@@ -383,6 +383,7 @@ var (
 	RunCarrierBodyWithDefs    = eng.RunCarrierBodyWithDefs
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
+	InvokeBody                = eng.InvokeBody
 	CloneValue                = eng.CloneValue
 	NewSyncWriter             = eng.NewSyncWriter
 	NewArray                  = eng.NewArray

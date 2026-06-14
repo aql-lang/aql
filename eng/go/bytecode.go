@@ -75,6 +75,33 @@ const (
 	// threaded arg) and pushed onto the island; the island's residual
 	// is pushed back.
 	OpFallback
+	// OpPushClosure pushes a Closure VALUE over the compiled body unit
+	// Fns[Arg] (Value{Parent: TFunction, Data: ClosurePayload}). A
+	// higher-order word's CODE body compiles to its own unit and rides
+	// as the word's operand; at run time the word's native handler
+	// invokes it through the VM's re-entrant runner via the InvokeBody
+	// seam — never the interpreter (plan P2). Capture-carrying closures
+	// take their captures from the operand stack below the closure (not
+	// yet emitted; capture-free bodies only for now).
+	OpPushClosure
+	// OpCallNativePoly dispatches PolyRefs[Arg].Word at RUN time: it runs
+	// the kernel's own MatchSignature over the word's signatures against the
+	// Arity values on top of the stack — the SAME first-match the
+	// interpreter takes — then calls the matched handler. Used where the
+	// checker could not commit to one overload (a dynamic operand the
+	// checker widened to Any), so the VM selects faithfully at run time
+	// instead of islanding through a sub-engine (plan P3). Pops Arity,
+	// pushes one result; a no-match raises signature_error.
+	OpCallNativePoly
+	// OpCallDynamic applies a runtime FUNCTION value to Arg trailing args:
+	// the value sits below the Arg args on the stack. If it is callable (a
+	// compiled closure, or an FnDef the interpreter auto-applies — a method
+	// field like `r.int`), it is invoked and the result replaces value+args;
+	// if it is NOT callable, the value and args stay on the stack unchanged
+	// (matching the interpreter, which leaves a non-callable residual). This
+	// is the fn-value-call boundary (plan P4): a dynamic value preceding
+	// residual args.
+	OpCallDynamic
 )
 
 func (o Opcode) String() string {
@@ -105,8 +132,38 @@ func (o Opcode) String() string {
 		return "PUSH_TYPE"
 	case OpFallback:
 		return "FALLBACK"
+	case OpPushClosure:
+		return "PUSH_CLOSURE"
+	case OpCallNativePoly:
+		return "CALL_NATIVE_POLY"
+	case OpCallDynamic:
+		return "CALL_DYNAMIC"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
+}
+
+// PolyRef names one runtime-dispatched native call: the word and the arity
+// (operand count) the checker fixed at the call site. OpCallNativePoly runs
+// MatchSignature over the word's signatures against that many stack values.
+type PolyRef struct {
+	Word  string
+	Arity int
+}
+
+// ClosurePayload is a runtime fn VALUE backed by a compiled body unit:
+// OpPushClosure pushes one, and a higher-order word's native handler invokes
+// it through the VM's re-entrant runner (via the InvokeBody seam) — never the
+// interpreter (plan P2). Unit indexes Program.Fns; Captures are the
+// construction-time lexical captures bound into the body's trailing local
+// slots at invocation (empty for a capture-free body).
+type ClosurePayload struct {
+	Unit     int
+	Captures []Value
+}
+
+// NewClosure builds a closure Value over a compiled body unit.
+func NewClosure(unit int, captures []Value) Value {
+	return Value{Parent: TFunction, Data: ClosurePayload{Unit: unit, Captures: captures}}
 }
 
 // Instr is one fixed-width instruction.
@@ -149,6 +206,7 @@ type Program struct {
 	Consts    []Value
 	Types     []TypeRef
 	Sigs      []SigRef
+	PolyRefs  []PolyRef
 	Fallbacks []FallbackSpan
 	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
@@ -162,9 +220,46 @@ type Program struct {
 type CompiledFn struct {
 	Name    string
 	NParams int
-	NLocals int
-	Code    []Instr
-	Debug   []SrcPos
+	// NCaptures is how many of the NParams leading slots are CAPTURES (for a
+	// closure body unit): the per-invocation inputs fill slots
+	// 0..NParams-NCaptures-1, the captures fill the trailing NCaptures slots.
+	// OpPushClosure pops NCaptures values off the stack into the closure's
+	// captures; 0 for an ordinary user fn or a capture-free body. (For a user
+	// fn the captures still ride as trailing CALL_USER args, so NCaptures
+	// stays 0 there — it is closure-specific.)
+	NCaptures int
+	NLocals   int
+	Code      []Instr
+	Debug     []SrcPos
+	// Returns are the declared return types, enforced at RET against the
+	// body's result the same way the interpreter's ReturnCheck (__RC)
+	// does — via v.Is(exp), so a predicate refine runs its predicate, a
+	// bare refine stays nominal, and builtins are unchanged. Empty for a
+	// fn with no declared return (no check runs).
+	Returns []*Type
+	// LocalNames maps a frame local slot to its source name (params in
+	// slots 0..NParams-1, then captures), for a debugger / disassembler.
+	// Body-local iterator slots have no name (empty string). Purely
+	// metadata — the VM never reads it.
+	LocalNames []string
+}
+
+// slotNames renders a CompiledFn's slot→name table for the
+// disassembler: " [n acc]" with empty (anonymous body-local) slots shown
+// as "_". Empty string when no names are known.
+func slotNames(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	parts := make([]string, len(names))
+	for i, n := range names {
+		if n == "" {
+			parts[i] = "_"
+		} else {
+			parts[i] = n
+		}
+	}
+	return " [" + strings.Join(parts, " ") + "]"
 }
 
 // Disassemble renders the program for golden tests and debugging.
@@ -172,7 +267,7 @@ func (p *Program) Disassemble() string {
 	var sb strings.Builder
 	p.disasmUnit(&sb, p.Code)
 	for fi := range p.Fns {
-		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d):\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals)
+		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d)%s:\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals, slotNames(p.Fns[fi].LocalNames))
 		p.disasmUnit(&sb, p.Fns[fi].Code)
 	}
 	fmt.Fprintf(&sb, "; consts=%d types=%d sigs=%d fallbacks=%d fns=%d max-stack=%d locals=%d\n",
@@ -205,6 +300,13 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " b%-3d ; %s (nin=%d)", in.Arg, fb.Desc, fb.NIn)
 		case OpCallUser, OpTailCallUser:
 			fmt.Fprintf(sb, " f%-3d ; %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
+		case OpPushClosure:
+			fmt.Fprintf(sb, " f%-3d ; closure %s/%d", in.Arg, p.Fns[in.Arg].Name, p.Fns[in.Arg].NParams)
+		case OpCallNativePoly:
+			pr := p.PolyRefs[in.Arg]
+			fmt.Fprintf(sb, " p%-3d ; %s/%d (poly)", in.Arg, pr.Word, pr.Arity)
+		case OpCallDynamic:
+			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
 		}
 		sb.WriteByte('\n')
 	}

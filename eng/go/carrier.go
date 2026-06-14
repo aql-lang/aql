@@ -378,10 +378,89 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	if !tryRecordFallback(r, word, sig, args, out, pos) {
+	if !tryRecordClosure(r, word, sig, args, out, pos) &&
+		!tryRecordPoly(r, word, sig, args, out, pos) &&
+		!tryRecordFallback(r, word, sig, args, out, pos) {
 		r.Check.Emit.RecordCall(word, sig, args, out, pos)
 	}
 	return out
+}
+
+// tryRecordPoly records a genuinely-dynamic typed dispatch (get/size/is/
+// make/typeof/type-algebra over an Any-widened operand) as an
+// OpCallNativePoly that re-matches the word's signatures at run time — the
+// SAME first-match the interpreter takes — instead of islanding through a
+// sub-engine (plan P3). Returns false (leaving the island path) for a
+// concrete-operand call, a non-core sig, or an operand of unknown provenance.
+func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+	es := r.Check.Emit
+	if !es.active() || sig == nil || len(outs) != 1 {
+		return false
+	}
+	// Code-body higher-order words compile to closures, not poly.
+	if fallbackWords[word] {
+		return false
+	}
+	// Only a REGISTERED builtin native — never a user-def fn or a usurp/ref
+	// wrapper (`def ifu (usurp if)`), whose dispatch re-steps tokens and
+	// returns tape-coupled values the VM cannot push. The runtime
+	// MatchSignature re-dispatches over the builtin's own signatures.
+	if !r.IsBuiltinWord(word) {
+		return false
+	}
+	// Only a genuinely dynamic dispatch (the case the checker could not
+	// commit to one overload — an island or a refusal today). A fully
+	// concrete call lowers to a faithful baked CALL_NATIVE.
+	if !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
+		return false
+	}
+	// Shapes the VM re-match cannot faithfully dispatch: code bodies,
+	// quoted/meta operands, user-fn frames, full-stack words, compile-time
+	// words. (islandPureWords/get pass these — get's key is its only
+	// QuoteArg and is handled below.)
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+		return false
+	}
+	if len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" {
+		return false
+	}
+	// A fn-valued operand or result means a fn-invoking / fn-returning word
+	// (apply/usurp, an atom-keyed method get): the value would need dynamic
+	// INVOCATION (the fn-value-call boundary, P4). Keep those out of poly.
+	for _, t := range sig.Args {
+		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			return false
+		}
+	}
+	for _, a := range args {
+		if _, ok := a.Data.(FnDefInfo); ok {
+			return false
+		}
+	}
+	// get/getr over a Map/Object/Module receiver can return a Function FIELD
+	// (a method). The VM handles that faithfully now: callPoly auto-applies a
+	// named 0-arg method result (`r.bool`), and a method needing args
+	// (`r.int`) stays a value and flows to CALL_DYNAMIC — so both atom- and
+	// integer-keyed gets poly.
+	// CORE-dispatch guard: the matched sig must be the word's main-registry
+	// binding, since the runtime MatchSignature re-matches over r.Lookup's
+	// signatures (a module-qualified sub-registry sig would re-run the core
+	// word of that name).
+	fn := r.Lookup(word)
+	if fn == nil {
+		return false
+	}
+	sigOK := false
+	for i := range fn.Signatures {
+		if &fn.Signatures[i] == sig {
+			sigOK = true
+			break
+		}
+	}
+	if !sigOK {
+		return false
+	}
+	return es.RecordPolyCall(word, args, outs, pos)
 }
 
 // fallbackWords is the allow-set of code-body higher-order words that
@@ -393,25 +472,66 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 var fallbackWords = map[string]bool{
 	"each": true, "fold": true, "scan": true,
 	"for-each": true, "select": true, "group": true,
+	"filter": true, "outer": true, "inner": true,
+	"do": true, "case": true, "where": true,
+	"having": true, "order": true,
+}
+
+// islandPureWords are the F4 general dynamic-dispatch words: pure typed
+// dispatches (no side effects, no registry mutation, no fn-value
+// re-stepping) whose forward-form span re-DISPATCHES faithfully through a
+// sub-engine. A site the checker widened to a dynamic carrier — a `get`
+// returning Any, a dynamic-receiver `make`/`is`/`typeof`/`size`, a type-
+// algebra query — re-runs the construct against the REAL runtime value
+// instead of baking a static signature the value might not match. The
+// sub-engine picks the overload at run time exactly as the interpreter
+// would, so soundness holds without a static sig commitment; the dynamic
+// result flows on and a downstream TYPED dispatch still refuses via
+// anyDynamicCarrier. (Report §9.1's TYPE_CHECK boundary, realised as an
+// interpreter island — the island IS the runtime guard.)
+var islandPureWords = map[string]bool{
+	"get": true, "getr": true, "size": true, "make": true,
+	"is": true, "typeof": true,
+	"teq": true, "tcmp": true, "tnot": true, "tor": true, "tand": true,
 }
 
 // tryRecordFallback attempts to compile a refused code-body higher-order
-// word as a fully-baked (nIn=0) interpreter island: the construct
-// re-runs through a sub-engine over `word arg0 arg1 …` in forward form.
+// word as an interpreter island: the construct re-runs through a
+// sub-engine over `word arg0 arg1 …` in forward form. The baked args
+// ride inside the island token span; a COMPUTED data arg (a prior
+// compiled event's result, or a loop local) whose value the check pass
+// can't materialise is THREADED instead — the VM preloads its runtime
+// value onto the island and the span re-runs against it ("computed
+// receiver" islands, e.g. `(iota 5) each […]`).
+//
 // Eligible iff the word is allow-listed, fully forward-eligible (so the
-// forward-form span is faithful), single-result, every arg materialises
-// concrete, and every code-body arg is FREE of references the VM can't
-// honour (only registered words / known literals — a check-time `def`
-// binding is a carrier at run time and would diverge). Returns true when
-// recorded; false leaves the normal refusal (whole-program fallback) to
-// stand. Soundness rides on the differential gate.
+// forward-form span is faithful), single-result, every code-body arg is
+// concrete AND free of references the VM can't honour (only registered
+// words / known literals — a check-time `def` binding is a carrier at
+// run time and would diverge), and at most ONE data arg is threaded and
+// it is the TRAILING run of positions (so the baked args fill the
+// forward prefix and the one threaded value back-fills the deepest sig
+// position — positionally faithful by the split rule). A baked data arg
+// must be deeply concrete. Returns true when recorded; false leaves the
+// normal refusal (whole-program fallback) to stand. Soundness rides on
+// the differential gate: a threaded value is the program's real runtime
+// value, and the island's dynamic result still refuses any downstream
+// TYPED dispatch via anyDynamicCarrier.
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es := r.Check.Emit
-	if !es.active() || !fallbackWords[word] || len(outs) != 1 || sig == nil {
+	if !es.active() || !(fallbackWords[word] || islandPureWords[word]) || len(outs) != 1 || sig == nil {
 		return false
 	}
-	// Fully forward-eligible: BarrierPos -1 (sentinel) or >= arity.
-	if sig.BarrierPos >= 0 && sig.BarrierPos < len(sig.Args) {
+	// A pure typed word (get/make/is/typeof/size/type-algebra) is
+	// islanded ONLY when the dispatch is genuinely dynamic — a dynamic
+	// operand or a dynamic (Any-widened) result the normal path would
+	// refuse anyway. A concrete-operand one compiles as a faithful
+	// CALL_NATIVE and must NOT be islanded: islanding poisons its result
+	// to dynamic, refusing every downstream typed dispatch (a net
+	// coverage LOSS). The code-body words always island (they never lower
+	// to CALL_NATIVE).
+	if islandPureWords[word] && !fallbackWords[word] &&
+		!anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
 		return false
 	}
 	// CORE-dispatch guard: the matched sig must belong to the word's
@@ -437,29 +557,96 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	}
 	span := make([]Value, 0, len(args)+1)
 	span = append(span, NewWord(word))
+	var ins []Value
 	for i, a := range args {
-		cv, ok := es.materialise(a)
-		if !ok || !IsConcrete(cv) {
-			return false
+		// A TYPE operand (a bare type node — `make Point …`, `x is Foo`,
+		// the type-algebra args) bakes as a token in the span: the island
+		// re-resolves it against the registry's lattice at run time, the
+		// same place OpPushType resolves canonical types. It is never
+		// threaded (a stack PUSH_TYPE would mis-order the dispatch).
+		if IsBareTypeNode(a) && a.ID != "" {
+			if len(ins) > 0 {
+				return false
+			}
+			span = append(span, a)
+			continue
 		}
-		if sig.NoEvalArgs[i] {
+		cv, ok := es.materialise(a)
+		baked := ok && IsConcrete(cv)
+		if baked && sig.NoEvalArgs[i] {
 			// A code body: legitimately contains words, but every one
 			// must be VM-resolvable (no check-time def carriers).
 			if !bodyFreeForFallback(r, cv) {
 				return false
 			}
-		} else if !isInertConst(cv) {
-			// A data arg must be DEEPLY concrete plain data — a carrier
-			// element anywhere (e.g. a def-bound list whose interior the
-			// check pass stripped) would bake a type-only artefact into
-			// the island and diverge (`[ProperString …]` vs the real
-			// strings). isInertConst rejects any carrier/dynamic/bare
-			// node in the tree.
+		} else if baked && !isInertConst(cv) {
+			// A baked data arg must be DEEPLY concrete plain data — a
+			// carrier element anywhere (e.g. a def-bound list whose
+			// interior the check pass stripped) would bake a type-only
+			// artefact into the island and diverge (`[ProperString …]`
+			// vs the real strings). isInertConst rejects any
+			// carrier/dynamic/bare node in the tree.
 			return false
 		}
-		span = append(span, cv)
+		if baked {
+			if len(ins) > 0 {
+				// A baked arg AFTER a threaded one would break the
+				// forward-prefix / stack-suffix split — the threaded
+				// values must be the trailing run. Refuse.
+				return false
+			}
+			span = append(span, cv)
+			continue
+		}
+		// Not bakeable: thread the runtime value. A code body must be
+		// baked (its tokens carry the island's program); only a data
+		// arg can thread. resolveOperand (in RecordFallback) refuses
+		// anything without compiled provenance.
+		if sig.NoEvalArgs[i] {
+			return false
+		}
+		ins = append(ins, a)
 	}
-	return es.RecordFallback(FallbackSpan{Tokens: span, Desc: word}, nil, outs[0], pos)
+	if len(ins) > 1 {
+		// Multi-threaded islands need the trailing run laid out on the
+		// operand stack deepest-first; that ordering is a Stage-5
+		// follow-on. One threaded value (the common computed-receiver
+		// shape) is positionally unambiguous.
+		return false
+	}
+	barrier := sig.BarrierPos
+	if barrier < 0 || barrier > len(sig.Args) {
+		barrier = len(sig.Args)
+	}
+	// Span faithfulness for a BARRIERED sig (e.g. `get`: key forward,
+	// receiver stack). The forward-form span `word arg0 arg1 …` can only
+	// place forward-eligible (position < barrier) args after the word; a
+	// stack arg must reach the dispatch from the operand stack.
+	//   - A THREADED stack arg already does (the island preloads it), so
+	//     the baked args must all be forward-eligible (k <= barrier).
+	//   - An ALL-BAKED island (no thread) on a PURE typed word with no
+	//     code body rebuilds the span in STACK form: the stack args (B..N)
+	//     ride before the word deepest-first, then the word, then the
+	//     forward args — `{m} get a` instead of `get a {m}`. Code-body
+	//     words can't (a baked body list would auto-evaluate when stepped
+	//     on the stack), so they keep the forward-eligible constraint.
+	canStackForm := len(ins) == 0 && islandPureWords[word] && !fallbackWords[word]
+	if !canStackForm && len(args)-len(ins) > barrier {
+		return false
+	}
+	if canStackForm && barrier < len(args) {
+		baked := span[1:] // sig order, parallel to args
+		ns := make([]Value, 0, len(span))
+		for i := len(baked) - 1; i >= barrier; i-- { // stack args, deepest first
+			ns = append(ns, baked[i])
+		}
+		ns = append(ns, NewWord(word))
+		for i := 0; i < barrier; i++ { // forward args, in order
+			ns = append(ns, baked[i])
+		}
+		span = ns
+	}
+	return es.RecordFallback(FallbackSpan{Tokens: span, Desc: word}, ins, outs[0], pos)
 }
 
 // bodyFreeForFallback reports whether a code body references only words
@@ -477,6 +664,18 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 		switch w.Name {
 		case "true", "false", "none", "null":
 			return
+		case "break", "continue", "return":
+			// A flow-control sentinel inside the body would set the shared
+			// registry's FlowCtrl when the island's sub-engine runs it; the
+			// VM cannot propagate that to an ENCLOSING compiled loop/frame
+			// across the island boundary (the sentinel surfaces as a
+			// tape-coupled island result and the VM rejects it). Refuse so
+			// the whole program falls back, where the interpreter unwinds
+			// it correctly. (Sentinels targeting a loop WITHIN the body are
+			// rarer than this conservative rule loses; the gate stays
+			// green either way.)
+			free = false
+			return
 		}
 		if r.Lookup(w.Name) != nil {
 			return
@@ -487,6 +686,25 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 		free = false
 	})
 	return free
+}
+
+// bodyHasSentinel reports whether a code body contains a flow-control
+// sentinel (break/continue/return). Such a body cannot compile to a closure
+// (or island): the sentinel targets an ENCLOSING loop/frame the VM cannot
+// reach across the call boundary, so the whole program must fall back and let
+// the interpreter unwind it. Unlike bodyFreeForFallback this does NOT reject
+// def references — the closure compile bakes a concrete def as a const or
+// threads an enclosing-fn binding as a capture, and the probe compile refuses
+// anything it cannot resolve.
+func bodyHasSentinel(body Value) bool {
+	found := false
+	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
+		switch w.Name {
+		case "break", "continue", "return":
+			found = true
+		}
+	})
+	return found
 }
 
 // disjunctPartitionCap bounds the alternative cross product a

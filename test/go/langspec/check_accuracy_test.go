@@ -53,6 +53,14 @@ func TestCheckAccuracyRatchet(t *testing.T) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
 			continue
 		}
+		// bytecode-combinations.tsv is a compiled-vs-interpreter PARITY
+		// fixture (validated by the differential / whole-corpus / spec
+		// gates), not a checker-accuracy spec — its rows deliberately
+		// exercise dynamic/island shapes the gradual checker widens, so
+		// it must not move the false-positive / soundness baselines.
+		if e.Name() == "bytecode-combinations.tsv" {
+			continue
+		}
 		path := filepath.Join(specDir, e.Name())
 		f, err := os.Open(path)
 		if err != nil {
@@ -167,6 +175,14 @@ func TestCheckTypeSoundness(t *testing.T) {
 
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		// bytecode-combinations.tsv is a compiled-vs-interpreter PARITY
+		// fixture (validated by the differential / whole-corpus / spec
+		// gates), not a checker-accuracy spec — its rows deliberately
+		// exercise dynamic/island shapes the gradual checker widens, so
+		// it must not move the false-positive / soundness baselines.
+		if e.Name() == "bytecode-combinations.tsv" {
 			continue
 		}
 		path := filepath.Join(specDir, e.Name())

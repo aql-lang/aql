@@ -8,7 +8,19 @@ step budget — self AND mutual tail recursion at depth 1M under a
 tight ceiling in compiled mode); Stage 4 COMPLETE (the compile-time
 meta layer: macro + minilang expansion, generic instantiations, type
 operands, multi-overload monomorphization, module dot-access calls —
-1412 spec rows compiled, 0 mismatches). Companion to
+1412 spec rows compiled, 0 mismatches); Stage 5 GATE MET (the whole
+spec corpus — 2607 rows — compiles-or-falls-back with 0 divergences in
+BOTH values and error taxonomy; concurrent spec rows race-free in
+compiled mode under `-race`; 1494 rows take the compiled path). Reaching
+it closed two compiled-mode soundness gaps beyond the span-fallback
+islands themselves: the fallback no longer double-executes check-pass
+side effects (registry snapshot/restore), and the compiled path now
+reproduces the interpreter's runtime guards (declared return type/count
+enforced at RET; check-mode-suppressed strict errors — orphan gen,
+unpack of a missing key — refuse compilation and fall back). The
+native-compilation coverage follow-ons (F4 dynamic dispatch,
+sentinel-crossing, multi-threaded islands, query-DSL words) remain —
+every such program already runs correctly via fallback. Companion to
 `aql-bytecode-report.0.md` (the design) and
 `aql-bytecode-revisions.0.md` (the June 2026 re-review that this plan
 incorporates; read it first — it changes two requirements). Written
@@ -411,29 +423,129 @@ the compiled code on either side intact. The VM handles NIn>0
 threading; the emitter currently emits only fully-baked (NIn=0)
 islands.
 
-First words wired: the code-body higher-order data transforms
-(`each`/`fold`/`scan`/`for-each`/`select`/`group`). A refused dispatch
-becomes an island iff — allow-listed, single-result, fully
-forward-eligible, **core dispatch** (the matched sig is pointer-identical
-to the word's main-registry binding, so a module-qualified inner native
-through a sub-registry is rejected — baking its bare name would re-run
-a different word), every arg materialises **deeply concrete** (a data
-arg with any carrier element refuses — a stripped def-bound list would
-bake `[ProperString …]` instead of the values), and every code-body
-word is **VM-resolvable** (a registered native/fn-def or known literal;
-a value-`def` reference refuses, because that binding is a check-time
-carrier at run time). The island's dynamic result flows to the residual
-or another fallback; a downstream TYPED dispatch consuming it still
-refuses via `anyDynamicCarrier`, so soundness holds. Differential:
-1434 rows / 0 mismatches (+22), floor 1430. Soundness is gate-proven
-across the corpus.
+Words wired: the code-body higher-order data transforms
+(`each`/`fold`/`scan`/`for-each`/`select`/`group`, plus
+`filter`/`outer`/`inner` — the allow-set widened with the gate green).
+A refused dispatch becomes an island iff — allow-listed, single-result,
+fully forward-eligible, **core dispatch** (the matched sig is
+pointer-identical to the word's main-registry binding, so a
+module-qualified inner native through a sub-registry is rejected —
+baking its bare name would re-run a different word), every BAKED arg
+materialises **deeply concrete** (a data arg with any carrier element
+refuses — a stripped def-bound list would bake `[ProperString …]`
+instead of the values), and every code-body word is **VM-resolvable**
+(a registered native/fn-def or known literal; a value-`def` reference
+refuses, because that binding is a check-time carrier at run time). The
+island's dynamic result flows to the residual or another fallback; a
+downstream TYPED dispatch consuming it still refuses via
+`anyDynamicCarrier`, so soundness holds.
 
-**Remaining (follow-on):** emit NIn>0 threaded islands (computed
-receivers like `(iota 5) each […]`); widen the allow-set
-(`do`/`case`/`select`-query/…) as the gate stays green; the general
-dynamic-dispatch fallback for `get`-returns-`Any` and fn-value call
-sites (F4) via `TYPE_CHECK`-guarded boundaries; `break`/`continue`/
-`return` sentinels crossing an island. The original Stage-5 scope:
+**Threaded computed-receiver islands LANDED.** A data arg the check
+pass can't materialise — a prior compiled event's result or a loop
+local, e.g. `(iota 5) each […]` — is THREADED instead of baked: it must
+be the trailing run of sig positions (so the baked args fill the
+forward prefix and the one threaded value back-fills the deepest sig
+position, positionally faithful by the split rule), capped at one
+threaded value for now (multi-threaded layout is a follow-on). The VM
+preloads its real runtime value onto the island and re-runs the span;
+nested islands compose (`each […] (each […] …)`). Differential: 1438
+rows / 0 mismatches, floor 1430. Soundness is gate-proven across the
+corpus.
+
+**Concurrency gates LANDED.** `Program` and all its tables are immutable
+after compile; every mutable VM scope (operand stack, locals, frames,
+loop state) is allocated per `RunProgram` call, and each goroutine runs
+against its own `ForkConcurrent` registry. Two `-race` gates: a
+synthetic one (`bytecode_concurrency_test.go`) drives one shared
+`*Program` from 16 goroutines across the compiled surface (straight-line,
+loop, tail-recursive fn, baked AND threaded islands), and the
+plan-mandated one (`compiled_concurrent_test.go`) drives the CONCURRENT
+SPEC ROWS (`await` parallel bodies, `timeout`/`interval`/`cancel`)
+through `RunCompiled` under load — both data-race-free, results matching
+the interpreter. `await`/timer branch bodies run as interpreter
+fallbacks (v1), forking an isolated registry per branch.
+
+**Whole-corpus gate MET, 0 divergences in values AND error taxonomy**
+(`compiled_fullcorpus_test.go`): every row (2607) runs through
+`RunCompiled` — compiling what it can, silently falling back otherwise —
+and matches the interpreter on both the value and the error code (1494
+compiled). Three compiled-mode soundness gaps were closed to get there:
+
+- **Fallback registry-isolation.** `CompileCheck` executes the program
+  in check mode, so its RunInCheckMode words (def/import/type/macro, the
+  Test harness) leave real side effects; the COMPILED path needs those
+  (OpPushType resolves minted IDs, islands re-run over the same
+  registry), but the FALLBACK must not re-apply them or it double-mints /
+  re-imports / re-runs a Test spec. `RunCompiled` snapshots the mutable
+  scopes (`Registry.SnapshotForCompile`: Defs, Types, Contexts, Modules
+  load set, builtin-word set, capability slots, check state) and rolls
+  them back on the fallback path; the compiled path keeps them. An
+  in-place snapshot was the right tool — a `ForkConcurrent` shares the
+  parent's `Modules`/`Capabilities` pointers, so a fork's check pass
+  still pollutes the real registry's module cache; restoring the SAME
+  registry is faithful where a separate one is not.
+- **Return type/count check at RET.** The interpreter enforces a fn's
+  declared return via a ReturnCheck (`__RC`) token; the compiled fn
+  skipped it. The VM now checks the body's result against
+  `CompiledFn.Returns` with the same `v.Is(exp)` membership (predicate
+  refines run their predicate, bare refines stay nominal, builtins
+  unchanged), raising the byte-identical `type_error`. A body whose
+  value COUNT differs from the declared returns refuses to compile (the
+  single-result lowering would otherwise drop the extras) and falls back.
+- **Check-mode-suppressed strict errors.** Some words are lenient in
+  check mode but raise at runtime — an orphan `gen [...]`
+  (gen_without_constructor), an `unpack` of a missing key (unpack_error).
+  The compiled stream IS the check pass, so it would silently succeed.
+  Such a word now sets `Check.SuppressedRuntimeError`; `CompileCheck`
+  refuses to compile and the interpreter raises the real error on the
+  fallback.
+
+**Coverage follow-ons — status.** The bounded, gate-safe ones landed:
+
+- **Query-DSL / body-running allow-set DONE.** `do`/`case`/`where`/
+  `having`/`order` joined the island allow-set under the same guards
+  (differential 1438 → 1454, whole-corpus 1494 → 1511, 0 divergences).
+  The splice word `word` stays out (not a data transform).
+- **Sentinel-crossing-island made SOUND.** A `break`/`continue`/`return`
+  inside an island body sets the shared registry's FlowCtrl when the
+  sub-engine runs it, which the VM cannot propagate to an ENCLOSING
+  compiled loop/frame — it surfaced as a tape-coupled island result the
+  VM rejected (`for 3 [each [break] …]` errored vs the interpreter's
+  `[]`). `bodyFreeForFallback` now refuses such bodies, so they fall back
+  and the interpreter unwinds correctly. No spec row exercised it — a
+  latent gap, now pinned.
+- **Multi-threaded islands (NIn>1): not implemented — 0 spec coverage.**
+  The trailing-run deepest-first operand layout is a clean extension, but
+  no corpus row uses more than one computed arg to an allow-listed word,
+  so it would add risk with no gate benefit. Revisit if a workload needs
+  it.
+
+**F4 general dynamic dispatch — LANDED as interpreter islands.** A typed
+query word (`get`/`getr`/`make`/`is`/`typeof`/`size` and the type-algebra
+words `teq`/`tcmp`/`tnot`/`tor`/`tand`) on a value the checker widened to
+a dynamic carrier now islands and re-DISPATCHES through the sub-engine,
+threading the runtime value (`islandPureWords`). The island IS the
+report-§9.1 `TYPE_CHECK` boundary realised faithfully: it picks the
+overload at run time exactly as the interpreter does, so no static
+signature is committed and the gradual modality discharges naturally. A
+type operand (`make Point …`, `x is Foo`) bakes as a token in the span
+and re-resolves against the registry lattice at run time. Islands
+compose — `each […]` → `size`/`typeof`/`is`/`make` over the dynamic list
+all island and chain. The guard is deliberately tight: a CONCRETE-operand
+query keeps its `CALL_NATIVE` (islanding it would poison the result to
+dynamic and refuse downstream typed dispatch — a net loss), so only the
+genuinely-dynamic sites convert. Differential 1454 → 1455, whole-corpus
+1511 → 1514, 0 divergences.
+
+The remaining dynamic-operand rows that still whole-program-fall-back are
+the ones whose dynamic operand cannot be threaded: a value-`def`
+receiver (bound to a check-pass carrier, not a concrete value, at VM run
+time) and a class-type `make` operand (the class literal is not a bare
+type node, so it is not baked as a type token). Both run correctly via
+fallback today; recovering them needs def-value materialisation and
+class-type-operand baking respectively — incremental extensions of the
+now-in-place F4 island mechanism, not new machinery. The original
+Stage-5 scope:
 
 Span-level `FALLBACK_INTERP`: `do` on computed lists, unresolved
 `context get`, leaky runtime `def`, and any site the checker widened
@@ -459,20 +571,229 @@ compiled per-fork entry points are a later optimisation.
 
 ## Stage 6 — specialisation (benchmark-driven, each independent)
 
-Only after Stage 5 is green, and only as the Stage-0 corpus directs:
+**Status: MEASURED; the corpus redirected the work.** The Stage-6
+measurement harness landed (`bytecode_stage6_bench_test.go`): each
+Stage-0 shape runs compiled vs interpreted with parse/compile cost
+amortised out, isolating execution. The numbers (per-op, ~1.5s
+benchtime) reset the priorities the plan guessed at:
 
-- **Sig splitting for `ReturnsFn`** (report §9.4) — the single
-  biggest lever: auto-generate monomorphic sig_ids (`add_i_i`, …) so
-  integer chains stay monomorphic. Regression-test mono propagation
-  on chains explicitly.
-- `CALL_NATIVE1_1`/`CALL_NATIVE2_1` fast paths; compact encoding.
-- Inline caches at `CALL_NATIVE_POLY`/`CALL_USER_POLY` sites —
-  per-fork cache storage only (R6 #28).
-- Typed opcodes / unboxed cells remain v2+; do not start them here.
-- **Gate:** each item lands with before/after numbers against the
-  Stage-0 baseline on the same corpus.
+| shape | interp | compiled | speedup |
+|---|---|---|---|
+| arith_chain64 | 732µs | 44µs | **16.8×** |
+| if_scalar / if_listcond | ~6.3ms | ~0.31ms | **~20×** |
+| for_tight | 5.5ms | 0.34ms | **16×** |
+| recursion_nontail | 23ms | 0.64ms | **36×** |
+| recursion_tail | 99ms | 3.4ms | **30×** |
+
+The compute path is already **10–36× faster compiled**, far past the
+Stage-0 go/no-go gate. Crucially, the plan's headline lever —
+**sig-splitting for `ReturnsFn`** (avoid `matchSignature` so integer
+chains stay monomorphic) — is **already realised by compilation**: the
+emitter bakes the checker-selected sig into `CALL_NATIVE`, so there is
+NO runtime dispatch to split. The remaining compute cost is per-dispatch
+boxing/allocation (arith: ~4 allocs/dispatch), where `CALL_NATIVE1_1`/
+`2_1` fast paths and unboxed cells would help — but those carry handler-
+aliasing risk against the 0-divergence gate and target an already-fast
+path; deferred until a workload demands them.
+
+The corpus's one clear signal was the **island shapes regressing** in
+compiled mode — a fallback island re-runs through a sub-engine, and
+`OpFallback` created a fresh engine+tape on EVERY execution, so a hot
+island in a loop allocated one per iteration:
+
+| shape | interp | compiled (before) | compiled (after) |
+|---|---|---|---|
+| do_body `for 100 [do body]` | 11.7ms | 21.5ms (0.54×, 33MB) | ~10.3ms (1.1×, 16.9MB) |
+
+**Item landed — island sub-engine reuse.** The VM now reuses ONE
+sub-engine across every `OpFallback` in a `RunProgram`, reloading its
+tape in place (`Tape.Reload`, gated by `Engine.reuseTape`) instead of
+allocating. `do_body` went from a **2× regression to parity** with the
+interpreter and its allocations **halved** (33MB → 16.9MB,
+deterministic); single-island shapes are allocation-neutral. The reuse
+carries no state across island executions (per-run scratch — marks,
+voidGroups, pointer — is cleared on reload); proven by the 0-divergence
+gate and a varying-threaded-input loop test
+(`TestCompiledIslandReuseNoStateLeak`).
+
+Remaining Stage-6 items (`CALL_NATIVE1_1`/`2_1` fast paths, inline caches
+at poly sites, compact encoding) stay benchmark-gated and unstarted —
+the measured win there is small relative to the compute path's existing
+10–36× and the risk against the strict gate is real. Typed opcodes /
+unboxed cells remain v2+. **Gate:** each item lands with before/after
+numbers against the Stage-0 baseline on the same corpus.
 
 *~1–2 weeks per item taken.*
+
+### Residuals hardening (Stage-6 follow-on) — status
+
+A pass over the Stage 0–6 residuals: harden the regression net first,
+then take each residual gate-clean-or-defer.
+
+**Landed:**
+
+- **Curated combination matrix + strict verification gate.**
+  `lang/spec/bytecode-combinations.tsv` (interpreter-pinned + compiled
+  differential) and `compiled_combinations_test.go` (parity + compilation
+  PATH pins) cross the feature axes the per-feature specs test in
+  isolation; `make verify-bytecode` runs the differential, whole-corpus,
+  combination, -race, and deterministic alloc-ceiling gates as one
+  command (CI runs the -race step). Differential 1455 → 1511.
+- **Tooling/DX:** `AQL_COMPILE`/`AQL_NO_COMPILE` env (the rollout
+  contract + forward kill switch); `trace` falls back so the step trace
+  renders (the "disable under trace" contract via fallback); a compile
+  report (`aql check --emit` prints `sites: mono/poly/dynamic/meta` +
+  `islands:`); a slot→name table per `CompiledFn`; and byte-identical
+  mixed-mode island error rendering. All pinned.
+- **`args`/`__pa` refused** — they read the interpreter's per-call args
+  stack, which the VM's `CALL_USER` frame doesn't maintain; a compiled fn
+  reading `args` failed at run time, so refuse and fall back (latent
+  soundness fix).
+- **Per-dispatch args scratch buffer** — reuse one buffer across
+  `OpCallNative` instead of allocating per call (the result is copied onto
+  the stack before reuse; monomorphic natives don't retain it). Compiled
+  allocs: arith 257 → 194, recursion_tail 18757 → 15756 (~16–25%), time
+  ~20% faster; gate-clean.
+
+**F4 dynamic dispatch — SUBSTANTIALLY LANDED** (the `make`/`get` operand
+frontier, +130 compiled rows, 0 divergences). The three interlocking
+issues were each solved:
+
+- **Fn-value-call boundary (the conceptual crux).** A `get` returning a
+  Function (a map field that is a method — `r.int`) is auto-applied by
+  the interpreter to the args that follow, but the compiled island would
+  leave it unapplied (`[fn rand-int … 0 100]` vs `75`). The result is
+  dynamic `Any`, statically indistinguishable from a data get — but the
+  shape IS detectable in the RESIDUAL: a dynamic value followed by more
+  residual values is the auto-application signal. `Finalize` refuses when
+  a dynamic value precedes residual args (a dynamic value LAST is fine —
+  nothing follows it). Sound and precise; subsumed a coarser receiver
+  guard.
+- **Barriered stack-form spans.** A barriered word like `get` (key
+  forward, receiver stack) islands a THREADED receiver via the forward
+  span, and an ALL-BAKED island now rebuilds a STACK-form span
+  (`{m} get a`) for pure typed words. Combined with `origByID` recovery
+  of def-bound literals, this islands the data-access bulk:
+  `{a:1} get a`, `m.a.b.c`, `def xs […] xs get 1`, the `m.a` field read.
+- **Class/object `make`.** `ObjectTypeInfo` joined the structural-type-
+  body const whitelist: a plain-data class body bakes as a program
+  constant (a method-field class still refuses via the field walk), so
+  `make Point {x:9}` lowers to `CALL_NATIVE` and its chains compile —
+  `(make Point {}) get x`, `def p (make Point {x:9}) p.y`.
+
+- **`is`/`typeof` on a make-result (LANDED).** A `make` result is an
+  ObjectInstance that inherits the type literal's value ID. A downstream
+  type operand sharing that ID — `(make Point {}) is Point`,
+  `(make Point {}) typeof` — was hijacked by `resolveOperand`'s
+  `producedBy` lookup, mapping the `Point` literal to the make event;
+  both `is` operands then pointed at one event and `lowerCall` hit "stack
+  discipline underflow at is". The fix tracks per-event whether the
+  output is *itself* a type body (`setProduced`/`typeOut`) and skips the
+  `producedBy` hijack when the operand is a type body but the event
+  produced a non-type value — an ID collision. A genuine type-producing
+  event (typeof, type algebra) keeps its `fromSeq` provenance, so stack
+  discipline is preserved.
+
+Net: differential 1511 → 1636, whole-corpus 1571 → 1708.
+
+**Remaining frontier items — investigated, resolved or deferred:**
+
+- **Record-type `make` naming — MOOT (no compilable shape).** There is
+  no current AQL syntax where `make R {…}` over a record/map-shape binding
+  yields a valid instance: a plain implicit-map binding
+  (`def R {x:Integer} make R {…}`) errors *identically in both engines*
+  ("make: first argument must be a type literal or record type"), and the
+  legacy `record`/`object` constructors were removed in Phase 3 (`refine`
+  takes a type, not a map shape). Parity holds via whole-program fallback;
+  the working structural-make path is the class form, already landed.
+- **Refine / predicate / dependent-type `make` — DONE / MOOT.**
+  `def Pos refine Integer make Pos 5` compiles native. Predicate and
+  dependent-scalar types (`def Big (Integer gt 10) make Big 20`) cannot be
+  `make`'d in *either* engine — `make` rejects the non-type-literal first
+  argument identically; error-taxonomy parity holds via fallback.
+- **General `get`-returns-callable / `apply` fn-value site — DEFERRED
+  (Stage-3 frontier).** Both `r.int 0 100` (a map-method field auto-applied
+  to trailing args) and `(m get f) 5` (a fn-valued field then applied) hold
+  value + error parity via whole-program fallback, but compiling them needs
+  a Function value to cross the compiled boundary — either dynamic dispatch
+  (the VM has no `CALL_DYNAMIC`) or a whole-expression island that bakes a
+  fn-containing map as a const (a fn body is not inert). Neither is
+  gate-clean-trivial; the fn-value-call boundary conservatively defers it,
+  and it stays the documented Stage-3 dynamic-dispatch residual.
+
+**`CALL_NATIVE_POLY`** (~0 corpus sites), **multi-threaded islands**
+(0 coverage), and **fast-path opcodes / compact encoding** (scratch buffer
+captured the dominant alloc) stay deferred as documented.
+
+## Runtime independence (P0–P7) — progress
+
+Goal: a compiled `Program` executes ENTIRELY in the VM — no `OpFallback`
+island, no whole-program fallback. Compile-time recording through the
+checker stays. Two downward ratchets gate the deletion (P7): the spec-row
+COMPILE-REFUSAL count and the ISLANDED-program count, both in
+`test/go/langspec/compiled_coverage_test.go` (`TestCompiledCoverage`).
+
+Landed (each gate-clean: differential + whole-corpus at 0 divergences,
+race-clean, alloc ceilings held):
+
+- **P0 — coverage ratchet.** `TestCompiledCoverage` buckets every refusal;
+  baseline 651 refused / 115 islanded.
+- **P1 — `InvokeBody` seam.** One choke point (`eng/go/invoke.go`,
+  `Registry.Invoker`) all code-body words run their body through, so the VM
+  can drive body execution without the interpreter.
+- **P2a — re-entrant VM runner.** `runProgram`'s loop extracted to
+  `vmContext.run(startUnit, locals, stack)`; step budget / island engine
+  shared, per-run stack/frames isolated.
+- **P2b — code bodies → closures.** `each`/`fold`/`scan`/`filter`/`do`
+  compile their body to a `CompiledFn` unit (`OpPushClosure`,
+  `ClosurePayload`, `vmContext.invokeClosure`); a throwaway-EmitState PROBE
+  compiles speculatively so a refusal falls back to the island untouched.
+  Plus **closure capture** (`CompiledFn.NCaptures`, `ComputeCaptures`):
+  bodies capturing an enclosing fn's binding compile; a concrete module-def
+  bakes as a const.
+- **P3 — `CALL_NATIVE_POLY`.** A dynamic typed dispatch the checker could
+  not pin to one overload runs the kernel's own `MatchSignature` at run
+  time (the same first-match the interpreter takes) instead of islanding.
+  Widened to ANY registered builtin native over a dynamic operand (guards:
+  builtin-only, no code-body/quoted/fn-frame/full-stack/fn-valued; integer-
+  keyed get only).
+- **P4 — `CALL_DYNAMIC`.** The fn-value-call boundary (`r.int 0 100`)
+  compiles: a dynamic value leading the residual is applied to its args at
+  run time IFF callable (closure → VM-native; FnDef → island sub-engine;
+  non-callable → left untouched, faithful to the interpreter).
+
+- **P4 follow-on — VM-native fn-value dispatch.** `callDynamic` dispatches a
+  trivial-delegation native method (rand-int) VM-native via MatchSignature +
+  handler (the island stays the backstop for user-fn bodies). And **atom-keyed
+  gets now poly**: a data field returns directly, a named 0-arg method result
+  is auto-applied VM-native (`r.bool` — matching the interpreter's re-step), an
+  anonymous fn stays data, and a method needing args (`r.int`) flows to
+  CALL_DYNAMIC. Plus the no-init `fold` and dynamic-output `filter` closure
+  gaps closed.
+
+Ratchets now: **616 refused / 29 islanded** (islands 115 → 29 — the atom-keyed
+get bucket eliminated). Compiled rows 1706 → 1741.
+
+**The remaining work (P5–P7) is specified in detail in
+`design/aql-bytecode-runtime-independence.0.md`** — multi-result lowering,
+carrier-identity for `make` + value-def locals, fn-values-on-the-stack
+(`apply`), predicate-type operands, `case` clause compilation, and the final
+fallback deletion, each with root cause, plan, files, risk, and sequencing.
+
+**Remaining buckets (each a dedicated unit, root cause identified):**
+
+- **Predicate-type operands (~157, "operand provenance").** Type-algebra
+  over `(Integer gt 10)` — a check-mode `DepScalarInfo` CARRIER with no
+  recoverable original; needs carrier provenance, not const-baking.
+- **`apply` / fn-value flow (~148, "dynamic/opaque output").** `apply`
+  takes a fn VALUE operand; fn values can't bake as consts (code) nor
+  resolve. Needs fn-values-on-the-stack — i.e. compiling all user fns to
+  closures and a VM-native FnDef dispatch (which would also de-island the
+  P4 CALL_DYNAMIC apply and the atom-keyed method gets).
+- **Multi-result / multi-return (~44).** P5: generalise the deeply single-
+  result lowerer (the plan's top risk hotspot).
+- **`case` clause compilation (~16 islands), context words (with-decimal),
+  Stage-1/2 lowering edges (if-branch, stack-discipline, residual shape).**
 
 ## Stage 7 — graduation criteria (compiled mode by default)
 

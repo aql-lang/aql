@@ -227,6 +227,11 @@ func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Va
 	if !ok {
 		if r.Check.IsActive() {
 			val = NewCarrier(TAny)
+			// Lenient in check mode, but the interpreter errors at
+			// runtime — flag the suppression so a bytecode compile of
+			// this program refuses and falls back (the compiled stream
+			// elides unpack, a RunInCheckMode word).
+			r.Check.SuppressedRuntimeError = true
 		} else {
 			return r.AqlError("unpack_error", "unpack: key "+srcKey+" not found in source", "unpack")
 		}

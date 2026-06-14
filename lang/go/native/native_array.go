@@ -1237,19 +1237,12 @@ func eachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("each_error", "each: expected concrete lists", "each")
 	}
-	_lst, _ := AsList(args[0])
-	bodySlice := _lst.Slice()
 	dataList, _ := AsList(args[1])
 
 	results := make([]Value, dataList.Len())
 	for i := 0; i < dataList.Len(); i++ {
 		elem := dataList.Get(i)
-		input := make([]Value, len(bodySlice)+1)
-		input[0] = elem
-		copy(input[1:], bodySlice)
-
-		sub := New(reg)
-		res, err := sub.Run(input)
+		res, err := InvokeBody(reg, args[0], []Value{elem})
 		if err != nil {
 			return nil, fmt.Errorf("each: element %d: %w", i, err)
 		}
@@ -1326,18 +1319,11 @@ func forEachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("for_each_error", "for-each: expected concrete lists", "for-each")
 	}
-	_lst, _ := AsList(args[0])
-	bodySlice := _lst.Slice()
 	dataList, _ := AsList(args[1])
 
 	for i := 0; i < dataList.Len(); i++ {
 		elem := dataList.Get(i)
-		input := make([]Value, len(bodySlice)+1)
-		input[0] = elem
-		copy(input[1:], bodySlice)
-
-		sub := New(reg)
-		if _, err := sub.Run(input); err != nil {
+		if _, err := InvokeBody(reg, args[0], []Value{elem}); err != nil {
 			return nil, fmt.Errorf("for-each: element %d: %w", i, err)
 		}
 	}
@@ -1445,11 +1431,9 @@ func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regis
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("fold_error", "fold: expected concrete lists", "fold")
 	}
-	_lst, _ := AsList(args[0])
-	bodySlice := _lst.Slice()
 	dataList, _ := AsList(args[1])
 	init := args[2]
-	return doFold(reg, init, bodySlice, dataList)
+	return doFold(reg, init, args[0], dataList)
 }
 
 // Fold result type is the stabilised accumulator: the body is
@@ -1470,8 +1454,6 @@ func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("fold_error", "fold: expected concrete lists", "fold")
 	}
-	_lst, _ := AsList(args[0])
-	bodySlice := _lst.Slice()
 	dataList, _ := AsList(args[1])
 	if dataList.Len() == 0 {
 		return nil, reg.AqlError("fold_error", "fold: empty list with no initial value", "fold")
@@ -1483,7 +1465,7 @@ func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 		rest[i-1] = dataList.Get(i)
 	}
 	restList := NewReadList(rest)
-	return doFold(reg, init, bodySlice, restList)
+	return doFold(reg, init, args[0], restList)
 }
 
 // No init — accumulator type and element type both come from the
@@ -1498,16 +1480,10 @@ func foldNoInitReturnsFn(args []Value, r *Registry) []Value {
 }
 
 // doFold is the shared fold implementation used by both fold signatures.
-func doFold(reg *Registry, acc Value, bodySlice []Value, data ReadList) ([]Value, error) {
+func doFold(reg *Registry, acc Value, body Value, data ReadList) ([]Value, error) {
 	for i := 0; i < data.Len(); i++ {
 		elem := data.Get(i)
-		input := make([]Value, len(bodySlice)+2)
-		input[0] = acc
-		input[1] = elem
-		copy(input[2:], bodySlice)
-
-		sub := New(reg)
-		res, err := sub.Run(input)
+		res, err := InvokeBody(reg, body, []Value{acc, elem})
 		if err != nil {
 			return nil, fmt.Errorf("fold: step %d: %w", i, err)
 		}
@@ -1525,8 +1501,6 @@ func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("scan_error", "scan: expected concrete lists", "scan")
 	}
-	_lst, _ := AsList(args[0])
-	bodySlice := _lst.Slice()
 	dataList, _ := AsList(args[1])
 	if dataList.Len() == 0 {
 		return []Value{NewList(nil)}, nil
@@ -1538,13 +1512,7 @@ func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 
 	for i := 1; i < dataList.Len(); i++ {
 		elem := dataList.Get(i)
-		input := make([]Value, len(bodySlice)+2)
-		input[0] = acc
-		input[1] = elem
-		copy(input[2:], bodySlice)
-
-		sub := New(reg)
-		res, err := sub.Run(input)
+		res, err := InvokeBody(reg, args[0], []Value{acc, elem})
 		if err != nil {
 			return nil, fmt.Errorf("scan: step %d: %w", i, err)
 		}
@@ -1862,8 +1830,6 @@ func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	if !IsConcrete(args[1]) || !IsConcrete(args[2]) {
 		return nil, reg.AqlError("foldaxis_error", "foldaxis: expected concrete body and data lists", "foldaxis")
 	}
-	_lst, _ := AsList(args[1])
-	bodySlice := _lst.Slice()
 	rows, _ := AsList(args[2])
 	if rows.Len() == 0 {
 		return []Value{NewList([]Value{})}, nil
@@ -1895,7 +1861,7 @@ func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	result := make([]Value, len(lanes))
 	for i, lane := range lanes {
 		acc := lane[0]
-		res, err := doFold(reg, acc, bodySlice, NewReadList(lane[1:]))
+		res, err := doFold(reg, acc, args[1], NewReadList(lane[1:]))
 		if err != nil {
 			return nil, fmt.Errorf("foldaxis: lane %d: %w", i, err)
 		}

@@ -1,0 +1,93 @@
+# Bytecode combination matrix — curated feature crossings for the
+# compiled execution mode (design/aql-bytecode-plan.0.md Stage 6
+# follow-on). These rows are run by the production spec runner (pinning
+# the INTERPRETER's canonical output) AND by the compiled differential /
+# whole-corpus gates (pinning compiled == interpreter, value + error
+# taxonomy). They deliberately cross feature axes the per-feature .tsv
+# files test in isolation: literal kind × call form × control flow ×
+# user fns × islands × F4 dynamic dispatch × errors. The expected column
+# is canonical (eng.Canon); error rows pin the taxonomy code.
+
+# --- arithmetic × call form (forward / stack / swap / paren) ---
+add 1 2	3	forward form
+1 add 2	3	mixed split form
+1 2 add	3	stack form
+10 sub 3	7	swap form (10-3)
+3 10 sub	-7	stack form (3-10)
+add (mul 2 3) 4	10	paren group as operand
+mul 2.5 4	10.0	int/float contagion → Float
+mul 2 4.0	8.0	float contagion the other way
+add 'a' 'b'	'ba'	string concat
+add 1 'x'	'x1'	scalar add coerces to concat
+
+# --- boolean / comparison ---
+and true false	false	boolean and
+not true	false	boolean not
+cmp 1 2	1	three-way compare
+5 eq 5	true	equality
+1 lt 2	true	less-than
+3 gte 3	true	gte
+size [1 2 3]	3	list size
+size {a:1 b:2}	2	map size
+
+# --- control flow ---
+if (5 gt 3) [10] [20]	10	if paren cond, then
+if (5 lt 3) [10] [20]	20	if paren cond, else
+if [1 lt 2] ['a'] ['b']	'a'	if list-form condition
+if (5 gt 3) [99]	99	2-arg if (no else)
+for 5 [i]	0 1 2 3 4	counted loop
+for 5 [mul i 2]	0 2 4 6 8	loop with body dispatch
+for [2,6] [i]	2 3 4 5	range loop
+for [6,2,-1] [i]	6 5 4 3	range loop, negative step
+for 5 [if (gt i 2) [mul i 10] [i]]	0 10 2 3 4	loop × branch
+for 6 [if (eq i 3) [break] [i]]	0 1 2	break out of loop
+for 6 [if (eq i 3) [continue] [i]]	0 1 2 4 5	continue in loop
+
+# --- user fns: simple / recursive / tail / mutual / closure ---
+def db fn [[n:Integer] [Integer] [n mul 2]] db 21	42	simple fn
+def fac fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fac (n sub 1))]]] fac 6	720	non-tail recursion
+def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] s2 100 0	5050	tail recursion
+def od fn [[n:Integer] [Boolean] [if (n eq 0) [false] [ev (n sub 1)]]] def ev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [od (n sub 1)]]] ev 50	true	mutual tail recursion
+def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] def a5 (mk 5) a5 10	15	closure capture
+
+# --- islands: code-body higher-order (baked + threaded receivers) ---
+each [mul 2] [1 2 3]	[2 4 6]	each, baked data
+[1 2 3] each [mul 2]	[2 4 6]	each, stack form
+fold [add] [1 2 3 4] 0	10	fold
+scan [add] [1 2 3]	[1 3 6]	scan
+each [mul 2] (iota 4)	[0 2 4 6]	each, threaded computed receiver
+scan [add] (iota 4)	[0 1 3 6]	scan, threaded receiver
+filter [gt 2] [1 2 3 4]	[3 4]	filter predicate body
+do [add 1 2]	3	do body island
+each [add 1] (each [mul 2] (iota 3))	[1 3 5]	nested + threaded islands
+
+# --- F4 dynamic dispatch over island results ---
+size (each [mul 2] [1 2 3])	3	size over a dynamic list
+typeof (fold [add] [1 2 3] 0)	Integer	typeof over a dynamic result
+(each [mul 2] [1 2 3]) is List	true	is over a dynamic list
+make Array (each [mul 2] [1 2 3])	Array[2 4 6]	make threading a dynamic receiver
+
+# --- islands in loops with varying threaded inputs (reuse safety) ---
+for 4 [each [mul 2] (iota i)]	[] [0] [0 2] [0 2 4]	each over a per-iteration list
+for 3 [size (each [add 1] (iota i))]	0 1 2	chained islands in a loop
+for 3 [do [add 1 2]]	3 3 3	repeated do island
+def mk2 fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] for 3 [(mk2 i) 10]	10 11 12	closure built per loop iteration
+def n 10 each [add 1] [1 2 3] def n 20 each [add 1] [4 5 6]	[2 3 4] [5 6 7]	def reassignment around islands
+
+# --- type queries / algebra ---
+5 is Integer	true	is membership true
+'x' is Integer	false	is membership false
+typeof 5	Integer	typeof scalar
+typeof [1 2]	List	typeof list
+Integer teq Integer	true	type equality
+Integer tcmp String	-1	type compare
+
+# --- map / record access ---
+def m {a: {b: {c: 7}}} m.a.b.c	7	nested dotted access
+{a:1 b:2} get a	1	map get
+
+# --- error rows: identical taxonomy in both engines ---
+def f fn [[n:Integer] [String] [n]] f 1	ERROR:type_error	return type mismatch
+def r2 fn [[n:Integer] [Integer] [n n]] r2 1	ERROR:type_error	return count mismatch
+def m2 {x:1} unpack [y] m2	ERROR:unpack_error	unpack missing key
+gen [T]	ERROR:gen_without_constructor	orphan gen spec

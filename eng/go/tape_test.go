@@ -323,3 +323,38 @@ func TestTapeInitialSizeAtLeastProgram(t *testing.T) {
 		t.Errorf("initial cap %d does not hold the %d-entry program", tp.Cap(), 50)
 	}
 }
+
+// Reload re-seeds the tape in place when the backing array fits (the
+// island-engine reuse path), restoring the gap, grow budget, and
+// exhaustion/warn flags; it reports false when the array is too small so
+// the caller allocates fresh. Stale gap entries must not survive.
+func TestTapeReload(t *testing.T) {
+	tp := NewTapeWith([]Value{NewInteger(1), NewInteger(2)}, TapeConfig{}, nil)
+	cap0 := tp.Cap()
+	if cap0 < 2 {
+		t.Fatalf("initial cap %d too small", cap0)
+	}
+
+	// Reuse: a program that fits is reloaded in place, same backing array.
+	if !tp.Reload([]Value{NewInteger(9)}) {
+		t.Fatal("Reload of a fitting program returned false")
+	}
+	if tp.Cap() != cap0 {
+		t.Errorf("Reload reallocated: cap %d -> %d", cap0, tp.Cap())
+	}
+	if tp.Len() != 1 {
+		t.Fatalf("after Reload Len = %d, want 1", tp.Len())
+	}
+	if n, _ := tp.At(0).AsConcreteInteger(); n != 9 {
+		t.Errorf("Reload content = %d, want 9", n)
+	}
+
+	// Negative: a program larger than the backing array refuses reuse.
+	big := make([]Value, cap0+1)
+	for i := range big {
+		big[i] = NewInteger(int64(i))
+	}
+	if tp.Reload(big) {
+		t.Error("Reload of an over-capacity program returned true; must refuse so the caller reallocates")
+	}
+}

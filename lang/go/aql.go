@@ -267,6 +267,12 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	a.registry.Check.EmitUnusedDefDiagnostics()
 
 	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
+	if es := a.registry.Check.Emit; es != nil && len(es.SiteCounts) > 0 {
+		res.SiteCounts = make(map[string]int, len(es.SiteCounts))
+		for k, v := range es.SiteCounts {
+			res.SiteCounts[k] = v
+		}
+	}
 	if runErr != nil {
 		return nil, "check error", res, runErr
 	}
@@ -274,6 +280,15 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 		if d.Severity == SeverityError {
 			return nil, "check diagnostics", res, nil
 		}
+	}
+	// Some words are deliberately lenient in check mode but raise a
+	// strict error at runtime (an orphan `gen [...]`, an `unpack` of a
+	// missing key). The compiled stream IS the check pass, so it would
+	// silently succeed where the interpreter errors. Such a word flags
+	// the suppression; refuse to compile and let the interpreter raise
+	// the real error on the fallback path.
+	if a.registry.Check.SuppressedRuntimeError {
+		return nil, "check-mode suppressed a runtime error (uncompilable)", res, nil
 	}
 	prog, reason, ok := a.registry.Check.Emit.Finalize(residual)
 	if !ok {
@@ -415,8 +430,19 @@ func convertResults(result []eng.Value) []any {
 // reports which path ran (for tooling; never branch program logic on
 // it).
 func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
+	// CompileCheck executes the program in check mode, so its
+	// RunInCheckMode words (def/import/type/macro, the Test harness)
+	// leave real side effects on the registry. The COMPILED path needs
+	// those to persist (OpPushType resolves minted IDs; islands re-run
+	// through a sub-engine over the same registry). But the interpreter
+	// FALLBACK re-runs the whole source, so it must NOT see them or it
+	// double-applies a re-mint / re-import / re-run Test spec. Snapshot
+	// the mutable scopes before the check pass and roll them back on the
+	// fallback path; keep them on the compiled path.
+	snap := a.registry.SnapshotForCompile()
 	prog, _, _, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
+		a.registry.RestoreForCompile(snap)
 		out, rerr := a.Run(src)
 		return out, false, rerr
 	}
@@ -439,6 +465,14 @@ type CheckResult struct {
 	Stack       []string          `json:"stack"`
 	Diagnostics []CheckDiagnostic `json:"diagnostics"`
 	Summary     CheckSummary      `json:"summary"`
+	// SiteCounts tallies dispatch sites by compilation class during the
+	// bytecode recording pass — "mono" (a single resolved signature,
+	// compiles to CALL_NATIVE), "poly" (polymorphic, not lowered),
+	// "dynamic" (a dynamic carrier / interpreter-island site), and
+	// "meta" (compile-time / fn-invoking / higher-order words). Populated
+	// only by CompileCheck (the recording pass); nil for a plain Check.
+	// It answers "why didn't my hot loop compile to a single path?".
+	SiteCounts map[string]int `json:"site_counts,omitempty"`
 }
 
 // CheckSummary reports the per-severity count of diagnostics from

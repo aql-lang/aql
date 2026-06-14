@@ -127,6 +127,16 @@ type Registry struct {
 	// macroCache memoizes macro expansions keyed on (macro name + operand
 	// canon). See macroCacheGet / MacroCacheClear. Nil until first use.
 	macroCache map[string][]Value
+
+	// Invoker, when non-nil, executes a code BODY through the bytecode VM
+	// instead of a fresh interpreter sub-engine. The body-running native
+	// handlers (each/fold/scan/do/filter/… — every word that today spins up
+	// `New(r).Run([inputs… body…])`) call InvokeBody, which routes here when
+	// the VM is driving so the body runs as a compiled closure WITHOUT
+	// re-entering the interpreter. Nil on a plain interpreter run, where
+	// InvokeBody falls back to a sub-engine and behaviour is unchanged. The
+	// VM installs and restores this around its run. See invoke.go.
+	Invoker func(body Value, inputs []Value) ([]Value, error)
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
@@ -242,6 +252,15 @@ type CheckState struct {
 	// BudgetTripped is set to true after the first budget overshoot
 	// so we emit at most one diagnostic per check run.
 	BudgetTripped bool
+
+	// SuppressedRuntimeError is set when a word that is deliberately
+	// lenient in check mode skips an error the interpreter raises at
+	// runtime — an orphan `gen [...]` (gen_without_constructor), an
+	// `unpack` of a missing key (unpack_error). The bytecode compiler
+	// reads it after the check pass: the compiled stream elides such
+	// words, so it would silently succeed where the interpreter errors —
+	// the program is therefore uncompilable and must fall back.
+	SuppressedRuntimeError bool
 
 	// DefsInstalled records the names (and source positions) that
 	// the user's program defined during a check run via the def

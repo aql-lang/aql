@@ -235,7 +235,8 @@ func TestEmitRefusals(t *testing.T) {
 		// A branch reading an enclosing computation breaks the closed-
 		// fragment rule (Stage 3, with locals).
 		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
-		{`do [1 add 2]`, "code-body word do"},
+		// `word` is the splice marker, not an islandable data transform.
+		{`word [1 add 2]`, "code-body word word"},
 	}
 	for _, c := range cases {
 		got, reason := compile(t, c.src)
@@ -624,22 +625,26 @@ func TestEmitModuleCallLowering(t *testing.T) {
 		t.Fatalf("max 5.0 9.0 = %v, want 9.0", out)
 	}
 
-	// Negative: a get whose RESULT the checker cannot type (dynamic
-	// Any — a runtime field read) refuses and falls back; the program
-	// still runs correctly through the interpreter.
-	if _, r := compile(t, `def m {a:1} m.a`); r == "" {
-		t.Error("dynamic-result get compiled but must refuse (checker types it Any)")
+	// F4: a get whose RESULT the checker types dynamic Any (a runtime field
+	// read on a def-bound map) now runtime-dispatches via CALL_NATIVE_POLY
+	// (plan P3/P4) — no island. The result must match the interpreter.
+	got2, reason2 := compile(t, `def m {a:1} m.a`)
+	if reason2 != "" {
+		t.Fatalf("dynamic-result get refused: %s", reason2)
+	}
+	if strings.Contains(got2, "FALLBACK") || !strings.Contains(got2, "CALL_NATIVE_POLY") {
+		t.Errorf("dynamic-result get did not lower to CALL_NATIVE_POLY:\n%s", got2)
 	}
 	b, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	out2, compiled2, err := b.RunCompiled(`def m {a:1} m.a`)
-	if err != nil || compiled2 {
-		t.Fatalf("dynamic get fallback: compiled=%v err=%v", compiled2, err)
+	out2, _, err := b.RunCompiled(`def m {a:1} m.a`)
+	if err != nil {
+		t.Fatalf("dynamic get: %v", err)
 	}
 	if len(out2) != 1 || out2[0] != int64(1) {
-		t.Fatalf("m.a fallback = %v, want 1", out2)
+		t.Fatalf("m.a = %v, want 1", out2)
 	}
 }
 
@@ -672,8 +677,9 @@ func TestEmitMultiOverloadMonomorphises(t *testing.T) {
 
 // Stage 4: the minilang `mini` word lowers to a bare CALL_NATIVE —
 // it is a deterministic expansion the recording pass treats like any
-// other native. (A trailing dynamic accessor on the result — `.n` —
-// is Stage-5 fallback territory, asserted as a refusal here.)
+// other native. A trailing dynamic accessor on the result — `.n` —
+// is the F4 data-get case: the dynamic `mini` result threads into a
+// `get` island and re-dispatches faithfully (Stage-6 F4 follow-on).
 func TestEmitMinilangCompiles(t *testing.T) {
 	got, reason := compile(t, `"aql:minilang" import end "a1b2c3" mini re "\\d"`)
 	if reason != "" {
@@ -682,9 +688,21 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	if !strings.Contains(got, "CALL_NATIVE") || strings.Contains(got, "CALL_USER") {
 		t.Errorf("mini did not lower to a native call:\n%s", got)
 	}
-	// The dynamic-result accessor refuses (Stage-5 fallback boundary).
-	if _, r := compile(t, `"aql:minilang" import end ("a1b2c3" mini re "\\d").n`); r == "" {
-		t.Error("dynamic accessor on mini result compiled but must refuse")
+	// The dynamic-result data accessor now islands (F4); the result
+	// must match the interpreter.
+	src := `"aql:minilang" import end ("a1b2c3" mini re "\\d").n`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gc, _, ec := a.RunCompiled(src)
+	b, _ := New()
+	gi, ei := b.Run(src)
+	if (ec == nil) != (ei == nil) {
+		t.Fatalf("mini accessor error divergence: compiled=%v interp=%v", ec, ei)
+	}
+	if ec == nil && (len(gc) != len(gi) || (len(gc) == 1 && gc[0] != gi[0])) {
+		t.Errorf("mini accessor F4: compiled=%v interp=%v", gc, gi)
 	}
 }
 
@@ -709,18 +727,17 @@ func TestEmitFnValueCallFallsBack(t *testing.T) {
 	}
 }
 
-// Stage 5: a code-body higher-order word compiles as an interpreter
-// ISLAND (OpFallback) — a self-contained span re-run through a
-// sub-engine, with the compiled code on either side intact. The body
-// must reference only VM-resolvable words; a body reading a check-time
-// `def` (a carrier at run time) refuses to whole-program fallback.
+// Plan P2: a code-body higher-order word compiles its body to a CLOSURE
+// unit (PUSH_CLOSURE) and runs it through the VM — no interpreter island.
+// The body must reference only VM-resolvable words; a body reading a
+// check-time `def` (a carrier at run time) keeps the island/fallback path.
 func TestEmitFallbackIsland(t *testing.T) {
 	got, reason := compile(t, `each [mul 2] [1 2 3]`)
 	if reason != "" {
-		t.Fatalf("each island uncompilable: %s", reason)
+		t.Fatalf("each closure uncompilable: %s", reason)
 	}
-	if !strings.Contains(got, "FALLBACK") || !strings.Contains(got, "fallbacks=1") {
-		t.Errorf("each did not lower to a FALLBACK island:\n%s", got)
+	if !strings.Contains(got, "PUSH_CLOSURE") || strings.Contains(got, "FALLBACK") {
+		t.Errorf("each did not lower to a closure (expected PUSH_CLOSURE, no FALLBACK):\n%s", got)
 	}
 
 	// Runtime parity across each / fold / scan.
@@ -746,21 +763,23 @@ func TestEmitFallbackIsland(t *testing.T) {
 		}
 	}
 
-	// Negative: a body reading a value-def refuses (the def is a carrier
-	// at VM run time) — whole-program fallback, correct result.
-	if _, r := compile(t, `def n 10 each [add n] [1 2 3]`); r == "" {
-		t.Error("each with a def-referencing body compiled but must refuse")
+	// A body reading a CONCRETE module-def bakes it as a const in the
+	// closure body (plan P2 closure-capture / const-bake) — compiles native.
+	if got, r := compile(t, `def n 10 each [add n] [1 2 3]`); r != "" {
+		t.Errorf("each with a concrete def-referencing body refused: %s", r)
+	} else if strings.Contains(got, "FALLBACK") {
+		t.Errorf("each with a concrete def-referencing body islanded:\n%s", got)
 	}
 	b, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	out, compiled, err := b.RunCompiled(`def n 10 each [add n] [1 2 3]`)
-	if err != nil || compiled {
-		t.Fatalf("def-body fallback: compiled=%v err=%v", compiled, err)
+	if err != nil || !compiled {
+		t.Fatalf("def-body closure: compiled=%v err=%v", compiled, err)
 	}
 	if len(out) != 1 || out[0] != "[11 12 13]" {
-		t.Fatalf("def-body fallback = %v, want [11 12 13]", out)
+		t.Fatalf("def-body closure = %v, want [11 12 13]", out)
 	}
 
 	// A module-qualified higher-order word with a code body dispatches
@@ -778,5 +797,192 @@ func TestEmitFallbackIsland(t *testing.T) {
 	iout, _ := d.Run(`"aql:array-util" import end ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if len(mout) != len(iout) || (len(mout) == 1 && mout[0] != iout[0]) {
 		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
+	}
+}
+
+// Plan P2: a single-result `do` body compiles to a CLOSURE unit (native),
+// not an island. The splice word `word` stays OUT (not a data transform) —
+// it refuses to whole-program fallback.
+func TestEmitWidenedAllowSet(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want any
+		isFn bool // compiles native via a closure (no island, no refusal)
+	}{
+		{`do [1 add 2]`, int64(3), true},
+		{`do [mul 2 (add 3 4)]`, int64(14), true},
+		// `word` is the splice marker — refused, runs via whole-program
+		// fallback to the identical result (splices [3] → 3).
+		{`word [1 add 2]`, int64(3), false},
+	} {
+		got, reason := compile(t, c.src)
+		if c.isFn {
+			if reason != "" {
+				t.Errorf("%q expected a native closure, refused: %s", c.src, reason)
+			} else if strings.Contains(got, "FALLBACK") {
+				t.Errorf("%q expected a native closure, islanded:\n%s", c.src, got)
+			} else if !strings.Contains(got, "PUSH_CLOSURE") {
+				t.Errorf("%q expected a PUSH_CLOSURE:\n%s", c.src, got)
+			}
+		} else if reason == "" {
+			t.Errorf("%q expected refusal (whole-program fallback), but compiled:\n%s", c.src, got)
+		}
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, _, err := a.RunCompiled(c.src)
+		if err != nil {
+			t.Fatalf("%q: %v", c.src, err)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q = %v, want %v", c.src, out, c.want)
+		}
+	}
+}
+
+// Stage 5 (F4 — general dynamic dispatch): a typed query word
+// (get/size/is/typeof/make/type-algebra) on a now-native each result is
+// itself native: with the each body compiled to a closure (plan P2) its
+// result is a concrete typed List, so the typed query lowers to CALL_NATIVE
+// rather than re-dispatching through an island. (A genuinely-dynamic
+// operand — a threaded get's Any result — still islands; that path is
+// covered by the combination-path pins and the full-corpus gate.)
+func TestEmitF4DynamicDispatch(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want any
+	}{
+		{`size (each [mul 2] [1 2 3])`, int64(3)},
+		{`typeof (each [mul 2] [1 2 3])`, "List"},
+		{`(each [mul 2] [1 2 3]) is List`, "true"},
+		{`make Array (each [mul 2] [1 2 3])`, "Array[2 4 6]"},
+	} {
+		got, reason := compile(t, c.src)
+		if reason != "" {
+			t.Errorf("%q F4 dispatch refused: %s", c.src, reason)
+		} else if strings.Contains(got, "FALLBACK") {
+			t.Errorf("%q islanded but a native-each result is a concrete query:\n%s", c.src, got)
+		}
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, compiled, err := a.RunCompiled(c.src)
+		if err != nil || !compiled {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, err)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q = %v, want %v", c.src, out, c.want)
+		}
+	}
+
+	// Negative: a CONCRETE-operand query keeps the normal CALL_NATIVE
+	// path — it must NOT become a FALLBACK island (which would poison the
+	// result to dynamic). `size [1 2 3]` lowers to a native call.
+	got, reason := compile(t, `size [1 2 3]`)
+	if reason != "" {
+		t.Fatalf("size of a concrete list refused: %s", reason)
+	}
+	if strings.Contains(got, "FALLBACK") {
+		t.Errorf("concrete `size [1 2 3]` was islanded but must lower to CALL_NATIVE:\n%s", got)
+	}
+}
+
+// Stage 5: a flow-control sentinel (break/continue/return) inside an
+// island body cannot cross the island boundary to an enclosing compiled
+// loop — the sub-engine would set FlowCtrl that the VM can't propagate.
+// Such a body refuses to island; the whole program falls back and the
+// interpreter unwinds the sentinel correctly.
+func TestEmitIslandSentinelRefusal(t *testing.T) {
+	// `each [break]` inside a compiled `for`: the break targets the for,
+	// not each — it must NOT be islanded.
+	src := `for 3 [each [break] [1 2]]`
+	if _, reason := compile(t, src); reason == "" {
+		t.Errorf("%q islanded a sentinel body but must refuse", src)
+	}
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(src)
+	if err != nil {
+		t.Fatalf("%q: %v", src, err)
+	}
+	if compiled {
+		t.Errorf("%q took the compiled path but a sentinel island must fall back", src)
+	}
+	b, _ := New()
+	iout, _ := b.Run(src)
+	if len(out) != len(iout) {
+		t.Fatalf("%q: compiled-fallback %v != interpreter %v", src, out, iout)
+	}
+}
+
+// Plan P2: a COMPUTED receiver — a data arg that is a prior compiled
+// event's result rather than a baked literal — flows as a normal operand
+// to the native higher-order call, with the body compiled to a closure.
+// `(iota 4) each [body]` compiles to `… CALL_NATIVE iota; PUSH_CLOSURE;
+// CALL_NATIVE each` — no island, the iota result is the each data operand.
+func TestEmitThreadedFallbackIsland(t *testing.T) {
+	for _, src := range []string{
+		`each [mul 2] (iota 4)`,
+		`(iota 4) each [mul 2]`,
+		`scan [add] (iota 4)`,
+		`each [mul 2] (range 1 5)`,
+	} {
+		got, reason := compile(t, src)
+		if reason != "" {
+			t.Fatalf("%q computed-receiver closure uncompilable: %s", src, reason)
+		}
+		if !strings.Contains(got, "PUSH_CLOSURE") || strings.Contains(got, "FALLBACK") {
+			t.Errorf("%q did not lower to a native closure call with a computed data operand:\n%s", src, got)
+		}
+	}
+
+	// Runtime parity: compiled (threaded island) == interpreter.
+	for _, c := range []struct {
+		src  string
+		want any
+	}{
+		{`each [mul 2] (iota 4)`, "[0 2 4 6]"},
+		{`(iota 4) each [mul 2]`, "[0 2 4 6]"},
+		{`scan [add] (iota 4)`, "[0 1 3 6]"},
+		{`each [mul 2] (range 1 5)`, "[2 4 6 8]"},
+		// A threaded island whose dynamic result feeds a second island:
+		// the first each's result threads into the second.
+		{`each [add 1] (each [mul 2] (iota 3))`, "[1 3 5]"},
+	} {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, compiled, err := a.RunCompiled(c.src)
+		if err != nil || !compiled {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, err)
+		}
+		if len(out) != 1 || out[0] != c.want {
+			t.Fatalf("%q compiled = %v, want %v", c.src, out, c.want)
+		}
+	}
+
+	// A computed receiver with a concrete def-referencing body compiles
+	// native: the def bakes as a const, the data threads as a computed
+	// operand (plan P2).
+	if got, r := compile(t, `def n 10 each [add n] (iota 3)`); r != "" {
+		t.Errorf("threaded each with a concrete def-referencing body refused: %s", r)
+	} else if strings.Contains(got, "FALLBACK") {
+		t.Errorf("threaded each with a concrete def-referencing body islanded:\n%s", got)
+	}
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := b.RunCompiled(`def n 10 each [add n] (iota 3)`)
+	if err != nil || !compiled {
+		t.Fatalf("def-body threaded closure: compiled=%v err=%v", compiled, err)
+	}
+	if len(out) != 1 || out[0] != "[10 11 12]" {
+		t.Fatalf("def-body threaded closure = %v, want [10 11 12]", out)
 	}
 }

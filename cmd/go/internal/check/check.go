@@ -105,10 +105,30 @@ func Emit(stdout, stderr io.Writer, source string) error {
 	}
 	if prog == nil {
 		fmt.Fprintf(stdout, "uncompilable: %s\n", reason)
+		writeSiteReport(stdout, res.SiteCounts, nil)
 		return nil
 	}
 	fmt.Fprint(stdout, prog.Disassemble())
+	islands := make([]string, len(prog.Fallbacks))
+	for i, fb := range prog.Fallbacks {
+		islands[i] = fb.Desc
+	}
+	writeSiteReport(stdout, res.SiteCounts, islands)
 	return nil
+}
+
+// writeSiteReport prints the compile report (design/aql-bytecode-plan.0.md
+// DX section): the per-class dispatch-site tally that answers "why didn't
+// this compile to a single path?", plus the interpreter islands a
+// compiled program falls back into for each fallback span.
+func writeSiteReport(w io.Writer, counts map[string]int, islands []string) {
+	if len(counts) > 0 {
+		fmt.Fprintf(w, "; sites: mono=%d poly=%d dynamic=%d meta=%d\n",
+			counts["mono"], counts["poly"], counts["dynamic"], counts["meta"])
+	}
+	if len(islands) > 0 {
+		fmt.Fprintf(w, "; islands: %s\n", strings.Join(islands, ", "))
+	}
 }
 
 func atPos(row, col int) string {
