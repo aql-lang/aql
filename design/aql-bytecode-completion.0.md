@@ -114,13 +114,18 @@ before/after numbers.
    deliberately leaves refused (check-mode `[Any]`), not a lowering gap.
    (`eng/go/lower.go`.)
 
-2. **Object/class `set` field mutation (24, MED risk).** `set k v inst` on an
-   Array/Object/Store instance is a real native dispatch refused only because
-   `set` carries a QuoteArgs key. Route it like the dot-access `get` poly path
-   (the key is an inert Atom const; the receiver is a computed event/local).
-   Watch mutation-safety (the receiver must be an event/local, never a pooled
-   const — already guaranteed by `isInertConst` excluding instance types).
-   (`eng/go/carrier.go` quoted-operand gate, `emit.go`.)
+2. **Object/class `set` field mutation. ✅ LANDED (445 → 425).** `set k v inst`
+   on an Object/Class instance refused only because the atom-keyed overload
+   carries a QuoteArgs key (`p set x 7`). Exempted `set` from the
+   quoted-operand refusal alongside get/getr: the key is an inert Atom const,
+   the receiver is a non-const instance (mutation-safe — instance types are
+   absent from `isInertConst`, exactly as the integer-keyed `set 1 v arr` that
+   already compiled relies on), and `set` cannot be shadowed (builtin), so the
+   word-name match admits only the real mutator. Sealed-field / out-of-bounds
+   error rows raise the same taxonomy in both engines. The integer-keyed array
+   set (incl. aliasing `def b a set 0 9 a b`) already compiled. Cleared the 24
+   set rows; the residual 13 quoted-operand refusals are meta
+   (minilang/codequote/quote/timeout). (`eng/go/emit.go` RecordCall.)
 
 3. **`make` class with typed-instance field defaults (32, MED risk).** A class
    body `{x:(make Foo 1)}` whose default is a user-type instance. The default is

@@ -1145,13 +1145,18 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr":
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set":
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
-		// re-steps. get/getr are exempt — plain accessors whose quoted
-		// key is an inert Atom const and whose results are data (their
-		// fn-valued module-resolution case is elided above; a dynamic
-		// or fn-valued result still refuses via the later cases).
+		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
+		// quoted key is an inert Atom const (its fn-valued module-resolution
+		// case is elided above; a dynamic or fn-valued result still refuses via
+		// the later cases). For `set` the quoted key is the atom field name of
+		// an object/class/store/flex field write (`p set x 7`); the receiver is
+		// a non-const instance (mutation-safety holds — instance types are
+		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
+		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
+		// so the word-name match admits only the real mutator, never a usurp.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
 		return

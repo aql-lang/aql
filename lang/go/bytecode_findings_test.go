@@ -184,3 +184,46 @@ func TestStrictDisjunctTypeAlgebraPoly(t *testing.T) {
 		}
 	}
 }
+
+// Roadmap item 2 — atom-keyed `set` on an object/class instance (a field write
+// like `p set x 7`, whose quoted key previously refused as "quoted-operand
+// word set") lowers to CALL_NATIVE. The receiver is a non-const instance so
+// the in-place mutation is safe, exactly as integer-keyed `set 1 v arr` already
+// relied on.
+func TestObjectClassSetLowers(t *testing.T) {
+	// Positive: a declared-field write compiles natively and is visible after.
+	const ok = `def Point class {x:1} def p (make Point {}) p set x 7 end p.x`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(ok)
+	if cerr != nil || prog == nil {
+		t.Fatalf("object set did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") || !strings.Contains(dis, "set") {
+		t.Errorf("expected a native CALL_NATIVE set, got:\n%s", dis)
+	}
+	gotC, compiled, errC := a.RunCompiled(ok)
+	if !compiled || errC != nil {
+		t.Fatalf("object set run: compiled=%v err=%v", compiled, errC)
+	}
+	b, _ := New()
+	gotI, _ := b.Run(ok)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[7]" {
+		t.Errorf("object set: compiled=%v interp=%v (want [7])", gotC, gotI)
+	}
+
+	// Negative: an undeclared (sealed) field write raises the SAME sealed_field
+	// error in both engines — the compiled mutator must not silently succeed.
+	const bad = `def Point class {x:1} def p (make Point {}) p set z 9`
+	c, _ := New()
+	_, _, errCbad := c.RunCompiled(bad)
+	d, _ := New()
+	_, errIbad := d.Run(bad)
+	if codeOf(errCbad) != "sealed_field" || codeOf(errCbad) != codeOf(errIbad) {
+		t.Errorf("sealed-field set: compiled=[%s] interp=[%s] (want sealed_field both)",
+			codeOf(errCbad), codeOf(errIbad))
+	}
+}
