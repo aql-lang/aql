@@ -237,10 +237,29 @@ before/after numbers.
    (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`, `eng/go/emit.go` RecordBranch,
    `eng/go/lower.go` lowerArms/lowerArmsComputed.)
 
-7. **`select` query DSL + `reach` lenses (~26, MED, OPTIONAL for P7).** Compile
-   the query/lens bodies, or — if the cost outweighs the benefit — add them to
-   `metaFallbackWords` as a deliberate DSL-interpreted boundary. Decide with the
-   island/refusal numbers in hand.
+7. **Code-body context/DSL words (PARTIAL). SCOPE FINDING: only one of the
+   code-body-word refusals is clean single-body closure reuse; the rest are
+   genuine DSLs or entangled with other clusters.** The "code-body word
+   (NoEvalArgs)" bucket (99 at the 399 ceiling) breaks down as: `select` ~20
+   (the whole `Query.*` query DSL — joins/group/order/having), `word`-splice ~31
+   and `test-*` ~15 (META — for the item-9 allowlist), `case` 7 (predicate-type /
+   computed-scrutinee shapes, cascading from the predicate/provenance work),
+   `reach` 6 (lens construction, a baking pattern not a body run), `do`/`error` 8
+   (error-recovery DSL, the bodies mostly contain `case`), and `with-decimal` 5.
+
+   - **`with-decimal`. ✅ LANDED (refusals 399 → 394).** A single-body context
+     word like `do`: it pushes a decimal precision/rounding override then ran the
+     body via a sub-engine. Routed through `InvokeBody` + added to `callableWords`
+     so the body compiles to a closure run INSIDE the pushed context; the compiled
+     decimal ops read the context at run time (precision parity confirmed by the
+     differential). (`native_math.go`, `callable_words.go`.)
+
+   - **`select` query DSL (~20), `reach` lenses (6), predicate-type `case` (7),
+     `do`/`error` recovery (8) — DEFERRED.** `select` is the whole `aql:query`
+     module DSL — best compiled as a dedicated effort or, per the original
+     OPTIONAL note, added to `metaFallbackWords` (item 9) as a deliberate
+     DSL-interpreted boundary. `case`/`do`/`error` are entangled with the
+     predicate-type and provenance clusters, not single-body closure reuse.
 
 8. **introspection over fn-values ✅ LANDED (417 → 407).** A type-READING word
    (`typeof`/`tcmp`/`teq`/`tand`/`tor`/`tnot`/`inspect`) over a fn VALUE bakes
