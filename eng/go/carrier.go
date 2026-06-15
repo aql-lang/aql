@@ -522,6 +522,14 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	if !es.active() || !(fallbackWords[word] || islandPureWords[word]) || len(outs) != 1 || sig == nil {
 		return false
 	}
+	// A dispatch whose output is already recorded was handled by a structured
+	// ReturnsFn hook (e.g. `case`'s desugar to a branch chain) — islanding it
+	// would DOUBLE-record (the island fallback PLUS the structured event),
+	// leaving the extra event unconsumed on the simulated stack. Skip it; the
+	// generic RecordCall path that follows likewise early-returns.
+	if _, done := es.producedBy[outs[0].ID]; done {
+		return false
+	}
 	// A pure typed word (get/make/is/typeof/size/type-algebra) is
 	// islanded ONLY when the dispatch is genuinely dynamic — a dynamic
 	// operand or a dynamic (Any-widened) result the normal path would

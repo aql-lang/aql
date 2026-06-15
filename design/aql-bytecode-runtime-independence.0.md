@@ -29,10 +29,11 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **545 refused / 26 islanded** (from 651 / 115 at P0;
+Current ratchets: **542 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
-555 after predicate-type provenance). Compiled rows 1706 → 1820, 0 divergences
-throughout.
+555 after predicate-type provenance; 545 after if value-else). Compiled rows
+1706 → 1823, 0 divergences throughout. The `case` desugar dropped the island
+count 26 → 15 (islanded case rows now compile natively).
 
 Stage-2 lowering edges also closed this pass: a 3-arg `if` whose else arm is
 a plain VALUE (`if cond [then] 42` — literal / local / type, not a `[…]`
@@ -318,34 +319,39 @@ operand site it is a check-mode **carrier** with no recovered original, so
 
 ## `case` clause compilation (islands ~16)
 
-**Status — ATTEMPTED, REVERTED (deferred).** A token-desugar to a nested
-`if` chain (a `caseReturnsFn` calling `if3ReturnsFn` with constructed list
-args, so the branches record in the enclosing scope and nested clauses ride
-the else BODY) compiled the with-default, const-value cases and was
-**differential-clean**. Two findings worth keeping for the next attempt:
+**Status — LANDED (545/26 → 542/15), gate-clean.** A `caseReturnsFn`
+desugars `case v [m0 b0 …]` to the nested `if` chain `if (v m0 __casematch)
+[b0] [rest]` by calling `if3ReturnsFn` with constructed list args, so the
+branches record in the enclosing scope and nested clauses ride the else
+BODY. Three findings, each load-bearing:
 
-- **Match faithfulness (solved).** `case` matches via `UnifyR`, which is
-  LENIENT for a bare-refine newtype — `case 5 [Pos …]` matches `Pos`
-  (`def Pos refine Integer`) — whereas `5 is Pos` is nominal-FALSE. So a
-  desugar to `is` diverges. The fix is a dedicated internal word
-  (`__casematch v m` → `UnifyR(m, v)`) that the guard emits for non-
-  predicate clauses; a code-body predicate clause `[pred]` stays `(v pred…)`.
-- **The blocker (unsolved).** Shapes the branch lowering can't take — a
-  COMPUTED case value (an event referenced in every clause → reads enclosing
-  computation inside the else fragments), a no-default tail (a 2-arg `if` →
-  variadic result) — must fall back. Detecting them needs to RUN the desugar
-  (a probe), but probing mid-recording cannot roll back cleanly: a def-only
-  `Defs.Restore` leaves guard-narrowing pollution that makes the island's
-  `bodyFreeForFallback` reject the row, and a full `RestoreForCompile` clones
-  `Types`, breaking canonical-pointer identity for the rest of the program's
-  recording. Either way ~7 previously-ISLANDED case rows turn into refusals
-  (545 → 552), failing the refusal ratchet. A clean landing needs a way to
-  classify a case as un-compilable WITHOUT running the desugar (e.g. an
-  exported "does this operand resolve to a computed event?" emitter query,
-  plus the static no-default check), so the probe is never needed for the
-  fall-back shapes.
+- **Match faithfulness.** `case` matches via `UnifyR`, which is LENIENT for a
+  bare-refine newtype — `case 5 [Pos …]` matches `Pos` (`def Pos refine
+  Integer`) — whereas `5 is Pos` is nominal-FALSE. A desugar to `is` diverges;
+  the fix is an internal `__casematch v m` → `UnifyR(m, v)` the guard emits for
+  non-predicate clauses (a code-body predicate clause `[pred]` stays
+  `(v pred…)`).
+- **No probe — static classification.** The fall-back shapes (a COMPUTED case
+  value referenced in every clause; a no-default tail → variadic) are
+  classified WITHOUT running the desugar: a new side-effect-free
+  `EmitState.OperandRepushable(v)` (mirrors `resolveOperand`: const/local/type
+  yes, computed-event no) plus the static odd-length-clause check. A
+  non-compilable shape returns the prior dynamic-Any WITHOUT marking
+  uncompilable, so the island / fallback keeps owning it. (Probing
+  mid-recording can't roll back cleanly — a def-only `Defs.Restore` leaves
+  narrowing pollution; a full `RestoreForCompile` clones `Types`, breaking
+  canonical-pointer identity — which is why the probe is avoided entirely.)
+- **The double-record bug (the real blocker).** `case` is in `fallbackWords`,
+  so after `caseReturnsFn` recorded the branch, `tryRecordFallback` ALSO
+  islanded it — the extra FALLBACK event sat unconsumed on the simulated
+  stack ("residual shape … call results reordered"). Fixed by an early
+  `producedBy[outs[0].ID]` guard in `tryRecordFallback` (mirroring
+  `RecordCall`): a dispatch a structured ReturnsFn already recorded is never
+  also islanded. This is what flipped the result from a +7 regression to a
+  net win — the islanded case rows now compile natively (islands 26 → 15).
 
-**Symptom.** `code-body word case (Stage 2)` — `case v [m1 b1 m2 b2 … default]`
+**Symptom (was).** `code-body word case (Stage 2)` — `case v [m1 b1 m2 b2 …
+default]` islanded (a structured match/block clause list, not a single body).
 islands (a structured match/block clause list, not a single body).
 
 **Root cause.** `case` is a multi-way dispatcher (`native_control.go::
@@ -424,11 +430,15 @@ lint) and lowers a ratchet monotonically.
    constructor records its concrete value (`RememberOriginal`); `isInertConst`
    admits `DepScalarInfo`. (Done out of order — small, self-contained, low
    risk — while fn-values is the larger remaining semantic item.)
-4. **Fn-values-on-the-stack.** ← NEXT. The remaining big semantic item
+4. **`case` clause compilation.** ✅ DONE (545/26 → 542/15). Desugar to a
+   nested `if` chain (`__casematch` for faithful matching, `OperandRepushable`
+   for static classification, a `tryRecordFallback` `producedBy` guard to stop
+   the double-record). Islanded case rows now compile natively.
+5. **Fn-values-on-the-stack.** ← NEXT. The remaining big semantic item
    (`apply` + higher-order fn args); de-islands the `callDynamic` user-fn
    apply. Higher risk (engine re-stepping, stack-form calling convention).
-5. **`case` clause compilation.** Reuses value-def locals + branch lowering.
-6. **P7 deletion** — once both ratchets hit 0.
+6. **Predicate-type operands.** ✅ DONE (done out of order, see above).
+7. **P7 deletion** — once both ratchets hit 0.
 
 ## Verification discipline (unchanged contract)
 

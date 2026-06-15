@@ -132,6 +132,101 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 	return nil, nil
 }
 
+// caseReturnsFn type-checks a `case` and, when bytecode emission is active,
+// desugars it to a nested-`if` chain so it compiles natively instead of
+// refusing as a code-body word (design doc "case clause compilation"). Each
+// clause becomes `if (v match __casematch) [block] [rest]`; a code-body
+// predicate match `[pred]` becomes the guard `(v pred…)`; a block runs with
+// v pushed first (mirroring runCaseBody).
+//
+// It compiles ONLY shapes it can statically prove the single-result branch
+// lowering will take — a re-pushable case value (`OperandRepushable`: tested
+// against every clause guard, a computed event could not be re-pushed inside
+// the else fragments) and a trailing default (so the innermost else is a
+// definite value, not a 2-arg-if variadic). Every other shape returns the
+// prior conservative dynamic-Any WITHOUT marking the program uncompilable, so
+// the island / whole-program fallback keeps owning it and refusals never
+// rise. Faithfulness rides the differential gate (runtime stays
+// caseHandler/caseClauses; __casematch reuses its UnifyR).
+func caseReturnsFn(args []Value, r *Registry) []Value {
+	dynAny := []Value{NewDynamicCarrier(TAny)}
+	if r.Check.Emit == nil {
+		return dynAny
+	}
+	v, clauses := args[0], args[1]
+	if isCodeBody(v) && !isCodeBody(clauses) {
+		v, clauses = clauses, v
+	}
+	if isCodeBody(v) || !isCodeBody(clauses) {
+		return dynAny
+	}
+	lst, _ := AsList(clauses)
+	elems := lst.Slice()
+	// Need at least one clause pair AND a trailing default (odd length).
+	if len(elems) < 3 || len(elems)%2 == 0 {
+		return dynAny
+	}
+	if !r.Check.Emit.OperandRepushable(v) {
+		return dynAny
+	}
+	cond := NewList(caseGuardTokens(v, elems[0]))
+	then := NewList(caseBlockTokens(v, elems[1]))
+	rest := buildCaseChain(v, elems, 2)
+	return if3ReturnsFn([]Value{cond, then, NewList(rest)}, r)
+}
+
+// caseGuardTokens builds the guard body for one clause: a code-body
+// predicate `[pred]` runs as `v pred…` (matching runCaseBody), any other
+// match dispatches `v match __casematch` (the same UnifyR caseClauses uses).
+func caseGuardTokens(v Value, m Value) []Value {
+	if isCodeBody(m) {
+		ml, _ := AsList(m)
+		return append([]Value{v}, ml.Slice()...)
+	}
+	return []Value{v, m, NewWord("__casematch")}
+}
+
+// caseBlockTokens returns the tokens a clause block contributes: a code body
+// runs with v pushed first (runCaseBody's convention), a plain value is
+// itself.
+func caseBlockTokens(v Value, b Value) []Value {
+	if isCodeBody(b) {
+		bl, _ := AsList(b)
+		return append([]Value{v}, bl.Slice()...)
+	}
+	return []Value{b}
+}
+
+// buildCaseChain builds the token stream for the nested-`if` form of the
+// clause list from index i: `if (v match __casematch) [block] [<rest>]`,
+// recursing into the else body so a later clause only evaluates when the
+// earlier guard fails. A trailing odd element is the default block.
+func buildCaseChain(v Value, elems []Value, i int) []Value {
+	if i+1 >= len(elems) {
+		if i < len(elems) {
+			return caseBlockTokens(v, elems[i]) // trailing default
+		}
+		return nil
+	}
+	guard := []Value{NewOpenParen()}
+	guard = append(guard, caseGuardTokens(v, elems[i])...)
+	guard = append(guard, NewCloseParen())
+	out := []Value{NewWord("if")}
+	out = append(out, guard...)
+	out = append(out, NewList(caseBlockTokens(v, elems[i+1]))) // then [block]
+	if rest := buildCaseChain(v, elems, i+2); rest != nil {
+		out = append(out, NewList(rest)) // else [rest] — lazy
+	}
+	return out
+}
+
+// caseMatchHandler is the runtime of __casematch: UnifyR(match, value) → ok.
+// args[0] is the match (stack top), args[1] the case value (BarrierPos 0).
+func caseMatchHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	_, ok := UnifyR(args[0], args[1], r)
+	return []Value{NewBoolean(ok)}, nil
+}
+
 // runCaseBody executes a case block (or default): a code-body list
 // runs in a sub-engine with the captured value pushed first — the
 // same convention as the `error [handler]` block — so the block can

@@ -89,9 +89,24 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
 				Handler:    caseHandler,
+				ReturnsFn:  caseReturnsFn,
 				Returns:    []*Type{TAny}, BarrierPos: -1,
 			},
 		},
+	},
+	{
+		// __casematch is the internal guard the compiled `case` desugar
+		// emits for a non-predicate clause: `v match __casematch` applies the
+		// SAME UnifyR the interpreter's caseClauses uses, so a bare-refine
+		// newtype (`Pos`) matches structurally exactly as case does — which
+		// the `is` word (nominal) would not. Not user-facing.
+		Name: "__casematch",
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny, TAny},
+			Handler:    caseMatchHandler,
+			Returns:    []*Type{TBoolean},
+			BarrierPos: 0,
+		}},
 	},
 	{
 		Name: "for",

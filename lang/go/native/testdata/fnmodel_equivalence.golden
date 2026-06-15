@@ -1,4 +1,6 @@
 === SIGNATURE TABLE ===
+WORD __casematch
+  [Any Any] barrier=0 returns=[Scalar/Boolean]
 WORD __file
   [] barrier=0 returns=[Scalar/String]
 WORD __folder
@@ -63,7 +65,7 @@ WORD cancel
 WORD canon
   [Any] barrier=1 returns=[Scalar/String]
 WORD case
-  [Any Any] barrier=2 noeval={0,1} returns=[Any]
+  [Any Any] barrier=2 noeval={0,1} returns=[Any] +returnsfn
 WORD changecase
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/Atom Node/Map] barrier=2 returns=[Scalar/String]

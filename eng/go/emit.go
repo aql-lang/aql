@@ -418,6 +418,33 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	return constOperand(es.intern(lit)), true
 }
 
+// OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE
+// operand — a const, a frame local, or a (canonical) type node — as opposed
+// to a computed EVENT result (on the simulated stack exactly once) or an
+// unresolvable value. It mirrors resolveOperand's decision but is SIDE-
+// EFFECT FREE (no interning), so a caller can classify an operand WITHOUT
+// recording. Used by a multi-reference desugar (the `case` value is tested
+// against every clause guard) to decide up front whether it can compile —
+// avoiding a probe whose rollback would otherwise pollute the recording.
+func (es *EmitState) OperandRepushable(v Value) bool {
+	if es == nil {
+		return false
+	}
+	// An event operand is the value's stack-discipline truth (pushed once);
+	// it cannot be re-pushed for a second reference.
+	if pr, ok := es.producedBy[v.ID]; ok && (!IsTypeBody(v) || es.typeOut[pr.seq]) {
+		return false
+	}
+	if _, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
+		return true
+	}
+	if IsBareTypeNode(v) && v.ID != "" {
+		return true
+	}
+	lit, ok := es.materialise(v)
+	return ok && isInertConst(lit)
+}
+
 // materialise recovers the fully concrete value behind a stripped
 // literal: the value itself, its RecordStrip original, or — for a
 // concrete container whose MEMBERS were stripped by a sub-engine run
