@@ -218,6 +218,22 @@ carries `(seq, idx)`).
 
 ## Fn-values-on-the-stack (`apply` + higher-order fn args, refusals ~148)
 
+**Scope correction (from a probe of the bucket).** The "~148" was the whole
+heterogeneous dynamic/opaque-output bucket; the genuine fn-VALUE rows are
+~34: `fn/r apply` (named/anon ref applied to args, ~10 — the core), `apply
+$.path receiver` (a Reach lens, a DIFFERENT sig, ~7), a fn value reaching an
+introspection word (`typeof (inc/r)`, `Positive tcmp Positive`,
+`TypeUtil.arityof (fn …)`, ~12), and higher-order afn args
+(`each ([kv] => …)`, ~3).
+
+**No shortcut (verified).** The tempting elision — "`apply` just unquotes the
+fn for the engine to re-step, so elide it and let the re-step record the real
+`inc 5` call" — does NOT work: after `apply` returns the fn, the check-mode
+engine does not re-step it into an `inc` dispatch; the fn flows to the
+residual unresolved ("residual value of unknown provenance"). So the full
+machinery below is required — the fn VALUE must become a closure on the
+stack, and `apply` must lower to a stack-form application.
+
 **Symptom.** `unannotated or opaque word apply` for `5 inc/r apply`,
 `z/r apply`, `f/r apply`; and any higher-order word handed a fn VALUE
 (`each [idg] …`). The fn value can neither bake (it is code, not
