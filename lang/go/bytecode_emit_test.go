@@ -377,6 +377,33 @@ func TestEmitDynOutNative(t *testing.T) {
 	}
 }
 
+// TestEmitModuleInnerNative: a module word reached via dot-access
+// (`StructUtil.clone …`) trivially delegates to its inner native; even with a
+// declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,
+// verified against the module sub-registry (so a usurp synthetic can't slip
+// through). The interpreter dispatches the same inner native via execMatch on
+// the main engine, so the baked call is identical.
+func TestEmitModuleInnerNative(t *testing.T) {
+	cases := []string{
+		`"aql:struct-util" import end StructUtil.clone {a:1}`,
+		`"aql:struct-util" import end StructUtil.jsonify {a:1}`,
+	}
+	for _, src := range cases {
+		if _, r := compile(t, src); r != "" {
+			t.Errorf("module inner native must compile, refused: %s\n  %s", r, src)
+		}
+		_, compiled, err := mustRun(t, src)
+		if err != nil || !compiled {
+			t.Fatalf("%s: compiled=%v err=%v (want compiled, no error)", src, compiled, err)
+		}
+	}
+	// Negative: a user-def usurp value (`def ifu (usurp if)`) is NOT a module
+	// inner native and re-steps (tape-coupled) — it must refuse, not bake.
+	if _, r := compile(t, `def ifu (usurp if) ifu (1 eq 1) [10] [20]`); r == "" {
+		t.Error("usurp'd user def compiled but must refuse (re-steps)")
+	}
+}
+
 // mustRun runs src in compiled mode, returning (result, wasCompiled, err).
 func mustRun(t *testing.T, src string) ([]any, bool, error) {
 	t.Helper()

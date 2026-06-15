@@ -70,13 +70,30 @@ downstream TYPED consumer of it refuses via the dynamic-input guard — containe
 Cleared 18 opaque-output rows (−5 net; cascades moved to other buckets). Files:
 `eng/go/carrier.go` (dynOutNativeOK), `eng/go/emit.go` (RecordCall forceDynOut).
 
-Current ratchets: **514 refused / 15 islanded** (from 651 / 115 at P0;
+**Module inner natives via dot-access (LANDED, 514 → 459).** A module word
+called `Pkg.word` (`StructUtil.clone`, `StructUtil.jsonify`, …) trivially
+delegates to an inner native registered in the module's sub-registry; those
+natives have no `Returns` annotation, so their Any output is dynamic and they
+refused as "opaque output". But the dispatch IS sound to bake: the interpreter
+dispatches the inner native via `execMatch` on the main engine (the wrapper's
+trivial delegation), so a `CALL_NATIVE` with the main registry is identical.
+`dynOutNativeOK` now accepts the inner sig, verified by `isModuleInnerSig`
+(pointer-membership in a loaded module's wrapper sub-registry) — which excludes
+usurp synthetics. The IsBuiltinWord gate stays on the CORE path: a user
+`def ifu (usurp if)` makes `r.Lookup("ifu")` return the usurp-MODIFIED `if` sig
+(pointer-equal), so without that gate ifu baked and returned a tape-coupled
+result (the differential caught it). Cleared the struct-util / module-word
+opaque cluster: −55 refusals, +48 compiled differential rows. Files:
+`eng/go/carrier.go` (dynOutNativeOK + isModuleInnerSig).
+
+Current ratchets: **459 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
 555 after predicate-type provenance; 545 after if value-else; 542 after case;
 538 after multi-return / 0-return / anonymous-lambda fns; 527 after apply of a
 fn value; 521 after unnamed-fn map/list members; 519 after 0-value-then if
-guard; 514 after concrete-args dynamic-output core builtins). Compiled rows
-1706 → 1853, 0 divergences throughout. The `case`
+guard; 514 after concrete-args dynamic-output core builtins; 459 after module
+inner natives via dot-access). Compiled rows 1706 → 1908, 0 divergences
+throughout. The `case`
 desugar dropped the island count 26 → 15 (islanded case rows now compile
 natively).
 

@@ -405,7 +405,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	if anyDynamicCarrier(args) || !anyDynamicCarrier(outs) {
 		return false
 	}
-	if fallbackWords[word] || !r.IsBuiltinWord(word) {
+	if fallbackWords[word] {
 		return false
 	}
 	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
@@ -424,15 +424,61 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 			return false
 		}
 	}
-	// The runtime CALL_NATIVE uses this exact sig, so it must be the word's own
-	// main-registry binding (not a module-qualified sub-registry sig).
-	fn := r.Lookup(word)
-	if fn == nil {
+	// The VM bakes this exact sig and calls sig.Handler DIRECTLY, so it must be
+	// a REAL native binding: the word's own main-registry BUILTIN sig, OR a
+	// trivial-delegation module inner-native sig reached via dot-access
+	// (`StructUtil.clone …`). Both are sound to bake with the main registry —
+	// for a module inner native the interpreter ALSO dispatches via execMatch
+	// on the main engine (the wrapper's trivial delegation), so the call is
+	// identical. The IsBuiltinWord gate on the core path is load-bearing: a
+	// user `def ifu (usurp if)` makes r.Lookup("ifu") return the usurp-MODIFIED
+	// if sig (pointer-equal to the match) — but ifu is not a builtin, so it is
+	// excluded here and stays refused (a usurp'd if re-steps and returns
+	// tape-coupled values). A usurp synthetic also matches no module export.
+	if r.IsBuiltinWord(word) {
+		if fn := r.Lookup(word); fn != nil {
+			for i := range fn.Signatures {
+				if &fn.Signatures[i] == sig {
+					return true
+				}
+			}
+		}
+	}
+	return isModuleInnerSig(r, word, sig)
+}
+
+// isModuleInnerSig reports whether sig is a native signature exported by a
+// LOADED module's trivial-delegation wrapper for word — i.e. the inner native
+// `word` dispatches when called as `Pkg.word`. The wrapper (an FnDefInfo
+// carrying its sub-Registry) lives in the module's export map; the inner sig is
+// `wrapper.Registry.Lookup(word).Signatures`. Pointer-identity confirms sig is
+// THAT native, not a usurp-synthetic copy. O(loaded modules × exports) — only
+// consulted on a dynamic-output dispatch the core-sig check already missed.
+func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
+	if r == nil || r.Modules == nil {
 		return false
 	}
-	for i := range fn.Signatures {
-		if &fn.Signatures[i] == sig {
-			return true
+	for _, md := range r.Modules.loaded {
+		for _, em := range md.Exports {
+			if em == nil {
+				continue
+			}
+			for _, k := range em.Keys() {
+				v, _ := em.Get(k)
+				fd, ok := v.Data.(FnDefInfo)
+				if !ok || fd.Registry == nil || fd.Name != word {
+					continue
+				}
+				inner := fd.Registry.Lookup(fd.Name)
+				if inner == nil {
+					continue
+				}
+				for i := range inner.Signatures {
+					if &inner.Signatures[i] == sig {
+						return true
+					}
+				}
+			}
 		}
 	}
 	return false
