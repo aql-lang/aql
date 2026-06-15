@@ -89,7 +89,7 @@ func invokeCallback(r *Registry, cb Value, args []Value) ([]Value, error) {
 	}
 	sig := MatchFnSig(cb, args)
 	if sig == nil {
-		return nil, fmt.Errorf("filter: no matching callback signature")
+		return nil, fmt.Errorf("no matching callback signature for %d argument(s)", len(args))
 	}
 	var caps []CapturedBinding
 	if fd, ok := cb.Data.(FnDefInfo); ok {
@@ -105,21 +105,13 @@ func invokeCallback(r *Registry, cb Value, args []Value) ([]Value, error) {
 // quotation map form rather than dropping silently.
 func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 	data, _ := AsMap(mapVal)
-	var caps []CapturedBinding
-	if fd, ok := cb.Data.(FnDefInfo); ok {
-		caps = fd.Captured
-	}
 	keys := data.Keys()
 	n := int64(len(keys))
 	out := NewOrderedMap()
 	for idx, k := range keys {
 		v, _ := data.Get(k)
 		cbArgs := []Value{NewKeyVal(k, v, int64(idx), n)}
-		sig := MatchFnSig(cb, cbArgs)
-		if sig == nil {
-			return nil, fmt.Errorf("filter: no matching callback signature")
-		}
-		res, err := r.CallAQL(sig, cbArgs, caps)
+		res, err := invokeCallback(r, cb, cbArgs)
 		if err != nil {
 			return nil, fmt.Errorf("filter: key %q: %w", k, err)
 		}

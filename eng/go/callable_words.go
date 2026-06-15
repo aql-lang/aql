@@ -169,24 +169,84 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	return real.RecordClosureCall(word, sig, args, spec.bodyPos, unit, capOps, outs, pos)
 }
 
+// lambdaHOFWords is the curated set of higher-order words whose lambda VALUE
+// form compiles to a closure (roadmap item 5a). filter over a list hands the
+// lambda a {key:index, value:elem} pair Map; filter/each over a map hand a
+// KeyVal {k v i n}; fold/scan over a map hand (accumulator, KeyVal). Anything
+// else (multi-sig fns, predicate `is`, apply, usurp) stays refused.
+var lambdaHOFWords = map[string]bool{"filter": true, "each": true, "fold": true, "scan": true}
+
+// pairMapCarrier is the filter-over-LIST lambda input: a concrete map mirroring
+// the {key:index, value:elem} pair the handler builds, so `p.value` lowers
+// against the element type. Concrete TMap (not TKeyVal — that type lives in the
+// lang layer) is sufficient: the compiled `get value` is map-subtype-agnostic
+// and the runtime pair Map satisfies it.
+func pairMapCarrier(elem *Type) Value {
+	m := NewOrderedMap()
+	m.Set("key", NewCarrier(TInteger))
+	m.Set("value", NewCarrier(elem))
+	return NewMap(m)
+}
+
+// keyValCarrier is the over-MAP lambda input: a concrete map mirroring a KeyVal
+// {k v i n}, so `kv.v`/`kv.i`/`kv.n`/`kv.k` lower against the right types. The
+// runtime KeyVal is a map subtype, so the same field gets apply.
+func keyValCarrier(elem *Type) Value {
+	m := NewOrderedMap()
+	m.Set("k", NewCarrier(TString))
+	m.Set("v", NewCarrier(elem))
+	m.Set("i", NewCarrier(TInteger))
+	m.Set("n", NewCarrier(TInteger))
+	return NewMap(m)
+}
+
+// buildLambdaInputs returns the body input carriers + the lambda's param names
+// for an allowlisted higher-order word handed a single-sig lambda, mirroring
+// what the runtime handler passes; ok=false keeps the call refused (wrong
+// receiver/arity). The arity check is load-bearing: a wrong-arity lambda would
+// bind the wrong inputs.
+func buildLambdaInputs(word string, args []Value, fs FnSig) (inputs []Value, names []string, ok bool) {
+	data := args[1]
+	isList := IsConcrete(data) && data.Parent.ConformsTo(TList)
+	isMap := IsConcrete(data) && data.Parent.ConformsTo(TMap)
+	switch word {
+	case "filter", "each":
+		if len(fs.Params) != 1 {
+			return nil, nil, false
+		}
+		switch {
+		case word == "filter" && isList:
+			return []Value{pairMapCarrier(DataListElemTypeFromValue(data))}, []string{fs.Params[0].Name}, true
+		case isMap:
+			return []Value{keyValCarrier(DataMapValueTypeFromValue(data))}, []string{fs.Params[0].Name}, true
+		}
+	case "fold", "scan":
+		if len(fs.Params) != 2 || !isMap {
+			return nil, nil, false
+		}
+		elem := DataMapValueTypeFromValue(data)
+		acc := NewCarrier(elem) // no-init / scan seeds from the first value
+		if word == "fold" && len(args) >= 3 {
+			acc = NewCarrier(args[2].Parent) // explicit seed
+		}
+		return []Value{acc, keyValCarrier(elem)}, []string{fs.Params[0].Name, fs.Params[1].Name}, true
+	}
+	return nil, nil, false
+}
+
 // tryRecordLambdaClosure compiles a higher-order word handed a LAMBDA VALUE
 // (an anonymous, single-sig FnDefInfo built by `=>`/afn) to a closure unit,
 // recording a native dispatch instead of refusing at RecordCall's fn-value
-// guards. Scoped (roadmap item 5a-1) to `filter (lambda) [list]`: the handler
-// hands the lambda a {key:index, value:elem} pair Map, so the closure's single
-// named param binds to that pair-Map carrier. Other receivers/words stay
-// refused. Returns true on success, leaving the real emit state untouched on
-// any refusal (the probe runs in a throwaway state).
+// guards (roadmap item 5a). The lambda's NAMED params bind to input carriers
+// matching what the handler builds at run time (buildLambdaInputs). Returns
+// true on success, leaving the real emit state untouched on any refusal (the
+// probe runs in a throwaway state).
 func tryRecordLambdaClosure(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es := r.Check.Emit
 	if !es.active() || sig == nil || len(outs) != 1 {
 		return false
 	}
-	// Only filter over a concrete LIST receiver (the pair-Map input shape).
-	if word != "filter" || len(args) < 2 {
-		return false
-	}
-	if !IsConcrete(args[1]) || !args[1].Parent.ConformsTo(TList) {
+	if !lambdaHOFWords[word] || len(args) < 2 {
 		return false
 	}
 	lambda := args[0]
@@ -195,22 +255,14 @@ func tryRecordLambdaClosure(r *Registry, word string, sig *Signature, args, outs
 		return false // not a single-sig anonymous lambda — keep it refused
 	}
 	fs := fnDef.Signatures[0]
-	if len(fs.Params) != 1 || len(fs.Body) == 0 {
-		return false // the predicate is a single-param body
+	if len(fs.Body) == 0 || bodyHasSentinel(NewList(fs.Body)) {
+		return false // empty body, or a break/continue/return to an unreachable loop
 	}
-	if bodyHasSentinel(NewList(fs.Body)) {
-		return false // break/continue/return targets an unreachable loop
+	inputs, paramNames, ok := buildLambdaInputs(word, args, fs)
+	if !ok {
+		return false
 	}
-	paramNames := []string{fs.Params[0].Name}
 	bodyToks := fs.Body
-
-	// The handler builds a {key:index, value:elem} pair Map per element
-	// (filter.go). Bind the lambda's param to a matching pair-Map carrier so
-	// `p.value` lowers against the element type.
-	pair := NewOrderedMap()
-	pair.Set("key", NewCarrier(TInteger))
-	pair.Set("value", NewCarrier(DataListElemTypeFromValue(args[1])))
-	inputs := []Value{NewMap(pair)}
 
 	// Lexical captures ride from the lambda's construction-time snapshot (the
 	// correct enclosing baseline), resolved in the current emit scope.

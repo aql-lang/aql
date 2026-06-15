@@ -62,6 +62,7 @@ fold [add] 5 0	ERROR:signature_error	fold requires a list collection
 each [mul 10] {a:1 b:2}	{a:10 b:20}	forward form
 {a:1 b:2} each [[9] swap push]	{a:[9 1] b:[9 2]}	each over a map: a compound (list) per-entry result keeps the map shape
 {a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])	{a:1 b:3}	each lambda receives a KeyVal (value + iteration index)
+def f fn [[t:Integer] [Map] [each ([kv:KeyVal] => [kv.v add t]) {a:1 b:2}]] f 10	{a:11 b:12}	a map each-lambda captures an enclosing-fn param (t)
 {a:1 b:5 c:3} filter ([kv:KeyVal] => [kv.v gt 2])	{b:5 c:3}	filter lambda receives a KeyVal, keeps the map shape
 fold [add] {a:1 b:2 c:3} 0	6	fold over a map sums the values (explicit seed)
 fold [add] {a:10 b:20 c:5}	35	no-init form folds from the first value

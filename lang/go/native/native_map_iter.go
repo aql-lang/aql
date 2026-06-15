@@ -29,8 +29,7 @@ import "fmt"
 // construction by the matched signature, not inferred from the body value.
 type mapBody struct {
 	lambda bool
-	body   Value             // quotation list / compiled closure, or the lambda fn
-	caps   []CapturedBinding // lambda captures (lambda form only)
+	body   Value // quotation list / compiled closure, or the lambda fn
 }
 
 // newQuoteBody prepares a quotation/closure body: each entry's VALUE is its sole
@@ -40,14 +39,11 @@ func newQuoteBody(body Value) mapBody {
 	return mapBody{body: body}
 }
 
-// newLambdaBody prepares a Function body handed a KeyVal per entry, run through
-// CallAQL with the lambda's captured bindings.
+// newLambdaBody prepares a Function body handed a KeyVal per entry. It runs
+// through invokeCallback: a compiled closure VM-native via InvokeBody, an
+// interpreter FnDefInfo lambda via CallAQL with its captures.
 func newLambdaBody(body Value) mapBody {
-	mb := mapBody{lambda: true, body: body}
-	if fd, ok := body.Data.(FnDefInfo); ok {
-		mb.caps = fd.Captured
-	}
-	return mb
+	return mapBody{lambda: true, body: body}
 }
 
 // value runs the body for one entry with no accumulator. ok=false when the body
@@ -71,11 +67,7 @@ func (mb mapBody) fold(reg *Registry, acc Value, k string, v Value, i, n int64) 
 }
 
 func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
-	sig := MatchFnSig(mb.body, args)
-	if sig == nil {
-		return Value{}, false, fmt.Errorf("no matching lambda signature for %d argument(s)", len(args))
-	}
-	return topOfRun(reg.CallAQL(sig, args, mb.caps))
+	return topOfRun(invokeCallback(reg, mb.body, args))
 }
 
 // topOfRun returns the top of a body's residual stack (ok=false when empty).
