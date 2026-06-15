@@ -420,6 +420,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		}
 	}
 	if !tryRecordClosure(r, word, sig, args, out, pos) &&
+		!tryRecordLambdaClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))

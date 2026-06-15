@@ -72,10 +72,9 @@ func hofElemType(data Value) *Type {
 // unit, AnalyseFnBody records the body under it, finish closes it. ok is false
 // when the body refuses (StartFnCompile declined, or the analysis marked the
 // state uncompilable).
-func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, captures []CapturedBinding, pos SrcPos) (int, bool) {
+func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
 	declared := []*Type{TAny}
-	paramNames := make([]string, len(inputs)) // all unnamed: body reads inputs off the stack
 	name := word + "$body"
 	key := FnAnalysisKey(name, inputs, captures, bodyToks)
 	unit, finish, ok := es.StartFnCompile(key, name, inputs, declared, paramNames, captures, false, pos)
@@ -148,11 +147,14 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	diagBase := len(r.Check.Diagnostics)
 	defer r.Check.TruncateDiagnostics(diagBase)
 
+	// Quotation bodies read their inputs off the stack — all params unnamed.
+	paramNames := make([]string, len(inputs))
+
 	// PROBE: compile the body in a throwaway state so a refusal leaves the
 	// real program untouched (graceful fall-through to the island).
 	real := r.Check.Emit
 	r.Check.Emit = NewEmitState()
-	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, captures, pos)
+	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -160,9 +162,82 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, captures, pos)
+	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
 	if !realOk || unit < 0 {
 		return false
 	}
 	return real.RecordClosureCall(word, sig, args, spec.bodyPos, unit, capOps, outs, pos)
+}
+
+// tryRecordLambdaClosure compiles a higher-order word handed a LAMBDA VALUE
+// (an anonymous, single-sig FnDefInfo built by `=>`/afn) to a closure unit,
+// recording a native dispatch instead of refusing at RecordCall's fn-value
+// guards. Scoped (roadmap item 5a-1) to `filter (lambda) [list]`: the handler
+// hands the lambda a {key:index, value:elem} pair Map, so the closure's single
+// named param binds to that pair-Map carrier. Other receivers/words stay
+// refused. Returns true on success, leaving the real emit state untouched on
+// any refusal (the probe runs in a throwaway state).
+func tryRecordLambdaClosure(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+	es := r.Check.Emit
+	if !es.active() || sig == nil || len(outs) != 1 {
+		return false
+	}
+	// Only filter over a concrete LIST receiver (the pair-Map input shape).
+	if word != "filter" || len(args) < 2 {
+		return false
+	}
+	if !IsConcrete(args[1]) || !args[1].Parent.ConformsTo(TList) {
+		return false
+	}
+	lambda := args[0]
+	fnDef, ok := lambda.Data.(FnDefInfo)
+	if !ok || !fnDef.Anonymous || len(fnDef.Signatures) != 1 {
+		return false // not a single-sig anonymous lambda — keep it refused
+	}
+	fs := fnDef.Signatures[0]
+	if len(fs.Params) != 1 || len(fs.Body) == 0 {
+		return false // the predicate is a single-param body
+	}
+	if bodyHasSentinel(NewList(fs.Body)) {
+		return false // break/continue/return targets an unreachable loop
+	}
+	paramNames := []string{fs.Params[0].Name}
+	bodyToks := fs.Body
+
+	// The handler builds a {key:index, value:elem} pair Map per element
+	// (filter.go). Bind the lambda's param to a matching pair-Map carrier so
+	// `p.value` lowers against the element type.
+	pair := NewOrderedMap()
+	pair.Set("key", NewCarrier(TInteger))
+	pair.Set("value", NewCarrier(DataListElemTypeFromValue(args[1])))
+	inputs := []Value{NewMap(pair)}
+
+	// Lexical captures ride from the lambda's construction-time snapshot (the
+	// correct enclosing baseline), resolved in the current emit scope.
+	captures := fnDef.Captured
+	capOps := make([]emitOperand, len(captures))
+	for i, cb := range captures {
+		op, ok := es.resolveOperand(cb.Value)
+		if !ok {
+			return false // an unreachable capture — keep it refused
+		}
+		capOps[i] = op
+	}
+
+	diagBase := len(r.Check.Diagnostics)
+	defer r.Check.TruncateDiagnostics(diagBase)
+
+	// PROBE in a throwaway state, then compile for real.
+	real := r.Check.Emit
+	r.Check.Emit = NewEmitState()
+	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
+	r.Check.Emit = real
+	if !probeOk {
+		return false
+	}
+	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
+	if !realOk || unit < 0 {
+		return false
+	}
+	return real.RecordClosureCall(word, sig, args, 0, unit, capOps, outs, pos)
 }
