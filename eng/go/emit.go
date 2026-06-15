@@ -719,6 +719,82 @@ func (es *EmitState) RegisterLocal(id string) int {
 	return slot
 }
 
+// emitCheckpoint snapshots the append-only recording pools and counters so a
+// DISCARDED loop-analysis round can be rolled back. AnalyseLoopBody re-runs a
+// loop body to a binding fixed point but keeps only the final (stabilised)
+// round's fragment; without rollback the earlier rounds' interned consts and
+// island fallback spans orphan into the Program and their dispatches inflate
+// SiteCounts (the metric surfaced via CheckResult.SiteCounts). The snapshot is
+// by LENGTH for the slice pools (intern/internType/RecordFallback only append)
+// and by VALUE for the small SiteCounts map.
+type emitCheckpoint struct {
+	seq        int
+	consts     int
+	types      int
+	fallbacks  int
+	fnRecs     int
+	siteCounts map[string]int
+}
+
+// Checkpoint captures the rollback point. Nil-safe (returns a zero checkpoint
+// that Rollback ignores via the nil-receiver guard at its call site).
+func (es *EmitState) Checkpoint() emitCheckpoint {
+	if es == nil {
+		return emitCheckpoint{}
+	}
+	sc := make(map[string]int, len(es.SiteCounts))
+	for k, v := range es.SiteCounts {
+		sc[k] = v
+	}
+	return emitCheckpoint{
+		seq:        es.seq,
+		consts:     len(es.consts),
+		types:      len(es.types),
+		fallbacks:  len(es.fallbacks),
+		fnRecs:     len(es.fnRecs),
+		siteCounts: sc,
+	}
+}
+
+// Rollback discards everything recorded since cp — used to drop a non-final
+// loop-analysis round so only the stabilised round lands in the Program.
+//
+// SAFETY: a round that compiled a fn UNIT (a closure/island body via
+// StartFnCompile) cannot be unwound — the unit's lowered code references shared
+// const/type indices, so trimming the pools would dangle them. That shape (a
+// fn body inside a loop that ALSO needs multiple fixed-point rounds) is rare;
+// for it we keep the round's recording (the prior behaviour: a little bloat,
+// always correct) rather than risk corrupting an emitted unit.
+func (es *EmitState) Rollback(cp emitCheckpoint) {
+	if es == nil || len(es.fnRecs) != cp.fnRecs {
+		return
+	}
+	for k, i := range es.constIdx {
+		if i >= cp.consts {
+			delete(es.constIdx, k)
+		}
+	}
+	es.consts = es.consts[:cp.consts]
+	for k, i := range es.typeIdx {
+		if i >= cp.types {
+			delete(es.typeIdx, k)
+		}
+	}
+	es.types = es.types[:cp.types]
+	es.fallbacks = es.fallbacks[:cp.fallbacks]
+	// Provenance entries minted after cp belong to the discarded round's
+	// carriers (fresh ids never referenced again); drop them, mirroring
+	// StartFnCompile's fn-unit cleanup so the live map stays tight.
+	for id, pr := range es.producedBy {
+		if pr.seq > cp.seq {
+			delete(es.producedBy, id)
+		}
+	}
+	es.SiteCounts = cp.siteCounts
+	es.seq = cp.seq
+	es.captured = nil
+}
+
 // fnArm bypasses AnalyseFnBody's suspension exactly once — set by
 // StartFnCompile so the armed body analysis records into the open
 // fn fragment.

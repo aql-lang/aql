@@ -1492,7 +1492,15 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 		for i, n := range bindNames {
 			r.Defs.Push(n, bindVals[i])
 		}
+		// Checkpoint the recording pools before an armed round: only the FINAL
+		// (stabilised) round's fragment is kept, so a non-final round's interned
+		// consts / island spans and its SiteCounts are rolled back rather than
+		// orphaned into the Program (bytecode artifact + metric bloat). The
+		// def-stack convergence (r.Defs) is independent of the recording, so it
+		// proceeds across rounds untouched.
+		var cp emitCheckpoint
 		if loopCapture {
+			cp = es.Checkpoint()
 			es.ArmBranchCapture()
 		}
 		var adds map[string]Value
@@ -1517,20 +1525,26 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 			r.Defs.Push(k, v)
 			installed = append(installed, k)
 		}
-		if len(joined) == 0 {
-			break
-		}
-		stable := len(joined) == len(prev)
-		if stable {
-			for k, v := range joined {
-				pv, ok := prev[k]
-				if !ok || !ValuesEqual(pv, v) {
-					stable = false
-					break
+		// Stabilised when the body adds no bindings (the common single-round
+		// case) or the joined bindings equal the previous round's. The final
+		// round is the one that stabilises, or the last permitted round.
+		stable := len(joined) == 0
+		if !stable {
+			stable = len(joined) == len(prev)
+			if stable {
+				for k, v := range joined {
+					pv, ok := prev[k]
+					if !ok || !ValuesEqual(pv, v) {
+						stable = false
+						break
+					}
 				}
 			}
+			prev = joined
 		}
-		prev = joined
+		if loopCapture && !stable && round < loopAnalysisRounds-1 {
+			es.Rollback(cp)
+		}
 		if stable {
 			break
 		}

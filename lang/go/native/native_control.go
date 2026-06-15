@@ -1,7 +1,5 @@
 package native
 
-import "fmt"
-
 // controlNatives covers the control-flow words: do, if, for, break,
 // continue, error.
 //
@@ -567,7 +565,14 @@ func ifListReturnsFn(args []Value, r *Registry) []Value {
 // ---- for / break / continue handlers ----
 
 func forCountHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	n, _ := args[0].AsConcreteInteger()
+	// Reject a non-concrete count (a DepScalar/refinement Integer, a carrier)
+	// rather than silently coercing it to zero and running the loop zero
+	// times — the VM's OpForSetup (eng/go/vm.go) raises for_error here, so
+	// both engines must agree instead of one looping and the other erroring.
+	n, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, r.AqlError("for_error", "for: count must be a concrete Integer", "for")
+	}
 	body := args[1]
 	return runForLoop(r, 0, n, 1, "i", body)
 }
@@ -581,7 +586,9 @@ func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	body := args[1]
 	start, end, step, err := parseRange(rangeSpec)
 	if err != nil {
-		return nil, fmt.Errorf("for: %w", err)
+		// for_error matches the VM's OpForSetup taxonomy (eng/go/vm.go) so a
+		// malformed/non-concrete range errors the same way in both engines.
+		return nil, r.AqlError("for_error", "for: "+err.Error(), "for")
 	}
 	return runForLoop(r, start, end, step, "i", body)
 }

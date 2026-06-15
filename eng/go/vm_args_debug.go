@@ -10,3 +10,9 @@ package eng
 // under the differential / race gates rather than silent, coverage-dependent
 // corruption. See vm_args_release.go for the production constant.
 const vmFreshArgsPerCall = true
+
+// VMArgsDebugBuild reports whether this binary was built with -tags aqldebug
+// (a fresh args slice per CALL_NATIVE). True here. Exposed so allocation-
+// ceiling guards can skip themselves under the debug tag, whose extra
+// per-call allocations are intentional.
+const VMArgsDebugBuild = true

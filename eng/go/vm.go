@@ -17,7 +17,10 @@ package eng
 // tail-call spin) trips the step budget with the interpreter's
 // evaluation_limit taxonomy.
 
-import "fmt"
+import (
+	"fmt"
+	"sync/atomic"
+)
 
 // RunProgram executes a compiled Program against a registry and
 // returns the residual value stack (bottom → top), matching what the
@@ -93,10 +96,40 @@ func tapeCoupled(results []Value) bool {
 	return false
 }
 
-func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
+func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr error) {
 	if p == nil {
 		return nil, fmt.Errorf("bytecode: nil program")
 	}
+	// Concurrency guard: a single registry cannot drive two OVERLAPPING runs —
+	// the shared Invoker install/restore below (and the mutable scopes the run
+	// touches) would race. Catch the misuse with a clear error instead of
+	// silent data corruption; concurrent runs must each own a registry
+	// (ForkConcurrent). Nested SEQUENTIAL reuse is unaffected: the flag resets
+	// on exit before the next run begins, which is the normal RunCompiled path.
+	if r != nil {
+		if !atomic.CompareAndSwapInt32(&r.vmRunning, 0, 1) {
+			return nil, makeAqlError("concurrency_error",
+				"bytecode: a compiled program is already running on this registry; concurrent runs need their own registry (ForkConcurrent)",
+				"", "", "")
+		}
+		defer atomic.StoreInt32(&r.vmRunning, 0)
+	}
+	// Last-resort panic guard, mirroring the interpreter's top-level recover
+	// (engine.go Run): a bug in a compiled-reachable handler or in the VM loop
+	// must surface as a clean internal_error AqlError — which RunCompiled then
+	// resolves by falling back to the interpreter — never as a goroutine stack
+	// trace. Errors returned normally are untouched.
+	defer func() {
+		if rec := recover(); rec != nil {
+			src := ""
+			if r != nil {
+				src = r.Source
+			}
+			result = nil
+			runErr = makeAqlError("internal_error",
+				fmt.Sprintf("internal bytecode VM error: %v", rec), "", src, "")
+		}
+	}()
 	vc := &vmContext{p: p, r: r, ceiling: vmStackCeiling(r), stepLimit: stepLimit}
 	// Install the body-closure invoker so a higher-order word's handler runs
 	// its body through the VM (InvokeBody → r.Invoker → invokeClosure). The
@@ -636,12 +669,20 @@ func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
 	return r.AqlError("type_error", detail, funcName)
 }
 
+// vmErrAt builds an internal_error AqlError for a VM-internal soundness
+// violation (a simulated/runtime stack disagreement the lowerer thought
+// impossible). It carries the AQL taxonomy code — so a direct RunProgram
+// caller and error-scraping tooling see a structured error, not a raw Go
+// string — and RunCompiled treats it as a fall-back-to-interpreter signal.
+// Reaching one is a compiler bug; the message keeps the pc/source detail.
 func vmErrAt(debug []SrcPos, pc int, msg string) error {
 	pos := SrcPos{}
 	if pc >= 0 && pc < len(debug) {
 		pos = debug[pc]
 	}
-	return fmt.Errorf("bytecode: internal: %s (pc=%d, src %d:%d)", msg, pc, pos.Row, pos.Col)
+	return makeAqlErrorAt("internal_error",
+		fmt.Sprintf("bytecode: internal: %s (pc=%d, src %d:%d)", msg, pc, pos.Row, pos.Col),
+		"", "", "", pos)
 }
 
 // vmEvalLimitAt mirrors the interpreter's evalLimitError: the
