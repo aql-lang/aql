@@ -381,9 +381,61 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	if !tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
-		r.Check.Emit.RecordCall(word, sig, args, out, pos)
+		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))
 	}
 	return out
+}
+
+// dynOutNativeOK reports whether a dispatch with a DYNAMIC output but CONCRETE
+// args may still bake a plain CALL_NATIVE despite the dynamic result. Concrete
+// args mean the checker RESOLVED the sig by real matching (not widening), so a
+// dynamic output is just a declared-Any return (e.g. unify's [Any, Boolean]),
+// not a best-guess sig — for a CORE builtin native the handler runs faithfully.
+// The dynamic result is still registered, so any downstream TYPED consumer of
+// it refuses via the dynamic-input guard, keeping it contained. Mirrors
+// tryRecordPoly's safety (core sig, no meta/fn-value), and is the escape hatch
+// RecordCall's anyDynamicCarrier(outs) refusal consults via forceDynOut.
+func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value) bool {
+	es := r.Check.Emit
+	if !es.active() || sig == nil || len(outs) == 0 {
+		return false
+	}
+	// Concrete args + dynamic output only — a dynamic INPUT means the sig was
+	// widened (a guess), which stays refused.
+	if anyDynamicCarrier(args) || !anyDynamicCarrier(outs) {
+		return false
+	}
+	if fallbackWords[word] || !r.IsBuiltinWord(word) {
+		return false
+	}
+	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
+	// regardless; screen here so they don't slip through forceDynOut).
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode ||
+		len(sig.NoEvalArgs) > 0 || len(sig.QuoteArgs) > 0 {
+		return false
+	}
+	for _, t := range sig.Args {
+		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			return false
+		}
+	}
+	for _, a := range args {
+		if _, ok := a.Data.(FnDefInfo); ok {
+			return false
+		}
+	}
+	// The runtime CALL_NATIVE uses this exact sig, so it must be the word's own
+	// main-registry binding (not a module-qualified sub-registry sig).
+	fn := r.Lookup(word)
+	if fn == nil {
+		return false
+	}
+	for i := range fn.Signatures {
+		if &fn.Signatures[i] == sig {
+			return true
+		}
+	}
+	return false
 }
 
 // tryRecordPoly records a genuinely-dynamic typed dispatch (get/size/is/

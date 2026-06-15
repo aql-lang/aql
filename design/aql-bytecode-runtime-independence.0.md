@@ -57,12 +57,26 @@ statement; a computed else) stays refused — it needs true 0-or-1 residual
 modeling. Files: `eng/go/emit.go` (RecordBranch zeroOut + residual skip),
 `eng/go/lower.go` (lowerArms no-slot), `lang/go/native/native_control.go`.
 
-Current ratchets: **519 refused / 15 islanded** (from 651 / 115 at P0;
+**Concrete-args dynamic-output core builtins (LANDED, 519 → 514).** A core
+builtin native with CONCRETE args but a declared-Any (dynamic) output — e.g.
+`unify` ([Any,Any]→[Any,Boolean], a 2-result word that can't poly) — refused as
+"opaque output". But concrete args mean the checker RESOLVED the sig by real
+matching (not widening), so the dynamic output is just a declared-Any return,
+not a best-guess sig: a plain CALL_NATIVE bakes faithfully. `dynOutNativeOK`
+(carrier.go) gates it (concrete args, dynamic output, core sig, no
+meta/fn-value/code-body), and RecordCall's `anyDynamicCarrier(outs)` refusal
+gains a `forceDynOut` bypass. The dynamic result is still registered, so a
+downstream TYPED consumer of it refuses via the dynamic-input guard — contained.
+Cleared 18 opaque-output rows (−5 net; cascades moved to other buckets). Files:
+`eng/go/carrier.go` (dynOutNativeOK), `eng/go/emit.go` (RecordCall forceDynOut).
+
+Current ratchets: **514 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
 555 after predicate-type provenance; 545 after if value-else; 542 after case;
 538 after multi-return / 0-return / anonymous-lambda fns; 527 after apply of a
 fn value; 521 after unnamed-fn map/list members; 519 after 0-value-then if
-guard). Compiled rows 1706 → 1848, 0 divergences throughout. The `case`
+guard; 514 after concrete-args dynamic-output core builtins). Compiled rows
+1706 → 1853, 0 divergences throughout. The `case`
 desugar dropped the island count 26 → 15 (islanded case rows now compile
 natively).
 

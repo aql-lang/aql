@@ -357,6 +357,26 @@ func TestEmitGuardIf(t *testing.T) {
 	}
 }
 
+// TestEmitDynOutNative: a CORE builtin with CONCRETE args but a declared-Any
+// (dynamic) output — e.g. `unify`, [Any,Any]→[Any,Boolean] — bakes a plain
+// CALL_NATIVE (the sig was resolved by real matching; the handler runs
+// faithfully). A dynamic INPUT still refuses (the sig would be a guess).
+func TestEmitDynOutNative(t *testing.T) {
+	if _, r := compile(t, `List unify [1 2]`); r != "" {
+		t.Errorf("concrete-args unify must compile, refused: %s", r)
+	}
+	// Value parity in compiled mode (unify returns [unified, ok]).
+	got, _, err := mustRun(t, `List unify [1 2]`)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("List unify [1 2]: got %v err=%v", got, err)
+	}
+	// Negative: a DYNAMIC input keeps the dynamic-input refusal — the sig is
+	// then a guess, not a resolved match.
+	if _, r := compile(t, `def l [1 2] push 3 l unify l`); r == "" {
+		t.Error("dynamic-input unify compiled but must refuse")
+	}
+}
+
 // mustRun runs src in compiled mode, returning (result, wasCompiled, err).
 func mustRun(t *testing.T, src string) ([]any, bool, error) {
 	t.Helper()

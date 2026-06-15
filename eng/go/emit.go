@@ -991,7 +991,10 @@ func (es *EmitState) RecordPoly(word string) {
 
 // RecordCall records one resolved dispatch. args are in signature
 // order (position 0 = top of stack); outs are the carrier results.
-func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos) {
+// forceDynOut bypasses the dynamic-output refusal when the caller
+// (dynOutNativeOK) has proven the dispatch is a concrete-args core builtin
+// whose dynamic result is merely a declared-Any return.
+func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut bool) {
 	if !es.active() {
 		return
 	}
@@ -1080,11 +1083,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
 		return
-	case anyDynamicCarrier(outs):
+	case anyDynamicCarrier(outs) && !forceDynOut:
 		// Dynamic outputs mean the checker could not type the word
 		// (missing annotations, opaque wrappers like a def-bound
 		// usurp value): the recorded signature is a best guess, not a
-		// proof — don't bake it in.
+		// proof — don't bake it in. forceDynOut (dynOutNativeOK) is the
+		// exception: a CONCRETE-args core builtin whose dynamic result is a
+		// declared-Any return bakes faithfully and falls through here.
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("unannotated or opaque word " + word)
 		return
