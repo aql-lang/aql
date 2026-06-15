@@ -76,8 +76,13 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		mappings[i].alias = name
 	}
 
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpRead); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -88,7 +93,8 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			fmt.Fprintf(stderr, "error: duplicate env name %q in mapping\n", m.envName)
 			return 1
 		}
-		v, err := kr.Get(m.alias)
+		ns, _ := splitAlias(m.alias)
+		v, err := sess.getValue(m.alias, ns)
 		if err != nil {
 			_ = appendAudit(homeDir, AuditEvent{
 				Action: "vault.exec", Alias: m.alias,

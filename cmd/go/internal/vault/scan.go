@@ -287,13 +287,14 @@ func buildVaultSecretIndex(homeDir string) (map[string]string, error) {
 	if s.Locked {
 		return nil, fmt.Errorf("vault is locked")
 	}
-	kr, err := openKeyring(s, homeDir, nil, io.Discard, "")
+	sess, err := authenticate(s, homeDir, nil, io.Discard, "")
 	if err != nil {
 		return nil, err
 	}
+	defer sess.Close()
 	out := map[string]string{}
 	for _, a := range s.Aliases {
-		v, err := kr.Get(a.Name)
+		v, err := sess.getValue(a.Name, valueNamespace(a.Name))
 		if err != nil {
 			continue
 		}

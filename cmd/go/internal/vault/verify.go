@@ -47,11 +47,13 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	}
 	// The passphrase prompt happens here, OUTSIDE the vault lock, so a
 	// human at the prompt can never stall the broker's counter writes.
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	defer sess.Close()
+	kr := sess.Keyring()
 
 	issues, pruned := 0, 0
 	report := func(repaired bool, format string, a ...any) {
@@ -183,6 +185,20 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 			Action: "vault.verify", Outcome: "ok",
 			Reason: fmt.Sprintf("repaired=%d", pruned),
 		})
+	}
+
+	// Report the integrity status of an envelope vault (legacy vaults
+	// have no integrity layer, so their output is unchanged). A repair
+	// re-establishes the keyed sidecar; otherwise we report the detected
+	// state (ok / unverified / external-change / hmac-invalid / rollback)
+	// without masking it.
+	if s.HasPasswordSlots() {
+		if *prune && pruned > 0 {
+			sealIntegrity(homeDir, sess)
+		}
+		anchor, _ := readAnchor(sess.Keyring())
+		st, _ := checkStoreIntegrity(homeDir, sess.IntegrityKey(), anchor)
+		fmt.Fprintf(stdout, "integrity: %s\n", st)
 	}
 
 	switch {

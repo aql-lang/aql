@@ -124,11 +124,17 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	defer sess.Close()
+	if err := requireScope(sess, OpAdmin); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	kr := sess.Keyring()
 
 	// Apply under the vault lock against a freshly-loaded store so a
 	// concurrent writer is never clobbered. The passphrase prompt
@@ -167,7 +173,13 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 						return fmt.Errorf("alias %q FromEnv=%s is empty", a.Name, a.FromEnv)
 					}
 					if !*dryRun {
-						if err := kr.Set(a.Name, val); err != nil {
+						// NOTE: this runs inside withVaultLock, so we use the
+						// non-locking setValue (not writeSecret, which would
+						// re-enter the lock). Policy provisions into existing
+						// namespaces; a brand-new namespace returns a clear
+						// "admin must create it first" error.
+						nsP, _ := splitAlias(a.Name)
+						if err := sess.setValue(a.Name, nsP, val); err != nil {
 							return fmt.Errorf("storing %s: %w", a.Name, err)
 						}
 					}

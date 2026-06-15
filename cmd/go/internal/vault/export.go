@@ -116,15 +116,20 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	// IS stdout (e.g. `aql vault export > vault.aqlx`), so a prompt on
 	// stdout would corrupt the file — and the user wouldn't see it on
 	// their terminal either.
-	kr, err := openKeyring(s, homeDir, stdin, stderr, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, stdin, stderr, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpRead); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
 	bundle := exportBundle{Version: exportVersion, ExportedAt: time.Now().UTC().Format(time.RFC3339)}
 	for _, a := range selected {
-		v, err := kr.Get(a.Name)
+		v, err := sess.getValue(a.Name, valueNamespace(a.Name))
 		if err != nil {
 			fmt.Fprintf(stderr, "error: reading %s: %s\n", a.Name, err)
 			return 1
@@ -274,8 +279,13 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 	if fromStdin {
 		krStdin = nil
 	}
-	kr, err := openKeyring(s, homeDir, krStdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, krStdin, stdout, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpWrite); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -323,7 +333,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 			skipped++
 			continue
 		}
-		if err := kr.Set(name, a.Value); err != nil {
+		if err := writeSecret(homeDir, sess, name, ns, a.Value); err != nil {
 			fmt.Fprintf(stderr, "error: storing %s: %s\n", name, err)
 			return 1
 		}
@@ -351,6 +361,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	sealIntegrity(homeDir, sess)
 	fmt.Fprintf(stdout, "imported %d secret(s)", imported)
 	if skipped > 0 {
 		fmt.Fprintf(stdout, ", skipped %d existing", skipped)
