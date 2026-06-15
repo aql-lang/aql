@@ -180,10 +180,18 @@ before/after numbers.
    instead of islanding. The highest-leverage island reducer. (`eng/go/carrier.go`,
    `emit.go`, possibly a `FOR_EACH_MAP` lowering.)
 
-6. **computed-else / variadic-statement `if` (13, MED risk).** `if c [t] (expr)`
-   and `if c [raise] …` used as a discarded statement — both need true 0-or-1
-   residual modelling the single-result branch lowering lacks. (`eng/go/lower.go`
-   `lowerArms`.)
+6. **computed-else `if` ✅ LANDED (425 → 421); variadic-statement `if` still
+   open (~9 rows).** The computed-else half — `if cond [then] (expr)` where the
+   else is an eagerly-evaluated paren result on the stack — now lowers: a new
+   `OpDrop` plus a `lowerArmsComputed` path SWAPs the cond above the
+   eager else value, `JMP_IF_FALSE`, and on the taken path DROPs the else before
+   the then-body (the false path keeps it as the result). Both arms net one
+   value, so the result is a single (non-variadic) merge slot — handled only
+   when the cond is itself a plain stack event. The remaining if-branch bucket
+   (9) is the variadic/empty-else statement-if (`if c [99] []`, `if c [raise]`
+   as a discarded statement), which needs true 0-or-1 residual modelling and is
+   a separate follow-on. (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`,
+   `eng/go/emit.go` RecordBranch, `eng/go/lower.go` lowerArmsComputed.)
 
 7. **`select` query DSL + `reach` lenses (~26, MED, OPTIONAL for P7).** Compile
    the query/lens bodies, or — if the cost outweighs the benefit — add them to

@@ -111,6 +111,12 @@ const (
 	// multiply-referenced value (the carrier-identity item's value-def
 	// locals).
 	OpStoreLocal
+	// OpDrop pops and discards the top stack value. Emitted on the TRUE path of
+	// a computed-else `if cond [then] (expr)`: the else value `(expr)` is
+	// eagerly computed onto the stack before the branch, so the taken (then)
+	// path drops it before running the then-body, while the false path leaves
+	// it as the branch result.
+	OpDrop
 )
 
 func (o Opcode) String() string {
@@ -149,6 +155,8 @@ func (o Opcode) String() string {
 		return "CALL_DYNAMIC"
 	case OpStoreLocal:
 		return "STORE_LOCAL"
+	case OpDrop:
+		return "DROP"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }

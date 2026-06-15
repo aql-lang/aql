@@ -411,6 +411,13 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			locals[in.Arg] = stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
+		case OpDrop:
+			// Discard the top value — the computed else value on the taken
+			// (then) path of `if cond [then] (expr)`.
+			if len(stack) == 0 {
+				return nil, vmErrAt(curDebug, pc, "DROP stack underflow")
+			}
+			stack = stack[:len(stack)-1]
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {

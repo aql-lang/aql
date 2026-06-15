@@ -227,3 +227,45 @@ func TestObjectClassSetLowers(t *testing.T) {
 			codeOf(errCbad), codeOf(errIbad))
 	}
 }
+
+// Roadmap item 6 — a computed-else `if cond [then] (expr)` (the else is an
+// eagerly-evaluated paren result on the stack, not a literal/local) lowers via
+// SWAP (cond to top) + JMP_IF_FALSE + OpDrop (discard the else value on the
+// taken path), instead of refusing "computed else value". Both branch
+// directions must match the interpreter.
+func TestComputedElseIfLowers(t *testing.T) {
+	const src = `if (1 eq 1) [99] (add 1 2)`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("computed-else if did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") || !strings.Contains(dis, "DROP") {
+		t.Errorf("expected a native SWAP/JMP_IF_FALSE/DROP lowering:\n%s", dis)
+	}
+
+	// Both directions + downstream consumption, value parity with the interpreter.
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`if (1 eq 1) [99] (add 1 2)`, "99"},           // taken: then; else value dropped
+		{`if (1 eq 2) [99] (add 1 2)`, "3"},            // not taken: computed else is the result
+		{`add 10 (if (1 eq 1) [99] (add 1 2))`, "109"}, // consumed downstream
+	} {
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, errC)
+		}
+		d, _ := New()
+		gotI, _ := d.Run(c.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
+			t.Errorf("%q: compiled=%v interp=%v (want [%s])", c.src, gotC, gotI, c.want)
+		}
+	}
+}

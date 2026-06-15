@@ -669,6 +669,22 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		}
 		return ""
 	}
+	if br.elsComputed {
+		// Computed else (`if cond [then] (expr)`): the else value is eagerly on
+		// the stack BELOW the cond event. Bring the cond to the top so
+		// JMP_IF_FALSE can consume it; the else value stays below — the result
+		// on the false path, DROPped before the then-body on the true path.
+		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-1], br.elsVal) || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
+			return "if: computed-else stack layout (Stage 2)"
+		}
+		if !br.hasThenOut {
+			return "if: computed else with diverging then (Stage 2)"
+		}
+		lw.swapTop2(br.pos)
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; the else value stays
+		return lw.lowerArmsComputed(ev, jf)
+	}
 	// Condition on top of stack: a pre-evaluated value, or an inline
 	// list-form condition body lowered here (it nets one Boolean).
 	switch {
@@ -757,5 +773,27 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 		lw.note()
 	}
+	return ""
+}
+
+// lowerArmsComputed lowers a computed-else `if cond [then] (expr)` after the
+// JMP_IF_FALSE at jf. Entry sim/runtime stack is [.., elseVal] (the cond was
+// just consumed; the eagerly-computed else value remains). The TAKEN path drops
+// the else value and runs the then-body; the FALSE path falls through with the
+// else value as the result. Both arms net exactly one value, so the result is a
+// single (non-variadic) merge slot.
+func (lw *lowerer) lowerArmsComputed(ev *emitEvent, jf int) string {
+	br := &ev.br
+	// True path: discard the else value, then run the then-body.
+	lw.emit(OpDrop, 0, br.pos)
+	lw.vm = lw.vm[:len(lw.vm)-1] // else value dropped on this path
+	if reason := lw.lowerFragment(br.then, &br.thenOut, br.pos); reason != "" {
+		return reason
+	}
+	jend := lw.emit(OpJmp, 0, br.pos)
+	(*lw.code)[jf].Arg = int32(len(*lw.code)) // false path lands here, else value intact
+	(*lw.code)[jend].Arg = int32(len(*lw.code))
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+	lw.note()
 	return ""
 }

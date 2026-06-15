@@ -114,7 +114,8 @@ type emitBranch struct {
 	thenOut, elsOut       emitOperand
 	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
 	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
-	elsVal                emitOperand // the value-else operand (const/local/type) when elsIsVal
+	elsVal                emitOperand // the value-else operand (const/local/type, OR a COMPUTED event when elsComputed) when elsIsVal
+	elsComputed           bool        // else value is a COMPUTED event eagerly on the stack below the cond (`if c [t] (expr)`): SWAP cond up, DROP it on the taken path
 	pos                   SrcPos
 }
 
@@ -654,10 +655,21 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 					return
 				}
 				if op.kind == opEvent {
-					es.MarkUncompilable("if: computed else value (Stage 2 lowers literal/local else)")
-					return
+					// A COMPUTED else value (`if cond [then] (add 1 2)`) is
+					// eagerly on the stack BELOW the cond event. The lowerer
+					// SWAPs the cond to the top, branches, and DROPs the else on
+					// the taken path (it survives on the false path as the
+					// result). Only the plain-event-cond layout [cond, elseVal]
+					// is handled; a const / condFrag / const-cond condition sits
+					// elsewhere, so refuse those (unchanged).
+					if b.ConstCond != nil || b.CondFrag != nil || ev.br.cond.kind != opEvent {
+						es.MarkUncompilable("if: computed else value with non-stack condition (Stage 2)")
+						return
+					}
+					ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut, ev.br.elsComputed = true, op, true, true
+				} else {
+					ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
 				}
-				ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
 			} else {
 				elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
 				if !ok {
