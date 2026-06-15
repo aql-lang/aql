@@ -243,38 +243,54 @@ stack, and `apply` must lower to a stack-form application.
 stack. The closure machinery exists (`OpPushClosure`) but is only emitted for
 code BODIES, not for fn VALUES referenced by name.
 
-**Plan.**
+**Plan (REFINED — ready to implement; the Finalize-residual variant sidesteps
+the args-inaccessibility blocker found below).**
 
-1. **FnDefInfo operand → closure.** When `resolveOperand` (or a dedicated
-   hook before `RecordCall`) sees an `FnDefInfo` value used as an operand,
-   compile its body to a `CompiledFn` unit via the existing
-   `StartFnCompile`+`AnalyseFnBody` path (probe-guarded, exactly like
-   `tryRecordClosure`), and return a closure operand. A user fn's params are
-   NAMED (bound to frame locals); the unit reads them via `PUSH_LOCAL` and is
-   invoked like `CALL_USER`. Anonymous afn values compile the same way. A fn
-   that does not compile leaves the operand unresolved → the program falls
-   back, exactly as today.
-2. **`apply` elision.** `apply`'s handler just unquotes the fn for the engine
-   to re-step (`native_ref.go::applyHandler`). In compiled form the fn IS a
-   closure on the stack, so `apply` is an identity — elide it at record time
-   (like the get/getr module-resolution elision in `RecordCall`), leaving the
-   closure for the application to consume.
-3. **Stack-form application.** `apply`'s convention is STACK-form: `args… fn
-   apply` (fn on TOP, args BELOW). The existing `OpCallDynamic` is residual-
-   form (fn first, args after). Add a stack-form variant (or a flag on
-   `OpCallDynamic`) that pops the fn from the top and applies it to the N
-   values below — `callDynamic` already routes closures to `vc.run` VM-native
-   and FnDefs to `tryNativeFnApply` / island.
-4. **Value-vs-call.** Respect the interpreter's "0-arg anonymous value stays
-   data" rule (eng CLAUDE.md "Sharp edge"): only elide+apply where the
-   interpreter would apply; a fn value bound by `def` is captured at check
-   time (compile-time) and never reaches runtime as an apply.
+The naive "FnDefInfo operand → closure at the apply site" does NOT work,
+because `apply`'s sig is `[TFunction]` (BarrierPos 0): apply consumes ONLY the
+fn; the call args (`5` in `5 inc/r apply`) sit BELOW the fn on the stack and
+are never apply's args, so neither apply's handler nor a ReturnsFn can see
+them. But at FINALIZE the whole residual `[5, inc-fn]` is in hand — so handle
+it there, the way P4 already handles the fn-LEADING residual:
 
-**Files.** `eng/go/emit.go` (FnDefInfo-operand → closure compile; reuse
-`compileClosureBody`/probe), `eng/go/carrier.go` (`apply` elision + the
-fn-value-operand hook), `eng/go/bytecode.go`+`vm.go` (stack-form CALL_DYNAMIC),
-`lang/go/native/native_ref.go` (apply already returns the fn unchanged — no
-handler change, the recorder elides it).
+1. **Preserve + elide `apply`.** Give `apply`'s `[TFunction]` sig a ReturnsFn
+   that returns args[0] unchanged (the FnDef stays concrete — `toCarrier`
+   keeps `FnDefInfo`), and elide its `RecordCall` (add an `apply` case beside
+   the get/getr elision in `emit.go::RecordCall`) so it neither refuses nor
+   records. The FnDef then flows into the program residual as `[…args, fn]`.
+2. **Finalize: residual-trailing FnDef.** When the residual ENDS with a
+   concrete `FnDefInfo` for a single-sig user/anon fn, take its arity `N =
+   len(Signatures[0].Params)`; the `N` residual entries before it are the call
+   args. Compile the fn body to a closure unit, then emit: push the `N` arg
+   operands, `OpPushClosure`, stack-form `CALL_DYNAMIC N`. (A multi-sig fn, or
+   an arity that doesn't match the residual, refuses → fallback.)
+3. **Compile the fn body to a unit.** `Signatures[0]` carries `Body []Value`,
+   `Params []FnParam` (names), `Returns []*Type` — feed them to
+   `StartFnCompile`+`AnalyseFnBody` exactly like the direct-call path
+   (`core_helpers.go:367-399`), probe-guarded like `tryRecordClosure`. Use
+   GENERALISED arg carriers (the residual arg types) so the unit doesn't
+   constant-fold one call's values.
+4. **Stack-form `CALL_DYNAMIC` (VM).** The existing `callDynamic`
+   (`vm.go:205`) is residual-form (`fnVal = stack[base]`, args after). Add a
+   stack-form path (`fnVal = stack[top]`, args = `stack[top-N:top]`) — a flag
+   on `OpCallDynamic` or a sibling opcode. It then reuses callDynamic's
+   closure → `invokeClosure` route VM-native.
+5. **Value-vs-call.** A fn value bound by `def` is captured at compile time and
+   never reaches runtime as an apply, so only the literal `… fn/r apply`
+   residual shape triggers this; the differential gate is the backstop.
+
+**Verified findings (this session's probe).** The bucket's genuine fn-VALUE
+rows are ~34, of which `fn/r apply` (named/anon ref) is the ~10-row core. The
+elision-only shortcut was implemented and ruled out (the re-step does not fire
+in check mode — the fn lands in the residual unresolved). The `apply $.path`
+rows are Reach LENSES (`applyReachHandler`, a different sig) and a separate
+item. Introspection (`typeof (inc/r)`, `tcmp Function`, `arityof`) wants the
+fn-value as a CALL_NATIVE operand, not a closure — a smaller follow-on.
+
+**Files.** `eng/go/emit.go` (apply elision + Finalize residual-trailing-FnDef +
+closure compile, reusing `compileClosureBody`/probe), `eng/go/bytecode.go` +
+`vm.go` (stack-form CALL_DYNAMIC), `lang/go/native/native_ref.go` (apply sig
+gains `ReturnsFn: ReturnsIdentity(0)` so the FnDef survives check mode).
 
 **Benefit beyond apply.** This is what lets `callDynamic` stop islanding
 user-fn applies (it can compile the body to a unit and run VM-native), and it
