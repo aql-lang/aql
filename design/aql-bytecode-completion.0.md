@@ -127,12 +127,34 @@ before/after numbers.
    set rows; the residual 13 quoted-operand refusals are meta
    (minilang/codequote/quote/timeout). (`eng/go/emit.go` RecordCall.)
 
-3. **`make` class with typed-instance field defaults (32, MED risk).** A class
-   body `{x:(make Foo 1)}` whose default is a user-type instance. The default is
-   an impure-constructor carrier; resolve its provenance (the `ReturnsFreshInstance`
-   identity work + `materialise` already handle made instances elsewhere) so the
-   class body const-bakes. Unlocks composed user types. (`eng/go/emit.go`
-   `typeBodyConstOK`/`isInertConst`, the class `make` path.)
+3. **`make` class with typed-instance field defaults — DEFERRED (5 rows, HIGH
+   risk, multi-blocker).** A class body `{x:(make Foo 1)}` whose default is a
+   user-type instance. Scoped + attempted June 2026; reverted. Findings:
+   - Only **5 spec rows** (`user-types.tsv` §, `class.tsv` lines 79–81 refine
+     defaults + 114–115 class-instance defaults that pin per-instance COPY).
+   - NOT a provenance gap: `ReturnsFreshInstance` returns a bare type CARRIER in
+     check mode (`NewCarrier(t)`), so `make Foo 1` has no concrete value to
+     bake/remember. The carrier-identity work deliberately made it so.
+   - **Blocker 1 (bake) — solvable.** A `rememberConcreteMake` hook (run the
+     pure-data constructor for real in check mode, remember the instance against
+     the carrier id) + a `materialise` ObjectTypeInfo-rebuild makes the class
+     body bake. Verified: the refusal moves PAST the make operand.
+   - **Blocker 2 (recording) — high blast radius.** The inner `make Foo 1`,
+     evaluated during the `def S` body, records an event whose result is buried
+     in the baked schema (not on the runtime stack), so Finalize hits "residual
+     shape … call results reordered." Fixing it means suppressing recording
+     during class-body default evaluation — a change to the `def`/`autoEvalMap`
+     recording path that also governs `def x (computed) x` and every other
+     def-body dispatch. Too dangerous for 5 rows.
+   - **Blocker 3 (mutation).** The class-instance rows additionally need
+     `typeBodyConstOK` to admit a concrete instance as a type-body member
+     (sound — type bodies are schemas `make` copies per instance, never mutated
+     — but a fourth coordinated change).
+
+   Verdict: revisit only as a dedicated multi-step effort once a clean
+   "suppress recording inside a const-baked schema construction" primitive
+   exists; the leverage (5 rows) does not justify it ahead of items 5/6.
+   (`eng/go/emit.go`, `eng/go/carrier.go`.)
 
 4. **Poly type-algebra over predicates. ✅ LANDED (453 → 445).** SCOPE
    CORRECTION: the billed "~75 get/is/typeof over instances" turned out to be
