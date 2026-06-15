@@ -285,7 +285,7 @@ var mathNatives = []NativeFunc{
 func withDecimalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	opts := args[0]
 	body := args[1]
-	if !IsConcrete(body) || !body.Parent.ConformsTo(TList) {
+	if !IsCompiledClosure(body) && (!IsConcrete(body) || !body.Parent.ConformsTo(TList)) {
 		return nil, r.AqlError("type_error", "with-decimal: body must be a concrete list", "with-decimal")
 	}
 
@@ -303,8 +303,15 @@ func withDecimalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		}
 	}
 
-	lst, _ := AsList(body)
-	return doEvalList(r, lst.Slice())
+	// Run the body through the InvokeBody seam so a compiled closure runs
+	// VM-native inside the pushed decimal context; a raw token list runs a
+	// sub-engine. Preserve doEvalList's error-as-value wrapping (the historical
+	// behaviour) so neither engine's result shifts.
+	res, err := InvokeBody(r, body, nil)
+	if err != nil {
+		return []Value{NewError(err)}, nil
+	}
+	return res, nil
 }
 
 func addConcatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

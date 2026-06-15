@@ -51,6 +51,12 @@ var callableWords = map[string]callableWord{
 	"do": {0, func(a []Value) []Value {
 		return []Value{}
 	}},
+	// with-decimal {opts} [body] — runs the body (no inputs) inside a scoped
+	// decimal-rounding context the handler pushes before InvokeBody; the body's
+	// single residual is the result. The opts map at position 0 bakes as a const.
+	"with-decimal": {1, func(a []Value) []Value {
+		return []Value{}
+	}},
 }
 
 // hofElemType is the body input carrier for a higher-order word's data

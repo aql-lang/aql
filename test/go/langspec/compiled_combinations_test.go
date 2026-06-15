@@ -260,6 +260,10 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`def mm fn [[x:Integer][Boolean][x gt 1] [x:Boolean][Boolean][x]] filter mm [1 2 3]`, "fallback"},
 		{`{a:1 b:2} each ([a:Any b:Any] => [a])`, "fallback"},
 		{`{a:1 b:2} for-each [drop]`, "island"},
+		// --- roadmap item 7: with-decimal body as a closure run in the pushed
+		// decimal context (a single-body context word like `do`). ---
+		{`with-decimal {precision: 5} [0d1.0 div 0d3.0]`, "native"},
+		{`with-decimal {precision: 6} [with-decimal {precision: 3} [0d1.0 div 0d3.0]]`, "native"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {
