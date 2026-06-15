@@ -190,7 +190,7 @@ var modeDocs = []modeDoc{
 	{"history", "show the content-revision history (vault.jsonic.log)"},
 	{"restore", "restore vault metadata to a past generation (admin)"},
 	{"mcp", "run a stdio MCP server exposing aliases as tools"},
-	{"exec", "run a command with secrets injected as env vars"},
+	{"exec", "run a command with secrets injected as env vars (--for=npm|cargo|gem|pypi|uv to publish)"},
 }
 
 // --- shared helpers --------------------------------------------------------

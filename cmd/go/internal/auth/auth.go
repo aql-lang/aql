@@ -43,11 +43,19 @@ type UserStore struct {
 }
 
 // ClientUser represents the locally-stored login state (~/.aql/user.jsonic).
+// DefaultRegistryTokenAlias is the vault alias `aql login --vault` /
+// `aql publish --vault` use for the registry token when none is given.
+const DefaultRegistryTokenAlias = "aql-registry-token"
+
 type ClientUser struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Token    string `json:"token"`
 	Registry string `json:"registry"`
+	// TokenVault, when set, names the vault alias holding the registry
+	// token instead of storing it in cleartext in Token. `aql login
+	// --vault` sets it; `aql publish` reads the token back from the vault.
+	TokenVault string `json:"token_vault,omitempty"`
 }
 
 // NewUserStore creates a UserStore backed by the given directory.
@@ -270,6 +278,9 @@ func SaveClientUser(homeDir string, cu *ClientUser) error {
 	}
 	content := fmt.Sprintf("username: %s\nemail: %s\ntoken: %s\nregistry: %s\n",
 		cu.Username, cu.Email, cu.Token, cu.Registry)
+	if cu.TokenVault != "" {
+		content += fmt.Sprintf("token_vault: %s\n", cu.TokenVault)
+	}
 	return os.WriteFile(filepath.Join(dir, "user.jsonic"), []byte(content), 0600)
 }
 
@@ -301,6 +312,8 @@ func LoadClientUser(homeDir string) (*ClientUser, error) {
 			cu.Token = val
 		case "registry":
 			cu.Registry = val
+		case "token_vault":
+			cu.TokenVault = val
 		}
 	}
 	return cu, nil

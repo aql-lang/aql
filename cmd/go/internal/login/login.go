@@ -15,6 +15,7 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
 
 type cmd struct{}
@@ -33,6 +34,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	registryURL := fs.String("r", "http://localhost:8080", "registry server URL")
+	useVault := fs.Bool("vault", false, "store the registry token in the aql vault instead of plaintext ~/.aql/user.jsonic")
+	vaultAlias := fs.String("vault-alias", auth.DefaultRegistryTokenAlias, "vault alias for the token when --vault is set")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -95,11 +98,26 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Token:    result["token"],
 		Registry: strings.TrimRight(*registryURL, "/"),
 	}
+	if *useVault {
+		// Store the token in the (encrypted) vault and keep only a
+		// reference in user.jsonic. The vault passphrase comes from
+		// AQL_VAULT_PASSPHRASE or an interactive prompt.
+		if err := vault.WriteSecret(homeDir, *vaultAlias, cu.Token, "aql-login", stdin, stdout); err != nil {
+			fmt.Fprintf(stderr, "error: storing token in vault: %s\n", err)
+			return 1
+		}
+		cu.Token = ""
+		cu.TokenVault = *vaultAlias
+	}
 	if err := auth.SaveClientUser(homeDir, cu); err != nil {
 		fmt.Fprintf(stderr, "error: saving credentials: %s\n", err)
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "logged in as %s\n", cu.Username)
+	if cu.TokenVault != "" {
+		fmt.Fprintf(stdout, "logged in as %s (token stored in vault as %q)\n", cu.Username, cu.TokenVault)
+	} else {
+		fmt.Fprintf(stdout, "logged in as %s\n", cu.Username)
+	}
 	return 0
 }

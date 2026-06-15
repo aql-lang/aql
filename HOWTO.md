@@ -1017,6 +1017,21 @@ variables — the secret never appears on the command line. Use
 `--upper` to uppercase derived names, `--prefix=PFX` to prepend a
 fixed prefix, or `--clear-env` for a sanitized environment.
 
+To **publish a package** without memorizing each tool's credential
+convention, use a recipe — `--for=<tool>` presents the secret exactly
+how that publisher reads it (npm needs no `~/.npmrc` at all):
+
+```
+aql vault exec --for=npm   npm_token  -- npm publish
+aql vault exec --for=cargo crates_tok -- cargo publish
+aql vault exec --for=pypi  pypi_token -- twine upload dist/*
+```
+
+Recipes: `npm` (use `--registry=HOST` for GitHub Packages/scoped),
+`cargo`, `gem`, `pypi`/`twine`, `uv`. For AQL's own registry, `aql
+login --vault` keeps the registry token in the vault and `aql publish`
+reads it back automatically.
+
 Inside AQL, secrets are surfaced via the `vault` capability:
 
 ```
