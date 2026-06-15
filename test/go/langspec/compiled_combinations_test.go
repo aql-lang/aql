@@ -264,6 +264,12 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// decimal context (a single-body context word like `do`). ---
 		{`with-decimal {precision: 5} [0d1.0 div 0d3.0]`, "native"},
 		{`with-decimal {precision: 6} [with-decimal {precision: 3} [0d1.0 div 0d3.0]]`, "native"},
+		// aql:query DSL — the clause lists (column/expr specs) and bare table
+		// names are inert data parsed into SQL, so they bake as consts and the
+		// dispatch lowers to CALL_NATIVE (not a code-body refusal).
+		{`"aql:query" import end  Query.select [name age]`, "native"},
+		{`"aql:query" import end  Query.where [age gt 1] (Query.select [name])`, "native"},
+		{`"aql:query" import end  Query.on [name eq who] (Query.join visits (Query.select [name]))`, "native"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {

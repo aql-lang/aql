@@ -45,6 +45,21 @@ var fnIntrospectionWords = map[string]bool{
 	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
 }
 
+// queryDSLWords are the aql:query module words whose NoEvalArgs clause list (a
+// column list / expression spec) or QuoteArgs operand (a bare table name) is
+// inert DATA the handler parses into SQL — never AQL code re-stepped on the
+// tape. The operand bakes as a const and the dispatch lowers to a plain
+// CALL_NATIVE, so they are exempt from the blanket code-body and quoted-operand
+// refusals, like the get/set field-name exemption. Each word carries only one of
+// NoEvalArgs/QuoteArgs, so one set serves both guards.
+var queryDSLWords = map[string]bool{
+	// NoEvalArgs clause lists.
+	"select": true, "where": true, "order": true, "group": true,
+	"having": true, "on": true, "using": true,
+	// QuoteArgs bare table names.
+	"from": true, "join": true, "innerjoin": true, "leftjoin": true, "crossjoin": true,
+}
+
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -1168,11 +1183,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
 		return
-	case len(sig.NoEvalArgs) > 0:
+	case len(sig.NoEvalArgs) > 0 && !queryDSLWords[word]:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set":
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !queryDSLWords[word]:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
@@ -1254,6 +1269,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 				// introspection handler reads at run time.
 				op, ok = constOperand(es.intern(a)), true
 			}
+		}
+		if !ok && queryDSLWords[word] && IsConcrete(a) && a.Parent.ConformsTo(TList) {
+			// A query clause list (column names, an expression spec) is inert
+			// DATA the handler parses into SQL — never re-stepped on the tape —
+			// so it bakes as a const even though it holds Words (which the
+			// general isInertConst rejects as code). Compounds are never pooled,
+			// so each clause keeps its own const slot.
+			op, ok = constOperand(es.intern(a)), true
 		}
 		if !ok {
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
