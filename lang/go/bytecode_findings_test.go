@@ -3,6 +3,7 @@ package lang
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -96,5 +97,41 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 	gotI, _ := c.Run(`for 3 [def x (add i 1) x]`)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("rebinding loop: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// Roadmap item 1 — a 3-arg native call whose sig-0 operand is a COMPUTED
+// result (a receiver above two const operands) lowers via a push+swap chain
+// instead of refusing "operand shape needs reordering". `setpath recv k v`
+// with a computed receiver is the driving shape.
+func TestThreeArgComputedReceiverLowers(t *testing.T) {
+	const src = `"aql:struct-util" import end (StructUtil.setpath (object {a:1}) "b" 2) get b`
+
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("3-arg computed-receiver row did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("expected a native lowering, got an island:\n%s", dis)
+	}
+	if !strings.Contains(dis, "SWAP") || !strings.Contains(dis, "setpath") {
+		t.Errorf("expected a push+swap chain into CALL_NATIVE setpath:\n%s", dis)
+	}
+
+	// Parity: the compiled result matches the interpreter.
+	b, _ := New()
+	gotC, compiled, errC := b.RunCompiled(src)
+	if !compiled || errC != nil {
+		t.Fatalf("compiled run: compiled=%v err=%v", compiled, errC)
+	}
+	c, _ := New()
+	gotI, _ := c.Run(src)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("setpath parity: compiled=%v interp=%v", gotC, gotI)
 	}
 }

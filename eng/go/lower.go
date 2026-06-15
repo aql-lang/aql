@@ -339,19 +339,32 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], ops[ri]) {
 			return msg.resultNotTop
 		}
-		// The prior result is on top. Push the const operands deepest-first;
-		// they land ABOVE the result, so when the result must be sig
-		// position 0 (top) a final SWAP restores the layout — only the
-		// 2-arg shape is fixable.
-		for i := n - 1; i >= 0; i-- {
-			if i == ri {
-				continue
+		switch {
+		case ri == n-1:
+			// The lone prior-result operand is the DEEPEST sig position: push
+			// the const/local operands above it deepest-first, so sig 0 lands
+			// on top. No reordering needed.
+			for i := n - 1; i >= 0; i-- {
+				if i == ri {
+					continue
+				}
+				lw.pushOperand(ops[i], pos)
 			}
-			lw.pushOperand(ops[i], pos)
-		}
-		if ri == 0 && n == 2 {
-			lw.swapTop2(pos)
-		} else if ri != n-1 && n > 1 {
+		case ri == 0:
+			// The result operand is sig position 0 — it must end on TOP, with
+			// the const/local operands below it. Push each deeper operand above
+			// the result then SWAP the result back to the top, settling that
+			// operand into its (deeper) place; repeat sig(n-1) down to sig 1.
+			// n==2 is the single push+swap; n>2 chains it (e.g. a computed
+			// receiver `setpath (make…) "k" v`, sig 0 = receiver on top).
+			for j := n - 1; j >= 1; j-- {
+				lw.pushOperand(ops[j], pos)
+				lw.swapTop2(pos)
+			}
+		default:
+			// The result operand sits in a MIDDLE sig position (0 < ri < n-1):
+			// seating it needs a 3-deep rotate the VM has no opcode for. No
+			// spec row hits this shape; refuse so the program falls back.
 			return msg.reorder
 		}
 	case 2:
