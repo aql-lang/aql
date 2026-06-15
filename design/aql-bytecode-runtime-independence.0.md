@@ -29,11 +29,26 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **527 refused / 15 islanded** (from 651 / 115 at P0;
+**Method fields (`m.f`) — unnamed-fn const members (LANDED, 527 → 521).** A map
+whose field is an inline fn (`{f: (fn …)}`) could not const-bake because
+`isInertConst` rejected the fn member, so the receiver was unresolvable and
+`m.f args` refused as "opaque output". Allow an UNNAMED fn value as a const
+compound MEMBER (`isInertConstMember`): immutable code is safe inside a
+read-only const map/list. Then `m.f args` compiles as it already did for scalar
+fields — a `CALL_NATIVE_POLY get` returns the fn (dynamic), and the existing
+fn-value-call boundary (`applyDynamic` → `OpCallDynamic`) applies it. A NAMED
+ref field (`{b: f/r}`, Name="f") is kept non-const: applied through the island
+sub-engine it re-dispatches by name and forward-collection of the trailing arg
+diverges, so it falls back faithfully instead (a pre-existing island subtlety,
+not introduced here). Bare top-level fn values stay non-const (the apply /
+closure case). Files: `eng/go/emit.go` (`isInertConstMember`).
+
+Current ratchets: **521 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
 555 after predicate-type provenance; 545 after if value-else; 542 after case;
 538 after multi-return / 0-return / anonymous-lambda fns; 527 after apply of a
-fn value). Compiled rows 1706 → 1840, 0 divergences throughout. The `case`
+fn value; 521 after unnamed-fn map/list members). Compiled rows 1706 → 1846,
+0 divergences throughout. The `case`
 desugar dropped the island count 26 → 15 (islanded case rows now compile
 natively).
 

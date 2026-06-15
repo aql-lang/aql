@@ -1339,7 +1339,7 @@ func isInertConst(v Value) bool {
 		return typeBodyConstOK(v)
 	case ListPayload:
 		for _, e := range d.Elems {
-			if !isInertConst(e) {
+			if !isInertConstMember(e) {
 				return false
 			}
 		}
@@ -1350,7 +1350,7 @@ func isInertConst(v Value) bool {
 		}
 		for _, k := range d.M.Keys() {
 			mv, _ := d.M.Get(k)
-			if !isInertConst(mv) {
+			if !isInertConstMember(mv) {
 				return false
 			}
 		}
@@ -1358,6 +1358,28 @@ func isInertConst(v Value) bool {
 	default:
 		return false
 	}
+}
+
+// isInertConstMember reports whether v may ride as a MEMBER of a const
+// compound (a list element or map field): an inert const, OR a fn VALUE. A fn
+// value is immutable code, so it is safe inside a READ-ONLY const container — a
+// method field of a data map (`{f: fn}`), the receiver of `m.f`. It is admitted
+// only as a member, never as a standalone const: the top-level isInertConst
+// switch still rejects a bare FnDefInfo (a top-level fn value is the apply /
+// closure case, not bakeable data). At run time a poly `get` of the field
+// returns the fn, which the fn-value-call boundary (OpCallDynamic) applies.
+func isInertConstMember(v Value) bool {
+	if !v.Carrier && !v.Dynamic {
+		if fd, ok := v.Data.(FnDefInfo); ok {
+			// Only an UNNAMED (inline `fn […]`) fn value. A named ref (`f/r`,
+			// Name="f") re-dispatches by NAME when applied through the island
+			// sub-engine, where forward collection of the trailing arg differs
+			// from the interpreter — that diverges, so keep named refs
+			// non-const (they refuse and fall back faithfully).
+			return fd.Name == ""
+		}
+	}
+	return isInertConst(v)
 }
 
 // Finalize linearises the recorded events into a Program. residual

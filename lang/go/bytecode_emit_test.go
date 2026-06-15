@@ -339,6 +339,33 @@ func mustRun(t *testing.T, src string) ([]any, bool, error) {
 	return a.RunCompiled(src)
 }
 
+// TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
+// const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
+// the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field
+// (`{b: f/r}`) is NOT const-bakeable (it would diverge via the island) and
+// falls back faithfully — verified by the differential, asserted here for
+// value parity.
+func TestEmitMethodField(t *testing.T) {
+	cases := []struct {
+		src  string
+		want []any
+	}{
+		{`def m {f: (fn [[a:Integer][Integer][a add 1]])} m.f 5`, []any{int64(6)}},
+		{`def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])} m.f 2 3`, []any{int64(203)}},
+		// Named-ref field: falls back, but must still match the interpreter.
+		{`def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f/r} m.b 2`, []any{int64(3)}},
+	}
+	for _, c := range cases {
+		got, _, rerr := mustRun(t, c.src)
+		if rerr != nil {
+			t.Fatalf("%s: err=%v", c.src, rerr)
+		}
+		if len(got) != len(c.want) || (len(got) == 1 && got[0] != c.want[0]) {
+			t.Errorf("%s: got %v, want %v", c.src, got, c.want)
+		}
+	}
+}
+
 // Loop results are VARIADIC at run time (one value per iteration):
 // downstream calls must refuse to consume them — only the program
 // residual may absorb the accumulation.
@@ -833,24 +860,27 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	}
 }
 
-// Stage 4: an fn-value pulled from a map field and called (`m.f 5`)
-// is F4 — the checker types the get result as dynamic Any, so the
-// recorder refuses and the program falls back to the interpreter with
-// the correct result (the plan's sanctioned F4 fallback).
+// A method field whose value is an UNNAMED inline fn now COMPILES (the map
+// const-bakes the fn member, a poly get returns it, CALL_DYNAMIC applies it —
+// see TestEmitMethodField). A NAMED ref field (`{b: f/r}`) still falls back to
+// the interpreter (it would diverge through the island), with the correct
+// result — the remaining sanctioned fn-value-from-map fallback.
 func TestEmitFnValueCallFallsBack(t *testing.T) {
-	if _, r := compile(t, `def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`); r == "" {
-		t.Error("fn-value-from-map call compiled but must fall back (F4)")
+	// Positive: unnamed-fn method field compiles.
+	if _, r := compile(t, `def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`); r != "" {
+		t.Errorf("unnamed-fn method field must compile, refused: %s", r)
 	}
-	a, err := New()
-	if err != nil {
-		t.Fatal(err)
+	// Negative: a NAMED ref field falls back (not compiled) but still correct.
+	src := `def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/r}  m.b 2`
+	if _, r := compile(t, src); r == "" {
+		t.Error("named-ref method field compiled but must fall back")
 	}
-	out, compiled, err := a.RunCompiled(`def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`)
+	out, compiled, err := mustRun(t, src)
 	if err != nil || compiled {
-		t.Fatalf("fn-value fallback: compiled=%v err=%v", compiled, err)
+		t.Fatalf("named-ref fallback: compiled=%v err=%v", compiled, err)
 	}
-	if len(out) != 1 || out[0] != int64(6) {
-		t.Fatalf("m.f 5 fallback = %v, want 6", out)
+	if len(out) != 1 || out[0] != int64(3) {
+		t.Fatalf("m.b 2 fallback = %v, want 3", out)
 	}
 }
 
