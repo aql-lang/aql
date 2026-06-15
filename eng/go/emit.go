@@ -711,7 +711,7 @@ func (es *EmitState) fnBodyGuard() func() {
 // bindings installed around the recorded analysis. ok=false when the
 // fn is beyond Stage 4 (unchecked or multi-value returns) — the
 // program is then marked uncompilable.
-func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool) (unit int, finish func([]Value), ok bool) {
+func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool) {
 	if !es.active() {
 		return -1, nil, false
 	}
@@ -735,7 +735,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	for _, cb := range captures {
 		locals = append(locals, cb.Name)
 	}
-	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals}
+	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
 	u := &emitUnit{localByID: map[string]int{}}

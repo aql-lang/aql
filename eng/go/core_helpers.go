@@ -384,7 +384,16 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				paramNames[i] = p.Name
 			}
 			var okFn bool
-			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil)
+			// The body's first-token position locates the compiled unit for
+			// a return-type error stamped at the VM's RET. It cannot equal
+			// the interpreter's call-site column (one unit serves every call
+			// site), but it keeps the compiled error from reporting an
+			// unknown position. Empty body falls back to a zero pos.
+			var fnPos SrcPos
+			if len(bodyCopy) > 0 {
+				fnPos = bodyCopy[0].Pos
+			}
+			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
 				fnUnit = -1
 			}

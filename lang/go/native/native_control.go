@@ -600,6 +600,14 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 // see Integer|Float, not the pre-loop Integer. Returns a typed list
 // whose element type mirrors the final round's residual top.
 //
+// The List carrier is a STATIC APPROXIMATION of the result type, not a
+// claim that the loop leaves one List value: at run time BOTH engines
+// splice the per-iteration values onto the stack as separate entries
+// (`for 3 [i]` leaves `0 1 2`, not `[0,1,2]`). That is why the bytecode
+// lowerer treats a loop result as VARIADIC — consumable only by the
+// program residual, never fed to a downstream operand (eng/go/lower.go
+// lowerLoop, RecordLoop's `out` marked variadic).
+//
 // countArg >= 0 names the count/range operand and arms bytecode loop
 // recording: the final round's events are captured as a fragment and
 // RecordLoop lowers the loop (FOR_SETUP/FOR_NEXT with the iterator
