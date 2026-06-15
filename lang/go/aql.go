@@ -1,8 +1,10 @@
 package lang
 
 import (
-	"github.com/aql-lang/aql/eng/go"
+	"errors"
 	"io"
+
+	"github.com/aql-lang/aql/eng/go"
 
 	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/capabilities"
@@ -429,6 +431,25 @@ func convertResults(result []eng.Value) []any {
 // way, the flag only changes the execution engine. The second return
 // reports which path ran (for tooling; never branch program logic on
 // it).
+//
+// Two boundaries qualify "identical results":
+//
+//   - Internal errors. A compiled-mode VM/lowering soundness assertion or a
+//     recovered handler panic (taxonomy internal_error), and any non-AQL Go
+//     error, are NOT surfaced: the run rolls back and re-executes on the
+//     interpreter, so a latent compiler bug degrades to the correct result
+//     rather than a raw failure (the differential gate's row-count floor still
+//     catches the regression).
+//   - The step budget. The interpreter counts it per tape token stepped, the
+//     VM per bytecode instruction, both capped at eng.DefaultStepLimit. Only
+//     iteration/recursion can approach that ceiling, and for those the compiled
+//     stream is leaner than the expanded token stream — so the VM reaches at
+//     least as far as the interpreter and never spuriously raises
+//     evaluation_limit on a program the interpreter completes. The residual
+//     deviation is benign and one-directional: a long computation the
+//     interpreter reports as evaluation_limit may COMPLETE under compilation.
+//     A genuine runaway trips evaluation_limit fast in both (the VM does not
+//     fall back on it — that would only re-burn the same budget).
 func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 	// CompileCheck executes the program in check mode, so its
 	// RunInCheckMode words (def/import/type/macro, the Test harness)
@@ -448,9 +469,42 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 	}
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
+		// An INTERNAL compiled-mode error — a VM/lowering soundness assertion
+		// or a recovered handler panic (both carry code internal_error), or any
+		// non-AQL Go error — must never reach the caller as a raw compiler bug.
+		// Roll the registry back to the pre-check state (exactly as the
+		// uncompilable path does) and let the interpreter render the canonical
+		// result. Genuine AQL runtime errors (type_error, div-by-zero, and the
+		// resource ceilings evaluation_limit / tape_exhausted) match the
+		// interpreter by the differential gate and are returned as-is — the
+		// resource limits in particular fail FAST in both engines by design
+		// (see the step-budget note above), so re-running the interpreter would
+		// only burn the same budget again.
+		if runtimeShouldFallback(err) {
+			a.registry.RestoreForCompile(snap)
+			out, rerr := a.Run(src)
+			return out, false, rerr
+		}
 		return nil, true, err
 	}
 	return convertResults(result), true, nil
+}
+
+// runtimeShouldFallback reports whether a compiled-mode RUN error should be
+// resolved by re-running on the interpreter rather than surfaced. True for an
+// internal_error (a VM/lowering soundness assertion or a recovered handler
+// panic — never surface a raw compiler bug; the interpreter is the correctness
+// backstop) and any non-AQL (foreign) error. False for every genuine AQL
+// runtime error — type_error, div-by-zero, and the resource ceilings
+// (evaluation_limit / tape_exhausted) — which the differential gate proves
+// match the interpreter, and which the VM deliberately surfaces fast rather
+// than hanging or double-running.
+func runtimeShouldFallback(err error) bool {
+	var ae *eng.AqlError
+	if !errors.As(err, &ae) {
+		return true
+	}
+	return ae.Code == "internal_error"
 }
 
 // CheckResult is the outcome of a static type-check run.

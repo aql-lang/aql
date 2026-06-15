@@ -339,19 +339,32 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], ops[ri]) {
 			return msg.resultNotTop
 		}
-		// The prior result is on top. Push the const operands deepest-first;
-		// they land ABOVE the result, so when the result must be sig
-		// position 0 (top) a final SWAP restores the layout — only the
-		// 2-arg shape is fixable.
-		for i := n - 1; i >= 0; i-- {
-			if i == ri {
-				continue
+		switch {
+		case ri == n-1:
+			// The lone prior-result operand is the DEEPEST sig position: push
+			// the const/local operands above it deepest-first, so sig 0 lands
+			// on top. No reordering needed.
+			for i := n - 1; i >= 0; i-- {
+				if i == ri {
+					continue
+				}
+				lw.pushOperand(ops[i], pos)
 			}
-			lw.pushOperand(ops[i], pos)
-		}
-		if ri == 0 && n == 2 {
-			lw.swapTop2(pos)
-		} else if ri != n-1 && n > 1 {
+		case ri == 0:
+			// The result operand is sig position 0 — it must end on TOP, with
+			// the const/local operands below it. Push each deeper operand above
+			// the result then SWAP the result back to the top, settling that
+			// operand into its (deeper) place; repeat sig(n-1) down to sig 1.
+			// n==2 is the single push+swap; n>2 chains it (e.g. a computed
+			// receiver `setpath (make…) "k" v`, sig 0 = receiver on top).
+			for j := n - 1; j >= 1; j-- {
+				lw.pushOperand(ops[j], pos)
+				lw.swapTop2(pos)
+			}
+		default:
+			// The result operand sits in a MIDDLE sig position (0 < ri < n-1):
+			// seating it needs a 3-deep rotate the VM has no opcode for. No
+			// spec row hits this shape; refuse so the program falls back.
 			return msg.reorder
 		}
 	case 2:
@@ -656,6 +669,22 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		}
 		return ""
 	}
+	if br.elsComputed {
+		// Computed else (`if cond [then] (expr)`): the else value is eagerly on
+		// the stack BELOW the cond event. Bring the cond to the top so
+		// JMP_IF_FALSE can consume it; the else value stays below — the result
+		// on the false path, DROPped before the then-body on the true path.
+		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-1], br.elsVal) || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
+			return "if: computed-else stack layout (Stage 2)"
+		}
+		if !br.hasThenOut {
+			return "if: computed else with diverging then (Stage 2)"
+		}
+		lw.swapTop2(br.pos)
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; the else value stays
+		return lw.lowerArmsComputed(ev, jf)
+	}
 	// Condition on top of stack: a pre-evaluated value, or an inline
 	// list-form condition body lowered here (it nets one Boolean).
 	switch {
@@ -742,7 +771,42 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	}
 	if br.hasThenOut || br.hasElsOut {
 		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+		// Mismatched arm value-counts: one arm nets a value, the other nets 0
+		// WITHOUT diverging (it reaches the merge with nothing) → the merge
+		// carries 0-or-1 values, a VARIADIC result only the program residual may
+		// absorb (`if cond [99] []`, `if cond [raise] [99]`). A DIVERGING 0-arm
+		// never reaches the merge, so the surviving arm's value is
+		// unconditional — non-variadic, left as-is.
+		if br.hasThenOut != br.hasElsOut {
+			thenDiv := fragDiverges(br.then)
+			elsDiv := br.els != nil && fragDiverges(br.els)
+			if (!br.hasThenOut && !thenDiv) || (!br.hasElsOut && !elsDiv) {
+				lw.variadic[ev.seq] = true
+			}
+		}
 		lw.note()
 	}
+	return ""
+}
+
+// lowerArmsComputed lowers a computed-else `if cond [then] (expr)` after the
+// JMP_IF_FALSE at jf. Entry sim/runtime stack is [.., elseVal] (the cond was
+// just consumed; the eagerly-computed else value remains). The TAKEN path drops
+// the else value and runs the then-body; the FALSE path falls through with the
+// else value as the result. Both arms net exactly one value, so the result is a
+// single (non-variadic) merge slot.
+func (lw *lowerer) lowerArmsComputed(ev *emitEvent, jf int) string {
+	br := &ev.br
+	// True path: discard the else value, then run the then-body.
+	lw.emit(OpDrop, 0, br.pos)
+	lw.vm = lw.vm[:len(lw.vm)-1] // else value dropped on this path
+	if reason := lw.lowerFragment(br.then, &br.thenOut, br.pos); reason != "" {
+		return reason
+	}
+	jend := lw.emit(OpJmp, 0, br.pos)
+	(*lw.code)[jf].Arg = int32(len(*lw.code)) // false path lands here, else value intact
+	(*lw.code)[jend].Arg = int32(len(*lw.code))
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+	lw.note()
 	return ""
 }

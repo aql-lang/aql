@@ -59,28 +59,44 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 //	[start, end]       — start to end, step 1
 //	[start, end, step] — start to end, step
 func parseRange(elems []Value) (start, end, step int64, err error) {
+	// AsConcreteInteger rejects non-Integer values AND DepScalar/carrier
+	// payloads — matching the VM's OpForSetup (eng/go/vm.go), which reads each
+	// bound with the same concrete accessor. Using it (rather than a
+	// ConformsTo check plus an error-swallowing AsInteger) means a non-concrete
+	// bound errors in the interpreter exactly as it does in the VM, instead of
+	// being silently coerced to zero.
+	intAt := func(v Value) (int64, error) {
+		n, e := v.AsConcreteInteger()
+		if e != nil {
+			return 0, fmt.Errorf("range: expected a concrete integer, got %s", v.Parent)
+		}
+		return n, nil
+	}
 	switch len(elems) {
 	case 1:
-		if !elems[0].Parent.ConformsTo(TInteger) {
-			return 0, 0, 0, fmt.Errorf("range: expected integer, got %s", elems[0].Parent)
+		if end, err = intAt(elems[0]); err != nil {
+			return 0, 0, 0, err
 		}
-		_as0, _ := AsInteger(elems[0])
-		return 0, _as0, 1, nil
+		return 0, end, 1, nil
 	case 2:
-		if !elems[0].Parent.ConformsTo(TInteger) || !elems[1].Parent.ConformsTo(TInteger) {
-			return 0, 0, 0, fmt.Errorf("range: expected integers")
+		if start, err = intAt(elems[0]); err != nil {
+			return 0, 0, 0, err
 		}
-		_as2, _ := AsInteger(elems[0])
-		_as1, _ := AsInteger(elems[1])
-		return _as2, _as1, 1, nil
+		if end, err = intAt(elems[1]); err != nil {
+			return 0, 0, 0, err
+		}
+		return start, end, 1, nil
 	case 3:
-		if !elems[0].Parent.ConformsTo(TInteger) || !elems[1].Parent.ConformsTo(TInteger) || !elems[2].Parent.ConformsTo(TInteger) {
-			return 0, 0, 0, fmt.Errorf("range: expected integers")
+		if start, err = intAt(elems[0]); err != nil {
+			return 0, 0, 0, err
 		}
-		_as5, _ := AsInteger(elems[0])
-		_as4, _ := AsInteger(elems[1])
-		_as3, _ := AsInteger(elems[2])
-		return _as5, _as4, _as3, nil
+		if end, err = intAt(elems[1]); err != nil {
+			return 0, 0, 0, err
+		}
+		if step, err = intAt(elems[2]); err != nil {
+			return 0, 0, 0, err
+		}
+		return start, end, step, nil
 	default:
 		return 0, 0, 0, fmt.Errorf("range: expected 1-3 elements, got %d", len(elems))
 	}

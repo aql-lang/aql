@@ -66,7 +66,10 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		// fallback path (a plain-data class now compiles).
 		`def C class {x:1 f:(fn [[][Integer][2]])} def p (make C {x:5}) undef C end p get x`,
 		// fn registration under a capitalised name — a re-register clashes.
-		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] Positive tcmp Positive`,
+		// `is` over the predicate fn INVOKES it (the VM cannot re-step a fn
+		// body), so this stays uncompilable even though `typeof`/`tcmp` over a
+		// fn value now compile (fn-value introspection).
+		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
 		// native-module import whose namespace metadata a re-import degrades.
 		`"aql:math-util" import end typeof MathUtil`,
 		`"aql:math-util" import end MathUtil.$name`,

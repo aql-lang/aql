@@ -142,6 +142,18 @@ type Registry struct {
 	// compiled runs concurrently — see RunProgram's concurrency note. Each
 	// concurrent run needs its own *Registry (ForkConcurrent / per-instance).
 	Invoker func(body Value, inputs []Value) ([]Value, error)
+
+	// vmRunning latches non-zero (via sync/atomic) for the duration of a
+	// RunProgram on this registry. Because RunProgram installs/restores the
+	// shared Invoker (and the run mutates other shared scopes — Contexts, Defs,
+	// the island sub-engine), two overlapping runs on ONE registry would race.
+	// The guard converts that misuse from a silent data race into a clear
+	// error; concurrent runs must each use their own registry (ForkConcurrent,
+	// which resets this). It does NOT gate nested SEQUENTIAL reuse (one run
+	// fully finishes, resetting the flag, before the next begins) — the normal
+	// RunCompiled path. It is a plain int32 (not atomic.Bool) so the Registry
+	// stays copyable for ForkConcurrent's shallow clone.
+	vmRunning int32
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).

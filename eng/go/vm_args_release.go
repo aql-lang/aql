@@ -12,3 +12,9 @@ package eng
 // A const lets the compiler dead-code-eliminate the unused branch, so the
 // release build keeps the scratch reuse at zero overhead.
 const vmFreshArgsPerCall = false
+
+// VMArgsDebugBuild reports whether this binary was built with -tags aqldebug
+// (a fresh args slice per CALL_NATIVE). False here, the release default.
+// Exposed so allocation-ceiling guards can skip themselves under the debug
+// tag, whose extra per-call allocations are intentional.
+const VMArgsDebugBuild = false

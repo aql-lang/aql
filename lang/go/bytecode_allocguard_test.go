@@ -38,6 +38,12 @@ func TestCompiledAllocCeilings(t *testing.T) {
 	if testing.Short() {
 		t.Skip("alloc guard runs a micro-benchmark; skipped under -short")
 	}
+	if eng.VMArgsDebugBuild {
+		// The ceilings are calibrated for the release build's per-run args
+		// scratch reuse; -tags aqldebug allocates a fresh args slice per
+		// CALL_NATIVE on purpose, so its higher counts are expected.
+		t.Skip("alloc ceilings are release-build calibrated; skipped under -tags aqldebug")
+	}
 	guards := []struct {
 		name    string
 		setup   string

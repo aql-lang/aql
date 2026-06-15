@@ -34,6 +34,17 @@ const (
 	SiteMeta    = "meta"
 )
 
+// fnIntrospectionWords READ a fn value (its type, arity, or type-algebra over
+// it) and never INVOKE it — so a fn-value operand may bake as an inert const
+// the handler inspects (`typeof (f/r)`, `Positive tcmp Function`). Words that
+// invoke a fn value (apply, the higher-order forms, and `is` over a predicate
+// fn, whose handler applies the predicate) are deliberately EXCLUDED: their
+// handlers re-step the fn on the tape, which the VM cannot honour.
+var fnIntrospectionWords = map[string]bool{
+	"typeof": true, "inspect": true,
+	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
+}
+
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -114,7 +125,8 @@ type emitBranch struct {
 	thenOut, elsOut       emitOperand
 	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
 	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
-	elsVal                emitOperand // the value-else operand (const/local/type) when elsIsVal
+	elsVal                emitOperand // the value-else operand (const/local/type, OR a COMPUTED event when elsComputed) when elsIsVal
+	elsComputed           bool        // else value is a COMPUTED event eagerly on the stack below the cond (`if c [t] (expr)`): SWAP cond up, DROP it on the taken path
 	pos                   SrcPos
 }
 
@@ -578,8 +590,12 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 			return emitOperand{}, false, true
 		}
 		if len(stk) == 0 {
-			es.MarkUncompilable("if: " + name + "-branch produces no value (Stage 2 lowers single-result branches)")
-			return emitOperand{}, false, false
+			// A 0-value arm (an empty `[]`, a 0-value word, or a raise that
+			// fragDiverges doesn't classify): no merge value, like a diverging
+			// arm. When the SIBLING arm nets a value the branch is VARIADIC
+			// (0-or-1) — lowerArms marks it and only the program residual
+			// absorbs it; when BOTH arms net 0 the caller refuses below.
+			return emitOperand{}, false, true
 		}
 		op, ok := es.resolveOperand(stk[len(stk)-1])
 		if !ok {
@@ -654,10 +670,21 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 					return
 				}
 				if op.kind == opEvent {
-					es.MarkUncompilable("if: computed else value (Stage 2 lowers literal/local else)")
-					return
+					// A COMPUTED else value (`if cond [then] (add 1 2)`) is
+					// eagerly on the stack BELOW the cond event. The lowerer
+					// SWAPs the cond to the top, branches, and DROPs the else on
+					// the taken path (it survives on the false path as the
+					// result). Only the plain-event-cond layout [cond, elseVal]
+					// is handled; a const / condFrag / const-cond condition sits
+					// elsewhere, so refuse those (unchanged).
+					if b.ConstCond != nil || b.CondFrag != nil || ev.br.cond.kind != opEvent {
+						es.MarkUncompilable("if: computed else value with non-stack condition (Stage 2)")
+						return
+					}
+					ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut, ev.br.elsComputed = true, op, true, true
+				} else {
+					ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
 				}
-				ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
 			} else {
 				elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
 				if !ok {
@@ -717,6 +744,82 @@ func (es *EmitState) RegisterLocal(id string) int {
 	u.numLocals++
 	u.localByID[id] = slot
 	return slot
+}
+
+// emitCheckpoint snapshots the append-only recording pools and counters so a
+// DISCARDED loop-analysis round can be rolled back. AnalyseLoopBody re-runs a
+// loop body to a binding fixed point but keeps only the final (stabilised)
+// round's fragment; without rollback the earlier rounds' interned consts and
+// island fallback spans orphan into the Program and their dispatches inflate
+// SiteCounts (the metric surfaced via CheckResult.SiteCounts). The snapshot is
+// by LENGTH for the slice pools (intern/internType/RecordFallback only append)
+// and by VALUE for the small SiteCounts map.
+type emitCheckpoint struct {
+	seq        int
+	consts     int
+	types      int
+	fallbacks  int
+	fnRecs     int
+	siteCounts map[string]int
+}
+
+// Checkpoint captures the rollback point. Nil-safe (returns a zero checkpoint
+// that Rollback ignores via the nil-receiver guard at its call site).
+func (es *EmitState) Checkpoint() emitCheckpoint {
+	if es == nil {
+		return emitCheckpoint{}
+	}
+	sc := make(map[string]int, len(es.SiteCounts))
+	for k, v := range es.SiteCounts {
+		sc[k] = v
+	}
+	return emitCheckpoint{
+		seq:        es.seq,
+		consts:     len(es.consts),
+		types:      len(es.types),
+		fallbacks:  len(es.fallbacks),
+		fnRecs:     len(es.fnRecs),
+		siteCounts: sc,
+	}
+}
+
+// Rollback discards everything recorded since cp — used to drop a non-final
+// loop-analysis round so only the stabilised round lands in the Program.
+//
+// SAFETY: a round that compiled a fn UNIT (a closure/island body via
+// StartFnCompile) cannot be unwound — the unit's lowered code references shared
+// const/type indices, so trimming the pools would dangle them. That shape (a
+// fn body inside a loop that ALSO needs multiple fixed-point rounds) is rare;
+// for it we keep the round's recording (the prior behaviour: a little bloat,
+// always correct) rather than risk corrupting an emitted unit.
+func (es *EmitState) Rollback(cp emitCheckpoint) {
+	if es == nil || len(es.fnRecs) != cp.fnRecs {
+		return
+	}
+	for k, i := range es.constIdx {
+		if i >= cp.consts {
+			delete(es.constIdx, k)
+		}
+	}
+	es.consts = es.consts[:cp.consts]
+	for k, i := range es.typeIdx {
+		if i >= cp.types {
+			delete(es.typeIdx, k)
+		}
+	}
+	es.types = es.types[:cp.types]
+	es.fallbacks = es.fallbacks[:cp.fallbacks]
+	// Provenance entries minted after cp belong to the discarded round's
+	// carriers (fresh ids never referenced again); drop them, mirroring
+	// StartFnCompile's fn-unit cleanup so the live map stays tight.
+	for id, pr := range es.producedBy {
+		if pr.seq > cp.seq {
+			delete(es.producedBy, id)
+		}
+	}
+	es.SiteCounts = cp.siteCounts
+	es.seq = cp.seq
+	es.captured = nil
 }
 
 // fnArm bypasses AnalyseFnBody's suspension exactly once — set by
@@ -1069,13 +1172,18 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr":
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set":
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
-		// re-steps. get/getr are exempt — plain accessors whose quoted
-		// key is an inert Atom const and whose results are data (their
-		// fn-valued module-resolution case is elided above; a dynamic
-		// or fn-valued result still refuses via the later cases).
+		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
+		// quoted key is an inert Atom const (its fn-valued module-resolution
+		// case is elided above; a dynamic or fn-valued result still refuses via
+		// the later cases). For `set` the quoted key is the atom field name of
+		// an object/class/store/flex field write (`p set x 7`); the receiver is
+		// a non-const instance (mutation-safety holds — instance types are
+		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
+		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
+		// so the word-name match admits only the real mutator, never a usurp.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
 		return
@@ -1121,8 +1229,17 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 			return
 		}
 	}
+	introspect := fnIntrospectionWords[word]
 	for _, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
+			// An INTROSPECTION word READS a fn value (its type/arity) and never
+			// invokes it, so the immutable fn value rides as a plain const
+			// operand the handler inspects — unlike a fn-INVOKING word (apply,
+			// higher-order, or `is` over a predicate fn), whose handler re-steps
+			// the fn on the tape, which the VM cannot honour.
+			if introspect {
+				continue
+			}
 			es.SiteCounts[SiteMeta]++
 			es.MarkUncompilable("function value reaches " + word + " (Stage 3)")
 			return
@@ -1131,6 +1248,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
+		if !ok && introspect && IsConcrete(a) {
+			if _, isFn := a.Data.(FnDefInfo); isFn {
+				// Bake the concrete (immutable) fn value as a const the
+				// introspection handler reads at run time.
+				op, ok = constOperand(es.intern(a)), true
+			}
+		}
 		if !ok {
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
 			return
@@ -1222,6 +1346,13 @@ func (es *EmitState) internType(v Value) int {
 // under the VM where the interpreter says false (the report's
 // gotcha #13, caught by the differential gate).
 func (es *EmitState) intern(v Value) int {
+	if _, isFn := v.Data.(FnDefInfo); isFn {
+		// A fn value (introspection operand): never pool — CanonValue is not a
+		// reliable identity key for fn bodies, so dedup could merge distinct
+		// fns. Each bakes as its own const.
+		es.consts = append(es.consts, v)
+		return len(es.consts) - 1
+	}
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
