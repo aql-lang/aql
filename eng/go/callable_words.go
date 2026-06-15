@@ -23,18 +23,18 @@ type callableWord struct {
 var callableWords = map[string]callableWord{
 	// each [body] data — body sees one element, returns the mapped value.
 	"each": {0, func(a []Value) []Value {
-		return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
+		return []Value{NewCarrier(hofElemType(a[1]))}
 	}},
 	// filter [body] data — body sees one element, returns a Boolean.
 	"filter": {0, func(a []Value) []Value {
-		return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
+		return []Value{NewCarrier(hofElemType(a[1]))}
 	}},
 	// fold [body] data init — body sees (accumulator, element). InvokeBody
 	// supplies [acc, elem]; acc generalises to the init's type, or (no-init
 	// 2-arg form) to the element type, since the accumulator starts as the
 	// first element.
 	"fold": {0, func(a []Value) []Value {
-		elem := DataListElemTypeFromValue(a[1])
+		elem := hofElemType(a[1])
 		if len(a) >= 3 {
 			return []Value{NewCarrier(a[2].Parent), NewCarrier(elem)}
 		}
@@ -43,7 +43,7 @@ var callableWords = map[string]callableWord{
 	// scan [body] data — body sees (accumulator, element); the accumulator
 	// starts as the first element, so both inputs carry the element type.
 	"scan": {0, func(a []Value) []Value {
-		e := DataListElemTypeFromValue(a[1])
+		e := hofElemType(a[1])
 		return []Value{NewCarrier(e), NewCarrier(e)}
 	}},
 	// do [body] — runs the body with no inputs and returns its single
@@ -51,6 +51,17 @@ var callableWords = map[string]callableWord{
 	"do": {0, func(a []Value) []Value {
 		return []Value{}
 	}},
+}
+
+// hofElemType is the body input carrier for a higher-order word's data
+// receiver: a map's VALUE type when the receiver is a map, else the list
+// element type. A map-receiver quotation body sees each value, exactly as a
+// list body sees each element.
+func hofElemType(data Value) *Type {
+	if data.Parent != nil && data.Parent.ConformsTo(TMap) {
+		return DataMapValueTypeFromValue(data)
+	}
+	return DataListElemTypeFromValue(data)
 }
 
 // compileClosureBody compiles a code body (bodyToks) consuming the given input
