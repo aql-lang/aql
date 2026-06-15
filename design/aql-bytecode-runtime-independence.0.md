@@ -29,10 +29,11 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **542 refused / 15 islanded** (from 651 / 115 at P0;
+Current ratchets: **538 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
-555 after predicate-type provenance; 545 after if value-else). Compiled rows
-1706 → 1823, 0 divergences throughout. The `case` desugar dropped the island
+555 after predicate-type provenance; 545 after if value-else; 542 after case;
+538 after multi-return / 0-return / anonymous-lambda fns). Compiled rows
+1706 → 1827, 0 divergences throughout. The `case` desugar dropped the island
 count 26 → 15 (islanded case rows now compile natively).
 
 Stage-2 lowering edges also closed this pass: a 3-arg `if` whose else arm is
@@ -75,13 +76,46 @@ empirical breakdown corrected the plan's framing: the "multi-result" refusal
 bucket (34 rows) was dominated by **0-result** side-effect calls, not N-output
 calls — those drove most of the −18 refusals.
 
+**Multi-RETURN / 0-return / anonymous-lambda fns — LANDED (542 → 538).**
+`StartFnCompile` no longer requires exactly one declared return; the fn unit's
+single `outOp`/`hasOut` became `outOps []emitOperand` (the body residual in
+stack order), `RecordUserCall` takes `outs []Value` and registers each with its
+result index, `emitUserCall`/`lowerUserCall` carry `nout` (N result slots
+pushed, deepest-first), and the `Finalize` fn-unit tail reconciles the N result
+operands against the simulated stack (`lowerer.reconcileResults`, the fn-unit
+mirror of the program-residual reconciliation) before the `OpRet` (whose
+per-`Returns` type/count check was already N-capable). Empirical corrections to
+the plan's "~10, mechanical" framing:
+
+- The bucket was dominated by **anonymous lambdas** (`([n] => [n add 1]) 5`):
+  `buildFnBodyReturnsFn` nils an anonymous fn's `Returns`, so it presented as
+  "0 declared returns" and the old `len(declared) != 1` refusal caught it. The
+  interpreter does NOT count-enforce a 0-declared fn (`def f fn [[x][][x]] f 5`
+  → 5), so the count check now applies ONLY when returns are declared
+  (non-empty); an undeclared fn's body residual (0 or N values) is taken as-is.
+- The call-recording path only fired `RecordUserCall` for `len(out) == 1`, so
+  0/N-return calls were never recorded at all (the result carriers had no
+  producing event → "unknown provenance" downstream). Both the declared-N and
+  the inferred (anonymous / 0-return) branches now record. The empty-body-
+  residual case keeps the check-mode `[Any]` approximation and stays unrecorded
+  → refuses downstream, unchanged.
+- The `RecordCall` double-record guard (a dispatch a structured hook already
+  recorded must not be re-refused) checked `len(outs) == 1`; generalised to
+  `len(outs) > 0` so a multi-return user-fn call isn't refused as "user fn
+  call (Stage 3)" by the generic path.
+- Tail marking stays single-result only (a multi-return tail boundary lowers
+  as a plain `CALL_USER`); an all-arms-tail branch body is tracked as diverged
+  so it emits no unreachable RET.
+
+The residual 3 "multi-return fn" refusals are **count-mismatch error rows**
+(`def r2 fn [[n] [Integer] [n n]] r2 1` — declared 1, body 2): the body count
+differs from the DECLARED returns, which the interpreter raises as a
+return-count error, so they correctly refuse and fall back. A few rows that
+previously refused here now reach a LATER refusal (apply / fn-value, if-branch),
+which the remaining items below own.
+
 **Deferred (still refused, soundly):**
 
-- **Multi-RETURN / 0-return fns** (step 4 — the "multi-return fn" bucket, ~10
-  rows): `StartFnCompile` still requires exactly one declared return; the fn
-  unit's single `outOp` and `RecordUserCall`'s single `out` need generalising
-  to N results, and `Finalize`'s fn-unit RET check to N (`OpRet` already loops
-  over `Returns`). Mechanical follow-on on the same `(seq, idx)` base.
 - **dup-body islands** (`each [dup add]`): `dup` returns `[args[0], args[0]]` —
   the SAME `Value.ID` twice (`spliceMatchResults` does not re-mint), so the two
   outputs collapse in the ID-keyed `producedBy` and the operand layout refuses
@@ -466,6 +500,10 @@ lint) and lowers a ratchet monotonically.
    nested `if` chain (`__casematch` for faithful matching, `OperandRepushable`
    for static classification, a `tryRecordFallback` `producedBy` guard to stop
    the double-record). Islanded case rows now compile natively.
+4b. **Multi-return / 0-return / anonymous-lambda fns.** ✅ DONE (542/15 →
+   538/15). N-result fn units (`outOps`, `RecordUserCall(outs)`, `nout`,
+   `reconcileResults`); count-enforced only for declared returns. The deferred
+   P5 follow-on; unblocked anonymous lambdas applied directly.
 5. **Fn-values-on-the-stack.** ← NEXT. The remaining big semantic item
    (`apply` + higher-order fn args); de-islands the `callDynamic` user-fn
    apply. Higher risk (engine re-stepping, stack-form calling convention).

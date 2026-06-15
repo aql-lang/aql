@@ -144,12 +144,14 @@ const (
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
-// unit index, the args in sig order, and whether the lowering marked
-// it a TAIL call (it then replaces the frame and control never
-// returns to the site).
+// unit index, the args in sig order, the number of results the unit
+// returns (0 for a side-effect / 0-return fn, N for a multi-return
+// fn), and whether the lowering marked it a TAIL call (it then
+// replaces the frame and control never returns to the site).
 type emitUserCall struct {
 	unit int
 	ops  []emitOperand
+	nout int
 	tail bool
 	pos  SrcPos
 }
@@ -237,15 +239,19 @@ type emitUnit struct {
 // OUT of tail marking, mirroring the interpreter's HasGen exclusion
 // from frame elision (plan Stage 4).
 type fnUnitRec struct {
-	name     string
-	nParams  int
-	caps     []CapturedBinding
-	generic  bool
-	returns  []*Type  // declared return types — enforced at the VM's RET
-	locals   []string // slot→name table (params then captures); debug only
-	frag     *EmitFragment
-	outOp    emitOperand
-	hasOut   bool
+	name    string
+	nParams int
+	caps    []CapturedBinding
+	generic bool
+	returns []*Type  // declared return types — enforced at the VM's RET
+	locals  []string // slot→name table (params then captures); debug only
+	frag    *EmitFragment
+	// outOps are the body's residual operands in stack order (bottom→top):
+	// the values the unit leaves for its caller. Empty for a 0-result body
+	// OR a diverging body (every path tail-calls) — fragDiverges(frag)
+	// distinguishes them (a diverging body emits no RET; a 0-result body
+	// emits a bare RET).
+	outOps   []emitOperand
 	numLoc   int
 	pos      SrcPos
 	finished bool
@@ -715,10 +721,6 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	if !es.active() {
 		return -1, nil, false
 	}
-	if len(declared) != 1 {
-		es.MarkUncompilable("fn " + name + " without exactly one declared return (Stage 3 lowers single-return fns)")
-		return -1, nil, false
-	}
 	if u, hit := es.fnUnits[key]; hit {
 		return u, nil, true
 	}
@@ -755,22 +757,30 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	finish = func(bodyStk []Value) {
 		resume()
 		rec.frag = es.TakeFragment()
-		// The body must leave exactly the declared number of values. A
-		// different count is a return-COUNT error the interpreter raises;
-		// the single-result lowering would otherwise silently keep just
-		// the last value, so refuse and let the program fall back.
-		if !fragDiverges(rec.frag) && len(bodyStk) != len(rec.returns) {
-			es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
-			return
-		}
-		if len(bodyStk) > 0 && !fragDiverges(rec.frag) {
-			if op, okOut := es.resolveOperand(bodyStk[len(bodyStk)-1]); okOut {
-				rec.outOp, rec.hasOut = op, true
-			} else {
-				es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
+		if !fragDiverges(rec.frag) {
+			// A DECLARED fn must leave exactly len(returns) values: a
+			// different count is the return-COUNT error the interpreter
+			// raises, so refuse and let the program fall back. An UNDECLARED
+			// fn (an anonymous lambda whose Returns were nilled, or a
+			// 0-return fn) is NOT count-checked by the interpreter, so its
+			// body residual — 0 or N values — is taken as-is.
+			if len(rec.returns) > 0 && len(bodyStk) != len(rec.returns) {
+				es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
+				return
 			}
-		} else if !fragDiverges(rec.frag) {
-			es.MarkUncompilable("fn " + name + ": body produces no value")
+			// Resolve every residual value to an operand, in stack order
+			// (bottom→top), so the unit leaves the body's N results for its
+			// caller. A 0-result body leaves outOps empty (a bare RET).
+			ops := make([]emitOperand, len(bodyStk))
+			for i, v := range bodyStk {
+				op, okOut := es.resolveOperand(v)
+				if !okOut {
+					es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
+					return
+				}
+				ops[i] = op
+			}
+			rec.outOps = ops
 		}
 		// The unit is closed: its events' outputs cannot be stack
 		// values in the enclosing scope, so drop their provenance
@@ -797,14 +807,17 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 }
 
 // RecordUserCall records one call of a compiled fn unit. args are in
-// signature order; out is the dispatch's declared-return carrier.
-// The unit's captures ride as hidden trailing operands, resolved in
-// the CALLER's scope: at the construction site they are the enclosing
-// frame's values; inside the fn's own body (recursion) they resolve
-// to the frame's own capture slots and re-flow unchanged. A capture
-// unreachable from the call site marks the program uncompilable —
-// the interpreter keeps owning that shape.
-func (es *EmitState) RecordUserCall(unit int, args []Value, out Value, pos SrcPos) {
+// signature order; outs are the dispatch's result carriers (0 for a
+// 0-return fn, 1 for the common single-return case, N for a multi-
+// return fn — registered idx 0..N-1, matching the order the VM's
+// CALL_USER leaves them on the stack). The unit's captures ride as
+// hidden trailing operands, resolved in the CALLER's scope: at the
+// construction site they are the enclosing frame's values; inside the
+// fn's own body (recursion) they resolve to the frame's own capture
+// slots and re-flow unchanged. A capture unreachable from the call
+// site marks the program uncompilable — the interpreter keeps owning
+// that shape.
+func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos) {
 	if !es.active() || unit < 0 {
 		return
 	}
@@ -826,9 +839,11 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, out Value, pos SrcPo
 		}
 		ops = append(ops, op)
 	}
-	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, pos: pos}})
+	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, nout: len(outs), pos: pos}})
 	es.SiteCounts[SiteMono]++
-	es.setProduced(out, seq)
+	for i := range outs {
+		es.setProducedAt(outs[i], seq, i)
+	}
 }
 
 // RecordLoop records a counted/range `for`: start/end/step operand
@@ -956,9 +971,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		return
 	}
 	// A dispatch whose output is already registered was recorded by a
-	// structured hook (RecordBranch owns the `if` dispatch) — the
-	// generic path must not double-record or refuse it.
-	if len(outs) == 1 {
+	// structured hook (RecordBranch owns the `if` dispatch; a user-fn
+	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
+	// the generic path must not double-record or refuse it. A structured
+	// hook registers all results together, so checking the first suffices.
+	if len(outs) > 0 {
 		if _, ok := es.producedBy[outs[0].ID]; ok {
 			return
 		}
@@ -1447,10 +1464,20 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		if !rec.finished {
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
-		if !rec.generic {
-			// Generic instantiations stay out of tail marking — the
+		diverged := fragDiverges(rec.frag)
+		if !rec.generic && len(rec.outOps) == 1 && rec.outOps[0].kind == opEvent {
+			// Tail marking is single-result only: a tail call's results
+			// become the fn's results wholesale, so a multi-return tail
+			// boundary needs no rewrite here (it stays a plain CALL_USER).
+			// Generic instantiations stay out of tail marking too — the
 			// interpreter's HasGen exclusion, mirrored (plan Stage 4).
-			rec.hasOut = markTailCalls(rec.frag, &rec.outOp, rec.hasOut)
+			if !markTailCalls(rec.frag, &rec.outOps[0], true) {
+				// Every path tail-called: the body diverges (a trailing
+				// all-arms-tail branch isn't caught by fragDiverges, so
+				// track it here) and emits no reachable RET.
+				rec.outOps = nil
+				diverged = true
+			}
 		}
 		// NParams counts everything the call site pushes — declared
 		// params AND hidden capture slots; the VM pops them into frame
@@ -1464,22 +1491,20 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}
-		switch {
-		case rec.hasOut && rec.outOp.kind == opEvent:
-			if len(flw.vm) != 1 || !slotIs(flw.vm[0], rec.outOp) {
-				return nil, "fn " + rec.name + ": body leaves extra values (Stage 3 lowers single-result bodies)", false
+		if !diverged {
+			// Reconcile the body's N result operands with the simulated
+			// stack and emit a RET. Event results must already sit on the
+			// stack in order (they were left by their own events); inert
+			// operands (const / local / type) are pushed as a trailing
+			// tail above the last event result. This is the fn-unit mirror
+			// of the program-residual reconciliation below.
+			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, rec.pos); reason != "" {
+				return nil, reason, false
 			}
 			flw.emit(OpRet, 0, rec.pos)
-		case rec.hasOut:
-			if len(flw.vm) != 0 {
-				return nil, "fn " + rec.name + ": body leaves extra values (Stage 3 lowers single-result bodies)", false
-			}
-			flw.pushOperand(rec.outOp, rec.pos)
-			flw.emit(OpRet, 0, rec.pos)
-		default:
-			// Fully diverging body (every path tail-calls): the RET is
-			// unreachable; nothing to emit.
 		}
+		// A fully diverging body (every path tail-calls) emits no RET —
+		// control leaves via the callee's eventual RET.
 		p.Fns = append(p.Fns, cf)
 		_ = i
 	}

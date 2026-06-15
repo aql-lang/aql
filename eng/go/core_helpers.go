@@ -455,17 +455,31 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				}
 				out[i] = NewCarrier(t)
 			}
-			if fnUnit >= 0 && len(out) == 1 {
+			if fnUnit >= 0 {
 				pos := SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos
 				}
-				es.RecordUserCall(fnUnit, args, out[0], pos)
+				es.RecordUserCall(fnUnit, args, out, pos)
 			}
 			return out
 		}
 		if len(stk) == 0 {
+			// No declared returns and an empty body residual: keep the
+			// check-mode Any approximation (unchanged), and do NOT record a
+			// call — the Any carrier has no producing event, so a downstream
+			// consumer refuses and the program falls back, as before.
 			return []Value{NewCarrier(TAny)}
+		}
+		// Undeclared fn (anonymous lambda, 0-return fn) with a non-empty body
+		// residual: the body's residual IS the result. Record the call with
+		// those N carriers so downstream resolves them to this dispatch.
+		if fnUnit >= 0 {
+			pos := SrcPos{}
+			if len(args) > 0 {
+				pos = args[0].Pos
+			}
+			es.RecordUserCall(fnUnit, args, stk, pos)
 		}
 		return stk
 	}

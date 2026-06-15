@@ -263,12 +263,26 @@ func TestEmitP5MultiResult(t *testing.T) {
 		t.Fatalf("`raise \"boom\"`: compiled=%v err=%v (want compiled + error)", wasCompiled, rerr)
 	}
 
-	// Negative: a multi-RETURN fn is the deferred follow-on — still refused
-	// with a precise reason, never lowered wrongly.
-	if got, reason := compile(t, `def mk fn [[] [Integer Integer] [1 2]] mk`); got != "" {
-		t.Errorf("multi-return fn compiled but must refuse (deferred):\n%s", got)
-	} else if !strings.Contains(reason, "without exactly one declared return") {
-		t.Errorf("unexpected multi-return-fn refusal reason: %q", reason)
+	// A multi-RETURN fn now compiles: the body leaves N values matching the
+	// declared returns, and CALL_USER leaves them on the caller's stack.
+	d, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotMR, wasCompiled, mrErr := d.RunCompiled(`def mk fn [[] [Integer Integer] [1 2]] mk`)
+	if !wasCompiled || mrErr != nil {
+		t.Fatalf("multi-return fn: compiled=%v err=%v (want compiled, no error)", wasCompiled, mrErr)
+	}
+	if len(gotMR) != 2 || gotMR[0] != int64(1) || gotMR[1] != int64(2) {
+		t.Fatalf("multi-return fn result = %v, want [1 2]", gotMR)
+	}
+
+	// Negative: a body whose value count differs from the DECLARED returns
+	// is a return-count error the interpreter raises — refuse and fall back.
+	if got, reason := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got != "" {
+		t.Errorf("count-mismatch fn compiled but must refuse:\n%s", got)
+	} else if !strings.Contains(reason, "body value count differs") {
+		t.Errorf("unexpected count-mismatch refusal reason: %q", reason)
 	}
 }
 
