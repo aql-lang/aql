@@ -254,12 +254,22 @@ before/after numbers.
      decimal ops read the context at run time (precision parity confirmed by the
      differential). (`native_math.go`, `callable_words.go`.)
 
-   - **`select` query DSL (~20), `reach` lenses (6), predicate-type `case` (7),
-     `do`/`error` recovery (8) — DEFERRED.** `select` is the whole `aql:query`
-     module DSL — best compiled as a dedicated effort or, per the original
-     OPTIONAL note, added to `metaFallbackWords` (item 9) as a deliberate
-     DSL-interpreted boundary. `case`/`do`/`error` are entangled with the
-     predicate-type and provenance clusters, not single-body closure reuse.
+   - **`select` query DSL. ✅ LANDED (refusals 394 → 374, all 21 query rows).**
+     CORRECTION of an earlier deferral: this is NOT a special DSL barrier. The
+     `aql:query` module materializes through SQLite, so every clause list (a
+     column/expression spec) and bare table name is inert DATA the handler parses
+     into SQL — never AQL code re-stepped. Two narrow exemptions (mirroring
+     get/set): `queryDSLWords` skip the NoEvalArgs + QuoteArgs refusal guards, and
+     the clause list bakes as a const in `RecordCall`'s operand loop (it holds
+     Words, which the general `isInertConst` rejects as code, but the handler
+     treats them as data). Dispatch lowers to a plain `CALL_NATIVE` running the
+     unchanged handler; SQLite materialization is value-identical under the VM.
+     (`emit.go`.)
+
+   - **`reach` lenses (6), predicate-type `case` (7), `do`/`error` recovery (8) —
+     still REMAINING.** `case`/`do`/`error` are entangled with the predicate-type
+     and provenance clusters; `reach` is a lens-construction (baking) pattern.
+     Tractable but not yet done.
 
 8. **introspection over fn-values ✅ LANDED (417 → 407).** A type-READING word
    (`typeof`/`tcmp`/`teq`/`tand`/`tor`/`tnot`/`inspect`) over a fn VALUE bakes
