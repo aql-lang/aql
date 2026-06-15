@@ -269,3 +269,45 @@ func TestComputedElseIfLowers(t *testing.T) {
 		}
 	}
 }
+
+// Roadmap item 6b — a statement-`if` where exactly one arm nets a value and the
+// other nets 0 WITHOUT diverging (`if c [99] []`, `if c [] [99]`,
+// `if c [raise] [99]`) lowers as a VARIADIC (0-or-1) branch result instead of
+// refusing "branch produces no value". Both directions, the empty arm, and the
+// raise-guard (which errors on its taken path) must match the interpreter.
+func TestVariadicElseIfLowers(t *testing.T) {
+	cases := []struct {
+		src       string
+		want      string // expected residual when no error
+		wantError bool
+	}{
+		{`if (1 gt 0) [99] []`, "[99]", false},          // then value taken
+		{`if (1 eq 2) [99] []`, "[]", false},            // empty else taken → nothing
+		{`if (1 eq 2) [] [99]`, "[99]", false},          // else value taken
+		{`if (1 eq 1) [] [99]`, "[]", false},            // empty then taken → nothing
+		{`if (1 eq 2) [raise "x"] [99]`, "[99]", false}, // guard not taken
+		{`if (1 eq 1) [raise "x"] [99]`, "", true},      // guard taken → raises
+	}
+	for _, c := range cases {
+		a, _ := New()
+		gotC, compiled, errC := a.RunCompiled(c.src)
+		b, _ := New()
+		gotI, errI := b.Run(c.src)
+		if (errC != nil) != (errI != nil) {
+			t.Errorf("%q: error parity compiled=%v interp=%v", c.src, errC, errI)
+			continue
+		}
+		if c.wantError {
+			if errC == nil {
+				t.Errorf("%q: expected an error (raise on the taken path), got none", c.src)
+			}
+			continue
+		}
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v (want %s)", c.src, gotC, gotI, c.want)
+		}
+	}
+}

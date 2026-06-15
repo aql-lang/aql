@@ -579,8 +579,12 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 			return emitOperand{}, false, true
 		}
 		if len(stk) == 0 {
-			es.MarkUncompilable("if: " + name + "-branch produces no value (Stage 2 lowers single-result branches)")
-			return emitOperand{}, false, false
+			// A 0-value arm (an empty `[]`, a 0-value word, or a raise that
+			// fragDiverges doesn't classify): no merge value, like a diverging
+			// arm. When the SIBLING arm nets a value the branch is VARIADIC
+			// (0-or-1) — lowerArms marks it and only the program residual
+			// absorbs it; when BOTH arms net 0 the caller refuses below.
+			return emitOperand{}, false, true
 		}
 		op, ok := es.resolveOperand(stk[len(stk)-1])
 		if !ok {

@@ -771,6 +771,19 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	}
 	if br.hasThenOut || br.hasElsOut {
 		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+		// Mismatched arm value-counts: one arm nets a value, the other nets 0
+		// WITHOUT diverging (it reaches the merge with nothing) → the merge
+		// carries 0-or-1 values, a VARIADIC result only the program residual may
+		// absorb (`if cond [99] []`, `if cond [raise] [99]`). A DIVERGING 0-arm
+		// never reaches the merge, so the surviving arm's value is
+		// unconditional — non-variadic, left as-is.
+		if br.hasThenOut != br.hasElsOut {
+			thenDiv := fragDiverges(br.then)
+			elsDiv := br.els != nil && fragDiverges(br.els)
+			if (!br.hasThenOut && !thenDiv) || (!br.hasElsOut && !elsDiv) {
+				lw.variadic[ev.seq] = true
+			}
+		}
 		lw.note()
 	}
 	return ""

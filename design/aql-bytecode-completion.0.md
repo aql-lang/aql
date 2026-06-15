@@ -180,18 +180,22 @@ before/after numbers.
    instead of islanding. The highest-leverage island reducer. (`eng/go/carrier.go`,
    `emit.go`, possibly a `FOR_EACH_MAP` lowering.)
 
-6. **computed-else `if` ✅ LANDED (425 → 421); variadic-statement `if` still
-   open (~9 rows).** The computed-else half — `if cond [then] (expr)` where the
-   else is an eagerly-evaluated paren result on the stack — now lowers: a new
-   `OpDrop` plus a `lowerArmsComputed` path SWAPs the cond above the
-   eager else value, `JMP_IF_FALSE`, and on the taken path DROPs the else before
-   the then-body (the false path keeps it as the result). Both arms net one
-   value, so the result is a single (non-variadic) merge slot — handled only
-   when the cond is itself a plain stack event. The remaining if-branch bucket
-   (9) is the variadic/empty-else statement-if (`if c [99] []`, `if c [raise]`
-   as a discarded statement), which needs true 0-or-1 residual modelling and is
-   a separate follow-on. (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`,
-   `eng/go/emit.go` RecordBranch, `eng/go/lower.go` lowerArmsComputed.)
+6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
+   (425 → 421); 6b variadic-else (421 → 417).**
+   - 6a — `if cond [then] (expr)` where the else is an eagerly-evaluated paren
+     result on the stack: a new `OpDrop` + a `lowerArmsComputed` path SWAPs the
+     cond above the eager else value, `JMP_IF_FALSE`, and on the taken path DROPs
+     the else before the then-body (the false path keeps it as the result). Both
+     arms net one value → a single (non-variadic) merge.
+   - 6b — a statement-`if` where exactly one arm nets a value and the other nets
+     0 WITHOUT diverging (`if c [99] []`, `if c [] [99]`, `if c [raise] [99]`):
+     `resolveArm` now allows a non-diverging 0-value arm, and `lowerArms` marks
+     the merge VARIADIC (0-or-1, residual-only) when the arms' counts mismatch
+     and the empty arm doesn't diverge (a diverging 0-arm leaves, so the
+     surviving value is unconditional — non-variadic). The raise-guard errors on
+     its taken path in both engines.
+   (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`, `eng/go/emit.go` RecordBranch,
+   `eng/go/lower.go` lowerArms/lowerArmsComputed.)
 
 7. **`select` query DSL + `reach` lenses (~26, MED, OPTIONAL for P7).** Compile
    the query/lens bodies, or — if the cost outweighs the benefit — add them to
