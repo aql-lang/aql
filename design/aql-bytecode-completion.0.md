@@ -291,6 +291,36 @@ Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
 6–8 → ~40, all META + error rows; item 9 closes the gate.
 
+## 4b. Conservative-guard sweep (refusals 407 → 368)
+
+A pass re-examining every refusal bucket with one question — *is this a real
+barrier the VM cannot honour, or a conservative guard / inert operand?* — found
+and cleared a class of FALSE barriers: words refused by a blanket guard whose
+operand is actually inert DATA the unchanged handler consumes (never re-stepped),
+so it bakes as a const and lowers to plain `CALL_NATIVE`. Cleared: the `aql:query`
+DSL (clause lists → SQL, 20), `reach` lens paths (4), `raise` error-code atoms
+(2), plus `with-decimal` as a single-body closure (5). The exemptions live in
+`inertOperandWords` (emit.go), mirroring the get/set field-name exemption; a
+`listHasParenExpr` guard excludes deferred-code operands (a reach computed `(k)`
+needs the live def scope — the differential caught it: compiled None vs interp 9).
+
+The sweep also CONFIRMED the remaining 368 are not false barriers — they split:
+
+- **Genuine META (~70) — for the item-9 allowlist, uncompilable by definition.**
+  `word`-splice (~31, re-steps spliced tokens), `test-*` (~16), `minilang-register`
+  (4), `codequote` (2), `vm-run`, timeout/interval/await (runtime), and the
+  usurp/`force-arity`/`stack-args`/`forward-args` modifier family (the `sub`/`add`/
+  `if` "dynamic output" rows — they re-dispatch a modified fn the VM cannot re-step).
+- **Real compilation work (~230) — tractable but genuine, not mislabeled guards.**
+  `make`/`get`/`is`/`typeof` operand provenance (167, the carrier-identity cluster,
+  item 3 HIGH risk), residual lowering (31), user-fn-call inlining (32), `do`/`error`
+  (blocked by the dynamic `do`-output provenance + a diverging body, not a guard),
+  predicate-type/computed-scrutinee `case` (7), multi-return (7), `eachrank`/
+  `foldaxis` (3, matrix HOF), if-branch (4).
+
+So the cheap wins are exhausted: further progress is item 9 (META allowlist) and
+the provenance/lowering efforts, not more exemptions.
+
 ## 5. Why not delete the island after all
 
 Even at the re-scoped target the `OpFallback` island earns its keep: it is the
