@@ -298,7 +298,14 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// although the Integer path takes [Number Number]. Resolve each
 	// alternative independently and join the per-alternative returns.
 	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
-		r.Check.Emit.RecordPoly(word)
+		// A strict-disjunct straddle is a runtime-dispatch case, not an
+		// inherent refusal: if the word is a safe poly candidate (core builtin,
+		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
+		// OpCallNativePoly so the VM re-matches the one concrete alternative at
+		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
+		if !tryRecordPoly(r, word, sig, args, out, pos, true) {
+			r.Check.Emit.RecordPoly(word)
+		}
 		return out
 	}
 	var out []Value
@@ -379,7 +386,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		}
 	}
 	if !tryRecordClosure(r, word, sig, args, out, pos) &&
-		!tryRecordPoly(r, word, sig, args, out, pos) &&
+		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))
 	}
@@ -490,7 +497,16 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // SAME first-match the interpreter takes — instead of islanding through a
 // sub-engine (plan P3). Returns false (leaving the island path) for a
 // concrete-operand call, a non-core sig, or an operand of unknown provenance.
-func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+//
+// disjunctStraddle marks the OTHER legitimate poly trigger: a STRICT (non-
+// dynamic) disjunct operand that straddles the word's signatures
+// (disjunctPartitionReturns) — e.g. `5 is (tnot (Integer gt 0))`, where the
+// complement type reaches more than one `is` overload. The runtime value is a
+// single concrete alternative, so the same runtime MatchSignature dispatches it
+// faithfully; only the dynamic-only gate is bypassed, every other safety gate
+// (core builtin, no meta/fn-value/code-body sig, sig identity, resolvable
+// operands) still applies.
+func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool) bool {
 	es := r.Check.Emit
 	if !es.active() || sig == nil || len(outs) != 1 {
 		return false
@@ -507,9 +523,10 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 		return false
 	}
 	// Only a genuinely dynamic dispatch (the case the checker could not
-	// commit to one overload — an island or a refusal today). A fully
-	// concrete call lowers to a faithful baked CALL_NATIVE.
-	if !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
+	// commit to one overload — an island or a refusal today) OR a strict-
+	// disjunct straddle (disjunctStraddle). A fully concrete, single-overload
+	// call lowers to a faithful baked CALL_NATIVE, not poly.
+	if !disjunctStraddle && !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
 		return false
 	}
 	// Shapes the VM re-match cannot faithfully dispatch: code bodies,

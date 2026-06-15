@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -481,22 +482,36 @@ func TestEmitRefusals(t *testing.T) {
 
 // Negative: a polymorphic (partitioned) site is classified and
 // refused — later stages emit CALL_NATIVE_POLY here.
-func TestEmitRefusesPolySite(t *testing.T) {
+// A strict-disjunct straddle (`y` is Integer|String from the two `if` arms,
+// reaching more than one `add` overload) lowers to OpCallNativePoly: the VM
+// re-matches the one concrete runtime alternative, so it no longer refuses as
+// "polymorphic dispatch" (roadmap item 4). Faithfulness is the load-bearing
+// assertion — the runtime value (1, the true arm) dispatches `1 add 1 = 2` in
+// both engines.
+func TestEmitPolySiteLowersToRuntimeMatch(t *testing.T) {
+	const src = `def y if (1 gt 0) [1] ['s'] y add 1`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	prog, reason, _, err := a.CompileCheck(`def y if (1 gt 0) [1] ['s'] y add 1`)
+	prog, reason, _, err := a.CompileCheck(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prog != nil {
-		t.Fatalf("polymorphic program compiled at Stage 1:\n%s", prog.Disassemble())
+	if prog == nil {
+		t.Fatalf("strict-disjunct straddle did not compile: reason=%q", reason)
 	}
-	// The `if` marks first (code-body); the load-bearing assertion is
-	// refusal, with either the control-flow or the poly reason.
-	if !strings.Contains(reason, "code-body") && !strings.Contains(reason, "polymorphic") {
-		t.Errorf("unexpected refusal reason %q", reason)
+	if !strings.Contains(prog.Disassemble(), "CALL_NATIVE_POLY") {
+		t.Errorf("expected a runtime-matched poly call for the straddling add:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := a.RunCompiled(src)
+	if !compiled || errC != nil {
+		t.Fatalf("compiled run: compiled=%v err=%v", compiled, errC)
+	}
+	b, _ := New()
+	gotI, _ := b.Run(src)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[2]" {
+		t.Errorf("poly add: compiled=%v interp=%v (want [2])", gotC, gotI)
 	}
 }
 

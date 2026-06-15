@@ -135,3 +135,52 @@ func TestThreeArgComputedReceiverLowers(t *testing.T) {
 		t.Errorf("setpath parity: compiled=%v interp=%v", gotC, gotI)
 	}
 }
+
+// Roadmap item 4 — a STRICT-disjunct straddle (a type-algebra dispatch whose
+// operand is a complement/predicate type reaching more than one overload, e.g.
+// `is` over `tnot (Integer gt 0)`) lowers to OpCallNativePoly (runtime
+// re-match) instead of refusing "polymorphic dispatch". The runtime value is a
+// single concrete alternative, so the VM dispatches it faithfully.
+func TestStrictDisjunctTypeAlgebraPoly(t *testing.T) {
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(`5 is (tnot (Integer gt 0))`)
+	if cerr != nil || prog == nil {
+		t.Fatalf("type-algebra poly row did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("expected a native poly lowering, got an island:\n%s", dis)
+	}
+	if !strings.Contains(dis, "CALL_NATIVE_POLY") {
+		t.Errorf("expected CALL_NATIVE_POLY for the straddling `is`:\n%s", dis)
+	}
+
+	// Value + taxonomy parity across both engines, including the truth flip
+	// (5 is NOT in the complement of Integer>0; 0 IS) — the negative half.
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`5 is (tnot (Integer gt 0))`, "false"},
+		{`0 is (tnot (Integer gt 0))`, "true"},
+		{`Integer tand (tnot (Integer gt 0))`, "(Integer lte 0)"},
+		{`"hi" is (tnot (Integer gt 0))`, "true"},
+	} {
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, errC)
+		}
+		d, _ := New()
+		gotI, _ := d.Run(c.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotC) != "["+c.want+"]" {
+			t.Errorf("%q: got %v, want [%s]", c.src, gotC, c.want)
+		}
+	}
+}

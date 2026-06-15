@@ -129,11 +129,21 @@ before/after numbers.
    class body const-bakes. Unlocks composed user types. (`eng/go/emit.go`
    `typeBodyConstOK`/`isInertConst`, the class `make` path.)
 
-4. **`get`/`is`/`typeof` over instances + poly type-algebra (~75, MED risk).**
-   Largely already have the machinery (`tryRecordPoly`, `OpCallNativePoly`,
-   `dynOutNativeOK`); the residue is instances and `tnot`/`tand`/`tor` over
-   predicate operands the poly gate doesn't yet admit. Extend the poly/dyn-out
-   gates to these shapes. The single biggest refusal block. (`eng/go/carrier.go`.)
+4. **Poly type-algebra over predicates. ✅ LANDED (453 → 445).** SCOPE
+   CORRECTION: the billed "~75 get/is/typeof over instances" turned out to be
+   mostly ALREADY COMPILING (simple `(make S {}) get x`, `is S`, `typeof` all
+   lower today) plus CASCADES from items 3 (typed-field defaults) and 5
+   (closures) — those `get`/`is`/`typeof` rows refuse because their *receiver*
+   is unproducible, so they clear when 3/5 land, not as independent item-4 work.
+   The genuine independent item-4 content was the ~8 "polymorphic dispatch"
+   rows: a STRICT-disjunct straddle (`5 is (tnot (Integer gt 0))`,
+   `Integer tand (tnot …)`) that `disjunctPartitionReturns` refused via
+   `RecordPoly`. `tryRecordPoly` now takes a `disjunctStraddle` flag that
+   bypasses only its dynamic-only gate (every other safety gate stays), so a
+   safe-builtin straddle lowers to `OpCallNativePoly` — the VM re-matches the
+   one concrete runtime alternative. Also flipped the obsolete
+   `TestEmitRefusesPolySite` (the site now compiles) to assert the poly
+   lowering + parity. (`eng/go/carrier.go`.)
 
 5. **Lambda higher-order args + map iteration (~22 refusals + 7 islands, HIGH
    risk).** `filter ([p:Any] => …)`, `fold` over maps, `each {…}`. Two parts:
