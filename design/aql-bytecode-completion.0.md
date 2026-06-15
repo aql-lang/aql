@@ -106,11 +106,13 @@ Ordered by leverage ÷ risk. Each lands gate-clean (the §6 discipline) and
 lowers `refusalCeiling`/`islandCeiling` monotonically; commit each with its
 before/after numbers.
 
-1. **3-arg operand shape + 0-return-def (lowering gaps, ~12, LOW risk).**
-   Extend `layoutOperands`/`reconcileResults` past the n≤2 single-result
-   shapes for the `setpath recv k v` family; lower a 0-return fn bound by `def`.
-   Pure lowering, no new semantics — the safest first win. (`eng/go/lower.go`,
-   `emit.go`.)
+1. **3-arg operand shape (lowering gap, LOW risk). ✅ LANDED (459 → 453).**
+   `layoutOperands`' single-result case now seats a sig-0 computed result over
+   const operands with a push+swap chain (`setpath (make…) k v`); n>2 chains the
+   swap, no new opcode/local. The companion "0-return fn bound to def" was
+   *dropped*: those rows are the empty-body fn case the runtime-independence doc
+   deliberately leaves refused (check-mode `[Any]`), not a lowering gap.
+   (`eng/go/lower.go`.)
 
 2. **Object/class `set` field mutation (24, MED risk).** `set k v inst` on an
    Array/Object/Store instance is a real native dispatch refused only because
