@@ -263,12 +263,181 @@ func TestEmitP5MultiResult(t *testing.T) {
 		t.Fatalf("`raise \"boom\"`: compiled=%v err=%v (want compiled + error)", wasCompiled, rerr)
 	}
 
-	// Negative: a multi-RETURN fn is the deferred follow-on — still refused
-	// with a precise reason, never lowered wrongly.
-	if got, reason := compile(t, `def mk fn [[] [Integer Integer] [1 2]] mk`); got != "" {
-		t.Errorf("multi-return fn compiled but must refuse (deferred):\n%s", got)
-	} else if !strings.Contains(reason, "without exactly one declared return") {
-		t.Errorf("unexpected multi-return-fn refusal reason: %q", reason)
+	// A multi-RETURN fn now compiles: the body leaves N values matching the
+	// declared returns, and CALL_USER leaves them on the caller's stack.
+	d, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotMR, wasCompiled, mrErr := d.RunCompiled(`def mk fn [[] [Integer Integer] [1 2]] mk`)
+	if !wasCompiled || mrErr != nil {
+		t.Fatalf("multi-return fn: compiled=%v err=%v (want compiled, no error)", wasCompiled, mrErr)
+	}
+	if len(gotMR) != 2 || gotMR[0] != int64(1) || gotMR[1] != int64(2) {
+		t.Fatalf("multi-return fn result = %v, want [1 2]", gotMR)
+	}
+
+	// Negative: a body whose value count differs from the DECLARED returns
+	// is a return-count error the interpreter raises — refuse and fall back.
+	if got, reason := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got != "" {
+		t.Errorf("count-mismatch fn compiled but must refuse:\n%s", got)
+	} else if !strings.Contains(reason, "body value count differs") {
+		t.Errorf("unexpected count-mismatch refusal reason: %q", reason)
+	}
+}
+
+// TestEmitApplyFnValue: `…args fn apply` compiles. apply returns the fn VALUE
+// concrete in check mode (ReturnsIdentity), so the check engine re-steps it and
+// the fn dispatches against its stack args as an ordinary CALL_USER. Covers the
+// stack-form binding (sig position 0 = top), the 0-arg fn, and an anon lambda.
+func TestEmitApplyFnValue(t *testing.T) {
+	cases := []struct {
+		src  string
+		want []any
+	}{
+		{`def inc fn [[n:Integer][Integer][n add 1]] 5 inc/r apply`, []any{int64(6)}},
+		// Stack form: a=top=3, b=10 → a sub b = 3-10 = -7 (NOT forward sub2 10 3 = 7).
+		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] 10 3 sub2/r apply`, []any{int64(-7)}},
+		{`def z fn [[][Integer][42]] z/r apply`, []any{int64(42)}},
+		{`def f ([n:Integer] => [n add 1]) 5 f/r apply`, []any{int64(6)}},
+	}
+	for _, c := range cases {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, wasCompiled, rerr := a.RunCompiled(c.src)
+		if !wasCompiled || rerr != nil {
+			t.Fatalf("%s: compiled=%v err=%v (want compiled, no error)", c.src, wasCompiled, rerr)
+		}
+		if len(got) != len(c.want) {
+			t.Fatalf("%s: got %v, want %v", c.src, got, c.want)
+		}
+		for i := range c.want {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: got %v, want %v", c.src, got, c.want)
+				break
+			}
+		}
+	}
+
+	// Negative: applying a NON-function (a plain Integer) errors in both
+	// engines — apply's [Function] sig rejects it; the row must not silently
+	// compile to a wrong value.
+	if _, _, rerr := mustRun(t, `5 6 apply`); rerr == nil {
+		t.Errorf("`5 6 apply`: want an error (apply of a non-function), got none")
+	}
+}
+
+// TestEmitGuardIf: a 2-arg `if` whose then produces 0 values (a raise guard,
+// or a 0-value word) is a statement guard — the if contributes 0 values on
+// both paths (true→raise/0, false→0), so it compiles with no merge slot and
+// the program continues after it.
+func TestEmitGuardIf(t *testing.T) {
+	// Positive: guard-if compiles and continues to the trailing value.
+	if _, r := compile(t, `def n 5 if (n eq 0) [raise "zero"] def q (10 div n) q`); r != "" {
+		t.Errorf("guard-if must compile, refused: %s", r)
+	}
+	okCases := []struct {
+		src  string
+		want int64
+	}{
+		{`def n 5 if (n eq 0) [raise "zero"] def q (10 div n) q`, 2},
+		{`def f fn [[n:Integer] [Integer] [ if (n eq 0) [raise "zero"] def q (10 div n) q ]] f 5`, 2},
+	}
+	for _, c := range okCases {
+		got, _, err := mustRun(t, c.src)
+		if err != nil || len(got) != 1 || got[0] != c.want {
+			t.Errorf("%s: got %v err=%v, want [%d]", c.src, got, err, c.want)
+		}
+	}
+	// Negative: the guard FIRES (raise on the true path) — both engines error.
+	if _, _, err := mustRun(t, `def n 0 if (n eq 0) [raise "zero"] def q (10 div n) q`); err == nil {
+		t.Error("guard-if true path must raise, got no error")
+	}
+}
+
+// TestEmitDynOutNative: a CORE builtin with CONCRETE args but a declared-Any
+// (dynamic) output — e.g. `unify`, [Any,Any]→[Any,Boolean] — bakes a plain
+// CALL_NATIVE (the sig was resolved by real matching; the handler runs
+// faithfully). A dynamic INPUT still refuses (the sig would be a guess).
+func TestEmitDynOutNative(t *testing.T) {
+	if _, r := compile(t, `List unify [1 2]`); r != "" {
+		t.Errorf("concrete-args unify must compile, refused: %s", r)
+	}
+	// Value parity in compiled mode (unify returns [unified, ok]).
+	got, _, err := mustRun(t, `List unify [1 2]`)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("List unify [1 2]: got %v err=%v", got, err)
+	}
+	// Negative: a DYNAMIC input keeps the dynamic-input refusal — the sig is
+	// then a guess, not a resolved match.
+	if _, r := compile(t, `def l [1 2] push 3 l unify l`); r == "" {
+		t.Error("dynamic-input unify compiled but must refuse")
+	}
+}
+
+// TestEmitModuleInnerNative: a module word reached via dot-access
+// (`StructUtil.clone …`) trivially delegates to its inner native; even with a
+// declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,
+// verified against the module sub-registry (so a usurp synthetic can't slip
+// through). The interpreter dispatches the same inner native via execMatch on
+// the main engine, so the baked call is identical.
+func TestEmitModuleInnerNative(t *testing.T) {
+	cases := []string{
+		`"aql:struct-util" import end StructUtil.clone {a:1}`,
+		`"aql:struct-util" import end StructUtil.jsonify {a:1}`,
+	}
+	for _, src := range cases {
+		if _, r := compile(t, src); r != "" {
+			t.Errorf("module inner native must compile, refused: %s\n  %s", r, src)
+		}
+		_, compiled, err := mustRun(t, src)
+		if err != nil || !compiled {
+			t.Fatalf("%s: compiled=%v err=%v (want compiled, no error)", src, compiled, err)
+		}
+	}
+	// Negative: a user-def usurp value (`def ifu (usurp if)`) is NOT a module
+	// inner native and re-steps (tape-coupled) — it must refuse, not bake.
+	if _, r := compile(t, `def ifu (usurp if) ifu (1 eq 1) [10] [20]`); r == "" {
+		t.Error("usurp'd user def compiled but must refuse (re-steps)")
+	}
+}
+
+// mustRun runs src in compiled mode, returning (result, wasCompiled, err).
+func mustRun(t *testing.T, src string) ([]any, bool, error) {
+	t.Helper()
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a.RunCompiled(src)
+}
+
+// TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
+// const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
+// the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field
+// (`{b: f/r}`) is NOT const-bakeable (it would diverge via the island) and
+// falls back faithfully — verified by the differential, asserted here for
+// value parity.
+func TestEmitMethodField(t *testing.T) {
+	cases := []struct {
+		src  string
+		want []any
+	}{
+		{`def m {f: (fn [[a:Integer][Integer][a add 1]])} m.f 5`, []any{int64(6)}},
+		{`def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])} m.f 2 3`, []any{int64(203)}},
+		// Named-ref field: falls back, but must still match the interpreter.
+		{`def f fn [[x:Integer] [Integer] [add x 1]] def m {b:f/r} m.b 2`, []any{int64(3)}},
+	}
+	for _, c := range cases {
+		got, _, rerr := mustRun(t, c.src)
+		if rerr != nil {
+			t.Fatalf("%s: err=%v", c.src, rerr)
+		}
+		if len(got) != len(c.want) || (len(got) == 1 && got[0] != c.want[0]) {
+			t.Errorf("%s: got %v, want %v", c.src, got, c.want)
+		}
 	}
 }
 
@@ -766,24 +935,27 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	}
 }
 
-// Stage 4: an fn-value pulled from a map field and called (`m.f 5`)
-// is F4 — the checker types the get result as dynamic Any, so the
-// recorder refuses and the program falls back to the interpreter with
-// the correct result (the plan's sanctioned F4 fallback).
+// A method field whose value is an UNNAMED inline fn now COMPILES (the map
+// const-bakes the fn member, a poly get returns it, CALL_DYNAMIC applies it —
+// see TestEmitMethodField). A NAMED ref field (`{b: f/r}`) still falls back to
+// the interpreter (it would diverge through the island), with the correct
+// result — the remaining sanctioned fn-value-from-map fallback.
 func TestEmitFnValueCallFallsBack(t *testing.T) {
-	if _, r := compile(t, `def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`); r == "" {
-		t.Error("fn-value-from-map call compiled but must fall back (F4)")
+	// Positive: unnamed-fn method field compiles.
+	if _, r := compile(t, `def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`); r != "" {
+		t.Errorf("unnamed-fn method field must compile, refused: %s", r)
 	}
-	a, err := New()
-	if err != nil {
-		t.Fatal(err)
+	// Negative: a NAMED ref field falls back (not compiled) but still correct.
+	src := `def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/r}  m.b 2`
+	if _, r := compile(t, src); r == "" {
+		t.Error("named-ref method field compiled but must fall back")
 	}
-	out, compiled, err := a.RunCompiled(`def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`)
+	out, compiled, err := mustRun(t, src)
 	if err != nil || compiled {
-		t.Fatalf("fn-value fallback: compiled=%v err=%v", compiled, err)
+		t.Fatalf("named-ref fallback: compiled=%v err=%v", compiled, err)
 	}
-	if len(out) != 1 || out[0] != int64(6) {
-		t.Fatalf("m.f 5 fallback = %v, want 6", out)
+	if len(out) != 1 || out[0] != int64(3) {
+		t.Fatalf("m.b 2 fallback = %v, want 3", out)
 	}
 }
 

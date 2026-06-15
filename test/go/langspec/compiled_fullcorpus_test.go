@@ -45,6 +45,15 @@ func errCode(e error) string {
 	return "non-aql"
 }
 
+// asAqlError unwraps e to an *AqlError, or nil for a non-AQL / nil error.
+func asAqlError(e error) *eng.AqlError {
+	var ae *eng.AqlError
+	if e != nil && errors.As(e, &ae) {
+		return ae
+	}
+	return nil
+}
+
 func TestSpecCompiledOrFallback(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
 	entries, err := os.ReadDir(specDir)
@@ -94,6 +103,28 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 				continue
 			}
 			if errC != nil {
+				// Error CONTENT parity: the compiled VM goes out of its way to
+				// reproduce the interpreter's errors byte-for-byte (vmReturnTypeErr,
+				// vmReturnCountErr), so detail text must match and the compiled
+				// error must carry a source position whenever the interpreter does.
+				// Exact Row/Col are NOT asserted: a return-type error is stamped at
+				// the call site by the interpreter but inside the shared fn unit by
+				// the VM, so the column legitimately differs — only presence is
+				// gated, which is what catches a "source position unknown" regression.
+				if aeC, aeI := asAqlError(errC), asAqlError(errI); aeC != nil && aeI != nil {
+					if aeC.Detail != aeI.Detail {
+						mismatches++
+						t.Errorf("%s:L%d (wasCompiled=%v): %s\n  error detail divergence:\n  compiled=%q\n  interpreted=%q",
+							e.Name(), lineNum, wasCompiled, input, aeC.Detail, aeI.Detail)
+						continue
+					}
+					if aeI.Row > 0 && aeC.Row == 0 {
+						mismatches++
+						t.Errorf("%s:L%d (wasCompiled=%v): %s\n  error position lost in compiled mode: interpreter at %d:%d, compiled has no position\n  detail=%q",
+							e.Name(), lineNum, wasCompiled, input, aeI.Row, aeI.Col, aeC.Detail)
+						continue
+					}
+				}
 				continue
 			}
 			if renderAny(gotC) != renderAny(gotI) {

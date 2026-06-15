@@ -376,6 +376,41 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 	return ""
 }
 
+// reconcileResults arranges a unit's N result operands (bottom→top) as the
+// final stack, ready for a RET. Each event operand must already sit on the
+// simulated stack in order — it was left there by its own event — and inert
+// operands (const / local / type) are pushed as a trailing tail above the
+// last event result. who prefixes the refusal reason ("fn name"). This is
+// the fn-unit mirror of Finalize's program-residual reconciliation, the
+// multi-result generalisation of the old single-result body tail.
+func (lw *lowerer) reconcileResults(ops []emitOperand, who string, pos SrcPos) string {
+	vi := 0
+	var tail []emitOperand
+	for _, op := range ops {
+		if op.kind == opEvent {
+			if lw.variadic[op.idx] {
+				return who + ": result is a variadic loop value (Stage 3)"
+			}
+			if len(tail) > 0 {
+				return who + ": result above a literal (Stage 3)"
+			}
+			if vi >= len(lw.vm) || !slotIs(lw.vm[vi], op) {
+				return who + ": body leaves extra values (Stage 3 lowers in-order results)"
+			}
+			vi++
+			continue
+		}
+		tail = append(tail, op)
+	}
+	if vi != len(lw.vm) {
+		return who + ": body leaves extra values (Stage 3 lowers in-order results)"
+	}
+	for _, op := range tail {
+		lw.pushOperand(op, pos)
+	}
+	return ""
+}
+
 func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	c := &ev.call
 	n := len(c.ops)
@@ -513,7 +548,12 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 	}
 	lw.emit(OpCallUser, uc.unit, uc.pos)
 	lw.vm = lw.vm[:len(lw.vm)-n]
-	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+	// Push one simulated slot per result the unit returns (P5 multi-result):
+	// 0 for a 0-return fn, N for a multi-return fn — idx 0..N-1 deepest-first,
+	// matching the order the VM's CALL_USER leaves the unit's residual.
+	for i := 0; i < uc.nout; i++ {
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq, idx: i})
+	}
 	lw.note()
 	return ""
 }
@@ -664,9 +704,15 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	if !br.hasElse {
 		// 2-arg if: false path jumps straight to the merge.
 		(*lw.code)[jf].Arg = int32(len(*lw.code))
-		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
-		lw.variadic[ev.seq] = true
-		lw.note()
+		// A value-producing then yields a VARIADIC result (the value on true,
+		// nothing on false) — only the program residual may absorb it. A
+		// 0-value / diverging then (raise/set/break) produces 0 values on both
+		// paths: a statement guard with no merge slot.
+		if br.hasThenOut {
+			lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+			lw.variadic[ev.seq] = true
+			lw.note()
+		}
 		return ""
 	}
 	jend := -1

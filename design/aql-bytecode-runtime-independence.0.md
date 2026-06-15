@@ -29,11 +29,73 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **542 refused / 15 islanded** (from 651 / 115 at P0;
+**Method fields (`m.f`) — unnamed-fn const members (LANDED, 527 → 521).** A map
+whose field is an inline fn (`{f: (fn …)}`) could not const-bake because
+`isInertConst` rejected the fn member, so the receiver was unresolvable and
+`m.f args` refused as "opaque output". Allow an UNNAMED fn value as a const
+compound MEMBER (`isInertConstMember`): immutable code is safe inside a
+read-only const map/list. Then `m.f args` compiles as it already did for scalar
+fields — a `CALL_NATIVE_POLY get` returns the fn (dynamic), and the existing
+fn-value-call boundary (`applyDynamic` → `OpCallDynamic`) applies it. A NAMED
+ref field (`{b: f/r}`, Name="f") is kept non-const: applied through the island
+sub-engine it re-dispatches by name and forward-collection of the trailing arg
+diverges, so it falls back faithfully instead (a pre-existing island subtlety,
+not introduced here). Bare top-level fn values stay non-const (the apply /
+closure case). Files: `eng/go/emit.go` (`isInertConstMember`).
+
+**Guard-if statement (`if cond [raise]`) — 0-value-then if (LANDED, 521 → 519).**
+A 2-arg `if` whose then-branch produces 0 values (a `raise` guard, a 0-value
+word like `set`/`printstr`, or a break/continue) refused as "then-branch
+produces no value". But such an if produces 0 values on BOTH paths (true→0 or
+diverge, false→0) — it's a statement guard, not a variadic 0-or-1 result.
+`if2ReturnsFn` still types it `[None]` (so RecordCall's double-record guard
+elides the dispatch), but `RecordBranch` marks the seq `zeroOut`: the lowerer
+emits no merge slot, and Finalize's residual reconciliation skips the phantom
+None. The trailing statement (`… def q (10 div n) q`) then lowers cleanly. The
+broader variadic-statement-if (a value-producing then used as a discarded
+statement; a computed else) stays refused — it needs true 0-or-1 residual
+modeling. Files: `eng/go/emit.go` (RecordBranch zeroOut + residual skip),
+`eng/go/lower.go` (lowerArms no-slot), `lang/go/native/native_control.go`.
+
+**Concrete-args dynamic-output core builtins (LANDED, 519 → 514).** A core
+builtin native with CONCRETE args but a declared-Any (dynamic) output — e.g.
+`unify` ([Any,Any]→[Any,Boolean], a 2-result word that can't poly) — refused as
+"opaque output". But concrete args mean the checker RESOLVED the sig by real
+matching (not widening), so the dynamic output is just a declared-Any return,
+not a best-guess sig: a plain CALL_NATIVE bakes faithfully. `dynOutNativeOK`
+(carrier.go) gates it (concrete args, dynamic output, core sig, no
+meta/fn-value/code-body), and RecordCall's `anyDynamicCarrier(outs)` refusal
+gains a `forceDynOut` bypass. The dynamic result is still registered, so a
+downstream TYPED consumer of it refuses via the dynamic-input guard — contained.
+Cleared 18 opaque-output rows (−5 net; cascades moved to other buckets). Files:
+`eng/go/carrier.go` (dynOutNativeOK), `eng/go/emit.go` (RecordCall forceDynOut).
+
+**Module inner natives via dot-access (LANDED, 514 → 459).** A module word
+called `Pkg.word` (`StructUtil.clone`, `StructUtil.jsonify`, …) trivially
+delegates to an inner native registered in the module's sub-registry; those
+natives have no `Returns` annotation, so their Any output is dynamic and they
+refused as "opaque output". But the dispatch IS sound to bake: the interpreter
+dispatches the inner native via `execMatch` on the main engine (the wrapper's
+trivial delegation), so a `CALL_NATIVE` with the main registry is identical.
+`dynOutNativeOK` now accepts the inner sig, verified by `isModuleInnerSig`
+(pointer-membership in a loaded module's wrapper sub-registry) — which excludes
+usurp synthetics. The IsBuiltinWord gate stays on the CORE path: a user
+`def ifu (usurp if)` makes `r.Lookup("ifu")` return the usurp-MODIFIED `if` sig
+(pointer-equal), so without that gate ifu baked and returned a tape-coupled
+result (the differential caught it). Cleared the struct-util / module-word
+opaque cluster: −55 refusals, +48 compiled differential rows. Files:
+`eng/go/carrier.go` (dynOutNativeOK + isModuleInnerSig).
+
+Current ratchets: **459 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
-555 after predicate-type provenance; 545 after if value-else). Compiled rows
-1706 → 1823, 0 divergences throughout. The `case` desugar dropped the island
-count 26 → 15 (islanded case rows now compile natively).
+555 after predicate-type provenance; 545 after if value-else; 542 after case;
+538 after multi-return / 0-return / anonymous-lambda fns; 527 after apply of a
+fn value; 521 after unnamed-fn map/list members; 519 after 0-value-then if
+guard; 514 after concrete-args dynamic-output core builtins; 459 after module
+inner natives via dot-access). Compiled rows 1706 → 1908, 0 divergences
+throughout. The `case`
+desugar dropped the island count 26 → 15 (islanded case rows now compile
+natively).
 
 Stage-2 lowering edges also closed this pass: a 3-arg `if` whose else arm is
 a plain VALUE (`if cond [then] 42` — literal / local / type, not a `[…]`
@@ -75,13 +137,46 @@ empirical breakdown corrected the plan's framing: the "multi-result" refusal
 bucket (34 rows) was dominated by **0-result** side-effect calls, not N-output
 calls — those drove most of the −18 refusals.
 
+**Multi-RETURN / 0-return / anonymous-lambda fns — LANDED (542 → 538).**
+`StartFnCompile` no longer requires exactly one declared return; the fn unit's
+single `outOp`/`hasOut` became `outOps []emitOperand` (the body residual in
+stack order), `RecordUserCall` takes `outs []Value` and registers each with its
+result index, `emitUserCall`/`lowerUserCall` carry `nout` (N result slots
+pushed, deepest-first), and the `Finalize` fn-unit tail reconciles the N result
+operands against the simulated stack (`lowerer.reconcileResults`, the fn-unit
+mirror of the program-residual reconciliation) before the `OpRet` (whose
+per-`Returns` type/count check was already N-capable). Empirical corrections to
+the plan's "~10, mechanical" framing:
+
+- The bucket was dominated by **anonymous lambdas** (`([n] => [n add 1]) 5`):
+  `buildFnBodyReturnsFn` nils an anonymous fn's `Returns`, so it presented as
+  "0 declared returns" and the old `len(declared) != 1` refusal caught it. The
+  interpreter does NOT count-enforce a 0-declared fn (`def f fn [[x][][x]] f 5`
+  → 5), so the count check now applies ONLY when returns are declared
+  (non-empty); an undeclared fn's body residual (0 or N values) is taken as-is.
+- The call-recording path only fired `RecordUserCall` for `len(out) == 1`, so
+  0/N-return calls were never recorded at all (the result carriers had no
+  producing event → "unknown provenance" downstream). Both the declared-N and
+  the inferred (anonymous / 0-return) branches now record. The empty-body-
+  residual case keeps the check-mode `[Any]` approximation and stays unrecorded
+  → refuses downstream, unchanged.
+- The `RecordCall` double-record guard (a dispatch a structured hook already
+  recorded must not be re-refused) checked `len(outs) == 1`; generalised to
+  `len(outs) > 0` so a multi-return user-fn call isn't refused as "user fn
+  call (Stage 3)" by the generic path.
+- Tail marking stays single-result only (a multi-return tail boundary lowers
+  as a plain `CALL_USER`); an all-arms-tail branch body is tracked as diverged
+  so it emits no unreachable RET.
+
+The residual 3 "multi-return fn" refusals are **count-mismatch error rows**
+(`def r2 fn [[n] [Integer] [n n]] r2 1` — declared 1, body 2): the body count
+differs from the DECLARED returns, which the interpreter raises as a
+return-count error, so they correctly refuse and fall back. A few rows that
+previously refused here now reach a LATER refusal (apply / fn-value, if-branch),
+which the remaining items below own.
+
 **Deferred (still refused, soundly):**
 
-- **Multi-RETURN / 0-return fns** (step 4 — the "multi-return fn" bucket, ~10
-  rows): `StartFnCompile` still requires exactly one declared return; the fn
-  unit's single `outOp` and `RecordUserCall`'s single `out` need generalising
-  to N results, and `Finalize`'s fn-unit RET check to N (`OpRet` already loops
-  over `Returns`). Mechanical follow-on on the same `(seq, idx)` base.
 - **dup-body islands** (`each [dup add]`): `dup` returns `[args[0], args[0]]` —
   the SAME `Value.ID` twice (`spliceMatchResults` does not re-mint), so the two
   outputs collapse in the ID-keyed `producedBy` and the operand layout refuses
@@ -226,13 +321,27 @@ introspection word (`typeof (inc/r)`, `Positive tcmp Positive`,
 `TypeUtil.arityof (fn …)`, ~12), and higher-order afn args
 (`each ([kv] => …)`, ~3).
 
-**No shortcut (verified).** The tempting elision — "`apply` just unquotes the
-fn for the engine to re-step, so elide it and let the re-step record the real
-`inc 5` call" — does NOT work: after `apply` returns the fn, the check-mode
-engine does not re-step it into an `inc` dispatch; the fn flows to the
-residual unresolved ("residual value of unknown provenance"). So the full
-machinery below is required — the fn VALUE must become a closure on the
-stack, and `apply` must lower to a stack-form application.
+**The shortcut DOES work — corrected (LANDED, 538 → 527).** The earlier note
+claimed the re-step "does not fire in check mode," but that was an artefact of
+returning a CARRIER. The fix is two lines: give `apply`'s `[Function]` sig
+`ReturnsFn: ReturnsIdentity(0)` so it returns the fn VALUE **concrete** (not
+widened to Any), and elide `apply`'s own dispatch in `RecordCall` (a `word ==
+"apply"` + FnDef-arg guard beside the get/getr elision). A concrete fn value
+landing back on the check stack IS re-stepped by `stepLiteral` →
+`execFnDefLiteral` exactly as at runtime, so the fn dispatches against its
+preceding stack args and records as an ordinary `CALL_USER` (its body compiled
+by the normal `buildFnBodyReturnsFn` path). No new opcode, no closure push, no
+stack-form `CALL_DYNAMIC`, no Finalize-residual handling — the whole "full
+machinery" below proved unnecessary (an `OpCallDynamicStack` prototype compiled
+0 rows and was removed). Covers `inc/r apply`, the stack-form 2-arg
+`sub2/r apply` (sig position 0 = top, so `10 3 sub2/r apply = -7`), the 0-arg
+`z/r apply`, and the anonymous-lambda `f/r apply`. Files: `native_ref.go`
+(apply sig), `eng/go/emit.go` (RecordCall elision). The `m.f` method-through-map
+and `apply $.path` Reach-lens rows are separate items.
+
+**Original plan (superseded by the shortcut above, kept for context):** the fn
+VALUE was to become a closure on the stack and `apply` lower to a stack-form
+application —
 
 **Symptom.** `unannotated or opaque word apply` for `5 inc/r apply`,
 `z/r apply`, `f/r apply`; and any higher-order word handed a fn VALUE
@@ -466,9 +575,15 @@ lint) and lowers a ratchet monotonically.
    nested `if` chain (`__casematch` for faithful matching, `OperandRepushable`
    for static classification, a `tryRecordFallback` `producedBy` guard to stop
    the double-record). Islanded case rows now compile natively.
-5. **Fn-values-on-the-stack.** ← NEXT. The remaining big semantic item
-   (`apply` + higher-order fn args); de-islands the `callDynamic` user-fn
-   apply. Higher risk (engine re-stepping, stack-form calling convention).
+4b. **Multi-return / 0-return / anonymous-lambda fns.** ✅ DONE (542/15 →
+   538/15). N-result fn units (`outOps`, `RecordUserCall(outs)`, `nout`,
+   `reconcileResults`); count-enforced only for declared returns. The deferred
+   P5 follow-on; unblocked anonymous lambdas applied directly.
+5. **Fn-values-on-the-stack (`apply`).** ✅ DONE (538/15 → 527/15). Two-line
+   shortcut: `apply` returns the fn concrete (`ReturnsIdentity(0)`) so the check
+   engine re-steps it into an ordinary CALL_USER; elide apply in RecordCall. The
+   stack-form-closure machinery in the original plan proved unnecessary. The
+   `m.f` method-through-map and `apply $.path` Reach rows remain.
 6. **Predicate-type operands.** ✅ DONE (done out of order, see above).
 7. **P7 deletion** — once both ratchets hit 0.
 

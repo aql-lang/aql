@@ -381,9 +381,107 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	if !tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
-		r.Check.Emit.RecordCall(word, sig, args, out, pos)
+		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))
 	}
 	return out
+}
+
+// dynOutNativeOK reports whether a dispatch with a DYNAMIC output but CONCRETE
+// args may still bake a plain CALL_NATIVE despite the dynamic result. Concrete
+// args mean the checker RESOLVED the sig by real matching (not widening), so a
+// dynamic output is just a declared-Any return (e.g. unify's [Any, Boolean]),
+// not a best-guess sig — for a CORE builtin native the handler runs faithfully.
+// The dynamic result is still registered, so any downstream TYPED consumer of
+// it refuses via the dynamic-input guard, keeping it contained. Mirrors
+// tryRecordPoly's safety (core sig, no meta/fn-value), and is the escape hatch
+// RecordCall's anyDynamicCarrier(outs) refusal consults via forceDynOut.
+func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value) bool {
+	es := r.Check.Emit
+	if !es.active() || sig == nil || len(outs) == 0 {
+		return false
+	}
+	// Concrete args + dynamic output only — a dynamic INPUT means the sig was
+	// widened (a guess), which stays refused.
+	if anyDynamicCarrier(args) || !anyDynamicCarrier(outs) {
+		return false
+	}
+	if fallbackWords[word] {
+		return false
+	}
+	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
+	// regardless; screen here so they don't slip through forceDynOut).
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode ||
+		len(sig.NoEvalArgs) > 0 || len(sig.QuoteArgs) > 0 {
+		return false
+	}
+	for _, t := range sig.Args {
+		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			return false
+		}
+	}
+	for _, a := range args {
+		if _, ok := a.Data.(FnDefInfo); ok {
+			return false
+		}
+	}
+	// The VM bakes this exact sig and calls sig.Handler DIRECTLY, so it must be
+	// a REAL native binding: the word's own main-registry BUILTIN sig, OR a
+	// trivial-delegation module inner-native sig reached via dot-access
+	// (`StructUtil.clone …`). Both are sound to bake with the main registry —
+	// for a module inner native the interpreter ALSO dispatches via execMatch
+	// on the main engine (the wrapper's trivial delegation), so the call is
+	// identical. The IsBuiltinWord gate on the core path is load-bearing: a
+	// user `def ifu (usurp if)` makes r.Lookup("ifu") return the usurp-MODIFIED
+	// if sig (pointer-equal to the match) — but ifu is not a builtin, so it is
+	// excluded here and stays refused (a usurp'd if re-steps and returns
+	// tape-coupled values). A usurp synthetic also matches no module export.
+	if r.IsBuiltinWord(word) {
+		if fn := r.Lookup(word); fn != nil {
+			for i := range fn.Signatures {
+				if &fn.Signatures[i] == sig {
+					return true
+				}
+			}
+		}
+	}
+	return isModuleInnerSig(r, word, sig)
+}
+
+// isModuleInnerSig reports whether sig is a native signature exported by a
+// LOADED module's trivial-delegation wrapper for word — i.e. the inner native
+// `word` dispatches when called as `Pkg.word`. The wrapper (an FnDefInfo
+// carrying its sub-Registry) lives in the module's export map; the inner sig is
+// `wrapper.Registry.Lookup(word).Signatures`. Pointer-identity confirms sig is
+// THAT native, not a usurp-synthetic copy. O(loaded modules × exports) — only
+// consulted on a dynamic-output dispatch the core-sig check already missed.
+func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
+	if r == nil || r.Modules == nil {
+		return false
+	}
+	for _, md := range r.Modules.loaded {
+		for _, em := range md.Exports {
+			if em == nil {
+				continue
+			}
+			for _, k := range em.Keys() {
+				v, _ := em.Get(k)
+				fd, ok := v.Data.(FnDefInfo)
+				if !ok || fd.Registry == nil || fd.Name != word {
+					continue
+				}
+				inner := fd.Registry.Lookup(fd.Name)
+				if inner == nil {
+					continue
+				}
+				for i := range inner.Signatures {
+					if &inner.Signatures[i] == sig {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // tryRecordPoly records a genuinely-dynamic typed dispatch (get/size/is/

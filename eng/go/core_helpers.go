@@ -384,7 +384,16 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				paramNames[i] = p.Name
 			}
 			var okFn bool
-			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil)
+			// The body's first-token position locates the compiled unit for
+			// a return-type error stamped at the VM's RET. It cannot equal
+			// the interpreter's call-site column (one unit serves every call
+			// site), but it keeps the compiled error from reporting an
+			// unknown position. Empty body falls back to a zero pos.
+			var fnPos SrcPos
+			if len(bodyCopy) > 0 {
+				fnPos = bodyCopy[0].Pos
+			}
+			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
 				fnUnit = -1
 			}
@@ -446,17 +455,31 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				}
 				out[i] = NewCarrier(t)
 			}
-			if fnUnit >= 0 && len(out) == 1 {
+			if fnUnit >= 0 {
 				pos := SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos
 				}
-				es.RecordUserCall(fnUnit, args, out[0], pos)
+				es.RecordUserCall(fnUnit, args, out, pos)
 			}
 			return out
 		}
 		if len(stk) == 0 {
+			// No declared returns and an empty body residual: keep the
+			// check-mode Any approximation (unchanged), and do NOT record a
+			// call — the Any carrier has no producing event, so a downstream
+			// consumer refuses and the program falls back, as before.
 			return []Value{NewCarrier(TAny)}
+		}
+		// Undeclared fn (anonymous lambda, 0-return fn) with a non-empty body
+		// residual: the body's residual IS the result. Record the call with
+		// those N carriers so downstream resolves them to this dispatch.
+		if fnUnit >= 0 {
+			pos := SrcPos{}
+			if len(args) > 0 {
+				pos = args[0].Pos
+			}
+			es.RecordUserCall(fnUnit, args, stk, pos)
 		}
 		return stk
 	}
