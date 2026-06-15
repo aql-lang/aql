@@ -202,9 +202,16 @@ before/after numbers.
    `metaFallbackWords` as a deliberate DSL-interpreted boundary. Decide with the
    island/refusal numbers in hand.
 
-8. **introspection over fn-values (12, LOW-MED).** `typeof (f/r)`, `tcmp
-   Function` want the fn value as a plain CALL_NATIVE operand (not a closure) —
-   the "smaller follow-on" the runtime-independence doc named.
+8. **introspection over fn-values ✅ LANDED (417 → 407).** A type-READING word
+   (`typeof`/`tcmp`/`teq`/`tand`/`tor`/`tnot`/`inspect`) over a fn VALUE bakes
+   the immutable fn as a const operand the handler inspects (`typeof (f/r)`,
+   `Positive tcmp Function`): `fnIntrospectionWords` exempts them from the
+   "function value reaches word" refusal, and a concrete fn-value arg interns as
+   a never-pooled const (CanonValue is not a reliable fn identity key).
+   Fn-INVOKING words stay refused — apply, the higher-order forms, and crucially
+   `is` over a predicate fn (whose handler APPLIES the predicate; the VM cannot
+   re-step a fn body) — so they are deliberately OFF the allowlist.
+   (`eng/go/emit.go` RecordCall + intern.)
 
 9. **Error-row disposition + the re-scoped P7 gate.** Make the VM raise the
    count-mismatch / unpack-missing / orphan-gen taxonomies (so they compile), or

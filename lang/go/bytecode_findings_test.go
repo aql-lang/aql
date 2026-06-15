@@ -311,3 +311,46 @@ func TestVariadicElseIfLowers(t *testing.T) {
 		}
 	}
 }
+
+// Roadmap item (fn-value introspection) — a type-reading word (typeof / tcmp /
+// teq / tand / tor / tnot) over a fn VALUE bakes the immutable fn as a const
+// the handler inspects, instead of refusing "function value reaches word". A
+// fn-INVOKING use must stay refused (the VM cannot re-step a fn body).
+func TestFnValueIntrospectionLowers(t *testing.T) {
+	const setup = `def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] `
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`typeof (fn [[a:Integer][Integer][a add 1]])`, "[Function]"},
+		{setup + `Positive tcmp Positive`, "[0]"}, // equal
+		{setup + `Positive tcmp Function`, "[1]"},
+		{setup + `Function tcmp Positive`, "[-1]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected native, got island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// Negative: `is` over a predicate fn INVOKES it (applies the predicate), so
+	// it must NOT be exempted — it still falls back (parity preserved).
+	const inv = `def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`
+	c, _ := New()
+	_, compiled, _ := c.RunCompiled(inv)
+	if compiled {
+		t.Errorf("`is` over a predicate fn must not compile as introspection (it invokes the fn)")
+	}
+}

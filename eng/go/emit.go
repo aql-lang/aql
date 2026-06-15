@@ -34,6 +34,17 @@ const (
 	SiteMeta    = "meta"
 )
 
+// fnIntrospectionWords READ a fn value (its type, arity, or type-algebra over
+// it) and never INVOKE it — so a fn-value operand may bake as an inert const
+// the handler inspects (`typeof (f/r)`, `Positive tcmp Function`). Words that
+// invoke a fn value (apply, the higher-order forms, and `is` over a predicate
+// fn, whose handler applies the predicate) are deliberately EXCLUDED: their
+// handlers re-step the fn on the tape, which the VM cannot honour.
+var fnIntrospectionWords = map[string]bool{
+	"typeof": true, "inspect": true,
+	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
+}
+
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -1218,8 +1229,17 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 			return
 		}
 	}
+	introspect := fnIntrospectionWords[word]
 	for _, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
+			// An INTROSPECTION word READS a fn value (its type/arity) and never
+			// invokes it, so the immutable fn value rides as a plain const
+			// operand the handler inspects — unlike a fn-INVOKING word (apply,
+			// higher-order, or `is` over a predicate fn), whose handler re-steps
+			// the fn on the tape, which the VM cannot honour.
+			if introspect {
+				continue
+			}
 			es.SiteCounts[SiteMeta]++
 			es.MarkUncompilable("function value reaches " + word + " (Stage 3)")
 			return
@@ -1228,6 +1248,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
+		if !ok && introspect && IsConcrete(a) {
+			if _, isFn := a.Data.(FnDefInfo); isFn {
+				// Bake the concrete (immutable) fn value as a const the
+				// introspection handler reads at run time.
+				op, ok = constOperand(es.intern(a)), true
+			}
+		}
 		if !ok {
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
 			return
@@ -1319,6 +1346,13 @@ func (es *EmitState) internType(v Value) int {
 // under the VM where the interpreter says false (the report's
 // gotcha #13, caught by the differential gate).
 func (es *EmitState) intern(v Value) int {
+	if _, isFn := v.Data.(FnDefInfo); isFn {
+		// A fn value (introspection operand): never pool — CanonValue is not a
+		// reliable identity key for fn bodies, so dedup could merge distinct
+		// fns. Each bakes as its own const.
+		es.consts = append(es.consts, v)
+		return len(es.consts) - 1
+	}
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
