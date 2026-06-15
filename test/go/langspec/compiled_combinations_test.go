@@ -276,6 +276,12 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// A reach path with a COMPUTED segment is deferred code needing live
 		// scope — excluded from baking, so it falls back (correctly).
 		{`def p {x:{y:9}} def k "y" apply (reach 0 [x (k)]) p`, "fallback"},
+		// A structural type operand of BUILTIN type literals bakes as a const
+		// (canonical pointers, no behave-staleness); a USER-type leaf stays
+		// refused because its behavior could be mutated after the bake.
+		{`[1] is [Integer]`, "native"},
+		{`{a:5} is {a:Integer}`, "native"},
+		{`def Foo refine Integer end [1] is [Foo]`, "fallback"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {

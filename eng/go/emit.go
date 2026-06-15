@@ -1285,6 +1285,15 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 			// evaluation time, which a baked const cannot reach — so it falls back.
 			op, ok = constOperand(es.intern(a)), true
 		}
+		if !ok && (introspect || word == "is") && isBuiltinStructuralType(a) {
+			// A STRUCTURAL type operand (`[Integer]`, `{a:Integer}`) that a
+			// type-reading word matches against. isInertConst rejects its
+			// type-literal members, but a BUILTIN type literal's Parent is the
+			// canonical package-level *Type, so baking by value is sound (no
+			// behave-staleness). `5 is Integer` already lowers via OpPushType;
+			// this is its structural counterpart.
+			op, ok = constOperand(es.intern(a)), true
+		}
 		if !ok {
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
 			return
@@ -1501,6 +1510,56 @@ func typeBodyConstOK(v Value) bool {
 // copy-returning. Keep this whitelist free of mutable instance types: adding
 // one would let a pooled compound const reach an in-place mutator and corrupt
 // it across iterations.
+// isBuiltinStructuralType reports whether v is a structural TYPE literal whose
+// every leaf is a BUILTIN type node — `[Integer]`, `[Integer String]`,
+// `{a:Integer}`, and nestings thereof. Such a value is sound to bake by value
+// for a type-reading word (`is`, `typeof`, the type-algebra words): a builtin
+// type literal's Parent is the canonical package-level *Type pointer, which is
+// stable and never retired, so no canonical-pointer staleness arises (eng
+// CLAUDE.md "Canonical *Type Pointers"). USER-type leaves are excluded — their
+// Behavior can be mutated later via `behave`, which a by-value const would not
+// see — so those structural operands stay refused.
+func isBuiltinStructuralType(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return false
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		if len(d.Elems) == 0 {
+			return false
+		}
+		for _, e := range d.Elems {
+			if !isBuiltinTypeLeaf(e) {
+				return false
+			}
+		}
+		return true
+	case MapPayload:
+		if d.M == nil || d.M.Len() == 0 {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !isBuiltinTypeLeaf(mv) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// isBuiltinTypeLeaf reports whether v is a builtin bare type node or a nested
+// builtin structural type — the per-leaf rule of isBuiltinStructuralType.
+func isBuiltinTypeLeaf(v Value) bool {
+	if IsBareTypeNode(v) {
+		// A bare type literal IS its lattice node (typeNodeOf), not its Parent;
+		// a builtin node has a stable canonical package-level pointer.
+		return typeNodeOf(v).IsNative()
+	}
+	return isBuiltinStructuralType(v)
+}
+
 // listHasParenExpr reports whether a concrete list holds a ParenExpr element —
 // deferred code that needs the live def scope when evaluated (a reach computed
 // segment `(k)`), so the list is NOT inert and must not bake into the const pool.
