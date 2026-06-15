@@ -270,6 +270,12 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`"aql:query" import end  Query.select [name age]`, "native"},
 		{`"aql:query" import end  Query.where [age gt 1] (Query.select [name])`, "native"},
 		{`"aql:query" import end  Query.on [name eq who] (Query.join visits (Query.select [name]))`, "native"},
+		// reach inert lens path + raise error-code atom bake as inert consts.
+		{`reach 5 [a !b]`, "native"},
+		{`raise bad_input "nope"`, "native"},
+		// A reach path with a COMPUTED segment is deferred code needing live
+		// scope — excluded from baking, so it falls back (correctly).
+		{`def p {x:{y:9}} def k "y" apply (reach 0 [x (k)]) p`, "fallback"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {

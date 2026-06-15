@@ -45,19 +45,24 @@ var fnIntrospectionWords = map[string]bool{
 	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
 }
 
-// queryDSLWords are the aql:query module words whose NoEvalArgs clause list (a
-// column list / expression spec) or QuoteArgs operand (a bare table name) is
-// inert DATA the handler parses into SQL — never AQL code re-stepped on the
-// tape. The operand bakes as a const and the dispatch lowers to a plain
-// CALL_NATIVE, so they are exempt from the blanket code-body and quoted-operand
-// refusals, like the get/set field-name exemption. Each word carries only one of
-// NoEvalArgs/QuoteArgs, so one set serves both guards.
-var queryDSLWords = map[string]bool{
-	// NoEvalArgs clause lists.
+// inertOperandWords are words whose NoEvalArgs clause/path list or QuoteArgs
+// atom is inert DATA the handler consumes directly — parsed into SQL, decoded
+// into a lens, read as an error code — never AQL code re-stepped on the tape.
+// The operand therefore bakes as a const and the dispatch lowers to a plain
+// CALL_NATIVE running the unchanged handler, so they are exempt from the blanket
+// code-body and quoted-operand refusals (like the get/set field-name exemption).
+// A list operand bakes even when it holds Words / paren-exprs, which the general
+// isInertConst rejects as code.
+var inertOperandWords = map[string]bool{
+	// aql:query DSL — clause lists (column/expr specs) + bare table names.
 	"select": true, "where": true, "order": true, "group": true,
 	"having": true, "on": true, "using": true,
-	// QuoteArgs bare table names.
 	"from": true, "join": true, "innerjoin": true, "leftjoin": true, "crossjoin": true,
+	// reach — an inert lens path: field names, `!` strict markers, and raw
+	// computed `(expr)` segments (stored unevaluated, applied later by the lens).
+	"reach": true,
+	// raise — the error-code atom (`raise bad_input "…"`).
+	"raise": true,
 }
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -1183,11 +1188,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
 		return
-	case len(sig.NoEvalArgs) > 0 && !queryDSLWords[word]:
+	case len(sig.NoEvalArgs) > 0 && !inertOperandWords[word]:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !queryDSLWords[word]:
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !inertOperandWords[word]:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
@@ -1270,12 +1275,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 				op, ok = constOperand(es.intern(a)), true
 			}
 		}
-		if !ok && queryDSLWords[word] && IsConcrete(a) && a.Parent.ConformsTo(TList) {
-			// A query clause list (column names, an expression spec) is inert
-			// DATA the handler parses into SQL — never re-stepped on the tape —
-			// so it bakes as a const even though it holds Words (which the
-			// general isInertConst rejects as code). Compounds are never pooled,
-			// so each clause keeps its own const slot.
+		if !ok && inertOperandWords[word] && IsConcrete(a) && a.Parent.ConformsTo(TList) && !listHasParenExpr(a) {
+			// An inert operand list (query column/expr spec, reach path) is DATA
+			// the handler consumes directly — never re-stepped — so it bakes as a
+			// const even though it holds Words (which the general isInertConst
+			// rejects as code). Compounds are never pooled, so each keeps its own
+			// const slot. A list holding a ParenExpr is EXCLUDED: that is deferred
+			// code (a reach computed segment `(k)`) needing the live def scope at
+			// evaluation time, which a baked const cannot reach — so it falls back.
 			op, ok = constOperand(es.intern(a)), true
 		}
 		if !ok {
@@ -1494,6 +1501,22 @@ func typeBodyConstOK(v Value) bool {
 // copy-returning. Keep this whitelist free of mutable instance types: adding
 // one would let a pooled compound const reach an in-place mutator and corrupt
 // it across iterations.
+// listHasParenExpr reports whether a concrete list holds a ParenExpr element —
+// deferred code that needs the live def scope when evaluated (a reach computed
+// segment `(k)`), so the list is NOT inert and must not bake into the const pool.
+func listHasParenExpr(v Value) bool {
+	lst, err := AsList(v)
+	if err != nil || lst.IsNil() {
+		return false
+	}
+	for i := 0; i < lst.Len(); i++ {
+		if IsParenExpr(lst.Get(i)) {
+			return true
+		}
+	}
+	return false
+}
+
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
