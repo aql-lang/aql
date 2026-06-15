@@ -238,6 +238,28 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// closure that threads the capture (plan P2 closure-capture).
 		{`def f fn [[k:Integer] [List] [each [add k] [1 2 3]]] f 10`, "native"},
 		{`def g fn [[k:Integer] [Integer] [fold [add] [1 2 3] k]] g 7`, "native"},
+		// --- roadmap item 5: map-iteration quotation + lambda HOF args ---
+		// 5b: each/fold/scan quotation over a map compile to a closure (no island).
+		{`{a:1 b:2 c:3} each [mul 10]`, "native"},
+		{`fold [add] {a:1 b:2 c:3} 0`, "native"},
+		{`{a:1 b:2 c:3} scan [add]`, "native"},
+		// 5a-1: a filter list-lambda compiles to a named-param closure (the
+		// handler hands it a {key,value} pair Map; `p.value` lowers).
+		{`filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]`, "native"},
+		// 5a-2: filter/each/fold/scan lambdas over a map bind a KeyVal input.
+		{`{a:1 b:5 c:3} filter ([kv:KeyVal] => [kv.v gt 2])`, "native"},
+		{`{a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])`, "native"},
+		{`0 fold ([acc:Integer kv:KeyVal] => [acc add kv.v]) {a:1 b:2 c:3}`, "native"},
+		{`{a:1 b:2 c:3} scan ([acc:Integer kv:KeyVal] => [acc add kv.v])`, "native"},
+		// A lambda capturing an enclosing-fn param threads it as a closure capture.
+		{`def fc fn [[t:Integer] [Map] [each ([kv:KeyVal] => [kv.v add t]) {a:1 b:2}]] fc 10`, "native"},
+		// Boundaries that must STAY refused (the lambda path is gated): a
+		// multi-sig fn value (a closure unit is ONE body), and a wrong-arity
+		// lambda (its inputs would not match). for-each map quotation still
+		// islands — a 0-result body has no closure-call recording yet.
+		{`def mm fn [[x:Integer][Boolean][x gt 1] [x:Boolean][Boolean][x]] filter mm [1 2 3]`, "fallback"},
+		{`{a:1 b:2} each ([a:Any b:Any] => [a])`, "fallback"},
+		{`{a:1 b:2} for-each [drop]`, "island"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {
