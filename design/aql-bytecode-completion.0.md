@@ -172,13 +172,41 @@ before/after numbers.
    `TestEmitRefusesPolySite` (the site now compiles) to assert the poly
    lowering + parity. (`eng/go/carrier.go`.)
 
-5. **Lambda higher-order args + map iteration (~22 refusals + 7 islands, HIGH
-   risk).** `filter ([p:Any] => …)`, `fold` over maps, `each {…}`. Two parts:
-   (a) a lambda VALUE arg compiles its body to a closure (the closure machinery
-   exists; the afn-value path needs the fn-VALUE-on-stack handling the apply
-   shortcut sketched); (b) map iteration emits ordered KeyVal traversal natively
-   instead of islanding. The highest-leverage island reducer. (`eng/go/carrier.go`,
-   `emit.go`, possibly a `FOR_EACH_MAP` lowering.)
+5. **Lambda higher-order args + map iteration (HIGH risk). SCOPE CORRECTION:
+   the billed "~22 refusals + 7 islands" was stale — at 407 the live cluster is
+   ~6 islands + ~6 refusing rows, the rest having already cleared or been
+   cascade-dependent.** Two mechanisms, both routed through the existing
+   `InvokeBody` seam (no new opcode — `FOR_EACH_MAP` was unnecessary):
+
+   - **5b — map-iteration quotation. ✅ LANDED (islands 15 → 9).** `each`/`fold`/
+     `scan [body] {map}` islanded because the map-overload handlers ran the body
+     through a fresh sub-engine (`New(reg).Run`) instead of `InvokeBody`. The
+     handlers were one-per-word and classified the body by `Parent` type at run
+     time — unsound once bodies compile (a compiled quotation closure and a
+     lambda both have `Parent=TFunction`). Split each word's handler PER MATCHED
+     SIGNATURE (`[TList,TMap]` quotation → value input + `InvokeBody`;
+     `[TFunction,TMap]` lambda → KeyVal input + `CallAQL`), which `OpCallNative`
+     routes by the baked sig. Added a map-value body input carrier
+     (`DataMapValueTypeFromValue`). `for-each` map quotation is DEFERRED: it nets
+     0 values and `RecordClosureCall` requires exactly one. (`native_map_iter.go`,
+     `native_array.go`, `callable_words.go`, `carrier.go`.)
+
+   - **5a-1 — filter list-lambda. ✅ LANDED (refusals 407 → 405).** `filter
+     ([p:Any] => …) [list]` refused at RecordCall's opaque-output guard (filter's
+     dynamic Function result), before the fn-value guard. `tryRecordLambdaClosure`
+     (carrier dispatch, before `RecordCall`) compiles a single-sig anonymous
+     lambda body to a closure with the lambda's NAMED param bound to a
+     `{key,value}` pair-Map carrier (matching what `filterHandler` builds), riding
+     the lambda's precomputed `Captured`. `filterHandler` runs its callback via
+     `invokeCallback` (closure → `InvokeBody`/VM, FnDefInfo → `CallAQL`).
+     (`callable_words.go` named-param `compileClosureBody` + `tryRecordLambdaClosure`,
+     `invoke.go` `IsCompiledClosure`, `filter.go`.)
+
+   - **5a-2 — map lambdas (filter/each/fold/scan over `{…}`) + `for-each` map
+     quotation. REMAINING.** ~4 map-lambda refusals need the KeyVal input carrier
+     + the map handlers' lambda path routed through `InvokeBody`; `for-each` needs
+     a 0-output closure-call recording. Gated leverage (~4-5 rows, HIGH risk) is
+     low vs the 165-row "operand provenance" bucket — revisit deliberately.
 
 6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
    (425 → 421); 6b variadic-else (421 → 417).**
