@@ -13,6 +13,7 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // Env names recognised by every mode.
@@ -126,6 +127,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runRotate(rest, homeDir, stdin, stdout, stderr)
 	case "policy":
 		return runPolicy(rest, homeDir, stdin, stdout, stderr)
+	case "password", "pw":
+		return runPassword(rest, homeDir, stdin, stdout, stderr)
+	case "history":
+		return runHistory(rest, homeDir, stdout, stderr)
+	case "restore":
+		return runRestore(rest, homeDir, stdin, stdout, stderr)
 	case "mcp":
 		return runMCP(rest, homeDir, stdin, stdout, stderr)
 	case "exec":
@@ -179,8 +186,11 @@ var modeDocs = []modeDoc{
 	{"audit", "show the structured audit log"},
 	{"rotate", "replace a stored secret value, optionally revoking caps"},
 	{"policy", "declaratively apply / show vault aliases and capabilities"},
+	{"password", "manage scoped vault passwords (add/assign/set/rm/list)"},
+	{"history", "show the content-revision history (vault.jsonic.log)"},
+	{"restore", "restore vault metadata to a past generation (admin)"},
 	{"mcp", "run a stdio MCP server exposing aliases as tools"},
-	{"exec", "run a command with secrets injected as env vars"},
+	{"exec", "run a command with secrets injected as env vars (--for=npm|cargo|gem|pypi|uv to publish)"},
 }
 
 // --- shared helpers --------------------------------------------------------
@@ -349,7 +359,22 @@ func runStatus(args []string, homeDir string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "capabilities:  %d active / %d total\n", len(active), len(s.Capabilities))
 	fmt.Fprintf(stdout, "agents:        %d registered\n", len(s.Agents))
+	if s.HasPasswordSlots() {
+		fmt.Fprintf(stdout, "passwords:     %d slots (%d admin)\n", len(s.Passwords), adminSlotCount(s))
+		fmt.Fprintf(stdout, "generation:    %d\n", s.Generation)
+	}
 	return 0
+}
+
+// adminSlotCount counts admin-scoped password slots.
+func adminSlotCount(s *Store) int {
+	n := 0
+	for i := range s.Passwords {
+		if s.Passwords[i].Scope == ScopeAdmin {
+			n++
+		}
+	}
+	return n
 }
 
 // namespaceBreakdown renders per-namespace alias counts, e.g.
@@ -390,6 +415,8 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	provider := fs.String("provider", "", "tag this secret with a provider (openai, anthropic, github, ...)")
 	namespace := fs.String("namespace", "", "store under this namespace (same as the ns: prefix; ':' = root)")
 	expiry := fs.String("expiry", "", "optional expiry reminder: YYYY-MM-DD, an RFC3339 timestamp, or a duration like 90d / 720h")
+	yes := fs.Bool("yes", false, "confirm overwriting an existing secret non-interactively")
+	fs.BoolVar(yes, "y", false, "confirm overwriting an existing secret non-interactively (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -444,16 +471,28 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		return 1
 	}
 
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	ns, _ := splitAlias(alias)
+	// Overwriting an existing secret is destructive; a fresh alias is not.
+	if existing, _ := s.FindAlias(alias); existing != nil {
+		if err := confirmDestructive(confirmTier1, alias, fmt.Sprintf("overwrite existing secret %q", alias), *yes, false, stdin, stdout); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+	}
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if err := kr.Set(alias, value); err != nil {
+	defer sess.Close()
+	if err := requireScopeNS(sess, OpWrite, ns); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	ns, _ := splitAlias(alias)
+	if err := writeSecret(homeDir, sess, alias, ns, value); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
 	if err := mutateStore(homeDir, func(s *Store) error {
 		if s.Locked {
 			return errLocked
@@ -470,11 +509,12 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	sealIntegrity(homeDir, sess)
 	_ = appendAudit(homeDir, AuditEvent{
 		Action: "vault.add", Alias: alias, Provider: *provider, Outcome: "ok",
 		Reason: "source=" + source,
 	})
-	fmt.Fprintf(stdout, "stored %s (backend=%s, %d bytes)\n", alias, kr.Name(), len(value))
+	fmt.Fprintf(stdout, "stored %s (backend=%s, %d bytes)\n", alias, sess.Keyring().Name(), len(value))
 	if expiresAt != "" {
 		fmt.Fprintf(stdout, "  expires %s\n", expiresAt)
 	}
@@ -566,12 +606,18 @@ func runGet(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	kr, err := openKeyring(s, homeDir, os.Stdin, stdout, "Vault passphrase: ")
+	ns, _ := splitAlias(alias)
+	sess, err := authenticate(s, homeDir, os.Stdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	v, err := kr.Get(alias)
+	defer sess.Close()
+	if err := requireScopeNS(sess, OpRead, ns); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	v, err := sess.getValue(alias, ns)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -645,11 +691,13 @@ func dash(s string) string {
 func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault rm", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	yes := fs.Bool("yes", false, "confirm the deletion non-interactively")
+	fs.BoolVar(yes, "y", false, "confirm the deletion non-interactively (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault rm <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault rm [--yes] <alias>\n")
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -662,8 +710,18 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	kr, err := openKeyring(s, homeDir, os.Stdin, stdout, "Vault passphrase: ")
+	ns, _ := splitAlias(alias)
+	sess, err := authenticate(s, homeDir, os.Stdin, stdout, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScopeNS(sess, OpWrite, ns); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	if err := confirmDestructive(confirmTier1, alias, fmt.Sprintf("delete secret %q", alias), *yes, false, os.Stdin, stdout); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -678,9 +736,10 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if err := kr.Delete(alias); err != nil {
+	if err := sess.deleteValue(alias); err != nil {
 		fmt.Fprintf(stderr, "warning: removed %s from the vault but could not delete its keyring entry: %s\n", alias, err)
 	}
+	sealIntegrity(homeDir, sess)
 	_ = appendAudit(homeDir, AuditEvent{Action: "vault.rm", Alias: alias, Outcome: "ok"})
 	fmt.Fprintf(stdout, "removed %s\n", alias)
 	return 0
@@ -710,7 +769,8 @@ func runImport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	fromStdin := true
 	var data []byte
 	if fs.NArg() >= 1 {
-		srcName = fs.Arg(0)
+		// Expand a leading ~ the shell left verbatim (quoted path, etc.).
+		srcName = pathutil.ExpandTilde(fs.Arg(0), homeDir)
 		fromStdin = false
 		b, err := os.ReadFile(srcName)
 		if err != nil {
@@ -777,8 +837,13 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 	if fromStdin {
 		krStdin = nil
 	}
-	kr, err := openKeyring(s, homeDir, krStdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, krStdin, stdout, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScopeNS(sess, OpWrite, effNS); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -789,7 +854,7 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 			fmt.Fprintf(stderr, "warning: skipping invalid alias %q\n", alias)
 			continue
 		}
-		if err := kr.Set(alias, entries[k]); err != nil {
+		if err := writeSecret(homeDir, sess, alias, effNS, entries[k]); err != nil {
 			fmt.Fprintf(stderr, "error: storing %s: %s\n", alias, err)
 			return 1
 		}
@@ -814,6 +879,7 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	sealIntegrity(homeDir, sess)
 	return 0
 }
 
@@ -911,6 +977,11 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		s.Capabilities[idx].MaxCalls = *maxCalls
 		s.Capabilities[idx].MaxCostCents = *maxCostCents
 		s.Capabilities[idx].RequireApproval = *approval
+		// Bind the capability to the namespace its alias lives in, so a
+		// broker can confirm a presented token is being used within the
+		// namespace it was minted for (defence in depth on top of the
+		// per-alias token check and the broker password's NDK scope).
+		s.Capabilities[idx].Namespace = valueNamespace(alias)
 		token, tok = tk, s.Capabilities[idx]
 		return nil
 	}); err != nil {
@@ -1087,11 +1158,13 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	fromClipboard := fs.Bool("from-clipboard", false, "read the new value from the OS clipboard, then wipe the clipboard")
 	revokeCaps := fs.Bool("revoke-caps", false, "revoke all capabilities scoped to this alias")
 	expiry := fs.String("expiry", "", "update the expiry reminder (YYYY-MM-DD, RFC3339, or a duration like 90d); omitted = keep the current one")
+	yes := fs.Bool("yes", false, "confirm the overwrite non-interactively")
+	fs.BoolVar(yes, "y", false, "confirm the overwrite non-interactively (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] [--expiry=WHEN] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] [--expiry=WHEN] [--yes] <alias>\n")
 		return 1
 	}
 	expiresAt, err := parseExpiryFlag(*expiry)
@@ -1113,6 +1186,10 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	if err := confirmDestructive(confirmTier1, alias, fmt.Sprintf("overwrite secret %q", alias), *yes, false, stdin, stdout); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
 
 	value, source, err := readSecretValue(*fromEnv, *fromStdin, *fromClipboard, stdin, stdout)
 	if err != nil {
@@ -1124,8 +1201,14 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	ns, _ := splitAlias(alias)
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScopeNS(sess, OpWrite, ns); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -1151,7 +1234,7 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		}
 	}
 
-	if err := kr.Set(alias, value); err != nil {
+	if err := writeSecret(homeDir, sess, alias, ns, value); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -1172,11 +1255,12 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	sealIntegrity(homeDir, sess)
 	_ = appendAudit(homeDir, AuditEvent{
 		Action: "vault.rotate", Alias: alias, Outcome: "ok",
 		Reason: fmt.Sprintf("source=%s revoked-caps=%d", source, revoked),
 	})
-	fmt.Fprintf(stdout, "rotated %s (backend=%s, %d bytes)", alias, kr.Name(), len(value))
+	fmt.Fprintf(stdout, "rotated %s (backend=%s, %d bytes)", alias, sess.Keyring().Name(), len(value))
 	if revoked > 0 {
 		fmt.Fprintf(stdout, "; revoked %d capability(s)", revoked)
 	}

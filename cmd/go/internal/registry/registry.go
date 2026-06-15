@@ -27,6 +27,7 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // cmd is the Command implementation for `aql registry`.
@@ -68,7 +69,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	srv, err := NewServer(*registryDir, *port)
+	// Expand a leading ~ the shell left verbatim (e.g. -r=~/reg, quoted
+	// path, or a value from a systemd unit / config file).
+	srv, err := NewServer(pathutil.Expand(*registryDir), *port)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", strings.TrimPrefix(err.Error(), "registry: "))
 		return 1

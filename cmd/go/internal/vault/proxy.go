@@ -48,6 +48,12 @@ type Proxy struct {
 	stdout      io.Writer
 	stderr      io.Writer
 	client      *http.Client
+	// sess is the broker's authenticated session, opened once at startup
+	// so a request does not re-derive the KEK (one scrypt) per call. Its
+	// unsealed data keys live in memory for the broker's lifetime; nil
+	// falls back to a per-request authenticate. Read-only after Serve
+	// starts, so concurrent request goroutines share it safely.
+	sess *Session
 }
 
 // NewProxy constructs a Proxy. defaultPass is forwarded to the
@@ -93,6 +99,17 @@ func runProxy(args []string, homeDir string, stdout, stderr io.Writer) int {
 	}
 
 	p := NewProxy(*listen, homeDir, os.Getenv(EnvPassphrase), stdout, stderr)
+	// Open the session once so each request reuses its unsealed data keys
+	// instead of re-deriving the KEK per call. A failure here (e.g. no
+	// passphrase yet) is non-fatal: the handler falls back to a
+	// per-request authenticate.
+	if sess, serr := authenticate(s, homeDir, nil, io.Discard, ""); serr == nil {
+		p.sess = sess
+		defer sess.Close()
+		if sess.Slot != nil && sess.Scope == ScopeAdmin {
+			fmt.Fprintln(stderr, "warning: broker is running under an ADMIN password; prefer a scoped read password (vault password add <name> --scope=read --namespaces=...)")
+		}
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if err := p.Serve(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -216,13 +233,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kr, err := openKeyring(s, p.homeDir, nil, io.Discard, "")
-	if err != nil {
-		writeDenied(w, http.StatusServiceUnavailable, "vault unavailable; set AQL_VAULT_PASSPHRASE for file backend")
-		p.log(started, r, alias, http.StatusServiceUnavailable, "no-keyring")
-		return
+	sess := p.sess
+	if sess == nil {
+		var aerr error
+		sess, aerr = authenticate(s, p.homeDir, nil, io.Discard, "")
+		if aerr != nil {
+			writeDenied(w, http.StatusServiceUnavailable, "vault unavailable; set AQL_VAULT_PASSPHRASE for file backend")
+			p.log(started, r, alias, http.StatusServiceUnavailable, "no-keyring")
+			return
+		}
+		defer sess.Close()
 	}
-	secret, err := kr.Get(alias)
+	secret, err := sess.getValue(alias, valueNamespace(alias))
 	if err != nil {
 		writeDenied(w, http.StatusInternalServerError, "secret lookup failed")
 		p.log(started, r, alias, http.StatusInternalServerError, "no-secret")

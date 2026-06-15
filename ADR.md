@@ -451,3 +451,100 @@ error-returning constructors the codebase already has.
   is reported.
 - The `// lint:allow-panic` annotations are removed. Any new `panic` in
   non-test, non-`Must*`-constant code is a defect.
+
+---
+
+## ADR-006 — Vault scoped passwords use a backend-agnostic envelope; Feature B activates only with slots {#adr-006}
+
+**Status:** Accepted · **Date:** 2026-06-15
+
+### Decision
+
+The vault supports multiple **named, scoped passwords** ("slots") over a
+backend-agnostic **envelope**, and the content-versioning/integrity layer
+(Feature B) activates only once a vault has slots.
+
+1. **Envelope key hierarchy.** Each namespace has a random
+   **namespace data key (NDK)**, identified by an 8-byte id. Every secret
+   *value* is sealed (`"AQLE" | format | ndkID | nonce | ct`, AES-256-GCM,
+   AAD binding `ndkID|namespace|alias`) under its namespace NDK *before*
+   it reaches any storage backend — so backends become opaque ciphertext
+   stores. Each **slot** owns an X25519 keypair: the private key is
+   AES-GCM-sealed under a per-slot KEK = `HKDF(scrypt(passphrase,
+   Store.VaultSalt), slot.Salt)` (one scrypt per authentication regardless
+   of slot count), and each granted NDK is `nacl/box`-sealed to the slot's
+   public key. The store-integrity HMAC key is the NDK of a reserved
+   `@integrity` namespace, sealed to every slot.
+
+2. **What is cryptographic vs policy.** Namespace isolation is
+   cryptographic: a slot can only decrypt namespaces whose NDK is sealed
+   to it. The `scope` tier (`read|write|move|admin`) is bound into the
+   slot's **verifier and private-key AAD**, so editing the plaintext
+   `scope` in `vault.jsonic` fails authentication rather than escalating.
+   The namespace allow-list is **not** bound into the verifier — it is
+   gated by NDK possession (editing the field grants nothing without the
+   key), which is what lets an admin reassign namespaces (re-wrapping NDKs
+   to a slot's authenticated public key) **without the holder's
+   passphrase**. read-vs-write-vs-move within a held namespace is policy +
+   audit (symmetric possession can't separate them). A per-slot `PubMAC`
+   (keyed by the integrity key) authenticates a slot's public key before
+   any admin re-seal targets it.
+
+3. **Migration, not reformat-in-place.** The first `vault password add`
+   on a legacy single-passphrase vault migrates it: it generates the
+   `VaultSalt` and NDKs, turns the current passphrase into a seed `admin`
+   slot, re-seals every secret under its namespace NDK, and adds the
+   requested slot — committing the store (the only durable copy of the
+   NDKs, via the admin slot) **before** overwriting the keyring. New
+   on-disk versions follow ADR-004: `storeVersion` 3 → 4 (with a no-op
+   `migrateStoreV3ToV4` and a golden fixture), and the envelope keyring is
+   a self-describing `"AQLK" | format=2 | json` container distinct from
+   the legacy format-1 encrypted blob.
+
+4. **Feature B (versioning/integrity/history/restore) activates only with
+   slots.** `SaveStore` bumps a monotonic `Generation` (only on real
+   content change, so a no-op re-save stays byte-identical), writes a
+   keyless signature sidecar (`vault.jsonic.sig`), and appends a redacted
+   record to an event-sourced journal (`vault.jsonic.log`) — **only** when
+   the vault has password slots. A legacy single-passphrase vault is
+   written exactly as before: no generation counter, sidecar, or journal.
+
+### Context
+
+The vault was all-or-nothing: hold the one passphrase, get everything.
+Delegating a credential to a collaborator or agent — scoped to some
+namespaces and to read-only — required a second vault. The asymmetric
+slot design is what makes scoped delegation manageable: an admin can
+grant or reassign a namespace by sealing its NDK to a slot's *public*
+key, so no passphrase-sharing or holder-coordination is needed. The
+binding of `scope` (but not namespaces) into the verifier resolves a real
+tension surfaced in review: binding namespaces too would lock a holder
+out whenever an admin reassigned them, while leaving scope unbound would
+let a holder self-escalate by editing a plaintext flag.
+
+Gating Feature B on slot presence resolves two regressions an
+unconditional implementation caused: legacy vaults stopped being
+byte-identical (breaking the no-op-save guarantee), and the broker's
+per-request quota-counter save turned into a multi-fsync + journal-append
+hot path. Both vanish when the side artifacts only exist for envelope
+vaults, where the richer metadata (slots, wrapped keys) is what makes
+versioning and restore worth having.
+
+### Consequences
+
+- The at-rest guarantee is preserved and scoped: no valid passphrase →
+  every NDK is unreachable and all values are ciphertext, exactly as
+  before; a non-admin password recovers exactly its granted namespaces.
+- The keyed integrity HMAC + anti-rollback anchor defend against an
+  attacker with no valid passphrase. An authenticated insider is
+  constrained instead by the per-slot scope/pubkey bindings, so the
+  store-level HMAC was never the control that stops them; the integrity
+  key is therefore reachable by every slot (not admin-only), which is
+  required for a non-admin write to maintain the keyed layer at all.
+- `restore` reinstates the *metadata* layer (aliases, agents, lock state,
+  a monotonic capability merge) from a past generation while preserving
+  the live password slots, namespace keys, and keyring values — it is a
+  last-known-good recovery for `vault.jsonic`, not a secret-value rewind.
+- The scoped-password feature requires the file backend's envelope; a
+  keychain-backed vault that gains slots double-wraps (OS store of
+  envelope ciphertext) and now requires an AQL passphrase to decrypt.

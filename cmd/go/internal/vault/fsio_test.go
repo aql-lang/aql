@@ -102,7 +102,7 @@ func TestRotateRevokeCapsPersistsRevocationBeforeValue(t *testing.T) {
 	}
 	_ = grantOK(t, "k", nil, nil)
 
-	code, out, errOut := runVault(t, "new\n", "rotate", "--from-stdin", "--revoke-caps", "k")
+	code, out, errOut := runVault(t, "new\n", "rotate", "--yes", "--from-stdin", "--revoke-caps", "k")
 	if code != 0 {
 		t.Fatalf("rotate: %s", errOut)
 	}

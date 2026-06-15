@@ -89,6 +89,39 @@ func TestLoadMigratesV2Golden(t *testing.T) {
 	}
 }
 
+// TestLoadMigratesV3Golden loads a checked-in v3 store and asserts the
+// v3->v4 bump is a clean no-op: version advances, the alias expiry is
+// preserved (not invented or dropped), no password slots are conjured,
+// and the v3 capability stays valid. (Golden-per-version, ADR-004/006.)
+func TestLoadMigratesV3Golden(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "vault.v3.jsonic"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := writeStoreFile(t, data)
+
+	s, err := LoadStore(dir)
+	if err != nil {
+		t.Fatalf("LoadStore: %s", err)
+	}
+	if s.Version != storeVersion {
+		t.Errorf("version = %d after migration, want %d", s.Version, storeVersion)
+	}
+	a, _ := s.FindAlias("openai")
+	if a == nil {
+		t.Fatalf("alias lost during migration")
+	}
+	if a.ExpiresAt != "2099-06-01T00:00:00Z" {
+		t.Errorf("v3->v4 changed the alias expiry: %q", a.ExpiresAt)
+	}
+	if s.HasPasswordSlots() {
+		t.Errorf("v3->v4 conjured password slots: %d", len(s.Passwords))
+	}
+	if len(s.ActiveCapabilities(nowUTC())) != 1 {
+		t.Errorf("v3 capability should remain active after migration")
+	}
+}
+
 // TestLoadRejectsFutureVersion ensures a store written by a newer aql
 // is refused, not parsed leniently (which would silently strip unknown
 // fields on the next save).

@@ -154,7 +154,7 @@ func TestRotateReplacesValueAndKeepsMetadata(t *testing.T) {
 	if code, _, _ := runVault(t, "old-val\n", "add", "--from-stdin", "--provider=openai", "k"); code != 0 {
 		t.Fatal("add")
 	}
-	if code, _, errOut := runVault(t, "new-val\n", "rotate", "--from-stdin", "k"); code != 0 {
+	if code, _, errOut := runVault(t, "new-val\n", "rotate", "--yes", "--from-stdin", "k"); code != 0 {
 		t.Fatalf("rotate: %s", errOut)
 	}
 	// Value updated.
@@ -182,7 +182,7 @@ func TestRotateWithRevokeCaps(t *testing.T) {
 	_ = grantOK(t, "k", nil, nil)
 	_ = grantOK(t, "k", nil, nil)
 
-	if code, _, errOut := runVault(t, "y\n", "rotate", "--from-stdin", "--revoke-caps", "k"); code != 0 {
+	if code, _, errOut := runVault(t, "y\n", "rotate", "--yes", "--from-stdin", "--revoke-caps", "k"); code != 0 {
 		t.Fatalf("rotate: %s", errOut)
 	}
 	s, _ := LoadStore(home)

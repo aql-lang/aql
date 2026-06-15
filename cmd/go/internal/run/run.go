@@ -14,6 +14,7 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	lang "github.com/aql-lang/aql/lang/go"
@@ -72,6 +73,10 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	// Expand a leading ~ the shell left verbatim (e.g. -r=~/reg or a
+	// quoted "~/script.aql") in the registry path and the script path.
+	reg := pathutil.Expand(*registry)
+
 	var source string
 	var hasSource bool
 
@@ -79,7 +84,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		source = *evalExpr
 		hasSource = true
 	} else if fs.NArg() > 0 {
-		filename := fs.Arg(0)
+		filename := pathutil.Expand(fs.Arg(0))
 		data, err := os.ReadFile(filename)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
@@ -96,7 +101,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			// --check — surface real bugs in the run loop). stdout is
 			// left clean for the program. For advisory-only output, use
 			// the standalone `aql check --soft`.
-			if err := check.Preflight(stderr, source, *registry, *seed); err != nil {
+			if err := check.Preflight(stderr, source, reg, *seed); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
 				return 1
 			}
@@ -106,7 +111,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		o := lang.Options{Registry: *registry, Seed: *seed, Policy: pol}
+		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol}
 		if *optionsStr != "" {
 			m, perr := lang.ParseOptions(*optionsStr)
 			if perr != nil {
@@ -127,7 +132,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	// No source provided: drop into the REPL.
 	fmt.Fprintf(stdout, "aql %s\n", Version)
-	repl.Start(stdin, stdout, *registry)
+	repl.Start(stdin, stdout, reg)
 	return 0
 }
 

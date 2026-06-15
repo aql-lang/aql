@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // Vault location customization.
@@ -32,11 +34,12 @@ const (
 )
 
 // vaultFolder returns the folder holding the vault's files: the
-// AQL_VAULT_FOLDER override when set, otherwise {homeDir}/.aql. A
-// relative override is resolved against the process working folder.
+// AQL_VAULT_FOLDER override when set, otherwise {homeDir}/.aql. A leading
+// ~ in the override is expanded to homeDir (see pathutil.ExpandTilde),
+// and a relative override is resolved against the process working folder.
 func vaultFolder(homeDir string) string {
 	if f := os.Getenv(EnvFolder); f != "" {
-		return f
+		return pathutil.ExpandTilde(f, homeDir)
 	}
 	return filepath.Join(homeDir, ".aql")
 }

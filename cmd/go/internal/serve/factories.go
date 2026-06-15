@@ -15,6 +15,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/api"
 	"github.com/aql-lang/aql/cmd/go/internal/exec"
 	"github.com/aql-lang/aql/cmd/go/internal/lsp"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
@@ -49,7 +50,7 @@ func replFactory(args []string, stdin io.Reader, stdout, _ io.Writer) (service.S
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
-	return repl.NewServer(stdin, stdout, *registryPath), nil
+	return repl.NewServer(stdin, stdout, pathutil.Expand(*registryPath)), nil
 }
 
 func registryFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Service, error) {
@@ -63,7 +64,7 @@ func registryFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.S
 	if *dir == "" {
 		return nil, fmt.Errorf("-r <folder> is required")
 	}
-	srv, err := registry.NewServer(*dir, *port)
+	srv, err := registry.NewServer(pathutil.Expand(*dir), *port)
 	if err != nil {
 		// NewServer prefixes its errors with "registry: "; strip it
 		// since buildServices already adds the segment name.
@@ -105,7 +106,7 @@ func execFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Servi
 	if *port > 0 {
 		addr = fmt.Sprintf(":%d", *port)
 	}
-	srv, err := exec.NewServer(addr, *registryPath, pol)
+	srv, err := exec.NewServer(addr, pathutil.Expand(*registryPath), pol)
 	if err != nil {
 		return nil, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "exec: "))
 	}
@@ -131,7 +132,7 @@ func vaultProxyFactory(args []string, _ io.Reader, _, stderr io.Writer) (service
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
-	svc, err := vault.NewProxyService(*listen, *home, os.Getenv(vault.EnvPassphrase))
+	svc, err := vault.NewProxyService(*listen, pathutil.Expand(*home), os.Getenv(vault.EnvPassphrase))
 	if err != nil {
 		// NewProxyService prefixes errors with "vault-proxy: " for
 		// standalone use; strip it since buildServices re-adds the

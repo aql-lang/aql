@@ -584,6 +584,196 @@ func (f *fileKeyring) list() ([]string, error) {
 	return out, nil
 }
 
+// --- Envelope-mode file keyring (format 2) ----------------------------------
+
+// Reserved keyring keyspace. Vault-internal material (the HMAC integrity
+// key and the anti-rollback anchor) is stored under names beginning with
+// '@', a byte validAlias rejects, so a reserved key can never collide
+// with a user alias. add/import/mv refuse reserved names, `verify
+// --prune` skips them, and export omits them.
+const reservedKeyPrefix = "@"
+
+const (
+	// integrityNamespace is the reserved namespace whose data key IS the
+	// store-integrity HMAC key. Like any NDK it is sealed into every
+	// slot's WrappedKeys, so any authenticated session can verify/maintain
+	// the keyed integrity layer.
+	integrityNamespace = "@integrity"
+	// anchorKeyName is a reserved keyring entry holding the anti-rollback
+	// high-water-mark generation (a plain integer, not sealed).
+	anchorKeyName = "@anchor"
+)
+
+// isReservedKeyringKey reports whether k is in the reserved keyspace.
+func isReservedKeyringKey(k string) bool { return strings.HasPrefix(k, reservedKeyPrefix) }
+
+// envelopeKeyringFormat is the on-disk format byte for the plaintext
+// envelope container, distinct from the legacy encrypted blob's
+// keyringFormat=1. Values inside are already AQLE-sealed under namespace
+// data keys, so the container itself needs no encryption — there is no
+// single passphrase to encrypt it under once a vault has scoped slots.
+const envelopeKeyringFormat = 2
+
+// envelopeKeyringFile is the JSON body of a format-2 keyring. KeyringID
+// and Generation let restore detect store<->keyring divergence; Entries
+// maps each alias (and any reserved name) to its opaque sealed value.
+type envelopeKeyringFile struct {
+	KeyringID  string            `json:"keyring_id"`
+	Generation int64             `json:"generation"`
+	Entries    map[string]string `json:"entries"`
+}
+
+// envelopeFileKeyring is the file backend for a vault with password
+// slots: a plaintext (mode 0600) container of opaque AQLE ciphertext.
+// It needs no passphrase of its own — confidentiality comes from the
+// per-namespace envelope applied above it (keyslot.go).
+type envelopeFileKeyring struct {
+	folder string
+}
+
+func (f *envelopeFileKeyring) Name() string { return BackendFile }
+func (f *envelopeFileKeyring) path() string { return filepath.Join(f.folder, vaultFileName("keyring")) }
+
+func (f *envelopeFileKeyring) loadFile() (*envelopeKeyringFile, error) {
+	data, err := os.ReadFile(f.path())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &envelopeKeyringFile{Entries: map[string]string{}}, nil
+		}
+		return nil, err
+	}
+	if len(data) == 0 {
+		return &envelopeKeyringFile{Entries: map[string]string{}}, nil
+	}
+	if len(data) < len(keyringMagic)+1 || string(data[:len(keyringMagic)]) != keyringMagic {
+		return nil, errors.New("vault: keyring file has no recognizable header")
+	}
+	switch format := data[len(keyringMagic)]; format {
+	case envelopeKeyringFormat:
+		var ekf envelopeKeyringFile
+		if err := json.Unmarshal(data[len(keyringMagic)+1:], &ekf); err != nil {
+			return nil, fmt.Errorf("vault: parsing keyring: %w", err)
+		}
+		if ekf.Entries == nil {
+			ekf.Entries = map[string]string{}
+		}
+		return &ekf, nil
+	case keyringFormat:
+		return nil, errors.New("vault: keyring is in legacy single-passphrase format but the vault has password slots; run `aql vault verify`")
+	default:
+		return nil, fmt.Errorf("vault: keyring is format %d but this aql understands up to %d; upgrade aql", format, envelopeKeyringFormat)
+	}
+}
+
+func (f *envelopeFileKeyring) saveFile(ekf *envelopeKeyringFile) error {
+	if err := os.MkdirAll(f.folder, 0700); err != nil {
+		return err
+	}
+	if ekf.Entries == nil {
+		ekf.Entries = map[string]string{}
+	}
+	if ekf.KeyringID == "" {
+		id, err := randomID()
+		if err != nil {
+			return err
+		}
+		ekf.KeyringID = id
+	}
+	ekf.Generation++
+	body, err := json.Marshal(ekf)
+	if err != nil {
+		return err
+	}
+	out := make([]byte, 0, len(keyringMagic)+1+len(body))
+	out = append(out, keyringMagic...)
+	out = append(out, byte(envelopeKeyringFormat))
+	out = append(out, body...)
+	return writeFileAtomic(f.path(), out, 0600)
+}
+
+func (f *envelopeFileKeyring) Set(alias, value string) error {
+	ekf, err := f.loadFile()
+	if err != nil {
+		return err
+	}
+	ekf.Entries[alias] = value
+	return f.saveFile(ekf)
+}
+
+func (f *envelopeFileKeyring) Get(alias string) (string, error) {
+	ekf, err := f.loadFile()
+	if err != nil {
+		return "", err
+	}
+	v, ok := ekf.Entries[alias]
+	if !ok {
+		return "", ErrNotFound
+	}
+	return v, nil
+}
+
+func (f *envelopeFileKeyring) Delete(alias string) error {
+	ekf, err := f.loadFile()
+	if err != nil {
+		return err
+	}
+	if _, ok := ekf.Entries[alias]; !ok {
+		return nil
+	}
+	delete(ekf.Entries, alias)
+	return f.saveFile(ekf)
+}
+
+// list returns user-visible aliases only, excluding the reserved
+// keyspace so `vault verify --prune` never treats the integrity key or
+// anchor as an orphan to delete.
+func (f *envelopeFileKeyring) list() ([]string, error) {
+	ekf, err := f.loadFile()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(ekf.Entries))
+	for k := range ekf.Entries {
+		if isReservedKeyringKey(k) {
+			continue
+		}
+		out = append(out, k)
+	}
+	return out, nil
+}
+
+// keyringIdentity returns the keyring's stable id and current
+// generation, or ("", 0) if the keyring file does not yet exist. Restore
+// uses these to detect store<->keyring divergence.
+func (f *envelopeFileKeyring) keyringIdentity() (id string, generation int64, err error) {
+	ekf, err := f.loadFile()
+	if err != nil {
+		return "", 0, err
+	}
+	return ekf.KeyringID, ekf.Generation, nil
+}
+
+// keyringFileFormat reports the on-disk format of the keyring file in
+// folder: 0 if absent/empty, 1 for the legacy encrypted blob (headered
+// or pre-header), 2 for the envelope container. Used to choose the
+// backend and to drive migration.
+func keyringFileFormat(folder string) (int, error) {
+	data, err := os.ReadFile(filepath.Join(folder, vaultFileName("keyring")))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if len(data) == 0 {
+		return 0, nil
+	}
+	if len(data) < len(keyringMagic)+1 || string(data[:len(keyringMagic)]) != keyringMagic {
+		return 1, nil // legacy headerless blob
+	}
+	return int(data[len(keyringMagic)]), nil
+}
+
 // scryptKey derives a 32-byte AES-256 key from passphrase + salt.
 // The N=2^15 cost is conservative for an interactive vault on a
 // developer machine; it dominates each Set/Get on the file backend

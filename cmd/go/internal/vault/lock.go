@@ -2,6 +2,7 @@ package vault
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -62,6 +63,21 @@ func mutateStore(homeDir string, mutate func(*Store) error) error {
 		}
 		if s == nil {
 			return errors.New("vault not initialized; run `aql vault init`")
+		}
+		// Snapshot-then-block: on an envelope vault, a mutation that finds
+		// vault.jsonic changed outside aql since the last commit preserves
+		// the offending file and refuses, rather than overwriting an edit
+		// it can't account for. This uses the cheap keyless check (file
+		// sha vs the sidecar), which never trips in normal flow because
+		// every SaveStore writes a matching sidecar; only a genuine
+		// external edit between commands diverges. Recover with
+		// `aql vault restore`. (Legacy vaults have no sidecar and skip this.)
+		if s.HasPasswordSlots() {
+			switch st, _ := checkStoreIntegrity(homeDir, nil, 0); st {
+			case IntegrityExternalChange, IntegrityCorrupt:
+				snap, _ := quarantineStore(homeDir)
+				return fmt.Errorf("vault.jsonic changed outside aql (%s); preserved a copy at %s — inspect it, then run `aql vault restore` to recover", st, filepath.Base(snap))
+			}
 		}
 		if err := mutate(s); err != nil {
 			return err

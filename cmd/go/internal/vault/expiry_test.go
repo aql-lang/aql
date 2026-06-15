@@ -268,7 +268,7 @@ func TestRotatePreservesAndUpdatesExpiry(t *testing.T) {
 	}
 
 	// Rotating the value without --expiry keeps the existing reminder.
-	if code, _, e := runVault(t, "v2\n", "rotate", "--from-stdin", "k"); code != 0 {
+	if code, _, e := runVault(t, "v2\n", "rotate", "--yes", "--from-stdin", "k"); code != 0 {
 		t.Fatalf("rotate: %s", e)
 	}
 	s, _ := LoadStore(home)
@@ -277,7 +277,7 @@ func TestRotatePreservesAndUpdatesExpiry(t *testing.T) {
 	}
 
 	// Rotating with --expiry updates it.
-	if code, _, e := runVault(t, "v3\n", "rotate", "--from-stdin", "--expiry=2031-02-02", "k"); code != 0 {
+	if code, _, e := runVault(t, "v3\n", "rotate", "--yes", "--from-stdin", "--expiry=2031-02-02", "k"); code != 0 {
 		t.Fatalf("rotate --expiry: %s", e)
 	}
 	s, _ = LoadStore(home)

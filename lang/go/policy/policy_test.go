@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -169,6 +171,45 @@ func TestLoadAutoDetection(t *testing.T) {
 	// Unknown name
 	if _, err := LoadAuto("nonesuch-profile-xyzzy"); err == nil {
 		t.Error("expected error on unknown name")
+	}
+}
+
+// TestLoadFileTildeExpanded guards that a leading ~ in a policy path the
+// shell left verbatim resolves under $HOME — covering direct LoadFile,
+// the "@~/path" inline form (the @ keeps the ~ off the start of the
+// argument, so the shell never expands it), and LoadAuto's file branch.
+func TestLoadFileTildeExpanded(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home) // os.UserHomeDir honors $HOME on Unix.
+	if err := os.WriteFile(filepath.Join(home, "p.jsonic"), []byte(`{ name: "x" }`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Positive: ~ resolves under $HOME through every file entry point.
+	if _, err := LoadFile("~/p.jsonic"); err != nil {
+		t.Errorf("LoadFile(~/p.jsonic): %v", err)
+	}
+	if _, err := LoadInline("@~/p.jsonic"); err != nil {
+		t.Errorf("LoadInline(@~/p.jsonic): %v", err)
+	}
+	if _, err := LoadAuto("~/p.jsonic"); err != nil {
+		t.Errorf("LoadAuto(~/p.jsonic): %v", err)
+	}
+
+	// Negative: a missing ~ path errors against the EXPANDED location,
+	// proving expansion happened rather than a literal "~" being read.
+	_, err := LoadFile("~/missing.jsonic")
+	if err == nil {
+		t.Fatal("expected error for a missing ~ path")
+	}
+	if !strings.Contains(err.Error(), filepath.Join(home, "missing.jsonic")) {
+		t.Errorf("error should reference the expanded path, got: %v", err)
+	}
+
+	// Negative: ~user is left untouched (we don't resolve other users'
+	// homes), so it fails to read rather than silently expanding.
+	if _, err := LoadFile("~nobodyuserxyz/p.jsonic"); err == nil {
+		t.Error("~user must not be expanded; expected a read error")
 	}
 }
 

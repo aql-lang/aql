@@ -40,6 +40,83 @@ func TestExecInjectsSecretAsEnvVar(t *testing.T) {
 	}
 }
 
+func TestExecForNpm(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "npm-tok\n", "add", "--from-stdin", "npm_token"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// npm reads the per-registry token from an npm_config_* env var; the
+	// name has '/' and ':' so it must be read with printenv, not $var.
+	code, out, errOut := runVault(t, "",
+		"exec", "--for=npm", "npm_token", "--",
+		"sh", "-c", "printenv 'npm_config_//registry.npmjs.org/:_authToken'")
+	if code != 0 {
+		t.Fatalf("exec --for=npm: %s", errOut)
+	}
+	if strings.TrimSpace(out) != "npm-tok" {
+		t.Errorf("npm auth token env = %q, want npm-tok", out)
+	}
+}
+
+func TestExecForNpmCustomRegistry(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "ghp-tok\n", "add", "--from-stdin", "gh_npm"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	code, out, errOut := runVault(t, "",
+		"exec", "--for=npm", "--registry=npm.pkg.github.com", "gh_npm", "--",
+		"sh", "-c", "printf %s:%s \"$(printenv 'npm_config_//npm.pkg.github.com/:_authToken')\" \"$(printenv npm_config_registry)\"")
+	if code != 0 {
+		t.Fatalf("exec --for=npm --registry: %s", errOut)
+	}
+	if strings.TrimSpace(out) != "ghp-tok:https://npm.pkg.github.com/" {
+		t.Errorf("custom-registry env = %q", out)
+	}
+}
+
+func TestExecForCargoAndPypi(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "crates-tok\n", "add", "--from-stdin", "crates"); code != 0 {
+		t.Fatalf("add crates: %s", e)
+	}
+	if code, _, e := runVault(t, "pypi-tok\n", "add", "--from-stdin", "pypi"); code != 0 {
+		t.Fatalf("add pypi: %s", e)
+	}
+	if code, out, e := runVault(t, "", "exec", "--for=cargo", "crates", "--", "sh", "-c", "printenv CARGO_REGISTRY_TOKEN"); code != 0 || strings.TrimSpace(out) != "crates-tok" {
+		t.Fatalf("cargo recipe = %d/%q (%s)", code, out, e)
+	}
+	// pypi/twine: API token authenticates as __token__ with the token as password.
+	if code, out, e := runVault(t, "", "exec", "--for=twine", "pypi", "--", "sh", "-c", "printf %s:%s \"$TWINE_USERNAME\" \"$TWINE_PASSWORD\""); code != 0 || strings.TrimSpace(out) != "__token__:pypi-tok" {
+		t.Fatalf("pypi/twine recipe = %d/%q (%s)", code, out, e)
+	}
+}
+
+func TestExecForRejectsBadUsage(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "v\n", "add", "--from-stdin", "tok"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// Unknown recipe lists the known ones.
+	if code, _, errOut := runVault(t, "", "exec", "--for=bogus", "tok", "--", "sh", "-c", "true"); code == 0 || !strings.Contains(errOut, "npm") {
+		t.Errorf("unknown recipe should error and list recipes, got code=%d err=%q", code, errOut)
+	}
+	// --for takes a single alias, not a remap or list.
+	if code, _, _ := runVault(t, "", "exec", "--for=npm", "tok=NPM", "--", "sh", "-c", "true"); code == 0 {
+		t.Error("--for with =ENV remap should be rejected")
+	}
+	if code, _, _ := runVault(t, "", "exec", "--for=npm", "--upper", "tok", "--", "sh", "-c", "true"); code == 0 {
+		t.Error("--for with --upper should be rejected")
+	}
+}
+
 func TestExecRenameAndUpper(t *testing.T) {
 	requireSh(t)
 	testHome(t)
