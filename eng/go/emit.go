@@ -210,6 +210,7 @@ type EmitState struct {
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
+	zeroOutSeq map[int]bool        // branch seq → 0-output statement guard (residual skips it)
 	typeOut    map[int]bool        // event seq → its output is itself a type body
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
@@ -266,6 +267,7 @@ func NewEmitState() *EmitState {
 		units:      []*emitUnit{{localByID: map[string]int{}}},
 		fnUnits:    map[string]int{},
 		producedBy: map[string]producer{},
+		zeroOutSeq: map[int]bool{},
 		typeOut:    map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
@@ -610,12 +612,28 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		}
 	}
 	// Arms.
+	zeroOut := false
 	if b.ConstCond != nil {
 		out, has, ok := resolveArm(b.Then, b.ThenStk, "taken")
 		if !ok {
 			return
 		}
 		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, out, has
+	} else if !b.HasElse && (len(b.ThenStk) == 0 || fragDiverges(b.Then)) {
+		// 2-arg if (no else) whose then produces 0 values — a 0-value word
+		// (raise/set/printstr) or a diverging arm (break/continue/raise): the
+		// if produces 0 values on BOTH paths (true→0/diverge, false→0), so it
+		// is a statement guard with NO merge value. Record the then for
+		// lowering (its body still runs on the true path) and mark the event
+		// zeroOut: the lowerer emits no slot, and Finalize skips the (phantom
+		// None) result it still registers below — the registration is kept so
+		// RecordCall's double-record guard still elides this if dispatch.
+		if b.Then == nil {
+			es.MarkUncompilable("if: then-branch not captured")
+			return
+		}
+		ev.br.then, ev.br.hasThenOut = b.Then, false
+		zeroOut = true
 	} else {
 		thenOut, hasThen, ok := resolveArm(b.Then, b.ThenStk, "then")
 		if !ok {
@@ -656,6 +674,13 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
 	es.setProduced(b.Out, seq)
+	if zeroOut {
+		// The if produces 0 runtime values; its registered (None) result is a
+		// phantom. Mark the seq so Finalize's residual reconciliation skips it
+		// rather than expecting a stack slot. Keeping the setProduced above
+		// lets RecordCall's double-record guard elide this if dispatch.
+		es.zeroOutSeq[seq] = true
+	}
 }
 
 // ArmLoopCapture makes the NEXT AnalyseLoopBody record its final
@@ -1449,6 +1474,12 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	tail := []emitOperand{}
 	for _, rv := range residual {
 		if pr, ok := es.producedBy[rv.ID]; ok {
+			// A 0-output statement guard (`if cond [raise]`) registered a
+			// phantom None result but produces 0 runtime values: it left no
+			// stack slot, so skip it here rather than expecting one.
+			if es.zeroOutSeq[pr.seq] {
+				continue
+			}
 			// A promoted value-def local is no longer on the simulated stack
 			// (STORE_LOCAL consumed it); re-push it from its slot like any
 			// other materialised tail operand.

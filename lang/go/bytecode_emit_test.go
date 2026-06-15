@@ -329,6 +329,34 @@ func TestEmitApplyFnValue(t *testing.T) {
 	}
 }
 
+// TestEmitGuardIf: a 2-arg `if` whose then produces 0 values (a raise guard,
+// or a 0-value word) is a statement guard — the if contributes 0 values on
+// both paths (true→raise/0, false→0), so it compiles with no merge slot and
+// the program continues after it.
+func TestEmitGuardIf(t *testing.T) {
+	// Positive: guard-if compiles and continues to the trailing value.
+	if _, r := compile(t, `def n 5 if (n eq 0) [raise "zero"] def q (10 div n) q`); r != "" {
+		t.Errorf("guard-if must compile, refused: %s", r)
+	}
+	okCases := []struct {
+		src  string
+		want int64
+	}{
+		{`def n 5 if (n eq 0) [raise "zero"] def q (10 div n) q`, 2},
+		{`def f fn [[n:Integer] [Integer] [ if (n eq 0) [raise "zero"] def q (10 div n) q ]] f 5`, 2},
+	}
+	for _, c := range okCases {
+		got, _, err := mustRun(t, c.src)
+		if err != nil || len(got) != 1 || got[0] != c.want {
+			t.Errorf("%s: got %v err=%v, want [%d]", c.src, got, err, c.want)
+		}
+	}
+	// Negative: the guard FIRES (raise on the true path) — both engines error.
+	if _, _, err := mustRun(t, `def n 0 if (n eq 0) [raise "zero"] def q (10 div n) q`); err == nil {
+		t.Error("guard-if true path must raise, got no error")
+	}
+}
+
 // mustRun runs src in compiled mode, returning (result, wasCompiled, err).
 func mustRun(t *testing.T, src string) ([]any, bool, error) {
 	t.Helper()

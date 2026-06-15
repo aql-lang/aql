@@ -461,7 +461,9 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	} else {
 		out = JoinCarriers(thenStk[len(thenStk)-1], NewCarrier(TNone))
 	}
-	// 2-arg if: a VARIADIC result (0 or 1 values at run time).
+	// 2-arg if: a VARIADIC result (0 or 1 values at run time). An empty
+	// then-stack (a 0-value/diverging then) makes it a 0-value statement
+	// guard — RecordBranch lowers that with no merge slot.
 	es.Emit.RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: false,
 		Then: thenFrag, ThenStk: thenStk, Out: out, Pos: args[0].Pos,

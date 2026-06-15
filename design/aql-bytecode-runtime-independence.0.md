@@ -43,12 +43,26 @@ diverges, so it falls back faithfully instead (a pre-existing island subtlety,
 not introduced here). Bare top-level fn values stay non-const (the apply /
 closure case). Files: `eng/go/emit.go` (`isInertConstMember`).
 
-Current ratchets: **521 refused / 15 islanded** (from 651 / 115 at P0;
+**Guard-if statement (`if cond [raise]`) — 0-value-then if (LANDED, 521 → 519).**
+A 2-arg `if` whose then-branch produces 0 values (a `raise` guard, a 0-value
+word like `set`/`printstr`, or a break/continue) refused as "then-branch
+produces no value". But such an if produces 0 values on BOTH paths (true→0 or
+diverge, false→0) — it's a statement guard, not a variadic 0-or-1 result.
+`if2ReturnsFn` still types it `[None]` (so RecordCall's double-record guard
+elides the dispatch), but `RecordBranch` marks the seq `zeroOut`: the lowerer
+emits no merge slot, and Finalize's residual reconciliation skips the phantom
+None. The trailing statement (`… def q (10 div n) q`) then lowers cleanly. The
+broader variadic-statement-if (a value-producing then used as a discarded
+statement; a computed else) stays refused — it needs true 0-or-1 residual
+modeling. Files: `eng/go/emit.go` (RecordBranch zeroOut + residual skip),
+`eng/go/lower.go` (lowerArms no-slot), `lang/go/native/native_control.go`.
+
+Current ratchets: **519 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
 555 after predicate-type provenance; 545 after if value-else; 542 after case;
 538 after multi-return / 0-return / anonymous-lambda fns; 527 after apply of a
-fn value; 521 after unnamed-fn map/list members). Compiled rows 1706 → 1846,
-0 divergences throughout. The `case`
+fn value; 521 after unnamed-fn map/list members; 519 after 0-value-then if
+guard). Compiled rows 1706 → 1848, 0 divergences throughout. The `case`
 desugar dropped the island count 26 → 15 (islanded case rows now compile
 natively).
 

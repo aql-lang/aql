@@ -704,9 +704,15 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	if !br.hasElse {
 		// 2-arg if: false path jumps straight to the merge.
 		(*lw.code)[jf].Arg = int32(len(*lw.code))
-		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
-		lw.variadic[ev.seq] = true
-		lw.note()
+		// A value-producing then yields a VARIADIC result (the value on true,
+		// nothing on false) — only the program residual may absorb it. A
+		// 0-value / diverging then (raise/set/break) produces 0 values on both
+		// paths: a statement guard with no merge slot.
+		if br.hasThenOut {
+			lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+			lw.variadic[ev.seq] = true
+			lw.note()
+		}
 		return ""
 	}
 	jend := -1
