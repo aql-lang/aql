@@ -980,6 +980,17 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 			return
 		}
 	}
+	// `apply` of a fn VALUE (`…args fn apply`): apply's ReturnsFn returns the
+	// fn concrete, so the check engine RE-STEPS it — the fn then dispatches
+	// against its preceding stack args and records as an ordinary CALL_USER.
+	// Elide apply's own dispatch (it produces nothing the VM runs); without
+	// this the generic path below refuses it as "function value reaches apply".
+	// The Reach-apply sig (a TReach operand, not an FnDef) is untouched.
+	if word == "apply" && len(args) >= 1 {
+		if _, ok := args[0].Data.(FnDefInfo); ok {
+			return
+		}
+	}
 	// Compile-time NAME RESOLUTION: a get/getr whose result is a
 	// statically-known callable or namespace (a module export wrapper,
 	// a module-export instance) executed during the check pass —

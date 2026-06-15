@@ -29,12 +29,13 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **538 refused / 15 islanded** (from 651 / 115 at P0;
+Current ratchets: **527 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
 555 after predicate-type provenance; 545 after if value-else; 542 after case;
-538 after multi-return / 0-return / anonymous-lambda fns). Compiled rows
-1706 → 1827, 0 divergences throughout. The `case` desugar dropped the island
-count 26 → 15 (islanded case rows now compile natively).
+538 after multi-return / 0-return / anonymous-lambda fns; 527 after apply of a
+fn value). Compiled rows 1706 → 1840, 0 divergences throughout. The `case`
+desugar dropped the island count 26 → 15 (islanded case rows now compile
+natively).
 
 Stage-2 lowering edges also closed this pass: a 3-arg `if` whose else arm is
 a plain VALUE (`if cond [then] 42` — literal / local / type, not a `[…]`
@@ -260,13 +261,27 @@ introspection word (`typeof (inc/r)`, `Positive tcmp Positive`,
 `TypeUtil.arityof (fn …)`, ~12), and higher-order afn args
 (`each ([kv] => …)`, ~3).
 
-**No shortcut (verified).** The tempting elision — "`apply` just unquotes the
-fn for the engine to re-step, so elide it and let the re-step record the real
-`inc 5` call" — does NOT work: after `apply` returns the fn, the check-mode
-engine does not re-step it into an `inc` dispatch; the fn flows to the
-residual unresolved ("residual value of unknown provenance"). So the full
-machinery below is required — the fn VALUE must become a closure on the
-stack, and `apply` must lower to a stack-form application.
+**The shortcut DOES work — corrected (LANDED, 538 → 527).** The earlier note
+claimed the re-step "does not fire in check mode," but that was an artefact of
+returning a CARRIER. The fix is two lines: give `apply`'s `[Function]` sig
+`ReturnsFn: ReturnsIdentity(0)` so it returns the fn VALUE **concrete** (not
+widened to Any), and elide `apply`'s own dispatch in `RecordCall` (a `word ==
+"apply"` + FnDef-arg guard beside the get/getr elision). A concrete fn value
+landing back on the check stack IS re-stepped by `stepLiteral` →
+`execFnDefLiteral` exactly as at runtime, so the fn dispatches against its
+preceding stack args and records as an ordinary `CALL_USER` (its body compiled
+by the normal `buildFnBodyReturnsFn` path). No new opcode, no closure push, no
+stack-form `CALL_DYNAMIC`, no Finalize-residual handling — the whole "full
+machinery" below proved unnecessary (an `OpCallDynamicStack` prototype compiled
+0 rows and was removed). Covers `inc/r apply`, the stack-form 2-arg
+`sub2/r apply` (sig position 0 = top, so `10 3 sub2/r apply = -7`), the 0-arg
+`z/r apply`, and the anonymous-lambda `f/r apply`. Files: `native_ref.go`
+(apply sig), `eng/go/emit.go` (RecordCall elision). The `m.f` method-through-map
+and `apply $.path` Reach-lens rows are separate items.
+
+**Original plan (superseded by the shortcut above, kept for context):** the fn
+VALUE was to become a closure on the stack and `apply` lower to a stack-form
+application —
 
 **Symptom.** `unannotated or opaque word apply` for `5 inc/r apply`,
 `z/r apply`, `f/r apply`; and any higher-order word handed a fn VALUE
@@ -504,9 +519,11 @@ lint) and lowers a ratchet monotonically.
    538/15). N-result fn units (`outOps`, `RecordUserCall(outs)`, `nout`,
    `reconcileResults`); count-enforced only for declared returns. The deferred
    P5 follow-on; unblocked anonymous lambdas applied directly.
-5. **Fn-values-on-the-stack.** ← NEXT. The remaining big semantic item
-   (`apply` + higher-order fn args); de-islands the `callDynamic` user-fn
-   apply. Higher risk (engine re-stepping, stack-form calling convention).
+5. **Fn-values-on-the-stack (`apply`).** ✅ DONE (538/15 → 527/15). Two-line
+   shortcut: `apply` returns the fn concrete (`ReturnsIdentity(0)`) so the check
+   engine re-steps it into an ordinary CALL_USER; elide apply in RecordCall. The
+   stack-form-closure machinery in the original plan proved unnecessary. The
+   `m.f` method-through-map and `apply $.path` Reach rows remain.
 6. **Predicate-type operands.** ✅ DONE (done out of order, see above).
 7. **P7 deletion** — once both ratchets hit 0.
 

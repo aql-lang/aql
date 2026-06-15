@@ -286,6 +286,59 @@ func TestEmitP5MultiResult(t *testing.T) {
 	}
 }
 
+// TestEmitApplyFnValue: `…args fn apply` compiles. apply returns the fn VALUE
+// concrete in check mode (ReturnsIdentity), so the check engine re-steps it and
+// the fn dispatches against its stack args as an ordinary CALL_USER. Covers the
+// stack-form binding (sig position 0 = top), the 0-arg fn, and an anon lambda.
+func TestEmitApplyFnValue(t *testing.T) {
+	cases := []struct {
+		src  string
+		want []any
+	}{
+		{`def inc fn [[n:Integer][Integer][n add 1]] 5 inc/r apply`, []any{int64(6)}},
+		// Stack form: a=top=3, b=10 → a sub b = 3-10 = -7 (NOT forward sub2 10 3 = 7).
+		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]] 10 3 sub2/r apply`, []any{int64(-7)}},
+		{`def z fn [[][Integer][42]] z/r apply`, []any{int64(42)}},
+		{`def f ([n:Integer] => [n add 1]) 5 f/r apply`, []any{int64(6)}},
+	}
+	for _, c := range cases {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, wasCompiled, rerr := a.RunCompiled(c.src)
+		if !wasCompiled || rerr != nil {
+			t.Fatalf("%s: compiled=%v err=%v (want compiled, no error)", c.src, wasCompiled, rerr)
+		}
+		if len(got) != len(c.want) {
+			t.Fatalf("%s: got %v, want %v", c.src, got, c.want)
+		}
+		for i := range c.want {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: got %v, want %v", c.src, got, c.want)
+				break
+			}
+		}
+	}
+
+	// Negative: applying a NON-function (a plain Integer) errors in both
+	// engines — apply's [Function] sig rejects it; the row must not silently
+	// compile to a wrong value.
+	if _, _, rerr := mustRun(t, `5 6 apply`); rerr == nil {
+		t.Errorf("`5 6 apply`: want an error (apply of a non-function), got none")
+	}
+}
+
+// mustRun runs src in compiled mode, returning (result, wasCompiled, err).
+func mustRun(t *testing.T, src string) ([]any, bool, error) {
+	t.Helper()
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a.RunCompiled(src)
+}
+
 // Loop results are VARIADIC at run time (one value per iteration):
 // downstream calls must refuse to consume them — only the program
 // residual may absorb the accumulation.

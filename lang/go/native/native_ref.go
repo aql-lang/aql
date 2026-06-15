@@ -58,7 +58,14 @@ var refNatives = []NativeFunc{
 			{
 				Args:    []*Type{TFunction},
 				Handler: applyHandler,
-				Returns: []*Type{TAny}, BarrierPos: 0,
+				// Check mode: return the applied fn VALUE concrete (identity,
+				// not widened to Any) so the check engine re-steps it exactly as
+				// runtime — the fn then dispatches against its preceding stack
+				// args and records as an ordinary CALL_USER, letting the bytecode
+				// compiler lower `…args fn apply`. Runtime is unchanged
+				// (applyHandler still re-steps the fn).
+				ReturnsFn: ReturnsIdentity(0),
+				Returns:   []*Type{TAny}, BarrierPos: 0,
 			},
 			// Apply a Reach (a lens) to a receiver: `apply $.name person`
 			// rebinds the reach's receiver to `person` and evaluates it —
