@@ -29,8 +29,19 @@ race-clean, alloc ceilings held). The runtime-independence machinery exists:
   (compiled programs still containing an `OpFallback`). Both are downward;
   P7 is gated on both reaching **0**.
 
-Current ratchets: **616 refused / 29 islanded** (from 651 / 115 at P0).
-Compiled rows 1706 → 1741, 0 divergences throughout.
+Current ratchets: **542 refused / 15 islanded** (from 651 / 115 at P0;
+616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
+555 after predicate-type provenance; 545 after if value-else). Compiled rows
+1706 → 1823, 0 divergences throughout. The `case` desugar dropped the island
+count 26 → 15 (islanded case rows now compile natively).
+
+Stage-2 lowering edges also closed this pass: a 3-arg `if` whose else arm is
+a plain VALUE (`if cond [then] 42` — literal / local / type, not a `[…]`
+body) now compiles (the else arm lowers to a single push). A COMPUTED else
+(a paren result eagerly on the stack before the branch) and a variadic
+STATEMENT-if (`if cond [raise …]` used as a guard, result discarded) still
+refuse — both need stack juggling the single-result branch lowering doesn't
+do yet.
 
 ## The recorder/lowerer model (shared context for the work below)
 
@@ -53,6 +64,30 @@ and the stack-discipline item.
 ---
 
 ## P5 — Multi-result lowering (refusals ~44 + dup-body islands)
+
+**Status — partially landed (616/29 → 598/26).** The `(seq, idx)` foundation
+(steps 1–3 below) plus **0-result and N-result native calls** landed
+gate-clean: `producedBy` is now `map[string]producer{seq,idx}`, the lowerer's
+simulated stack is `[]vmSlot{seq,idx}`, an `emitOperand` carries a `resIdx`,
+and `RecordCall` records side-effect (`set`/`raise`/`drop`/`printstr`/`sleep`)
+and genuine multi-result words instead of refusing `len(outs) != 1`. The
+empirical breakdown corrected the plan's framing: the "multi-result" refusal
+bucket (34 rows) was dominated by **0-result** side-effect calls, not N-output
+calls — those drove most of the −18 refusals.
+
+**Deferred (still refused, soundly):**
+
+- **Multi-RETURN / 0-return fns** (step 4 — the "multi-return fn" bucket, ~10
+  rows): `StartFnCompile` still requires exactly one declared return; the fn
+  unit's single `outOp` and `RecordUserCall`'s single `out` need generalising
+  to N results, and `Finalize`'s fn-unit RET check to N (`OpRet` already loops
+  over `Returns`). Mechanical follow-on on the same `(seq, idx)` base.
+- **dup-body islands** (`each [dup add]`): `dup` returns `[args[0], args[0]]` —
+  the SAME `Value.ID` twice (`spliceMatchResults` does not re-mint), so the two
+  outputs collapse in the ID-keyed `producedBy` and the operand layout refuses
+  the consume as "not adjacent." This is the **carrier-identity** item's
+  territory (the next section): a multiply-emitted identical value needs
+  distinct ids (or a value-def local / `DUP`), not the `(seq, idx)` machinery.
 
 **Symptom.** `X returns N values (Stage 1 lowers single-result calls)`
 (`emit.go::RecordCall`, `len(outs) != 1`), `fn … without exactly one declared
@@ -98,6 +133,39 @@ mechanical (no fn-value/type subtlety).
 ---
 
 ## Carrier-identity for `make` + value-def locals (stack-discipline ~24)
+
+**Status — LANDED (598/26 → 565/26), gate-clean across three commits.**
+All three steps below shipped; the dup-body case (the deferred P5 item) came
+with it. What actually landed, with the empirical corrections:
+
+- **Step 1 — make carrier-identity (598 → 580, FP 122 → 114).** `make`'s
+  constructor sigs moved from `ReturnsIdentity(0)` to a new
+  `ReturnsFreshInstance(0)` (`eng/go/carrier.go`). The correction to the plan:
+  returning the type literal with a **fresh ID** is NOT viable — a type
+  literal is dual (its `Value.ID` IS the type's lattice identity), so a fresh
+  ID severs the literal↔type link and `ValueType` can no longer resolve the
+  made type (conformance fails, soundness regressed +10). The fix returns a
+  fresh **value carrier** of the made type (`ValueType` + `NewCarrier`, for
+  both bare type nodes AND structural type bodies like a class's
+  `ObjectTypeInfo` literal). This is also more faithful than the type literal
+  — conformance sees the instance's type — which DROPPED 8 false positives.
+- **Step 2 — value-def locals (580 → 568).** `OpStoreLocal`
+  (`eng/go/bytecode.go` + `vm.go`) plus a frame-0 promotion pre-pass
+  (`planValueDefLocals` in `eng/go/lower.go`): a single-result native-call
+  result referenced more than once — counting the program residual — is
+  promoted to a frame local. The producing event emits `STORE_LOCAL` instead
+  of leaving its result on the stack; references (rewritten in place to local
+  operands) and promoted residual values re-push via `PUSH_LOCAL`.
+- **Step 3 — dup carrier-identity (568 → 565).** A duplicating stack word
+  (`dup` `(0,0)`, `over` `(0,1,0)`) returned the same `Value.ID` for several
+  outputs; `ReturnsIdentity` now gives each output of a **repeated** source
+  index a fresh ID, leaving the source's own provenance untouched. This is
+  the dup-body case (`each [dup add]`) — a simple identity fix, no `OpDup`
+  opcode needed.
+
+**Deferred / not needed:** `OpDup` (step 3's "optional fast path") — the
+distinct-id fix made the dup body compile without it; fn-unit value-def
+promotion (the pre-pass is frame-0; no spec row needs it).
 
 **Symptom.** `stack discipline underflow at eq/cmp/deq/is` for
 `def a (make Array [1 2]) a eq a`, `(make P {}) (make P {}) eq`,
@@ -150,6 +218,22 @@ carries `(seq, idx)`).
 
 ## Fn-values-on-the-stack (`apply` + higher-order fn args, refusals ~148)
 
+**Scope correction (from a probe of the bucket).** The "~148" was the whole
+heterogeneous dynamic/opaque-output bucket; the genuine fn-VALUE rows are
+~34: `fn/r apply` (named/anon ref applied to args, ~10 — the core), `apply
+$.path receiver` (a Reach lens, a DIFFERENT sig, ~7), a fn value reaching an
+introspection word (`typeof (inc/r)`, `Positive tcmp Positive`,
+`TypeUtil.arityof (fn …)`, ~12), and higher-order afn args
+(`each ([kv] => …)`, ~3).
+
+**No shortcut (verified).** The tempting elision — "`apply` just unquotes the
+fn for the engine to re-step, so elide it and let the re-step record the real
+`inc 5` call" — does NOT work: after `apply` returns the fn, the check-mode
+engine does not re-step it into an `inc` dispatch; the fn flows to the
+residual unresolved ("residual value of unknown provenance"). So the full
+machinery below is required — the fn VALUE must become a closure on the
+stack, and `apply` must lower to a stack-form application.
+
 **Symptom.** `unannotated or opaque word apply` for `5 inc/r apply`,
 `z/r apply`, `f/r apply`; and any higher-order word handed a fn VALUE
 (`each [idg] …`). The fn value can neither bake (it is code, not
@@ -159,38 +243,54 @@ carries `(seq, idx)`).
 stack. The closure machinery exists (`OpPushClosure`) but is only emitted for
 code BODIES, not for fn VALUES referenced by name.
 
-**Plan.**
+**Plan (REFINED — ready to implement; the Finalize-residual variant sidesteps
+the args-inaccessibility blocker found below).**
 
-1. **FnDefInfo operand → closure.** When `resolveOperand` (or a dedicated
-   hook before `RecordCall`) sees an `FnDefInfo` value used as an operand,
-   compile its body to a `CompiledFn` unit via the existing
-   `StartFnCompile`+`AnalyseFnBody` path (probe-guarded, exactly like
-   `tryRecordClosure`), and return a closure operand. A user fn's params are
-   NAMED (bound to frame locals); the unit reads them via `PUSH_LOCAL` and is
-   invoked like `CALL_USER`. Anonymous afn values compile the same way. A fn
-   that does not compile leaves the operand unresolved → the program falls
-   back, exactly as today.
-2. **`apply` elision.** `apply`'s handler just unquotes the fn for the engine
-   to re-step (`native_ref.go::applyHandler`). In compiled form the fn IS a
-   closure on the stack, so `apply` is an identity — elide it at record time
-   (like the get/getr module-resolution elision in `RecordCall`), leaving the
-   closure for the application to consume.
-3. **Stack-form application.** `apply`'s convention is STACK-form: `args… fn
-   apply` (fn on TOP, args BELOW). The existing `OpCallDynamic` is residual-
-   form (fn first, args after). Add a stack-form variant (or a flag on
-   `OpCallDynamic`) that pops the fn from the top and applies it to the N
-   values below — `callDynamic` already routes closures to `vc.run` VM-native
-   and FnDefs to `tryNativeFnApply` / island.
-4. **Value-vs-call.** Respect the interpreter's "0-arg anonymous value stays
-   data" rule (eng CLAUDE.md "Sharp edge"): only elide+apply where the
-   interpreter would apply; a fn value bound by `def` is captured at check
-   time (compile-time) and never reaches runtime as an apply.
+The naive "FnDefInfo operand → closure at the apply site" does NOT work,
+because `apply`'s sig is `[TFunction]` (BarrierPos 0): apply consumes ONLY the
+fn; the call args (`5` in `5 inc/r apply`) sit BELOW the fn on the stack and
+are never apply's args, so neither apply's handler nor a ReturnsFn can see
+them. But at FINALIZE the whole residual `[5, inc-fn]` is in hand — so handle
+it there, the way P4 already handles the fn-LEADING residual:
 
-**Files.** `eng/go/emit.go` (FnDefInfo-operand → closure compile; reuse
-`compileClosureBody`/probe), `eng/go/carrier.go` (`apply` elision + the
-fn-value-operand hook), `eng/go/bytecode.go`+`vm.go` (stack-form CALL_DYNAMIC),
-`lang/go/native/native_ref.go` (apply already returns the fn unchanged — no
-handler change, the recorder elides it).
+1. **Preserve + elide `apply`.** Give `apply`'s `[TFunction]` sig a ReturnsFn
+   that returns args[0] unchanged (the FnDef stays concrete — `toCarrier`
+   keeps `FnDefInfo`), and elide its `RecordCall` (add an `apply` case beside
+   the get/getr elision in `emit.go::RecordCall`) so it neither refuses nor
+   records. The FnDef then flows into the program residual as `[…args, fn]`.
+2. **Finalize: residual-trailing FnDef.** When the residual ENDS with a
+   concrete `FnDefInfo` for a single-sig user/anon fn, take its arity `N =
+   len(Signatures[0].Params)`; the `N` residual entries before it are the call
+   args. Compile the fn body to a closure unit, then emit: push the `N` arg
+   operands, `OpPushClosure`, stack-form `CALL_DYNAMIC N`. (A multi-sig fn, or
+   an arity that doesn't match the residual, refuses → fallback.)
+3. **Compile the fn body to a unit.** `Signatures[0]` carries `Body []Value`,
+   `Params []FnParam` (names), `Returns []*Type` — feed them to
+   `StartFnCompile`+`AnalyseFnBody` exactly like the direct-call path
+   (`core_helpers.go:367-399`), probe-guarded like `tryRecordClosure`. Use
+   GENERALISED arg carriers (the residual arg types) so the unit doesn't
+   constant-fold one call's values.
+4. **Stack-form `CALL_DYNAMIC` (VM).** The existing `callDynamic`
+   (`vm.go:205`) is residual-form (`fnVal = stack[base]`, args after). Add a
+   stack-form path (`fnVal = stack[top]`, args = `stack[top-N:top]`) — a flag
+   on `OpCallDynamic` or a sibling opcode. It then reuses callDynamic's
+   closure → `invokeClosure` route VM-native.
+5. **Value-vs-call.** A fn value bound by `def` is captured at compile time and
+   never reaches runtime as an apply, so only the literal `… fn/r apply`
+   residual shape triggers this; the differential gate is the backstop.
+
+**Verified findings (this session's probe).** The bucket's genuine fn-VALUE
+rows are ~34, of which `fn/r apply` (named/anon ref) is the ~10-row core. The
+elision-only shortcut was implemented and ruled out (the re-step does not fire
+in check mode — the fn lands in the residual unresolved). The `apply $.path`
+rows are Reach LENSES (`applyReachHandler`, a different sig) and a separate
+item. Introspection (`typeof (inc/r)`, `tcmp Function`, `arityof`) wants the
+fn-value as a CALL_NATIVE operand, not a closure — a smaller follow-on.
+
+**Files.** `eng/go/emit.go` (apply elision + Finalize residual-trailing-FnDef +
+closure compile, reusing `compileClosureBody`/probe), `eng/go/bytecode.go` +
+`vm.go` (stack-form CALL_DYNAMIC), `lang/go/native/native_ref.go` (apply sig
+gains `ReturnsFn: ReturnsIdentity(0)` so the FnDef survives check mode).
 
 **Benefit beyond apply.** This is what lets `callDynamic` stop islanding
 user-fn applies (it can compile the body to a unit and run VM-native), and it
@@ -204,6 +304,18 @@ the stack-form calling convention.
 ---
 
 ## Predicate-type operands (refusals ~157, "operand provenance")
+
+**Status — LANDED (565/26 → 555/26).** Both steps below shipped. Empirical
+correction: the operand is ALWAYS a carrier at the type-algebra site (step 2
+is the load-bearing half, not step 1) — `MakeDepScalarSig` is already
+`RunInCheckMode`, so `Integer gt 10` produces a concrete `DepScalar` during
+the check pass, but `toCarrier` strips its `DepScalarInfo` to a bare base
+carrier (preserving the `Value.ID`) before it reaches `tcmp`. The constructor
+now records the concrete predicate against its ID
+(`EmitState.RememberOriginal`); the same-ID strip then recovers it via
+`origByID`/`materialise`, and `isInertConst` admits `DepScalarInfo` so it
+bakes into the const pool. The "operand provenance" bucket (which is broader
+than predicate types — also generics/module/class) dropped 159 → 142.
 
 **Symptom.** `operand of unknown provenance … at tcmp/teq/lt` for
 `(Integer gt 10) tcmp (Integer gt 10)`, `(Integer gt 10) lt (Integer gt 20)`
@@ -239,7 +351,39 @@ operand site it is a check-mode **carrier** with no recovered original, so
 
 ## `case` clause compilation (islands ~16)
 
-**Symptom.** `code-body word case (Stage 2)` — `case v [m1 b1 m2 b2 … default]`
+**Status — LANDED (545/26 → 542/15), gate-clean.** A `caseReturnsFn`
+desugars `case v [m0 b0 …]` to the nested `if` chain `if (v m0 __casematch)
+[b0] [rest]` by calling `if3ReturnsFn` with constructed list args, so the
+branches record in the enclosing scope and nested clauses ride the else
+BODY. Three findings, each load-bearing:
+
+- **Match faithfulness.** `case` matches via `UnifyR`, which is LENIENT for a
+  bare-refine newtype — `case 5 [Pos …]` matches `Pos` (`def Pos refine
+  Integer`) — whereas `5 is Pos` is nominal-FALSE. A desugar to `is` diverges;
+  the fix is an internal `__casematch v m` → `UnifyR(m, v)` the guard emits for
+  non-predicate clauses (a code-body predicate clause `[pred]` stays
+  `(v pred…)`).
+- **No probe — static classification.** The fall-back shapes (a COMPUTED case
+  value referenced in every clause; a no-default tail → variadic) are
+  classified WITHOUT running the desugar: a new side-effect-free
+  `EmitState.OperandRepushable(v)` (mirrors `resolveOperand`: const/local/type
+  yes, computed-event no) plus the static odd-length-clause check. A
+  non-compilable shape returns the prior dynamic-Any WITHOUT marking
+  uncompilable, so the island / fallback keeps owning it. (Probing
+  mid-recording can't roll back cleanly — a def-only `Defs.Restore` leaves
+  narrowing pollution; a full `RestoreForCompile` clones `Types`, breaking
+  canonical-pointer identity — which is why the probe is avoided entirely.)
+- **The double-record bug (the real blocker).** `case` is in `fallbackWords`,
+  so after `caseReturnsFn` recorded the branch, `tryRecordFallback` ALSO
+  islanded it — the extra FALLBACK event sat unconsumed on the simulated
+  stack ("residual shape … call results reordered"). Fixed by an early
+  `producedBy[outs[0].ID]` guard in `tryRecordFallback` (mirroring
+  `RecordCall`): a dispatch a structured ReturnsFn already recorded is never
+  also islanded. This is what flipped the result from a +7 regression to a
+  net win — the islanded case rows now compile natively (islands 26 → 15).
+
+**Symptom (was).** `code-body word case (Stage 2)` — `case v [m1 b1 m2 b2 …
+default]` islanded (a structured match/block clause list, not a single body).
 islands (a structured match/block clause list, not a single body).
 
 **Root cause.** `case` is a multi-way dispatcher (`native_control.go::
@@ -308,15 +452,25 @@ simplify).
 Each lands gate-clean (differential + full-corpus 0 divergences, race, alloc,
 lint) and lowers a ratchet monotonically.
 
-1. **Multi-result lowering (P5).** Foundational, mechanical; unlocks dup-body
-   islands + 44 refusals; the `(seq, idx)` operand model the next items reuse.
-2. **Carrier-identity for `make` + value-def locals.** Unblocks the stack-
-   discipline bucket; makes `OpDup`/`OpStoreLocal` sound.
-3. **Fn-values-on-the-stack.** Biggest refusal unlock (~148); de-islands the
-   `callDynamic` user-fn apply.
-4. **`case` clause compilation.** Reuses value-def locals + branch lowering.
-5. **Predicate-type operands.** Lowest leverage/effort; sequence late.
-6. **P7 deletion** — once both ratchets hit 0.
+1. **Multi-result lowering (P5).** ✅ DONE (616/29 → 598/26). Foundational,
+   mechanical; the `(seq, idx)` operand model the next items reuse.
+2. **Carrier-identity for `make` + value-def locals.** ✅ DONE (598/26 →
+   565/26). Cleared the stack-discipline bucket (make-vs-make/type via fresh
+   value carriers, value-def `OpStoreLocal`, dup distinct-ids) and dropped 8
+   false positives.
+3. **Predicate-type operands.** ✅ DONE (565/26 → 555/26). Predicate
+   constructor records its concrete value (`RememberOriginal`); `isInertConst`
+   admits `DepScalarInfo`. (Done out of order — small, self-contained, low
+   risk — while fn-values is the larger remaining semantic item.)
+4. **`case` clause compilation.** ✅ DONE (545/26 → 542/15). Desugar to a
+   nested `if` chain (`__casematch` for faithful matching, `OperandRepushable`
+   for static classification, a `tryRecordFallback` `producedBy` guard to stop
+   the double-record). Islanded case rows now compile natively.
+5. **Fn-values-on-the-stack.** ← NEXT. The remaining big semantic item
+   (`apply` + higher-order fn args); de-islands the `callDynamic` user-fn
+   apply. Higher risk (engine re-stepping, stack-form calling convention).
+6. **Predicate-type operands.** ✅ DONE (done out of order, see above).
+7. **P7 deletion** — once both ratchets hit 0.
 
 ## Verification discipline (unchanged contract)
 

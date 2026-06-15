@@ -482,6 +482,7 @@ var (
 	ResolveTypePath        = eng.ResolveTypePath
 	ResolveWordValue       = eng.ResolveWordValue
 	ResolveWordsDeep       = eng.ResolveWordsDeep
+	ReturnsFreshInstance   = eng.ReturnsFreshInstance
 	ReturnsIdentity        = eng.ReturnsIdentity
 	ReturnsListElemAt      = eng.ReturnsListElemAt
 	ReturnsNumericBinary   = eng.ReturnsNumericBinary

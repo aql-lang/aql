@@ -36,7 +36,7 @@ import (
 // The ratchet pins. Lower them when a checker improvement lands;
 // never raise them without a documented decision.
 const (
-	pinnedFalsePositives     = 122 // value rows the checker wrongly errors on (June 2026; was 132 — macro installs in check mode)
+	pinnedFalsePositives     = 114 // value rows the checker wrongly errors on (June 2026; was 132 — macro installs in check mode; was 122 — make returns a value carrier of the made type, not the type literal)
 	pinnedUnflaggedErrorRows = 131 // ERROR rows the checker is silent on (June 2026; was 132)
 )
 

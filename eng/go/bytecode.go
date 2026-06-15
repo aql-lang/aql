@@ -102,6 +102,15 @@ const (
 	// is the fn-value-call boundary (plan P4): a dynamic value preceding
 	// residual args.
 	OpCallDynamic
+	// OpStoreLocal POPS the top of stack into locals[Arg]. Emitted right
+	// after the event that produces a COMPUTED value referenced more than
+	// once — a value-`def` bound to an event result and used several times
+	// (`def a (make …) a eq a`). The single VM-stack copy would be consumed
+	// by the first use; storing it once and re-pushing each reference via
+	// PUSH_LOCAL gives the lowerer's single-consume stack discipline a sound
+	// multiply-referenced value (the carrier-identity item's value-def
+	// locals).
+	OpStoreLocal
 )
 
 func (o Opcode) String() string {
@@ -138,6 +147,8 @@ func (o Opcode) String() string {
 		return "CALL_NATIVE_POLY"
 	case OpCallDynamic:
 		return "CALL_DYNAMIC"
+	case OpStoreLocal:
+		return "STORE_LOCAL"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -291,7 +302,7 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " s%-3d ; %s (%s)", in.Arg, s.Word, strings.Join(names, ", "))
 		case OpJmp, OpJmpIfFalse, OpForNext:
 			fmt.Fprintf(sb, " -> %04d", in.Arg)
-		case OpPushLocal, OpForSetup:
+		case OpPushLocal, OpForSetup, OpStoreLocal:
 			fmt.Fprintf(sb, " l%d", in.Arg)
 		case OpPushType:
 			fmt.Fprintf(sb, " t%-3d ; %s", in.Arg, p.Types[in.Arg].Name)

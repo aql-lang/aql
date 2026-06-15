@@ -43,6 +43,16 @@ func (r *Registry) SnapshotForCompile() CompileSandbox {
 	if r == nil {
 		return CompileSandbox{}
 	}
+	// check and pendGen are captured by VALUE (a CheckState struct copy and a
+	// *GenSpecInfo pointer), not deep-cloned like the scopes above. That is
+	// sound because the check pass only ever REPLACES them — CompileCheck
+	// reassigns Check.Emit/FnSummaries/FnInflight and Check.Begin resets the
+	// per-pass fields, none of which mutate the snapshot's copy in place; and
+	// pendingGen is set/cleared by pointer reassignment, never by in-place
+	// mutation of the pointed-to GenSpecInfo. RestoreForCompile then puts the
+	// pre-check struct/pointer back wholesale. If a future change starts
+	// mutating a CheckState map or *pendingGen in place during the check
+	// pass, deep-clone them here instead.
 	s := CompileSandbox{
 		defs:    r.Defs.Clone(),
 		types:   r.Types.Clone(),
@@ -95,6 +105,11 @@ func (r *Registry) RestoreForCompile(s CompileSandbox) {
 		r.Modules.seq = s.modSeq
 		r.Modules.loaded = s.modLoaded
 	}
+	// builtins/caps restore only when the snapshot captured a (non-nil) copy.
+	// Both maps are constructed in NewRegistry and never reset to nil, so the
+	// snapshot always holds a copy in practice; the guard just avoids
+	// installing a nil map on the degenerate (never-constructed) path rather
+	// than being a meaningful "leave as-is" branch.
 	if s.builtins != nil {
 		r.builtinWords = s.builtins
 	}

@@ -34,26 +34,68 @@ const (
 	SiteMeta    = "meta"
 )
 
+// operandKind discriminates how an emitOperand sources its value. The kind
+// is an explicit enum rather than a set of "-1 means unset" int fields so the
+// struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
+// returned paired with an ok=false flag) — never a valid-looking "const index
+// 0." See eng/go/CLAUDE.md "No Zero-Value Overload (CRITICAL)": four parallel
+// sentinel fields are exactly the smell that rule forbids, and a single missed
+// initialization used to mean "Consts[0]" silently.
+type operandKind uint8
+
+const (
+	opNone    operandKind = iota // zero value: unset / invalid (ok=false only)
+	opConst                      // idx → Program.Consts index
+	opEvent                      // idx → producing event sequence number
+	opLocal                      // idx → frame-local slot (loop iterator / param)
+	opType                       // idx → Program.Types index (canonical type)
+	opClosure                    // closureUnit + closureCaps (a compiled body)
+)
+
+// emitOperand names where one dispatch argument comes from. For every kind but
+// opClosure the single idx field carries the kind-specific index/seq; the
+// constructors below are the only construction sites for the indexed kinds, so
+// the kind↔idx pairing can never drift.
+//
+// resIdx is meaningful only for opEvent (P5 multi-result lowering): it names
+// WHICH of the producing event's results this operand is. A single-result
+// event uses resIdx 0; a multi-result call (e.g. `swap`, a multi-return fn)
+// distinguishes its N outputs by 0..N-1, matching the order the VM pushes the
+// handler's results (results[0] deepest, results[N-1] on top).
 type emitOperand struct {
-	constIdx  int // >=0: Consts index
-	fromSeq   int // >=0: producing event sequence number
-	localSlot int // >=0: loop-iterator local slot
-	typeIdx   int // >=0: Types index (canonical type operand)
-	// isClosure marks a compiled code-BODY operand: closureUnit indexes
-	// Program.Fns and lowers to OpPushClosure (plan P2). A bool flag (not a
-	// sentinel) so existing operand literals stay valid by zero value.
+	kind   operandKind
+	idx    int
+	resIdx int
+	// closureUnit indexes Program.Fns and lowers to OpPushClosure (plan P2);
 	// closureCaps are the body's lexical captures, resolved in the ENCLOSING
 	// scope and pushed (in CapturedBinding order) just before OpPushClosure,
-	// which pops them into the closure value.
-	isClosure   bool
+	// which pops them into the closure value. Both are meaningful only when
+	// kind == opClosure.
 	closureUnit int
 	closureCaps []emitOperand
 }
+
+// constOperand / eventOperand / localOperand / typeOperand build the indexed
+// operand kinds — the only places that pair a kind with its idx. eventOperand
+// additionally carries the result index within the producing event (P5).
+func constOperand(idx int) emitOperand { return emitOperand{kind: opConst, idx: idx} }
+func eventOperand(seq, resIdx int) emitOperand {
+	return emitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
+}
+func localOperand(slot int) emitOperand { return emitOperand{kind: opLocal, idx: slot} }
+func typeOperand(idx int) emitOperand   { return emitOperand{kind: opType, idx: idx} }
+
+// producer locates a recorded value: the producing event's seq and which of
+// that event's results it is (idx 0 for the common single-result case). P5
+// generalised producedBy from a bare seq so a multi-result call's N outputs
+// stay distinguishable when a downstream operand resolves one of them.
+type producer struct{ seq, idx int }
 
 type emitCall struct {
 	word string
 	sig  *Signature
 	ops  []emitOperand
+	nout int // number of results the call pushes (0 for a side-effect word, N for multi-result)
 	pos  SrcPos
 	poly bool // dispatch via OpCallNativePoly (runtime MatchSignature)
 }
@@ -70,7 +112,9 @@ type emitBranch struct {
 	hasElse               bool // false = 2-arg if; its result is VARIADIC (0 or 1 values)
 	then, els             *EmitFragment
 	thenOut, elsOut       emitOperand
-	hasThenOut, hasElsOut bool // false when the arm DIVERGES (ends in break/continue)
+	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
+	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
+	elsVal                emitOperand // the value-else operand (const/local/type) when elsIsVal
 	pos                   SrcPos
 }
 
@@ -163,8 +207,8 @@ type EmitState struct {
 	units      []*emitUnit    // units[0] = top level; fn compilations push
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
-	producedBy map[string]int // value ID → producing event seq
-	typeOut    map[int]bool   // event seq → its output is itself a type body
+	producedBy map[string]producer // value ID → producing (event seq, result idx)
+	typeOut    map[int]bool        // event seq → its output is itself a type body
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
 	types      []TypeRef
@@ -215,7 +259,7 @@ func NewEmitState() *EmitState {
 		frames:     [][]emitEvent{nil},
 		units:      []*emitUnit{{localByID: map[string]int{}}},
 		fnUnits:    map[string]int{},
-		producedBy: map[string]int{},
+		producedBy: map[string]producer{},
 		typeOut:    map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
@@ -323,7 +367,17 @@ func (es *EmitState) appendEvent(ev emitEvent) int {
 // type operand (`(make Point {}) is Point`) would otherwise resolve
 // the `Point` literal to the make event.
 func (es *EmitState) setProduced(out Value, seq int) {
-	es.producedBy[out.ID] = seq
+	es.setProducedAt(out, seq, 0)
+}
+
+// setProducedAt is setProduced for the idx-th result of a multi-result event
+// (P5). idx 0 is the single-result case. When two outputs share an ID — a
+// stack word like `dup` returns `[args[0], args[0]]`, both the same Value —
+// the LAST registration wins; the lowerer's operand layout then refuses the
+// ambiguous consume (sound: the program falls back) until carrier-identity
+// (the next runtime-independence item) mints distinct ids.
+func (es *EmitState) setProducedAt(out Value, seq, idx int) {
+	es.producedBy[out.ID] = producer{seq: seq, idx: idx}
 	if IsTypeBody(out) {
 		es.typeOut[seq] = true
 	}
@@ -338,30 +392,57 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// agree), and the event is then the value's stack-discipline truth
 	// — the branch pushed it. A plain param/iterator reference has no
 	// producing event and resolves to its local slot.
-	if idx, ok := es.producedBy[v.ID]; ok {
+	if pr, ok := es.producedBy[v.ID]; ok {
 		// A type operand whose ID matches a producing event whose own
 		// output was NOT a type is an ID collision (a `make` result
 		// inheriting the type literal's ID): resolve it as its own type
 		// operand / const below, not the unrelated event.
-		if !IsTypeBody(v) || es.typeOut[idx] {
-			return emitOperand{constIdx: -1, fromSeq: idx, localSlot: -1, typeIdx: -1}, true
+		if !IsTypeBody(v) || es.typeOut[pr.seq] {
+			return eventOperand(pr.seq, pr.idx), true
 		}
 	}
 	if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
-		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: slot, typeIdx: -1}, true
+		return localOperand(slot), true
 	}
 	// A bare type node is a TYPE operand: it must reach the runtime
 	// as the CANONICAL registry node (a pooled by-value copy goes
 	// stale against behaviour/field installs), so it gets its own
 	// table, resolved by ID at run time via OpPushType.
 	if IsBareTypeNode(v) && v.ID != "" {
-		return emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: es.internType(v)}, true
+		return typeOperand(es.internType(v)), true
 	}
 	lit, ok := es.materialise(v)
 	if !ok || !isInertConst(lit) {
 		return emitOperand{}, false
 	}
-	return emitOperand{constIdx: es.intern(lit), fromSeq: -1, localSlot: -1, typeIdx: -1}, true
+	return constOperand(es.intern(lit)), true
+}
+
+// OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE
+// operand — a const, a frame local, or a (canonical) type node — as opposed
+// to a computed EVENT result (on the simulated stack exactly once) or an
+// unresolvable value. It mirrors resolveOperand's decision but is SIDE-
+// EFFECT FREE (no interning), so a caller can classify an operand WITHOUT
+// recording. Used by a multi-reference desugar (the `case` value is tested
+// against every clause guard) to decide up front whether it can compile —
+// avoiding a probe whose rollback would otherwise pollute the recording.
+func (es *EmitState) OperandRepushable(v Value) bool {
+	if es == nil {
+		return false
+	}
+	// An event operand is the value's stack-discipline truth (pushed once);
+	// it cannot be re-pushed for a second reference.
+	if pr, ok := es.producedBy[v.ID]; ok && (!IsTypeBody(v) || es.typeOut[pr.seq]) {
+		return false
+	}
+	if _, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
+		return true
+	}
+	if IsBareTypeNode(v) && v.ID != "" {
+		return true
+	}
+	lit, ok := es.materialise(v)
+	return ok && isInertConst(lit)
 }
 
 // materialise recovers the fully concrete value behind a stripped
@@ -460,6 +541,7 @@ type BranchRecord struct {
 	HasElse         bool
 	Then, Els       *EmitFragment
 	ThenStk, ElsStk []Value
+	ElsValue        *Value // non-nil: the else arm is this already-evaluated VALUE, not a body
 	Out             Value
 	Pos             SrcPos
 }
@@ -535,14 +617,33 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		}
 		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, thenOut, hasThen
 		if b.HasElse {
-			elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
-			if !ok {
-				return
-			}
-			ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
-			if !hasThen && !hasEls {
-				es.MarkUncompilable("if: both branches diverge (Stage 2)")
-				return
+			if b.ElsValue != nil {
+				// Value-else: the else arm is an already-evaluated value
+				// (`if cond [then] 42`), not a `[…]` body. It lowers to a
+				// single push in the else arm. A COMPUTED else (an event
+				// result of a paren like `(add 1 2)`) is eagerly on the
+				// stack BEFORE the branch — that needs stack juggling the
+				// current single-result lowering doesn't do, so refuse it.
+				op, ok := es.resolveOperand(*b.ElsValue)
+				if !ok {
+					es.MarkUncompilable("if: else value of unknown provenance")
+					return
+				}
+				if op.kind == opEvent {
+					es.MarkUncompilable("if: computed else value (Stage 2 lowers literal/local else)")
+					return
+				}
+				ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
+			} else {
+				elsOut, hasEls, ok := resolveArm(b.Els, b.ElsStk, "else")
+				if !ok {
+					return
+				}
+				ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
+				if !hasThen && !hasEls {
+					es.MarkUncompilable("if: both branches diverge (Stage 2)")
+					return
+				}
 			}
 		}
 	}
@@ -678,8 +779,13 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		// reused a capture/param ID (JoinCarriers keeps the then-side
 		// ID) would make an ENCLOSING call site resolve that value to
 		// an event of this closed unit.
-		for id, seq := range es.producedBy {
-			if seq > rec.frag.startSeq {
+		//
+		// O(live-IDs) scan per fn finish — i.e. O(fns × live-IDs) over a
+		// compile. Negligible at current fn densities; revisit (e.g. track
+		// per-unit produced IDs) if deeply nested fn-heavy programs make
+		// compile time bite.
+		for id, pr := range es.producedBy {
+			if pr.seq > rec.frag.startSeq {
 				delete(es.producedBy, id)
 			}
 		}
@@ -748,7 +854,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 		es.MarkUncompilable("for: range of unknown provenance")
 		return
 	}
-	if startOp.constIdx < 0 || stepOp.constIdx < 0 {
+	if startOp.kind != opConst || stepOp.kind != opConst {
 		es.MarkUncompilable("for: computed range start/step (Stage 2 follow-on)")
 		return
 	}
@@ -813,6 +919,24 @@ func (es *EmitState) RecordStrip(orig, stripped Value) {
 	if stripped.Carrier && !orig.Carrier && orig.ID != "" && orig.ID == stripped.ID {
 		es.origByID[orig.ID] = orig
 	}
+}
+
+// RememberOriginal records a CONCRETE value produced during the check
+// pass against its own ID, so that when a later carrier-strip reduces it
+// (preserving the ID — toCarrier keeps Value.ID) the lowerer can recover
+// the original via materialise/origByID. Used by impure-but-pure-data
+// constructors that run in check mode and whose result is otherwise
+// stripped before reaching a downstream operand — notably the predicate
+// constructors (`Integer gt 10`), whose DepScalarInfo payload toCarrier
+// strips to a bare base-type carrier, losing the bound.
+func (es *EmitState) RememberOriginal(v Value) {
+	if es == nil || es.suspended > 0 || !es.active() {
+		return
+	}
+	if v.Carrier || v.Dynamic || v.ID == "" {
+		return
+	}
+	es.origByID[v.ID] = v
 }
 
 // RecordPoly classifies a partitioned (per-alternative) dispatch.
@@ -919,11 +1043,15 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	case word == "continue" && len(outs) == 0:
 		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
 		return
-	case len(outs) != 1:
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable(word + " returns " + itoaSmall(len(outs)) + " values (Stage 1 lowers single-result calls)")
-		return
 	}
+	// P5 multi-result lowering: a 0-result side-effect word (set/raise/drop/
+	// printstr/sleep…) or a genuine N-result word records like any call — the
+	// VM's OpCallNative already pushes every handler result, so no VM change is
+	// needed. MUTATION-SAFETY (load-bearing, see isInertConst): the only
+	// 0-result words are in-place mutators on Array/Object/Store/context
+	// receivers, and those instance types are NOT const-bakeable (absent from
+	// isInertConst's whitelist), so a pooled compound const can never reach one
+	// — the receiver is always a computed event or a frame local.
 	// Function-valued operands mean a fn-invoking word (apply, usurp,
 	// higher-order forms): their handlers return values the ENGINE
 	// re-steps on the tape, which a VM cannot honour. Stage 3
@@ -952,8 +1080,10 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, pos: pos}})
-	es.setProduced(outs[0], seq)
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	for i := range outs {
+		es.setProducedAt(outs[i], seq, i)
+	}
 }
 
 // RecordPolyCall records a native dispatch the checker could not commit to
@@ -974,7 +1104,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos)
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, pos: pos, poly: true}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true}})
 	es.setProduced(outs[0], seq)
 	return true
 }
@@ -1002,7 +1132,7 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	ops := make([]emitOperand, len(args))
 	for i := range args {
 		if i == bodyPos {
-			ops[i] = emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: -1, isClosure: true, closureUnit: unit, closureCaps: capOps}
+			ops[i] = emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}
 			continue
 		}
 		op, ok := es.resolveOperand(args[i])
@@ -1012,7 +1142,7 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, pos: pos}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: 1, pos: pos}})
 	es.setProduced(outs[0], seq)
 	return true
 }
@@ -1138,6 +1268,20 @@ func typeBodyConstOK(v Value) bool {
 // CLAUDE.md, Canonical *Type Pointers — they route through
 // OpPushType instead); class/surface bodies can embed method
 // fn-values; function values are fn-value call sites (Stage 4 F4).
+//
+// MUTATION-SAFETY (load-bearing): a pooled const is pushed by the SAME
+// Value — and thus the same pointer-backed payload — on every execution,
+// including each iteration of a loop, so it must never reach a word that
+// mutates it in place. That holds because the whitelist admits only
+// immutable shapes: the mutable containers (Array/Object/Store instances)
+// are absent, so their constructors never produce an inert const. The
+// in-place mutators (Array/Object/Store `set`) return 0 values and DO now
+// compile (P5 multi-result lowering), but their receiver is always a
+// computed event (the constructor) or a frame local — never a pooled const,
+// precisely because those instance types are absent here. Map/List `set` is
+// copy-returning. Keep this whitelist free of mutable instance types: adding
+// one would let a pooled compound const reach an in-place mutator and corrupt
+// it across iterations.
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -1146,6 +1290,15 @@ func isInertConst(v Value) bool {
 	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
 		PathPayload, NonePayload, BigIntPayload, DecimalPayload,
 		TimePayload, DurationPayload, TimezonePayload:
+		return true
+	case DepScalarInfo:
+		// A predicate / refinement type (`Integer gt 10`): self-contained
+		// (base family + bound, no registry, no canonical-pointer hazard per
+		// eng CLAUDE.md), so the value bakes by value into the const pool.
+		// The bound is recovered for a stripped operand via origByID
+		// (RememberOriginal at the constructor); type-algebra words
+		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
+		_ = d
 		return true
 	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
@@ -1179,66 +1332,6 @@ func isInertConst(v Value) bool {
 	}
 }
 
-// lowerLoop lowers a counted/range for:
-//
-//	…step end start…  FOR_SETUP slot   ; pops start, end, step
-//	head: FOR_NEXT -> end_pc           ; bind iterator or exit
-//	…body…                             ; net ≤1 value per iteration
-//	JMP -> head                        ; the back-edge
-//	end_pc:
-//
-// The loop's stack contribution is variadic; the simulated stack
-// carries one marker entry flagged in lw.variadic so only the
-// program residual may absorb it. break/continue inside the body
-// jump to end_pc / head via the lowerer's loop-context stack.
-func (lw *lowerer) lowerLoop(ev *emitEvent) string {
-	lp := &ev.loop
-	// Operand layout for FOR_SETUP: start on top, then end, then
-	// step. start/step are consts (RecordLoop enforced); the end may
-	// be a computed value already on top of the simulated stack — a
-	// SWAP threads it under the step push.
-	if lp.end.fromSeq >= 0 {
-		if lw.variadic[lp.end.fromSeq] {
-			return "loop results as a loop bound (Stage 2)"
-		}
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != lp.end.fromSeq {
-			return "for: count is not on top of the stack"
-		}
-		lw.pushOperand(lp.step, lp.pos) // [end step]
-		lw.emit(OpSwap, 0, lp.pos)      // [step end]
-		lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
-	} else {
-		lw.pushOperand(lp.step, lp.pos)
-		lw.pushOperand(lp.end, lp.pos)
-	}
-	lw.pushOperand(lp.start, lp.pos)
-	lw.emit(OpForSetup, lp.iterSlot, lp.pos)
-	lw.vm = lw.vm[:len(lw.vm)-3] // start, end, step consumed
-	head := len(*lw.code)
-	fn := lw.emit(OpForNext, 0, lp.pos)
-	endHoles := []int{}
-	lw.loops = append(lw.loops, loopCtx{nextPC: head, endHoles: &endHoles})
-	var out *emitOperand
-	if lp.hasBodyOut {
-		out = &lp.bodyOut
-	}
-	reason := lw.lowerFragment(lp.body, out, lp.pos)
-	lw.loops = lw.loops[:len(lw.loops)-1]
-	if reason != "" {
-		return reason
-	}
-	lw.emit(OpJmp, head, lp.pos)
-	endPC := len(*lw.code)
-	(*lw.code)[fn].Arg = int32(endPC)
-	for _, h := range endHoles {
-		(*lw.code)[h].Arg = int32(endPC)
-	}
-	lw.vm = append(lw.vm, ev.seq)
-	lw.variadic[ev.seq] = true
-	lw.note()
-	return ""
-}
-
 // Finalize linearises the recorded events into a Program. residual
 // is the check run's final carrier stack — the program's declared
 // result: event-produced entries must match the simulated stack in
@@ -1255,6 +1348,17 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	}
 	p := &Program{}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
+	// Value-def locals: a top-level computed result referenced more than once
+	// (counting the program residual) is promoted to a frame local so the
+	// single-consume stack discipline holds. Count the residual references,
+	// then plan + rewrite before lowering.
+	var residualSeqs []int
+	for _, rv := range residual {
+		if pr, ok := es.producedBy[rv.ID]; ok && pr.idx == 0 {
+			residualSeqs = append(residualSeqs, pr.seq)
+		}
+	}
+	lw.promoted = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}
@@ -1294,18 +1398,25 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	vi := 0
 	tail := []emitOperand{}
 	for _, rv := range residual {
-		if seq, ok := es.producedBy[rv.ID]; ok {
+		if pr, ok := es.producedBy[rv.ID]; ok {
+			// A promoted value-def local is no longer on the simulated stack
+			// (STORE_LOCAL consumed it); re-push it from its slot like any
+			// other materialised tail operand.
+			if slot, isProm := lw.promoted[pr.seq]; isProm {
+				tail = append(tail, localOperand(slot))
+				continue
+			}
 			if len(tail) > 0 {
 				return nil, "residual shape beyond Stage 1 (call result above a literal)", false
 			}
-			if vi >= len(lw.vm) || lw.vm[vi] != seq {
+			if vi >= len(lw.vm) || lw.vm[vi].seq != pr.seq || lw.vm[vi].idx != pr.idx {
 				return nil, "residual shape beyond Stage 1 (call results reordered)", false
 			}
 			vi++
 			continue
 		}
 		if IsBareTypeNode(rv) && rv.ID != "" {
-			tail = append(tail, emitOperand{constIdx: -1, fromSeq: -1, localSlot: -1, typeIdx: es.internType(rv)})
+			tail = append(tail, typeOperand(es.internType(rv)))
 			continue
 		}
 		lit, okLit := es.materialise(rv)
@@ -1315,7 +1426,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		if !isInertConst(lit) {
 			return nil, "residual value not statically materialisable", false
 		}
-		tail = append(tail, emitOperand{constIdx: es.intern(lit), fromSeq: -1, localSlot: -1, typeIdx: -1})
+		tail = append(tail, constOperand(es.intern(lit)))
 	}
 	if vi != len(lw.vm) {
 		return nil, "residual shape beyond Stage 1 (unconsumed call results)", false
@@ -1354,8 +1465,8 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}
 		switch {
-		case rec.hasOut && rec.outOp.fromSeq >= 0:
-			if len(flw.vm) != 1 || flw.vm[0] != rec.outOp.fromSeq {
+		case rec.hasOut && rec.outOp.kind == opEvent:
+			if len(flw.vm) != 1 || !slotIs(flw.vm[0], rec.outOp) {
 				return nil, "fn " + rec.name + ": body leaves extra values (Stage 3 lowers single-result bodies)", false
 			}
 			flw.emit(OpRet, 0, rec.pos)
@@ -1393,516 +1504,4 @@ func eventPos(ev emitEvent) SrcPos {
 		return ev.uc.pos
 	}
 	return ev.br.pos
-}
-
-// lowerer walks an event trace emitting instructions over a simulated
-// stack of producing event seqs (-1 = const).
-// loopCtx is the lowering context of one open loop: the FOR_NEXT pc
-// (continue's target, and the back-edge) and the holes to patch with
-// the loop's end pc (break's targets).
-type loopCtx struct {
-	nextPC   int
-	endHoles *[]int
-}
-
-type lowerer struct {
-	es       *EmitState
-	p        *Program
-	code     *[]Instr  // current emission target (main or one fn unit)
-	debug    *[]SrcPos // 1:1 with code
-	sigIdx   map[*Signature]int
-	vm       []int
-	variadic map[int]bool // loop seqs: N runtime values, not one
-	loops    []loopCtx
-	maxDepth int
-}
-
-// pushOperand emits the push for a const, local, or type operand.
-func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
-	if op.isClosure {
-		// Push the captures (enclosing-scope operands), then OpPushClosure
-		// pops them into the closure value. Net stack effect: +1.
-		for i := range op.closureCaps {
-			lw.pushOperand(op.closureCaps[i], pos)
-		}
-		lw.emit(OpPushClosure, op.closureUnit, pos)
-		lw.vm = lw.vm[:len(lw.vm)-len(op.closureCaps)]
-		lw.vm = append(lw.vm, -1)
-		lw.note()
-		return
-	}
-	switch {
-	case op.localSlot >= 0:
-		lw.emit(OpPushLocal, op.localSlot, pos)
-	case op.typeIdx >= 0:
-		lw.emit(OpPushType, op.typeIdx, pos)
-	default:
-		lw.emit(OpPushConst, op.constIdx, pos)
-	}
-	lw.vm = append(lw.vm, -1)
-	lw.note()
-}
-
-func (lw *lowerer) note() {
-	if len(lw.vm) > lw.maxDepth {
-		lw.maxDepth = len(lw.vm)
-	}
-}
-
-func (lw *lowerer) emit(op Opcode, arg int, pos SrcPos) int {
-	*lw.code = append(*lw.code, Instr{Op: op, Arg: int32(arg)})
-	*lw.debug = append(*lw.debug, pos)
-	return len(*lw.code) - 1
-}
-
-// lowerEvents lowers a trace. scopeFloor is the closed-fragment rule:
-// an operand produced by an event with seq <= scopeFloor lives in the
-// enclosing scope, which Stage 2 branch fragments must not read.
-func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
-	for i := range events {
-		ev := &events[i]
-		if scopeFloor > 0 {
-			for _, op := range collectOperands(ev) {
-				if op.fromSeq > 0 && op.fromSeq <= scopeFloor {
-					return "branch reads enclosing computation (Stage 3)"
-				}
-			}
-		}
-		var reason string
-		switch ev.kind {
-		case evCall:
-			reason = lw.lowerCall(ev)
-		case evBranch:
-			reason = lw.lowerBranch(ev)
-		case evLoop:
-			reason = lw.lowerLoop(ev)
-		case evBreak:
-			reason = lw.lowerBreak(ev)
-		case evContinue:
-			reason = lw.lowerContinue(ev)
-		case evCallUser:
-			reason = lw.lowerUserCall(ev)
-		case evFallback:
-			reason = lw.lowerFallback(ev)
-		default:
-			reason = "unknown event kind"
-		}
-		if reason != "" {
-			return reason
-		}
-	}
-	return ""
-}
-
-func collectOperands(ev *emitEvent) []emitOperand {
-	switch ev.kind {
-	case evCall:
-		return ev.call.ops
-	case evLoop:
-		return []emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut}
-	case evBreak, evContinue:
-		return nil
-	case evCallUser:
-		return ev.uc.ops
-	case evFallback:
-		return ev.fb.ins
-	}
-	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut}
-}
-
-func (lw *lowerer) lowerCall(ev *emitEvent) string {
-	c := &ev.call
-	n := len(c.ops)
-	results := []int{}
-	for i, op := range c.ops {
-		if op.fromSeq >= 0 {
-			if lw.variadic[op.fromSeq] {
-				return "consumes loop results (Stage 2 loops only feed the program residual)"
-			}
-			results = append(results, i)
-		}
-	}
-	switch len(results) {
-	case 0:
-		// Push consts/locals deepest-first so sig position 0 lands on
-		// top.
-		for i := n - 1; i >= 0; i-- {
-			lw.pushOperand(c.ops[i], c.pos)
-		}
-	case 1:
-		ri := results[0]
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != c.ops[ri].fromSeq {
-			return "stack discipline: result operand of " + c.word + " is not on top"
-		}
-		// The prior result is on top. Push the const operands
-		// deepest-first; they land ABOVE the result, so when the
-		// result must be sig position 0 (top) a final SWAP restores
-		// the layout — only the 2-arg shape is fixable.
-		for i := n - 1; i >= 0; i-- {
-			if i == ri {
-				continue
-			}
-			lw.pushOperand(c.ops[i], c.pos)
-		}
-		if ri == 0 && n == 2 {
-			lw.emit(OpSwap, 0, c.pos)
-			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
-		} else if ri != n-1 && n > 1 {
-			return "operand shape at " + c.word + " needs reordering beyond Stage 1"
-		}
-	case 2:
-		if n != 2 {
-			return "operand shape at " + c.word + " beyond Stage 1"
-		}
-		if len(lw.vm) < 2 {
-			return "stack discipline underflow at " + c.word
-		}
-		top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
-		switch {
-		case top == c.ops[0].fromSeq && below == c.ops[1].fromSeq:
-			// already in layout
-		case top == c.ops[1].fromSeq && below == c.ops[0].fromSeq:
-			lw.emit(OpSwap, 0, c.pos)
-			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
-		default:
-			return "stack discipline: operands of " + c.word + " not adjacent on top"
-		}
-	default:
-		return "operand shape at " + c.word + " beyond Stage 1"
-	}
-	if c.poly {
-		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
-		// word's signatures against the n stack values.
-		pi := len(lw.p.PolyRefs)
-		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n})
-		lw.emit(OpCallNativePoly, pi, c.pos)
-	} else {
-		si, ok := lw.sigIdx[c.sig]
-		if !ok {
-			lw.p.Sigs = append(lw.p.Sigs, SigRef{Word: c.word, Sig: c.sig})
-			si = len(lw.p.Sigs) - 1
-			lw.sigIdx[c.sig] = si
-		}
-		lw.emit(OpCallNative, si, c.pos)
-	}
-	lw.vm = lw.vm[:len(lw.vm)-n]
-	lw.vm = append(lw.vm, ev.seq)
-	lw.note()
-	return ""
-}
-
-// lowerFragment lowers a closed body: a fresh stack scope that must
-// end as exactly [out] (out non-nil), or empty (out nil — a net-0 or
-// diverging fragment; a diverging fragment's terminator already
-// emitted its jump, so whatever its scope holds is unreachable and
-// ignored). Restores the parent scope afterwards.
-func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, pos SrcPos) string {
-	parent := lw.vm
-	lw.vm = nil
-	if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
-		return reason
-	}
-	switch {
-	case fragDiverges(frag):
-		// Control left via break/continue; the residual scope is
-		// unreachable.
-	case out == nil:
-		if len(lw.vm) != 0 {
-			return "body leaves extra values (Stage 2 lowers single-result bodies)"
-		}
-	case out.fromSeq >= 0:
-		if lw.variadic[out.fromSeq] {
-			return "loop results as a branch/body result (Stage 2)"
-		}
-		if len(lw.vm) != 1 || lw.vm[0] != out.fromSeq {
-			return "branch leaves extra values (Stage 2 lowers single-result branches)"
-		}
-	default:
-		if len(lw.vm) != 0 {
-			return "branch leaves extra values (Stage 2 lowers single-result branches)"
-		}
-		lw.pushOperand(*out, pos)
-		lw.vm = lw.vm[:len(lw.vm)-1] // pushOperand tracked it; the scope owns the count
-	}
-	lw.vm = parent
-	return ""
-}
-
-// lowerBreak / lowerContinue: flow-control terminators inside a loop
-// body fragment. break jumps to the loop end (hole patched by
-// lowerLoop); continue jumps back to FOR_NEXT — a back-edge the VM
-// accepts because it targets the loop header.
-func (lw *lowerer) lowerBreak(ev *emitEvent) string {
-	if len(lw.loops) == 0 {
-		return "break outside a compiled loop (Stage 2)"
-	}
-	h := lw.emit(OpJmp, 0, ev.call.pos)
-	ctx := lw.loops[len(lw.loops)-1]
-	*ctx.endHoles = append(*ctx.endHoles, h)
-	return ""
-}
-
-func (lw *lowerer) lowerContinue(ev *emitEvent) string {
-	if len(lw.loops) == 0 {
-		return "continue outside a compiled loop (Stage 2)"
-	}
-	lw.emit(OpJmp, lw.loops[len(lw.loops)-1].nextPC, ev.call.pos)
-	return ""
-}
-
-// lowerUserCall pushes the args (sig position 0 on top — frame
-// locals bind by pop order) and calls or tail-calls the unit. A tail
-// call replaces the frame: control never returns here, so nothing is
-// pushed to the simulated stack (the marking pass already cleared
-// the consumer's out expectation).
-func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
-	uc := &ev.uc
-	n := len(uc.ops)
-	// Stage 3 operand shape: all args const/local (results-on-stack
-	// shapes work when the single result operand is on top, mirroring
-	// lowerCall's n<=2 rules — keep it simple: allow one trailing
-	// result operand at position 0).
-	results := []int{}
-	for i, op := range uc.ops {
-		if op.fromSeq >= 0 {
-			if lw.variadic[op.fromSeq] {
-				return "loop results as fn args (Stage 3)"
-			}
-			results = append(results, i)
-		}
-	}
-	switch len(results) {
-	case 0:
-		for i := n - 1; i >= 0; i-- {
-			lw.pushOperand(uc.ops[i], uc.pos)
-		}
-	case 1:
-		ri := results[0]
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != uc.ops[ri].fromSeq {
-			return "stack discipline: fn arg result is not on top (call of " + lw.es.fnRecs[uc.unit].name + ")"
-		}
-		for i := n - 1; i >= 0; i-- {
-			if i == ri {
-				continue
-			}
-			lw.pushOperand(uc.ops[i], uc.pos)
-		}
-		if ri == 0 && n == 2 {
-			lw.emit(OpSwap, 0, uc.pos)
-			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
-		} else if ri != n-1 && n > 1 {
-			return "fn arg shape needs reordering beyond Stage 3"
-		}
-	case 2:
-		if n != 2 {
-			return "fn arg shape beyond Stage 3"
-		}
-		if len(lw.vm) < 2 {
-			return "stack discipline underflow at fn call"
-		}
-		top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
-		switch {
-		case top == uc.ops[0].fromSeq && below == uc.ops[1].fromSeq:
-			// already in layout
-		case top == uc.ops[1].fromSeq && below == uc.ops[0].fromSeq:
-			lw.emit(OpSwap, 0, uc.pos)
-			lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
-		default:
-			return "stack discipline: fn args not adjacent on top"
-		}
-	default:
-		return "fn arg shape beyond Stage 3"
-	}
-	if uc.tail {
-		lw.emit(OpTailCallUser, uc.unit, uc.pos)
-		lw.vm = lw.vm[:len(lw.vm)-n]
-		return ""
-	}
-	lw.emit(OpCallUser, uc.unit, uc.pos)
-	lw.vm = lw.vm[:len(lw.vm)-n]
-	lw.vm = append(lw.vm, ev.seq)
-	lw.note()
-	return ""
-}
-
-// lowerFallback emits OpFallback. A fully-baked island (no threaded
-// inputs) just runs its span; a single threaded input is the computed
-// data arg (a "computed receiver" like `(iota 5) each […]`): its
-// runtime value must sit on top of the operand stack when OpFallback
-// runs, so the VM can preload it onto the island and back-fill the
-// deepest sig position. A result operand is already on top; a
-// const/local operand is pushed first. The island's single residual
-// lands on the simulated stack as this event's product, read by a
-// downstream consumer (or the program residual) like any computed
-// value. Multiple threaded inputs are a documented follow-on.
-func (lw *lowerer) lowerFallback(ev *emitEvent) string {
-	fb := &ev.fb
-	switch len(fb.ins) {
-	case 0:
-		lw.emit(OpFallback, fb.spanIdx, fb.pos)
-		lw.vm = append(lw.vm, ev.seq)
-		lw.note()
-		return ""
-	case 1:
-		op := fb.ins[0]
-		if op.fromSeq >= 0 {
-			if lw.variadic[op.fromSeq] {
-				return "fallback threads a loop result (Stage 5 follow-on)"
-			}
-			// The computed value is already on top of the simulated
-			// stack; OpFallback consumes it as the threaded input.
-			if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != op.fromSeq {
-				return "stack discipline: fallback input is not on top"
-			}
-		} else {
-			// A const / local / type input: materialise it on top first.
-			lw.pushOperand(op, fb.pos)
-		}
-		lw.emit(OpFallback, fb.spanIdx, fb.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1]
-		lw.vm = append(lw.vm, ev.seq)
-		lw.note()
-		return ""
-	default:
-		return "fallback island with multiple threaded inputs (Stage 5 follow-on)"
-	}
-}
-
-// markTailCalls rewrites tail-position user calls in a fn body
-// fragment: the final event when it produces the body's result, and
-// recursively the final event of branch arms whose result is that
-// arm's own trailing call. Marked calls lower as TAIL_CALL_USER and
-// count as divergence (control leaves via the callee's eventual RET),
-// so the arm/body contributes no merge value.
-func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasOut bool) {
-	if frag == nil || len(frag.events) == 0 || !hasOut || out.fromSeq < 0 {
-		return hasOut
-	}
-	last := &frag.events[len(frag.events)-1]
-	switch last.kind {
-	case evCallUser:
-		if last.seq == out.fromSeq {
-			last.uc.tail = true
-			return false
-		}
-	case evBranch:
-		if last.seq == out.fromSeq && last.br.constCond == nil && last.br.hasElse {
-			if last.br.hasThenOut {
-				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
-			}
-			if last.br.hasElsOut {
-				last.br.hasElsOut = markTailCalls(last.br.els, &last.br.elsOut, true)
-			}
-			// The branch still merges normally for non-tail arms; if
-			// EVERY arm tail-calls, control never reaches the merge —
-			// the whole body diverges.
-			if !last.br.hasThenOut && !last.br.hasElsOut {
-				return false
-			}
-		}
-	}
-	return hasOut
-}
-
-func (lw *lowerer) lowerBranch(ev *emitEvent) string {
-	br := &ev.br
-	armOut := func(has bool, op *emitOperand) *emitOperand {
-		if has {
-			return op
-		}
-		return nil
-	}
-	if br.constCond != nil {
-		// Statically-taken branch: inline the taken fragment.
-		if reason := lw.lowerFragment(br.then, armOut(br.hasThenOut, &br.thenOut), br.pos); reason != "" {
-			return reason
-		}
-		if br.hasThenOut {
-			lw.vm = append(lw.vm, ev.seq)
-			lw.note()
-		}
-		return ""
-	}
-	// Condition on top of stack: a pre-evaluated value, or an inline
-	// list-form condition body lowered here (it nets one Boolean).
-	switch {
-	case br.condFrag != nil:
-		if reason := lw.lowerFragment(br.condFrag, &br.condOut, br.pos); reason != "" {
-			return reason
-		}
-		// The Boolean is on the runtime stack but not in the parent
-		// scope's sim — JMP_IF_FALSE consumes it net-zero.
-		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
-		return lw.lowerArms(ev, jf)
-	case br.cond.fromSeq >= 0:
-		if lw.variadic[br.cond.fromSeq] {
-			return "loop results as a condition (Stage 2)"
-		}
-		if len(lw.vm) == 0 || lw.vm[len(lw.vm)-1] != br.cond.fromSeq {
-			return "if: condition is not on top of the stack"
-		}
-		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed
-		return lw.lowerArms(ev, jf)
-	default:
-		lw.pushOperand(br.cond, br.pos)
-		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1]
-		return lw.lowerArms(ev, jf)
-	}
-}
-
-// lowerArms emits the then/else arms after the JMP_IF_FALSE at jf.
-// A diverging arm's terminator already jumped out of the construct,
-// so it needs no jump-to-end and contributes no value; the merge
-// point then carries only the surviving arm's value. The 2-arg form
-// (no else) merges with 0-or-1 values — a VARIADIC result.
-func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
-	br := &ev.br
-	thenOut := func() *emitOperand {
-		if br.hasThenOut {
-			return &br.thenOut
-		}
-		return nil
-	}()
-	if reason := lw.lowerFragment(br.then, thenOut, br.pos); reason != "" {
-		return reason
-	}
-	if !br.hasElse {
-		// 2-arg if: false path jumps straight to the merge.
-		(*lw.code)[jf].Arg = int32(len(*lw.code))
-		lw.vm = append(lw.vm, ev.seq)
-		lw.variadic[ev.seq] = true
-		lw.note()
-		return ""
-	}
-	jend := -1
-	if !fragDiverges(br.then) {
-		jend = lw.emit(OpJmp, 0, br.pos)
-	}
-	(*lw.code)[jf].Arg = int32(len(*lw.code))
-	elsOut := func() *emitOperand {
-		if br.hasElsOut {
-			return &br.elsOut
-		}
-		return nil
-	}()
-	if reason := lw.lowerFragment(br.els, elsOut, br.pos); reason != "" {
-		return reason
-	}
-	if jend >= 0 {
-		(*lw.code)[jend].Arg = int32(len(*lw.code))
-	}
-	if br.hasThenOut || br.hasElsOut {
-		lw.vm = append(lw.vm, ev.seq)
-		lw.note()
-	}
-	return ""
-}
-
-func itoaSmall(n int) string {
-	if n >= 0 && n < 10 {
-		return string(rune('0' + n))
-	}
-	return "many"
 }

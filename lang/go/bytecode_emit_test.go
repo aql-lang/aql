@@ -212,6 +212,66 @@ func TestEmitStage2CompletionShapes(t *testing.T) {
 	}
 }
 
+// P5 multi-result lowering (design/aql-bytecode-runtime-independence.0.md):
+// 0-result side-effect words (set/raise/drop/…) and genuine multi-result
+// words now record and lower, where they previously refused "returns N
+// values". The (seq, idx) operand model distinguishes a multi-result call's
+// outputs; a 0-result word pushes nothing.
+func TestEmitP5MultiResult(t *testing.T) {
+	// Positive: these now COMPILE.
+	for _, src := range []string{
+		`raise "boom"`,                          // 0-result, diverges with an error at run time
+		`5 7 swap`,                              // 2-in-2-out: distinct output ids
+		`5 7 swap sub`,                          // a multi-result consumed by a downstream call
+		`def a (make Array [1 2 3]) set 1 99 a`, // 0-result in-place mutator (Array set)
+	} {
+		if got, reason := compile(t, src); got == "" {
+			t.Errorf("%q unexpectedly uncompilable: %s", src, reason)
+		}
+	}
+
+	// Runtime parity for a multi-result word feeding a non-commutative
+	// downstream call (`5 7 swap sub` → 7 - 5 = 2): the two swap outputs
+	// must land in the right order.
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(`5 7 swap sub`)
+	if err != nil || !compiled {
+		t.Fatalf("`5 7 swap sub`: compiled=%v err=%v", compiled, err)
+	}
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := b.Run(`5 7 swap sub`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || len(want) != 1 || out[0] != want[0] {
+		t.Fatalf("compiled %v != interpreted %v", out, want)
+	}
+
+	// A compiled `raise` errors at run time exactly as the interpreter does
+	// (the 0-result call lowers to CALL_NATIVE, whose handler returns the error).
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, wasCompiled, rerr := c.RunCompiled(`raise "boom"`); !wasCompiled || rerr == nil {
+		t.Fatalf("`raise \"boom\"`: compiled=%v err=%v (want compiled + error)", wasCompiled, rerr)
+	}
+
+	// Negative: a multi-RETURN fn is the deferred follow-on — still refused
+	// with a precise reason, never lowered wrongly.
+	if got, reason := compile(t, `def mk fn [[] [Integer Integer] [1 2]] mk`); got != "" {
+		t.Errorf("multi-return fn compiled but must refuse (deferred):\n%s", got)
+	} else if !strings.Contains(reason, "without exactly one declared return") {
+		t.Errorf("unexpected multi-return-fn refusal reason: %q", reason)
+	}
+}
+
 // Loop results are VARIADIC at run time (one value per iteration):
 // downstream calls must refuse to consume them — only the program
 // residual may absorb the accumulation.

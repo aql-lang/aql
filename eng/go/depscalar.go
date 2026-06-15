@@ -428,7 +428,7 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 	return NativeSig{
 		Args:     []*Type{TScalar, TScalar},
 		TypeArgs: map[int]bool{1: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 			// arg1 is the type-literal at the deep position. Reject
 			// non-leaf bases — only the well-known scalar types map
 			// to a supported DepScalar base.
@@ -446,7 +446,15 @@ func MakeDepScalarSig(opName string, kind DepKind) NativeSig {
 				return nil, fmt.Errorf("%s: bound %s does not match dependent base %s",
 					opName, args[0].Parent.String(), base.String())
 			}
-			return []Value{NewDepScalar(kind, args[0])}, nil
+			dep := NewDepScalar(kind, args[0])
+			// Check-mode bytecode recording: remember the concrete predicate
+			// against its ID so a downstream operand — toCarrier strips the
+			// DepScalarInfo to a bare base carrier, preserving the ID — can
+			// recover the bound via origByID and bake it as a const.
+			if r != nil {
+				r.Check.Emit.RememberOriginal(dep)
+			}
+			return []Value{dep}, nil
 		},
 		Returns:        []*Type{TScalar},
 		RunInCheckMode: true, BarrierPos:

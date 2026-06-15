@@ -89,9 +89,24 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
 				Handler:    caseHandler,
+				ReturnsFn:  caseReturnsFn,
 				Returns:    []*Type{TAny}, BarrierPos: -1,
 			},
 		},
+	},
+	{
+		// __casematch is the internal guard the compiled `case` desugar
+		// emits for a non-predicate clause: `v match __casematch` applies the
+		// SAME UnifyR the interpreter's caseClauses uses, so a bare-refine
+		// newtype (`Pos`) matches structurally exactly as case does — which
+		// the `is` word (nominal) would not. Not user-facing.
+		Name: "__casematch",
+		Signatures: []NativeSig{{
+			Args:       []*Type{TAny, TAny},
+			Handler:    caseMatchHandler,
+			Returns:    []*Type{TBoolean},
+			BarrierPos: 0,
+		}},
 	},
 	{
 		Name: "for",
@@ -375,11 +390,27 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
 	thenFrag := es.Emit.TakeFragment()
 	restoreThen()
-	restoreElse := ApplyComplementNarrowing(r, args[0])
-	es.Emit.ArmBranchCapture()
-	elseStk, elseDefs := RunCarrierBodyWithDefs(r, args[2])
-	elseFrag := es.Emit.TakeFragment()
-	restoreElse()
+	// The else arm may be a `[…]` code body (captured as its own fragment)
+	// or an already-evaluated VALUE (`if cond [then] 42` — a literal, a
+	// def-bound value, a paren result). For a non-body else, do NOT arm a
+	// capture (there is no body to run); pass the value through so the
+	// lowering pushes it directly in the else arm.
+	elseIsBody := IsConcrete(args[2]) && args[2].Parent.ConformsTo(TList)
+	var elseFrag *EmitFragment
+	var elseStk []Value
+	var elseDefs map[string]Value
+	var elseValue *Value
+	if elseIsBody {
+		restoreElse := ApplyComplementNarrowing(r, args[0])
+		es.Emit.ArmBranchCapture()
+		elseStk, elseDefs = RunCarrierBodyWithDefs(r, args[2])
+		elseFrag = es.Emit.TakeFragment()
+		restoreElse()
+	} else {
+		v := args[2]
+		elseValue = &v
+		elseStk = []Value{v}
+	}
 	InstallJoinedDefs(r, thenDefs, elseDefs)
 	joined := JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
@@ -390,7 +421,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	es.Emit.RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
-		Out: out, Pos: args[0].Pos,
+		ElsValue: elseValue, Out: out, Pos: args[0].Pos,
 	})
 	return []Value{out}
 }

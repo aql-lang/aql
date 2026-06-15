@@ -16,6 +16,14 @@
 // render it back to readable AQL with Pretty(). Equivalent
 // programs produce equal StackForms (Equal); cost-driven shrinking
 // uses Cost.
+//
+// NOT THE BYTECODE PIPELINE. Despite the historical reference above,
+// this package shares no code with the production compiler/VM
+// (eng/go/emit.go, vm.go, bytecode.go — the Program / Instr / CALL_NATIVE
+// path that RunCompiled drives). StackForm is an independent strict-stack
+// IR used only by the property-based-testing reducer: its Quote / DoEval
+// ops are reserved and not emitted today. Reach for emit.go / vm.go for
+// the real bytecode path; reach here for PBT shrinking.
 package stackform
 
 import "github.com/aql-lang/aql/eng/go"

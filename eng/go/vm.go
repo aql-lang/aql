@@ -26,6 +26,13 @@ import "fmt"
 // stack (a tail-recursive spin — frames are REPLACED, so neither
 // ceiling trips) fails with the same evaluation_limit taxonomy the
 // interpreter raises, instead of hanging.
+//
+// Concurrency: NOT safe to call twice on the SAME *Registry concurrently.
+// The run installs and restores r.Invoker (the body-closure seam) on the
+// shared registry for its duration, so two simultaneous runs on one registry
+// would race on that field. AQL's concurrent words sidestep this by forking
+// an isolated registry per branch (ForkConcurrent), and host callers run each
+// instance on its own registry — give each goroutine its own *Registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	return runProgram(p, r, DefaultStepLimit)
 }
@@ -57,7 +64,33 @@ type vmContext struct {
 	ceiling   int
 	stepLimit int
 	steps     int
+	// islandEng is a single sub-engine reused across every OpFallback /
+	// CALL_DYNAMIC island in this run, with reuseTape set so a hot island in
+	// a loop does not allocate a fresh engine+tape per iteration. Reuse is
+	// sound ONLY because island runs are never nested or concurrent within a
+	// run: the main VM loop is suspended while islandEng.Run executes, and a
+	// higher-order body reached from inside an island re-enters via a FRESH
+	// New(r) sub-engine (invokeClosure's non-closure branch), never this one.
+	// A future change that makes an island re-enter islandEng would corrupt
+	// its in-place-reloaded tape — keep island execution non-reentrant.
 	islandEng *Engine
+}
+
+// tapeCoupled reports whether any result value is a tape-coupled token
+// (Word/Mark/Move/Forward/OpenParen/Splice) — a value the interpreter would
+// re-STEP on the tape rather than treat as data. No compiled-reachable handler
+// should produce one (the emitter refuses fn-invoking / code-splicing words),
+// so every dispatch site that funnels handler/island results back onto the
+// operand stack screens for them and fails loudly instead of pushing a token
+// as data. The single definition keeps the four call sites in lockstep.
+func tapeCoupled(results []Value) bool {
+	for _, rv := range results {
+		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
+			IsOpenParen(rv) || IsSplice(rv) {
+			return true
+		}
+	}
+	return false
 }
 
 func runProgram(p *Program, r *Registry, stepLimit int) ([]Value, error) {
@@ -156,11 +189,8 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 			}
 		}
 	}
-	for _, rv := range results {
-		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
-			IsOpenParen(rv) || IsSplice(rv) {
-			return nil, vmErrAt(curDebug, pc, "tape-coupled poly result at "+pr.Word)
-		}
+	if tapeCoupled(results) {
+		return nil, vmErrAt(curDebug, pc, "tape-coupled poly result at "+pr.Word)
 	}
 	return append(stack[:len(stack)-n], results...), nil
 }
@@ -219,11 +249,8 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	for _, rv := range results {
-		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
-			IsOpenParen(rv) || IsSplice(rv) {
-			return nil, vmErrAt(curDebug, pc, "tape-coupled dynamic result")
-		}
+	if tapeCoupled(results) {
+		return nil, vmErrAt(curDebug, pc, "tape-coupled dynamic result")
 	}
 	return append(stack[:base], results...), nil
 }
@@ -293,11 +320,8 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	for _, rv := range results {
-		if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
-			IsOpenParen(rv) || IsSplice(rv) {
-			return nil, vmErrAt(curDebug, pc, "tape-coupled island result at "+fb.Desc)
-		}
+	if tapeCoupled(results) {
+		return nil, vmErrAt(curDebug, pc, "tape-coupled island result at "+fb.Desc)
 	}
 	return append(stack, results...), nil
 }
@@ -346,6 +370,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = append(stack, p.Consts[in.Arg])
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
+		case OpStoreLocal:
+			// Pop the producing event's single result into a frame local;
+			// each reference re-pushes it via PUSH_LOCAL (value-def locals).
+			if len(stack) == 0 {
+				return nil, vmErrAt(curDebug, pc, "STORE_LOCAL stack underflow")
+			}
+			locals[in.Arg] = stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {
@@ -427,11 +459,18 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// the next call reuses the buffer, and compiled-reachable
 			// natives (the monomorphic math/compare/etc. words the emitter
 			// admits) do not retain the args slice. The 0-divergence gate
-			// + combination matrix catch any handler that does.
-			if cap(argScratch) < n {
-				argScratch = make([]Value, n)
+			// + combination matrix catch any handler that does — and a
+			// -tags aqldebug build (vmFreshArgsPerCall) allocates fresh per
+			// call to localize a violator directly. See vm_args_release.go.
+			var args []Value
+			if vmFreshArgsPerCall {
+				args = make([]Value, n)
+			} else {
+				if cap(argScratch) < n {
+					argScratch = make([]Value, n)
+				}
+				args = argScratch[:n]
 			}
-			args := argScratch[:n]
 			for i := 0; i < n; i++ {
 				args[i] = stack[len(stack)-1-i]
 			}
@@ -445,11 +484,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// compiled — the emitter refuses fn-invoking and
 			// code-splicing words. Fail loudly, never push tokens as
 			// data.
-			for _, rv := range results {
-				if IsWord(rv) || IsMark(rv) || IsMove(rv) || IsForward(rv) ||
-					IsOpenParen(rv) || IsSplice(rv) {
-					return nil, vmErrAt(curDebug, pc, "tape-coupled handler result at "+s.Word)
-				}
+			if tapeCoupled(results) {
+				return nil, vmErrAt(curDebug, pc, "tape-coupled handler result at "+s.Word)
 			}
 			stack = append(stack, results...)
 		case OpFallback:
@@ -526,7 +562,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// unchanged. The body nets exactly len(Returns) values (the
 			// lowerer enforces single-result bodies), sitting on top.
 			// Applies to a nested RET (back to a CALL_USER caller) AND the
-			// top RET of a re-entrant unit run.
+			// top RET of a re-entrant unit run. (A closure body unit carries
+			// Returns=[Any] — compileClosureBody's declared return — so this
+			// check is a guaranteed-pass v.Is(Any) for closures; the cost is
+			// one trivial membership test per closure return, deliberately
+			// kept uniform with user-fn return enforcement.)
 			if curUnit >= 0 {
 				rets := p.Fns[curUnit].Returns
 				if len(rets) > 0 {

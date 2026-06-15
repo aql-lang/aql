@@ -522,6 +522,14 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	if !es.active() || !(fallbackWords[word] || islandPureWords[word]) || len(outs) != 1 || sig == nil {
 		return false
 	}
+	// A dispatch whose output is already recorded was handled by a structured
+	// ReturnsFn hook (e.g. `case`'s desugar to a branch chain) — islanding it
+	// would DOUBLE-record (the island fallback PLUS the structured event),
+	// leaving the extra event unconsumed on the simulated stack. Skip it; the
+	// generic RecordCall path that follows likewise early-returns.
+	if _, done := es.producedBy[outs[0].ID]; done {
+		return false
+	}
 	// A pure typed word (get/make/is/typeof/size/type-algebra) is
 	// islanded ONLY when the dispatch is genuinely dynamic — a dynamic
 	// operand or a dynamic (Any-widened) result the normal path would
@@ -960,15 +968,87 @@ func anyDynamicCarrier(vs []Value) bool {
 //
 // The mapping is a permutation-description slice: result[i] = args[mapping[i]].
 // Example: swap is ReturnsIdentity(1, 0); over is ReturnsIdentity(0, 1, 0).
+//
+// A DUPLICATED source index (dup `(0, 0)`, over `(0, 1, 0)`) would otherwise
+// return the same Value — one Value.ID — for several stack outputs, which
+// the bytecode emitter's per-value provenance (emit.go producedBy) cannot
+// tell apart: a `dup`-bodied higher-order word (`each [dup add]`) records
+// both of add's operands onto the LAST output, so the operand layout refuses
+// them as "not adjacent." Each output of a repeated source gets a fresh
+// identity (the carrier-identity DUP path) so the N copies stay distinct;
+// the source's own provenance is left untouched (no output keeps its ID).
+// Identity-only — runtime dispatch is unaffected (ReturnsFn is check-mode).
 func ReturnsIdentity(mapping ...int) ReturnsFunc {
 	return func(args []Value, _ *Registry) []Value {
+		counts := make(map[int]int, len(mapping))
+		for _, m := range mapping {
+			counts[m]++
+		}
 		out := make([]Value, len(mapping))
 		for i, m := range mapping {
 			if m < 0 || m >= len(args) {
 				out[i] = NewCarrier(TAny)
 				continue
 			}
-			out[i] = args[m]
+			v := args[m] // struct copy: the ID write below is local to v.
+			if counts[m] > 1 {
+				v.ID = GenerateID(IDPrefixForType(v.Parent))
+			}
+			out[i] = v
+		}
+		return out
+	}
+}
+
+// ReturnsFreshInstance is a ReturnsFunc for IMPURE constructors (make):
+// each result is a fresh VALUE carrier of the TYPE named by args[mapping[i]],
+// mirroring the runtime where every construction mints a new value
+// (NewValueRaw). ReturnsIdentity returns args[m] verbatim — for `make` that
+// is the requested TYPE LITERAL, which is wrong twice over:
+//
+//   - Identity. A type literal is dual (eng CLAUDE.md "Canonical *Type
+//     Pointers"): its Value.ID IS the type's lattice identity, so every
+//     `make P {}` returns the SAME P-literal value (one Value.ID). The
+//     bytecode lowerer's per-value provenance (emit.go's producedBy) then
+//     cannot tell two instances apart — it resolves both operands of a
+//     downstream `(make P {}) (make P {}) eq` onto the LAST make, leaving
+//     one simulated-stack slot where the binary op needs two ("stack
+//     discipline underflow"). A fresh carrier ID keeps each construction a
+//     distinct operand.
+//   - Faithfulness. The runtime result is a VALUE of type P, not the type
+//     literal P; a carrier of P is the same shape carrierResults gives every
+//     other declared return, and conformance sees the instance's type.
+//
+// (Minting a fresh ID on the type literal itself is NOT viable: it severs
+// the literal↔type ID duality, so ValueType can no longer resolve the made
+// type and conformance checks fail.)
+//
+// Only a concrete bare-type-node target is converted; a dynamic/computed
+// target (a carrier already) keeps the prior identity behaviour.
+func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
+	return func(args []Value, r *Registry) []Value {
+		out := make([]Value, len(mapping))
+		for i, m := range mapping {
+			switch {
+			case m < 0 || m >= len(args):
+				out[i] = NewCarrier(TAny)
+			case !args[m].Carrier && !args[m].Dynamic:
+				// A concrete constructor target — a bare type node
+				// (`make Path …`, `make Foo …`) or a structural type body
+				// (`make P {}` for a class/record, whose literal carries an
+				// ObjectTypeInfo/RecordTypeInfo payload). ValueType yields the
+				// made *Type in both cases (the node itself, or the body's
+				// Parent); a fresh carrier of it is the per-call instance.
+				t := ValueType(args[m])
+				if r != nil {
+					t = CanonicalType(r, t)
+				}
+				out[i] = NewCarrier(t)
+			default:
+				// Dynamic / computed target (a carrier already): keep the
+				// prior identity behaviour.
+				out[i] = args[m]
+			}
 		}
 		return out
 	}
