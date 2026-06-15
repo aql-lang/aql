@@ -202,11 +202,23 @@ before/after numbers.
      (`callable_words.go` named-param `compileClosureBody` + `tryRecordLambdaClosure`,
      `invoke.go` `IsCompiledClosure`, `filter.go`.)
 
-   - **5a-2 — map lambdas (filter/each/fold/scan over `{…}`) + `for-each` map
-     quotation. REMAINING.** ~4 map-lambda refusals need the KeyVal input carrier
-     + the map handlers' lambda path routed through `InvokeBody`; `for-each` needs
-     a 0-output closure-call recording. Gated leverage (~4-5 rows, HIGH risk) is
-     low vs the 165-row "operand provenance" bucket — revisit deliberately.
+   - **5a-2 — map lambdas. ✅ LANDED (refusals 405 → 399).** filter/each/fold/scan
+     with a lambda over a map. `tryRecordLambdaClosure` grew a per-(word,receiver)
+     `buildLambdaInputs`: filter-list keeps the pair Map; filter/each-map hand a
+     KeyVal carrier (a concrete TMap with `k/v/i/n` fields — `TKeyVal` is lang-
+     layer and the compiled `get` is map-subtype-agnostic); fold/scan-map hand
+     `(acc, KeyVal)`. Lambda arity is validated (1 for filter/each, 2 for fold/
+     scan). The map handlers' lambda path + `filterMapFunction` route through
+     `invokeCallback` (closure → `InvokeBody`/VM, FnDefInfo → `CallAQL`). Gated to
+     single-sig anonymous lambdas; multi-sig fns stay refused. (`callable_words.go`,
+     `native_map_iter.go`, `filter.go`.)
+
+   - **`for-each` map quotation — DEFERRED, no corpus rows.** Would need a
+     0-output closure-call recording (`RecordClosureCall` requires exactly one
+     out); left unbuilt rather than added speculatively, since no `.tsv` row
+     exercises it. Item 5 is otherwise complete: every lambda-HOF and map-
+     iteration row in the corpus compiles natively, the rest of the original
+     cluster having been stale/cascade-dependent.
 
 6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
    (425 → 421); 6b variadic-else (421 → 417).**
