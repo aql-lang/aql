@@ -453,15 +453,20 @@ corpus is a finite, hand-written oracle — it exercises rows, never COMBINATION
 and the carrier compiler's per-construct gates fail exactly on combinations the
 author didn't foresee (the make-default fold inside a `for` body; a computed map
 value referencing a def-local carrier). So a generator emits well-typed AQL from
-the compilable subset (arithmetic / `if` / computed lists / `size` / `def`-
-locals / `for` / maps + `get`) and asserts compiled == interpreted on each, with
-a shrinker that reduces a failure to a minimal program. Its first run found TWO
-real divergences the corpus had missed for the life of the project: (1) `for 3
-[{a: (3 mul i)} get a]` — `constFoldContainerVal` froze the loop-iterator-
-dependent map value; (2) `def v0 (0 add 3) … {a: (5 mul v0)}` — the fold ran
-against `v0`'s CARRIER binding, which `AsInteger`-coerced to 0, baking `{a:0}`.
-Both were fixed by gating the fold to the top frame AND off any expression that
-references a carrier binding (`exprRefsCarrier`); a user TYPE binding
-(`Carrier=false`) still folds. 36 000 generated programs across 12 seeds are now
-divergence-free. This is the durable answer to "why is this so fiddly": fund the
+the compilable subset (arithmetic / division / boolean logic / strings / `if` /
+computed lists / `size` / `def`-locals / `for` / nested maps + `get`, type-
+tracked so `if` branches and `get` results stay well-typed; error TAXONOMY
+compared too) and asserts compiled == interpreted on each, with a shrinker that
+reduces a failure to a minimal program. It has found THREE real divergences the
+corpus had missed for the life of the project: (1) `for 3 [{a: (3 mul i)} get a]`
+— `constFoldContainerVal` froze the loop-iterator-dependent map value; (2) `def
+v0 (0 add 3) … {a: (5 mul v0)}` — the fold ran against `v0`'s CARRIER binding,
+which `AsInteger`-coerced to 0, baking `{a:0}` (both fixed by gating the fold to
+the top frame AND off any expression referencing a carrier binding,
+`exprRefsCarrier`; a user TYPE binding, `Carrier=false`, still folds); (3) `def
+v0 3 def v1 (if c [v0] [4]) v0` -> 4 — `JoinCarriers` kept the then-arm's ID, so
+the `if`-result reused `v0`'s identity and a later `v0` reference resolved to the
+if-event (fixed by minting a fresh ID for the merged carrier — it is a NEW
+value). 36 000 generated programs across 12 seeds are divergence-free after each
+fix. This is the durable answer to "why is this so fiddly": fund the
 ORACLE, not the manual probing.

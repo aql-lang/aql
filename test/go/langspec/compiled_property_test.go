@@ -36,6 +36,7 @@ type cat int
 const (
 	cInt cat = iota
 	cBool
+	cStr
 	cList
 	cMap
 )
@@ -43,70 +44,140 @@ const (
 type gnode struct {
 	op   string
 	cat  cat
-	n    int      // lit value / var index / map-key index
+	ecat cat      // element category (list) / value category (map -> get's result)
+	n    int      // lit value / var index / str-lit index / map-key index
 	cmp  string   // for op=="cmp"
 	keys []string // for op=="map"
 	kids []*gnode
 }
 
 var mapKeys = []string{"a", "b", "c"}
-
+var strLits = []string{"x", "y", "z", "w"}
 var cmps = []string{"lt", "gt", "eq", "lte", "gte"}
 
+// randVCat / randECat pick a map value / list element category, biased to cInt
+// but reaching strings and nested containers.
+func randVCat(r *rand.Rand) cat {
+	switch r.Intn(4) {
+	case 0:
+		return cStr
+	case 1:
+		return cList
+	default:
+		return cInt
+	}
+}
+func randECat(r *rand.Rand) cat {
+	switch r.Intn(5) {
+	case 0:
+		return cStr
+	case 1:
+		return cList
+	case 2:
+		return cMap
+	default:
+		return cInt
+	}
+}
+
 // gen builds a node of the requested category within a depth budget; scope is
-// the in-scope Integer var names (def-bound).
+// the in-scope Integer var names (def-bound). Categories are tracked so `if`
+// branches and `get` results stay well-typed.
 func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
+	if depth <= 0 {
+		return leaf(r, c, scope)
+	}
 	switch c {
 	case cBool:
-		return &gnode{op: "cmp", cat: cBool, cmp: cmps[r.Intn(len(cmps))],
-			kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
-	case cMap:
-		nk := 1 + r.Intn(len(mapKeys))
-		m := &gnode{op: "map", cat: cMap, keys: append([]string{}, mapKeys[:nk]...)}
-		for i := 0; i < nk; i++ {
-			m.kids = append(m.kids, gen(r, cInt, depth-1, scope))
+		switch r.Intn(5) {
+		case 0:
+			return &gnode{op: "and", cat: cBool, kids: []*gnode{gen(r, cBool, depth-1, scope), gen(r, cBool, depth-1, scope)}}
+		case 1:
+			return &gnode{op: "or", cat: cBool, kids: []*gnode{gen(r, cBool, depth-1, scope), gen(r, cBool, depth-1, scope)}}
+		case 2:
+			return &gnode{op: "not", cat: cBool, kids: []*gnode{gen(r, cBool, depth-1, scope)}}
+		case 3:
+			return &gnode{op: "cmp", cat: cBool, cmp: "eq", kids: []*gnode{gen(r, cStr, depth-1, scope), gen(r, cStr, depth-1, scope)}}
+		default:
+			return &gnode{op: "cmp", cat: cBool, cmp: cmps[r.Intn(len(cmps))], kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
 		}
-		return m
+	case cStr:
+		switch r.Intn(4) {
+		case 0:
+			return &gnode{op: "add", cat: cStr, kids: []*gnode{gen(r, cStr, depth-1, scope), gen(r, cStr, depth-1, scope)}} // concat
+		case 1:
+			return &gnode{op: "if", cat: cStr, kids: []*gnode{gen(r, cBool, depth-1, scope), gen(r, cStr, depth-1, scope), gen(r, cStr, depth-1, scope)}}
+		case 2:
+			m := genMap(r, cStr, depth-1, scope)
+			return &gnode{op: "get", cat: cStr, n: r.Intn(len(m.keys)), kids: []*gnode{m}}
+		default:
+			return leaf(r, cStr, scope)
+		}
+	case cMap:
+		return genMap(r, randVCat(r), depth-1, scope)
 	case cList:
-		if depth > 0 && r.Intn(3) == 0 {
+		if r.Intn(3) == 0 {
 			// `for <count> [<body using i>]` -> list of per-iteration values.
-			return &gnode{op: "for", cat: cList, kids: []*gnode{
+			return &gnode{op: "for", cat: cList, ecat: cInt, kids: []*gnode{
 				gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, append(append([]string{}, scope...), "i"))}}
 		}
+		ec := randECat(r)
 		k := 1 + r.Intn(3)
-		l := &gnode{op: "list", cat: cList}
+		l := &gnode{op: "list", cat: cList, ecat: ec}
 		for i := 0; i < k; i++ {
-			l.kids = append(l.kids, gen(r, cInt, depth-1, scope))
+			l.kids = append(l.kids, gen(r, ec, depth-1, scope))
 		}
 		return l
 	default: // cInt
-		if depth <= 0 {
-			if len(scope) > 0 && r.Intn(2) == 0 {
-				return &gnode{op: "var", cat: cInt, n: r.Intn(len(scope))}
-			}
-			return &gnode{op: "lit", cat: cInt, n: r.Intn(6)}
-		}
-		switch r.Intn(10) {
+		switch r.Intn(11) {
 		case 0, 1:
-			ops := []string{"add", "sub", "mul"}
-			return &gnode{op: ops[r.Intn(len(ops))], cat: cInt,
-				kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
+			ops := []string{"add", "sub", "mul", "div", "mod"}
+			return &gnode{op: ops[r.Intn(len(ops))], cat: cInt, kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
 		case 2:
-			return &gnode{op: "if", cat: cInt, kids: []*gnode{
-				gen(r, cBool, depth-1, scope), gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
+			return &gnode{op: "if", cat: cInt, kids: []*gnode{gen(r, cBool, depth-1, scope), gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
 		case 3:
 			return &gnode{op: "size", cat: cInt, kids: []*gnode{gen(r, cList, depth-1, scope)}}
 		case 4:
-			// `(<map> get <key>)` — key chosen from the map's own keys.
-			m := gen(r, cMap, depth-1, scope)
+			m := genMap(r, cInt, depth-1, scope)
 			return &gnode{op: "get", cat: cInt, n: r.Intn(len(m.keys)), kids: []*gnode{m}}
 		default:
-			if len(scope) > 0 && r.Intn(3) == 0 {
-				return &gnode{op: "var", cat: cInt, n: r.Intn(len(scope))}
-			}
-			return &gnode{op: "lit", cat: cInt, n: r.Intn(6)}
+			return leaf(r, cInt, scope)
 		}
 	}
+}
+
+// leaf is a depth-0 terminal of category c.
+func leaf(r *rand.Rand, c cat, scope []string) *gnode {
+	switch c {
+	case cStr:
+		return &gnode{op: "strlit", cat: cStr, n: r.Intn(len(strLits))}
+	case cBool:
+		return &gnode{op: "cmp", cat: cBool, cmp: "lt", kids: []*gnode{{op: "lit", cat: cInt, n: r.Intn(3)}, {op: "lit", cat: cInt, n: r.Intn(3)}}}
+	case cList:
+		return &gnode{op: "list", cat: cList, ecat: cInt, kids: []*gnode{{op: "lit", cat: cInt, n: r.Intn(6)}}}
+	case cMap:
+		return genMap(r, cInt, 0, scope)
+	default: // cInt
+		if len(scope) > 0 && r.Intn(2) == 0 {
+			return &gnode{op: "var", cat: cInt, n: r.Intn(len(scope))}
+		}
+		return &gnode{op: "lit", cat: cInt, n: r.Intn(6)}
+	}
+}
+
+// genMap builds a map whose values are all category vcat (so `get` of any key
+// has a known type).
+func genMap(r *rand.Rand, vcat cat, depth int, scope []string) *gnode {
+	nk := 1 + r.Intn(len(mapKeys))
+	m := &gnode{op: "map", cat: cMap, ecat: vcat, keys: append([]string{}, mapKeys[:nk]...)}
+	for i := 0; i < nk; i++ {
+		d := depth
+		if d < 0 {
+			d = 0
+		}
+		m.kids = append(m.kids, gen(r, vcat, d, scope))
+	}
+	return m
 }
 
 // genProgram returns a top-level node and the var names it may reference. With
@@ -121,11 +192,15 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 		scope = append(scope, name)
 	}
 	bodyCat := cInt
-	switch r.Intn(5) {
+	switch r.Intn(7) {
 	case 0:
 		bodyCat = cList
 	case 1:
 		bodyCat = cMap
+	case 2:
+		bodyCat = cStr
+	case 3:
+		bodyCat = cBool
 	}
 	body := gen(r, bodyCat, depth, scope)
 	if len(defs) == 0 {
@@ -143,8 +218,12 @@ func render(n *gnode, scope []string) string {
 			return scope[n.n]
 		}
 		return "0"
-	case "add", "sub", "mul":
+	case "strlit":
+		return `"` + strLits[n.n] + `"`
+	case "add", "sub", "mul", "div", "mod", "and", "or":
 		return "(" + render(n.kids[0], scope) + " " + n.op + " " + render(n.kids[1], scope) + ")"
+	case "not":
+		return "(not " + render(n.kids[0], scope) + ")"
 	case "cmp":
 		return "(" + render(n.kids[0], scope) + " " + n.cmp + " " + render(n.kids[1], scope) + ")"
 	case "if":
@@ -198,7 +277,7 @@ func diverges(t *testing.T, src string) (compiled, bad bool) {
 		return true, true
 	}
 	if errC != nil {
-		return true, false // both errored — presence matches
+		return true, errCode(errC) != errCode(errI) // both errored — compare taxonomy
 	}
 	return true, fmt.Sprint(gotC) != fmt.Sprint(gotI)
 }
@@ -262,10 +341,12 @@ func minNode(c cat) *gnode {
 	switch c {
 	case cBool:
 		return &gnode{op: "cmp", cat: cBool, cmp: "lt", kids: []*gnode{{op: "lit", cat: cInt}, {op: "lit", cat: cInt}}}
+	case cStr:
+		return &gnode{op: "strlit", cat: cStr}
 	case cList:
-		return &gnode{op: "list", cat: cList, kids: []*gnode{{op: "lit", cat: cInt}}}
+		return &gnode{op: "list", cat: cList, ecat: cInt, kids: []*gnode{{op: "lit", cat: cInt}}}
 	case cMap:
-		return &gnode{op: "map", cat: cMap, keys: []string{"a"}, kids: []*gnode{{op: "lit", cat: cInt}}}
+		return &gnode{op: "map", cat: cMap, ecat: cInt, keys: []string{"a"}, kids: []*gnode{{op: "lit", cat: cInt}}}
 	default:
 		return &gnode{op: "lit", cat: cInt}
 	}
@@ -305,6 +386,8 @@ func simplifications(n *gnode) []*gnode {
 func isMinimal(n *gnode) bool {
 	switch n.op {
 	case "lit", "var":
+		return true
+	case "strlit":
 		return true
 	case "cmp":
 		return n.kids[0].op == "lit" && n.kids[1].op == "lit"

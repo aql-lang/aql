@@ -1560,6 +1560,12 @@ func JoinCarriers(a, b Value) Value {
 		out := a
 		out.Carrier = true
 		out.Data = nil
+		// The merged carrier is a NEW value (an `if`/loop result), not arm `a`.
+		// Keeping a's ID lets the result COLLIDE with a's own binding when an arm
+		// returns a live local — `def v0 3 def v1 (if c [v0] [4])` makes the if-
+		// result reuse v0's id, so a later `v0` reference resolves to the if-event
+		// (the compiler bakes the wrong value). Mint a distinct identity.
+		out.ID = GenerateID(IDPrefixForType(out.Parent))
 		return out
 	}
 	if !IsDisjunct(a) && !IsDisjunct(b) {
