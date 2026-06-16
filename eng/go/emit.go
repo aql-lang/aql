@@ -1576,6 +1576,31 @@ func listHasParenExpr(v Value) bool {
 	return false
 }
 
+// isInertReach reports whether a Reach lens value is fully inert and so safe to
+// bake as a const: every segment is a literal field-name key (no computed
+// `(expr)` segment, which is deferred code needing the live def scope), and the
+// receiver (if any) is itself a const. A field-name Word key counts as inert
+// data here — the lens handler reads it as a key, never re-steps it.
+func isInertReach(ri ReachInfo) bool {
+	for _, seg := range ri.Segments {
+		if seg.Computed {
+			return false
+		}
+		if _, isWord := seg.KeyLit.Data.(WordInfo); isWord {
+			continue // a field-name Word is inert lens data
+		}
+		if !isInertConstMember(seg.KeyLit) {
+			return false
+		}
+	}
+	for _, rv := range ri.Receiver {
+		if !isInertConstMember(rv) {
+			return false
+		}
+	}
+	return true
+}
+
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -1594,6 +1619,13 @@ func isInertConst(v Value) bool {
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
 		_ = d
 		return true
+	case ReachInfo:
+		// An inert lens VALUE (`$.name`, `$.a.b`, a constructed reach): the
+		// segments are field-name keys the apply/get/set handlers read as data
+		// and the receiver (if any) is a const, so the whole lens bakes. A
+		// COMPUTED `(expr)` segment is deferred code needing the live def scope at
+		// apply time (it would go stale in a const), so it disqualifies the lens.
+		return isInertReach(d)
 	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
 		// use site — make's operand). Sound as consts when their

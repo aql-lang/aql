@@ -282,6 +282,9 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`[1] is [Integer]`, "native"},
 		{`{a:5} is {a:Integer}`, "native"},
 		{`def Foo refine Integer end [1] is [Foo]`, "fallback"},
+		// An inert reach lens VALUE ($.path, no computed segment) bakes as a const.
+		{`def p {a:{b:7}} apply $.a.b p`, "native"},
+		{`"aql:struct-util" import end StructUtil.getpath $.a.b {a:{b:7}}`, "native"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {
