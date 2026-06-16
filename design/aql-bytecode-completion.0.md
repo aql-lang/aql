@@ -324,10 +324,22 @@ before/after numbers.
    re-step a fn body) — so they are deliberately OFF the allowlist.
    (`eng/go/emit.go` RecordCall + intern.)
 
-9. **Error-row disposition + the re-scoped P7 gate.** Make the VM raise the
-   count-mismatch / unpack-missing / orphan-gen taxonomies (so they compile), or
-   allowlist them; then land `metaFallbackWords` + `TestOnlyMetaFallsBack` and
-   perform the §P7 fallback narrowing.
+9. **Error-row disposition + the re-scoped P7 gate. ◑ PARTIAL — allowlist +
+   boundary gate LANDED; non-meta drive + P7 narrowing remain.** `metaFallbackWords`
+   (the curated allowlist of inherently-dynamic/reflective words, each with a
+   one-line *why it can't compile*) and `TestMetaFallbackBoundary` are in
+   (`test/go/langspec/meta_fallback_test.go`): every refused/islanded row is
+   classified META (attributable to an allowlisted word — deliberate fallback)
+   or NON-META (remaining compilable work), via the refusal-reason word
+   (module-wrapped natives like `test-*` surface here) or a source token (the
+   usurp family surfaces as a `/u`-suffixed token). The split: **121 META + 212
+   NON-META**; `nonMetaCeiling` (212) is the honest finish-line ratchet
+   (only-down). REMAINING: drive non-meta → 0 (the 212 are real compute —
+   make/get/is/typeof provenance ~119, code-body ~37, residual lowering ~17,
+   etc.); the error rows (count-mismatch / unpack-missing / orphan-gen) get their
+   own disposition (raise the matching taxonomy so they compile, or join the
+   allowlist); THEN move `metaFallbackWords` into eng and perform the §P7
+   whole-program-fallback narrowing.
 
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
