@@ -221,9 +221,37 @@ func genArrRead(r *rand.Rand, length int) *gnode {
 	}
 }
 
+// genObjProg builds an OBJECT/CLASS field-mutation program — in-place mutation
+// through the object path (a different instance type than Array):
+//
+//	def P class {a: 0 b: 0} def p (make P {}) (p set a v) … <read of p>
+func genObjProg(r *rand.Rand) *gnode {
+	nf := 1 + r.Intn(len(mapKeys))
+	fields := append([]string{}, mapKeys[:nf]...)
+	p := &gnode{op: "objprog", cat: cInt, keys: fields}
+	for s := r.Intn(4); s > 0; s-- {
+		f := fields[r.Intn(nf)]
+		p.kids = append(p.kids, &gnode{op: "setobj", cat: cInt, keys: []string{f}, kids: []*gnode{gen(r, cInt, 2, nil)}})
+	}
+	p.kids = append(p.kids, genObjRead(r, fields))
+	return p
+}
+
+func genObjRead(r *rand.Rand, fields []string) *gnode {
+	if r.Intn(2) == 0 {
+		return &gnode{op: "objget", cat: cInt, keys: []string{fields[r.Intn(len(fields))]}}
+	}
+	return &gnode{op: "objadd", cat: cInt, kids: []*gnode{
+		{op: "objget", cat: cInt, keys: []string{fields[r.Intn(len(fields))]}},
+		{op: "objget", cat: cInt, keys: []string{fields[r.Intn(len(fields))]}}}}
+}
+
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
-	if r.Intn(6) == 0 {
+	switch r.Intn(6) {
+	case 0:
 		return genArrProg(r), nil
+	case 1:
+		return genObjProg(r), nil
 	}
 	scope := []string{}
 	var defs []*gnode
@@ -310,6 +338,23 @@ func render(n *gnode, scope []string) string {
 	case "arrsize":
 		return "(size a0)"
 	case "arradd":
+		return "(" + render(n.kids[0], scope) + " add " + render(n.kids[1], scope) + ")"
+	case "objprog":
+		fdefs := make([]string, len(n.keys))
+		for i, f := range n.keys {
+			fdefs[i] = f + ": 0"
+		}
+		var sb strings.Builder
+		sb.WriteString("def P class {" + strings.Join(fdefs, " ") + "} def p (make P {})")
+		for _, k := range n.kids {
+			sb.WriteString(" " + render(k, scope))
+		}
+		return sb.String()
+	case "setobj":
+		return "(p set " + n.keys[0] + " " + render(n.kids[0], scope) + ")"
+	case "objget":
+		return "(p get " + n.keys[0] + ")"
+	case "objadd":
 		return "(" + render(n.kids[0], scope) + " add " + render(n.kids[1], scope) + ")"
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
@@ -436,10 +481,10 @@ func simplifications(n *gnode) []*gnode {
 				out = append(out, replace(n, path, nl))
 			}
 		}
-		// Drop one SET statement from an arrprog (the last kid is the read).
-		if sub.op == "arrprog" && len(sub.kids) > 1 {
+		// Drop one SET statement from an arr/obj prog (the last kid is the read).
+		if (sub.op == "arrprog" || sub.op == "objprog") && len(sub.kids) > 1 {
 			for d := 0; d < len(sub.kids)-1; d++ {
-				np := &gnode{op: "arrprog", cat: cInt, n: sub.n}
+				np := &gnode{op: sub.op, cat: cInt, n: sub.n, keys: sub.keys}
 				for i, k := range sub.kids {
 					if i != d {
 						np.kids = append(np.kids, k)
