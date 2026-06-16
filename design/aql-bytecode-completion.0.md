@@ -79,28 +79,43 @@ reached. **Re-scope P7** from *"delete the fallback"* to:
 
 ### Re-scoped P7 gate (replaces "both ratchets == 0")
 
-1. Define `metaFallbackWords` — the curated allowlist of inherently-dynamic
-   words (`vm-run`, `vm-run-with`, the `test-*` family, `flex`, `canon`,
-   `macroexpand`, `minilang-register`, `codequote`, the usurp synthetics,
-   `args`). Each entry carries a one-line *why it cannot compile*.
-2. `TestOnlyMetaFallsBack` (replaces `TestEveryRowCompiles`): every `.tsv`
-   value row either compiles to a fallback-free `Program`, OR its refusal/island
-   is attributable to a `metaFallbackWords` member. A refusal/island from any
-   word NOT on the list fails the gate. This keeps the downward ratchet honest
+**Steps 1–3 ✅ LANDED** (`test/go/langspec/compiled_metafallback_test.go`,
+`TestOnlyMetaFallsBack`). The gate partitions every refused/islanded spec value
+row into meta / error-row / **compute gap** and ratchets the compute gap toward
+0. Current partition (June 2026, after lambda higher-order args): **101
+meta-attributable, 12 error-row, 295 compute gap** (`computeRefusalCeiling`).
+Meta breakdown: usurp 43, Test/Assert harness 28, quote/codequote 14, flex 7,
+minilang 5, args 2, Vm.run 1, canon 1.
+
+1. ✅ `metaFallbackWords` — the curated allowlist (`usurp` + `/u`/`/ur`/`/us`
+   synthetics, `quote`/`codequote`, `macroexpand`, `minilang`, `flex`, `canon`,
+   `args.` accessor, `Vm.run`/`Vm.run-with`, the `Test.`/`Assert.` harness).
+   Each entry carries a one-line *why it cannot compile*. Attribution is by a
+   NARROW source pattern (the accessor `args.`, not `forward-args`; `Vm.run`,
+   not every `run`) so a real compute gap is never masked.
+2. ✅ `TestOnlyMetaFallsBack`: every `.tsv` value row either compiles to a
+   fallback-free `Program`, OR its refusal/island is attributed to a
+   `metaFallbackWords` member or an error-row. A non-meta, non-error
+   refusal/island is a COMPUTE GAP, ratcheted by `computeRefusalCeiling` — at 0
+   this becomes the strict "only meta falls back" gate. Keeps the ratchet honest
    without demanding the impossible.
-3. Error rows (count-mismatch returns, `unpack` missing key, orphan `gen`) get
-   their own small disposition: either the VM raises the matching taxonomy
-   (preferred — they then compile), or they join the allowlist as
-   "deliberately interpreted to surface the runtime error."
-4. THEN the deletions in `aql-bytecode-runtime-independence.0.md` §P7 apply to
-   the WHOLE-PROGRAM fallback's *unbounded* form: `RunCompiled` stops calling
-   `a.Run(src)` for arbitrary refusals and instead runs the compiled `Program`
-   (which now contains a NARROW `OpFallback` island only for allowlisted meta
-   spans). The island machinery **stays** — it is the hybrid's interpreter seam,
-   now provably confined to meta.
+3. ✅ Error rows (count-mismatch returns, `unpack` missing key, orphan `gen`)
+   are dispositioned as **allowlisted** (`errorRowReason`): the checker
+   deliberately refuses so the interpreter surfaces the matching taxonomy. The
+   alternative (make the VM raise the taxonomy so they compile) stays available
+   as future tightening.
+4. **PENDING** (gated on `computeRefusalCeiling` reaching 0): THEN the deletions
+   in `aql-bytecode-runtime-independence.0.md` §P7 apply to the WHOLE-PROGRAM
+   fallback's *unbounded* form: `RunCompiled` stops calling `a.Run(src)` for
+   arbitrary refusals and instead runs the compiled `Program` (which now contains
+   a NARROW `OpFallback` island only for allowlisted meta spans). The island
+   machinery **stays** — it is the hybrid's interpreter seam, now provably
+   confined to meta.
 
 This is "complete delivery": real compute is 100% native and runtime-
-independent; meta is explicitly, auditably interpreted.
+independent; meta is explicitly, auditably interpreted. The gate now MEASURES
+the gap to that delivery (295 compute rows) instead of asserting an impossible
+absolute.
 
 ## 4. Sequenced roadmap (tractable clusters)
 
@@ -244,10 +259,19 @@ before/after numbers.
    re-step a fn body) — so they are deliberately OFF the allowlist.
    (`eng/go/emit.go` RecordCall + intern.)
 
-9. **Error-row disposition + the re-scoped P7 gate.** Make the VM raise the
-   count-mismatch / unpack-missing / orphan-gen taxonomies (so they compile), or
-   allowlist them; then land `metaFallbackWords` + `TestOnlyMetaFallsBack` and
-   perform the §P7 fallback narrowing.
+9. **Error-row disposition + the re-scoped P7 gate ✅ GATE LANDED (steps 1–3);
+   fallback narrowing PENDING (step 4).** `metaFallbackWords` +
+   `TestOnlyMetaFallsBack` partition every refused/islanded row into meta (101) /
+   error-row (12) / compute gap (295) and ratchet the compute gap toward 0
+   (`computeRefusalCeiling = 295`). Error rows are allowlisted (the checker
+   refuses so the interpreter surfaces the taxonomy); making the VM raise them
+   stays available as future tightening. The §P7 fallback narrowing (step 4)
+   waits on the compute gap reaching 0 — its remaining drivers are the
+   operand-provenance cascades (140, clear when their producers compile: item-3
+   class instances, user-fn results), the code-body DSL words (82: `select` /
+   `case` / `reach` / `with-decimal` / `where` / `group` / … — item 7 + follow-
+   ons), Stage-1 lowering residuals (~24), dynamic in/out (~24), the 9 islands,
+   and user-fn dispatch (5). (`test/go/langspec/compiled_metafallback_test.go`.)
 
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
