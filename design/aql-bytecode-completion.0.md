@@ -10,9 +10,11 @@ case/fn-value items landed and the A–F robustness hardening, then maps the
 ## 1. Status reconciliation
 
 The runtime-independence doc's "Recommended sequencing" marks items 1–6 DONE,
-but the ratchets stand at **459 refused / 15 islanded** (from 651 / 115 at P0).
-Those items each cleared their *named* cluster; what remains is a **long tail**
-the sequencing section never enumerated. This doc enumerates it.
+but the ratchets stood at **459 refused / 15 islanded** (from 651 / 115 at P0)
+when this doc was written. Those items each cleared their *named* cluster; what
+remained is a **long tail** the sequencing section never enumerated, which this
+doc enumerates. As of the latest landings (items 1–6, 8, and lambda higher-order
+args) the ratchets stand at **399 refused / 9 islanded**.
 
 Robustness (separate from coverage) was hardened since: RunCompiled falls back
 on `internal_error`/foreign errors, the VM has a panic guard + concurrency
@@ -172,9 +174,9 @@ before/after numbers.
    `TestEmitRefusesPolySite` (the site now compiles) to assert the poly
    lowering + parity. (`eng/go/carrier.go`.)
 
-5. **Lambda higher-order args + map iteration (HIGH risk). Part A — map
-   iteration ✅ LANDED (islands 15 → 9); Part B — lambda args still open
-   (~22 refusals).**
+5. **Lambda higher-order args + map iteration ✅ FULLY LANDED. Part A — map
+   iteration (islands 15 → 9); Part B — lambda args (459-era ~22 → cleared the 8
+   directly-attributable rows, 407 → 399; the rest were get/is/typeof cascades).**
    - Part A — `each`/`fold`/`filter` over a MAP islanded because the token-body
      map path ran the body via `runQuotationBody` (`New(reg).Run`), bypassing
      the InvokeBody seam the list path uses. `newMapBody` now detects a compiled
@@ -185,23 +187,29 @@ before/after numbers.
      were already `wasCompiled=true`, so this moves the ISLAND ceiling, not the
      differential count. (`eng/go/bytecode.go` IsCompiledClosure,
      `eng/go/carrier.go` DataListElemTypeFromValue, `native/native_map_iter.go`.)
-   - Part B — a lambda VALUE arg (`filter ([p] => …) data`) — ATTEMPTED June
-     2026, REVERTED. The afn body CAN be extracted and compiled as a closure with
-     named params (tryRecordClosure was extended to admit an FnDefInfo body — it
-     rides a carrier that KEEPS the FnDefInfo — and compileClosureBody to take the
-     lambda's param names). But the blocker is that each higher-order word has its
-     OWN callback convention, so a uniform closure does NOT fit:
-       - `each`/`for-each`/`scan` (list) → `InvokeBody(cb, [element])`.
-       - `filter` (list) → `voxgigstruct.Filter` hands the callback a
-         `{key, value}` MAP via `MatchFnSig`+`CallAQL`, NOT InvokeBody — so a
-         compiled closure makes `filter` raise "no matching callback signature"
-         and fall back (a soft regression).
-       - map forms → a KeyVal via `callLambda` (and the spec rows are dominated by
-         these — 6 of 8 lambda rows are map+KeyVal, which also need the Part-A
-         closure routed with a KeyVal, an unbuilt input-kind metadata thread).
-     Verdict: Part B needs per-word callback unification (make `filter`/map forms
-     drive a closure with their own input shape) before a lambda closure is sound —
-     a dedicated effort, not a uniform fix. Deferred.
+   - Part B — a lambda VALUE arg (`filter ([p] => …) data`). The earlier attempt
+     reverted because it sought a UNIFORM closure, but each higher-order word has
+     its OWN callback convention. The fix is per-word callback unification:
+     compile the afn body against the WORD'S callback input SHAPE, and route a
+     compiled closure through that handler's existing shape:
+       - `filter` (list) → a `{key, value}` pair Map (element via `.value`).
+       - `filter`/`each` (map) → a KeyVal {k v i n} (value via `.v`).
+       - `fold` (init) / `scan` (map) → (accumulator, KeyVal).
+     `tryRecordClosure` detects an FnDefInfo body and routes to
+     `tryRecordLambdaClosure`, which builds the representative-carrier inputs
+     (`lambdaCallbackInputs`) and compiles the body with the lambda's NAMED
+     params bound to them (AnalyseFnBody's def path) — so `p.value`/`kv.v`
+     typechecks where the declared `Any`/`KeyVal` param alone could not. The
+     filter handlers build their own fixed shape, so they need no metadata; the
+     map-iteration handler is shared between the token (bare value) and lambda
+     (KeyVal) forms, so the input shape is recorded on the unit
+     (`ClosureInShape`, copied onto the ClosurePayload at OpPushClosure) and the
+     handler reads it back (`ClosureWantsKeyVal`). Capturing lambdas, list
+     each/fold, no-init map fold, and `for-each` (0-result/1-output mismatch)
+     stay refused — conservative, gate-clean. (`eng/go/callable_words.go`,
+     `eng/go/bytecode.go`, `eng/go/emit.go`, `eng/go/vm.go`,
+     `native/filter.go`, `native/native_map_iter.go`. Two commits, each
+     gate-clean: filter then each/fold/scan.)
 
 6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
    (425 → 421); 6b variadic-else (421 → 417).**
