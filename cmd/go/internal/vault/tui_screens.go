@@ -19,7 +19,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // opResultMsg reports the outcome of a mutating operation so the root can
@@ -94,6 +93,10 @@ func (s *listScreen) Init() tea.Cmd { return nil }
 func (s *listScreen) Title() string { return s.title }
 
 func (s *listScreen) capturesInput() bool { return s.list.FilterState() == list.Filtering }
+
+// hasAppliedFilter reports whether a committed filter is in effect, so the
+// root can route esc to clearing it rather than treating esc as "back".
+func (s *listScreen) hasAppliedFilter() bool { return s.list.FilterState() == list.FilterApplied }
 
 func (s *listScreen) selected() (listItem, bool) {
 	it, ok := s.list.SelectedItem().(listItem)

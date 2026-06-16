@@ -61,7 +61,7 @@ func TestModelFooterAlwaysListsKeys(t *testing.T) {
 	m := newTestModel(t)
 	// Home footer: the global keys are always present.
 	home := m.footerView()
-	for _, want := range []string{"open", "vault", "command", "help", "quit"} {
+	for _, want := range []string{"open", "switch", "command", "help", "quit"} {
 		if !strings.Contains(home, want) {
 			t.Errorf("home footer missing %q: %q", want, home)
 		}
@@ -69,7 +69,7 @@ func TestModelFooterAlwaysListsKeys(t *testing.T) {
 	// Drill into Secrets: its action keys appear, plus back + globals.
 	m = feed(t, m, pushMsg{m.buildSecrets()})
 	sec := m.footerView()
-	for _, want := range []string{"add", "reveal", "rotate", "delete", "back", "vault", "help"} {
+	for _, want := range []string{"add", "reveal", "rotate", "delete", "back", "switch", "help"} {
 		if !strings.Contains(sec, want) {
 			t.Errorf("secrets footer missing %q: %q", want, sec)
 		}
@@ -199,13 +199,14 @@ func TestVaultPickerEnterSwitches(t *testing.T) {
 func TestModelHelpScreenIsHelpful(t *testing.T) {
 	m := newTestModel(t)
 	m = feed(t, m, pushMsg{m.buildSecrets()})
-	m.showHelp = true
-	h := m.View() // renders the full help screen
+	m.openHelp()
+	h := m.View() // renders the scrollable help screen
 	for _, want := range []string{
-		"Help", "Your stored secrets", // title + description
-		"On this screen", "reveal", "rotate", // screen actions with descriptions
-		"Anywhere", "switch vault", "command", "help", // global keys
-		"press any key to close",
+		"Help", "Your stored API keys", // title + description
+		"On this screen", "Reveal", // section + an action
+		"Rotate", "replace the value with a new one", // rotate is actually explained
+		"Anywhere", "switch", "command", "theme", // global keys
+		"closes", // pinned close hint
 	} {
 		if !strings.Contains(h, want) {
 			t.Errorf("help screen missing %q", want)
@@ -243,16 +244,52 @@ func TestModelHeaderShowsVersion(t *testing.T) {
 	if !strings.Contains(h, "aql vault") {
 		t.Errorf("title line missing app name: %q", h)
 	}
-	// The folder is shown on the vault line.
-	if vl := m.vaultLine(); !strings.Contains(vl, m.ctl.folder) {
-		t.Errorf("vault line should show the folder %q: %q", m.ctl.folder, vl)
+	// The folder is shown on the vault line (home shortened to ~).
+	if vl := m.vaultLine(); !strings.Contains(vl, ".aql") {
+		t.Errorf("vault line should show the folder: %q", vl)
 	}
 }
 
 func TestModelSwitchKeyOpensPicker(t *testing.T) {
 	m := newTestModel(t)
-	m = feed(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	// 'o' (no ctrl) opens the picker.
+	m = feed(t, m, keyMsg("o"))
 	if m.top().Title() != "vaults" {
-		t.Errorf("ctrl+o should open the vault picker, got %q", m.top().Title())
+		t.Errorf("o should open the vault picker, got %q", m.top().Title())
+	}
+	depth := len(m.stack)
+	// Pressing 'o' again must NOT stack a second picker.
+	m = feed(t, m, keyMsg("o"))
+	if len(m.stack) != depth {
+		t.Errorf("o on the picker should be a no-op, depth %d -> %d", depth, len(m.stack))
+	}
+	// ctrl+o is still accepted as an alias from a normal screen.
+	m2 := newTestModel(t)
+	m2 = feed(t, m2, tea.KeyMsg{Type: tea.KeyCtrlO})
+	if m2.top().Title() != "vaults" {
+		t.Errorf("ctrl+o alias should still open the picker, got %q", m2.top().Title())
+	}
+}
+
+func TestPaletteWidthIsBounded(t *testing.T) {
+	m := newTestModel(t)
+	m = feed(t, m, keyMsg(":"))
+	if m.palette.Width <= 0 {
+		t.Errorf("palette width should be set on open (got %d) so the placeholder renders", m.palette.Width)
+	}
+}
+
+func TestHelpScrollAndCtrlCStillQuits(t *testing.T) {
+	m := newTestModel(t)
+	m.openHelp()
+	// A scroll key does not close the help.
+	m = feed(t, m, tea.KeyMsg{Type: tea.KeyDown})
+	if !m.showHelp {
+		t.Error("scroll key should not close help")
+	}
+	// ctrl+c quits even from the help screen.
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if !nm.(*rootModel).quitting || cmd == nil {
+		t.Error("ctrl+c should quit from the help screen")
 	}
 }

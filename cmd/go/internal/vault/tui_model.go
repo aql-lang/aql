@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -76,17 +77,29 @@ type rootModel struct {
 
 	help     help.Model
 	showHelp bool
+	helpVP   viewport.Model
 
 	palette     textinput.Model
 	paletteOpen bool
 
+	theme        themeMode
+	detectedDark bool
+
 	quitting bool
+}
+
+// cycleTheme advances dark/light/auto, applies it, and persists the choice.
+func (m *rootModel) cycleTheme() tea.Cmd {
+	m.theme = m.theme.next()
+	applyTheme(m.theme, m.detectedDark)
+	_ = saveTUIPrefs(m.ctl.homeDir, tuiPrefs{Theme: m.theme.String()})
+	return status("theme: " + m.theme.String())
 }
 
 func newRootModel(ctl *tuiController) *rootModel {
 	// Footer help: wider separation between terms and high-contrast styling.
 	h := help.New()
-	h.ShortSeparator = "   •   "
+	h.ShortSeparator = "  •  "
 	h.FullSeparator = "      "
 	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	h.Styles.ShortKey = tuiKeyStyle
@@ -102,7 +115,7 @@ func newRootModel(ctl *tuiController) *rootModel {
 	pal.PromptStyle = tuiKeyStyle
 	pal.TextStyle = tuiTextStyle
 	pal.CharLimit = 64
-	return &rootModel{ctl: ctl, help: h, palette: pal}
+	return &rootModel{ctl: ctl, help: h, palette: pal, helpVP: viewport.New(0, 0)}
 }
 
 func (m *rootModel) Init() tea.Cmd {
@@ -187,6 +200,11 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.help.Width = msg.Width
+		m.palette.Width = m.paletteInputWidth()
+		if m.showHelp {
+			m.helpVP.Width = msg.Width
+			m.helpVP.Height = maxInt(1, msg.Height-1)
+		}
 		return m, m.resizeTop()
 	case pushMsg:
 		return m, m.push(msg.s)
@@ -231,9 +249,26 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, m.updateTop(msg)
 }
 
+// helpScrollKeys are the keys that scroll the ? help instead of closing it.
+var helpScrollKeys = map[string]bool{
+	"up": true, "down": true, "j": true, "k": true,
+	"pgup": true, "pgdown": true, " ": true, "ctrl+u": true, "ctrl+d": true,
+	"home": true, "end": true,
+}
+
 func (m *rootModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Full-help overlay swallows the next key (closing it).
+	// While the ? help is open: ctrl+c still quits, scroll keys scroll, any
+	// other key closes it.
 	if m.showHelp {
+		if k.String() == "ctrl+c" {
+			m.quitting = true
+			return m, tea.Quit
+		}
+		if helpScrollKeys[k.String()] {
+			var cmd tea.Cmd
+			m.helpVP, cmd = m.helpVP.Update(k)
+			return m, cmd
+		}
 		m.showHelp = false
 		return m, nil
 	}
@@ -253,14 +288,24 @@ func (m *rootModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case key.Matches(k, keyHelpTog):
-		m.showHelp = true
+		m.openHelp()
 		return m, nil
 	case key.Matches(k, keyPalette):
 		m.openPalette()
 		return m, textinput.Blink
 	case key.Matches(k, keySwitch):
+		// Don't stack a second picker when one is already on top.
+		if m.top() != nil && m.top().Title() == "vaults" {
+			return m, nil
+		}
 		return m, m.push(m.buildVaultPicker())
+	case key.Matches(k, keyTheme):
+		return m, m.cycleTheme()
 	case key.Matches(k, keyBack):
+		// esc clears a committed list filter before it counts as "back".
+		if ls, ok := m.top().(*listScreen); ok && ls.hasAppliedFilter() {
+			return m, m.updateTop(k)
+		}
 		if len(m.stack) > 1 {
 			m.pop()
 			return m, reloadTop()
@@ -276,11 +321,30 @@ func (m *rootModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, m.updateTop(k)
 }
 
+// openHelp populates and sizes the scrollable help viewport.
+func (m *rootModel) openHelp() {
+	m.showHelp = true
+	m.helpVP.Width = m.width
+	m.helpVP.Height = maxInt(1, m.height-1) // leave a line for the close hint
+	m.helpVP.SetContent(m.helpContent())
+	m.helpVP.GotoTop()
+}
+
 // --- command palette -------------------------------------------------------
+
+// paletteHint is the compact, always-shown run/cancel affordance.
+const paletteHint = "  enter run · esc cancel"
+
+// paletteInputWidth bounds the input so bubbles renders the placeholder and
+// scrolls long input, while leaving room on the line for paletteHint.
+func (m *rootModel) paletteInputWidth() int {
+	return maxInt(10, m.width-lipgloss.Width(m.palette.Prompt)-len(paletteHint)-1)
+}
 
 func (m *rootModel) openPalette() {
 	m.paletteOpen = true
 	m.palette.SetValue("")
+	m.palette.Width = m.paletteInputWidth()
 	m.palette.Focus()
 }
 
@@ -364,10 +428,13 @@ func (m *rootModel) titleLine() string {
 }
 
 // vaultLine shows the active vault: name, backend, lock state, and FOLDER.
+// It is truncated to the terminal width so a long folder path can never wrap
+// and desync the fixed-height header.
 func (m *rootModel) vaultLine() string {
 	if !m.vaultOK {
-		return tuiVaultStyle.Render("▸ (no vault)") + tuiDimStyle.Render("   press ") +
-			tuiVaultStyle.Render("o") + tuiDimStyle.Render(" to choose or create one")
+		line := tuiVaultStyle.Render("▸ (no vault)") + tuiDimStyle.Render("   press ") +
+			tuiKeyStyle.Render("o") + tuiDimStyle.Render(" to choose or create one")
+		return ansi.Truncate(line, m.width, "…")
 	}
 	name := m.ctl.suffix
 	if name == "" {
@@ -378,10 +445,22 @@ func (m *rootModel) vaultLine() string {
 		lock = tuiLockedStyle.Render("LOCKED")
 	}
 	sep := tuiDimStyle.Render("    ")
-	return tuiVaultStyle.Render("▸ "+name) + sep +
+	line := tuiVaultStyle.Render("▸ "+name) + sep +
 		tuiDimStyle.Render(dash(m.vault.Backend)) + sep +
 		lock + sep +
-		tuiPathStyle.Render(m.ctl.folder)
+		tuiPathStyle.Render(shortenHome(m.ctl.folder, m.homeDir()))
+	return ansi.Truncate(line, m.width, "…")
+}
+
+// homeDir is the user's home directory, used to shorten paths with ~.
+func (m *rootModel) homeDir() string { return m.ctl.homeDir }
+
+// shortenHome replaces a leading home directory with ~ for a compact path.
+func shortenHome(path, home string) string {
+	if home != "" && strings.HasPrefix(path, home) {
+		return "~" + path[len(home):]
+	}
+	return path
 }
 
 // headerVersion renders the build version for the header (e.g. "v0.1.0-dev"),
@@ -419,60 +498,63 @@ func (m *rootModel) statusView() string {
 }
 
 func (m *rootModel) footerView() string {
-	var binds []key.Binding
+	// Lead with the escape hatches (help + back/quit). bubbles/help truncates
+	// from the RIGHT on a narrow terminal, so the keys that must never vanish
+	// — '?' (which reveals everything) and quit/back — go FIRST. The screen's
+	// own actions follow, then the remaining globals.
+	binds := []key.Binding{keyHelpTog}
+	if len(m.stack) > 1 {
+		binds = append(binds, keyBack)
+	} else {
+		binds = append(binds, keyQuit)
+	}
 	if s := m.top(); s != nil {
 		binds = append(binds, s.shortHelp()...)
 	}
-	// Global keys, always visible.
-	if len(m.stack) > 1 {
-		binds = append(binds, keyBack)
-	}
-	binds = append(binds, keySwitch, keyPalette, keyHelpTog)
-	if len(m.stack) == 1 {
-		binds = append(binds, keyQuit)
-	}
+	binds = append(binds, keySwitch, keyPalette)
 	return m.help.ShortHelpView(binds)
 }
 
 // paletteBar renders the ':' command input as a bottom bar (replacing the
-// footer while open) so the typed command is clearly visible.
+// footer while open) so the typed command is clearly visible. The essential
+// "enter run · esc cancel" affordance comes right after the input so it
+// survives truncation; the longer examples are appended last.
 func (m *rootModel) paletteBar() string {
-	bar := m.palette.View() // ":<typed>" with cursor
-	hint := tuiDimStyle.Render("    enter run · esc cancel · e.g. secrets · audit · add · grant · folder")
-	return ansi.Truncate(bar+hint, m.width, "…")
+	bar := m.palette.View() // ":<typed>" with cursor (width-bounded, scrolls)
+	return ansi.Truncate(bar+tuiDimStyle.Render(paletteHint), m.width, "…")
 }
 
-// helpScreen is the full-screen ? help: a description of the current screen
-// plus its keys and the global keys, with real explanations.
+// helpScreen renders the scrollable ? help: the viewport content plus a pinned
+// footer hint, so the close affordance is never clipped on short terminals.
 func (m *rootModel) helpScreen() string {
+	hint := tuiDimStyle.Render("↑/↓ scroll  ·  any other key closes")
+	return m.helpVP.View() + "\n" + hint
+}
+
+// helpContent builds the ? help body: a description of the current screen plus
+// its keys and the global keys, with real explanations.
+func (m *rootModel) helpContent() string {
 	var b strings.Builder
 	b.WriteString(tuiTitleStyle.Render("Help — " + m.breadcrumbTitle()))
 	b.WriteString("\n\n")
+	b.WriteString(tuiDimStyle.Render("Move with ↑/↓ (or j/k); act with the keys below; esc goes back."))
+	b.WriteString("\n\n")
+	// Per-screen detailed help: what each action actually does.
 	if s := m.top(); s != nil && s.helpInfo() != "" {
+		b.WriteString(tuiSectionStyle.Render("On this screen"))
+		b.WriteByte('\n')
 		b.WriteString(tuiTextStyle.Render(s.helpInfo()))
 		b.WriteString("\n\n")
-	}
-	b.WriteString(tuiDimStyle.Render("Move with ↑/↓ (or j/k), open with enter, go back with esc."))
-	b.WriteString("\n\n")
-	if s := m.top(); s != nil {
-		if keys := s.shortHelp(); len(keys) > 0 {
-			b.WriteString(tuiSectionStyle.Render("On this screen"))
-			b.WriteByte('\n')
-			b.WriteString(renderKeyList(keys))
-			b.WriteString("\n\n")
-		}
 	}
 	b.WriteString(tuiSectionStyle.Render("Anywhere"))
 	b.WriteByte('\n')
 	b.WriteString(renderKeyList([]key.Binding{
-		keySwitch, keyPalette, keyHelpTog, keyQuit,
+		keySwitch, keyPalette, keyTheme, keyHelpTog, keyQuit,
 		key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit immediately")),
 	}))
 	b.WriteString("\n\n")
 	b.WriteString(tuiDimStyle.Render("Tip: press ") + tuiKeyStyle.Render(":") +
 		tuiDimStyle.Render(" then type a command (e.g. audit) to jump anywhere."))
-	b.WriteString("\n\n")
-	b.WriteString(tuiDimStyle.Render("press any key to close"))
 	return b.String()
 }
 

@@ -85,7 +85,14 @@ func (m *rootModel) buildHome() screen {
 		listItem{name: "Settings", desc: "config, lock/unlock, providers", act: func() tea.Cmd { return pushScreen(m.buildSettings()) }},
 	}
 	return newListScreen("", items, nil, nil).
-		withHelp("Pick an area to manage. Each area lists its own actions on screen.")
+		withHelp(`Pick an area and press enter to open it. Press ? on any screen for detailed
+help about that screen's actions.
+
+  Secrets       store, reveal, rotate, rename, remove, set expiry reminders
+  Access        grant and revoke capability tokens for the proxy
+  Passwords     scoped vault passwords (keyslots)
+  Maintenance   verify, scan, history & restore, audit log
+  Settings      config, lock/unlock, theme, providers`)
 }
 
 // --- Vault picker / switcher ----------------------------------------------
@@ -112,7 +119,12 @@ func (m *rootModel) buildVaultPicker() screen {
 		}},
 	}
 	return newListScreen("vaults", build(), acts, build).
-		withHelp("Switch between vaults (enter), create a new one (n), set a default (d), or prune a stale entry (D).")
+		withHelp(`The vaults aql knows about — found on disk and recorded when created.
+
+  enter   Switch to the selected vault.
+  n       Create a new vault.
+  d       Make the selected vault the default that aql vault -i opens.
+  D       Forget a stale entry from the list (its files are left untouched).`)
 }
 
 func (m *rootModel) vaultItems() []list.Item {
@@ -262,7 +274,16 @@ func (m *rootModel) buildSecrets() screen {
 	}
 	cols, rows := m.secretsTable()
 	return newTableScreen("secrets", cols, rows, acts, "no secrets yet — press a to add one", m.secretsTable).
-		withHelp("Your stored secrets (values stay hidden). Reveal, add, rotate, rename, remove, or set an expiry reminder.")
+		withHelp(`Your stored API keys and tokens. Values stay hidden until you reveal them.
+
+  g / enter   Reveal the value on a temporary screen (esc clears it from view).
+  a           Add a new secret — you type the value (entry is hidden).
+  R           Rotate: replace the value with a new one, keeping the same alias
+              and its capabilities. Tokens issued for it keep working unless you
+              also choose to revoke them.
+  D           Delete the secret and every capability scoped to it.
+  m           Rename the secret, or move it to another namespace.
+  e           Set or clear its expiry reminder (a reminder only — never enforced).`)
 }
 
 func (m *rootModel) buildRevealPager(alias, value string) screen {
@@ -398,7 +419,12 @@ func (m *rootModel) buildAccess() screen {
 	}
 	cols, rows := m.accessTable()
 	return newTableScreen("access", cols, rows, acts, "no capabilities — press a to grant one", m.accessTable).
-		withHelp("Capability tokens the proxy accepts. Grant a scoped token (shown once) or revoke one.")
+		withHelp(`Capability tokens the credential proxy will accept for a secret.
+
+  a   Grant: mint a scoped token for an alias. The bearer token is shown ONCE —
+      copy it then. You can scope it by agent, hosts, methods, a TTL, and
+      call/cost limits.
+  D   Revoke: permanently disable the selected token; it stops working at once.`)
 }
 
 func (m *rootModel) buildGrantForm() screen {
@@ -480,7 +506,12 @@ func (m *rootModel) buildPasswords() screen {
 	}
 	cols, rows := m.passwordsTable()
 	return newTableScreen("passwords", cols, rows, acts, "no scoped passwords (legacy single-passphrase vault) — press a to add one", m.passwordsTable).
-		withHelp("Scoped vault passwords. Add a named password with a scope and namespaces, or remove one.")
+		withHelp(`Scoped vault passwords (keyslots). Each unlocks a chosen scope and set of
+namespaces, so different holders can be given different access.
+
+  a   Add: create a named password with a scope (read / write / move / admin)
+      and namespaces. You first authenticate with an existing admin password.
+  D   Remove: delete a password slot; the other slots keep working.`)
 }
 
 func (m *rootModel) buildPasswordAddForm() screen {
@@ -536,11 +567,19 @@ func (m *rootModel) buildMaintenance() screen {
 			return pushScreen(m.buildHistoryPager())
 		}},
 		listItem{name: "Audit", desc: "structured audit log", act: func() tea.Cmd {
-			return pushScreen(newPagerScreen("audit", m.ctl.auditText(), nil, func() string { return m.ctl.auditText() }))
+			return pushScreen(newPagerScreen("audit", m.ctl.auditText(), nil, func() string { return m.ctl.auditText() }).
+				withHelp("The structured log of vault operations (newest last). Scroll with ↑/↓; secrets are never recorded here."))
 		}},
 	}
 	return newListScreen("maintenance", items, nil, nil).
-		withHelp("Vault upkeep: verify integrity, scan files for leaks, browse history and restore, view the audit log.")
+		withHelp(`Vault upkeep and history. Open an item with enter.
+
+  Verify    Reconcile the metadata with the keyring and report problems;
+            optionally repair (prune orphans and dangling records).
+  Scan      Search files for leaked secret-like strings.
+  History   Browse content revisions and restore to an earlier generation
+            (you confirm by typing its number).
+  Audit     View the structured log of vault operations.`)
 }
 
 func (m *rootModel) buildVerifyPager() screen {
@@ -549,7 +588,10 @@ func (m *rootModel) buildVerifyPager() screen {
 		{binding: kPrune2, run: func() tea.Cmd { return pushScreen(m.buildVerifyPruneForm()) }},
 	}
 	return newPagerScreen("verify", content, acts, func() string { c, _ := m.ctl.verifyText(false); return c }).
-		withHelp("Reconciles the store and keyring. Press p to repair (prune orphans and dangling records).")
+		withHelp(`Reconciles the metadata with the keyring and reports any problems above.
+
+  p   Repair: prune orphaned keyring entries, drop dangling records, and remove
+      stale temp files. You confirm before anything is changed.`)
 }
 
 func (m *rootModel) buildVerifyPruneForm() screen {
@@ -593,7 +635,10 @@ func (m *rootModel) buildHistoryPager() screen {
 		{binding: kRestore, run: func() tea.Cmd { return pushScreen(m.buildRestoreForm()) }},
 	}
 	return newPagerScreen("history", m.ctl.historyText(), acts, func() string { return m.ctl.historyText() }).
-		withHelp("Each row is a saved revision (generation). Press R to restore one — you confirm by typing its number.")
+		withHelp(`Each row above is a saved content revision (generation), newest last.
+
+  R   Restore the vault metadata to a generation. You confirm by typing its
+      number. Password slots, namespace keys, and config are preserved.`)
 }
 
 func (m *rootModel) buildRestoreForm() screen {
@@ -629,6 +674,7 @@ func (m *rootModel) buildSettings() screen {
 	items := []list.Item{
 		listItem{name: "Config", desc: "view & edit vault configuration", act: func() tea.Cmd { return pushScreen(m.buildConfigPager()) }},
 		listItem{name: "Lock / Unlock", desc: "toggle the vault lock", act: func() tea.Cmd { return m.toggleLock() }},
+		listItem{name: "Theme", desc: "switch dark / light / auto (also: T anywhere)", act: func() tea.Cmd { return m.cycleTheme() }},
 		listItem{name: "Providers", desc: "built-in provider presets", act: func() tea.Cmd {
 			return pushScreen(m.textPager("providers", m.ctl.providersText()))
 		}},
@@ -637,7 +683,12 @@ func (m *rootModel) buildSettings() screen {
 		}},
 	}
 	return newListScreen("settings", items, nil, nil).
-		withHelp("Vault configuration, lock/unlock, and provider presets.")
+		withHelp(`Vault configuration and preferences. Open an item with enter.
+
+  Config         View and edit config keys (e.g. the default namespace).
+  Lock / Unlock  Toggle the lock; a locked vault blocks reads and grants.
+  Theme          Switch dark / light / auto (also: T anywhere).
+  Providers      Built-in provider presets (base URL, auth style).`)
 }
 
 func (m *rootModel) toggleLock() tea.Cmd {
@@ -657,7 +708,10 @@ func (m *rootModel) buildConfigPager() screen {
 		{binding: kUnset, run: func() tea.Cmd { return pushScreen(m.buildConfigUnsetForm()) }},
 	}
 	return newPagerScreen("config", m.ctl.configText(), acts, func() string { return m.ctl.configText() }).
-		withHelp("Vault configuration keys. Press s to set a key, x to unset one.")
+		withHelp(`Vault configuration keys and their values are listed above.
+
+  s   Set a key to a value (e.g. namespace.default).
+  x   Unset (remove) a key.`)
 }
 
 func (m *rootModel) buildConfigSetForm() screen {

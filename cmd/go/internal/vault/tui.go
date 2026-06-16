@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 )
 
@@ -48,7 +49,15 @@ func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stde
 		ctl.setActiveVault(homeAQLDir(homeDir), "")
 	}
 
+	// Theme: detect the terminal background once, then honor the saved
+	// preference (auto uses the detected value).
+	detectedDark := lipgloss.HasDarkBackground()
+	mode := parseThemeMode(loadTUIPrefs(homeDir).Theme)
+	applyTheme(mode, detectedDark)
+
 	m := newRootModel(ctl)
+	m.theme = mode
+	m.detectedDark = detectedDark
 	prog := tea.NewProgram(m, tea.WithInput(stdin), tea.WithOutput(stdout), tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(stderr, "tui: %s\n", err)
