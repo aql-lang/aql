@@ -185,10 +185,23 @@ before/after numbers.
      were already `wasCompiled=true`, so this moves the ISLAND ceiling, not the
      differential count. (`eng/go/bytecode.go` IsCompiledClosure,
      `eng/go/carrier.go` DataListElemTypeFromValue, `native/native_map_iter.go`.)
-   - Part B — a lambda VALUE arg (`filter ([p] => …) data`) still refuses; it
-     needs the afn-value body extracted and compiled as a closure (tryRecordClosure
-     does `AsList(body)`, which fails on an FnDefInfo). The remaining island/refusal
-     reducer.
+   - Part B — a lambda VALUE arg (`filter ([p] => …) data`) — ATTEMPTED June
+     2026, REVERTED. The afn body CAN be extracted and compiled as a closure with
+     named params (tryRecordClosure was extended to admit an FnDefInfo body — it
+     rides a carrier that KEEPS the FnDefInfo — and compileClosureBody to take the
+     lambda's param names). But the blocker is that each higher-order word has its
+     OWN callback convention, so a uniform closure does NOT fit:
+       - `each`/`for-each`/`scan` (list) → `InvokeBody(cb, [element])`.
+       - `filter` (list) → `voxgigstruct.Filter` hands the callback a
+         `{key, value}` MAP via `MatchFnSig`+`CallAQL`, NOT InvokeBody — so a
+         compiled closure makes `filter` raise "no matching callback signature"
+         and fall back (a soft regression).
+       - map forms → a KeyVal via `callLambda` (and the spec rows are dominated by
+         these — 6 of 8 lambda rows are map+KeyVal, which also need the Part-A
+         closure routed with a KeyVal, an unbuilt input-kind metadata thread).
+     Verdict: Part B needs per-word callback unification (make `filter`/map forms
+     drive a closure with their own input shape) before a lambda closure is sound —
+     a dedicated effort, not a uniform fix. Deferred.
 
 6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
    (425 → 421); 6b variadic-else (421 → 417).**
