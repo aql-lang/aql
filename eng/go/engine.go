@@ -3155,7 +3155,21 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			// downstream const-bake gate (typeBodyConstOK for a schema default,
 			// isInertConst for a data map) decides mutation-safety, so an
 			// instance still bakes only where `make` copies it per instance.
-			if e.registry.Check.IsActive() {
+			// ONLY at the TOP frame: a container inside a fn
+			// body / for body / closure (`for 3 [{a: (3 mul i)} get a]`) is
+			// RE-EVALUATED per call or iteration, often with a different binding
+			// (the loop iterator `i`). The fold's determinism check (two equal
+			// concrete evals) does NOT catch that — `i` is stable WITHIN the fold —
+			// so freezing the value would replicate it across iterations. Those
+			// keep refusing and fall back (mirrors the OpMakeList gate).
+			// The expression must also not REFERENCE a CARRIER binding (a def-local
+			// bound to a computed value, `def v0 (0 add 3) ... {a: (5 mul v0)}`): the
+			// concrete fold coerces the carrier (e.g. to 0) and freezes a WRONG value
+			// (the determinism check sees the same coerced 0 twice). exprRefsCarrier
+			// catches that; a user TYPE binding (Carrier=false) still folds.
+			es := e.registry.Check.Emit
+			topFrame := es == nil || len(es.frames) == 1
+			if e.registry.Check.IsActive() && topFrame && !e.exprRefsCarrier(items) {
 				if folded, ok := e.constFoldContainerVal(items); ok {
 					out.Set(resolvedKey, folded)
 					continue
@@ -3202,6 +3216,52 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		}
 	}
 	return NewMap(out), nil
+}
+
+// exprRefsCarrier reports whether a folded container expression references a
+// def-bound name whose current value is a CARRIER — a computed value or a loop
+// iterator, abstract at check time. Folding such an expression runs the handler
+// against the carrier, which coerces (e.g. AsInteger -> 0), so the fold freezes
+// a wrong constant. A user TYPE binding (a type literal, Carrier=false) or a
+// concrete literal binding is NOT a carrier and still folds. Walks nested paren-
+// exprs, lists, and map values; builtins (not in Defs) are ignored.
+func (e *Engine) exprRefsCarrier(items []Value) bool {
+	r := e.registry
+	found := false
+	var walk func(vs []Value)
+	walk = func(vs []Value) {
+		for _, v := range vs {
+			if found {
+				return
+			}
+			if IsWord(v) {
+				if w, err := AsWord(v); err == nil {
+					if bound, ok := r.Defs.Top(w.Name); ok && bound.Carrier {
+						found = true
+						return
+					}
+				}
+			}
+			if IsParenExpr(v) {
+				if toks, err := AsParenExpr(v); err == nil {
+					walk(toks)
+				}
+				continue
+			}
+			if lst, err := AsList(v); err == nil && !lst.IsNil() {
+				walk(lst.Slice())
+				continue
+			}
+			if mp, err := AsMap(v); err == nil && mp != nil {
+				for _, k := range mp.Keys() {
+					mv, _ := mp.Get(k)
+					walk([]Value{mv})
+				}
+			}
+		}
+	}
+	walk(items)
+	return found
 }
 
 // constFoldContainerVal evaluates a container's computed value (a class field
