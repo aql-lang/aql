@@ -408,6 +408,24 @@ unbakeable* — each made SOUND by a tight guard the differential validated:
   payload pointer. The INSTANTIATED forms (`Box of [Integer]`, make/get over
   them) already compiled. Remaining generics refusals are cascades (case/each/
   fold/reify over generic instances) + 3 instantiated-typed-list-field makes.
+- **Surface type identities. ✅ (323 → 312, ~11 rows.)** `def Shape surface
+  {area:(fnsig …)}` used as a type-algebra / `is` / `unify` operand: the value
+  is a `*SurfaceInfo` `isInertConst` didn't cover. Bake it (return true) — its
+  pointer is shared with the live type (Required shapes + the `exposes`-mutable
+  Conform set stay consistent), so a by-value copy never goes stale.
+- **Class-instance typed-defs (`def b:Point {x:9}`) — DIAGNOSED, deferred (the
+  bulk of the "generic-instance carrier" cluster, ~24 rows; NOT generic-
+  specific).** `b typeof`/`b get x`/`b is …` over a typed-def class instance
+  refuse: `defTypedHandler`'s ObjectType branch constructs the instance via
+  `eng.MakeObject` INLINE, so no `make` event is recorded and `b`'s value is not
+  materialisable — whereas `def b (make Point {x:9})` works via the recorded
+  make-event-result. Baking the instance is UNSOUND: `ObjectInstanceInfo.Fields`
+  is a shared mutable `*OrderedMap` (`b set x 7` mutates in place), so a baked
+  const would persist mutations across program re-runs — a hazard the single-run
+  differential wouldn't catch. The sound fix is EVENT-TRACKING: route the
+  typed-def's class/object construction through the recorded `make` path (a
+  `defTypedHandler` + recording-seam change), so the instance is rebuilt fresh
+  each run like explicit `make`. A focused effort, not a structural-bake.
 
 What REMAINS in provenance is the genuinely deep, multi-blocker work the roadmap
 deferred: `make` class instance-field defaults (item 3 — needs a "suppress
