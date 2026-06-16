@@ -52,16 +52,7 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 		item.Set("value", valVal)
 
 		cbArgs := []Value{NewMap(item)}
-		cbSig := MatchFnSig(cb, cbArgs)
-		if cbSig == nil {
-			callErr = fmt.Errorf("filter: no matching callback signature")
-			return false
-		}
-		var cbCaps []CapturedBinding
-		if fd, ok := cb.Data.(FnDefInfo); ok {
-			cbCaps = fd.Captured
-		}
-		cbResult, err := r.CallAQL(cbSig, cbArgs, cbCaps)
+		cbResult, err := runFilterCallback(r, cb, cbArgs)
 		if err != nil {
 			callErr = err
 			return false
@@ -91,21 +82,13 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 // quotation map form rather than dropping silently.
 func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 	data, _ := AsMap(mapVal)
-	var caps []CapturedBinding
-	if fd, ok := cb.Data.(FnDefInfo); ok {
-		caps = fd.Captured
-	}
 	keys := data.Keys()
 	n := int64(len(keys))
 	out := NewOrderedMap()
 	for idx, k := range keys {
 		v, _ := data.Get(k)
 		cbArgs := []Value{NewKeyVal(k, v, int64(idx), n)}
-		sig := MatchFnSig(cb, cbArgs)
-		if sig == nil {
-			return nil, fmt.Errorf("filter: no matching callback signature")
-		}
-		res, err := r.CallAQL(sig, cbArgs, caps)
+		res, err := runFilterCallback(r, cb, cbArgs)
 		if err != nil {
 			return nil, fmt.Errorf("filter: key %q: %w", k, err)
 		}
@@ -121,6 +104,29 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 		}
 	}
 	return []Value{NewMap(out)}, nil
+}
+
+// runFilterCallback invokes filter's Function-form callback once for one entry,
+// returning its result stack. A compiled CLOSURE (the bytecode VM driving
+// filter natively, the body operand lowered to OpPushClosure) runs through the
+// InvokeBody seam — its named param binds to the cbArgs shape the closure was
+// compiled against ({key,value} pair for a list, KeyVal for a map). An
+// interpreter FnDefINFO lambda matches a signature and runs through CallAQL. The
+// two shapes are byte-identical to the handler: both consume cbArgs and yield a
+// Boolean predicate result.
+func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
+	if IsCompiledClosure(cb) {
+		return InvokeBody(r, cb, cbArgs)
+	}
+	sig := MatchFnSig(cb, cbArgs)
+	if sig == nil {
+		return nil, fmt.Errorf("filter: no matching callback signature")
+	}
+	var caps []CapturedBinding
+	if fd, ok := cb.Data.(FnDefInfo); ok {
+		caps = fd.Captured
+	}
+	return r.CallAQL(sig, cbArgs, caps)
 }
 
 // filterBodyHandler is the quotation form of filter: `filter [body] xs`

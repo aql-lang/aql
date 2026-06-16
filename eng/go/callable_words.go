@@ -61,10 +61,16 @@ var callableWords = map[string]callableWord{
 // unit, AnalyseFnBody records the body under it, finish closes it. ok is false
 // when the body refuses (StartFnCompile declined, or the analysis marked the
 // state uncompilable).
-func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, captures []CapturedBinding, pos SrcPos) (int, bool) {
+// paramNames is the per-input name table: a NAMED slot (a lambda param,
+// `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
+// an empty name (the token-quotation form, `[body]`) leaves the input on the
+// stack for the body to consume positionally. nil means all-unnamed.
+func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
 	declared := []*Type{TAny}
-	paramNames := make([]string, len(inputs)) // all unnamed: body reads inputs off the stack
+	if paramNames == nil {
+		paramNames = make([]string, len(inputs)) // all unnamed: body reads inputs off the stack
+	}
 	name := word + "$body"
 	key := FnAnalysisKey(name, inputs, captures, bodyToks)
 	unit, finish, ok := es.StartFnCompile(key, name, inputs, declared, paramNames, captures, false, pos)
@@ -98,6 +104,19 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 		return false
 	}
 	body := args[spec.bodyPos]
+
+	// A lambda VALUE body (`filter ([p:Any] => …) data`): the afn's named
+	// param binds to the WORD'S callback shape ({key,value} pair for list
+	// filter, KeyVal for the map forms), not to its declared `Any`. Compile
+	// the lambda body against that representative shape so `p.value`/`kv.v`
+	// typechecks, then record the dispatch with the body as a closure the
+	// handler drives through InvokeBody.
+	if fd, isFn := body.Data.(FnDefInfo); isFn {
+		return tryRecordLambdaClosure(r, word, spec, sig, args, &fd, outs, pos)
+	}
+
+	// A token-list body (`filter [body] data`): the body consumes its inputs
+	// positionally off the stack.
 	if !IsConcrete(body) {
 		return false
 	}
@@ -123,6 +142,49 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
 	captures := ComputeCaptures(r, &FnSig{Body: bodyToks})
+	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, outs, pos)
+}
+
+// tryRecordLambdaClosure compiles a higher-order word's LAMBDA argument
+// (`([p] => …)`, an anonymous FnDefInfo) to a closure unit. The lambda's body
+// is compiled with the word's per-callback input shape (lambdaCallbackInputs)
+// bound to the lambda's NAMED params, so a body that destructures the entry
+// (`p.value`, `kv.v`, `acc`+`kv.v`) typechecks. Returns false — leaving the
+// refusal to stand — for a shape the word has no lambda convention for, an
+// arity mismatch, a capturing lambda (deferred), or a body that does not
+// compile.
+func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Signature, args []Value, fd *FnDefInfo, outs []Value, pos SrcPos) bool {
+	lam, ok := fd.FirstOwnSig()
+	if !ok || len(lam.Body) == 0 {
+		return false
+	}
+	// A capturing lambda would need its captures resolved in this scope and
+	// threaded onto the closure; the spec lambda rows are capture-free, so
+	// defer that and keep a capturing lambda on the refusal path.
+	if len(fd.Captured) > 0 {
+		return false
+	}
+	if bodyToksHaveSentinel(lam.Body) {
+		return false
+	}
+	inputs, ok := lambdaCallbackInputs(r, word, args, lam)
+	if !ok || len(lam.Params) != len(inputs) {
+		return false
+	}
+	names := make([]string, len(lam.Params))
+	for i := range lam.Params {
+		names[i] = lam.Params[i].Name
+	}
+	return recordClosureDispatch(r, word, spec, sig, args, lam.Body, inputs, names, nil, outs, pos)
+}
+
+// recordClosureDispatch is the shared tail of the token and lambda closure
+// paths: it resolves the lexical captures, probe-compiles the body in a
+// throwaway state (a refusal leaves the real program untouched), then
+// real-compiles it and records the dispatch (the body operand lowering to
+// OpPushClosure). paramNames is nil for the token form (stack-consumed inputs)
+// and the lambda's param names for the lambda form.
+func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, outs []Value, pos SrcPos) bool {
 	capOps := make([]emitOperand, len(captures))
 	for i, cb := range captures {
 		op, ok := r.Check.Emit.resolveOperand(cb.Value)
@@ -141,7 +203,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// real program untouched (graceful fall-through to the island).
 	real := r.Check.Emit
 	r.Check.Emit = NewEmitState()
-	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, captures, pos)
+	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -149,9 +211,86 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, captures, pos)
+	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
 	if !realOk || unit < 0 {
 		return false
 	}
 	return real.RecordClosureCall(word, sig, args, spec.bodyPos, unit, capOps, outs, pos)
+}
+
+// lambdaCallbackInputs returns the representative input carriers a higher-order
+// word presents to a LAMBDA callback — the word's callback shape, which differs
+// from the token-quotation form (spec.inputs):
+//
+//   - filter over a LIST: one {key, value} pair Map (the element via `.value`).
+//   - filter over a MAP:  one KeyVal {k v i n} (the value via `.v`).
+//
+// The carriers are GENERALISED (field types, not one call's values) so the body
+// is compiled once for every entry. ok is false for a shape with no lambda
+// convention (the caller then leaves the refusal to stand).
+func lambdaCallbackInputs(r *Registry, word string, args []Value, _ *Signature) ([]Value, bool) {
+	switch word {
+	case "filter":
+		if spec := callableWords[word]; spec.bodyPos+1 >= len(args) {
+			return nil, false
+		}
+		data := args[1]
+		if !IsConcrete(data) {
+			return nil, false
+		}
+		elem := DataListElemTypeFromValue(data)
+		switch {
+		case data.Parent.ConformsTo(TMap):
+			return []Value{keyValCarrier(r, elem)}, true
+		case data.Parent.ConformsTo(TList):
+			return []Value{pairCarrier(elem)}, true
+		}
+	}
+	return nil, false
+}
+
+// pairCarrier builds a representative {key, value} pair Map carrier — the shape
+// filter's list Function form hands its callback (key = the index, value = the
+// element). Field VALUES are carriers (Integer key, elem value) so the compiled
+// body reads field TYPES, never one call's concrete values.
+func pairCarrier(elem *Type) Value {
+	om := NewOrderedMap()
+	om.Set("key", NewCarrier(TInteger))
+	om.Set("value", NewCarrier(elem))
+	return NewValueRaw(TMap, MapPayload{M: om})
+}
+
+// keyValCarrier builds a representative KeyVal {k v i n} carrier — the shape the
+// map Function forms (filter/each/fold/scan over a map) hand their callback. The
+// value field carries the map's common value type; k/i/n carry String/Integer/
+// Integer. Tagged Node/Map/KeyVal when that type is registered (the language
+// layer), else a plain Map carrier — either way the body's `kv.v`/`kv.i` reads
+// resolve by ordinary dotted access.
+func keyValCarrier(r *Registry, elem *Type) Value {
+	om := NewOrderedMap()
+	om.Set("k", NewCarrier(TString))
+	om.Set("v", NewCarrier(elem))
+	om.Set("i", NewCarrier(TInteger))
+	om.Set("n", NewCarrier(TInteger))
+	t := TMap
+	if r != nil {
+		if kv := r.Types.Lookup("Node/Map/KeyVal"); kv != nil {
+			t = kv
+		}
+	}
+	return NewValueRaw(t, MapPayload{M: om})
+}
+
+// bodyToksHaveSentinel reports whether a lambda body's token slice contains a
+// flow-control sentinel (break/continue/return) — the token-slice form of
+// bodyHasSentinel, for a lambda whose Body is already []Value.
+func bodyToksHaveSentinel(toks []Value) bool {
+	found := false
+	WalkBodyWords(toks, func(w WordInfo, _ Value) {
+		switch w.Name {
+		case "break", "continue", "return":
+			found = true
+		}
+	})
+	return found
 }

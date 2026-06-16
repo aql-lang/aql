@@ -395,3 +395,50 @@ func TestMapIterationCompilesNative(t *testing.T) {
 		t.Errorf("list each regressed: compiled=%v got=%v", compiled, gotC)
 	}
 }
+
+// Roadmap item 5 part B (filter lambda args) — a `filter ([p] => …) data`
+// lambda compiles its afn body to a closure with the word's callback input
+// shape ({key,value} pair over a list, KeyVal over a map), driven natively
+// through InvokeBody rather than islanding or refusing. Verifies the closure
+// path is value- and taxonomy-identical to the interpreter.
+func TestFilterLambdaCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		// list filter: the lambda reads the element via the {key,value} pair.
+		{`filter ([p:Any] => [(p.value mod 2) eq 0]) [1 2 3 4 5 6]`, "[[2 4 6]]"},
+		{`filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]`, "[[4 5]]"},
+		// map filter: the lambda reads the value via a KeyVal, shape preserved.
+		{`filter ([kv:KeyVal] => [(kv.v mod 2) eq 0]) {a:1 b:2 c:3 d:4}`, "[{b:2 d:4}]"},
+		{`{a:1 b:5 c:3} filter ([kv:KeyVal] => [kv.v gt 2])`, "[{b:5 c:3}]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native closure lowering, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// A non-Boolean map predicate is a loud filter_error in BOTH engines (the
+	// compiled closure runs the same strict check as the interpreter path).
+	bad := `{a:1 b:5} filter ([kv:KeyVal] => [kv.v])`
+	a, _ := New()
+	_, compiled, errC := a.RunCompiled(bad)
+	b, _ := New()
+	_, errI := b.Run(bad)
+	if !compiled || errC == nil || errI == nil {
+		t.Errorf("%q: want both engines to error (compiled=%v errC=%v errI=%v)", bad, compiled, errC, errI)
+	}
+}
