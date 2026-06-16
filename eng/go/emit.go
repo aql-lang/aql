@@ -45,6 +45,26 @@ var fnIntrospectionWords = map[string]bool{
 	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
 }
 
+// inertOperandWords are words whose NoEvalArgs clause/path list or QuoteArgs
+// atom is inert DATA the handler consumes directly — parsed into SQL, decoded
+// into a lens, read as an error code — never AQL code re-stepped on the tape.
+// The operand therefore bakes as a const and the dispatch lowers to a plain
+// CALL_NATIVE running the unchanged handler, so they are exempt from the blanket
+// code-body and quoted-operand refusals (like the get/set field-name exemption).
+// A list operand bakes even when it holds Words / paren-exprs, which the general
+// isInertConst rejects as code.
+var inertOperandWords = map[string]bool{
+	// aql:query DSL — clause lists (column/expr specs) + bare table names.
+	"select": true, "where": true, "order": true, "group": true,
+	"having": true, "on": true, "using": true,
+	"from": true, "join": true, "innerjoin": true, "leftjoin": true, "crossjoin": true,
+	// reach — an inert lens path: field names, `!` strict markers, and raw
+	// computed `(expr)` segments (stored unevaluated, applied later by the lens).
+	"reach": true,
+	// raise — the error-code atom (`raise bad_input "…"`).
+	"raise": true,
+}
+
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -1168,11 +1188,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
 		return
-	case len(sig.NoEvalArgs) > 0:
+	case len(sig.NoEvalArgs) > 0 && !inertOperandWords[word]:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set":
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !inertOperandWords[word]:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
@@ -1254,6 +1274,25 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 				// introspection handler reads at run time.
 				op, ok = constOperand(es.intern(a)), true
 			}
+		}
+		if !ok && inertOperandWords[word] && IsConcrete(a) && a.Parent.ConformsTo(TList) && !listHasParenExpr(a) {
+			// An inert operand list (query column/expr spec, reach path) is DATA
+			// the handler consumes directly — never re-stepped — so it bakes as a
+			// const even though it holds Words (which the general isInertConst
+			// rejects as code). Compounds are never pooled, so each keeps its own
+			// const slot. A list holding a ParenExpr is EXCLUDED: that is deferred
+			// code (a reach computed segment `(k)`) needing the live def scope at
+			// evaluation time, which a baked const cannot reach — so it falls back.
+			op, ok = constOperand(es.intern(a)), true
+		}
+		if !ok && (introspect || word == "is") && isBuiltinStructuralType(a) {
+			// A STRUCTURAL type operand (`[Integer]`, `{a:Integer}`) that a
+			// type-reading word matches against. isInertConst rejects its
+			// type-literal members, but a BUILTIN type literal's Parent is the
+			// canonical package-level *Type, so baking by value is sound (no
+			// behave-staleness). `5 is Integer` already lowers via OpPushType;
+			// this is its structural counterpart.
+			op, ok = constOperand(es.intern(a)), true
 		}
 		if !ok {
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
@@ -1435,15 +1474,43 @@ func typeBodyConstOK(v Value) bool {
 		return true
 	case ObjectTypeInfo:
 		// A class / object type body is const-bakeable iff every field
-		// default is plain data — a method (fn-value) field is not, so a
-		// class with methods (the surface-body case) still refuses. The
-		// canonical *Type rides the body's payload pointer (shared, not
-		// copied), so it stays canonical at run time; `make` recovers the
-		// field schema from the baked body. The parent chain's fields must
-		// be data too (AllFields merges them).
-		return fieldsOK(d.AllFields())
+		// default is a TEMPLATE `make` deep-copies per instance: a required
+		// field's type node, an inert const, a clean nested type body, OR any
+		// concrete data default — a flex container, a class/object instance, an
+		// array (`{items:(flex [])}`, `{i:(make Inner {})}`, materialised at
+		// schema construction). The const template is only ever READ (copied),
+		// never mutated, so a mutable default is sound; the per-instance COPY
+		// isolation is pinned by class.tsv:112. A METHOD field (fn value) is NOT
+		// data and still refuses (the surface-body case falls back). The
+		// canonical *Type rides the body payload pointer, staying canonical.
+		fields := d.AllFields()
+		if fields == nil {
+			return false
+		}
+		for _, k := range fields.Keys() {
+			fv, _ := fields.Get(k)
+			if memberOK(fv) || isSchemaDefaultOK(fv) {
+				continue
+			}
+			return false
+		}
+		return true
 	}
 	return false
+}
+
+// isSchemaDefaultOK reports whether v may ride as a class/object field DEFAULT
+// in a const-baked schema: a concrete data template `make` deep-copies per
+// instance. A fn value (a method field) is excluded — it is code, not data, and
+// keeps the schema on the fallback path.
+func isSchemaDefaultOK(v Value) bool {
+	if !IsConcrete(v) {
+		return false
+	}
+	if _, isFn := v.Data.(FnDefInfo); isFn {
+		return false
+	}
+	return true
 }
 
 // isInertConst reports whether v can live in a Program's constant
@@ -1471,6 +1538,97 @@ func typeBodyConstOK(v Value) bool {
 // copy-returning. Keep this whitelist free of mutable instance types: adding
 // one would let a pooled compound const reach an in-place mutator and corrupt
 // it across iterations.
+// isBuiltinStructuralType reports whether v is a structural TYPE literal whose
+// every leaf is a BUILTIN type node — `[Integer]`, `[Integer String]`,
+// `{a:Integer}`, and nestings thereof. Such a value is sound to bake by value
+// for a type-reading word (`is`, `typeof`, the type-algebra words): a builtin
+// type literal's Parent is the canonical package-level *Type pointer, which is
+// stable and never retired, so no canonical-pointer staleness arises (eng
+// CLAUDE.md "Canonical *Type Pointers"). USER-type leaves are excluded — their
+// Behavior can be mutated later via `behave`, which a by-value const would not
+// see — so those structural operands stay refused.
+func isBuiltinStructuralType(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return false
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		if len(d.Elems) == 0 {
+			return false
+		}
+		for _, e := range d.Elems {
+			if !isBuiltinTypeLeaf(e) {
+				return false
+			}
+		}
+		return true
+	case MapPayload:
+		if d.M == nil || d.M.Len() == 0 {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !isBuiltinTypeLeaf(mv) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// isBuiltinTypeLeaf reports whether v is a builtin bare type node or a nested
+// builtin structural type — the per-leaf rule of isBuiltinStructuralType.
+func isBuiltinTypeLeaf(v Value) bool {
+	if IsBareTypeNode(v) {
+		// A bare type literal IS its lattice node (typeNodeOf), not its Parent;
+		// a builtin node has a stable canonical package-level pointer.
+		return typeNodeOf(v).IsNative()
+	}
+	return isBuiltinStructuralType(v)
+}
+
+// listHasParenExpr reports whether a concrete list holds a ParenExpr element —
+// deferred code that needs the live def scope when evaluated (a reach computed
+// segment `(k)`), so the list is NOT inert and must not bake into the const pool.
+func listHasParenExpr(v Value) bool {
+	lst, err := AsList(v)
+	if err != nil || lst.IsNil() {
+		return false
+	}
+	for i := 0; i < lst.Len(); i++ {
+		if IsParenExpr(lst.Get(i)) {
+			return true
+		}
+	}
+	return false
+}
+
+// isInertReach reports whether a Reach lens value is fully inert and so safe to
+// bake as a const: every segment is a literal field-name key (no computed
+// `(expr)` segment, which is deferred code needing the live def scope), and the
+// receiver (if any) is itself a const. A field-name Word key counts as inert
+// data here — the lens handler reads it as a key, never re-steps it.
+func isInertReach(ri ReachInfo) bool {
+	for _, seg := range ri.Segments {
+		if seg.Computed {
+			return false
+		}
+		if _, isWord := seg.KeyLit.Data.(WordInfo); isWord {
+			continue // a field-name Word is inert lens data
+		}
+		if !isInertConstMember(seg.KeyLit) {
+			return false
+		}
+	}
+	for _, rv := range ri.Receiver {
+		if !isInertConstMember(rv) {
+			return false
+		}
+	}
+	return true
+}
+
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -1489,6 +1647,13 @@ func isInertConst(v Value) bool {
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
 		_ = d
 		return true
+	case ReachInfo:
+		// An inert lens VALUE (`$.name`, `$.a.b`, a constructed reach): the
+		// segments are field-name keys the apply/get/set handlers read as data
+		// and the receiver (if any) is a const, so the whole lens bakes. A
+		// COMPUTED `(expr)` segment is deferred code needing the live def scope at
+		// apply time (it would go stale in a const), so it disqualifies the lens.
+		return isInertReach(d)
 	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
 		// use site — make's operand). Sound as consts when their
@@ -1498,6 +1663,22 @@ func isInertConst(v Value) bool {
 		// canonical. Never deduped. A class/object body qualifies only
 		// when every field default is data (no method fn-values).
 		return typeBodyConstOK(v)
+	case *TypeSchemaInfo:
+		// A GENERIC SCHEMA template (`gen [T] class {value:T}`) — the bare
+		// generic type value (`Box`, `make Box …`, `is Box`). Immutable:
+		// `of [T]` / inference instantiate a FRESH lattice node per use, never
+		// mutating the template, and the canonical minted schema node rides
+		// d.Type by pointer. Bake when the body (placeholder fields + structure)
+		// is itself a clean type body.
+		return typeBodyConstOK(d.Body) || isInertConst(d.Body)
+	case *SurfaceInfo:
+		// A SURFACE type identity (`def Shape surface {area:(fnsig …)}`) used as
+		// a type-algebra / `is` operand. Sound to bake: the value is a pointer
+		// to the canonical *SurfaceInfo (shared by every copy), so its Required
+		// shapes and even the `exposes`-mutable Conform set stay consistent with
+		// the live type — a by-value Value copy shares the same pointer, so
+		// nothing goes stale.
+		return true
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConstMember(e) {

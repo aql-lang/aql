@@ -52,23 +52,17 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 		item.Set("value", valVal)
 
 		cbArgs := []Value{NewMap(item)}
-		cbSig := MatchFnSig(cb, cbArgs)
-		if cbSig == nil {
-			callErr = fmt.Errorf("filter: no matching callback signature")
-			return false
-		}
-		var cbCaps []CapturedBinding
-		if fd, ok := cb.Data.(FnDefInfo); ok {
-			cbCaps = fd.Captured
-		}
-		cbResult, err := r.CallAQL(cbSig, cbArgs, cbCaps)
+		cbResult, err := invokeCallback(r, cb, cbArgs)
 		if err != nil {
 			callErr = err
 			return false
 		}
-		if len(cbResult) > 0 && cbResult[0].Parent.ConformsTo(TBoolean) {
-			b, _ := AsBoolean(cbResult[0])
-			return b
+		if len(cbResult) > 0 {
+			top := cbResult[len(cbResult)-1]
+			if top.Parent.ConformsTo(TBoolean) {
+				b, _ := AsBoolean(top)
+				return b
+			}
 		}
 		return false
 	})
@@ -84,6 +78,26 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	return []Value{val}, nil
 }
 
+// invokeCallback runs a higher-order callback fn VALUE against args: a compiled
+// closure (the OpPushClosure payload, when the call compiled) runs VM-native
+// through the InvokeBody seam; an interpreter FnDefInfo lambda runs through
+// CallAQL with its construction-time captures. The two paths build the SAME
+// args, so results are identical regardless of which one runs.
+func invokeCallback(r *Registry, cb Value, args []Value) ([]Value, error) {
+	if IsCompiledClosure(cb) {
+		return InvokeBody(r, cb, args)
+	}
+	sig := MatchFnSig(cb, args)
+	if sig == nil {
+		return nil, fmt.Errorf("no matching callback signature for %d argument(s)", len(args))
+	}
+	var caps []CapturedBinding
+	if fd, ok := cb.Data.(FnDefInfo); ok {
+		caps = fd.Captured
+	}
+	return r.CallAQL(sig, args, caps)
+}
+
 // filterMapFunction is the Function form of filter over a map: it calls the
 // callback once per entry with a KeyVal {k v i n}, keeping the entries whose
 // result is Boolean true and returning a Map (shape-preserving, like the
@@ -91,21 +105,13 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 // quotation map form rather than dropping silently.
 func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 	data, _ := AsMap(mapVal)
-	var caps []CapturedBinding
-	if fd, ok := cb.Data.(FnDefInfo); ok {
-		caps = fd.Captured
-	}
 	keys := data.Keys()
 	n := int64(len(keys))
 	out := NewOrderedMap()
 	for idx, k := range keys {
 		v, _ := data.Get(k)
 		cbArgs := []Value{NewKeyVal(k, v, int64(idx), n)}
-		sig := MatchFnSig(cb, cbArgs)
-		if sig == nil {
-			return nil, fmt.Errorf("filter: no matching callback signature")
-		}
-		res, err := r.CallAQL(sig, cbArgs, caps)
+		res, err := invokeCallback(r, cb, cbArgs)
 		if err != nil {
 			return nil, fmt.Errorf("filter: key %q: %w", k, err)
 		}

@@ -2278,7 +2278,24 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				// is a fn that's also a registered callable.
 				noEval := match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]
 				if !noEval {
+					// A type-constructor SCHEMA arg folds into one const: while
+					// its defaults evaluate, MATERIALISE them (run the pure-data
+					// constructors for real → concrete templates, not carriers)
+					// and SUSPEND bytecode recording (the inner make/flex
+					// dispatches must not record spurious unconsumed-result
+					// events). Both windows close right after the eval.
+					var closeMat, resume func()
+					if match.Sig.SchemaArg {
+						closeMat = e.registry.Check.EnterSchemaMaterialisation()
+						resume = e.registry.Check.Emit.Suspend()
+					}
 					evaluated, err := e.autoEvalMap(match.Args[i])
+					if resume != nil {
+						resume()
+					}
+					if closeMat != nil {
+						closeMat()
+					}
 					if err != nil {
 						return err
 					}
@@ -2320,7 +2337,22 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Signatures marked RunInCheckMode opt out of this intercept —
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
-	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode {
+	// Schema materialisation runs a DATA constructor (make/flex/array/object)
+	// for real so a class field default becomes a concrete template. It must
+	// NOT run a CODE constructor (fn/afn/fnsig) — a method field is not data,
+	// and materialising it collapses the schema to a clean type that would
+	// wrongly const-bake; such a class must keep falling back. A Function-typed
+	// result identifies the code constructors.
+	materialising := e.registry.Check.MaterialisingSchema()
+	if materialising {
+		for _, rt := range match.Sig.Returns {
+			if rt != nil && (rt.Equal(TFunction) || rt.Equal(TFnDef)) {
+				materialising = false
+				break
+			}
+		}
+	}
+	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode && !materialising {
 		// The dispatch name: the word at the pointer, or — for a
 		// VALUE dispatch (a module wrapper's trivial-delegation
 		// short-circuit steps the Function literal, not a Word) — the

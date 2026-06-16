@@ -127,9 +127,26 @@ before/after numbers.
    set rows; the residual 13 quoted-operand refusals are meta
    (minilang/codequote/quote/timeout). (`eng/go/emit.go` RecordCall.)
 
-3. **`make` class with typed-instance field defaults — DEFERRED (5 rows, HIGH
-   risk, multi-blocker).** A class body `{x:(make Foo 1)}` whose default is a
-   user-type instance. Scoped + attempted June 2026; reverted. Findings:
+3. **`make` class with instance/computed field defaults — ✅ LANDED (refusals
+   337 → 335; the deep multi-blocker, done June 2026 via the targeted hook).**
+   A class body `{items:(flex [])}`, `{i:(make Inner {})}`, `{bits:(make Array
+   …)}`, `{x:(make Foo 1)}` whose default is a mutable container / instance.
+   All three blockers solved together: a `SchemaArg` sig flag on the type
+   constructor opens a window while its schema map auto-evaluates in which (B2)
+   bytecode recording is SUSPENDED (no spurious unconsumed-result events) and
+   (B1) DATA constructors are MATERIALISED — the check-mode intercept is
+   bypassed so flex/make/array run for real into concrete templates, NOT
+   carriers; CODE constructors (fn/afn/fnsig, Function-shaped Return) are NOT
+   materialised so a real arg-taking method still falls back. (B3)
+   `typeBodyConstOK` admits concrete data defaults (a template `make` deep-
+   copies per instance) while rejecting fn-value method fields. The
+   global-`RunInCheckMode` shortcut that regressed the first attempt is avoided
+   (standalone `flex […]` untouched). A 0-arg fn field is a COMPUTED default
+   (auto-invoked → its value) and now compiles too — value-parity verified.
+   (`eng/go/{value,nativefunc,registry,check,engine,emit}.go`, `native_type.go`.)
+
+   **Original (reverted June-2026) analysis, kept for context:** A class body
+   `{x:(make Foo 1)}` whose default is a user-type instance. Findings:
    - Only **5 spec rows** (`user-types.tsv` §, `class.tsv` lines 79–81 refine
      defaults + 114–115 class-instance defaults that pin per-instance COPY).
    - NOT a provenance gap: `ReturnsFreshInstance` returns a bare type CARRIER in
@@ -156,6 +173,31 @@ before/after numbers.
    exists; the leverage (5 rows) does not justify it ahead of items 5/6.
    (`eng/go/emit.go`, `eng/go/carrier.go`.)
 
+   **Re-attempt June 2026 — reverted, but two of the three blockers proved
+   out; Blocker 1 is the lone wall.** Findings, to seed the dedicated effort:
+   - **Blocker 2 (recording) — SOLVED, clean primitive found.** A `SchemaArg`
+     flag on the type-constructor sig (`class`/`object`/`record`/`surface`,
+     NOT `make` whose override map is a runtime value), wired into `execMatch`'s
+     arg auto-eval to wrap the schema map's `autoEvalMap` in `EmitState.Suspend()`,
+     makes the inner `(make…)`/`(flex…)` defaults stop recording. Verified:
+     `def Foo class {items:(flex [])} 1` then compiles native (was "residual
+     shape beyond Stage 1"). This IS the "suppress recording inside a const-baked
+     schema construction" primitive the original verdict asked for.
+   - **Blocker 3 (bake) — implemented, sound.** `typeBodyConstOK`'s ObjectTypeInfo
+     case admits any CONCRETE data default (a template `make` deep-copies per
+     instance) while still rejecting fn-value method fields. Correct, but inert
+     without Blocker 1.
+   - **Blocker 1 (carrier → concrete) — the wall, and the naive fix REGRESSES.**
+     The defaults are check-mode CARRIERS (`flex []` → `NewCarrier(TNode)`), so
+     the schema never goes concrete and `make Foo {}` still refuses. Making the
+     constructor `RunInCheckMode` GLOBALLY (tried on `flex`) cleared one row but
+     regressed refusals 337 → 401 — a standalone `flex […]` then yields a
+     concrete flex that can't be a program residual, and check-error rows shift.
+     So Blocker 1 needs the TARGETED `rememberConcreteMake`/`materialise` hook
+     (run the pure-data constructor for real ONLY inside the SchemaArg-suspended
+     schema eval, remember the concrete instance against the carrier id) — not a
+     global mode change. That hook is the remaining dedicated-effort piece.
+
 4. **Poly type-algebra over predicates. ✅ LANDED (453 → 445).** SCOPE
    CORRECTION: the billed "~75 get/is/typeof over instances" turned out to be
    mostly ALREADY COMPILING (simple `(make S {}) get x`, `is S`, `typeof` all
@@ -172,13 +214,53 @@ before/after numbers.
    `TestEmitRefusesPolySite` (the site now compiles) to assert the poly
    lowering + parity. (`eng/go/carrier.go`.)
 
-5. **Lambda higher-order args + map iteration (~22 refusals + 7 islands, HIGH
-   risk).** `filter ([p:Any] => …)`, `fold` over maps, `each {…}`. Two parts:
-   (a) a lambda VALUE arg compiles its body to a closure (the closure machinery
-   exists; the afn-value path needs the fn-VALUE-on-stack handling the apply
-   shortcut sketched); (b) map iteration emits ordered KeyVal traversal natively
-   instead of islanding. The highest-leverage island reducer. (`eng/go/carrier.go`,
-   `emit.go`, possibly a `FOR_EACH_MAP` lowering.)
+5. **Lambda higher-order args + map iteration (HIGH risk). SCOPE CORRECTION:
+   the billed "~22 refusals + 7 islands" was stale — at 407 the live cluster is
+   ~6 islands + ~6 refusing rows, the rest having already cleared or been
+   cascade-dependent.** Two mechanisms, both routed through the existing
+   `InvokeBody` seam (no new opcode — `FOR_EACH_MAP` was unnecessary):
+
+   - **5b — map-iteration quotation. ✅ LANDED (islands 15 → 9).** `each`/`fold`/
+     `scan [body] {map}` islanded because the map-overload handlers ran the body
+     through a fresh sub-engine (`New(reg).Run`) instead of `InvokeBody`. The
+     handlers were one-per-word and classified the body by `Parent` type at run
+     time — unsound once bodies compile (a compiled quotation closure and a
+     lambda both have `Parent=TFunction`). Split each word's handler PER MATCHED
+     SIGNATURE (`[TList,TMap]` quotation → value input + `InvokeBody`;
+     `[TFunction,TMap]` lambda → KeyVal input + `CallAQL`), which `OpCallNative`
+     routes by the baked sig. Added a map-value body input carrier
+     (`DataMapValueTypeFromValue`). `for-each` map quotation is DEFERRED: it nets
+     0 values and `RecordClosureCall` requires exactly one. (`native_map_iter.go`,
+     `native_array.go`, `callable_words.go`, `carrier.go`.)
+
+   - **5a-1 — filter list-lambda. ✅ LANDED (refusals 407 → 405).** `filter
+     ([p:Any] => …) [list]` refused at RecordCall's opaque-output guard (filter's
+     dynamic Function result), before the fn-value guard. `tryRecordLambdaClosure`
+     (carrier dispatch, before `RecordCall`) compiles a single-sig anonymous
+     lambda body to a closure with the lambda's NAMED param bound to a
+     `{key,value}` pair-Map carrier (matching what `filterHandler` builds), riding
+     the lambda's precomputed `Captured`. `filterHandler` runs its callback via
+     `invokeCallback` (closure → `InvokeBody`/VM, FnDefInfo → `CallAQL`).
+     (`callable_words.go` named-param `compileClosureBody` + `tryRecordLambdaClosure`,
+     `invoke.go` `IsCompiledClosure`, `filter.go`.)
+
+   - **5a-2 — map lambdas. ✅ LANDED (refusals 405 → 399).** filter/each/fold/scan
+     with a lambda over a map. `tryRecordLambdaClosure` grew a per-(word,receiver)
+     `buildLambdaInputs`: filter-list keeps the pair Map; filter/each-map hand a
+     KeyVal carrier (a concrete TMap with `k/v/i/n` fields — `TKeyVal` is lang-
+     layer and the compiled `get` is map-subtype-agnostic); fold/scan-map hand
+     `(acc, KeyVal)`. Lambda arity is validated (1 for filter/each, 2 for fold/
+     scan). The map handlers' lambda path + `filterMapFunction` route through
+     `invokeCallback` (closure → `InvokeBody`/VM, FnDefInfo → `CallAQL`). Gated to
+     single-sig anonymous lambdas; multi-sig fns stay refused. (`callable_words.go`,
+     `native_map_iter.go`, `filter.go`.)
+
+   - **`for-each` map quotation — DEFERRED, no corpus rows.** Would need a
+     0-output closure-call recording (`RecordClosureCall` requires exactly one
+     out); left unbuilt rather than added speculatively, since no `.tsv` row
+     exercises it. Item 5 is otherwise complete: every lambda-HOF and map-
+     iteration row in the corpus compiles natively, the rest of the original
+     cluster having been stale/cascade-dependent.
 
 6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
    (425 → 421); 6b variadic-else (421 → 417).**
@@ -197,10 +279,39 @@ before/after numbers.
    (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`, `eng/go/emit.go` RecordBranch,
    `eng/go/lower.go` lowerArms/lowerArmsComputed.)
 
-7. **`select` query DSL + `reach` lenses (~26, MED, OPTIONAL for P7).** Compile
-   the query/lens bodies, or — if the cost outweighs the benefit — add them to
-   `metaFallbackWords` as a deliberate DSL-interpreted boundary. Decide with the
-   island/refusal numbers in hand.
+7. **Code-body context/DSL words (PARTIAL). SCOPE FINDING: only one of the
+   code-body-word refusals is clean single-body closure reuse; the rest are
+   genuine DSLs or entangled with other clusters.** The "code-body word
+   (NoEvalArgs)" bucket (99 at the 399 ceiling) breaks down as: `select` ~20
+   (the whole `Query.*` query DSL — joins/group/order/having), `word`-splice ~31
+   and `test-*` ~15 (META — for the item-9 allowlist), `case` 7 (predicate-type /
+   computed-scrutinee shapes, cascading from the predicate/provenance work),
+   `reach` 6 (lens construction, a baking pattern not a body run), `do`/`error` 8
+   (error-recovery DSL, the bodies mostly contain `case`), and `with-decimal` 5.
+
+   - **`with-decimal`. ✅ LANDED (refusals 399 → 394).** A single-body context
+     word like `do`: it pushes a decimal precision/rounding override then ran the
+     body via a sub-engine. Routed through `InvokeBody` + added to `callableWords`
+     so the body compiles to a closure run INSIDE the pushed context; the compiled
+     decimal ops read the context at run time (precision parity confirmed by the
+     differential). (`native_math.go`, `callable_words.go`.)
+
+   - **`select` query DSL. ✅ LANDED (refusals 394 → 374, all 21 query rows).**
+     CORRECTION of an earlier deferral: this is NOT a special DSL barrier. The
+     `aql:query` module materializes through SQLite, so every clause list (a
+     column/expression spec) and bare table name is inert DATA the handler parses
+     into SQL — never AQL code re-stepped. Two narrow exemptions (mirroring
+     get/set): `queryDSLWords` skip the NoEvalArgs + QuoteArgs refusal guards, and
+     the clause list bakes as a const in `RecordCall`'s operand loop (it holds
+     Words, which the general `isInertConst` rejects as code, but the handler
+     treats them as data). Dispatch lowers to a plain `CALL_NATIVE` running the
+     unchanged handler; SQLite materialization is value-identical under the VM.
+     (`emit.go`.)
+
+   - **`reach` lenses (6), predicate-type `case` (7), `do`/`error` recovery (8) —
+     still REMAINING.** `case`/`do`/`error` are entangled with the predicate-type
+     and provenance clusters; `reach` is a lens-construction (baking) pattern.
+     Tractable but not yet done.
 
 8. **introspection over fn-values ✅ LANDED (417 → 407).** A type-READING word
    (`typeof`/`tcmp`/`teq`/`tand`/`tor`/`tnot`/`inspect`) over a fn VALUE bakes
@@ -213,14 +324,115 @@ before/after numbers.
    re-step a fn body) — so they are deliberately OFF the allowlist.
    (`eng/go/emit.go` RecordCall + intern.)
 
-9. **Error-row disposition + the re-scoped P7 gate.** Make the VM raise the
-   count-mismatch / unpack-missing / orphan-gen taxonomies (so they compile), or
-   allowlist them; then land `metaFallbackWords` + `TestOnlyMetaFallsBack` and
-   perform the §P7 fallback narrowing.
+9. **Error-row disposition + the re-scoped P7 gate. ◑ PARTIAL — allowlist +
+   boundary gate LANDED; non-meta drive + P7 narrowing remain.** `metaFallbackWords`
+   (the curated allowlist of inherently-dynamic/reflective words, each with a
+   one-line *why it can't compile*) and `TestMetaFallbackBoundary` are in
+   (`test/go/langspec/meta_fallback_test.go`): every refused/islanded row is
+   classified META (attributable to an allowlisted word — deliberate fallback)
+   or NON-META (remaining compilable work), via the refusal-reason word
+   (module-wrapped natives like `test-*` surface here) or a source token (the
+   usurp family surfaces as a `/u`-suffixed token). The split: **121 META + 212
+   NON-META**; `nonMetaCeiling` (212) is the honest finish-line ratchet
+   (only-down). REMAINING: drive non-meta → 0 (the 212 are real compute —
+   make/get/is/typeof provenance ~119, code-body ~37, residual lowering ~17,
+   etc.); the error rows (count-mismatch / unpack-missing / orphan-gen) get their
+   own disposition (raise the matching taxonomy so they compile, or join the
+   allowlist); THEN move `metaFallbackWords` into eng and perform the §P7
+   whole-program-fallback narrowing.
 
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
 6–8 → ~40, all META + error rows; item 9 closes the gate.
+
+## 4b. Conservative-guard sweep (refusals 407 → 368)
+
+A pass re-examining every refusal bucket with one question — *is this a real
+barrier the VM cannot honour, or a conservative guard / inert operand?* — found
+and cleared a class of FALSE barriers: words refused by a blanket guard whose
+operand is actually inert DATA the unchanged handler consumes (never re-stepped),
+so it bakes as a const and lowers to plain `CALL_NATIVE`. Cleared: the `aql:query`
+DSL (clause lists → SQL, 20), `reach` lens paths (4), `raise` error-code atoms
+(2), plus `with-decimal` as a single-body closure (5). The exemptions live in
+`inertOperandWords` (emit.go), mirroring the get/set field-name exemption; a
+`listHasParenExpr` guard excludes deferred-code operands (a reach computed `(k)`
+needs the live def scope — the differential caught it: compiled None vs interp 9).
+
+The sweep also CONFIRMED the remaining 368 are not false barriers — they split:
+
+- **Genuine META (~70) — for the item-9 allowlist, uncompilable by definition.**
+  `word`-splice (~31, re-steps spliced tokens), `test-*` (~16), `minilang-register`
+  (4), `codequote` (2), `vm-run`, timeout/interval/await (runtime), and the
+  usurp/`force-arity`/`stack-args`/`forward-args` modifier family (the `sub`/`add`/
+  `if` "dynamic output" rows — they re-dispatch a modified fn the VM cannot re-step).
+- **Real compilation work (~230) — tractable but genuine, not mislabeled guards.**
+  `make`/`get`/`is`/`typeof` operand provenance (167, the carrier-identity cluster,
+  item 3 HIGH risk), residual lowering (31), user-fn-call inlining (32), `do`/`error`
+  (blocked by the dynamic `do`-output provenance + a diverging body, not a guard),
+  predicate-type/computed-scrutinee `case` (7), multi-return (7), `eachrank`/
+  `foldaxis` (3, matrix HOF), if-branch (4).
+
+So the cheap wins are exhausted: further progress is item 9 (META allowlist) and
+the provenance/lowering efforts, not more exemptions.
+
+## 4c. Operand-provenance inroads (refusals 368 → 337)
+
+The "operand provenance" bucket (167) is not monolithic. Two sub-clusters yielded
+to the same lens — *the operand is inert, only its representation looked
+unbakeable* — each made SOUND by a tight guard the differential validated:
+
+- **Builtin structural type operands. ✅ (368 → 353, ~15 rows.)** `[1] is
+  [Integer]`, `{a:5} is {a:Integer}`, `[Integer String] tcmp …`: the operand is a
+  list/map of type literals, which `isInertConst` rejects (type nodes can go
+  stale against canonical pointers). Sound for BUILTINS only — a builtin literal's
+  Parent is the canonical package-level *Type, stable and never retired, so a
+  by-value bake never goes stale. `isBuiltinStructuralType` (emit.go) walks the
+  operand via `typeNodeOf` (a type literal IS its node, not `v.Parent` — the first
+  cut got that wrong and let a user type through). USER-type leaves stay refused
+  (their Behavior is `behave`-mutable).
+- **Inert reach lens values. ✅ (353 → 337, ~16 rows.)** `apply $.name p`,
+  `StructUtil.setpath $.a.b …`, `getpath`, `sortby`: a `$.path` is a concrete
+  Reach value `isInertConst` didn't cover. Added a `ReachInfo` case (`isInertReach`)
+  baking a lens whose segments are all literal field-name keys and whose receiver
+  is const; a COMPUTED `(expr)` segment is excluded (deferred code needing live
+  scope). One row crossed REFUSED → compiled-with-island (net gain), so
+  islandCeiling 9 → 10.
+- **Class instance-field defaults. ✅ (337 → 335.)** Roadmap item 3 (above);
+  the deep multi-blocker, via the SchemaArg materialise/suspend hook.
+- **Bare generic schema templates. ✅ (335 → 323, ~12 rows.)** `make Box
+  {value:42}`, `is Box`, `typeof`/residual over a bare `gen [T] class/refine/
+  fnsig`: the value is a `*TypeSchemaInfo` (immutable generic schema) `isInertConst`
+  didn't cover, and a bare generic has no canonical lattice node to OpPushType.
+  Bake it as a const (its body is a clean type body) — sound, since `of`/
+  inference mint a FRESH node per use and the canonical schema node rides the
+  payload pointer. The INSTANTIATED forms (`Box of [Integer]`, make/get over
+  them) already compiled. Remaining generics refusals are cascades (case/each/
+  fold/reify over generic instances) + 3 instantiated-typed-list-field makes.
+- **Surface type identities. ✅ (323 → 312, ~11 rows.)** `def Shape surface
+  {area:(fnsig …)}` used as a type-algebra / `is` / `unify` operand: the value
+  is a `*SurfaceInfo` `isInertConst` didn't cover. Bake it (return true) — its
+  pointer is shared with the live type (Required shapes + the `exposes`-mutable
+  Conform set stay consistent), so a by-value copy never goes stale.
+- **Class-instance typed-defs (`def b:Point {x:9}`) — DIAGNOSED, deferred (the
+  bulk of the "generic-instance carrier" cluster, ~24 rows; NOT generic-
+  specific).** `b typeof`/`b get x`/`b is …` over a typed-def class instance
+  refuse: `defTypedHandler`'s ObjectType branch constructs the instance via
+  `eng.MakeObject` INLINE, so no `make` event is recorded and `b`'s value is not
+  materialisable — whereas `def b (make Point {x:9})` works via the recorded
+  make-event-result. Baking the instance is UNSOUND: `ObjectInstanceInfo.Fields`
+  is a shared mutable `*OrderedMap` (`b set x 7` mutates in place), so a baked
+  const would persist mutations across program re-runs — a hazard the single-run
+  differential wouldn't catch. The sound fix is EVENT-TRACKING: route the
+  typed-def's class/object construction through the recorded `make` path (a
+  `defTypedHandler` + recording-seam change), so the instance is rebuilt fresh
+  each run like explicit `make`. A focused effort, not a structural-bake.
+
+What REMAINS in provenance is the genuinely deep, multi-blocker work the roadmap
+deferred: `make` class instance-field defaults (item 3 — needs a "suppress
+recording inside a const-baked schema construction" primitive, high blast
+radius), generic-instance provenance (`Box<T>`, `of [T]` across get/is/typeof,
+~30), module `$name`/`$module` gets, and the surface-type fnsig algebra. These are
+multi-step efforts, not guard exemptions.
 
 ## 5. Why not delete the island after all
 

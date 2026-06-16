@@ -61,10 +61,11 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
 	cases := []string{
-		// type mint + undef, then reuse — a re-mint would clash. The
-		// method field keeps make uncompilable so this stays on the
-		// fallback path (a plain-data class now compiles).
-		`def C class {x:1 f:(fn [[][Integer][2]])} def p (make C {x:5}) undef C end p get x`,
+		// type mint + undef, then reuse — a re-mint would clash. A REAL
+		// method field (a multi-arg fn value) keeps make uncompilable so this
+		// stays on the fallback path (a plain-data class — and a 0-arg fn
+		// COMPUTED default — now compile; only an arg-taking method does not).
+		`def C class {x:1 g:(fn [[y:Integer][Integer][y add 1]])} def p (make C {x:5}) undef C end p get x`,
 		// fn registration under a capitalised name — a re-register clashes.
 		// `is` over the predicate fn INVOKES it (the VM cannot re-step a fn
 		// body), so this stays uncompilable even though `typeof`/`tcmp` over a

@@ -216,9 +216,29 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`{a:1 b:2} get a`, "native"},
 		{`def m {a:{b:7}} m.a.b`, "native"},
 		// Class `make` with plain-data fields compiles (the body bakes as a
-		// const); a class with a method field must fall back.
+		// const). A 0-arg fn field is a COMPUTED default — auto-invoked to its
+		// value at schema construction (here → 2) — so it materialises to data
+		// and the schema bakes (roadmap item 3: SchemaArg materialisation,
+		// value-parity verified). A REAL method (a multi-arg fn value) stays a
+		// fn in the schema and still falls back.
 		{`def Point class {x:1, y:2} make Point {x:9}`, "native"},
-		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "fallback"},
+		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "native"},
+		{`def C class {g:(fn [[x:Integer][Integer][x add 1]])} make C {}`, "fallback"},
+		// A class whose field default is a COMPUTED data template (flex, an
+		// array, a nested instance) materialises concretely at schema
+		// construction and the schema const-bakes — `make` deep-copies the
+		// template per instance (roadmap item 3, value-parity verified).
+		{`def Foo class {items:(flex [])} def a (make Foo {}) a`, "native"},
+		{`def Inner class {n:0} def Outer class {i:(make Inner {})} def a (make Outer {}) a`, "native"},
+		// A bare GENERIC type value is an immutable schema template — it bakes
+		// as a const (of/inference mint fresh nodes per use), so make/is/typeof
+		// over a bare generic compile (value-parity verified).
+		{`def Box gen [T] class {value:T} end (make Box {value:42}) typeof`, "native"},
+		{`def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box`, "native"},
+		// A SURFACE type identity bakes as a const operand (its *SurfaceInfo
+		// pointer is shared with the live type), so type-algebra / unify over it
+		// compiles (value-parity verified).
+		{`def Shape surface {area: (fnsig [[Self] [Float]])} end Integer tor Shape`, "native"},
 		// is / typeof on a make-result: the type operand shares the make
 		// result's ID, but the type-operand ID-collision guard resolves the
 		// `Point` literal to its own type, not the make event — so it compiles
@@ -238,6 +258,53 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// closure that threads the capture (plan P2 closure-capture).
 		{`def f fn [[k:Integer] [List] [each [add k] [1 2 3]]] f 10`, "native"},
 		{`def g fn [[k:Integer] [Integer] [fold [add] [1 2 3] k]] g 7`, "native"},
+		// --- roadmap item 5: map-iteration quotation + lambda HOF args ---
+		// 5b: each/fold/scan quotation over a map compile to a closure (no island).
+		{`{a:1 b:2 c:3} each [mul 10]`, "native"},
+		{`fold [add] {a:1 b:2 c:3} 0`, "native"},
+		{`{a:1 b:2 c:3} scan [add]`, "native"},
+		// 5a-1: a filter list-lambda compiles to a named-param closure (the
+		// handler hands it a {key,value} pair Map; `p.value` lowers).
+		{`filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]`, "native"},
+		// 5a-2: filter/each/fold/scan lambdas over a map bind a KeyVal input.
+		{`{a:1 b:5 c:3} filter ([kv:KeyVal] => [kv.v gt 2])`, "native"},
+		{`{a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])`, "native"},
+		{`0 fold ([acc:Integer kv:KeyVal] => [acc add kv.v]) {a:1 b:2 c:3}`, "native"},
+		{`{a:1 b:2 c:3} scan ([acc:Integer kv:KeyVal] => [acc add kv.v])`, "native"},
+		// A lambda capturing an enclosing-fn param threads it as a closure capture.
+		{`def fc fn [[t:Integer] [Map] [each ([kv:KeyVal] => [kv.v add t]) {a:1 b:2}]] fc 10`, "native"},
+		// Boundaries that must STAY refused (the lambda path is gated): a
+		// multi-sig fn value (a closure unit is ONE body), and a wrong-arity
+		// lambda (its inputs would not match). for-each map quotation still
+		// islands — a 0-result body has no closure-call recording yet.
+		{`def mm fn [[x:Integer][Boolean][x gt 1] [x:Boolean][Boolean][x]] filter mm [1 2 3]`, "fallback"},
+		{`{a:1 b:2} each ([a:Any b:Any] => [a])`, "fallback"},
+		{`{a:1 b:2} for-each [drop]`, "island"},
+		// --- roadmap item 7: with-decimal body as a closure run in the pushed
+		// decimal context (a single-body context word like `do`). ---
+		{`with-decimal {precision: 5} [0d1.0 div 0d3.0]`, "native"},
+		{`with-decimal {precision: 6} [with-decimal {precision: 3} [0d1.0 div 0d3.0]]`, "native"},
+		// aql:query DSL — the clause lists (column/expr specs) and bare table
+		// names are inert data parsed into SQL, so they bake as consts and the
+		// dispatch lowers to CALL_NATIVE (not a code-body refusal).
+		{`"aql:query" import end  Query.select [name age]`, "native"},
+		{`"aql:query" import end  Query.where [age gt 1] (Query.select [name])`, "native"},
+		{`"aql:query" import end  Query.on [name eq who] (Query.join visits (Query.select [name]))`, "native"},
+		// reach inert lens path + raise error-code atom bake as inert consts.
+		{`reach 5 [a !b]`, "native"},
+		{`raise bad_input "nope"`, "native"},
+		// A reach path with a COMPUTED segment is deferred code needing live
+		// scope — excluded from baking, so it falls back (correctly).
+		{`def p {x:{y:9}} def k "y" apply (reach 0 [x (k)]) p`, "fallback"},
+		// A structural type operand of BUILTIN type literals bakes as a const
+		// (canonical pointers, no behave-staleness); a USER-type leaf stays
+		// refused because its behavior could be mutated after the bake.
+		{`[1] is [Integer]`, "native"},
+		{`{a:5} is {a:Integer}`, "native"},
+		{`def Foo refine Integer end [1] is [Foo]`, "fallback"},
+		// An inert reach lens VALUE ($.path, no computed segment) bakes as a const.
+		{`def p {a:{b:7}} apply $.a.b p`, "native"},
+		{`"aql:struct-util" import end StructUtil.getpath $.a.b {a:{b:7}}`, "native"},
 	}
 	for _, c := range cases {
 		if got := pathOf(t, c.src); got != c.want {

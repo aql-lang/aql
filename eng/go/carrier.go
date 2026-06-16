@@ -149,6 +149,40 @@ func DataListElemTypeFromValue(data Value) *Type {
 	return t
 }
 
+// DataMapValueTypeFromValue is the map analogue of DataListElemTypeFromValue:
+// the common type of a concrete map's VALUES. A map-receiver higher-order word's
+// body sees each value (quotation) or a KeyVal whose `.v` is each value, so the
+// body input carrier must be the map's value type, not the list-element type
+// (AsList over a map yields nothing). Reads the ChildTypeInfo value constraint
+// first, then joins the concrete values' VTypes.
+func DataMapValueTypeFromValue(data Value) *Type {
+	if data.Data == nil {
+		return TAny
+	}
+	if ct, ok := data.Data.(ChildTypeInfo); ok {
+		if ct.Child.Data == nil && !ct.Child.Carrier {
+			c := ct.Child // bare type-literal child IS the value type
+			return &c
+		}
+		return ct.Child.Parent
+	}
+	m, err := AsMap(data)
+	if err != nil || m == nil || m.Len() == 0 {
+		return TAny
+	}
+	keys := m.Keys()
+	first, _ := m.Get(keys[0])
+	t := first.Parent
+	for i := 1; i < len(keys); i++ {
+		v, _ := m.Get(keys[i])
+		t = CommonAncestorType(t, v.Parent)
+		if t.Equal(TAny) {
+			break
+		}
+	}
+	return t
+}
+
 // toCarrier converts a concrete Value to its carrier form. Control /
 // structural tokens (words, marks, moves, open-paren, paren-expr,
 // interp-string, return-check, def-cleanup, forward) are returned
@@ -386,6 +420,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		}
 	}
 	if !tryRecordClosure(r, word, sig, args, out, pos) &&
+		!tryRecordLambdaClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))
