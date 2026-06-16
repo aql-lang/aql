@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -150,10 +151,160 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("kinds", wrapMiniFnDef("minilang-kinds", [][]native.FnParam{{}},
 		[]*native.Type{native.TList}, nil, subReg))
 
+	// ---- host-registered kinds (the Go embedder API) -------------------
+	// Fold in every kind a host installed via RegisterHostMiniLang on the
+	// importing registry, then record the live (exports, subReg) pair so a
+	// LATER RegisterHostMiniLang injects directly into this already-built
+	// module rather than waiting for a re-import that the loaded-module
+	// cache would never trigger.
+	// create=true: even with no host kinds yet, recording the live module
+	// lets a post-import RegisterHostMiniLang inject directly (the loaded
+	// cache would otherwise never rebuild).
+	state := miniLangHostStateFor(parent, true)
+	state.mu.Lock()
+	for _, spec := range state.specs {
+		if err := installHostMiniLang(exports, subReg, spec); err != nil {
+			state.mu.Unlock()
+			return native.ModuleDesc{}, err
+		}
+	}
+	state.live = &builtMiniLang{exports: exports, subReg: subReg}
+	state.mu.Unlock()
+
 	return native.ModuleDesc{
 		ID:      parent.Modules.NextID(),
 		Exports: map[string]*native.OrderedMap{"MiniLang": exports},
 	}, nil
+}
+
+// MiniLangSpec describes a Go-implemented mini-language kind for the host
+// registration API (RegisterHostMiniLang). The standard minilang prefix
+// [src:String opts:Map] is supplied automatically — a host declares only
+// the additional stack Inputs (zero or more, AFTER the prefix), the
+// Returns, and the Handler. The handler receives args[0]=src,
+// args[1]=opts, args[2..]=Inputs in order, exactly like a built-in kind.
+type MiniLangSpec struct {
+	// Name is the kind atom, unprefixed and lowercase ("iop", not
+	// "lang_iop"). It is the token a caller writes after `mini`.
+	Name string
+	// Inputs are the kind's stack inputs AFTER the [src opts] prefix.
+	// Nil/empty for a generator kind (inputs come from opts). Params
+	// should be unnamed (only Type / Quote are read) so the wrapper keeps
+	// the trivial-delegation dispatch short-circuit.
+	Inputs []native.FnParam
+	// Returns are the kind's output types (nil = no declared output).
+	Returns []*native.Type
+	// Handler implements the kind. Required.
+	Handler native.Handler
+}
+
+// capMiniLangHost is the registry capability slot holding host-registered
+// mini-language kinds. Per-registry so each lang.New() instance owns its
+// own set (no process-global table, no leak across instances).
+const capMiniLangHost = "engine.minilang.host"
+
+// miniLangHostState is the per-registry record of host-registered kinds.
+// specs is the source of truth (folded into the module at build time);
+// live points at the built module so a post-import registration can inject
+// straight away.
+type miniLangHostState struct {
+	mu    sync.Mutex
+	specs []MiniLangSpec
+	live  *builtMiniLang
+}
+
+// builtMiniLang is the live (exports, subReg) pair captured once
+// BuildMiniLangModule has run for a registry.
+type builtMiniLang struct {
+	exports *native.OrderedMap
+	subReg  *native.Registry
+}
+
+// miniLangHostStateFor returns the host-minilang state on r, creating it
+// when create is true. Stored on the registry's capability store so it is
+// scoped to the instance and collected with it.
+func miniLangHostStateFor(r *native.Registry, create bool) *miniLangHostState {
+	if s, ok, _ := eng.Cap[*miniLangHostState](r, capMiniLangHost); ok && s != nil {
+		return s
+	}
+	if !create {
+		return nil
+	}
+	s := &miniLangHostState{}
+	_ = r.Capabilities.Set(capMiniLangHost, s)
+	return s
+}
+
+// RegisterHostMiniLang installs a Go-implemented mini-language kind on reg
+// — the embedder twin of the AQL-level `MiniLang.register` word. The kind
+// becomes resolvable as `mini <Name> …` once the program imports
+// "aql:minilang"; registration may happen before OR after that import
+// (a post-import call injects into the already-built module).
+//
+// It owns the same contract as `MiniLang.register`: a lowercase kind name
+// with no `lang_` prefix, a non-nil handler, and the standard
+// [src:String opts:Map …] signature prefix (guaranteed here by
+// construction). A name that collides with an existing kind — built-in or
+// host — is refused.
+func RegisterHostMiniLang(reg *native.Registry, spec MiniLangSpec) error {
+	if why := miniValidKindName(spec.Name); why != "" {
+		return fmt.Errorf("register minilang: %s", why)
+	}
+	if spec.Handler == nil {
+		return fmt.Errorf("register minilang %q: handler must not be nil", spec.Name)
+	}
+	state := miniLangHostStateFor(reg, true)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	for _, s := range state.specs {
+		if s.Name == spec.Name {
+			return fmt.Errorf("register minilang %q: already registered", spec.Name)
+		}
+	}
+	// If the module is already built in this registry, install live (this
+	// also catches a collision against a built-in kind such as `re`/`bf`).
+	if state.live != nil {
+		if err := installHostMiniLang(state.live.exports, state.live.subReg, spec); err != nil {
+			return err
+		}
+	}
+	state.specs = append(state.specs, spec)
+	return nil
+}
+
+// installHostMiniLang registers spec's handler as an inner native in subReg
+// and exports the standard trivial-delegation wrapper under lang_<name>.
+// Mirrors the built-in kind path (wrapMiniFnDef) so a host kind dispatches
+// identically. The [src opts] prefix is prepended here; host Inputs are
+// copied type/quote-only to keep every wrapper param unnamed.
+func installHostMiniLang(exports *native.OrderedMap, subReg *native.Registry, spec MiniLangSpec) error {
+	key := "lang_" + spec.Name
+	if _, exists := exports.Get(key); exists {
+		return fmt.Errorf("register minilang %q: already registered", spec.Name)
+	}
+	params := make([]native.FnParam, 0, 2+len(spec.Inputs))
+	params = append(params,
+		native.FnParam{Type: native.TString},
+		native.FnParam{Type: native.TMap})
+	for _, in := range spec.Inputs {
+		params = append(params, native.FnParam{Type: in.Type, Quote: in.Quote})
+	}
+	args := make([]*native.Type, len(params))
+	for i, p := range params {
+		args[i] = p.Type
+	}
+	inner := "minilang-host-" + spec.Name
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: inner,
+		Signatures: []native.NativeSig{{
+			Args:       args,
+			Returns:    spec.Returns,
+			BarrierPos: -1,
+			Handler:    spec.Handler,
+		}},
+	})
+	exports.Set(key, wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg))
+	return nil
 }
 
 // wrapMiniFnDef builds the module FnDef wrapper for an inner native —
