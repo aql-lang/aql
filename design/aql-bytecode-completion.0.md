@@ -127,9 +127,26 @@ before/after numbers.
    set rows; the residual 13 quoted-operand refusals are meta
    (minilang/codequote/quote/timeout). (`eng/go/emit.go` RecordCall.)
 
-3. **`make` class with typed-instance field defaults — DEFERRED (5 rows, HIGH
-   risk, multi-blocker).** A class body `{x:(make Foo 1)}` whose default is a
-   user-type instance. Scoped + attempted June 2026; reverted. Findings:
+3. **`make` class with instance/computed field defaults — ✅ LANDED (refusals
+   337 → 335; the deep multi-blocker, done June 2026 via the targeted hook).**
+   A class body `{items:(flex [])}`, `{i:(make Inner {})}`, `{bits:(make Array
+   …)}`, `{x:(make Foo 1)}` whose default is a mutable container / instance.
+   All three blockers solved together: a `SchemaArg` sig flag on the type
+   constructor opens a window while its schema map auto-evaluates in which (B2)
+   bytecode recording is SUSPENDED (no spurious unconsumed-result events) and
+   (B1) DATA constructors are MATERIALISED — the check-mode intercept is
+   bypassed so flex/make/array run for real into concrete templates, NOT
+   carriers; CODE constructors (fn/afn/fnsig, Function-shaped Return) are NOT
+   materialised so a real arg-taking method still falls back. (B3)
+   `typeBodyConstOK` admits concrete data defaults (a template `make` deep-
+   copies per instance) while rejecting fn-value method fields. The
+   global-`RunInCheckMode` shortcut that regressed the first attempt is avoided
+   (standalone `flex […]` untouched). A 0-arg fn field is a COMPUTED default
+   (auto-invoked → its value) and now compiles too — value-parity verified.
+   (`eng/go/{value,nativefunc,registry,check,engine,emit}.go`, `native_type.go`.)
+
+   **Original (reverted June-2026) analysis, kept for context:** A class body
+   `{x:(make Foo 1)}` whose default is a user-type instance. Findings:
    - Only **5 spec rows** (`user-types.tsv` §, `class.tsv` lines 79–81 refine
      defaults + 114–115 class-instance defaults that pin per-instance COPY).
    - NOT a provenance gap: `ReturnsFreshInstance` returns a bare type CARRIER in
