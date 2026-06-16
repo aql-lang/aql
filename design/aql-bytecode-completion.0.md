@@ -385,6 +385,17 @@ unbakeable* — each made SOUND by a tight guard the differential validated:
   is const; a COMPUTED `(expr)` segment is excluded (deferred code needing live
   scope). One row crossed REFUSED → compiled-with-island (net gain), so
   islandCeiling 9 → 10.
+- **Class instance-field defaults. ✅ (337 → 335.)** Roadmap item 3 (above);
+  the deep multi-blocker, via the SchemaArg materialise/suspend hook.
+- **Bare generic schema templates. ✅ (335 → 323, ~12 rows.)** `make Box
+  {value:42}`, `is Box`, `typeof`/residual over a bare `gen [T] class/refine/
+  fnsig`: the value is a `*TypeSchemaInfo` (immutable generic schema) `isInertConst`
+  didn't cover, and a bare generic has no canonical lattice node to OpPushType.
+  Bake it as a const (its body is a clean type body) — sound, since `of`/
+  inference mint a FRESH node per use and the canonical schema node rides the
+  payload pointer. The INSTANTIATED forms (`Box of [Integer]`, make/get over
+  them) already compiled. Remaining generics refusals are cascades (case/each/
+  fold/reify over generic instances) + 3 instantiated-typed-list-field makes.
 
 What REMAINS in provenance is the genuinely deep, multi-blocker work the roadmap
 deferred: `make` class instance-field defaults (item 3 — needs a "suppress
