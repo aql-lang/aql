@@ -216,9 +216,20 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`{a:1 b:2} get a`, "native"},
 		{`def m {a:{b:7}} m.a.b`, "native"},
 		// Class `make` with plain-data fields compiles (the body bakes as a
-		// const); a class with a method field must fall back.
+		// const). A 0-arg fn field is a COMPUTED default — auto-invoked to its
+		// value at schema construction (here → 2) — so it materialises to data
+		// and the schema bakes (roadmap item 3: SchemaArg materialisation,
+		// value-parity verified). A REAL method (a multi-arg fn value) stays a
+		// fn in the schema and still falls back.
 		{`def Point class {x:1, y:2} make Point {x:9}`, "native"},
-		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "fallback"},
+		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "native"},
+		{`def C class {g:(fn [[x:Integer][Integer][x add 1]])} make C {}`, "fallback"},
+		// A class whose field default is a COMPUTED data template (flex, an
+		// array, a nested instance) materialises concretely at schema
+		// construction and the schema const-bakes — `make` deep-copies the
+		// template per instance (roadmap item 3, value-parity verified).
+		{`def Foo class {items:(flex [])} def a (make Foo {}) a`, "native"},
+		{`def Inner class {n:0} def Outer class {i:(make Inner {})} def a (make Outer {}) a`, "native"},
 		// is / typeof on a make-result: the type operand shares the make
 		// result's ID, but the type-operand ID-collision guard resolves the
 		// `Point` literal to its own type, not the make event — so it compiles

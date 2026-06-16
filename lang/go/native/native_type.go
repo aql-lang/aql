@@ -71,7 +71,7 @@ var typeNatives = []NativeFunc{
 			Args:           []*Type{TMap},
 			Handler:        classHandler,
 			Returns:        []*Type{TType},
-			RunInCheckMode: true, BarrierPos: -1,
+			RunInCheckMode: true, SchemaArg: true, BarrierPos: -1,
 		}},
 	},
 	{

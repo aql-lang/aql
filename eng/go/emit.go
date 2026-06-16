@@ -1474,15 +1474,43 @@ func typeBodyConstOK(v Value) bool {
 		return true
 	case ObjectTypeInfo:
 		// A class / object type body is const-bakeable iff every field
-		// default is plain data — a method (fn-value) field is not, so a
-		// class with methods (the surface-body case) still refuses. The
-		// canonical *Type rides the body's payload pointer (shared, not
-		// copied), so it stays canonical at run time; `make` recovers the
-		// field schema from the baked body. The parent chain's fields must
-		// be data too (AllFields merges them).
-		return fieldsOK(d.AllFields())
+		// default is a TEMPLATE `make` deep-copies per instance: a required
+		// field's type node, an inert const, a clean nested type body, OR any
+		// concrete data default — a flex container, a class/object instance, an
+		// array (`{items:(flex [])}`, `{i:(make Inner {})}`, materialised at
+		// schema construction). The const template is only ever READ (copied),
+		// never mutated, so a mutable default is sound; the per-instance COPY
+		// isolation is pinned by class.tsv:112. A METHOD field (fn value) is NOT
+		// data and still refuses (the surface-body case falls back). The
+		// canonical *Type rides the body payload pointer, staying canonical.
+		fields := d.AllFields()
+		if fields == nil {
+			return false
+		}
+		for _, k := range fields.Keys() {
+			fv, _ := fields.Get(k)
+			if memberOK(fv) || isSchemaDefaultOK(fv) {
+				continue
+			}
+			return false
+		}
+		return true
 	}
 	return false
+}
+
+// isSchemaDefaultOK reports whether v may ride as a class/object field DEFAULT
+// in a const-baked schema: a concrete data template `make` deep-copies per
+// instance. A fn value (a method field) is excluded — it is code, not data, and
+// keeps the schema on the fallback path.
+func isSchemaDefaultOK(v Value) bool {
+	if !IsConcrete(v) {
+		return false
+	}
+	if _, isFn := v.Data.(FnDefInfo); isFn {
+		return false
+	}
+	return true
 }
 
 // isInertConst reports whether v can live in a Program's constant
