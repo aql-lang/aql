@@ -585,6 +585,53 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 	}
 }
 
+// Nested-variadic branch lowering — a no-default `case` desugars to a nested
+// if-chain whose innermost `if guard [block]` has no else, so the chain is
+// variadic (0-or-1: a value on a match, nothing on no-match). The lowerer now
+// lets a branch arm CARRY a variadic (0-or-1) result and propagates the
+// variadic-ness up to the residual, so a 2+-clause no-default case compiles.
+func TestNestedVariadicCaseCompiles(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def Big (Integer gt 10) case 50 [Big "big" Integer "small-int"]`, "[big]"},
+		{`def Big (Integer gt 10) case 5 [Big "big" Integer "small-int"]`, "[small-int]"},
+		{`if true [if false [9]]`, "[]"}, // bare nested-variadic if -> 0 values
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native if-chain, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// A variadic case result CONSUMED by another word can't compile (the
+	// consumer needs a fixed count) — it must still fall back, with parity.
+	const consumed = `def Big (Integer gt 10) [99 (case 5 [Big "big"]) 88]`
+	a, _ := New()
+	_, compiled, _ := a.RunCompiled(consumed)
+	b, _ := New()
+	gotI, _ := b.Run(consumed)
+	if compiled {
+		t.Errorf("%q: a consumed variadic case must fall back, not compile", consumed)
+	}
+	if fmt.Sprint(gotI) != "[[99 88]]" {
+		t.Errorf("%q: interp = %v, want [[99 88]]", consumed, gotI)
+	}
+}
+
 // usurp (and the /u suffix) — a static arg permutation: `usurp f` wraps f so a
 // call reverses the arg order (`usurped a b c` ≡ `f c b a`). The wrapper's
 // re-dispatch handler now runs in check mode, so the carrier compiler steps the

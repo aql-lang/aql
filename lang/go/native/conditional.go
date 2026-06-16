@@ -162,13 +162,12 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	}
 	lst, _ := AsList(clauses)
 	elems := lst.Slice()
-	// Need at least one clause pair AND a trailing default (odd length).
-	// WITHOUT a default (even length) the chain is variadic and its 0-or-1
-	// result must propagate through the NESTED if-else fragments — a lowering
-	// the current single-result branch path does not yet do (it errors "else-
-	// branch not captured" / "loop results as a branch result"), so leave those
-	// to the fallback rather than mis-lower them.
-	if len(elems) < 3 || len(elems)%2 == 0 {
+	// At least one clause pair. A trailing default (odd length) makes the
+	// innermost else a definite value; WITHOUT one (even length) the innermost
+	// `if guard [block]` has no else and the chain is variadic (0-or-1), which
+	// matches case's no-match semantics (it produces NO value) — the nested-
+	// variadic branch lowering propagates that 0-or-1 to the residual.
+	if len(elems) < 2 {
 		return dynAny
 	}
 	if !r.Check.Emit.OperandRepushable(v) {
