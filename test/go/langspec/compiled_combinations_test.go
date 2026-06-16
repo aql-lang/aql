@@ -230,6 +230,11 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// template per instance (roadmap item 3, value-parity verified).
 		{`def Foo class {items:(flex [])} def a (make Foo {}) a`, "native"},
 		{`def Inner class {n:0} def Outer class {i:(make Inner {})} def a (make Outer {}) a`, "native"},
+		// A bare GENERIC type value is an immutable schema template — it bakes
+		// as a const (of/inference mint fresh nodes per use), so make/is/typeof
+		// over a bare generic compile (value-parity verified).
+		{`def Box gen [T] class {value:T} end (make Box {value:42}) typeof`, "native"},
+		{`def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box`, "native"},
 		// is / typeof on a make-result: the type operand shares the make
 		// result's ID, but the type-operand ID-collision guard resolves the
 		// `Point` literal to its own type, not the make event — so it compiles

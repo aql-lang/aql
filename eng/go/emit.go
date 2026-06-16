@@ -1663,6 +1663,14 @@ func isInertConst(v Value) bool {
 		// canonical. Never deduped. A class/object body qualifies only
 		// when every field default is data (no method fn-values).
 		return typeBodyConstOK(v)
+	case *TypeSchemaInfo:
+		// A GENERIC SCHEMA template (`gen [T] class {value:T}`) — the bare
+		// generic type value (`Box`, `make Box …`, `is Box`). Immutable:
+		// `of [T]` / inference instantiate a FRESH lattice node per use, never
+		// mutating the template, and the canonical minted schema node rides
+		// d.Type by pointer. Bake when the body (placeholder fields + structure)
+		// is itself a clean type body.
+		return typeBodyConstOK(d.Body) || isInertConst(d.Body)
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConstMember(e) {
