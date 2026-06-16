@@ -163,6 +163,11 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	lst, _ := AsList(clauses)
 	elems := lst.Slice()
 	// Need at least one clause pair AND a trailing default (odd length).
+	// WITHOUT a default (even length) the chain is variadic and its 0-or-1
+	// result must propagate through the NESTED if-else fragments — a lowering
+	// the current single-result branch path does not yet do (it errors "else-
+	// branch not captured" / "loop results as a branch result"), so leave those
+	// to the fallback rather than mis-lower them.
 	if len(elems) < 3 || len(elems)%2 == 0 {
 		return dynAny
 	}
