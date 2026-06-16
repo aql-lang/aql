@@ -904,27 +904,53 @@ func TestReachLensCompilesNative(t *testing.T) {
 		}
 	}
 
-	// SCOPING: the const-bake is the inert LENS VALUE only. A higher-order LENS
-	// FORM that iterates DATA (`each $.name people`, `filter $.on data`) is NOT a
-	// const — its data list's interior strings are carrier-stripped in check mode
-	// (an orthogonal limit, also why `size people` over string data refuses), and
-	// a reach is not a code body to island. So it must still REFUSE and fall back
-	// with faithful parity — never silently islanded by the lens-as-const change.
-	const each = `def people [{name:"ada"}]  each $.name people`
+	// The CONCRETE-output lens-over-DATA forms (`each $.name people`,
+	// `ArrayUtil.sortby $.age people`) also compile native: the lens bakes as a
+	// const (isInertReach) AND the string-bearing data list now bakes too (the
+	// toCarrier scalar-keep stopped stripping its interior strings), so the
+	// reach-form dispatch records a plain CALL_NATIVE.
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def people [{name:"ada"}]  each $.name people`, "[['ada']]"},
+		{`each $.name [{name:"a"} {name:"b"}]`, "[['a' 'b']]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil || strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: lens-over-data did not compile native: reason=%q", c.src, reason)
+			continue
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// SCOPING / negative: `filter` has a DYNAMIC output and is a deliberate
+	// fallbackWord, so even with the lens + data both const-bakeable, the
+	// reach-form `filter $.on data` must NOT compile native and must NOT island
+	// (the lens guard in tryRecordFallback keeps it off the island path); it
+	// refuses and falls back with faithful parity.
+	const filter = `filter $.on {a:{on:true} b:{on:false}}`
 	a, _ := New()
-	prog, reason, _, _ := a.CompileCheck(each)
+	prog, reason, _, _ := a.CompileCheck(filter)
 	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-		t.Errorf("%q: a lens-over-data form must NOT compile native (reason was %q)", each, reason)
+		t.Errorf("%q: a dynamic-output lens form must NOT compile native (reason was %q)", filter, reason)
 	}
 	ar, _ := New()
-	gotC, compiledEach, _ := ar.RunCompiled(each)
-	if compiledEach {
-		t.Errorf("%q: a lens-over-data form must fall back, not compile", each)
+	gotC, compiledFilter, _ := ar.RunCompiled(filter)
+	if compiledFilter {
+		t.Errorf("%q: a dynamic-output lens form must fall back, not compile", filter)
 	}
 	b, _ := New()
-	gotI, _ := b.Run(each)
-	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[['ada']]" {
-		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", each, gotC, gotI)
+	gotI, _ := b.Run(filter)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[{a:{on:true}}]" {
+		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", filter, gotC, gotI)
 	}
 
 	// The dot-access EVAL reach (`m.a.b`, a get-chain the engine expands) is
@@ -935,5 +961,69 @@ func TestReachLensCompilesNative(t *testing.T) {
 	p2, r2, _, _ := c2.CompileCheck(dot)
 	if p2 == nil || strings.Contains(p2.Disassemble(), "FALLBACK") {
 		t.Errorf("%q: dot-access reach must still compile native (reason %q)", dot, r2)
+	}
+}
+
+// scalar carrier-keep + carrier-identity de-collision. Two coupled
+// runtime-independence steps:
+//
+//   - toCarrier now keeps a concrete inert SCALAR (string/bool/float/atom/
+//     temporal, not just integer) concrete through check mode, so a DATA list or
+//     map whose interior is scalar bakes as an inert const instead of stripping
+//     to a type-only carrier — `size people`, `each $.name people`, a
+//     string-bearing table row all const-bake their operand.
+//   - a call OUTPUT whose deterministic id collides with a PRIOR generic event
+//     (a repeated identical computed call — `(context get 'n') add (context get
+//     'n')`, both gets returning the same id once the key is concrete) mints a
+//     fresh id, so the two stack values stay distinct and the residual layout no
+//     longer refuses "call results reordered". The skip that owns structured
+//     hooks (if / user-fn / poly / closure) is gated on the producer being a
+//     structured event (not a prior generic native), so it still fires for them.
+func TestScalarKeepAndCarrierIdentity(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		// scalar-keep: string-bearing data lists const-bake
+		{`size ["a" "b" "c"]`, "[3]"},
+		{`def people [{name:"ada"}]  size people`, "[1]"},
+		{`def people [{name:"ada"} {name:"bob"}]  each $.name people`, "[['ada' 'bob']]"},
+		// carrier-identity: repeated identical computed calls
+		{`context set 'n' 5 end ( context get 'n' ) add ( context get 'n' )`, "[10]"},
+		{`context set 'n' 5 end ( context get 'n' ) add ( context get 'n' ) add ( context get 'n' )`, "[15]"},
+		// the de-collision must NOT disturb dup's intentional same-id outputs,
+		// nor a computed receiver feeding dup
+		{`5 dup add`, "[10]"},
+		{`( 1 add 2 ) dup add`, "[6]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native lowering, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// Control: an `if` whose output id the structured RecordBranch hook
+	// pre-registers must STILL be skipped by the generic path (the de-collision
+	// gate only bypasses the skip for a prior GENERIC producer) — it compiles
+	// natively and matches the interpreter.
+	const cond = `if (5 gt 3) [10] [20]`
+	a, _ := New()
+	gotC, compiled, _ := a.RunCompiled(cond)
+	b, _ := New()
+	gotI, _ := b.Run(cond)
+	if !compiled || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[10]" {
+		t.Errorf("%q: if regressed: compiled=%v gotC=%v gotI=%v", cond, compiled, gotC, gotI)
 	}
 }

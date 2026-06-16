@@ -224,6 +224,7 @@ type EmitState struct {
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
 	zeroOutSeq map[int]bool        // branch seq → 0-output statement guard (residual skips it)
 	typeOut    map[int]bool        // event seq → its output is itself a type body
+	genericSeq map[int]bool        // event seq → recorded by the GENERIC RecordCall path (a plain native), not a structured hook
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
 	types      []TypeRef
@@ -285,6 +286,7 @@ func NewEmitState() *EmitState {
 		producedBy: map[string]producer{},
 		zeroOutSeq: map[int]bool{},
 		typeOut:    map[int]bool{},
+		genericSeq: map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
 		origByID:   map[string]Value{},
@@ -1113,8 +1115,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
 	// the generic path must not double-record or refuse it. A structured
 	// hook registers all results together, so checking the first suffices.
+	// The producer must be a STRUCTURED hook, not a prior GENERIC native call:
+	// a repeated identical computed call (`(context get 'n') add (context get
+	// 'n')` — both gets return the same deterministic-ID result once their key
+	// is concrete) collides with a prior generic event, and skipping the second
+	// would orphan its receiver push. Those fall through to the carrier-identity
+	// de-collision below (which mints a fresh ID), so guard on !genericSeq.
 	if len(outs) > 0 {
-		if _, ok := es.producedBy[outs[0].ID]; ok {
+		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.genericSeq[pr.seq] {
 			return
 		}
 	}
@@ -1275,7 +1283,33 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	// Carrier-identity de-collision (the deferred runtime-independence item, in
+	// its targeted form). A call OUTPUT whose ID already maps to a PRIOR event is
+	// a repeated identical computed call: `(context get 'n') add (context get
+	// 'n')` issues two get events that each return the same deterministic-ID
+	// result, so the second registration would overwrite the first and `add`
+	// would resolve BOTH operands to the second event — the residual layout then
+	// refuses "call results reordered". Mint a fresh ID so the two stack values
+	// stay distinct (the outs slice is the carrierResults return, so the fresh ID
+	// flows to the downstream consumer). Guarded twice: a SAME-event collision is
+	// `dup`/`swap` returning an input by identity (`[args[0], args[0]]`), handled
+	// by the DUP lowering, so skip pr.seq == seq; and a result that IS one of the
+	// call's inputs (an identity/stack word passing a value through) keeps its ID,
+	// so skip an output whose ID appears in args.
+	es.genericSeq[seq] = true
+	var argIDs map[string]bool
 	for i := range outs {
+		if pr, ok := es.producedBy[outs[i].ID]; ok && pr.seq != seq {
+			if argIDs == nil {
+				argIDs = make(map[string]bool, len(args))
+				for _, a := range args {
+					argIDs[a.ID] = true
+				}
+			}
+			if !argIDs[outs[i].ID] {
+				outs[i].ID = GenerateID(IDPrefixForType(outs[i].Parent))
+			}
+		}
 		es.setProducedAt(outs[i], seq, i)
 	}
 }

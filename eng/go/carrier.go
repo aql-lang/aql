@@ -197,16 +197,24 @@ func toCarrier(v Value) Value {
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
 		return v
 	}
-	// Keep concrete integer literals concrete so static index checking
-	// can recover the value (an out-of-bounds literal index like
-	// `[10 20] 5 getr`). Stripping would lose the value and force the
-	// index check to give up. This only preserves genuine concrete
-	// integers (IntPayload) — DepScalar constraints (Data is a
-	// DepScalarInfo) and carriers are untouched. Precision only
-	// increases: a literal stays concrete until a word consumes it and
-	// produces a computed carrier, exactly as lists/maps already behave.
-	if v.Parent.Equal(TInteger) && IsConcrete(v) && !v.IsDepScalar() {
-		return v
+	// Keep concrete inert SCALAR literals concrete so the recorder can recover
+	// the value. Two drivers: static index checking (an out-of-bounds literal
+	// index like `[10 20] 5 getr` needs the integer), and const-baking a DATA
+	// list/map whose interior is scalar (`each $.name [{name:"a"}]`, `size
+	// people`, a string-bearing table row). Without this the interior strips to
+	// a type-only carrier, so the container is no longer an inert const and the
+	// operand has no compiled home. Only GENUINE concrete scalars qualify — a
+	// DepScalar CONSTRAINT (`Integer gt 10`, `String len 5`) carries a
+	// DepScalarInfo payload, not one of these, so it is naturally excluded and
+	// stays a carrier for predicate matching. Precision only increases: a
+	// literal stays concrete until a word consumes it and produces a computed
+	// carrier, exactly as lists/maps already behave.
+	switch v.Data.(type) {
+	case IntPayload, StrPayload, BoolPayload, FloatPayload, AtomPayload,
+		BigIntPayload, DecimalPayload, TimePayload, DurationPayload, TimezonePayload:
+		if IsConcrete(v) {
+			return v
+		}
 	}
 	// Keep FnDef / Function payloads (FnDefInfo) concrete. Stripping
 	// them loses the body, params, and Captured list — which means a

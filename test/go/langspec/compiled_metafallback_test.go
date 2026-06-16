@@ -119,9 +119,9 @@ func errorRowReason(reason string) bool {
 // reducibleCeiling and computeRefusalCeiling both ratchet toward 0 — when they
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
-	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
-	reducibleCeiling       = 61  // Test/Assert 28, quote 10, usurp 9, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N + word mostly + macroexpand static cases moved out: now compiled)
-	computeRefusalCeiling  = 200 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL + reach lens-as-const forms now compile)
+	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code (now just 1: the scalar carrier-keep landed a former Vm.run(canon …) row)
+	reducibleCeiling       = 62  // Test/Assert 29, quote 10, usurp 9, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO. Rebalance, NOT a regression: the scalar carrier-keep dropped interp 2->1 (a Vm.run row compiled) and reclassified one harness row into Test/Assert; net interp+reducible unchanged at 63, and the all-rows diff confirmed 0 native->non-native regressions
+	computeRefusalCeiling  = 190 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL + reach + scalar-keep container/data forms now compile)
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

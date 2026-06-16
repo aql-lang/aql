@@ -796,13 +796,30 @@ func TestEmitTypeOperands(t *testing.T) {
 		t.Fatalf("make M = %v, want {k:'x'}", out2)
 	}
 
-	// Negative: a type body whose interior holds a check-mode CARRIER
-	// (a generic instantiation over a class body with a stripped
-	// default) must refuse — baking the analysis artefact in would
-	// render `r:Float` where the interpreter rebuilds `r:1.0` (caught
-	// by the differential gate).
-	if _, r := compile(t, `def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Circle]`); r == "" {
-		t.Error("carrier-tainted type body compiled but must refuse")
+	// Positive: a generic instantiation over a class whose default is a
+	// concrete SCALAR (`r:1.0`) compiles faithfully — the scalar stays concrete
+	// through check mode (toCarrier keeps inert scalars), so the baked type body
+	// renders `r:1.0`, NOT a stripped `r:Float` artefact. The differential gate
+	// confirms parity (it once would have diverged; the scalar-keep closed it).
+	g, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outG, compiledG, errG := g.RunCompiled(`def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Holder gen [(T extends Shape)] refine Record [item:T] end Holder of [Circle]`)
+	if errG != nil || !compiledG {
+		t.Fatalf("scalar-default generic body: compiled=%v err=%v", compiledG, errG)
+	}
+	if len(outG) != 1 || !strings.Contains(fmt.Sprint(outG[0]), "r:1.0") {
+		t.Fatalf("generic body baked %v, want a faithful r:1.0", outG)
+	}
+
+	// Negative: a type body whose interior holds a check-mode CARRIER that the
+	// scalar-keep does NOT cover — a mutable-INSTANCE default (`items:(flex [])`)
+	// whose make-result is a non-bakeable instance carrier — must still refuse.
+	// Baking the analysis artefact in would diverge from the interpreter's
+	// per-instance rebuild (caught by the differential gate).
+	if _, r := compile(t, `def C class {items:(flex [])} def Holder gen [T] refine Record [item:T] end Holder of [C]`); r == "" {
+		t.Error("instance-tainted type body compiled but must refuse")
 	}
 }
 

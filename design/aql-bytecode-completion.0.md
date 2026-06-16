@@ -337,6 +337,39 @@ before/after numbers.
    in/out (~34), the 7 islands, and user-fn dispatch (5).
    (`test/go/langspec/compiled_metafallback_test.go`.)
 
+10. **Scalar carrier-keep + carrier-identity de-collision ✅ LANDED
+    (283 → 258).** Two coupled runtime-independence steps that clear a slab of
+    the operand-provenance cascade:
+    - **Scalar carrier-keep.** `toCarrier` kept only concrete INTEGERS concrete
+      through check mode (for static index checking); every other scalar
+      stripped to a type-only carrier. So a DATA list/map whose interior is a
+      string/bool/temporal stripped to `[ProperString …]` and was no longer an
+      inert const — `size people`, `each $.name people`, `ArrayUtil.sortby
+      $.age people`, and a class type body with a `r:1.0` default all refused
+      "operand of unknown provenance". Keeping every concrete inert SCALAR
+      concrete (string/bool/float/atom/big-int/decimal/temporal, DepScalar
+      CONSTRAINTS still excluded — their payload is a DepScalarInfo) makes the
+      container bake. It also closed a latent hazard: the generic-over-class
+      `r:Float`-vs-`r:1.0` type-body taint is now faithfully `r:1.0`.
+    - **Carrier-identity de-collision.** Keeping the scalar key concrete made a
+      repeated identical computed call deterministic: `(context get 'n') add
+      (context get 'n')` issues two `get` events whose results now share an id.
+      The generic RecordCall "already recorded → a structured hook owns it"
+      skip then mis-fired on the SECOND get (orphaning its receiver push), and
+      even past the skip the shared id let `add` resolve both operands to one
+      event ("call results reordered"). Fixed in its targeted form: the skip is
+      gated on the producer being a STRUCTURED hook (RecordBranch / user-fn /
+      poly / closure / loop / fallback — tracked by `genericSeq`), so a prior
+      GENERIC collision falls through; and the output loop mints a fresh id for
+      an output that collides with a prior event (guarded against `dup`/`swap`
+      identity pass-through: same-event and out-id-in-args are skipped). The
+      all-rows diff confirmed 0 native→non-native regressions, +12 improvements.
+    Ratchets: refused 283 → 258, minCompiledRows 1996 → 2007, compute gap 200 →
+    190; interp dropped 2 → 1 (a former `Vm.run (canon …)` row compiled),
+    rebalancing tier-2 to 62. (`eng/go/carrier.go` toCarrier scalar-keep,
+    `eng/go/emit.go` RecordCall genericSeq gate + de-collision;
+    `lang/go/bytecode_findings_test.go` `TestScalarKeepAndCarrierIdentity`.)
+
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
 6–8 → ~40, all META + error rows; item 9 closes the gate.
