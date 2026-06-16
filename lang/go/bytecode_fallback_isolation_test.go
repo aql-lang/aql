@@ -72,8 +72,12 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		// fn value now compile (fn-value introspection).
 		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
 		// native-module import whose namespace metadata a re-import degrades.
-		`"aql:math-util" import end typeof MathUtil`,
-		`"aql:math-util" import end MathUtil.$name`,
+		// The module-SYNTHETIC reads (`typeof MathUtil`, `MathUtil.$name`,
+		// `MathUtil.$module.name`) now const-fold and compile, so these pair the
+		// import with a still-uncompilable operation: the import side effect must
+		// still be rolled back before the whole-program fallback re-runs.
+		`"aql:math-util" import end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		`"aql:test" import end Test.test "a" [1 1 Assert.equal] end Test.fail-count`,
 	}
 	for _, src := range cases {
 		ac, err := New()

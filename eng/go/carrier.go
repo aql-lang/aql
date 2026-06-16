@@ -225,6 +225,15 @@ func toCarrier(v Value) Value {
 	if _, ok := v.Data.(FnDefInfo); ok {
 		return v
 	}
+	// Keep MODULE instances (Ideal/Module, Ideal/ModuleExport) concrete, same
+	// rationale as FnDefInfo: stripping nulls the ExtensionPayload descriptor /
+	// exports, so `MathUtil.$module` would become an opaque carrier the
+	// get-resolution elision can no longer follow. They are immutable and
+	// import-bound, so a pure read of one (`$name`, `$module.name`, `convert
+	// Map …`) const-folds (tryFoldModuleConst).
+	if isModuleFamilyValue(v) {
+		return v
+	}
 	// Keep Reach values (dot-access `m.a`, `Pkg.fn`) concrete. A parsed
 	// dot-access is a Reach whose ReachInfo carries the Eval flag and the
 	// get/getr segments; the engine expands it in place at step time
@@ -456,6 +465,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		}
 	}
 	if !tryFoldStaticIndex(r, word, args, out) &&
+		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
@@ -499,6 +509,118 @@ func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
 	}
 	outs[0] = elem
 	return true
+}
+
+// moduleConstFoldWords are the PURE reader words whose result over a
+// compile-time-known module value is a compile-time constant. `import` binds a
+// ModuleExport / Module instance that is immutable and deterministic, so a
+// get/getr (`MathUtil.$name`, `X.$module.name`), convert (`convert Map Foo`),
+// or typeof / is over it always yields the same value — it can be baked rather
+// than re-read at run time. Kept to a known-pure set so an impure word over a
+// module (none exists today, but defensively) can never const-fold.
+var moduleConstFoldWords = map[string]bool{
+	"get": true, "getr": true, "convert": true,
+	"typeof": true, "is": true, "size": true, "has": true,
+}
+
+// isModuleFamilyValue reports whether v is a concrete module instance — an
+// Ideal/Module descriptor or an Ideal/ModuleExport namespace (the values
+// `import` binds). Identified by the stable registered type PATH (FixedIDs
+// 5000/5001 in the lang layer) so the eng-level fold needs no lang import. These
+// instances are immutable and produced deterministically by `import`, so a pure
+// read of one is a compile-time constant.
+func isModuleFamilyValue(v Value) bool {
+	if !IsConcrete(v) || v.Parent == nil {
+		return false
+	}
+	switch v.Parent.Path() {
+	case "Ideal/Module", "Ideal/ModuleExport":
+		return true
+	}
+	return false
+}
+
+// tryFoldModuleConst const-folds a PURE read whose result is a compile-time
+// constant because it depends only on a module value (immutable, import-bound)
+// plus inert consts / type operands — `MathUtil.$name` -> 'MathUtil',
+// `convert Map Foo` -> the export map, `MathUtil.$module.name` ->
+// 'aql:math-util', `typeof MathUtil.$module` -> Module. The checker's recorded
+// RESULT is NOT enough: a word like `convert`/`is`/`typeof` returns its declared
+// TYPE (a Map carrier, a Boolean carrier) in check mode, not the concrete value,
+// so baking that would render `Map` where the interpreter rebuilds `{a:1 b:2}`.
+// Instead the dispatch is RE-EVALUATED concretely (check mode off) — twice, and
+// only folded when both runs agree on the same resolvable value (an inert const
+// or a bare type node), so a clock/rand/mutation-bearing read never freezes.
+// The fold emits nothing; the concrete result rides as that const / type
+// operand — the get/getr module-RESOLUTION elision (RecordCall), generalised to
+// the synthetic accessors and projections whose result is data, not a fn.
+// Declines unless the word is a known pure reader with a direct handler, at
+// least one operand is a module value, and every other operand is itself a
+// compile-time constant (an inert const or a type node) — a runtime operand
+// never folds.
+func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
+	es := r.Check.Emit
+	if !es.active() || !moduleConstFoldWords[word] || len(outs) != 1 ||
+		sig == nil || sig.Handler == nil || len(sig.NoEvalArgs) > 0 {
+		return false
+	}
+	sawModule := false
+	for _, a := range args {
+		switch {
+		case isModuleFamilyValue(a):
+			sawModule = true
+		case IsBareTypeNode(a):
+			// a type operand (the target of `convert Map …` / `… is Module`)
+		case isInertConst(a):
+			// an inert const operand (a quoted key atom, a scalar)
+		default:
+			return false // a runtime / non-const operand — not a compile-time fold
+		}
+	}
+	if !sawModule {
+		return false
+	}
+	one, ok := concreteHandlerEval(r, sig, args)
+	if !ok {
+		return false
+	}
+	two, ok := concreteHandlerEval(r, sig, args)
+	if !ok || one.String() != two.String() {
+		return false
+	}
+	switch {
+	case isInertConst(one):
+		outs[0] = one // ride as an inert const
+	case IsBareTypeNode(one) && one.ID != "":
+		outs[0] = one // ride as a type operand (OpPushType)
+	default:
+		return false
+	}
+	return true
+}
+
+// concreteHandlerEval runs sig.Handler on the already-resolved args with check
+// mode OFF, so a pure reader produces its REAL value rather than the declared-
+// type carrier the check-mode ReturnsFn emits. Nothing is recorded (the handler
+// is called directly, off the emit path) and the def stack is snapshotted /
+// restored so a stray binding cannot leak. Returns the single result when it is
+// a concrete value or a bare type node (typeof's type literal). Mirrors
+// concreteEvalOnce, but dispatches the one matched native instead of re-running
+// a token stream — the args are already in sig order.
+func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool) {
+	snap := r.Defs.Snapshot()
+	prev := r.Check.Mode
+	r.Check.Mode = false
+	res, err := sig.Handler(args, nil, nil, r)
+	r.Check.Mode = prev
+	r.Defs.Restore(snap)
+	if err != nil || len(res) != 1 {
+		return Value{}, false
+	}
+	if IsConcrete(res[0]) || (IsBareTypeNode(res[0]) && res[0].ID != "") {
+		return res[0], true
+	}
+	return Value{}, false
 }
 
 // dynOutNativeOK reports whether a dispatch with a DYNAMIC output but CONCRETE

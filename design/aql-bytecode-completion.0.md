@@ -370,6 +370,29 @@ before/after numbers.
     `eng/go/emit.go` RecordCall genericSeq gate + de-collision;
     `lang/go/bytecode_findings_test.go` `TestScalarKeepAndCarrierIdentity`.)
 
+11. **Module-synthetic const-fold ✅ LANDED (258 → 227).** `import` binds an
+    IMMUTABLE, deterministic Module / ModuleExport instance, so a pure read of
+    one is a compile-time constant — `MathUtil.$name`, `X.$module.name` / `.kind`
+    / `.exports`, `convert Map/List Foo`, `typeof` / `is` over a Module. They
+    refused "operand of unknown provenance at get/convert": the module value is
+    not an inert const, so it has no compiled operand home. `tryFoldModuleConst`
+    folds them. The subtlety that makes it sound: the checker's RECORDED result
+    is the declared TYPE (a `Map` / `Boolean` carrier), not the value — baking
+    that renders `Map` where the interpreter rebuilds `{a:1 b:2}` (a real bug the
+    first cut hit). So the fold RE-EVALUATES the dispatch concretely off the emit
+    path (`concreteHandlerEval`: check mode off, the def stack snapshotted, run
+    TWICE and only folded when both agree — the same determinism guard as the
+    `make` default fold), then bakes the real value as an inert const / type
+    operand. Gated to a known pure-reader set with a module-family operand and
+    otherwise compile-time-constant args; module instances are kept concrete
+    through `toCarrier` (like `FnDefInfo`) so the `$module` chain resolves. The
+    all-rows diff confirmed 0 native→non-native regressions, +31 improvements
+    (the cascade also cleared the `Test.*` synthetic-get rows, ratcheting
+    reducible 62 → 54). Ratchets: refused 258 → 227, minCompiledRows 2007 →
+    2038, compute gap 190 → 167. (`eng/go/carrier.go` `tryFoldModuleConst` /
+    `concreteHandlerEval` / `isModuleFamilyValue` + the toCarrier module guard;
+    `lang/go/bytecode_findings_test.go` `TestModuleSyntheticConstFold`.)
+
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
 6–8 → ~40, all META + error rows; item 9 closes the gate.

@@ -120,8 +120,8 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code (now just 1: the scalar carrier-keep landed a former Vm.run(canon …) row)
-	reducibleCeiling       = 62  // Test/Assert 29, quote 10, usurp 9, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO. Rebalance, NOT a regression: the scalar carrier-keep dropped interp 2->1 (a Vm.run row compiled) and reclassified one harness row into Test/Assert; net interp+reducible unchanged at 63, and the all-rows diff confirmed 0 native->non-native regressions
-	computeRefusalCeiling  = 190 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL + reach + scalar-keep container/data forms now compile)
+	reducibleCeiling       = 54  // Test/Assert 21, quote 10, usurp 9, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO. Ratcheted back DOWN from 62: the module-synthetic const-fold cleared the Test.* synthetic-get rows (`Test.TestCase istype`, `(make Test.TestSpec …) get …`)
+	computeRefusalCeiling  = 167 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL + reach + scalar-keep + module-synthetic reads now compile)
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

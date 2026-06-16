@@ -1027,3 +1027,60 @@ func TestScalarKeepAndCarrierIdentity(t *testing.T) {
 		t.Errorf("%q: if regressed: compiled=%v gotC=%v gotI=%v", cond, compiled, gotC, gotI)
 	}
 }
+
+// module-synthetic const-fold — a PURE read over an import-bound module value is
+// a compile-time constant. `import` binds an immutable, deterministic Module /
+// ModuleExport, so `MathUtil.$name`, `X.$module.name`, `convert Map/List Foo`,
+// and `typeof`/`is` over a Module always yield the same value. The checker's
+// recorded RESULT is the declared TYPE (a Map/Boolean carrier), not the value,
+// so tryFoldModuleConst RE-EVALUATES the dispatch concretely (check mode off,
+// twice, must agree) and bakes the real value — `convert Map Foo` -> the export
+// MAP, never the type literal `Map` (the bug this guards). Module instances are
+// kept concrete through toCarrier so the $module chain resolves.
+func TestModuleSyntheticConstFold(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`"aql:math-util" import end  MathUtil.$name`, "[MathUtil]"},
+		{`"aql:math-util" import end  typeof MathUtil.$module`, "[Module]"},
+		{`"aql:math-util" import end  MathUtil.$module is Module`, "[true]"},
+		{`"aql:math-util" import end  MathUtil.$module.name`, "[aql:math-util]"},
+		{`"aql:math-util" import end  MathUtil.$module.kind`, "[native]"},
+		{`"aql:math-util" import end  MathUtil.$module.exports`, "[['MathUtil']]"},
+		// the VALUE, not the declared type Map/List (the convert-folding bug guard)
+		{`module [export "Foo" {a:1 b:2}] import end convert Map Foo`, "[{a:1 b:2}]"},
+		{`module [export "Foo" {a:1 b:2}] import end convert List Foo`, "[[1 2]]"},
+		{`module [export "Foo" {a:1}] import end convert List Foo.$module`, "[['Foo']]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native const-fold, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// CONTROL: `convert` over a NON-module ideal (an Array instance) is not a
+	// module-synthetic fold — it goes through the normal path and still produces
+	// the value, proving the fold is scoped to module operands and does not
+	// hijack every convert.
+	const arr = `convert List (make Array [1 2 3])`
+	a, _ := New()
+	gotC, compiled, _ := a.RunCompiled(arr)
+	b, _ := New()
+	gotI, _ := b.Run(arr)
+	if !compiled || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[[1 2 3]]" {
+		t.Errorf("%q: array convert control failed: compiled=%v gotC=%v gotI=%v", arr, compiled, gotC, gotI)
+	}
+}
