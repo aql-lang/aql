@@ -465,8 +465,8 @@ func TestEmitRefusals(t *testing.T) {
 		// A branch reading an enclosing computation breaks the closed-
 		// fragment rule (Stage 3, with locals).
 		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
-		// `word` is the splice marker, not an islandable data transform.
-		{`word [1 add 2]`, "code-body word word"},
+		// (`word [1 add 2]` USED to be refused here; the splice now compiles by
+		// inline expansion — see TestWordSpliceCompilesNative.)
 	}
 	for _, c := range cases {
 		got, reason := compile(t, c.src)
@@ -1058,9 +1058,8 @@ func TestEmitWidenedAllowSet(t *testing.T) {
 	}{
 		{`do [1 add 2]`, int64(3), true},
 		{`do [mul 2 (add 3 4)]`, int64(14), true},
-		// `word` is the splice marker — refused, runs via whole-program
-		// fallback to the identical result (splices [3] → 3).
-		{`word [1 add 2]`, int64(3), false},
+		// (`word [1 add 2]` USED to refuse here; the splice now compiles by inline
+		// expansion to a plain native lowering — see TestWordSpliceCompilesNative.)
 	} {
 		got, reason := compile(t, c.src)
 		if c.isFn {

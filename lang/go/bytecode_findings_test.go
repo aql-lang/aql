@@ -490,6 +490,56 @@ func TestArgsAccessorCompilesNative(t *testing.T) {
 	}
 }
 
+// word (Forth-style macro splice) — `def x word [body]` binds x to an __SP
+// splice marker; at each use site stepLiteral inlines the body and re-steps it
+// against the live stack. The bytecode does the SAME thing: carrierResults
+// produces the marker as a non-emitting compile-time value (toCarrier preserves
+// it), and the use-site splice expands inline — so the body's instructions land
+// in place, late binding and all. Proof that the gate's "tier 2" is reducible:
+// `word` was the 30-row macro-splice cluster I'd called irreducible meta.
+func TestWordSpliceCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def x word [1,2,3] x`, "[1 2 3]"},
+		{`word [1 add 2]`, "[3]"}, // splices 1 add 2 -> evaluates inline
+		{`def dbl word [dup add] 5 dbl`, "[10]"},
+		// Late binding: the splice re-resolves c1 at the USE site (= 20), not at
+		// definition (= 10) — the exact case the bytecode "freezes things"
+		// objection predicted would break, and does not.
+		{`def c1 10 def x word [c1 2] def c1 20 x`, "[20 2]"},
+		{`def a word [1,2] def b word [a 3] b`, "[1 2 3]"}, // recursive splice
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected an inline native lowering, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// A splice of an undefined word errors in BOTH engines (the inline
+	// expansion surfaces the undefined_word at check time / run time alike).
+	a, _ := New()
+	_, _, errC := a.RunCompiled(`def x word [nope 2 3] x`)
+	b, _ := New()
+	_, errI := b.Run(`def x word [nope 2 3] x`)
+	if (errC == nil) != (errI == nil) {
+		t.Errorf("word-splice undefined: error divergence compiled=%v interp=%v", errC, errI)
+	}
+}
+
 // with-decimal block — a 0-input body run inside a scoped BigDecimal rounding
 // context compiles to a closure (like `do`) driven through InvokeBody, so the
 // VM-run body's decimal ops read the precision/rounding override exactly as the

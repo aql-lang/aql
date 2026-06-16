@@ -70,7 +70,7 @@ var reducibleWords = []allowEntry{
 	{"quote", regexp.MustCompile(`\b(code)?quote\b`),
 		"REDUCIBLE: code-as-data; needs the compiler to bake the quoted form as a constant token-list value"},
 	{"word", regexp.MustCompile(`\bword\b`),
-		"REDUCIBLE: Forth-style splice; needs compile-time inlining of the splice body at each use site (late binding then falls out of the normal def sequence)"},
+		"REDUCIBLE (mostly COMPILED): the __SP splice now expands inline at the use site (carrier.go). Residual: a few splices whose inlined body reaches an un-compilable word"},
 	{"macroexpand", regexp.MustCompile(`\bmacroexpand\b`),
 		"REDUCIBLE: Lisp-style — expand the macro at compile time (args/macro are static) and bake the resulting tokens"},
 	{"minilang", regexp.MustCompile(`\bminilang`),
@@ -120,7 +120,7 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
-	reducibleCeiling       = 127 // usurp 43, word 30, Test/Assert 28, quote 14, flex 7, minilang 5 — each a named, reducible compiler/VM TODO (args.N moved out: now compiled)
+	reducibleCeiling       = 100 // usurp 43, Test/Assert 28, quote 14, flex 7, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N fully + word mostly moved out: now compiled)
 	computeRefusalCeiling  = 258 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 9 islands, user-fn dispatch
 )
 

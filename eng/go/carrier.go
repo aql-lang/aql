@@ -228,6 +228,13 @@ func toCarrier(v Value) Value {
 	if IsReach(v) {
 		return v
 	}
+	// Keep an __SP splice marker concrete: it is a compile-time macro binding
+	// (`def x word [body]`), expanded inline at each use site by stepLiteral. A
+	// carrier-stripped marker would lose its payload and never splice, so the
+	// reference would be an opaque carrier in check mode.
+	if IsSplice(v) {
+		return v
+	}
 	// Type literals (Data already nil) are already in the right
 	// shape for sig matching — preserve their Carrier=false marker
 	// so sigTypeMatchesAsType can still recognise them as type
@@ -322,6 +329,14 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
 			return []Value{top}
 		}
+	}
+	// `word [body]` is a compile-time macro splice: produce the __SP marker as a
+	// non-emitting value (no runtime op). At its use site stepLiteral splices the
+	// body inline and re-steps it against the live stack, so the expansion
+	// compiles in place — late binding and all. (The `def NAME word …` that binds
+	// the marker emits nothing either; the marker has no runtime existence.)
+	if word == "word" && len(args) == 1 {
+		return []Value{NewSplice(args[0])}
 	}
 	narrowDynamicUses(r, sig, args)
 	// Per-alternative dispatch for strict disjunct inputs
