@@ -235,6 +235,10 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// over a bare generic compile (value-parity verified).
 		{`def Box gen [T] class {value:T} end (make Box {value:42}) typeof`, "native"},
 		{`def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box`, "native"},
+		// A SURFACE type identity bakes as a const operand (its *SurfaceInfo
+		// pointer is shared with the live type), so type-algebra / unify over it
+		// compiles (value-parity verified).
+		{`def Shape surface {area: (fnsig [[Self] [Float]])} end Integer tor Shape`, "native"},
 		// is / typeof on a make-result: the type operand shares the make
 		// result's ID, but the type-operand ID-collision guard resolves the
 		// `Point` literal to its own type, not the make event — so it compiles

@@ -1671,6 +1671,14 @@ func isInertConst(v Value) bool {
 		// d.Type by pointer. Bake when the body (placeholder fields + structure)
 		// is itself a clean type body.
 		return typeBodyConstOK(d.Body) || isInertConst(d.Body)
+	case *SurfaceInfo:
+		// A SURFACE type identity (`def Shape surface {area:(fnsig …)}`) used as
+		// a type-algebra / `is` operand. Sound to bake: the value is a pointer
+		// to the canonical *SurfaceInfo (shared by every copy), so its Required
+		// shapes and even the `exposes`-mutable Conform set stay consistent with
+		// the live type — a by-value Value copy shares the same pointer, so
+		// nothing goes stale.
+		return true
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConstMember(e) {

@@ -131,7 +131,7 @@ func metaAttribution(source, reason string) (string, bool) {
 // metaFallbackWords member — the remaining COMPILABLE work. This is the
 // finish-line ratchet: it must only ever go DOWN, and when it reaches 0 the
 // re-scoped P7 gate ("only meta falls back") holds. Never raise it.
-const nonMetaCeiling = 212
+const nonMetaCeiling = 201
 
 // TestMetaFallbackBoundary classifies every refused/islanded spec value row as
 // META (an expected, allowlisted interpreter fallback) or NON-META (remaining
