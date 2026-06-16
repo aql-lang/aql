@@ -102,7 +102,7 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			return &gnode{op: "cmp", cat: cBool, cmp: cmps[r.Intn(len(cmps))], kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
 		}
 	case cStr:
-		switch r.Intn(4) {
+		switch r.Intn(5) {
 		case 0:
 			return &gnode{op: "add", cat: cStr, kids: []*gnode{gen(r, cStr, depth-1, scope), gen(r, cStr, depth-1, scope)}} // concat
 		case 1:
@@ -110,6 +110,8 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		case 2:
 			m := genMap(r, cStr, depth-1, scope)
 			return &gnode{op: "get", cat: cStr, n: r.Intn(len(m.keys)), kids: []*gnode{m}}
+		case 3:
+			return genCase(r, cStr, depth, scope) // string-bodied dispatch over an int scrutinee
 		default:
 			return leaf(r, cStr, scope)
 		}
@@ -142,7 +144,7 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		}
 		return l
 	default: // cInt
-		switch r.Intn(12) {
+		switch r.Intn(13) {
 		case 0, 1:
 			ops := []string{"add", "sub", "mul", "div", "mod"}
 			return &gnode{op: ops[r.Intn(len(ops))], cat: cInt, kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
@@ -156,6 +158,8 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		case 5:
 			// `(fold [<binop>] <litList> <init>)` -> accumulated value.
 			return &gnode{op: "fold", cat: cInt, cmp: binOps[r.Intn(len(binOps))], n: r.Intn(6), kids: []*gnode{genLitList(r)}}
+		case 6:
+			return genCase(r, cInt, depth, scope) // multi-way dispatch (N-arm if-join)
 		default:
 			return leaf(r, cInt, scope)
 		}
@@ -172,6 +176,84 @@ func genLitList(r *rand.Rand) *gnode {
 		l.kids = append(l.kids, &gnode{op: "lit", cat: cInt, n: r.Intn(6)})
 	}
 	return l
+}
+
+// genCase builds a well-typed `case` dispatch whose result is category c (cInt
+// or cStr) — a multi-way branch-join, the N-arm generalization of `if`. The
+// scrutinee stays a literal/var Integer (a computed scrutinee refuses); clauses
+// mix scalar / [gt N] / [lt N] / Integer-type matches; a default is ALWAYS
+// present so the result is a well-typed value of c (embeddable anywhere). Some
+// cInt arms are value-consuming blocks ([<binop> N], which see the scrutinee).
+func genCase(r *rand.Rand, c cat, depth int, scope []string) *gnode {
+	n := &gnode{op: "case", cat: c}
+	if r.Intn(2) == 0 {
+		n.cmp = "stk" // stack form: <scrutinee> case [clauses]
+	}
+	n.kids = append(n.kids, leaf(r, cInt, scope)) // scrutinee: lit or in-scope var
+	for cl := 1 + r.Intn(3); cl > 0; cl-- {
+		n.keys = append(n.keys, genMatchKey(r))
+		n.kids = append(n.kids, genArmBody(r, c, depth-1, scope))
+	}
+	n.kids = append(n.kids, genArmBody(r, c, depth-1, scope)) // default (last kid)
+	return n
+}
+
+// genCaseStmt is a top-level NO-DEFAULT `case` — it may match nothing and yield
+// an empty result, which is only well-typed at the statement tail. Exercises the
+// 0-result dispatch path (a case value that isn't re-pushable).
+func genCaseStmt(r *rand.Rand) *gnode {
+	n := &gnode{op: "case", cat: cInt}
+	if r.Intn(2) == 0 {
+		n.cmp = "stk"
+	}
+	n.kids = append(n.kids, &gnode{op: "lit", cat: cInt, n: r.Intn(6)}) // literal scrutinee
+	for cl := 1 + r.Intn(3); cl > 0; cl-- {
+		n.keys = append(n.keys, genMatchKey(r))
+		n.kids = append(n.kids, genArmBody(r, cInt, 2, nil))
+	}
+	return n // no default kid: len(kids) == 1 + len(keys)
+}
+
+// genMatchKey encodes one case match clause: "sN" scalar literal, "gN"/"lN" the
+// predicate block [gt N]/[lt N], "tI" the Integer type literal (matches any
+// Integer scrutinee).
+func genMatchKey(r *rand.Rand) string {
+	switch r.Intn(5) {
+	case 0:
+		return "g" + fmt.Sprint(r.Intn(6))
+	case 1:
+		return "l" + fmt.Sprint(r.Intn(6))
+	case 2:
+		return "tI"
+	default:
+		return "s" + fmt.Sprint(r.Intn(6))
+	}
+}
+
+// genArmBody is a case arm body: a normal node of category c, or — for cInt — a
+// value-consuming block [<binop> <int>] that operates on the scrutinee.
+func genArmBody(r *rand.Rand, c cat, depth int, scope []string) *gnode {
+	if c == cInt && r.Intn(4) == 0 {
+		return &gnode{op: "vblock", cat: cInt, cmp: binOps[r.Intn(len(binOps))], kids: []*gnode{leaf(r, cInt, scope)}}
+	}
+	if depth < 0 {
+		depth = 0
+	}
+	return gen(r, c, depth, scope)
+}
+
+// renderMatch renders a match key (see genMatchKey) as case-clause source.
+func renderMatch(key string) string {
+	switch key[0] {
+	case 'g':
+		return "[gt " + key[1:] + "]"
+	case 'l':
+		return "[lt " + key[1:] + "]"
+	case 't':
+		return "Integer"
+	default: // 's'
+		return key[1:]
+	}
 }
 
 // leaf is a depth-0 terminal of category c.
@@ -269,11 +351,13 @@ func genObjRead(r *rand.Rand, fields []string) *gnode {
 }
 
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
-	switch r.Intn(6) {
+	switch r.Intn(7) {
 	case 0:
 		return genArrProg(r), nil
 	case 1:
 		return genObjProg(r), nil
+	case 2:
+		return genCaseStmt(r), nil // top-level no-default case (0-result tail)
 	}
 	scope := []string{}
 	var defs []*gnode
@@ -384,6 +468,22 @@ func render(n *gnode, scope []string) string {
 		return "(each [" + n.cmp + " " + fmt.Sprint(n.n) + "] " + render(n.kids[0], scope) + ")"
 	case "scan":
 		return "(" + render(n.kids[0], scope) + " scan [" + n.cmp + "])"
+	case "case":
+		nClause := len(n.keys)
+		clauses := make([]string, 0, nClause*2+1)
+		for i := 0; i < nClause; i++ {
+			clauses = append(clauses, renderMatch(n.keys[i]), render(n.kids[1+i], scope))
+		}
+		if len(n.kids) > 1+nClause { // default present (always the last kid)
+			clauses = append(clauses, render(n.kids[len(n.kids)-1], scope))
+		}
+		body := "[" + strings.Join(clauses, " ") + "]"
+		if n.cmp == "stk" {
+			return "(" + render(n.kids[0], scope) + " case " + body + ")"
+		}
+		return "(case " + render(n.kids[0], scope) + " " + body + ")"
+	case "vblock":
+		return "[" + n.cmp + " " + render(n.kids[0], scope) + "]"
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":
