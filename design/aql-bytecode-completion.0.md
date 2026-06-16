@@ -54,68 +54,75 @@ Islands (15): map iteration (`each`/`fold` over `{…}` → ~7), a few `case`
 shapes whose value isn't re-pushable (~5), multi-result `do` (1), `each [drop]`
 (1).
 
-## 3. P7 reachability — the literal goal is not reachable; re-scope it
+## 3. P7 reachability — what is truly irreducible (and what only looks it)
 
 `aql-bytecode-runtime-independence.0.md` gates P7 (delete `OpFallback` + the
-whole-program fallback) on **both ratchets at 0** — every row compiles. That is
-**not achievable** while the corpus exercises the META cluster:
+whole-program fallback) on **both ratchets at 0** — every row compiles. Exactly
+ONE narrow thing makes that unreachable, and it is worth stating precisely,
+because an earlier draft of this doc overstated it.
 
-- `Vm.run`/`run-with` parse and execute **runtime-constructed source** in a
-  sub-engine (`lang/go/modules/vm.go`). The program isn't known until run time,
-  so there is nothing to AOT-compile — this IS the interpreter, by definition.
-- The **Test harness** generates inputs and runs candidate programs (property
-  testing); `macroexpand`/`minilang-register` rewrite/register code at run
-  time; `flex`/`canon` are reflective; `codequote`/`quote` are code-as-data;
-  usurp re-steps tape-coupled values the VM cannot push; `args.N` needs a
-  per-call args stack the VM frame deliberately doesn't keep.
+A bytecode compiler is an ahead-of-time function `compile : Program ->
+Instructions`, run once before execution. The only genuinely irreducible words
+are those that **execute code computed at RUNTIME** — `Vm.run`/`run-with` of a
+runtime string (`lang/go/modules/vm.go`). For those there is no static program
+to emit; "compiling" them is parse+compile+run *at runtime*, which is exactly
+what the `OpFallback` island (the embedded interpreter) does. That, and only
+that, is irreducible — and even then it is not magic, just the bytecode invoking
+the parser/VM on data.
 
-The original outline (`aql-bytecode-outline.0.md` §5, §8) was right: *"Not as a
-replacement for the interpreter — dynamic features need a fallback. A hybrid
-design keeps the interpreter for these."* The runtime-independence doc's P7 over-
-reached. **Re-scope P7** from *"delete the fallback"* to:
+**Everything else the corpus refuses is REDUCIBLE** — refused by a specific,
+nameable limitation of *this* compiler/VM, not by any law:
 
-> **Native execution of all REAL COMPUTE; an explicit, enumerated, allowlisted
-> meta-fallback for the irreducible dynamic/reflective words.**
+- `macroexpand` — Lisp-style: expand at compile time (macro + args are static),
+  bake the resulting tokens. Unimplemented, not impossible.
+- `word` (Forth splice) — inline the splice body at each use site; late binding
+  then falls out of the normal `def c1 10 … def c1 20` sequence the VM already
+  runs. The compiler just treats `word` as opaque today.
+- `args.N` — the params ARE the frame's leading locals (0..n-1); `args.N` is a
+  `PUSH_LOCAL N`. Needs the emitter to fold get-N-of-args; nothing fundamental.
+- `flex`/`canon`/`usurp`/`quote`/`Test`/`minilang` — reference cells, a pure
+  canonicaliser, a VM dispatch model for usurp, constant token-list bakes,
+  compiling candidate bodies. All named VM/compiler features.
 
-### Re-scoped P7 gate (replaces "both ratchets == 0")
+So the honest re-scope keeps a fallback ONLY for runtime code-eval, and treats
+the rest as work:
 
-**Steps 1–3 ✅ LANDED** (`test/go/langspec/compiled_metafallback_test.go`,
+> **Native execution of all reducible code; an OpFallback island confined to the
+> one irreducible category — words that execute runtime-computed code.**
+
+### Re-scoped P7 gate — three tiers (replaces "both ratchets == 0")
+
+**✅ LANDED** (`test/go/langspec/compiled_metafallback_test.go`,
 `TestOnlyMetaFallsBack`). The gate partitions every refused/islanded spec value
-row into meta / error-row / **compute gap** and ratchets the compute gap toward
-0. Current partition (June 2026): **131 meta-attributable, 12 error-row, 260
-compute gap** (`computeRefusalCeiling`). Meta breakdown: usurp 43, word (the
-Forth-style macro splice) 30, Test/Assert harness 28, quote/codequote 14, flex
-7, minilang 5, args 2, Vm.run 1, canon 1.
+row into three tiers plus error-rows, each on its own ratchet. Current partition
+(June 2026): **2 interpreter-only (tier 1), 129 reducible (tier 2), 12
+error-row, 260 compute gap**.
 
-1. ✅ `metaFallbackWords` — the curated allowlist (`usurp` + `/u`/`/ur`/`/us`
-   synthetics, `quote`/`codequote`, `macroexpand`, `minilang`, `flex`, `canon`,
-   `args.` accessor, `Vm.run`/`Vm.run-with`, the `Test.`/`Assert.` harness).
-   Each entry carries a one-line *why it cannot compile*. Attribution is by a
-   NARROW source pattern (the accessor `args.`, not `forward-args`; `Vm.run`,
-   not every `run`) so a real compute gap is never masked.
-2. ✅ `TestOnlyMetaFallsBack`: every `.tsv` value row either compiles to a
-   fallback-free `Program`, OR its refusal/island is attributed to a
-   `metaFallbackWords` member or an error-row. A non-meta, non-error
-   refusal/island is a COMPUTE GAP, ratcheted by `computeRefusalCeiling` — at 0
-   this becomes the strict "only meta falls back" gate. Keeps the ratchet honest
-   without demanding the impossible.
-3. ✅ Error rows (count-mismatch returns, `unpack` missing key, orphan `gen`)
-   are dispositioned as **allowlisted** (`errorRowReason`): the checker
-   deliberately refuses so the interpreter surfaces the matching taxonomy. The
-   alternative (make the VM raise the taxonomy so they compile) stays available
-   as future tightening.
-4. **PENDING** (gated on `computeRefusalCeiling` reaching 0): THEN the deletions
-   in `aql-bytecode-runtime-independence.0.md` §P7 apply to the WHOLE-PROGRAM
-   fallback's *unbounded* form: `RunCompiled` stops calling `a.Run(src)` for
-   arbitrary refusals and instead runs the compiled `Program` (which now contains
-   a NARROW `OpFallback` island only for allowlisted meta spans). The island
-   machinery **stays** — it is the hybrid's interpreter seam, now provably
-   confined to meta.
+1. ✅ **Tier 1 — `interpreterOnlyWords` (permanent, capped at 3).** Executes
+   runtime-constructed code: `Vm.run`/`Vm.run-with`. The legitimate, permanent
+   home of the island. A NEW tier-1 entry is an *irreducibility claim* the gate
+   forces you to justify.
+2. ✅ **Tier 2 — `reducibleWords` (ratcheted, `reducibleCeiling = 129`).**
+   Refused by a NAMED missing feature, each `why` recording what compiling it
+   takes: usurp 43, word 30, Test/Assert 28, quote 14, flex 7, minilang 5, args
+   2. These are TODOs, not exclusions — they ratchet to 0 like any other work.
+   (The earlier draft mislabeled this tier "irreducible meta"; that laundered
+   unfinished work as impossibility. `with-decimal` disproved the framing by
+   moving from a refusing code-body word to a clean native compile.)
+3. ✅ **Compute frontier (ratcheted, `computeRefusalCeiling = 260`).** Cascades
+   (operand-provenance 140), code-body DSL bodies (47), Stage-1 lowering (~24),
+   dynamic in/out (~24), 9 islands, user-fn dispatch (5). Error rows (12) are
+   allowlisted via `errorRowReason` (the checker refuses so the interpreter
+   raises the taxonomy; making the VM raise them stays available).
+4. **PENDING** (gated on tiers 2 + 3 reaching 0): the §P7 deletion of the
+   *unbounded* whole-program fallback — `RunCompiled` stops calling `a.Run(src)`
+   for arbitrary refusals and runs the compiled `Program`, whose `OpFallback`
+   island is then provably confined to tier-1 spans. The island machinery stays.
 
-This is "complete delivery": real compute is 100% native and runtime-
-independent; meta is explicitly, auditably interpreted. The gate now MEASURES
-the gap to that delivery (295 compute rows) instead of asserting an impossible
-absolute.
+This is "complete delivery": all reducible code native; the island confined to
+runtime code-eval. The gate MEASURES the distance (129 reducible + 260 compute)
+instead of asserting an impossible absolute — and keeps tier 2 honestly on the
+work list rather than excused as "meta."
 
 ## 4. Sequenced roadmap (tractable clusters)
 
@@ -259,11 +266,12 @@ before/after numbers.
    re-step a fn body) — so they are deliberately OFF the allowlist.
    (`eng/go/emit.go` RecordCall + intern.)
 
-9. **Error-row disposition + the re-scoped P7 gate ✅ GATE LANDED (steps 1–3);
-   fallback narrowing PENDING (step 4).** `metaFallbackWords` +
-   `TestOnlyMetaFallsBack` partition every refused/islanded row into meta (131) /
-   error-row (12) / compute gap (260) and ratchet the compute gap toward 0
-   (`computeRefusalCeiling = 260`). Error rows are allowlisted (the checker
+9. **Error-row disposition + the re-scoped P7 gate ✅ GATE LANDED (three-tier);
+   fallback narrowing PENDING.** `TestOnlyMetaFallsBack` partitions every
+   refused/islanded row into tier 1 interpreter-only (2, capped), tier 2
+   reducible (129, `reducibleCeiling`), error-row (12, allowlisted), and compute
+   gap (260, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
+   island; tiers 2 and 3 both ratchet to 0. Error rows are allowlisted (the checker
    refuses so the interpreter surfaces the taxonomy); making the VM raise them
    stays available as future tightening. The §P7 fallback narrowing (step 4)
    waits on the compute gap reaching 0 — its remaining drivers are the
@@ -280,12 +288,13 @@ typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; item
 ## 5. Why not delete the island after all
 
 Even at the re-scoped target the `OpFallback` island earns its keep: it is the
-seam that runs an allowlisted meta span (e.g. a `Vm.run` body) through the
-interpreter mid-Program without abandoning the compiled code around it. Deleting
-it (the runtime-independence doc's literal §P7) would force the *whole* program
-to fall back the moment it touches one meta word — strictly worse coverage than
-a confined island. Keep the island; delete only the *unbounded whole-program*
-fallback path in `RunCompiled` once `TestOnlyMetaFallsBack` is green.
+seam that runs a tier-1 span (a `Vm.run` body — runtime-computed code) through
+the interpreter mid-Program without abandoning the compiled code around it.
+Deleting it (the runtime-independence doc's literal §P7) would force the *whole*
+program to fall back the moment it touches one runtime-eval word — strictly worse
+coverage than a confined island. Keep the island; delete only the *unbounded
+whole-program* fallback path in `RunCompiled` once tiers 2 and 3 reach 0 (so the
+island is provably confined to tier 1).
 
 ## 6. Verification discipline (unchanged)
 

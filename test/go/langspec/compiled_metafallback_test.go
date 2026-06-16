@@ -1,29 +1,34 @@
 // The re-scoped P7 gate (design/aql-bytecode-completion.0.md §3).
 //
 // The literal P7 — every spec value row compiles to a fallback-free Program —
-// is NOT reachable, by design: the corpus exercises irreducibly dynamic /
-// reflective words (Vm.run executes runtime-constructed source; the Test/Assert
-// harness generates and runs candidate programs; macroexpand rewrites code;
-// codequote/quote are code-as-data; flex/canon are reflective; usurp re-steps
-// tape-coupled values; args reads the per-call args stack). Those ARE the
-// interpreter — there is nothing to ahead-of-time compile.
+// is not reachable for ONE narrow reason: a bytecode compiler is an
+// ahead-of-time function `compile : Program -> Instructions`, and a handful of
+// words EXECUTE CODE THAT IS COMPUTED AT RUNTIME (`Vm.run` of a runtime string).
+// For those there is no static instruction sequence — "compiling" them is
+// parse+compile+run at runtime, which is exactly what the OpFallback island
+// (the embedded interpreter) does. That, and only that, is irreducible.
 //
-// So P7 is re-scoped to: all REAL COMPUTE native, with an explicit, enumerated
-// allowlist for the meta words. This gate is the objective measure of THAT
-// goal. It partitions every refused or islanded spec value row into:
+// EVERYTHING ELSE that refuses today is REDUCIBLE — it is refused by a specific,
+// nameable limitation of THIS compiler/VM, not by any law. So the partition is
+// three tiers, not "meta vs compute":
 //
-//   - META — the source uses an allowlisted meta word (metaFallbackWords); the
-//     refusal/island is by design and the interpreter owns it.
-//   - ERROR-ROW — the checker deliberately refuses so the interpreter surfaces a
-//     runtime error (return-count mismatch, unpack of a missing key, orphan
-//     gen); §3 step 3 dispositions these as allowlisted.
-//   - COMPUTE GAP — everything else: the real frontier, ratcheted DOWN toward 0.
+//   - tier 1, interpreter-only (interpreterOnlyWords): executes runtime-computed
+//     code. The island is the correct, permanent home. Capped, not ratcheted.
+//   - tier 2, reducible-not-yet-compiled (reducibleWords): refused by a named
+//     missing compiler/VM feature (macroexpand = compile-time expand + bake;
+//     word = splice inline; args.N = frame-local read; flex = reference cells;
+//     …). These are TODOs, ratcheted toward 0 like any other work.
+//   - the compute frontier: cascades, lowering residuals, DSL bodies, error
+//     rows. Ratcheted by computeRefusalCeiling.
 //
-// The downward ratchet is computeRefusalCeiling. When it reaches 0 this becomes
-// the strict "only meta (and error rows) fall back" gate, and the unbounded
-// whole-program fallback in RunCompiled can be narrowed to the allowlisted meta
-// spans (§3 step 4) while the OpFallback island machinery stays as the hybrid's
-// confined interpreter seam.
+// (An earlier version of this file called tier 2 "irreducible meta." That was
+// wrong — it laundered unfinished compiler work as impossibility. `with-decimal`
+// proved the point by moving from "refusing code-body word" to a clean native
+// compile; the tier-2 words are the same kind of move, just deeper.)
+//
+// When BOTH ratchets reach 0, only tier 1 falls back, and the unbounded
+// whole-program fallback in RunCompiled can be narrowed to the tier-1 island
+// spans (§3 step 4).
 package langspec
 
 import (
@@ -36,68 +41,84 @@ import (
 	"testing"
 )
 
-// metaFallbackWords is the curated allowlist: a source pattern plus the one-line
-// reason that word cannot ahead-of-time compile. A refused/islanded row whose
-// SOURCE matches a pattern is attributed to meta. The patterns are deliberately
-// narrow (e.g. `args.` the accessor, not `forward-args`; `Vm.run` not every
-// `run`) so a genuine compute gap is never masked. Curated conservatively —
-// expand only with a documented rationale, since a too-wide allowlist hides
-// compute frontiers from the ratchet.
-var metaFallbackWords = []struct {
+type allowEntry struct {
 	name    string
 	pattern *regexp.Regexp
 	why     string
-}{
-	{"usurp", regexp.MustCompile(`\busurp\b|/u[rs]?(\b|$)`),
-		"re-steps tape-coupled values on the interpreter tape; the VM cannot push them (incl. the /u /ur /us ref synthetics)"},
-	{"quote", regexp.MustCompile(`\b(code)?quote\b`),
-		"code-as-data: yields its operand's unevaluated form, which has no runtime value to bake"},
-	{"word", regexp.MustCompile(`\bword\b`),
-		"Forth-style macro splice: wraps a body in an __SP marker re-stepped LATE-BOUND against the live stack at each use site (code-as-data)"},
-	{"macroexpand", regexp.MustCompile(`\bmacroexpand\b`),
-		"rewrites code at run time (macro expansion); the program is not known until then"},
-	{"minilang", regexp.MustCompile(`\bminilang`),
-		"registers and runs a sublanguage at run time (reflective)"},
-	{"flex", regexp.MustCompile(`\bflex\b`),
-		"reference-semantics mutable container; the aliasing the VM's value model cannot track"},
-	{"canon", regexp.MustCompile(`\bcanon\b`),
-		"canonicalises a value reflectively"},
-	{"args", regexp.MustCompile(`\bargs\.`),
-		"reads the interpreter's per-call args stack; the VM frame binds params to locals and keeps no args stack"},
-	{"Vm.run", regexp.MustCompile(`\bVm\.run`),
-		"executes runtime-constructed source in a sub-engine — this IS the interpreter, by definition"},
-	{"Test/Assert", regexp.MustCompile(`\b(Test|Assert)\.`),
-		"the test / property harness generates inputs and runs candidate programs at run time"},
 }
 
-// metaAttribution returns the meta word a refused/islanded row's source is
-// attributable to (and why), or ok=false when the row is a genuine non-meta gap.
-func metaAttribution(src string) (name, why string, ok bool) {
-	for _, m := range metaFallbackWords {
-		if m.pattern.MatchString(src) {
-			return m.name, m.why, true
+// interpreterOnlyWords (tier 1) execute code that is constructed at RUNTIME, so
+// there is no ahead-of-time instruction sequence to emit: "compiling" them is a
+// runtime parse+compile+run, i.e. the interpreter. This is the one genuinely
+// irreducible category and the legitimate permanent home of the OpFallback
+// island. Kept deliberately tiny — a NEW entry here is a claim of irreducibility
+// that must be justified.
+var interpreterOnlyWords = []allowEntry{
+	{"Vm.run", regexp.MustCompile(`\bVm\.run`),
+		"executes runtime-constructed source in a sub-engine — there is no static program to compile; this IS the interpreter"},
+}
+
+// reducibleWords (tier 2) refuse today because of a specific, NAMED limitation
+// of this compiler/VM — not because they cannot be compiled. The `why` records
+// exactly what compiling each would take. They are ratcheted toward 0
+// (reducibleCeiling); none is a permanent exclusion.
+var reducibleWords = []allowEntry{
+	{"usurp", regexp.MustCompile(`\busurp\b|/u[rs]?(\b|$)`),
+		"REDUCIBLE: re-steps tape-coupled values; needs the VM to model the usurp-modified dispatch instead of the interpreter tape (incl. /u /ur /us synthetics)"},
+	{"quote", regexp.MustCompile(`\b(code)?quote\b`),
+		"REDUCIBLE: code-as-data; needs the compiler to bake the quoted form as a constant token-list value"},
+	{"word", regexp.MustCompile(`\bword\b`),
+		"REDUCIBLE: Forth-style splice; needs compile-time inlining of the splice body at each use site (late binding then falls out of the normal def sequence)"},
+	{"macroexpand", regexp.MustCompile(`\bmacroexpand\b`),
+		"REDUCIBLE: Lisp-style — expand the macro at compile time (args/macro are static) and bake the resulting tokens"},
+	{"minilang", regexp.MustCompile(`\bminilang`),
+		"REDUCIBLE: registers a sublanguage; static registrations could compile, only runtime-input parsing is interpreter-bound"},
+	{"flex", regexp.MustCompile(`\bflex\b`),
+		"REDUCIBLE: reference-semantics container; needs reference cells in the VM value model (currently by-value)"},
+	{"canon", regexp.MustCompile(`\bcanon\b`),
+		"REDUCIBLE: canonicalisation is a pure function; just unimplemented in the VM"},
+	{"args", regexp.MustCompile(`\bargs\.`),
+		"REDUCIBLE: args.N is a frame-local read (params ARE locals 0..n-1); needs the emitter to fold get-N-of-args to PUSH_LOCAL N"},
+	{"Test/Assert", regexp.MustCompile(`\b(Test|Assert)\.`),
+		"REDUCIBLE: the test/property harness; the candidate bodies compile, the harness accumulates — only random input generation is runtime"},
+}
+
+// classify returns the tier a refused/islanded row's source is attributable to:
+// "" (compute gap), or the matched tier-1/tier-2 word. Tier 1 is checked first
+// so a `Vm.run (canon …)` row counts as interpreter-only, not reducible-canon.
+func classify(src string) (tier int, name string) {
+	for _, e := range interpreterOnlyWords {
+		if e.pattern.MatchString(src) {
+			return 1, e.name
 		}
 	}
-	return "", "", false
+	for _, e := range reducibleWords {
+		if e.pattern.MatchString(src) {
+			return 2, e.name
+		}
+	}
+	return 0, ""
 }
 
-// errorRowReason reports whether a refusal reason is a deliberately-interpreted
+// errorRowReason reports whether a refusal is a deliberately-interpreted
 // runtime-error surface: the checker refuses so the interpreter raises the
 // matching taxonomy (a return-count mismatch, an unpack of a missing key, an
-// orphan gen). §3 step 3 dispositions these as allowlisted rather than demanding
-// the VM raise every such taxonomy.
+// orphan gen). §3 step 3 dispositions these as allowlisted.
 func errorRowReason(reason string) bool {
 	return strings.Contains(reason, "suppressed a runtime error") ||
 		strings.Contains(reason, "body value count differs") ||
 		strings.Contains(reason, "without exactly one declared return")
 }
 
-// computeRefusalCeiling is the downward ratchet at the heart of the re-scoped
-// P7 gate: the maximum number of refused-or-islanded spec value rows allowed to
-// be GENUINE COMPUTE gaps (neither meta-attributable nor an error-row). It must
-// reach 0 before the unbounded whole-program fallback can be narrowed. Lower it
-// monotonically as compute clusters compile natively; never raise it.
-const computeRefusalCeiling = 260 // 295 then `word` macro splice reclassified to meta (-30 -> 265) then with-decimal block compiled natively (-5 -> 260); remaining: operand-provenance cascades (get/is/typeof/make over unmaterialisable producers, 140), code-body DSL words (select/case/reach/error/do/..., 47), Stage-1 lowering residuals (~24), dynamic in/out (~24), 9 islands, user-fn dispatch (5)
+// Three downward ratchets. interpreterOnlyCeiling caps the ONE permanent island
+// category (a new tier-1 word is an irreducibility claim that must be argued);
+// reducibleCeiling and computeRefusalCeiling both ratchet toward 0 — when they
+// reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
+const (
+	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
+	reducibleCeiling       = 129 // usurp 43, word 30, Test/Assert 28, quote 14, flex 7, minilang 5, args 2 — each a named, reducible compiler/VM TODO
+	computeRefusalCeiling  = 260 // operand-provenance cascades (140), code-body DSL words (47), Stage-1 lowering residuals (~24), dynamic in/out (~24), 9 islands, user-fn dispatch (5)
+)
 
 func TestOnlyMetaFallsBack(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
@@ -106,10 +127,10 @@ func TestOnlyMetaFallsBack(t *testing.T) {
 		t.Fatalf("read %s: %v", specDir, err)
 	}
 
-	var metaCount, errorRows, computeGap int
-	metaByWord := map[string]int{}
+	var interp, reducible, errorRows, computeGap int
+	tier1By := map[string]int{}
+	tier2By := map[string]int{}
 	computeByReason := map[string]int{}
-	var sampleGaps []string
 
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
@@ -140,25 +161,25 @@ func TestOnlyMetaFallsBack(t *testing.T) {
 			case prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK"):
 				continue // fully native
 			}
-			// Refused, or an islanded Program (re-enters the interpreter): a row
-			// that is NOT fully native. Attribute it.
-			if name, _, ok := metaAttribution(input); ok {
-				metaCount++
-				metaByWord[name]++
-				continue
-			}
-			if errorRowReason(reason) {
-				errorRows++
-				continue
-			}
-			computeGap++
-			r := normaliseReason(reason)
-			if reason == "" {
-				r = "island (OpFallback span)"
-			}
-			computeByReason[r]++
-			if len(sampleGaps) < 25 {
-				sampleGaps = append(sampleGaps, input)
+			// Refused, or an islanded Program: not fully native. Classify.
+			switch tier, name := classify(input); tier {
+			case 1:
+				interp++
+				tier1By[name]++
+			case 2:
+				reducible++
+				tier2By[name]++
+			default:
+				if errorRowReason(reason) {
+					errorRows++
+					continue
+				}
+				computeGap++
+				r := normaliseReason(reason)
+				if reason == "" {
+					r = "island (OpFallback span)"
+				}
+				computeByReason[r]++
 			}
 		}
 		f.Close()
@@ -167,22 +188,31 @@ func TestOnlyMetaFallsBack(t *testing.T) {
 		}
 	}
 
-	t.Logf("re-scoped P7 partition: %d meta-attributable, %d error-row, %d COMPUTE GAP (ceiling %d)",
-		metaCount, errorRows, computeGap, computeRefusalCeiling)
-	t.Logf("meta-attributable by word:")
-	for _, w := range sortedKeys(metaByWord) {
-		t.Logf("  meta %4d  %s", metaByWord[w], w)
+	t.Logf("re-scoped P7 partition: %d interpreter-only (tier 1, permanent), %d reducible (tier 2, TODO), %d error-row, %d COMPUTE GAP",
+		interp, reducible, errorRows, computeGap)
+	t.Logf("tier 1 — interpreter-only (ceiling %d):", interpreterOnlyCeiling)
+	for _, w := range sortedKeys(tier1By) {
+		t.Logf("  interp %4d  %s", tier1By[w], w)
 	}
-	t.Logf("compute gaps by reason (the frontier to clear):")
+	t.Logf("tier 2 — reducible, not yet compiled (ceiling %d):", reducibleCeiling)
+	for _, w := range sortedKeys(tier2By) {
+		t.Logf("  reduce %4d  %s", tier2By[w], w)
+	}
+	t.Logf("compute gaps by reason (ceiling %d):", computeRefusalCeiling)
 	for _, r := range sortedKeys(computeByReason) {
-		t.Logf("  gap  %4d  %s", computeByReason[r], r)
+		t.Logf("  gap    %4d  %s", computeByReason[r], r)
 	}
 
+	if interp > interpreterOnlyCeiling {
+		t.Errorf("interpreter-only rows %d exceed cap %d — a NEW word claims irreducibility; justify it or compile it",
+			interp, interpreterOnlyCeiling)
+	}
+	if reducible > reducibleCeiling {
+		t.Errorf("reducible (tier-2) rows %d exceed ceiling %d — a reducible-but-unimplemented row regressed",
+			reducible, reducibleCeiling)
+	}
 	if computeGap > computeRefusalCeiling {
-		for _, s := range sampleGaps {
-			t.Logf("  e.g. %s", s)
-		}
-		t.Errorf("compute gaps %d exceed ceiling %d — a real-compute row regressed to refusing (it is NOT attributable to a meta word or an error-row)",
+		t.Errorf("compute gaps %d exceed ceiling %d — a real-compute row regressed to refusing",
 			computeGap, computeRefusalCeiling)
 	}
 }
