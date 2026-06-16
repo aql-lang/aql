@@ -420,6 +420,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, vmErrAt(curDebug, pc, "DROP stack underflow")
 			}
 			stack = stack[:len(stack)-1]
+		case OpMakeList:
+			// Assemble the top Arg values into a list (a computed list literal,
+			// `[1 add 2]`); order preserved, deepest becomes element 0.
+			n := int(in.Arg)
+			if len(stack) < n {
+				return nil, vmErrAt(curDebug, pc, "MAKE_LIST stack underflow")
+			}
+			elems := make([]Value, n)
+			copy(elems, stack[len(stack)-n:])
+			stack = stack[:len(stack)-n]
+			stack = append(stack, NewList(elems))
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {

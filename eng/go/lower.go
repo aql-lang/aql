@@ -437,7 +437,11 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	}); reason != "" {
 		return reason
 	}
-	if c.poly {
+	if c.makeList {
+		// Assemble the n laid-out operands into a list (a computed list literal,
+		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.
+		lw.emit(OpMakeList, n, c.pos)
+	} else if c.poly {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.
 		pi := len(lw.p.PolyRefs)

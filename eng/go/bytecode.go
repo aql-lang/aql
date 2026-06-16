@@ -117,6 +117,13 @@ const (
 	// path drops it before running the then-body, while the false path leaves
 	// it as the branch result.
 	OpDrop
+	// OpMakeList pops Arg values off the top of the stack and pushes a single
+	// list of them, preserving order (deepest of the Arg becomes element 0). It
+	// lowers a list literal whose elements are COMPUTED (`[1 add 2]` -> `[3]`,
+	// `[1 (2 add 3) 4]` -> `[1 5 4]`): the elements are evaluated onto the stack,
+	// then assembled. A fully-literal list (`[1 2 3]`) stays a pooled const and
+	// never needs this.
+	OpMakeList
 )
 
 func (o Opcode) String() string {
@@ -157,6 +164,8 @@ func (o Opcode) String() string {
 		return "STORE_LOCAL"
 	case OpDrop:
 		return "DROP"
+	case OpMakeList:
+		return "MAKE_LIST"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -373,6 +382,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " p%-3d ; %s/%d (poly)", in.Arg, pr.Word, pr.Arity)
 		case OpCallDynamic:
 			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
+		case OpMakeList:
+			fmt.Fprintf(sb, " n%-3d ; assemble %d into a list", in.Arg, in.Arg)
 		}
 		sb.WriteByte('\n')
 	}

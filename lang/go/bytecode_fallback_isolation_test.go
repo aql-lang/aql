@@ -138,26 +138,39 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 // the interpreter and the trace renders — exactly the plan's "compiled
 // mode disables itself under trace" contract, realised via fallback.
 // Pin it so making `trace` compilable can't silently lose the trace.
-func TestCompiledTraceFallsBack(t *testing.T) {
+func TestCompiledTraceRenders(t *testing.T) {
+	// `IO.trace` renders the VALUE it traces, not interpreter execution steps, so
+	// it compiles to a CALL_NATIVE (its `[add 1 2]` arg now assembles via
+	// OpMakeList) and emits BYTE-IDENTICAL output to the interpreter. The trace
+	// side-effect must therefore survive the compiled path unchanged.
 	src := `"aql:io" import end IO.trace [add 1 2]`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var buf bytes.Buffer
-	a.SetOutput(&buf)
+	var bufC bytes.Buffer
+	a.SetOutput(&bufC)
 	out, compiled, err := a.RunCompiled(src)
 	if err != nil {
 		t.Fatalf("traced program: %v", err)
 	}
-	if compiled {
-		t.Error("a traced program took the compiled path; it must fall back so the trace renders")
+	if !compiled {
+		t.Error("a value trace must take the compiled path (it renders the same)")
 	}
 	if len(out) != 1 || out[0] != int64(3) {
 		t.Fatalf("traced result = %v, want 3", out)
 	}
-	if !strings.Contains(buf.String(), "trace") {
-		t.Errorf("no trace output captured: %q", buf.String())
+	b, _ := New()
+	var bufI bytes.Buffer
+	b.SetOutput(&bufI)
+	if _, errI := b.Run(src); errI != nil {
+		t.Fatalf("interpreter trace: %v", errI)
+	}
+	if !strings.Contains(bufC.String(), "trace") {
+		t.Errorf("no trace output captured: %q", bufC.String())
+	}
+	if bufC.String() != bufI.String() {
+		t.Errorf("trace stdout diverged:\n compiled=%q\n interp  =%q", bufC.String(), bufI.String())
 	}
 }
 

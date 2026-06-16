@@ -393,6 +393,37 @@ before/after numbers.
     `concreteHandlerEval` / `isModuleFamilyValue` + the toCarrier module guard;
     `lang/go/bytecode_findings_test.go` `TestModuleSyntheticConstFold`.)
 
+12. **OpMakeList — computed list literals ✅ LANDED (227 → 213).** A list
+    literal whose elements are COMPUTED (`[1 add 2]` → `[3]`, `[(1 add 2)
+    (3 add 4)]`, `[a.b c.d]`) cannot bake as an inert const (its elements are
+    event results), so it refused "residual value of unknown provenance" — the
+    compiler had NO list-assembly primitive, only `OpPushConst` for fully-literal
+    lists. Added `OpMakeList N` (pop N, push a list, order preserved). `autoEval
+    List` records the assembly: the elements lower onto the stack (their own
+    events), then the opcode assembles them. The soundness gates, each found by
+    the differential / regression diff:
+    - **Top frame only** — a fn-body / closure / branch-arm list is re-evaluated
+      per call with a different scope (`fn […[[c1]]]`), so freezing one assembly
+      diverges.
+    - **TOP engine only** (`e.isTop`) — a SUB-engine eval is a handler inferring
+      a re-run NoEval body (`list-of [Rand.int 0 10] 3`), often non-deterministic.
+    - **Core-builtin element producers** — a module/user word may be stateful
+      (`rand-int` advances the seed); only a builtin value-yield re-computes
+      identically.
+    - **No type-pattern (`[Integer]`) or make-instance elements** — those are
+      owned by the type machinery / schema-member const-bake, which a typed-def
+      reparent then re-IDs.
+    - **Not a `for` range** — `for` over a runtime-assembled range list diverges;
+      keep it on the literal-const path (`makeListRange` refusal).
+    Order matters: the ops reverse so element 0 lands DEEPEST (a list assembles
+    bottom-up, unlike a sig's top-first operands). The all-rows diff confirmed
+    0 native→non-native regressions, +14 improvements — and it cleared the
+    corpus's last tier-1 row (`Vm.run (canon [1 {a:none} x/q])`, once the canon
+    list could assemble), so interp is now 0. (`eng/go/bytecode.go` OpMakeList,
+    `eng/go/vm.go` exec, `eng/go/lower.go` + `eng/go/emit.go` RecordMakeList /
+    `makeListRange` / the for gate, `eng/go/engine.go` autoEvalList;
+    `lang/go/bytecode_findings_test.go` `TestOpMakeListCompiles`.)
+
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
 6–8 → ~40, all META + error rows; item 9 closes the gate.

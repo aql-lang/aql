@@ -1084,3 +1084,73 @@ func TestModuleSyntheticConstFold(t *testing.T) {
 		t.Errorf("%q: array convert control failed: compiled=%v gotC=%v gotI=%v", arr, compiled, gotC, gotI)
 	}
 }
+
+// OpMakeList — a TOP-LEVEL computed list literal (`[1 add 2]`, `[(1 add 2)
+// (3 add 4)]`) cannot bake as an inert const (its elements are event results),
+// so autoEvalList records an OpMakeList assembly of the evaluated elements: the
+// elements lower onto the stack, then the opcode pops N and pushes the list.
+// Gated to the top frame (a fn-body / higher-order list is re-evaluated), to
+// CORE-builtin element producers (a module/stateful word like `rand-int` must
+// re-run, not freeze), and away from type-pattern (`[Integer]`) and make-
+// instance lists (which the type machinery / schema-member const-bake own).
+func TestOpMakeListCompiles(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`[1 add 2]`, "[[3]]"},
+		{`[1 add 2 mul 3]`, "[[9]]"},
+		{`[10 sub 4 add 1]`, "[[7]]"},
+		{`def x [1 add 2] x`, "[[3]]"},
+		{`[(1 add 2) (3 add 4)]`, "[[3 7]]"},
+		{`def a { b:5 } def c { d:6 } [ a.b c.d ]`, "[[5 6]]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		dis := prog.Disassemble()
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected a native MAKE_LIST, got an island", c.src)
+		}
+		if !strings.Contains(dis, "MAKE_LIST") {
+			t.Errorf("%q: expected a MAKE_LIST opcode:\n%s", c.src, dis)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// A fully-LITERAL list stays a pooled const — no MAKE_LIST.
+	c2, _ := New()
+	p2, _, _, _ := c2.CompileCheck(`[1 2 3]`)
+	if p2 == nil || strings.Contains(p2.Disassemble(), "MAKE_LIST") {
+		t.Errorf("[1 2 3]: a literal list must bake as a const, not MAKE_LIST")
+	}
+
+	// SCOPING / negative: a const-EVENT-const interleave (`[1 (2 add 3) 4]`)
+	// exceeds the Stage-1 operand layout, so it must NOT compile native — it
+	// falls back with faithful parity.
+	const inter = `[1 (2 add 3) 4]`
+	a, _ := New()
+	prog, _, _, _ := a.CompileCheck(inter)
+	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: a const-event-const interleave must not compile native", inter)
+	}
+	ar, _ := New()
+	gotC, compiled, _ := ar.RunCompiled(inter)
+	if compiled {
+		t.Errorf("%q: must fall back, not compile", inter)
+	}
+	b, _ := New()
+	gotI, _ := b.Run(inter)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[1 5 4]]" {
+		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", inter, gotC, gotI)
+	}
+}

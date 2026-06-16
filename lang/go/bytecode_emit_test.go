@@ -206,10 +206,13 @@ func TestEmitStage2CompletionShapes(t *testing.T) {
 	if got, _ := compile(t, `if (1 gt 0) [break] [1]`); got != "" {
 		t.Errorf("break outside a loop compiled but must refuse:\n%s", got)
 	}
-	// Negative: a range with a computed element refuses — its bounds
-	// are carriers at check time, not literals.
-	if got, _ := compile(t, `for [1, (1 add 2)] [i]`); got != "" {
-		t.Errorf("computed range compiled but must refuse:\n%s", got)
+	// Negative: a range with a computed element does NOT compile natively — its
+	// bounds are carriers at check time, not literals, so `for` cannot lower a
+	// counted loop. The element list now assembles via OpMakeList, but `for`
+	// still islands over the runtime list (falls back), so the program is never
+	// a native compile.
+	if got, _ := compile(t, `for [1, (1 add 2)] [i]`); got != "" && !strings.Contains(got, "FALLBACK") {
+		t.Errorf("computed range compiled NATIVELY but must island/refuse:\n%s", got)
 	}
 }
 

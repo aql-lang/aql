@@ -119,9 +119,9 @@ func errorRowReason(reason string) bool {
 // reducibleCeiling and computeRefusalCeiling both ratchet toward 0 — when they
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
-	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code (now just 1: the scalar carrier-keep landed a former Vm.run(canon …) row)
-	reducibleCeiling       = 54  // Test/Assert 21, quote 10, usurp 9, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO. Ratcheted back DOWN from 62: the module-synthetic const-fold cleared the Test.* synthetic-get rows (`Test.TestCase istype`, `(make Test.TestSpec …) get …`)
-	computeRefusalCeiling  = 167 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL + reach + scalar-keep + module-synthetic reads now compile)
+	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code. NOW 0: the corpus's last tier-1 row, Vm.run(canon [1 {a:none} x/q]), compiled once OpMakeList let the canon list assemble. Kept at 3 for headroom — a Vm.run of a genuinely RUNTIME string would re-populate it
+	reducibleCeiling       = 51  // Test/Assert 21, quote 10, usurp 9, flex 6, minilang 5 — each a named, reducible compiler/VM TODO
+	computeRefusalCeiling  = 157 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL + reach + scalar-keep + module-synthetic + computed-list now compile)
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

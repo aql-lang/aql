@@ -103,12 +103,13 @@ func typeOperand(idx int) emitOperand   { return emitOperand{kind: opType, idx: 
 type producer struct{ seq, idx int }
 
 type emitCall struct {
-	word string
-	sig  *Signature
-	ops  []emitOperand
-	nout int // number of results the call pushes (0 for a side-effect word, N for multi-result)
-	pos  SrcPos
-	poly bool // dispatch via OpCallNativePoly (runtime MatchSignature)
+	word     string
+	sig      *Signature
+	ops      []emitOperand
+	nout     int // number of results the call pushes (0 for a side-effect word, N for multi-result)
+	pos      SrcPos
+	poly     bool // dispatch via OpCallNativePoly (runtime MatchSignature)
+	makeList bool // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -1229,6 +1230,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	case word == "continue" && len(outs) == 0:
 		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
 		return
+	case word == "for" && makeListRange(es, args):
+		// `for` over a COMPUTED range list (`for [1, (1 add 2)] [i]`) — the range
+		// assembled via OpMakeList. A literal-const or local range lowers fine
+		// (OpForSetup, or a CALL_NATIVE over the const list), but the CALL_NATIVE
+		// for-handler over a RUNTIME-assembled range diverges, so keep it refused
+		// (the interpreter handles the computed range).
+		es.MarkUncompilable("for: computed range list (Stage 2 follow-on)")
+		return
 	}
 	// P5 multi-result lowering: a 0-result side-effect word (set/raise/drop/
 	// printstr/sleep…) or a genuine N-result word records like any call — the
@@ -1334,6 +1343,94 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos)
 	es.SiteCounts[SiteDynamic]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true}})
 	es.setProduced(outs[0], seq)
+	return true
+}
+
+// producerWord returns the word of the event that produced value id, when id
+// resolves to a recorded event (not a const / local / unproduced value). Used to
+// gate makelist on its elements being core-builtin (deterministic) results.
+func (es *EmitState) producerWord(id string) (string, bool) {
+	pr, ok := es.producedBy[id]
+	if !ok {
+		return "", false
+	}
+	for _, fr := range es.frames {
+		for i := range fr {
+			if fr[i].seq == pr.seq {
+				return fr[i].call.word, true
+			}
+		}
+	}
+	return "", false
+}
+
+// makeListRange reports whether any of a dispatch's args was produced by an
+// OpMakeList assembly (the synthetic "[…]" word) — used to keep `for` off a
+// computed range list.
+func makeListRange(es *EmitState, args []Value) bool {
+	for i := range args {
+		if w, ok := es.producerWord(args[i].ID); ok && w == "[…]" {
+			return true
+		}
+	}
+	return false
+}
+
+// RecordMakeList records the assembly of a COMPUTED list literal (`[1 add 2]`,
+// `[1 (2 add 3) 4]`): autoEvalList evaluated the elements (their dispatches
+// already recorded their own events) and `ins` are the resulting element
+// values, in order; `out` is the list. The N element operands resolve normally
+// (an event result, a const, a local) and the dispatch lowers to OpMakeList N,
+// which pops them and pushes the list. Returns false — leaving es untouched, so
+// the list stays an unresolvable residual and the program falls back — when an
+// element has no compiled home (e.g. a fn value, a nested dynamic carrier).
+func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	// Only the TOP-LEVEL frame. A list inside a fn body / higher-order closure /
+	// branch arm (a nested fragment) is RE-EVALUATED per call or iteration, often
+	// with a different scope (`fn […[[c1]]]`, where c1 rebinds). Baking ONE
+	// assembly of the check-mode evaluation would freeze that — so those keep
+	// refusing and fall back. A top-level computed list is evaluated once.
+	if len(es.frames) != 1 {
+		return false
+	}
+	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
+	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
+	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and
+	// builds [first..last] in order. Each element must be produced by a CORE
+	// BUILTIN (or be a const): a builtin that yields a value is deterministic and
+	// side-effect-free, so the lowered re-computation matches. A MODULE / user
+	// word may be stateful — `list-of [Rand.int 0 10] 3` leaks its NoEval
+	// generator to the residual, and freezing one `rand-int` (which advances the
+	// seed) would replicate it instead of re-running per iteration. Those refuse.
+	ops := make([]emitOperand, len(ins))
+	for i := range ins {
+		// A TYPE-pattern list (`[Integer]`, `[Integer String]`) is the operand of
+		// the type machinery (`Box of [Integer]`, `x is [Integer String]`), not a
+		// DATA list to assemble — baking it as an OpMakeList breaks that dispatch.
+		// A genuine data list never holds a bare type node.
+		if IsBareTypeNode(ins[i]) {
+			return false
+		}
+		if w, isEvent := es.producerWord(ins[i].ID); isEvent && (!r.IsBuiltinWord(w) || w == "make") {
+			// `make` yields a MUTABLE instance that bakes as a const SCHEMA MEMBER
+			// (the make-default work) when the list is bound to a typed variable
+			// (`def xs:[:(Box of …)] [(make …)]`), which a typed-def REPARENT then
+			// re-IDs — assembling it via OpMakeList instead severs that linkage and
+			// the residual refuses. Keep instance lists on the const-bake path.
+			return false
+		}
+		op, ok := es.resolveOperand(ins[i])
+		if !ok {
+			return false
+		}
+		ops[len(ins)-1-i] = op
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "[…]", ops: ops, nout: 1, pos: pos, makeList: true}})
+	es.setProduced(out, seq)
 	return true
 }
 

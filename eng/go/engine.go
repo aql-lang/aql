@@ -2951,7 +2951,21 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	return NewList(result), nil
+	out := NewList(result)
+	// In RECORDING mode a list whose elements are COMPUTED (an event carrier, not
+	// plain data — `[1 add 2]`, `[1 (2 add 3) 4]`) cannot bake as an inert const,
+	// so record it as an OpMakeList assembly of the evaluated elements; otherwise
+	// the list is an unresolvable residual and the program falls back. A
+	// fully-literal list (`[1 2 3]`) stays inert and bakes as a pooled const.
+	// Only the TOP engine records: a SUB-engine eval is a handler inferring a
+	// NoEval code body (`list-of [Rand.int 0 10] 3` — the generator is re-run per
+	// iteration, often non-deterministic), so freezing one assembly would diverge.
+	if e.isTop && e.registry.Check.IsActive() {
+		if es := e.registry.Check.Emit; es != nil && !isInertConst(out) {
+			es.RecordMakeList(e.registry, result, out, val.Pos)
+		}
+	}
+	return out, nil
 }
 
 // evalInterpString evaluates an interpolated string by running each
