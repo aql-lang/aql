@@ -156,6 +156,31 @@ before/after numbers.
    exists; the leverage (5 rows) does not justify it ahead of items 5/6.
    (`eng/go/emit.go`, `eng/go/carrier.go`.)
 
+   **Re-attempt June 2026 — reverted, but two of the three blockers proved
+   out; Blocker 1 is the lone wall.** Findings, to seed the dedicated effort:
+   - **Blocker 2 (recording) — SOLVED, clean primitive found.** A `SchemaArg`
+     flag on the type-constructor sig (`class`/`object`/`record`/`surface`,
+     NOT `make` whose override map is a runtime value), wired into `execMatch`'s
+     arg auto-eval to wrap the schema map's `autoEvalMap` in `EmitState.Suspend()`,
+     makes the inner `(make…)`/`(flex…)` defaults stop recording. Verified:
+     `def Foo class {items:(flex [])} 1` then compiles native (was "residual
+     shape beyond Stage 1"). This IS the "suppress recording inside a const-baked
+     schema construction" primitive the original verdict asked for.
+   - **Blocker 3 (bake) — implemented, sound.** `typeBodyConstOK`'s ObjectTypeInfo
+     case admits any CONCRETE data default (a template `make` deep-copies per
+     instance) while still rejecting fn-value method fields. Correct, but inert
+     without Blocker 1.
+   - **Blocker 1 (carrier → concrete) — the wall, and the naive fix REGRESSES.**
+     The defaults are check-mode CARRIERS (`flex []` → `NewCarrier(TNode)`), so
+     the schema never goes concrete and `make Foo {}` still refuses. Making the
+     constructor `RunInCheckMode` GLOBALLY (tried on `flex`) cleared one row but
+     regressed refusals 337 → 401 — a standalone `flex […]` then yields a
+     concrete flex that can't be a program residual, and check-error rows shift.
+     So Blocker 1 needs the TARGETED `rememberConcreteMake`/`materialise` hook
+     (run the pure-data constructor for real ONLY inside the SchemaArg-suspended
+     schema eval, remember the concrete instance against the carrier id) — not a
+     global mode change. That hook is the remaining dedicated-effort piece.
+
 4. **Poly type-algebra over predicates. ✅ LANDED (453 → 445).** SCOPE
    CORRECTION: the billed "~75 get/is/typeof over instances" turned out to be
    mostly ALREADY COMPILING (simple `(make S {}) get x`, `is S`, `typeof` all
