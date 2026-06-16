@@ -72,7 +72,7 @@ var reducibleWords = []allowEntry{
 	{"word", regexp.MustCompile(`\bword\b`),
 		"REDUCIBLE (mostly COMPILED): the __SP splice now expands inline at the use site (carrier.go). Residual: a few splices whose inlined body reaches an un-compilable word"},
 	{"macroexpand", regexp.MustCompile(`\bmacroexpand\b`),
-		"REDUCIBLE: Lisp-style — expand the macro at compile time (args/macro are static) and bake the resulting tokens"},
+		"REDUCIBLE (static cases COMPILED): the macro expands at compile time and the token list bakes as a code-as-data const (carrier.go). Residual: expansions with a non-Word/un-bakeable member (parens, type nodes)"},
 	{"minilang", regexp.MustCompile(`\bminilang`),
 		"REDUCIBLE: registers a sublanguage; static registrations could compile, only runtime-input parsing is interpreter-bound"},
 	{"flex", regexp.MustCompile(`\bflex\b`),
@@ -120,7 +120,7 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
-	reducibleCeiling       = 100 // usurp 43, Test/Assert 28, quote 14, flex 7, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N fully + word mostly moved out: now compiled)
+	reducibleCeiling       = 96  // usurp 43, Test/Assert 28, quote 10, flex 7, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N + word mostly + macroexpand static cases moved out: now compiled)
 	computeRefusalCeiling  = 258 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 9 islands, user-fn dispatch
 )
 

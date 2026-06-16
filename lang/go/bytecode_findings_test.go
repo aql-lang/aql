@@ -540,6 +540,51 @@ func TestWordSpliceCompilesNative(t *testing.T) {
 	}
 }
 
+// macroexpand — Lisp-style: when the macro and its operands are static the
+// expansion is a compile-time computation, so carrierResults runs it and bakes
+// the resulting token list as a code-as-data const (a Word is admitted as a
+// const MEMBER — isInertConstMember). The compiled result is the same data list
+// the interpreter returns. A too-deep / un-bakeable expansion refuses and the
+// interpreter surfaces the identical result. Proof that macroexpand is
+// reducible compiler work, not irreducible reflection.
+func TestMacroexpandCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])  macroexpand (twice 5)`, "[[5 word(add) 5]]"},
+		{`def innr (macro [[x] [quote [unquote x add 1]]])  def outr (macro [[y] [quote [innr unquote y]]])  macroexpand (outr 5)`, "[[5 word(add) 1]]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a baked code-const, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// A recursive (too-deep) macro errors in both engines (the compile-time
+	// expansion errors, so the row refuses and the interpreter surfaces it).
+	deep := `def loopy (macro [[a] [quote [loopy unquote a]]])  macroexpand (loopy 1)`
+	a, _ := New()
+	_, _, errC := a.RunCompiled(deep)
+	b, _ := New()
+	_, errI := b.Run(deep)
+	if (errC == nil) != (errI == nil) {
+		t.Errorf("too-deep macroexpand: error divergence compiled=%v interp=%v", errC, errI)
+	}
+}
+
 // with-decimal block — a 0-input body run inside a scoped BigDecimal rounding
 // context compiles to a closure (like `do`) driven through InvokeBody, so the
 // VM-run body's decimal ops read the precision/rounding override exactly as the

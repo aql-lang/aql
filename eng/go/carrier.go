@@ -338,6 +338,19 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	if word == "word" && len(args) == 1 {
 		return []Value{NewSplice(args[0])}
 	}
+	// `macroexpand (mac args…)` is Lisp-style compile-time expansion: the macro
+	// and its operands are static, so run the expansion NOW and bake the
+	// resulting token list as a const (code-as-data). Only when the expansion
+	// is fully concrete (isInertConst — no carrier from a runtime operand) and
+	// succeeds; a too-deep / erroring expansion falls through to refuse, and the
+	// interpreter surfaces the same error.
+	if word == "macroexpand" && len(args) == 1 {
+		if toks, err := ExpandMacroForm(r, args[0]); err == nil {
+			if lst := NewList(toks); isInertConst(lst) {
+				return []Value{lst}
+			}
+		}
+	}
 	narrowDynamicUses(r, sig, args)
 	// Per-alternative dispatch for strict disjunct inputs
 	// (design/checker-accuracy-review.0.md A1). matchSignature tested

@@ -1535,6 +1535,17 @@ func isInertConst(v Value) bool {
 // returns the fn, which the fn-value-call boundary (OpCallDynamic) applies.
 func isInertConstMember(v Value) bool {
 	if !v.Carrier && !v.Dynamic {
+		// A Word token riding inside a quoted (non-eval) compound — what
+		// `macroexpand` returns as data (`[5 word(add) 5]`). Safe as a const
+		// MEMBER: the compound is pushed as inert data and never auto-evaluated
+		// (a source eval-list is reduced before baking), and a word's Parent is
+		// the canonical kernel TWord, so the by-value copy carries no stale
+		// behaviour (unlike a bare type node — the canonical-*Type hazard — which
+		// is deliberately NOT admitted here). The standalone isInertConst switch
+		// still rejects a bare Word, so a top-level word never bakes as code.
+		if IsWord(v) {
+			return true
+		}
 		if fd, ok := v.Data.(FnDefInfo); ok {
 			// Only an UNNAMED (inline `fn […]`) fn value. A named ref (`f/r`,
 			// Name="f") re-dispatches by NAME when applied through the island
