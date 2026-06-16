@@ -97,7 +97,7 @@ func errorRowReason(reason string) bool {
 // be GENUINE COMPUTE gaps (neither meta-attributable nor an error-row). It must
 // reach 0 before the unbounded whole-program fallback can be narrowed. Lower it
 // monotonically as compute clusters compile natively; never raise it.
-const computeRefusalCeiling = 265 // 295 then `word` (the Forth-style macro splice) correctly reclassified to meta (-30); remaining: operand-provenance cascades (get/is/typeof/make over unmaterialisable producers, 140), code-body DSL words (select/case/reach/with-decimal/..., 52), Stage-1 lowering residuals (~24), dynamic in/out (~24), 9 islands, user-fn dispatch (5)
+const computeRefusalCeiling = 260 // 295 then `word` macro splice reclassified to meta (-30 -> 265) then with-decimal block compiled natively (-5 -> 260); remaining: operand-provenance cascades (get/is/typeof/make over unmaterialisable producers, 140), code-body DSL words (select/case/reach/error/do/..., 47), Stage-1 lowering residuals (~24), dynamic in/out (~24), 9 islands, user-fn dispatch (5)
 
 func TestOnlyMetaFallsBack(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

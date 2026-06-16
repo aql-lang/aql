@@ -443,6 +443,39 @@ func TestFilterLambdaCompilesNative(t *testing.T) {
 	}
 }
 
+// with-decimal block — a 0-input body run inside a scoped BigDecimal rounding
+// context compiles to a closure (like `do`) driven through InvokeBody, so the
+// VM-run body's decimal ops read the precision/rounding override exactly as the
+// interpreter's doEvalList does. Verifies native lowering + parity, including a
+// NESTED context (the inner override shadows the outer).
+func TestWithDecimalCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`with-decimal {precision: 5} [0d1.0 div 0d3.0]`, "[0d0.33333]"},
+		{`with-decimal {precision: 4 rounding: "down"} [0d2.0 div 0d3.0]`, "[0d0.6666]"},
+		{`with-decimal {precision: 6} [with-decimal {precision: 3} [0d1.0 div 0d3.0]]`, "[0d0.333]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native closure lowering, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+}
+
 // Roadmap item 5 part B (each/fold/scan map lambda args) — the map-iteration
 // words run a KeyVal-shaped lambda closure natively. These share the same
 // handler as their token-quotation form, which sees the bare VALUE; the unit's

@@ -51,6 +51,13 @@ var callableWords = map[string]callableWord{
 	"do": {0, func(a []Value) []Value {
 		return []Value{}
 	}},
+	// with-decimal {opts} [body] — runs a 0-input body inside a scoped
+	// BigDecimal rounding context (opts at sig 0, body at sig 1). Like `do`,
+	// the body nets its single residual; the handler pushes the context around
+	// InvokeBody so the VM-run body's BigDecimal ops read the override.
+	"with-decimal": {1, func(a []Value) []Value {
+		return []Value{}
+	}},
 }
 
 // compileClosureBody compiles a code body (bodyToks) consuming the given input

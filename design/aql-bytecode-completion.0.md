@@ -82,7 +82,7 @@ reached. **Re-scope P7** from *"delete the fallback"* to:
 **Steps 1–3 ✅ LANDED** (`test/go/langspec/compiled_metafallback_test.go`,
 `TestOnlyMetaFallsBack`). The gate partitions every refused/islanded spec value
 row into meta / error-row / **compute gap** and ratchets the compute gap toward
-0. Current partition (June 2026): **131 meta-attributable, 12 error-row, 265
+0. Current partition (June 2026): **131 meta-attributable, 12 error-row, 260
 compute gap** (`computeRefusalCeiling`). Meta breakdown: usurp 43, word (the
 Forth-style macro splice) 30, Test/Assert harness 28, quote/codequote 14, flex
 7, minilang 5, args 2, Vm.run 1, canon 1.
@@ -262,8 +262,8 @@ before/after numbers.
 9. **Error-row disposition + the re-scoped P7 gate ✅ GATE LANDED (steps 1–3);
    fallback narrowing PENDING (step 4).** `metaFallbackWords` +
    `TestOnlyMetaFallsBack` partition every refused/islanded row into meta (131) /
-   error-row (12) / compute gap (265) and ratchet the compute gap toward 0
-   (`computeRefusalCeiling = 265`). Error rows are allowlisted (the checker
+   error-row (12) / compute gap (260) and ratchet the compute gap toward 0
+   (`computeRefusalCeiling = 260`). Error rows are allowlisted (the checker
    refuses so the interpreter surfaces the taxonomy); making the VM raise them
    stays available as future tightening. The §P7 fallback narrowing (step 4)
    waits on the compute gap reaching 0 — its remaining drivers are the
