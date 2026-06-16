@@ -3132,6 +3132,21 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		// (shared via evalParenExprResults with the main-stack path).
 		if IsParenExpr(v) {
 			items, _ := AsParenExpr(v)
+			// CHECK-MODE const-fold: a computed container value (a class field
+			// default like (make Foo 1), or a data-map (1 add 2)) evaluated
+			// abstractly leaves a recorded event the container then swallows
+			// ("unconsumed call results"), so the program refuses. When the
+			// expression is DETERMINISTIC it is a compile-time constant — fold
+			// it to its concrete value so the container bakes as a const. The
+			// downstream const-bake gate (typeBodyConstOK for a schema default,
+			// isInertConst for a data map) decides mutation-safety, so an
+			// instance still bakes only where `make` copies it per instance.
+			if e.registry.Check.IsActive() {
+				if folded, ok := e.constFoldContainerVal(items); ok {
+					out.Set(resolvedKey, folded)
+					continue
+				}
+			}
 			result, err := e.evalParenExprResults(items)
 			if err != nil {
 				return Value{}, err
@@ -3173,6 +3188,48 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 		}
 	}
 	return NewMap(out), nil
+}
+
+// constFoldContainerVal evaluates a container's computed value (a class field
+// default or a data-map paren-expr) CONCRETELY at check time and returns the
+// constant, so the container bakes as a const instead of recording an event the
+// container swallows. It only folds a DETERMINISTIC expression: the items are
+// evaluated twice in a throwaway non-recording sub-engine, and the fold is taken
+// only when both runs yield the SAME single deeply-concrete value — so a
+// clock/rand/mutation-bearing default (whose two runs differ) is left to the
+// normal recording path and stays uncompiled rather than freezing a runtime
+// value. A reference to a check-mode value binding evaluates to a carrier (not
+// concrete) and so does not fold. Mutation-safety of the folded value is the
+// downstream const-bake gate's job (a mutable instance bakes only as a schema
+// default that make copies, never as a data-map member).
+func (e *Engine) constFoldContainerVal(items []Value) (Value, bool) {
+	one, ok := e.concreteEvalOnce(items)
+	if !ok {
+		return Value{}, false
+	}
+	two, ok := e.concreteEvalOnce(items)
+	if !ok || one.String() != two.String() {
+		return Value{}, false
+	}
+	return one, true
+}
+
+// concreteEvalOnce runs items in a throwaway sub-engine with check mode OFF (so
+// the result is a real value, not a carrier, and nothing is recorded into the
+// parent's emit state) and returns the single concrete residual. The def stack
+// is snapshotted and restored so a stray binding cannot leak into the compile.
+func (e *Engine) concreteEvalOnce(items []Value) (Value, bool) {
+	r := e.registry
+	snap := r.Defs.Snapshot()
+	prev := r.Check.Mode
+	r.Check.Mode = false
+	res, err := New(r).Run(append([]Value(nil), items...))
+	r.Check.Mode = prev
+	r.Defs.Restore(snap)
+	if err != nil || len(res) != 1 || !IsConcrete(res[0]) {
+		return Value{}, false
+	}
+	return res[0], true
 }
 
 // the function. If the FnDef carries a captured Registry (closure from a

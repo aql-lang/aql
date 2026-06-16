@@ -585,6 +585,57 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 	}
 }
 
+// make computed container defaults — a class field default (or data-map value)
+// that is itself a COMPUTED paren-expr ((make Foo 1), (1 add 2)) used to refuse:
+// in check mode the inner computation recorded an event the container swallowed
+// ("unconsumed call results"). A deterministic computed value is a compile-time
+// constant, so it now const-folds (constFoldContainerVal: two non-recording
+// concrete evals that must agree), and the container bakes. An INSTANCE default
+// bakes only as a class-schema member (make copies it per instance — mutation-
+// safe), never as a data-map member. Drives `make`-class-default compilation.
+func TestMakeComputedDefaultsCompile(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {}) get x`, "[1]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end typeof ((make S {}) get x)`, "[Foo]"},
+		{`def Foo class {y:1} end def S class {x:(make Foo {})} end (make S {}) get x`, "[Class/Foo{y:1}]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 7)} end (make S {x:(make Foo 9)}) get x`, "[9]"},
+		{`def S class {x:(1 add 2)} end (make S {}) get x`, "[3]"},
+		{`def m {a:(1 add 2)} m`, "[{a:3}]"}, // data map scalar default also const-folds
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native const-bake, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// Per-instance copy isolation: make copies the baked schema default, so
+	// mutating one instance's field must not affect another's.
+	const iso = `def Foo class {n:1} end def S class {x:(make Foo {})} end def a (make S {}) def b (make S {}) (a.x set n 9) end b.x get n`
+	a, _ := New()
+	gotC, compiled, _ := a.RunCompiled(iso)
+	b, _ := New()
+	gotI, _ := b.Run(iso)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("per-instance isolation: compiled=%v interp=%v (must match)", gotC, gotI)
+	}
+	_ = compiled
+}
+
 // with-decimal block — a 0-input body run inside a scoped BigDecimal rounding
 // context compiles to a closure (like `do`) driven through InvokeBody, so the
 // VM-run body's decimal ops read the precision/rounding override exactly as the

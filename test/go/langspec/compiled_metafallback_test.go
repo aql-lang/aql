@@ -120,8 +120,8 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
-	reducibleCeiling       = 96  // usurp 43, Test/Assert 28, quote 10, flex 7, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N + word mostly + macroexpand static cases moved out: now compiled)
-	computeRefusalCeiling  = 258 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 9 islands, user-fn dispatch
+	reducibleCeiling       = 95  // usurp 43, Test/Assert 28, quote 10, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N + word mostly + macroexpand static cases moved out: now compiled)
+	computeRefusalCeiling  = 249 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 9 islands, user-fn dispatch
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

@@ -116,7 +116,8 @@ var comboParity = []string{
 	`(do [iota 3]) 5`,
 
 	// --- F4: class/object `make` — a plain-data class compiles + chains;
-	// a class with a METHOD field stays on the fallback path ---
+	// a class whose computed defaults const-fold (incl. a method field) now
+	// compiles too; either way value/error parity holds ---
 	`def Point class {x:1, y:2} make Point {x:9}`,
 	`def Point class {x:1} (make Point {}) typeof`,
 	`def Point class {x:1} (make Point {}) get x`,
@@ -218,7 +219,7 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// Class `make` with plain-data fields compiles (the body bakes as a
 		// const); a class with a method field must fall back.
 		{`def Point class {x:1, y:2} make Point {x:9}`, "native"},
-		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "fallback"},
+		{`def C class {x:1 f:(fn [[][Integer][2]])} make C {}`, "native"}, // computed defaults (incl. a method field) const-fold
 		// is / typeof on a make-result: the type operand shares the make
 		// result's ID, but the type-operand ID-collision guard resolves the
 		// `Point` literal to its own type, not the make event — so it compiles

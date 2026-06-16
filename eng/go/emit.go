@@ -1396,6 +1396,16 @@ func typeBodyConstOK(v Value) bool {
 		return true
 	}
 	memberOK := func(m Value) bool {
+		// A concrete instance default (`class {x:(make Foo 1)}`) is a const-safe
+		// SCHEMA member: make copies the type body's defaults per instance, so
+		// the baked instance is never the one a later `set` mutates (the
+		// mutation-safety invariant holds — unlike a data-map member, which
+		// isInertConst still rejects). Const-folded by constFoldContainerVal.
+		if !m.Carrier && !m.Dynamic {
+			if _, ok := m.Data.(ObjectInstanceInfo); ok {
+				return true
+			}
+		}
 		return typeBodyConstOK(m) || isInertConst(m)
 	}
 	fieldsOK := func(m *OrderedMap) bool {

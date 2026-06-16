@@ -61,10 +61,11 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
 	cases := []string{
-		// type mint + undef, then reuse — a re-mint would clash. The
-		// method field keeps make uncompilable so this stays on the
-		// fallback path (a plain-data class now compiles).
-		`def C class {x:1 f:(fn [[][Integer][2]])} def p (make C {x:5}) undef C end p get x`,
+		// type mint + undef, then reuse — a re-mint would clash. A flex
+		// (reference-cell) field keeps make uncompilable so this stays on the
+		// fallback path. (A plain-data class — and now a class whose computed
+		// defaults const-fold, including a method field — compiles.)
+		`def C class {x:(flex [])} def p (make C {}) undef C end p get x`,
 		// fn registration under a capitalised name — a re-register clashes.
 		// `is` over the predicate fn INVOKES it (the VM cannot re-step a fn
 		// body), so this stays uncompilable even though `typeof`/`tcmp` over a
