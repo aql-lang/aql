@@ -114,6 +114,12 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			return leaf(r, cStr, scope)
 		}
 	case cMap:
+		if r.Intn(3) == 0 {
+			// copy-returning map update: (<map> set <key> <value>) -> a new map.
+			vc := randVCat(r)
+			m := genMap(r, vc, depth-1, scope)
+			return &gnode{op: "setmap", cat: cMap, ecat: vc, n: r.Intn(len(mapKeys)), kids: []*gnode{m, gen(r, vc, depth-1, scope)}}
+		}
 		return genMap(r, randVCat(r), depth-1, scope)
 	case cList:
 		if r.Intn(3) == 0 {
@@ -183,7 +189,42 @@ func genMap(r *rand.Rand, vcat cat, depth int, scope []string) *gnode {
 // genProgram returns a top-level node and the var names it may reference. With
 // some probability it wraps the body in one or two def-bindings to stress
 // value-def locals (OpStoreLocal) and local references.
+// genArrProg builds an in-place ARRAY MUTATION program — the load-bearing
+// "a pooled const must never reach an in-place mutator" territory:
+//
+//	def a0 (make Array [0 0 …]) (a0 set i v) … <read of a0>
+//
+// The array is referenced and mutated repeatedly; if the compiler aliased it to
+// a pooled const, hoisted the make, or reordered set/read, the result diverges.
+func genArrProg(r *rand.Rand) *gnode {
+	length := 2 + r.Intn(3)
+	p := &gnode{op: "arrprog", cat: cInt, n: length}
+	for s := r.Intn(4); s > 0; s-- {
+		set := &gnode{op: "setarr", cat: cInt, n: r.Intn(length), kids: []*gnode{gen(r, cInt, 2, nil)}}
+		p.kids = append(p.kids, set)
+	}
+	p.kids = append(p.kids, genArrRead(r, length))
+	return p
+}
+
+// genArrRead reads the mutated array a0: an element, its size, or arithmetic
+// over two elements (multiple reads of a mutated instance).
+func genArrRead(r *rand.Rand, length int) *gnode {
+	switch r.Intn(3) {
+	case 0:
+		return &gnode{op: "arrsize", cat: cInt}
+	case 1:
+		return &gnode{op: "arrget", cat: cInt, n: r.Intn(length)}
+	default:
+		return &gnode{op: "arradd", cat: cInt, kids: []*gnode{
+			{op: "arrget", cat: cInt, n: r.Intn(length)}, {op: "arrget", cat: cInt, n: r.Intn(length)}}}
+	}
+}
+
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
+	if r.Intn(6) == 0 {
+		return genArrProg(r), nil
+	}
 	scope := []string{}
 	var defs []*gnode
 	for r.Intn(3) == 0 && len(scope) < 2 {
@@ -250,6 +291,26 @@ func render(n *gnode, scope []string) string {
 			parts[i] = n.keys[i] + ": " + render(k, scope)
 		}
 		return "{" + strings.Join(parts, " ") + "}"
+	case "setmap":
+		// copy-returning map update: (<map> set <key> <value>)
+		key := mapKeys[n.n%len(mapKeys)]
+		return "(" + render(n.kids[0], scope) + " set " + key + " " + render(n.kids[1], scope) + ")"
+	case "arrprog":
+		zeros := strings.TrimSpace(strings.Repeat("0 ", n.n))
+		var sb strings.Builder
+		sb.WriteString("def a0 (make Array [" + zeros + "])")
+		for _, k := range n.kids {
+			sb.WriteString(" " + render(k, scope))
+		}
+		return sb.String()
+	case "setarr":
+		return "(a0 set " + fmt.Sprint(n.n) + " " + render(n.kids[0], scope) + ")"
+	case "arrget":
+		return "(a0 get " + fmt.Sprint(n.n) + ")"
+	case "arrsize":
+		return "(size a0)"
+	case "arradd":
+		return "(" + render(n.kids[0], scope) + " add " + render(n.kids[1], scope) + ")"
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":
@@ -373,6 +434,18 @@ func simplifications(n *gnode) []*gnode {
 					}
 				}
 				out = append(out, replace(n, path, nl))
+			}
+		}
+		// Drop one SET statement from an arrprog (the last kid is the read).
+		if sub.op == "arrprog" && len(sub.kids) > 1 {
+			for d := 0; d < len(sub.kids)-1; d++ {
+				np := &gnode{op: "arrprog", cat: cInt, n: sub.n}
+				for i, k := range sub.kids {
+					if i != d {
+						np.kids = append(np.kids, k)
+					}
+				}
+				out = append(out, replace(n, path, np))
 			}
 		}
 		for i := range sub.kids {
