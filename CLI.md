@@ -381,6 +381,7 @@ A local credentials vault, backed by the OS keyring where possible
 1Password) or a file fallback.
 
 ```bash
+aql vault -i                            # interactive TUI (menu-driven; keys shown on screen)
 aql vault init                          # initialise, pick backend
 aql vault add --from-clipboard github_token   # read from clipboard, then wipe it
 aql vault add --from-stdin github_token       # read one line from stdin
@@ -411,11 +412,30 @@ aql vault policy apply policy.aql       # declaratively apply policy
 aql vault proxy                         # run local credential broker (loopback only)
 aql vault mcp                           # stdio MCP server over aliases
 aql vault exec gh,openai -- mycmd       # run mycmd with secrets in env
+aql vault folder                        # list known vault folders (discovered + recorded by init)
+aql vault folder add ~/.othervault      # register an already-existing vault into the index
 
 # Custom location: a folder and/or an inner file-name suffix, by flag or env.
 aql vault --folder=/secure/vault --suffix=work init   # vault at /secure/vault/vault.work.*
 AQL_VAULT_FOLDER=/secure/vault AQL_VAULT_SUFFIX=work aql vault list
 ```
+
+#### Interactive TUI (`aql vault -i`)
+
+`aql vault -i` (or `--interactive`) opens a menu-driven terminal UI for
+managing the vault — no need to remember verbs or flags; the valid keys are
+always shown in a footer, with `?` for full help and `:` for a command
+palette. It covers vault *management* (secrets, capabilities, scoped
+passwords, maintenance, config); the runtime commands `proxy`, `mcp`, and
+`exec` stay on the command line.
+
+Switching between vaults is built in: the active vault shows in the header,
+and `ctrl+o` (or `:vaults`) opens a picker to switch, create, or set a
+default — including vaults in custom `--folder` locations, which `init`
+records in a small index (`~/.aql/vaults.jsonic`, locations only, never
+secrets). `aql vault folder` prints the same list from the command line, and
+`aql vault [--suffix=NAME] folder add <dir>` registers a pre-existing vault
+(the suffix is auto-detected when the folder holds exactly one).
 
 The secret value is never taken as a command-line argument — that
 would leak it into your shell history and the process listing.
@@ -582,6 +602,16 @@ Recipes (`npm`, `cargo`, `gem`, `pypi`/`twine`, `uv`) are pure env
 injection; file-only publishers like docker and maven are not yet
 covered. The recipe sets the env-var names, so `--for` takes a single
 alias (no `=ENV`/`--prefix`/`--upper`).
+
+To rehearse the plumbing without unlocking the vault, add `--dry-run`: no
+passphrase is read and an obviously-fake filler value is injected in place
+of the real secret. The aliases are still resolved (a typo is still an
+error), so you can confirm the command and env wiring against a publisher's
+own dry run:
+
+```bash
+aql vault exec --dry-run --for=npm npm_token -- npm publish --dry-run
+```
 
 For AQL's **own** registry, `aql login --vault` stores the registry token
 in the vault instead of plaintext `~/.aql/user.jsonic`, and `aql publish`

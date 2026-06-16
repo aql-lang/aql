@@ -83,6 +83,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return 0
+	case "-i", "--interactive":
+		return runInteractive(rest, homeDir, stdin, stdout, stderr)
 	case "init":
 		return runInit(rest, homeDir, stdin, stdout, stderr)
 	case "status":
@@ -119,6 +121,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runProxy(rest, homeDir, stdout, stderr)
 	case "providers":
 		return runProviders(stdout)
+	case "folder", "folders", "vaults", "list-vaults":
+		return runVaults(rest, homeDir, stdout, stderr)
 	case "scan":
 		return runScan(rest, homeDir, stdout, stderr)
 	case "audit":
@@ -146,12 +150,15 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aql vault [--folder=PATH] [--suffix=NAME] <mode> [args...]")
+	fmt.Fprintln(w, "       aql vault -i   (interactive TUI — manage the vault with a menu)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Modes:")
 	for _, m := range modeDocs {
 		fmt.Fprintf(w, "  %-10s %s\n", m.name, m.summary)
 	}
 	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Interactive: aql vault -i opens a menu-driven TUI (switch vaults, browse & edit")
+	fmt.Fprintln(w, "  secrets, capabilities, passwords, maintenance); keys are shown on screen.")
 	fmt.Fprintln(w, "Backends: auto (default), keychain, secret-service, wincred, file, 1password.")
 	fmt.Fprintln(w, "Passphrases are prompted interactively (hidden); set AQL_VAULT_PASSPHRASE only for non-interactive use.")
 	fmt.Fprintln(w, "Namespaces: qualify aliases as ns:name; bare names use the default namespace")
@@ -182,6 +189,7 @@ var modeDocs = []modeDoc{
 	{"config", "view or set vault configuration"},
 	{"proxy", "run a local credential broker for agents and tools"},
 	{"providers", "list built-in provider presets"},
+	{"folder", "list vault folders; `folder add <dir>` registers an existing vault"},
 	{"scan", "scan files for leaked secret-like strings"},
 	{"audit", "show the structured audit log"},
 	{"rotate", "replace a stored secret value, optionally revoking caps"},
@@ -328,6 +336,10 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	_ = appendAudit(homeDir, AuditEvent{Action: "vault.init", Outcome: "ok", Reason: "backend=" + chosen})
+	// Record the vault in the global index so it is auto-discoverable by the
+	// interactive TUI and `vault vaults`, even when it lives in a custom
+	// --folder location. Best-effort: a registry write never fails init.
+	_ = recordVaultInit(homeDir, vaultFolder(homeDir), os.Getenv(EnvSuffix), chosen)
 	fmt.Fprintf(stdout, "vault initialized: backend=%s store=%s\n", chosen, StorePath(homeDir))
 	return 0
 }
