@@ -454,10 +454,11 @@ and the carrier compiler's per-construct gates fail exactly on combinations the
 author didn't foresee (the make-default fold inside a `for` body; a computed map
 value referencing a def-local carrier). So a generator emits well-typed AQL from
 the compilable subset (arithmetic / division / boolean logic / strings / `if` /
-computed lists / `size` / `def`-locals / `for` / nested maps + `get`, type-
-tracked so `if` branches and `get` results stay well-typed; error TAXONOMY
-compared too) and asserts compiled == interpreted on each, with a shrinker that
-reduces a failure to a minimal program. It has found THREE real divergences the
+computed lists / `size` / `def`-locals / `for` / nested maps + `get` / in-place
+mutation (`Array` + map `set`) / object & class field mutation / higher-order
+`fold`/`each`/`scan` over literal lists, type-tracked so `if` branches and `get`
+results stay well-typed; error TAXONOMY compared too) and asserts compiled ==
+interpreted on each, with a shrinker that reduces a failure to a minimal program. It has found THREE real divergences the
 corpus had missed for the life of the project: (1) `for 3 [{a: (3 mul i)} get a]`
 — `constFoldContainerVal` froze the loop-iterator-dependent map value; (2) `def
 v0 (0 add 3) … {a: (5 mul v0)}` — the fold ran against `v0`'s CARRIER binding,
@@ -468,5 +469,9 @@ v0 3 def v1 (if c [v0] [4]) v0` -> 4 — `JoinCarriers` kept the then-arm's ID, 
 the `if`-result reused `v0`'s identity and a later `v0` reference resolved to the
 if-event (fixed by minting a fresh ID for the merged carrier — it is a NEW
 value). 36 000 generated programs across 12 seeds are divergence-free after each
-fix. This is the durable answer to "why is this so fiddly": fund the
-ORACLE, not the manual probing.
+fix. Each subsequent widening round — in-place mutation, object/class field
+mutation, and higher-order `fold`/`each`/`scan` — landed divergence-free on
+first hunt (21 808 compiled paths across 12 seeds on the higher-order round
+alone), so the generator now doubles as a standing soundness witness for the
+constructs it already covers, not only a bug-finder. This is the durable answer
+to "why is this so fiddly": fund the ORACLE, not the manual probing.

@@ -122,10 +122,17 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		}
 		return genMap(r, randVCat(r), depth-1, scope)
 	case cList:
-		if r.Intn(3) == 0 {
+		switch r.Intn(4) {
+		case 0:
 			// `for <count> [<body using i>]` -> list of per-iteration values.
 			return &gnode{op: "for", cat: cList, ecat: cInt, kids: []*gnode{
 				gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, append(append([]string{}, scope...), "i"))}}
+		case 1:
+			// `(each [<op> N] <litList>)` -> mapped list.
+			return &gnode{op: "each", cat: cList, ecat: cInt, cmp: binOps[r.Intn(len(binOps))], n: r.Intn(6), kids: []*gnode{genLitList(r)}}
+		case 2:
+			// `(<litList> scan [<binop>])` -> running fold.
+			return &gnode{op: "scan", cat: cList, ecat: cInt, cmp: binOps[r.Intn(len(binOps))], kids: []*gnode{genLitList(r)}}
 		}
 		ec := randECat(r)
 		k := 1 + r.Intn(3)
@@ -135,7 +142,7 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		}
 		return l
 	default: // cInt
-		switch r.Intn(11) {
+		switch r.Intn(12) {
 		case 0, 1:
 			ops := []string{"add", "sub", "mul", "div", "mod"}
 			return &gnode{op: ops[r.Intn(len(ops))], cat: cInt, kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
@@ -146,10 +153,25 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		case 4:
 			m := genMap(r, cInt, depth-1, scope)
 			return &gnode{op: "get", cat: cInt, n: r.Intn(len(m.keys)), kids: []*gnode{m}}
+		case 5:
+			// `(fold [<binop>] <litList> <init>)` -> accumulated value.
+			return &gnode{op: "fold", cat: cInt, cmp: binOps[r.Intn(len(binOps))], n: r.Intn(6), kids: []*gnode{genLitList(r)}}
 		default:
 			return leaf(r, cInt, scope)
 		}
 	}
+}
+
+var binOps = []string{"add", "mul", "sub"}
+
+// genLitList builds a LITERAL int list (2-4 lits) — higher-order words compile
+// over a literal list but fall back over a computed (makelist) one.
+func genLitList(r *rand.Rand) *gnode {
+	l := &gnode{op: "list", cat: cList, ecat: cInt}
+	for k := 2 + r.Intn(3); k > 0; k-- {
+		l.kids = append(l.kids, &gnode{op: "lit", cat: cInt, n: r.Intn(6)})
+	}
+	return l
 }
 
 // leaf is a depth-0 terminal of category c.
@@ -356,6 +378,12 @@ func render(n *gnode, scope []string) string {
 		return "(p get " + n.keys[0] + ")"
 	case "objadd":
 		return "(" + render(n.kids[0], scope) + " add " + render(n.kids[1], scope) + ")"
+	case "fold":
+		return "(fold [" + n.cmp + "] " + render(n.kids[0], scope) + " " + fmt.Sprint(n.n) + ")"
+	case "each":
+		return "(each [" + n.cmp + " " + fmt.Sprint(n.n) + "] " + render(n.kids[0], scope) + ")"
+	case "scan":
+		return "(" + render(n.kids[0], scope) + " scan [" + n.cmp + "])"
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":
