@@ -58,6 +58,13 @@ func (mb mapBody) value(reg *Registry, k string, v Value, i, n int64) (Value, bo
 		return mb.callLambda(reg, []Value{NewKeyVal(k, v, i, n)})
 	}
 	if mb.closure {
+		// A closure compiled from a LAMBDA body expects a KeyVal (its named
+		// param destructures `kv.v`/`kv.i`); one compiled from a token body
+		// sees the bare value, like a quotation. The unit's recorded shape says
+		// which (ClosureWantsKeyVal).
+		if ClosureWantsKeyVal(mb.body) {
+			return invokeBodyTop(reg, mb.body, []Value{NewKeyVal(k, v, i, n)})
+		}
 		return invokeBodyTop(reg, mb.body, []Value{v})
 	}
 	return runQuotationBody(reg, mb.tokens, []Value{v})
@@ -72,6 +79,11 @@ func (mb mapBody) fold(reg *Registry, acc Value, k string, v Value, i, n int64) 
 		return mb.callLambda(reg, []Value{acc, NewKeyVal(k, v, i, n)})
 	}
 	if mb.closure {
+		// (accumulator, entry): a lambda-derived closure takes the entry as a
+		// KeyVal, a token-derived one as the bare value.
+		if ClosureWantsKeyVal(mb.body) {
+			return invokeBodyTop(reg, mb.body, []Value{acc, NewKeyVal(k, v, i, n)})
+		}
 		return invokeBodyTop(reg, mb.body, []Value{acc, v})
 	}
 	return runQuotationBody(reg, mb.tokens, []Value{acc, v})

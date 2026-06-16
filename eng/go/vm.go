@@ -244,8 +244,10 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 	fnVal := stack[base]
 	args := stack[base+1:]
 
-	if cl, ok := fnVal.Data.(ClosurePayload); ok {
-		results, err := vc.invokeClosure(NewClosure(cl.Unit, cl.Captures), append([]Value(nil), args...))
+	if _, ok := fnVal.Data.(ClosurePayload); ok {
+		// Pass fnVal directly so the payload's InShape rides along (invokeClosure
+		// only fills param slots, but a downstream handler may read the shape).
+		results, err := vc.invokeClosure(fnVal, append([]Value(nil), args...))
 		if err != nil {
 			return nil, stampAt(err, curDebug, pc, r)
 		}
@@ -429,7 +431,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				copy(caps, stack[len(stack)-nc:])
 				stack = stack[:len(stack)-nc]
 			}
-			stack = append(stack, NewClosure(int(in.Arg), caps))
+			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape}
+			stack = append(stack, Value{Parent: TFunction, Data: cl})
 		case OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
 			// copy (eng/go/CLAUDE.md, Canonical *Type Pointers). Types

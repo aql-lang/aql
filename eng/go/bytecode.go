@@ -169,20 +169,51 @@ type PolyRef struct {
 	Arity int
 }
 
+// ClosureInShape tags HOW a higher-order word must present each per-invocation
+// input to a compiled closure — the divergence the per-word callback
+// conventions create. A map-iteration handler (each/fold/scan over a map) runs
+// BOTH a token-quotation body (sees the bare value) and a lambda body (sees a
+// KeyVal {k v i n}); the closure value alone cannot say which, so the compile
+// records the shape on the unit and the handler reads it back here. The
+// unambiguous handlers (filter list/map) build their own fixed shape and ignore
+// it.
+type ClosureInShape uint8
+
+const (
+	// ClosureInValue passes the per-invocation inputs through unchanged — the
+	// token-quotation form (list element / map value, plus fold's accumulator).
+	ClosureInValue ClosureInShape = iota
+	// ClosureInKeyVal wraps a map entry as a KeyVal {k v i n} before the (last)
+	// input — the map-iteration LAMBDA convention (`each (kv => …) {m}`).
+	ClosureInKeyVal
+)
+
 // ClosurePayload is a runtime fn VALUE backed by a compiled body unit:
 // OpPushClosure pushes one, and a higher-order word's native handler invokes
 // it through the VM's re-entrant runner (via the InvokeBody seam) — never the
 // interpreter (plan P2). Unit indexes Program.Fns; Captures are the
 // construction-time lexical captures bound into the body's trailing local
-// slots at invocation (empty for a capture-free body).
+// slots at invocation (empty for a capture-free body). InShape carries the
+// unit's input convention (copied from CompiledFn at OpPushClosure) so the
+// driving handler shapes each input correctly.
 type ClosurePayload struct {
 	Unit     int
 	Captures []Value
+	InShape  ClosureInShape
 }
 
-// NewClosure builds a closure Value over a compiled body unit.
+// NewClosure builds a closure Value over a compiled body unit (default value
+// input shape). The VM stamps the unit's real InShape at OpPushClosure.
 func NewClosure(unit int, captures []Value) Value {
 	return Value{Parent: TFunction, Data: ClosurePayload{Unit: unit, Captures: captures}}
+}
+
+// ClosureWantsKeyVal reports whether v is a compiled closure whose body expects
+// a map entry presented as a KeyVal (the map-iteration lambda convention), so a
+// map-iteration handler wraps the entry rather than passing the bare value.
+func ClosureWantsKeyVal(v Value) bool {
+	cl, ok := v.Data.(ClosurePayload)
+	return ok && cl.InShape == ClosureInKeyVal
 }
 
 // IsCompiledClosure reports whether v is a compiled-closure VALUE (a body unit
@@ -258,8 +289,14 @@ type CompiledFn struct {
 	// stays 0 there — it is closure-specific.)
 	NCaptures int
 	NLocals   int
-	Code      []Instr
-	Debug     []SrcPos
+	// InShape is the input convention a closure over this unit presents to its
+	// driving handler (ClosureInValue for an ordinary fn / token body, or
+	// ClosureInKeyVal for a map-iteration lambda body). Copied onto the
+	// ClosurePayload at OpPushClosure. The VM never branches on it; the native
+	// map-iteration handler reads it via ClosureWantsKeyVal.
+	InShape ClosureInShape
+	Code    []Instr
+	Debug   []SrcPos
 	// Returns are the declared return types, enforced at RET against the
 	// body's result the same way the interpreter's ReturnCheck (__RC)
 	// does — via v.Is(exp), so a predicate refine runs its predicate, a

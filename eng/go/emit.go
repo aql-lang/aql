@@ -268,6 +268,10 @@ type fnUnitRec struct {
 	numLoc   int
 	pos      SrcPos
 	finished bool
+	// inShape is the closure input convention recorded for a closure body unit
+	// (ClosureInValue by default; ClosureInKeyVal for a map-iteration lambda).
+	// Copied into CompiledFn.InShape at lowering. Zero (value) for user fns.
+	inShape ClosureInShape
 }
 
 // NewEmitState returns a fresh recording state.
@@ -1686,7 +1690,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, Returns: rec.returns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false

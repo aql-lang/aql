@@ -442,3 +442,43 @@ func TestFilterLambdaCompilesNative(t *testing.T) {
 		t.Errorf("%q: want both engines to error (compiled=%v errC=%v errI=%v)", bad, compiled, errC, errI)
 	}
 }
+
+// Roadmap item 5 part B (each/fold/scan map lambda args) — the map-iteration
+// words run a KeyVal-shaped lambda closure natively. These share the same
+// handler as their token-quotation form, which sees the bare VALUE; the unit's
+// recorded ClosureInShape (ClosureWantsKeyVal) keeps the two apart, so a
+// KeyVal-destructuring lambda and a value-consuming quotation both compile and
+// both stay correct.
+func TestMapLambdaCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		// KeyVal-shaped lambda closures (the lambda reads kv.v / kv.i / acc).
+		{`{a:1 b:2} each ([kv:KeyVal] => [kv.v add kv.i])`, "[{a:1 b:3}]"},
+		{`0 fold ([acc:Integer kv:KeyVal] => [acc add kv.v]) {a:1 b:2 c:3}`, "[6]"},
+		{`{a:1 b:2 c:3} scan ([acc:Integer kv:KeyVal] => [acc add kv.v])`, "[{a:1 b:3 c:6}]"},
+		// Token-quotation map closures share the handler but take the bare value
+		// — the ClosureInShape flag must NOT wrap these in a KeyVal.
+		{`each [mul 10] {a:1 b:2}`, "[{a:10 b:20}]"},
+		{`fold [add] {a:1 b:2 c:3} 0`, "[6]"},
+		{`{a:1 b:2 c:3} scan [add]`, "[{a:1 b:3 c:6}]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native closure lowering, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+}

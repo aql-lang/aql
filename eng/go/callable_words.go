@@ -65,7 +65,7 @@ var callableWords = map[string]callableWord{
 // `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
-func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, pos SrcPos) (int, bool) {
+func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
 	declared := []*Type{TAny}
 	if paramNames == nil {
@@ -77,6 +77,9 @@ func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, para
 	if !ok {
 		return -1, false
 	}
+	// Record the closure's input convention on the unit (consistent across a
+	// memo hit: the key includes name+input types, which determine the shape).
+	es.fnRecs[unit].inShape = shape
 	if finish == nil {
 		// Memo hit: the unit is already compiled in this state.
 		return unit, es.active()
@@ -142,7 +145,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
 	captures := ComputeCaptures(r, &FnSig{Body: bodyToks})
-	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, outs, pos)
+	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, outs, pos)
 }
 
 // tryRecordLambdaClosure compiles a higher-order word's LAMBDA argument
@@ -167,7 +170,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Si
 	if bodyToksHaveSentinel(lam.Body) {
 		return false
 	}
-	inputs, ok := lambdaCallbackInputs(r, word, args, lam)
+	inputs, shape, ok := lambdaCallbackInputs(r, word, args, lam)
 	if !ok || len(lam.Params) != len(inputs) {
 		return false
 	}
@@ -175,7 +178,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Si
 	for i := range lam.Params {
 		names[i] = lam.Params[i].Name
 	}
-	return recordClosureDispatch(r, word, spec, sig, args, lam.Body, inputs, names, nil, outs, pos)
+	return recordClosureDispatch(r, word, spec, sig, args, lam.Body, inputs, names, nil, shape, outs, pos)
 }
 
 // recordClosureDispatch is the shared tail of the token and lambda closure
@@ -184,7 +187,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Si
 // real-compiles it and records the dispatch (the body operand lowering to
 // OpPushClosure). paramNames is nil for the token form (stack-consumed inputs)
 // and the lambda's param names for the lambda form.
-func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, outs []Value, pos SrcPos) bool {
+func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, outs []Value, pos SrcPos) bool {
 	capOps := make([]emitOperand, len(captures))
 	for i, cb := range captures {
 		op, ok := r.Check.Emit.resolveOperand(cb.Value)
@@ -203,7 +206,7 @@ func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Sig
 	// real program untouched (graceful fall-through to the island).
 	real := r.Check.Emit
 	r.Check.Emit = NewEmitState()
-	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
+	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, shape, pos)
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -211,7 +214,7 @@ func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Sig
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, pos)
+	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, shape, pos)
 	if !realOk || unit < 0 {
 		return false
 	}
@@ -220,33 +223,57 @@ func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Sig
 
 // lambdaCallbackInputs returns the representative input carriers a higher-order
 // word presents to a LAMBDA callback — the word's callback shape, which differs
-// from the token-quotation form (spec.inputs):
+// from the token-quotation form (spec.inputs) — plus the runtime ClosureInShape
+// the driving handler reads to present each entry:
 //
 //   - filter over a LIST: one {key, value} pair Map (the element via `.value`).
-//   - filter over a MAP:  one KeyVal {k v i n} (the value via `.v`).
+//   - filter/each over a MAP: one KeyVal {k v i n} (the value via `.v`).
+//   - fold (init form) / scan over a MAP: (accumulator, KeyVal).
 //
 // The carriers are GENERALISED (field types, not one call's values) so the body
 // is compiled once for every entry. ok is false for a shape with no lambda
-// convention (the caller then leaves the refusal to stand).
-func lambdaCallbackInputs(r *Registry, word string, args []Value, _ *Signature) ([]Value, bool) {
+// convention (the caller then leaves the refusal to stand): a list each/fold,
+// a no-init map fold, and for-each (whose check-mode output count does not match
+// its 0-result runtime) all stay on the refusal path.
+func lambdaCallbackInputs(r *Registry, word string, args []Value, _ *Signature) ([]Value, ClosureInShape, bool) {
+	spec, ok := callableWords[word]
+	if !ok || spec.bodyPos+1 >= len(args) {
+		return nil, ClosureInValue, false
+	}
+	data := args[spec.bodyPos+1] // the data operand follows the body operand
+	if !IsConcrete(data) {
+		return nil, ClosureInValue, false
+	}
+	elem := DataListElemTypeFromValue(data)
+	isMap := data.Parent.ConformsTo(TMap)
+	isList := data.Parent.ConformsTo(TList)
 	switch word {
 	case "filter":
-		if spec := callableWords[word]; spec.bodyPos+1 >= len(args) {
-			return nil, false
-		}
-		data := args[1]
-		if !IsConcrete(data) {
-			return nil, false
-		}
-		elem := DataListElemTypeFromValue(data)
 		switch {
-		case data.Parent.ConformsTo(TMap):
-			return []Value{keyValCarrier(r, elem)}, true
-		case data.Parent.ConformsTo(TList):
-			return []Value{pairCarrier(elem)}, true
+		case isMap:
+			return []Value{keyValCarrier(r, elem)}, ClosureInKeyVal, true
+		case isList:
+			return []Value{pairCarrier(elem)}, ClosureInValue, true
+		}
+	case "each":
+		if isMap {
+			return []Value{keyValCarrier(r, elem)}, ClosureInKeyVal, true
+		}
+	case "fold":
+		// Init form only (`init fold (lambda) {m}` → args [lambda, map, init]):
+		// the accumulator carries the seed's type, the entry rides as a KeyVal.
+		if isMap && len(args) > spec.bodyPos+2 {
+			acc := args[spec.bodyPos+2]
+			return []Value{NewCarrier(acc.Parent), keyValCarrier(r, elem)}, ClosureInKeyVal, true
+		}
+	case "scan":
+		// scan seeds the accumulator from the first value (no init operand): the
+		// accumulator carries the value type, the entry rides as a KeyVal.
+		if isMap {
+			return []Value{NewCarrier(elem), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
 	}
-	return nil, false
+	return nil, ClosureInValue, false
 }
 
 // pairCarrier builds a representative {key, value} pair Map carrier — the shape
