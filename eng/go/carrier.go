@@ -451,7 +451,9 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
-		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))
+		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
+		r.Check.Emit.RecordCall(word, sig, args, out, pos,
+			dynOutNativeOK(r, word, sig, args, out) || quoteInertOK, quoteInertOK)
 	}
 	return out
 }
@@ -547,6 +549,41 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 					return true
 				}
 			}
+		}
+	}
+	return isModuleInnerSig(r, word, sig)
+}
+
+// quoteOperandInertOK reports whether a dispatch with implicit-quote operands
+// (sig.QuoteArgs) may still bake a plain CALL_NATIVE despite the quoted
+// positions. It holds only for a MODULE INNER NATIVE (`Pkg.word`, confirmed by
+// pointer identity) whose every quoted operand is an inert Atom const — the
+// query DSL's table-name operands (`Query.from people`, `Query.join visits`):
+// the name is captured unevaluated as a symbol the handler resolves at run time.
+// This is the QuoteArgs analogue of dynOutNativeOK and of the get/getr/set
+// exemption in RecordCall: the inner native is reached via the wrapper's trivial
+// delegation, so the interpreter dispatches the SAME handler via execMatch on
+// this engine, and a baked Atom is the same value either way. Restricting to
+// module inner natives keeps it off the core meta words (usurp / force-arity /
+// ref-family) whose quoted operands drive re-stepping dispatch, and off any
+// user word (those refuse earlier as a user-fn call). Mutation-safety holds:
+// the query builders return fresh lazy-query values, they do not mutate a
+// pooled const.
+func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value) bool {
+	if sig == nil || len(sig.QuoteArgs) == 0 {
+		return false
+	}
+	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
+	// regardless; screen here so they cannot slip through this exemption).
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+		return false
+	}
+	for i := range args {
+		if !sig.QuoteArgs[i] {
+			continue
+		}
+		if _, ok := args[i].Data.(AtomPayload); !ok || !isInertConst(args[i]) {
+			return false
 		}
 	}
 	return isModuleInnerSig(r, word, sig)

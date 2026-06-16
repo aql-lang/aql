@@ -789,3 +789,74 @@ func TestMapLambdaCompilesNative(t *testing.T) {
 		}
 	}
 }
+
+// query DSL (aql:query) — the SQL-style query words are trivial-delegation
+// module wrappers over inner natives. The clause words (select/where/order/
+// group/having/limit/offset/distinct/on/using) carry NoEvalArgs whose clause is
+// an inert word-list (`[name age]`, `[age gt 1]`) the compiler now bakes as a
+// code-as-data const (noEvalBodiesInert). The source words (from/join/innerjoin/
+// leftjoin/crossjoin) carry a QuoteArgs table-NAME atom the compiler now bakes
+// via the module-inner quote exemption (quoteOperandInertOK). Either way the
+// recorded dispatch is the inner native as a plain CALL_NATIVE, which the
+// interpreter reaches identically through the wrapper's trivial delegation, so
+// the lazy-query value is built the same on both paths. The spec rows do not
+// seed a FROM table, so the query carries a deferred error and renders the same
+// unforced value on both paths — the invariant under test is native compilation
+// + exact compiled/interpreted parity (the compiler must not change behaviour),
+// not the lazy-query rendering itself.
+func TestQueryDSLCompilesNative(t *testing.T) {
+	const imp = `"aql:query" import end  `
+	for _, src := range []string{
+		imp + `Query.select [name age]`,
+		imp + `Query.where [age gt 1] (Query.select [name])`,
+		imp + `Query.order [age desc] (Query.select [name])`,
+		imp + `Query.group [city] (Query.select [city])`,
+		imp + `Query.having [cnt gt 1] (Query.group [city] (Query.select [city]))`,
+		imp + `Query.limit 5 (Query.select [name])`,
+		imp + `Query.offset 2 (Query.select [name])`,
+		imp + `Query.distinct (Query.select [name])`,
+		imp + `Query.join visits (Query.select [name])`,
+		imp + `Query.innerjoin visits (Query.select [name])`,
+		imp + `Query.leftjoin visits (Query.select [name])`,
+		imp + `Query.crossjoin visits (Query.select [name])`,
+		imp + `Query.on [name eq who] (Query.join visits (Query.select [name]))`,
+		imp + `Query.using [name] (Query.join visits (Query.select [name]))`,
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native query DSL lowering, got an island", src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(src)
+		b, _ := New()
+		gotI, _ := b.Run(src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v errC=%v gotC=%v gotI=%v (compiled/interp must match)",
+				src, compiled, errC, gotC, gotI)
+		}
+	}
+
+	// SCOPING: the quote exemption is gated on a MODULE INNER native. A core
+	// quoted-operand word (here `inspect`, which quotes a bare def name) is NOT a
+	// module inner native, so it must STILL refuse — proving the exemption does
+	// not leak to the meta/accessor quoted-operand words. It falls back with
+	// faithful parity.
+	const core = `def x 5  inspect x`
+	a, _ := New()
+	prog, reason, _, _ := a.CompileCheck(core)
+	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: a core quoted-operand word must NOT compile native (reason was %q)", core, reason)
+	}
+	ar, _ := New()
+	gotC, _, _ := ar.RunCompiled(core)
+	b, _ := New()
+	gotI, _ := b.Run(core)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", core, gotC, gotI)
+	}
+}

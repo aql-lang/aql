@@ -1100,8 +1100,11 @@ func (es *EmitState) RecordPoly(word string) {
 // order (position 0 = top of stack); outs are the carrier results.
 // forceDynOut bypasses the dynamic-output refusal when the caller
 // (dynOutNativeOK) has proven the dispatch is a concrete-args core builtin
-// whose dynamic result is merely a declared-Any return.
-func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut bool) {
+// whose dynamic result is merely a declared-Any return. quoteInertOK bypasses
+// the quoted-operand refusal when the caller (quoteOperandInertOK) has proven
+// the dispatch is a module inner native whose quoted operands are inert Atom
+// consts (the query DSL's table names).
+func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) {
 	if !es.active() {
 		return
 	}
@@ -1172,11 +1175,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
 		return
-	case len(sig.NoEvalArgs) > 0:
+	case len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args):
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set":
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
@@ -1188,6 +1191,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
 		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
 		// so the word-name match admits only the real mutator, never a usurp.
+		// quoteInertOK is the principled extension of that exemption to a MODULE
+		// INNER NATIVE whose quoted operands are inert Atom consts — the query
+		// DSL's table names (`Query.from people`, `Query.join visits`): the inner
+		// native is reached via the wrapper's trivial delegation, so the
+		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
 		return
@@ -1330,6 +1338,32 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: 1, pos: pos}})
 	es.setProduced(outs[0], seq)
+	return true
+}
+
+// noEvalBodiesInert reports whether every NoEvalArgs (un-evaluated code-body)
+// position holds INERT data — a const-bakeable word-list / scalar with no
+// computed paren or carrier (e.g. a query clause `[name age]` / `[age gt 1]`,
+// read or stored as data by the handler). Such a body bakes as a const and the
+// dispatch lowers to a plain CALL_NATIVE: the handler does exactly what it does
+// under the interpreter, byte-identically. A body with a computed paren (a test
+// assertion `[(1 add 1) …]`) is NOT inert and keeps the conservative refusal.
+func noEvalBodiesInert(sig *Signature, args []Value) bool {
+	for i := range args {
+		if !sig.NoEvalArgs[i] {
+			continue
+		}
+		if !isInertConst(args[i]) {
+			return false
+		}
+		// A flow-control sentinel (break/continue/return) inside the body
+		// targets an ENCLOSING loop/frame; running the body inside the handler
+		// (the CALL_NATIVE this enables) cannot propagate that across the call
+		// boundary, so it would diverge (`each [break]`). Keep those refused.
+		if bodyHasSentinel(args[i]) {
+			return false
+		}
+	}
 	return true
 }
 

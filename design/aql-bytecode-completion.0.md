@@ -262,10 +262,29 @@ before/after numbers.
    (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`, `eng/go/emit.go` RecordBranch,
    `eng/go/lower.go` lowerArms/lowerArmsComputed.)
 
-7. **`select` query DSL + `reach` lenses (~26, MED, OPTIONAL for P7).** Compile
-   the query/lens bodies, or — if the cost outweighs the benefit — add them to
-   `metaFallbackWords` as a deliberate DSL-interpreted boundary. Decide with the
-   island/refusal numbers in hand.
+7. **`select` query DSL ✅ LANDED (310 → 283); `reach` lenses still PENDING.**
+   The `aql:query` words are trivial-delegation module wrappers over inner
+   natives, so they compiled the moment their two operand shapes did:
+   - **Clause words** (select/where/order/group/having/limit/offset/distinct/on/
+     using) carry `NoEvalArgs` whose clause is an inert word-list (`[name age]`,
+     `[age gt 1]`). `noEvalBodiesInert` now admits a `NoEvalArgs` body that is an
+     `isInertConst` (a Word-member list bakes as a code-as-data const), so the
+     wrapper records the inner native as a plain `CALL_NATIVE`. Flow-control
+     sentinel bodies (`each [break]`) stay refused (`bodyHasSentinel`): baking
+     `[break]` + a `CALL_NATIVE` cannot carry the break across the call boundary.
+   - **Source words** (from/join/innerjoin/leftjoin/crossjoin) carry a
+     `QuoteArgs` table-NAME atom. `quoteOperandInertOK` is the principled
+     extension of the get/getr/set quoted-operand exemption: a MODULE INNER
+     native (confirmed by `isModuleInnerSig` pointer identity) whose quoted
+     operands are all inert Atom consts bakes a plain `CALL_NATIVE`. It is gated
+     on module-inner so it never leaks to the core meta quoted words (usurp /
+     force-arity / ref-family / inspect / has), which keep refusing.
+   The interpreter reaches the same inner native through the wrapper's trivial
+   delegation, so the lazy-query value is built identically — differential 0
+   mismatches across the family. `reach` lenses remain the OPTIONAL follow-on.
+   (`eng/go/emit.go` RecordCall `noEvalBodiesInert`, `eng/go/carrier.go`
+   `quoteOperandInertOK`; `lang/go/bytecode_findings_test.go`
+   `TestQueryDSLCompilesNative`.)
 
 8. **introspection over fn-values ✅ LANDED (417 → 407).** A type-READING word
    (`typeof`/`tcmp`/`teq`/`tand`/`tor`/`tnot`/`inspect`) over a fn VALUE bakes
@@ -281,18 +300,20 @@ before/after numbers.
 9. **Error-row disposition + the re-scoped P7 gate ✅ GATE LANDED (three-tier);
    fallback narrowing PENDING.** `TestOnlyMetaFallsBack` partitions every
    refused/islanded row into tier 1 interpreter-only (2, capped), tier 2
-   reducible (96, `reducibleCeiling`), error-row (12, allowlisted), and compute
-   gap (258, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
-   island; tiers 2 and 3 both ratchet to 0. `args.N` and `with-decimal` are the
-   first tier-2/frontier reductions proving the ratchet bites. Error rows are allowlisted (the checker
+   reducible (61, `reducibleCeiling`), error-row (12, allowlisted), and compute
+   gap (215, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
+   island; tiers 2 and 3 both ratchet to 0. `args.N`, `with-decimal`, `word`,
+   `macroexpand`, `usurp` and the query DSL are the tier-2/frontier reductions
+   proving the ratchet bites. Error rows are allowlisted (the checker
    refuses so the interpreter surfaces the taxonomy); making the VM raise them
    stays available as future tightening. The §P7 fallback narrowing (step 4)
    waits on the compute gap reaching 0 — its remaining drivers are the
-   operand-provenance cascades (140, clear when their producers compile: item-3
-   class instances, user-fn results), the code-body DSL words (82: `select` /
-   `case` / `reach` / `with-decimal` / `where` / `group` / … — item 7 + follow-
-   ons), Stage-1 lowering residuals (~24), dynamic in/out (~24), the 9 islands,
-   and user-fn dispatch (5). (`test/go/langspec/compiled_metafallback_test.go`.)
+   operand-provenance cascades (130, clear when their producers compile: item-3
+   class instances, user-fn results), the residual code-body DSL words (8:
+   `reach` / `with-decimal` / follow-ons — `select` / `where` / `group` / `case`
+   now compile), Stage-1 lowering residuals (~22), dynamic in/out (~33), the 7
+   islands, and user-fn dispatch (5).
+   (`test/go/langspec/compiled_metafallback_test.go`.)
 
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
