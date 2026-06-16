@@ -360,8 +360,24 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 		return genCaseStmt(r), nil // top-level no-default case (0-result tail)
 	}
 	scope := []string{}
+	var stmts []*gnode
+	// Optionally seed the CONTEXT STORE: `context set 'KEY' <lit> end` …, then
+	// expose each KEY as an Integer var that renders `(context get 'KEY')`, so
+	// the whole body generator weaves strict-key store reads through arithmetic,
+	// `if`, `for`, `case`, defs, … (a get inside a computed container refuses —
+	// harmlessly). Keys are '@'-tagged in scope to distinguish them from defs.
+	if r.Intn(3) == 0 {
+		nk := 1 + r.Intn(len(ctxKeys))
+		for i := 0; i < nk; i++ {
+			stmts = append(stmts, &gnode{op: "ctxset", keys: []string{ctxKeys[i]}, kids: []*gnode{{op: "lit", cat: cInt, n: r.Intn(6)}}})
+			scope = append(scope, "@"+ctxKeys[i])
+		}
+		if r.Intn(2) == 0 { // shadow the first key (latest value wins)
+			stmts = append(stmts, &gnode{op: "ctxset", keys: []string{ctxKeys[0]}, kids: []*gnode{{op: "lit", cat: cInt, n: r.Intn(6)}}})
+		}
+	}
 	var defs []*gnode
-	for r.Intn(3) == 0 && len(scope) < 2 {
+	for nDefs := 0; r.Intn(3) == 0 && nDefs < 2; nDefs++ {
 		name := fmt.Sprintf("v%d", len(scope))
 		defs = append(defs, &gnode{op: "def", n: len(scope), kids: []*gnode{gen(r, cInt, depth-1, append([]string{}, scope...))}})
 		scope = append(scope, name)
@@ -378,11 +394,15 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 		bodyCat = cBool
 	}
 	body := gen(r, bodyCat, depth, scope)
-	if len(defs) == 0 {
+	prefix := append(stmts, defs...)
+	if len(prefix) == 0 {
 		return body, scope
 	}
-	return &gnode{op: "seq", kids: append(defs, body)}, scope
+	return &gnode{op: "seq", kids: append(prefix, body)}, scope
 }
+
+// ctxKeys is the pool of context-store keys the generator may seed and read.
+var ctxKeys = []string{"n", "p", "q"}
 
 func render(n *gnode, scope []string) string {
 	switch n.op {
@@ -390,7 +410,11 @@ func render(n *gnode, scope []string) string {
 		return fmt.Sprint(n.n)
 	case "var":
 		if n.n < len(scope) {
-			return scope[n.n]
+			name := scope[n.n]
+			if strings.HasPrefix(name, "@") { // context-store key -> strict get
+				return "(context get '" + name[1:] + "')"
+			}
+			return name
 		}
 		return "0"
 	case "strlit":
@@ -484,6 +508,8 @@ func render(n *gnode, scope []string) string {
 		return "(case " + render(n.kids[0], scope) + " " + body + ")"
 	case "vblock":
 		return "[" + n.cmp + " " + render(n.kids[0], scope) + "]"
+	case "ctxset":
+		return "context set '" + n.keys[0] + "' " + render(n.kids[0], scope) + " end"
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":

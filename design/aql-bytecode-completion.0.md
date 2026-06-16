@@ -458,8 +458,11 @@ computed lists / `size` / `def`-locals / `for` / nested maps + `get` / in-place
 mutation (`Array` + map `set`) / object & class field mutation / higher-order
 `fold`/`each`/`scan` over literal lists / `case` multi-way dispatch (scalar /
 `[gt N]` / `[lt N]` / `Integer`-type matches, value-consuming block bodies, value
-& stack forms, no-default 0-result tails), type-tracked so `if` branches and
-`get` results stay well-typed; error TAXONOMY compared too) and asserts compiled ==
+& stack forms, no-default 0-result tails) / context-store reads (`context set 'k'
+<lit> end` … with `(context get 'k')` woven through arithmetic / `if` / `for` /
+`case` / defs, shadowing and the strict unknown-key error included), type-tracked
+so `if` branches and `get` results stay well-typed; error TAXONOMY compared too)
+and asserts compiled ==
 interpreted on each, with a shrinker that reduces a failure to a minimal program. It has found THREE real divergences the
 corpus had missed for the life of the project: (1) `for 3 [{a: (3 mul i)} get a]`
 — `constFoldContainerVal` froze the loop-iterator-dependent map value; (2) `def
@@ -472,9 +475,9 @@ the `if`-result reused `v0`'s identity and a later `v0` reference resolved to th
 if-event (fixed by minting a fresh ID for the merged carrier — it is a NEW
 value). 36 000 generated programs across 12 seeds are divergence-free after each
 fix. Each subsequent widening round — in-place mutation, object/class field
-mutation, higher-order `fold`/`each`/`scan`, and `case` multi-way dispatch —
-landed divergence-free on first hunt (21 808 compiled paths across 12 seeds on
-the higher-order round, 20 802 on the `case` round), so the generator now
-doubles as a standing soundness witness for the constructs it already covers,
-not only a bug-finder. This is the durable answer
+mutation, higher-order `fold`/`each`/`scan`, `case` multi-way dispatch, and
+context-store reads — landed divergence-free on first hunt (21 808 compiled
+paths across 12 seeds on the higher-order round, 20 802 on the `case` round,
+19 285 on the context round), so the generator now doubles as a standing
+soundness witness for the constructs it already covers, not only a bug-finder. This is the durable answer
 to "why is this so fiddly": fund the ORACLE, not the manual probing.
