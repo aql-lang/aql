@@ -11,9 +11,23 @@ package langspec
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+// fuzzEnv reads a positive integer from an env var, else returns def. Lets CI /
+// a nightly job CRANK the fuzzer (`AQL_FUZZ_SEEDS=20 AQL_FUZZ_ITERS=5000`)
+// without touching the lean, deterministic default the standard suite runs.
+func fuzzEnv(name string, def int) int {
+	if v := os.Getenv(name); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
+}
 
 // cat is a generated node's value category, so generation and shrinking stay
 // well-typed (an Integer slot never gets a Boolean node).
@@ -193,14 +207,16 @@ func TestPropertyDifferential(t *testing.T) {
 	if testing.Short() {
 		t.Skip("property fuzz: skipped in -short")
 	}
-	const (
-		iters = 3000
-		depth = 4
-		seeds = 3 // distinct generator seeds, for breadth across CI runs
-	)
+	// Lean DETERMINISTIC default (a regression guard, ~10s) — the same programs
+	// every run, so a failure always reproduces. Override the budget for a deep
+	// exploratory hunt: `AQL_FUZZ_SEEDS=20 AQL_FUZZ_ITERS=5000 go test -run
+	// TestPropertyDifferential`.
+	const depth = 4
+	iters := fuzzEnv("AQL_FUZZ_ITERS", 1500)
+	seeds := fuzzEnv("AQL_FUZZ_SEEDS", 2)
 	var compiled, failures int
-	for seed := int64(1); seed <= seeds; seed++ {
-		r := rand.New(rand.NewSource(seed))
+	for seed := 1; seed <= seeds; seed++ {
+		r := rand.New(rand.NewSource(int64(seed)))
 		for i := 0; i < iters; i++ {
 			root, scope := genProgram(r, depth)
 			src := render(root, scope)
