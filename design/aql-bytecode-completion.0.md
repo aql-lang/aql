@@ -460,7 +460,10 @@ mutation (`Array` + map `set`) / object & class field mutation / higher-order
 `[gt N]` / `[lt N]` / `Integer`-type matches, value-consuming block bodies, value
 & stack forms, no-default 0-result tails) / context-store reads (`context set 'k'
 <lit> end` … with `(context get 'k')` woven through arithmetic / `if` / `for` /
-`case` / defs, shadowing and the strict unknown-key error included), type-tracked
+`case` / defs, shadowing and the strict unknown-key error included) / fn-value
+indirection (a named `fn` or `=>` lambda over 0-2 Integer params, an Integer body
+over those params, CALLED through a value — `apply` with the `/r` or usurp `/ur`
+ref suffix, or stored-field dispatch `def m {f: <fnval>} m.f <args>`), type-tracked
 so `if` branches and `get` results stay well-typed; error TAXONOMY compared too)
 and asserts compiled ==
 interpreted on each, with a shrinker that reduces a failure to a minimal program. It has found THREE real divergences the
@@ -475,9 +478,10 @@ the `if`-result reused `v0`'s identity and a later `v0` reference resolved to th
 if-event (fixed by minting a fresh ID for the merged carrier — it is a NEW
 value). 36 000 generated programs across 12 seeds are divergence-free after each
 fix. Each subsequent widening round — in-place mutation, object/class field
-mutation, higher-order `fold`/`each`/`scan`, `case` multi-way dispatch, and
-context-store reads — landed divergence-free on first hunt (21 808 compiled
-paths across 12 seeds on the higher-order round, 20 802 on the `case` round,
-19 285 on the context round), so the generator now doubles as a standing
+mutation, higher-order `fold`/`each`/`scan`, `case` multi-way dispatch,
+context-store reads, and fn-value indirection (`apply` / stored dispatch) —
+landed divergence-free on first hunt (21 808 compiled paths across 12 seeds on
+the higher-order round, 20 802 on the `case` round, 19 285 on the context round,
+21 015 on the fn-indirection round), so the generator now doubles as a standing
 soundness witness for the constructs it already covers, not only a bug-finder. This is the durable answer
 to "why is this so fiddly": fund the ORACLE, not the manual probing.

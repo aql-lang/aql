@@ -350,14 +350,61 @@ func genObjRead(r *rand.Rand, fields []string) *gnode {
 		{op: "objget", cat: cInt, keys: []string{fields[r.Intn(len(fields))]}}}}
 }
 
+// genFnProg builds a fn-VALUE INDIRECTION program: define a fn (a named `fn` or
+// a `=>` lambda) over 0-2 Integer params with an Integer body, then CALL it
+// THROUGH a value — `apply` (`<args> f0/r apply`, or `/ur` usurp) or stored-
+// field dispatch (`def m {f: <fnval>} m.f <args>`). This is dispatch machinery
+// nothing else the generator emits exercises: every other call is direct. The
+// body is a full Integer expression over the params (if / case / fold / for …),
+// so the closure unit lowers a rich body. A 0-param paren-def auto-fires, so
+// apply is gated to >=1 param; stored dispatch handles 0.
+func genFnProg(r *rand.Rand) *gnode {
+	nparams := r.Intn(3) // 0, 1, 2
+	apply := nparams > 0 && r.Intn(2) == 0
+	params := append([]string{}, []string{"a", "b"}[:nparams]...)
+	form := "F"
+	if nparams > 0 && r.Intn(2) == 0 {
+		form = "L" // lambda (=>) — needs >=1 param
+	}
+	op := "fnstored"
+	if apply {
+		op = "fnapply"
+		if r.Intn(3) == 0 {
+			op = "fnapplyu" // usurp (/ur): argument-reversed wrapper
+		}
+	}
+	node := &gnode{op: op, cat: cInt, n: nparams, keys: params, cmp: form, kids: []*gnode{gen(r, cInt, 3, params)}}
+	for i := 0; i < nparams; i++ {
+		node.kids = append(node.kids, &gnode{op: "lit", cat: cInt, n: r.Intn(6)})
+	}
+	return node
+}
+
+// renderFnDef renders a fn VALUE: a named-fn `(fn [[params][Integer][body]])` or
+// an afn lambda `([params] => [body])`. The body is already rendered in the
+// param scope.
+func renderFnDef(form string, params []string, bodySrc string) string {
+	sig := make([]string, len(params))
+	for i, p := range params {
+		sig[i] = p + ":Integer"
+	}
+	psig := strings.Join(sig, " ")
+	if form == "L" {
+		return "([" + psig + "] => [" + bodySrc + "])"
+	}
+	return "(fn [[" + psig + "][Integer][" + bodySrc + "]])"
+}
+
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
-	switch r.Intn(7) {
+	switch r.Intn(8) {
 	case 0:
 		return genArrProg(r), nil
 	case 1:
 		return genObjProg(r), nil
 	case 2:
 		return genCaseStmt(r), nil // top-level no-default case (0-result tail)
+	case 3:
+		return genFnProg(r), nil // fn-value indirection (apply / stored dispatch)
 	}
 	scope := []string{}
 	var stmts []*gnode
@@ -510,6 +557,23 @@ func render(n *gnode, scope []string) string {
 		return "[" + n.cmp + " " + render(n.kids[0], scope) + "]"
 	case "ctxset":
 		return "context set '" + n.keys[0] + "' " + render(n.kids[0], scope) + " end"
+	case "fnapply", "fnapplyu":
+		fndef := renderFnDef(n.cmp, n.keys, render(n.kids[0], n.keys)) // body scope = params
+		args := ""
+		for _, k := range n.kids[1:] {
+			args += render(k, scope) + " "
+		}
+		suffix := "/r"
+		if n.op == "fnapplyu" {
+			suffix = "/ur"
+		}
+		return "def f0 " + fndef + " " + args + "f0" + suffix + " apply"
+	case "fnstored":
+		out := "def m {f: " + renderFnDef(n.cmp, n.keys, render(n.kids[0], n.keys)) + "} m.f"
+		for _, k := range n.kids[1:] {
+			out += " " + render(k, scope)
+		}
+		return out
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":
