@@ -172,13 +172,23 @@ before/after numbers.
    `TestEmitRefusesPolySite` (the site now compiles) to assert the poly
    lowering + parity. (`eng/go/carrier.go`.)
 
-5. **Lambda higher-order args + map iteration (~22 refusals + 7 islands, HIGH
-   risk).** `filter ([p:Any] => …)`, `fold` over maps, `each {…}`. Two parts:
-   (a) a lambda VALUE arg compiles its body to a closure (the closure machinery
-   exists; the afn-value path needs the fn-VALUE-on-stack handling the apply
-   shortcut sketched); (b) map iteration emits ordered KeyVal traversal natively
-   instead of islanding. The highest-leverage island reducer. (`eng/go/carrier.go`,
-   `emit.go`, possibly a `FOR_EACH_MAP` lowering.)
+5. **Lambda higher-order args + map iteration (HIGH risk). Part A — map
+   iteration ✅ LANDED (islands 15 → 9); Part B — lambda args still open
+   (~22 refusals).**
+   - Part A — `each`/`fold`/`filter` over a MAP islanded because the token-body
+     map path ran the body via `runQuotationBody` (`New(reg).Run`), bypassing
+     the InvokeBody seam the list path uses. `newMapBody` now detects a compiled
+     CLOSURE (`IsCompiledClosure`) and routes it per VALUE through `InvokeBody`
+     (token/lambda paths unchanged — interpreter untouched), and
+     `DataListElemTypeFromValue` returns the map's common VALUE type so a
+     value-body closure compiles. Map iteration is now native; the islanded rows
+     were already `wasCompiled=true`, so this moves the ISLAND ceiling, not the
+     differential count. (`eng/go/bytecode.go` IsCompiledClosure,
+     `eng/go/carrier.go` DataListElemTypeFromValue, `native/native_map_iter.go`.)
+   - Part B — a lambda VALUE arg (`filter ([p] => …) data`) still refuses; it
+     needs the afn-value body extracted and compiled as a closure (tryRecordClosure
+     does `AsList(body)`, which fails on an FnDefInfo). The remaining island/refusal
+     reducer.
 
 6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
    (425 → 421); 6b variadic-else (421 → 417).**

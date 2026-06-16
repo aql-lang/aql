@@ -185,6 +185,16 @@ func NewClosure(unit int, captures []Value) Value {
 	return Value{Parent: TFunction, Data: ClosurePayload{Unit: unit, Captures: captures}}
 }
 
+// IsCompiledClosure reports whether v is a compiled-closure VALUE (a body unit
+// the VM runs via InvokeBody), as opposed to an interpreter FnDefInfo lambda.
+// Both are Parent=TFunction, so a higher-order handler that treats a lambda
+// differently from a plain code body (e.g. map iteration hands a lambda a
+// KeyVal but a body the value) must discriminate on this.
+func IsCompiledClosure(v Value) bool {
+	_, ok := v.Data.(ClosurePayload)
+	return ok
+}
+
 // Instr is one fixed-width instruction.
 type Instr struct {
 	Op  Opcode

@@ -354,3 +354,44 @@ func TestFnValueIntrospectionLowers(t *testing.T) {
 		t.Errorf("`is` over a predicate fn must not compile as introspection (it invokes the fn)")
 	}
 }
+
+// Roadmap item 5 (part A) — each/fold/filter over a MAP compiles NATIVE
+// instead of islanding: the value-body closure runs per map value through the
+// InvokeBody seam (newMapBody routes a compiled closure like a quotation), and
+// the closure's input type is the map's common VALUE type. The interpreter's
+// token-body path is unchanged.
+func TestMapIterationCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`each [mul 10] {a:1 b:2}`, "[{a:10 b:20}]"},
+		{`{a:1 b:2} each [mul 10]`, "[{a:10 b:20}]"},
+		{`fold [add] {a:1 b:2 c:3} 0`, "[6]"},
+		{`filter [gt 2] {a:1 b:5 c:3}`, "[{b:5 c:3}]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native closure lowering, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// Regression: list iteration still compiles native + correct.
+	a, _ := New()
+	gotC, compiled, _ := a.RunCompiled(`each [mul 2] [1 2 3]`)
+	if !compiled || fmt.Sprint(gotC) != "[[2 4 6]]" {
+		t.Errorf("list each regressed: compiled=%v got=%v", compiled, gotC)
+	}
+}

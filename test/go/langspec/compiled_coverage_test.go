@@ -37,7 +37,7 @@ const refusalCeiling = 407 // P0 651 -> P3 642 -> wide poly 618 -> P4 CALL_DYNAM
 // at run time, so this is the second downward ratchet toward run-time
 // independence (plan): each phase that compiles an island shape natively lowers
 // it, and it must reach 0 before the OpFallback machinery can be deleted (P7).
-const islandCeiling = 15 // atom-keyed gets 102->36; fold-no-init + filter (dynamic-output) closures 36->29; P5 multi/0-result calls 29->26; case clause compilation (islanded cases now compile natively) 26->15; lower as more island shapes compile natively
+const islandCeiling = 9 // atom-keyed gets 102->36; fold-no-init + filter (dynamic-output) closures 36->29; P5 multi/0-result calls 29->26; case clause compilation (islanded cases now compile natively) 26->15; map iteration (each/fold/filter over a map) compiles a value-body closure via InvokeBody 15->9; lower as more island shapes compile natively
 
 // normaliseReason buckets a refusal reason into a stable category by
 // stripping the row-specific tail (word names, counts), so the histogram is

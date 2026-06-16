@@ -135,6 +135,30 @@ func DataListElemTypeFromValue(data Value) *Type {
 		}
 		return ct.Child.Parent
 	}
+	// A concrete MAP: the higher-order words (each/filter/fold over a map)
+	// transform the VALUES (keys are kept), so the element type a value-body
+	// closure sees is the common value type, not the list-element type below.
+	if mp, ok := data.Data.(MapPayload); ok {
+		if mp.M == nil || mp.M.Len() == 0 {
+			return TAny
+		}
+		var t *Type
+		for _, k := range mp.M.Keys() {
+			v, _ := mp.M.Get(k)
+			if t == nil {
+				t = v.Parent
+			} else {
+				t = CommonAncestorType(t, v.Parent)
+			}
+			if t.Equal(TAny) {
+				break
+			}
+		}
+		if t == nil {
+			return TAny
+		}
+		return t
+	}
 	list, err := AsList(data)
 	if err != nil || list.IsNil() || list.Len() == 0 {
 		return TAny

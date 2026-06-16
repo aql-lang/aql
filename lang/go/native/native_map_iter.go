@@ -21,15 +21,22 @@ import "fmt"
 // mapBody is a prepared iteration body — either a quotation (token list) or a
 // lambda (Function value) — ready to run once per map entry.
 type mapBody struct {
-	lambda bool
-	fn     Value             // when lambda: the Function value
-	caps   []CapturedBinding // when lambda: its captured bindings
-	tokens []Value           // when quotation: the body tokens
+	lambda  bool
+	closure bool              // when a compiled-closure body (VM-driven)
+	fn      Value             // when lambda: the Function value
+	body    Value             // when closure: the closure value (run via InvokeBody)
+	caps    []CapturedBinding // when lambda: its captured bindings
+	tokens  []Value           // when quotation: the body tokens
 }
 
-// newMapBody classifies the body arg: a Function is a lambda (handed a KeyVal),
-// anything else must be a concrete quotation list (handed the value).
+// newMapBody classifies the body arg: a compiled CLOSURE (the bytecode VM
+// driving each/fold over a map) runs per VALUE via the InvokeBody seam, like a
+// quotation; a (lambda) Function is handed a KeyVal; anything else must be a
+// concrete quotation list (handed the value).
 func newMapBody(reg *Registry, body Value, word string) (mapBody, error) {
+	if IsCompiledClosure(body) {
+		return mapBody{closure: true, body: body}, nil
+	}
 	if body.Parent.ConformsTo(TFunction) {
 		mb := mapBody{lambda: true, fn: body}
 		if fd, ok := body.Data.(FnDefInfo); ok {
@@ -50,6 +57,9 @@ func (mb mapBody) value(reg *Registry, k string, v Value, i, n int64) (Value, bo
 	if mb.lambda {
 		return mb.callLambda(reg, []Value{NewKeyVal(k, v, i, n)})
 	}
+	if mb.closure {
+		return invokeBodyTop(reg, mb.body, []Value{v})
+	}
 	return runQuotationBody(reg, mb.tokens, []Value{v})
 }
 
@@ -61,7 +71,23 @@ func (mb mapBody) fold(reg *Registry, acc Value, k string, v Value, i, n int64) 
 	if mb.lambda {
 		return mb.callLambda(reg, []Value{acc, NewKeyVal(k, v, i, n)})
 	}
+	if mb.closure {
+		return invokeBodyTop(reg, mb.body, []Value{acc, v})
+	}
 	return runQuotationBody(reg, mb.tokens, []Value{acc, v})
+}
+
+// invokeBodyTop runs a (closure) body via the InvokeBody seam and returns its
+// residual top of stack — the closure mirror of runQuotationBody.
+func invokeBodyTop(reg *Registry, body Value, inputs []Value) (Value, bool, error) {
+	res, err := InvokeBody(reg, body, inputs)
+	if err != nil {
+		return Value{}, false, err
+	}
+	if len(res) == 0 {
+		return Value{}, false, nil
+	}
+	return res[len(res)-1], true, nil
 }
 
 func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
