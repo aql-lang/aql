@@ -860,3 +860,80 @@ func TestQueryDSLCompilesNative(t *testing.T) {
 		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", core, gotC, gotI)
 	}
 }
+
+// reach lenses — a RECEIVERLESS reach (`$.name`, `$.a.b`, `$!.x`, `$.1`) is an
+// inert first-class lens value that evaluates to itself. It now bakes into the
+// const pool (isInertReach: Eval=false, no Receiver, all-literal-key segments —
+// the opposite of a dot-access Eval reach the engine expands in place), so the
+// lens VALUE, `typeof`, `apply`, `rebind`, and the StructUtil getpath/setpath
+// forms compile to a plain const-operand CALL_NATIVE. The lens keys carry no
+// canonical-*Type hazard (Words/Atoms/scalars), so the by-value const copy is
+// faithful — the differential confirms compiled == interpreted across the family.
+func TestReachLensCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`$.name`, "[$.name]"},
+		{`$.a.b`, "[$.a.b]"},
+		{`$!.x`, "[$!.x]"},
+		{`typeof $.name`, "[Reach]"},
+		{`def p {name:"ada" age:36}  apply $.name p`, "[ada]"},
+		{`def p {a:{b:7}}  apply $.a.b p`, "[7]"},
+		{`def xs [10 20 30]  apply $.1 xs`, "[20]"},
+		{`def p {name:"ada"}  apply $!.name p`, "[ada]"},
+		{`def p {name:"ada"}  typeof (rebind $.name p)`, "[Reach]"},
+		{`"aql:struct-util" import end  StructUtil.getpath $.a.b {a:{b:7}}`, "[7]"},
+		{`"aql:struct-util" import end  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}`, "[{a:{b:99} c:2}]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native const-baked lens, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// SCOPING: the const-bake is the inert LENS VALUE only. A higher-order LENS
+	// FORM that iterates DATA (`each $.name people`, `filter $.on data`) is NOT a
+	// const — its data list's interior strings are carrier-stripped in check mode
+	// (an orthogonal limit, also why `size people` over string data refuses), and
+	// a reach is not a code body to island. So it must still REFUSE and fall back
+	// with faithful parity — never silently islanded by the lens-as-const change.
+	const each = `def people [{name:"ada"}]  each $.name people`
+	a, _ := New()
+	prog, reason, _, _ := a.CompileCheck(each)
+	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: a lens-over-data form must NOT compile native (reason was %q)", each, reason)
+	}
+	ar, _ := New()
+	gotC, compiledEach, _ := ar.RunCompiled(each)
+	if compiledEach {
+		t.Errorf("%q: a lens-over-data form must fall back, not compile", each)
+	}
+	b, _ := New()
+	gotI, _ := b.Run(each)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[['ada']]" {
+		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", each, gotC, gotI)
+	}
+
+	// The dot-access EVAL reach (`m.a.b`, a get-chain the engine expands) is
+	// untouched by isInertReach (it is excluded: Eval=true, has a receiver) and
+	// keeps compiling via its lowered get-chain.
+	const dot = `def m {a:{b:7}}  m.a.b`
+	c2, _ := New()
+	p2, r2, _, _ := c2.CompileCheck(dot)
+	if p2 == nil || strings.Contains(p2.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: dot-access reach must still compile native (reason %q)", dot, r2)
+	}
+}

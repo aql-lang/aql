@@ -121,7 +121,7 @@ func errorRowReason(reason string) bool {
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
 	reducibleCeiling       = 61  // Test/Assert 28, quote 10, usurp 9, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N + word mostly + macroexpand static cases moved out: now compiled)
-	computeRefusalCeiling  = 215 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL select/from/join family now compiles)
+	computeRefusalCeiling  = 200 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (query DSL + reach lens-as-const forms now compile)
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

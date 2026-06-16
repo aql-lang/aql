@@ -1564,9 +1564,44 @@ func isInertConst(v Value) bool {
 			}
 		}
 		return true
+	case ReachInfo:
+		// A receiverless inert lens (`$.name`, `$.a.b`, `$!.x`, `$.1`). See
+		// isInertReach: only the non-eval, no-receiver, all-literal-key shape
+		// qualifies — the dot-access Eval reach (which the engine expands in
+		// place) is excluded.
+		return isInertReach(v)
 	default:
 		return false
 	}
+}
+
+// isInertReach reports whether v is an INERT receiverless lens — a first-class
+// Reach value that evaluates to ITSELF (`$.name`, `$.a.b`, `$!.x`, `$.1`):
+// Eval=false, no Receiver tokens, and every segment a LITERAL key (no computed
+// paren to evaluate at run time). Such a lens is immutable data, not code: it
+// renders as itself, `typeof` reads Reach, and `apply`/`each`/`filter`/`sortby`
+// /`getpath` walk its segments against a FRESH receiver — none of which the
+// engine expands or re-steps. That is the opposite of a dot-access Eval reach
+// (`m.a.b`), which `isEvalReach`/`expandReach` lower to a get-chain IN PLACE;
+// isInertConst rightly keeps THAT one out (it is a structural token, not data).
+// The lens keys carry no canonical-*Type staleness hazard: they are Words /
+// Atoms / scalars whose Parents are the canonical kernel types, copied by value
+// safely (isInertConstMember screens out a bare type node). So the inert lens
+// pools into the const table like an atom or a path.
+func isInertReach(v Value) bool {
+	if !IsReach(v) || v.Carrier || v.Dynamic {
+		return false
+	}
+	info, err := AsReach(v)
+	if err != nil || info.Eval || len(info.Receiver) > 0 {
+		return false
+	}
+	for _, seg := range info.Segments {
+		if seg.Computed || !isInertConstMember(seg.KeyLit) {
+			return false
+		}
+	}
+	return true
 }
 
 // isInertConstMember reports whether v may ride as a MEMBER of a const

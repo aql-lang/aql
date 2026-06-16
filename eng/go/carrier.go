@@ -772,6 +772,17 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	if !es.active() || !(fallbackWords[word] || islandPureWords[word]) || len(outs) != 1 || sig == nil {
 		return false
 	}
+	// A higher-order callable word dispatched on its LENS (Reach) form, not a
+	// code body (`filter $.on data`, `each $.name data`): the island mechanism
+	// exists to run an interpreted CODE BODY, and a reach lens is inert data, not
+	// code. Now that an inert lens bakes as a const (isInertReach), letting these
+	// island would convert a clean refusal into a NEW interpreter island (a
+	// regression on islandCeiling) for no gain — the reach form has no body to
+	// run. Decline so it refuses; the lens-as-const value/apply/getpath forms
+	// (which do not route here) still compile natively.
+	if spec, ok := callableWords[word]; ok && spec.bodyPos < len(args) && IsReach(args[spec.bodyPos]) {
+		return false
+	}
 	// A dispatch whose output is already recorded was handled by a structured
 	// ReturnsFn hook (e.g. `case`'s desugar to a branch chain) — islanding it
 	// would DOUBLE-record (the island fallback PLUS the structured event),

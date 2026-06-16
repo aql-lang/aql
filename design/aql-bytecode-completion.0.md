@@ -262,7 +262,8 @@ before/after numbers.
    (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`, `eng/go/emit.go` RecordBranch,
    `eng/go/lower.go` lowerArms/lowerArmsComputed.)
 
-7. **`select` query DSL ✅ LANDED (310 → 283); `reach` lenses still PENDING.**
+7. **`select` query DSL ✅ LANDED (310 → 283); `reach` lenses ✅ LANDED
+   (283 → 268).**
    The `aql:query` words are trivial-delegation module wrappers over inner
    natives, so they compiled the moment their two operand shapes did:
    - **Clause words** (select/where/order/group/having/limit/offset/distinct/on/
@@ -281,10 +282,30 @@ before/after numbers.
      force-arity / ref-family / inspect / has), which keep refusing.
    The interpreter reaches the same inner native through the wrapper's trivial
    delegation, so the lazy-query value is built identically — differential 0
-   mismatches across the family. `reach` lenses remain the OPTIONAL follow-on.
+   mismatches across the family.
    (`eng/go/emit.go` RecordCall `noEvalBodiesInert`, `eng/go/carrier.go`
    `quoteOperandInertOK`; `lang/go/bytecode_findings_test.go`
    `TestQueryDSLCompilesNative`.)
+
+   **`reach` lenses** then split the same way. A RECEIVERLESS reach (`$.name`,
+   `$.a.b`, `$!.x`, `$.1`) is an INERT first-class lens — it evaluates to itself,
+   `typeof` reads `Reach`, and `apply`/`getpath`/`setpath` walk its segments
+   against a FRESH receiver. `isInertReach` admits exactly that shape to
+   `isInertConst` (Eval=false, no Receiver, all-literal-key segments), so the
+   lens bakes into the const pool like an atom — the opposite of a dot-access
+   EVAL reach (`m.a.b`), which `expandReach` lowers to a get-chain IN PLACE and
+   which `isInertConst` rightly still excludes. That single const-bake unblocks
+   the lens VALUE, `typeof`, `apply`, `rebind`, and StructUtil `getpath`/`setpath`
+   forms as plain const-operand CALL_NATIVEs (the keys are Words/Atoms/scalars,
+   no canonical-*Type hazard). The HIGHER-ORDER lens forms (`each $.name people`,
+   `filter $.on data`, `ArrayUtil.sortby $.age people`) stay refused on an
+   ORTHOGONAL limit — a data list's interior strings are carrier-stripped in
+   check mode (the same reason `size people` over string data refuses), so the
+   list is not a bakeable const; `tryRecordFallback` declines to island those
+   (a reach is data, not a code body) so they refuse cleanly instead of
+   regressing `islandCeiling`. (`eng/go/emit.go` `isInertReach`,
+   `eng/go/carrier.go` `tryRecordFallback` lens guard;
+   `lang/go/bytecode_findings_test.go` `TestReachLensCompilesNative`.)
 
 8. **introspection over fn-values ✅ LANDED (417 → 407).** A type-READING word
    (`typeof`/`tcmp`/`teq`/`tand`/`tor`/`tnot`/`inspect`) over a fn VALUE bakes
@@ -301,18 +322,19 @@ before/after numbers.
    fallback narrowing PENDING.** `TestOnlyMetaFallsBack` partitions every
    refused/islanded row into tier 1 interpreter-only (2, capped), tier 2
    reducible (61, `reducibleCeiling`), error-row (12, allowlisted), and compute
-   gap (215, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
+   gap (200, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
    island; tiers 2 and 3 both ratchet to 0. `args.N`, `with-decimal`, `word`,
-   `macroexpand`, `usurp` and the query DSL are the tier-2/frontier reductions
-   proving the ratchet bites. Error rows are allowlisted (the checker
-   refuses so the interpreter surfaces the taxonomy); making the VM raise them
-   stays available as future tightening. The §P7 fallback narrowing (step 4)
-   waits on the compute gap reaching 0 — its remaining drivers are the
-   operand-provenance cascades (130, clear when their producers compile: item-3
-   class instances, user-fn results), the residual code-body DSL words (8:
-   `reach` / `with-decimal` / follow-ons — `select` / `where` / `group` / `case`
-   now compile), Stage-1 lowering residuals (~22), dynamic in/out (~33), the 7
-   islands, and user-fn dispatch (5).
+   `macroexpand`, `usurp`, the query DSL and the reach lens-as-const forms are
+   the tier-2/frontier reductions proving the ratchet bites. Error rows are
+   allowlisted (the checker refuses so the interpreter surfaces the taxonomy);
+   making the VM raise them stays available as future tightening. The §P7
+   fallback narrowing (step 4) waits on the compute gap reaching 0 — its
+   remaining drivers are the operand-provenance cascades (117, clear when their
+   producers compile: item-3 class instances, user-fn results), the residual
+   code-body DSL words (8: `with-decimal` / follow-ons — `select` / `where` /
+   `group` / `case` now compile), the higher-order lens/data forms blocked on
+   list-element carrier-stripping, Stage-1 lowering residuals (~19), dynamic
+   in/out (~34), the 7 islands, and user-fn dispatch (5).
    (`test/go/langspec/compiled_metafallback_test.go`.)
 
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
