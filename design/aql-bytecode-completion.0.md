@@ -321,6 +321,36 @@ The sweep also CONFIRMED the remaining 368 are not false barriers — they split
 So the cheap wins are exhausted: further progress is item 9 (META allowlist) and
 the provenance/lowering efforts, not more exemptions.
 
+## 4c. Operand-provenance inroads (refusals 368 → 337)
+
+The "operand provenance" bucket (167) is not monolithic. Two sub-clusters yielded
+to the same lens — *the operand is inert, only its representation looked
+unbakeable* — each made SOUND by a tight guard the differential validated:
+
+- **Builtin structural type operands. ✅ (368 → 353, ~15 rows.)** `[1] is
+  [Integer]`, `{a:5} is {a:Integer}`, `[Integer String] tcmp …`: the operand is a
+  list/map of type literals, which `isInertConst` rejects (type nodes can go
+  stale against canonical pointers). Sound for BUILTINS only — a builtin literal's
+  Parent is the canonical package-level *Type, stable and never retired, so a
+  by-value bake never goes stale. `isBuiltinStructuralType` (emit.go) walks the
+  operand via `typeNodeOf` (a type literal IS its node, not `v.Parent` — the first
+  cut got that wrong and let a user type through). USER-type leaves stay refused
+  (their Behavior is `behave`-mutable).
+- **Inert reach lens values. ✅ (353 → 337, ~16 rows.)** `apply $.name p`,
+  `StructUtil.setpath $.a.b …`, `getpath`, `sortby`: a `$.path` is a concrete
+  Reach value `isInertConst` didn't cover. Added a `ReachInfo` case (`isInertReach`)
+  baking a lens whose segments are all literal field-name keys and whose receiver
+  is const; a COMPUTED `(expr)` segment is excluded (deferred code needing live
+  scope). One row crossed REFUSED → compiled-with-island (net gain), so
+  islandCeiling 9 → 10.
+
+What REMAINS in provenance is the genuinely deep, multi-blocker work the roadmap
+deferred: `make` class instance-field defaults (item 3 — needs a "suppress
+recording inside a const-baked schema construction" primitive, high blast
+radius), generic-instance provenance (`Box<T>`, `of [T]` across get/is/typeof,
+~30), module `$name`/`$module` gets, and the surface-type fnsig algebra. These are
+multi-step efforts, not guard exemptions.
+
 ## 5. Why not delete the island after all
 
 Even at the re-scoped target the `OpFallback` island earns its keep: it is the
