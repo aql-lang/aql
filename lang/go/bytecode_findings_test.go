@@ -443,6 +443,53 @@ func TestFilterLambdaCompilesNative(t *testing.T) {
 	}
 }
 
+// args.N — `args.N` inside a fn body reads the N-th call argument. The params
+// ARE the frame's leading locals, so AnalyseFnBody projects them as the args
+// list and `get N args` folds to PUSH_LOCAL N (carrier.go tryFoldStaticIndex) —
+// no runtime args stack. The compiled body is byte-for-byte the named-param
+// form. (Concrete proof that the P7-gate "tier 2" words are reducible, not
+// irreducible.) Bare `args` (the whole list) still refuses, by design.
+func TestArgsAccessorCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def f fn [[a:Integer b:Integer] [Integer] [args.0 add args.1]] f 3 4`, "[7]"},
+		{`def f fn [[a:Integer b:Integer] [Integer] [args.1 sub args.0]] f 10 3`, "[-7]"},
+		{`def f fn [[n:Integer] [Integer] [if (n lte 0) [args.0] [f (n sub 1)]]] f 3`, "[0]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native lowering, got an island", c.src)
+		}
+		// args.N must lower to a frame-local read, not a runtime args call.
+		if strings.Contains(prog.Disassemble(), "CALL_NATIVE_POLY") && strings.Contains(c.src, "args.0 add") {
+			t.Errorf("%q: args.N did not fold to a local (poly get remains):\n%s", c.src, prog.Disassemble())
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+
+	// The named-param form is byte-identical (args.N is just another spelling).
+	a, _ := New()
+	p1, _, _, _ := a.CompileCheck(`def f fn [[a:Integer b:Integer] [Integer] [args.0 add args.1]] f 3 4`)
+	b, _ := New()
+	p2, _, _, _ := b.CompileCheck(`def f fn [[a:Integer b:Integer] [Integer] [a add b]] f 3 4`)
+	if p1 == nil || p2 == nil || p1.Disassemble() != p2.Disassemble() {
+		t.Errorf("args.N body should compile identically to the named-param body")
+	}
+}
+
 // with-decimal block — a 0-input body run inside a scoped BigDecimal rounding
 // context compiles to a closure (like `do`) driven through InvokeBody, so the
 // VM-run body's decimal ops read the precision/rounding override exactly as the

@@ -78,8 +78,13 @@ nameable limitation of *this* compiler/VM, not by any law:
 - `word` (Forth splice) — inline the splice body at each use site; late binding
   then falls out of the normal `def c1 10 … def c1 20` sequence the VM already
   runs. The compiler just treats `word` as opaque today.
-- `args.N` — the params ARE the frame's leading locals (0..n-1); `args.N` is a
-  `PUSH_LOCAL N`. Needs the emitter to fold get-N-of-args; nothing fundamental.
+- `args.N` — ✅ NOW COMPILED. It was billed "context-dependent, needs a per-call
+  args stack the VM frame doesn't keep"; in fact the params ARE the frame's
+  leading locals, so `args.N` lowers to a plain `PUSH_LOCAL N`. AnalyseFnBody
+  projects the params as the args list and `tryFoldStaticIndex` folds
+  `get N args` to the local (carrier.go). The compiled body is byte-identical to
+  the named-param form — the concrete proof that "tier 2" is reducible work, not
+  irreducibility.
 - `flex`/`canon`/`usurp`/`quote`/`Test`/`minilang` — reference cells, a pure
   canonicaliser, a VM dispatch model for usurp, constant token-list bakes,
   compiling candidate bodies. All named VM/compiler features.
@@ -95,21 +100,21 @@ the rest as work:
 **✅ LANDED** (`test/go/langspec/compiled_metafallback_test.go`,
 `TestOnlyMetaFallsBack`). The gate partitions every refused/islanded spec value
 row into three tiers plus error-rows, each on its own ratchet. Current partition
-(June 2026): **2 interpreter-only (tier 1), 129 reducible (tier 2), 12
-error-row, 260 compute gap**.
+(June 2026): **2 interpreter-only (tier 1), 127 reducible (tier 2), 12
+error-row, 258 compute gap**.
 
 1. ✅ **Tier 1 — `interpreterOnlyWords` (permanent, capped at 3).** Executes
    runtime-constructed code: `Vm.run`/`Vm.run-with`. The legitimate, permanent
    home of the island. A NEW tier-1 entry is an *irreducibility claim* the gate
    forces you to justify.
-2. ✅ **Tier 2 — `reducibleWords` (ratcheted, `reducibleCeiling = 129`).**
+2. ✅ **Tier 2 — `reducibleWords` (ratcheted, `reducibleCeiling = 127`).**
    Refused by a NAMED missing feature, each `why` recording what compiling it
-   takes: usurp 43, word 30, Test/Assert 28, quote 14, flex 7, minilang 5, args
-   2. These are TODOs, not exclusions — they ratchet to 0 like any other work.
-   (The earlier draft mislabeled this tier "irreducible meta"; that laundered
-   unfinished work as impossibility. `with-decimal` disproved the framing by
-   moving from a refusing code-body word to a clean native compile.)
-3. ✅ **Compute frontier (ratcheted, `computeRefusalCeiling = 260`).** Cascades
+   takes: usurp 43, word 30, Test/Assert 28, quote 14, flex 7, minilang 5. These
+   are TODOs, not exclusions — they ratchet to 0 like any other work. (The
+   earlier draft mislabeled this tier "irreducible meta"; that laundered
+   unfinished work as impossibility. `args.N` disproved the framing concretely —
+   moved OUT of this tier to a plain `PUSH_LOCAL N` — as did `with-decimal`.)
+3. ✅ **Compute frontier (ratcheted, `computeRefusalCeiling = 258`).** Cascades
    (operand-provenance 140), code-body DSL bodies (47), Stage-1 lowering (~24),
    dynamic in/out (~24), 9 islands, user-fn dispatch (5). Error rows (12) are
    allowlisted via `errorRowReason` (the checker refuses so the interpreter
@@ -269,9 +274,10 @@ before/after numbers.
 9. **Error-row disposition + the re-scoped P7 gate ✅ GATE LANDED (three-tier);
    fallback narrowing PENDING.** `TestOnlyMetaFallsBack` partitions every
    refused/islanded row into tier 1 interpreter-only (2, capped), tier 2
-   reducible (129, `reducibleCeiling`), error-row (12, allowlisted), and compute
-   gap (260, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
-   island; tiers 2 and 3 both ratchet to 0. Error rows are allowlisted (the checker
+   reducible (127, `reducibleCeiling`), error-row (12, allowlisted), and compute
+   gap (258, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
+   island; tiers 2 and 3 both ratchet to 0. `args.N` and `with-decimal` are the
+   first tier-2/frontier reductions proving the ratchet bites. Error rows are allowlisted (the checker
    refuses so the interpreter surfaces the taxonomy); making the VM raise them
    stays available as future tightening. The §P7 fallback narrowing (step 4)
    waits on the compute gap reaching 0 — its remaining drivers are the

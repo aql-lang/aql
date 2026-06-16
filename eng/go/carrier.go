@@ -313,6 +313,16 @@ func isLiteralWord(v Value) bool {
 // args that would be passed to the runtime handler). pos carries the
 // word's source location so diagnostics can point at it.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
+	// `args` inside a compiled fn body projects the frame's params (pushed by
+	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
+	// then folds to param N — a frame local — via tryFoldStaticIndex; bare
+	// `args` has no foldable consumer and refuses at its use site. At top level
+	// r.Args is empty so `args` falls through to RecordCall's refusal.
+	if word == "args" {
+		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
+			return []Value{top}
+		}
+	}
 	narrowDynamicUses(r, sig, args)
 	// Per-alternative dispatch for strict disjunct inputs
 	// (design/checker-accuracy-review.0.md A1). matchSignature tested
@@ -409,12 +419,48 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	if !tryRecordClosure(r, word, sig, args, out, pos) &&
+	if !tryFoldStaticIndex(r, word, args, out) &&
+		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))
 	}
 	return out
+}
+
+// tryFoldStaticIndex folds a `get` / `getr` over a CONCRETE list with a STATIC,
+// in-range, non-negative integer index to the element's existing operand —
+// emitting nothing, since the result already has a compiled home. Its purpose is
+// `args.N` (= `get N args`): the args projection is the list of param carriers,
+// whose IDs are the frame locals, so `args.0` folds to PUSH_LOCAL 0. The fold is
+// general but self-gating: it only fires when the element resolves to an operand
+// (a local or interned const), so a literal-list element that was never interned
+// declines and the normal poly/get path stands. outs[0] is rewritten to the
+// element carrier so the value flowing on has the element's identity.
+func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
+	es := r.Check.Emit
+	if !es.active() || (word != "get" && word != "getr") || len(args) != 2 || len(outs) != 1 {
+		return false
+	}
+	key, recv := args[0], args[1]
+	if !recv.Parent.ConformsTo(TList) || !IsConcrete(recv) ||
+		!key.Parent.ConformsTo(TInteger) || !IsConcrete(key) {
+		return false
+	}
+	n, err := AsInteger(key)
+	if err != nil || n < 0 {
+		return false
+	}
+	lst, lerr := AsList(recv)
+	if lerr != nil || lst.IsNil() || int(n) >= lst.Len() {
+		return false
+	}
+	elem := lst.Get(int(n))
+	if _, ok := es.resolveOperand(elem); !ok {
+		return false // element has no compiled home (e.g. an un-interned literal) — decline
+	}
+	outs[0] = elem
+	return true
 }
 
 // dynOutNativeOK reports whether a dispatch with a DYNAMIC output but CONCRETE
@@ -1952,6 +1998,15 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		snapshot := r.Defs.Snapshot()
 		r.PushFnBaseline(snapshot)
 		defer r.PopFnBaseline()
+
+		// Expose the params as the per-call args list so a body that reads
+		// `args` / `args.N` resolves them in check mode. The params ARE the
+		// frame's leading locals (0..n-1), so `args.N` folds to that local — at
+		// lowering it becomes PUSH_LOCAL N, no runtime args stack needed
+		// (carrierResults' `args` projection + tryFoldStaticIndex). Pushed
+		// alongside the FnBaseline; popped together.
+		_ = r.Args.Push(NewList(append([]Value(nil), args...)))
+		defer func() { _, _ = r.Args.Pop() }()
 
 		// Install lexical captures first so params (installed below)
 		// shadow same-named captures — innermost binding wins,

@@ -22,9 +22,11 @@
 //     rows. Ratcheted by computeRefusalCeiling.
 //
 // (An earlier version of this file called tier 2 "irreducible meta." That was
-// wrong — it laundered unfinished compiler work as impossibility. `with-decimal`
-// proved the point by moving from "refusing code-body word" to a clean native
-// compile; the tier-2 words are the same kind of move, just deeper.)
+// wrong — it laundered unfinished compiler work as impossibility. `args.N`
+// proved it concretely: once called "context-dependent, needs an args stack the
+// VM frame doesn't keep," it now compiles to a plain PUSH_LOCAL N — the params
+// ARE the frame locals. `with-decimal` was the same move. The remaining tier-2
+// words are more of the same, just deeper.)
 //
 // When BOTH ratchets reach 0, only tier 1 falls back, and the unbounded
 // whole-program fallback in RunCompiled can be narrowed to the tier-1 island
@@ -77,8 +79,10 @@ var reducibleWords = []allowEntry{
 		"REDUCIBLE: reference-semantics container; needs reference cells in the VM value model (currently by-value)"},
 	{"canon", regexp.MustCompile(`\bcanon\b`),
 		"REDUCIBLE: canonicalisation is a pure function; just unimplemented in the VM"},
-	{"args", regexp.MustCompile(`\bargs\.`),
-		"REDUCIBLE: args.N is a frame-local read (params ARE locals 0..n-1); needs the emitter to fold get-N-of-args to PUSH_LOCAL N"},
+	// `args.N` was here ("REDUCIBLE: a frame-local read"); it is now COMPILED —
+	// AnalyseFnBody exposes the params as the args projection and
+	// tryFoldStaticIndex folds `get N args` to PUSH_LOCAL N (carrier.go). It is
+	// the concrete proof that the tier-2 words are reducible, not irreducible.
 	{"Test/Assert", regexp.MustCompile(`\b(Test|Assert)\.`),
 		"REDUCIBLE: the test/property harness; the candidate bodies compile, the harness accumulates — only random input generation is runtime"},
 }
@@ -116,8 +120,8 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
-	reducibleCeiling       = 129 // usurp 43, word 30, Test/Assert 28, quote 14, flex 7, minilang 5, args 2 — each a named, reducible compiler/VM TODO
-	computeRefusalCeiling  = 260 // operand-provenance cascades (140), code-body DSL words (47), Stage-1 lowering residuals (~24), dynamic in/out (~24), 9 islands, user-fn dispatch (5)
+	reducibleCeiling       = 127 // usurp 43, word 30, Test/Assert 28, quote 14, flex 7, minilang 5 — each a named, reducible compiler/VM TODO (args.N moved out: now compiled)
+	computeRefusalCeiling  = 258 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 9 islands, user-fn dispatch
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

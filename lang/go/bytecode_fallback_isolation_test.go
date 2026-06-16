@@ -196,12 +196,16 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 // spec row currently triggers (a future change that let `args` compile
 // would silently break it).
 func TestCompiledArgsWordFallsBack(t *testing.T) {
+	// Bare `args` (the WHOLE per-call list) still falls back: the args
+	// projection has no foldable consumer, so it refuses at its use site and
+	// the interpreter owns it. (Compiling it would need a build-list-from-locals
+	// lowering — a separate, reducible follow-on.) `args.N` is different — it
+	// folds to a frame local — and is covered by TestArgsAccessorCompilesNative.
 	for _, c := range []struct {
 		src  string
 		want any
 	}{
 		{`def g fn [[n:Integer] [List] [args]] g 7`, "[7]"},
-		{`def f fn [[n:Integer] [Integer] [args.0]] f 3`, int64(3)},
 	} {
 		ac, err := New()
 		if err != nil {
@@ -212,10 +216,23 @@ func TestCompiledArgsWordFallsBack(t *testing.T) {
 			t.Fatalf("%q: %v", c.src, err)
 		}
 		if compiled {
-			t.Errorf("%q took the compiled path; a fn reading `args` must fall back", c.src)
+			t.Errorf("%q took the compiled path; a fn reading bare `args` must fall back", c.src)
 		}
 		if len(out) != 1 || out[0] != c.want {
 			t.Fatalf("%q = %v, want %v", c.src, out, c.want)
 		}
+	}
+
+	// args.N, by contrast, now compiles to a frame-local read.
+	ac, _ := New()
+	out, compiled, err := ac.RunCompiled(`def f fn [[n:Integer] [Integer] [args.0]] f 3`)
+	if err != nil {
+		t.Fatalf("args.0: %v", err)
+	}
+	if !compiled {
+		t.Errorf("args.0 should compile natively (folds to PUSH_LOCAL 0)")
+	}
+	if len(out) != 1 || out[0] != int64(3) {
+		t.Fatalf("args.0 = %v, want 3", out)
 	}
 }
