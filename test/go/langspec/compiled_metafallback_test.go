@@ -66,7 +66,7 @@ var interpreterOnlyWords = []allowEntry{
 // (reducibleCeiling); none is a permanent exclusion.
 var reducibleWords = []allowEntry{
 	{"usurp", regexp.MustCompile(`\busurp\b|/u[rs]?(\b|$)`),
-		"REDUCIBLE: re-steps tape-coupled values; needs the VM to model the usurp-modified dispatch instead of the interpreter tape (incl. /u /ur /us synthetics)"},
+		"REDUCIBLE (mostly COMPILED): usurp is a static arg permutation; its wrapper re-dispatch runs in check mode so the carrier compiler compiles the reversed original call (core_ref.go). Residual: usurp combined with quote/codequote or a non-fn target"},
 	{"quote", regexp.MustCompile(`\b(code)?quote\b`),
 		"REDUCIBLE: code-as-data; needs the compiler to bake the quoted form as a constant token-list value"},
 	{"word", regexp.MustCompile(`\bword\b`),
@@ -120,8 +120,8 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code
-	reducibleCeiling       = 95  // usurp 43, Test/Assert 28, quote 10, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N + word mostly + macroexpand static cases moved out: now compiled)
-	computeRefusalCeiling  = 249 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 9 islands, user-fn dispatch
+	reducibleCeiling       = 61  // Test/Assert 28, quote 10, usurp 9, flex 6, minilang 5, word 3 — each a named, reducible compiler/VM TODO (args.N + word mostly + macroexpand static cases moved out: now compiled)
+	computeRefusalCeiling  = 246 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 9 islands, user-fn dispatch
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

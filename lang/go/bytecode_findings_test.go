@@ -585,6 +585,40 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 	}
 }
 
+// usurp (and the /u suffix) — a static arg permutation: `usurp f` wraps f so a
+// call reverses the arg order (`usurped a b c` ≡ `f c b a`). The wrapper's
+// re-dispatch handler now runs in check mode, so the carrier compiler steps the
+// re-dispatch and compiles the reversed ORIGINAL call directly — there was never
+// any "tape coupling" to model, just an opaque wrapper the compiler stepped past.
+func TestUsurpCompilesNative(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp (ref sub2) 10 3`, "[-7]"},
+		{`def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  sub2/u 10 3`, "[-7]"},
+		{`def inc fn [[n:Integer][Integer][n add 1]]  inc/u 5`, "[6]"}, // 1-arg usurp is a no-op on order
+		{`def cat3 fn [[a:String b:String c:String][String][a add b add c]]  cat3/u 'x' 'y' 'z'`, "[zyx]"},
+	} {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected a native reversed-call lowering, got an island", c.src)
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, _ := b.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
+		}
+	}
+}
+
 // make computed container defaults — a class field default (or data-map value)
 // that is itself a COMPUTED paren-expr ((make Foo 1), (1 add 2)) used to refuse:
 // in check mode the inner computation recorded an event the container swallowed
