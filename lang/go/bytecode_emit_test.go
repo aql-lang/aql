@@ -591,6 +591,62 @@ func TestRunCompiledTailGuarantee(t *testing.T) {
 	}
 }
 
+// A tail call inside a STATICALLY-TAKEN (const-condition) branch keeps the
+// O(1)-frame guarantee. lowerBranch inlines only the taken arm, and
+// markTailCalls marks the call there as TAIL_CALL_USER just as it does on the
+// dynamic-condition path — otherwise the const-cond arm lowered the recursion
+// as a frame-growing CALL_USER, silently losing the guarantee the interpreter
+// (and the dynamic-cond compiled path) honour. The `[true]` list condition is
+// what LiteralCondValue folds to a constCond (a bare `true` word stays a
+// runtime branch).
+func TestRunCompiledConstCondTailGuarantee(t *testing.T) {
+	const src = `def g fn [[n:Integer] [Integer] [if (n lte 0) [0] [if [true] [g (n sub 1)] [0]]]] g 100000`
+
+	// The const-cond arm's self-call lowers as TAIL_CALL_USER. (Before the
+	// fix it was a plain CALL_USER and no TAIL_CALL_USER appeared at all.)
+	got, reason := compile(t, src)
+	if reason != "" {
+		t.Fatalf("const-cond tail recursion uncompilable: %s", reason)
+	}
+	if !strings.Contains(got, "TAIL_CALL_USER f0   ; g/1") {
+		t.Fatalf("const-cond arm tail call not lowered as TAIL_CALL_USER:\n%s", got)
+	}
+
+	// Runs in O(1) frames under a tight ceiling deep NON-tail recursion would
+	// exhaust, and agrees with the interpreter.
+	tight := Options{Tape: TapeOptions{InitialSize: 64, MaxGrows: 1, GrowthFactor: 2.7}}
+	a, err := New(tight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, compiled, err := a.RunCompiled(src)
+	if err != nil {
+		t.Fatalf("deep const-cond tail recursion: %v", err)
+	}
+	if !compiled {
+		t.Fatal("const-cond tail recursion fell back to the interpreter")
+	}
+	if len(out) != 1 || out[0] != int64(0) {
+		t.Fatalf("g 100000 = %v, want 0", out)
+	}
+
+	// Negative: a PENDING op below the same const-cond arm's self-call makes it
+	// non-tail; frames then grow and exhaust loudly under the tight ceiling —
+	// the const-cond branch must not spuriously elide a real frame.
+	const nonTail = `def h fn [[n:Integer] [Integer] [if (n lte 0) [0] [if [true] [1 add (h (n sub 1))] [0]]]] h 100000`
+	b, err := New(tight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, compiled2, err2 := b.RunCompiled(nonTail)
+	if !compiled2 {
+		t.Fatal("const-cond non-tail program fell back to the interpreter")
+	}
+	if err2 == nil || !strings.Contains(err2.Error(), "tape_exhausted") {
+		t.Fatalf("deep const-cond non-tail recursion = %v, want tape_exhausted", err2)
+	}
+}
+
 // Stage 3 completion: mutual tail recursion. The forward-reference
 // rescue clears the checker FP, both bodies compile as units at the
 // top-level call site (each is fully defined by then), and the arm

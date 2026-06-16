@@ -90,6 +90,10 @@ vuln:
 #      per-dispatch or island-reuse allocation regression).
 #   6. The -race concurrency gates (shared immutable Program across forks;
 #      island sub-engine reuse with no state leak; concurrent spec rows).
+#   7. The same parity gates under -tags aqldebug (a fresh args slice per
+#      CALL_NATIVE), so a compiled-reachable native that retains its args
+#      slice — silently corrupting a later dispatch under the release build's
+#      buffer reuse — instead diverges cleanly here. Mirrors the CI lane.
 #
 # Any divergence, race, or allocation regression fails the gate.
 verify-bytecode: fmt vet lint
@@ -101,6 +105,9 @@ verify-bytecode: fmt vet lint
 	@echo "==> bytecode: -race concurrency gates"
 	cd lang/go && go test . -run 'TestCompiledConcurrencyRaceFree|TestCompiledIslandReuseNoStateLeak' -race
 	cd test/go && go test ./langspec/ -run 'TestSpecCompiledConcurrentRowsRaceFree' -race
+	@echo "==> bytecode: args-aliasing gate (-tags aqldebug, fresh args slice per CALL_NATIVE)"
+	cd lang/go && go test -tags aqldebug . -run 'TestEmit|TestRunCompiled|TestCompiled'
+	cd test/go && go test -tags aqldebug ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombinationParity'
 	@echo "==> bytecode: VERIFY PASSED"
 
 clean:

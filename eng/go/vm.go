@@ -30,12 +30,17 @@ import (
 // ceiling trips) fails with the same evaluation_limit taxonomy the
 // interpreter raises, instead of hanging.
 //
-// Concurrency: NOT safe to call twice on the SAME *Registry concurrently.
-// The run installs and restores r.Invoker (the body-closure seam) on the
-// shared registry for its duration, so two simultaneous runs on one registry
-// would race on that field. AQL's concurrent words sidestep this by forking
-// an isolated registry per branch (ForkConcurrent), and host callers run each
-// instance on its own registry — give each goroutine its own *Registry.
+// Concurrency: a *Registry must not be driven by two executions at once —
+// and that means ANY pairing, not just two compiled runs. For its duration
+// this run installs/restores r.Invoker (the body-closure seam) and mutates the
+// registry's scopes, so a concurrent RunProgram OR a concurrent interpreter
+// Run on the same registry would race on r.Invoker and the shared defs/types.
+// The vmRunning CAS below rejects an overlapping compiled run with a clear
+// error, but it cannot see an interpreter Run on another goroutine — so the
+// rule is the same one the interpreter already follows: give each goroutine
+// its own *Registry. AQL's concurrent words honour this by forking an isolated
+// registry per branch (ForkConcurrent); host callers run each instance on its
+// own registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	return runProgram(p, r, DefaultStepLimit)
 }
@@ -67,6 +72,17 @@ type vmContext struct {
 	ceiling   int
 	stepLimit int
 	steps     int
+	// frameDepth counts live VM activations — user-call frames AND re-entrant
+	// run() invocations (a closure invoked from a native handler via
+	// invokeClosure starts a FRESH run with its own frames slice). The per-run
+	// frames slice alone does NOT bound depth that flows through such
+	// re-entrant invocations, so the count lives here, shared across them, and
+	// the per-instruction guard checks it against the same ceiling the operand
+	// stack uses. This keeps deep higher-order recursion failing with the
+	// tape_exhausted memory taxonomy (as the interpreter does) instead of
+	// growing the Go stack until it overflows — a panic the top-level recover
+	// would otherwise mask as internal_error.
+	frameDepth int
 	// islandEng is a single sub-engine reused across every OpFallback /
 	// CALL_DYNAMIC island in this run, with reuseTape set so a hot island in
 	// a loop does not allocate a fresh engine+tape per iteration. Reuse is
@@ -369,6 +385,13 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value, error) {
 	p, r := vc.p, vc.r
 	ceiling := vc.ceiling
+	// This activation counts against the shared frame ceiling; restore the
+	// entry baseline on exit so sequential runs and error unwinds never leak
+	// (the per-CALL_USER increments below are balanced by their RETs, and the
+	// reset catches any frames still open on an early error return).
+	entryFrameDepth := vc.frameDepth
+	vc.frameDepth++
+	defer func() { vc.frameDepth = entryFrameDepth }()
 	var loops []vmLoop
 	var frames []vmFrame
 	// argScratch is per-run (NOT shared on vc): a re-entrant closure run's
@@ -390,7 +413,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 	}
 	enterUnit(startUnit)
 	for pc := 0; pc < len(curCode); pc++ {
-		if len(stack) > ceiling || len(frames) > ceiling {
+		if len(stack) > ceiling || vc.frameDepth > ceiling {
 			return nil, vmExhaustedAt(curDebug, pc, r, ceiling)
 		}
 		vc.steps++
@@ -579,6 +602,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = stack[:len(stack)-fn.NParams]
 			if in.Op == OpCallUser {
 				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops)})
+				vc.frameDepth++ // balanced by the matching RET below
 			} else {
 				// Tail call: REPLACE the frame — the language's
 				// tail-call guarantee in compiled form. The caller's
@@ -631,6 +655,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			f := frames[len(frames)-1]
 			frames = frames[:len(frames)-1]
+			vc.frameDepth-- // matches the OpCallUser increment
 			loops = loops[:f.loopBase]
 			locals = f.locals
 			enterUnit(f.retUnit)

@@ -572,6 +572,43 @@ func fragDiverges(frag *EmitFragment) bool {
 	return last.kind == evBreak || last.kind == evContinue
 }
 
+// fragDivergesDeep reports whether a LOWERED fragment definitely leaves the
+// enclosing construct on every reachable path: break, continue, a tail call,
+// or a branch all of whose reachable arms do. Unlike fragDiverges (a shallow
+// last-event check), it recurses through branch arms, so a fully-diverging
+// NESTED branch — e.g. a const-condition branch whose taken arm tail-calls —
+// is seen as divergent by the variadic-merge accounting. Sound only AFTER
+// markTailCalls has run (it reads the tail flags set there); the only caller
+// is lowerArms, in Finalize's lowering pass.
+func fragDivergesDeep(frag *EmitFragment) bool {
+	if frag == nil || len(frag.events) == 0 {
+		return false
+	}
+	return eventDivergesDeep(&frag.events[len(frag.events)-1])
+}
+
+func eventDivergesDeep(ev *emitEvent) bool {
+	switch ev.kind {
+	case evBreak, evContinue:
+		return true
+	case evCallUser:
+		return ev.uc.tail
+	case evBranch:
+		if ev.br.constCond != nil {
+			// Only the taken (then) arm is reachable.
+			return fragDivergesDeep(ev.br.then)
+		}
+		if !ev.br.hasElse {
+			return false // the implicit false path falls through to the merge
+		}
+		if ev.br.elsIsVal {
+			return false // a value / computed else arm never diverges
+		}
+		return fragDivergesDeep(ev.br.then) && fragDivergesDeep(ev.br.els)
+	}
+	return false
+}
+
 // BranchRecord carries one `if` dispatch into RecordBranch.
 type BranchRecord struct {
 	Cond            Value         // pre-evaluated condition (paren/value form)
