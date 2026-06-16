@@ -52,6 +52,8 @@ var metaFallbackWords = []struct {
 		"re-steps tape-coupled values on the interpreter tape; the VM cannot push them (incl. the /u /ur /us ref synthetics)"},
 	{"quote", regexp.MustCompile(`\b(code)?quote\b`),
 		"code-as-data: yields its operand's unevaluated form, which has no runtime value to bake"},
+	{"word", regexp.MustCompile(`\bword\b`),
+		"Forth-style macro splice: wraps a body in an __SP marker re-stepped LATE-BOUND against the live stack at each use site (code-as-data)"},
 	{"macroexpand", regexp.MustCompile(`\bmacroexpand\b`),
 		"rewrites code at run time (macro expansion); the program is not known until then"},
 	{"minilang", regexp.MustCompile(`\bminilang`),
@@ -95,7 +97,7 @@ func errorRowReason(reason string) bool {
 // be GENUINE COMPUTE gaps (neither meta-attributable nor an error-row). It must
 // reach 0 before the unbounded whole-program fallback can be narrowed. Lower it
 // monotonically as compute clusters compile natively; never raise it.
-const computeRefusalCeiling = 295 // lambda higher-order args landed; remaining: operand-provenance cascades (get/is/typeof/make over unmaterialisable producers, 140), code-body DSL words (select/case/reach/with-decimal/..., 82), Stage-1 lowering residuals (~24), dynamic in/out (~24), 9 islands, user-fn dispatch (5)
+const computeRefusalCeiling = 265 // 295 then `word` (the Forth-style macro splice) correctly reclassified to meta (-30); remaining: operand-provenance cascades (get/is/typeof/make over unmaterialisable producers, 140), code-body DSL words (select/case/reach/with-decimal/..., 52), Stage-1 lowering residuals (~24), dynamic in/out (~24), 9 islands, user-fn dispatch (5)
 
 func TestOnlyMetaFallsBack(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
