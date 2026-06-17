@@ -52,8 +52,9 @@ are plain and already meaningful (`aql serve`). Erlang's `cast`/`handle`/
 ## Context
 
 The end goal is efficient, safe network servers/clients. `PROCESSES.0.md`
-specifies the low-level **actor substrate** (processes, mailboxes, `send`/
-`receive`, selective receive via patrun). This document specifies the layer most
+specifies the low-level **actor substrate** (processes, bounded mailboxes, `send`/
+`receive` with pattern-matched dispatch via patrun). This document specifies the
+layer most
 code is actually written against — services and servers — and, crucially, shows
 how the CLI's **existing** servers fold into the same model (§5).
 
@@ -294,11 +295,13 @@ proxying across them (§6).
 - **In-process** (default): `call`/`send` dispatch directly; zero process
   machinery. Good for libraries and tests. Honours the uniform failure contract
   (§8), but the failure modes are rare and the deadline is advisory (§8.2).
-- **Served**: inside a `server`, a service runs as a supervised process; `call`
-  becomes `send {call:req, @from:self}` + await reply; `send` is true async; the
-  deadline, mailbox bound, and `down` detection are now *enforced*. Same surface
-  and same contract, different locus — the actor `receive` loop and the service's
-  handler patrun are the *same* matcher.
+- **Served**: inside a `server`, a service runs as a supervised process; its loop
+  **consumes the front mailbox message and dispatches by patrun** (not selective
+  receive — `PROCESSES.0.md` §1); `call` becomes `send {call:req, @from:self}` +
+  await the reply **on a dedicated per-call channel** (never a mailbox scan);
+  `send` is true async; the deadline, mailbox bound, and `down` detection are now
+  *enforced*. Same surface and same contract, different locus — the actor
+  `receive` loop and the service's handler patrun are the *same* matcher.
 - **Transport** (`aql:net`): **`listen {transport} <service>`** exposes a served
   service over a wire protocol; **`connect {transport} -> Service`** returns a
   local proxy whose `call`/`send` forward to a remote service. A transport is an

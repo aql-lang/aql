@@ -10,8 +10,10 @@ protocols. The most battle-tested architecture for that problem is the Erlang
 **BEAM**: huge numbers of cheap, isolated processes that communicate only by
 asynchronous message passing, with selective receive and supervision on top. The
 canonical server shape — **one lightweight process per connection**, each
-blocking on a mailbox and selectively receiving the messages it cares about — is
+blocking on a mailbox and pattern-matching the messages it cares about — is
 what makes high-concurrency network code both efficient and easy to reason about.
+(We adopt this shape but, unlike BEAM, with **bounded** mailboxes and
+**pattern-matched dispatch** rather than skip-and-save selective receive — see §1.)
 
 AQL today is a concatenative data/query language with only **fork-join**
 concurrency (`await`, `timeout`, `interval` in
@@ -26,7 +28,7 @@ BEAM-like runtime:
   direct analog of a BEAM **per-process heap**.
 - **patrun** (`lang/go/native/internal/patrun/`, wired up in
   `lang/go/native/native_patrun.go`) is a trie pattern matcher that is a natural
-  engine for **selective receive**.
+  engine for **pattern-matched message dispatch** (and, opt-in, selective receive).
 - AQL values are **immutability-first** (`eng/go/clone.go`): scalars, plain
   `List`, plain `Map`, and type/function values are never mutated in place. Only
   `Object`, `Array`, and `Store` are mutable. Immutable values can therefore be
@@ -55,16 +57,18 @@ streams move bytes.
 `call`/`send` requests; a server is a supervised collection of services) — *on
 top of* this substrate, and folds the CLI's existing servers (`registry`/`lsp`/
 `exec`/`api`/`tui`/`vault-proxy`) into it. The mapping is direct: a served
-**service** is an actor whose selective `receive` *is* its handler patrun, and
-`call` is `send` + await-reply. This document is the low-level layer (raw
+**service** is an actor whose `receive` loop *is* its handler patrun (consume +
+dispatch), and `call` is `send` + await-reply on a dedicated channel. This
+document is the low-level layer (raw
 processes/mailboxes, like Erlang processes); `SERVICES.0.md` is the high-level
 layer most code is written against. The two are designed together.
 
 ### Scope decisions (agreed)
 
 1. **Phase 1 = core actors only.** Lightweight processes, PIDs, a named process
-   registry, asynchronous `send`, and a mailbox with **selective receive via
-   patrun**. Explicitly **out of scope** for phase 1: links/monitors,
+   registry, asynchronous `send`, and a **bounded** mailbox with **pattern-matched
+   dispatch via patrun** (selective receive demoted to a bounded opt-in, §3).
+   Explicitly **out of scope** for phase 1: links/monitors,
    supervisors and restart strategies, `gen_server`-style behaviours, TCP/HTTP
    *servers*, and binary wire-protocol support. These are later phases
    (see [Roadmap](#9-phased-roadmap)).
@@ -81,15 +85,26 @@ layer most code is written against. The two are designed together.
 
 ## 1. Motivation & end-goal
 
-The target programming model is **actor-per-connection + selective receive**:
+The target programming model is **actor-per-connection + pattern-matched
+dispatch**:
 
 - A listener process accepts connections and `spawn`s a handler process per
   connection.
-- Each handler is a loop that `receive`s — selectively matching protocol
-  messages (a parsed JSON request, a timer tick, a shutdown signal) regardless
-  of arrival order.
+- Each handler is a loop that `receive`s — matching each incoming message (a
+  parsed JSON request, a timer tick, a shutdown signal) against patrun clauses
+  and running the matched body.
 - State lives *inside* the process (as ordinary AQL bindings in its forked
   registry), never shared, so there are no locks in user code.
+
+> **Dispatch, not selective receive (decided).** The primary `receive` consumes
+> the **front** message and dispatches it by patrun clause — it does *not* scan
+> past and save non-matching messages. True Erlang **selective receive** (skip +
+> save) is demoted to a bounded, opt-in escape hatch (§3), because (a) an
+> unbounded save-set defeats the bounded-mailbox backpressure that `SERVICES.0.md`
+> §8.1 relies on, (b) it is the source of the O(n²) mailbox-scan footgun, and
+> (c) its canonical use — synchronous call/reply — is handled structurally by a
+> dedicated per-call reply channel, not a mailbox scan. The pattern-matching
+> *receiver* idea is fully retained; only the skip-and-save part is opt-in.
 
 This RFC delivers the concurrency substrate for that model. The networking and
 binary-codec layers that complete the end-goal are scoped as later phases and
@@ -110,9 +125,9 @@ model.
 | Lightweight process | a goroutine running an AQL body on its own `ForkConcurrent()` registry |
 | Per-process heap isolation | forked registry + **immutable-only messages** (no shared mutable state crosses a `send`) |
 | PID | a new opaque **`Pid`** Ideal value (precedent: `Timeout`/`Interval` Ideals) wrapping a `*process` handle |
-| Mailbox | per-process goroutine-safe queue: a growable slice guarded by a mutex/`sync.Cond` (BEAM mailboxes are unbounded) |
-| Async send (`!`) | the `send` word — non-blocking enqueue into the target's mailbox |
-| Selective receive | the `receive` word, scanning the mailbox with **patrun** clause matching, leaving non-matching messages in place |
+| Mailbox | per-process goroutine-safe queue: a slice guarded by a mutex/`sync.Cond`, **bounded** with a configurable overflow policy (`SERVICES.0.md` §8.1; BEAM's are unbounded — we deliberately diverge) |
+| Async send (`!`) | the `send` word — enqueue into the target's mailbox; blocks / fails / drops on a full mailbox per the overflow policy |
+| Pattern-matched receive | the `receive` word — consume the front message and dispatch it by **patrun** clause; selective (skip + save) receive is a bounded opt-in (§3) |
 | Process registry (named procs) | a shared `*ProcessRuntime` pointer on `Registry` (auto-shared by `ForkConcurrent`'s shallow copy) holding a mutex-guarded `name→*process` map and a `pid→*process` table |
 | Preemptive scheduling | the Go runtime scheduler (note: no per-process *fairness* guarantees — acceptable for phase 1) |
 | "Let it crash" | phase 1 has no supervision, but every process goroutine **must `recover()`** so a crash terminates only that process (logged), never the host |
@@ -151,7 +166,8 @@ copies, child forks share the same `*ProcessRuntime` with no change to
 ```
 type process struct {
     id      string            // "P_…"
-    mailbox []Value           // unbounded FIFO, oldest first
+    mailbox []Value           // bounded FIFO, oldest first (cap = bound)
+    bound   int               // mailbox capacity; overflow policy on the process
     mu      sync.Mutex
     cond    *sync.Cond        // signals new arrivals to a blocked receive
     reg     *Registry         // the forked registry this process runs on
@@ -161,10 +177,14 @@ type process struct {
 }
 ```
 
-The mailbox is a slice + `sync.Cond` rather than a Go channel because **selective
-receive must inspect and skip messages without consuming them** — a plain
-channel cannot peek-and-leave. `send` locks, appends, and `cond.Signal()`s;
-`receive` locks, scans, and `cond.Wait()`s when no message matches.
+The mailbox is a slice + `sync.Cond` rather than a Go channel for two reasons:
+the **configurable overflow policy** (`'block`/`'fail`/`'drop`, `SERVICES.0.md`
+§8.1) needs more than a buffered channel's block-only behaviour, and the **opt-in
+selective receive** (§3) needs to inspect-and-leave, which a channel cannot do.
+The common path is cheap: `send` locks, enforces the bound, appends, and
+`cond.Signal()`s; `receive` locks, takes the head, and `cond.Wait()`s when empty.
+Synchronous call/reply does **not** go through the mailbox — the reply travels on
+a dedicated per-call channel (so a caller never scans its own mailbox for a reply).
 
 ### spawn flow
 
@@ -183,29 +203,41 @@ This deliberately mirrors the existing goroutine/fork patterns in
 `runParallelBranch`) and the timer-fork pattern in `native_misc.go`
 (`doTimeout` forks on the dispatcher goroutine before scheduling).
 
-### mailbox + selective receive (the core algorithm)
+### mailbox + dispatch (the core algorithm)
 
 `receive` is given an ordered set of clauses, each a `{pattern}` + a body, plus
-an optional `after <ms>` body. BEAM-faithful semantics:
+an optional `after <ms>` body. The primary semantics are **consume-front +
+dispatch** (not selective):
 
 1. Build a patrun matcher from the clause patterns (reusing
    `native_patrun.go`'s `coercePattern` and the `internal/patrun` trie). The
    matcher maps a message's scalar fields to the most-specific clause.
-2. Lock the mailbox. Scan buffered messages **oldest-first**; take the **first**
-   message that matches **any** clause. Remove just that message (messages ahead
-   of it that did not match stay queued — true selective receive).
-3. Run the matched clause body with the message bound, on the process's own
-   registry. Return its result.
-4. If no buffered message matches: if an `after` clause is present and its
-   deadline has passed, run it; otherwise `cond.Wait()` for a new arrival (or
-   `ctx.Done()` for shutdown) and rescan. An `after 0` clause makes `receive`
-   non-blocking (poll once, else fire `after`).
+2. Lock the mailbox. Take the **front** (oldest) message and match it. If it
+   matches a clause, remove it and run that clause body (on the process's own
+   registry) and return its result. If it matches **no** clause, run the
+   catch-all `{}` clause if present, else raise `no_match` — an unmatched message
+   is *not* silently saved (that is what kept BEAM mailboxes growing).
+3. If the mailbox is empty: if an `after` clause's deadline has passed, run it;
+   otherwise `cond.Wait()` for a new arrival (or `ctx.Done()` for shutdown). An
+   `after 0` clause makes `receive` non-blocking (poll once, else fire `after`).
 
 Because patrun keys on `map[string]string`, the **message convention is the
 tagged map**: messages are maps whose discriminating fields (e.g. `cmd`) drive
-the match, just as Erlang uses tagged tuples. Non-map messages can still be sent
-and received via a catch-all clause (an empty pattern `{}` matches anything in
-patrun).
+the match, just as Erlang uses tagged tuples. Non-map messages are handled via a
+catch-all clause (`{}` matches anything in patrun).
+
+### selective receive (opt-in, bounded)
+
+For raw protocol code that genuinely must take a message **out of order** (defer
+non-matching messages until a later phase), `receive` accepts an explicit
+`{select: true}` option that restores Erlang semantics: scan oldest-first, take
+the first match, and **save** the skipped messages in a bounded save-set. The
+save-set has a cap; on overflow the process raises (it is misusing the feature),
+so selective receive can never silently grow memory. This is documented as an
+advanced escape hatch — the idiomatic alternative is **explicit state-based
+deferral** (`gen_statem`-style: stash the deferred message in process state and
+handle it after the state transition), which makes the buffering visible and
+bounded by construction. Most code never needs `{select: true}`.
 
 ### Lifecycle & edge cases
 
@@ -218,10 +250,12 @@ patrun).
   actors, same as BEAM). It is unblocked by an arriving message, by an `after`
   clause, or by `ProcessRuntime` cancellation on host shutdown. Document this so
   authors add `after` where they need a timeout.
-- **Unbounded mailbox:** like BEAM, mailboxes are conceptually unbounded; a slow
-  consumer can grow memory. Backpressure/bounded mailboxes are a deliberate
-  non-goal for phase 1 and noted as future work (they pair naturally with
-  links/monitors and `aql:stream`).
+- **Bounded mailbox (diverges from BEAM):** mailboxes are bounded with a
+  configurable overflow policy — `'block` (backpressure, default), `'fail`
+  (raise `overload`), or `'drop` — per `SERVICES.0.md` §8.1. This is a deliberate
+  divergence from BEAM's unbounded mailbox, whose unbounded growth is its classic
+  overload/OOM failure mode. The bound is what makes the demotion of selective
+  receive coherent: with a bounded mailbox there is no unbounded save-set.
 
 ## 4. Language surface (new core words)
 
@@ -238,9 +272,10 @@ summaries and examples.
   mailbox of `<pid>`. Non-blocking. Returns `<msg>` for chaining. **Validates
   that `<msg>` is immutable** (§6) and raises otherwise. `<pid>` may be a `Pid`
   *or* a registered name (atom/string).
-- **`receive [ {pat} [body] … (after <ms> [body]) ] -> result`** — block the
-  current process and selectively match the mailbox (§3). Returns the chosen
-  clause's result.
+- **`receive [ {pat} [body] … (after <ms> [body]) ] -> result`** — take the front
+  mailbox message and dispatch it by patrun clause (§3); block when the mailbox is
+  empty. Returns the chosen clause's result. An optional `{select: true}` restores
+  bounded selective receive (§3) for the rare out-of-order case.
 - **`register <name> <pid>`** — bind a name to a pid in the shared registry.
 - **`whereis <name> -> Pid`** — look up a registered name; `None` if absent.
 - **`unregister <name>`** — remove a name binding.
@@ -301,9 +336,10 @@ policy can attenuate away the process capability entirely.
 
 What this RFC adds, and what still blocks the network-server end-goal:
 
-- **Added here:** long-lived process primitive; `Pid` type; mailbox; `send` /
-  `receive` / selective receive; named process registry; the first use of
-  `context.Context` in the engine (for shutdown/cancellation).
+- **Added here:** long-lived process primitive; `Pid` type; bounded mailbox;
+  `send` / `receive` (pattern-matched dispatch; bounded opt-in selective receive);
+  named process registry; the first use of `context.Context` in the engine (for
+  shutdown/cancellation).
 - **Still missing — networking (phase 3):** AQL has **no TCP/socket server** —
   only the HTTP *client* `fetch` (`lang/go/native/fetch.go`,
   `aql:net`). A listener/acceptor primitive (Go `net`/`net/http`) is required
@@ -319,7 +355,8 @@ What this RFC adds, and what still blocks the network-server end-goal:
 ## 9. Phased roadmap
 
 - **Phase 1 (this RFC): core actors.** `spawn`/`self`/`send`/`receive`/registry,
-  `Pid` type, selective receive via patrun, immutable-only messages, capability
+  `Pid` type, pattern-matched dispatch via patrun (bounded mailbox; selective
+  receive a bounded opt-in), immutable-only messages, capability
   gating, context-based shutdown.
 - **Phase 2: OTP fundamentals.** Links & monitors; supervisors with restart
   strategies (one-for-one, one-for-all, rest-for-one); a `gen_server`-style
@@ -337,12 +374,12 @@ build on phases 1–3 here).
 ## 10. Worked example
 
 A counter actor demonstrating spawn → register → tagged-map messages →
-selective receive. (Illustrative surface; exact syntax settles during
+pattern-matched dispatch. (Illustrative surface; exact syntax settles during
 implementation.)
 
 ```aql
 # The actor body: a loop that holds its count as a binding and
-# selectively handles two message shapes.
+# dispatches three message shapes (front message matched against the clauses).
 def counter-loop fn [[n:Integer] [Never] [
   receive [
     {cmd: 'inc}            [ inc n counter-loop ]          # tail-recurse with n+1
@@ -379,5 +416,10 @@ and the loop carries state purely as a binding (`n`), never shared.
 4. **Non-map messages** — rely on the empty-pattern catch-all, or add an
    explicit value-equality clause form to `receive`? (Leaning: catch-all is
    enough for phase 1.)
-5. **Mailbox bound** — confirm unbounded for phase 1, with bounded/backpressure
-   deferred to phase 2 (where it pairs with monitors and `aql:stream`).
+5. **Mailbox bound** — *decided:* bounded with a `'block`/`'fail`/`'drop` overflow
+   policy from phase 1 (`SERVICES.0.md` §8.1), diverging from BEAM. Open sub-point:
+   the default capacity and whether it is per-permission-profile.
+6. **Selective receive** — *decided:* demoted to a bounded `{select: true}` opt-in;
+   the default `receive` is consume-front + dispatch. Open sub-point: do we ship
+   `{select: true}` in phase 1 at all, or defer it until a concrete protocol needs
+   it (leaning defer)?
