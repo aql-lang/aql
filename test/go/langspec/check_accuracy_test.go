@@ -162,7 +162,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 // wrong-TYPE checker bugs (A1, A4), which the value-pinning ratchet
 // cannot see. Violations are pinned and may only decrease.
 
-const pinnedTypeSoundnessViolations = 159 // June 2026 baseline — see TestCheckTypeSoundness
+const pinnedTypeSoundnessViolations = 22 // was 159 — typeCovered now applies the runtime `is Type` membership rule to type-as-value actuals (typeof / type-algebra / make-of-a-type / record shapes), which a raw actual.Parent.ConformsTo misjudged (a type literal's Parent is the DENOTED type's lattice parent), removing 127 spurious flags and exposing the genuine residue (wrong module-time Returns annotations, do/for/pop arity, dynamic method dispatch)
 
 func TestCheckTypeSoundness(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
@@ -336,7 +336,38 @@ func typeCovered(checked, actual eng.Value) bool {
 	if node == nil {
 		return false
 	}
+	// A type-as-value actual — the result of `typeof`, type algebra
+	// (`exclude`/`extract`/`tor`), `make`-of-a-type, a record shape left
+	// on the stack — is a VALUE THAT IS A TYPE. Its runtime membership is
+	// the `is Type` rule (native_type.go), NOT actual.Parent.ConformsTo:
+	// a type literal's Parent is the DENOTED type's lattice parent (the
+	// `Integer` literal has Parent == Number, the `Resource` literal has
+	// Parent == Object), so a raw Parent.ConformsTo misjudges every such
+	// value as not-a-Type. The checker correctly types these as the
+	// meta-type `Type`; cover them when the checked node admits `Type`
+	// (checked == Type/Any), or — when the checker was precise enough to
+	// produce a specific type literal — when the actual's denoted node
+	// conforms to it.
+	if actualIsTypeValue(actual) {
+		if eng.TType.ConformsTo(node) {
+			return true
+		}
+		if dn := eng.ValueType(actual); dn != nil && dn.ConformsTo(node) {
+			return true
+		}
+	}
 	return actual.Parent.ConformsTo(node)
+}
+
+// actualIsTypeValue mirrors the runtime `is Type` membership rule
+// (native_type.go isHandler): a value is itself a type when it is a
+// bare type node, a structural type body, an (explicit-map) record
+// shape, or a Type/-rooted value (Function / Disjunct / Enum). Used by
+// typeCovered so a `typeof`/type-algebra result is judged by its
+// type-membership, not by its denoted type's lattice parent.
+func actualIsTypeValue(v eng.Value) bool {
+	return eng.IsBareTypeNode(v) || eng.IsTypeBody(v) ||
+		eng.IsRecordShape(v) || v.Parent.ConformsTo(eng.TType)
 }
 
 func stackTypes(vs []eng.Value) string {
