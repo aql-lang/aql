@@ -48,6 +48,16 @@ words. Streams are about data flow; processes are about concurrent state and
 message protocols. A future network server uses both — actors own connections,
 streams move bytes.
 
+### Relationship to `SERVICES.0.md`
+
+`SERVICES.0.md` designs the **primary developer experience** — a Seneca-inspired
+`add`/`act` message model with plugins — *on top of* this substrate. The
+mapping is direct: a hosted **service** is an actor whose selective `receive`
+*is* a patrun dispatch table, and `act` is `send` + await-reply. This document
+is the low-level layer (raw processes/mailboxes, like Erlang processes);
+`SERVICES.0.md` is the high-level behaviour most code is written against (like
+OTP `gen_server` + a pattern router). The two are designed together.
+
 ### Scope decisions (agreed)
 
 1. **Phase 1 = core actors only.** Lightweight processes, PIDs, a named process
@@ -317,6 +327,10 @@ What this RFC adds, and what still blocks the network-server end-goal:
   stated efficient/safe JSON **and** binary network-server goal.
 - **Later (optional): distribution.** Location-transparent `send` across nodes,
   the BEAM feature that turns actors into a distributed system.
+
+The Seneca-style **service/plugin DX** that rides on these phases is specified
+separately in `SERVICES.0.md` (its `Mesh.host`/`listen`/`client` build on phases
+1–3 here).
 
 ## 10. Worked example
 
