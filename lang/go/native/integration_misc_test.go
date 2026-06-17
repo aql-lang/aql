@@ -202,13 +202,17 @@ func TestEngineInspectBuiltin(t *testing.T) {
 		t.Error("expected at least one signature for add")
 	}
 
-	// Check first signature has args.
+	// Check the first signature has args. `add` carries several overloads
+	// (the 2-arg arithmetic/scalar/temporal forms plus patrun's 3-arg
+	// [Map Any Patrun] rule form), and SortSignatures decides which lands
+	// first, so assert the count is in the valid range rather than pinning a
+	// single arity.
 	sig0, _ := AsMap(sigList[0])
 	args, _ := sig0.Get("args")
 	_lst2, _ := AsList(args)
 	argList := _lst2.Slice()
-	if len(argList) != 2 {
-		t.Errorf("expected 2 args for add, got %d", len(argList))
+	if len(argList) < 2 || len(argList) > 3 {
+		t.Errorf("expected 2 or 3 args for add's first signature, got %d", len(argList))
 	}
 }
 

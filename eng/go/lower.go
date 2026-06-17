@@ -201,7 +201,13 @@ func collectOperands(ev *emitEvent) []emitOperand {
 	case evFallback:
 		return ev.fb.ins
 	}
-	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut}
+	// elsVal is the value-else operand — meaningful only when elsIsVal, and
+	// an opEvent only for the computed-else shape (`if c [t] (expr)`); for any
+	// other branch it is the zero opNone, which both consumers (the scopeFloor
+	// enclosing-scope guard and the value-def ref count) skip. Including it
+	// keeps the operand set complete so the safety guard never misses a
+	// computed-else reference into an enclosing computation.
+	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut, ev.br.elsVal}
 }
 
 // promoteOperand rewrites one ENCLOSING-scope operand: a single-result
@@ -236,6 +242,11 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 		}
 	case evBranch:
 		promoteOperand(&ev.br.cond, promoted)
+		// A computed-else value (`if c [t] (expr)`) is an enclosing-scope
+		// reference too; rewrite it in lockstep with collectOperands counting
+		// it. (A promoted computed-else then refuses at lowerBranch's stack-
+		// layout check and falls back — sound, never a wrong result.)
+		promoteOperand(&ev.br.elsVal, promoted)
 	case evLoop:
 		promoteOperand(&ev.loop.end, promoted)
 	}
@@ -628,7 +639,11 @@ func (lw *lowerer) lowerFallback(ev *emitEvent) string {
 // recursively the final event of branch arms whose result is that
 // arm's own trailing call. Marked calls lower as TAIL_CALL_USER and
 // count as divergence (control leaves via the callee's eventual RET),
-// so the arm/body contributes no merge value.
+// so the arm/body contributes no merge value. A statically-taken
+// (const-condition) branch inlines only its taken arm, so a tail call
+// there is the body's tail call too and is marked through the same
+// recursion — otherwise the dynamic-condition path would honour the
+// O(1)-frame guarantee while the const-condition path silently lost it.
 func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasOut bool) {
 	if frag == nil || len(frag.events) == 0 || !hasOut || out.kind != opEvent {
 		return hasOut
@@ -641,7 +656,24 @@ func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasO
 			return false
 		}
 	case evBranch:
-		if last.seq == out.idx && last.br.constCond == nil && last.br.hasElse {
+		if last.seq != out.idx {
+			return hasOut
+		}
+		if last.br.constCond != nil {
+			// Statically-taken branch: lowerBranch inlines ONLY the taken
+			// (then) arm and its result IS the branch's result, so a tail
+			// call there is the body's tail call. Mark it; if the arm fully
+			// tail-diverges, the whole branch does (lowerBranch's const-cond
+			// path then emits no merge slot, matching hasThenOut=false).
+			if last.br.hasThenOut {
+				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
+				if !last.br.hasThenOut {
+					return false
+				}
+			}
+			return hasOut
+		}
+		if last.br.hasElse {
 			if last.br.hasThenOut {
 				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
 			}
@@ -790,8 +822,14 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		// never reaches the merge, so the surviving arm's value is
 		// unconditional — non-variadic, left as-is.
 		if br.hasThenOut != br.hasElsOut {
-			thenDiv := fragDiverges(br.then)
-			elsDiv := br.els != nil && fragDiverges(br.els)
+			// Use the DEEP divergence check: an arm whose result is a
+			// fully-diverging nested branch (a const-condition branch whose
+			// taken arm tail-calls) leaves via that callee's RET and never
+			// reaches the merge, so the surviving arm's value is unconditional
+			// — non-variadic. Shallow fragDiverges misses the nested-branch
+			// shape and would over-mark the merge variadic.
+			thenDiv := fragDivergesDeep(br.then)
+			elsDiv := br.els != nil && fragDivergesDeep(br.els)
 			if (!br.hasThenOut && !thenDiv) || (!br.hasElsOut && !elsDiv) {
 				lw.variadic[ev.seq] = true
 			}

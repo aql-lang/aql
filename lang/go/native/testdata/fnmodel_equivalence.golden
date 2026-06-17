@@ -8,6 +8,7 @@ WORD __folder
 WORD __pa
   [] barrier=0
 WORD add
+  [Node/Map Any Ideal/Patrun] barrier=3
   [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
   [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
   [Scalar/Time/Date Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
@@ -165,6 +166,9 @@ WORD filter
   [Type/Function Any] barrier=2 +returnsfn
   [Ideal/Reach Any] barrier=2 +returnsfn
   [Node/List Any] barrier=2 noeval={0} +returnsfn
+WORD find
+  [Node/Map Ideal/Patrun Node/Map] barrier=3 returns=[Any]
+  [Node/Map Ideal/Patrun] barrier=2 returns=[Any]
 WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1
@@ -408,6 +412,10 @@ WORD parse
   [Scalar/String] barrier=1 returns=[Any]
 WORD pathof
   [Any] barrier=1 typearg={0} returns=[Node/List]
+WORD patrun
+  [] barrier=0 returns=[Ideal/Patrun]
+WORD patterns
+  [Ideal/Patrun] barrier=1 returns=[Node/List]
 WORD pick
   [Scalar/Number/Integer] barrier=0 fullstack
 WORD pop
@@ -456,6 +464,7 @@ WORD reify
   [Any Node/Map] barrier=2
   [Any Scalar/String] barrier=2
 WORD remove
+  [Node/Map Ideal/Patrun] barrier=2
   [Node/Map Ideal/Object/Resource/Entity] barrier=2
   [Node/Map Node/Map] barrier=2
   [Node/Map Node/Map] barrier=2
