@@ -162,9 +162,9 @@ WORD fetch
   [Node/Map] barrier=1
   [Scalar/String] barrier=1
 WORD filter
-  [Type/Function Any] barrier=2
-  [Ideal/Reach Any] barrier=2
-  [Node/List Any] barrier=2 noeval={0}
+  [Type/Function Any] barrier=2 +returnsfn
+  [Ideal/Reach Any] barrier=2 +returnsfn
+  [Node/List Any] barrier=2 noeval={0} +returnsfn
 WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1

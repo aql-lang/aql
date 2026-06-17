@@ -933,26 +933,25 @@ func TestReachLensCompilesNative(t *testing.T) {
 		}
 	}
 
-	// SCOPING / negative: `filter` has a DYNAMIC output and is a deliberate
-	// fallbackWord, so even with the lens + data both const-bakeable, the
-	// reach-form `filter $.on data` must NOT compile native and must NOT island
-	// (the lens guard in tryRecordFallback keeps it off the island path); it
-	// refuses and falls back with faithful parity.
+	// `filter $.on {map}` lens form: filter now narrows its result to the
+	// INPUT collection type (filterReturnsFn — a Map subset, not a dynamic
+	// Any), so the reach-form dispatch records a faithful CALL_NATIVE instead
+	// of refusing on a dynamic output. Parity must hold.
 	const filter = `filter $.on {a:{on:true} b:{on:false}}`
 	a, _ := New()
-	prog, reason, _, _ := a.CompileCheck(filter)
-	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-		t.Errorf("%q: a dynamic-output lens form must NOT compile native (reason was %q)", filter, reason)
+	prog, reason, _, cerr := a.CompileCheck(filter)
+	if cerr != nil || prog == nil || strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: filter lens form did not compile native: reason=%q", filter, reason)
 	}
 	ar, _ := New()
 	gotC, compiledFilter, _ := ar.RunCompiled(filter)
-	if compiledFilter {
-		t.Errorf("%q: a dynamic-output lens form must fall back, not compile", filter)
+	if !compiledFilter {
+		t.Errorf("%q: filter lens form should compile native now", filter)
 	}
 	b, _ := New()
 	gotI, _ := b.Run(filter)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[{a:{on:true}}]" {
-		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", filter, gotC, gotI)
+		t.Errorf("%q: filter parity broke: compiled=%v interp=%v", filter, gotC, gotI)
 	}
 
 	// The dot-access EVAL reach (`m.a.b`, a get-chain the engine expands) is

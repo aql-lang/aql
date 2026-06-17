@@ -224,15 +224,15 @@ var Natives = []NativeFunc{
 		Name: "filter",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, BarrierPos: -1},
+			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
 			// Lens form: `filter $.active xs` keeps the elements whose reach
 			// applies to a truthy value (the reach reads the ELEMENT, not the
 			// {key,value} wrapper the Function form receives).
-			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, BarrierPos: -1},
+			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
 			// Quotation form: `filter [body] xs` runs the quoted body once
 			// per element (element pushed first, like each/fold) and keeps
 			// the elements whose body result is Boolean true.
-			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: filterBodyHandler, BarrierPos: -1},
+			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: filterBodyHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
 		},
 	},
 

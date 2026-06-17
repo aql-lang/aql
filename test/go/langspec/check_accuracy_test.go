@@ -392,7 +392,7 @@ func stackTypes(vs []eng.Value) string {
 // caught. Unlike type-soundness this is a PRECISION metric, not a
 // soundness one: a high count is imprecise, not unsound.
 
-const pinnedAnyFrontierRows = 217 // was 241 — case result narrows to the clause-block join (caseBranchJoin) even in plain check mode / non-re-pushable cases, decoupled from the if-chain compile desugar; was 286 (item #4 field-access narrowing); see TestCheckAnyFrontier
+const pinnedAnyFrontierRows = 208 // was 217 — filter narrows to its input collection type (List/Map subset) instead of Any; was 241 (case branch-join), 286 (item #4 field access); see TestCheckAnyFrontier
 
 func TestCheckAnyFrontier(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
