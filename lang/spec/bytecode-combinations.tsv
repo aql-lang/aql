@@ -91,3 +91,23 @@ def f fn [[n:Integer] [String] [n]] f 1	ERROR:type_error	return type mismatch
 def r2 fn [[n:Integer] [Integer] [n n]] r2 1	ERROR:type_error	return count mismatch
 def m2 {x:1} unpack [y] m2	ERROR:unpack_error	unpack missing key
 gen [T]	ERROR:gen_without_constructor	orphan gen spec
+
+# --- checker narrowing pinned as compiled differential cases ---
+# schema-enforced object/class field reads narrow to the declared type
+# (sound because make AND set type-check the field schema), list integer-
+# index reads narrow to the element type, and the value-selecting
+# connectives narrow to the join of their operands.
+def P class {a: 5} def p (make P {}) ((p get a) add 1)	6	Integer field read narrows -> int op compiles
+def Point class {x:1} def Point3 refine Point {z:3} def p (make Point3 {x:7}) ((p get x) add 1)	8	inherited field read narrows via AllFields
+def P class {s: "hi"} def p (make P {}) (add (p get s) "!")	'!hi'	String field read narrows
+def P class {a: 0} def p (make P {}) (p set a "x")	ERROR:expected Integer	set enforces the field schema (justifies narrowing)
+def P class {a: 0} make P {a: "x"}	ERROR:expected Integer	make enforces the field schema (justifies narrowing)
+[10 20 30] get 0	10	in-range list index narrows to the element
+[10 20 30] get 5	None	out-of-range list index reads None
+[1 2 3] get -1	None	negative list index reads None
+([10 20 30] get 1) add 1	21	narrowed Integer element feeds an int op
+["x" "y" "z"] get 1	'y'	String element index narrows
+3 and 0	0	and yields the second operand (operand-join)
+0 or "default"	'default'	or yields the second operand
+5 otherwise 9	5	otherwise yields the value operand
+(3 and "x") add 1	'x1'	join carrier stays polymorphic, not int-specialized
