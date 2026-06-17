@@ -37,7 +37,8 @@ This design went too far in both directions before settling:
 | sync request → reply | `act` | `call` | **`call`** |
 | async, no reply | *(none)* | `cast` | **`send`** (reuse the actor word) |
 | handler state | closure `Store` | `[req state]->{reply newstate}` tuple | **`[req state] -> reply`**, `state` a private mutable `Store` |
-| compose units | `prior` override chain | supervision tree | **server** + **proxy** (see §3, §6) |
+| compose behaviour (cross-cutting) | `prior` chain ✓ | (no real equivalent) | **`prior`** layering + **`wrap`** middleware (§1) |
+| compose units (fault) | (plugins in one instance) | supervision tree | **`server`** supervision (§3) |
 | run it | `host` | `start_link` | **`serve`** (reuse the CLI verb) |
 | no-match error code | `no_action` | `no_clause` | **`no_match`** |
 | framework module | `aql:mesh` | `aql:otp` | **`aql:serve`** + **`aql:net`** |
@@ -163,6 +164,76 @@ without burdening the common case:
 So `[req state] -> reply` is the whole contract for normal services; `@from` and
 `defer` exist for the proxy/transport minority. Settled.
 
+### Cross-cutting concerns — handler layering (`prior`) and `wrap` (core)
+
+Patrun's most-specific-match decides *which* handler runs; a separate, orthogonal
+mechanism decides how that handler is *decorated* — the cross-cutting axis (auth,
+logging, caching, validation, tracing, transactions, rate-limiting). This is
+**Seneca's `prior` system**, and it earns its place: supervision trees (§3)
+compose *separate* services for fault isolation but do nothing for layering
+behaviour on a *single* pattern. The two are orthogonal composition axes, not
+substitutes — dropping one for the other (as an earlier draft did) loses real
+power.
+
+**Layering — `add` stacks, the handler receives `prior`.** Adding a handler for a
+pattern that already has one does **not** overwrite it; it **pushes** onto a stack
+for that exact pattern signature (raw patrun overwrites — the `Service` keeps the
+stack), newest outermost. A layering handler opts into the third, optional
+argument — the continuation **`prior`** — and chooses whether and how to invoke
+the handler it shadowed:
+
+```aql
+# Wrap the order-submit action with auth + audit, without touching it.
+add {role:'order op:'submit} [ [req state prior] => [
+    require-role req 'clerk                 # cross-cutting: auth (may short-circuit)
+    def result ( prior req )                # invoke the shadowed handler
+    audit 'order-submit req result          # cross-cutting: after
+    result
+] ] svc
+```
+
+`prior req` runs the next handler down the stack and returns its reply; a base
+handler (stack bottom) is the plain `[req state]` form with no `prior`. A
+decorator may **short-circuit** (never call `prior` — a cache hit, an auth
+reject), **pre-process** (`prior modified-req`), or **post-process** (transform
+`prior`'s reply). This is `around`-advice / middleware `next()` realised as an
+*explicit captured continuation* — no hidden dynamic-dispatch context, just AQL
+function values. (It is exactly Seneca's `this.prior(msg, done)`.)
+
+**Service middleware — `wrap` (ambient cross-cutting).** Per-pattern layering
+decorates *one* action; concerns that apply to *every* request into a service
+(tracing, metrics, panic recovery, a blanket auth gate) use **`wrap`**, which runs
+around the whole dispatch regardless of which pattern matches:
+
+```aql
+wrap [ [req state prior] => [
+    trace-start req
+    def out ( prior req )                   # run the rest of the pipeline
+    trace-end req
+    out
+] ] svc
+```
+
+`wrap` is *not* a catch-all `add {} […]`: a `{}` handler is the *least-specific*
+patrun entry and fires only when nothing else matches, whereas a `wrap`
+middleware wraps the chosen handler whatever it is. Multiple `wrap`s nest, newest
+outermost. The full dispatch pipeline is therefore:
+
+```
+wrap layers (outer → inner)  →  patrun match  →  per-pattern prior stack  →  base handler
+```
+
+— all sharing the service's single-threaded `state`, so a caching or metrics
+layer keeps its data in `state` with no locks.
+
+**Scope: local and synchronous.** `prior`/`wrap` compose handlers *within one
+service's handling of one message*; they never cross a process boundary, so they
+stay zero-cost direct calls even when the service is `serve`d. Cross-cutting that
+must span services (distributed tracing, a request id) is the union of a local
+`wrap` that reads/writes a trace id in the request's **metadata** (carried like
+`@from`; see the message-metadata gap, §9) and the transport propagating that
+metadata — local layering + metadata, not a distributed interceptor.
+
 ## 2. Services live in modules
 
 A reusable service is an AQL module that **exports a constructor** returning a
@@ -210,10 +281,13 @@ serve <server-or-service>                            # run it
 
 This **is** today's `serve` supervisor (`cmd/go/internal/serve`), surfaced as a
 value. `aql serve registry + lsp + api` is `serve (server [Registry.New{…}
-Lsp.New{…} Api.New{…}])`. Composition across services is **the server + routing/
-proxying (§6)** — there is no per-service override chain (the dropped Seneca
-`prior`); independent services with their own state, supervised together, is the
-model.
+Lsp.New{…} Api.New{…}])`. This is the **fault/lifecycle** composition axis —
+independent services with their own state, supervised together. It is *orthogonal*
+to the **behavioural** composition axis (cross-cutting layering with `prior`/`wrap`,
+§1): supervision composes separate services for isolation; `prior`/`wrap` layer
+behaviour within one service. A system uses both — a supervised collection of
+services, each internally decorated by cross-cutting layers — plus routing/
+proxying across them (§6).
 
 ## 4. Hosting & transport
 
@@ -293,6 +367,13 @@ A `proxy` is a `Service` whose handler, for a matched request:
    `aql:net connect`) — the location-transparent leg;
 3. runs **`after`** interceptors — transform + account for the response;
 4. returns the (possibly streamed) reply.
+
+`proxy` is really **sugar over the §1 cross-cutting primitives**: `before`/`after`
+are `wrap` middleware whose innermost base handler is "`call` the `target`". So a
+proxy is "a forwarding base handler + cross-cutting layers" — the same machinery
+that decorates any service, pointed at a remote `target`. (Keeping `proxy` as a
+named constructor is still worthwhile: forwarding + streaming + capability checks
+is a recurring shape worth blessing.)
 
 The vault proxy maps cleanly: `before` = capability-token auth + policy checks +
 credential injection; `target` = the upstream provider URL (a `connect`ed
@@ -601,6 +682,12 @@ error [ case [
 - **`Service` type + `add`/`call`/`send`/`state`** and the `[req state] -> reply`
   handler contract (the patrun router is reused; invocation reuses
   `execFnDefLiteral`).
+- **Layering (`prior`) + `wrap` middleware** (§1) — the per-pattern handler stack
+  (patrun must keep a stack, not overwrite a same-signature rule) and the `prior`
+  continuation passed to layering handlers; `wrap` for ambient cross-cutting.
+- **Message metadata** — a small per-request envelope (a `@from` reply handle, a
+  trace/request id) carried through `call`/`send` and across transport, so
+  cross-cutting `wrap` layers can propagate context between services.
 - **`server`/`serve`/restart** — depend on `PROCESSES.0.md` (processes, links,
   exit signals).
 - **`proxy` + streaming replies** — needs `call` to return a stream (`aql:stream`)
@@ -621,8 +708,8 @@ error [ case [
 ## 10. Phased roadmap
 
 - **Phase 1: in-process service.** `service`, `add`, `call`, `send`, `state`,
-  `no_match` — all core. Pure request→handler over reused patrun, state in
-  a `Store`. No processes.
+  `no_match`, plus `prior` layering + `wrap` middleware (§1) — all core. Pure
+  request→handler over reused patrun, state in a `Store`. No processes.
 - **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the
@@ -681,3 +768,8 @@ serve ( server [ app gw ] )               # run everything (blocks)
    *optionally* warn when one is never handled anywhere up the stack, and should an
    inline hot path be allowed to opt out of the deadline entirely (`timeout:
    'none`) for zero overhead? (Leaning: opt-in lint + an explicit inline escape.)
+8. **Layer ordering** (§1) — `prior`/`wrap` layers nest by add-order (newest
+   outermost), which is Seneca's model but makes cross-cutting order depend on load
+   order (a known Seneca footgun). Offer an explicit priority/phase (e.g. `add …
+   {phase: 'auth}`) so ordering is declared, not incidental? (Leaning: add-order
+   default, optional declared priority for `wrap`.)
