@@ -52,6 +52,10 @@ linters:
       threshold: 400        # current 4 grandfathered groups are ≤ 350 tokens
   exclusions:
     generated: lax
+    paths:
+      # Vendored third-party source (github.com/rjrodger/patrun, MIT) — kept
+      # verbatim except the gex-glob matcher; not ours to lint or restyle.
+      - native/internal/patrun
     presets:
       - common-false-positives
       - std-error-handling

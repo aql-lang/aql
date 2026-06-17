@@ -6,13 +6,15 @@ import (
 	"strings"
 
 	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/native/internal/patrun"
 )
 
-// Patrun — a mutable pattern→value dispatch table, the vendored functionality
-// of github.com/rjrodger/patrun (a clean-room port of its documented
-// semantics). A pattern is a Map of Scalar match-values; `find` returns the
-// value of the MOST SPECIFIC pattern that subset-matches a subject: more
-// matched key-value pairs win, and unknown keys in the subject are ignored.
+// Patrun — a mutable pattern→value dispatch table, backed by the vendored
+// github.com/rjrodger/patrun trie (lang/go/native/internal/patrun). A pattern
+// is a Map of Scalar match-values; `find` returns the value of the MOST
+// SPECIFIC pattern that subset-matches a subject — more matched keys win,
+// unknown subject keys are ignored — in O(query-key-depth), independent of
+// table size.
 //
 //	def routes (patrun)
 //	add {a:1}     "A" routes
@@ -22,16 +24,12 @@ import (
 //	find {a:1 z:9}    routes      # → 'A'   (unknown key z ignored)
 //	find {x:9}        routes      # → None
 //
-// Match-values are compared by STRING COERCION (ValToString), faithful to
-// patrun/Seneca — so `1` and `"1"` share a rule, while `1.0` ("1.0") and
-// `true` ("true") key on their own text. The stored value is any AQL value —
-// typically a function, making a Patrun a dispatch/router table.
-//
-// Tie-break among equally-specific patterns: the lexicographically smaller
-// sorted key list wins (patrun's alphabetical traversal order), so
-// {a:1 b:1} beats {a:1 c:1}. Two distinct rules can never both fully match the
-// same subject at the same key count (their values would have to differ on a
-// shared key), so this is total and deterministic.
+// patrun matches on map[string]string. AQL match-values are SCALARS compared
+// by string coercion (ValToString): 1 and "1" share a rule; 1.0 ("1.0") and
+// true ("true") key on their own text. A non-scalar pattern value is a loud
+// error. The stored value is any AQL value — typically a function, making a
+// Patrun a dispatch/router table — so it rides a side table keyed by the
+// pattern's canonical signature (patrun's *string data is that signature).
 
 // TPatrun is Ideal/Patrun. FixedID 5004 — next free in the 5000–9999
 // kernel/language band (Module 5000, ModuleExport 5001, KeyVal 5002,
@@ -47,27 +45,33 @@ func registerPatrunType() *eng.Type {
 	return t
 }
 
-// patrunEntry is one registered rule: a pattern (alphabetically sorted keys +
-// string-coerced values) bound to a stored value. raw keeps the original
-// pattern Map for `patterns` listing.
-type patrunEntry struct {
-	keys []string          // pattern keys, sorted alphabetically
-	pat  map[string]string // key -> coerced (ValToString) match-value
-	raw  Value             // the original pattern Map
-	val  Value             // the stored data (any value)
+// patrunRule is the AQL side of one registered rule: the original pattern Map
+// (for `patterns`), the stored value, and a pre-rendered "k=v,…" for Format.
+type patrunRule struct {
+	raw  Value
+	val  Value
+	disp string
 }
 
-// patrunMatcher is the mutable table behind a Patrun value. add/remove mutate
-// entries in place; a Patrun Value wraps the *patrunMatcher pointer (via
-// ExtensionPayload), so mutation is visible through every copy — the Store
-// mutation model.
+// patrunMatcher wraps the vendored patrun trie plus a side table. The trie
+// owns matching (it stores map[string]string patterns and a *string handle —
+// the pattern's canonical signature); the side table maps that signature to
+// the AQL value and raw pattern, and `order` preserves insertion order for
+// `patterns`. add/remove mutate in place; a Patrun Value wraps the pointer
+// (ExtensionPayload), so mutation is visible through every copy.
 type patrunMatcher struct {
-	entries []*patrunEntry
+	pm    *patrun.Patrun
+	side  map[string]patrunRule
+	order []string
+}
+
+func newPatrunMatcher() *patrunMatcher {
+	return &patrunMatcher{pm: patrun.New(), side: map[string]patrunRule{}}
 }
 
 // NewPatrun builds a fresh empty Patrun value.
 func NewPatrun() Value {
-	return eng.NewExtension(TPatrun, &patrunMatcher{})
+	return eng.NewExtension(TPatrun, newPatrunMatcher())
 }
 
 func asPatrun(v Value) (*patrunMatcher, bool) {
@@ -81,8 +85,7 @@ func asPatrun(v Value) (*patrunMatcher, bool) {
 
 // patrunNatives installs the Patrun words. `patrun` / `find` / `patterns` are
 // new; `add` and `remove` carry a Patrun overload that FOLDS into the existing
-// core words (upsertFnDef appends), disambiguated purely by the Patrun
-// receiver type — `add 1 2` stays arithmetic.
+// core words (upsertFnDef appends), disambiguated by the Patrun receiver type.
 var patrunNatives = []NativeFunc{
 	{
 		Name: "patrun",
@@ -131,19 +134,16 @@ func patrunAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if !ok {
 		return nil, r.AqlError("patrun_error", "add: expected a Patrun, got "+args[2].Parent.String(), "add")
 	}
-	keys, pat, err := coercePattern(args[0], "add", r)
+	pat, keys, sig, err := coercePattern(args[0], "add", r)
 	if err != nil {
 		return nil, err
 	}
-	entry := &patrunEntry{keys: keys, pat: pat, raw: args[0], val: args[1]}
-	// Re-adding the identical pattern overwrites its value (set semantics).
-	for i, e := range m.entries {
-		if samePattern(e, keys, pat) {
-			m.entries[i] = entry
-			return nil, nil
-		}
+	if _, exists := m.side[sig]; !exists {
+		m.order = append(m.order, sig)
 	}
-	m.entries = append(m.entries, entry)
+	m.side[sig] = patrunRule{raw: args[0], val: args[1], disp: patrunDisp(keys, pat)}
+	h := sig
+	m.pm.Add(pat, &h)
 	return nil, nil
 }
 
@@ -164,11 +164,21 @@ func patrunFindHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, err
 	}
-	best := patrunBestMatch(m, subj, exact)
-	if best == nil {
+	var h *string
+	var found bool
+	if exact {
+		h, found = m.pm.FindExact(subj)
+	} else {
+		h, found = m.pm.Find(subj)
+	}
+	if !found || h == nil {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
-	return []Value{best.val}, nil
+	rule, ok := m.side[*h]
+	if !ok {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	return []Value{rule.val}, nil
 }
 
 func patrunRemoveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -176,15 +186,19 @@ func patrunRemoveHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if !ok {
 		return nil, r.AqlError("patrun_error", "remove: expected a Patrun, got "+args[1].Parent.String(), "remove")
 	}
-	keys, pat, err := coercePattern(args[0], "remove", r)
+	pat, _, sig, err := coercePattern(args[0], "remove", r)
 	if err != nil {
 		return nil, err
 	}
-	for i, e := range m.entries {
-		if samePattern(e, keys, pat) {
-			m.entries = append(m.entries[:i], m.entries[i+1:]...)
-			break
+	if _, exists := m.side[sig]; exists {
+		delete(m.side, sig)
+		for i, s := range m.order {
+			if s == sig {
+				m.order = append(m.order[:i], m.order[i+1:]...)
+				break
+			}
 		}
+		m.pm.Remove(pat)
 	}
 	return nil, nil
 }
@@ -194,118 +208,89 @@ func patrunPatternsHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	if !ok {
 		return nil, r.AqlError("patrun_error", "patterns: expected a Patrun, got "+args[0].Parent.String(), "patterns")
 	}
-	out := make([]Value, 0, len(m.entries))
-	for _, e := range m.entries {
+	out := make([]Value, 0, len(m.order))
+	for _, sig := range m.order {
+		rule := m.side[sig]
 		row := NewOrderedMap()
-		row.Set("pattern", e.raw)
-		row.Set("value", e.val)
+		row.Set("pattern", rule.raw)
+		row.Set("value", rule.val)
 		out = append(out, NewMap(row))
 	}
 	return []Value{NewList(out)}, nil
 }
 
-// ---- matching ----
-
-// patrunBestMatch returns the most specific subset-matching entry, or nil.
-func patrunBestMatch(m *patrunMatcher, subj map[string]string, exact bool) *patrunEntry {
-	var best *patrunEntry
-	for _, e := range m.entries {
-		if !matchesSubset(e, subj) {
-			continue
-		}
-		// Exact: the rule must account for every (scalar) key of the subject,
-		// not just a subset — i.e. identical key sets.
-		if exact && len(e.keys) != len(subj) {
-			continue
-		}
-		if best == nil || moreSpecific(e, best) {
-			best = e
-		}
-	}
-	return best
-}
-
-// matchesSubset reports whether every key-value of the rule is present and
-// equal (by coerced string) in the subject.
-func matchesSubset(e *patrunEntry, subj map[string]string) bool {
-	for _, k := range e.keys {
-		if sv, ok := subj[k]; !ok || sv != e.pat[k] {
-			return false
-		}
-	}
-	return true
-}
-
-// moreSpecific reports whether a should beat b: more matched keys wins; on a
-// tie the lexicographically smaller sorted key list wins (alphabetical
-// traversal order).
-func moreSpecific(a, b *patrunEntry) bool {
-	if len(a.keys) != len(b.keys) {
-		return len(a.keys) > len(b.keys)
-	}
-	for i := range a.keys {
-		if a.keys[i] != b.keys[i] {
-			return a.keys[i] < b.keys[i]
-		}
-	}
-	return false
-}
-
-func samePattern(e *patrunEntry, keys []string, pat map[string]string) bool {
-	if len(e.keys) != len(keys) {
-		return false
-	}
-	for i, k := range e.keys {
-		if keys[i] != k || e.pat[k] != pat[k] {
-			return false
-		}
-	}
-	return true
-}
-
 // ---- coercion ----
 
-// coercePattern coerces a pattern Map to sorted keys + a key→string map. Every
+// coercePattern coerces a pattern Map to patrun's map[string]string plus the
+// sorted keys and a canonical signature (the trie's *string handle). Every
 // match-value must be a concrete Scalar; anything else is a loud error (unlike
 // patrun-JS, which silently stringifies objects).
-func coercePattern(pv Value, op string, r *Registry) ([]string, map[string]string, error) {
-	m, err := RequireConcreteMap(pv, op)
+func coercePattern(pv Value, op string, r *Registry) (map[string]string, []string, string, error) {
+	mp, err := RequireConcreteMap(pv, op)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	keys := m.Keys()
-	pat := make(map[string]string, len(keys))
-	for _, k := range keys {
-		val, _ := m.Get(k)
+	mkeys := mp.Keys()
+	pat := make(map[string]string, len(mkeys))
+	for _, k := range mkeys {
+		val, _ := mp.Get(k)
 		if !IsConcrete(val) || !val.Parent.ConformsTo(TScalar) {
-			return nil, nil, r.AqlErrorHint("patrun_error",
+			return nil, nil, "", r.AqlErrorHint("patrun_error",
 				fmt.Sprintf("%s: pattern value for %q must be a Scalar, got %s", op, k, val.Parent.String()),
 				op, "patterns match on scalar values (Integer/Float/String/Boolean/Atom)")
 		}
 		pat[k] = ValToString(val)
 	}
-	sorted := append([]string(nil), keys...)
-	sort.Strings(sorted)
-	return sorted, pat, nil
+	keys := append([]string(nil), mkeys...)
+	sort.Strings(keys)
+	return pat, keys, patrunSig(keys, pat), nil
 }
 
-// coerceSubject coerces a subject Map to a key→string map, keeping only its
-// scalar values (a non-scalar subject value is simply not matchable, so it is
-// skipped rather than erroring — only patterns are strict).
+// coerceSubject coerces a subject Map to patrun's map[string]string, keeping
+// only its scalar values (a non-scalar subject value is not matchable, so it
+// is skipped rather than erroring — only patterns are strict).
 func coerceSubject(sv Value, op string) (map[string]string, error) {
-	m, err := RequireConcreteMap(sv, op)
+	mp, err := RequireConcreteMap(sv, op)
 	if err != nil {
 		return nil, err
 	}
-	keys := m.Keys()
-	subj := make(map[string]string, len(keys))
-	for _, k := range keys {
-		val, _ := m.Get(k)
+	subj := make(map[string]string, len(mp.Keys()))
+	for _, k := range mp.Keys() {
+		val, _ := mp.Get(k)
 		if IsConcrete(val) && val.Parent.ConformsTo(TScalar) {
 			subj[k] = ValToString(val)
 		}
 	}
 	return subj, nil
+}
+
+// patrunSig is the canonical, collision-free signature of a coerced pattern:
+// sorted key\x00value\x00 pairs. It is the trie's *string handle and the side
+// table key, so distinct coerced patterns map to distinct rules and identical
+// ones overwrite.
+func patrunSig(keys []string, pat map[string]string) string {
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte(0)
+		b.WriteString(pat[k])
+		b.WriteByte(0)
+	}
+	return b.String()
+}
+
+// patrunDisp renders a coerced pattern as "k=v,k=v" for Format.
+func patrunDisp(keys []string, pat map[string]string) string {
+	var b strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(pat[k])
+	}
+	return b.String()
 }
 
 func patrunOptBool(opts Value, key string) (bool, error) {
@@ -326,33 +311,27 @@ func patrunOptBool(opts Value, key string) (bool, error) {
 
 // ---- behavior ----
 
-// patrunBehavior renders a Patrun as "Patrun(k=v,… -> value; …)"; Match and
-// Equal defer to the kernel default (nominal identity).
+// patrunBehavior renders a Patrun as "Patrun(k=v,… -> value; …)" in insertion
+// order; Match and Equal defer to the kernel default (nominal identity).
 type patrunBehavior struct{}
 
 func (patrunBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 func (patrunBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (patrunBehavior) Format(v Value) string {
 	m, ok := asPatrun(v)
-	if !ok || len(m.entries) == 0 {
+	if !ok || len(m.order) == 0 {
 		return "Patrun()"
 	}
 	var b strings.Builder
 	b.WriteString("Patrun(")
-	for i, e := range m.entries {
+	for i, sig := range m.order {
 		if i > 0 {
 			b.WriteString("; ")
 		}
-		for j, k := range e.keys {
-			if j > 0 {
-				b.WriteByte(',')
-			}
-			b.WriteString(k)
-			b.WriteByte('=')
-			b.WriteString(e.pat[k])
-		}
+		rule := m.side[sig]
+		b.WriteString(rule.disp)
 		b.WriteString(" -> ")
-		b.WriteString(ValToString(e.val))
+		b.WriteString(ValToString(rule.val))
 	}
 	b.WriteByte(')')
 	return b.String()
