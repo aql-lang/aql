@@ -143,6 +143,13 @@ func Register(r *Registry) {
 	for _, n := range Natives {
 		r.RegisterNativeFunc(n)
 	}
+	// Patrun pattern-matching dispatch table (patrun / find / patterns, plus
+	// the add / remove Patrun overloads). Registered AFTER mathNatives and
+	// Natives so the add / remove overloads append to the existing words
+	// (upsertFnDef) rather than starting fresh.
+	for _, n := range patrunNatives {
+		r.RegisterNativeFunc(n)
+	}
 	r.Modules.InitFunc = func(child *Registry) {
 		for _, n := range Natives {
 			child.RegisterNativeFunc(n)

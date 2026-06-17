@@ -1,0 +1,52 @@
+# AQL Language Specification: Patrun — pattern→value dispatch tables
+# Format: input<TAB>expected<TAB>description
+#
+# `patrun` builds a mutable Patrun (vendored github.com/rjrodger/patrun).
+# `add {pattern} value pm` registers a rule (in place); `find {subject} pm`
+# returns the value of the MOST SPECIFIC pattern that subset-matches the
+# subject — more matched keys win, unknown subject keys are ignored — or None.
+# Match-values are Scalars compared by STRING COERCION (1 and "1" share a
+# rule; 1.0 and true key on their own text). The stored value is any value.
+# `add` / `remove` fold a Patrun overload into the core words; the receiver
+# type disambiguates, so `add 1 2` stays arithmetic.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  specificity + subset matching
+def r (patrun)  add {a:1} "A" r  add {a:1 b:1} "B" r  add {a:1 b:2} "C" r  find {a:1} r	'A'	the least specific rule
+def r (patrun)  add {a:1} "A" r  add {a:1 b:1} "B" r  add {a:1 b:2} "C" r  find {a:1 b:1} r	'B'	more matched keys win
+def r (patrun)  add {a:1} "A" r  add {a:1 b:1} "B" r  add {a:1 b:2} "C" r  find {a:1 b:2} r	'C'	a different value on b selects C
+def r (patrun)  add {a:1} "A" r  find {a:1 z:9} r	'A'	an unknown subject key is ignored (subset match)
+def r (patrun)  add {a:1} "A" r  find {x:9} r	None	no matching rule → None
+def r (patrun)  add {} "D" r  add {a:1} "A" r  find {x:9} r	'D'	the empty pattern is the catch-all default
+def r (patrun)  add {} "D" r  add {a:1} "A" r  find {a:1} r	'A'	a specific rule beats the default
+#
+# §2  scalar match-values, compared by string coercion
+def r (patrun)  add {n:1} "int" r  find {n:1} r	'int'	integer match
+def r (patrun)  add {n:1} "int" r  find {n:"1"} r	'int'	coercion: integer 1 and string "1" share a rule
+def r (patrun)  add {n:1} "int" r  find {n:1.0} r	None	1.0 coerces to "1.0", distinct from "1"
+def r (patrun)  add {flag:true} "on" r  find {flag:true} r	'on'	booleans coerce to "true"/"false"
+#
+# §3  tie-break (specificity equal) + overwrite
+def r (patrun)  add {a:1 b:1} "X" r  add {a:1 c:1} "Y" r  find {a:1 b:1 c:1} r	'X'	equal key counts: alphabetically earlier ({a,b} < {a,c}) wins
+def r (patrun)  add {a:1} "A" r  add {a:1} "A2" r  find {a:1} r	'A2'	re-adding the same pattern overwrites its value
+#
+# §4  exact / remove / patterns
+def r (patrun)  add {a:1 b:1} "B" r  find {a:1} r {exact:true}	None	exact: a partial (subset) match does not count
+def r (patrun)  add {a:1 b:1} "B" r  find {a:1 b:1} r {exact:true}	'B'	exact: identical key set matches
+def r (patrun)  add {a:1} "A" r  remove {a:1} r  find {a:1} r	None	remove deletes a rule by its pattern
+def r (patrun)  add {a:1} "A" r  add {b:2} "B" r  patterns r	[{pattern:{a:1} value:'A'} {pattern:{b:2} value:'B'}]	patterns lists the rules in registration order
+#
+# §5  dispatch (values are functions), truthiness, typeof
+def api (patrun)  add {cmd:"sum"} ([m:Map] => [m.x add m.y]) api  def h (find {cmd:"sum" x:3 y:4} api)  h {x:3 y:4}	7	the matched value is a handler function, then called
+def r (patrun)  add {a:1} "A" r  if (find {a:1} r) ["Y"] ["N"]	'Y'	a found value is truthy
+def r (patrun)  add {a:1} "A" r  if (find {x:9} r) ["Y"] ["N"]	'N'	None is falsy → the else branch
+typeof (patrun)	Patrun	the type of a Patrun
+#
+# §6  add stays polymorphic — the receiver type disambiguates
+add 1 2	3	integer add is untouched
+add 1.5 2.5	4.0	float add is untouched
+#
+# §7  negatives
+def r (patrun)  add {a:[1 2]} "X" r	ERROR:patrun_error	a non-scalar pattern value is rejected (unlike patrun-JS stringification)
+find {a:1} {b:2}	ERROR:signature_error	find needs a Patrun receiver, not a plain Map
+add {a:1} "v" 5	ERROR:signature_error	the 3-arg add requires a Patrun receiver (5 is an Integer)

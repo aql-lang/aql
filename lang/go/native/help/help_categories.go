@@ -53,6 +53,7 @@ var categories = []Category{
 	{"storage", "Variables, value access, references, and lenses.", []string{
 		"set", "get", "getr", "has", "context", "keys", "vals",
 		"reach", "apply", "rebind", "ref", "referent",
+		"patrun", "find", "patterns",
 	}},
 	{"control", "Control flow, definitions, and functions.", []string{
 		"unpack", "codequote", "do", "raise", "if", "case", "for", "break",

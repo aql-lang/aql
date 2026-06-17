@@ -90,6 +90,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/ModuleExport":     5001,
 		"Node/Map/KeyVal":        5002, // map-iteration entry — lang/go/native/native_keyval.go
 		"Ideal/MiniLangCompiled": 5003, // compiled-minilang carrier — lang/go/modules/minilang.go
+		"Ideal/Patrun":           5004, // pattern-dispatch table — lang/go/native/native_patrun.go
 		"Word/__IS":              51,
 		"Type/Disjunct/Enum":     62,
 		"Word/__PE":              63,
