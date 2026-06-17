@@ -4911,6 +4911,31 @@ func (e *Engine) stepCloseParen() error {
 		}
 	}
 
+	// Check-mode fn-value-call boundary guard. A paren whose net contents are
+	// a leading DYNAMIC value followed by >=1 more value is a deferred fn-value
+	// application bounded by THIS paren — `(m.g 3)`, where m.g is a dynamic
+	// method-field get the checker cannot dispatch in place (it stays a value
+	// and flows to the residual's OpCallDynamic). That residual reconciliation
+	// is paren-UNAWARE: if the paren result is then consumed by a trailing op,
+	// the op reorders ahead of the apply and the value is applied to the wrong
+	// argument — `((m.g 3) add 1)` compiled m.g(3 add 1)=8 instead of
+	// (m.g 3) add 1=7. The interpreter dispatches the concrete fn AT the paren,
+	// so refuse here and let the faithful interpreter fallback run it.
+	if es := e.registry.Check.Emit; es != nil && es.active() {
+		first, count := -1, 0
+		for i := openIdx + 1; i < closeIdx; i++ {
+			if isRecordableLiteral(e.tape.At(i)) {
+				if count == 0 && e.tape.At(i).Dynamic {
+					first = i
+				}
+				count++
+			}
+		}
+		if first >= 0 && count >= 2 {
+			es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
+		}
+	}
+
 	// Remove the close paren (higher index first) and open paren.
 	// The values between them are already in place.
 	e.tape.Remove(closeIdx)

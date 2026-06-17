@@ -1154,3 +1154,56 @@ func TestOpMakeListCompiles(t *testing.T) {
 		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", inter, gotC, gotI)
 	}
 }
+
+// Paren-bounded fn-value application — a method-field fn dispatch whose result
+// is consumed across a paren boundary. `m.g` is a dynamic method-field get the
+// checker cannot dispatch in place; it would otherwise flow to the residual's
+// paren-UNAWARE OpCallDynamic, which reorders a trailing op ahead of the apply
+// and miscomputes (`((m.g 3) add 1)` lowered `m.g(3 add 1)=8` instead of
+// `(m.g 3) add 1=7`). The paren-barrier guard refuses the shape so the
+// interpreter — which dispatches the concrete fn AT the paren — runs it
+// faithfully. Pairs the negative (hazard refuses + correct fallback) with the
+// positive (a simple method dispatch and a bare-word call still compile).
+func TestParenBoundedFnValueApplyFallsBack(t *testing.T) {
+	const def = `def m {g: (fn [[x:Integer][Integer][x mul 2]])} `
+
+	// NEGATIVE: the paren-bounded apply must NOT compile native (it would
+	// miscompile); RunCompiled falls back to the faithful interpreter result.
+	for _, neg := range []struct{ src, want string }{
+		{def + `((m.g 3) add 1)`, "[7]"},
+		{def + `(m.g 3) add 1`, "[7]"}, // same hazard without the outer paren
+	} {
+		a, _ := New()
+		prog, _, _, _ := a.CompileCheck(neg.src)
+		if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: a paren-bounded fn-value apply must not compile native:\n%s", neg.src, prog.Disassemble())
+		}
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(neg.src)
+		c, _ := New()
+		gotI, _ := c.Run(neg.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != neg.want {
+			t.Errorf("%q: fallback parity: compiled=%v interp=%v want=%s (err %v)", neg.src, gotC, gotI, neg.want, errC)
+		}
+		_ = compiled
+	}
+
+	// POSITIVE: a simple method dispatch (arg directly follows, no paren
+	// boundary) and a bare-word fn call still COMPILE correctly — the guard is
+	// scoped to the dynamic-value-bounded-by-a-paren shape only.
+	for _, pos := range []struct{ src, want string }{
+		{def + `m.g 5`, "[10]"}, // simple stored dispatch
+		{`def g (fn [[x:Integer][Integer][x mul 2]]) ((g 3) add 1)`, "[7]"}, // bare-word fn, concrete dispatch
+	} {
+		a, _ := New()
+		gotC, compiled, errC := a.RunCompiled(pos.src)
+		if !compiled || errC != nil {
+			t.Errorf("%q: expected a native compile, got compiled=%v err=%v", pos.src, compiled, errC)
+		}
+		b, _ := New()
+		gotI, _ := b.Run(pos.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != pos.want {
+			t.Errorf("%q: parity: compiled=%v interp=%v want=%s", pos.src, gotC, gotI, pos.want)
+		}
+	}
+}
