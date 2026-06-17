@@ -28,6 +28,7 @@ type clipboardCmd struct {
 	pasteArgv  []string // command that writes clipboard contents to stdout
 	clearArgv  []string // command that clears/overwrites the clipboard
 	clearStdin bool     // if true, clearArgv is fed an empty stdin (tools that "clear" by setting empty content)
+	copyArgv   []string // command that reads text from stdin and sets the clipboard
 }
 
 // clipEnv abstracts the host facts clipboard detection depends on, so
@@ -59,6 +60,7 @@ func detectClipboard(env clipEnv) (*clipboardCmd, error) {
 				pasteArgv:  []string{"pbpaste"},
 				clearArgv:  []string{"pbcopy"}, // empty stdin -> empty clipboard
 				clearStdin: true,
+				copyArgv:   []string{"pbcopy"},
 			}, nil
 		}
 		return nil, fmt.Errorf("pbpaste/pbcopy not found (they ship with macOS)")
@@ -71,6 +73,7 @@ func detectClipboard(env clipEnv) (*clipboardCmd, error) {
 				// empty string, and overwriting is what matters — the
 				// secret no longer lives in the clipboard.
 				clearArgv: []string{ps, "-NoProfile", "-Command", "Set-Clipboard -Value ' '"},
+				copyArgv:  []string{ps, "-NoProfile", "-Command", "$input | Set-Clipboard"},
 			}, nil
 		}
 		return nil, fmt.Errorf("powershell not found on PATH")
@@ -83,6 +86,7 @@ func detectClipboard(env clipEnv) (*clipboardCmd, error) {
 				label:     "wl-paste/wl-copy",
 				pasteArgv: []string{"wl-paste"},
 				clearArgv: []string{"wl-copy", "--clear"},
+				copyArgv:  []string{"wl-copy"},
 			}, nil
 		}
 		if have("xclip") {
@@ -91,6 +95,7 @@ func detectClipboard(env clipEnv) (*clipboardCmd, error) {
 				pasteArgv:  []string{"xclip", "-selection", "clipboard", "-o"},
 				clearArgv:  []string{"xclip", "-selection", "clipboard"}, // empty stdin -> empty clipboard
 				clearStdin: true,
+				copyArgv:   []string{"xclip", "-selection", "clipboard"},
 			}, nil
 		}
 		if have("xsel") {
@@ -98,6 +103,7 @@ func detectClipboard(env clipEnv) (*clipboardCmd, error) {
 				label:     "xsel",
 				pasteArgv: []string{"xsel", "--clipboard", "--output"},
 				clearArgv: []string{"xsel", "--clipboard", "--clear"},
+				copyArgv:  []string{"xsel", "--clipboard", "--input"},
 			}, nil
 		}
 		return nil, fmt.Errorf("no clipboard tool found; install wl-clipboard (Wayland) or xclip / xsel (X11)")
@@ -137,6 +143,23 @@ func (c *clipboardCmd) clear() error {
 	if c.clearStdin {
 		cmd.Stdin = strings.NewReader("")
 	}
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %s: %s", c.label, err, strings.TrimSpace(errBuf.String()))
+	}
+	return nil
+}
+
+// copy sets the clipboard to text by feeding it on stdin to the platform's
+// write tool. It is used to copy non-secret helper text (e.g. an exec command)
+// to the clipboard from the TUI.
+func (c *clipboardCmd) copy(text string) error {
+	if len(c.copyArgv) == 0 {
+		return fmt.Errorf("%s: copy not supported", c.label)
+	}
+	cmd := exec.Command(c.copyArgv[0], c.copyArgv[1:]...)
+	cmd.Stdin = strings.NewReader(text)
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {

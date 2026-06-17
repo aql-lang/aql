@@ -231,6 +231,31 @@ func (c *tuiController) listAliases() ([]Alias, error) {
 	return s.SortedAliases(), nil
 }
 
+// alias returns one alias's metadata, or (Alias{}, false) if absent.
+func (c *tuiController) alias(name string) (Alias, bool) {
+	s, err := requireStore(c.homeDir)
+	if err != nil {
+		return Alias{}, false
+	}
+	if a, _ := s.FindAlias(name); a != nil {
+		return *a, true
+	}
+	return Alias{}, false
+}
+
+// copyToClipboard sets the OS clipboard to text (non-secret helper text),
+// returning the clipboard tool's label.
+func (c *tuiController) copyToClipboard(text string) (string, error) {
+	clip, err := detectClipboard(hostClipEnv())
+	if err != nil {
+		return "", err
+	}
+	if err := clip.copy(text); err != nil {
+		return "", err
+	}
+	return clip.label, nil
+}
+
 // listCapabilities returns all capabilities and the set of currently-active
 // IDs (neither revoked nor expired).
 func (c *tuiController) listCapabilities() ([]Capability, map[string]bool, error) {

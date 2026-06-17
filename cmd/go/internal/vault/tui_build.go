@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -20,23 +21,26 @@ import (
 // --- per-screen action key bindings ---------------------------------------
 
 var (
-	kReveal   = key.NewBinding(key.WithKeys("g", "enter"), key.WithHelp("g", "reveal"))
-	kAdd      = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
-	kRotate   = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "rotate"))
-	kRemove   = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete"))
-	kRename   = key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "rename"))
-	kExpiry   = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "expiry"))
-	kGrant    = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "grant"))
-	kRevoke   = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "revoke"))
-	kPwAdd    = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
-	kPwRemove = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "remove"))
-	kNewVault = key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new"))
-	kSetDef   = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "default"))
-	kPrune    = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "prune"))
-	kPrune2   = key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "prune"))
-	kRestore  = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "restore"))
-	kSet      = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "set"))
-	kUnset    = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "unset"))
+	kOpenDetail  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details"))
+	kReveal      = key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reveal/hide"))
+	kCopyExec    = key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "copy exec"))
+	kAdd         = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
+	kRotate      = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "rotate"))
+	kRemove      = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete"))
+	kRename      = key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "rename"))
+	kExpiry      = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "expiry"))
+	kGrant       = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "grant"))
+	kDetailGrant = key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "grant"))
+	kRevoke      = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "revoke"))
+	kPwAdd       = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
+	kPwRemove    = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "remove"))
+	kNewVault    = key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new"))
+	kSetDef      = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "default"))
+	kPrune       = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "prune"))
+	kPrune2      = key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "prune"))
+	kRestore     = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "restore"))
+	kSet         = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "set"))
+	kUnset       = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "unset"))
 )
 
 // requireAuth runs do, first prompting for the vault passphrase when the
@@ -124,7 +128,8 @@ func (m *rootModel) buildVaultPicker() screen {
   enter   Switch to the selected vault.
   n       Create a new vault.
   d       Make the selected vault the default that aql vault -i opens.
-  D       Forget a stale entry from the list (its files are left untouched).`)
+  D       Forget a stale entry from the list (its files are left untouched).`).
+		withCmd("aql vault folder")
 }
 
 func (m *rootModel) vaultItems() []list.Item {
@@ -193,7 +198,7 @@ func (m *rootModel) buildCreateVaultForm() screen {
 		huh.NewInput().Title("Passphrase").Description("required for the file backend").
 			EchoMode(huh.EchoModePassword).Value(&pass),
 	))
-	return newFormScreen("new vault", form, func() tea.Cmd {
+	fs := newFormScreen("new vault", form, func() tea.Cmd {
 		name := suffix
 		if name == "" {
 			name = "default"
@@ -205,6 +210,8 @@ func (m *rootModel) buildCreateVaultForm() screen {
 			return switchedToVaultMsg{name: name}
 		})
 	})
+	fs.cmdFn = func() string { return createVaultCommandPreview(folder, suffix, backend) }
+	return fs
 }
 
 // --- Secrets ---------------------------------------------------------------
@@ -219,9 +226,18 @@ func (m *rootModel) secretsTable() ([]table.Column, []table.Row) {
 	aliases, _ := m.ctl.listAliases()
 	rows := make([]table.Row, 0, len(aliases))
 	for _, a := range aliases {
-		rows = append(rows, table.Row{a.Name, dash(a.Provider), dash(aliasNamespace(a)), dash(a.ExpiresAt)})
+		rows = append(rows, table.Row{a.Name, dash(a.Provider), dash(aliasNamespace(a)), expiryCell(a.ExpiresAt)})
 	}
 	return cols, rows
+}
+
+// expiryCell shows the human countdown for the EXPIRES column ("in 89d" /
+// "expired 3d ago"), or "-" when unset.
+func expiryCell(rfc3339 string) string {
+	if cd := expiryCountdown(rfc3339); cd != "" {
+		return cd
+	}
+	return "-"
 }
 
 func (m *rootModel) buildSecrets() screen {
@@ -233,81 +249,409 @@ func (m *rootModel) buildSecrets() screen {
 		return ""
 	}
 	acts := []tableAction{
-		{binding: kReveal, run: func(idx int) tea.Cmd {
-			alias := aliasAt(idx)
-			if alias == "" {
-				return nil
-			}
-			return m.requireAuth(func() tea.Cmd {
-				v, err := m.ctl.revealSecret(alias)
-				if err != nil {
-					return statusErr(err.Error())
-				}
-				return pushScreen(m.buildRevealPager(alias, v))
-			})
-		}},
-		{binding: kAdd, run: func(_ int) tea.Cmd { return pushScreen(m.buildAddForm()) }},
-		{binding: kRotate, run: func(idx int) tea.Cmd {
+		// Enter opens the per-secret detail page — that's the only place the
+		// value can be revealed and where the per-key actions live.
+		{binding: kOpenDetail, run: func(idx int) tea.Cmd {
 			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildRotateForm(alias))
+				return pushScreen(m.buildSecretDetail(alias))
 			}
 			return nil
 		}},
-		{binding: kRemove, run: func(idx int) tea.Cmd {
-			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildRemoveForm(alias))
-			}
-			return nil
-		}},
-		{binding: kRename, run: func(idx int) tea.Cmd {
-			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildRenameForm(alias))
-			}
-			return nil
-		}},
-		{binding: kExpiry, run: func(idx int) tea.Cmd {
-			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildExpiryForm(alias))
-			}
-			return nil
+		{binding: kAdd, run: func(_ int) tea.Cmd {
+			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildAddForm()) })
 		}},
 	}
 	cols, rows := m.secretsTable()
 	return newTableScreen("secrets", cols, rows, acts, "no secrets yet — press a to add one", m.secretsTable).
-		withHelp(`Your stored API keys and tokens. Values stay hidden until you reveal them.
+		withHelp(`Your stored API keys and tokens. Values stay hidden here.
 
-  g / enter   Reveal the value on a temporary screen (esc clears it from view).
-  a           Add a new secret — you type the value (entry is hidden).
-  R           Rotate: replace the value with a new one, keeping the same alias
-              and its capabilities. Tokens issued for it keep working unless you
-              also choose to revoke them.
-  D           Delete the secret and every capability scoped to it.
-  m           Rename the secret, or move it to another namespace.
-  e           Set or clear its expiry reminder (a reminder only — never enforced).`)
+  enter   Open the secret's page — reveal it, rotate / rename / delete it, set an
+          expiry, grant a token, and copy the command to inject it into a process.
+  a       Add a new secret — you type the value (entry is hidden).`).
+		withCmd("aql vault list")
 }
 
-func (m *rootModel) buildRevealPager(alias, value string) screen {
-	content := tuiErrStyle.Render("⚠ secret revealed — press esc to clear from the screen") + "\n\n" +
-		tuiTitleStyle.Render(alias) + "\n\n" + value
-	return newPagerScreen("reveal", content, nil, nil)
+// secretRevealedMsg carries a freshly-revealed value back to the detail
+// screen after the (possibly async) passphrase prompt.
+type secretRevealedMsg struct{ value string }
+
+// secretDetailScreen is the per-secret page: metadata, a reveal/hide toggle,
+// the key actions, and a SELECTABLE list of the commands to inject the secret
+// into a process (↑/↓ to choose, c to copy). It is the only place a value can
+// be revealed.
+type secretDetailScreen struct {
+	m      *rootModel
+	alias  string
+	shown  bool
+	value  string
+	cmds   []injectCmd
+	cursor int
+}
+
+// injectCmd is one exec recipe plus a one-line explanation of what it does.
+type injectCmd struct {
+	cmd  string
+	desc string
+}
+
+func (m *rootModel) buildSecretDetail(alias string) screen {
+	return &secretDetailScreen{m: m, alias: alias, cmds: injectCommands(alias)}
+}
+
+// injectCommands are the exec recipes shown (and copyable) on the detail page,
+// each with a note on its purpose.
+func injectCommands(alias string) []injectCmd {
+	env := strings.ToUpper(aliasBase(alias))
+	return []injectCmd{
+		{
+			"aql vault exec " + alias + " -- <your command>",
+			"Run any command with the secret injected as the $" + aliasBase(alias) + " environment variable.",
+		},
+		{
+			"aql vault exec " + alias + "=" + env + " -- <your command>",
+			"Same, but choose the variable's name (here $" + env + ").",
+		},
+		{
+			"aql vault exec --for=npm " + alias + " -- npm publish",
+			"Set up a tool's credential env — --for=npm·yarn·pnpm·bun·pypi·uv·poetry·cargo·gem·hex·swift·cocoapods·composer·github·gitlab·terraform.",
+		},
+	}
+}
+
+func (s *secretDetailScreen) Init() tea.Cmd       { return nil }
+func (s *secretDetailScreen) Title() string       { return s.alias }
+func (s *secretDetailScreen) capturesInput() bool { return false }
+func (s *secretDetailScreen) reload() tea.Cmd     { return nil } // View reads live state
+func (s *secretDetailScreen) cliCommand() string  { return "aql vault get " + s.alias }
+
+func (s *secretDetailScreen) helpInfo() string {
+	return `Everything about one secret. The value is shown only here, only when you
+reveal it, and it is cleared again when you leave this page.
+
+  ↑/↓ select an inject command   ·   c copy the selected command
+  r   Reveal the value (press r again to hide it). Masked otherwise.
+  R   Rotate: replace the value with a new one, keeping the same alias and its
+      capabilities. Tokens issued for it keep working unless you also revoke.
+  m   Rename the secret, or move it to another namespace.
+  e   Set or clear its expiry reminder (informational; never enforced).
+  g   Grant a scoped capability token for this secret.
+  D   Delete the secret and every capability scoped to it.
+
+The "Inject into a process" commands run the secret into a child process's
+environment without it ever touching disk or your shell history:
+"aql vault exec <alias> -- cmd" injects it as $<alias>; add
+"--for=npm|cargo|gem|pypi|uv" for publishing recipes.`
+}
+
+func (s *secretDetailScreen) shortHelp() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "select cmd")),
+		kCopyExec, kReveal, kRotate, kRename, kExpiry, kDetailGrant, kRemove,
+	}
+}
+func (s *secretDetailScreen) fullHelp() [][]key.Binding { return [][]key.Binding{s.shortHelp()} }
+
+func (s *secretDetailScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
+	switch msg := msg.(type) {
+	case secretRevealedMsg:
+		s.shown, s.value = true, msg.value
+		return s, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if s.cursor > 0 {
+				s.cursor--
+			}
+			return s, nil
+		case "down", "j":
+			if s.cursor < len(s.cmds)-1 {
+				s.cursor++
+			}
+			return s, nil
+		}
+		switch {
+		case key.Matches(msg, kReveal):
+			if s.shown {
+				s.shown, s.value = false, ""
+				return s, nil
+			}
+			alias := s.alias
+			return s, s.m.requireAuth(func() tea.Cmd {
+				v, err := s.m.ctl.revealSecret(alias)
+				if err != nil {
+					return statusErr(err.Error())
+				}
+				return func() tea.Msg { return secretRevealedMsg{value: v} }
+			})
+		case key.Matches(msg, kCopyExec):
+			if s.cursor < len(s.cmds) {
+				label, err := s.m.ctl.copyToClipboard(s.cmds[s.cursor].cmd)
+				if err != nil {
+					return s, statusErr("copy: " + err.Error())
+				}
+				return s, status("copied to clipboard (" + label + ")")
+			}
+		case key.Matches(msg, kRotate):
+			return s, s.m.requireAuth(func() tea.Cmd { return pushScreen(s.m.buildRotateForm(s.alias)) })
+		case key.Matches(msg, kRename):
+			return s, s.m.requireAuth(func() tea.Cmd { return pushScreen(s.m.buildRenameForm(s.alias)) })
+		case key.Matches(msg, kExpiry):
+			return s, pushScreen(s.m.buildExpiryForm(s.alias))
+		case key.Matches(msg, kDetailGrant):
+			return s, pushScreen(s.m.buildGrantForm(s.alias))
+		case key.Matches(msg, kRemove):
+			return s, s.m.requireAuth(func() tea.Cmd { return pushScreen(s.m.buildRemoveForm(s.alias)) })
+		}
+	}
+	return s, nil
+}
+
+func (s *secretDetailScreen) View(width, height int) string {
+	return s.m.secretDetailBody(s.alias, s.shown, s.value, s.cursor)
+}
+
+// detailValueCol is where the value column starts ("  " + 11-wide label).
+const detailValueCol = 13
+
+// detailRow renders an aligned "label  value" line for the detail page.
+func detailRow(label, value string) string {
+	return "  " + tuiDimStyle.Render(fmt.Sprintf("%-11s", label)) + value + "\n"
+}
+
+// secretDetailBody renders the detail page for an alias with the given reveal
+// state and selected command index.
+func (m *rootModel) secretDetailBody(alias string, shown bool, value string, sel int) string {
+	a, ok := m.ctl.alias(alias)
+	var b strings.Builder
+	b.WriteString(tuiTitleStyle.Render("Secret  " + alias))
+	b.WriteString("\n\n")
+	if ok {
+		b.WriteString(detailRow("provider", dash(a.Provider)))
+		b.WriteString(detailRow("namespace", nsLabel(aliasNamespace(a))))
+		b.WriteString(detailRow("created", dash(a.CreatedAt)))
+		exp := dash(a.ExpiresAt)
+		if cd := expiryCountdown(a.ExpiresAt); cd != "" {
+			exp = a.ExpiresAt + "  " + tuiDimStyle.Render("("+cd+")")
+		}
+		b.WriteString(detailRow("expires", exp))
+		b.WriteString(detailRow("source", dash(a.Source)))
+	}
+	b.WriteByte('\n')
+	indent := strings.Repeat(" ", detailValueCol)
+	if shown {
+		b.WriteString(detailRow("value", tuiErrStyle.Render(value)))
+		b.WriteString(indent + tuiDimStyle.Render("⚠ visible — press r to hide") + "\n")
+	} else {
+		b.WriteString(detailRow("value", tuiDimStyle.Render("•••••••• (hidden)")))
+		b.WriteString(indent + tuiDimStyle.Render("press r to reveal") + "\n")
+	}
+	b.WriteByte('\n')
+	b.WriteString(tuiSectionStyle.Render("Inject into a process — ↑/↓ select · c copy"))
+	b.WriteByte('\n')
+	for i, ic := range injectCommands(alias) {
+		cursor, style := "  ", tuiPathStyle
+		if i == sel {
+			cursor, style = tuiCursorStyle.Render("▸ "), tuiPathStyle.Bold(true)
+		}
+		b.WriteString("  " + cursor + style.Render(ic.cmd) + "\n")
+		b.WriteString("      " + tuiDimStyle.Render(ic.desc) + "\n")
+	}
+	return b.String()
+}
+
+// expiryCountdown turns an RFC3339 expiry into a human countdown like
+// "in 89d" or "expired 3d ago"; "" when unset/unparseable.
+func expiryCountdown(rfc3339 string) string {
+	if rfc3339 == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, rfc3339)
+	if err != nil {
+		return ""
+	}
+	return expiryStatus(t, time.Now())
+}
+
+// providerOptions builds the Provider select: "(none)" plus the known
+// provider presets, so the field is a constrained choice, not free text.
+func providerOptions() []huh.Option[string] {
+	opts := []huh.Option[string]{huh.NewOption("(none)", "")}
+	for _, p := range ListProviders() {
+		opts = append(opts, huh.NewOption(p.Name, p.Name))
+	}
+	return opts
 }
 
 func (m *rootModel) buildAddForm() screen {
-	var alias, value, provider, namespace, expiry string
+	var alias, value string
+	// Pre-fill the remembered context (never the alias or the secret value).
+	provider, namespace, expiry := m.lastAdd.provider, m.lastAdd.namespace, m.lastAdd.expiry
+	submit := true
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Alias").Description("name, or ns:name to qualify a namespace").Value(&alias).
-			Validate(nonEmpty("alias")),
-		huh.NewInput().Title("Secret value").EchoMode(huh.EchoModePassword).Value(&value).
-			Validate(nonEmpty("value")),
-		huh.NewInput().Title("Provider").Description("optional: openai, anthropic, github, …").Value(&provider),
-		huh.NewInput().Title("Namespace").Description("optional; overrides any ns: prefix").Value(&namespace),
-		huh.NewInput().Title("Expiry").Description("optional: YYYY-MM-DD, RFC3339, or a duration like 90d").Value(&expiry),
+		huh.NewInput().Title("Alias").Description("name, or ns:name to qualify a namespace").
+			Value(&alias).Validate(validateAliasField),
+		huh.NewInput().Title("Secret value").Description("the secret itself (entry is hidden)").
+			EchoMode(huh.EchoModePassword).Value(&value).Validate(nonEmpty("value")),
+		huh.NewSelect[string]().Title("Provider").Description("optional: tag with a known provider").
+			Options(providerOptions()...).Value(&provider),
+		huh.NewInput().Title("Namespace").Description("optional; overrides any ns: prefix").
+			Value(&namespace).Validate(validateNamespaceField),
+		huh.NewInput().Title("Expiry").Description("optional: YYYY-MM-DD, RFC3339, or a duration like 90d").
+			Value(&expiry).Validate(validateExpiryField),
+		huh.NewConfirm().Affirmative("Submit").Negative("Cancel").Value(&submit),
 	))
-	return newFormScreen("add", form, func() tea.Cmd {
+	fs := newFormScreen("add", form, func() tea.Cmd {
+		if !submit { // the Cancel button
+			return tea.Batch(popScreen(), status("cancelled"))
+		}
+		// Remember the context for the next add (not the alias/value).
+		m.lastAdd = addDefaults{provider: provider, namespace: namespace, expiry: expiry}
 		return submitOp("stored "+alias, func() error {
 			return m.ctl.addSecret(alias, value, provider, namespace, expiry)
 		})
 	})
+	// The command builder mirrors the in-progress input as a CLI command.
+	fs.cmdFn = func() string { return addCommandPreview(alias, provider, namespace, expiry) }
+	return fs
+}
+
+// addCommandPreview renders the equivalent `aql vault add` command for the
+// values entered so far (the secret value is never shown).
+func addCommandPreview(alias, provider, namespace, expiry string) string {
+	parts := []string{"aql", "vault", "add"}
+	if provider != "" {
+		parts = append(parts, "--provider="+provider)
+	}
+	if namespace != "" {
+		parts = append(parts, "--namespace="+namespace)
+	}
+	if expiry != "" {
+		parts = append(parts, "--expiry="+expiry)
+	}
+	parts = append(parts, "--from-stdin")
+	if alias != "" {
+		parts = append(parts, alias)
+	} else {
+		parts = append(parts, "<alias>")
+	}
+	return strings.Join(parts, " ")
+}
+
+// orPlaceholder returns s, or ph when s is blank — so a preview reads
+// naturally before a required field is filled.
+func orPlaceholder(s, ph string) string {
+	if strings.TrimSpace(s) == "" {
+		return ph
+	}
+	return s
+}
+
+func rotateCommandPreview(alias, expiry string, revoke bool) string {
+	parts := []string{"aql", "vault", "rotate"}
+	if revoke {
+		parts = append(parts, "--revoke-caps")
+	}
+	if expiry != "" {
+		parts = append(parts, "--expiry="+expiry)
+	}
+	return strings.Join(append(parts, "--from-stdin", alias), " ")
+}
+
+func renameCommandPreview(from, to string, revoke bool) string {
+	parts := []string{"aql", "vault", "mv"}
+	if revoke {
+		parts = append(parts, "--revoke-caps")
+	}
+	return strings.Join(append(parts, from, orPlaceholder(to, "<new-name>")), " ")
+}
+
+func expiryCommandPreview(alias, when string) string {
+	if strings.TrimSpace(when) == "" {
+		return "aql vault expiry clear " + alias
+	}
+	return "aql vault expiry set " + alias + " " + when
+}
+
+func grantCommandPreview(alias, agent, hosts, methods, ttl, maxCalls, maxCost string, approval bool) string {
+	parts := []string{"aql", "vault", "grant"}
+	if agent != "" {
+		parts = append(parts, "--agent="+agent)
+	}
+	if hosts != "" {
+		parts = append(parts, "--hosts="+hosts)
+	}
+	if methods != "" {
+		parts = append(parts, "--methods="+methods)
+	}
+	if ttl != "" {
+		parts = append(parts, "--ttl="+ttl)
+	}
+	if n := atoiOr0(maxCalls); n > 0 {
+		parts = append(parts, fmt.Sprintf("--max-calls=%d", n))
+	}
+	if n := atoiOr0(maxCost); n > 0 {
+		parts = append(parts, fmt.Sprintf("--max-cost-cents=%d", n))
+	}
+	if approval {
+		parts = append(parts, "--require-approval")
+	}
+	return strings.Join(append(parts, orPlaceholder(alias, "<alias>")), " ")
+}
+
+func passwordAddCommandPreview(name, scope, namespaces string) string {
+	parts := []string{"aql", "vault", "password", "add"}
+	if scope != "" {
+		parts = append(parts, "--scope="+scope)
+	}
+	if namespaces != "" {
+		parts = append(parts, "--namespaces="+namespaces)
+	}
+	return strings.Join(append(parts, orPlaceholder(name, "<name>")), " ")
+}
+
+func createVaultCommandPreview(folder, suffix, backend string) string {
+	parts := []string{"aql", "vault"}
+	if folder != "" {
+		parts = append(parts, "--folder="+folder)
+	}
+	if suffix != "" {
+		parts = append(parts, "--suffix="+suffix)
+	}
+	return strings.Join(append(parts, "init", "--backend="+orPlaceholder(backend, "auto")), " ")
+}
+
+// --- add-form field validators (mark invalid fields with a message) -------
+
+func validateAliasField(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return fmt.Errorf("alias is required")
+	}
+	if !validAliasRef(s) {
+		return fmt.Errorf("invalid: use letters, digits, . - _ and one optional ns: prefix")
+	}
+	return nil
+}
+
+func validateNamespaceField(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" || s == rootNamespaceRef {
+		return nil
+	}
+	if !validNamespaceName(s) {
+		return fmt.Errorf("invalid namespace name")
+	}
+	return nil
+}
+
+func validateExpiryField(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	if _, err := parseExpiryFlag(s); err != nil {
+		return fmt.Errorf("invalid: use YYYY-MM-DD, RFC3339, or a duration like 90d")
+	}
+	return nil
 }
 
 func (m *rootModel) buildRotateForm(alias string) screen {
@@ -319,11 +663,13 @@ func (m *rootModel) buildRotateForm(alias string) screen {
 		huh.NewInput().Title("Expiry").Description("optional; blank keeps the current reminder").Value(&expiry),
 		huh.NewConfirm().Title("Revoke existing capabilities for this alias?").Value(&revoke),
 	))
-	return newFormScreen("rotate", form, func() tea.Cmd {
+	fs := newFormScreen("rotate", form, func() tea.Cmd {
 		return submitOp("rotated "+alias, func() error {
 			return m.ctl.rotateSecret(alias, value, revoke, expiry)
 		})
 	})
+	fs.cmdFn = func() string { return rotateCommandPreview(alias, expiry, revoke) }
+	return fs
 }
 
 func (m *rootModel) buildRemoveForm(alias string) screen {
@@ -334,12 +680,14 @@ func (m *rootModel) buildRemoveForm(alias string) screen {
 			Description("this permanently removes the secret and its capabilities").
 			Affirmative("Delete").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("delete", form, func() tea.Cmd {
+	fs := newFormScreen("delete", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
 		return submitOp("deleted "+alias, func() error { return m.ctl.removeSecret(alias) })
 	})
+	fs.cmdFn = func() string { return "aql vault rm --yes " + alias }
+	return fs
 }
 
 func (m *rootModel) buildRenameForm(alias string) screen {
@@ -350,11 +698,13 @@ func (m *rootModel) buildRenameForm(alias string) screen {
 		huh.NewInput().Title("New name").Description("name, ns:name, or a trailing ns: to move").Value(&to).Validate(nonEmpty("name")),
 		huh.NewConfirm().Title("Revoke capabilities instead of re-binding them?").Value(&revoke),
 	))
-	return newFormScreen("rename", form, func() tea.Cmd {
+	fs := newFormScreen("rename", form, func() tea.Cmd {
 		return submitOp("renamed "+alias+" → "+to, func() error {
 			return m.ctl.renameSecret(alias, to, revoke)
 		})
 	})
+	fs.cmdFn = func() string { return renameCommandPreview(alias, to, revoke) }
+	return fs
 }
 
 func (m *rootModel) buildExpiryForm(alias string) screen {
@@ -363,12 +713,14 @@ func (m *rootModel) buildExpiryForm(alias string) screen {
 		huh.NewNote().Title("Expiry reminder for "+alias),
 		huh.NewInput().Title("Expires").Description("YYYY-MM-DD, RFC3339, duration like 90d — blank clears it").Value(&when),
 	))
-	return newFormScreen("expiry", form, func() tea.Cmd {
+	fs := newFormScreen("expiry", form, func() tea.Cmd {
 		if strings.TrimSpace(when) == "" {
 			return submitOp("cleared expiry for "+alias, func() error { return m.ctl.clearExpiry(alias) })
 		}
 		return submitOp("set expiry for "+alias, func() error { return m.ctl.setExpiry(alias, when) })
 	})
+	fs.cmdFn = func() string { return expiryCommandPreview(alias, when) }
+	return fs
 }
 
 // --- Access (capabilities) -------------------------------------------------
@@ -409,7 +761,7 @@ func (m *rootModel) buildAccess() screen {
 		return ""
 	}
 	acts := []tableAction{
-		{binding: kGrant, run: func(_ int) tea.Cmd { return pushScreen(m.buildGrantForm()) }},
+		{binding: kGrant, run: func(_ int) tea.Cmd { return pushScreen(m.buildGrantForm("")) }},
 		{binding: kRevoke, run: func(idx int) tea.Cmd {
 			if id := idAt(idx); id != "" {
 				return pushScreen(m.buildRevokeForm(id))
@@ -427,8 +779,9 @@ func (m *rootModel) buildAccess() screen {
   D   Revoke: permanently disable the selected token; it stops working at once.`)
 }
 
-func (m *rootModel) buildGrantForm() screen {
-	var alias, agent, hosts, methods, ttl, maxCalls, maxCost string
+func (m *rootModel) buildGrantForm(prefillAlias string) screen {
+	alias := prefillAlias
+	var agent, hosts, methods, ttl, maxCalls, maxCost string
 	var approval bool
 	ttl = "2h"
 	form := huh.NewForm(huh.NewGroup(
@@ -441,7 +794,7 @@ func (m *rootModel) buildGrantForm() screen {
 		huh.NewInput().Title("Max cost (cents)").Description("optional integer; 0 = unlimited").Value(&maxCost).Validate(optionalInt),
 		huh.NewConfirm().Title("Require human approval?").Value(&approval),
 	))
-	return newFormScreen("grant", form, func() tea.Cmd {
+	fs := newFormScreen("grant", form, func() tea.Cmd {
 		return tea.Sequence(popScreen(), func() tea.Msg {
 			out, err := m.ctl.grant(alias, agent, hosts, methods, ttl, atoiOr0(maxCalls), atoiOr0(maxCost), approval)
 			if err != nil {
@@ -451,6 +804,10 @@ func (m *rootModel) buildGrantForm() screen {
 			return grantedMsg{output: out}
 		})
 	})
+	fs.cmdFn = func() string {
+		return grantCommandPreview(alias, agent, hosts, methods, ttl, maxCalls, maxCost, approval)
+	}
+	return fs
 }
 
 func (m *rootModel) buildRevokeForm(id string) screen {
@@ -462,12 +819,14 @@ func (m *rootModel) buildRevokeForm(id string) screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title("Revoke capability " + short + "?").Affirmative("Revoke").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("revoke", form, func() tea.Cmd {
+	fs := newFormScreen("revoke", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
 		return submitOp("revoked "+short, func() error { return m.ctl.revoke(id) })
 	})
+	fs.cmdFn = func() string { return "aql vault revoke " + id }
+	return fs
 }
 
 // --- Passwords -------------------------------------------------------------
@@ -511,7 +870,8 @@ namespaces, so different holders can be given different access.
 
   a   Add: create a named password with a scope (read / write / move / admin)
       and namespaces. You first authenticate with an existing admin password.
-  D   Remove: delete a password slot; the other slots keep working.`)
+  D   Remove: delete a password slot; the other slots keep working.`).
+		withCmd("aql vault password list")
 }
 
 func (m *rootModel) buildPasswordAddForm() screen {
@@ -529,13 +889,15 @@ func (m *rootModel) buildPasswordAddForm() screen {
 		huh.NewInput().Title("Namespaces").Description("comma-separated; * = all, : = root").Value(&namespaces),
 		huh.NewInput().Title("New password").EchoMode(huh.EchoModePassword).Value(&newPass).Validate(nonEmpty("password")),
 	))
-	return newFormScreen("password add", form, func() tea.Cmd {
+	fs := newFormScreen("password add", form, func() tea.Cmd {
 		return m.requireAuth(func() tea.Cmd {
 			return submitOp("added password "+name, func() error {
 				return m.ctl.passwordAdd(name, scope, namespaces, newPass)
 			})
 		})
 	})
+	fs.cmdFn = func() string { return passwordAddCommandPreview(name, scope, namespaces) }
+	return fs
 }
 
 func (m *rootModel) buildPasswordRemoveForm(name string) screen {
@@ -543,7 +905,7 @@ func (m *rootModel) buildPasswordRemoveForm(name string) screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title("Remove password " + name + "?").Affirmative("Remove").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("password rm", form, func() tea.Cmd {
+	fs := newFormScreen("password rm", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
@@ -551,6 +913,8 @@ func (m *rootModel) buildPasswordRemoveForm(name string) screen {
 			return submitOp("removed password "+name, func() error { return m.ctl.passwordRemove(name) })
 		})
 	})
+	fs.cmdFn = func() string { return "aql vault password rm " + name }
+	return fs
 }
 
 // --- Maintenance -----------------------------------------------------------
@@ -568,7 +932,8 @@ func (m *rootModel) buildMaintenance() screen {
 		}},
 		listItem{name: "Audit", desc: "structured audit log", act: func() tea.Cmd {
 			return pushScreen(newPagerScreen("audit", m.ctl.auditText(), nil, func() string { return m.ctl.auditText() }).
-				withHelp("The structured log of vault operations (newest last). Scroll with ↑/↓; secrets are never recorded here."))
+				withHelp("The structured log of vault operations (newest last). Scroll with ↑/↓; secrets are never recorded here.").
+				withCmd("aql vault audit"))
 		}},
 	}
 	return newListScreen("maintenance", items, nil, nil).
@@ -599,7 +964,7 @@ func (m *rootModel) buildVerifyPruneForm() screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title("Repair the vault (prune orphans, drop dangling records)?").Affirmative("Repair").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("prune", form, func() tea.Cmd {
+	fs := newFormScreen("prune", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
@@ -614,6 +979,8 @@ func (m *rootModel) buildVerifyPruneForm() screen {
 			})
 		})
 	})
+	fs.cmdFn = func() string { return "aql vault verify --prune" }
+	return fs
 }
 
 func (m *rootModel) buildScanForm() screen {
@@ -621,13 +988,15 @@ func (m *rootModel) buildScanForm() screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Path to scan").Description("directory or file; default current directory").Value(&path),
 	))
-	return newFormScreen("scan", form, func() tea.Cmd {
+	fs := newFormScreen("scan", form, func() tea.Cmd {
 		p := strings.TrimSpace(path)
 		return tea.Sequence(popScreen(), func() tea.Msg {
 			out := m.ctl.scanText(p)
 			return pushMsg{m.textPager("scan", out)}
 		})
 	})
+	fs.cmdFn = func() string { return "aql vault scan " + orPlaceholder(path, ".") }
+	return fs
 }
 
 func (m *rootModel) buildHistoryPager() screen {
@@ -638,7 +1007,8 @@ func (m *rootModel) buildHistoryPager() screen {
 		withHelp(`Each row above is a saved content revision (generation), newest last.
 
   R   Restore the vault metadata to a generation. You confirm by typing its
-      number. Password slots, namespace keys, and config are preserved.`)
+      number. Password slots, namespace keys, and config are preserved.`).
+		withCmd("aql vault history")
 }
 
 func (m *rootModel) buildRestoreForm() screen {
@@ -658,7 +1028,7 @@ func (m *rootModel) buildRestoreForm() screen {
 			return nil
 		}),
 	))
-	return newFormScreen("restore", form, func() tea.Cmd {
+	fs := newFormScreen("restore", form, func() tea.Cmd {
 		gen, _ := strconv.ParseInt(strings.TrimSpace(genStr), 10, 64)
 		return m.requireAuth(func() tea.Cmd {
 			return submitOp(fmt.Sprintf("restored to generation %d", gen), func() error {
@@ -666,6 +1036,10 @@ func (m *rootModel) buildRestoreForm() screen {
 			})
 		})
 	})
+	fs.cmdFn = func() string {
+		return "aql vault restore --generation=" + orPlaceholder(genStr, "<generation>") + " --yes"
+	}
+	return fs
 }
 
 // --- Settings --------------------------------------------------------------
@@ -711,7 +1085,8 @@ func (m *rootModel) buildConfigPager() screen {
 		withHelp(`Vault configuration keys and their values are listed above.
 
   s   Set a key to a value (e.g. namespace.default).
-  x   Unset (remove) a key.`)
+  x   Unset (remove) a key.`).
+		withCmd("aql vault config")
 }
 
 func (m *rootModel) buildConfigSetForm() screen {
@@ -720,9 +1095,11 @@ func (m *rootModel) buildConfigSetForm() screen {
 		huh.NewInput().Title("Key").Value(&k).Validate(nonEmpty("key")),
 		huh.NewInput().Title("Value").Value(&v),
 	))
-	return newFormScreen("config set", form, func() tea.Cmd {
+	fs := newFormScreen("config set", form, func() tea.Cmd {
 		return submitOp("set "+k, func() error { return m.ctl.configSet(k, v) })
 	})
+	fs.cmdFn = func() string { return "aql vault config --set " + orPlaceholder(k, "<key>") + "=" + v }
+	return fs
 }
 
 func (m *rootModel) buildConfigUnsetForm() screen {
@@ -730,9 +1107,11 @@ func (m *rootModel) buildConfigUnsetForm() screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Key to unset").Value(&k).Validate(nonEmpty("key")),
 	))
-	return newFormScreen("config unset", form, func() tea.Cmd {
+	fs := newFormScreen("config unset", form, func() tea.Cmd {
 		return submitOp("unset "+k, func() error { return m.ctl.configUnset(k) })
 	})
+	fs.cmdFn = func() string { return "aql vault config --unset " + orPlaceholder(k, "<key>") }
+	return fs
 }
 
 // textPager builds a simple scrollable pager over static text.
@@ -782,9 +1161,9 @@ func (m *rootModel) runPalette(cmd string) tea.Cmd {
 	case "config":
 		return pushScreen(m.buildConfigPager())
 	case "add":
-		return pushScreen(m.buildAddForm())
+		return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildAddForm()) })
 	case "grant":
-		return pushScreen(m.buildGrantForm())
+		return pushScreen(m.buildGrantForm(""))
 	case "lock":
 		return submitOpNoPop("vault locked", m.ctl.lock)
 	case "unlock":
