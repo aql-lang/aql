@@ -27,7 +27,7 @@
 "aql:minilang" import end  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  register / kinds — out-of-band exports (not mini-callable)
-"aql:minilang" import end  MiniLang.kinds	[re/q bf/q]	the registered kind atoms, in registration order
+"aql:minilang" import end  MiniLang.kinds	[re/q bf/q gex/q]	the registered kind atoms, in registration order
 "aql:minilang" import end  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 "aql:minilang" import end  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
 #
@@ -73,3 +73,26 @@ MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:minilang" import end  MiniLang.register-compiled ghost (macro [[s o] [ quote [ s ] ]])	ERROR:mini_no_transducer	a compiler must layer on an existing transducer
 "aql:minilang" import end  MiniLang.register lit (fn [[s:String o:Map] [String] [s]]) end  MiniLang.register-compiled lit (fn [[s:String o:Map] [List] [ [s] ]])	ERROR:mini_bad_compiler	the compiler must be a macro, not a plain fn
 "aql:minilang" import end  MiniLang.register-compiled Bad (macro [[s o] [ quote [ s ] ]])	ERROR:mini_bad_name	capitalised names are rejected (types)
+#
+# §8  the `gex` kind — glob-expression SELECT (not a match-extractor like re).
+#     Anchored whole-subject match: `*` any run, `?` one char, `**`/`*?` a literal
+#     `*`/`?`. A scalar returns itself when it matches else None; a List is filtered
+#     to matching elements, a Map to entries whose key matches. None / empty results
+#     are falsy, so the scalar value drops straight into `if`.
+"aql:minilang" import end  "ax" mini gex 'a*'	'ax'	scalar match returns the subject (explicit mini form)
+"aql:minilang" import end  "bx" mini gex 'a*'	None	no match → None
+"aql:minilang" import end  "ax" MiniLang.lang_gex 'a*' {} end	'ax'	the desugared standard call — mini and +gex are sugar for this
+"aql:minilang" import end  "ax" +gex/a*/	'ax'	the terse +literal form, subject from the stack
+"aql:minilang" import end  "bx" +gex/a*/	None	+literal, no match → None
+"aql:minilang" import end  "xab" +gex/a*/	None	anchored: the whole subject must match, not a substring
+"aql:minilang" import end  ["ab" "zz" "ac"] +gex/a*/	['ab' 'ac']	a List subject is filtered to matching elements
+"aql:minilang" import end  {ab:1 zz:2 ac:3} +gex/a*/ {}	{ab:1 ac:3}	a Map subject is filtered by key — needs an explicit {} (mini's opts is a Map, so a bare map subject is claimed as opts)
+"aql:minilang" import end  {ab:1 zz:2 ac:3} +gex/a*/	ERROR:uncalled_function	without the {} the map IS the opts, leaving no subject — the gotcha the {} above avoids
+"aql:minilang" import end  "a*b" +gex/a**b/	'a*b'	`**` is a literal `*` (matches the star verbatim)
+"aql:minilang" import end  "axb" +gex/a**b/	None	`**` is literal, so the wildcard reading does not apply
+"aql:minilang" import end  "axc" +gex/a?c/	'axc'	`?` matches exactly one character
+"aql:minilang" import end  "ac" +gex/a?c/	None	`?` requires a character — zero won't do
+"aql:minilang" import end  "a?c" +gex/a*?c/	'a?c'	`*?` is a literal `?`
+"aql:minilang" import end  "axc" +gex/a*?c/	None	`*?` is literal, so a real char does not match it
+"aql:minilang" import end  if ("ax" +gex/a*/) ['Y'] ['N']	'Y'	a matched subject is truthy
+"aql:minilang" import end  if ("bx" +gex/a*/) ['Y'] ['N']	'N'	None is falsy, so a non-match takes the else branch

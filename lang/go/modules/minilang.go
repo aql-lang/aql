@@ -137,6 +137,25 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		stdPrefix,
 	}, []*native.Type{native.TString}, nil, subReg))
 
+	// ---- kind: gex — glob-expression selector -------------------------
+	// [src opts subject:Any] → [Any]. gex is a SELECTOR (gex's `.on`), not
+	// a match-extractor like `re`: a List subject is filtered to matching
+	// elements, a Map to entries whose key matches, and a scalar returns
+	// itself when it matches or None otherwise. The pattern is anchored
+	// (whole-subject), with `**`/`*?` for a literal `*`/`?`. See gex.go.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-gex",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
+			Returns:    []*native.Type{native.TAny},
+			BarrierPos: -1,
+			Handler:    miniGexHandler,
+		}},
+	})
+	exports.Set("lang_gex", wrapMiniFnDef("minilang-gex", [][]native.FnParam{
+		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
+	}, []*native.Type{native.TAny}, nil, subReg))
+
 	// ---- out-of-band: register -----------------------------------------
 	// MiniLang.register <name> <fn> installs an AQL function as the
 	// mini-language `lang_<name>`. The fn must carry the standard

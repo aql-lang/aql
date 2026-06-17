@@ -35,7 +35,7 @@ var moduleCatalog = []ModuleInfo{
 	{"net", "HTTP requests and API access: fetch, prepare, direct."},
 	{"logic-util", "Derived boolean connectives: nand, nor, xnor, iff, implies."},
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
-	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), register."},
+	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), gex (globs), register."},
 	{"parselang", "Named parsers behind the `parse` word: register a parser, parse a source into an AST."},
 }
 
