@@ -36,8 +36,8 @@ import (
 // The ratchet pins. Lower them when a checker improvement lands;
 // never raise them without a documented decision.
 const (
-	pinnedFalsePositives     = 114 // value rows the checker wrongly errors on (June 2026; was 132 — macro installs in check mode; was 122 — make returns a value carrier of the made type, not the type literal)
-	pinnedUnflaggedErrorRows = 131 // ERROR rows the checker is silent on (June 2026; was 132)
+	pinnedFalsePositives     = 119 // value rows the checker wrongly errors on (June 2026; was 114 — +5 module-parselang register-then-parse rows the checker can't see the runtime register for, mirroring the MiniLang.register rows; was 132 — macro installs in check mode; was 122 — make returns a value carrier of the made type, not the type literal)
+	pinnedUnflaggedErrorRows = 136 // ERROR rows the checker is silent on (June 2026; was 131 — +5 module-parselang runtime-only errors: parse_file_unsupported / parse_bad_source / parse_kind_exists; was 132)
 )
 
 func TestCheckAccuracyRatchet(t *testing.T) {

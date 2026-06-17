@@ -116,6 +116,39 @@ var macroNatives = []NativeFunc{
 			},
 		},
 	},
+	{
+		Name: "parse",
+		// `parse <kind> <opts?> <source>` — named parsers (the sibling of
+		// `mini`; design/MINILANG.5.md + the ParseLang module). A macro in
+		// effect: the call expands to the STANDARD parser call
+		//
+		//	ParseLang.parse_<kind> <source> <opts> end
+		//
+		// spliced at the call site. Unlike `mini`, the `source` is the
+		// REQUIRED LAST surface argument (a String or a `{src:…}` Source
+		// map) and `opts` is the optional MIDDLE one — disambiguated by
+		// arity, so a Map source never collides with a Map opts. The kind
+		// names the expansion target and must be a literal; it is resolved
+		// against the imported `ParseLang` namespace at expansion time —
+		// unknown kinds fail loudly here. A parser returns Any (an AST, a
+		// transduction, …, per the language).
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TAtom, TMap, TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        parseHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom, TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        parseHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TAny}, BarrierPos: -1,
+			},
+		},
+	},
 }
 
 // gensymHandler returns a fresh atom whose name is guaranteed not to collide
@@ -278,6 +311,80 @@ func miniNamespaceBound(r *Registry) bool {
 // MiniLang namespace.
 func miniKindRegistered(r *Registry, target string) bool {
 	top, ok := r.Defs.Top("MiniLang")
+	if !ok {
+		return false
+	}
+	info, ok := asModuleExportInfo(top)
+	if !ok || info.Fields == nil {
+		return false
+	}
+	_, ok = info.Fields.Get(target)
+	return ok
+}
+
+// parseHandler expands `parse <kind> <opts?> <source>` into the standard
+// parser call `ParseLang.parse_<kind> <source> <opts> end`, returned as an
+// __SP splice so the generated tokens re-step at the call site (the same
+// mechanism as `mini`). args[0]=kind (Atom via /q — must be literal); the
+// `source` is the required LAST surface arg, `opts` the optional middle one
+// (2-arg form normalizes to {}). source/opts are spliced as collected — they
+// may be carriers in check mode; only the kind must be concrete.
+func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	kind, err := args[0].AsConcreteAtom()
+	if err != nil {
+		return nil, r.AqlErrorHint("parse_error",
+			"parse: the kind must be a literal name", "parse",
+			"write the kind as a bare word: parse calc 'x + y'")
+	}
+	target := "parse_" + kind
+
+	// Resolve the kind against the imported ParseLang namespace NOW —
+	// unknown kinds are expansion-time errors at the call site.
+	if !parseKindRegistered(r, target) {
+		if r.Check.IsActive() && !parseNamespaceBound(r) {
+			// The import may be outside the checked fragment; degrade to a
+			// dynamic value rather than a false-positive diagnostic (mirror
+			// of miniHandler).
+			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
+		return nil, r.AqlErrorHint("parse_unknown_lang",
+			fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
+			`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`)
+	}
+
+	// Surface: parse <kind> <opts?> <source>. source is the required last
+	// arg; opts is optional. Map surface→emission to the standard parser
+	// call shape [source opts].
+	var opts, source Value
+	if len(args) == 3 {
+		opts = args[1]
+		source = args[2]
+	} else {
+		opts = NewMap(NewOrderedMap())
+		source = args[1]
+	}
+	toks := []Value{
+		NewWord("ParseLang"), NewWord("get"), NewWord(target),
+		source, opts, NewEnd(),
+	}
+	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// parseNamespaceBound reports whether the `ParseLang` namespace is bound to a
+// ModuleExport in the current scope.
+func parseNamespaceBound(r *Registry) bool {
+	top, ok := r.Defs.Top("ParseLang")
+	if !ok {
+		return false
+	}
+	_, ok = asModuleExportInfo(top)
+	return ok
+}
+
+// parseKindRegistered reports whether `parse_<kind>` is an export of the
+// bound ParseLang namespace.
+func parseKindRegistered(r *Registry, target string) bool {
+	top, ok := r.Defs.Top("ParseLang")
 	if !ok {
 		return false
 	}

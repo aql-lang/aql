@@ -47,11 +47,12 @@ var metaFallbackWords = map[string]string{
 	"test-skip":       "property-test harness scaffolding",
 
 	// Code-as-data / reflection — rewrite or render the program at run time.
-	"macroexpand":       "rewrites code at run time",
-	"minilang-register": "registers a mini-language (code) at run time",
-	"codequote":         "captures code as data",
-	"canon":             "renders a value as canonical source (code-as-data)",
-	"reify":             "reflects a value back to its constructing form",
+	"macroexpand":        "rewrites code at run time",
+	"minilang-register":  "registers a mini-language (code) at run time",
+	"parselang-register": "registers a parser (code) at run time",
+	"codequote":          "captures code as data",
+	"canon":              "renders a value as canonical source (code-as-data)",
+	"reify":              "reflects a value back to its constructing form",
 
 	// The usurp / dispatch-modifier family returns a re-stepped, tape-coupled
 	// modified fn the VM cannot push (the `/u`, `/s`, `/f`, `/N` sugar desugars
