@@ -392,7 +392,7 @@ func stackTypes(vs []eng.Value) string {
 // caught. Unlike type-soundness this is a PRECISION metric, not a
 // soundness one: a high count is imprecise, not unsound.
 
-const pinnedAnyFrontierRows = 201 // was 208 — StructUtil.jsonify->String, items->List, clone->input type; was 217 (filter), 241 (case branch-join), 286 (item #4 field access); see TestCheckAnyFrontier
+const pinnedAnyFrontierRows = 196 // was 201 — get narrows concrete-list integer-index reads to the element type (plain-check analogue of tryFoldStaticIndex); was 208 (struct-util), 217 (filter), 241 (case), 286 (item #4 field access); see TestCheckAnyFrontier
 
 func TestCheckAnyFrontier(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

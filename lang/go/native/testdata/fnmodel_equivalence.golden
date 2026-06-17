@@ -211,7 +211,7 @@ WORD get
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
-  [Scalar/Number/Integer Node] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn

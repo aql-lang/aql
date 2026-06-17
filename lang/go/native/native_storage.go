@@ -139,7 +139,7 @@ var storageNatives = []NativeFunc{
 			// must not stringify-and-miss an integer over a list.
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
-			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getIntKeyReturns},
 			// [Key | Array]
 			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
 			// [Key | Object] — atom/string field reads resolve the field's
@@ -371,6 +371,41 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 		return dyn
 	}
 	return []Value{NewCarrier(val.Parent)}
+}
+
+// getIntKeyReturns narrows an INTEGER-key read over a CONCRETE list to the
+// indexed element's type — the plain-check-mode analogue of the emit-only
+// tryFoldStaticIndex fold, so `[10 20 30] get 0` checks as Integer instead of
+// dynamic(Any). An out-of-range or negative index reads as None (mirroring
+// getNodeHandler). A computed index, a non-list receiver (a Map keyed by a
+// stringified integer, an abstract object carrier), or a dispatch-bearing
+// element keeps dynamic(Any). Restricting to LISTS is deliberate: an integer
+// key over a list is an INDEX, never a stringified map key (the bug that
+// mistyped a parselang `get 1` over a list as None).
+func getIntKeyReturns(args []Value, _ *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 2 || !IsConcrete(args[0]) || !IsConcrete(args[1]) ||
+		!args[1].Parent.ConformsTo(TList) {
+		return dyn
+	}
+	idx, err := AsInteger(args[0])
+	if err != nil {
+		return dyn
+	}
+	list, lerr := AsList(args[1])
+	if lerr != nil || list.IsNil() {
+		return dyn
+	}
+	i := int(idx)
+	if i < 0 || i >= list.Len() {
+		return []Value{NewCarrier(TNone)} // out-of-range index reads as None
+	}
+	el := list.Get(i)
+	if el.Parent.ConformsTo(TFunction) || el.Parent.ConformsTo(TFnDef) ||
+		IsReach(el) || IsSplice(el) {
+		return dyn
+	}
+	return []Value{NewCarrier(el.Parent)}
 }
 
 func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
