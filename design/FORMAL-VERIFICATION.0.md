@@ -1,8 +1,12 @@
 # Formal Verification for AQL — a layered plan
 
-**Status:** draft / proposal (`.0`). No proof artifacts exist in the repo
-yet; `FORMAL-SPEC.md` §10–§11 names a mechanized model only as an
-aspiration. This note turns that aspiration into a concrete, staged
+**Status:** draft / proposal (`.0`). A first machine-checked **seed of
+milestone 6 now exists** at [`formal/lean/AqlCore.lean`](formal/lean/AqlCore.lean)
+(Lean 4.15.0, no Mathlib): a deep embedding of the binary-word + forward-collection
+fragment that *proves* source-spelling equivalence, the `end`-barrier
+negative result, determinism, and the type-lattice order — and
+cross-validates against the engine. The rest of `FORMAL-SPEC.md` §10–§11
+names a mechanized model only as an aspiration. This note turns that aspiration into a concrete, staged
 plan and — crucially — connects it to machinery the repo *already*
 ships: the carrier-based static checker (`eng/go/check.go`,
 `CheckState`), property-based testing (`aql:rand`, `test.check-prop`,
@@ -323,7 +327,7 @@ independently valuable and nothing changes default behaviour.
 | 3 | **Effect/capability inference** domain reusing the transparency lattice | AI | low | static sandbox decisions; feeds `PERMISSIONS.10` |
 | 4 | **Stack-effect checker** over composed signatures + forward-collection model | AI | medium | catches "stranded operand" statically |
 | 5 | **SMT discharge of `refine` predicates** (Z3) | SMT | high | turns existing refinement syntax into real verification |
-| 6 | **Lean deep embedding** of the scalar+refinement+record fragment; prove progress+preservation; cross-validate vs `eng/spec/*.tsv` | Lean | high | the soundness result the spec implies; answers §11.5 |
+| 6 | **Lean deep embedding** of the scalar+refinement+record fragment; prove progress+preservation; cross-validate vs `eng/spec/*.tsv` | Lean | high | the soundness result the spec implies; answers §11.5 — *seed landed: [`formal/lean/AqlCore.lean`](formal/lean/AqlCore.lean)* |
 | 7 | **Per-word adequacy library** + symbolic-carrier emitter; worked `clamp` end-to-end | Lean | high | sound per-program verification (b2); reused by certificate-checked SMT |
 | 8 | **`StackForm` compiler-correctness theorem** in Lean | Lean | medium | de-risks the bytecode backend |
 
