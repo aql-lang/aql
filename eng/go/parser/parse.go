@@ -116,6 +116,7 @@ func Parse(src string) ([]eng.Value, error) {
 	t := setupBaseTokens(j)
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
+	setupMiniLitMatcher(j, t)
 
 	// Stage 2: Grammar setup — extend rules for AQL syntax.
 	setupValRule(j, t)
@@ -250,6 +251,23 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 
 	values := make([]eng.Value, 0, len(items))
 	for i := 0; i < len(items); i++ {
+		// Minilang literal `+name<delim>src<delim>`: emit the three tokens
+		// `mini name 'src'` INLINE in word context (top level, list elements,
+		// paren contents) — byte-for-byte the same value stream as if the
+		// user had typed `mini name 'src'`. This keeps full parity with the
+		// explicit form (a trailing opts Map collected by mini's 3-arg sig, a
+		// stack subject, the expansion-time unknown-kind error, and check
+		// mode) instead of wrapping in an outer splice (which would
+		// double-splice mini's own splice and trip check mode at the bare top
+		// level). Data-context map values fall back to the splice form in
+		// convertTopLevelValueInner.
+		if ml, ok := items[i].(miniLitVal); ok {
+			values = append(values,
+				withPos(eng.NewWord("mini"), poss[i]),
+				withPos(eng.NewWord(ml.Name), poss[i]),
+				withPos(eng.NewString(ml.Src), poss[i]))
+			continue
+		}
 		// Dotted-access chain: a receiver primary followed by one or more
 		// `.key` / `!.key` segments → one group `( recv get k … )`.
 		if isChainReceiver(items[i]) && i+1 < len(items) && startsDot(items, i+1) {
@@ -552,6 +570,16 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 	case interpGroup:
 		return convertInterpGroup(val)
 
+	case miniLitVal:
+		// `+name<delim>src<delim>` desugars to the splice `mini name 'src'`
+		// (the `word` mechanism): one value that re-steps as the standard
+		// mini call, so a stack subject, a trailing opts Map, the
+		// unknown-kind error, and check mode all behave exactly as if the
+		// user had typed `mini name 'src'`.
+		return eng.NewSplice(eng.NewList([]eng.Value{
+			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
+		})), nil
+
 	case numberVal:
 		return numberValToValue(val)
 
@@ -841,6 +869,16 @@ func convertDataValueInner(v any) (eng.Value, error) {
 
 	case interpGroup:
 		return convertInterpGroup(val)
+
+	case miniLitVal:
+		// `+name<delim>src<delim>` desugars to the splice `mini name 'src'`
+		// (the `word` mechanism): one value that re-steps as the standard
+		// mini call, so a stack subject, a trailing opts Map, the
+		// unknown-kind error, and check mode all behave exactly as if the
+		// user had typed `mini name 'src'`.
+		return eng.NewSplice(eng.NewList([]eng.Value{
+			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
+		})), nil
 
 	case numberVal:
 		return numberValToValue(val)

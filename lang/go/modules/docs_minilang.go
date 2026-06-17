@@ -9,5 +9,10 @@ func init() {
 		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
 			"Every fn signature must start with the standard prefix [src:String opts:Map …].",
 		"kinds": "List the registered mini-language kind atoms.",
+		"register-compiled": "Add an expansion-time compile hook (a macro) to a kind: " +
+			"MiniLang.register-compiled <name> (macro [[src opts] [ quote [ … ] ]]). The kind must " +
+			"already have a transducer; `mini` runs the compiler at the call site and splices its tokens.",
+		"run-re": "Internal: the compiled-`re` consumer — matches a precompiled-pattern carrier " +
+			"(from the re compile hook) against the stack subject.",
 	})
 }

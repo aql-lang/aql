@@ -1,0 +1,39 @@
+# AQL Language Specification: the aql:parselang module + the core `parse` word
+# Format: input<TAB>expected<TAB>description
+#
+# `parse <kind> <opts?> <source>` is the sibling of `mini`: it expands at the
+# call site to the STANDARD parser call `ParseLang.parse_<kind> <source> <opts>
+# end`. Unlike `mini`, the `source` is the REQUIRED LAST surface arg (a String
+# or a {src:…} Source map) and `opts` is the optional MIDDLE one — disambiguated
+# by arity. A parser returns Any (an AST, a transduction, …). `ParseLang.register`
+# installs AQL fns as parsers; `ParseLang.kinds` lists them; `ParseLang.source`
+# resolves a source value to its String. These rows register a small `calc`
+# parser whose AST is the token list `[left op right]` (built by StringUtil.split
+# on the resolved source). A {file:…} source is deferred in v1.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  parse — an AQL-registered parser returning a tokenization
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc 'x + y') get 1	'+'	the parsed operator token
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc 'x + y') get 0	'x'	the left operand token
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc '3 * 4') get 2	'4'	operands are arbitrary tokens, not fixed identifiers
+#
+# §2  source forms and opts
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc {src:'a - b'}) get 1	'-'	a {src:…} Source map resolves to its string
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc {trace:true} 'x + y') get 1	'+'	3-arg form: opts in the middle, source last
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (ParseLang.parse_calc 'x + y' {} end) get 1	'+'	parse is pure sugar — the desugared standard call is equivalent
+#
+# §3  register / kinds / source — out-of-band exports
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ParseLang.kinds	[calc/q]	the registered parser-kind atoms
+"aql:parselang" import end  ParseLang.source 'x + y'	'x + y'	the source resolver passes a String through
+"aql:parselang" import end  ParseLang.source {src:'a b'}	'a b'	the source resolver unwraps {src:…}
+#
+# §4  negatives
+"aql:parselang" import end  parse nope 'x'	ERROR:parse_unknown_lang	unknown kind: expansion-time error at the call site
+parse calc 'x'	ERROR:parse_unknown_lang	parse is core but parsers need the import (no auto-import)
+ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  parse calc {file:'x.calc'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  parse calc {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
+"aql:parselang" import end  ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]]) end  ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_kind_exists	collision with a registered parser
+"aql:parselang" import end  ParseLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:parse_bad_signature	the standard prefix [source:String opts:Map …] is enforced
+"aql:parselang" import end  ParseLang.register parse_x (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	the parse_ prefix is register's job, not the caller's
+"aql:parselang" import end  ParseLang.register Bad (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	capitalised parser names are rejected (types)

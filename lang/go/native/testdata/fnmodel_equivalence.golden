@@ -403,6 +403,8 @@ WORD pad
   [Scalar/Number/Integer Any] barrier=2
   [Any] barrier=1
 WORD parse
+  [Scalar/Atom Node/Map Any] barrier=3 runcheck quote={0} returns=[Any]
+  [Scalar/Atom Any] barrier=2 runcheck quote={0} returns=[Any]
   [Scalar/String] barrier=1 returns=[Any]
 WORD pathof
   [Any] barrier=1 typearg={0} returns=[Node/List]

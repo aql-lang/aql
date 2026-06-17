@@ -39,6 +39,10 @@ var hermeticExempt = map[string]string{
 	// "mem://" scheme, so there is no hermetic spec surface. Covered by
 	// lang/go/native/folder_test.go.
 	"IO.folder": "host-FS mkdir; no hermetic spec surface (folder_test.go)",
+	// run-re is the internal compiled-`re` consumer: it is reached only via the
+	// re compile-hook splice (with a carrier users cannot construct), never by
+	// name. Covered by lang/go/test/minilang_compile_test.go.
+	"MiniLang.run-re": "internal compiled-re consumer; reached only via the compile-hook splice (minilang_compile_test.go)",
 }
 
 // TestModuleExportCoverage fails when any native-module export lacks a

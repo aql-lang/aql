@@ -76,4 +76,20 @@ func init() {
 			`"aql:minilang" import end  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
 		},
 	})
+
+	register(&Entry{
+		Word:    "parse",
+		Summary: "Call a named parser: parse <kind> <opts?> <source>.",
+		Description: "The sibling of `mini`: expands to the standard call " +
+			"`ParseLang.parse_<kind> <source> <opts> end` at the call site. The `source` is the " +
+			"required LAST argument — a String or a {src:…} Source map — and `opts` is the optional " +
+			"middle one. A parser returns whatever the language yields (an AST, a transduction, …), " +
+			"typed Any. Parsers live in the aql:parselang module (import it first; ParseLang.kinds " +
+			"lists them; register your own with ParseLang.register or the Go RegisterParser host API). " +
+			"An unknown kind is an expansion-time error.",
+		Examples: []string{
+			`"aql:parselang" import end  parse calc 'x + y'        ;# => the parser's AST`,
+			`"aql:parselang" import end  parse calc {src:'x + y'}  ;# a {src:…} source map`,
+		},
+	})
 }

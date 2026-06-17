@@ -47,3 +47,29 @@ MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:minilang" import end  MiniLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:mini_bad_signature	the standard prefix [src:String opts:Map …] is enforced
 "aql:minilang" import end  MiniLang.register lang_x (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	the lang_ prefix is register's job, not the caller's
 "aql:minilang" import end  MiniLang.register Bad (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	capitalised kind names are rejected (types)
+#
+# §6  the `+name<delim>src<delim>` shortcut — terse lexer sugar for `mini name 'src'`.
+#     The delimiter is the first char after the name; the same char closes. Backslash
+#     escapes the delimiter and itself; every OTHER backslash is raw (so `\d` stays `\d`,
+#     no doubling). Desugars to the identical token stream as the explicit call, so a
+#     stack subject, a trailing opts map, and the unknown-kind error all carry over.
+"aql:minilang" import end  ("AbcD" +re/[a-z]+/).fst.m	'bc'	the shortcut: subject from the stack, / delimiter
+"aql:minilang" import end  ("a1b2c3" +re/\d/).n	3	raw backslash — `\d` is the pattern, no doubling (vs the quoted '\\d')
+"aql:minilang" import end  ("a1b2c3" +re/\d/ {limit:2}).n	2	a trailing opts map is collected by mini's 3-arg sig
+"aql:minilang" import end  ("AbcD" +re|[a-z]+|).fst.m	'bc'	a custom delimiter — | here
+"aql:minilang" import end  ("xa/by" +re#a/b#).fst.m	'a/b'	pick a delimiter (#) so the source can contain /
+"aql:minilang" import end  ("xa/by" +re/a\/b/).fst.m	'a/b'	or escape the delimiter with a backslash
+"aql:minilang" import end  +bf/++++++++[>++++++++<-]>+./	'A'	bf generator via the shortcut
+"aql:minilang" import end  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the same expansion-time error as `mini nope`
++re/[a-z]+/	ERROR:mini_unknown_lang	the shortcut needs the import too (no auto-import)
+#
+# §7  compiled mini-languages — an optional expansion-time compile hook (design §13).
+#     A kind keeps its transducer (the semantic reference + fallback) and adds a
+#     compiler that runs at the `mini` site when src is concrete, splicing tokens
+#     instead of the standard call. `re` ships a Go hook (precompiled-pattern
+#     carrier + run-re consumer); AQL kinds add one via MiniLang.register-compiled
+#     (a macro). `mini` has no expansion cache, so hooks memoize (re does).
+"aql:minilang" import end  "aql:string-util" import end  MiniLang.register up (fn [[s:String o:Map] [String] [s]]) end  MiniLang.register-compiled up (macro [[src opts] [ quote [ unquote (StringUtil.upper src) ] ]]) end  mini up 'hi'	'HI'	the AQL compile hook (a macro) uppercases src at the call site
+"aql:minilang" import end  MiniLang.register-compiled ghost (macro [[s o] [ quote [ s ] ]])	ERROR:mini_no_transducer	a compiler must layer on an existing transducer
+"aql:minilang" import end  MiniLang.register lit (fn [[s:String o:Map] [String] [s]]) end  MiniLang.register-compiled lit (fn [[s:String o:Map] [List] [ [s] ]])	ERROR:mini_bad_compiler	the compiler must be a macro, not a plain fn
+"aql:minilang" import end  MiniLang.register-compiled Bad (macro [[s o] [ quote [ s ] ]])	ERROR:mini_bad_name	capitalised names are rejected (types)
