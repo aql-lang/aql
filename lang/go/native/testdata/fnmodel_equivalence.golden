@@ -208,7 +208,7 @@ WORD get
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Error] barrier=2 returns=[Any]
   [Scalar/String Ideal/Object] barrier=1 returns=[Any]
-  [Scalar/String Node] barrier=1 returns=[Any]
+  [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 returns=[Any]
@@ -218,7 +218,7 @@ WORD get
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Error] barrier=2 quote={0} returns=[Any]
   [Scalar/Atom Ideal/Object] barrier=1 quote={0} returns=[Any]
-  [Scalar/Atom Node] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Node] barrier=1 quote={0} +returnsfn
   [Any None] barrier=1 returns=[None]
 WORD getpath
   [Ideal/Reach Any] barrier=2

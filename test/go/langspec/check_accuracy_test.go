@@ -392,7 +392,7 @@ func stackTypes(vs []eng.Value) string {
 // caught. Unlike type-soundness this is a PRECISION metric, not a
 // soundness one: a high count is imprecise, not unsound.
 
-const pinnedAnyFrontierRows = 286 // June 2026 baseline — see TestCheckAnyFrontier
+const pinnedAnyFrontierRows = 272 // was 286 — get narrows concrete-map field reads (atom/string key) to the field type; see TestCheckAnyFrontier
 
 func TestCheckAnyFrontier(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

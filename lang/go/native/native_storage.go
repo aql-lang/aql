@@ -131,9 +131,14 @@ var storageNatives = []NativeFunc{
 		Name: "get",
 
 		Signatures: []NativeSig{
-			// [Key | Node] — covers Map, List, Options, record-shape
-			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
-			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
+			// [Key | Node] — covers Map, List, Options, record-shape. The
+			// atom / string key sigs narrow a concrete map FIELD read via
+			// getNodeReturns; the integer-key sig stays Any because an
+			// integer key is a LIST index (handled precisely downstream by
+			// tryFoldStaticIndex) or a stringified map key — getNodeReturns
+			// must not stringify-and-miss an integer over a list.
+			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
+			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
 			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
 			// [Key | Array]
 			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
@@ -318,6 +323,52 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 		return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
 	}
 	return nil, nil
+}
+
+// getNodeReturns narrows a field read over a CONCRETE map / record-shape
+// to the stored value's type when the key is statically known, instead of
+// the poison Any the [Key|Node] sigs otherwise declare — `{a:1 b:2}.a`
+// checks as Integer, `{x:'hi'}.x` as ProperString, a statically-absent key
+// as None. A computed receiver, a non-literal key, a non-OrderedMap
+// container (AsMap nil), or a list falls back to dynamic(Any) — the exact
+// shape carrierResults already produced for the declared Any, so those
+// paths (e.g. tryFoldStaticIndex's list-element fold) are unchanged.
+// Object / Class instances are abstract type carriers in check mode (no
+// field payload), so they keep their own Any sigs until schema resolution
+// lands. Mirrors getNodeHandler's map branch so check and run agree.
+func getNodeReturns(args []Value, _ *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 2 {
+		return dyn
+	}
+	key, container := args[0], args[1]
+	if !IsConcrete(container) || !IsConcrete(key) || !container.Parent.ConformsTo(TMap) {
+		return dyn
+	}
+	m, err := AsMap(container)
+	if err != nil || m == nil {
+		return dyn
+	}
+	val, ok := m.Get(getKey(key))
+	if !ok {
+		return []Value{NewCarrier(TNone)} // statically-absent key reads as None
+	}
+	// Only narrow plain DATA fields. A field bearing dispatch — a stored
+	// Function / FnDef, a /r ref (Reach), or a word-splice — keeps the
+	// dynamic Any the poly / island path already handles: returning its
+	// concrete value would push the compiler to lower a fn-value call or a
+	// modifier re-dispatch and refuse to compile (fn-value.tsv `m.f 2 3`,
+	// path-modifier.tsv `m.a/u`). Return a FRESH carrier of the field's
+	// TYPE, not the stored value — the stored value's Value ID is shared
+	// with the map field and collides in the emitter's operand-provenance
+	// tracking (`def a {b:5} [a.b]`). Deep nesting (`.a.b`) narrows the
+	// first hop to a Map carrier and the rest falls to dynamic(Any), which
+	// is still strictly better than the all-Any baseline.
+	if val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef) ||
+		IsReach(val) || IsSplice(val) {
+		return dyn
+	}
+	return []Value{NewCarrier(val.Parent)}
 }
 
 func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
