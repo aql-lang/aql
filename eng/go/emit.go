@@ -43,6 +43,9 @@ const (
 var fnIntrospectionWords = map[string]bool{
 	"typeof": true, "inspect": true,
 	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
+	// arity/param/return introspection: READ a fn's signature shape, never
+	// invoke it, so the fn value bakes as a const the handler inspects.
+	"arityof": true, "paramsof": true, "returnsof": true,
 }
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -1738,6 +1741,17 @@ func isInertConst(v Value) bool {
 		// signature at run time. A pattern-bearing param (rare in signatures)
 		// could embed non-const data, so it refuses conservatively.
 		return fnSigConstOK(d)
+	case FnDefInfo:
+		// A function VALUE used as DATA — a residual (`f/r`), a map/list member
+		// (`{b:f/r}`), or an introspection operand (`arityof (fn …)`) — NOT a
+		// call site. It bakes as a const only with no closure state: no captured
+		// bindings (which would snapshot check-pass values, divergent from the VM
+		// pass) and no module sub-registry. The body tokens ride inside the
+		// payload and are never re-stepped while the value is data; a CALL of the
+		// value is a separate dispatch path (a bare `(fn …) args` auto-dispatch
+		// records the fn-body splice and refuses; a `/r`-referenced fn does not
+		// auto-dispatch, so `f/r` / `{b:f/r}` are pure data).
+		return len(d.Captured) == 0 && d.Registry == nil
 	case *SurfaceInfo:
 		// A surface type (`def Shape surface {area: (fnsig …)}`): an immutable
 		// contract descriptor riding its canonical minted node via the Type
@@ -1996,6 +2010,23 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			if residual[i].Dynamic {
 				return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
 			}
+		}
+	}
+	// A fn value followed by residual args is an auto-dispatch boundary the
+	// residual cannot resolve statically: the interpreter applies a plain
+	// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2], and the two are
+	// indistinguishable here. The lead may be a concrete fn value (a baked
+	// const) OR a Function-typed call-result carrier (`mk2 5`'s declared
+	// [Function] return) — neither is a Dynamic/Any carrier, so applyDynamic
+	// above does not own it. Refuse so both fall back faithfully — a fn value
+	// stands ONLY as the last residual / a container member / an introspection
+	// operand, never ahead of args.
+	for i := 0; i+1 < len(residual); i++ {
+		rv := residual[i]
+		_, isFnData := rv.Data.(FnDefInfo)
+		isFnTyped := rv.Parent != nil && (rv.Parent.ConformsTo(TFunction) || rv.Parent.ConformsTo(TFnDef))
+		if isFnData || isFnTyped {
+			return nil, "fn value precedes residual args (auto-dispatch boundary)", false
 		}
 	}
 	vi := 0

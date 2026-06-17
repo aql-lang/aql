@@ -574,6 +574,42 @@ func TestEmitDeadValueDef(t *testing.T) {
 	}
 }
 
+// TestEmitFnValueData: a no-capture function VALUE used as data — a residual
+// (`f/r`), a map member (`{b:f/r}`), or an arity/param introspection operand —
+// bakes as a const, so these compile. The auto-dispatch boundary (a fn value
+// standing AHEAD of residual args) is deliberately refused so it falls back
+// faithfully: a plain `(mk2 5) 10` applies the returned fn, an inert `f/r 2`
+// does not, and the residual cannot tell them apart.
+func TestEmitFnValueData(t *testing.T) {
+	const inc = `def f fn [[x:Integer] [Integer] [x add 1]] `
+	for _, c := range []struct{ src, want string }{
+		{inc + `f/r`, "[fn f(Integer)]"},
+		{`"aql:type-util" import end  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a]])`, "[2]"},
+	} {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: fn value as data must compile, refused: %s", c.src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake", c.src)
+		}
+		if got, _, err := mustRun(t, c.src); err != nil || fmt.Sprint(got) != c.want {
+			t.Errorf("%s: got %v err=%v, want %s", c.src, got, err, c.want)
+		}
+	}
+	// A captured closure carries snapshot state, so it does NOT bake as a const.
+	if _, r := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a (mk 5) a`); r == "" {
+		t.Error("a captured closure value compiled as a const but must not (closure state)")
+	}
+	// Auto-dispatch boundary: a fn value ahead of residual args must fall back
+	// (not compile to a stranded [fn args] residual). It must refuse to compile;
+	// the differential gate proves the fallback matches the interpreter.
+	if _, r := compile(t, `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] (mk2 5) 10`); r == "" {
+		t.Error("a fn value ahead of residual args compiled but must fall back (auto-dispatch boundary)")
+	}
+}
+
 // TestEmitModuleInnerNative: a module word reached via dot-access
 // (`StructUtil.clone …`) trivially delegates to its inner native; even with a
 // declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,
@@ -613,10 +649,10 @@ func mustRun(t *testing.T, src string) ([]any, bool, error) {
 
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
 // const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
-// the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field
-// (`{b: f/r}`) is NOT const-bakeable (it would diverge via the island) and
-// falls back faithfully — verified by the differential, asserted here for
-// value parity.
+// the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field map
+// (`{b: f/r}`) now const-bakes too (the no-capture fn value is inert data), but
+// the `m.b 2` CALL through it still falls back at the get-then-dispatch — value
+// parity holds either way, asserted here.
 func TestEmitMethodField(t *testing.T) {
 	cases := []struct {
 		src  string
