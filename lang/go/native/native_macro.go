@@ -289,11 +289,69 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if len(args) == 3 {
 		opts = args[2]
 	}
+
+	// Compile-hook path (design/MINILANG.5.md §13). When the kind registered
+	// a compile hook AND src is concrete, compile at the call site and splice
+	// the hook's tokens instead of the standard call. NOT in check mode: the
+	// checker validates the standard `lang_<kind>` call (the semantic
+	// reference), and a check-mode src is a carrier with no text to compile.
+	// `mini` has no expansion cache, so the hook re-runs whenever the call is
+	// stepped — hooks memoize their compile (as `re` does). A non-concrete
+	// runtime src falls back to the standard transducer call.
+	if !r.Check.IsActive() {
+		goHook, hasGo := miniGoHook(r, kind)
+		aqlHook, hasAQL := miniCompileExport(r, kind)
+		if hasGo || hasAQL {
+			if src, serr := args[1].AsConcreteString(); serr == nil {
+				var hookToks []Value
+				var herr error
+				if hasGo {
+					hookToks, herr = goHook(src, opts, r)
+				} else {
+					hookToks, herr = miniInvokeAQLCompile(r, kind, aqlHook, src, opts)
+				}
+				if herr != nil {
+					return nil, herr
+				}
+				return []Value{NewSplice(NewList(hookToks))}, nil
+			}
+		}
+	}
+
 	toks := []Value{
 		NewWord("MiniLang"), NewWord("get"), NewWord(target),
 		args[1], opts, NewEnd(),
 	}
 	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// miniCompileExport returns kind's AQL compile-hook fn (the `compile_<kind>`
+// export of the bound MiniLang namespace), if present.
+func miniCompileExport(r *Registry, kind string) (Value, bool) {
+	top, ok := r.Defs.Top("MiniLang")
+	if !ok {
+		return Value{}, false
+	}
+	info, ok := asModuleExportInfo(top)
+	if !ok || info.Fields == nil {
+		return Value{}, false
+	}
+	return info.Fields.Get("compile_" + kind)
+}
+
+// miniInvokeAQLCompile runs an AQL compile hook at expansion time. An AQL hook
+// is a MACRO (template with quote/unquote): the language's list literals don't
+// capture locals, so a plain fn can't build a value-injected token list — the
+// macro template is the vehicle. It is expanded against [src, opts] and the
+// resulting tokens are what `mini` splices.
+func miniInvokeAQLCompile(r *Registry, kind string, fn Value, src string, opts Value) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok || !fnDef.Macro || len(fnDef.Signatures) == 0 {
+		return nil, r.AqlErrorHint("mini_bad_compiler",
+			fmt.Sprintf("compile_%s must be a macro", kind), "mini",
+			"register it as MiniLang.register-compiled "+kind+" (macro [[src opts] [ quote [ … ] ]])")
+	}
+	return eng.ExpandMacroWith(r, &fnDef, []Value{NewString(src), opts})
 }
 
 // miniNamespaceBound reports whether the `MiniLang` namespace is bound to a

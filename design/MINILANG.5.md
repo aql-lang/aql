@@ -649,6 +649,65 @@ splice in `convertTopLevelValueInner`). Battery: `lang/spec/module-minilang.tsv`
 
 ---
 
+## 13. Compile hooks — LANDED (additive; the transducer stays)
+
+The Phase-3 staged-compilation idea, delivered **additively**: a kind keeps
+its runtime transducer and may register an OPTIONAL expansion-time **compile
+hook**. When `mini <kind> <src>` is stepped and `src` is concrete, the hook
+runs at the call site and returns the tokens `mini` splices instead of the
+standard `MiniLang.lang_<kind> src opts end` call.
+
+The transducer is **load-bearing**, not legacy: it is the semantic reference,
+the **check-mode target** (the checker always validates the standard call —
+compile hooks never run in check mode), and the **fallback** when `src` is not
+concrete. So the immediate-transduction definition API is unchanged; compile
+hooks are layered on top.
+
+**Two registration paths, one discovery point** (`miniHandler`):
+
+- **Go** — an optional `Compile native.MiniCompileHook` field on `MiniLangSpec`
+  / a built-in's `native.RegisterMiniCompileGoHook`. The hook is a Go func
+  `(src, opts, r) → []Value`. Stored in a per-registry table.
+- **AQL** — `MiniLang.register-compiled <name> (macro [[src opts] [quote […]]])`,
+  stored as the `compile_<name>` export and expanded via `eng.ExpandMacroWith`.
+  An AQL hook **must be a macro**: AQL list literals don't capture locals, so a
+  plain fn can't build a value-injected token list — the macro template
+  (`quote`/`unquote`) is the only vehicle. The kind must already have a
+  transducer (`mini_no_transducer` otherwise).
+
+**Built-in demo — `re` (carrier + consumer):** `miniReCompile` compiles the
+pattern at the call site (memoized), wraps the `*regexp.Regexp` in an inert
+`Ideal/MiniLangCompiled` carrier (FixedID 5003), and splices
+`MiniLang get run-re <carrier> <opts> end`. `run-re` matches the precompiled
+pattern against the stack subject — per-call cost is just the match. A
+**malformed pattern defers to the standard `lang_re` call** rather than raising
+early: the carrier can't be built, and deferring keeps the error byte-identical
+to the transducer — which is what the bytecode VM runs (the recorder, in check
+mode, never takes the compile-hook path), so compiled/interpreted parity holds
+(`TestSpecCompiledOrFallback`). This is the general rule for hooks: a compiled
+splice must be observationally identical to the transducer, errors included.
+
+**Two architectural facts that shaped the scope** (and ruled out a
+literal-only / strict mode):
+
+1. `mini` expands at **execution** time, not parse time, so `src` is already
+   evaluated — a variable is indistinguishable from a string literal. There is
+   no way to reject "runtime-computed src" without raw-capturing `src` (a
+   deeper change to the core word's collection + the dynamic-src splice).
+2. `mini` has **no expansion cache** (Phase 1: "the `re` compile memo covers
+   the hot cost"), so even a literal recompiles every time the call is stepped.
+   Literal-gating buys no "compile once" win; hooks **memoize** instead (as
+   `re` does via `miniCompiledPattern`).
+
+So the contract is simply: *the hook runs whenever `src` is concrete; check
+mode and a non-concrete src use the transducer.* A hook author guarantees the
+compiled tokens are semantically equivalent to the transducer (the
+differential reference).
+
+Battery: `lang/spec/module-minilang.tsv` §7 + `lang/go/test/minilang_compile_test.go`.
+
+---
+
 ## Appendix A — rev 1 (superseded): `xy/` lexer literals
 
 Rev 1 proposed two-letter whitespace-terminated lexer literals

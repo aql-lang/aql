@@ -62,3 +62,14 @@ MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:minilang" import end  +bf/++++++++[>++++++++<-]>+./	'A'	bf generator via the shortcut
 "aql:minilang" import end  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the same expansion-time error as `mini nope`
 +re/[a-z]+/	ERROR:mini_unknown_lang	the shortcut needs the import too (no auto-import)
+#
+# §7  compiled mini-languages — an optional expansion-time compile hook (design §13).
+#     A kind keeps its transducer (the semantic reference + fallback) and adds a
+#     compiler that runs at the `mini` site when src is concrete, splicing tokens
+#     instead of the standard call. `re` ships a Go hook (precompiled-pattern
+#     carrier + run-re consumer); AQL kinds add one via MiniLang.register-compiled
+#     (a macro). `mini` has no expansion cache, so hooks memoize (re does).
+"aql:minilang" import end  "aql:string-util" import end  MiniLang.register up (fn [[s:String o:Map] [String] [s]]) end  MiniLang.register-compiled up (macro [[src opts] [ quote [ unquote (StringUtil.upper src) ] ]]) end  mini up 'hi'	'HI'	the AQL compile hook (a macro) uppercases src at the call site
+"aql:minilang" import end  MiniLang.register-compiled ghost (macro [[s o] [ quote [ s ] ]])	ERROR:mini_no_transducer	a compiler must layer on an existing transducer
+"aql:minilang" import end  MiniLang.register lit (fn [[s:String o:Map] [String] [s]]) end  MiniLang.register-compiled lit (fn [[s:String o:Map] [List] [ [s] ]])	ERROR:mini_bad_compiler	the compiler must be a macro, not a plain fn
+"aql:minilang" import end  MiniLang.register-compiled Bad (macro [[s o] [ quote [ s ] ]])	ERROR:mini_bad_name	capitalised names are rejected (types)
