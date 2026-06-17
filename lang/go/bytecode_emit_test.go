@@ -912,16 +912,17 @@ func TestEmitModuleCallLowering(t *testing.T) {
 		t.Fatalf("m.a = %v, want 1", out2)
 	}
 
-	// F4: a get whose RESULT the checker still types dynamic Any — an OBJECT
-	// instance is an abstract type carrier in check mode (no field payload),
-	// so `o.a` cannot narrow — runtime-dispatches via CALL_NATIVE_POLY
-	// (plan P3/P4), no island. The result must match the interpreter.
+	// An OBJECT field read also narrows: the field's declared type is
+	// resolved from the class SCHEMA (getObjectReturns) even though the
+	// instance is an abstract carrier in check mode, so `o.a` likewise
+	// monomorphizes to a plain CALL_NATIVE. The runtime poly-dispatch path is
+	// covered by TestEmitPolySiteLowersToRuntimeMatch.
 	got3, reason3 := compile(t, `def Foo class {a:1} def o (make Foo {}) o.a`)
 	if reason3 != "" {
-		t.Fatalf("dynamic-result get refused: %s", reason3)
+		t.Fatalf("object field get refused: %s", reason3)
 	}
-	if strings.Contains(got3, "FALLBACK") || !strings.Contains(got3, "CALL_NATIVE_POLY") {
-		t.Errorf("dynamic-result get did not lower to CALL_NATIVE_POLY:\n%s", got3)
+	if strings.Contains(got3, "FALLBACK") || strings.Contains(got3, "CALL_NATIVE_POLY") {
+		t.Errorf("object field get should monomorphize to CALL_NATIVE:\n%s", got3)
 	}
 	c, err := New()
 	if err != nil {
@@ -929,7 +930,7 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	}
 	out3, _, err := c.RunCompiled(`def Foo class {a:1} def o (make Foo {}) o.a`)
 	if err != nil {
-		t.Fatalf("dynamic get: %v", err)
+		t.Fatalf("object field get: %v", err)
 	}
 	if len(out3) != 1 || out3[0] != int64(1) {
 		t.Fatalf("o.a = %v, want 1", out3)

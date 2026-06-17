@@ -142,9 +142,10 @@ var storageNatives = []NativeFunc{
 			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, Returns: []*Type{TAny}},
 			// [Key | Array]
 			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
-			// [Key | Object]
-			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
-			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			// [Key | Object] — atom/string field reads resolve the field's
+			// declared type from the schema (getObjectReturns).
+			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
 			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 			// [Key | ModuleExport] — transparent export access + $module/$name
 			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
@@ -153,9 +154,10 @@ var storageNatives = []NativeFunc{
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
 			// [Key | Class instance] — flat field read (no prototype
-			// chain; class instances resolve every field at make).
-			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
-			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+			// chain; class instances resolve every field at make). Field
+			// type resolved from the schema (getObjectReturns).
+			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
 			// [Key | None] — chained-read propagation
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
 			// [Key | Store] — check-mode-aware ReturnsFn picks up a
@@ -399,6 +401,39 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return []Value{val}, nil
 	}
 	return []Value{NewTypeLiteral(TNone)}, nil
+}
+
+// getObjectReturns narrows a field read over an OBJECT / CLASS instance
+// carrier to the field's DECLARED type, resolved from the type SCHEMA. In
+// check mode the instance is an abstract type carrier (no field payload),
+// so the field type comes from the bound type's ObjectTypeInfo.AllFields()
+// (own + inherited). A method field (function-typed), an absent/sealed
+// field (→ None), or a type whose schema can't be resolved keeps the
+// dynamic(Any) the poly path handles — the same dispatch-bearing exclusion
+// as the concrete-map case (a returned fn value would push the compiler to
+// lower a fn-value call and refuse).
+func getObjectReturns(args []Value, r *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if r == nil || len(args) != 2 || !IsConcrete(args[0]) || args[1].Parent == nil {
+		return dyn
+	}
+	body, ok := r.TopTypeBody(args[1].Parent.Leaf())
+	if !ok {
+		return dyn
+	}
+	info, oerr := AsObjectType(body)
+	if oerr != nil {
+		return dyn
+	}
+	fv, ok := info.AllFields().Get(getKey(args[0]))
+	if !ok {
+		return []Value{NewCarrier(TNone)} // sealed / absent field reads as None
+	}
+	ft := ValueType(fv)
+	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+		return dyn
+	}
+	return []Value{NewCarrier(ft)}
 }
 
 func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
