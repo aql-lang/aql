@@ -1793,6 +1793,20 @@ func isInertConstMember(v Value) bool {
 		if IsWord(v) {
 			return true
 		}
+		// A bare type node as a structural-pattern MEMBER — the type leaves of
+		// `{a:Integer}`, `[Integer String]`, `[Resource Entity]`: the inert
+		// operand of a static `is` / `typeof` / `size`. Admitted as a const
+		// member (it was previously excluded outright). Soundness: the member's
+		// Parent is the canonical lattice pointer the parser resolved, copied by
+		// value inside a READ-ONLY container, and the whole pattern bakes as one
+		// const the VM pushes verbatim — the `is`/`typeof` handler then runs
+		// byte-identically to the interpreter over the same value. The standalone
+		// isInertConst switch still rejects a bare type node, so a top-level type
+		// operand keeps reaching the runtime via the by-ID type table
+		// (OpPushType), the canonical path that survives a later `behave`.
+		if IsBareTypeNode(v) && v.ID != "" {
+			return true
+		}
 		if fd, ok := v.Data.(FnDefInfo); ok {
 			// Only an UNNAMED (inline `fn […]`) fn value. A named ref (`f/r`,
 			// Name="f") re-dispatches by NAME when applied through the island

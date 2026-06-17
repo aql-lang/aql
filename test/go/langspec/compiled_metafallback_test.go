@@ -120,8 +120,8 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3   // Vm.run / Vm.run-with — execute runtime-computed code. NOW 0: the corpus's last tier-1 row, Vm.run(canon [1 {a:none} x/q]), compiled once OpMakeList let the canon list assemble. Kept at 3 for headroom — a Vm.run of a genuinely RUNTIME string would re-populate it
-	reducibleCeiling       = 54  // Test/Assert 21, quote 10, usurp 9, flex 6, minilang/parselang 8 (+3 from merged PR #142) — each a named, reducible compiler/VM TODO
-	computeRefusalCeiling  = 166 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 7 islands, user-fn dispatch (+8 from merged PR #142 minilang/parselang corpus rows that fall back faithfully; +1 patrun.tsv — a mutable Patrun dispatch / `add` 3-arg-overload row falls back, the bytecode fix is tracked on a separate branch)
+	reducibleCeiling       = 52  // Test/Assert 21, quote 10, usurp 9, flex 6, minilang/parselang 8 (+3 from merged PR #142) — each a named, reducible compiler/VM TODO; 54 -> 52 when structural type-pattern operands started baking (two rows that refused at a reducible word past the now-compiled pattern dropped out)
+	computeRefusalCeiling  = 137 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 5 islands, user-fn dispatch (+8 from merged PR #142 minilang/parselang corpus rows that fall back faithfully; +1 patrun.tsv — a mutable Patrun dispatch / `add` 3-arg-overload row falls back, the bytecode fix is tracked on a separate branch); 166 -> 137: structural type-pattern operands (`{a:Integer}`, `[Integer String]`, `[Resource Entity]`) now bake as const members, so static is/typeof/size over them compiles
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {

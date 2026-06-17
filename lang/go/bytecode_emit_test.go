@@ -381,6 +381,47 @@ func TestEmitDynOutNative(t *testing.T) {
 	}
 }
 
+// TestEmitStructuralTypePattern: a STATIC structural type pattern — a map or
+// list whose leaves are bare type nodes (`{a:Integer}`, `[Integer String]`,
+// `[Resource Entity]`) — bakes as one const operand (a type node is admitted
+// as a const MEMBER), so `is` / `typeof` / `size` over it compiles natively
+// instead of refusing "operand of unknown provenance." The pattern is inert
+// data the VM pushes verbatim, so the handler runs identically to the
+// interpreter.
+func TestEmitStructuralTypePattern(t *testing.T) {
+	okCases := []struct {
+		src  string
+		want string
+	}{
+		{`{a:5} is {a:Integer}`, "true"},
+		{`{a:'x'} is {a:Integer}`, "false"},
+		{`{a:5 b:'x'} is {a:Integer b:String}`, "true"},
+		{`{inner:{x:5}} is {inner:{x:Integer}}`, "true"},
+		{`[1] is [Integer]`, "true"},
+		{`[1 'x'] is [Integer String]`, "true"},
+		{`size [Resource Entity]`, "2"},
+	}
+	for _, c := range okCases {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: structural type-pattern must compile, refused: %s", c.src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake:\n%s", c.src, dis)
+		}
+		got, _, err := mustRun(t, c.src)
+		if err != nil || len(got) != 1 || fmt.Sprint(got[0]) != c.want {
+			t.Errorf("%s: got %v err=%v, want [%s]", c.src, got, err, c.want)
+		}
+	}
+	// Negative: a GENERIC made-instance operand still refuses (sub-cluster C —
+	// the instance is a carrier with no concrete value to bake; out of scope).
+	if _, r := compile(t, `def Box gen [T] class {value:T} end (make Box {value:42}) typeof`); r == "" {
+		t.Error("generic made-instance typeof compiled but must still refuse (no concrete instance to bake)")
+	}
+}
+
 // TestEmitModuleInnerNative: a module word reached via dot-access
 // (`StructUtil.clone …`) trivially delegates to its inner native; even with a
 // declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,
