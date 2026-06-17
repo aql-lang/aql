@@ -1275,3 +1275,58 @@ func TestPRReviewFindings(t *testing.T) {
 		t.Errorf("#2 pure fold regressed: compiled=%v wasCompiled=%v", gotC, compiled)
 	}
 }
+
+// TestHeterogeneousArityBinaryOpCompiles guards the resolveForwardArgs
+// function-word-barrier fix. A binary op whose signature set ALSO includes a
+// higher-arity overload (here a 3-arg `add3`, mimicking patrun's
+// `add {pattern} value pm`) must still compile a chained call over a repeated
+// computed operand. The 3-arg overload never matches the integer chain, but
+// its mere presence raised the word's max forward arity to 3; the former
+// pre-evaluation scan then evaluated the THIRD group across the intermediate
+// `add3` barrier, so the recorded operands laid out non-adjacently and the
+// program refused with "operands of add3 not adjacent on top".
+func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
+	const src = `context set 'n' 5 end ( context get 'n' ) add3 ( context get 'n' ) add3 ( context get 'n' )`
+
+	mk := func() *AQL {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.Register("add3",
+			Signature{
+				Args: []*Type{TNumber, TNumber},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+					x, _ := eng.AsInteger(args[0])
+					y, _ := eng.AsInteger(args[1])
+					return []Value{NewInteger(x + y)}, nil
+				},
+				Returns: []*Type{TInteger}, BarrierPos: -1,
+			},
+			// The higher-arity overload — never matched by the integer chain,
+			// present only to make add3's arity profile heterogeneous (max
+			// forward arity 3).
+			Signature{
+				Args: []*Type{TMap, TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+					return []Value{args[0]}, nil
+				},
+				Returns: []*Type{TMap}, BarrierPos: -1,
+			},
+		)
+		return a
+	}
+
+	prog, reason, _, cerr := mk().CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("heterogeneous-arity chain did not compile: reason=%q err=%v", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Fatalf("heterogeneous-arity chain fell back to the interpreter:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mk().RunCompiled(src)
+	gotI, _ := mk().Run(src)
+	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[15]" {
+		t.Fatalf("parity broke: compiled=%v gotC=%v gotI=%v (want [15])", compiled, gotC, gotI)
+	}
+}
