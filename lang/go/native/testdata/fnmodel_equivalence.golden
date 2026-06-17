@@ -74,7 +74,7 @@ WORD changecase
 WORD class
   [Node/Map] barrier=1 runcheck returns=[Type]
 WORD clone
-  [Any] barrier=1
+  [Any] barrier=1 +returnsfn
 WORD cmp
   [Any Any] barrier=2 returns=[Scalar/Number/Integer]
 WORD codequote
@@ -297,13 +297,13 @@ WORD is
 WORD istype
   [Any] barrier=1
 WORD items
-  [Any] barrier=1
+  [Any] barrier=1 returns=[Node/List]
 WORD join
   [Scalar/String Node/List] barrier=2 returns=[Scalar/String]
   [Node/List] barrier=1 returns=[Scalar/String]
 WORD jsonify
-  [Node/Map Any] barrier=2
-  [Any] barrier=1
+  [Node/Map Any] barrier=2 returns=[Scalar/String]
+  [Any] barrier=1 returns=[Scalar/String]
 WORD keys
   [Node/Map] barrier=1 returns=[Node/List]
 WORD list
