@@ -113,6 +113,48 @@ func readPassphrase(stdin io.Reader, stdout io.Writer, prompt string) (string, e
 	return p, nil
 }
 
+// authenticateWith resolves a session from a passphrase already in hand
+// (e.g. one the TUI collected via a masked input field) instead of reading
+// stdin. It mirrors authenticate's resolution exactly: a legacy vault opens
+// the keyring directly — needing the passphrase only for the file backend —
+// and an envelope vault matches the passphrase against its slots via
+// openSession.
+func authenticateWith(s *Store, homeDir, pass string) (*Session, error) {
+	if !s.HasPasswordSlots() {
+		backend := s.Backend
+		if backend == "" {
+			backend = BackendAuto
+		}
+		resolved := backend
+		if backend == BackendAuto {
+			resolved = autoBackend()
+		}
+		if resolved != BackendFile {
+			kr, err := selectKeyring(backend, vaultFolder(homeDir), "")
+			if err != nil {
+				return nil, err
+			}
+			return &Session{kr: kr, Scope: ScopeAdmin}, nil
+		}
+		if pass == "" {
+			return nil, errors.New("file backend requires a passphrase")
+		}
+		kr, err := selectKeyring(BackendFile, vaultFolder(homeDir), pass)
+		if err != nil {
+			return nil, err
+		}
+		return &Session{kr: kr, Scope: ScopeAdmin}, nil
+	}
+	return openSession(s, homeDir, pass)
+}
+
+// vaultNeedsPassphrase reports whether opening a secret/admin session for s
+// will require a passphrase: envelope vaults always do; a legacy vault does
+// only for the file backend (host keychains need none).
+func vaultNeedsPassphrase(s *Store) bool {
+	return s.HasPasswordSlots() || resolveBackend(s) == BackendFile
+}
+
 // openSession runs the single scrypt over the shared VaultSalt, then
 // tries each slot's HKDF-derived KEK against its verifier. The matching
 // slot's private key and granted NDKs are unsealed. No match -> the

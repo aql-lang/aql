@@ -224,15 +224,15 @@ var Natives = []NativeFunc{
 		Name: "filter",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, BarrierPos: -1},
+			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
 			// Lens form: `filter $.active xs` keeps the elements whose reach
 			// applies to a truthy value (the reach reads the ELEMENT, not the
 			// {key,value} wrapper the Function form receives).
-			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, BarrierPos: -1},
+			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
 			// Quotation form: `filter [body] xs` runs the quoted body once
 			// per element (element pushed first, like each/fold) and keeps
 			// the elements whose body result is Boolean true.
-			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: filterBodyHandler, BarrierPos: -1},
+			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: filterBodyHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
 		},
 	},
 
@@ -241,8 +241,8 @@ var Natives = []NativeFunc{
 		Name: "join",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TList}, Handler: joinSepHandler, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: joinDefaultHandler, BarrierPos: -1},
+			{Args: []*Type{TString, TList}, Handler: joinSepHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: joinDefaultHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 
@@ -267,7 +267,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TFlexList}, Handler: popFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: popHandler, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: popHandler, Returns: []*Type{TList, TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -275,7 +275,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny, TFlexList}, Handler: unshiftFlexHandler, Returns: []*Type{TFlexList}, BarrierPos: -1},
-			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
@@ -283,7 +283,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TFlexList}, Handler: shiftFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: shiftHandler, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: shiftHandler, Returns: []*Type{TList, TAny}, BarrierPos: -1},
 		},
 	},
 

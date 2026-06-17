@@ -350,10 +350,14 @@ var allArrayNatives = []NativeFunc{
 			},
 			// Map forms — reduce entries (quotation: acc beneath, value on top;
 			// lambda: (acc, KeyVal)). Seeded explicitly, or by the first value.
-			{Args: []*Type{TList, TMap, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapNoInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap, TAny}, Handler: foldMapInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: foldMapNoInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			// The accumulator-type inference is collection-agnostic
+			// (DataListElemTypeFromValue reads a map's common value type), so the
+			// list ReturnsFns narrow the map forms too — `fold [add] {map} 0`
+			// checks as Integer, not Any.
+			{Args: []*Type{TList, TMap, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapInitHandler, ReturnsFn: foldWithInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapNoInitHandler, ReturnsFn: foldNoInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap, TAny}, Handler: foldMapInitHandler, ReturnsFn: foldWithInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: foldMapNoInitHandler, ReturnsFn: foldNoInitReturnsFn, BarrierPos: -1},
 		},
 	},
 	{

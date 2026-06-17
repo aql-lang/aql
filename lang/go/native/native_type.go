@@ -188,7 +188,7 @@ var typeNatives = []NativeFunc{
 			Args:       []*Type{TAny, TBoolean},
 			BarrierPos: 1,
 			Handler:    guardHandler,
-			Returns:    []*Type{TAny},
+			ReturnsFn:  guardReturns,
 		}}},
 	{
 		Name: "base",
@@ -737,6 +737,17 @@ func makeOptionalType(t Value) Value {
 }
 
 // ---- guard ----
+
+// guardReturns is the check-mode return for `guard`: it yields the
+// guarded value when the condition holds, else None — so the result type
+// is value|None, not Any. Narrowing only; the runtime result is always
+// the value or None, both covered by the join.
+func guardReturns(args []Value, _ *Registry) []Value {
+	if len(args) == 0 {
+		return []Value{NewCarrier(TAny)}
+	}
+	return []Value{JoinCarriers(args[0], NewCarrier(TNone))}
+}
 
 func guardHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	val := args[0]

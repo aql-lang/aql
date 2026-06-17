@@ -216,7 +216,16 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TAny)}
 	}
-	return []Value{stk[len(stk)-1]}
+	// `do` leaves the body's ENTIRE residual stack (doListHandler returns the
+	// full InvokeBody result), so a multi-value literal body — `do [10 20 30]`
+	// — nets three values, not one. Returning only the last (stk[len-1])
+	// under-reported the arity and made the checked stack contradict the
+	// runtime. Mirror the handler: return the full residual. The common
+	// single-value `do [expr]` is unaffected (len(stk)==1). The emit closure /
+	// island paths require a single output, so a genuinely multi-value body
+	// (rare) declines those and rides the whole-program fallback — correct,
+	// just not natively compiled.
+	return stk
 }
 
 func doMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

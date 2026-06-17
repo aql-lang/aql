@@ -286,6 +286,85 @@ func TestExecAuditsWithoutValue(t *testing.T) {
 	}
 }
 
+func TestExecDryRunInjectsFiller(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "real-secret\n", "add", "--from-stdin", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// --dry-run injects the filler, never the real value.
+	code, out, errOut := runVault(t, "",
+		"exec", "--dry-run", "k", "--", "sh", "-c", "printf %s \"$k\"")
+	if code != 0 {
+		t.Fatalf("exec --dry-run: %s", errOut)
+	}
+	if out != dryRunFiller {
+		t.Errorf("child env = %q, want filler %q", out, dryRunFiller)
+	}
+	if strings.Contains(out, "real-secret") {
+		t.Errorf("dry-run leaked the real secret: %q", out)
+	}
+}
+
+func TestExecDryRunNeedsNoUnlock(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "real-secret\n", "add", "--from-stdin", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// A locked vault blocks a normal exec; --dry-run reads nothing, so it
+	// must still succeed without unlocking.
+	if code, _, _ := runVault(t, "", "lock"); code != 0 {
+		t.Fatal("lock")
+	}
+	code, out, errOut := runVault(t, "",
+		"exec", "--dry-run", "k", "--", "sh", "-c", "printf %s \"$k\"")
+	if code != 0 {
+		t.Fatalf("exec --dry-run while locked: %s", errOut)
+	}
+	if out != dryRunFiller {
+		t.Errorf("child env = %q, want filler %q", out, dryRunFiller)
+	}
+}
+
+func TestExecDryRunForNpm(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "real-npm-tok\n", "add", "--from-stdin", "npm_token"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// The publisher recipe still shapes the env-var names; only the value
+	// is the filler. This is what lets `npm publish --dry-run` be exercised.
+	code, out, errOut := runVault(t, "",
+		"exec", "--dry-run", "--for=npm", "npm_token", "--",
+		"sh", "-c", "printenv 'npm_config_//registry.npmjs.org/:_authToken'")
+	if code != 0 {
+		t.Fatalf("exec --dry-run --for=npm: %s", errOut)
+	}
+	if strings.TrimSpace(out) != dryRunFiller {
+		t.Errorf("npm auth token env = %q, want filler %q", out, dryRunFiller)
+	}
+}
+
+func TestExecDryRunStillResolvesAlias(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	// A missing alias is an error even in --dry-run: the resolution step is
+	// kept faithful so a typo is caught before the child runs.
+	code, _, errOut := runVault(t, "",
+		"exec", "--dry-run", "nope", "--", "sh", "-c", "true")
+	if code == 0 {
+		t.Fatal("expected non-zero exit for unknown alias in --dry-run")
+	}
+	if !strings.Contains(errOut, "nope") {
+		t.Errorf("unknown-alias error not in %q", errOut)
+	}
+}
+
 func TestExecClearEnvDropsAmbient(t *testing.T) {
 	requireSh(t)
 	testHome(t)

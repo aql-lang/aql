@@ -94,6 +94,7 @@ func Run() {
 // `aql [-e expr] [script.aql]` shape and the no-args REPL drop-in.
 func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	run.SetVersion(versionString())
+	vault.SetVersion(versionString())
 	reg := buildRegistry()
 
 	if len(args) > 0 {

@@ -933,26 +933,25 @@ func TestReachLensCompilesNative(t *testing.T) {
 		}
 	}
 
-	// SCOPING / negative: `filter` has a DYNAMIC output and is a deliberate
-	// fallbackWord, so even with the lens + data both const-bakeable, the
-	// reach-form `filter $.on data` must NOT compile native and must NOT island
-	// (the lens guard in tryRecordFallback keeps it off the island path); it
-	// refuses and falls back with faithful parity.
+	// `filter $.on {map}` lens form: filter now narrows its result to the
+	// INPUT collection type (filterReturnsFn — a Map subset, not a dynamic
+	// Any), so the reach-form dispatch records a faithful CALL_NATIVE instead
+	// of refusing on a dynamic output. Parity must hold.
 	const filter = `filter $.on {a:{on:true} b:{on:false}}`
 	a, _ := New()
-	prog, reason, _, _ := a.CompileCheck(filter)
-	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-		t.Errorf("%q: a dynamic-output lens form must NOT compile native (reason was %q)", filter, reason)
+	prog, reason, _, cerr := a.CompileCheck(filter)
+	if cerr != nil || prog == nil || strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: filter lens form did not compile native: reason=%q", filter, reason)
 	}
 	ar, _ := New()
 	gotC, compiledFilter, _ := ar.RunCompiled(filter)
-	if compiledFilter {
-		t.Errorf("%q: a dynamic-output lens form must fall back, not compile", filter)
+	if !compiledFilter {
+		t.Errorf("%q: filter lens form should compile native now", filter)
 	}
 	b, _ := New()
 	gotI, _ := b.Run(filter)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[{a:{on:true}}]" {
-		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", filter, gotC, gotI)
+		t.Errorf("%q: filter parity broke: compiled=%v interp=%v", filter, gotC, gotI)
 	}
 
 	// The dot-access EVAL reach (`m.a.b`, a get-chain the engine expands) is
@@ -992,12 +991,7 @@ func TestScalarKeepAndCarrierIdentity(t *testing.T) {
 		{`def people [{name:"ada"} {name:"bob"}]  each $.name people`, "[['ada' 'bob']]"},
 		// carrier-identity: repeated identical computed calls
 		{`context set 'n' 5 end ( context get 'n' ) add ( context get 'n' )`, "[10]"},
-		// NOTE: the 3-deep chain `(get) add (get) add (get)` is temporarily
-		// regressed — patrun's 3-arg `add` overload perturbs the operand-layout
-		// / de-collision for chained `add`, so it falls back to the interpreter
-		// (runtime result is still correct). Tracked for a bytecode-compiler fix
-		// on a separate branch; restore this row then:
-		//   {`context set 'n' 5 end ( context get 'n' ) add ( context get 'n' ) add ( context get 'n' )`, "[15]"},
+		{`context set 'n' 5 end ( context get 'n' ) add ( context get 'n' ) add ( context get 'n' )`, "[15]"},
 		// the de-collision must NOT disturb dup's intentional same-id outputs,
 		// nor a computed receiver feeding dup
 		{`5 dup add`, "[10]"},
@@ -1279,5 +1273,60 @@ func TestPRReviewFindings(t *testing.T) {
 	a, _ := New()
 	if gotC, compiled, _ := a.RunCompiled(`{a:(3 mul 2) b:1}`); !compiled || fmt.Sprint(gotC) != "[{a:6 b:1}]" {
 		t.Errorf("#2 pure fold regressed: compiled=%v wasCompiled=%v", gotC, compiled)
+	}
+}
+
+// TestHeterogeneousArityBinaryOpCompiles guards the resolveForwardArgs
+// function-word-barrier fix. A binary op whose signature set ALSO includes a
+// higher-arity overload (here a 3-arg `add3`, mimicking patrun's
+// `add {pattern} value pm`) must still compile a chained call over a repeated
+// computed operand. The 3-arg overload never matches the integer chain, but
+// its mere presence raised the word's max forward arity to 3; the former
+// pre-evaluation scan then evaluated the THIRD group across the intermediate
+// `add3` barrier, so the recorded operands laid out non-adjacently and the
+// program refused with "operands of add3 not adjacent on top".
+func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
+	const src = `context set 'n' 5 end ( context get 'n' ) add3 ( context get 'n' ) add3 ( context get 'n' )`
+
+	mk := func() *AQL {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.Register("add3",
+			Signature{
+				Args: []*Type{TNumber, TNumber},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+					x, _ := eng.AsInteger(args[0])
+					y, _ := eng.AsInteger(args[1])
+					return []Value{NewInteger(x + y)}, nil
+				},
+				Returns: []*Type{TInteger}, BarrierPos: -1,
+			},
+			// The higher-arity overload — never matched by the integer chain,
+			// present only to make add3's arity profile heterogeneous (max
+			// forward arity 3).
+			Signature{
+				Args: []*Type{TMap, TAny, TAny},
+				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+					return []Value{args[0]}, nil
+				},
+				Returns: []*Type{TMap}, BarrierPos: -1,
+			},
+		)
+		return a
+	}
+
+	prog, reason, _, cerr := mk().CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("heterogeneous-arity chain did not compile: reason=%q err=%v", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Fatalf("heterogeneous-arity chain fell back to the interpreter:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mk().RunCompiled(src)
+	gotI, _ := mk().Run(src)
+	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[15]" {
+		t.Fatalf("parity broke: compiled=%v gotC=%v gotI=%v (want [15])", compiled, gotC, gotI)
 	}
 }

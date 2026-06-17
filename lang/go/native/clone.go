@@ -18,3 +18,16 @@ package native
 func cloneHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{CloneValue(args[0])}, nil
 }
+
+// cloneReturnsFn types `clone` as the SAME type as its input — CloneValue
+// preserves the type (a refine subtype, typed list/map, object/class type all
+// survive the copy), so the result is never the poison dynamic(Any) the bare
+// TAny sig would declare. A FRESH carrier of the input's Parent keeps the
+// result's emit identity distinct from the source — a clone is a new value
+// (`(clone p) eq p` is false) — so operand provenance stays unambiguous.
+func cloneReturnsFn(args []Value, _ *Registry) []Value {
+	if len(args) == 0 {
+		return []Value{NewDynamicCarrier(TAny)}
+	}
+	return []Value{NewCarrier(args[0].Parent)}
+}

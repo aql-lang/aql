@@ -945,15 +945,16 @@ func TestEmitModuleCallLowering(t *testing.T) {
 		t.Fatalf("max 5.0 9.0 = %v, want 9.0", out)
 	}
 
-	// F4: a get whose RESULT the checker types dynamic Any (a runtime field
-	// read on a def-bound map) now runtime-dispatches via CALL_NATIVE_POLY
-	// (plan P3/P4) — no island. The result must match the interpreter.
+	// A field read over a CONCRETE map with a static key now narrows to the
+	// field's type (getNodeReturns), so a def-bound `m.a` monomorphizes to a
+	// plain CALL_NATIVE — better than the prior dynamic poly dispatch. The
+	// result must still match the interpreter.
 	got2, reason2 := compile(t, `def m {a:1} m.a`)
 	if reason2 != "" {
-		t.Fatalf("dynamic-result get refused: %s", reason2)
+		t.Fatalf("concrete-map get refused: %s", reason2)
 	}
-	if strings.Contains(got2, "FALLBACK") || !strings.Contains(got2, "CALL_NATIVE_POLY") {
-		t.Errorf("dynamic-result get did not lower to CALL_NATIVE_POLY:\n%s", got2)
+	if strings.Contains(got2, "FALLBACK") || strings.Contains(got2, "CALL_NATIVE_POLY") {
+		t.Errorf("concrete-map field get should monomorphize to CALL_NATIVE:\n%s", got2)
 	}
 	b, err := New()
 	if err != nil {
@@ -961,10 +962,34 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	}
 	out2, _, err := b.RunCompiled(`def m {a:1} m.a`)
 	if err != nil {
-		t.Fatalf("dynamic get: %v", err)
+		t.Fatalf("concrete-map get: %v", err)
 	}
 	if len(out2) != 1 || out2[0] != int64(1) {
 		t.Fatalf("m.a = %v, want 1", out2)
+	}
+
+	// An OBJECT field read also narrows: the field's declared type is
+	// resolved from the class SCHEMA (getObjectReturns) even though the
+	// instance is an abstract carrier in check mode, so `o.a` likewise
+	// monomorphizes to a plain CALL_NATIVE. The runtime poly-dispatch path is
+	// covered by TestEmitPolySiteLowersToRuntimeMatch.
+	got3, reason3 := compile(t, `def Foo class {a:1} def o (make Foo {}) o.a`)
+	if reason3 != "" {
+		t.Fatalf("object field get refused: %s", reason3)
+	}
+	if strings.Contains(got3, "FALLBACK") || strings.Contains(got3, "CALL_NATIVE_POLY") {
+		t.Errorf("object field get should monomorphize to CALL_NATIVE:\n%s", got3)
+	}
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out3, _, err := c.RunCompiled(`def Foo class {a:1} def o (make Foo {}) o.a`)
+	if err != nil {
+		t.Fatalf("object field get: %v", err)
+	}
+	if len(out3) != 1 || out3[0] != int64(1) {
+		t.Fatalf("o.a = %v, want 1", out3)
 	}
 }
 
