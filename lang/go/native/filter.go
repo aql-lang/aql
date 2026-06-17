@@ -52,17 +52,14 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 		item.Set("value", valVal)
 
 		cbArgs := []Value{NewMap(item)}
-		cbResult, err := invokeCallback(r, cb, cbArgs)
+		cbResult, err := runFilterCallback(r, cb, cbArgs)
 		if err != nil {
 			callErr = err
 			return false
 		}
-		if len(cbResult) > 0 {
-			top := cbResult[len(cbResult)-1]
-			if top.Parent.ConformsTo(TBoolean) {
-				b, _ := AsBoolean(top)
-				return b
-			}
+		if len(cbResult) > 0 && cbResult[0].Parent.ConformsTo(TBoolean) {
+			b, _ := AsBoolean(cbResult[0])
+			return b
 		}
 		return false
 	})
@@ -78,26 +75,6 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	return []Value{val}, nil
 }
 
-// invokeCallback runs a higher-order callback fn VALUE against args: a compiled
-// closure (the OpPushClosure payload, when the call compiled) runs VM-native
-// through the InvokeBody seam; an interpreter FnDefInfo lambda runs through
-// CallAQL with its construction-time captures. The two paths build the SAME
-// args, so results are identical regardless of which one runs.
-func invokeCallback(r *Registry, cb Value, args []Value) ([]Value, error) {
-	if IsCompiledClosure(cb) {
-		return InvokeBody(r, cb, args)
-	}
-	sig := MatchFnSig(cb, args)
-	if sig == nil {
-		return nil, fmt.Errorf("no matching callback signature for %d argument(s)", len(args))
-	}
-	var caps []CapturedBinding
-	if fd, ok := cb.Data.(FnDefInfo); ok {
-		caps = fd.Captured
-	}
-	return r.CallAQL(sig, args, caps)
-}
-
 // filterMapFunction is the Function form of filter over a map: it calls the
 // callback once per entry with a KeyVal {k v i n}, keeping the entries whose
 // result is Boolean true and returning a Map (shape-preserving, like the
@@ -111,7 +88,7 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 	for idx, k := range keys {
 		v, _ := data.Get(k)
 		cbArgs := []Value{NewKeyVal(k, v, int64(idx), n)}
-		res, err := invokeCallback(r, cb, cbArgs)
+		res, err := runFilterCallback(r, cb, cbArgs)
 		if err != nil {
 			return nil, fmt.Errorf("filter: key %q: %w", k, err)
 		}
@@ -127,6 +104,29 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 		}
 	}
 	return []Value{NewMap(out)}, nil
+}
+
+// runFilterCallback invokes filter's Function-form callback once for one entry,
+// returning its result stack. A compiled CLOSURE (the bytecode VM driving
+// filter natively, the body operand lowered to OpPushClosure) runs through the
+// InvokeBody seam — its named param binds to the cbArgs shape the closure was
+// compiled against ({key,value} pair for a list, KeyVal for a map). An
+// interpreter FnDefINFO lambda matches a signature and runs through CallAQL. The
+// two shapes are byte-identical to the handler: both consume cbArgs and yield a
+// Boolean predicate result.
+func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
+	if IsCompiledClosure(cb) {
+		return InvokeBody(r, cb, cbArgs)
+	}
+	sig := MatchFnSig(cb, cbArgs)
+	if sig == nil {
+		return nil, fmt.Errorf("filter: no matching callback signature")
+	}
+	var caps []CapturedBinding
+	if fd, ok := cb.Data.(FnDefInfo); ok {
+		caps = fd.Captured
+	}
+	return r.CallAQL(sig, cbArgs, caps)
 }
 
 // filterBodyHandler is the quotation form of filter: `filter [body] xs`

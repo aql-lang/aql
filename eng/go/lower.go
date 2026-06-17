@@ -52,7 +52,7 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	if lp.hasBodyOut {
 		out = &lp.bodyOut
 	}
-	reason := lw.lowerFragment(lp.body, out, lp.pos)
+	reason := lw.lowerFragment(lp.body, out, false, lp.pos)
 	lw.loops = lw.loops[:len(lw.loops)-1]
 	if reason != "" {
 		return reason
@@ -437,7 +437,11 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	}); reason != "" {
 		return reason
 	}
-	if c.poly {
+	if c.makeList {
+		// Assemble the n laid-out operands into a list (a computed list literal,
+		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.
+		lw.emit(OpMakeList, n, c.pos)
+	} else if c.poly {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.
 		pi := len(lw.p.PolyRefs)
@@ -477,7 +481,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 // diverging fragment; a diverging fragment's terminator already
 // emitted its jump, so whatever its scope holds is unreachable and
 // ignored). Restores the parent scope afterwards.
-func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, pos SrcPos) string {
+func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
 	parent := lw.vm
 	lw.vm = nil
 	if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
@@ -492,7 +496,12 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, pos SrcPo
 			return "body leaves extra values (Stage 2 lowers single-result bodies)"
 		}
 	case out.kind == opEvent:
-		if lw.variadic[out.idx] {
+		if lw.variadic[out.idx] && !allowVariadic {
+			// The fragment's result is itself a VARIADIC (0-or-1) event — a
+			// nested variadic `if` (e.g. a no-default `case` chain). A BRANCH ARM
+			// may carry it (allowVariadic — the parent if propagates the
+			// variadic-ness up to its own merge), but a loop body / condition may
+			// not: they need a definite single value per iteration.
 			return "loop results as a branch/body result (Stage 2)"
 		}
 		if len(lw.vm) != 1 || !slotIs(lw.vm[0], *out) {
@@ -660,11 +669,14 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	}
 	if br.constCond != nil {
 		// Statically-taken branch: inline the taken fragment.
-		if reason := lw.lowerFragment(br.then, armOut(br.hasThenOut, &br.thenOut), br.pos); reason != "" {
+		if reason := lw.lowerFragment(br.then, armOut(br.hasThenOut, &br.thenOut), true, br.pos); reason != "" {
 			return reason
 		}
 		if br.hasThenOut {
 			lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+			if lw.variadic[br.thenOut.idx] {
+				lw.variadic[ev.seq] = true // taken arm was itself variadic
+			}
 			lw.note()
 		}
 		return ""
@@ -689,7 +701,7 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	// list-form condition body lowered here (it nets one Boolean).
 	switch {
 	case br.condFrag != nil:
-		if reason := lw.lowerFragment(br.condFrag, &br.condOut, br.pos); reason != "" {
+		if reason := lw.lowerFragment(br.condFrag, &br.condOut, false, br.pos); reason != "" {
 			return reason
 		}
 		// The Boolean is on the runtime stack but not in the parent
@@ -727,7 +739,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		}
 		return nil
 	}()
-	if reason := lw.lowerFragment(br.then, thenOut, br.pos); reason != "" {
+	if reason := lw.lowerFragment(br.then, thenOut, true, br.pos); reason != "" {
 		return reason
 	}
 	if !br.hasElse {
@@ -762,7 +774,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 			}
 			return nil
 		}()
-		if reason := lw.lowerFragment(br.els, elsOut, br.pos); reason != "" {
+		if reason := lw.lowerFragment(br.els, elsOut, true, br.pos); reason != "" {
 			return reason
 		}
 	}
@@ -784,6 +796,13 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 				lw.variadic[ev.seq] = true
 			}
 		}
+		// Variadic ARM: an arm whose own result is a nested variadic (0-or-1)
+		// event — a no-default `case`'s inner `if` chain — makes this merge
+		// variadic too, so the 0-or-1 propagates up to the residual.
+		if (br.hasThenOut && lw.variadic[br.thenOut.idx]) ||
+			(br.hasElsOut && lw.variadic[br.elsOut.idx]) {
+			lw.variadic[ev.seq] = true
+		}
 		lw.note()
 	}
 	return ""
@@ -800,7 +819,7 @@ func (lw *lowerer) lowerArmsComputed(ev *emitEvent, jf int) string {
 	// True path: discard the else value, then run the then-body.
 	lw.emit(OpDrop, 0, br.pos)
 	lw.vm = lw.vm[:len(lw.vm)-1] // else value dropped on this path
-	if reason := lw.lowerFragment(br.then, &br.thenOut, br.pos); reason != "" {
+	if reason := lw.lowerFragment(br.then, &br.thenOut, false, br.pos); reason != "" {
 		return reason
 	}
 	jend := lw.emit(OpJmp, 0, br.pos)

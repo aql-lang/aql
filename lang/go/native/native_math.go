@@ -285,7 +285,11 @@ var mathNatives = []NativeFunc{
 func withDecimalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	opts := args[0]
 	body := args[1]
-	if !IsCompiledClosure(body) && (!IsConcrete(body) || !body.Parent.ConformsTo(TList)) {
+	// The body is a quotation list under the interpreter, or a compiled CLOSURE
+	// when the bytecode VM drives this dispatch (the body operand lowered to
+	// OpPushClosure). Both run within the scoped context below.
+	closure := IsCompiledClosure(body)
+	if !closure && (!IsConcrete(body) || !body.Parent.ConformsTo(TList)) {
 		return nil, r.AqlError("type_error", "with-decimal: body must be a concrete list", "with-decimal")
 	}
 
@@ -303,15 +307,14 @@ func withDecimalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		}
 	}
 
-	// Run the body through the InvokeBody seam so a compiled closure runs
-	// VM-native inside the pushed decimal context; a raw token list runs a
-	// sub-engine. Preserve doEvalList's error-as-value wrapping (the historical
-	// behaviour) so neither engine's result shifts.
-	res, err := InvokeBody(r, body, nil)
-	if err != nil {
-		return []Value{NewError(err)}, nil
+	if closure {
+		// Drive the closure through the InvokeBody seam (the VM re-entrant
+		// runner) WITHIN the pushed context, so every BigDecimal op inside reads
+		// the override exactly as the interpreter's doEvalList does.
+		return InvokeBody(r, body, nil)
 	}
-	return res, nil
+	lst, _ := AsList(body)
+	return doEvalList(r, lst.Slice())
 }
 
 func addConcatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

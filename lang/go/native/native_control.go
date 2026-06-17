@@ -227,6 +227,19 @@ func doMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	return []Value{result}, nil
 }
 
+// doEvalList evaluates a top-level list of tokens in a sub-engine.
+// Errors are caught and returned as a single error value on the stack.
+func doEvalList(r *Registry, elems []Value) ([]Value, error) {
+	sub := New(r)
+	input := make([]Value, len(elems))
+	copy(input, elems)
+	result, err := sub.Run(input)
+	if err != nil {
+		return []Value{NewError(err)}, nil
+	}
+	return result, nil
+}
+
 // doEvalDataList evaluates a list value inside a `do` map as code.
 // Unquoted words in the list arrive as Word values and run normally
 // (`do {a:[add 1 2]}` → {a:3}); quoted strings and atoms are DATA and

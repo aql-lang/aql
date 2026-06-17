@@ -385,6 +385,7 @@ var (
 	New                       = eng.New
 	InvokeBody                = eng.InvokeBody
 	IsCompiledClosure         = eng.IsCompiledClosure
+	ClosureWantsKeyVal        = eng.ClosureWantsKeyVal
 	CloneValue                = eng.CloneValue
 	NewSyncWriter             = eng.NewSyncWriter
 	NewArray                  = eng.NewArray

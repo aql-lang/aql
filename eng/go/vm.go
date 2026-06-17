@@ -244,8 +244,10 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 	fnVal := stack[base]
 	args := stack[base+1:]
 
-	if cl, ok := fnVal.Data.(ClosurePayload); ok {
-		results, err := vc.invokeClosure(NewClosure(cl.Unit, cl.Captures), append([]Value(nil), args...))
+	if _, ok := fnVal.Data.(ClosurePayload); ok {
+		// Pass fnVal directly so the payload's InShape rides along (invokeClosure
+		// only fills param slots, but a downstream handler may read the shape).
+		results, err := vc.invokeClosure(fnVal, append([]Value(nil), args...))
 		if err != nil {
 			return nil, stampAt(err, curDebug, pc, r)
 		}
@@ -418,6 +420,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, vmErrAt(curDebug, pc, "DROP stack underflow")
 			}
 			stack = stack[:len(stack)-1]
+		case OpMakeList:
+			// Assemble the top Arg values into a list (a computed list literal,
+			// `[1 add 2]`); order preserved, deepest becomes element 0.
+			n := int(in.Arg)
+			if len(stack) < n {
+				return nil, vmErrAt(curDebug, pc, "MAKE_LIST stack underflow")
+			}
+			elems := make([]Value, n)
+			copy(elems, stack[len(stack)-n:])
+			stack = stack[:len(stack)-n]
+			stack = append(stack, NewList(elems))
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {
@@ -429,7 +442,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				copy(caps, stack[len(stack)-nc:])
 				stack = stack[:len(stack)-nc]
 			}
-			stack = append(stack, NewClosure(int(in.Arg), caps))
+			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape}
+			stack = append(stack, Value{Parent: TFunction, Data: cl})
 		case OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
 			// copy (eng/go/CLAUDE.md, Canonical *Type Pointers). Types

@@ -135,6 +135,30 @@ func DataListElemTypeFromValue(data Value) *Type {
 		}
 		return ct.Child.Parent
 	}
+	// A concrete MAP: the higher-order words (each/filter/fold over a map)
+	// transform the VALUES (keys are kept), so the element type a value-body
+	// closure sees is the common value type, not the list-element type below.
+	if mp, ok := data.Data.(MapPayload); ok {
+		if mp.M == nil || mp.M.Len() == 0 {
+			return TAny
+		}
+		var t *Type
+		for _, k := range mp.M.Keys() {
+			v, _ := mp.M.Get(k)
+			if t == nil {
+				t = v.Parent
+			} else {
+				t = CommonAncestorType(t, v.Parent)
+			}
+			if t.Equal(TAny) {
+				break
+			}
+		}
+		if t == nil {
+			return TAny
+		}
+		return t
+	}
 	list, err := AsList(data)
 	if err != nil || list.IsNil() || list.Len() == 0 {
 		return TAny
@@ -142,40 +166,6 @@ func DataListElemTypeFromValue(data Value) *Type {
 	t := list.Get(0).Parent
 	for i := 1; i < list.Len(); i++ {
 		t = CommonAncestorType(t, list.Get(i).Parent)
-		if t.Equal(TAny) {
-			break
-		}
-	}
-	return t
-}
-
-// DataMapValueTypeFromValue is the map analogue of DataListElemTypeFromValue:
-// the common type of a concrete map's VALUES. A map-receiver higher-order word's
-// body sees each value (quotation) or a KeyVal whose `.v` is each value, so the
-// body input carrier must be the map's value type, not the list-element type
-// (AsList over a map yields nothing). Reads the ChildTypeInfo value constraint
-// first, then joins the concrete values' VTypes.
-func DataMapValueTypeFromValue(data Value) *Type {
-	if data.Data == nil {
-		return TAny
-	}
-	if ct, ok := data.Data.(ChildTypeInfo); ok {
-		if ct.Child.Data == nil && !ct.Child.Carrier {
-			c := ct.Child // bare type-literal child IS the value type
-			return &c
-		}
-		return ct.Child.Parent
-	}
-	m, err := AsMap(data)
-	if err != nil || m == nil || m.Len() == 0 {
-		return TAny
-	}
-	keys := m.Keys()
-	first, _ := m.Get(keys[0])
-	t := first.Parent
-	for i := 1; i < len(keys); i++ {
-		v, _ := m.Get(keys[i])
-		t = CommonAncestorType(t, v.Parent)
 		if t.Equal(TAny) {
 			break
 		}
@@ -207,16 +197,24 @@ func toCarrier(v Value) Value {
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
 		return v
 	}
-	// Keep concrete integer literals concrete so static index checking
-	// can recover the value (an out-of-bounds literal index like
-	// `[10 20] 5 getr`). Stripping would lose the value and force the
-	// index check to give up. This only preserves genuine concrete
-	// integers (IntPayload) — DepScalar constraints (Data is a
-	// DepScalarInfo) and carriers are untouched. Precision only
-	// increases: a literal stays concrete until a word consumes it and
-	// produces a computed carrier, exactly as lists/maps already behave.
-	if v.Parent.Equal(TInteger) && IsConcrete(v) && !v.IsDepScalar() {
-		return v
+	// Keep concrete inert SCALAR literals concrete so the recorder can recover
+	// the value. Two drivers: static index checking (an out-of-bounds literal
+	// index like `[10 20] 5 getr` needs the integer), and const-baking a DATA
+	// list/map whose interior is scalar (`each $.name [{name:"a"}]`, `size
+	// people`, a string-bearing table row). Without this the interior strips to
+	// a type-only carrier, so the container is no longer an inert const and the
+	// operand has no compiled home. Only GENUINE concrete scalars qualify — a
+	// DepScalar CONSTRAINT (`Integer gt 10`, `String len 5`) carries a
+	// DepScalarInfo payload, not one of these, so it is naturally excluded and
+	// stays a carrier for predicate matching. Precision only increases: a
+	// literal stays concrete until a word consumes it and produces a computed
+	// carrier, exactly as lists/maps already behave.
+	switch v.Data.(type) {
+	case IntPayload, StrPayload, BoolPayload, FloatPayload, AtomPayload,
+		BigIntPayload, DecimalPayload, TimePayload, DurationPayload, TimezonePayload:
+		if IsConcrete(v) {
+			return v
+		}
 	}
 	// Keep FnDef / Function payloads (FnDefInfo) concrete. Stripping
 	// them loses the body, params, and Captured list — which means a
@@ -225,6 +223,15 @@ func toCarrier(v Value) Value {
 	// than to the inner FnDefInfo, breaking subsequent invocation +
 	// inference of `add5 3`.
 	if _, ok := v.Data.(FnDefInfo); ok {
+		return v
+	}
+	// Keep MODULE instances (Ideal/Module, Ideal/ModuleExport) concrete, same
+	// rationale as FnDefInfo: stripping nulls the ExtensionPayload descriptor /
+	// exports, so `MathUtil.$module` would become an opaque carrier the
+	// get-resolution elision can no longer follow. They are immutable and
+	// import-bound, so a pure read of one (`$name`, `$module.name`, `convert
+	// Map …`) const-folds (tryFoldModuleConst).
+	if isModuleFamilyValue(v) {
 		return v
 	}
 	// Keep Reach values (dot-access `m.a`, `Pkg.fn`) concrete. A parsed
@@ -236,6 +243,13 @@ func toCarrier(v Value) Value {
 	// propagation, index checks, and dispatch diagnostics. Same rationale
 	// as the FnDefInfo case above.
 	if IsReach(v) {
+		return v
+	}
+	// Keep an __SP splice marker concrete: it is a compile-time macro binding
+	// (`def x word [body]`), expanded inline at each use site by stepLiteral. A
+	// carrier-stripped marker would lose its payload and never splice, so the
+	// reference would be an opaque carrier in check mode.
+	if IsSplice(v) {
 		return v
 	}
 	// Type literals (Data already nil) are already in the right
@@ -323,6 +337,37 @@ func isLiteralWord(v Value) bool {
 // args that would be passed to the runtime handler). pos carries the
 // word's source location so diagnostics can point at it.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
+	// `args` inside a compiled fn body projects the frame's params (pushed by
+	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
+	// then folds to param N — a frame local — via tryFoldStaticIndex; bare
+	// `args` has no foldable consumer and refuses at its use site. At top level
+	// r.Args is empty so `args` falls through to RecordCall's refusal.
+	if word == "args" {
+		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
+			return []Value{top}
+		}
+	}
+	// `word [body]` is a compile-time macro splice: produce the __SP marker as a
+	// non-emitting value (no runtime op). At its use site stepLiteral splices the
+	// body inline and re-steps it against the live stack, so the expansion
+	// compiles in place — late binding and all. (The `def NAME word …` that binds
+	// the marker emits nothing either; the marker has no runtime existence.)
+	if word == "word" && len(args) == 1 {
+		return []Value{NewSplice(args[0])}
+	}
+	// `macroexpand (mac args…)` is Lisp-style compile-time expansion: the macro
+	// and its operands are static, so run the expansion NOW and bake the
+	// resulting token list as a const (code-as-data). Only when the expansion
+	// is fully concrete (isInertConst — no carrier from a runtime operand) and
+	// succeeds; a too-deep / erroring expansion falls through to refuse, and the
+	// interpreter surfaces the same error.
+	if word == "macroexpand" && len(args) == 1 {
+		if toks, err := ExpandMacroForm(r, args[0]); err == nil {
+			if lst := NewList(toks); isInertConst(lst) {
+				return []Value{lst}
+			}
+		}
+	}
 	narrowDynamicUses(r, sig, args)
 	// Per-alternative dispatch for strict disjunct inputs
 	// (design/checker-accuracy-review.0.md A1). matchSignature tested
@@ -419,13 +464,163 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	if !tryRecordClosure(r, word, sig, args, out, pos) &&
-		!tryRecordLambdaClosure(r, word, sig, args, out, pos) &&
+	if !tryFoldStaticIndex(r, word, args, out) &&
+		!tryFoldModuleConst(r, word, sig, args, out) &&
+		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
-		r.Check.Emit.RecordCall(word, sig, args, out, pos, dynOutNativeOK(r, word, sig, args, out))
+		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
+		r.Check.Emit.RecordCall(word, sig, args, out, pos,
+			dynOutNativeOK(r, word, sig, args, out) || quoteInertOK, quoteInertOK)
 	}
 	return out
+}
+
+// tryFoldStaticIndex folds a `get` / `getr` over a CONCRETE list with a STATIC,
+// in-range, non-negative integer index to the element's existing operand —
+// emitting nothing, since the result already has a compiled home. Its purpose is
+// `args.N` (= `get N args`): the args projection is the list of param carriers,
+// whose IDs are the frame locals, so `args.0` folds to PUSH_LOCAL 0. The fold is
+// general but self-gating: it only fires when the element resolves to an operand
+// (a local or interned const), so a literal-list element that was never interned
+// declines and the normal poly/get path stands. outs[0] is rewritten to the
+// element carrier so the value flowing on has the element's identity.
+func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
+	es := r.Check.Emit
+	if !es.active() || (word != "get" && word != "getr") || len(args) != 2 || len(outs) != 1 {
+		return false
+	}
+	key, recv := args[0], args[1]
+	if !recv.Parent.ConformsTo(TList) || !IsConcrete(recv) ||
+		!key.Parent.ConformsTo(TInteger) || !IsConcrete(key) {
+		return false
+	}
+	n, err := AsInteger(key)
+	if err != nil || n < 0 {
+		return false
+	}
+	lst, lerr := AsList(recv)
+	if lerr != nil || lst.IsNil() || int(n) >= lst.Len() {
+		return false
+	}
+	elem := lst.Get(int(n))
+	if _, ok := es.resolveOperand(elem); !ok {
+		return false // element has no compiled home (e.g. an un-interned literal) — decline
+	}
+	outs[0] = elem
+	return true
+}
+
+// moduleConstFoldWords are the PURE reader words whose result over a
+// compile-time-known module value is a compile-time constant. `import` binds a
+// ModuleExport / Module instance that is immutable and deterministic, so a
+// get/getr (`MathUtil.$name`, `X.$module.name`), convert (`convert Map Foo`),
+// or typeof / is over it always yields the same value — it can be baked rather
+// than re-read at run time. Kept to a known-pure set so an impure word over a
+// module (none exists today, but defensively) can never const-fold.
+var moduleConstFoldWords = map[string]bool{
+	"get": true, "getr": true, "convert": true,
+	"typeof": true, "is": true, "size": true, "has": true,
+}
+
+// isModuleFamilyValue reports whether v is a concrete module instance — an
+// Ideal/Module descriptor or an Ideal/ModuleExport namespace (the values
+// `import` binds). Identified by the stable registered type PATH (FixedIDs
+// 5000/5001 in the lang layer) so the eng-level fold needs no lang import. These
+// instances are immutable and produced deterministically by `import`, so a pure
+// read of one is a compile-time constant.
+func isModuleFamilyValue(v Value) bool {
+	if !IsConcrete(v) || v.Parent == nil {
+		return false
+	}
+	switch v.Parent.Path() {
+	case "Ideal/Module", "Ideal/ModuleExport":
+		return true
+	}
+	return false
+}
+
+// tryFoldModuleConst const-folds a PURE read whose result is a compile-time
+// constant because it depends only on a module value (immutable, import-bound)
+// plus inert consts / type operands — `MathUtil.$name` -> 'MathUtil',
+// `convert Map Foo` -> the export map, `MathUtil.$module.name` ->
+// 'aql:math-util', `typeof MathUtil.$module` -> Module. The checker's recorded
+// RESULT is NOT enough: a word like `convert`/`is`/`typeof` returns its declared
+// TYPE (a Map carrier, a Boolean carrier) in check mode, not the concrete value,
+// so baking that would render `Map` where the interpreter rebuilds `{a:1 b:2}`.
+// Instead the dispatch is RE-EVALUATED concretely (check mode off) — twice, and
+// only folded when both runs agree on the same resolvable value (an inert const
+// or a bare type node), so a clock/rand/mutation-bearing read never freezes.
+// The fold emits nothing; the concrete result rides as that const / type
+// operand — the get/getr module-RESOLUTION elision (RecordCall), generalised to
+// the synthetic accessors and projections whose result is data, not a fn.
+// Declines unless the word is a known pure reader with a direct handler, at
+// least one operand is a module value, and every other operand is itself a
+// compile-time constant (an inert const or a type node) — a runtime operand
+// never folds.
+func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
+	es := r.Check.Emit
+	if !es.active() || !moduleConstFoldWords[word] || len(outs) != 1 ||
+		sig == nil || sig.Handler == nil || len(sig.NoEvalArgs) > 0 {
+		return false
+	}
+	sawModule := false
+	for _, a := range args {
+		switch {
+		case isModuleFamilyValue(a):
+			sawModule = true
+		case IsBareTypeNode(a):
+			// a type operand (the target of `convert Map …` / `… is Module`)
+		case isInertConst(a):
+			// an inert const operand (a quoted key atom, a scalar)
+		default:
+			return false // a runtime / non-const operand — not a compile-time fold
+		}
+	}
+	if !sawModule {
+		return false
+	}
+	one, ok := concreteHandlerEval(r, sig, args)
+	if !ok {
+		return false
+	}
+	two, ok := concreteHandlerEval(r, sig, args)
+	if !ok || one.String() != two.String() {
+		return false
+	}
+	switch {
+	case isInertConst(one):
+		outs[0] = one // ride as an inert const
+	case IsBareTypeNode(one) && one.ID != "":
+		outs[0] = one // ride as a type operand (OpPushType)
+	default:
+		return false
+	}
+	return true
+}
+
+// concreteHandlerEval runs sig.Handler on the already-resolved args with check
+// mode OFF, so a pure reader produces its REAL value rather than the declared-
+// type carrier the check-mode ReturnsFn emits. Nothing is recorded (the handler
+// is called directly, off the emit path) and the def stack is snapshotted /
+// restored so a stray binding cannot leak. Returns the single result when it is
+// a concrete value or a bare type node (typeof's type literal). Mirrors
+// concreteEvalOnce, but dispatches the one matched native instead of re-running
+// a token stream — the args are already in sig order.
+func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool) {
+	snap := r.Defs.Snapshot()
+	prev := r.Check.Mode
+	r.Check.Mode = false
+	res, err := sig.Handler(args, nil, nil, r)
+	r.Check.Mode = prev
+	r.Defs.Restore(snap)
+	if err != nil || len(res) != 1 {
+		return Value{}, false
+	}
+	if IsConcrete(res[0]) || (IsBareTypeNode(res[0]) && res[0].ID != "") {
+		return res[0], true
+	}
+	return Value{}, false
 }
 
 // dynOutNativeOK reports whether a dispatch with a DYNAMIC output but CONCRETE
@@ -484,6 +679,41 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 					return true
 				}
 			}
+		}
+	}
+	return isModuleInnerSig(r, word, sig)
+}
+
+// quoteOperandInertOK reports whether a dispatch with implicit-quote operands
+// (sig.QuoteArgs) may still bake a plain CALL_NATIVE despite the quoted
+// positions. It holds only for a MODULE INNER NATIVE (`Pkg.word`, confirmed by
+// pointer identity) whose every quoted operand is an inert Atom const — the
+// query DSL's table-name operands (`Query.from people`, `Query.join visits`):
+// the name is captured unevaluated as a symbol the handler resolves at run time.
+// This is the QuoteArgs analogue of dynOutNativeOK and of the get/getr/set
+// exemption in RecordCall: the inner native is reached via the wrapper's trivial
+// delegation, so the interpreter dispatches the SAME handler via execMatch on
+// this engine, and a baked Atom is the same value either way. Restricting to
+// module inner natives keeps it off the core meta words (usurp / force-arity /
+// ref-family) whose quoted operands drive re-stepping dispatch, and off any
+// user word (those refuse earlier as a user-fn call). Mutation-safety holds:
+// the query builders return fresh lazy-query values, they do not mutate a
+// pooled const.
+func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value) bool {
+	if sig == nil || len(sig.QuoteArgs) == 0 {
+		return false
+	}
+	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
+	// regardless; screen here so they cannot slip through this exemption).
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+		return false
+	}
+	for i := range args {
+		if !sig.QuoteArgs[i] {
+			continue
+		}
+		if _, ok := args[i].Data.(AtomPayload); !ok || !isInertConst(args[i]) {
+			return false
 		}
 	}
 	return isModuleInnerSig(r, word, sig)
@@ -670,6 +900,17 @@ var islandPureWords = map[string]bool{
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es := r.Check.Emit
 	if !es.active() || !(fallbackWords[word] || islandPureWords[word]) || len(outs) != 1 || sig == nil {
+		return false
+	}
+	// A higher-order callable word dispatched on its LENS (Reach) form, not a
+	// code body (`filter $.on data`, `each $.name data`): the island mechanism
+	// exists to run an interpreted CODE BODY, and a reach lens is inert data, not
+	// code. Now that an inert lens bakes as a const (isInertReach), letting these
+	// island would convert a clean refusal into a NEW interpreter island (a
+	// regression on islandCeiling) for no gain — the reach form has no body to
+	// run. Decline so it refuses; the lens-as-const value/apply/getpath forms
+	// (which do not route here) still compile natively.
+	if spec, ok := callableWords[word]; ok && spec.bodyPos < len(args) && IsReach(args[spec.bodyPos]) {
 		return false
 	}
 	// A dispatch whose output is already recorded was handled by a structured
@@ -1319,6 +1560,12 @@ func JoinCarriers(a, b Value) Value {
 		out := a
 		out.Carrier = true
 		out.Data = nil
+		// The merged carrier is a NEW value (an `if`/loop result), not arm `a`.
+		// Keeping a's ID lets the result COLLIDE with a's own binding when an arm
+		// returns a live local — `def v0 3 def v1 (if c [v0] [4])` makes the if-
+		// result reuse v0's id, so a later `v0` reference resolves to the if-event
+		// (the compiler bakes the wrong value). Mint a distinct identity.
+		out.ID = GenerateID(IDPrefixForType(out.Parent))
 		return out
 	}
 	if !IsDisjunct(a) && !IsDisjunct(b) {
@@ -1963,6 +2210,15 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		snapshot := r.Defs.Snapshot()
 		r.PushFnBaseline(snapshot)
 		defer r.PopFnBaseline()
+
+		// Expose the params as the per-call args list so a body that reads
+		// `args` / `args.N` resolves them in check mode. The params ARE the
+		// frame's leading locals (0..n-1), so `args.N` folds to that local — at
+		// lowering it becomes PUSH_LOCAL N, no runtime args stack needed
+		// (carrierResults' `args` projection + tryFoldStaticIndex). Pushed
+		// alongside the FnBaseline; popped together.
+		_ = r.Args.Push(NewList(append([]Value(nil), args...)))
+		defer func() { _, _ = r.Args.Pop() }()
 
 		// Install lexical captures first so params (installed below)
 		// shadow same-named captures — innermost binding wins,

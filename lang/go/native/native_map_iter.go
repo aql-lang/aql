@@ -2,48 +2,53 @@ package native
 
 import "fmt"
 
-// Map overloads for the higher-order words each / for-each / fold / scan (and
-// the Function form of filter, in filter.go), plus the keys / vals projections.
+// Map overloads for the higher-order words each / for-each / fold (and the
+// Function form of filter, in filter.go), plus the keys / vals projections.
 //
 // A Map is iterated entry by entry in insertion order. Two body forms, mirrored
-// across every word and SPLIT BY SIGNATURE (never by sniffing the body value's
-// type — a compiled-closure quotation body and a lambda value both have
-// Parent=TFunction, so only the matched signature discriminates them):
+// across every word:
 //
-//   - quotation `[body]` (sig `[TList, TMap]`) — the entry's VALUE is pushed on
-//     the stack; the body runs through the InvokeBody seam, so a compiled
-//     closure runs VM-native and a raw token list runs a sub-engine (identical
-//     to the historical New(reg).Run path). The result keeps the map shape.
-//     e.g. `{a:1 b:2} each [mul 10]`.
-//   - lambda `(kv => …)` (sig `[TFunction, TMap]`) — the body is handed a
-//     KeyVal {k v i n} so it can use the key/index/total; it runs through
-//     CallAQL. The result still keeps the map shape.
+//   - quotation `[body]` — the entry's VALUE is pushed on the stack; the result
+//     keeps the map shape (same keys). e.g. `{a:1 b:2} each [mul 10]`.
+//   - lambda `(kv => …)` — the body is handed a KeyVal {k v i n} so it can use
+//     the key/index/total; the result still keeps the map shape.
 //     e.g. `{a:1 b:2} each (kv => [kv.v mul 10])`.
 //
 // each → Map (values transformed, keys kept); for-each → nothing;
-// fold → the accumulator; scan → Map (running fold, keys kept);
-// filter → Map (entries kept by a Boolean predicate).
+// fold → the accumulator; filter → Map (entries kept by a Boolean predicate).
 // To leave the map shape and get a List, use keys / vals (or StructUtil.items).
 
-// mapBody runs an iteration body once per map entry. The form is fixed at
-// construction by the matched signature, not inferred from the body value.
+// mapBody is a prepared iteration body — either a quotation (token list) or a
+// lambda (Function value) — ready to run once per map entry.
 type mapBody struct {
-	lambda bool
-	body   Value // quotation list / compiled closure, or the lambda fn
+	lambda  bool
+	closure bool              // when a compiled-closure body (VM-driven)
+	fn      Value             // when lambda: the Function value
+	body    Value             // when closure: the closure value (run via InvokeBody)
+	caps    []CapturedBinding // when lambda: its captured bindings
+	tokens  []Value           // when quotation: the body tokens
 }
 
-// newQuoteBody prepares a quotation/closure body: each entry's VALUE is its sole
-// input, run through InvokeBody (VM-native for a compiled closure, sub-engine
-// for a raw token list — byte-identical to the old runQuotationBody path).
-func newQuoteBody(body Value) mapBody {
-	return mapBody{body: body}
-}
-
-// newLambdaBody prepares a Function body handed a KeyVal per entry. It runs
-// through invokeCallback: a compiled closure VM-native via InvokeBody, an
-// interpreter FnDefInfo lambda via CallAQL with its captures.
-func newLambdaBody(body Value) mapBody {
-	return mapBody{lambda: true, body: body}
+// newMapBody classifies the body arg: a compiled CLOSURE (the bytecode VM
+// driving each/fold over a map) runs per VALUE via the InvokeBody seam, like a
+// quotation; a (lambda) Function is handed a KeyVal; anything else must be a
+// concrete quotation list (handed the value).
+func newMapBody(reg *Registry, body Value, word string) (mapBody, error) {
+	if IsCompiledClosure(body) {
+		return mapBody{closure: true, body: body}, nil
+	}
+	if body.Parent.ConformsTo(TFunction) {
+		mb := mapBody{lambda: true, fn: body}
+		if fd, ok := body.Data.(FnDefInfo); ok {
+			mb.caps = fd.Captured
+		}
+		return mb, nil
+	}
+	if !IsConcrete(body) {
+		return mapBody{}, reg.AqlError(word+"_error", word+": body must be a quotation list or a lambda", word)
+	}
+	bl, _ := AsList(body)
+	return mapBody{tokens: bl.Slice()}, nil
 }
 
 // value runs the body for one entry with no accumulator. ok=false when the body
@@ -52,7 +57,17 @@ func (mb mapBody) value(reg *Registry, k string, v Value, i, n int64) (Value, bo
 	if mb.lambda {
 		return mb.callLambda(reg, []Value{NewKeyVal(k, v, i, n)})
 	}
-	return topOfRun(InvokeBody(reg, mb.body, []Value{v}))
+	if mb.closure {
+		// A closure compiled from a LAMBDA body expects a KeyVal (its named
+		// param destructures `kv.v`/`kv.i`); one compiled from a token body
+		// sees the bare value, like a quotation. The unit's recorded shape says
+		// which (ClosureWantsKeyVal).
+		if ClosureWantsKeyVal(mb.body) {
+			return invokeBodyTop(reg, mb.body, []Value{NewKeyVal(k, v, i, n)})
+		}
+		return invokeBodyTop(reg, mb.body, []Value{v})
+	}
+	return runQuotationBody(reg, mb.tokens, []Value{v})
 }
 
 // fold runs the body for one entry with an accumulator. The quotation form
@@ -63,15 +78,52 @@ func (mb mapBody) fold(reg *Registry, acc Value, k string, v Value, i, n int64) 
 	if mb.lambda {
 		return mb.callLambda(reg, []Value{acc, NewKeyVal(k, v, i, n)})
 	}
-	return topOfRun(InvokeBody(reg, mb.body, []Value{acc, v}))
+	if mb.closure {
+		// (accumulator, entry): a lambda-derived closure takes the entry as a
+		// KeyVal, a token-derived one as the bare value.
+		if ClosureWantsKeyVal(mb.body) {
+			return invokeBodyTop(reg, mb.body, []Value{acc, NewKeyVal(k, v, i, n)})
+		}
+		return invokeBodyTop(reg, mb.body, []Value{acc, v})
+	}
+	return runQuotationBody(reg, mb.tokens, []Value{acc, v})
+}
+
+// invokeBodyTop runs a (closure) body via the InvokeBody seam and returns its
+// residual top of stack — the closure mirror of runQuotationBody.
+func invokeBodyTop(reg *Registry, body Value, inputs []Value) (Value, bool, error) {
+	res, err := InvokeBody(reg, body, inputs)
+	if err != nil {
+		return Value{}, false, err
+	}
+	if len(res) == 0 {
+		return Value{}, false, nil
+	}
+	return res[len(res)-1], true, nil
 }
 
 func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
-	return topOfRun(invokeCallback(reg, mb.body, args))
+	sig := MatchFnSig(mb.fn, args)
+	if sig == nil {
+		return Value{}, false, fmt.Errorf("no matching lambda signature for %d argument(s)", len(args))
+	}
+	res, err := reg.CallAQL(sig, args, mb.caps)
+	if err != nil {
+		return Value{}, false, err
+	}
+	if len(res) == 0 {
+		return Value{}, false, nil
+	}
+	return res[len(res)-1], true, nil
 }
 
-// topOfRun returns the top of a body's residual stack (ok=false when empty).
-func topOfRun(res []Value, err error) (Value, bool, error) {
+// runQuotationBody pushes `pushed` (deepest first), then the body tokens, runs a
+// fresh sub-engine, and returns the residual top of stack.
+func runQuotationBody(reg *Registry, tokens []Value, pushed []Value) (Value, bool, error) {
+	input := make([]Value, 0, len(pushed)+len(tokens))
+	input = append(input, pushed...)
+	input = append(input, tokens...)
+	res, err := New(reg).Run(input)
 	if err != nil {
 		return Value{}, false, err
 	}
@@ -93,10 +145,17 @@ func requireConcreteMap(reg *Registry, v Value, word string) (ReadMap, error) {
 	return m, nil
 }
 
-// ---- each ----
-
-// eachMapWith maps a body over a map's values, keeping the keys — `mapValues`.
-func eachMapWith(reg *Registry, mb mapBody, data ReadMap) ([]Value, error) {
+// eachMapHandler maps a body over a map's values, keeping the keys — `mapValues`.
+// Backs the `[TList, TMap]` (quotation) and `[TFunction, TMap]` (lambda) sigs.
+func eachMapHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	data, err := requireConcreteMap(reg, args[1], "each")
+	if err != nil {
+		return nil, err
+	}
+	mb, err := newMapBody(reg, args[0], "each")
+	if err != nil {
+		return nil, err
+	}
 	keys := data.Keys()
 	n := int64(len(keys))
 	out := NewOrderedMap()
@@ -114,27 +173,17 @@ func eachMapWith(reg *Registry, mb mapBody, data ReadMap) ([]Value, error) {
 	return []Value{NewMap(out)}, nil
 }
 
-func eachMapQuoteHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "each")
+// forEachMapHandler runs the body once per entry for side effects, producing
+// nothing. Backs the `[TList, TMap]` and `[TFunction, TMap]` sigs.
+func forEachMapHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	data, err := requireConcreteMap(reg, args[1], "for-each")
 	if err != nil {
 		return nil, err
 	}
-	return eachMapWith(reg, newQuoteBody(args[0]), data)
-}
-
-func eachMapLambdaHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "each")
+	mb, err := newMapBody(reg, args[0], "for-each")
 	if err != nil {
 		return nil, err
 	}
-	return eachMapWith(reg, newLambdaBody(args[0]), data)
-}
-
-// ---- for-each ----
-
-// forEachMapWith runs the body once per entry for side effects, producing
-// nothing.
-func forEachMapWith(reg *Registry, mb mapBody, data ReadMap) ([]Value, error) {
 	keys := data.Keys()
 	n := int64(len(keys))
 	for idx, k := range keys {
@@ -146,27 +195,38 @@ func forEachMapWith(reg *Registry, mb mapBody, data ReadMap) ([]Value, error) {
 	return nil, nil
 }
 
-func forEachMapQuoteHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "for-each")
+// foldMapInitHandler reduces a map's entries with an explicit seed —
+// `init fold [body] {map}`. Backs `[TList, TMap, TAny]` / `[TFunction, TMap, TAny]`.
+func foldMapInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	data, err := requireConcreteMap(reg, args[1], "fold")
 	if err != nil {
 		return nil, err
 	}
-	return forEachMapWith(reg, newQuoteBody(args[0]), data)
+	return doFoldMap(reg, args[0], args[2], data, 0)
 }
 
-func forEachMapLambdaHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "for-each")
+// foldMapNoInitHandler reduces a map's entries, seeding from the first value —
+// `fold [body] {map}`. Backs `[TList, TMap]` / `[TFunction, TMap]`.
+func foldMapNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	data, err := requireConcreteMap(reg, args[1], "fold")
 	if err != nil {
 		return nil, err
 	}
-	return forEachMapWith(reg, newLambdaBody(args[0]), data)
+	keys := data.Keys()
+	if len(keys) == 0 {
+		return nil, reg.AqlError("fold_error", "fold: empty map with no initial value", "fold")
+	}
+	first, _ := data.Get(keys[0])
+	return doFoldMap(reg, args[0], first, data, 1)
 }
 
-// ---- fold ----
-
-// foldMapWith threads the accumulator from `start` onward over the map's
-// entries, passing each entry's original index/total to a lambda's KeyVal.
-func foldMapWith(reg *Registry, mb mapBody, acc Value, data ReadMap, start int) ([]Value, error) {
+// doFoldMap threads the accumulator from `start` onward over the map's entries,
+// passing each entry's original index/total to a lambda's KeyVal.
+func doFoldMap(reg *Registry, body, acc Value, data ReadMap, start int) ([]Value, error) {
+	mb, err := newMapBody(reg, body, "fold")
+	if err != nil {
+		return nil, err
+	}
 	keys := data.Keys()
 	n := int64(len(keys))
 	for idx := start; idx < len(keys); idx++ {
@@ -184,62 +244,19 @@ func foldMapWith(reg *Registry, mb mapBody, acc Value, data ReadMap, start int) 
 	return []Value{acc}, nil
 }
 
-// foldMapInitQuoteHandler reduces a map's entries with an explicit seed —
-// `init fold [body] {map}`. Backs `[TList, TMap, TAny]`.
-func foldMapInitQuoteHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "fold")
+// scanMapHandler is the running (prefix) fold over a map's values: the first
+// value seeds the accumulator and is the first output, then each later entry's
+// body result becomes that key's output. Keeps the map shape (keys preserved).
+// Backs the `[TList, TMap]` (quotation) and `[TFunction, TMap]` (lambda) sigs.
+func scanMapHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	data, err := requireConcreteMap(reg, args[1], "scan")
 	if err != nil {
 		return nil, err
 	}
-	return foldMapWith(reg, newQuoteBody(args[0]), args[2], data, 0)
-}
-
-// foldMapInitLambdaHandler is the lambda form of `init fold (kv => …) {map}`.
-// Backs `[TFunction, TMap, TAny]`.
-func foldMapInitLambdaHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "fold")
+	mb, err := newMapBody(reg, args[0], "scan")
 	if err != nil {
 		return nil, err
 	}
-	return foldMapWith(reg, newLambdaBody(args[0]), args[2], data, 0)
-}
-
-// foldMapNoInit seeds the accumulator from the first value, then folds the rest.
-func foldMapNoInit(reg *Registry, mb mapBody, data ReadMap) ([]Value, error) {
-	keys := data.Keys()
-	if len(keys) == 0 {
-		return nil, reg.AqlError("fold_error", "fold: empty map with no initial value", "fold")
-	}
-	first, _ := data.Get(keys[0])
-	return foldMapWith(reg, mb, first, data, 1)
-}
-
-// foldMapNoInitQuoteHandler reduces a map's entries, seeding from the first
-// value — `fold [body] {map}`. Backs `[TList, TMap]`.
-func foldMapNoInitQuoteHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "fold")
-	if err != nil {
-		return nil, err
-	}
-	return foldMapNoInit(reg, newQuoteBody(args[0]), data)
-}
-
-// foldMapNoInitLambdaHandler is the lambda form of `fold (kv => …) {map}`.
-// Backs `[TFunction, TMap]`.
-func foldMapNoInitLambdaHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "fold")
-	if err != nil {
-		return nil, err
-	}
-	return foldMapNoInit(reg, newLambdaBody(args[0]), data)
-}
-
-// ---- scan ----
-
-// scanMapWith is the running (prefix) fold over a map's values: the first value
-// seeds the accumulator and is the first output, then each later entry's body
-// result becomes that key's output. Keeps the map shape (keys preserved).
-func scanMapWith(reg *Registry, mb mapBody, data ReadMap) ([]Value, error) {
 	keys := data.Keys()
 	out := NewOrderedMap()
 	if len(keys) == 0 {
@@ -262,22 +279,6 @@ func scanMapWith(reg *Registry, mb mapBody, data ReadMap) ([]Value, error) {
 		out.Set(k, acc)
 	}
 	return []Value{NewMap(out)}, nil
-}
-
-func scanMapQuoteHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "scan")
-	if err != nil {
-		return nil, err
-	}
-	return scanMapWith(reg, newQuoteBody(args[0]), data)
-}
-
-func scanMapLambdaHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	data, err := requireConcreteMap(reg, args[1], "scan")
-	if err != nil {
-		return nil, err
-	}
-	return scanMapWith(reg, newLambdaBody(args[0]), data)
 }
 
 // keysHandler returns a map's keys as a list, in insertion order.
@@ -310,8 +311,8 @@ func valsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 }
 
 // mapNatives are the standalone map-projection words. The each / for-each /
-// fold / scan Map overloads live on those words' own signatures
-// (native_array.go); the filter Function-over-map path lives in filter.go.
+// fold Map overloads live on those words' own signatures (native_array.go); the
+// filter Function-over-map path lives in filter.go.
 var mapNatives = []NativeFunc{
 	{
 		Name: "keys",

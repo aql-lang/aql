@@ -109,6 +109,14 @@ func UsurpFunction(v Value) (Value, bool) {
 			origBarrier = len(src.Params)
 		}
 		rev.Handler = usurpDispatchHandler(orig, origBarrier)
+		// usurp is a static arg permutation: the handler re-dispatches the
+		// ORIGINAL with the args reversed (a token stream the engine re-steps).
+		// Running it in CHECK mode means the carrier compiler steps that
+		// re-dispatch and compiles the original call directly — `usurp (ref f) a
+		// b` lowers exactly like `f b a` — instead of refusing the opaque
+		// wrapper dispatch. Soundness rides the differential (the compiled
+		// re-dispatch is byte-identical to the runtime one).
+		rev.RunInCheckMode = true
 		normalizeSig(&rev)
 		wrapped = append(wrapped, rev)
 	}

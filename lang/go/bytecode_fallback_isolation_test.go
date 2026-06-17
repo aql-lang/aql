@@ -61,19 +61,23 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
 	cases := []string{
-		// type mint + undef, then reuse — a re-mint would clash. A REAL
-		// method field (a multi-arg fn value) keeps make uncompilable so this
-		// stays on the fallback path (a plain-data class — and a 0-arg fn
-		// COMPUTED default — now compile; only an arg-taking method does not).
-		`def C class {x:1 g:(fn [[y:Integer][Integer][y add 1]])} def p (make C {x:5}) undef C end p get x`,
+		// type mint + undef, then reuse — a re-mint would clash. A flex
+		// (reference-cell) field keeps make uncompilable so this stays on the
+		// fallback path. (A plain-data class — and now a class whose computed
+		// defaults const-fold, including a method field — compiles.)
+		`def C class {x:(flex [])} def p (make C {}) undef C end p get x`,
 		// fn registration under a capitalised name — a re-register clashes.
 		// `is` over the predicate fn INVOKES it (the VM cannot re-step a fn
 		// body), so this stays uncompilable even though `typeof`/`tcmp` over a
 		// fn value now compile (fn-value introspection).
 		`def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
 		// native-module import whose namespace metadata a re-import degrades.
-		`"aql:math-util" import end typeof MathUtil`,
-		`"aql:math-util" import end MathUtil.$name`,
+		// The module-SYNTHETIC reads (`typeof MathUtil`, `MathUtil.$name`,
+		// `MathUtil.$module.name`) now const-fold and compile, so these pair the
+		// import with a still-uncompilable operation: the import side effect must
+		// still be rolled back before the whole-program fallback re-runs.
+		`"aql:math-util" import end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		`"aql:test" import end Test.test "a" [1 1 Assert.equal] end Test.fail-count`,
 	}
 	for _, src := range cases {
 		ac, err := New()
@@ -134,26 +138,39 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 // the interpreter and the trace renders — exactly the plan's "compiled
 // mode disables itself under trace" contract, realised via fallback.
 // Pin it so making `trace` compilable can't silently lose the trace.
-func TestCompiledTraceFallsBack(t *testing.T) {
+func TestCompiledTraceRenders(t *testing.T) {
+	// `IO.trace` renders the VALUE it traces, not interpreter execution steps, so
+	// it compiles to a CALL_NATIVE (its `[add 1 2]` arg now assembles via
+	// OpMakeList) and emits BYTE-IDENTICAL output to the interpreter. The trace
+	// side-effect must therefore survive the compiled path unchanged.
 	src := `"aql:io" import end IO.trace [add 1 2]`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var buf bytes.Buffer
-	a.SetOutput(&buf)
+	var bufC bytes.Buffer
+	a.SetOutput(&bufC)
 	out, compiled, err := a.RunCompiled(src)
 	if err != nil {
 		t.Fatalf("traced program: %v", err)
 	}
-	if compiled {
-		t.Error("a traced program took the compiled path; it must fall back so the trace renders")
+	if !compiled {
+		t.Error("a value trace must take the compiled path (it renders the same)")
 	}
 	if len(out) != 1 || out[0] != int64(3) {
 		t.Fatalf("traced result = %v, want 3", out)
 	}
-	if !strings.Contains(buf.String(), "trace") {
-		t.Errorf("no trace output captured: %q", buf.String())
+	b, _ := New()
+	var bufI bytes.Buffer
+	b.SetOutput(&bufI)
+	if _, errI := b.Run(src); errI != nil {
+		t.Fatalf("interpreter trace: %v", errI)
+	}
+	if !strings.Contains(bufC.String(), "trace") {
+		t.Errorf("no trace output captured: %q", bufC.String())
+	}
+	if bufC.String() != bufI.String() {
+		t.Errorf("trace stdout diverged:\n compiled=%q\n interp  =%q", bufC.String(), bufI.String())
 	}
 }
 
@@ -197,12 +214,16 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 // spec row currently triggers (a future change that let `args` compile
 // would silently break it).
 func TestCompiledArgsWordFallsBack(t *testing.T) {
+	// Bare `args` (the WHOLE per-call list) still falls back: the args
+	// projection has no foldable consumer, so it refuses at its use site and
+	// the interpreter owns it. (Compiling it would need a build-list-from-locals
+	// lowering — a separate, reducible follow-on.) `args.N` is different — it
+	// folds to a frame local — and is covered by TestArgsAccessorCompilesNative.
 	for _, c := range []struct {
 		src  string
 		want any
 	}{
 		{`def g fn [[n:Integer] [List] [args]] g 7`, "[7]"},
-		{`def f fn [[n:Integer] [Integer] [args.0]] f 3`, int64(3)},
 	} {
 		ac, err := New()
 		if err != nil {
@@ -213,10 +234,23 @@ func TestCompiledArgsWordFallsBack(t *testing.T) {
 			t.Fatalf("%q: %v", c.src, err)
 		}
 		if compiled {
-			t.Errorf("%q took the compiled path; a fn reading `args` must fall back", c.src)
+			t.Errorf("%q took the compiled path; a fn reading bare `args` must fall back", c.src)
 		}
 		if len(out) != 1 || out[0] != c.want {
 			t.Fatalf("%q = %v, want %v", c.src, out, c.want)
 		}
+	}
+
+	// args.N, by contrast, now compiles to a frame-local read.
+	ac, _ := New()
+	out, compiled, err := ac.RunCompiled(`def f fn [[n:Integer] [Integer] [args.0]] f 3`)
+	if err != nil {
+		t.Fatalf("args.0: %v", err)
+	}
+	if !compiled {
+		t.Errorf("args.0 should compile natively (folds to PUSH_LOCAL 0)")
+	}
+	if len(out) != 1 || out[0] != int64(3) {
+		t.Fatalf("args.0 = %v, want 3", out)
 	}
 }

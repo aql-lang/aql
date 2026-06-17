@@ -10,9 +10,11 @@ case/fn-value items landed and the A–F robustness hardening, then maps the
 ## 1. Status reconciliation
 
 The runtime-independence doc's "Recommended sequencing" marks items 1–6 DONE,
-but the ratchets stand at **459 refused / 15 islanded** (from 651 / 115 at P0).
-Those items each cleared their *named* cluster; what remains is a **long tail**
-the sequencing section never enumerated. This doc enumerates it.
+but the ratchets stood at **459 refused / 15 islanded** (from 651 / 115 at P0)
+when this doc was written. Those items each cleared their *named* cluster; what
+remained is a **long tail** the sequencing section never enumerated, which this
+doc enumerates. As of the latest landings (items 1–6, 8, and lambda higher-order
+args) the ratchets stand at **399 refused / 9 islanded**.
 
 Robustness (separate from coverage) was hardened since: RunCompiled falls back
 on `internal_error`/foreign errors, the VM has a panic guard + concurrency
@@ -52,53 +54,87 @@ Islands (15): map iteration (`each`/`fold` over `{…}` → ~7), a few `case`
 shapes whose value isn't re-pushable (~5), multi-result `do` (1), `each [drop]`
 (1).
 
-## 3. P7 reachability — the literal goal is not reachable; re-scope it
+## 3. P7 reachability — what is truly irreducible (and what only looks it)
 
 `aql-bytecode-runtime-independence.0.md` gates P7 (delete `OpFallback` + the
-whole-program fallback) on **both ratchets at 0** — every row compiles. That is
-**not achievable** while the corpus exercises the META cluster:
+whole-program fallback) on **both ratchets at 0** — every row compiles. Exactly
+ONE narrow thing makes that unreachable, and it is worth stating precisely,
+because an earlier draft of this doc overstated it.
 
-- `Vm.run`/`run-with` parse and execute **runtime-constructed source** in a
-  sub-engine (`lang/go/modules/vm.go`). The program isn't known until run time,
-  so there is nothing to AOT-compile — this IS the interpreter, by definition.
-- The **Test harness** generates inputs and runs candidate programs (property
-  testing); `macroexpand`/`minilang-register` rewrite/register code at run
-  time; `flex`/`canon` are reflective; `codequote`/`quote` are code-as-data;
-  usurp re-steps tape-coupled values the VM cannot push; `args.N` needs a
-  per-call args stack the VM frame deliberately doesn't keep.
+A bytecode compiler is an ahead-of-time function `compile : Program ->
+Instructions`, run once before execution. The only genuinely irreducible words
+are those that **execute code computed at RUNTIME** — `Vm.run`/`run-with` of a
+runtime string (`lang/go/modules/vm.go`). For those there is no static program
+to emit; "compiling" them is parse+compile+run *at runtime*, which is exactly
+what the `OpFallback` island (the embedded interpreter) does. That, and only
+that, is irreducible — and even then it is not magic, just the bytecode invoking
+the parser/VM on data.
 
-The original outline (`aql-bytecode-outline.0.md` §5, §8) was right: *"Not as a
-replacement for the interpreter — dynamic features need a fallback. A hybrid
-design keeps the interpreter for these."* The runtime-independence doc's P7 over-
-reached. **Re-scope P7** from *"delete the fallback"* to:
+**Everything else the corpus refuses is REDUCIBLE** — refused by a specific,
+nameable limitation of *this* compiler/VM, not by any law:
 
-> **Native execution of all REAL COMPUTE; an explicit, enumerated, allowlisted
-> meta-fallback for the irreducible dynamic/reflective words.**
+- `macroexpand` — ✅ NOW COMPILED (static cases). Lisp-style: the macro + args
+  are static, so the expansion is a compile-time computation — carrierResults
+  runs it and bakes the token list as a code-as-data const (a Word is admitted as
+  a const MEMBER; a bare type node is NOT, to dodge the canonical-`*Type` hazard).
+  `macroexpand (twice 5)` → `[5 word(add) 5]`.
+- `word` (Forth splice) — ✅ NOW COMPILED. The __SP marker is preserved through
+  check mode and the existing stepLiteral splice expands the body inline at each
+  use site, so the instructions land in place. Late binding falls straight out of
+  the normal `def c1 10 … def c1 20` sequence the VM already runs:
+  `def c1 10 def x word [c1 2] def c1 20 x` → 20 2 (re-resolved at the USE site).
+  Nothing was ever frozen — the compiler just used to treat `word` as opaque.
+- `args.N` — ✅ NOW COMPILED. It was billed "context-dependent, needs a per-call
+  args stack the VM frame doesn't keep"; in fact the params ARE the frame's
+  leading locals, so `args.N` lowers to a plain `PUSH_LOCAL N`. AnalyseFnBody
+  projects the params as the args list and `tryFoldStaticIndex` folds
+  `get N args` to the local (carrier.go). The compiled body is byte-identical to
+  the named-param form — the concrete proof that "tier 2" is reducible work, not
+  irreducibility.
+- `flex`/`canon`/`usurp`/`quote`/`Test`/`minilang` — reference cells, a pure
+  canonicaliser, a VM dispatch model for usurp, constant token-list bakes,
+  compiling candidate bodies. All named VM/compiler features.
 
-### Re-scoped P7 gate (replaces "both ratchets == 0")
+So the honest re-scope keeps a fallback ONLY for runtime code-eval, and treats
+the rest as work:
 
-1. Define `metaFallbackWords` — the curated allowlist of inherently-dynamic
-   words (`vm-run`, `vm-run-with`, the `test-*` family, `flex`, `canon`,
-   `macroexpand`, `minilang-register`, `codequote`, the usurp synthetics,
-   `args`). Each entry carries a one-line *why it cannot compile*.
-2. `TestOnlyMetaFallsBack` (replaces `TestEveryRowCompiles`): every `.tsv`
-   value row either compiles to a fallback-free `Program`, OR its refusal/island
-   is attributable to a `metaFallbackWords` member. A refusal/island from any
-   word NOT on the list fails the gate. This keeps the downward ratchet honest
-   without demanding the impossible.
-3. Error rows (count-mismatch returns, `unpack` missing key, orphan `gen`) get
-   their own small disposition: either the VM raises the matching taxonomy
-   (preferred — they then compile), or they join the allowlist as
-   "deliberately interpreted to surface the runtime error."
-4. THEN the deletions in `aql-bytecode-runtime-independence.0.md` §P7 apply to
-   the WHOLE-PROGRAM fallback's *unbounded* form: `RunCompiled` stops calling
-   `a.Run(src)` for arbitrary refusals and instead runs the compiled `Program`
-   (which now contains a NARROW `OpFallback` island only for allowlisted meta
-   spans). The island machinery **stays** — it is the hybrid's interpreter seam,
-   now provably confined to meta.
+> **Native execution of all reducible code; an OpFallback island confined to the
+> one irreducible category — words that execute runtime-computed code.**
 
-This is "complete delivery": real compute is 100% native and runtime-
-independent; meta is explicitly, auditably interpreted.
+### Re-scoped P7 gate — three tiers (replaces "both ratchets == 0")
+
+**✅ LANDED** (`test/go/langspec/compiled_metafallback_test.go`,
+`TestOnlyMetaFallsBack`). The gate partitions every refused/islanded spec value
+row into three tiers plus error-rows, each on its own ratchet. Current partition
+(June 2026): **2 interpreter-only (tier 1), 96 reducible (tier 2), 12
+error-row, 258 compute gap**.
+
+1. ✅ **Tier 1 — `interpreterOnlyWords` (permanent, capped at 3).** Executes
+   runtime-constructed code: `Vm.run`/`Vm.run-with`. The legitimate, permanent
+   home of the island. A NEW tier-1 entry is an *irreducibility claim* the gate
+   forces you to justify.
+2. ✅ **Tier 2 — `reducibleWords` (ratcheted, `reducibleCeiling = 96`).**
+   Refused by a NAMED missing feature, each `why` recording what compiling it
+   takes: usurp 43, Test/Assert 28, quote 10, flex 7, minilang 5, word 3 (residual
+   splices). These are TODOs, not exclusions — they ratchet to 0 like any other
+   work. (The earlier draft mislabeled this tier "irreducible meta"; that
+   laundered unfinished work as impossibility. `args.N`, the 30-row `word` macro
+   splice, `macroexpand`, and `with-decimal` disproved the framing concretely —
+   each moved OUT of this tier to native code.)
+3. ✅ **Compute frontier (ratcheted, `computeRefusalCeiling = 258`).** Cascades
+   (operand-provenance 140), code-body DSL bodies (47), Stage-1 lowering (~24),
+   dynamic in/out (~24), 9 islands, user-fn dispatch (5). Error rows (12) are
+   allowlisted via `errorRowReason` (the checker refuses so the interpreter
+   raises the taxonomy; making the VM raise them stays available).
+4. **PENDING** (gated on tiers 2 + 3 reaching 0): the §P7 deletion of the
+   *unbounded* whole-program fallback — `RunCompiled` stops calling `a.Run(src)`
+   for arbitrary refusals and runs the compiled `Program`, whose `OpFallback`
+   island is then provably confined to tier-1 spans. The island machinery stays.
+
+This is "complete delivery": all reducible code native; the island confined to
+runtime code-eval. The gate MEASURES the distance (96 reducible + 258 compute)
+instead of asserting an impossible absolute — and keeps tier 2 honestly on the
+work list rather than excused as "meta."
 
 ## 4. Sequenced roadmap (tractable clusters)
 
@@ -127,26 +163,9 @@ before/after numbers.
    set rows; the residual 13 quoted-operand refusals are meta
    (minilang/codequote/quote/timeout). (`eng/go/emit.go` RecordCall.)
 
-3. **`make` class with instance/computed field defaults — ✅ LANDED (refusals
-   337 → 335; the deep multi-blocker, done June 2026 via the targeted hook).**
-   A class body `{items:(flex [])}`, `{i:(make Inner {})}`, `{bits:(make Array
-   …)}`, `{x:(make Foo 1)}` whose default is a mutable container / instance.
-   All three blockers solved together: a `SchemaArg` sig flag on the type
-   constructor opens a window while its schema map auto-evaluates in which (B2)
-   bytecode recording is SUSPENDED (no spurious unconsumed-result events) and
-   (B1) DATA constructors are MATERIALISED — the check-mode intercept is
-   bypassed so flex/make/array run for real into concrete templates, NOT
-   carriers; CODE constructors (fn/afn/fnsig, Function-shaped Return) are NOT
-   materialised so a real arg-taking method still falls back. (B3)
-   `typeBodyConstOK` admits concrete data defaults (a template `make` deep-
-   copies per instance) while rejecting fn-value method fields. The
-   global-`RunInCheckMode` shortcut that regressed the first attempt is avoided
-   (standalone `flex […]` untouched). A 0-arg fn field is a COMPUTED default
-   (auto-invoked → its value) and now compiles too — value-parity verified.
-   (`eng/go/{value,nativefunc,registry,check,engine,emit}.go`, `native_type.go`.)
-
-   **Original (reverted June-2026) analysis, kept for context:** A class body
-   `{x:(make Foo 1)}` whose default is a user-type instance. Findings:
+3. **`make` class with typed-instance field defaults — DEFERRED (5 rows, HIGH
+   risk, multi-blocker).** A class body `{x:(make Foo 1)}` whose default is a
+   user-type instance. Scoped + attempted June 2026; reverted. Findings:
    - Only **5 spec rows** (`user-types.tsv` §, `class.tsv` lines 79–81 refine
      defaults + 114–115 class-instance defaults that pin per-instance COPY).
    - NOT a provenance gap: `ReturnsFreshInstance` returns a bare type CARRIER in
@@ -173,31 +192,6 @@ before/after numbers.
    exists; the leverage (5 rows) does not justify it ahead of items 5/6.
    (`eng/go/emit.go`, `eng/go/carrier.go`.)
 
-   **Re-attempt June 2026 — reverted, but two of the three blockers proved
-   out; Blocker 1 is the lone wall.** Findings, to seed the dedicated effort:
-   - **Blocker 2 (recording) — SOLVED, clean primitive found.** A `SchemaArg`
-     flag on the type-constructor sig (`class`/`object`/`record`/`surface`,
-     NOT `make` whose override map is a runtime value), wired into `execMatch`'s
-     arg auto-eval to wrap the schema map's `autoEvalMap` in `EmitState.Suspend()`,
-     makes the inner `(make…)`/`(flex…)` defaults stop recording. Verified:
-     `def Foo class {items:(flex [])} 1` then compiles native (was "residual
-     shape beyond Stage 1"). This IS the "suppress recording inside a const-baked
-     schema construction" primitive the original verdict asked for.
-   - **Blocker 3 (bake) — implemented, sound.** `typeBodyConstOK`'s ObjectTypeInfo
-     case admits any CONCRETE data default (a template `make` deep-copies per
-     instance) while still rejecting fn-value method fields. Correct, but inert
-     without Blocker 1.
-   - **Blocker 1 (carrier → concrete) — the wall, and the naive fix REGRESSES.**
-     The defaults are check-mode CARRIERS (`flex []` → `NewCarrier(TNode)`), so
-     the schema never goes concrete and `make Foo {}` still refuses. Making the
-     constructor `RunInCheckMode` GLOBALLY (tried on `flex`) cleared one row but
-     regressed refusals 337 → 401 — a standalone `flex […]` then yields a
-     concrete flex that can't be a program residual, and check-error rows shift.
-     So Blocker 1 needs the TARGETED `rememberConcreteMake`/`materialise` hook
-     (run the pure-data constructor for real ONLY inside the SchemaArg-suspended
-     schema eval, remember the concrete instance against the carrier id) — not a
-     global mode change. That hook is the remaining dedicated-effort piece.
-
 4. **Poly type-algebra over predicates. ✅ LANDED (453 → 445).** SCOPE
    CORRECTION: the billed "~75 get/is/typeof over instances" turned out to be
    mostly ALREADY COMPILING (simple `(make S {}) get x`, `is S`, `typeof` all
@@ -214,53 +208,42 @@ before/after numbers.
    `TestEmitRefusesPolySite` (the site now compiles) to assert the poly
    lowering + parity. (`eng/go/carrier.go`.)
 
-5. **Lambda higher-order args + map iteration (HIGH risk). SCOPE CORRECTION:
-   the billed "~22 refusals + 7 islands" was stale — at 407 the live cluster is
-   ~6 islands + ~6 refusing rows, the rest having already cleared or been
-   cascade-dependent.** Two mechanisms, both routed through the existing
-   `InvokeBody` seam (no new opcode — `FOR_EACH_MAP` was unnecessary):
-
-   - **5b — map-iteration quotation. ✅ LANDED (islands 15 → 9).** `each`/`fold`/
-     `scan [body] {map}` islanded because the map-overload handlers ran the body
-     through a fresh sub-engine (`New(reg).Run`) instead of `InvokeBody`. The
-     handlers were one-per-word and classified the body by `Parent` type at run
-     time — unsound once bodies compile (a compiled quotation closure and a
-     lambda both have `Parent=TFunction`). Split each word's handler PER MATCHED
-     SIGNATURE (`[TList,TMap]` quotation → value input + `InvokeBody`;
-     `[TFunction,TMap]` lambda → KeyVal input + `CallAQL`), which `OpCallNative`
-     routes by the baked sig. Added a map-value body input carrier
-     (`DataMapValueTypeFromValue`). `for-each` map quotation is DEFERRED: it nets
-     0 values and `RecordClosureCall` requires exactly one. (`native_map_iter.go`,
-     `native_array.go`, `callable_words.go`, `carrier.go`.)
-
-   - **5a-1 — filter list-lambda. ✅ LANDED (refusals 407 → 405).** `filter
-     ([p:Any] => …) [list]` refused at RecordCall's opaque-output guard (filter's
-     dynamic Function result), before the fn-value guard. `tryRecordLambdaClosure`
-     (carrier dispatch, before `RecordCall`) compiles a single-sig anonymous
-     lambda body to a closure with the lambda's NAMED param bound to a
-     `{key,value}` pair-Map carrier (matching what `filterHandler` builds), riding
-     the lambda's precomputed `Captured`. `filterHandler` runs its callback via
-     `invokeCallback` (closure → `InvokeBody`/VM, FnDefInfo → `CallAQL`).
-     (`callable_words.go` named-param `compileClosureBody` + `tryRecordLambdaClosure`,
-     `invoke.go` `IsCompiledClosure`, `filter.go`.)
-
-   - **5a-2 — map lambdas. ✅ LANDED (refusals 405 → 399).** filter/each/fold/scan
-     with a lambda over a map. `tryRecordLambdaClosure` grew a per-(word,receiver)
-     `buildLambdaInputs`: filter-list keeps the pair Map; filter/each-map hand a
-     KeyVal carrier (a concrete TMap with `k/v/i/n` fields — `TKeyVal` is lang-
-     layer and the compiled `get` is map-subtype-agnostic); fold/scan-map hand
-     `(acc, KeyVal)`. Lambda arity is validated (1 for filter/each, 2 for fold/
-     scan). The map handlers' lambda path + `filterMapFunction` route through
-     `invokeCallback` (closure → `InvokeBody`/VM, FnDefInfo → `CallAQL`). Gated to
-     single-sig anonymous lambdas; multi-sig fns stay refused. (`callable_words.go`,
-     `native_map_iter.go`, `filter.go`.)
-
-   - **`for-each` map quotation — DEFERRED, no corpus rows.** Would need a
-     0-output closure-call recording (`RecordClosureCall` requires exactly one
-     out); left unbuilt rather than added speculatively, since no `.tsv` row
-     exercises it. Item 5 is otherwise complete: every lambda-HOF and map-
-     iteration row in the corpus compiles natively, the rest of the original
-     cluster having been stale/cascade-dependent.
+5. **Lambda higher-order args + map iteration ✅ FULLY LANDED. Part A — map
+   iteration (islands 15 → 9); Part B — lambda args (459-era ~22 → cleared the 8
+   directly-attributable rows, 407 → 399; the rest were get/is/typeof cascades).**
+   - Part A — `each`/`fold`/`filter` over a MAP islanded because the token-body
+     map path ran the body via `runQuotationBody` (`New(reg).Run`), bypassing
+     the InvokeBody seam the list path uses. `newMapBody` now detects a compiled
+     CLOSURE (`IsCompiledClosure`) and routes it per VALUE through `InvokeBody`
+     (token/lambda paths unchanged — interpreter untouched), and
+     `DataListElemTypeFromValue` returns the map's common VALUE type so a
+     value-body closure compiles. Map iteration is now native; the islanded rows
+     were already `wasCompiled=true`, so this moves the ISLAND ceiling, not the
+     differential count. (`eng/go/bytecode.go` IsCompiledClosure,
+     `eng/go/carrier.go` DataListElemTypeFromValue, `native/native_map_iter.go`.)
+   - Part B — a lambda VALUE arg (`filter ([p] => …) data`). The earlier attempt
+     reverted because it sought a UNIFORM closure, but each higher-order word has
+     its OWN callback convention. The fix is per-word callback unification:
+     compile the afn body against the WORD'S callback input SHAPE, and route a
+     compiled closure through that handler's existing shape:
+       - `filter` (list) → a `{key, value}` pair Map (element via `.value`).
+       - `filter`/`each` (map) → a KeyVal {k v i n} (value via `.v`).
+       - `fold` (init) / `scan` (map) → (accumulator, KeyVal).
+     `tryRecordClosure` detects an FnDefInfo body and routes to
+     `tryRecordLambdaClosure`, which builds the representative-carrier inputs
+     (`lambdaCallbackInputs`) and compiles the body with the lambda's NAMED
+     params bound to them (AnalyseFnBody's def path) — so `p.value`/`kv.v`
+     typechecks where the declared `Any`/`KeyVal` param alone could not. The
+     filter handlers build their own fixed shape, so they need no metadata; the
+     map-iteration handler is shared between the token (bare value) and lambda
+     (KeyVal) forms, so the input shape is recorded on the unit
+     (`ClosureInShape`, copied onto the ClosurePayload at OpPushClosure) and the
+     handler reads it back (`ClosureWantsKeyVal`). Capturing lambdas, list
+     each/fold, no-init map fold, and `for-each` (0-result/1-output mismatch)
+     stay refused — conservative, gate-clean. (`eng/go/callable_words.go`,
+     `eng/go/bytecode.go`, `eng/go/emit.go`, `eng/go/vm.go`,
+     `native/filter.go`, `native/native_map_iter.go`. Two commits, each
+     gate-clean: filter then each/fold/scan.)
 
 6. **if-branch lowering ✅ FULLY LANDED (bucket 13 → 0). 6a computed-else
    (425 → 421); 6b variadic-else (421 → 417).**
@@ -279,39 +262,50 @@ before/after numbers.
    (`eng/go/bytecode.go` OpDrop, `eng/go/vm.go`, `eng/go/emit.go` RecordBranch,
    `eng/go/lower.go` lowerArms/lowerArmsComputed.)
 
-7. **Code-body context/DSL words (PARTIAL). SCOPE FINDING: only one of the
-   code-body-word refusals is clean single-body closure reuse; the rest are
-   genuine DSLs or entangled with other clusters.** The "code-body word
-   (NoEvalArgs)" bucket (99 at the 399 ceiling) breaks down as: `select` ~20
-   (the whole `Query.*` query DSL — joins/group/order/having), `word`-splice ~31
-   and `test-*` ~15 (META — for the item-9 allowlist), `case` 7 (predicate-type /
-   computed-scrutinee shapes, cascading from the predicate/provenance work),
-   `reach` 6 (lens construction, a baking pattern not a body run), `do`/`error` 8
-   (error-recovery DSL, the bodies mostly contain `case`), and `with-decimal` 5.
+7. **`select` query DSL ✅ LANDED (310 → 283); `reach` lenses ✅ LANDED
+   (283 → 268).**
+   The `aql:query` words are trivial-delegation module wrappers over inner
+   natives, so they compiled the moment their two operand shapes did:
+   - **Clause words** (select/where/order/group/having/limit/offset/distinct/on/
+     using) carry `NoEvalArgs` whose clause is an inert word-list (`[name age]`,
+     `[age gt 1]`). `noEvalBodiesInert` now admits a `NoEvalArgs` body that is an
+     `isInertConst` (a Word-member list bakes as a code-as-data const), so the
+     wrapper records the inner native as a plain `CALL_NATIVE`. Flow-control
+     sentinel bodies (`each [break]`) stay refused (`bodyHasSentinel`): baking
+     `[break]` + a `CALL_NATIVE` cannot carry the break across the call boundary.
+   - **Source words** (from/join/innerjoin/leftjoin/crossjoin) carry a
+     `QuoteArgs` table-NAME atom. `quoteOperandInertOK` is the principled
+     extension of the get/getr/set quoted-operand exemption: a MODULE INNER
+     native (confirmed by `isModuleInnerSig` pointer identity) whose quoted
+     operands are all inert Atom consts bakes a plain `CALL_NATIVE`. It is gated
+     on module-inner so it never leaks to the core meta quoted words (usurp /
+     force-arity / ref-family / inspect / has), which keep refusing.
+   The interpreter reaches the same inner native through the wrapper's trivial
+   delegation, so the lazy-query value is built identically — differential 0
+   mismatches across the family.
+   (`eng/go/emit.go` RecordCall `noEvalBodiesInert`, `eng/go/carrier.go`
+   `quoteOperandInertOK`; `lang/go/bytecode_findings_test.go`
+   `TestQueryDSLCompilesNative`.)
 
-   - **`with-decimal`. ✅ LANDED (refusals 399 → 394).** A single-body context
-     word like `do`: it pushes a decimal precision/rounding override then ran the
-     body via a sub-engine. Routed through `InvokeBody` + added to `callableWords`
-     so the body compiles to a closure run INSIDE the pushed context; the compiled
-     decimal ops read the context at run time (precision parity confirmed by the
-     differential). (`native_math.go`, `callable_words.go`.)
-
-   - **`select` query DSL. ✅ LANDED (refusals 394 → 374, all 21 query rows).**
-     CORRECTION of an earlier deferral: this is NOT a special DSL barrier. The
-     `aql:query` module materializes through SQLite, so every clause list (a
-     column/expression spec) and bare table name is inert DATA the handler parses
-     into SQL — never AQL code re-stepped. Two narrow exemptions (mirroring
-     get/set): `queryDSLWords` skip the NoEvalArgs + QuoteArgs refusal guards, and
-     the clause list bakes as a const in `RecordCall`'s operand loop (it holds
-     Words, which the general `isInertConst` rejects as code, but the handler
-     treats them as data). Dispatch lowers to a plain `CALL_NATIVE` running the
-     unchanged handler; SQLite materialization is value-identical under the VM.
-     (`emit.go`.)
-
-   - **`reach` lenses (6), predicate-type `case` (7), `do`/`error` recovery (8) —
-     still REMAINING.** `case`/`do`/`error` are entangled with the predicate-type
-     and provenance clusters; `reach` is a lens-construction (baking) pattern.
-     Tractable but not yet done.
+   **`reach` lenses** then split the same way. A RECEIVERLESS reach (`$.name`,
+   `$.a.b`, `$!.x`, `$.1`) is an INERT first-class lens — it evaluates to itself,
+   `typeof` reads `Reach`, and `apply`/`getpath`/`setpath` walk its segments
+   against a FRESH receiver. `isInertReach` admits exactly that shape to
+   `isInertConst` (Eval=false, no Receiver, all-literal-key segments), so the
+   lens bakes into the const pool like an atom — the opposite of a dot-access
+   EVAL reach (`m.a.b`), which `expandReach` lowers to a get-chain IN PLACE and
+   which `isInertConst` rightly still excludes. That single const-bake unblocks
+   the lens VALUE, `typeof`, `apply`, `rebind`, and StructUtil `getpath`/`setpath`
+   forms as plain const-operand CALL_NATIVEs (the keys are Words/Atoms/scalars,
+   no canonical-*Type hazard). The HIGHER-ORDER lens forms (`each $.name people`,
+   `filter $.on data`, `ArrayUtil.sortby $.age people`) stay refused on an
+   ORTHOGONAL limit — a data list's interior strings are carrier-stripped in
+   check mode (the same reason `size people` over string data refuses), so the
+   list is not a bakeable const; `tryRecordFallback` declines to island those
+   (a reach is data, not a code body) so they refuse cleanly instead of
+   regressing `islandCeiling`. (`eng/go/emit.go` `isInertReach`,
+   `eng/go/carrier.go` `tryRecordFallback` lens guard;
+   `lang/go/bytecode_findings_test.go` `TestReachLensCompilesNative`.)
 
 8. **introspection over fn-values ✅ LANDED (417 → 407).** A type-READING word
    (`typeof`/`tcmp`/`teq`/`tand`/`tor`/`tnot`/`inspect`) over a fn VALUE bakes
@@ -324,127 +318,128 @@ before/after numbers.
    re-step a fn body) — so they are deliberately OFF the allowlist.
    (`eng/go/emit.go` RecordCall + intern.)
 
-9. **Error-row disposition + the re-scoped P7 gate. ◑ PARTIAL — allowlist +
-   boundary gate LANDED; non-meta drive + P7 narrowing remain.** `metaFallbackWords`
-   (the curated allowlist of inherently-dynamic/reflective words, each with a
-   one-line *why it can't compile*) and `TestMetaFallbackBoundary` are in
-   (`test/go/langspec/meta_fallback_test.go`): every refused/islanded row is
-   classified META (attributable to an allowlisted word — deliberate fallback)
-   or NON-META (remaining compilable work), via the refusal-reason word
-   (module-wrapped natives like `test-*` surface here) or a source token (the
-   usurp family surfaces as a `/u`-suffixed token). The split: **121 META + 212
-   NON-META**; `nonMetaCeiling` (212) is the honest finish-line ratchet
-   (only-down). REMAINING: drive non-meta → 0 (the 212 are real compute —
-   make/get/is/typeof provenance ~119, code-body ~37, residual lowering ~17,
-   etc.); the error rows (count-mismatch / unpack-missing / orphan-gen) get their
-   own disposition (raise the matching taxonomy so they compile, or join the
-   allowlist); THEN move `metaFallbackWords` into eng and perform the §P7
-   whole-program-fallback narrowing.
+9. **Error-row disposition + the re-scoped P7 gate ✅ GATE LANDED (three-tier);
+   fallback narrowing PENDING.** `TestOnlyMetaFallsBack` partitions every
+   refused/islanded row into tier 1 interpreter-only (2, capped), tier 2
+   reducible (61, `reducibleCeiling`), error-row (12, allowlisted), and compute
+   gap (200, `computeRefusalCeiling`). Only tier 1 (`Vm.run`) is a permanent
+   island; tiers 2 and 3 both ratchet to 0. `args.N`, `with-decimal`, `word`,
+   `macroexpand`, `usurp`, the query DSL and the reach lens-as-const forms are
+   the tier-2/frontier reductions proving the ratchet bites. Error rows are
+   allowlisted (the checker refuses so the interpreter surfaces the taxonomy);
+   making the VM raise them stays available as future tightening. The §P7
+   fallback narrowing (step 4) waits on the compute gap reaching 0 — its
+   remaining drivers are the operand-provenance cascades (117, clear when their
+   producers compile: item-3 class instances, user-fn results), the residual
+   code-body DSL words (8: `with-decimal` / follow-ons — `select` / `where` /
+   `group` / `case` now compile), the higher-order lens/data forms blocked on
+   list-element carrier-stripping, Stage-1 lowering residuals (~19), dynamic
+   in/out (~34), the 7 islands, and user-fn dispatch (5).
+   (`test/go/langspec/compiled_metafallback_test.go`.)
+
+10. **Scalar carrier-keep + carrier-identity de-collision ✅ LANDED
+    (283 → 258).** Two coupled runtime-independence steps that clear a slab of
+    the operand-provenance cascade:
+    - **Scalar carrier-keep.** `toCarrier` kept only concrete INTEGERS concrete
+      through check mode (for static index checking); every other scalar
+      stripped to a type-only carrier. So a DATA list/map whose interior is a
+      string/bool/temporal stripped to `[ProperString …]` and was no longer an
+      inert const — `size people`, `each $.name people`, `ArrayUtil.sortby
+      $.age people`, and a class type body with a `r:1.0` default all refused
+      "operand of unknown provenance". Keeping every concrete inert SCALAR
+      concrete (string/bool/float/atom/big-int/decimal/temporal, DepScalar
+      CONSTRAINTS still excluded — their payload is a DepScalarInfo) makes the
+      container bake. It also closed a latent hazard: the generic-over-class
+      `r:Float`-vs-`r:1.0` type-body taint is now faithfully `r:1.0`.
+    - **Carrier-identity de-collision.** Keeping the scalar key concrete made a
+      repeated identical computed call deterministic: `(context get 'n') add
+      (context get 'n')` issues two `get` events whose results now share an id.
+      The generic RecordCall "already recorded → a structured hook owns it"
+      skip then mis-fired on the SECOND get (orphaning its receiver push), and
+      even past the skip the shared id let `add` resolve both operands to one
+      event ("call results reordered"). Fixed in its targeted form: the skip is
+      gated on the producer being a STRUCTURED hook (RecordBranch / user-fn /
+      poly / closure / loop / fallback — tracked by `genericSeq`), so a prior
+      GENERIC collision falls through; and the output loop mints a fresh id for
+      an output that collides with a prior event (guarded against `dup`/`swap`
+      identity pass-through: same-event and out-id-in-args are skipped). The
+      all-rows diff confirmed 0 native→non-native regressions, +12 improvements.
+    Ratchets: refused 283 → 258, minCompiledRows 1996 → 2007, compute gap 200 →
+    190; interp dropped 2 → 1 (a former `Vm.run (canon …)` row compiled),
+    rebalancing tier-2 to 62. (`eng/go/carrier.go` toCarrier scalar-keep,
+    `eng/go/emit.go` RecordCall genericSeq gate + de-collision;
+    `lang/go/bytecode_findings_test.go` `TestScalarKeepAndCarrierIdentity`.)
+
+11. **Module-synthetic const-fold ✅ LANDED (258 → 227).** `import` binds an
+    IMMUTABLE, deterministic Module / ModuleExport instance, so a pure read of
+    one is a compile-time constant — `MathUtil.$name`, `X.$module.name` / `.kind`
+    / `.exports`, `convert Map/List Foo`, `typeof` / `is` over a Module. They
+    refused "operand of unknown provenance at get/convert": the module value is
+    not an inert const, so it has no compiled operand home. `tryFoldModuleConst`
+    folds them. The subtlety that makes it sound: the checker's RECORDED result
+    is the declared TYPE (a `Map` / `Boolean` carrier), not the value — baking
+    that renders `Map` where the interpreter rebuilds `{a:1 b:2}` (a real bug the
+    first cut hit). So the fold RE-EVALUATES the dispatch concretely off the emit
+    path (`concreteHandlerEval`: check mode off, the def stack snapshotted, run
+    TWICE and only folded when both agree — the same determinism guard as the
+    `make` default fold), then bakes the real value as an inert const / type
+    operand. Gated to a known pure-reader set with a module-family operand and
+    otherwise compile-time-constant args; module instances are kept concrete
+    through `toCarrier` (like `FnDefInfo`) so the `$module` chain resolves. The
+    all-rows diff confirmed 0 native→non-native regressions, +31 improvements
+    (the cascade also cleared the `Test.*` synthetic-get rows, ratcheting
+    reducible 62 → 54). Ratchets: refused 258 → 227, minCompiledRows 2007 →
+    2038, compute gap 190 → 167. (`eng/go/carrier.go` `tryFoldModuleConst` /
+    `concreteHandlerEval` / `isModuleFamilyValue` + the toCarrier module guard;
+    `lang/go/bytecode_findings_test.go` `TestModuleSyntheticConstFold`.)
+
+12. **OpMakeList — computed list literals ✅ LANDED (227 → 213).** A list
+    literal whose elements are COMPUTED (`[1 add 2]` → `[3]`, `[(1 add 2)
+    (3 add 4)]`, `[a.b c.d]`) cannot bake as an inert const (its elements are
+    event results), so it refused "residual value of unknown provenance" — the
+    compiler had NO list-assembly primitive, only `OpPushConst` for fully-literal
+    lists. Added `OpMakeList N` (pop N, push a list, order preserved). `autoEval
+    List` records the assembly: the elements lower onto the stack (their own
+    events), then the opcode assembles them. The soundness gates, each found by
+    the differential / regression diff:
+    - **Top frame only** — a fn-body / closure / branch-arm list is re-evaluated
+      per call with a different scope (`fn […[[c1]]]`), so freezing one assembly
+      diverges.
+    - **TOP engine only** (`e.isTop`) — a SUB-engine eval is a handler inferring
+      a re-run NoEval body (`list-of [Rand.int 0 10] 3`), often non-deterministic.
+    - **Core-builtin element producers** — a module/user word may be stateful
+      (`rand-int` advances the seed); only a builtin value-yield re-computes
+      identically.
+    - **No type-pattern (`[Integer]`) or make-instance elements** — those are
+      owned by the type machinery / schema-member const-bake, which a typed-def
+      reparent then re-IDs.
+    - **Not a `for` range** — `for` over a runtime-assembled range list diverges;
+      keep it on the literal-const path (`makeListRange` refusal).
+    Order matters: the ops reverse so element 0 lands DEEPEST (a list assembles
+    bottom-up, unlike a sig's top-first operands). The all-rows diff confirmed
+    0 native→non-native regressions, +14 improvements — and it cleared the
+    corpus's last tier-1 row (`Vm.run (canon [1 {a:none} x/q])`, once the canon
+    list could assemble), so interp is now 0. (`eng/go/bytecode.go` OpMakeList,
+    `eng/go/vm.go` exec, `eng/go/lower.go` + `eng/go/emit.go` RecordMakeList /
+    `makeListRange` / the for gate, `eng/go/engine.go` autoEvalList;
+    `lang/go/bytecode_findings_test.go` `TestOpMakeListCompiles`.)
 
 Projected trajectory: items 1–4 take 459 → ~150 (clearing make/get/set/is/
 typeof/lowering); item 5 takes islands 15 → ~3 and refusals ~150 → ~80; items
 6–8 → ~40, all META + error rows; item 9 closes the gate.
 
-## 4b. Conservative-guard sweep (refusals 407 → 368)
-
-A pass re-examining every refusal bucket with one question — *is this a real
-barrier the VM cannot honour, or a conservative guard / inert operand?* — found
-and cleared a class of FALSE barriers: words refused by a blanket guard whose
-operand is actually inert DATA the unchanged handler consumes (never re-stepped),
-so it bakes as a const and lowers to plain `CALL_NATIVE`. Cleared: the `aql:query`
-DSL (clause lists → SQL, 20), `reach` lens paths (4), `raise` error-code atoms
-(2), plus `with-decimal` as a single-body closure (5). The exemptions live in
-`inertOperandWords` (emit.go), mirroring the get/set field-name exemption; a
-`listHasParenExpr` guard excludes deferred-code operands (a reach computed `(k)`
-needs the live def scope — the differential caught it: compiled None vs interp 9).
-
-The sweep also CONFIRMED the remaining 368 are not false barriers — they split:
-
-- **Genuine META (~70) — for the item-9 allowlist, uncompilable by definition.**
-  `word`-splice (~31, re-steps spliced tokens), `test-*` (~16), `minilang-register`
-  (4), `codequote` (2), `vm-run`, timeout/interval/await (runtime), and the
-  usurp/`force-arity`/`stack-args`/`forward-args` modifier family (the `sub`/`add`/
-  `if` "dynamic output" rows — they re-dispatch a modified fn the VM cannot re-step).
-- **Real compilation work (~230) — tractable but genuine, not mislabeled guards.**
-  `make`/`get`/`is`/`typeof` operand provenance (167, the carrier-identity cluster,
-  item 3 HIGH risk), residual lowering (31), user-fn-call inlining (32), `do`/`error`
-  (blocked by the dynamic `do`-output provenance + a diverging body, not a guard),
-  predicate-type/computed-scrutinee `case` (7), multi-return (7), `eachrank`/
-  `foldaxis` (3, matrix HOF), if-branch (4).
-
-So the cheap wins are exhausted: further progress is item 9 (META allowlist) and
-the provenance/lowering efforts, not more exemptions.
-
-## 4c. Operand-provenance inroads (refusals 368 → 337)
-
-The "operand provenance" bucket (167) is not monolithic. Two sub-clusters yielded
-to the same lens — *the operand is inert, only its representation looked
-unbakeable* — each made SOUND by a tight guard the differential validated:
-
-- **Builtin structural type operands. ✅ (368 → 353, ~15 rows.)** `[1] is
-  [Integer]`, `{a:5} is {a:Integer}`, `[Integer String] tcmp …`: the operand is a
-  list/map of type literals, which `isInertConst` rejects (type nodes can go
-  stale against canonical pointers). Sound for BUILTINS only — a builtin literal's
-  Parent is the canonical package-level *Type, stable and never retired, so a
-  by-value bake never goes stale. `isBuiltinStructuralType` (emit.go) walks the
-  operand via `typeNodeOf` (a type literal IS its node, not `v.Parent` — the first
-  cut got that wrong and let a user type through). USER-type leaves stay refused
-  (their Behavior is `behave`-mutable).
-- **Inert reach lens values. ✅ (353 → 337, ~16 rows.)** `apply $.name p`,
-  `StructUtil.setpath $.a.b …`, `getpath`, `sortby`: a `$.path` is a concrete
-  Reach value `isInertConst` didn't cover. Added a `ReachInfo` case (`isInertReach`)
-  baking a lens whose segments are all literal field-name keys and whose receiver
-  is const; a COMPUTED `(expr)` segment is excluded (deferred code needing live
-  scope). One row crossed REFUSED → compiled-with-island (net gain), so
-  islandCeiling 9 → 10.
-- **Class instance-field defaults. ✅ (337 → 335.)** Roadmap item 3 (above);
-  the deep multi-blocker, via the SchemaArg materialise/suspend hook.
-- **Bare generic schema templates. ✅ (335 → 323, ~12 rows.)** `make Box
-  {value:42}`, `is Box`, `typeof`/residual over a bare `gen [T] class/refine/
-  fnsig`: the value is a `*TypeSchemaInfo` (immutable generic schema) `isInertConst`
-  didn't cover, and a bare generic has no canonical lattice node to OpPushType.
-  Bake it as a const (its body is a clean type body) — sound, since `of`/
-  inference mint a FRESH node per use and the canonical schema node rides the
-  payload pointer. The INSTANTIATED forms (`Box of [Integer]`, make/get over
-  them) already compiled. Remaining generics refusals are cascades (case/each/
-  fold/reify over generic instances) + 3 instantiated-typed-list-field makes.
-- **Surface type identities. ✅ (323 → 312, ~11 rows.)** `def Shape surface
-  {area:(fnsig …)}` used as a type-algebra / `is` / `unify` operand: the value
-  is a `*SurfaceInfo` `isInertConst` didn't cover. Bake it (return true) — its
-  pointer is shared with the live type (Required shapes + the `exposes`-mutable
-  Conform set stay consistent), so a by-value copy never goes stale.
-- **Class-instance typed-defs (`def b:Point {x:9}`) — DIAGNOSED, deferred (the
-  bulk of the "generic-instance carrier" cluster, ~24 rows; NOT generic-
-  specific).** `b typeof`/`b get x`/`b is …` over a typed-def class instance
-  refuse: `defTypedHandler`'s ObjectType branch constructs the instance via
-  `eng.MakeObject` INLINE, so no `make` event is recorded and `b`'s value is not
-  materialisable — whereas `def b (make Point {x:9})` works via the recorded
-  make-event-result. Baking the instance is UNSOUND: `ObjectInstanceInfo.Fields`
-  is a shared mutable `*OrderedMap` (`b set x 7` mutates in place), so a baked
-  const would persist mutations across program re-runs — a hazard the single-run
-  differential wouldn't catch. The sound fix is EVENT-TRACKING: route the
-  typed-def's class/object construction through the recorded `make` path (a
-  `defTypedHandler` + recording-seam change), so the instance is rebuilt fresh
-  each run like explicit `make`. A focused effort, not a structural-bake.
-
-What REMAINS in provenance is the genuinely deep, multi-blocker work the roadmap
-deferred: `make` class instance-field defaults (item 3 — needs a "suppress
-recording inside a const-baked schema construction" primitive, high blast
-radius), generic-instance provenance (`Box<T>`, `of [T]` across get/is/typeof,
-~30), module `$name`/`$module` gets, and the surface-type fnsig algebra. These are
-multi-step efforts, not guard exemptions.
-
 ## 5. Why not delete the island after all
 
 Even at the re-scoped target the `OpFallback` island earns its keep: it is the
-seam that runs an allowlisted meta span (e.g. a `Vm.run` body) through the
-interpreter mid-Program without abandoning the compiled code around it. Deleting
-it (the runtime-independence doc's literal §P7) would force the *whole* program
-to fall back the moment it touches one meta word — strictly worse coverage than
-a confined island. Keep the island; delete only the *unbounded whole-program*
-fallback path in `RunCompiled` once `TestOnlyMetaFallsBack` is green.
+seam that runs a tier-1 span (a `Vm.run` body — runtime-computed code) through
+the interpreter mid-Program without abandoning the compiled code around it.
+Deleting it (the runtime-independence doc's literal §P7) would force the *whole*
+program to fall back the moment it touches one runtime-eval word — strictly worse
+coverage than a confined island. Keep the island; delete only the *unbounded
+whole-program* fallback path in `RunCompiled` once tiers 2 and 3 reach 0 (so the
+island is provably confined to tier 1).
 
-## 6. Verification discipline (unchanged)
+## 6. Verification discipline
 
 Per item: `make fmt && make vet && make lint && make test`; the coverage
 ratchets move only DOWN; `TestSpecCompiledDifferential` (raise `minCompiledRows`)
@@ -452,3 +447,48 @@ and `TestSpecCompiledOrFallback` at 0 divergences (value + taxonomy); `-race` on
 both concurrency gates; alloc ceilings held; and the new `-tags aqldebug` gate
 (args-aliasing) green. Gate-clean-or-revert; commit each landed item with its
 ratchet delta.
+
+**Property-based differential (`TestPropertyDifferential`).** The curated
+corpus is a finite, hand-written oracle — it exercises rows, never COMBINATIONS,
+and the carrier compiler's per-construct gates fail exactly on combinations the
+author didn't foresee (the make-default fold inside a `for` body; a computed map
+value referencing a def-local carrier). So a generator emits well-typed AQL from
+the compilable subset (arithmetic / division / boolean logic / strings / `if` /
+computed lists / `size` / `def`-locals / `for` / nested maps + `get` / in-place
+mutation (`Array` + map `set`) / object & class field mutation / higher-order
+`fold`/`each`/`scan` over literal lists / `case` multi-way dispatch (scalar /
+`[gt N]` / `[lt N]` / `Integer`-type matches, value-consuming block bodies, value
+& stack forms, no-default 0-result tails) / context-store reads (`context set 'k'
+<lit> end` … with `(context get 'k')` woven through arithmetic / `if` / `for` /
+`case` / defs, shadowing and the strict unknown-key error included) / fn-value
+indirection (a named `fn` or `=>` lambda over 0-2 Integer params, an Integer body
+over those params, CALLED through a value — `apply` with the `/r` or usurp `/ur`
+ref suffix, or stored-field dispatch `def m {f: <fnval>} m.f <args>`; the body may
+also CLOSE OVER outer `def`-local literals, exercising the FnBaselines / capture
+path) / `StringUtil.*` ops behind the (transparent) `"aql:string-util" import
+end` preamble (upper/lower/trim/concat/replace/repeat -> String, contains ->
+Boolean, indexof -> Integer, split -> List; computed strings flow through maps /
+comparisons / `size`, stressing the scalar-carrier-keep path), type-tracked so
+`if` branches and `get` results stay well-typed; error TAXONOMY compared too)
+and asserts compiled ==
+interpreted on each, with a shrinker that reduces a failure to a minimal program. It has found THREE real divergences the
+corpus had missed for the life of the project: (1) `for 3 [{a: (3 mul i)} get a]`
+— `constFoldContainerVal` froze the loop-iterator-dependent map value; (2) `def
+v0 (0 add 3) … {a: (5 mul v0)}` — the fold ran against `v0`'s CARRIER binding,
+which `AsInteger`-coerced to 0, baking `{a:0}` (both fixed by gating the fold to
+the top frame AND off any expression referencing a carrier binding,
+`exprRefsCarrier`; a user TYPE binding, `Carrier=false`, still folds); (3) `def
+v0 3 def v1 (if c [v0] [4]) v0` -> 4 — `JoinCarriers` kept the then-arm's ID, so
+the `if`-result reused `v0`'s identity and a later `v0` reference resolved to the
+if-event (fixed by minting a fresh ID for the merged carrier — it is a NEW
+value). 36 000 generated programs across 12 seeds are divergence-free after each
+fix. Each subsequent widening round — in-place mutation, object/class field
+mutation, higher-order `fold`/`each`/`scan`, `case` multi-way dispatch,
+context-store reads, fn-value indirection (`apply` / stored dispatch), closure
+capture, and `StringUtil.*` string ops — landed divergence-free on first hunt
+(21 808 compiled paths across 12 seeds on the higher-order round, 20 802 on the
+`case` round, 19 285 on the context round, 21 015 on the fn-indirection round,
+21 031 on the capture round, 21 622 on the string round), so the generator now
+doubles as a standing soundness witness for the constructs it already covers, not
+only a bug-finder. This is the durable answer
+to "why is this so fiddly": fund the ORACLE, not the manual probing.

@@ -45,26 +45,6 @@ var fnIntrospectionWords = map[string]bool{
 	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
 }
 
-// inertOperandWords are words whose NoEvalArgs clause/path list or QuoteArgs
-// atom is inert DATA the handler consumes directly — parsed into SQL, decoded
-// into a lens, read as an error code — never AQL code re-stepped on the tape.
-// The operand therefore bakes as a const and the dispatch lowers to a plain
-// CALL_NATIVE running the unchanged handler, so they are exempt from the blanket
-// code-body and quoted-operand refusals (like the get/set field-name exemption).
-// A list operand bakes even when it holds Words / paren-exprs, which the general
-// isInertConst rejects as code.
-var inertOperandWords = map[string]bool{
-	// aql:query DSL — clause lists (column/expr specs) + bare table names.
-	"select": true, "where": true, "order": true, "group": true,
-	"having": true, "on": true, "using": true,
-	"from": true, "join": true, "innerjoin": true, "leftjoin": true, "crossjoin": true,
-	// reach — an inert lens path: field names, `!` strict markers, and raw
-	// computed `(expr)` segments (stored unevaluated, applied later by the lens).
-	"reach": true,
-	// raise — the error-code atom (`raise bad_input "…"`).
-	"raise": true,
-}
-
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -123,12 +103,13 @@ func typeOperand(idx int) emitOperand   { return emitOperand{kind: opType, idx: 
 type producer struct{ seq, idx int }
 
 type emitCall struct {
-	word string
-	sig  *Signature
-	ops  []emitOperand
-	nout int // number of results the call pushes (0 for a side-effect word, N for multi-result)
-	pos  SrcPos
-	poly bool // dispatch via OpCallNativePoly (runtime MatchSignature)
+	word     string
+	sig      *Signature
+	ops      []emitOperand
+	nout     int // number of results the call pushes (0 for a side-effect word, N for multi-result)
+	pos      SrcPos
+	poly     bool // dispatch via OpCallNativePoly (runtime MatchSignature)
+	makeList bool // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -244,6 +225,7 @@ type EmitState struct {
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
 	zeroOutSeq map[int]bool        // branch seq → 0-output statement guard (residual skips it)
 	typeOut    map[int]bool        // event seq → its output is itself a type body
+	genericSeq map[int]bool        // event seq → recorded by the GENERIC RecordCall path (a plain native), not a structured hook
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
 	types      []TypeRef
@@ -288,6 +270,10 @@ type fnUnitRec struct {
 	numLoc   int
 	pos      SrcPos
 	finished bool
+	// inShape is the closure input convention recorded for a closure body unit
+	// (ClosureInValue by default; ClosureInKeyVal for a map-iteration lambda).
+	// Copied into CompiledFn.InShape at lowering. Zero (value) for user fns.
+	inShape ClosureInShape
 }
 
 // NewEmitState returns a fresh recording state.
@@ -301,6 +287,7 @@ func NewEmitState() *EmitState {
 		producedBy: map[string]producer{},
 		zeroOutSeq: map[int]bool{},
 		typeOut:    map[int]bool{},
+		genericSeq: map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
 		origByID:   map[string]Value{},
@@ -1116,8 +1103,11 @@ func (es *EmitState) RecordPoly(word string) {
 // order (position 0 = top of stack); outs are the carrier results.
 // forceDynOut bypasses the dynamic-output refusal when the caller
 // (dynOutNativeOK) has proven the dispatch is a concrete-args core builtin
-// whose dynamic result is merely a declared-Any return.
-func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut bool) {
+// whose dynamic result is merely a declared-Any return. quoteInertOK bypasses
+// the quoted-operand refusal when the caller (quoteOperandInertOK) has proven
+// the dispatch is a module inner native whose quoted operands are inert Atom
+// consts (the query DSL's table names).
+func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) {
 	if !es.active() {
 		return
 	}
@@ -1126,8 +1116,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
 	// the generic path must not double-record or refuse it. A structured
 	// hook registers all results together, so checking the first suffices.
+	// The producer must be a STRUCTURED hook, not a prior GENERIC native call:
+	// a repeated identical computed call (`(context get 'n') add (context get
+	// 'n')` — both gets return the same deterministic-ID result once their key
+	// is concrete) collides with a prior generic event, and skipping the second
+	// would orphan its receiver push. Those fall through to the carrier-identity
+	// de-collision below (which mints a fresh ID), so guard on !genericSeq.
 	if len(outs) > 0 {
-		if _, ok := es.producedBy[outs[0].ID]; ok {
+		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.genericSeq[pr.seq] {
 			return
 		}
 	}
@@ -1188,11 +1184,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
 		return
-	case len(sig.NoEvalArgs) > 0 && !inertOperandWords[word]:
+	case len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args):
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !inertOperandWords[word]:
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
@@ -1204,6 +1200,11 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
 		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
 		// so the word-name match admits only the real mutator, never a usurp.
+		// quoteInertOK is the principled extension of that exemption to a MODULE
+		// INNER NATIVE whose quoted operands are inert Atom consts — the query
+		// DSL's table names (`Query.from people`, `Query.join visits`): the inner
+		// native is reached via the wrapper's trivial delegation, so the
+		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
 		return
@@ -1228,6 +1229,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		return
 	case word == "continue" && len(outs) == 0:
 		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
+		return
+	case word == "for" && makeListRange(es, args):
+		// `for` over a COMPUTED range list (`for [1, (1 add 2)] [i]`) — the range
+		// assembled via OpMakeList. A literal-const or local range lowers fine
+		// (OpForSetup, or a CALL_NATIVE over the const list), but the CALL_NATIVE
+		// for-handler over a RUNTIME-assembled range diverges, so keep it refused
+		// (the interpreter handles the computed range).
+		es.MarkUncompilable("for: computed range list (Stage 2 follow-on)")
 		return
 	}
 	// P5 multi-result lowering: a 0-result side-effect word (set/raise/drop/
@@ -1275,25 +1284,6 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 				op, ok = constOperand(es.intern(a)), true
 			}
 		}
-		if !ok && inertOperandWords[word] && IsConcrete(a) && a.Parent.ConformsTo(TList) && !listHasParenExpr(a) {
-			// An inert operand list (query column/expr spec, reach path) is DATA
-			// the handler consumes directly — never re-stepped — so it bakes as a
-			// const even though it holds Words (which the general isInertConst
-			// rejects as code). Compounds are never pooled, so each keeps its own
-			// const slot. A list holding a ParenExpr is EXCLUDED: that is deferred
-			// code (a reach computed segment `(k)`) needing the live def scope at
-			// evaluation time, which a baked const cannot reach — so it falls back.
-			op, ok = constOperand(es.intern(a)), true
-		}
-		if !ok && (introspect || word == "is") && isBuiltinStructuralType(a) {
-			// A STRUCTURAL type operand (`[Integer]`, `{a:Integer}`) that a
-			// type-reading word matches against. isInertConst rejects its
-			// type-literal members, but a BUILTIN type literal's Parent is the
-			// canonical package-level *Type, so baking by value is sound (no
-			// behave-staleness). `5 is Integer` already lowers via OpPushType;
-			// this is its structural counterpart.
-			op, ok = constOperand(es.intern(a)), true
-		}
 		if !ok {
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
 			return
@@ -1302,7 +1292,33 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	// Carrier-identity de-collision (the deferred runtime-independence item, in
+	// its targeted form). A call OUTPUT whose ID already maps to a PRIOR event is
+	// a repeated identical computed call: `(context get 'n') add (context get
+	// 'n')` issues two get events that each return the same deterministic-ID
+	// result, so the second registration would overwrite the first and `add`
+	// would resolve BOTH operands to the second event — the residual layout then
+	// refuses "call results reordered". Mint a fresh ID so the two stack values
+	// stay distinct (the outs slice is the carrierResults return, so the fresh ID
+	// flows to the downstream consumer). Guarded twice: a SAME-event collision is
+	// `dup`/`swap` returning an input by identity (`[args[0], args[0]]`), handled
+	// by the DUP lowering, so skip pr.seq == seq; and a result that IS one of the
+	// call's inputs (an identity/stack word passing a value through) keeps its ID,
+	// so skip an output whose ID appears in args.
+	es.genericSeq[seq] = true
+	var argIDs map[string]bool
 	for i := range outs {
+		if pr, ok := es.producedBy[outs[i].ID]; ok && pr.seq != seq {
+			if argIDs == nil {
+				argIDs = make(map[string]bool, len(args))
+				for _, a := range args {
+					argIDs[a.ID] = true
+				}
+			}
+			if !argIDs[outs[i].ID] {
+				outs[i].ID = GenerateID(IDPrefixForType(outs[i].Parent))
+			}
+		}
 		es.setProducedAt(outs[i], seq, i)
 	}
 }
@@ -1327,6 +1343,94 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos)
 	es.SiteCounts[SiteDynamic]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true}})
 	es.setProduced(outs[0], seq)
+	return true
+}
+
+// producerWord returns the word of the event that produced value id, when id
+// resolves to a recorded event (not a const / local / unproduced value). Used to
+// gate makelist on its elements being core-builtin (deterministic) results.
+func (es *EmitState) producerWord(id string) (string, bool) {
+	pr, ok := es.producedBy[id]
+	if !ok {
+		return "", false
+	}
+	for _, fr := range es.frames {
+		for i := range fr {
+			if fr[i].seq == pr.seq {
+				return fr[i].call.word, true
+			}
+		}
+	}
+	return "", false
+}
+
+// makeListRange reports whether any of a dispatch's args was produced by an
+// OpMakeList assembly (the synthetic "[…]" word) — used to keep `for` off a
+// computed range list.
+func makeListRange(es *EmitState, args []Value) bool {
+	for i := range args {
+		if w, ok := es.producerWord(args[i].ID); ok && w == "[…]" {
+			return true
+		}
+	}
+	return false
+}
+
+// RecordMakeList records the assembly of a COMPUTED list literal (`[1 add 2]`,
+// `[1 (2 add 3) 4]`): autoEvalList evaluated the elements (their dispatches
+// already recorded their own events) and `ins` are the resulting element
+// values, in order; `out` is the list. The N element operands resolve normally
+// (an event result, a const, a local) and the dispatch lowers to OpMakeList N,
+// which pops them and pushes the list. Returns false — leaving es untouched, so
+// the list stays an unresolvable residual and the program falls back — when an
+// element has no compiled home (e.g. a fn value, a nested dynamic carrier).
+func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	// Only the TOP-LEVEL frame. A list inside a fn body / higher-order closure /
+	// branch arm (a nested fragment) is RE-EVALUATED per call or iteration, often
+	// with a different scope (`fn […[[c1]]]`, where c1 rebinds). Baking ONE
+	// assembly of the check-mode evaluation would freeze that — so those keep
+	// refusing and fall back. A top-level computed list is evaluated once.
+	if len(es.frames) != 1 {
+		return false
+	}
+	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
+	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
+	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and
+	// builds [first..last] in order. Each element must be produced by a CORE
+	// BUILTIN (or be a const): a builtin that yields a value is deterministic and
+	// side-effect-free, so the lowered re-computation matches. A MODULE / user
+	// word may be stateful — `list-of [Rand.int 0 10] 3` leaks its NoEval
+	// generator to the residual, and freezing one `rand-int` (which advances the
+	// seed) would replicate it instead of re-running per iteration. Those refuse.
+	ops := make([]emitOperand, len(ins))
+	for i := range ins {
+		// A TYPE-pattern list (`[Integer]`, `[Integer String]`) is the operand of
+		// the type machinery (`Box of [Integer]`, `x is [Integer String]`), not a
+		// DATA list to assemble — baking it as an OpMakeList breaks that dispatch.
+		// A genuine data list never holds a bare type node.
+		if IsBareTypeNode(ins[i]) {
+			return false
+		}
+		if w, isEvent := es.producerWord(ins[i].ID); isEvent && (!r.IsBuiltinWord(w) || w == "make") {
+			// `make` yields a MUTABLE instance that bakes as a const SCHEMA MEMBER
+			// (the make-default work) when the list is bound to a typed variable
+			// (`def xs:[:(Box of …)] [(make …)]`), which a typed-def REPARENT then
+			// re-IDs — assembling it via OpMakeList instead severs that linkage and
+			// the residual refuses. Keep instance lists on the const-bake path.
+			return false
+		}
+		op, ok := es.resolveOperand(ins[i])
+		if !ok {
+			return false
+		}
+		ops[len(ins)-1-i] = op
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "[…]", ops: ops, nout: 1, pos: pos, makeList: true}})
+	es.setProduced(out, seq)
 	return true
 }
 
@@ -1365,6 +1469,32 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: 1, pos: pos}})
 	es.setProduced(outs[0], seq)
+	return true
+}
+
+// noEvalBodiesInert reports whether every NoEvalArgs (un-evaluated code-body)
+// position holds INERT data — a const-bakeable word-list / scalar with no
+// computed paren or carrier (e.g. a query clause `[name age]` / `[age gt 1]`,
+// read or stored as data by the handler). Such a body bakes as a const and the
+// dispatch lowers to a plain CALL_NATIVE: the handler does exactly what it does
+// under the interpreter, byte-identically. A body with a computed paren (a test
+// assertion `[(1 add 1) …]`) is NOT inert and keeps the conservative refusal.
+func noEvalBodiesInert(sig *Signature, args []Value) bool {
+	for i := range args {
+		if !sig.NoEvalArgs[i] {
+			continue
+		}
+		if !isInertConst(args[i]) {
+			return false
+		}
+		// A flow-control sentinel (break/continue/return) inside the body
+		// targets an ENCLOSING loop/frame; running the body inside the handler
+		// (the CALL_NATIVE this enables) cannot propagate that across the call
+		// boundary, so it would diverge (`each [break]`). Keep those refused.
+		if bodyHasSentinel(args[i]) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -1431,6 +1561,16 @@ func typeBodyConstOK(v Value) bool {
 		return true
 	}
 	memberOK := func(m Value) bool {
+		// A concrete instance default (`class {x:(make Foo 1)}`) is a const-safe
+		// SCHEMA member: make copies the type body's defaults per instance, so
+		// the baked instance is never the one a later `set` mutates (the
+		// mutation-safety invariant holds — unlike a data-map member, which
+		// isInertConst still rejects). Const-folded by constFoldContainerVal.
+		if !m.Carrier && !m.Dynamic {
+			if _, ok := m.Data.(ObjectInstanceInfo); ok {
+				return true
+			}
+		}
 		return typeBodyConstOK(m) || isInertConst(m)
 	}
 	fieldsOK := func(m *OrderedMap) bool {
@@ -1474,43 +1614,15 @@ func typeBodyConstOK(v Value) bool {
 		return true
 	case ObjectTypeInfo:
 		// A class / object type body is const-bakeable iff every field
-		// default is a TEMPLATE `make` deep-copies per instance: a required
-		// field's type node, an inert const, a clean nested type body, OR any
-		// concrete data default — a flex container, a class/object instance, an
-		// array (`{items:(flex [])}`, `{i:(make Inner {})}`, materialised at
-		// schema construction). The const template is only ever READ (copied),
-		// never mutated, so a mutable default is sound; the per-instance COPY
-		// isolation is pinned by class.tsv:112. A METHOD field (fn value) is NOT
-		// data and still refuses (the surface-body case falls back). The
-		// canonical *Type rides the body payload pointer, staying canonical.
-		fields := d.AllFields()
-		if fields == nil {
-			return false
-		}
-		for _, k := range fields.Keys() {
-			fv, _ := fields.Get(k)
-			if memberOK(fv) || isSchemaDefaultOK(fv) {
-				continue
-			}
-			return false
-		}
-		return true
+		// default is plain data — a method (fn-value) field is not, so a
+		// class with methods (the surface-body case) still refuses. The
+		// canonical *Type rides the body's payload pointer (shared, not
+		// copied), so it stays canonical at run time; `make` recovers the
+		// field schema from the baked body. The parent chain's fields must
+		// be data too (AllFields merges them).
+		return fieldsOK(d.AllFields())
 	}
 	return false
-}
-
-// isSchemaDefaultOK reports whether v may ride as a class/object field DEFAULT
-// in a const-baked schema: a concrete data template `make` deep-copies per
-// instance. A fn value (a method field) is excluded — it is code, not data, and
-// keeps the schema on the fallback path.
-func isSchemaDefaultOK(v Value) bool {
-	if !IsConcrete(v) {
-		return false
-	}
-	if _, isFn := v.Data.(FnDefInfo); isFn {
-		return false
-	}
-	return true
 }
 
 // isInertConst reports whether v can live in a Program's constant
@@ -1538,97 +1650,6 @@ func isSchemaDefaultOK(v Value) bool {
 // copy-returning. Keep this whitelist free of mutable instance types: adding
 // one would let a pooled compound const reach an in-place mutator and corrupt
 // it across iterations.
-// isBuiltinStructuralType reports whether v is a structural TYPE literal whose
-// every leaf is a BUILTIN type node — `[Integer]`, `[Integer String]`,
-// `{a:Integer}`, and nestings thereof. Such a value is sound to bake by value
-// for a type-reading word (`is`, `typeof`, the type-algebra words): a builtin
-// type literal's Parent is the canonical package-level *Type pointer, which is
-// stable and never retired, so no canonical-pointer staleness arises (eng
-// CLAUDE.md "Canonical *Type Pointers"). USER-type leaves are excluded — their
-// Behavior can be mutated later via `behave`, which a by-value const would not
-// see — so those structural operands stay refused.
-func isBuiltinStructuralType(v Value) bool {
-	if v.Carrier || v.Dynamic {
-		return false
-	}
-	switch d := v.Data.(type) {
-	case ListPayload:
-		if len(d.Elems) == 0 {
-			return false
-		}
-		for _, e := range d.Elems {
-			if !isBuiltinTypeLeaf(e) {
-				return false
-			}
-		}
-		return true
-	case MapPayload:
-		if d.M == nil || d.M.Len() == 0 {
-			return false
-		}
-		for _, k := range d.M.Keys() {
-			mv, _ := d.M.Get(k)
-			if !isBuiltinTypeLeaf(mv) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
-// isBuiltinTypeLeaf reports whether v is a builtin bare type node or a nested
-// builtin structural type — the per-leaf rule of isBuiltinStructuralType.
-func isBuiltinTypeLeaf(v Value) bool {
-	if IsBareTypeNode(v) {
-		// A bare type literal IS its lattice node (typeNodeOf), not its Parent;
-		// a builtin node has a stable canonical package-level pointer.
-		return typeNodeOf(v).IsNative()
-	}
-	return isBuiltinStructuralType(v)
-}
-
-// listHasParenExpr reports whether a concrete list holds a ParenExpr element —
-// deferred code that needs the live def scope when evaluated (a reach computed
-// segment `(k)`), so the list is NOT inert and must not bake into the const pool.
-func listHasParenExpr(v Value) bool {
-	lst, err := AsList(v)
-	if err != nil || lst.IsNil() {
-		return false
-	}
-	for i := 0; i < lst.Len(); i++ {
-		if IsParenExpr(lst.Get(i)) {
-			return true
-		}
-	}
-	return false
-}
-
-// isInertReach reports whether a Reach lens value is fully inert and so safe to
-// bake as a const: every segment is a literal field-name key (no computed
-// `(expr)` segment, which is deferred code needing the live def scope), and the
-// receiver (if any) is itself a const. A field-name Word key counts as inert
-// data here — the lens handler reads it as a key, never re-steps it.
-func isInertReach(ri ReachInfo) bool {
-	for _, seg := range ri.Segments {
-		if seg.Computed {
-			return false
-		}
-		if _, isWord := seg.KeyLit.Data.(WordInfo); isWord {
-			continue // a field-name Word is inert lens data
-		}
-		if !isInertConstMember(seg.KeyLit) {
-			return false
-		}
-	}
-	for _, rv := range ri.Receiver {
-		if !isInertConstMember(rv) {
-			return false
-		}
-	}
-	return true
-}
-
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -1647,13 +1668,6 @@ func isInertConst(v Value) bool {
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
 		_ = d
 		return true
-	case ReachInfo:
-		// An inert lens VALUE (`$.name`, `$.a.b`, a constructed reach): the
-		// segments are field-name keys the apply/get/set handlers read as data
-		// and the receiver (if any) is a const, so the whole lens bakes. A
-		// COMPUTED `(expr)` segment is deferred code needing the live def scope at
-		// apply time (it would go stale in a const), so it disqualifies the lens.
-		return isInertReach(d)
 	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
 		// use site — make's operand). Sound as consts when their
@@ -1663,22 +1677,6 @@ func isInertConst(v Value) bool {
 		// canonical. Never deduped. A class/object body qualifies only
 		// when every field default is data (no method fn-values).
 		return typeBodyConstOK(v)
-	case *TypeSchemaInfo:
-		// A GENERIC SCHEMA template (`gen [T] class {value:T}`) — the bare
-		// generic type value (`Box`, `make Box …`, `is Box`). Immutable:
-		// `of [T]` / inference instantiate a FRESH lattice node per use, never
-		// mutating the template, and the canonical minted schema node rides
-		// d.Type by pointer. Bake when the body (placeholder fields + structure)
-		// is itself a clean type body.
-		return typeBodyConstOK(d.Body) || isInertConst(d.Body)
-	case *SurfaceInfo:
-		// A SURFACE type identity (`def Shape surface {area:(fnsig …)}`) used as
-		// a type-algebra / `is` operand. Sound to bake: the value is a pointer
-		// to the canonical *SurfaceInfo (shared by every copy), so its Required
-		// shapes and even the `exposes`-mutable Conform set stay consistent with
-		// the live type — a by-value Value copy shares the same pointer, so
-		// nothing goes stale.
-		return true
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConstMember(e) {
@@ -1697,9 +1695,44 @@ func isInertConst(v Value) bool {
 			}
 		}
 		return true
+	case ReachInfo:
+		// A receiverless inert lens (`$.name`, `$.a.b`, `$!.x`, `$.1`). See
+		// isInertReach: only the non-eval, no-receiver, all-literal-key shape
+		// qualifies — the dot-access Eval reach (which the engine expands in
+		// place) is excluded.
+		return isInertReach(v)
 	default:
 		return false
 	}
+}
+
+// isInertReach reports whether v is an INERT receiverless lens — a first-class
+// Reach value that evaluates to ITSELF (`$.name`, `$.a.b`, `$!.x`, `$.1`):
+// Eval=false, no Receiver tokens, and every segment a LITERAL key (no computed
+// paren to evaluate at run time). Such a lens is immutable data, not code: it
+// renders as itself, `typeof` reads Reach, and `apply`/`each`/`filter`/`sortby`
+// /`getpath` walk its segments against a FRESH receiver — none of which the
+// engine expands or re-steps. That is the opposite of a dot-access Eval reach
+// (`m.a.b`), which `isEvalReach`/`expandReach` lower to a get-chain IN PLACE;
+// isInertConst rightly keeps THAT one out (it is a structural token, not data).
+// The lens keys carry no canonical-*Type staleness hazard: they are Words /
+// Atoms / scalars whose Parents are the canonical kernel types, copied by value
+// safely (isInertConstMember screens out a bare type node). So the inert lens
+// pools into the const table like an atom or a path.
+func isInertReach(v Value) bool {
+	if !IsReach(v) || v.Carrier || v.Dynamic {
+		return false
+	}
+	info, err := AsReach(v)
+	if err != nil || info.Eval || len(info.Receiver) > 0 {
+		return false
+	}
+	for _, seg := range info.Segments {
+		if seg.Computed || !isInertConstMember(seg.KeyLit) {
+			return false
+		}
+	}
+	return true
 }
 
 // isInertConstMember reports whether v may ride as a MEMBER of a const
@@ -1712,6 +1745,17 @@ func isInertConst(v Value) bool {
 // returns the fn, which the fn-value-call boundary (OpCallDynamic) applies.
 func isInertConstMember(v Value) bool {
 	if !v.Carrier && !v.Dynamic {
+		// A Word token riding inside a quoted (non-eval) compound — what
+		// `macroexpand` returns as data (`[5 word(add) 5]`). Safe as a const
+		// MEMBER: the compound is pushed as inert data and never auto-evaluated
+		// (a source eval-list is reduced before baking), and a word's Parent is
+		// the canonical kernel TWord, so the by-value copy carries no stale
+		// behaviour (unlike a bare type node — the canonical-*Type hazard — which
+		// is deliberately NOT admitted here). The standalone isInertConst switch
+		// still rejects a bare Word, so a top-level word never bakes as code.
+		if IsWord(v) {
+			return true
+		}
 		if fd, ok := v.Data.(FnDefInfo); ok {
 			// Only an UNNAMED (inline `fn […]`) fn value. A named ref (`f/r`,
 			// Name="f") re-dispatches by NAME when applied through the island
@@ -1867,7 +1911,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, Returns: rec.returns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false

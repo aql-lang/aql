@@ -302,8 +302,8 @@ var allArrayNatives = []NativeFunc{
 			// Map forms — iterate entries in key order, keeping the map shape
 			// (mapValues). Quotation pushes the value; a lambda receives a
 			// KeyVal {k v i n}. See native_map_iter.go.
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: eachMapQuoteHandler, Returns: []*Type{TMap}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: eachMapLambdaHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: eachMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: eachMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
@@ -323,8 +323,8 @@ var allArrayNatives = []NativeFunc{
 				ReturnsFn:  forEachReturnsFn, BarrierPos: -1,
 			},
 			// Map forms — iterate entries for side effects, produce nothing.
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: forEachMapQuoteHandler, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: forEachMapLambdaHandler, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: forEachMapHandler, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: forEachMapHandler, BarrierPos: -1},
 		},
 	},
 	{
@@ -350,10 +350,10 @@ var allArrayNatives = []NativeFunc{
 			},
 			// Map forms — reduce entries (quotation: acc beneath, value on top;
 			// lambda: (acc, KeyVal)). Seeded explicitly, or by the first value.
-			{Args: []*Type{TList, TMap, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapInitQuoteHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapNoInitQuoteHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap, TAny}, Handler: foldMapInitLambdaHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: foldMapNoInitLambdaHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapNoInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap, TAny}, Handler: foldMapInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: foldMapNoInitHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -369,8 +369,8 @@ var allArrayNatives = []NativeFunc{
 			// Map forms — running fold over a map's values (the first value
 			// seeds), keeping the map shape. Quotation: acc beneath, value on
 			// top; lambda: (acc, KeyVal).
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: scanMapQuoteHandler, Returns: []*Type{TMap}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: scanMapLambdaHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: scanMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Handler: scanMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{

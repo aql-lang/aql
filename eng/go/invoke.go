@@ -27,15 +27,6 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	return New(r).Run(input)
 }
 
-// IsCompiledClosure reports whether v is a compiled-closure fn value (the
-// OpPushClosure payload), as opposed to an interpreter FnDefInfo lambda. A
-// higher-order word's handler runs a closure through the InvokeBody seam
-// (VM-native) and an FnDefInfo through CallAQL.
-func IsCompiledClosure(v Value) bool {
-	_, ok := v.Data.(ClosurePayload)
-	return ok
-}
-
 // bodyTokens returns the executable token sequence for a code body: a concrete
 // list's elements (the common case — `[mul 2]`), or the value itself wrapped
 // as a singleton for a non-list body. Mirrors what the handlers extracted via
