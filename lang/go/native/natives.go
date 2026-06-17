@@ -267,7 +267,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TFlexList}, Handler: popFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: popHandler, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: popHandler, Returns: []*Type{TList, TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -275,7 +275,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny, TFlexList}, Handler: unshiftFlexHandler, Returns: []*Type{TFlexList}, BarrierPos: -1},
-			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
@@ -283,7 +283,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TFlexList}, Handler: shiftFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: shiftHandler, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: shiftHandler, Returns: []*Type{TList, TAny}, BarrierPos: -1},
 		},
 	},
 

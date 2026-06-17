@@ -412,7 +412,7 @@ WORD pick
   [Scalar/Number/Integer] barrier=0 fullstack
 WORD pop
   [Node/List/FlexList] barrier=1 returns=[Node/List/FlexList Any]
-  [Node/List] barrier=1
+  [Node/List] barrier=1 returns=[Node/List Any]
 WORD pow
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD prepare
@@ -503,7 +503,7 @@ WORD shed
   [Scalar/Number/Integer Node/List] barrier=2 +returnsfn
 WORD shift
   [Node/List/FlexList] barrier=1 returns=[Node/List/FlexList Any]
-  [Node/List] barrier=1
+  [Node/List] barrier=1 returns=[Node/List Any]
 WORD size
   [Any] barrier=1 returns=[Scalar/Number/Integer]
 WORD sleep
@@ -596,7 +596,7 @@ WORD unquote
   [Any] barrier=1 returns=[Any]
 WORD unshift
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
-  [Any Node/List] barrier=2
+  [Any Node/List] barrier=2 returns=[Node/List]
 WORD update
   [Node/Map Ideal/Object/Resource/Entity] barrier=2
   [Node/Map Node/Map] barrier=2
