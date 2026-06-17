@@ -25,7 +25,7 @@ var booleanNatives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: andHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: andHandler, ReturnsFn: operandJoinReturns, BarrierPos: -1},
 		},
 	},
 	{
@@ -33,14 +33,14 @@ var booleanNatives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TBoolean, TBoolean}, BarrierPos: 1, Handler: orHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, ReturnsFn: operandJoinReturns},
 		},
 	},
 	{
 		Name: "otherwise",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: otherwiseHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: otherwiseHandler, ReturnsFn: operandJoinReturns},
 		},
 	},
 	boolBinaryNative("xor", func(a, b bool) bool { return a != b }),
@@ -97,6 +97,20 @@ func allHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 // notHandler always returns a Boolean.
 func notHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(!CoerceBoolean(args[0]))}, nil
+}
+
+// operandJoinReturns is the check-mode return for the value-selecting
+// connectives and/or/otherwise: each yields ONE of its two operands
+// (Python/Lisp short-circuit — `3 and 0 → 0`, `'x' or 'd' → 'x'`,
+// `5 otherwise 9 → 5`), so the result type is the join of the operand
+// carriers, not Any. Narrowing only: the runtime result is always one of
+// the operands, so the join soundly covers it while a downstream typed
+// use now sees the real type instead of a poison Any.
+func operandJoinReturns(args []Value, _ *Registry) []Value {
+	if len(args) != 2 {
+		return []Value{NewCarrier(TAny)}
+	}
+	return []Value{JoinCarriers(args[0], args[1])}
 }
 
 // andHandler returns args[1] when falsy, else args[0]. Short-circuit.

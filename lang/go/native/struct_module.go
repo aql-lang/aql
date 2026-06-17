@@ -80,7 +80,7 @@ var StructModuleNatives = []NativeFunc{
 	{
 		Name: "clone",
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: cloneHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: cloneHandler, ReturnsFn: cloneReturnsFn, BarrierPos: -1},
 		},
 	},
 	{
@@ -100,14 +100,14 @@ var StructModuleNatives = []NativeFunc{
 	{
 		Name: "items",
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: itemsHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: itemsHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "jsonify",
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TAny}, Handler: jsonifyFlagsHandler, BarrierPos: -1},
-			{Args: []*Type{TAny}, Handler: jsonifyDefaultHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TAny}, Handler: jsonifyFlagsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAny}, Handler: jsonifyDefaultHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{

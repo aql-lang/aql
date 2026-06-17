@@ -587,8 +587,8 @@ var TimeNatives = func() []native.NativeFunc {
 		// --- Duration construction (Integer -> CalDuration) ---
 		intToCalDurationNative("years", native.TCalDuration, func(n int) (int, int, int) { return n, 0, 0 }),
 		intToCalDurationNative("months", native.TCalDuration, func(n int) (int, int, int) { return 0, n, 0 }),
-		intToCalDurationNative("weeks", native.TClkDuration, func(n int) (int, int, int) { return 0, 0, n * 7 }),
-		intToCalDurationNative("days", native.TClkDuration, func(n int) (int, int, int) { return 0, 0, n }),
+		intToCalDurationNative("weeks", native.TCalDuration, func(n int) (int, int, int) { return 0, 0, n * 7 }),
+		intToCalDurationNative("days", native.TCalDuration, func(n int) (int, int, int) { return 0, 0, n }),
 		// --- Duration construction (Number -> ClkDuration) ---
 		numToClkDurationNative("hours", time.Hour),
 		numToClkDurationNative("minutes", time.Minute),
@@ -625,8 +625,7 @@ var TimeNatives = func() []native.NativeFunc {
 		clkDurationToFloatNative("total-hours", native.TFloat, func(d time.Duration) float64 { return d.Hours() }),
 		clkDurationToFloatNative("total-minutes", native.TFloat, func(d time.Duration) float64 { return d.Minutes() }),
 		clkDurationToFloatNative("total-seconds", native.TFloat, func(d time.Duration) float64 { return d.Seconds() }),
-		// total-ms: handler pushes Float but historical Returns is TInteger.
-		clkDurationToFloatNative("total-ms", native.TInteger, func(d time.Duration) float64 { return float64(d.Milliseconds()) }),
+		clkDurationToFloatNative("total-ms", native.TFloat, func(d time.Duration) float64 { return float64(d.Milliseconds()) }),
 		calDurationToIntNative("dur-years", func(cd native.CalDurationData) int64 { return int64(cd.Years) }),
 		calDurationToIntNative("dur-months", func(cd native.CalDurationData) int64 { return int64(cd.Months) }),
 		calDurationToIntNative("dur-days", func(cd native.CalDurationData) int64 { return int64(cd.Days) }),
@@ -683,7 +682,7 @@ var TimeNatives = func() []native.NativeFunc {
 					cd := dateDiffCalDuration(from, to)
 					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
+				Returns: []*native.Type{native.TCalDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -698,7 +697,7 @@ var TimeNatives = func() []native.NativeFunc {
 					cd := dateDiffCalDuration(from, to)
 					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
+				Returns: []*native.Type{native.TCalDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -1047,7 +1046,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					return []native.Value{native.NewString(fmt.Sprintf("%s%02d:%02d", sign, h, m))}, nil
 				},
-				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
+				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		{

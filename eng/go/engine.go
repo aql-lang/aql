@@ -1409,12 +1409,35 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			}
 		}
 
+		// A registered FUNCTION word in the forward window that the collecting
+		// word does NOT capture is the NEXT dispatch — the runtime's "another
+		// function word is a barrier" rule (commitBarrierForward) stops forward
+		// collection here, and the pre-evaluation scan must stop too. The
+		// former scan counted the word as one resolved forward position and
+		// kept going, so a LATER group was pre-evaluated ACROSS the barrier
+		// once the COLLECTING word's own max arity (maxBarrier) reached past
+		// it. With a heterogeneous-arity overload — e.g. a 3-arg `add` —
+		// `(g) add (g) add (g)` evaluated the third group before the first add
+		// ran; the recorded events then put both later operands on the
+		// simulated stack and the operand layout refused "not adjacent on
+		// top". Stop so each dispatch pre-evaluates only the groups IT
+		// collects, in source order. Lookup mirrors commitBarrierForward's own
+		// function-word test. The capturesForward guard preserves a word the
+		// collecting sig takes STRUCTURALLY as an operand (a /q name like
+		// `undef foo`, a raw/form/type slot) — there the function word is the
+		// argument, not a barrier, and the scan must walk past it.
+		if IsWord(tok) && !capturesForward(fn, pos) {
+			if wi, werr := AsWord(tok); werr == nil && e.registry.Lookup(wi.Name) != nil {
+				break
+			}
+		}
+
 		// Non-group token. A concrete literal carries a final type that
 		// matchSignature tests identically, so it is sound to prune the
 		// viable set on it. Words and other non-concrete tokens are left
 		// un-pruned (their matchSignature treatment is contextual) but are
 		// still counted as one resolved position — so, exactly like the
-		// former scan, groups beyond a word remain reachable.
+		// former scan, groups beyond a NON-FUNCTION word remain reachable.
 		if mt, kind := e.staticForwardType(tok); kind == fwdValue {
 			pruneViable(pos, mt)
 		}

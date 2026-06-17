@@ -19,6 +19,27 @@ import (
 // MAP it receives a KeyVal {k v i n} (read the value via `.v`) and the result
 // keeps the map shape — see filterMapFunction. (The afn param must be typed —
 // a bare `[p]` parses as a type name.)
+// filterReturnsFn narrows `filter` to its INPUT collection type: filtering
+// keeps a SUBSET of the same shape, so a List stays a List of the same
+// element type and a Map stays a Map. Without it filter declared no Returns
+// and poisoned every result with dynamic(Any). The predicate body is compiled
+// separately by the closure path (callableWords["filter"]); this types only
+// the result. A non-collection or computed receiver keeps dynamic(Any).
+func filterReturnsFn(args []Value, _ *Registry) []Value {
+	if len(args) < 2 {
+		return []Value{NewDynamicCarrier(TAny)}
+	}
+	data := args[1]
+	switch {
+	case data.Parent.ConformsTo(TList):
+		return []Value{NewCarrierTypedList(DataListElemTypeFromValue(data))}
+	case data.Parent.ConformsTo(TMap):
+		return []Value{NewCarrier(data.Parent)}
+	default:
+		return []Value{NewDynamicCarrier(TAny)}
+	}
+}
+
 func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	cb := args[0]
 
