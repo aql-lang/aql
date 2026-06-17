@@ -70,6 +70,7 @@ type listScreen struct {
 	acts     []listKeyAction
 	reloadFn func() []list.Item
 	helpText string
+	cmdText  string
 }
 
 func newListScreen(title string, items []list.Item, acts []listKeyAction, reloadFn func() []list.Item) *listScreen {
@@ -161,6 +162,8 @@ func (s *listScreen) reload() tea.Cmd {
 
 func (s *listScreen) helpInfo() string              { return s.helpText }
 func (s *listScreen) withHelp(t string) *listScreen { s.helpText = t; return s }
+func (s *listScreen) cliCommand() string            { return s.cmdText }
+func (s *listScreen) withCmd(c string) *listScreen  { s.cmdText = c; return s }
 
 // --- tableScreen -----------------------------------------------------------
 
@@ -178,6 +181,7 @@ type tableScreen struct {
 	emptyMsg string
 	reloadFn func() ([]table.Column, []table.Row)
 	helpText string
+	cmdText  string
 }
 
 func newTableScreen(title string, cols []table.Column, rows []table.Row, acts []tableAction, emptyMsg string, reloadFn func() ([]table.Column, []table.Row)) *tableScreen {
@@ -206,9 +210,8 @@ func (s *tableScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	case tea.KeyMsg:
 		for _, a := range s.acts {
 			if key.Matches(msg, a.binding) {
-				if s.count == 0 {
-					return s, nil
-				}
+				// Each action's closure guards against an empty selection, so
+				// row-less actions (add/grant) still work on an empty table.
 				return s, a.run(s.tbl.Cursor())
 			}
 		}
@@ -250,6 +253,8 @@ func (s *tableScreen) reload() tea.Cmd {
 
 func (s *tableScreen) helpInfo() string               { return s.helpText }
 func (s *tableScreen) withHelp(t string) *tableScreen { s.helpText = t; return s }
+func (s *tableScreen) cliCommand() string             { return s.cmdText }
+func (s *tableScreen) withCmd(c string) *tableScreen  { s.cmdText = c; return s }
 
 // --- pagerScreen -----------------------------------------------------------
 
@@ -265,6 +270,7 @@ type pagerScreen struct {
 	reloadFn func() string
 	ready    bool
 	helpText string
+	cmdText  string
 }
 
 func newPagerScreen(title, content string, acts []pagerAction, reloadFn func() string) *pagerScreen {
@@ -325,6 +331,8 @@ func (s *pagerScreen) reload() tea.Cmd {
 
 func (s *pagerScreen) helpInfo() string               { return s.helpText }
 func (s *pagerScreen) withHelp(t string) *pagerScreen { s.helpText = t; return s }
+func (s *pagerScreen) cliCommand() string             { return s.cmdText }
+func (s *pagerScreen) withCmd(c string) *pagerScreen  { s.cmdText = c; return s }
 
 // --- formScreen ------------------------------------------------------------
 
@@ -334,9 +342,16 @@ type formScreen struct {
 	onSubmit func() tea.Cmd
 	done     bool
 	helpText string
+	cmdFn    func() string // live CLI-command preview of the entered values
 }
 
 func (s *formScreen) helpInfo() string { return s.helpText }
+func (s *formScreen) cliCommand() string {
+	if s.cmdFn != nil {
+		return s.cmdFn()
+	}
+	return ""
+}
 
 func newFormScreen(title string, form *huh.Form, onSubmit func() tea.Cmd) *formScreen {
 	return &formScreen{title: title, form: form.WithShowHelp(true).WithShowErrors(true), onSubmit: onSubmit}

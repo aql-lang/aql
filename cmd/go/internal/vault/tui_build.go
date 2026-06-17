@@ -124,7 +124,8 @@ func (m *rootModel) buildVaultPicker() screen {
   enter   Switch to the selected vault.
   n       Create a new vault.
   d       Make the selected vault the default that aql vault -i opens.
-  D       Forget a stale entry from the list (its files are left untouched).`)
+  D       Forget a stale entry from the list (its files are left untouched).`).
+		withCmd("aql vault folder")
 }
 
 func (m *rootModel) vaultItems() []list.Item {
@@ -246,22 +247,27 @@ func (m *rootModel) buildSecrets() screen {
 				return pushScreen(m.buildRevealPager(alias, v))
 			})
 		}},
-		{binding: kAdd, run: func(_ int) tea.Cmd { return pushScreen(m.buildAddForm()) }},
+		// add/rotate/rm/rename all write secret values, so they need a session.
+		// Authenticate (once) BEFORE opening the form, so the operation has the
+		// passphrase rather than failing with "no input" at submit time.
+		{binding: kAdd, run: func(_ int) tea.Cmd {
+			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildAddForm()) })
+		}},
 		{binding: kRotate, run: func(idx int) tea.Cmd {
 			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildRotateForm(alias))
+				return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRotateForm(alias)) })
 			}
 			return nil
 		}},
 		{binding: kRemove, run: func(idx int) tea.Cmd {
 			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildRemoveForm(alias))
+				return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRemoveForm(alias)) })
 			}
 			return nil
 		}},
 		{binding: kRename, run: func(idx int) tea.Cmd {
 			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildRenameForm(alias))
+				return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRenameForm(alias)) })
 			}
 			return nil
 		}},
@@ -283,7 +289,8 @@ func (m *rootModel) buildSecrets() screen {
               also choose to revoke them.
   D           Delete the secret and every capability scoped to it.
   m           Rename the secret, or move it to another namespace.
-  e           Set or clear its expiry reminder (a reminder only — never enforced).`)
+  e           Set or clear its expiry reminder (a reminder only — never enforced).`).
+		withCmd("aql vault list")
 }
 
 func (m *rootModel) buildRevealPager(alias, value string) screen {
@@ -293,21 +300,91 @@ func (m *rootModel) buildRevealPager(alias, value string) screen {
 }
 
 func (m *rootModel) buildAddForm() screen {
-	var alias, value, provider, namespace, expiry string
+	var alias, value string
+	// Pre-fill the remembered context (never the alias or the secret value).
+	provider, namespace, expiry := m.lastAdd.provider, m.lastAdd.namespace, m.lastAdd.expiry
+	submit := true
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Alias").Description("name, or ns:name to qualify a namespace").Value(&alias).
-			Validate(nonEmpty("alias")),
-		huh.NewInput().Title("Secret value").EchoMode(huh.EchoModePassword).Value(&value).
-			Validate(nonEmpty("value")),
+		huh.NewInput().Title("Alias").Description("name, or ns:name to qualify a namespace").
+			Value(&alias).Validate(validateAliasField),
+		huh.NewInput().Title("Secret value").Description("the secret itself (entry is hidden)").
+			EchoMode(huh.EchoModePassword).Value(&value).Validate(nonEmpty("value")),
 		huh.NewInput().Title("Provider").Description("optional: openai, anthropic, github, …").Value(&provider),
-		huh.NewInput().Title("Namespace").Description("optional; overrides any ns: prefix").Value(&namespace),
-		huh.NewInput().Title("Expiry").Description("optional: YYYY-MM-DD, RFC3339, or a duration like 90d").Value(&expiry),
+		huh.NewInput().Title("Namespace").Description("optional; overrides any ns: prefix").
+			Value(&namespace).Validate(validateNamespaceField),
+		huh.NewInput().Title("Expiry").Description("optional: YYYY-MM-DD, RFC3339, or a duration like 90d").
+			Value(&expiry).Validate(validateExpiryField),
+		huh.NewConfirm().Affirmative("Submit").Negative("Cancel").Value(&submit),
 	))
-	return newFormScreen("add", form, func() tea.Cmd {
+	fs := newFormScreen("add", form, func() tea.Cmd {
+		if !submit { // the Cancel button
+			return tea.Batch(popScreen(), status("cancelled"))
+		}
+		// Remember the context for the next add (not the alias/value).
+		m.lastAdd = addDefaults{provider: provider, namespace: namespace, expiry: expiry}
 		return submitOp("stored "+alias, func() error {
 			return m.ctl.addSecret(alias, value, provider, namespace, expiry)
 		})
 	})
+	// The command builder mirrors the in-progress input as a CLI command.
+	fs.cmdFn = func() string { return addCommandPreview(alias, provider, namespace, expiry) }
+	return fs
+}
+
+// addCommandPreview renders the equivalent `aql vault add` command for the
+// values entered so far (the secret value is never shown).
+func addCommandPreview(alias, provider, namespace, expiry string) string {
+	parts := []string{"aql", "vault", "add"}
+	if provider != "" {
+		parts = append(parts, "--provider="+provider)
+	}
+	if namespace != "" {
+		parts = append(parts, "--namespace="+namespace)
+	}
+	if expiry != "" {
+		parts = append(parts, "--expiry="+expiry)
+	}
+	parts = append(parts, "--from-stdin")
+	if alias != "" {
+		parts = append(parts, alias)
+	} else {
+		parts = append(parts, "<alias>")
+	}
+	return strings.Join(parts, " ")
+}
+
+// --- add-form field validators (mark invalid fields with a message) -------
+
+func validateAliasField(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return fmt.Errorf("alias is required")
+	}
+	if !validAliasRef(s) {
+		return fmt.Errorf("invalid: use letters, digits, . - _ and one optional ns: prefix")
+	}
+	return nil
+}
+
+func validateNamespaceField(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" || s == rootNamespaceRef {
+		return nil
+	}
+	if !validNamespaceName(s) {
+		return fmt.Errorf("invalid namespace name")
+	}
+	return nil
+}
+
+func validateExpiryField(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	if _, err := parseExpiryFlag(s); err != nil {
+		return fmt.Errorf("invalid: use YYYY-MM-DD, RFC3339, or a duration like 90d")
+	}
+	return nil
 }
 
 func (m *rootModel) buildRotateForm(alias string) screen {
@@ -511,7 +588,8 @@ namespaces, so different holders can be given different access.
 
   a   Add: create a named password with a scope (read / write / move / admin)
       and namespaces. You first authenticate with an existing admin password.
-  D   Remove: delete a password slot; the other slots keep working.`)
+  D   Remove: delete a password slot; the other slots keep working.`).
+		withCmd("aql vault password list")
 }
 
 func (m *rootModel) buildPasswordAddForm() screen {
@@ -568,7 +646,8 @@ func (m *rootModel) buildMaintenance() screen {
 		}},
 		listItem{name: "Audit", desc: "structured audit log", act: func() tea.Cmd {
 			return pushScreen(newPagerScreen("audit", m.ctl.auditText(), nil, func() string { return m.ctl.auditText() }).
-				withHelp("The structured log of vault operations (newest last). Scroll with ↑/↓; secrets are never recorded here."))
+				withHelp("The structured log of vault operations (newest last). Scroll with ↑/↓; secrets are never recorded here.").
+				withCmd("aql vault audit"))
 		}},
 	}
 	return newListScreen("maintenance", items, nil, nil).
@@ -638,7 +717,8 @@ func (m *rootModel) buildHistoryPager() screen {
 		withHelp(`Each row above is a saved content revision (generation), newest last.
 
   R   Restore the vault metadata to a generation. You confirm by typing its
-      number. Password slots, namespace keys, and config are preserved.`)
+      number. Password slots, namespace keys, and config are preserved.`).
+		withCmd("aql vault history")
 }
 
 func (m *rootModel) buildRestoreForm() screen {
@@ -711,7 +791,8 @@ func (m *rootModel) buildConfigPager() screen {
 		withHelp(`Vault configuration keys and their values are listed above.
 
   s   Set a key to a value (e.g. namespace.default).
-  x   Unset (remove) a key.`)
+  x   Unset (remove) a key.`).
+		withCmd("aql vault config")
 }
 
 func (m *rootModel) buildConfigSetForm() screen {
@@ -782,7 +863,7 @@ func (m *rootModel) runPalette(cmd string) tea.Cmd {
 	case "config":
 		return pushScreen(m.buildConfigPager())
 	case "add":
-		return pushScreen(m.buildAddForm())
+		return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildAddForm()) })
 	case "grant":
 		return pushScreen(m.buildGrantForm())
 	case "lock":

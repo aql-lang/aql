@@ -11,6 +11,7 @@ package vault
 // global action reachable from any screen via ctrl+o.
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -33,6 +34,7 @@ type screen interface {
 	capturesInput() bool       // true while editing text (form / active filter)
 	reload() tea.Cmd           // re-fetch data after a mutation (may be nil)
 	helpInfo() string          // one-line description for the ? help screen
+	cliCommand() string        // equivalent CLI command for the current state ("" = none)
 }
 
 // --- navigation & app messages ---------------------------------------------
@@ -61,7 +63,7 @@ type grantedMsg struct{ output string }
 // chromeHeight is the number of terminal lines the header+footer consume,
 // leaving the rest for the body.
 const chromeTopLines = 5 // title, vault, blank, breadcrumb, blank
-const chromeBotLines = 2 // status line + help line
+const chromeBotLines = 4 // command builder, keys, status bar, message area
 
 type rootModel struct {
 	ctl    *tuiController
@@ -85,7 +87,18 @@ type rootModel struct {
 	theme        themeMode
 	detectedDark bool
 
+	lastAdd addDefaults // remembered add-form context (never the alias/value)
+
 	quitting bool
+}
+
+// addDefaults remembers the non-secret context of the last "add secret" so a
+// run of adds doesn't re-type the provider/namespace/expiry. The alias and the
+// value itself are always blank for a fresh add.
+type addDefaults struct {
+	provider  string
+	namespace string
+	expiry    string
 }
 
 // cycleTheme advances dark/light/auto, applies it, and persists the choice.
@@ -404,17 +417,19 @@ func (m *rootModel) View() string {
 	b.WriteString(padBody(body, h))
 	b.WriteByte('\n')
 
-	// Status line.
-	b.WriteString(m.statusView())
+	// Bottom chrome (chromeBotLines lines): command builder, keys (or palette),
+	// status bar, message area.
+	b.WriteString(m.commandBar())
 	b.WriteByte('\n')
-
-	// Footer — the command palette replaces it while open, so the typed
-	// command is unmistakably visible at the bottom.
 	if m.paletteOpen {
 		b.WriteString(m.paletteBar())
 	} else {
 		b.WriteString(m.footerView())
 	}
+	b.WriteByte('\n')
+	b.WriteString(m.statusBar())
+	b.WriteByte('\n')
+	b.WriteString(m.statusView())
 	return b.String()
 }
 
@@ -485,6 +500,46 @@ func (m *rootModel) breadcrumbView() string {
 		}
 	}
 	return tuiCrumbStyle.Render(strings.Join(parts, " ▸ "))
+}
+
+// commandBar (the command builder) shows the CLI command equivalent to the
+// current screen / in-progress form input, so the UI teaches the CLI.
+func (m *rootModel) commandBar() string {
+	cmd := ""
+	if s := m.top(); s != nil {
+		cmd = s.cliCommand()
+	}
+	if cmd == "" {
+		return tuiDimStyle.Render("⌘ —")
+	}
+	return tuiDimStyle.Render("⌘ ") + tuiPathStyle.Render(ansi.Truncate(cmd, maxInt(1, m.width-2), "…"))
+}
+
+// statusBar shows compact context: the current screen, item count, and the
+// vault lock state.
+func (m *rootModel) statusBar() string {
+	parts := []string{m.breadcrumbTitle()}
+	switch s := m.top().(type) {
+	case *tableScreen:
+		parts = append(parts, itemCount(s.count))
+	case *listScreen:
+		parts = append(parts, itemCount(len(s.list.Items())))
+	}
+	if m.vaultOK {
+		if m.vault.Locked {
+			parts = append(parts, "locked")
+		} else {
+			parts = append(parts, "unlocked")
+		}
+	}
+	return tuiDimStyle.Render(strings.Join(parts, "  ·  "))
+}
+
+func itemCount(n int) string {
+	if n == 1 {
+		return "1 item"
+	}
+	return strconv.Itoa(n) + " items"
 }
 
 func (m *rootModel) statusView() string {
