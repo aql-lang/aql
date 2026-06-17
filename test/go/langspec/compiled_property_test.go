@@ -116,15 +116,21 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			return leaf(r, cStr, scope)
 		}
 	case cMap:
-		if r.Intn(3) == 0 {
+		switch r.Intn(4) {
+		case 0:
 			// copy-returning map update: (<map> set <key> <value>) -> a new map.
 			vc := randVCat(r)
 			m := genMap(r, vc, depth-1, scope)
 			return &gnode{op: "setmap", cat: cMap, ecat: vc, n: r.Intn(len(mapKeys)), kids: []*gnode{m, gen(r, vc, depth-1, scope)}}
+		case 1:
+			// value-filtered copy: (<map{Int}> filter [<cmp> N]) -> a sub-map.
+			// Result keeps the input map type (a map of Integer); the predicate
+			// runs per value. Quotation `[cmp N]` and KeyVal-lambda `.v` forms.
+			return genFilter(r, cMap, depth-1, scope)
 		}
 		return genMap(r, randVCat(r), depth-1, scope)
 	case cList:
-		switch r.Intn(4) {
+		switch r.Intn(5) {
 		case 0:
 			// `for <count> [<body using i>]` -> list of per-iteration values.
 			return &gnode{op: "for", cat: cList, ecat: cInt, kids: []*gnode{
@@ -135,6 +141,11 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		case 2:
 			// `(<litList> scan [<binop>])` -> running fold.
 			return &gnode{op: "scan", cat: cList, ecat: cInt, cmp: binOps[r.Intn(len(binOps))], kids: []*gnode{genLitList(r)}}
+		case 3:
+			// `(filter [<cmp> N] <litList>)` -> the kept sub-list. The predicate
+			// narrows the result to the INPUT collection type (a list of Integer);
+			// quotation `[cmp N]` and `{key value}`-lambda `.value` forms.
+			return genFilter(r, cList, depth-1, scope)
 		}
 		ec := randECat(r)
 		k := 1 + r.Intn(3)
@@ -167,6 +178,27 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 }
 
 var binOps = []string{"add", "mul", "sub"}
+
+// genFilter builds a predicate-`filter` over an all-Integer collection: a
+// literal int list (-> cList) or an int-valued map (-> cMap). filter keeps the
+// container shape, so the result narrows to the INPUT collection type — the
+// checker's "narrow filter to its input collection type" path. Two predicate
+// forms exercise distinct lowerings: the quotation block `[<cmp> N]` (the value
+// is on the stack) and a Function callback that reads the per-element pair
+// (`{key value}.value` over a list, KeyVal `.v` over a map — the ClosureInShape
+// closure-arg path). keys marks the lambda form; cmp/n carry the predicate.
+func genFilter(r *rand.Rand, c cat, depth int, scope []string) *gnode {
+	n := &gnode{op: "filter", cat: c, ecat: cInt, cmp: cmps[r.Intn(len(cmps))], n: r.Intn(6)}
+	if r.Intn(2) == 0 {
+		n.keys = []string{"L"} // Function (lambda) form
+	}
+	if c == cMap {
+		n.kids = []*gnode{genMap(r, cInt, depth, scope)}
+	} else {
+		n.kids = []*gnode{genLitList(r)}
+	}
+	return n
+}
 
 // genLitList builds a LITERAL int list (2-4 lits) — higher-order words compile
 // over a literal list but fall back over a computed (makelist) one.
@@ -663,6 +695,21 @@ func render(n *gnode, scope []string) string {
 		return "(each [" + n.cmp + " " + fmt.Sprint(n.n) + "] " + render(n.kids[0], scope) + ")"
 	case "scan":
 		return "(" + render(n.kids[0], scope) + " scan [" + n.cmp + "])"
+	case "filter":
+		// keys==["L"] selects the Function (lambda) form; the per-element field is
+		// `.value` over a list and `.v` over a map.
+		pred := "[" + n.cmp + " " + fmt.Sprint(n.n) + "]"
+		if len(n.keys) > 0 {
+			field := "value"
+			if n.cat == cMap {
+				field = "v"
+			}
+			pred = "([p:Any] => [p." + field + " " + n.cmp + " " + fmt.Sprint(n.n) + "])"
+		}
+		if n.cat == cMap {
+			return "(" + render(n.kids[0], scope) + " filter " + pred + ")"
+		}
+		return "(filter " + pred + " " + render(n.kids[0], scope) + ")"
 	case "case":
 		nClause := len(n.keys)
 		clauses := make([]string, 0, nClause*2+1)
