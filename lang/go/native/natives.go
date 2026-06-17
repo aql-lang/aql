@@ -241,8 +241,8 @@ var Natives = []NativeFunc{
 		Name: "join",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TList}, Handler: joinSepHandler, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: joinDefaultHandler, BarrierPos: -1},
+			{Args: []*Type{TString, TList}, Handler: joinSepHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TList}, Handler: joinDefaultHandler, Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 

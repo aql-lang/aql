@@ -20,7 +20,7 @@ WORD all
   [Node/List] barrier=1 returns=[Scalar/Boolean]
 WORD and
   [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
-  [Any Any] barrier=2 returns=[Any]
+  [Any Any] barrier=2 +returnsfn
 WORD any
   [Node/List] barrier=1 returns=[Scalar/Boolean]
 WORD append
@@ -242,7 +242,7 @@ WORD gte
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD guard
-  [Any Scalar/Boolean] barrier=1 returns=[Any]
+  [Any Scalar/Boolean] barrier=1 +returnsfn
 WORD has
   [Scalar/String Ideal/Class] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Store] barrier=1 returns=[Scalar/Boolean]
@@ -299,8 +299,8 @@ WORD istype
 WORD items
   [Any] barrier=1
 WORD join
-  [Scalar/String Node/List] barrier=2
-  [Node/List] barrier=1
+  [Scalar/String Node/List] barrier=2 returns=[Scalar/String]
+  [Node/List] barrier=1 returns=[Scalar/String]
 WORD jsonify
   [Node/Map Any] barrier=2
   [Any] barrier=1
@@ -388,9 +388,9 @@ WORD of
   [Node/List Any] barrier=1 runcheck typearg={1} returns=[Type]
 WORD or
   [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
-  [Any Any] barrier=1 returns=[Any]
+  [Any Any] barrier=1 +returnsfn
 WORD otherwise
-  [Any Any] barrier=1 returns=[Any]
+  [Any Any] barrier=1 +returnsfn
 WORD outer
   [Node/List Node/List Node/List] barrier=3 noeval={0} +returnsfn
 WORD over

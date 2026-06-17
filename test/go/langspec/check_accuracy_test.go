@@ -23,6 +23,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -379,4 +380,111 @@ func stackTypes(vs []eng.Value) string {
 		}
 	}
 	return "[" + strings.Join(parts, " ") + "]"
+}
+
+// ---- Any-frontier metric (the "narrow types instead of Any" goal):
+// counts clean value rows whose residual carrier stack still contains an
+// Any-bounded carrier — strict Carry<Any> or dynamic(Any), the two shapes
+// where the checker gave up to Any instead of a narrow type. (A dynamic
+// carrier with a real bound — dynamic(Integer) — is NOT counted; it has a
+// useful type.) Pinned as a ratchet (only decreases) so return-annotation
+// / ReturnsFn narrowing work is measured and an Any-widening regression is
+// caught. Unlike type-soundness this is a PRECISION metric, not a
+// soundness one: a high count is imprecise, not unsound.
+
+const pinnedAnyFrontierRows = 286 // June 2026 baseline — see TestCheckAnyFrontier
+
+func TestCheckAnyFrontier(t *testing.T) {
+	specDir := filepath.Join("..", "..", "..", "lang", "spec")
+	entries, err := os.ReadDir(specDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", specDir, err)
+	}
+
+	var anyRows, valueRows int
+	byFile := map[string]int{}
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		if e.Name() == "bytecode-combinations.tsv" {
+			continue
+		}
+		f, err := os.Open(filepath.Join(specDir, e.Name()))
+		if err != nil {
+			t.Fatalf("open: %v", err)
+		}
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimRight(scanner.Text(), " \t")
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.Split(line, "\t")
+			if len(parts) < 2 || strings.HasPrefix(strings.TrimSpace(parts[1]), "ERROR:") {
+				continue
+			}
+			checked, flagged := checkRow(t, strings.TrimSpace(parts[0]))
+			if flagged {
+				continue
+			}
+			valueRows++
+			if residualHasAnyFrontier(checked) {
+				anyRows++
+				byFile[e.Name()]++
+			}
+		}
+		f.Close()
+		if err := scanner.Err(); err != nil {
+			t.Fatalf("scanner: %v", err)
+		}
+	}
+
+	t.Logf("any-frontier: %d/%d clean value rows end with an Any carrier", anyRows, valueRows)
+	for _, kv := range topFiles(byFile, 10) {
+		t.Logf("  %3d  %s", kv.n, kv.name)
+	}
+	if anyRows > pinnedAnyFrontierRows {
+		t.Errorf("Any-frontier rows rose to %d (pin %d) — a word widened to Any where it previously narrowed",
+			anyRows, pinnedAnyFrontierRows)
+	} else if anyRows < pinnedAnyFrontierRows {
+		t.Logf("Any-frontier improved to %d — lower pinnedAnyFrontierRows to lock it in", anyRows)
+	}
+}
+
+// residualHasAnyFrontier reports whether any carrier in a residual stack
+// is Any-bounded (strict Any carrier or dynamic(Any)) — the "gave up to
+// Any" shape the frontier metric counts.
+func residualHasAnyFrontier(stk []eng.Value) bool {
+	for _, v := range stk {
+		if v.Parent != nil && v.Parent.Equal(eng.TAny) {
+			return true
+		}
+	}
+	return false
+}
+
+type fileCount struct {
+	name string
+	n    int
+}
+
+// topFiles returns the n spec files with the most Any-frontier rows,
+// most first — a worklist of where narrowing would pay off most.
+func topFiles(byFile map[string]int, n int) []fileCount {
+	out := make([]fileCount, 0, len(byFile))
+	for name, c := range byFile {
+		out = append(out, fileCount{name, c})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].n != out[j].n {
+			return out[i].n > out[j].n
+		}
+		return out[i].name < out[j].name
+	})
+	if len(out) > n {
+		out = out[:n]
+	}
+	return out
 }
