@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -225,9 +226,18 @@ func (m *rootModel) secretsTable() ([]table.Column, []table.Row) {
 	aliases, _ := m.ctl.listAliases()
 	rows := make([]table.Row, 0, len(aliases))
 	for _, a := range aliases {
-		rows = append(rows, table.Row{a.Name, dash(a.Provider), dash(aliasNamespace(a)), dash(a.ExpiresAt)})
+		rows = append(rows, table.Row{a.Name, dash(a.Provider), dash(aliasNamespace(a)), expiryCell(a.ExpiresAt)})
 	}
 	return cols, rows
+}
+
+// expiryCell shows the human countdown for the EXPIRES column ("in 89d" /
+// "expired 3d ago"), or "-" when unset.
+func expiryCell(rfc3339 string) string {
+	if cd := expiryCountdown(rfc3339); cd != "" {
+		return cd
+	}
+	return "-"
 }
 
 func (m *rootModel) buildSecrets() screen {
@@ -261,59 +271,49 @@ func (m *rootModel) buildSecrets() screen {
 		withCmd("aql vault list")
 }
 
-// secretReveal is the per-detail-page reveal state (the cleartext is held
-// only while shown, and cleared on hide / leaving the page).
-type secretReveal struct {
-	shown bool
-	value string
+// secretRevealedMsg carries a freshly-revealed value back to the detail
+// screen after the (possibly async) passphrase prompt.
+type secretRevealedMsg struct{ value string }
+
+// secretDetailScreen is the per-secret page: metadata, a reveal/hide toggle,
+// the key actions, and a SELECTABLE list of the commands to inject the secret
+// into a process (↑/↓ to choose, c to copy). It is the only place a value can
+// be revealed.
+type secretDetailScreen struct {
+	m      *rootModel
+	alias  string
+	shown  bool
+	value  string
+	cmds   []string
+	cursor int
 }
 
-// buildSecretDetail is the per-secret page: metadata, a reveal/hide toggle,
-// the key actions, and the copyable commands to inject the secret into a
-// process. It is the ONLY place a value can be revealed.
 func (m *rootModel) buildSecretDetail(alias string) screen {
-	rev := &secretReveal{}
-	render := func() string { return m.renderSecretDetail(alias, rev) }
-	acts := []pagerAction{
-		{binding: kReveal, run: func() tea.Cmd {
-			if rev.shown {
-				rev.shown, rev.value = false, ""
-				return reloadTop()
-			}
-			return m.requireAuth(func() tea.Cmd {
-				v, err := m.ctl.revealSecret(alias)
-				if err != nil {
-					return statusErr(err.Error())
-				}
-				rev.shown, rev.value = true, v
-				return reloadTop()
-			})
-		}},
-		{binding: kCopyExec, run: func() tea.Cmd {
-			label, err := m.ctl.copyToClipboard(execInjectCommand(alias))
-			if err != nil {
-				return statusErr("copy: " + err.Error())
-			}
-			return status("copied exec command to clipboard (" + label + ")")
-		}},
-		{binding: kRotate, run: func() tea.Cmd {
-			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRotateForm(alias)) })
-		}},
-		{binding: kRename, run: func() tea.Cmd {
-			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRenameForm(alias)) })
-		}},
-		{binding: kExpiry, run: func() tea.Cmd { return pushScreen(m.buildExpiryForm(alias)) }},
-		{binding: kDetailGrant, run: func() tea.Cmd { return pushScreen(m.buildGrantForm(alias)) }},
-		{binding: kRemove, run: func() tea.Cmd {
-			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRemoveForm(alias)) })
-		}},
+	return &secretDetailScreen{m: m, alias: alias, cmds: injectCommands(alias)}
+}
+
+// injectCommands are the exec recipes shown (and copyable) on the detail page.
+func injectCommands(alias string) []string {
+	env := strings.ToUpper(aliasBase(alias))
+	return []string{
+		"aql vault exec " + alias + " -- <your command>",
+		"aql vault exec " + alias + "=" + env + " -- <your command>",
+		"aql vault exec --for=npm " + alias + " -- npm publish",
 	}
-	return newPagerScreen(alias, render(), acts, render).
-		withHelp(`Everything about one secret. The value is shown only here, only when you
+}
+
+func (s *secretDetailScreen) Init() tea.Cmd       { return nil }
+func (s *secretDetailScreen) Title() string       { return s.alias }
+func (s *secretDetailScreen) capturesInput() bool { return false }
+func (s *secretDetailScreen) reload() tea.Cmd     { return nil } // View reads live state
+func (s *secretDetailScreen) cliCommand() string  { return "aql vault get " + s.alias }
+
+func (s *secretDetailScreen) helpInfo() string {
+	return `Everything about one secret. The value is shown only here, only when you
 reveal it, and it is cleared again when you leave this page.
 
+  ↑/↓ select an inject command   ·   c copy the selected command
   r   Reveal the value (press r again to hide it). Masked otherwise.
-  c   Copy the "exec" command below to your clipboard.
   R   Rotate: replace the value with a new one, keeping the same alias and its
       capabilities. Tokens issued for it keep working unless you also revoke.
   m   Rename the secret, or move it to another namespace.
@@ -324,17 +324,87 @@ reveal it, and it is cleared again when you leave this page.
 The "Inject into a process" commands run the secret into a child process's
 environment without it ever touching disk or your shell history:
 "aql vault exec <alias> -- cmd" injects it as $<alias>; add
-"--for=npm|cargo|gem|pypi|uv" for publishing recipes.`).
-		withCmd("aql vault get " + alias)
+"--for=npm|cargo|gem|pypi|uv" for publishing recipes.`
 }
 
-// execInjectCommand is the primary command copied by 'c' on the detail page.
-func execInjectCommand(alias string) string {
-	return "aql vault exec " + alias + " -- <your command>"
+func (s *secretDetailScreen) shortHelp() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "select cmd")),
+		kCopyExec, kReveal, kRotate, kRename, kExpiry, kDetailGrant, kRemove,
+	}
+}
+func (s *secretDetailScreen) fullHelp() [][]key.Binding { return [][]key.Binding{s.shortHelp()} }
+
+func (s *secretDetailScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
+	switch msg := msg.(type) {
+	case secretRevealedMsg:
+		s.shown, s.value = true, msg.value
+		return s, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if s.cursor > 0 {
+				s.cursor--
+			}
+			return s, nil
+		case "down", "j":
+			if s.cursor < len(s.cmds)-1 {
+				s.cursor++
+			}
+			return s, nil
+		}
+		switch {
+		case key.Matches(msg, kReveal):
+			if s.shown {
+				s.shown, s.value = false, ""
+				return s, nil
+			}
+			alias := s.alias
+			return s, s.m.requireAuth(func() tea.Cmd {
+				v, err := s.m.ctl.revealSecret(alias)
+				if err != nil {
+					return statusErr(err.Error())
+				}
+				return func() tea.Msg { return secretRevealedMsg{value: v} }
+			})
+		case key.Matches(msg, kCopyExec):
+			if s.cursor < len(s.cmds) {
+				label, err := s.m.ctl.copyToClipboard(s.cmds[s.cursor])
+				if err != nil {
+					return s, statusErr("copy: " + err.Error())
+				}
+				return s, status("copied to clipboard (" + label + ")")
+			}
+		case key.Matches(msg, kRotate):
+			return s, s.m.requireAuth(func() tea.Cmd { return pushScreen(s.m.buildRotateForm(s.alias)) })
+		case key.Matches(msg, kRename):
+			return s, s.m.requireAuth(func() tea.Cmd { return pushScreen(s.m.buildRenameForm(s.alias)) })
+		case key.Matches(msg, kExpiry):
+			return s, pushScreen(s.m.buildExpiryForm(s.alias))
+		case key.Matches(msg, kDetailGrant):
+			return s, pushScreen(s.m.buildGrantForm(s.alias))
+		case key.Matches(msg, kRemove):
+			return s, s.m.requireAuth(func() tea.Cmd { return pushScreen(s.m.buildRemoveForm(s.alias)) })
+		}
+	}
+	return s, nil
 }
 
-// renderSecretDetail builds the detail-page body for one alias.
-func (m *rootModel) renderSecretDetail(alias string, rev *secretReveal) string {
+func (s *secretDetailScreen) View(width, height int) string {
+	return s.m.secretDetailBody(s.alias, s.shown, s.value, s.cursor)
+}
+
+// detailValueCol is where the value column starts ("  " + 11-wide label).
+const detailValueCol = 13
+
+// detailRow renders an aligned "label  value" line for the detail page.
+func detailRow(label, value string) string {
+	return "  " + tuiDimStyle.Render(fmt.Sprintf("%-11s", label)) + value + "\n"
+}
+
+// secretDetailBody renders the detail page for an alias with the given reveal
+// state and selected command index.
+func (m *rootModel) secretDetailBody(alias string, shown bool, value string, sel int) string {
 	a, ok := m.ctl.alias(alias)
 	var b strings.Builder
 	b.WriteString(tuiTitleStyle.Render("Secret  " + alias))
@@ -343,37 +413,46 @@ func (m *rootModel) renderSecretDetail(alias string, rev *secretReveal) string {
 		b.WriteString(detailRow("provider", dash(a.Provider)))
 		b.WriteString(detailRow("namespace", nsLabel(aliasNamespace(a))))
 		b.WriteString(detailRow("created", dash(a.CreatedAt)))
-		b.WriteString(detailRow("expires", dash(a.ExpiresAt)))
+		exp := dash(a.ExpiresAt)
+		if cd := expiryCountdown(a.ExpiresAt); cd != "" {
+			exp = a.ExpiresAt + "  " + tuiDimStyle.Render("("+cd+")")
+		}
+		b.WriteString(detailRow("expires", exp))
 		b.WriteString(detailRow("source", dash(a.Source)))
 	}
 	b.WriteByte('\n')
-	if rev.shown {
-		b.WriteString(detailRow("value", tuiErrStyle.Render(rev.value)))
-		b.WriteString(tuiDimStyle.Render("            ⚠ visible — press r to hide\n"))
+	indent := strings.Repeat(" ", detailValueCol)
+	if shown {
+		b.WriteString(detailRow("value", tuiErrStyle.Render(value)))
+		b.WriteString(indent + tuiDimStyle.Render("⚠ visible — press r to hide") + "\n")
 	} else {
 		b.WriteString(detailRow("value", tuiDimStyle.Render("•••••••• (hidden)")))
-		b.WriteString(tuiDimStyle.Render("            press r to reveal\n"))
+		b.WriteString(indent + tuiDimStyle.Render("press r to reveal") + "\n")
 	}
 	b.WriteByte('\n')
-	b.WriteString(tuiSectionStyle.Render("Inject into a process (run from your shell)"))
+	b.WriteString(tuiSectionStyle.Render("Inject into a process — ↑/↓ select · c copy"))
 	b.WriteByte('\n')
-	env := strings.ToUpper(aliasBase(alias))
-	for _, line := range []string{
-		"aql vault exec " + alias + " -- <your command>",
-		"aql vault exec " + alias + "=" + env + " -- <your command>",
-		"aql vault exec --for=npm " + alias + " -- npm publish",
-	} {
-		b.WriteString("  " + tuiPathStyle.Render(line) + "\n")
+	for i, line := range injectCommands(alias) {
+		cursor, style := "  ", tuiPathStyle
+		if i == sel {
+			cursor, style = tuiCursorStyle.Render("▸ "), tuiPathStyle.Bold(true)
+		}
+		b.WriteString("  " + cursor + style.Render(line) + "\n")
 	}
-	b.WriteByte('\n')
-	b.WriteString(tuiDimStyle.Render("press ") + tuiKeyStyle.Render("c") +
-		tuiDimStyle.Render(" to copy the first command, or select any line with the mouse"))
 	return b.String()
 }
 
-// detailRow renders an aligned "label  value" line for the detail page.
-func detailRow(label, value string) string {
-	return "  " + tuiDimStyle.Render(fmt.Sprintf("%-11s", label)) + value + "\n"
+// expiryCountdown turns an RFC3339 expiry into a human countdown like
+// "in 89d" or "expired 3d ago"; "" when unset/unparseable.
+func expiryCountdown(rfc3339 string) string {
+	if rfc3339 == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, rfc3339)
+	if err != nil {
+		return ""
+	}
+	return expiryStatus(t, time.Now())
 }
 
 func (m *rootModel) buildAddForm() screen {

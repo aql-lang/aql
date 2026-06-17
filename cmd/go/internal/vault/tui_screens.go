@@ -13,13 +13,40 @@ package vault
 // controller calls behind the action keys.
 
 import (
+	"fmt"
+	"io"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/x/ansi"
 )
+
+// arrowDelegate renders list rows with a left-hand "▸" cursor on the current
+// row (instead of bubbles' default purple left border), for a consistent
+// selection indicator across every menu and the vault picker.
+type arrowDelegate struct{}
+
+func (arrowDelegate) Height() int                         { return 2 }
+func (arrowDelegate) Spacing() int                        { return 0 }
+func (arrowDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
+func (arrowDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	it, ok := item.(listItem)
+	if !ok {
+		return
+	}
+	width := maxInt(1, m.Width())
+	cursor, titleStyle := "  ", tuiTextStyle.Bold(true)
+	if index == m.Index() {
+		cursor, titleStyle = tuiCursorStyle.Render("▸ "), tuiVaultStyle
+	}
+	title := ansi.Truncate(cursor+titleStyle.Render(it.name), width, "…")
+	desc := ansi.Truncate("  "+tuiDimStyle.Render(it.desc), width, "…")
+	fmt.Fprint(w, title+"\n"+desc)
+}
 
 // opResultMsg reports the outcome of a mutating operation so the root can
 // show a status line and refresh the active vault + top screen.
@@ -74,15 +101,7 @@ type listScreen struct {
 }
 
 func newListScreen(title string, items []list.Item, acts []listKeyAction, reloadFn func() []list.Item) *listScreen {
-	// Higher-contrast delegate: bright titles, readable (not faint)
-	// descriptions, and a clearly highlighted selection.
-	d := list.NewDefaultDelegate()
-	d.Styles.NormalTitle = d.Styles.NormalTitle.Foreground(adapt("0", "15")).Bold(true)
-	d.Styles.NormalDesc = d.Styles.NormalDesc.Foreground(adapt("8", "7"))
-	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(adapt("6", "14")).Bold(true)
-	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(adapt("4", "12"))
-	d.SetSpacing(0) // compact: title+desc per item, no blank gap, so short menus fit
-	l := list.New(items, d, 0, 0)
+	l := list.New(items, arrowDelegate{}, 0, 0)
 	l.Title = title
 	l.SetShowHelp(false)
 	l.SetShowStatusBar(false)
@@ -176,6 +195,7 @@ type tableAction struct {
 type tableScreen struct {
 	title    string
 	tbl      table.Model
+	rows     []table.Row // data rows incl. the leading cursor cell
 	acts     []tableAction
 	count    int
 	emptyMsg string
@@ -184,13 +204,44 @@ type tableScreen struct {
 	cmdText  string
 }
 
+// arrowColumn is the narrow leading column that carries the "▸" cursor.
+func arrowColumn() table.Column { return table.Column{Title: " ", Width: 2} }
+
+// withArrowCol prepends an (initially blank) cursor cell to each data row.
+func withArrowCol(rows []table.Row) []table.Row {
+	out := make([]table.Row, len(rows))
+	for i, r := range rows {
+		out[i] = append(table.Row{" "}, r...)
+	}
+	return out
+}
+
 func newTableScreen(title string, cols []table.Column, rows []table.Row, acts []tableAction, emptyMsg string, reloadFn func() ([]table.Column, []table.Row)) *tableScreen {
-	t := table.New(table.WithColumns(cols), table.WithRows(rows), table.WithFocused(true))
+	t := table.New(
+		table.WithColumns(append([]table.Column{arrowColumn()}, cols...)),
+		table.WithFocused(true),
+	)
 	st := table.DefaultStyles()
 	st.Header = st.Header.Bold(true)
-	st.Selected = tuiCursorStyle.Bold(true)
+	st.Selected = tuiVaultStyle // current row in the accent color (the ▸ marks it too)
 	t.SetStyles(st)
-	return &tableScreen{title: title, tbl: t, acts: acts, count: len(rows), emptyMsg: emptyMsg, reloadFn: reloadFn}
+	s := &tableScreen{title: title, tbl: t, acts: acts, count: len(rows), emptyMsg: emptyMsg, reloadFn: reloadFn}
+	s.rows = withArrowCol(rows)
+	s.applyCursor()
+	return s
+}
+
+// applyCursor sets the "▸" marker on the current row and "" elsewhere.
+func (s *tableScreen) applyCursor() {
+	cur := s.tbl.Cursor()
+	for i := range s.rows {
+		if i == cur {
+			s.rows[i][0] = "▸"
+		} else {
+			s.rows[i][0] = " "
+		}
+	}
+	s.tbl.SetRows(s.rows)
 }
 
 func (s *tableScreen) Init() tea.Cmd       { return nil }
@@ -218,6 +269,7 @@ func (s *tableScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	s.tbl, cmd = s.tbl.Update(msg)
+	s.applyCursor() // keep the ▸ marker on the (possibly moved) cursor row
 	return s, cmd
 }
 
@@ -241,12 +293,13 @@ func (s *tableScreen) fullHelp() [][]key.Binding { return [][]key.Binding{s.shor
 func (s *tableScreen) reload() tea.Cmd {
 	if s.reloadFn != nil {
 		cols, rows := s.reloadFn()
-		s.tbl.SetColumns(cols)
-		s.tbl.SetRows(rows)
+		s.tbl.SetColumns(append([]table.Column{arrowColumn()}, cols...))
+		s.rows = withArrowCol(rows)
 		s.count = len(rows)
 		if s.tbl.Cursor() >= s.count {
 			s.tbl.SetCursor(maxInt(0, s.count-1))
 		}
+		s.applyCursor()
 	}
 	return nil
 }

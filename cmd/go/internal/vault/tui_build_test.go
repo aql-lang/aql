@@ -3,6 +3,7 @@ package vault
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -164,7 +165,7 @@ func TestSecretDetailMasksRevealsAndInjects(t *testing.T) {
 	}
 	m := newRootModel(ctl)
 
-	masked := m.renderSecretDetail("github_token", &secretReveal{})
+	masked := m.secretDetailBody("github_token", false, "", 0)
 	if strings.Contains(masked, "ghp-xyz") {
 		t.Error("masked detail must not show the value")
 	}
@@ -174,9 +175,51 @@ func TestSecretDetailMasksRevealsAndInjects(t *testing.T) {
 		}
 	}
 
-	shown := m.renderSecretDetail("github_token", &secretReveal{shown: true, value: "ghp-xyz"})
+	shown := m.secretDetailBody("github_token", true, "ghp-xyz", 0)
 	if !strings.Contains(shown, "ghp-xyz") {
 		t.Error("revealed detail should show the value")
+	}
+}
+
+func TestSecretDetailSelectRevealCopy(t *testing.T) {
+	ctl, _ := newTestController(t)
+	if err := ctl.addSecret("k", "v", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	m := newRootModel(ctl)
+	s := m.buildSecretDetail("k").(*secretDetailScreen)
+
+	// down arrow selects the next command.
+	ns, _ := s.Update(tea.KeyMsg{Type: tea.KeyDown})
+	s = ns.(*secretDetailScreen)
+	if s.cursor != 1 {
+		t.Errorf("down -> cursor %d, want 1", s.cursor)
+	}
+	// a reveal message sets the shown value.
+	ns, _ = s.Update(secretRevealedMsg{value: "v"})
+	s = ns.(*secretDetailScreen)
+	if !s.shown || s.value != "v" {
+		t.Error("secretRevealedMsg should set shown+value")
+	}
+	if !strings.Contains(s.View(80, 24), "▸ ") {
+		t.Error("the selected inject command should carry the ▸ cursor")
+	}
+}
+
+func TestExpiryCountdown(t *testing.T) {
+	future := time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339)
+	if cd := expiryCountdown(future); !strings.HasPrefix(cd, "in ") {
+		t.Errorf("future expiry countdown = %q, want 'in …'", cd)
+	}
+	past := time.Now().Add(-72 * time.Hour).UTC().Format(time.RFC3339)
+	if cd := expiryCountdown(past); !strings.Contains(cd, "expired") {
+		t.Errorf("past expiry countdown = %q, want 'expired …'", cd)
+	}
+	if cd := expiryCountdown(""); cd != "" {
+		t.Errorf("empty expiry should have no countdown, got %q", cd)
+	}
+	if expiryCell("") != "-" {
+		t.Error("empty expiry cell should be '-'")
 	}
 }
 
