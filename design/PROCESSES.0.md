@@ -48,16 +48,17 @@ words. Streams are about data flow; processes are about concurrent state and
 message protocols. A future network server uses both — actors own connections,
 streams move bytes.
 
-### Relationship to `BEHAVIOURS.0.md`
+### Relationship to `SERVICES.0.md`
 
-`BEHAVIOURS.0.md` designs the **primary developer experience** — an OTP-style
-`gen_server` model (`call`/`cast`/`handle` with threaded state, composed into
-supervision trees) — *on top of* this substrate. The mapping is direct: a
-started **server** is an actor whose selective `receive` *is* its handler patrun,
-and `call` is `send` + await-reply. This document is the low-level layer (raw
-processes/mailboxes, like Erlang processes); `BEHAVIOURS.0.md` is the high-level
-behaviour most code is written against (like OTP `gen_server` + `supervisor`).
-The two are designed together.
+`SERVICES.0.md` designs the **primary developer experience** — a unified
+**service / server** model (a service owns state and answers pattern-matched
+`call`/`send` requests; a server is a supervised collection of services) — *on
+top of* this substrate, and folds the CLI's existing servers (`registry`/`lsp`/
+`exec`/`api`/`tui`/`vault-proxy`) into it. The mapping is direct: a served
+**service** is an actor whose selective `receive` *is* its handler patrun, and
+`call` is `send` + await-reply. This document is the low-level layer (raw
+processes/mailboxes, like Erlang processes); `SERVICES.0.md` is the high-level
+layer most code is written against. The two are designed together.
 
 ### Scope decisions (agreed)
 
@@ -329,9 +330,9 @@ What this RFC adds, and what still blocks the network-server end-goal:
 - **Later (optional): distribution.** Location-transparent `send` across nodes,
   the BEAM feature that turns actors into a distributed system.
 
-The OTP-style **gen_server/supervision DX** that rides on these phases is
-specified separately in `BEHAVIOURS.0.md` (its `OTP.start`/`supervise`/`listen`/
-`connect` build on phases 1–3 here).
+The OTP-style **service/server DX** that rides on these phases is specified
+separately in `SERVICES.0.md` (its `serve`/`server`/`proxy`/`listen`/`connect`
+build on phases 1–3 here).
 
 ## 10. Worked example
 
