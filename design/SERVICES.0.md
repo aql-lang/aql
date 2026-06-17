@@ -39,7 +39,7 @@ This design went too far in both directions before settling:
 | handler state | closure `Store` | `[req state]->{reply newstate}` tuple | **`[req state] -> reply`**, `state` a private mutable `Store` |
 | compose units | `prior` override chain | supervision tree | **server** + **proxy** (see §3, §6) |
 | run it | `host` | `start_link` | **`serve`** (reuse the CLI verb) |
-| no-match error | `[aql/no_action]` | `[aql/no_clause]` | **`[aql/no_match]`** |
+| no-match error code | `no_action` | `no_clause` | **`no_match`** |
 | framework module | `aql:mesh` | `aql:otp` | **`aql:serve`** + **`aql:net`** |
 
 The two anchors that pull this back to AQL: **`add`** (services register handlers
@@ -114,7 +114,8 @@ call {request} <service> -> reply
 ```
 
 Route `request` through the patrun (most-specific wins); on no match raise
-**`[aql/no_match]`** unless a catch-all `add {} […]` exists; invoke the handler
+the **`no_match`** error (`raise no_match …`) unless a catch-all `add {} […]`
+exists; invoke the handler
 with `(request, state)` and return its reply. Reuses
 `execFnDefLiteral`/`CallAQL`.
 
@@ -183,7 +184,7 @@ export "New" fn [[opts:Map] [Service] [
 def c ( Counter.New {start: 10} )
 call {op:'inc} c            # → 11
 call {op:'get} c            # → 11
-call {op:'nope} c           # raises [aql/no_match]
+call {op:'nope} c           # raises no_match
 ```
 
 ## 3. A server is a collection of services (module `aql:serve`)
@@ -399,7 +400,166 @@ jobs). AQL should take a stance up front:
 | Hot code loading complexity | rolling/blue-green deploys | not a goal; out of scope |
 | Testing concurrency | QuickCheck, PropEr, Concuerror | property-based testing is already idiomatic here (`lang/spec`); systematic concurrency testing to follow |
 
-## 8. Gap analysis — what AQL still lacks
+## 8. Delivery semantics — backpressure & explicit failure
+
+§7.1–7.2 set the *stances*; this section specifies them. Both apply only once a
+service is **`serve`d** as a process (or reached remotely via **`connect`**): an
+in-process `call`/`send` is a direct function call with neither a mailbox nor a
+delivery step, so neither concern arises until you cross a process boundary.
+(Syntax below is illustrative; error forms follow `lang/spec/error.tsv` —
+`raise <code> "msg"` and `do […] error […]`.)
+
+### 8.1 Bounded mailboxes & `send`
+
+**Mailbox.** Every `serve`d service has a bounded mailbox. Capacity and overflow
+policy are set where the service is placed in a server:
+
+```
+server [ svc ] {mailbox: 1024  overflow: 'block}
+```
+
+- `mailbox: N` — capacity in messages (default `1024`). `mailbox: 'unbounded` is
+  allowed but must be written explicitly — you opt *in* to BEAM's footgun, you
+  never get it by accident.
+- `overflow:` — what a delivery does when the mailbox is full:
+  - **`'block`** (default) — the sender blocks until space frees. Backpressure
+    propagates to the producer, pacing it to the service's drain rate.
+  - **`'fail`** — the delivery raises **`overload`** immediately; the caller sheds
+    or reroutes.
+  - **`'drop`** — the new message is discarded and the delivery returns; lossy,
+    for best-effort/telemetry traffic (a `'drop_oldest` variant evicts the head).
+
+**`send` (async)** resolves against the policy: enqueue and return `None` if there
+is room; otherwise block / raise `overload` / drop. An optional bound on blocking
+— `send {req} svc {within: (TimeUtil.seconds 1)}` — blocks at most that long under
+`'block`, then raises `overload`. `send` to a dead service raises `down`; `send`
+never raises `timeout` (no reply is awaited).
+
+**`call` is self-limiting.** A `call` also enqueues (request + reply handle), so it
+is bounded by the same mailbox — but because the caller blocks for the reply, at
+most `N` calls are in flight before further callers block to enqueue. So `call`
+gives backpressure *for free*; the explicit policy mainly governs `send`.
+
+**Observability.** `call {op:'status} svc` reports `{mailbox: {depth capacity
+high_water dropped}}`, so overload is measurable, not silent. (The bound governs
+the inbound mailbox; the per-process save-queue used for selective `receive` in
+`PROCESSES.0.md` is separate.)
+
+**Why.** Erlang's unbounded mailbox is its classic overload/OOM failure mode and
+makes selective `receive` O(n). A bound turns overload into one of three *chosen*
+behaviours — pace, shed, or drop — instead of an unbounded-queue death spiral.
+
+```aql
+"aql:serve"     import
+"aql:time-util" import
+
+# A slow worker behind a bounded, backpressured mailbox.
+def worker ( service {} )
+add {op:'job} [ [req state] => [ heavy-work req.work  None ] ] worker
+
+# Default 'block paces producers: the 1025th in-flight send parks the
+# producer until the worker drains one — no unbounded growth.
+serve ( server [ worker ] {mailbox: 1024  overflow: 'block} )
+
+# A telemetry sink that must never block the hot path: drop on overflow.
+def metrics ( service {} )
+add {op:'metric} [ [req state] => [ record req  None ] ] metrics
+serve ( server [ metrics ] {mailbox: 4096  overflow: 'drop} )
+
+# A front door that sheds load rather than queueing without limit:
+serve ( server [ worker ] {mailbox: 256  overflow: 'fail} )
+do [ send {op:'job  work: payload} worker ]
+error [ case [
+    [get code eq overload/q] [ "503 busy, retry later" ]   # caller shed load
+    [ raise ] ] ]                                          # re-raise anything else
+```
+
+### 8.2 Explicit failure for served / remote `call`
+
+An **in-process** `call` has two outcomes: it returns the reply, or it propagates
+whatever the handler `raise`d (an *application* error). A **`serve`d or
+`connect`ed** `call` adds failure modes with no in-process analogue — the request
+might never arrive, the service might be dead, the reply might never come. AQL
+makes these explicit three ways.
+
+**(1) A deadline is always in effect.** A served/remote `call` takes a timeout, and
+one is *always* applied:
+
+```
+call {req} svc {timeout: (TimeUtil.seconds 5)}
+```
+
+If omitted, a default deadline applies (proposed `5s`). `timeout: 'infinity` is
+permitted but must be written explicitly — you can never *accidentally* hang
+forever, the way an Erlang `receive` with no `after` can.
+
+**(2) A closed, named set of delivery errors,** distinct from application errors,
+each catchable via `do … error …` and dispatchable on `code`:
+
+| code | meaning | did the request run? |
+| --- | --- | --- |
+| `timeout` | no reply within the deadline | **unknown** — may have run |
+| `down` | target crashed / supervisor gave up / never existed — a dead handle (ties to `PROCESSES.0.md` monitors) | **unknown** — possibly partial |
+| `overload` | mailbox full under `'fail` / timed-out `'block` (§8.1) | **no** — never enqueued |
+| `transport` | remote only: connection refused/reset/closed, DNS/TLS — carries the cause | pre-send **no** / post-send **unknown** |
+
+An **application error** the handler raised (e.g. `raise bad_input "…"`) propagates
+back **unchanged** — same `code`, `message`, and payload, serialized across
+transport — so the caller distinguishes *"the call could not complete"* (the
+delivery codes above) from *"the service ran and said no"* (the app error).
+
+**(3) The type marks remote `call` as fallible.** The static type of a `connect`ed
+(or `serve`d) service handle tags its `call` as *may-raise-delivery-error*; an
+in-process `Service` handle's `call` is not so tagged. The checker can then flag a
+remote `call` whose delivery failures are never handled — the "make failure
+explicit" lesson enforced, lightweight checked-exception style.
+
+**Retries & idempotency.** Because `timeout`/`down` leave the outcome *unknown*, the
+runtime never silently retries them. A caller that knows a request is idempotent
+opts in:
+
+```
+call {req} svc {timeout: (TimeUtil.seconds 2)  retries: 3  idempotent: true}
+```
+
+- `overload` (and pre-send `transport`) → never executed → retried automatically,
+  even without `idempotent`.
+- `timeout` / `down` / post-send `transport` → unknown → retried **only** when
+  `idempotent: true`; otherwise the error surfaces for the caller to reconcile.
+
+This honesty about "unknown outcome" is the whole point: the model refuses to
+pretend a timed-out remote mutation definitely did — or definitely did not —
+happen.
+
+```aql
+"aql:serve"     import
+"aql:net"       import
+"aql:time-util" import
+
+# Reach a remote service; its `call` is statically fallible.
+def billing ( connect {http: "https://billing.internal"} )
+
+# Read path — idempotent, so auto-retry is safe; degrade on failure.
+def total (
+  do [ call {op:'get-total  user: uid} billing
+         {timeout: (TimeUtil.seconds 2)  retries: 3  idempotent: true} ]
+  error [ case [
+      [get code eq timeout/q]   [ -1 ]                  # unknown → show stale
+      [get code eq down/q]      [ -1 ]
+      [get code eq transport/q] [ raise unavailable "billing offline" ]
+      [ raise ] ] ] )                                   # app errors propagate
+
+# Write path — NOT idempotent: never blind-retry; reconcile a timeout.
+do [ call {op:'charge  user: uid  cents: 500} billing
+       {timeout: (TimeUtil.seconds 5)} ]
+error [ case [
+    [get code eq timeout/q]  [ enqueue-reconciliation uid ]  # unknown → verify
+    [get code eq down/q]     [ enqueue-reconciliation uid ]
+    [get code eq overload/q] [ retry-later uid ]             # definitely not charged
+    [ raise ] ] ]                                           # app errors propagate
+```
+
+## 9. Gap analysis — what AQL still lacks
 
 - **`Service` type + `add`/`call`/`send`/`state`** and the `[req state] -> reply`
   handler contract (the patrun router is reused; invocation reuses
@@ -414,25 +574,29 @@ jobs). AQL should take a stance up front:
   `PERMISSIONS.10.md` scopes.
 - **Refactor of the Go servers** onto the shared service/transport/lifecycle core
   (§5) — mechanical but broad.
-- **Bounded mailboxes + backpressure** for `send` (§7.2) — a per-service mailbox
-  bound with block-or-fail-fast on overload; depends on the `PROCESSES.0.md`
-  mailbox implementation.
+- **Bounded mailboxes + backpressure** for `send` (§8.1) — per-service capacity +
+  `'block`/`'fail`/`'drop` overflow; depends on the `PROCESSES.0.md` mailbox.
+- **Explicit-failure `call`** (§8.2) — mandatory deadline, the `timeout`/`down`/
+  `overload`/`transport` delivery-error set, fallible-call typing, and
+  idempotent-only retries; depends on monitors (`PROCESSES.0.md`) and transport.
 
-## 9. Phased roadmap
+## 10. Phased roadmap
 
 - **Phase 1: in-process service.** `service`, `add`, `call`, `send`, `state`,
-  `[aql/no_match]` — all core. Pure request→handler over reused patrun, state in
+  `no_match` — all core. Pure request→handler over reused patrun, state in
   a `Store`. No processes.
 - **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
-  control requests; bounded mailboxes + backpressure for `send` (§7.2).
+  control requests; bounded mailboxes + backpressure for `send` (§8.1); the
+  served `call` deadline + delivery-error set (§8.2).
 - **Phase 3: transport + proxy.** `aql:net` `listen`/`connect` (HTTP/stdio/TCP/
-  JSON-RPC); `proxy` with streaming replies and capability-checked interceptors;
-  begin refactoring the CLI servers (§5) onto the model — vault-proxy as the
-  proving ground. → the network-server goal.
+  JSON-RPC); remote `call` failure modes + fallible-call typing + retries (§8.2);
+  `proxy` with streaming replies and capability-checked interceptors; begin
+  refactoring the CLI servers (§5) onto the model — vault-proxy as the proving
+  ground. → the network-server goal.
 - **Later: distribution.** Location-transparent `call`/`send` across nodes.
 
-## 10. Worked example
+## 11. Worked example
 
 ```aql
 "aql:serve" import
@@ -453,7 +617,7 @@ def gw ( proxy ( connect {http: "https://api.example.com"} ) {
 serve ( server [ app gw ] )               # run everything (blocks)
 ```
 
-## 11. Open questions
+## 12. Open questions
 
 1. **`state` mutation vs purity** — the settled model mutates a `Store`; should a
    pure variant (`add` with `[req state] -> {reply state}`) also be offered for
@@ -470,3 +634,10 @@ serve ( server [ app gw ] )               # run everything (blocks)
    later.)
 5. **Go-server refactor order** — refactor the simplest endpoint (registry) first
    to prove the shared core, then the proxy, then stdio (repl/lsp)? (Leaning yes.)
+6. **Default deadline & mailbox values** (§8) — are `timeout: 5s`, `mailbox: 1024`,
+   `overflow: 'block` the right defaults, and should they be per-profile
+   (`PERMISSIONS.10.md`) rather than global constants? (Leaning per-profile
+   defaults with per-service overrides.)
+7. **Fallible-call strictness** (§8.2) — is an unhandled remote `call` a checker
+   *warning* or an *error*? (Leaning warning first, to avoid friction before the
+   type story is mature.)
