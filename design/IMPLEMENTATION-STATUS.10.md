@@ -8,9 +8,14 @@ Filenames carry a `0–10` implementation-completeness suffix (e.g.
 `PLAN.10.md` is fully implemented, `XML.0.md` is design-only). The number
 after the dot is that indicator, **not** a version. This audit found the
 suffix to be a reliable signal — every `.10` doc checked is genuinely
-implemented — with a few docs whose suffix understates reality (notably
-`TCO-STAGED.0`, `LAZY-ARG-RESOLUTION.0`, and `NUMERIC-TOWER.0`, all of which
-landed after their suffix was set).
+implemented. A 2026-06-17 pass renamed three docs whose suffix understated
+reality to `.10` — `TCO-STAGED`, `LAZY-ARG-RESOLUTION`, and
+`checker-accuracy-review` — and updated their ~50 in-tree references.
+`NUMERIC-TOWER.0` keeps its suffix because it was *superseded* by
+`BIGNUM-0D.10`: its specific design did not land even though bignums did. The
+`aql-bytecode-*.0` cluster keeps `.0` because it is genuinely **partial**
+(Stages 0–5 of 7 landed; default-on pending) — a single completeness digit
+would misstate an in-flight effort either way.
 
 > The canonical list of *words* and *modules* is the tool itself: run
 > `aql describe` (words, categories, modules) and `aql help` (CLI). This
@@ -45,7 +50,7 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 
 ## Recent Changes (since the 2026-05 status)
 
-- **Tail-call optimization** — `TCO.10` / `TCO-STAGED.0` fully landed
+- **Tail-call optimization** — `TCO.10` / `TCO-STAGED.10` fully landed
   (`OpTailCallUser` in `eng/go/bytecode.go`, frame replacement in `fn_frame.go`).
 - **Bytecode compiler + VM** — staged implementation (`eng/go/bytecode.go`,
   `emit*.go`, `vm*.go`); Stages 0–5 complete (2607 spec rows compile-or-fallback,
@@ -81,8 +86,8 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 | SIG-ORDER-REFACTOR.10 | top-first arg order; `sig_order_guard_test.go`. |
 | FUNCTION-MODEL.10 | single dispatch path via `execMatch`; FnDefInfo collapse. |
 | TAPE-DATA-STRUCTURE.10 / RECURSION-PERFORMANCE.10 | gap-buffer tape `eng/go/tape.go`. |
-| TCO.10 / TCO-STAGED.0 | `OpTailCallUser`, `fn_frame.go` frame replacement. |
-| LAZY-ARG-RESOLUTION.0 | `resolveForwardArgs` in `eng/go/engine.go`. |
+| TCO.10 / TCO-STAGED.10 | `OpTailCallUser`, `fn_frame.go` frame replacement. |
+| LAZY-ARG-RESOLUTION.10 | `resolveForwardArgs` in `eng/go/engine.go`. |
 | FORWARD-COLLECTION-PHASES.10 | `ForwardInfo.Speculative`, `/u` barrier. |
 | FORWARD-STRAND-ADVISORY.10 | `checkForwardStrandsOperand`, `forward_strands_operand` code. |
 | PARSING.10 | `StructUtil.parse` + `Vm.parse` (modules/struct.go, vm.go). |
@@ -127,7 +132,7 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 | CARRIER-STATIC-TYPECHECK-REPORT.10 | `eng/go/carrier.go` (2296 lines), `check.go`. |
 | checker-loud-diagnostics-report.10 | check-mode loud gates; `aql check`. |
 | STATIC_ANALYSIS_REPORT.10 | golangci-lint/govulncheck CI. |
-| checker-accuracy-review.0 | findings A1–A9 landed; `check_accuracy_test.go`. |
+| checker-accuracy-review.10 | findings A1–A9 landed; `check_accuracy_test.go`. |
 | PERMISSIONS.10 / PERMISSIONS-PLAN.10 | `lang/go/policy/` (8 files) + `capabilities/`. |
 | PBT-PLAN.10 / aql_property_based_reduction_report.10 | `modules/test/shrink/`, `modules/test.go`. |
 

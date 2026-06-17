@@ -1195,7 +1195,7 @@ func (e *Engine) pendingForwardWantsRawParen() bool {
 }
 
 // resolveForwardArgs implements structure-first, lazy forward-argument
-// resolution (design/LAZY-ARG-RESOLUTION.0.md). It replaces the former
+// resolution (design/LAZY-ARG-RESOLUTION.10.md). It replaces the former
 // eager `preEvalParens(MaxForwardArgs)` scan, which evaluated EVERY forward
 // paren group up to the highest-arity overload's needs before any signature
 // was chosen — the cause of the `import "mod" (expr)` hazard (gotcha N1),
@@ -1506,7 +1506,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	// reduces them. If the group collapses to a single Boolean
 	// carrier, the tokens are attached as a GuardFactInfo payload so
 	// guard narrowing can recover the `x is T` structure from the
-	// canonical paren condition form (checker-accuracy-review.0.md A3).
+	// canonical paren condition form (checker-accuracy-review.10.md A3).
 	var guardToks []Value
 	var groupSpan, lenBefore int
 	if e.registry.Check.IsActive() {
@@ -2421,7 +2421,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return nil
 	}
 
-	// Tail calls (design/TCO-STAGED.0.md): an AQL fn-body dispatch
+	// Tail calls (design/TCO-STAGED.10.md): an AQL fn-body dispatch
 	// (Sig.FnFrame non-nil — natives skip on the nil check) sitting in
 	// tail position of an enclosing fn frame is counted; when the
 	// eligibility gate passes (no binding mutations during arg
@@ -5947,7 +5947,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		}
 		args[i] = av
 	}
-	// Strict disjunct rescue (design/checker-accuracy-review.0.md A1):
+	// Strict disjunct rescue (design/checker-accuracy-review.10.md A1):
 	// the whole disjunct matched no signature, but individual
 	// alternatives may dispatch fine. If at least one does, splice the
 	// per-alternative join — the failing alternatives have already

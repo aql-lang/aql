@@ -370,7 +370,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	}
 	narrowDynamicUses(r, sig, args)
 	// Per-alternative dispatch for strict disjunct inputs
-	// (design/checker-accuracy-review.0.md A1). matchSignature tested
+	// (design/checker-accuracy-review.10.md A1). matchSignature tested
 	// the disjunct as a single value, so the matched sig may not be
 	// the one runtime dispatch takes for every alternative — e.g.
 	// Integer|String reaches add's [Scalar Scalar]→String catch-all
@@ -1754,7 +1754,7 @@ const loopAnalysisRounds = 3
 const FnAnalysisQuota = 64
 
 // AnalyseLoopBody analyses a loop body to a bounded fixed point
-// (design/checker-accuracy-review.0.md A4). Each round binds the
+// (design/checker-accuracy-review.10.md A4). Each round binds the
 // loop's own names (iterator …) as carriers, runs the body, and
 // JOINS the body's net def additions back into the enclosing
 // bindings — "the loop may run zero times" is the join with the
@@ -1855,7 +1855,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 // to a single Boolean carrier result: the group's ORIGINAL tokens,
 // preserved so guard narrowing can see the `x is T` structure that
 // evaluation reduced to a bare Boolean
-// (design/checker-accuracy-review.0.md A3 — without it, the canonical
+// (design/checker-accuracy-review.10.md A3 — without it, the canonical
 // `if (x is T) …` paren form narrowed nothing while the list form
 // `if [x is T] …` narrowed fine). Check-mode only; the runtime never
 // produces carriers.
@@ -2110,7 +2110,7 @@ func FnAnalysisKey(name string, args []Value, captures []CapturedBinding, body [
 //
 // declared is the signature's declared return types (nil =
 // unchecked). It is the induction hypothesis for recursion
-// (design/checker-accuracy-review.0.md A2): an in-flight recursive
+// (design/checker-accuracy-review.10.md A2): an in-flight recursive
 // call yields carriers of the DECLARED returns — the end-of-body
 // return check is the matching proof obligation — instead of the
 // everything-matches Any. For unchecked fns the Any bail-out

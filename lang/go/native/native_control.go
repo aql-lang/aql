@@ -612,7 +612,7 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 
 // forCarrierAnalyse analyses the body to a bounded fixed point with
 // the iterator bound as a typed carrier (AnalyseLoopBody —
-// design/checker-accuracy-review.0.md A4): body rebindings like
+// design/checker-accuracy-review.10.md A4): body rebindings like
 // `def acc (acc add 0.5)` join back into the enclosing binding and
 // the body re-runs until the bindings stabilise, so post-loop reads
 // see Integer|Float, not the pre-loop Integer. Returns a typed list

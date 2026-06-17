@@ -338,7 +338,7 @@ func TestCheckIfJoinsBranches(t *testing.T) {
 
 // TestCheckIfMixedBranchesWidenToScalar checks that heterogeneous
 // branches join WITHOUT collapsing to a distant common ancestor:
-// Integer|String stays a Disjunct (design/checker-accuracy-review.0.md
+// Integer|String stays a Disjunct (design/checker-accuracy-review.10.md
 // A1 — collapsing to Scalar changed first-match dispatch downstream).
 // Direct siblings (value-tagged literals) still collapse to their
 // shared parent — see TestCheckConditionalDefSameBranch.
@@ -737,7 +737,7 @@ func TestCheckDiagnosticPosition(t *testing.T) {
 // an if is joined across branches: after
 // `if [cond] [def x 1] [def x "hi"]`, x should be the
 // Integer|String disjunct (preserved for per-alternative dispatch,
-// design/checker-accuracy-review.0.md A1), not whichever branch
+// design/checker-accuracy-review.10.md A1), not whichever branch
 // ran last.
 func TestCheckConditionalDefJoin(t *testing.T) {
 	a, err := lang.New()
