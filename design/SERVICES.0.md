@@ -327,7 +327,79 @@ listener wrapper) split maps directly: the **interceptors + `target`** are the
 proxy core, and the **service lifecycle + `listen` transport** are the wrapper —
 so consolidation removes the bespoke wrapper, not the credential logic.
 
-## 7. Gap analysis — what AQL still lacks
+## 7. Lessons from BEAM's weaknesses
+
+BEAM is the inspiration, but its model has well-known weaknesses. Below are the
+generally-agreed ones, the ecosystem's responses, and the stance AQL takes — two
+of them (zero-copy messaging and backpressure) are load-bearing enough to change
+the design.
+
+### 7.1 Zero-copy messaging — AQL structurally avoids BEAM's biggest tax
+
+BEAM copies *every* message between processes. That cost is **not intrinsic to
+the actor model**: it exists because each BEAM process has its **own heap and own
+GC**, so a message must be copied to live in the receiver's heap (the same
+per-process-heap design that gives BEAM its low pause times). AQL has no
+per-process heaps — services and processes are **goroutines on one Go heap with
+one GC** — and AQL values are **immutability-first** (`eng/go/clone.go`: scalars,
+plain `List`, plain `Map`, type/function values are never mutated in place).
+
+**So, inside a server, an immutable message is passed by reference — zero copy,
+zero race** — both for an in-process `call` and for delivery to a `serve`d
+service in another goroutine. The mailbox send supplies the happens-before edge
+(Go memory model) so the receiver observes a fully-published value, and
+immutability guarantees no concurrent writer. This is exactly the property
+`PROCESSES.0.md` already states: AQL gets BEAM's **isolation** (a handler can
+never observe a caller mutating a message mid-flight) **without** BEAM's **copy
+cost** — sidestepping the per-message-copy weakness entirely. (It also gets
+Erlang's refc-binary optimization for free: a future immutable `Bytes` is shared
+by reference like any other immutable value.)
+
+The one case needing care is the **mutable subset** — `Object`, `Array`, `Store`.
+Sharing one across goroutines would reintroduce precisely the data race the actor
+model exists to prevent. The rule (already proposed as `PROCESSES.0.md`'s
+`not_sendable` check) is **refuse, not copy**: a `call`/`send` crossing a
+process/transport boundary must carry only immutable values; a mutable value at
+the boundary is an error. So AQL *never copies messages* — it shares immutable
+ones and forbids mutable ones. A service's own state `Store` is unaffected because
+it never crosses a boundary: it is owned and mutated by that one service's single
+goroutine. In-process `call` is cheaper still — a direct function call in the
+caller's goroutine, nothing sent or copied — so the immutability/`not_sendable`
+discipline only becomes load-bearing once a service is `serve`d as a process.
+
+### 7.2 Backpressure — `send` must not be unbounded
+
+BEAM's worst production failure mode is the **unbounded mailbox**: async `send`
+with no flow control lets a fast producer grow a slow consumer's mailbox until
+OOM, and a large mailbox also makes selective `receive` O(n). The ecosystem bolts
+backpressure on afterwards (synchronous `call`, GenStage/Flow/Broadway, sbroker,
+jobs). AQL should take a stance up front:
+
+- **`call` is the backpressured path** — synchronous request/reply naturally
+  rate-limits the caller to the service's throughput. Prefer it.
+- **`send` (async) gets a bounded mailbox** — when a `serve`d service's mailbox is
+  full, `send` either blocks (applying backpressure) or fails fast with an
+  overload error, configurable per service (`server [..] {mailbox: N}`). Never
+  silently unbounded.
+- A demand-driven streaming path (GenStage-style) is deferred to the `aql:stream`
+  integration but should reuse the same bounded-mailbox mechanism.
+
+### 7.3 The rest — mapped to AQL stances
+
+| BEAM weakness | ecosystem response | AQL stance |
+| --- | --- | --- |
+| Numeric/CPU throughput | BeamAsm JIT, NIFs/Rustler, Nx | Go-hosted (compiled, real arrays/maps); hot paths are Go natives, not a VM/NIF boundary — the gap mostly doesn't arise |
+| Dynamic typing / untyped protocols | Dialyzer, Gleam, Elixir set-theoretic types, Akka Typed | AQL has a static-leaning type system + `Behavior`; **a service may carry a schema on its accepted patterns**, validated at the `connect` boundary (Open Q #4) — ahead of Erlang |
+| Distribution: full mesh, head-of-line blocking | Partisan, `erpc`, message fragmentation | distribution is "later"; when built, follow Partisan (overlays, parallel connections), not disterl's full mesh |
+| Distribution: all-or-nothing trust | (largely unsolved in core) | **the proxy + capability model is the answer** — every cross-boundary `call` carries capability scopes; no ambient "connected = trusted" |
+| Location transparency leaks | Orleans virtual actors; "make failure explicit" | keep a transparent `call` surface but make served/remote `call` **fail explicit** — timeouts and a `down`/error result, never a pretence that remote == local |
+| Single `gen_server` bottleneck | pooling, sharding, scalable registries | a server is a collection of services; shard by key into many services; a router/proxy pin (Open Q #2) fronts them |
+| NIF safety / scheduler blocking | dirty schedulers, Rustler | natives run on Go's preemptively-scheduled goroutines; a slow native can't stall a cooperative scheduler the way a BEAM NIF can |
+| Mnesia limits | khepri, external DBs | no built-in DB ambition — persistence is an external service |
+| Hot code loading complexity | rolling/blue-green deploys | not a goal; out of scope |
+| Testing concurrency | QuickCheck, PropEr, Concuerror | property-based testing is already idiomatic here (`lang/spec`); systematic concurrency testing to follow |
+
+## 8. Gap analysis — what AQL still lacks
 
 - **`Service` type + `add`/`call`/`send`/`state`** and the `[req state] -> reply`
   handler contract (the patrun router is reused; invocation reuses
@@ -342,22 +414,25 @@ so consolidation removes the bespoke wrapper, not the credential logic.
   `PERMISSIONS.10.md` scopes.
 - **Refactor of the Go servers** onto the shared service/transport/lifecycle core
   (§5) — mechanical but broad.
+- **Bounded mailboxes + backpressure** for `send` (§7.2) — a per-service mailbox
+  bound with block-or-fail-fast on overload; depends on the `PROCESSES.0.md`
+  mailbox implementation.
 
-## 8. Phased roadmap
+## 9. Phased roadmap
 
 - **Phase 1: in-process service.** `service`, `add`, `call`, `send`, `state`,
   `[aql/no_match]` — all core. Pure request→handler over reused patrun, state in
   a `Store`. No processes.
 - **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
-  control requests.
+  control requests; bounded mailboxes + backpressure for `send` (§7.2).
 - **Phase 3: transport + proxy.** `aql:net` `listen`/`connect` (HTTP/stdio/TCP/
   JSON-RPC); `proxy` with streaming replies and capability-checked interceptors;
   begin refactoring the CLI servers (§5) onto the model — vault-proxy as the
   proving ground. → the network-server goal.
 - **Later: distribution.** Location-transparent `call`/`send` across nodes.
 
-## 9. Worked example
+## 10. Worked example
 
 ```aql
 "aql:serve" import
@@ -378,7 +453,7 @@ def gw ( proxy ( connect {http: "https://api.example.com"} ) {
 serve ( server [ app gw ] )               # run everything (blocks)
 ```
 
-## 10. Open questions
+## 11. Open questions
 
 1. **`state` mutation vs purity** — the settled model mutates a `Store`; should a
    pure variant (`add` with `[req state] -> {reply state}`) also be offered for
