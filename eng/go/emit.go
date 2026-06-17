@@ -1961,7 +1961,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			residualSeqs = append(residualSeqs, pr.seq)
 		}
 	}
-	lw.promoted = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
+	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}

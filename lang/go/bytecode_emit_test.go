@@ -539,6 +539,41 @@ func TestEmitTypedDefInstance(t *testing.T) {
 	}
 }
 
+// TestEmitDeadValueDef: a single-result value-def referenced zero times — a
+// dead binding (`def b (make C {…})` / `def x (1 add 2)` with the name never
+// used) — used to refuse as an "unconsumed call result" on the simulated
+// stack. The call still runs (side effects preserved), but its result is now
+// dropped, so the program compiles. A USED def is unaffected.
+func TestEmitDeadValueDef(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{`def C class {a:1} def b (make C {a:5})`, "[]"},
+		{`def C class {a:1} def b:C {a:5}`, "[]"},
+		{`def x (1 add 2)`, "[]"},
+		{`def x (1 add 2) 99`, "[99]"},
+		{`def a (1 add 2) def b (3 add 4) 99`, "[99]"},
+	} {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: dead value-def must compile, refused: %s", c.src, r)
+			continue
+		}
+		if !strings.Contains(dis, "DROP") {
+			t.Errorf("%s: expected a DROP for the dead result, got:\n%s", c.src, dis)
+		}
+		if got, _, err := mustRun(t, c.src); err != nil || fmt.Sprint(got) != c.want {
+			t.Errorf("%s: got %v err=%v, want %s", c.src, got, err, c.want)
+		}
+	}
+	// A USED value-def must NOT drop — its result feeds a consumer.
+	dis, r := compile(t, `def x (1 add 2) (x add x)`)
+	if r != "" {
+		t.Fatalf("used value-def refused: %s", r)
+	}
+	if strings.Contains(dis, "DROP") {
+		t.Errorf("used value-def emitted a DROP:\n%s", dis)
+	}
+}
+
 // TestEmitModuleInnerNative: a module word reached via dot-access
 // (`StructUtil.clone …`) trivially delegates to its inner native; even with a
 // declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,
