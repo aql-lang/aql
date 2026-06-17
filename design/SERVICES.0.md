@@ -69,11 +69,14 @@ This is a **design RFC only — no implementation code yet.**
 
 ### Scope decisions (carried forward)
 
-1. **Both — hosted on demand.** A `Service` is a lightweight in-process value by
-   default: `call` is direct dispatch in the caller's goroutine; state is a
-   private `Store`. On demand it is placed in a **server** and `serve`d — then it
-   runs as a `PROCESSES.0.md` process and `call`/`send` route via messages,
-   transparently.
+1. **Uniform surface, tiered cost — assume remote (§8).** Every `call`/`send`
+   obeys one failure-aware contract regardless of where the target lives. A
+   `Service` is a lightweight in-process value by default — `call` is zero-copy
+   direct dispatch (§7.1), state a private `Store` — and is placed in a **server**
+   and `serve`d to gain real processes, isolation, enforced timeouts, and
+   transport. Crossing that boundary needs **no caller changes**: the contract was
+   remote-shaped all along; only the cost, and the firing-rate of failures,
+   change.
 2. **Hybrid packaging.** The in-process surface — `service`, `add`, `call`,
    `send`, `state` — is **core** (next to the patrun words). Running, supervising,
    proxying, and transport live in modules **`aql:serve`** and **`aql:net`**.
@@ -115,9 +118,10 @@ call {request} <service> -> reply
 
 Route `request` through the patrun (most-specific wins); on no match raise
 the **`no_match`** error (`raise no_match …`) unless a catch-all `add {} […]`
-exists; invoke the handler
-with `(request, state)` and return its reply. Reuses
-`execFnDefLiteral`/`CallAQL`.
+exists; invoke the handler with `(request, state)` and return its reply. Reuses
+`execFnDefLiteral`/`CallAQL`. `call` also obeys the uniform failure contract —
+it may raise `timeout`/`down`/`overload` — which is rare and advisory in-process
+and enforced once `serve`d (§8).
 
 ### `send` (core) — asynchronous, no reply
 
@@ -214,11 +218,13 @@ model.
 ## 4. Hosting & transport
 
 - **In-process** (default): `call`/`send` dispatch directly; zero process
-  machinery. Good for libraries and tests.
+  machinery. Good for libraries and tests. Honours the uniform failure contract
+  (§8), but the failure modes are rare and the deadline is advisory (§8.2).
 - **Served**: inside a `server`, a service runs as a supervised process; `call`
-  becomes `send {call:req, @from:self}` + await reply; `send` is true async. Same
-  surface, different locus — the actor `receive` loop and the service's handler
-  patrun are the *same* matcher.
+  becomes `send {call:req, @from:self}` + await reply; `send` is true async; the
+  deadline, mailbox bound, and `down` detection are now *enforced*. Same surface
+  and same contract, different locus — the actor `receive` loop and the service's
+  handler patrun are the *same* matcher.
 - **Transport** (`aql:net`): **`listen {transport} <service>`** exposes a served
   service over a wire protocol; **`connect {transport} -> Service`** returns a
   local proxy whose `call`/`send` forward to a remote service. A transport is an
@@ -393,20 +399,38 @@ jobs). AQL should take a stance up front:
 | Dynamic typing / untyped protocols | Dialyzer, Gleam, Elixir set-theoretic types, Akka Typed | AQL has a static-leaning type system + `Behavior`; **a service may carry a schema on its accepted patterns**, validated at the `connect` boundary (Open Q #4) — ahead of Erlang |
 | Distribution: full mesh, head-of-line blocking | Partisan, `erpc`, message fragmentation | distribution is "later"; when built, follow Partisan (overlays, parallel connections), not disterl's full mesh |
 | Distribution: all-or-nothing trust | (largely unsolved in core) | **the proxy + capability model is the answer** — every cross-boundary `call` carries capability scopes; no ambient "connected = trusted" |
-| Location transparency leaks | Orleans virtual actors; "make failure explicit" | keep a transparent `call` surface but make served/remote `call` **fail explicit** — timeouts and a `down`/error result, never a pretence that remote == local |
+| Location transparency leaks | Orleans virtual actors; "make failure explicit" | **one uniform, failure-aware surface — assume remote** (§8): the same `call` contract local and remote, exposing failure everywhere rather than hiding it (the Waldo-consistent direction), with defaults keeping the common case terse |
 | Single `gen_server` bottleneck | pooling, sharding, scalable registries | a server is a collection of services; shard by key into many services; a router/proxy pin (Open Q #2) fronts them |
 | NIF safety / scheduler blocking | dirty schedulers, Rustler | natives run on Go's preemptively-scheduled goroutines; a slow native can't stall a cooperative scheduler the way a BEAM NIF can |
 | Mnesia limits | khepri, external DBs | no built-in DB ambition — persistence is an external service |
 | Hot code loading complexity | rolling/blue-green deploys | not a goal; out of scope |
 | Testing concurrency | QuickCheck, PropEr, Concuerror | property-based testing is already idiomatic here (`lang/spec`); systematic concurrency testing to follow |
 
-## 8. Delivery semantics — backpressure & explicit failure
+## 8. Delivery semantics — one uniform messaging surface
 
-§7.1–7.2 set the *stances*; this section specifies them. Both apply only once a
-service is **`serve`d** as a process (or reached remotely via **`connect`**): an
-in-process `call`/`send` is a direct function call with neither a mailbox nor a
-delivery step, so neither concern arises until you cross a process boundary.
-(Syntax below is illustrative; error forms follow `lang/spec/error.tsv` —
+§7.1–7.2 set the *stances*; this section specifies them, under one governing
+principle:
+
+> **Assume every send is remote.** The messaging *surface* is uniform — every
+> `call` may `timeout`/`down`/`overload`, every `send` may `overload`/`down` —
+> whether the target is co-located, in another process, or on another node. You
+> never ask "is this local?" at a call site: you write to the failure-aware
+> contract once, and a service can move in-process → process → remote with **no
+> caller changes**.
+
+This is the correct reading of Waldo et al.'s *A Note on Distributed Computing*
+(1994): the sin is making **remote look local** — hiding latency and partial
+failure under an infallible local-looking API; the cure is making **local look
+remote** — exposing the failure surface everywhere. It is also what BEAM already
+does: a `gen_server:call` carries a timeout even locally, and any pid (local or
+remote) can hand you a `DOWN`.
+
+Crucially, **a uniform *contract* is not a uniform *cost*.** The implementation
+stays tiered: a co-located immutable send is still zero-copy direct dispatch
+(§7.1) — no serialization, no scheduler hop — it merely *honours* the same
+contract, under which the failure modes are simply rare. And **defaults erase the
+ceremony** (§8.2), so the everyday form stays `call {req} svc` and is correct
+everywhere. (Syntax illustrative; error forms follow `lang/spec/error.tsv` —
 `raise <code> "msg"` and `do […] error […]`.)
 
 ### 8.1 Bounded mailboxes & `send`
@@ -474,24 +498,30 @@ error [ case [
     [ raise ] ] ]                                          # re-raise anything else
 ```
 
-### 8.2 Explicit failure for served / remote `call`
+### 8.2 The uniform failure contract for `call`
 
-An **in-process** `call` has two outcomes: it returns the reply, or it propagates
-whatever the handler `raise`d (an *application* error). A **`serve`d or
-`connect`ed** `call` adds failure modes with no in-process analogue — the request
-might never arrive, the service might be dead, the reply might never come. AQL
-makes these explicit three ways.
+Under the principle above, **every `call` carries the same failure contract**,
+regardless of where the target lives: it returns the reply, propagates an
+*application* error the handler `raise`d, or fails with a *delivery* error. There
+is no separate "local call" semantics to learn — co-located calls simply fire
+delivery errors rarely (or never). The contract is defined three ways.
 
-**(1) A deadline is always in effect.** A served/remote `call` takes a timeout, and
-one is *always* applied:
+**(1) A deadline is always in effect.**
 
 ```
 call {req} svc {timeout: (TimeUtil.seconds 5)}
 ```
 
-If omitted, a default deadline applies (proposed `5s`). `timeout: 'infinity` is
+If omitted, a profile default applies (proposed `5s`); `timeout: 'infinity` is
 permitted but must be written explicitly — you can never *accidentally* hang
-forever, the way an Erlang `receive` with no `after` can.
+forever, the way an Erlang `receive` with no `after` can. One honest asymmetry:
+when the target is an **un-`serve`d inline value**, the call is a direct dispatch
+in the caller's own goroutine, so the deadline is **advisory** — it cannot
+preempt what it cannot interrupt (the limitation any direct function call has).
+Once the service is **`serve`d**, the deadline is enforced by the caller's timer
+against the callee's separate goroutine, exactly as Erlang enforces a
+`gen_server:call` timeout. Either way the *contract* — "this may raise `timeout`"
+— is identical, so calling code never changes.
 
 **(2) A closed, named set of delivery errors,** distinct from application errors,
 each catchable via `do … error …` and dispatchable on `code`:
@@ -508,11 +538,17 @@ back **unchanged** — same `code`, `message`, and payload, serialized across
 transport — so the caller distinguishes *"the call could not complete"* (the
 delivery codes above) from *"the service ran and said no"* (the app error).
 
-**(3) The type marks remote `call` as fallible.** The static type of a `connect`ed
-(or `serve`d) service handle tags its `call` as *may-raise-delivery-error*; an
-in-process `Service` handle's `call` is not so tagged. The checker can then flag a
-remote `call` whose delivery failures are never handled — the "make failure
-explicit" lesson enforced, lightweight checked-exception style.
+**(3) Defaults, not types, carry the uniformity.** Because every `call` is
+*uniformly* fallible, the type system does **not** split handles into
+local-infallible vs remote-fallible — there is one `Service` type and one
+contract, which is what makes a service relocatable with no caller edits. The
+clutter is absorbed by **defaults** instead: an unhandled delivery error simply
+propagates like any raised error (it is *not* a forced checked-exception), a
+`call` with no `{timeout}` takes the profile default, and nothing retries unless
+asked. So the everyday call stays `call {req} svc`, with the failure modes
+*available* to handle exactly where you choose to. (The checker may *optionally*
+warn when a delivery error is never handled anywhere up the stack — Open Q #7 —
+but that is lint, not a local/remote type distinction.)
 
 **Retries & idempotency.** Because `timeout`/`down` leave the outcome *unknown*, the
 runtime never silently retries them. A caller that knows a request is idempotent
@@ -536,7 +572,8 @@ happen.
 "aql:net"       import
 "aql:time-util" import
 
-# Reach a remote service; its `call` is statically fallible.
+# Reach a remote service. Its `call` obeys the same contract as a local one —
+# only the failure modes are now common, so we handle them at this call site.
 def billing ( connect {http: "https://billing.internal"} )
 
 # Read path — idempotent, so auto-retry is safe; degrade on failure.
@@ -576,9 +613,10 @@ error [ case [
   (§5) — mechanical but broad.
 - **Bounded mailboxes + backpressure** for `send` (§8.1) — per-service capacity +
   `'block`/`'fail`/`'drop` overflow; depends on the `PROCESSES.0.md` mailbox.
-- **Explicit-failure `call`** (§8.2) — mandatory deadline, the `timeout`/`down`/
-  `overload`/`transport` delivery-error set, fallible-call typing, and
-  idempotent-only retries; depends on monitors (`PROCESSES.0.md`) and transport.
+- **Uniform-failure `call`** (§8.2) — mandatory deadline, the `timeout`/`down`/
+  `overload`/`transport` delivery-error set, one fallible contract for local and
+  remote, and idempotent-only retries; depends on monitors (`PROCESSES.0.md`) and
+  transport.
 
 ## 10. Phased roadmap
 
@@ -590,7 +628,7 @@ error [ case [
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the
   served `call` deadline + delivery-error set (§8.2).
 - **Phase 3: transport + proxy.** `aql:net` `listen`/`connect` (HTTP/stdio/TCP/
-  JSON-RPC); remote `call` failure modes + fallible-call typing + retries (§8.2);
+  JSON-RPC); remote `call` failure modes + retries under the uniform contract (§8.2);
   `proxy` with streaming replies and capability-checked interceptors; begin
   refactoring the CLI servers (§5) onto the model — vault-proxy as the proving
   ground. → the network-server goal.
@@ -638,6 +676,8 @@ serve ( server [ app gw ] )               # run everything (blocks)
    `overflow: 'block` the right defaults, and should they be per-profile
    (`PERMISSIONS.10.md`) rather than global constants? (Leaning per-profile
    defaults with per-service overrides.)
-7. **Fallible-call strictness** (§8.2) — is an unhandled remote `call` a checker
-   *warning* or an *error*? (Leaning warning first, to avoid friction before the
-   type story is mature.)
+7. **Unhandled-delivery-error strictness** (§8.2) — since all calls are uniformly
+   fallible, an unhandled delivery error just propagates. Should the checker
+   *optionally* warn when one is never handled anywhere up the stack, and should an
+   inline hot path be allowed to opt out of the deadline entirely (`timeout:
+   'none`) for zero overhead? (Leaning: opt-in lint + an explicit inline escape.)
