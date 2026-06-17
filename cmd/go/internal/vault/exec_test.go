@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"os"
 	"os/exec"
 	"reflect"
 	"sort"
@@ -19,6 +20,23 @@ func requireSh(t *testing.T) string {
 		t.Skipf("sh not available: %s", err)
 	}
 	return p
+}
+
+// requireShKeepsOddEnvNames skips when the `sh` on PATH drops environment
+// variables whose names are not portable identifiers (they contain '/' or ':').
+// npm's per-registry auth var — npm_config_//host/:_authToken — has such a name;
+// bash preserves it across exec, but dash and busybox sh discard it, so a child
+// that reads it via printenv sees nothing. The --for=npm tests inspect exactly
+// that var through `sh`, so they are only meaningful where sh preserves it.
+func requireShKeepsOddEnvNames(t *testing.T) {
+	t.Helper()
+	const name = "npm_config_//registry.npmjs.org/:_authToken"
+	cmd := exec.Command("sh", "-c", "printenv '"+name+"'")
+	cmd.Env = append(os.Environ(), name+"=probe")
+	out, _ := cmd.Output()
+	if strings.TrimSpace(string(out)) != "probe" {
+		t.Skip("sh does not preserve non-identifier env var names (e.g. dash) — the npm auth env var is not observable in a child")
+	}
 }
 
 func TestExecInjectsSecretAsEnvVar(t *testing.T) {
@@ -42,6 +60,7 @@ func TestExecInjectsSecretAsEnvVar(t *testing.T) {
 
 func TestExecForNpm(t *testing.T) {
 	requireSh(t)
+	requireShKeepsOddEnvNames(t)
 	testHome(t)
 	mustInit(t)
 	if code, _, e := runVault(t, "npm-tok\n", "add", "--from-stdin", "npm_token"); code != 0 {
@@ -62,6 +81,7 @@ func TestExecForNpm(t *testing.T) {
 
 func TestExecForNpmCustomRegistry(t *testing.T) {
 	requireSh(t)
+	requireShKeepsOddEnvNames(t)
 	testHome(t)
 	mustInit(t)
 	if code, _, e := runVault(t, "ghp-tok\n", "add", "--from-stdin", "gh_npm"); code != 0 {
