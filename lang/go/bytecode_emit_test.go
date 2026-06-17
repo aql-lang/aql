@@ -508,6 +508,37 @@ func TestEmitSurfaceType(t *testing.T) {
 	}
 }
 
+// TestEmitTypedDefInstance: `def b:Type {map}` is `def b (make Type map)`, but
+// the typed-def handler builds the instance via a direct MakeObject call,
+// skipping the make WORD dispatch — and with it the make event an explicit
+// make records. Without that event the bound instance has no provenance and a
+// downstream `b typeof` (or field access) refuses. The handler now records the
+// skipped make event in emit mode, so these compile, for plain classes,
+// explicit generic instantiations, inferred generic schemas, and the `<>`
+// sugar alike.
+func TestEmitTypedDefInstance(t *testing.T) {
+	type row struct{ src, want string }
+	for _, c := range []row{
+		{`def C class {a:1} def b:C {a:5} b typeof`, "C"},
+		{`def C class {a:1} def b:C {a:5} (b get a)`, "5"},
+		{`def Box gen [T] class {value:T} def b:(Box of [Integer]) {value:42} b typeof`, "Box of [Integer]"},
+		{`def Box gen [T] class {value:T} def b:Box {value:'hi'} b typeof`, "Box of [ProperString]"},
+		{`def Box<T> class {value:T} def b:Box<Integer> {value:42} (b get value)`, "42"},
+	} {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: typed-def instance must compile, refused: %s", c.src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake", c.src)
+		}
+		if got, _, err := mustRun(t, c.src); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != c.want {
+			t.Errorf("%s: got %v err=%v, want [%s]", c.src, got, err, c.want)
+		}
+	}
+}
+
 // TestEmitModuleInnerNative: a module word reached via dot-access
 // (`StructUtil.clone …`) trivially delegates to its inner native; even with a
 // declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,
