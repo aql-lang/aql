@@ -92,6 +92,56 @@ func TestAddFormValidators(t *testing.T) {
 	}
 }
 
+func TestFormCommandPreviews(t *testing.T) {
+	if got := rotateCommandPreview("k", "90d", true); !strings.Contains(got, "rotate") ||
+		!strings.Contains(got, "--revoke-caps") || !strings.Contains(got, "--expiry=90d") ||
+		!strings.Contains(got, "--from-stdin") || !strings.HasSuffix(got, " k") {
+		t.Errorf("rotate preview: %q", got)
+	}
+	got := grantCommandPreview("k", "ci", "api.x", "GET", "2h", "5", "0", true)
+	for _, want := range []string{"grant", "--agent=ci", "--hosts=api.x", "--methods=GET", "--ttl=2h", "--max-calls=5", "--require-approval", " k"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("grant preview %q missing %q", got, want)
+		}
+	}
+	if strings.Contains(got, "max-cost") { // 0 should be omitted
+		t.Errorf("grant preview should omit a zero max-cost: %q", got)
+	}
+	if got := grantCommandPreview("", "", "", "", "", "", "", false); !strings.Contains(got, "<alias>") {
+		t.Errorf("grant placeholder missing: %q", got)
+	}
+	if got := expiryCommandPreview("k", ""); !strings.Contains(got, "expiry clear k") {
+		t.Errorf("expiry clear: %q", got)
+	}
+	if got := expiryCommandPreview("k", "90d"); !strings.Contains(got, "expiry set k 90d") {
+		t.Errorf("expiry set: %q", got)
+	}
+	if got := renameCommandPreview("a", "b", false); !strings.Contains(got, "mv a b") {
+		t.Errorf("rename: %q", got)
+	}
+	if got := passwordAddCommandPreview("ci", "read", "*"); !strings.Contains(got, "password add") ||
+		!strings.Contains(got, "--scope=read") || !strings.Contains(got, "--namespaces=*") {
+		t.Errorf("password add: %q", got)
+	}
+	if got := createVaultCommandPreview("/v", "work", "file"); !strings.Contains(got, "--folder=/v") ||
+		!strings.Contains(got, "--suffix=work") || !strings.Contains(got, "init --backend=file") {
+		t.Errorf("create vault: %q", got)
+	}
+}
+
+func TestFormScreenCliCommandIsLive(t *testing.T) {
+	ctl, _ := newTestController(t)
+	m := newRootModel(ctl)
+	// The rotate form mirrors its alias into the command bar.
+	fs, ok := m.buildRotateForm("github_token").(*formScreen)
+	if !ok {
+		t.Fatalf("rotate form is %T", m.buildRotateForm("github_token"))
+	}
+	if cmd := fs.cliCommand(); !strings.Contains(cmd, "aql vault rotate") || !strings.HasSuffix(cmd, "github_token") {
+		t.Errorf("rotate form command bar: %q", cmd)
+	}
+}
+
 func TestCommandBarAndStatusBar(t *testing.T) {
 	ctl, _ := newTestController(t)
 	if err := ctl.addSecret("k", "v", "", "", ""); err != nil {

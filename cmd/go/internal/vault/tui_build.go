@@ -194,7 +194,7 @@ func (m *rootModel) buildCreateVaultForm() screen {
 		huh.NewInput().Title("Passphrase").Description("required for the file backend").
 			EchoMode(huh.EchoModePassword).Value(&pass),
 	))
-	return newFormScreen("new vault", form, func() tea.Cmd {
+	fs := newFormScreen("new vault", form, func() tea.Cmd {
 		name := suffix
 		if name == "" {
 			name = "default"
@@ -206,6 +206,8 @@ func (m *rootModel) buildCreateVaultForm() screen {
 			return switchedToVaultMsg{name: name}
 		})
 	})
+	fs.cmdFn = func() string { return createVaultCommandPreview(folder, suffix, backend) }
+	return fs
 }
 
 // --- Secrets ---------------------------------------------------------------
@@ -353,6 +355,89 @@ func addCommandPreview(alias, provider, namespace, expiry string) string {
 	return strings.Join(parts, " ")
 }
 
+// orPlaceholder returns s, or ph when s is blank — so a preview reads
+// naturally before a required field is filled.
+func orPlaceholder(s, ph string) string {
+	if strings.TrimSpace(s) == "" {
+		return ph
+	}
+	return s
+}
+
+func rotateCommandPreview(alias, expiry string, revoke bool) string {
+	parts := []string{"aql", "vault", "rotate"}
+	if revoke {
+		parts = append(parts, "--revoke-caps")
+	}
+	if expiry != "" {
+		parts = append(parts, "--expiry="+expiry)
+	}
+	return strings.Join(append(parts, "--from-stdin", alias), " ")
+}
+
+func renameCommandPreview(from, to string, revoke bool) string {
+	parts := []string{"aql", "vault", "mv"}
+	if revoke {
+		parts = append(parts, "--revoke-caps")
+	}
+	return strings.Join(append(parts, from, orPlaceholder(to, "<new-name>")), " ")
+}
+
+func expiryCommandPreview(alias, when string) string {
+	if strings.TrimSpace(when) == "" {
+		return "aql vault expiry clear " + alias
+	}
+	return "aql vault expiry set " + alias + " " + when
+}
+
+func grantCommandPreview(alias, agent, hosts, methods, ttl, maxCalls, maxCost string, approval bool) string {
+	parts := []string{"aql", "vault", "grant"}
+	if agent != "" {
+		parts = append(parts, "--agent="+agent)
+	}
+	if hosts != "" {
+		parts = append(parts, "--hosts="+hosts)
+	}
+	if methods != "" {
+		parts = append(parts, "--methods="+methods)
+	}
+	if ttl != "" {
+		parts = append(parts, "--ttl="+ttl)
+	}
+	if n := atoiOr0(maxCalls); n > 0 {
+		parts = append(parts, fmt.Sprintf("--max-calls=%d", n))
+	}
+	if n := atoiOr0(maxCost); n > 0 {
+		parts = append(parts, fmt.Sprintf("--max-cost-cents=%d", n))
+	}
+	if approval {
+		parts = append(parts, "--require-approval")
+	}
+	return strings.Join(append(parts, orPlaceholder(alias, "<alias>")), " ")
+}
+
+func passwordAddCommandPreview(name, scope, namespaces string) string {
+	parts := []string{"aql", "vault", "password", "add"}
+	if scope != "" {
+		parts = append(parts, "--scope="+scope)
+	}
+	if namespaces != "" {
+		parts = append(parts, "--namespaces="+namespaces)
+	}
+	return strings.Join(append(parts, orPlaceholder(name, "<name>")), " ")
+}
+
+func createVaultCommandPreview(folder, suffix, backend string) string {
+	parts := []string{"aql", "vault"}
+	if folder != "" {
+		parts = append(parts, "--folder="+folder)
+	}
+	if suffix != "" {
+		parts = append(parts, "--suffix="+suffix)
+	}
+	return strings.Join(append(parts, "init", "--backend="+orPlaceholder(backend, "auto")), " ")
+}
+
 // --- add-form field validators (mark invalid fields with a message) -------
 
 func validateAliasField(s string) error {
@@ -396,11 +481,13 @@ func (m *rootModel) buildRotateForm(alias string) screen {
 		huh.NewInput().Title("Expiry").Description("optional; blank keeps the current reminder").Value(&expiry),
 		huh.NewConfirm().Title("Revoke existing capabilities for this alias?").Value(&revoke),
 	))
-	return newFormScreen("rotate", form, func() tea.Cmd {
+	fs := newFormScreen("rotate", form, func() tea.Cmd {
 		return submitOp("rotated "+alias, func() error {
 			return m.ctl.rotateSecret(alias, value, revoke, expiry)
 		})
 	})
+	fs.cmdFn = func() string { return rotateCommandPreview(alias, expiry, revoke) }
+	return fs
 }
 
 func (m *rootModel) buildRemoveForm(alias string) screen {
@@ -411,12 +498,14 @@ func (m *rootModel) buildRemoveForm(alias string) screen {
 			Description("this permanently removes the secret and its capabilities").
 			Affirmative("Delete").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("delete", form, func() tea.Cmd {
+	fs := newFormScreen("delete", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
 		return submitOp("deleted "+alias, func() error { return m.ctl.removeSecret(alias) })
 	})
+	fs.cmdFn = func() string { return "aql vault rm --yes " + alias }
+	return fs
 }
 
 func (m *rootModel) buildRenameForm(alias string) screen {
@@ -427,11 +516,13 @@ func (m *rootModel) buildRenameForm(alias string) screen {
 		huh.NewInput().Title("New name").Description("name, ns:name, or a trailing ns: to move").Value(&to).Validate(nonEmpty("name")),
 		huh.NewConfirm().Title("Revoke capabilities instead of re-binding them?").Value(&revoke),
 	))
-	return newFormScreen("rename", form, func() tea.Cmd {
+	fs := newFormScreen("rename", form, func() tea.Cmd {
 		return submitOp("renamed "+alias+" → "+to, func() error {
 			return m.ctl.renameSecret(alias, to, revoke)
 		})
 	})
+	fs.cmdFn = func() string { return renameCommandPreview(alias, to, revoke) }
+	return fs
 }
 
 func (m *rootModel) buildExpiryForm(alias string) screen {
@@ -440,12 +531,14 @@ func (m *rootModel) buildExpiryForm(alias string) screen {
 		huh.NewNote().Title("Expiry reminder for "+alias),
 		huh.NewInput().Title("Expires").Description("YYYY-MM-DD, RFC3339, duration like 90d — blank clears it").Value(&when),
 	))
-	return newFormScreen("expiry", form, func() tea.Cmd {
+	fs := newFormScreen("expiry", form, func() tea.Cmd {
 		if strings.TrimSpace(when) == "" {
 			return submitOp("cleared expiry for "+alias, func() error { return m.ctl.clearExpiry(alias) })
 		}
 		return submitOp("set expiry for "+alias, func() error { return m.ctl.setExpiry(alias, when) })
 	})
+	fs.cmdFn = func() string { return expiryCommandPreview(alias, when) }
+	return fs
 }
 
 // --- Access (capabilities) -------------------------------------------------
@@ -518,7 +611,7 @@ func (m *rootModel) buildGrantForm() screen {
 		huh.NewInput().Title("Max cost (cents)").Description("optional integer; 0 = unlimited").Value(&maxCost).Validate(optionalInt),
 		huh.NewConfirm().Title("Require human approval?").Value(&approval),
 	))
-	return newFormScreen("grant", form, func() tea.Cmd {
+	fs := newFormScreen("grant", form, func() tea.Cmd {
 		return tea.Sequence(popScreen(), func() tea.Msg {
 			out, err := m.ctl.grant(alias, agent, hosts, methods, ttl, atoiOr0(maxCalls), atoiOr0(maxCost), approval)
 			if err != nil {
@@ -528,6 +621,10 @@ func (m *rootModel) buildGrantForm() screen {
 			return grantedMsg{output: out}
 		})
 	})
+	fs.cmdFn = func() string {
+		return grantCommandPreview(alias, agent, hosts, methods, ttl, maxCalls, maxCost, approval)
+	}
+	return fs
 }
 
 func (m *rootModel) buildRevokeForm(id string) screen {
@@ -539,12 +636,14 @@ func (m *rootModel) buildRevokeForm(id string) screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title("Revoke capability " + short + "?").Affirmative("Revoke").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("revoke", form, func() tea.Cmd {
+	fs := newFormScreen("revoke", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
 		return submitOp("revoked "+short, func() error { return m.ctl.revoke(id) })
 	})
+	fs.cmdFn = func() string { return "aql vault revoke " + id }
+	return fs
 }
 
 // --- Passwords -------------------------------------------------------------
@@ -607,13 +706,15 @@ func (m *rootModel) buildPasswordAddForm() screen {
 		huh.NewInput().Title("Namespaces").Description("comma-separated; * = all, : = root").Value(&namespaces),
 		huh.NewInput().Title("New password").EchoMode(huh.EchoModePassword).Value(&newPass).Validate(nonEmpty("password")),
 	))
-	return newFormScreen("password add", form, func() tea.Cmd {
+	fs := newFormScreen("password add", form, func() tea.Cmd {
 		return m.requireAuth(func() tea.Cmd {
 			return submitOp("added password "+name, func() error {
 				return m.ctl.passwordAdd(name, scope, namespaces, newPass)
 			})
 		})
 	})
+	fs.cmdFn = func() string { return passwordAddCommandPreview(name, scope, namespaces) }
+	return fs
 }
 
 func (m *rootModel) buildPasswordRemoveForm(name string) screen {
@@ -621,7 +722,7 @@ func (m *rootModel) buildPasswordRemoveForm(name string) screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title("Remove password " + name + "?").Affirmative("Remove").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("password rm", form, func() tea.Cmd {
+	fs := newFormScreen("password rm", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
@@ -629,6 +730,8 @@ func (m *rootModel) buildPasswordRemoveForm(name string) screen {
 			return submitOp("removed password "+name, func() error { return m.ctl.passwordRemove(name) })
 		})
 	})
+	fs.cmdFn = func() string { return "aql vault password rm " + name }
+	return fs
 }
 
 // --- Maintenance -----------------------------------------------------------
@@ -678,7 +781,7 @@ func (m *rootModel) buildVerifyPruneForm() screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title("Repair the vault (prune orphans, drop dangling records)?").Affirmative("Repair").Negative("Cancel").Value(&ok),
 	))
-	return newFormScreen("prune", form, func() tea.Cmd {
+	fs := newFormScreen("prune", form, func() tea.Cmd {
 		if !ok {
 			return tea.Batch(popScreen(), status("cancelled"))
 		}
@@ -693,6 +796,8 @@ func (m *rootModel) buildVerifyPruneForm() screen {
 			})
 		})
 	})
+	fs.cmdFn = func() string { return "aql vault verify --prune" }
+	return fs
 }
 
 func (m *rootModel) buildScanForm() screen {
@@ -700,13 +805,15 @@ func (m *rootModel) buildScanForm() screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Path to scan").Description("directory or file; default current directory").Value(&path),
 	))
-	return newFormScreen("scan", form, func() tea.Cmd {
+	fs := newFormScreen("scan", form, func() tea.Cmd {
 		p := strings.TrimSpace(path)
 		return tea.Sequence(popScreen(), func() tea.Msg {
 			out := m.ctl.scanText(p)
 			return pushMsg{m.textPager("scan", out)}
 		})
 	})
+	fs.cmdFn = func() string { return "aql vault scan " + orPlaceholder(path, ".") }
+	return fs
 }
 
 func (m *rootModel) buildHistoryPager() screen {
@@ -738,7 +845,7 @@ func (m *rootModel) buildRestoreForm() screen {
 			return nil
 		}),
 	))
-	return newFormScreen("restore", form, func() tea.Cmd {
+	fs := newFormScreen("restore", form, func() tea.Cmd {
 		gen, _ := strconv.ParseInt(strings.TrimSpace(genStr), 10, 64)
 		return m.requireAuth(func() tea.Cmd {
 			return submitOp(fmt.Sprintf("restored to generation %d", gen), func() error {
@@ -746,6 +853,10 @@ func (m *rootModel) buildRestoreForm() screen {
 			})
 		})
 	})
+	fs.cmdFn = func() string {
+		return "aql vault restore --generation=" + orPlaceholder(genStr, "<generation>") + " --yes"
+	}
+	return fs
 }
 
 // --- Settings --------------------------------------------------------------
@@ -801,9 +912,11 @@ func (m *rootModel) buildConfigSetForm() screen {
 		huh.NewInput().Title("Key").Value(&k).Validate(nonEmpty("key")),
 		huh.NewInput().Title("Value").Value(&v),
 	))
-	return newFormScreen("config set", form, func() tea.Cmd {
+	fs := newFormScreen("config set", form, func() tea.Cmd {
 		return submitOp("set "+k, func() error { return m.ctl.configSet(k, v) })
 	})
+	fs.cmdFn = func() string { return "aql vault config --set " + orPlaceholder(k, "<key>") + "=" + v }
+	return fs
 }
 
 func (m *rootModel) buildConfigUnsetForm() screen {
@@ -811,9 +924,11 @@ func (m *rootModel) buildConfigUnsetForm() screen {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Key to unset").Value(&k).Validate(nonEmpty("key")),
 	))
-	return newFormScreen("config unset", form, func() tea.Cmd {
+	fs := newFormScreen("config unset", form, func() tea.Cmd {
 		return submitOp("unset "+k, func() error { return m.ctl.configUnset(k) })
 	})
+	fs.cmdFn = func() string { return "aql vault config --unset " + orPlaceholder(k, "<key>") }
+	return fs
 }
 
 // textPager builds a simple scrollable pager over static text.
