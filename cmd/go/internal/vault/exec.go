@@ -39,12 +39,13 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	prefix := fs.String("prefix", "", "prepend this prefix to env-var names derived from aliases")
 	forRecipe := fs.String("for", "", "present a single alias as a publisher's credential env (npm, cargo, gem, pypi, uv)")
 	registry := fs.String("registry", "", "registry host for --for=npm (default "+npmDefaultRegistry+")")
+	dryRun := fs.Bool("dry-run", false, "inject a filler value instead of the real secret (no passphrase needed); for testing the plumbing, e.g. `npm publish --dry-run`")
 	if err := fs.Parse(preArgs); err != nil {
 		return 1
 	}
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--for=TOOL [--registry=HOST]] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
+		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--dry-run] [--for=TOOL [--registry=HOST]] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
 		return 1
 	}
 	if !sawSep || len(cmdArgs) == 0 {
@@ -57,19 +58,29 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
-		return 1
-	}
-	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
-	defer sess.Close()
-	if err := requireScope(sess, OpRead); err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
+	// In --dry-run we never unlock the vault: no passphrase is read and no
+	// real secret value is touched, so a locked vault is fine and so is a
+	// vault this password could not actually read. Each requested alias is
+	// still resolved against the store (a typo is still an error) but gets a
+	// fixed, obviously-fake filler value in place of the secret. This lets
+	// callers exercise the env-injection and child-command plumbing —
+	// `npm publish --dry-run` and friends — without real credentials.
+	var sess *Session
+	if !*dryRun {
+		if s.Locked {
+			fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+			return 1
+		}
+		sess, err = authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		defer sess.Close()
+		if err := requireScope(sess, OpRead); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
 	}
 
 	bin, err := exec.LookPath(cmdArgs[0])
@@ -103,7 +114,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			return 1
 		}
 		ns, _ := splitAlias(alias)
-		v, err := sess.getValue(alias, ns)
+		v, err := resolveSecret(sess, *dryRun, alias, ns)
 		if err != nil {
 			_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "error", Reason: "keyring: " + err.Error()})
 			fmt.Fprintf(stderr, "error: reading %s: %s\n", alias, err)
@@ -116,7 +127,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		for k, val := range rec.env(v, reg) {
 			overrides[k] = val
 		}
-		_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "ok", Reason: "for=" + rec.name + " cmd=" + filepath.Base(bin)})
+		_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "ok", Reason: auditReason(*dryRun, "for="+rec.name+" cmd="+filepath.Base(bin))})
 	} else {
 		mappings, err := parseExecAliases(fs.Arg(0), *prefix, *upper)
 		if err != nil {
@@ -139,7 +150,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 				return 1
 			}
 			ns, _ := splitAlias(m.alias)
-			v, err := sess.getValue(m.alias, ns)
+			v, err := resolveSecret(sess, *dryRun, m.alias, ns)
 			if err != nil {
 				_ = appendAudit(homeDir, AuditEvent{
 					Action: "vault.exec", Alias: m.alias,
@@ -154,7 +165,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			_ = appendAudit(homeDir, AuditEvent{
 				Action: "vault.exec", Alias: m.alias,
 				Outcome: "ok",
-				Reason:  "env=" + m.envName + " cmd=" + filepath.Base(bin),
+				Reason:  auditReason(*dryRun, "env="+m.envName+" cmd="+filepath.Base(bin)),
 			})
 		}
 	}
@@ -175,6 +186,30 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	return 0
+}
+
+// dryRunFiller is the placeholder injected for every alias in --dry-run
+// mode. It is deliberately not a real secret and is shaped to be obviously
+// fake if it ever surfaces in a publisher's output or a captured log.
+const dryRunFiller = "AQL-DRY-RUN-FILLER-NOT-A-REAL-SECRET"
+
+// resolveSecret returns the value to inject for an alias: the fixed filler
+// in --dry-run mode (no session, no keyring access), otherwise the real
+// decrypted secret from the authenticated session.
+func resolveSecret(sess *Session, dryRun bool, alias, ns string) (string, error) {
+	if dryRun {
+		return dryRunFiller, nil
+	}
+	return sess.getValue(alias, ns)
+}
+
+// auditReason tags an audit reason with a dry-run marker so the audit log
+// distinguishes a real injection from a filler one.
+func auditReason(dryRun bool, reason string) string {
+	if dryRun {
+		return "dry-run " + reason
+	}
+	return reason
 }
 
 // execMapping pairs a vault alias with the env-var name the
