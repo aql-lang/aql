@@ -232,7 +232,7 @@ service's handling of one message*; they never cross a process boundary, so they
 stay zero-cost direct calls even when the service is `serve`d. Cross-cutting that
 must span services (distributed tracing, a request id) is the union of a local
 `wrap` that reads/writes a trace id in the request's **metadata** (carried like
-`@from`; see the message-metadata gap, §9) and the transport propagating that
+`@from`; see the message-metadata gap, §10) and the transport propagating that
 metadata — local layering + metadata, not a distributed interceptor.
 
 ## 2. Services live in modules
@@ -680,7 +680,105 @@ error [ case [
     [ raise ] ] ]                                           # app errors propagate
 ```
 
-## 9. Gap analysis — what AQL still lacks
+## 9. Scalability & load balancing
+
+### 9.1 Scalability envelope
+
+A design-stage estimate from the substrate (Go goroutines/channels/GC,
+`ForkConcurrent` per process, immutable zero-copy messages (§7.1), patrun
+dispatch, the bytecode VM) — projections, not measurements.
+
+**Vertical (single node, ~32–64 cores):**
+
+| Dimension | Estimate | Set by |
+| --- | --- | --- |
+| Concurrent processes/services | **10⁴–10⁵; ~10⁶ only with lean forks** | per-process `ForkConcurrent` weight, *not* goroutine count |
+| Per-process memory | ~5–50 KB | goroutine stack + registry fork + mailbox |
+| Per-service throughput | **10⁴–10⁶ msg/s** | single-goroutine serialization × interpreted-handler cost |
+| Aggregate node throughput | **10⁶–10⁷ msg/s** (light handlers) | cores × per-service, via Go's M:N scheduler |
+| Local `call` latency | **sub-µs–µs** | patrun match + handler; zero-copy message |
+| Served `call` latency | **low µs** | + channel send + goroutine wakeup + reply round-trip |
+| Connections (once TCP lands) | **C10K trivial, C100K with lean forks** | goroutine + fork + FD per connection |
+| GC tail latency | **sub-ms typical, few-ms p99.9 at large heaps** | one shared Go GC |
+
+Limiters, in order: **(1) `ForkConcurrent` weight per process** — the biggest
+divergence from BEAM (~2.6 KB/process → 10⁶–10⁷ there); AQL forks copy the
+*mutable* eval state (sharing read-only infra), so density is **~10× behind BEAM
+but tunable** via lean/copy-on-write forks. **(2) The single shared GC** — zero-copy
+messaging is a win over BEAM's per-message copy, but BEAM's per-process GC gives
+tighter, isolated tail latency at large heaps. **(3) Per-service single-goroutine
+serialization** (the gen_server bottleneck, §7.3) → load balancing, §9.2.
+**(4) Interpreted-handler floor** (bytecode VM mitigates).
+
+**Horizontal (multi-node):**
+- **Today: single-node runtime** (one heap, one GC); scale-out only via network
+  services, itself gated on the **missing TCP server** (only HTTP-client `fetch`).
+- **Strongest property — relocation:** the uniform "assume remote" surface (§8)
+  lets a service move in-process → process → node with **no caller changes**.
+- **Secure routing** via proxy + capability (§6) — avoids disterl's all-or-nothing
+  trust.
+- **Ceiling when built:** follow Partisan (overlays, parallel connections) →
+  **hundreds–thousands of nodes** vs disterl's ~100.
+- **Missing:** node membership, a cross-node registry, partition/rebalance, and
+  the transport itself.
+
+**Benchmark first:** per-process fork weight is the key risk *and* the
+highest-leverage lever — measure it before anything else.
+
+### 9.2 Load balancing
+
+Two limiters above — per-service serialization (vertical) and node distribution
+(horizontal) — are the same need: **spread load across interchangeable
+instances.** The model meets it with one idea at two scopes — a **balanced
+service** that fronts a pool of workers and routes each request by a policy.
+
+**A pool is a service (`pool`, `aql:serve`).**
+
+```
+"aql:serve" import
+pool [worker-spec] {size: N  strategy: 'p2c} -> Service
+```
+
+A `pool` is a `Service` whose handler picks a worker from its set and forwards the
+`call`/`send`. Its workers are children under the server's supervisor (a crashed
+worker is replaced; the pool routes around `down` ones, §8.2). Being just a
+service, it composes with everything — `wrap` it with cross-cutting layers (§1),
+`serve` it, expose it via `listen`, even pool a set of pools.
+
+**Strategies.**
+- `'round-robin` / `'random` — stateless, even spread.
+- `'least-loaded` — route to the **shallowest mailbox** (depth is observable,
+  §8.1) — backpressure-aware.
+- `'p2c` (power-of-two-choices) — sample two at random, route to the less loaded;
+  near-optimal with negligible coordination — a good default.
+- `'hash <key>` — consistent-hash by a request key for **state affinity** (a key
+  always lands on the same worker — stateful sharding); rebalances on membership
+  change.
+- `'weighted` — for heterogeneous worker capacity.
+
+**Backpressure *is* the load signal.** The bounded-mailbox `overload` error (§8.1)
+doubles as the balancer's reroute trigger: a `'fail`-policy worker returning
+`overload` tells the pool to try another or shed; `'least-loaded`/`'p2c` use live
+mailbox depth to avoid a saturated worker in the first place. Load balancing and
+backpressure are one mechanism, not two.
+
+**Same idea, two scopes:**
+- **Intra-node** — a `pool` of local worker services across cores defeats the
+  per-service single-goroutine ceiling (§9.1 #3): stateless → `'p2c`, stateful →
+  `'hash`. Works on the phase-2 process layer.
+- **Inter-node** — a **proxy whose `target` is a *set* of remote endpoints**
+  (§6) *is* a load balancer / API gateway, inheriting the capability model; the
+  same strategies apply, and `down`/`transport` errors (§8.2) drive failover.
+  Because the surface is uniform, the same `pool`/proxy code balances local
+  workers or remote nodes identically.
+
+**Still needed** (with the horizontal gaps): cross-node **membership + health** so
+an inter-node pool/proxy knows its target set and liveness, and **rebalancing**
+for `'hash` pools on node join/leave (consistent hashing keeps reshuffling
+minimal). Intra-node pools land with phase 2; inter-node balancing with transport
++ distribution.
+
+## 10. Gap analysis — what AQL still lacks
 
 - **`Service` type + `add`/`call`/`send`/`state`** and the `[req state] -> reply`
   handler contract (the patrun router is reused; invocation reuses
@@ -707,8 +805,16 @@ error [ case [
   `overload`/`transport` delivery-error set, one fallible contract for local and
   remote, and idempotent-only retries; depends on monitors (`PROCESSES.0.md`) and
   transport.
+- **`pool` / load balancing** (§9.2) — a worker-pool service with routing
+  strategies (`'p2c`/`'least-loaded`/`'hash`/…) using mailbox depth + `overload`
+  as the load signal; intra-node first, inter-node via a multi-target `proxy`.
+- **Cross-node membership, health & rebalancing** (§9) — for inter-node pools and
+  proxies to know their target set, liveness, and to reshuffle `'hash` routing on
+  node join/leave (consistent hashing); lands with distribution.
+- **Lean / copy-on-write registry forks** (§9.1) — the #1 scalability lever;
+  reduces per-process memory toward BEAM-class process density.
 
-## 10. Phased roadmap
+## 11. Phased roadmap
 
 - **Phase 1: in-process service.** `service`, `add`, `call`, `send`, `state`,
   `no_match`, plus `prior` layering + `wrap` middleware (§1) — all core. Pure
@@ -716,15 +822,18 @@ error [ case [
 - **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the
-  served `call` deadline + delivery-error set (§8.2).
+  served `call` deadline + delivery-error set (§8.2); **intra-node `pool`** load
+  balancing (§9.2).
 - **Phase 3: transport + proxy.** `aql:net` `listen`/`connect` (HTTP/stdio/TCP/
   JSON-RPC); remote `call` failure modes + retries under the uniform contract (§8.2);
-  `proxy` with streaming replies and capability-checked interceptors; begin
-  refactoring the CLI servers (§5) onto the model — vault-proxy as the proving
-  ground. → the network-server goal.
-- **Later: distribution.** Location-transparent `call`/`send` across nodes.
+  `proxy` with streaming replies and capability-checked interceptors;
+  **inter-node load balancing** via a multi-target proxy (§9.2); begin refactoring
+  the CLI servers (§5) onto the model — vault-proxy as the proving ground. → the
+  network-server goal.
+- **Later: distribution.** Location-transparent `call`/`send` across nodes;
+  cross-node membership/health + `'hash`-pool rebalancing (§9.2).
 
-## 11. Worked example
+## 12. Worked example
 
 ```aql
 "aql:serve" import
@@ -745,7 +854,7 @@ def gw ( proxy ( connect {http: "https://api.example.com"} ) {
 serve ( server [ app gw ] )               # run everything (blocks)
 ```
 
-## 12. Open questions
+## 13. Open questions
 
 1. **`state` mutation vs purity** — the settled model mutates a `Store`; should a
    pure variant (`add` with `[req state] -> {reply state}`) also be offered for
@@ -776,3 +885,7 @@ serve ( server [ app gw ] )               # run everything (blocks)
    order (a known Seneca footgun). Offer an explicit priority/phase (e.g. `add …
    {phase: 'auth}`) so ordering is declared, not incidental? (Leaning: add-order
    default, optional declared priority for `wrap`.)
+9. **Default `pool` strategy & elasticity** (§9.2) — is `'p2c` the right default,
+   and should a `pool` auto-scale its worker `size` under sustained `overload`, or
+   stay fixed-size with shedding? (Leaning: `'p2c` default, fixed-size first,
+   elasticity later with metrics.)
