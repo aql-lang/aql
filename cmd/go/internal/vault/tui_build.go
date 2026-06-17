@@ -472,6 +472,16 @@ func expiryCountdown(rfc3339 string) string {
 	return expiryStatus(t, time.Now())
 }
 
+// providerOptions builds the Provider select: "(none)" plus the known
+// provider presets, so the field is a constrained choice, not free text.
+func providerOptions() []huh.Option[string] {
+	opts := []huh.Option[string]{huh.NewOption("(none)", "")}
+	for _, p := range ListProviders() {
+		opts = append(opts, huh.NewOption(p.Name, p.Name))
+	}
+	return opts
+}
+
 func (m *rootModel) buildAddForm() screen {
 	var alias, value string
 	// Pre-fill the remembered context (never the alias or the secret value).
@@ -482,7 +492,8 @@ func (m *rootModel) buildAddForm() screen {
 			Value(&alias).Validate(validateAliasField),
 		huh.NewInput().Title("Secret value").Description("the secret itself (entry is hidden)").
 			EchoMode(huh.EchoModePassword).Value(&value).Validate(nonEmpty("value")),
-		huh.NewInput().Title("Provider").Description("optional: openai, anthropic, github, …").Value(&provider),
+		huh.NewSelect[string]().Title("Provider").Description("optional: tag with a known provider").
+			Options(providerOptions()...).Value(&provider),
 		huh.NewInput().Title("Namespace").Description("optional; overrides any ns: prefix").
 			Value(&namespace).Validate(validateNamespaceField),
 		huh.NewInput().Title("Expiry").Description("optional: YYYY-MM-DD, RFC3339, or a duration like 90d").

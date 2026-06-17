@@ -103,6 +103,9 @@ type listScreen struct {
 func newListScreen(title string, items []list.Item, acts []listKeyAction, reloadFn func() []list.Item) *listScreen {
 	l := list.New(items, arrowDelegate{}, 0, 0)
 	l.Title = title
+	l.SetShowTitle(false) // the chrome breadcrumb shows the location; the list's
+	// own title bar has a colored background that renders as a stray block when
+	// the title is empty (the "purple square" on Home).
 	l.SetShowHelp(false)
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
@@ -407,7 +410,14 @@ func (s *formScreen) cliCommand() string {
 }
 
 func newFormScreen(title string, form *huh.Form, onSubmit func() tea.Cmd) *formScreen {
-	return &formScreen{title: title, form: form.WithShowHelp(true).WithShowErrors(true), onSubmit: onSubmit}
+	// Tab/Shift+Tab move between fields (huh default). Make Tab ALSO switch
+	// between the Submit/Cancel buttons on a confirm (huh defaults to ←/→
+	// only); enter then activates the focused button.
+	km := huh.NewDefaultKeyMap()
+	km.Confirm.Toggle = key.NewBinding(key.WithKeys("tab", "h", "l", "left", "right"), key.WithHelp("tab/←/→", "Submit⇄Cancel"))
+	km.Confirm.Next = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "ok"))
+	form = form.WithKeyMap(km).WithShowHelp(true).WithShowErrors(true)
+	return &formScreen{title: title, form: form, onSubmit: onSubmit}
 }
 
 func (s *formScreen) Init() tea.Cmd       { return s.form.Init() }
@@ -445,8 +455,8 @@ func (s *formScreen) View(width, height int) string { return s.form.View() }
 
 func (s *formScreen) shortHelp() []key.Binding {
 	return []key.Binding{
-		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next")),
-		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
+		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab/⇧tab", "move fields/buttons")),
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "ok")),
 		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 	}
 }
