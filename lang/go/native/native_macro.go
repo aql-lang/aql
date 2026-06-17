@@ -116,6 +116,39 @@ var macroNatives = []NativeFunc{
 			},
 		},
 	},
+	{
+		Name: "parse",
+		// `parse <kind> <opts?> <source>` — named parsers (the sibling of
+		// `mini`; design/MINILANG.5.md + the ParseLang module). A macro in
+		// effect: the call expands to the STANDARD parser call
+		//
+		//	ParseLang.parse_<kind> <source> <opts> end
+		//
+		// spliced at the call site. Unlike `mini`, the `source` is the
+		// REQUIRED LAST surface argument (a String or a `{src:…}` Source
+		// map) and `opts` is the optional MIDDLE one — disambiguated by
+		// arity, so a Map source never collides with a Map opts. The kind
+		// names the expansion target and must be a literal; it is resolved
+		// against the imported `ParseLang` namespace at expansion time —
+		// unknown kinds fail loudly here. A parser returns Any (an AST, a
+		// transduction, …, per the language).
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TAtom, TMap, TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        parseHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom, TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        parseHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TAny}, BarrierPos: -1,
+			},
+		},
+	},
 }
 
 // gensymHandler returns a fresh atom whose name is guaranteed not to collide
@@ -256,11 +289,69 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if len(args) == 3 {
 		opts = args[2]
 	}
+
+	// Compile-hook path (design/MINILANG.5.md §13). When the kind registered
+	// a compile hook AND src is concrete, compile at the call site and splice
+	// the hook's tokens instead of the standard call. NOT in check mode: the
+	// checker validates the standard `lang_<kind>` call (the semantic
+	// reference), and a check-mode src is a carrier with no text to compile.
+	// `mini` has no expansion cache, so the hook re-runs whenever the call is
+	// stepped — hooks memoize their compile (as `re` does). A non-concrete
+	// runtime src falls back to the standard transducer call.
+	if !r.Check.IsActive() {
+		goHook, hasGo := miniGoHook(r, kind)
+		aqlHook, hasAQL := miniCompileExport(r, kind)
+		if hasGo || hasAQL {
+			if src, serr := args[1].AsConcreteString(); serr == nil {
+				var hookToks []Value
+				var herr error
+				if hasGo {
+					hookToks, herr = goHook(src, opts, r)
+				} else {
+					hookToks, herr = miniInvokeAQLCompile(r, kind, aqlHook, src, opts)
+				}
+				if herr != nil {
+					return nil, herr
+				}
+				return []Value{NewSplice(NewList(hookToks))}, nil
+			}
+		}
+	}
+
 	toks := []Value{
 		NewWord("MiniLang"), NewWord("get"), NewWord(target),
 		args[1], opts, NewEnd(),
 	}
 	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// miniCompileExport returns kind's AQL compile-hook fn (the `compile_<kind>`
+// export of the bound MiniLang namespace), if present.
+func miniCompileExport(r *Registry, kind string) (Value, bool) {
+	top, ok := r.Defs.Top("MiniLang")
+	if !ok {
+		return Value{}, false
+	}
+	info, ok := asModuleExportInfo(top)
+	if !ok || info.Fields == nil {
+		return Value{}, false
+	}
+	return info.Fields.Get("compile_" + kind)
+}
+
+// miniInvokeAQLCompile runs an AQL compile hook at expansion time. An AQL hook
+// is a MACRO (template with quote/unquote): the language's list literals don't
+// capture locals, so a plain fn can't build a value-injected token list — the
+// macro template is the vehicle. It is expanded against [src, opts] and the
+// resulting tokens are what `mini` splices.
+func miniInvokeAQLCompile(r *Registry, kind string, fn Value, src string, opts Value) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok || !fnDef.Macro || len(fnDef.Signatures) == 0 {
+		return nil, r.AqlErrorHint("mini_bad_compiler",
+			fmt.Sprintf("compile_%s must be a macro", kind), "mini",
+			"register it as MiniLang.register-compiled "+kind+" (macro [[src opts] [ quote [ … ] ]])")
+	}
+	return eng.ExpandMacroWith(r, &fnDef, []Value{NewString(src), opts})
 }
 
 // miniNamespaceBound reports whether the `MiniLang` namespace is bound to a
@@ -278,6 +369,80 @@ func miniNamespaceBound(r *Registry) bool {
 // MiniLang namespace.
 func miniKindRegistered(r *Registry, target string) bool {
 	top, ok := r.Defs.Top("MiniLang")
+	if !ok {
+		return false
+	}
+	info, ok := asModuleExportInfo(top)
+	if !ok || info.Fields == nil {
+		return false
+	}
+	_, ok = info.Fields.Get(target)
+	return ok
+}
+
+// parseHandler expands `parse <kind> <opts?> <source>` into the standard
+// parser call `ParseLang.parse_<kind> <source> <opts> end`, returned as an
+// __SP splice so the generated tokens re-step at the call site (the same
+// mechanism as `mini`). args[0]=kind (Atom via /q — must be literal); the
+// `source` is the required LAST surface arg, `opts` the optional middle one
+// (2-arg form normalizes to {}). source/opts are spliced as collected — they
+// may be carriers in check mode; only the kind must be concrete.
+func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	kind, err := args[0].AsConcreteAtom()
+	if err != nil {
+		return nil, r.AqlErrorHint("parse_error",
+			"parse: the kind must be a literal name", "parse",
+			"write the kind as a bare word: parse calc 'x + y'")
+	}
+	target := "parse_" + kind
+
+	// Resolve the kind against the imported ParseLang namespace NOW —
+	// unknown kinds are expansion-time errors at the call site.
+	if !parseKindRegistered(r, target) {
+		if r.Check.IsActive() && !parseNamespaceBound(r) {
+			// The import may be outside the checked fragment; degrade to a
+			// dynamic value rather than a false-positive diagnostic (mirror
+			// of miniHandler).
+			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
+		return nil, r.AqlErrorHint("parse_unknown_lang",
+			fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
+			`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`)
+	}
+
+	// Surface: parse <kind> <opts?> <source>. source is the required last
+	// arg; opts is optional. Map surface→emission to the standard parser
+	// call shape [source opts].
+	var opts, source Value
+	if len(args) == 3 {
+		opts = args[1]
+		source = args[2]
+	} else {
+		opts = NewMap(NewOrderedMap())
+		source = args[1]
+	}
+	toks := []Value{
+		NewWord("ParseLang"), NewWord("get"), NewWord(target),
+		source, opts, NewEnd(),
+	}
+	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// parseNamespaceBound reports whether the `ParseLang` namespace is bound to a
+// ModuleExport in the current scope.
+func parseNamespaceBound(r *Registry) bool {
+	top, ok := r.Defs.Top("ParseLang")
+	if !ok {
+		return false
+	}
+	_, ok = asModuleExportInfo(top)
+	return ok
+}
+
+// parseKindRegistered reports whether `parse_<kind>` is an export of the
+// bound ParseLang namespace.
+func parseKindRegistered(r *Registry, target string) bool {
+	top, ok := r.Defs.Top("ParseLang")
 	if !ok {
 		return false
 	}

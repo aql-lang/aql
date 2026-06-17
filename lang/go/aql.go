@@ -357,6 +357,73 @@ func (a *AQL) RegisterNativeFunc(n native.NativeFunc) {
 	a.registry.RegisterNativeFunc(n)
 }
 
+// FnParam describes one parameter of a function signature — re-exported so
+// hosts can declare a mini-language kind's stack Inputs (see MiniLangSpec).
+type FnParam = native.FnParam
+
+// Handler is the signature of a native word / mini-language handler:
+// func(args, ctx, stack, registry) (results, error). args are delivered in
+// signature order (args[0] = sig position 0).
+type Handler = native.Handler
+
+// MiniLangSpec describes a Go-implemented mini-language kind for
+// RegisterMiniLang. The standard [src:String opts:Map] prefix is supplied
+// automatically; declare only the extra stack Inputs, the Returns, and the
+// Handler.
+type MiniLangSpec = modules.MiniLangSpec
+
+// RegisterMiniLang installs a Go-implemented mini-language kind on the
+// instance — the embedder twin of the AQL `MiniLang.register` word. After
+// the program imports "aql:minilang", the kind is callable as
+// `mini <Name> <src> <opts>` exactly like a built-in (`re`, `bf`).
+// Registration may precede or follow the import.
+//
+// The kind name must be a lowercase atom with no `lang_` prefix, the
+// handler must be non-nil, and the name must not collide with an existing
+// kind (built-in or host). The handler receives args[0]=src, args[1]=opts,
+// and args[2..]=the declared Inputs.
+//
+// Example — an integer binary op whose operands name keys in opts:
+//
+//	a.RegisterMiniLang(lang.MiniLangSpec{
+//	    Name:    "iop",
+//	    Returns: []*lang.Type{lang.TInteger},
+//	    Handler: iopHandler, // parses "x + y", applies to opts.x, opts.y
+//	})
+//	a.Run(`"aql:minilang" import end  mini iop 'x + y' {x:10, y:2}`) // → 12
+func (a *AQL) RegisterMiniLang(spec MiniLangSpec) error {
+	return modules.RegisterHostMiniLang(a.registry, spec)
+}
+
+// ParseLangSpec describes a Go-implemented parser for RegisterParser. The
+// standard [source:String opts:Map] prefix is supplied automatically and the
+// source is resolved to a String before the handler runs; declare only the
+// Returns and the Handler.
+type ParseLangSpec = modules.ParseLangSpec
+
+// RegisterParser installs a Go-implemented parser on the instance — the
+// embedder twin of the AQL `ParseLang.register` word, and the sibling of
+// RegisterMiniLang. After the program imports "aql:parselang", the parser is
+// callable as `parse <Name> <opts?> <source>`; it returns whatever the
+// language yields (an AST, a transduction, …), typed Any. Registration may
+// precede or follow the import.
+//
+// The kind name must be a lowercase atom with no `parse_` prefix, the handler
+// must be non-nil, and the name must not collide with an existing parser. The
+// handler receives args[0]=source (a resolved String) and args[1]=opts.
+//
+// Example — a calc parser that returns an AST instead of evaluating:
+//
+//	a.RegisterParser(lang.ParseLangSpec{
+//	    Name:    "calc",
+//	    Returns: []*lang.Type{lang.TMap},
+//	    Handler: calcParseHandler, // 'x + y' → {op:'+', left:'x', right:'y'}
+//	})
+//	a.Run(`"aql:parselang" import end  parse calc 'x + y'`) // → {op:'+' …}
+func (a *AQL) RegisterParser(spec ParseLangSpec) error {
+	return modules.RegisterHostParser(a.registry, spec)
+}
+
 // (RegisterStackOnly was retired. To install a stack-only word, set
 // `BarrierPos: 0` on each Signature and call `Register` — that's the
 // canonical encoding of "this sig consumes its args from the prefix

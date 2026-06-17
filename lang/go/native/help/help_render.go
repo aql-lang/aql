@@ -36,6 +36,7 @@ var moduleCatalog = []ModuleInfo{
 	{"logic-util", "Derived boolean connectives: nand, nor, xnor, iff, implies."},
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
 	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), register."},
+	{"parselang", "Named parsers behind the `parse` word: register a parser, parse a source into an AST."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The
