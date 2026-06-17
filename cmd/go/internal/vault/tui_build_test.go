@@ -142,6 +142,59 @@ func TestFormScreenCliCommandIsLive(t *testing.T) {
 	}
 }
 
+func TestSecretsEnterOpensDetail(t *testing.T) {
+	ctl, _ := newTestController(t)
+	if err := ctl.addSecret("k", "v", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	m := newRootModel(ctl)
+	m.Init()
+	m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+	secrets := m.buildSecrets()
+	_, cmd := secrets.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := pushedTitle(cmd); got != "k" {
+		t.Errorf("enter on a secret should open its detail page, pushed %q", got)
+	}
+}
+
+func TestSecretDetailMasksRevealsAndInjects(t *testing.T) {
+	ctl, _ := newTestController(t)
+	if err := ctl.addSecret("github_token", "ghp-xyz", "github", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	m := newRootModel(ctl)
+
+	masked := m.renderSecretDetail("github_token", &secretReveal{})
+	if strings.Contains(masked, "ghp-xyz") {
+		t.Error("masked detail must not show the value")
+	}
+	for _, want := range []string{"hidden", "github", "aql vault exec github_token", "--for=npm"} {
+		if !strings.Contains(masked, want) {
+			t.Errorf("detail missing %q", want)
+		}
+	}
+
+	shown := m.renderSecretDetail("github_token", &secretReveal{shown: true, value: "ghp-xyz"})
+	if !strings.Contains(shown, "ghp-xyz") {
+		t.Error("revealed detail should show the value")
+	}
+}
+
+func TestClipboardCopyArgvWired(t *testing.T) {
+	env := clipEnv{
+		goos:     "darwin",
+		getenv:   func(string) string { return "" },
+		lookPath: func(string) (string, error) { return "/usr/bin/x", nil },
+	}
+	c, err := detectClipboard(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.copyArgv) == 0 || c.copyArgv[0] != "pbcopy" {
+		t.Errorf("darwin copyArgv = %v, want [pbcopy]", c.copyArgv)
+	}
+}
+
 func TestCommandBarAndStatusBar(t *testing.T) {
 	ctl, _ := newTestController(t)
 	if err := ctl.addSecret("k", "v", "", "", ""); err != nil {

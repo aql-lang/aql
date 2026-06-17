@@ -69,7 +69,7 @@ func TestModelFooterAlwaysListsKeys(t *testing.T) {
 	// Drill into Secrets: its action keys appear, plus back + globals.
 	m = feed(t, m, pushMsg{m.buildSecrets()})
 	sec := m.footerView()
-	for _, want := range []string{"add", "reveal", "rotate", "delete", "back", "switch", "help"} {
+	for _, want := range []string{"details", "add", "back", "switch", "help"} {
 		if !strings.Contains(sec, want) {
 			t.Errorf("secrets footer missing %q: %q", want, sec)
 		}
@@ -198,11 +198,15 @@ func TestVaultPickerEnterSwitches(t *testing.T) {
 
 func TestModelHelpScreenIsHelpful(t *testing.T) {
 	m := newTestModel(t)
-	m = feed(t, m, pushMsg{m.buildSecrets()})
+	if err := m.ctl.addSecret("k", "v", "github", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	// The per-secret detail page is where reveal + the explained actions live.
+	m = feed(t, m, pushMsg{m.buildSecretDetail("k")})
 	m.openHelp()
 	h := m.View() // renders the scrollable help screen
 	for _, want := range []string{
-		"Help", "Your stored API keys", // title + description
+		"Help", "one secret", // title + description
 		"On this screen", "Reveal", // section + an action
 		"Rotate", "replace the value with a new one", // rotate is actually explained
 		"Anywhere", "switch", "command", "theme", // global keys

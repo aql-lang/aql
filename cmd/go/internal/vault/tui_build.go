@@ -20,23 +20,26 @@ import (
 // --- per-screen action key bindings ---------------------------------------
 
 var (
-	kReveal   = key.NewBinding(key.WithKeys("g", "enter"), key.WithHelp("g", "reveal"))
-	kAdd      = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
-	kRotate   = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "rotate"))
-	kRemove   = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete"))
-	kRename   = key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "rename"))
-	kExpiry   = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "expiry"))
-	kGrant    = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "grant"))
-	kRevoke   = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "revoke"))
-	kPwAdd    = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
-	kPwRemove = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "remove"))
-	kNewVault = key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new"))
-	kSetDef   = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "default"))
-	kPrune    = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "prune"))
-	kPrune2   = key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "prune"))
-	kRestore  = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "restore"))
-	kSet      = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "set"))
-	kUnset    = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "unset"))
+	kOpenDetail  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "details"))
+	kReveal      = key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reveal/hide"))
+	kCopyExec    = key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "copy exec"))
+	kAdd         = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
+	kRotate      = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "rotate"))
+	kRemove      = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "delete"))
+	kRename      = key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "rename"))
+	kExpiry      = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "expiry"))
+	kGrant       = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "grant"))
+	kDetailGrant = key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "grant"))
+	kRevoke      = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "revoke"))
+	kPwAdd       = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
+	kPwRemove    = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "remove"))
+	kNewVault    = key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new"))
+	kSetDef      = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "default"))
+	kPrune       = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "prune"))
+	kPrune2      = key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "prune"))
+	kRestore     = key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "restore"))
+	kSet         = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "set"))
+	kUnset       = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "unset"))
 )
 
 // requireAuth runs do, first prompting for the vault passphrase when the
@@ -236,69 +239,141 @@ func (m *rootModel) buildSecrets() screen {
 		return ""
 	}
 	acts := []tableAction{
-		{binding: kReveal, run: func(idx int) tea.Cmd {
-			alias := aliasAt(idx)
-			if alias == "" {
-				return nil
+		// Enter opens the per-secret detail page — that's the only place the
+		// value can be revealed and where the per-key actions live.
+		{binding: kOpenDetail, run: func(idx int) tea.Cmd {
+			if alias := aliasAt(idx); alias != "" {
+				return pushScreen(m.buildSecretDetail(alias))
+			}
+			return nil
+		}},
+		{binding: kAdd, run: func(_ int) tea.Cmd {
+			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildAddForm()) })
+		}},
+	}
+	cols, rows := m.secretsTable()
+	return newTableScreen("secrets", cols, rows, acts, "no secrets yet — press a to add one", m.secretsTable).
+		withHelp(`Your stored API keys and tokens. Values stay hidden here.
+
+  enter   Open the secret's page — reveal it, rotate / rename / delete it, set an
+          expiry, grant a token, and copy the command to inject it into a process.
+  a       Add a new secret — you type the value (entry is hidden).`).
+		withCmd("aql vault list")
+}
+
+// secretReveal is the per-detail-page reveal state (the cleartext is held
+// only while shown, and cleared on hide / leaving the page).
+type secretReveal struct {
+	shown bool
+	value string
+}
+
+// buildSecretDetail is the per-secret page: metadata, a reveal/hide toggle,
+// the key actions, and the copyable commands to inject the secret into a
+// process. It is the ONLY place a value can be revealed.
+func (m *rootModel) buildSecretDetail(alias string) screen {
+	rev := &secretReveal{}
+	render := func() string { return m.renderSecretDetail(alias, rev) }
+	acts := []pagerAction{
+		{binding: kReveal, run: func() tea.Cmd {
+			if rev.shown {
+				rev.shown, rev.value = false, ""
+				return reloadTop()
 			}
 			return m.requireAuth(func() tea.Cmd {
 				v, err := m.ctl.revealSecret(alias)
 				if err != nil {
 					return statusErr(err.Error())
 				}
-				return pushScreen(m.buildRevealPager(alias, v))
+				rev.shown, rev.value = true, v
+				return reloadTop()
 			})
 		}},
-		// add/rotate/rm/rename all write secret values, so they need a session.
-		// Authenticate (once) BEFORE opening the form, so the operation has the
-		// passphrase rather than failing with "no input" at submit time.
-		{binding: kAdd, run: func(_ int) tea.Cmd {
-			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildAddForm()) })
-		}},
-		{binding: kRotate, run: func(idx int) tea.Cmd {
-			if alias := aliasAt(idx); alias != "" {
-				return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRotateForm(alias)) })
+		{binding: kCopyExec, run: func() tea.Cmd {
+			label, err := m.ctl.copyToClipboard(execInjectCommand(alias))
+			if err != nil {
+				return statusErr("copy: " + err.Error())
 			}
-			return nil
+			return status("copied exec command to clipboard (" + label + ")")
 		}},
-		{binding: kRemove, run: func(idx int) tea.Cmd {
-			if alias := aliasAt(idx); alias != "" {
-				return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRemoveForm(alias)) })
-			}
-			return nil
+		{binding: kRotate, run: func() tea.Cmd {
+			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRotateForm(alias)) })
 		}},
-		{binding: kRename, run: func(idx int) tea.Cmd {
-			if alias := aliasAt(idx); alias != "" {
-				return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRenameForm(alias)) })
-			}
-			return nil
+		{binding: kRename, run: func() tea.Cmd {
+			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRenameForm(alias)) })
 		}},
-		{binding: kExpiry, run: func(idx int) tea.Cmd {
-			if alias := aliasAt(idx); alias != "" {
-				return pushScreen(m.buildExpiryForm(alias))
-			}
-			return nil
+		{binding: kExpiry, run: func() tea.Cmd { return pushScreen(m.buildExpiryForm(alias)) }},
+		{binding: kDetailGrant, run: func() tea.Cmd { return pushScreen(m.buildGrantForm(alias)) }},
+		{binding: kRemove, run: func() tea.Cmd {
+			return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildRemoveForm(alias)) })
 		}},
 	}
-	cols, rows := m.secretsTable()
-	return newTableScreen("secrets", cols, rows, acts, "no secrets yet — press a to add one", m.secretsTable).
-		withHelp(`Your stored API keys and tokens. Values stay hidden until you reveal them.
+	return newPagerScreen(alias, render(), acts, render).
+		withHelp(`Everything about one secret. The value is shown only here, only when you
+reveal it, and it is cleared again when you leave this page.
 
-  g / enter   Reveal the value on a temporary screen (esc clears it from view).
-  a           Add a new secret — you type the value (entry is hidden).
-  R           Rotate: replace the value with a new one, keeping the same alias
-              and its capabilities. Tokens issued for it keep working unless you
-              also choose to revoke them.
-  D           Delete the secret and every capability scoped to it.
-  m           Rename the secret, or move it to another namespace.
-  e           Set or clear its expiry reminder (a reminder only — never enforced).`).
-		withCmd("aql vault list")
+  r   Reveal the value (press r again to hide it). Masked otherwise.
+  c   Copy the "exec" command below to your clipboard.
+  R   Rotate: replace the value with a new one, keeping the same alias and its
+      capabilities. Tokens issued for it keep working unless you also revoke.
+  m   Rename the secret, or move it to another namespace.
+  e   Set or clear its expiry reminder (informational; never enforced).
+  g   Grant a scoped capability token for this secret.
+  D   Delete the secret and every capability scoped to it.
+
+The "Inject into a process" commands run the secret into a child process's
+environment without it ever touching disk or your shell history:
+"aql vault exec <alias> -- cmd" injects it as $<alias>; add
+"--for=npm|cargo|gem|pypi|uv" for publishing recipes.`).
+		withCmd("aql vault get " + alias)
 }
 
-func (m *rootModel) buildRevealPager(alias, value string) screen {
-	content := tuiErrStyle.Render("⚠ secret revealed — press esc to clear from the screen") + "\n\n" +
-		tuiTitleStyle.Render(alias) + "\n\n" + value
-	return newPagerScreen("reveal", content, nil, nil)
+// execInjectCommand is the primary command copied by 'c' on the detail page.
+func execInjectCommand(alias string) string {
+	return "aql vault exec " + alias + " -- <your command>"
+}
+
+// renderSecretDetail builds the detail-page body for one alias.
+func (m *rootModel) renderSecretDetail(alias string, rev *secretReveal) string {
+	a, ok := m.ctl.alias(alias)
+	var b strings.Builder
+	b.WriteString(tuiTitleStyle.Render("Secret  " + alias))
+	b.WriteString("\n\n")
+	if ok {
+		b.WriteString(detailRow("provider", dash(a.Provider)))
+		b.WriteString(detailRow("namespace", nsLabel(aliasNamespace(a))))
+		b.WriteString(detailRow("created", dash(a.CreatedAt)))
+		b.WriteString(detailRow("expires", dash(a.ExpiresAt)))
+		b.WriteString(detailRow("source", dash(a.Source)))
+	}
+	b.WriteByte('\n')
+	if rev.shown {
+		b.WriteString(detailRow("value", tuiErrStyle.Render(rev.value)))
+		b.WriteString(tuiDimStyle.Render("            ⚠ visible — press r to hide\n"))
+	} else {
+		b.WriteString(detailRow("value", tuiDimStyle.Render("•••••••• (hidden)")))
+		b.WriteString(tuiDimStyle.Render("            press r to reveal\n"))
+	}
+	b.WriteByte('\n')
+	b.WriteString(tuiSectionStyle.Render("Inject into a process (run from your shell)"))
+	b.WriteByte('\n')
+	env := strings.ToUpper(aliasBase(alias))
+	for _, line := range []string{
+		"aql vault exec " + alias + " -- <your command>",
+		"aql vault exec " + alias + "=" + env + " -- <your command>",
+		"aql vault exec --for=npm " + alias + " -- npm publish",
+	} {
+		b.WriteString("  " + tuiPathStyle.Render(line) + "\n")
+	}
+	b.WriteByte('\n')
+	b.WriteString(tuiDimStyle.Render("press ") + tuiKeyStyle.Render("c") +
+		tuiDimStyle.Render(" to copy the first command, or select any line with the mouse"))
+	return b.String()
+}
+
+// detailRow renders an aligned "label  value" line for the detail page.
+func detailRow(label, value string) string {
+	return "  " + tuiDimStyle.Render(fmt.Sprintf("%-11s", label)) + value + "\n"
 }
 
 func (m *rootModel) buildAddForm() screen {
@@ -579,7 +654,7 @@ func (m *rootModel) buildAccess() screen {
 		return ""
 	}
 	acts := []tableAction{
-		{binding: kGrant, run: func(_ int) tea.Cmd { return pushScreen(m.buildGrantForm()) }},
+		{binding: kGrant, run: func(_ int) tea.Cmd { return pushScreen(m.buildGrantForm("")) }},
 		{binding: kRevoke, run: func(idx int) tea.Cmd {
 			if id := idAt(idx); id != "" {
 				return pushScreen(m.buildRevokeForm(id))
@@ -597,8 +672,9 @@ func (m *rootModel) buildAccess() screen {
   D   Revoke: permanently disable the selected token; it stops working at once.`)
 }
 
-func (m *rootModel) buildGrantForm() screen {
-	var alias, agent, hosts, methods, ttl, maxCalls, maxCost string
+func (m *rootModel) buildGrantForm(prefillAlias string) screen {
+	alias := prefillAlias
+	var agent, hosts, methods, ttl, maxCalls, maxCost string
 	var approval bool
 	ttl = "2h"
 	form := huh.NewForm(huh.NewGroup(
@@ -980,7 +1056,7 @@ func (m *rootModel) runPalette(cmd string) tea.Cmd {
 	case "add":
 		return m.requireAuth(func() tea.Cmd { return pushScreen(m.buildAddForm()) })
 	case "grant":
-		return pushScreen(m.buildGrantForm())
+		return pushScreen(m.buildGrantForm(""))
 	case "lock":
 		return submitOpNoPop("vault locked", m.ctl.lock)
 	case "unlock":

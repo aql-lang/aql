@@ -365,6 +365,13 @@ func (s *formScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "esc" {
 		return s, tea.Batch(popScreen(), status("cancelled"))
 	}
+	// Size the form ONCE per resize, not on every render: re-applying
+	// WithWidth/WithHeight each View resets huh's scroll + focus, so the final
+	// Submit/Cancel field never appears highlighted and enter on it looks
+	// dead. huh scrolls the focused field into view on its own.
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		s.form = s.form.WithWidth(minInt(ws.Width, 72)).WithHeight(maxInt(ws.Height, 6))
+	}
 	fm, cmd := s.form.Update(msg)
 	if f, ok := fm.(*huh.Form); ok {
 		s.form = f
@@ -381,10 +388,7 @@ func (s *formScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	return s, cmd
 }
 
-func (s *formScreen) View(width, height int) string {
-	s.form = s.form.WithWidth(minInt(width, 72)).WithHeight(maxInt(height-1, 6))
-	return s.form.View()
-}
+func (s *formScreen) View(width, height int) string { return s.form.View() }
 
 func (s *formScreen) shortHelp() []key.Binding {
 	return []key.Binding{
