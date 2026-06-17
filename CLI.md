@@ -588,20 +588,35 @@ the command line:
 
 ```bash
 aql vault add --from-stdin npm_token            # store the token once
-aql vault exec --for=npm    npm_token   -- npm publish
-aql vault exec --for=cargo  crates_tok  -- cargo publish
-aql vault exec --for=gem    rubygems    -- gem push pkg.gem
-aql vault exec --for=pypi   pypi_token  -- twine upload dist/*
-aql vault exec --for=uv     pypi_token  -- uv publish
+aql vault exec --for=npm     npm_token   -- npm publish
+aql vault exec --for=pnpm    npm_token   -- pnpm publish
+aql vault exec --for=cargo   crates_tok  -- cargo publish
+aql vault exec --for=pypi    pypi_token  -- twine upload dist/*
+aql vault exec --for=poetry  pypi_token  -- poetry publish
+aql vault exec --for=github  gh_pat      -- gh release upload v1 dist/*
+aql vault exec --for=terraform tfc_token -- terraform apply
 
-# Scoped / GitHub Packages npm registry:
+# Scoped / GitHub Packages npm registry (works for npm/pnpm/composer/terraform):
 aql vault exec --for=npm --registry=npm.pkg.github.com gh_npm -- npm publish
 ```
 
-Recipes (`npm`, `cargo`, `gem`, `pypi`/`twine`, `uv`) are pure env
-injection; file-only publishers like docker and maven are not yet
-covered. The recipe sets the env-var names, so `--for` takes a single
-alias (no `=ENV`/`--prefix`/`--upper`).
+Recipes are pure env injection — a single secret into the exact variable(s)
+each tool reads:
+
+| `--for=` | Tool(s) | Env var(s) |
+|---|---|---|
+| `npm` · `yarn` · `pnpm` · `bun` | Node | per-registry `_authToken` / `YARN_NPM_AUTH_TOKEN` / `NPM_CONFIG_TOKEN` |
+| `pypi`/`twine` · `uv` · `poetry` · `hatch` · `flit` | Python | `TWINE_*` / `UV_PUBLISH_TOKEN` / `POETRY_PYPI_TOKEN_PYPI` / `HATCH_INDEX_*` / `FLIT_*` |
+| `cargo` · `gem` · `hex` | Rust/Ruby/Elixir | `CARGO_REGISTRY_TOKEN` / `GEM_HOST_API_KEY` / `HEX_API_KEY` |
+| `swift` · `cocoapods`/`pod` | Swift/iOS | `SWIFTPM_REGISTRY_TOKEN` / `COCOAPODS_TRUNK_TOKEN` |
+| `composer`/`packagist` | PHP | `COMPOSER_AUTH` (http-basic JSON) |
+| `github`/`gh` · `gitlab`/`glab` · `terraform`/`tf` | CLI tokens | `GH_TOKEN`+`GITHUB_TOKEN` / `GITLAB_TOKEN` / `TF_TOKEN_<host>` |
+
+The recipe sets the env-var names, so `--for` takes a single alias (no
+`=ENV`/`--prefix`/`--upper`). Tools that need a config file or two
+credentials (maven, gradle, conan, docker/helm, nuget's `--api-key`,
+pub.dev, jsr) are not covered — they can't be expressed as a single
+env-injected secret.
 
 To rehearse the plumbing without unlocking the vault, add `--dry-run`: no
 passphrase is read and an obviously-fake filler value is injected in place

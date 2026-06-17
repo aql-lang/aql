@@ -37,8 +37,8 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	upper := fs.Bool("upper", false, "uppercase env-var names derived from alias names")
 	clearEnv := fs.Bool("clear-env", false, "do not inherit the parent environment (keeps PATH/HOME/USER/SHELL/TERM/LANG/LC_ALL/TMPDIR only)")
 	prefix := fs.String("prefix", "", "prepend this prefix to env-var names derived from aliases")
-	forRecipe := fs.String("for", "", "present a single alias as a publisher's credential env (npm, cargo, gem, pypi, uv)")
-	registry := fs.String("registry", "", "registry host for --for=npm (default "+npmDefaultRegistry+")")
+	forRecipe := fs.String("for", "", "present a single alias as a tool's credential env (npm, yarn, pnpm, bun, pypi, uv, poetry, hatch, flit, cargo, gem, hex, swift, cocoapods, composer, github, gitlab, terraform)")
+	registry := fs.String("registry", "", "registry/host for registry-scoped recipes (npm, pnpm, composer, terraform); default per recipe")
 	dryRun := fs.Bool("dry-run", false, "inject a filler value instead of the real secret (no passphrase needed); for testing the plumbing, e.g. `npm publish --dry-run`")
 	if err := fs.Parse(preArgs); err != nil {
 		return 1

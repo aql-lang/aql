@@ -313,7 +313,7 @@ func injectCommands(alias string) []injectCmd {
 		},
 		{
 			"aql vault exec --for=npm " + alias + " -- npm publish",
-			"Publish using the token — --for=npm|cargo|gem|pypi|uv sets up that tool's auth env.",
+			"Set up a tool's credential env — --for=npm·yarn·pnpm·bun·pypi·uv·poetry·cargo·gem·hex·swift·cocoapods·composer·github·gitlab·terraform.",
 		},
 	}
 }
