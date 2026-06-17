@@ -85,7 +85,7 @@ type Registry struct {
 	// See flowctrl.go.
 	FlowCtrl FlowCtrl
 
-	// TCO is the tail-call-optimisation surface (design/TCO-STAGED.0.md).
+	// TCO is the tail-call-optimisation surface (design/TCO-STAGED.10.md).
 	// Lives on the registry (not the engine) so sub-engines sharing the
 	// registry contribute to one count and obey one switch.
 	TCO TCOState
@@ -243,7 +243,7 @@ type CheckState struct {
 	// declaration instead and don't count). AnalyseFnBody compares
 	// the counter around a body run to know whether its summary was
 	// computed under the weakest hypothesis and needs refinement
-	// before being cached (design/checker-accuracy-review.0.md A2).
+	// before being cached (design/checker-accuracy-review.10.md A2).
 	InflightBails int
 
 	// Emit, when non-nil, turns the check pass into the bytecode
@@ -259,7 +259,7 @@ type CheckState struct {
 	// or dynamic(Any) — and emits ONE analysis_truncated diagnostic
 	// naming the fn, so heavy polymorphic use degrades loudly instead
 	// of silently eating the whole step budget
-	// (design/checker-accuracy-review.0.md A9).
+	// (design/checker-accuracy-review.10.md A9).
 	FnAnalysisCounts map[string]int
 
 	// StepCount is the running total of engine steps consumed by

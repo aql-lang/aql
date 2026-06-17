@@ -1,7 +1,7 @@
 # AQL Bytecode & compilation — readiness assessment
 
 **Status:** assessment — June 2026, after the checker-accuracy work
-landed on this branch (`checker-accuracy-review.0.md` findings A1–A9
+landed on this branch (`checker-accuracy-review.10.md` findings A1–A9
 resolved or dispositioned). Re-reviews `aql-bytecode-report.0.md`,
 `aql-bytecode-revisions.0.md`, `aql-bytecode-plan.0.md`, and
 `aql-bytecode-baseline.0.md` against the current state and answers:

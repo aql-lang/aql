@@ -7,7 +7,7 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
-// Per-alternative disjunct dispatch (design/checker-accuracy-review.0.md
+// Per-alternative disjunct dispatch (design/checker-accuracy-review.10.md
 // A1): a strict disjunct input must dispatch as the JOIN of its
 // alternatives' first-match dispatches, never as a single first-match
 // on the whole disjunct.

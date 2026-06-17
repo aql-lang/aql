@@ -1,7 +1,7 @@
 package eng
 
 // Tail-call elimination for direct self-recursion
-// (design/TCO-STAGED.0.md Stages 3 and 4a).
+// (design/TCO-STAGED.10.md Stages 3 and 4a).
 //
 // When a fn-body dispatch is a direct self-recursive tail call, the
 // enclosing frame's cleanup tail — already on the tape, already

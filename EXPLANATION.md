@@ -283,7 +283,7 @@ import "aql:string-util"          # no `end` needed…
 `import` takes its module path and stops, because the following
 parenthesised expression matches none of its argument shapes. (Earlier
 builds eagerly evaluated that paren *before* `import` ran, so it failed with
-`undefined word: StringUtil` — see `design/LAZY-ARG-RESOLUTION.0.md`.) You
+`undefined word: StringUtil` — see `design/LAZY-ARG-RESOLUTION.10.md`.) You
 still reach for `end` when the next token *could* legitimately be the word's
 argument — most commonly a second string path right after `import`:
 

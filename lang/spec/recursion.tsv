@@ -2,7 +2,7 @@
 # Format: input<TAB>expected<TAB>description
 #
 # Pins the observable semantics of fn-call frames that tail-call
-# optimisation must preserve bit-for-bit (design/TCO-STAGED.0.md
+# optimisation must preserve bit-for-bit (design/TCO-STAGED.10.md
 # Stage 0): param/local/capture teardown, per-frame args visibility,
 # ReturnCheck behaviour, frames that accrete values, forwards pending
 # below a call, and flow control crossing fn frames. Depths stay well

@@ -6,7 +6,7 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
-// Loop-body fixed point (design/checker-accuracy-review.0.md A4):
+// Loop-body fixed point (design/checker-accuracy-review.10.md A4):
 // rebindings inside a loop body must join back into the enclosing
 // binding and re-analyse until stable — post-loop reads used to see
 // the PRE-loop type (Integer) while the runtime produced Float.

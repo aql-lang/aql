@@ -277,7 +277,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			// namespace WITHOUT the kind is a real bug in any mode. The
 			// carrier is dynamic(Any) — the documented escape-hatch
 			// modality — not strict Any, which would poison every typed
-			// consumer downstream (checker-accuracy-review.0.md A8).
+			// consumer downstream (checker-accuracy-review.10.md A8).
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("mini_unknown_lang",

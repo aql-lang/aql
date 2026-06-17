@@ -1,7 +1,7 @@
 # Tail-Call Optimisation for the AQL Tape Machine
 
 **Status:** **IMPLEMENTED** (June 2026) — via the staged plan in
-`TCO-STAGED.0.md`, which re-reviewed this note, corrected three points
+`TCO-STAGED.10.md`, which re-reviewed this note, corrected three points
 in it (the hook landed in `execMatch` before the handler rather than
 restructuring `buildFnBodyHandler`; the keep-caller's-`__RC` rule
 became the shell variant with full replacement keeping the callee's;

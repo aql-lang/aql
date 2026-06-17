@@ -1,4 +1,4 @@
-// Check-accuracy ratchet (design/checker-accuracy-review.0.md §5).
+// Check-accuracy ratchet (design/checker-accuracy-review.10.md §5).
 //
 // Runs `aql check` semantics (Registry.Check.Begin + a normal engine
 // run) over every row of the production language spec at lang/spec/
@@ -156,7 +156,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 	return false
 }
 
-// ---- type-soundness differential (checker-accuracy-review.0.md §5,
+// ---- type-soundness differential (checker-accuracy-review.10.md §5,
 // follow-on): for every value row that BOTH checks clean and runs,
 // the runtime result's type must be covered by the checked carrier —
 // `typeof(actual) ⊑ checked`. This is the assertion that catches

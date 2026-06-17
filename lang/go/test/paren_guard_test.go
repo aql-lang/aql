@@ -6,7 +6,7 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
-// Paren-condition guard narrowing (design/checker-accuracy-review.0.md
+// Paren-condition guard narrowing (design/checker-accuracy-review.10.md
 // A3): the canonical `if (x is T) …` form must narrow exactly like the
 // list form `if [x is T] …`.
 

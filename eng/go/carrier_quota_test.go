@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Per-fn analysis quota (design/checker-accuracy-review.0.md A9):
+// Per-fn analysis quota (design/checker-accuracy-review.10.md A9):
 // past FnAnalysisQuota distinct call shapes the analyser answers
 // without body re-analysis and emits exactly one analysis_truncated
 // diagnostic.
