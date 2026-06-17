@@ -150,9 +150,6 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 // caseHandler/caseClauses; __casematch reuses its UnifyR).
 func caseReturnsFn(args []Value, r *Registry) []Value {
 	dynAny := []Value{NewDynamicCarrier(TAny)}
-	if r.Check.Emit == nil {
-		return dynAny
-	}
 	v, clauses := args[0], args[1]
 	if isCodeBody(v) && !isCodeBody(clauses) {
 		v, clauses = clauses, v
@@ -161,6 +158,9 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		return dynAny
 	}
 	lst, _ := AsList(clauses)
+	if lst.IsNil() {
+		return dynAny
+	}
 	elems := lst.Slice()
 	// At least one clause pair. A trailing default (odd length) makes the
 	// innermost else a definite value; WITHOUT one (even length) the innermost
@@ -170,13 +170,58 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	if len(elems) < 2 {
 		return dynAny
 	}
-	if !r.Check.Emit.OperandRepushable(v) {
-		return dynAny
+	// COMPILE desugar to a nested-`if` chain — ONLY when emission is active
+	// and the case value is re-pushable (it is re-tested against every clause
+	// guard inside the else fragments; a computed event could not be
+	// re-pushed). if3ReturnsFn returns the branch-join type AND records the
+	// lowering.
+	if r.Check.Emit != nil && r.Check.Emit.OperandRepushable(v) {
+		cond := NewList(caseGuardTokens(v, elems[0]))
+		then := NewList(caseBlockTokens(v, elems[1]))
+		rest := buildCaseChain(v, elems, 2)
+		return if3ReturnsFn([]Value{cond, then, NewList(rest)}, r)
 	}
-	cond := NewList(caseGuardTokens(v, elems[0]))
-	then := NewList(caseBlockTokens(v, elems[1]))
-	rest := buildCaseChain(v, elems, 2)
-	return if3ReturnsFn([]Value{cond, then, NewList(rest)}, r)
+	// Otherwise the island / whole-program fallback owns COMPILATION, but the
+	// result TYPE is still computable: the join of every clause block's
+	// residual type plus the trailing default. Decoupling the type from the
+	// compile-eligibility lets a plain `aql check` (which has no emit state)
+	// and a non-re-pushable case narrow instead of poisoning the result with
+	// Any.
+	return caseBranchJoin(r, v, elems)
+}
+
+// caseBranchJoin computes a `case` result TYPE as the join of every clause
+// BLOCK's residual carrier (a block run with the case value pushed, per
+// caseBlockTokens) plus the trailing default — the abstract analogue of the
+// nested-`if` chain's branch join, without the emit desugar. A block that
+// produces no value contributes None. Type-only: RunCarrierBody pauses any
+// active recording, so this is safe whether or not emission is live.
+func caseBranchJoin(r *Registry, v Value, elems []Value) []Value {
+	var out Value
+	have := false
+	join := func(block Value) {
+		stk := RunCarrierBody(r, NewList(caseBlockTokens(v, block)))
+		res := NewCarrier(TNone)
+		if len(stk) > 0 {
+			res = stk[len(stk)-1]
+		}
+		if have {
+			out = JoinCarriers(out, res)
+		} else {
+			out, have = res, true
+		}
+	}
+	i := 0
+	for ; i+1 < len(elems); i += 2 {
+		join(elems[i+1]) // clause block (odd-indexed; the even index is the match)
+	}
+	if i < len(elems) {
+		join(elems[i]) // trailing default block
+	}
+	if !have {
+		return []Value{NewDynamicCarrier(TAny)}
+	}
+	return []Value{out}
 }
 
 // caseGuardTokens builds the guard body for one clause: a code-body
