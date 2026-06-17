@@ -34,7 +34,7 @@ func buildBenchPatrun(n int) *patrunMatcher {
 // find over a table of n rules, subject matching the LAST rule plus an extra
 // (ignored) key. The flat scan visits all n regardless of match position.
 func BenchmarkPatrunFindMatcher(b *testing.B) {
-	for _, n := range []int{1, 10, 100, 1000} {
+	for _, n := range []int{1, 10, 100, 1000, 10000} {
 		m := buildBenchPatrun(n)
 		last := strconv.Itoa(n - 1)
 		subj := map[string]string{"role": "r" + last, "cmd": "c" + last, "x": "extra"}
