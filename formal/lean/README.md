@@ -1,80 +1,105 @@
-# AQL — Lean formalization (prototype)
+# AQL — Lean formalization + differential harness (prototype)
 
-A mechanized, machine-checked prototype of AQL's core ideas, in Lean 4.
-This is the first concrete step of the milestone-6 plan in
+A machine-checked prototype of AQL's core semantics in Lean 4, plus a
+"tracer-bullet" harness that differential-tests the model against the
+real `aql` engine. This is the first concrete step of the milestone-6
+plan in
 [`design/FORMAL-VERIFICATION.0.md`](../../design/FORMAL-VERIFICATION.0.md):
 a *deep embedding* of a tractable fragment of the abstract machine
 specified in [`FORMAL-SPEC.md`](../../FORMAL-SPEC.md) §4 and §6.
 
-## What it covers
+## Layout
 
-[`AqlCore.lean`](AqlCore.lean) (single file, no Mathlib) models integer
-literals, binary words (`add`/`sub`/`mul`), the data stack, the `end`
-barrier, and — the point of the exercise — **forward collection**: a
-word drawing its arguments from both the tokens to its right and the
-values already on the stack (`FORMAL-SPEC` §6.4).
+| File | What it is |
+|------|-----------|
+| [`AqlCore.lean`](AqlCore.lean) | the model (library): syntax, values, words, forward collection, evaluation, the theorems |
+| [`Demo.lean`](Demo.lean) | a runnable wrapper (`lean --run Demo.lean`) printing the executable sanity checks |
+| [`harness/tracer.py`](harness/tracer.py) | the differential harness: runs each program through **both** the model and `aql do`, then compares |
+| [`lean-toolchain`](lean-toolchain) | pins `leanprover/lean4:v4.15.0` |
 
-It then proves:
+## What the model covers
 
-| Theorem | What it states |
+`AqlCore.lean` models two value types (`Int`, `Bool`), variable-arity
+words (unary `not`; binary `add`/`sub`/`mul` and comparisons
+`gt`/`lt`/`eq`), the data stack, the `end` barrier, and — the point of
+the exercise — **forward collection** (`FORMAL-SPEC` §6.4): a word
+gathering up to `arity` leading literals to its right, filling any
+remaining slots from the stack top-first, and leaving leftover literals
+on the stack (the engine's `add 1 2 7 => 3 7`).
+
+### Theorems (machine-checked; `lean AqlCore.lean` exits 0, no `sorry`)
+
+| Theorem | Statement |
 |---|---|
-| `spelling_equiv` | the three spellings `y x op`, `y op x`, `op x y` all compute `applyOp op x y` — for **all** ops and operands (not enumerated examples) |
-| `spelling_agree` | …and therefore agree with each other |
-| `barrier_blocks_forward` | an `end` between a word and a forward operand under-supplies the word (a *negative* result — what must be rejected) |
+| `spelling_equiv` | for **any** binary word and operands, the spellings `y x op`, `y op x`, `op x y` agree |
+| `sub_spellings` | the concrete `sub` case, `= some [Int 7]` |
+| `unary_spellings` | a unary word collects its arg forward *or* from the stack |
+| `binary_caps_and_leaves_leftover` | arity-2 collection caps and pushes the leftover (`add 1 2 7`) |
+| `barrier_blocks_forward` | an `end` under-supplies the word (a *negative* result) |
 | `run_deterministic` | evaluation is deterministic |
-| `sub_trans` (+ `Integer ⊑ Any`) | the `FORMAL-SPEC` §5.1 type lattice: `⊑` is reflexive and transitive |
+| `sub_trans` (+ lattice examples) | the §5.1 type lattice `⊑` is reflexive and transitive |
 
-The file is also executable: `#eval`s and a `main` reproduce
-`aql do '...'` so the same artifact proves *and* computes.
+## What the model deliberately does NOT cover
 
-## Scope (honest limits)
+The engine is *coercive* where this model is *strict*: `aql do 'add true
+2'` is `"2true"` and `'not 5'` is `false`, whereas the model treats a
+type-mismatched argument vector as a stuck signature error. Those
+coercion rules — and user functions, modules, effects, concurrency,
+floats/overflow, and refinement predicates — are later milestones. The
+harness therefore covers only the homogeneous-type fragment where model
+and engine agree.
 
-Covered: the binary-word fragment + forward collection + the `end`
-barrier + a slice of the type lattice. **Not** covered (later
-milestones): user functions, modules, effects/capabilities, concurrency,
-floats/overflow, and refinement-predicate discharge.
+## The harness — what it does and does not prove
 
-## Cross-validation against the real engine
-
-The model's normal forms were checked against the reference
-implementation; they agree:
+`harness/tracer.py` drives one thin slice through the whole pipeline:
 
 ```
-aql do 'sub 3 10'      => 7      aql do '10 sub 3'  => 7
-aql do '10 3 sub'      => 7      aql do 'mul 4 5'   => 20
-aql do '10 sub end 3'  => error: [aql/signature_error] no matching signature for sub
+AQL source ──tokenize──▶ Lean Tape ──lean──▶ model output
+     │                                            │
+     └──────────── aql do ─────▶ engine output ───┴──▶ compare
 ```
 
-This is the cheapest bridge of `FORMAL-VERIFICATION.0.md` §4.3: Lean as
-the spec, validated against the engine via examples (and, in the
-durable version, the `*.tsv` conformance corpus).
+It compiles `AqlCore.lean` (re-checking the proofs), generates a Lean
+module that evaluates every program, runs the reference `aql` engine on
+the same sources, normalizes both outputs, and asserts agreement.
+
+This is **differential testing, not proof**: it can *refute* "the model
+matches the engine" but never prove it. Its value is turning the
+model↔engine correspondence from a handful of hand examples into a
+re-runnable check whose failures point at exactly where model and
+implementation diverge. The proofs live on the model side; the harness
+is the (cheapest, §4.3) bridge to the implementation.
+
+Current run: **22/22 programs agree** (spelling equivalence, arithmetic,
+comparisons, the unary word forward and from the stack, arity/leftover,
+the `end` barrier, and underflow).
 
 ## Build / run
 
-The repo pins the toolchain in [`lean-toolchain`](lean-toolchain)
-(`leanprover/lean4:v4.15.0`). With a standard Lean install
-([`elan`](https://github.com/leanprover/elan)):
+The toolchain is pinned in [`lean-toolchain`](lean-toolchain). With a
+standard Lean install ([`elan`](https://github.com/leanprover/elan)):
 
 ```bash
 cd formal/lean
-lean AqlCore.lean        # type-check the proofs (exit 0, no `sorry`)
-lean --run AqlCore.lean  # run the executable cross-checks
+lean AqlCore.lean                 # type-check the proofs (exit 0, no `sorry`)
+python3 harness/tracer.py         # differential-test against the engine
 ```
+
+The harness builds the `aql` engine itself (`go build` in `cmd/go`).
+Override discovery with `LEAN=/path/to/lean` and/or `AQL=/path/to/aql`.
 
 ### Offline / restricted-network install
 
-If `elan`'s default download host is blocked but GitHub is reachable,
-install the toolchain straight from GitHub release assets:
+If `elan`'s default download host is blocked but GitHub is reachable:
 
-1. fetch the `elan` binary from
-   `github.com/leanprover/elan/releases` and run `./elan-init -y
-   --default-toolchain none`;
+1. fetch the `elan` binary from `github.com/leanprover/elan/releases`
+   and run `./elan-init -y --default-toolchain none`;
 2. download `lean-4.15.0-linux.tar.zst` from
-   `github.com/leanprover/lean4/releases`, decompress (`zstd` /
-   `python3 -m … zstandard`) and untar;
-3. `elan toolchain link aqlproto <extracted-dir>` and `elan default
-   aqlproto`.
+   `github.com/leanprover/lean4/releases`, decompress (`zstd`, or
+   `python3 -c 'import zstandard,sys; ...'`) and untar;
+3. `elan toolchain link aqlproto <extracted-dir>`.
 
-(`elan toolchain install` itself pings `release.lean-lang.org`, so the
-link-a-local-toolchain route above is the one that works behind a
-restrictive policy.)
+Because the pinned `lean-toolchain` names a channel `elan` would try to
+fetch from the blocked host, invoke the linked binary directly in such
+environments, e.g. `LEAN=/root/lean/v4.15.0/bin/lean python3
+harness/tracer.py`.
