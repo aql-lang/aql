@@ -480,6 +480,34 @@ func TestEmitGenericSchema(t *testing.T) {
 	}
 }
 
+// TestEmitSurfaceType: a surface type (`def Shape surface {area: (fnsig …)}`)
+// bakes as a const — an immutable contract descriptor riding its canonical
+// minted node, with its `exposes`-filled conformance set consulted through the
+// same shared payload the live unifier holds. On the compiled path RunCompiled
+// runs the VM over the check-pass registry without re-minting, so the baked
+// const and the live surface are one object. The whole surface type-algebra
+// surface (residual, is, typeof, tand/tor/tnot, unify) compiles.
+func TestEmitSurfaceType(t *testing.T) {
+	const pre = `def Shape surface {area: (fnsig [[Self] [Float]])} `
+	for _, src := range []string{
+		pre + `Shape`,
+		pre + `typeof Shape`,
+		pre + `Shape tand Shape`,
+		pre + `def Circle class {r:1.0} def area fn [[c:Circle] [Float] [3.14]] Circle exposes Shape end (make Circle {}) is Shape`,
+	} {
+		if _, r := compile(t, src); r != "" {
+			t.Errorf("%s: surface must compile, refused: %s", src, r)
+		}
+	}
+	// Value parity: a Circle that exposes Shape is a Shape; a bare Integer isn't.
+	if got, _, err := mustRun(t, pre+`def Circle class {r:1.0} def area fn [[c:Circle] [Float] [3.14]] Circle exposes Shape end (make Circle {}) is Shape`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "true" {
+		t.Errorf("Circle is Shape: got %v err=%v, want [true]", got, err)
+	}
+	if got, _, err := mustRun(t, pre+`5 is Shape`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "false" {
+		t.Errorf("5 is Shape: got %v err=%v, want [false]", got, err)
+	}
+}
+
 // TestEmitModuleInnerNative: a module word reached via dot-access
 // (`StructUtil.clone …`) trivially delegates to its inner native; even with a
 // declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,

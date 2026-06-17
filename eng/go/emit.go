@@ -1738,6 +1738,18 @@ func isInertConst(v Value) bool {
 		// signature at run time. A pattern-bearing param (rare in signatures)
 		// could embed non-const data, so it refuses conservatively.
 		return fnSigConstOK(d)
+	case *SurfaceInfo:
+		// A surface type (`def Shape surface {area: (fnsig …)}`): an immutable
+		// contract descriptor riding its canonical minted node via the Type
+		// pointer (shared, not copied). Its conformance set (Conform, filled in
+		// by `exposes`) is consulted through the SAME shared payload the
+		// canonical node's installed unifier holds — and the compiled path runs
+		// the VM over the check-pass registry without re-minting, so the baked
+		// const and the live surface are one object, never divergent. Admitting
+		// it lets `Shape` as a residual / operand to is/typeof/teq/tand/tor/tnot/
+		// unify all compile. The Required method shapes are fnsig values, const
+		// by fnSigConstOK above.
+		return surfaceConstOK(d)
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConstMember(e) {
@@ -1787,6 +1799,25 @@ func fnSigConstOK(info FnUndefInfo) bool {
 			if p.Pattern != nil && !(isInertConst(*p.Pattern) || typeBodyConstOK(*p.Pattern)) {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+// surfaceConstOK reports whether a surface type bakes as a const: it must ride
+// a canonical node (Type != nil) and every required-operation shape must be a
+// const-safe value (a fnsig descriptor, or any other inert member).
+func surfaceConstOK(s *SurfaceInfo) bool {
+	if s == nil || s.Type == nil {
+		return false
+	}
+	if s.Required == nil {
+		return true
+	}
+	for _, k := range s.Required.Keys() {
+		v, _ := s.Required.Get(k)
+		if !(isInertConst(v) || typeBodyConstOK(v)) {
+			return false
 		}
 	}
 	return true
