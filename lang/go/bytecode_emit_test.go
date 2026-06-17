@@ -458,9 +458,25 @@ func TestEmitGenericSchema(t *testing.T) {
 	if err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "Box of [Integer]" {
 		t.Errorf("inferred-T make typeof: got %v err=%v, want [Box of [Integer]]", got, err)
 	}
-	// Negative: a generic FNSIG schema body is not data-bakeable, so it refuses.
-	if _, r := compile(t, `def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) typeof`); r == "" {
-		t.Error("fnsig-schema typeof compiled but must still refuse (signature body, not data)")
+	// A function-signature value is pure descriptor data, so a fnsig schema and
+	// typeof/teq over an instantiated fnsig now compile too.
+	for _, src := range []string{
+		`(fnsig [[Integer] [String]]) typeof`,
+		`def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) typeof`,
+		`def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mapper of [Integer String])`,
+	} {
+		if _, r := compile(t, src); r != "" {
+			t.Errorf("%s: fnsig value must compile, refused: %s", src, r)
+		}
+	}
+	if got, _, err := mustRun(t, `def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mapper of [Integer String])`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "true" {
+		t.Errorf("instantiated-fnsig teq: got %v err=%v, want [true]", got, err)
+	}
+	// Negative: `make` of a generic instantiated inside a generic fn body still
+	// refuses (the instantiation operand's type variable is a fn-frame local,
+	// not resolvable at compile time).
+	if _, r := compile(t, `def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end (boxit 5) typeof`); r == "" {
+		t.Error("make of a generic instantiated in a fn body compiled but must still refuse")
 	}
 }
 

@@ -1729,6 +1729,15 @@ func isInertConst(v Value) bool {
 		// canonical. Never deduped. A class/object body qualifies only
 		// when every field default is data (no method fn-values).
 		return typeBodyConstOK(v)
+	case FnUndefInfo:
+		// A function SIGNATURE value (`fnsig [[Integer] [String]]`,
+		// `typeof (Mapper of [Integer String])`): pure descriptor data —
+		// param/return *Type pointers, no invocable body and no mutable state —
+		// so it bakes by value (the *Type pointers are shared, already
+		// canonical from construction). typeof/teq/is then read the baked
+		// signature at run time. A pattern-bearing param (rare in signatures)
+		// could embed non-const data, so it refuses conservatively.
+		return fnSigConstOK(d)
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConstMember(e) {
@@ -1766,6 +1775,21 @@ func isInertConst(v Value) bool {
 	default:
 		return false
 	}
+}
+
+// fnSigConstOK reports whether a function-signature value bakes as a const.
+// The signature is pure type/descriptor data; the only embeddable Value is an
+// optional structural pattern on a param, which must itself be const-safe (a
+// pattern that carried a carrier or data map would not be inert).
+func fnSigConstOK(info FnUndefInfo) bool {
+	for _, sig := range info.Sigs {
+		for _, p := range sig.Params {
+			if p.Pattern != nil && !(isInertConst(*p.Pattern) || typeBodyConstOK(*p.Pattern)) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // schemaConstOK reports whether a generic schema bakes as a const: its body
