@@ -43,6 +43,9 @@ const (
 var fnIntrospectionWords = map[string]bool{
 	"typeof": true, "inspect": true,
 	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
+	// arity/param/return introspection: READ a fn's signature shape, never
+	// invoke it, so the fn value bakes as a const the handler inspects.
+	"arityof": true, "paramsof": true, "returnsof": true,
 }
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -1591,11 +1594,26 @@ func isTypeBodyPayload(v Value) bool {
 // interpreter rebuilds `r:1.0` — so any carrier, or any payload this
 // walk doesn't know, refuses.
 func typeBodyConstOK(v Value) bool {
+	return typeBodyConstOKParam(v, nil)
+}
+
+// typeBodyConstOKParam is typeBodyConstOK with an optional type-parameter
+// predicate. When isParam != nil (the generic-schema path), a Word member
+// naming one of the schema's parameters is admitted — those Words are the
+// schema body's placeholder references (`[:T]`), resolved by name at
+// instantiation, never re-stepped at the engine pointer. With isParam == nil
+// (every other caller) the check is exactly the strict original.
+func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 	if v.Carrier || v.Dynamic {
 		return false
 	}
 	if IsBareTypeNode(v) {
 		return true
+	}
+	if isParam != nil {
+		if w, err := AsWord(v); err == nil && isParam(w.Name) {
+			return true
+		}
 	}
 	memberOK := func(m Value) bool {
 		// A concrete instance default (`class {x:(make Foo 1)}`) is a const-safe
@@ -1608,7 +1626,7 @@ func typeBodyConstOK(v Value) bool {
 				return true
 			}
 		}
-		return typeBodyConstOK(m) || isInertConst(m)
+		return typeBodyConstOKParam(m, isParam) || isInertConst(m)
 	}
 	fieldsOK := func(m *OrderedMap) bool {
 		if m == nil {
@@ -1714,6 +1732,38 @@ func isInertConst(v Value) bool {
 		// canonical. Never deduped. A class/object body qualifies only
 		// when every field default is data (no method fn-values).
 		return typeBodyConstOK(v)
+	case FnUndefInfo:
+		// A function SIGNATURE value (`fnsig [[Integer] [String]]`,
+		// `typeof (Mapper of [Integer String])`): pure descriptor data —
+		// param/return *Type pointers, no invocable body and no mutable state —
+		// so it bakes by value (the *Type pointers are shared, already
+		// canonical from construction). typeof/teq/is then read the baked
+		// signature at run time. A pattern-bearing param (rare in signatures)
+		// could embed non-const data, so it refuses conservatively.
+		return fnSigConstOK(d)
+	case FnDefInfo:
+		// A function VALUE used as DATA — a residual (`f/r`), a map/list member
+		// (`{b:f/r}`), or an introspection operand (`arityof (fn …)`) — NOT a
+		// call site. It bakes as a const only with no closure state: no captured
+		// bindings (which would snapshot check-pass values, divergent from the VM
+		// pass) and no module sub-registry. The body tokens ride inside the
+		// payload and are never re-stepped while the value is data; a CALL of the
+		// value is a separate dispatch path (a bare `(fn …) args` auto-dispatch
+		// records the fn-body splice and refuses; a `/r`-referenced fn does not
+		// auto-dispatch, so `f/r` / `{b:f/r}` are pure data).
+		return len(d.Captured) == 0 && d.Registry == nil
+	case *SurfaceInfo:
+		// A surface type (`def Shape surface {area: (fnsig …)}`): an immutable
+		// contract descriptor riding its canonical minted node via the Type
+		// pointer (shared, not copied). Its conformance set (Conform, filled in
+		// by `exposes`) is consulted through the SAME shared payload the
+		// canonical node's installed unifier holds — and the compiled path runs
+		// the VM over the check-pass registry without re-minting, so the baked
+		// const and the live surface are one object, never divergent. Admitting
+		// it lets `Shape` as a residual / operand to is/typeof/teq/tand/tor/tnot/
+		// unify all compile. The Required method shapes are fnsig values, const
+		// by fnSigConstOK above.
+		return surfaceConstOK(d)
 	case ListPayload:
 		for _, e := range d.Elems {
 			if !isInertConstMember(e) {
@@ -1738,9 +1788,89 @@ func isInertConst(v Value) bool {
 		// qualifies — the dot-access Eval reach (which the engine expands in
 		// place) is excluded.
 		return isInertReach(v)
+	case *TypeSchemaInfo:
+		// An installed generic schema (`def Box gen [T] class {value:T}`). The
+		// schema is immutable data — its instantiation memo lives in the
+		// registry, not this struct — and rides the canonical minted node via
+		// its Type pointer (shared, not copied), so it bakes as a const exactly
+		// like a structural type body. Admitting it lets `make Box {…}` (T
+		// inferred at run time), `is`/`typeof`/`teq` over the schema, and the
+		// schema as a residual all compile; the instantiated `Box of [Integer]`
+		// type already baked via typeBodyConstOK.
+		return schemaConstOK(d)
 	default:
 		return false
 	}
+}
+
+// fnSigConstOK reports whether a function-signature value bakes as a const.
+// The signature is pure type/descriptor data; the only embeddable Value is an
+// optional structural pattern on a param, which must itself be const-safe (a
+// pattern that carried a carrier or data map would not be inert).
+func fnSigConstOK(info FnUndefInfo) bool {
+	for _, sig := range info.Sigs {
+		for _, p := range sig.Params {
+			if p.Pattern != nil && !(isInertConst(*p.Pattern) || typeBodyConstOK(*p.Pattern)) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// surfaceConstOK reports whether a surface type bakes as a const: it must ride
+// a canonical node (Type != nil) and every required-operation shape must be a
+// const-safe value (a fnsig descriptor, or any other inert member).
+func surfaceConstOK(s *SurfaceInfo) bool {
+	if s == nil || s.Type == nil {
+		return false
+	}
+	if s.Required == nil {
+		return true
+	}
+	for _, k := range s.Required.Keys() {
+		v, _ := s.Required.Get(k)
+		if !(isInertConst(v) || typeBodyConstOK(v)) {
+			return false
+		}
+	}
+	return true
+}
+
+// schemaConstOK reports whether a generic schema bakes as a const: its body
+// must be a const-safe structural type body (or itself inert / a bare node)
+// and every parameter's extends-bound / default must be inert or a bare type
+// node. A computed constraint or a non-data (method-bearing fn) body refuses,
+// falling back faithfully.
+func schemaConstOK(s *TypeSchemaInfo) bool {
+	if s == nil || s.Type == nil {
+		return false
+	}
+	// The schema body embeds its type variables as unresolved Words (`[:T]`
+	// stores the Word `T`, which `of`/`make` later resolve by name). Those
+	// Words are inert schema data — the body is consumed by make/of/is/typeof,
+	// never re-stepped at the engine pointer — so the body check admits a Word
+	// naming one of this schema's own parameters.
+	isParam := func(name string) bool {
+		for _, p := range s.Params {
+			if p.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	memberOK := func(m Value) bool {
+		return IsBareTypeNode(m) || typeBodyConstOKParam(m, isParam) || isInertConst(m)
+	}
+	for _, p := range s.Params {
+		if p.HasBound && !memberOK(p.Bound) {
+			return false
+		}
+		if p.HasDefault && !memberOK(p.Default) {
+			return false
+		}
+	}
+	return memberOK(s.Body)
 }
 
 // isInertReach reports whether v is an INERT receiverless lens — a first-class
@@ -1793,6 +1923,20 @@ func isInertConstMember(v Value) bool {
 		if IsWord(v) {
 			return true
 		}
+		// A bare type node as a structural-pattern MEMBER — the type leaves of
+		// `{a:Integer}`, `[Integer String]`, `[Resource Entity]`: the inert
+		// operand of a static `is` / `typeof` / `size`. Admitted as a const
+		// member (it was previously excluded outright). Soundness: the member's
+		// Parent is the canonical lattice pointer the parser resolved, copied by
+		// value inside a READ-ONLY container, and the whole pattern bakes as one
+		// const the VM pushes verbatim — the `is`/`typeof` handler then runs
+		// byte-identically to the interpreter over the same value. The standalone
+		// isInertConst switch still rejects a bare type node, so a top-level type
+		// operand keeps reaching the runtime via the by-ID type table
+		// (OpPushType), the canonical path that survives a later `behave`.
+		if IsBareTypeNode(v) && v.ID != "" {
+			return true
+		}
 		if fd, ok := v.Data.(FnDefInfo); ok {
 			// Only an UNNAMED (inline `fn […]`) fn value. A named ref (`f/r`,
 			// Name="f") re-dispatches by NAME when applied through the island
@@ -1831,7 +1975,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			residualSeqs = append(residualSeqs, pr.seq)
 		}
 	}
-	lw.promoted = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
+	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}
@@ -1866,6 +2010,23 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			if residual[i].Dynamic {
 				return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
 			}
+		}
+	}
+	// A fn value followed by residual args is an auto-dispatch boundary the
+	// residual cannot resolve statically: the interpreter applies a plain
+	// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2], and the two are
+	// indistinguishable here. The lead may be a concrete fn value (a baked
+	// const) OR a Function-typed call-result carrier (`mk2 5`'s declared
+	// [Function] return) — neither is a Dynamic/Any carrier, so applyDynamic
+	// above does not own it. Refuse so both fall back faithfully — a fn value
+	// stands ONLY as the last residual / a container member / an introspection
+	// operand, never ahead of args.
+	for i := 0; i+1 < len(residual); i++ {
+		rv := residual[i]
+		_, isFnData := rv.Data.(FnDefInfo)
+		isFnTyped := rv.Parent != nil && (rv.Parent.ConformsTo(TFunction) || rv.Parent.ConformsTo(TFnDef))
+		if isFnData || isFnTyped {
+			return nil, "fn value precedes residual args (auto-dispatch boundary)", false
 		}
 	}
 	vi := 0

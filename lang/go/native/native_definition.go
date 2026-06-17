@@ -335,6 +335,14 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if IsObjectType(constraint) {
 		info, _ := AsObjectType(constraint)
 		if body.Parent.Equal(TMap) {
+			// `def b:Type {map}` is `def b (make Type map)`. In emit mode record
+			// the make event the direct MakeObject call would skip, so the bound
+			// instance has the same provenance an explicit make gives it (a
+			// downstream `b typeof` then compiles). Outside emit mode this is a
+			// no-op and the concrete instance is bound.
+			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos); ok {
+				return installAndRecordDef(r, name, carrier, args[0].Pos)
+			}
 			result, err := eng.MakeObject(info, body, nil, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)

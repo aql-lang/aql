@@ -88,6 +88,7 @@ type lowerer struct {
 	vm       []vmSlot
 	variadic map[int]bool // loop seqs: N runtime values, not one
 	promoted map[int]int  // value-def locals: producing event seq → frame local slot
+	dead     map[int]bool // single-result value-defs referenced zero times: drop the result
 	loops    []loopCtx
 	maxDepth int
 }
@@ -264,7 +265,7 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 // carrier-identity DUP path, not a single local; branch/loop variadic results
 // never reach here. Slots are allocated from the unit's local namespace.
 // Returns seq → slot and rewrites every reference in place to a local operand.
-func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int) map[int]int {
+func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	for i := range events {
 		for _, op := range collectOperands(&events[i]) {
@@ -277,29 +278,46 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		refs[seq]++
 	}
 	var promoted map[int]int
+	var dead map[int]bool
 	for i := range events {
 		ev := &events[i]
 		if ev.kind != evCall || ev.call.nout != 1 {
 			continue
 		}
-		if refs[ev.seq] <= 1 {
-			continue
-		}
-		if promoted == nil {
-			promoted = map[int]int{}
-		}
-		if _, done := promoted[ev.seq]; !done {
-			promoted[ev.seq] = unit.numLocals
-			unit.numLocals++
+		switch {
+		case refs[ev.seq] == 0:
+			// A single-result value-def bound to a name referenced zero times (a
+			// dead binding, e.g. `def b (make C {…})` with b never used) — and
+			// never the program residual, which would count toward refs. The call
+			// still runs (side effects preserved), but its result is discarded:
+			// lowerCall drops it rather than leaving it unconsumed on the stack. A
+			// value used inside a branch/loop arm cannot reach here — that arm is
+			// refused by the scopeFloor enclosing-computation guard first.
+			if dead == nil {
+				dead = map[int]bool{}
+			}
+			dead[ev.seq] = true
+		case refs[ev.seq] == 1:
+			// Consumed exactly once (inline or as the residual) — stays on the
+			// simulated stack for its single consumer; no local needed.
+		default:
+			// Referenced more than once: store into a frame slot now and re-push
+			// per reference (references rewritten to local operands below).
+			if promoted == nil {
+				promoted = map[int]int{}
+			}
+			if _, done := promoted[ev.seq]; !done {
+				promoted[ev.seq] = unit.numLocals
+				unit.numLocals++
+			}
 		}
 	}
-	if promoted == nil {
-		return nil
+	if promoted != nil {
+		for i := range events {
+			rewritePromotedRefs(&events[i], promoted)
+		}
 	}
-	for i := range events {
-		rewritePromotedRefs(&events[i], promoted)
-	}
-	return promoted
+	return promoted, dead
 }
 
 // layoutMsgs holds the call-site-specific diagnostic wording for
@@ -474,6 +492,14 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	// only marks single-result events, so nothing is left on the stack.
 	if slot, ok := lw.promoted[ev.seq]; ok {
 		lw.emit(OpStoreLocal, slot, c.pos)
+		lw.note()
+		return ""
+	}
+	if lw.dead[ev.seq] {
+		// A single-result value-def referenced zero times: the call ran for its
+		// side effects, but the result is discarded — drop it so it is not left
+		// unconsumed on the stack (planValueDefLocals marks only nout==1 events).
+		lw.emit(OpDrop, 0, c.pos)
 		lw.note()
 		return ""
 	}

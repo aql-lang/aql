@@ -381,6 +381,235 @@ func TestEmitDynOutNative(t *testing.T) {
 	}
 }
 
+// TestEmitStructuralTypePattern: a STATIC structural type pattern — a map or
+// list whose leaves are bare type nodes (`{a:Integer}`, `[Integer String]`,
+// `[Resource Entity]`) — bakes as one const operand (a type node is admitted
+// as a const MEMBER), so `is` / `typeof` / `size` over it compiles natively
+// instead of refusing "operand of unknown provenance." The pattern is inert
+// data the VM pushes verbatim, so the handler runs identically to the
+// interpreter.
+func TestEmitStructuralTypePattern(t *testing.T) {
+	okCases := []struct {
+		src  string
+		want string
+	}{
+		{`{a:5} is {a:Integer}`, "true"},
+		{`{a:'x'} is {a:Integer}`, "false"},
+		{`{a:5 b:'x'} is {a:Integer b:String}`, "true"},
+		{`{inner:{x:5}} is {inner:{x:Integer}}`, "true"},
+		{`[1] is [Integer]`, "true"},
+		{`[1 'x'] is [Integer String]`, "true"},
+		{`size [Resource Entity]`, "2"},
+	}
+	for _, c := range okCases {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: structural type-pattern must compile, refused: %s", c.src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake:\n%s", c.src, dis)
+		}
+		got, _, err := mustRun(t, c.src)
+		if err != nil || len(got) != 1 || fmt.Sprint(got[0]) != c.want {
+			t.Errorf("%s: got %v err=%v, want [%s]", c.src, got, err, c.want)
+		}
+	}
+	// A generic schema whose body nests the type variable inside a typed-list
+	// field (`{items:[:T]}`) also compiles: the schema-body check admits a Word
+	// naming a type parameter, so the placeholder rides through the
+	// ChildTypeInfo wrapper as inert schema data.
+	if _, r := compile(t, `def Stack gen [T] class {items:[:T]} end make Stack {items:[1 2]}`); r != "" {
+		t.Errorf("typed-list-field generic make must compile, refused: %s", r)
+	}
+}
+
+// TestEmitGenericSchema: an installed generic schema (`def Box gen [T] class
+// {value:T}`) bakes as a const — it is immutable data riding its canonical
+// minted node, with the instantiation memo held in the registry, not the
+// struct. So `make Box {…}` (T inferred at run time), `is`/`typeof` over the
+// schema, and the bare schema as a residual all compile, matching the
+// interpreter. Explicit instantiation (`make (Box of [Integer]) {…}`) already
+// compiled via the structural-type-body path.
+func TestEmitGenericSchema(t *testing.T) {
+	for _, src := range []string{
+		`def Box gen [T] class {value:T} end Box`,
+		`def Box gen [T] class {value:T} end make Box {value:42}`,
+		`def Box gen [T] class {value:T} end (make Box {value:42}) typeof`,
+		`def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box`,
+		// Type variable nested inside a typed-list field — the placeholder Word
+		// rides through the ChildTypeInfo as inert schema data.
+		`def Stack gen [T] class {items:[:T]} end Stack`,
+		`def Stack gen [T] class {items:[:T]} end (make Stack {items:[1 2]}) typeof`,
+		// Default-valued parameter (`T default Integer`).
+		`def R gen [(T default Integer)] class {items:[:T]} end (make R {items:[]}) typeof`,
+	} {
+		dis, r := compile(t, src)
+		if r != "" {
+			t.Errorf("%s: generic schema must compile, refused: %s", src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake", src)
+		}
+	}
+	// Value parity for the inferred-T make.
+	got, _, err := mustRun(t, `def Box gen [T] class {value:T} end (make Box {value:42}) typeof`)
+	if err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "Box of [Integer]" {
+		t.Errorf("inferred-T make typeof: got %v err=%v, want [Box of [Integer]]", got, err)
+	}
+	// A function-signature value is pure descriptor data, so a fnsig schema and
+	// typeof/teq over an instantiated fnsig now compile too.
+	for _, src := range []string{
+		`(fnsig [[Integer] [String]]) typeof`,
+		`def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) typeof`,
+		`def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mapper of [Integer String])`,
+	} {
+		if _, r := compile(t, src); r != "" {
+			t.Errorf("%s: fnsig value must compile, refused: %s", src, r)
+		}
+	}
+	if got, _, err := mustRun(t, `def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mapper of [Integer String])`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "true" {
+		t.Errorf("instantiated-fnsig teq: got %v err=%v, want [true]", got, err)
+	}
+	// Negative: `make` of a generic instantiated inside a generic fn body still
+	// refuses (the instantiation operand's type variable is a fn-frame local,
+	// not resolvable at compile time).
+	if _, r := compile(t, `def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end (boxit 5) typeof`); r == "" {
+		t.Error("make of a generic instantiated in a fn body compiled but must still refuse")
+	}
+}
+
+// TestEmitSurfaceType: a surface type (`def Shape surface {area: (fnsig …)}`)
+// bakes as a const — an immutable contract descriptor riding its canonical
+// minted node, with its `exposes`-filled conformance set consulted through the
+// same shared payload the live unifier holds. On the compiled path RunCompiled
+// runs the VM over the check-pass registry without re-minting, so the baked
+// const and the live surface are one object. The whole surface type-algebra
+// surface (residual, is, typeof, tand/tor/tnot, unify) compiles.
+func TestEmitSurfaceType(t *testing.T) {
+	const pre = `def Shape surface {area: (fnsig [[Self] [Float]])} `
+	for _, src := range []string{
+		pre + `Shape`,
+		pre + `typeof Shape`,
+		pre + `Shape tand Shape`,
+		pre + `def Circle class {r:1.0} def area fn [[c:Circle] [Float] [3.14]] Circle exposes Shape end (make Circle {}) is Shape`,
+	} {
+		if _, r := compile(t, src); r != "" {
+			t.Errorf("%s: surface must compile, refused: %s", src, r)
+		}
+	}
+	// Value parity: a Circle that exposes Shape is a Shape; a bare Integer isn't.
+	if got, _, err := mustRun(t, pre+`def Circle class {r:1.0} def area fn [[c:Circle] [Float] [3.14]] Circle exposes Shape end (make Circle {}) is Shape`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "true" {
+		t.Errorf("Circle is Shape: got %v err=%v, want [true]", got, err)
+	}
+	if got, _, err := mustRun(t, pre+`5 is Shape`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "false" {
+		t.Errorf("5 is Shape: got %v err=%v, want [false]", got, err)
+	}
+}
+
+// TestEmitTypedDefInstance: `def b:Type {map}` is `def b (make Type map)`, but
+// the typed-def handler builds the instance via a direct MakeObject call,
+// skipping the make WORD dispatch — and with it the make event an explicit
+// make records. Without that event the bound instance has no provenance and a
+// downstream `b typeof` (or field access) refuses. The handler now records the
+// skipped make event in emit mode, so these compile, for plain classes,
+// explicit generic instantiations, inferred generic schemas, and the `<>`
+// sugar alike.
+func TestEmitTypedDefInstance(t *testing.T) {
+	type row struct{ src, want string }
+	for _, c := range []row{
+		{`def C class {a:1} def b:C {a:5} b typeof`, "C"},
+		{`def C class {a:1} def b:C {a:5} (b get a)`, "5"},
+		{`def Box gen [T] class {value:T} def b:(Box of [Integer]) {value:42} b typeof`, "Box of [Integer]"},
+		{`def Box gen [T] class {value:T} def b:Box {value:'hi'} b typeof`, "Box of [ProperString]"},
+		{`def Box<T> class {value:T} def b:Box<Integer> {value:42} (b get value)`, "42"},
+	} {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: typed-def instance must compile, refused: %s", c.src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake", c.src)
+		}
+		if got, _, err := mustRun(t, c.src); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != c.want {
+			t.Errorf("%s: got %v err=%v, want [%s]", c.src, got, err, c.want)
+		}
+	}
+}
+
+// TestEmitDeadValueDef: a single-result value-def referenced zero times — a
+// dead binding (`def b (make C {…})` / `def x (1 add 2)` with the name never
+// used) — used to refuse as an "unconsumed call result" on the simulated
+// stack. The call still runs (side effects preserved), but its result is now
+// dropped, so the program compiles. A USED def is unaffected.
+func TestEmitDeadValueDef(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{`def C class {a:1} def b (make C {a:5})`, "[]"},
+		{`def C class {a:1} def b:C {a:5}`, "[]"},
+		{`def x (1 add 2)`, "[]"},
+		{`def x (1 add 2) 99`, "[99]"},
+		{`def a (1 add 2) def b (3 add 4) 99`, "[99]"},
+	} {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: dead value-def must compile, refused: %s", c.src, r)
+			continue
+		}
+		if !strings.Contains(dis, "DROP") {
+			t.Errorf("%s: expected a DROP for the dead result, got:\n%s", c.src, dis)
+		}
+		if got, _, err := mustRun(t, c.src); err != nil || fmt.Sprint(got) != c.want {
+			t.Errorf("%s: got %v err=%v, want %s", c.src, got, err, c.want)
+		}
+	}
+	// A USED value-def must NOT drop — its result feeds a consumer.
+	dis, r := compile(t, `def x (1 add 2) (x add x)`)
+	if r != "" {
+		t.Fatalf("used value-def refused: %s", r)
+	}
+	if strings.Contains(dis, "DROP") {
+		t.Errorf("used value-def emitted a DROP:\n%s", dis)
+	}
+}
+
+// TestEmitFnValueData: a no-capture function VALUE used as data — a residual
+// (`f/r`), a map member (`{b:f/r}`), or an arity/param introspection operand —
+// bakes as a const, so these compile. The auto-dispatch boundary (a fn value
+// standing AHEAD of residual args) is deliberately refused so it falls back
+// faithfully: a plain `(mk2 5) 10` applies the returned fn, an inert `f/r 2`
+// does not, and the residual cannot tell them apart.
+func TestEmitFnValueData(t *testing.T) {
+	const inc = `def f fn [[x:Integer] [Integer] [x add 1]] `
+	for _, c := range []struct{ src, want string }{
+		{inc + `f/r`, "[fn f(Integer)]"},
+		{`"aql:type-util" import end  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a]])`, "[2]"},
+	} {
+		dis, r := compile(t, c.src)
+		if r != "" {
+			t.Errorf("%s: fn value as data must compile, refused: %s", c.src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake", c.src)
+		}
+		if got, _, err := mustRun(t, c.src); err != nil || fmt.Sprint(got) != c.want {
+			t.Errorf("%s: got %v err=%v, want %s", c.src, got, err, c.want)
+		}
+	}
+	// A captured closure carries snapshot state, so it does NOT bake as a const.
+	if _, r := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a (mk 5) a`); r == "" {
+		t.Error("a captured closure value compiled as a const but must not (closure state)")
+	}
+	// Auto-dispatch boundary: a fn value ahead of residual args must fall back
+	// (not compile to a stranded [fn args] residual). It must refuse to compile;
+	// the differential gate proves the fallback matches the interpreter.
+	if _, r := compile(t, `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] (mk2 5) 10`); r == "" {
+		t.Error("a fn value ahead of residual args compiled but must fall back (auto-dispatch boundary)")
+	}
+}
+
 // TestEmitModuleInnerNative: a module word reached via dot-access
 // (`StructUtil.clone …`) trivially delegates to its inner native; even with a
 // declared-Any (dynamic) output the inner sig bakes a plain CALL_NATIVE,
@@ -420,10 +649,10 @@ func mustRun(t *testing.T, src string) ([]any, bool, error) {
 
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
 // const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
-// the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field
-// (`{b: f/r}`) is NOT const-bakeable (it would diverge via the island) and
-// falls back faithfully — verified by the differential, asserted here for
-// value parity.
+// the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field map
+// (`{b: f/r}`) now const-bakes too (the no-capture fn value is inert data), but
+// the `m.b 2` CALL through it still falls back at the get-then-dispatch — value
+// parity holds either way, asserted here.
 func TestEmitMethodField(t *testing.T) {
 	cases := []struct {
 		src  string
