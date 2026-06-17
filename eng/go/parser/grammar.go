@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/aql-lang/aql/eng/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
@@ -21,6 +23,7 @@ type parserTokens struct {
 	TL jsonic.Tin // template literal segment
 	LA jsonic.Tin // < (angle open — general-purpose token, D14)
 	RA jsonic.Tin // > (angle close)
+	ML jsonic.Tin // minilang literal: +name<delim>src<delim> (matcher-produced)
 }
 
 // setupBaseTokens registers the fixed AQL tokens and removes backtick from
@@ -52,6 +55,7 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 		// lt/gt. (`=>` still lexes as one token — longest match wins.)
 		LA: j.Token("#LA", "<"),
 		RA: j.Token("#RA", ">"),
+		ML: j.Token("#ML"),
 	}
 }
 
@@ -124,6 +128,102 @@ func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
 	})
 }
 
+// miniLitVal carries a minilang-literal match (`+name<delim>src<delim>`) from
+// the lex matcher through the val rule to the converter, which expands it to
+// the splice `mini <name> '<src>'`.
+type miniLitVal struct {
+	Name string
+	Src  string
+}
+
+// setupMiniLitMatcher registers a high-priority lex matcher for the minilang
+// shortcut `+name<delim>src<delim>` — terse sugar for `mini name 'src'`. The
+// delimiter is the first character after the (lowercase) name; the SAME
+// character closes. Backslash escapes the delimiter and itself (`\<delim>` →
+// the delimiter, `\\` → `\`); every OTHER backslash is preserved literally, so
+// regex sources keep their escapes raw (`+re/\d+/` → src `\d+`, no doubling).
+// The match emits a single #ML token carrying a miniLitVal; the val rule turns
+// it into r.Node and convertTopLevelValueInner expands it to the mini splice,
+// so all the normal mini machinery (stack subject, a trailing opts Map, the
+// expansion-time unknown-kind error, check mode) takes over unchanged. Runs
+// only outside template strings; a `+` not followed by a name + non-space
+// delimiter + closing delimiter is left to normal lexing.
+func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
+	isNameStart := func(c byte) bool { return c >= 'a' && c <= 'z' }
+	isNameChar := func(c byte) bool {
+		return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'
+	}
+	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
+	j.AddMatcher("minilang_literal", 1000002, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+		if rule != nil {
+			if _, ok := rule.K["aql_tpl"]; ok {
+				return nil // inside a template string: not a minilang literal
+			}
+		}
+		cursor := lex.Cursor()
+		s := lex.Src
+		start := cursor.SI
+		si := start
+		if si >= len(s) || s[si] != '+' {
+			return nil
+		}
+		si++
+		// Name: a lowercase kind atom. (A digit after `+` — e.g. `+0d5` — is
+		// not a name start, so signed bignums fall through to big_number.)
+		if si >= len(s) || !isNameStart(s[si]) {
+			return nil
+		}
+		nameStart := si
+		for si < len(s) && isNameChar(s[si]) {
+			si++
+		}
+		name := s[nameStart:si]
+		// Delimiter: the first char after the name. Must exist and not be
+		// whitespace (a space means this was not a minilang literal).
+		if si >= len(s) || isSpace(s[si]) {
+			return nil
+		}
+		delim := s[si]
+		si++
+		var b strings.Builder
+		closed := false
+		for si < len(s) {
+			c := s[si]
+			if c == '\\' && si+1 < len(s) {
+				if nxt := s[si+1]; nxt == delim || nxt == '\\' {
+					b.WriteByte(nxt) // \<delim> → delim ; \\ → \
+					si += 2
+					continue
+				}
+				b.WriteByte('\\') // any other escape is preserved raw (e.g. \d)
+				si++
+				continue
+			}
+			if c == delim {
+				closed = true
+				si++
+				break
+			}
+			b.WriteByte(c)
+			si++
+		}
+		if !closed {
+			return nil // unterminated → leave to normal lexing
+		}
+		tkn := lex.Token("#ML", t.ML, miniLitVal{Name: name, Src: b.String()}, s[start:si])
+		cursor.SI = si
+		for _, ch := range s[start:si] {
+			if ch == '\n' {
+				cursor.RI++
+				cursor.CI = 1
+			} else {
+				cursor.CI++
+			}
+		}
+		return tkn
+	})
+}
+
 // setupTemplateLiteralMatcher registers a high-priority lex matcher that
 // produces #TL tokens for literal text inside template strings. Active only
 // when rule.K["aql_tpl"] is set (inside a backtick-opened interp rule).
@@ -190,6 +290,11 @@ func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
 func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 	j.Rule("val", func(rs *jsonic.RuleSpec) {
 		rs.Open = append([]*jsonic.AltSpec{
+			// Minilang literal `+name<delim>src<delim>`: the matcher stashed a
+			// miniLitVal on the token; carry it to the converter as the node.
+			{S: [][]jsonic.Tin{{t.ML}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = r.O0.Val
+			}},
 			{S: [][]jsonic.Tin{{t.OP}}, P: "paren"},
 			// Backtick opens a template string → push to interp rule.
 			{S: [][]jsonic.Tin{{t.BT}}, P: "interp"},

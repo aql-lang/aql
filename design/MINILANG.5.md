@@ -598,7 +598,54 @@ Empirical findings the design must respect:
 | 1 | **LANDED 2026-06-12** (scoped to two kinds): native `mini` (two sigs `[Atom/q String]` / `[Atom/q String Map]`; `lang_` resolution with expansion-time `mini_unknown_lang`; auto-`end`; opts normalized to `{}`; `RunInCheckMode` so the checker steps the expansion) + `aql:minilang` with `re` (Go `regexp`, per-src compile memo) and `bf` (brainfuck — filter + generator forms, `opts.steps` budget) + `MiniLang.register` / `MiniLang.kinds` + battery `lang/spec/module-minilang.tsv`. Implementation notes: `mini` returns an `__SP` splice of the standard-call tokens (the `word` mechanism) rather than going through the macro expander — so there is no expansion cache (the `re` compile memo covers the hot cost) and `macroexpand` does not apply to `mini`; src is spliced as collected, so dynamic src works for runtime kinds. Deferred from the original Phase-1 row: `re-sub` / `re-test` / `re-all` |
 | 2 | `math` kind (Pratt parser; F2-aware emission), `tr`, `jp`, `fm`, `gl` |
 | 3 | **compile hooks**: a kind may register an expansion-time compiler `(src, opts-form) → token list` that `mini` splices *instead of* the standard call — staged compilation of the DSL (parse once ever, splice precompiled carrier values, surface `src` syntax errors at expansion time with call-site spans; requires literal `src`). The standard call remains the semantic reference and the dynamic-src fallback |
-| 4 | remaining catalogue kinds (`jq`, `xp`, `cs`, `ur`, `dt`, `sh`); optionally revisit rev 1's `xy/` literal as *pure lexer sugar desugaring to `mini`* if terseness demand materializes |
+| 4 | remaining catalogue kinds (`jq`, `xp`, `cs`, `ur`, `dt`, `sh`); the `+` literal shortcut — **LANDED** (§12) |
+
+---
+
+## 12. The `+name<delim>src<delim>` shortcut — LANDED
+
+The terse literal form rev 1 wanted, recovered as **pure lexer sugar over
+`mini`** (the Phase-4 option) rather than rev 1's whitespace-terminated
+two-letter prefixes (Appendix A). A custom jsonic LexMatcher
+(`eng/go/parser/grammar.go::setupMiniLitMatcher`) recognises
+
+```
++<name><delim><src><delim>
+```
+
+and the converter (`parse.go`) emits the **identical token stream** as the
+explicit call — `mini <name> '<src>'` — so every property of `mini` carries
+over for free: a stack subject, a trailing `{opts}` map (collected by mini's
+3-arg sig), the expansion-time `mini_unknown_lang` error, and check mode.
+
+- **Delimiter** is the first character after the (lowercase) `name`; the
+  **same** character closes. Pick any non-space char, so a source containing
+  one delimiter just uses another: `+re|a/b|`, `+re#a/b#`.
+- **Backslash** escapes the delimiter and itself (`\<delim>` → the delimiter,
+  `\\` → `\`); every **other** backslash is preserved **raw**. So regex keeps
+  its escapes without doubling — `+re/\d+/` is the pattern `\d+`, versus the
+  quoted form's `'\\d+'` (the F3 escaping wart, gone for this surface).
+- **Trigger** is `+` immediately followed by a lowercase letter, a non-space
+  delimiter, and a closing delimiter. `+0d5` (a signed bignum) and a bare `+`
+  are left to normal lexing; an unterminated `+re/…` falls through too.
+- **Sugar only, opts-less in the literal** — for options, the trailing map
+  rides the desugared call (`+re/\d/ {limit:2}`). There is no first-class
+  compiled-pattern *value* yet; that remains the Phase-3 compile-hook /
+  `aql:regexp`-style story.
+
+Examples (all equivalent to the explicit `mini` call):
+
+```
+"AbcD" +re/[a-z]+/                 ≡  "AbcD" mini re '[a-z]+'
+("a1b2c3" +re/\d/ {limit:2}).n     ≡  ("a1b2c3" mini re '\\d' {limit:2}).n   # → 2
++bf/++++++++[>++++++++<-]>+./       ≡  mini bf '++++++++[>++++++++<-]>+.'      # → 'A'
+```
+
+Implementation: matcher → `#ML` token carrying `miniLitVal{Name,Src}` →
+val-rule Open alternate sets `r.Node` → `convertTopLevelItems` emits the three
+tokens inline in word context (data-context map values fall back to an `__SP`
+splice in `convertTopLevelValueInner`). Battery: `lang/spec/module-minilang.tsv`
+§6 + `lang/go/test/minilang_literal_test.go`.
 
 ---
 
