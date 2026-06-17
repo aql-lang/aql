@@ -1,254 +1,208 @@
 # AQL Implementation Status
 
-Cross-reference of design documents in `lang/doc/design/` against the
-current codebase. Last updated: 2026-05-06.
+Cross-reference of design documents in `design/` against the current
+codebase. Last updated: **2026-06-17** (rebuilt from a full audit of every
+design doc against `lang/go/`, `eng/go/`, `lang/spec/`, and `cmd/go/`).
 
-Filenames are suffixed with a 0–10 implementation completeness
-indicator (e.g. `PLAN.10.md` is fully implemented, `XML.0.md`
-is design-only). The number after the dot is the indicator, not a
-version.
+Filenames carry a `0–10` implementation-completeness suffix (e.g.
+`PLAN.10.md` is fully implemented, `XML.0.md` is design-only). The number
+after the dot is that indicator, **not** a version. This audit found the
+suffix to be a reliable signal — every `.10` doc checked is genuinely
+implemented — with a few docs whose suffix understates reality (notably
+`TCO-STAGED.0`, `LAZY-ARG-RESOLUTION.0`, and `NUMERIC-TOWER.0`, all of which
+landed after their suffix was set).
 
-## Recent Changes
-
-- **String interpolation**: Backtick template strings with `${...}`
-  syntax, parsed natively by jsonic using custom tokens (#BT, #IS, #TL)
-  and grammar rules (interp/ielem/iexpr/ieval). Supports nested
-  interpolation to any depth. See LANGREF.10.md § Literals.
-- **Timer/concurrency words**: `sleep`, `timeout`, `interval`, `cancel`,
-  `await` with four parallel execution modes (all, full, first, any).
-  New types: `Ideal/Timeout`, `Ideal/Interval`.
-
-
-## Fully Implemented
-
-| Document | Description | Notes |
-|----------|-------------|-------|
-| PLAN.10.md | Core execution loop plan | All phases complete. |
-| ENGINE.10.md | Stack machine, forward scanning, argument equivalence | Working. /s /f modifiers, Forth primitives. |
-| ENGINE-UNIFIED-ALGO.8.md | Unified signature matching algorithm | Pending call frames, incremental constraint solving. |
-| SIGNATURE-MATCHING-PSEUDOCODE.10.md | Type matching, scoring, positional/forward/prefix matching | /q modifier, fallback signatures, specificity scoring. |
-| TYPES.10.md | Hierarchical type system | Any-root lattice; branches Scalar/Node/Ideal/Word/Type; degenerate roots None/Never; Ideal kinds (Object/Resource/Entity/Array/Record/Options/Error/Store/Table) + external (Time/Tensor/Fetch/Timeout/Interval). Metatypes retired; see TYPE-ORDERING.10.md for ordering. |
-| TYPE-ORDERING.10.md | Value lattice, Rank scheme, Comparer cascade, type-literal-first rule | Strict total order over distinct lattice nodes; one deliberate value-level equivalence (1 ≡ 1.0). Verified by lang/spec/compare.tsv (748 rows incl. transitivity + user-defined-type coverage). |
-| SIGNATURES.10.md | All 100+ builtin word signatures | Full match-order signatures with returns and notes. |
-| LANGREF.10.md | Language reference for all builtin words | All documented words registered in native_*.go. |
-| IMPORTS.10.md | Module system: descriptors, file imports, renaming | Bare name resolution, `aql:` prefix, isolation. |
-| NATIVE-MODULES.10.md | Native Go modules, `aql:math` | Module loading, dot-notation access, FnDef auto-invocation. |
-| FILE-ACCESS.10.md | read/write words, FileOps interface | CSV/TSV/JSON/jsonic/text, options maps, stdin/stdout/stderr. |
-| FOR-LOOP-REVIEW.10.md | For-loop design review | Sentinel errors for break/continue, mark/move, lazy ForCont. |
-
-**109 native words** across: stack manipulation (15), math (6),
-boolean logic (6), string ops (15), comparison (7), type system (11),
-control flow (5), definition/scoping (9), array ops (23),
-higher-order array (5), storage/context (3), file I/O (5),
-printing (2), modules (3), accessor (1), debug (2), unify (1),
-timer/concurrency (6: sleep, timeout, interval, cancel, await, now).
-
-
-## Partially Implemented
-
-### ARRAYIFICATION.6.md — complete (minus the rejected broadcasting)
-
-**Done:** `iota`, `range`, `reshape`, `flatten`, `transpose`, `take`,
-`shed`, `reverse`, `each`, `fold`, `scan`, `outer`, `inner`, `where`,
-`unique`, `grade`, `window`, `pairs`, `group`, `replicate`, `expand`,
-`compress`, `eachrank`, `foldaxis`, `at`, `sortby`, `member` (27
-words). Object/Array type with SQLiteStore backing.
-
-**Packaging:** the vocabulary is split between core built-ins and the
-`aql:array` module (see ARRAYIFICATION.6.md "Packaging"). Built-in:
-`iota`, `range`, `take`, `shed`, `reverse`, `each`, `fold`, `scan`,
-`outer`, `inner` (plus core `size`/`flatten`/`indexof`). Module
-(`array.` prefix after `"aql:array" import`): `shape`, `rank`,
-`reshape`, `transpose`, `where`, `grade`, `at`, `sortby`, `replicate`,
-`expand`, `compress`, `eachrank`, `foldaxis`, `member`, `unique`,
-`group`, `window`, `pairs`. Per ADR-001 no module export shadows a core
-word: deep flatten is the core `flatten -1` and list lookup is the core
-`indexof` `[List, List]` overload — neither is an `array.*` word.
-
-**Rejected:**
-- Broadcasting (implicit scalar-over-array lifting) — see ADR-002.
-  Scalar-over-array application stays explicit via `each`/`eachrank`.
-
-
-## Not Implemented
-
-### DATAFRAME-WORDS.3.md — 28+ words
-
-SQL-style tabular data manipulation. Planned words:
-
-| Category | Words |
-|----------|-------|
-| View | `head`, `tail`, `shape`, `cols`, `nrow`, `ncol`, `describe` |
-| Columns | `col`, `pick`, `omit` |
-| Filter | `sift` (pattern match or predicate per row) |
-| Modify | `mutate`, `rename` |
-| Sort | `sortby` (with direction) |
-| Aggregate | `sum`, `mean`, `count`, `min` (extend), `max` (extend) |
-| Group | `groupby` |
-| Join | `merge` |
-| Combine | `stack` (vertical concatenation) |
-| Missing | `dropna`, `fillna` |
-| Duplicates | `dedup`, `dupes` |
-| Reshape | `melt`, `pivot` |
-| Apply | `apply` (per column/element) |
-| Row access | `row`, `slice` (extend) |
-
-### MATRIX-WORDS.7.md — 83 words + 22 overloads
-
-Linear algebra operations (gonum dependency). Planned words:
-
-| Category | Words |
-|----------|-------|
-| Construction | `matrix`, `mat-zeros`, `mat-ones`, `mat-eye`, `mat-diag`, `mat-fill`, `mat-rand`, `mat-randn`, `mat-linspace`, `mat-range`, `mat-from-cols`, `mat-from-table` |
-| Shape/info | `mat-rows`, `mat-cols`, `mat-shape`, `mat-size`, `mat-square?`, `mat-symmetric?` |
-| Element access | `mat-at`, `mat-set`, `mat-row`, `mat-col`, `mat-diag-of`, `mat-slice`, `mat-set-row`, `mat-set-col` |
-| Arithmetic | `add`/`sub`/`mul`/`div` (extend), `mat-emul`, `mat-ediv` |
-| Element-wise math | 22 overloads of existing words (`abs`, `sqrt`, `sin`, `cos`, etc.) |
-| Transpose/reshape | `mat-t`, `mat-reshape`, `mat-flatten`, `mat-hstack`, `mat-vstack`, `mat-squeeze` |
-| Linear algebra | `mat-det`, `mat-inv`, `mat-trace`, `mat-rank`, `mat-norm`, `mat-cond` |
-| Decompositions | `mat-lu`, `mat-qr`, `mat-svd`, `mat-svd-vals`, `mat-chol`, `mat-eigen` |
-| Solving | `mat-solve`, `mat-lstsq`, `mat-pinv` |
-| Aggregation | `mat-sum`, `mat-mean`, `mat-min`, `mat-max`, row/col variants |
-| Comparison | `mat-eq?`, `mat-close?`, `mat-gt`, `mat-lt`, `mat-any?`, `mat-all?` |
-| Advanced | `mat-dot`, `mat-cross`, `mat-outer`, `mat-kron`, `mat-conv`, `mat-apply`, `mat-map-row`, `mat-map-col` |
-
-### TEMPORAL-WORDS.9.md — ~70 words (partially implemented)
-
-Date/time types and operations. Types implemented: Instant, DateTime,
-Date, TimeOfDay, CalDuration, ClkDuration, Timezone, Timeout, Interval.
-Core timer words implemented: `now`, `sleep`, `timeout`, `interval`,
-`cancel`, `await`. Remaining ~64 temporal module words not yet implemented.
-
-Per the Step 11 resolution of TYPE-DECOUPLING.10.md, free-form
-text/ISO parsing was **removed** as a feature rather than reimplemented.
-Construction is via numeric (`unix` / `unix-ms` / `unix-ns`) or
-wall-clock (`now-local` / `today` / `today-utc`); output-only
-formatting is via `to-string` / `to-iso` / `format`. The removed
-words appear stricken through below.
-
-| Category | Words |
-|----------|-------|
-| Construction | ~~`date`~~, ~~`datetime`~~, ~~`instant`~~, ~~`time-of-day`~~, `tz`, `unix`, `unix-ms`, `unix-ns`, `cal-dur`, ~~`duration`~~ (ISO-form) |
-| Current time | `now`, `now-local`, `today`, `today-utc`, `elapsed` |
-| Extraction | `year`, `month`, `day`, `hour`, `minute`, `second`, `nanosecond`, `weekday`, `weekday-name`, `month-name`, `year-day`, `iso-week`, `quarter`, `days-in-month`, `days-in-year`, `is-leap-year`, `to-unix`, `to-unix-ms` |
-| Duration | `years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`, `ms`, `us`, `ns`, `total-hours`, `total-minutes`, `total-seconds`, `total-ms`, `dur-years`, `dur-months`, `dur-days`, `dur-sign` |
-| Arithmetic | `add`/`sub` (extend), `until`, `since`, `diff` |
-| Comparison | `is-before`, `is-after`, `eq` (extend), `compare`, `is-between`, `earliest`, `latest` |
-| Conversion | `to-date`, `to-time-of-day`, `to-datetime`, `to-instant`, `to-local`, `to-utc`, `to-string`, `format`, `to-iso` |
-| Rounding | `round`/`truncate` (extend), `start-of`, `end-of` |
-| Timezone | `tz`, `tz-utc`, `tz-local`, `tz-name`, `tz-offset`, `is-dst` |
-| Parsing | ~~`parse-date`, `parse-datetime`, `auto-date`~~ (removed — see TYPE-DECOUPLING.10.md Step 11) |
-
-### MINILANG.5.md — 10+ inline DSLs
-
-Rev 2: a core `mini` macro expanding `mini <kind> <src> <opts?>` to
-the standard call `MiniLang.lang_<kind> <src> <opts> end`, with kinds
-registered in the `aql:minilang` module (native Go or pure AQL). No
-lexer changes — rev 1's `xy/...` two-letter prefix literals are
-superseded (kept as optional future sugar). **LANDED 2026-06-12:**
-the core `mini` word, the `aql:minilang` module with the `re` (Go
-regexp) and `bf` (brainfuck) kinds, `MiniLang.register` /
-`MiniLang.kinds`, static checking through the expansion, and the
-`lang/spec/module-minilang.tsv` battery. Remaining: the rest of the
-kind catalogue, compile hooks, optional lexer sugar. Kinds are
-ordinary atoms:
-
-| Kind | Language | Purpose |
-|------|----------|---------|
-| `re` | Regexp match | Return match structure |
-| `re-sub` | Regexp substitute | Backreference replacement (`opts.repl`) |
-| `re-test` | Regexp test | Boolean match test |
-| `re-all` | Regexp find-all | List of all matches |
-| `xp` | XPath | XML querying |
-| `jp` | JsonPath | Map/list querying |
-| `jq` | jq | Filter expressions |
-| `cs` | CSS selectors | DOM-style selection |
-| `tr` | Transliterate | Perl tr/y semantics |
-| `fm` | Format | String interpolation with `{}` |
-| `sh` | Shell pattern | POSIX glob matching |
-| `gl` | Glob | File glob matching |
-| `ur` | URL pattern | URL template matching |
-| `dt` | Date/time format | Temporal formatting |
-| `math` | Natural infix maths | Variables from named params (`opts`) |
-
-### GENERICS.10.md — generic types
-
-Algebraic generics with concatenative core and a sugar layer. No
-implementation yet — design draft only.
-
-### XML.0.md — XML format and embedding
-
-Tree-structured XML alternate concrete syntax for AQL programs and
-data, with `${...}` interpolation, CSS-selector querying (`cs/`),
-and `<aql-embed lang="...">` for embedding foreign syntaxes.
-
-
-## Reports and Reviews
-
-These documents review existing implementation rather than propose
-new features. Their completeness suffix reflects how much of what
-they describe or recommend is in the codebase.
-
-| Document | Topic |
-|----------|-------|
-| AQL-CODE-REVIEW-REPORT.6.md | Architecture, safety, duplication review; most fixes landed, some remain. |
-| BATTERIES-INCLUDED-REPORT.5.md | Standard-library coverage analysis; partial uptake. |
-| CARRIER-STATIC-TYPECHECK-REPORT.10.md | Carrier-based static type checking — implemented. |
-| TYPE-SYSTEM-REVIEW.7.md | Algebraic + dependent type review; majority resolved. |
-| AQL-DX-REPORT.5.md | DX feedback from `aql:decision`; all issues resolved or documented (re-verified 2026-06-09). |
-| jsonic-matcher-rule-access-report.10.md | Jsonic LexMatcher rule access; landed in jsonic v0.1.6. |
-| aql-boolean-operations-report.10.md | Boolean ops review; ops are implemented. |
-| aql-bytecode-outline.0.md | Bytecode AOT compilation outline. |
-| aql-bytecode-report.0.md | Full bytecode compilation feasibility report. |
-| amop-in-aql-report.0.md | Ambient-Oriented Programming feasibility. |
-| fsharp-units-in-aql-report.0.md | F# units of measure feasibility. |
-
-
-## Reference Documentation
-
-These describe the language itself; their completeness reflects
-parity with the codebase, not pending work.
-
-| Document | Topic |
-|----------|-------|
-| LANGREF.10.md | Language reference — all builtins. |
-| SIGNATURES.10.md | Builtin word signatures. |
-| TYPES.10.md | Type system — Any-root lattice, branches, kinds. |
-| TYPE-ORDERING.10.md | Comparison total order — `cmp`, `sort`, `lt`/`gt`. |
-| ENGINE.10.md | Stack machine. |
-| IMPORTS.10.md | Module / import system. |
-| NATIVE-MODULES.10.md | Native Go modules. |
-| FILE-ACCESS.10.md | File I/O API. |
-| SAMPLES.10.md | Code samples. |
-| tutorial.10.md | Step-by-step tutorial. |
-| how-to.10.md | Task-oriented how-to guides. |
-| reference.10.md | Precise reference material. |
-| explanation.10.md | Background and rationale. |
-
-
-## Open Design Issues
-
-From AQL-DX-REPORT.5.md (building `aql:decision`) — re-verified
-2026-06-09 against `8fdd4e1`; all six are now resolved or documented:
-
-| Priority | Issue | Status |
-|----------|-------|--------|
-| P0 | List auto-eval strips def references, blocking composition | Fixed (`lang/go/native/list_eval_test.go`) |
-| P0 | Def leakage from fn bodies via CallAQL | Fixed (`lang/go/native/def_leakage_test.go`) |
-| P1 | Arg ordering confusing across prefix/forward/FnDef contexts | Documented (lang/go/CLAUDE.md §Argument Ordering; `aql describe`; `/s` `/f` `/N` modifiers) |
-| P1 | Registered words shadow map keys in dot notation | Fixed (literal-key dot access; `lang/go/native/dot_shadow_test.go`) |
-| P2 | No ergonomic list-building word | Moot (list literals evaluate def refs since the Issue-1 fix) |
-| P2 | FnDef words cannot forward-collect like builtins | Fixed (structure-first lazy forward-argument resolution) |
-
+> The canonical list of *words* and *modules* is the tool itself: run
+> `aql describe` (words, categories, modules) and `aql help` (CLI). This
+> document indexes **design docs → code**, not the word catalogue.
 
 ## Summary
 
-| Area | Status | Word Count |
-|------|--------|------------|
-| Core engine, types, signatures | Complete | 103 implemented |
-| Array processing | ~60% | ~23 of ~40 |
-| Dataframe operations | Not started | 0 of ~28 |
-| Matrix / linear algebra | Not started | 0 of ~105 |
-| Temporal / date-time | Not started | 0 of ~70 |
-| Mini-languages | Not started | 0 of ~14 prefixes |
-| **Total** | | **~103 of ~360** |
+| Area | Status |
+|------|--------|
+| Core engine, dispatch, signatures | Complete |
+| Type system (lattice, generics, classes, surfaces, refine, ideals) | Complete |
+| Macros, errors, flex nodes, usurp, reach, paren-rep | Complete |
+| Numerics (bignum/0d, binary ops, IEEE-754, overflow) | Complete |
+| Temporal types + core words | Complete (some module words remain) |
+| Modules / imports / native modules / file I/O | Complete |
+| Static checker (carrier abstract interpretation, `aql check`) | Complete |
+| Permissions / capabilities | Complete |
+| Property-based testing harness | Complete |
+| Bytecode compiler + VM | **Staged** — Stages 0–5 landed; default-on pending |
+| Arrays / matrix / minilang | Partial |
+| Dataframe words | Not started |
+| Actors / services / streaming / XML | **Design-only** |
+
+Roughly: of ~95 design docs, **~55 fully implemented**, **~13 partial/staged**
+(8 of them the bytecode cluster), **~9 design-only**, **~14 reports/reviews**,
+and the rest reference documentation.
+
+There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
+`gex`, `io`, `logic`, `math`, `matrix` (+`matrix_ideal`), `minilang`, `net`,
+`parselang`, `query`, `rand`, `report`, `string`, `struct`, `test`, `time`,
+`type`, `vm` — plus well over 100 core native words in `lang/go/native/`.
+
+## Recent Changes (since the 2026-05 status)
+
+- **Tail-call optimization** — `TCO.10` / `TCO-STAGED.0` fully landed
+  (`OpTailCallUser` in `eng/go/bytecode.go`, frame replacement in `fn_frame.go`).
+- **Bytecode compiler + VM** — staged implementation (`eng/go/bytecode.go`,
+  `emit*.go`, `vm*.go`); Stages 0–5 complete (2607 spec rows compile-or-fallback,
+  0 divergences), only the default-on flip remains.
+- **Bignum / `0d` literals** — `TBigInteger`/`TBigDecimal` in `eng/go/value.go`,
+  literal parsing, `lang/spec/bignum.tsv`.
+- **Generics** — `lang/spec/generics.tsv`, `generics-class.tsv` (algebraic
+  generics with `gen`/`refine`).
+- **Classes / objects** — `CLASS-OBJECT.10`, `lang/spec/class.tsv` (64 rows).
+- **Macros** — `native_macro.go` (gensym/unquote/splice), `lang/spec/macro.tsv`.
+- **Errors** — `raise` + `do … error …`, `native_error_raise.go`,
+  `lang/spec/error.tsv`.
+- **Static checker** — carrier-based abstract interpretation (`eng/go/carrier.go`,
+  `check.go`, `aql check`), loud diagnostics.
+- **Permissions / capabilities** — `lang/go/policy/` + `lang/go/capabilities/`.
+- **Flex nodes, usurp, reach, surfaces, refine, paren-representation** — landed.
+- **Temporal** — types (`TInstant`/`TDateTime`/`TDate`/`TClkDuration`/…) and
+  core timer words; correcting the old "0 of 70" note.
+- **Minilang** — core `mini` word + `aql:minilang` (`re`/`bf` kinds).
+- **String interpolation** — backtick templates with `${…}` (jsonic tokens).
+
+## Fully Implemented
+
+### Core engine & dispatch
+
+| Document | Evidence |
+|----------|----------|
+| PLAN.10 | "This plan has been completed." Engine/registry/types/parser/IO all present. |
+| ENGINE.10 | `eng/go/engine.go` stack machine (`Run`/`stepWord`/`execMatch`). |
+| ENGINE-UNIFIED-ALGO.8 | unified matching in `eng/go/signature.go::MatchSignature`. |
+| SIGNATURE-MATCHING-PSEUDOCODE.10 | `eng/go/signature.go` (hierarchical/prefix/forward matching). |
+| SIGNATURES.10 | `Signature` struct + 750+ spec rows. |
+| SIG-ORDER-REFACTOR.10 | top-first arg order; `sig_order_guard_test.go`. |
+| FUNCTION-MODEL.10 | single dispatch path via `execMatch`; FnDefInfo collapse. |
+| TAPE-DATA-STRUCTURE.10 / RECURSION-PERFORMANCE.10 | gap-buffer tape `eng/go/tape.go`. |
+| TCO.10 / TCO-STAGED.0 | `OpTailCallUser`, `fn_frame.go` frame replacement. |
+| LAZY-ARG-RESOLUTION.0 | `resolveForwardArgs` in `eng/go/engine.go`. |
+| FORWARD-COLLECTION-PHASES.10 | `ForwardInfo.Speculative`, `/u` barrier. |
+| FORWARD-STRAND-ADVISORY.10 | `checkForwardStrandsOperand`, `forward_strands_operand` code. |
+| PARSING.10 | `StructUtil.parse` + `Vm.parse` (modules/struct.go, vm.go). |
+
+### Type system
+
+| Document | Evidence |
+|----------|----------|
+| TYPES.10 / TYPE-ORDERING.10 | `eng/go/typetable.go`, `compare.go` total order; `compare.tsv` (748 rows). |
+| BEHAVIORS.10 | per-type operation dispatch (`eng/go/compare_scalar_behaviors.go`). |
+| TYPE-DECOUPLING.10 (+INVENTORY) | Steps 0–11 landed; `RegisterExternalBuiltin`. |
+| TYPE-UNIFORM.10 / TYPE-CANONICALIZATION.10 | unified `def`/`make`/`refine`; `CanonicalType`. |
+| TYPE-OPERATIONS.8 | `native_compare.go`, `native_type.go`. |
+| GENERICS.10 | `lang/spec/generics.tsv` (39 rows), `generics-class.tsv`. |
+| IDEAL.10 | Ideal kinds throughout `class.tsv`/`generics-class.tsv`. |
+| REACH.10 | `native_ref.go` (`ApplyReach`/`rebind`), `getpath.go`/`setpath.go`. |
+| SURFACES.10 | `eng/go/surface.go`, `native_surface.go`, `surface.tsv`. |
+| REFINE-NEWTYPE-VS-SUBSET.10 | `eng/go/unify_refine.go`. |
+| FLEX-NODES.10 | `native_flex.go`, `flex.tsv` (129 rows). |
+
+### Language features
+
+| Document | Evidence |
+|----------|----------|
+| CLASS-OBJECT.10 | `native_object_record.go`, `class.tsv` (64 rows). |
+| MACROS.8 / MACROS-PHASE1.10 / MACROS-PHASE5.5 | `native_macro.go`, `macro.tsv` (34 rows). |
+| ERRORS.8 | `native_error_raise.go`, `error.tsv` (26 rows). |
+| USURP.10 | `native_ref.go`, `usurp.tsv` (52 rows). |
+| FOR-LOOP-REVIEW.10 | for-loop sentinels, lazy ForCont. |
+| PAREN-REPRESENTATION.9 | `ParenExpr` handling, `paren_expr_step_test.go`. |
+| BIGNUM-0D.10 / NUMERIC-TOWER.0 (superseded) | `TBigInteger`/`TBigDecimal`, `bignum.tsv`. |
+| BINARY-OPERATIONS.10 / aql-boolean-operations-report.10 | `aql:bin-util` (`band`/`bor`/…), `bitwise.tsv`. |
+| IEEE-754-COMPLIANCE.8 / INTEGER-OVERFLOW-STRATEGY.5 | numeric semantics in `eng/go`. |
+| TEMPORAL-WORDS.9 | `native_temporal.go` types + core words; some module words remain. |
+
+### Modules, I/O, tooling, safety
+
+| Document | Evidence |
+|----------|----------|
+| IMPORTS.10 / NATIVE-MODULES.10 | `native_module_module.go`, ~19 modules. |
+| FILE-ACCESS.10 | FileOps; CSV/TSV/JSON/jsonic/text; `lang/go/capabilities/`. |
+| CARRIER-STATIC-TYPECHECK-REPORT.10 | `eng/go/carrier.go` (2296 lines), `check.go`. |
+| checker-loud-diagnostics-report.10 | check-mode loud gates; `aql check`. |
+| STATIC_ANALYSIS_REPORT.10 | golangci-lint/govulncheck CI. |
+| checker-accuracy-review.0 | findings A1–A9 landed; `check_accuracy_test.go`. |
+| PERMISSIONS.10 / PERMISSIONS-PLAN.10 | `lang/go/policy/` (8 files) + `capabilities/`. |
+| PBT-PLAN.10 / aql_property_based_reduction_report.10 | `modules/test/shrink/`, `modules/test.go`. |
+
+## Partial / Staged
+
+| Document | State |
+|----------|-------|
+| **aql-bytecode-*.0** (baseline, completion, outline, plan, readiness, report, revisions, runtime-independence) | Compiler + VM landed (`eng/go/bytecode.go`, `emit*.go`, `vm*.go`); Stages 0–5 complete (2607 rows compile-or-fallback, 0 divergences); **default-on (Stage 7) pending**. |
+| ARRAYIFICATION.6 | ~27 words across core + `aql:array`; broadcasting rejected (ADR-002). |
+| MATRIX-WORDS.7 | `modules/matrix.go` (gonum-backed): construction/access/arithmetic done; decompositions, signal, advanced ops missing. |
+| MINILANG.5 | core `mini` + `aql:minilang` (`re`/`bf`); remaining kind catalogue, compile hooks, lexer sugar pending. |
+| OBJECT-METHODS.5 | class instances work; method dispatch via signatures, no dedicated method syntax. |
+| dynamic-modality-report.10 | check-mode-only `dynamic(T)` modality (no runtime semantics). |
+| TEMPORAL-WORDS.9 | types + core timer words done; ~remaining module words (extraction/duration/conversion catalogue) pending. |
+
+## Design-only — Not Implemented
+
+| Document | Notes |
+|----------|-------|
+| PROCESSES.0 | Actor substrate (`spawn`/`self`/`send`/`receive`/`Pid`, bounded mailboxes, registry). RFC; no code. |
+| SERVICES.0 | Service/server model (`service`/`add`/`call`/`send`/`state`, `server`/`serve`, `proxy`, `pool`, transport). RFC; no code. Depends on PROCESSES.0. |
+| STREAM-WORDS.0 | `aql:stream` words. No module. |
+| XML.0 | XML alternate syntax, `cs/` selectors, `aql-embed`. |
+| DATAFRAME-WORDS.3 | ~28 SQL-style dataframe words. 0 implemented. |
+| MODULE-CACHE.0 | "Analysis only"; `loadFileModule` re-runs body on each import. |
+| FORWARD-COLLECTION-TRAPS.0 | "Investigations only"; no fix landed. |
+| amop-in-aql-report.0 | Ambient-Oriented Programming feasibility; nothing built. |
+| fsharp-units-in-aql-report.0 | Units-of-measure feasibility; library-only, not built. |
+
+The actor → service → streaming → XML cluster is the **only major
+design-only feature area**. Their *local* prerequisites already exist
+(patrun dispatch, the `Error` system, capabilities in `policy/`,
+`ForkConcurrent`, immutable values, the bytecode VM). The cross-cutting
+blockers the RFCs name are a **TCP/socket server primitive** (only the
+HTTP-client `fetch` exists today) and a **`Bytes` type + bit-syntax** for
+binary transport.
+
+## Reports & Reviews
+
+These review existing code or assess feasibility rather than propose a
+feature; the suffix reflects how much of what they recommend has landed.
+
+| Document | Topic |
+|----------|-------|
+| AQL-CODE-REVIEW-REPORT.6 | Architecture/safety/duplication audit; many fixes landed. |
+| BATTERIES-INCLUDED-REPORT.5 | Stdlib-coverage analysis; partial uptake. |
+| TYPE-SYSTEM-REVIEW.7 | Algebraic/dependent-type review; majority resolved. |
+| AQL-DX-REPORT.5 | DX findings from `aql:decision`; all six resolved/documented. |
+| VOXGIG-AQL-REPORTS.5 / VOXGIG-DX-REPORT.5 | First-hand library/DX reports; many findings since fixed. |
+| WAT-AUDIT.5 | Surprising-behaviour catalogue + remediations. |
+| PORT_OBSERVATIONS.5 | Go→TS engine-port parity notes. |
+| LISP-ANALYSIS.5 | AQL through a Lisp/Scheme lens. |
+| elixir-types-in-aql-report.10 | Elixir set-theoretic types applicability. |
+| jsonic-matcher-rule-access-report.10 | jsonic matcher rule access (Go-port gap). |
+| REVIEW-NOTES.10 / data-last-audit.10 / TYPE-DECOUPLING-INVENTORY.10 | Implementation/audit records. |
+
+## Reference Documentation
+
+Parity with the codebase, not pending work.
+
+| Document | Topic |
+|----------|-------|
+| LANGREF.10 | Language reference — all builtins. |
+| TYPES.10 | Type hierarchy reference. |
+| SAMPLES.10 / tutorial.10 / how-to.10 / reference.10 / explanation.10 | Learning + reference material. |
+
+## Open Design Clusters (forward work)
+
+1. **Actors & services** (PROCESSES.0 → SERVICES.0): the largest design-only
+   effort. Phase 1 (in-process `service`/`add`/`call`/`send`/`state`, `prior`/
+   `wrap`) needs no new substrate; later phases need processes, then the TCP
+   server + transport, then distribution.
+2. **Streaming** (STREAM-WORDS.0): `aql:stream`; pairs with services for
+   network I/O.
+3. **Binary** (`Bytes` + bit-syntax): blocks binary wire protocols; JSON is
+   already covered by `Format`/`jsonify`/`reify`.
+4. **Dataframe** (DATAFRAME-WORDS.3): unstarted tabular vocabulary.
+5. **Bytecode default-on**: the one remaining stage of the bytecode cluster.
