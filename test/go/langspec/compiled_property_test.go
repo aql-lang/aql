@@ -358,10 +358,24 @@ func genObjRead(r *rand.Rand, fields []string) *gnode {
 // body is a full Integer expression over the params (if / case / fold / for …),
 // so the closure unit lowers a rich body. A 0-param paren-def auto-fires, so
 // apply is gated to >=1 param; stored dispatch handles 0.
+//
+// The fn may also CLOSE OVER outer def-locals: with some probability 1-2 `def
+// vK <lit>` bindings precede the fn and join its body scope, so the body
+// references them as captures (the FnBaselines / ComputeCaptures path). Capture
+// values are literals — capturing a computed (carrier) local refuses. keys holds
+// the whole body scope (params ++ captured names); n marks the param prefix.
 func genFnProg(r *rand.Rand) *gnode {
 	nparams := r.Intn(3) // 0, 1, 2
 	apply := nparams > 0 && r.Intn(2) == 0
 	params := append([]string{}, []string{"a", "b"}[:nparams]...)
+	bodyScope := append([]string{}, params...)
+	var caps []*gnode
+	if r.Intn(2) == 0 {
+		for c := 1 + r.Intn(2); c > 0; c-- {
+			caps = append(caps, &gnode{op: "def", n: len(caps), kids: []*gnode{{op: "lit", cat: cInt, n: r.Intn(6)}}})
+			bodyScope = append(bodyScope, fmt.Sprintf("v%d", len(caps)-1))
+		}
+	}
 	form := "F"
 	if nparams > 0 && r.Intn(2) == 0 {
 		form = "L" // lambda (=>) — needs >=1 param
@@ -373,11 +387,19 @@ func genFnProg(r *rand.Rand) *gnode {
 			op = "fnapplyu" // usurp (/ur): argument-reversed wrapper
 		}
 	}
-	node := &gnode{op: op, cat: cInt, n: nparams, keys: params, cmp: form, kids: []*gnode{gen(r, cInt, 3, params)}}
+	body := gen(r, cInt, 3, bodyScope)
+	if len(caps) > 0 && r.Intn(3) != 0 { // bias toward an ACTUAL capture reference
+		body = &gnode{op: binOps[r.Intn(len(binOps))], cat: cInt,
+			kids: []*gnode{body, {op: "var", cat: cInt, n: nparams + r.Intn(len(caps))}}}
+	}
+	node := &gnode{op: op, cat: cInt, n: nparams, keys: bodyScope, cmp: form, kids: []*gnode{body}}
 	for i := 0; i < nparams; i++ {
 		node.kids = append(node.kids, &gnode{op: "lit", cat: cInt, n: r.Intn(6)})
 	}
-	return node
+	if len(caps) == 0 {
+		return node
+	}
+	return &gnode{op: "seq", kids: append(caps, node)} // outer captures ++ the fn prog
 }
 
 // renderFnDef renders a fn VALUE: a named-fn `(fn [[params][Integer][body]])` or
@@ -558,7 +580,8 @@ func render(n *gnode, scope []string) string {
 	case "ctxset":
 		return "context set '" + n.keys[0] + "' " + render(n.kids[0], scope) + " end"
 	case "fnapply", "fnapplyu":
-		fndef := renderFnDef(n.cmp, n.keys, render(n.kids[0], n.keys)) // body scope = params
+		// sig = params (keys[:n]); body scope = params ++ captured locals (keys).
+		fndef := renderFnDef(n.cmp, n.keys[:n.n], render(n.kids[0], n.keys))
 		args := ""
 		for _, k := range n.kids[1:] {
 			args += render(k, scope) + " "
@@ -569,7 +592,7 @@ func render(n *gnode, scope []string) string {
 		}
 		return "def f0 " + fndef + " " + args + "f0" + suffix + " apply"
 	case "fnstored":
-		out := "def m {f: " + renderFnDef(n.cmp, n.keys, render(n.kids[0], n.keys)) + "} m.f"
+		out := "def m {f: " + renderFnDef(n.cmp, n.keys[:n.n], render(n.kids[0], n.keys)) + "} m.f"
 		for _, k := range n.kids[1:] {
 			out += " " + render(k, scope)
 		}
