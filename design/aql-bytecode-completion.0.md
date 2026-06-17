@@ -465,8 +465,11 @@ indirection (a named `fn` or `=>` lambda over 0-2 Integer params, an Integer bod
 over those params, CALLED through a value — `apply` with the `/r` or usurp `/ur`
 ref suffix, or stored-field dispatch `def m {f: <fnval>} m.f <args>`; the body may
 also CLOSE OVER outer `def`-local literals, exercising the FnBaselines / capture
-path), type-tracked so `if` branches and `get` results stay well-typed; error
-TAXONOMY compared too)
+path) / `StringUtil.*` ops behind the (transparent) `"aql:string-util" import
+end` preamble (upper/lower/trim/concat/replace/repeat -> String, contains ->
+Boolean, indexof -> Integer, split -> List; computed strings flow through maps /
+comparisons / `size`, stressing the scalar-carrier-keep path), type-tracked so
+`if` branches and `get` results stay well-typed; error TAXONOMY compared too)
 and asserts compiled ==
 interpreted on each, with a shrinker that reduces a failure to a minimal program. It has found THREE real divergences the
 corpus had missed for the life of the project: (1) `for 3 [{a: (3 mul i)} get a]`
@@ -481,10 +484,11 @@ if-event (fixed by minting a fresh ID for the merged carrier — it is a NEW
 value). 36 000 generated programs across 12 seeds are divergence-free after each
 fix. Each subsequent widening round — in-place mutation, object/class field
 mutation, higher-order `fold`/`each`/`scan`, `case` multi-way dispatch,
-context-store reads, fn-value indirection (`apply` / stored dispatch), and
-closure capture — landed divergence-free on first hunt (21 808 compiled paths
-across 12 seeds on the higher-order round, 20 802 on the `case` round, 19 285 on
-the context round, 21 015 on the fn-indirection round, 21 031 on the capture
-round), so the generator now doubles as a standing soundness witness for the
-constructs it already covers, not only a bug-finder. This is the durable answer
+context-store reads, fn-value indirection (`apply` / stored dispatch), closure
+capture, and `StringUtil.*` string ops — landed divergence-free on first hunt
+(21 808 compiled paths across 12 seeds on the higher-order round, 20 802 on the
+`case` round, 19 285 on the context round, 21 015 on the fn-indirection round,
+21 031 on the capture round, 21 622 on the string round), so the generator now
+doubles as a standing soundness witness for the constructs it already covers, not
+only a bug-finder. This is the durable answer
 to "why is this so fiddly": fund the ORACLE, not the manual probing.

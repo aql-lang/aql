@@ -417,8 +417,108 @@ func renderFnDef(form string, params []string, bodySrc string) string {
 	return "(fn [[" + psig + "][Integer][" + bodySrc + "]])"
 }
 
+// genStrProg builds a STRING-OPERATIONS program: the `"aql:string-util" import
+// end` preamble (transparent — a program compiles identically with or without
+// it) followed by a string-flavoured expression from genS. Exercises the
+// `StringUtil.*` module ops and, crucially, COMPUTED strings flowing through
+// maps / comparisons / `size` — the scalar-carrier-keep path (keeping a concrete
+// inert string concrete through check mode) that the rest of the generator
+// barely stresses.
+func genStrProg(r *rand.Rand) *gnode {
+	c := cStr
+	switch r.Intn(5) {
+	case 0:
+		c = cInt
+	case 1:
+		c = cBool
+	case 2:
+		c = cList
+	case 3:
+		c = cMap
+	}
+	return &gnode{op: "strprog", cat: c, kids: []*gnode{genS(r, c, 3)}}
+}
+
+// genS builds a node of category c from StringUtil ops plus basic int/bool/list/
+// map composition; result categories stay well-typed (upper/lower/trim/concat/
+// replace/repeat -> String, contains -> Boolean, indexof -> Integer, split ->
+// List). Self-contained: it never calls gen, so it cannot perturb the other
+// grammar paths. concat takes LITERAL string elements (computed strings in a
+// list literal refuse); every other op nests freely.
+func genS(r *rand.Rand, c cat, depth int) *gnode {
+	if depth <= 0 {
+		return sleaf(r, c)
+	}
+	switch c {
+	case cStr:
+		switch r.Intn(6) {
+		case 0:
+			return &gnode{op: "strop", cat: cStr, cmp: "upper", kids: []*gnode{genS(r, cStr, depth-1)}}
+		case 1:
+			return &gnode{op: "strop", cat: cStr, cmp: "lower", kids: []*gnode{genS(r, cStr, depth-1)}}
+		case 2:
+			return &gnode{op: "strop", cat: cStr, cmp: "trim", kids: []*gnode{genS(r, cStr, depth-1)}}
+		case 3:
+			l := &gnode{op: "list", cat: cList, ecat: cStr}
+			for k := 2 + r.Intn(2); k > 0; k-- {
+				l.kids = append(l.kids, sleaf(r, cStr)) // literal elements -> compiles
+			}
+			return &gnode{op: "strop", cat: cStr, cmp: "concat", kids: []*gnode{l}}
+		case 4:
+			return &gnode{op: "strop", cat: cStr, cmp: "repeat", kids: []*gnode{genS(r, cInt, depth-1), genS(r, cStr, depth-1)}}
+		default:
+			return &gnode{op: "strop", cat: cStr, cmp: "replace", kids: []*gnode{genS(r, cStr, depth-1), genS(r, cStr, depth-1), genS(r, cStr, depth-1)}}
+		}
+	case cBool:
+		if r.Intn(2) == 0 {
+			return &gnode{op: "strop", cat: cBool, cmp: "contains", kids: []*gnode{genS(r, cStr, depth-1), genS(r, cStr, depth-1)}}
+		}
+		return &gnode{op: "cmp", cat: cBool, cmp: "eq", kids: []*gnode{genS(r, cStr, depth-1), genS(r, cStr, depth-1)}}
+	case cList:
+		return &gnode{op: "strop", cat: cList, cmp: "split", kids: []*gnode{genS(r, cStr, depth-1), genS(r, cStr, depth-1)}}
+	case cMap:
+		nk := 1 + r.Intn(len(mapKeys))
+		m := &gnode{op: "map", cat: cMap, keys: append([]string{}, mapKeys[:nk]...)}
+		for i := 0; i < nk; i++ {
+			vc := cStr
+			if r.Intn(2) == 0 {
+				vc = cInt
+			}
+			m.kids = append(m.kids, genS(r, vc, depth-1))
+		}
+		return m
+	default: // cInt
+		switch r.Intn(4) {
+		case 0:
+			return &gnode{op: "strop", cat: cInt, cmp: "indexof", kids: []*gnode{genS(r, cStr, depth-1), genS(r, cStr, depth-1)}}
+		case 1:
+			return &gnode{op: "size", cat: cInt, kids: []*gnode{genS(r, cList, depth-1)}}
+		case 2:
+			return &gnode{op: "add", cat: cInt, kids: []*gnode{genS(r, cInt, depth-1), genS(r, cInt, depth-1)}}
+		default:
+			return sleaf(r, cInt)
+		}
+	}
+}
+
+// sleaf is a depth-0 terminal for the string sub-grammar.
+func sleaf(r *rand.Rand, c cat) *gnode {
+	switch c {
+	case cStr:
+		return &gnode{op: "strlit", cat: cStr, n: r.Intn(len(strLits))}
+	case cBool:
+		return &gnode{op: "cmp", cat: cBool, cmp: "eq", kids: []*gnode{sleaf(r, cStr), sleaf(r, cStr)}}
+	case cList:
+		return &gnode{op: "strop", cat: cList, cmp: "split", kids: []*gnode{sleaf(r, cStr), sleaf(r, cStr)}}
+	case cMap:
+		return &gnode{op: "map", cat: cMap, keys: []string{"a"}, kids: []*gnode{sleaf(r, cStr)}}
+	default: // cInt
+		return &gnode{op: "lit", cat: cInt, n: r.Intn(6)}
+	}
+}
+
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
-	switch r.Intn(8) {
+	switch r.Intn(9) {
 	case 0:
 		return genArrProg(r), nil
 	case 1:
@@ -427,6 +527,8 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 		return genCaseStmt(r), nil // top-level no-default case (0-result tail)
 	case 3:
 		return genFnProg(r), nil // fn-value indirection (apply / stored dispatch)
+	case 4:
+		return genStrProg(r), nil // StringUtil ops (computed strings, indexof, split…)
 	}
 	scope := []string{}
 	var stmts []*gnode
@@ -579,6 +681,14 @@ func render(n *gnode, scope []string) string {
 		return "[" + n.cmp + " " + render(n.kids[0], scope) + "]"
 	case "ctxset":
 		return "context set '" + n.keys[0] + "' " + render(n.kids[0], scope) + " end"
+	case "strprog":
+		return `"aql:string-util" import end ` + render(n.kids[0], scope)
+	case "strop":
+		parts := make([]string, len(n.kids))
+		for i, k := range n.kids {
+			parts[i] = render(k, scope)
+		}
+		return "(StringUtil." + n.cmp + " " + strings.Join(parts, " ") + ")"
 	case "fnapply", "fnapplyu":
 		// sig = params (keys[:n]); body scope = params ++ captured locals (keys).
 		fndef := renderFnDef(n.cmp, n.keys[:n.n], render(n.kids[0], n.keys))
