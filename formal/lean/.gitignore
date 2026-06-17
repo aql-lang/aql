@@ -1,0 +1,10 @@
+# Lean build artifacts
+*.olean
+*.ilean
+*.c
+/build/
+.lake/
+
+# Python harness
+__pycache__/
+*.pyc
