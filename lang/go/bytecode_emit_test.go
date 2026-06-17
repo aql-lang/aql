@@ -415,11 +415,12 @@ func TestEmitStructuralTypePattern(t *testing.T) {
 			t.Errorf("%s: got %v err=%v, want [%s]", c.src, got, err, c.want)
 		}
 	}
-	// Negative: a generic schema whose body nests the type variable inside a
-	// typed-list field (`{items:[:T]}`) still refuses — the placeholder is not
-	// yet admitted through the ChildTypeInfo wrapper (a follow-on extension).
-	if _, r := compile(t, `def Stack gen [T] class {items:[:T]} end make Stack {items:[1 2]}`); r == "" {
-		t.Error("typed-list-field generic make compiled but is not yet supported")
+	// A generic schema whose body nests the type variable inside a typed-list
+	// field (`{items:[:T]}`) also compiles: the schema-body check admits a Word
+	// naming a type parameter, so the placeholder rides through the
+	// ChildTypeInfo wrapper as inert schema data.
+	if _, r := compile(t, `def Stack gen [T] class {items:[:T]} end make Stack {items:[1 2]}`); r != "" {
+		t.Errorf("typed-list-field generic make must compile, refused: %s", r)
 	}
 }
 
@@ -436,6 +437,12 @@ func TestEmitGenericSchema(t *testing.T) {
 		`def Box gen [T] class {value:T} end make Box {value:42}`,
 		`def Box gen [T] class {value:T} end (make Box {value:42}) typeof`,
 		`def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box`,
+		// Type variable nested inside a typed-list field — the placeholder Word
+		// rides through the ChildTypeInfo as inert schema data.
+		`def Stack gen [T] class {items:[:T]} end Stack`,
+		`def Stack gen [T] class {items:[:T]} end (make Stack {items:[1 2]}) typeof`,
+		// Default-valued parameter (`T default Integer`).
+		`def R gen [(T default Integer)] class {items:[:T]} end (make R {items:[]}) typeof`,
 	} {
 		dis, r := compile(t, src)
 		if r != "" {
