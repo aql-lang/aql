@@ -175,11 +175,11 @@ WORD fn
 WORD fnsig
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/FunctionSignature]
 WORD fold
-  [Type/Function Node/Map Any] barrier=3 returns=[Any]
-  [Node/List Node/Map Any] barrier=3 noeval={0} returns=[Any]
+  [Type/Function Node/Map Any] barrier=3 +returnsfn
+  [Node/List Node/Map Any] barrier=3 noeval={0} +returnsfn
   [Node/List Node/List Any] barrier=3 noeval={0} +returnsfn
-  [Type/Function Node/Map] barrier=2 returns=[Any]
-  [Node/List Node/Map] barrier=2 noeval={0} returns=[Any]
+  [Type/Function Node/Map] barrier=2 +returnsfn
+  [Node/List Node/Map] barrier=2 noeval={0} +returnsfn
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD folder
   [Ideal/Options Scalar/Path] barrier=2 returns=[Node/List]
