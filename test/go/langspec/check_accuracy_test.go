@@ -162,7 +162,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 // wrong-TYPE checker bugs (A1, A4), which the value-pinning ratchet
 // cannot see. Violations are pinned and may only decrease.
 
-const pinnedTypeSoundnessViolations = 22 // was 159 — typeCovered now applies the runtime `is Type` membership rule to type-as-value actuals (typeof / type-algebra / make-of-a-type / record shapes), which a raw actual.Parent.ConformsTo misjudged (a type literal's Parent is the DENOTED type's lattice parent), removing 127 spurious flags and exposing the genuine residue (wrong module-time Returns annotations, do/for/pop arity, dynamic method dispatch)
+const pinnedTypeSoundnessViolations = 16 // was 22 — corrected six wrong aql:time-util inner-native Returns (weeks/days/until/since → CalDuration, tz-offset → String, total-ms → Float) to match their handlers; was 159 — typeCovered now applies the runtime `is Type` membership rule to type-as-value actuals (typeof / type-algebra / make-of-a-type / record shapes), which a raw actual.Parent.ConformsTo misjudged (a type literal's Parent is the DENOTED type's lattice parent), removing 127 spurious flags and exposing the genuine residue (wrong module-time Returns annotations, do/for/pop arity, dynamic method dispatch)
 
 func TestCheckTypeSoundness(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
