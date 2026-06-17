@@ -102,7 +102,7 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			return &gnode{op: "cmp", cat: cBool, cmp: cmps[r.Intn(len(cmps))], kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
 		}
 	case cStr:
-		switch r.Intn(5) {
+		switch r.Intn(6) {
 		case 0:
 			return &gnode{op: "add", cat: cStr, kids: []*gnode{gen(r, cStr, depth-1, scope), gen(r, cStr, depth-1, scope)}} // concat
 		case 1:
@@ -112,6 +112,8 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			return &gnode{op: "get", cat: cStr, n: r.Intn(len(m.keys)), kids: []*gnode{m}}
 		case 3:
 			return genCase(r, cStr, depth, scope) // string-bodied dispatch over an int scrutinee
+		case 4:
+			return genIndex(r, cStr) // `([…] get i)` -> the String element
 		default:
 			return leaf(r, cStr, scope)
 		}
@@ -130,7 +132,7 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		}
 		return genMap(r, randVCat(r), depth-1, scope)
 	case cList:
-		switch r.Intn(5) {
+		switch r.Intn(7) {
 		case 0:
 			// `for <count> [<body using i>]` -> list of per-iteration values.
 			return &gnode{op: "for", cat: cList, ecat: cInt, kids: []*gnode{
@@ -146,6 +148,14 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			// narrows the result to the INPUT collection type (a list of Integer);
 			// quotation `[cmp N]` and `{key value}`-lambda `.value` forms.
 			return genFilter(r, cList, depth-1, scope)
+		case 4:
+			// `(reverse <list>)` -> the same list reversed (element type preserved).
+			in := gen(r, cList, depth-1, scope)
+			return &gnode{op: "reverse", cat: cList, ecat: in.ecat, kids: []*gnode{in}}
+		case 5:
+			// `(<scalarList> sort)` -> ascending sort (element type preserved).
+			sl := genScalarList(r)
+			return &gnode{op: "sort", cat: cList, ecat: sl.ecat, kids: []*gnode{sl}}
 		}
 		ec := randECat(r)
 		k := 1 + r.Intn(3)
@@ -155,7 +165,7 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		}
 		return l
 	default: // cInt
-		switch r.Intn(13) {
+		switch r.Intn(14) {
 		case 0, 1:
 			ops := []string{"add", "sub", "mul", "div", "mod"}
 			return &gnode{op: ops[r.Intn(len(ops))], cat: cInt, kids: []*gnode{gen(r, cInt, depth-1, scope), gen(r, cInt, depth-1, scope)}}
@@ -171,6 +181,8 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 			return &gnode{op: "fold", cat: cInt, cmp: binOps[r.Intn(len(binOps))], n: r.Intn(6), kids: []*gnode{genLitList(r)}}
 		case 6:
 			return genCase(r, cInt, depth, scope) // multi-way dispatch (N-arm if-join)
+		case 7:
+			return genIndex(r, cInt) // `([…] get i)` -> the Integer element
 		default:
 			return leaf(r, cInt, scope)
 		}
@@ -178,6 +190,48 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 }
 
 var binOps = []string{"add", "mul", "sub"}
+
+// genIndex builds an integer-index read over a LITERAL list of c-elements:
+// `([e0 e1 …] get i)` with i in bounds, so the result is a value of category c.
+// The list is pure literals (a computed/var element refuses const-baking), which
+// is the shape the checker narrows — "concrete-list integer-index read to the
+// element type": Integer for an int list, String for a string list. n is the
+// index; kids[0] is the literal list.
+func genIndex(r *rand.Rand, c cat) *gnode {
+	k := 2 + r.Intn(3)
+	l := &gnode{op: "list", cat: cList, ecat: c}
+	for i := 0; i < k; i++ {
+		l.kids = append(l.kids, idxLeaf(r, c))
+	}
+	return &gnode{op: "idx", cat: c, n: r.Intn(k), kids: []*gnode{l}}
+}
+
+// idxLeaf is a pure-literal element for an index-read list (no vars / no
+// computation, so the whole list bakes as a const).
+func idxLeaf(r *rand.Rand, c cat) *gnode {
+	if c == cStr {
+		return &gnode{op: "strlit", cat: cStr, n: r.Intn(len(strLits))}
+	}
+	return &gnode{op: "lit", cat: cInt, n: r.Intn(6)}
+}
+
+// genScalarList builds a list whose elements are all ONE comparable scalar type
+// (all Integer or all String) — a sortable list. Either a literal list or a
+// computed-but-scalar list (an `each`-mapped int list), so `sort` lowers over
+// both a baked-const and a runtime-assembled input.
+func genScalarList(r *rand.Rand) *gnode {
+	switch r.Intn(3) {
+	case 0:
+		l := &gnode{op: "list", cat: cList, ecat: cStr}
+		for k := 2 + r.Intn(3); k > 0; k-- {
+			l.kids = append(l.kids, &gnode{op: "strlit", cat: cStr, n: r.Intn(len(strLits))})
+		}
+		return l
+	case 1:
+		return &gnode{op: "each", cat: cList, ecat: cInt, cmp: binOps[r.Intn(len(binOps))], n: r.Intn(6), kids: []*gnode{genLitList(r)}}
+	}
+	return genLitList(r)
+}
 
 // genFilter builds a predicate-`filter` over an all-Integer collection: a
 // literal int list (-> cList) or an int-valued map (-> cMap). filter keeps the
@@ -710,6 +764,13 @@ func render(n *gnode, scope []string) string {
 			return "(" + render(n.kids[0], scope) + " filter " + pred + ")"
 		}
 		return "(filter " + pred + " " + render(n.kids[0], scope) + ")"
+	case "idx":
+		// integer-index read of a literal list: (<list> get <i>)
+		return "(" + render(n.kids[0], scope) + " get " + fmt.Sprint(n.n) + ")"
+	case "reverse":
+		return "(reverse " + render(n.kids[0], scope) + ")"
+	case "sort":
+		return "(" + render(n.kids[0], scope) + " sort)"
 	case "case":
 		nClause := len(n.keys)
 		clauses := make([]string, 0, nClause*2+1)
