@@ -1738,9 +1738,42 @@ func isInertConst(v Value) bool {
 		// qualifies — the dot-access Eval reach (which the engine expands in
 		// place) is excluded.
 		return isInertReach(v)
+	case *TypeSchemaInfo:
+		// An installed generic schema (`def Box gen [T] class {value:T}`). The
+		// schema is immutable data — its instantiation memo lives in the
+		// registry, not this struct — and rides the canonical minted node via
+		// its Type pointer (shared, not copied), so it bakes as a const exactly
+		// like a structural type body. Admitting it lets `make Box {…}` (T
+		// inferred at run time), `is`/`typeof`/`teq` over the schema, and the
+		// schema as a residual all compile; the instantiated `Box of [Integer]`
+		// type already baked via typeBodyConstOK.
+		return schemaConstOK(d)
 	default:
 		return false
 	}
+}
+
+// schemaConstOK reports whether a generic schema bakes as a const: its body
+// must be a const-safe structural type body (or itself inert / a bare node)
+// and every parameter's extends-bound / default must be inert or a bare type
+// node. A computed constraint or a non-data (method-bearing fn) body refuses,
+// falling back faithfully.
+func schemaConstOK(s *TypeSchemaInfo) bool {
+	if s == nil || s.Type == nil {
+		return false
+	}
+	memberOK := func(m Value) bool {
+		return IsBareTypeNode(m) || typeBodyConstOK(m) || isInertConst(m)
+	}
+	for _, p := range s.Params {
+		if p.HasBound && !memberOK(p.Bound) {
+			return false
+		}
+		if p.HasDefault && !memberOK(p.Default) {
+			return false
+		}
+	}
+	return memberOK(s.Body)
 }
 
 // isInertReach reports whether v is an INERT receiverless lens — a first-class

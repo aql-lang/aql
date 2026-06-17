@@ -415,10 +415,45 @@ func TestEmitStructuralTypePattern(t *testing.T) {
 			t.Errorf("%s: got %v err=%v, want [%s]", c.src, got, err, c.want)
 		}
 	}
-	// Negative: a GENERIC made-instance operand still refuses (sub-cluster C —
-	// the instance is a carrier with no concrete value to bake; out of scope).
-	if _, r := compile(t, `def Box gen [T] class {value:T} end (make Box {value:42}) typeof`); r == "" {
-		t.Error("generic made-instance typeof compiled but must still refuse (no concrete instance to bake)")
+	// Negative: a generic schema whose body nests the type variable inside a
+	// typed-list field (`{items:[:T]}`) still refuses — the placeholder is not
+	// yet admitted through the ChildTypeInfo wrapper (a follow-on extension).
+	if _, r := compile(t, `def Stack gen [T] class {items:[:T]} end make Stack {items:[1 2]}`); r == "" {
+		t.Error("typed-list-field generic make compiled but is not yet supported")
+	}
+}
+
+// TestEmitGenericSchema: an installed generic schema (`def Box gen [T] class
+// {value:T}`) bakes as a const — it is immutable data riding its canonical
+// minted node, with the instantiation memo held in the registry, not the
+// struct. So `make Box {…}` (T inferred at run time), `is`/`typeof` over the
+// schema, and the bare schema as a residual all compile, matching the
+// interpreter. Explicit instantiation (`make (Box of [Integer]) {…}`) already
+// compiled via the structural-type-body path.
+func TestEmitGenericSchema(t *testing.T) {
+	for _, src := range []string{
+		`def Box gen [T] class {value:T} end Box`,
+		`def Box gen [T] class {value:T} end make Box {value:42}`,
+		`def Box gen [T] class {value:T} end (make Box {value:42}) typeof`,
+		`def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box`,
+	} {
+		dis, r := compile(t, src)
+		if r != "" {
+			t.Errorf("%s: generic schema must compile, refused: %s", src, r)
+			continue
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an interpreter island, want a native bake", src)
+		}
+	}
+	// Value parity for the inferred-T make.
+	got, _, err := mustRun(t, `def Box gen [T] class {value:T} end (make Box {value:42}) typeof`)
+	if err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "Box of [Integer]" {
+		t.Errorf("inferred-T make typeof: got %v err=%v, want [Box of [Integer]]", got, err)
+	}
+	// Negative: a generic FNSIG schema body is not data-bakeable, so it refuses.
+	if _, r := compile(t, `def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) typeof`); r == "" {
+		t.Error("fnsig-schema typeof compiled but must still refuse (signature body, not data)")
 	}
 }
 
