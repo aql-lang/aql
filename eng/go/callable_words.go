@@ -168,6 +168,19 @@ func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Si
 	if !ok || len(lam.Body) == 0 {
 		return false
 	}
+	// An OVERLOADED fn value (more than one own signature) is dispatched by
+	// MatchFnSig at runtime — FirstOwnSig is not necessarily the matched
+	// overload, so compiling its body could run the wrong one. Refuse and let
+	// the interpreter select the overload.
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	if own > 1 {
+		return false
+	}
 	// A capturing lambda would need its captures resolved in this scope and
 	// threaded onto the closure; the spec lambda rows are capture-free, so
 	// defer that and keep a capturing lambda on the refusal path.
@@ -180,6 +193,43 @@ func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Si
 	inputs, shape, ok := lambdaCallbackInputs(r, word, args, lam)
 	if !ok || len(lam.Params) != len(inputs) {
 		return false
+	}
+	// The callback shape must satisfy each declared param TYPE — the same
+	// membership the runtime MatchFnSig checks at dispatch. A param whose type
+	// rejects the shape (e.g. `[p:String]` against filter's {key,value} pair)
+	// makes the interpreter raise a callback error; compiling the body anyway
+	// would silently keep the element instead. Refuse so the type check stands.
+	for i := range lam.Params {
+		// The callback shape must satisfy each declared param TYPE — the same
+		// membership the runtime MatchFnSig checks at dispatch. A param whose
+		// type rejects the shape (e.g. `[p:String]` against filter's
+		// {key,value} pair, or `[kv:KeyVal]` against a list's plain pair) makes
+		// the interpreter raise a callback error; compiling the body anyway
+		// would silently keep the element. Refuse so the type check stands.
+		pt := lam.Params[i].Type
+		if pt == nil {
+			continue
+		}
+		// A map-iteration ENTRY input is a KeyVal (a Map subtype) that the
+		// carrier conservatively under-types as a plain Map — its concrete type
+		// is not always resolvable here. Accept any Map-family param (Map,
+		// KeyVal, Any, Node) and refuse a param that is neither a sub- nor a
+		// super-type of Map (a scalar like String, or a sibling container),
+		// which the runtime callback dispatch rejects.
+		if shape == ClosureInKeyVal && inputs[i].Parent.ConformsTo(TMap) {
+			if !pt.ConformsTo(TMap) && !TMap.ConformsTo(pt) {
+				return false
+			}
+			continue
+		}
+		// Correctly-typed carriers (the {key,value} pair for the list forms, a
+		// typed accumulator): the param must satisfy the carrier type, the same
+		// membership the runtime MatchFnSig checks at dispatch. A mismatch
+		// (`[p:String]` against filter's Map pair) makes the interpreter raise a
+		// callback error while a compiled body would silently keep the element.
+		if !sigTypeMatches(inputs[i], pt) {
+			return false
+		}
 	}
 	names := make([]string, len(lam.Params))
 	for i := range lam.Params {

@@ -3,6 +3,8 @@ package lang
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -1205,5 +1207,72 @@ func TestParenBoundedFnValueApplyFallsBack(t *testing.T) {
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != pos.want {
 			t.Errorf("%q: parity: compiled=%v interp=%v want=%s", pos.src, gotC, gotI, pos.want)
 		}
+	}
+}
+
+// PR #141 automated-review findings — three latent bytecode-compiler bugs in
+// the higher-order / const-fold paths. Each pairs the negative (the hazard
+// refuses / no longer diverges) with the positive (the legitimate shape still
+// compiles), so the fix is pinned without over-refusing.
+func TestPRReviewFindings(t *testing.T) {
+	// #4 / #1 — a lambda callback whose declared param TYPE cannot accept the
+	// higher-order word's callback shape: the interpreter raises a callback
+	// error, but the compiled closure used to bind the value and keep it. The
+	// closure lowering now matches the param type (and refuses overloaded fn
+	// values) so these fall back faithfully; Any / KeyVal callbacks still compile.
+	neg := []string{
+		`filter ([p:String] => [true]) [1 2]`,     // String param vs {key,value} pair (list)
+		`filter ([p:String] => [true]) {a:1 b:2}`, // String param vs KeyVal (map)
+		`filter ([p:Integer] => [true]) {a:1 b:2}`,
+		`filter ([kv:KeyVal] => [true]) [1 2]`, // KeyVal param vs a list's plain pair
+	}
+	for _, src := range neg {
+		a, _ := New()
+		gotC, _, errC := a.RunCompiled(src)
+		b, _ := New()
+		gotI, errI := b.Run(src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || (errC == nil) != (errI == nil) {
+			t.Errorf("%q: callback type mismatch diverged: compiled=%v(e %v) interp=%v(e %v)", src, gotC, errC, gotI, errI)
+		}
+	}
+	pos := []struct{ src, want string }{
+		{`filter ([p:Any] => [(p.value mod 2) eq 0]) [1 2 3 4]`, "[[2 4]]"},
+		{`filter ([kv:KeyVal] => [(kv.v mod 2) eq 0]) {a:1 b:2 c:3 d:4}`, "[{b:2 d:4}]"},
+		{`0 fold ([acc:Integer kv:KeyVal] => [acc add kv.v]) {a:1 b:2 c:3}`, "[6]"},
+	}
+	for _, p := range pos {
+		a, _ := New()
+		gotC, compiled, errC := a.RunCompiled(p.src)
+		if !compiled || errC != nil {
+			t.Errorf("%q: expected a native compile, got compiled=%v err=%v", p.src, compiled, errC)
+		}
+		if fmt.Sprint(gotC) != p.want {
+			t.Errorf("%q: compiled=%v want=%s", p.src, gotC, p.want)
+		}
+	}
+
+	// #2 — an effectful expression inside a container value was const-folded by
+	// re-running it concretely (twice), performing/doubling the side effect at
+	// compile time. The fold now declines an impure expression; a PURE container
+	// value still folds and compiles.
+	effOut := func(run func(*AQL, string)) string {
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		a, _ := New()
+		run(a, `{a:(print "x" 1) b:2}`)
+		w.Close()
+		os.Stdout = old
+		out, _ := io.ReadAll(r)
+		return string(out)
+	}
+	ci := effOut(func(a *AQL, s string) { a.Run(s) })
+	cc := effOut(func(a *AQL, s string) { a.RunCompiled(s) })
+	if ci != cc || ci != "x\n" {
+		t.Errorf("#2 effect parity: interp print=%q compiled print=%q (want %q once)", ci, cc, "x\n")
+	}
+	a, _ := New()
+	if gotC, compiled, _ := a.RunCompiled(`{a:(3 mul 2) b:1}`); !compiled || fmt.Sprint(gotC) != "[{a:6 b:1}]" {
+		t.Errorf("#2 pure fold regressed: compiled=%v wasCompiled=%v", gotC, compiled)
 	}
 }

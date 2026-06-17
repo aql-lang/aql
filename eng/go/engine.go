@@ -3248,6 +3248,79 @@ func (e *Engine) exprRefsCarrier(items []Value) bool {
 				}
 				continue
 			}
+			// A Reach can hide a carrier in its receiver or a computed key
+			// (`m.(k)` with a def-local carrier `k`): recurse into both so the
+			// fold declines rather than baking the carrier's check-time value.
+			if IsReach(v) {
+				if ri, err := AsReach(v); err == nil {
+					walk(ri.Receiver)
+					for i := range ri.Segments {
+						if ri.Segments[i].Computed {
+							walk(ri.Segments[i].KeyExpr)
+						}
+					}
+				}
+				continue
+			}
+			if lst, err := AsList(v); err == nil && !lst.IsNil() {
+				walk(lst.Slice())
+				continue
+			}
+			if mp, err := AsMap(v); err == nil && mp != nil {
+				for _, k := range mp.Keys() {
+					mv, _ := mp.Get(k)
+					walk([]Value{mv})
+				}
+			}
+		}
+	}
+	walk(items)
+	return found
+}
+
+// exprHasEffect reports whether items contain a word whose evaluation performs a
+// side effect that the const-fold (which re-runs the expression off the emit
+// path) must not double or strand: the effectful core word `print`, or a
+// module-bound word fronting an IO/Net/etc. call. The walk mirrors
+// exprRefsCarrier's structural recursion.
+func (e *Engine) exprHasEffect(items []Value) bool {
+	r := e.registry
+	found := false
+	var walk func(vs []Value)
+	walk = func(vs []Value) {
+		for _, v := range vs {
+			if found {
+				return
+			}
+			if IsWord(v) {
+				if w, err := AsWord(v); err == nil {
+					if w.Name == "print" {
+						found = true
+						return
+					}
+					if bound, ok := r.Defs.Top(w.Name); ok && isModuleFamilyValue(bound) {
+						found = true
+						return
+					}
+				}
+			}
+			if IsParenExpr(v) {
+				if toks, err := AsParenExpr(v); err == nil {
+					walk(toks)
+				}
+				continue
+			}
+			if IsReach(v) {
+				if ri, err := AsReach(v); err == nil {
+					walk(ri.Receiver)
+					for i := range ri.Segments {
+						if ri.Segments[i].Computed {
+							walk(ri.Segments[i].KeyExpr)
+						}
+					}
+				}
+				continue
+			}
 			if lst, err := AsList(v); err == nil && !lst.IsNil() {
 				walk(lst.Slice())
 				continue
@@ -3277,6 +3350,14 @@ func (e *Engine) exprRefsCarrier(items []Value) bool {
 // downstream const-bake gate's job (a mutable instance bakes only as a schema
 // default that make copies, never as a data-map member).
 func (e *Engine) constFoldContainerVal(items []Value) (Value, bool) {
+	// The fold runs the expression CONCRETELY (twice). That is only sound for a
+	// pure computation: an effectful word (`print`, a module IO/Net call) would
+	// perform its effect at compile time — and double it, across the two runs —
+	// while the compiled program just pushes the folded constant. Decline the
+	// fold for such an expression and let it record normally instead.
+	if e.exprHasEffect(items) {
+		return Value{}, false
+	}
 	one, ok := e.concreteEvalOnce(items)
 	if !ok {
 		return Value{}, false
