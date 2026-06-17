@@ -284,21 +284,37 @@ type secretDetailScreen struct {
 	alias  string
 	shown  bool
 	value  string
-	cmds   []string
+	cmds   []injectCmd
 	cursor int
+}
+
+// injectCmd is one exec recipe plus a one-line explanation of what it does.
+type injectCmd struct {
+	cmd  string
+	desc string
 }
 
 func (m *rootModel) buildSecretDetail(alias string) screen {
 	return &secretDetailScreen{m: m, alias: alias, cmds: injectCommands(alias)}
 }
 
-// injectCommands are the exec recipes shown (and copyable) on the detail page.
-func injectCommands(alias string) []string {
+// injectCommands are the exec recipes shown (and copyable) on the detail page,
+// each with a note on its purpose.
+func injectCommands(alias string) []injectCmd {
 	env := strings.ToUpper(aliasBase(alias))
-	return []string{
-		"aql vault exec " + alias + " -- <your command>",
-		"aql vault exec " + alias + "=" + env + " -- <your command>",
-		"aql vault exec --for=npm " + alias + " -- npm publish",
+	return []injectCmd{
+		{
+			"aql vault exec " + alias + " -- <your command>",
+			"Run any command with the secret injected as the $" + aliasBase(alias) + " environment variable.",
+		},
+		{
+			"aql vault exec " + alias + "=" + env + " -- <your command>",
+			"Same, but choose the variable's name (here $" + env + ").",
+		},
+		{
+			"aql vault exec --for=npm " + alias + " -- npm publish",
+			"Publish using the token — --for=npm|cargo|gem|pypi|uv sets up that tool's auth env.",
+		},
 	}
 }
 
@@ -369,7 +385,7 @@ func (s *secretDetailScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			})
 		case key.Matches(msg, kCopyExec):
 			if s.cursor < len(s.cmds) {
-				label, err := s.m.ctl.copyToClipboard(s.cmds[s.cursor])
+				label, err := s.m.ctl.copyToClipboard(s.cmds[s.cursor].cmd)
 				if err != nil {
 					return s, statusErr("copy: " + err.Error())
 				}
@@ -432,12 +448,13 @@ func (m *rootModel) secretDetailBody(alias string, shown bool, value string, sel
 	b.WriteByte('\n')
 	b.WriteString(tuiSectionStyle.Render("Inject into a process — ↑/↓ select · c copy"))
 	b.WriteByte('\n')
-	for i, line := range injectCommands(alias) {
+	for i, ic := range injectCommands(alias) {
 		cursor, style := "  ", tuiPathStyle
 		if i == sel {
 			cursor, style = tuiCursorStyle.Render("▸ "), tuiPathStyle.Bold(true)
 		}
-		b.WriteString("  " + cursor + style.Render(line) + "\n")
+		b.WriteString("  " + cursor + style.Render(ic.cmd) + "\n")
+		b.WriteString("      " + tuiDimStyle.Render(ic.desc) + "\n")
 	}
 	return b.String()
 }
