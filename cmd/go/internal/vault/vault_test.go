@@ -127,7 +127,7 @@ func TestAddGetListRemove(t *testing.T) {
 	}
 
 	// rm.
-	code, _, errOut = runVault(t, "", "rm", "openai")
+	code, _, errOut = runVault(t, "", "rm", "--yes", "openai")
 	if code != 0 {
 		t.Fatalf("rm: %s", errOut)
 	}

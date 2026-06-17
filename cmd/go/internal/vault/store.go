@@ -60,6 +60,47 @@ type Capability struct {
 	MaxCostCents    int      `json:"max_cost_cents,omitempty"`
 	UsedCostCents   int      `json:"used_cost_cents,omitempty"`
 	RequireApproval bool     `json:"require_approval,omitempty"`
+	// Namespace binds this capability to the namespace whose data key it
+	// may reach, and SlotName records the password slot that granted it.
+	// A broker authenticates a presented token into a session scoped to
+	// Namespace (intersected with the broker password's grants), so a
+	// token never reaches a namespace outside the scope it was minted for
+	// even when the broker runs under a broader password.
+	Namespace string `json:"namespace,omitempty"`
+	SlotName  string `json:"slot_name,omitempty"`
+}
+
+// PasswordSlot is one named, scoped vault password (a "keyslot" in the
+// LUKS sense). Each slot owns an X25519 keypair: EncPrivKey is the
+// private key sealed under a per-slot KEK derived from the slot's
+// passphrase, PublicKey is its public half, and WrappedKeys holds each
+// granted namespace data key (NDK) sealed to that public key. Admin
+// slots hold every NDK and can re-seal an NDK to any slot's public key.
+//
+// Scope is plaintext but cryptographically bound — it is mixed into the
+// Verifier and the EncPrivKey AAD (see keyslot.go) — so editing it in
+// vault.jsonic makes the slot fail authentication rather than escalate.
+// Namespaces are NOT bound there: they are gated by NDK possession
+// (editing the field grants nothing without the wrapped data key), which
+// also lets an admin reassign namespaces without the holder's
+// passphrase. PubMAC (keyed by the integrity key) authenticates
+// PublicKey + Scope + Namespaces before any admin re-seal targets it.
+//
+// None of Salt/Verifier/PubMAC/EncPrivKey/WrappedKeys is a plaintext
+// secret — they are derivation outputs and ciphertext, useless without
+// the slot passphrase — but `password list` must never print them.
+type PasswordSlot struct {
+	Name        string            `json:"name"`                   // unique; validAliasSegment (no colon)
+	Scope       string            `json:"scope"`                  // admin|read|write|move — bound into Verifier + EncPrivKey AAD
+	Namespaces  []string          `json:"namespaces,omitempty"`   // stored-form ns; ""=root; nil/["*"]=all
+	Salt        string            `json:"salt"`                   // base64, 16B — per-slot HKDF info (not a scrypt salt)
+	Verifier    string            `json:"verifier"`               // hex — HMAC over label,Name,Scope,sorted(NS)
+	PublicKey   string            `json:"public_key"`             // base64, X25519 public key
+	PubMAC      string            `json:"pub_mac,omitempty"`      // hex — HMAC(integrityKey, label,Name,Pub,Scope,NS)
+	EncPrivKey  string            `json:"enc_priv_key"`           // base64, AES-GCM(KEK) of X25519 private key
+	WrappedKeys map[string]string `json:"wrapped_keys,omitempty"` // "ns#ndkID" -> base64 sealed NDK
+	CreatedAt   string            `json:"created_at"`
+	UpdatedAt   string            `json:"updated_at,omitempty"`
 }
 
 // Store is the on-disk vault metadata file. It contains aliases,
@@ -73,7 +114,29 @@ type Store struct {
 	Capabilities []Capability   `json:"capabilities,omitempty"`
 	Agents       []string       `json:"agents,omitempty"`
 	Config       map[string]any `json:"config,omitempty"`
+	// VaultSalt is the single per-vault scrypt salt (base64, 16B). One
+	// scrypt over VaultSalt yields the master KEK; each slot's KEK is an
+	// HKDF expansion of it, so authenticate runs scrypt once regardless
+	// of slot count (see keyslot.go).
+	VaultSalt string `json:"vault_salt,omitempty"`
+	// Passwords holds the scoped password slots. Empty == legacy
+	// single-passphrase vault (implicit admin).
+	Passwords []PasswordSlot `json:"passwords,omitempty"`
+	// Generation is a monotonic content revision, bumped on every commit
+	// (distinct from the schema Version). It anchors integrity detection,
+	// the event-sourced journal, and restore.
+	Generation int64 `json:"generation,omitempty"`
+	// CurrentNDK maps each namespace (stored form; "" is root, plus the
+	// reserved integrity namespace) to the hex id of the namespace data
+	// key new writes seal under. A rekey transiently leaves an old and a
+	// new id both decryptable, but only the current id seals new values.
+	CurrentNDK map[string]string `json:"current_ndk,omitempty"`
 }
+
+// maxPasswordSlots bounds the slot table so authenticate's per-slot work
+// and the integrity checks stay bounded even if the file is tampered to
+// declare a huge number of slots. LoadStore refuses a store above it.
+const maxPasswordSlots = 64
 
 // storeVersion is the on-disk schema version this binary writes. Bump
 // it in the same commit as any change to the Store/Capability/Alias
@@ -88,7 +151,12 @@ type Store struct {
 //	v3 — aliases gain the optional ExpiresAt field. The bump exists only
 //	     so an older binary refuses a store that may carry alias expiries
 //	     rather than silently dropping them on its next save.
-const storeVersion = 3
+//	v4 — scoped password slots, the envelope (VaultSalt/Passwords), a
+//	     content Generation counter, and capability namespace-binding.
+//	     The bump makes an older binary refuse a v4 store rather than
+//	     silently dropping the password slots / key material on its next
+//	     save (which would orphan every envelope-sealed secret).
+const storeVersion = 4
 
 // storeMigrations[i] upgrades a store from schema version i+1 to i+2.
 // Each is a pure, in-place transform; the slice length must be
@@ -96,6 +164,7 @@ const storeVersion = 3
 var storeMigrations = []func(*Store) error{
 	migrateStoreV1ToV2, // index 0: v1 -> v2
 	migrateStoreV2ToV3, // index 1: v2 -> v3
+	migrateStoreV3ToV4, // index 2: v3 -> v4
 }
 
 // migrateStoreV1ToV2 revokes capabilities that predate token hashing.
@@ -118,6 +187,17 @@ func migrateStoreV1ToV2(s *Store) error {
 // version bump alone is the migration — it makes an older binary fail
 // loud on a v3 store instead of stripping expiries it cannot model.
 func migrateStoreV2ToV3(s *Store) error {
+	return nil
+}
+
+// migrateStoreV3ToV4 is a no-op transform. A v3 store has no password
+// slots, no VaultSalt, and no Generation, which correctly read as
+// "legacy single-passphrase vault, implicit admin, untracked content".
+// The version bump alone is the migration — it makes an older binary
+// fail loud on a v4 store instead of silently stripping the password
+// slots and key material it cannot model (which would orphan every
+// envelope-sealed secret).
+func migrateStoreV3ToV4(s *Store) error {
 	return nil
 }
 
@@ -176,11 +256,28 @@ func LoadStore(homeDir string) (*Store, error) {
 	if err := migrateStore(s); err != nil {
 		return nil, err
 	}
+	if len(s.Passwords) > maxPasswordSlots {
+		return nil, fmt.Errorf("vault: store declares %d password slots, exceeding the maximum of %d", len(s.Passwords), maxPasswordSlots)
+	}
 	return s, nil
 }
 
 // SaveStore writes the metadata file atomically and durably with mode
 // 0600. The vault folder is created with mode 0700 if absent.
+//
+// For a vault with scoped password slots it also maintains the
+// content-versioning + integrity side artifacts: the Generation counter
+// is bumped when (and only when) the content actually changed (so a
+// no-op re-save stays byte-stable), a keyless signature sidecar
+// (vault.jsonic.sig) is written, and on a content change one record is
+// appended to the event-sourced journal (vault.jsonic.log). These are
+// best-effort — failing to write them never fails the store save.
+//
+// A LEGACY single-passphrase vault (no slots) is written exactly as the
+// original implementation did — no generation counter, sidecar, or
+// journal — so existing vaults stay byte-identical and the broker's
+// per-request quota-counter saves stay cheap. Feature B activates once
+// the vault has password slots (the first `password add` migration).
 func SaveStore(homeDir string, s *Store) error {
 	if s.Version == 0 {
 		s.Version = storeVersion
@@ -188,11 +285,34 @@ func SaveStore(homeDir string, s *Store) error {
 	if err := os.MkdirAll(vaultFolder(homeDir), 0700); err != nil {
 		return err
 	}
+	if !s.HasPasswordSlots() {
+		data, err := json.MarshalIndent(s, "", "  ")
+		if err != nil {
+			return err
+		}
+		return writeFileAtomic(StorePath(homeDir), data, 0600)
+	}
+	contentH := storeContentHash(s)
+	changed := true
+	if prev, _ := readSidecar(homeDir); prev != nil && prev.ContentHash != "" && prev.ContentHash == contentH {
+		changed = false
+	}
+	if changed {
+		s.Generation++
+	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(StorePath(homeDir), data, 0600)
+	if err := writeFileAtomic(StorePath(homeDir), data, 0600); err != nil {
+		return err
+	}
+	_ = writeSidecar(homeDir, s.Generation, data, nil)
+	if changed {
+		_ = appendJournal(homeDir, nil, s.Generation, defaultActor(), "vault.save", storeSHA256(data), redactStore(s))
+		_ = pruneJournal(homeDir, journalKeepFromConfig(s))
+	}
+	return nil
 }
 
 // FindAlias returns a pointer to the named alias and its index, or
@@ -286,6 +406,70 @@ func (s *Store) SortedAliases() []Alias {
 	out := append([]Alias(nil), s.Aliases...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// HasPasswordSlots reports whether the vault has any scoped password
+// slots. No slots == a legacy single-passphrase vault (implicit admin).
+func (s *Store) HasPasswordSlots() bool { return len(s.Passwords) > 0 }
+
+// FindPasswordSlot returns a pointer to the named slot and its index, or
+// (nil, -1) if absent.
+func (s *Store) FindPasswordSlot(name string) (*PasswordSlot, int) {
+	for i := range s.Passwords {
+		if s.Passwords[i].Name == name {
+			return &s.Passwords[i], i
+		}
+	}
+	return nil, -1
+}
+
+// UpsertPasswordSlot inserts a new slot or replaces an existing one by
+// name, preserving CreatedAt and stamping UpdatedAt on replace.
+func (s *Store) UpsertPasswordSlot(slot PasswordSlot) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	if existing, idx := s.FindPasswordSlot(slot.Name); existing != nil {
+		slot.CreatedAt = existing.CreatedAt
+		slot.UpdatedAt = now
+		s.Passwords[idx] = slot
+		return
+	}
+	if slot.CreatedAt == "" {
+		slot.CreatedAt = now
+	}
+	s.Passwords = append(s.Passwords, slot)
+}
+
+// RemovePasswordSlot drops the named slot. Returns true if it existed.
+func (s *Store) RemovePasswordSlot(name string) bool {
+	_, idx := s.FindPasswordSlot(name)
+	if idx < 0 {
+		return false
+	}
+	s.Passwords = append(s.Passwords[:idx], s.Passwords[idx+1:]...)
+	return true
+}
+
+// SortedPasswordSlots returns slots ordered by name for stable display.
+func (s *Store) SortedPasswordSlots() []PasswordSlot {
+	out := append([]PasswordSlot(nil), s.Passwords...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// OtherFunctionalAdminExists reports whether an admin-scoped slot other
+// than excludingName exists. Identity-aware (not a bare count) so the
+// last-admin guard can't be tricked by an injected confusable admin slot
+// into allowing the real admin to be removed.
+func (s *Store) OtherFunctionalAdminExists(excludingName string) bool {
+	for i := range s.Passwords {
+		if s.Passwords[i].Name == excludingName {
+			continue
+		}
+		if s.Passwords[i].Scope == ScopeAdmin {
+			return true
+		}
+	}
+	return false
 }
 
 // FindCapability returns the capability matching id (or its short

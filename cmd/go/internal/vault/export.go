@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 // Export bundles let a vault be moved between machines and backends:
@@ -77,6 +78,9 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
+	// A leading ~ that the shell did not expand (e.g. --out=~/bundle.aqlx)
+	// must resolve under the home folder, not a literal "~" directory.
+	outPath := pathutil.ExpandTilde(*out, homeDir)
 	nsFilter, nsFiltered, err := normalizeNSFilter(*namespace)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
@@ -103,7 +107,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	}
 
 	// Never spew a binary bundle onto an interactive terminal.
-	if *out == "" && isTerminalWriter(stdout) {
+	if outPath == "" && isTerminalWriter(stdout) {
 		fmt.Fprintln(stderr, "error: refusing to write a binary bundle to the terminal; use --out=FILE or redirect stdout")
 		return 1
 	}
@@ -112,15 +116,20 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	// IS stdout (e.g. `aql vault export > vault.aqlx`), so a prompt on
 	// stdout would corrupt the file — and the user wouldn't see it on
 	// their terminal either.
-	kr, err := openKeyring(s, homeDir, stdin, stderr, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, stdin, stderr, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpRead); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
 	bundle := exportBundle{Version: exportVersion, ExportedAt: time.Now().UTC().Format(time.RFC3339)}
 	for _, a := range selected {
-		v, err := kr.Get(a.Name)
+		v, err := sess.getValue(a.Name, valueNamespace(a.Name))
 		if err != nil {
 			fmt.Fprintf(stderr, "error: reading %s: %s\n", a.Name, err)
 			return 1
@@ -151,12 +160,12 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 
-	if *out != "" {
-		if err := writeFileAtomic(*out, blob, 0600); err != nil {
+	if outPath != "" {
+		if err := writeFileAtomic(outPath, blob, 0600); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		fmt.Fprintf(stderr, "exported %d secret(s) to %s\n", len(bundle.Aliases), *out)
+		fmt.Fprintf(stderr, "exported %d secret(s) to %s\n", len(bundle.Aliases), outPath)
 	} else {
 		if _, err := stdout.Write(blob); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
@@ -270,8 +279,13 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 	if fromStdin {
 		krStdin = nil
 	}
-	kr, err := openKeyring(s, homeDir, krStdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, krStdin, stdout, "Vault passphrase: ")
 	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpWrite); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -319,7 +333,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 			skipped++
 			continue
 		}
-		if err := kr.Set(name, a.Value); err != nil {
+		if err := writeSecret(homeDir, sess, name, ns, a.Value); err != nil {
 			fmt.Fprintf(stderr, "error: storing %s: %s\n", name, err)
 			return 1
 		}
@@ -347,6 +361,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
+	sealIntegrity(homeDir, sess)
 	fmt.Fprintf(stdout, "imported %d secret(s)", imported)
 	if skipped > 0 {
 		fmt.Fprintf(stdout, ", skipped %d existing", skipped)

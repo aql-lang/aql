@@ -90,6 +90,12 @@ func runMCP(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		stderr:  stderr,
 		client:  &http.Client{Timeout: 60 * time.Second},
 	}
+	// Open the session once (one scrypt) and reuse it across tool calls;
+	// nil falls back to a per-call authenticate.
+	if sess, serr := authenticate(s, homeDir, nil, io.Discard, ""); serr == nil {
+		srv.sess = sess
+		defer sess.Close()
+	}
 	srv.serve(stdin, stdout)
 	return 0
 }
@@ -99,6 +105,8 @@ type mcpServer struct {
 	agent   string
 	stderr  io.Writer
 	client  *http.Client
+	// sess is opened once at startup; see Proxy.sess.
+	sess *Session
 }
 
 // serve runs the line-delimited JSON-RPC loop until stdin closes.
@@ -342,11 +350,16 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 		url += sep + vals.Encode()
 	}
 
-	kr, err := openKeyring(st, s.homeDir, nil, io.Discard, "")
-	if err != nil {
-		return fail(req, -32603, "keyring unavailable: "+err.Error())
+	sess := s.sess
+	if sess == nil {
+		var aerr error
+		sess, aerr = authenticate(st, s.homeDir, nil, io.Discard, "")
+		if aerr != nil {
+			return fail(req, -32603, "keyring unavailable: "+aerr.Error())
+		}
+		defer sess.Close()
 	}
-	secret, err := kr.Get(alias)
+	secret, err := sess.getValue(alias, valueNamespace(alias))
 	if err != nil {
 		return fail(req, -32603, "secret lookup failed")
 	}

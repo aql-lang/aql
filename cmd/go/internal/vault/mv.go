@@ -133,10 +133,24 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		return 0
 	}
 
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
+	}
+	defer sess.Close()
+	// A move needs move scope over both the source and destination
+	// namespaces; on an envelope vault it also needs the data keys for
+	// both (decrypt under source, re-seal under destination).
+	for _, m := range moves {
+		if err := requireScopeNS(sess, OpMove, valueNamespace(m.from)); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		if err := requireScopeNS(sess, OpMove, valueNamespace(m.to)); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
 	}
 
 	// Phase 1: copy every secret to its new name and verify the copy.
@@ -145,7 +159,7 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 	var copied []string
 	abort := func(from string, err error) int {
 		for _, c := range copied {
-			_ = kr.Delete(c)
+			_ = sess.deleteValue(c)
 		}
 		fmt.Fprintf(stderr, "error: moving %s: %s\n", from, err)
 		return 1
@@ -154,19 +168,23 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		if m.from == m.to {
 			continue
 		}
-		v, err := kr.Get(m.from)
+		// Decrypt under the source namespace, re-seal under the
+		// destination (the sealed value's AAD binds the alias+namespace,
+		// so a raw copy would not open under the new name). In legacy mode
+		// these are raw passthrough.
+		v, err := sess.getValue(m.from, valueNamespace(m.from))
 		if err != nil {
 			return abort(m.from, err)
 		}
-		if err := kr.Set(m.to, v); err != nil {
+		if err := writeSecret(homeDir, sess, m.to, valueNamespace(m.to), v); err != nil {
 			return abort(m.from, err)
 		}
-		got, err := kr.Get(m.to)
+		got, err := sess.getValue(m.to, valueNamespace(m.to))
 		if err != nil {
 			return abort(m.from, err)
 		}
 		if got != v {
-			_ = kr.Delete(m.to)
+			_ = sess.deleteValue(m.to)
 			return abort(m.from, fmt.Errorf("copy to %q did not verify", m.to))
 		}
 		copied = append(copied, m.to)
@@ -195,7 +213,7 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		return nil
 	}); err != nil {
 		for _, c := range copied {
-			_ = kr.Delete(c)
+			_ = sess.deleteValue(c)
 		}
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -208,10 +226,11 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		if m.from == m.to {
 			continue
 		}
-		if err := kr.Delete(m.from); err != nil {
+		if err := sess.deleteValue(m.from); err != nil {
 			fmt.Fprintf(stderr, "warning: could not remove old keyring entry %q: %s\n", m.from, err)
 		}
 	}
+	sealIntegrity(homeDir, sess)
 
 	for _, m := range moves {
 		_ = appendAudit(homeDir, AuditEvent{

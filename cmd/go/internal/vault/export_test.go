@@ -71,6 +71,27 @@ func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 	}
 }
 
+// TestExportOutTildeExpanded guards that a leading ~ in --out that the
+// shell left verbatim (e.g. --out=~/bundle.aqlx) resolves under the home
+// folder rather than writing to a literal "~" directory in the cwd.
+func TestExportOutTildeExpanded(t *testing.T) {
+	t.Setenv(EnvExportPassphrase, "bundle-pass")
+	home := testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "sk\n", "add", "--from-stdin", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	if code, _, e := runVault(t, "", "export", "--out=~/bundle.aqlx", "k"); code != 0 {
+		t.Fatalf("export: %s", e)
+	}
+	if _, err := os.Stat(filepath.Join(home, "bundle.aqlx")); err != nil {
+		t.Errorf("bundle not written under expanded home: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("~", "bundle.aqlx")); err == nil {
+		t.Errorf("a literal ~ directory was created")
+	}
+}
+
 // TestExportToStdoutKeepsPromptsOffBundle guards the corruption bug
 // where passphrase prompts were written to the same stdout stream as
 // the bundle, so `aql vault export > vault.aqlx` produced an

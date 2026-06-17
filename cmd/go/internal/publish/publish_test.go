@@ -16,6 +16,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/pack"
 	"github.com/aql-lang/aql/cmd/go/internal/prep"
 	"github.com/aql-lang/aql/cmd/go/internal/registry"
+	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
 
 // --- "not logged in" guard ---
@@ -76,6 +77,58 @@ func TestRunPublishCLI(t *testing.T) {
 		t.Fatalf("Run failed: %s", stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "published clipub@1.0.0") {
+		t.Errorf("unexpected output: %q", stdout.String())
+	}
+}
+
+// --- publish reads its token from the vault (token_vault) ---
+
+func TestRunPublishFromVault(t *testing.T) {
+	regDir := t.TempDir()
+	srv := httptest.NewServer(registry.Handler(regDir))
+	defer srv.Close()
+
+	rresp, _ := http.Post(srv.URL+"/api/register", "application/json",
+		strings.NewReader(`{"email":"v@example.com","username":"vuser","password":"vpass"}`))
+	rresp.Body.Close()
+	resp, _ := http.Post(srv.URL+"/api/login", "application/json",
+		strings.NewReader(`{"username":"vuser","password":"vpass"}`))
+	var loginResult map[string]string
+	json.NewDecoder(resp.Body).Decode(&loginResult)
+	resp.Body.Close()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("AQL_HOME", "") // force the vault to resolve home from HOME
+	t.Setenv("AQL_VAULT_FOLDER", "")
+	t.Setenv("AQL_VAULT_SUFFIX", "")
+	t.Setenv("AQL_VAULT_PASSPHRASE", "vpw")
+
+	// Initialize the vault and stash the registry token in it.
+	if code := vault.Run([]string{"init", "--backend=file"}, strings.NewReader(""), io.Discard, io.Discard); code != 0 {
+		t.Fatal("vault init failed")
+	}
+	if err := vault.WriteSecret(home, auth.DefaultRegistryTokenAlias, loginResult["token"], "test", strings.NewReader(""), io.Discard); err != nil {
+		t.Fatalf("WriteSecret: %v", err)
+	}
+	// user.jsonic references the vault; no plaintext token.
+	auth.SaveClientUser(home, &auth.ClientUser{
+		Username:   "vuser",
+		Registry:   srv.URL,
+		TokenVault: auth.DefaultRegistryTokenAlias,
+	})
+
+	moduleDir := t.TempDir()
+	os.WriteFile(filepath.Join(moduleDir, "aql.jsonic"),
+		[]byte("name: vaultpub\nmajor: 1\nminor: 0\npatch: 0\nfiles: [vaultpub.aql]\n"), 0644)
+	os.WriteFile(filepath.Join(moduleDir, "vaultpub.aql"), []byte("1"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"-r", srv.URL, moduleDir}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("publish (vault token): %s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "published vaultpub@1.0.0") {
 		t.Errorf("unexpected output: %q", stdout.String())
 	}
 }

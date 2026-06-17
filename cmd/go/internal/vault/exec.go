@@ -37,22 +37,18 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	upper := fs.Bool("upper", false, "uppercase env-var names derived from alias names")
 	clearEnv := fs.Bool("clear-env", false, "do not inherit the parent environment (keeps PATH/HOME/USER/SHELL/TERM/LANG/LC_ALL/TMPDIR only)")
 	prefix := fs.String("prefix", "", "prepend this prefix to env-var names derived from aliases")
+	forRecipe := fs.String("for", "", "present a single alias as a publisher's credential env (npm, cargo, gem, pypi, uv)")
+	registry := fs.String("registry", "", "registry host for --for=npm (default "+npmDefaultRegistry+")")
 	if err := fs.Parse(preArgs); err != nil {
 		return 1
 	}
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
+		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--for=TOOL [--registry=HOST]] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
 		return 1
 	}
 	if !sawSep || len(cmdArgs) == 0 {
 		fmt.Fprintln(stderr, "error: missing command (separate aliases from the command with `--`)")
-		return 1
-	}
-
-	mappings, err := parseExecAliases(fs.Arg(0), *prefix, *upper)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
@@ -65,39 +61,15 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	// Resolve every alias reference (default-namespace sugar, ':name'
-	// root escape) to its stored name before any keyring access.
-	for i := range mappings {
-		_, name, err := findAliasRef(s, mappings[i].alias)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %s\n", err)
-			return 1
-		}
-		mappings[i].alias = name
-	}
-
-	kr, err := openKeyring(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-
-	overrides := make(map[string]string, len(mappings))
-	for _, m := range mappings {
-		if _, dup := overrides[m.envName]; dup {
-			fmt.Fprintf(stderr, "error: duplicate env name %q in mapping\n", m.envName)
-			return 1
-		}
-		v, err := kr.Get(m.alias)
-		if err != nil {
-			_ = appendAudit(homeDir, AuditEvent{
-				Action: "vault.exec", Alias: m.alias,
-				Outcome: "error", Reason: "keyring: " + err.Error(),
-			})
-			fmt.Fprintf(stderr, "error: reading %s: %s\n", m.alias, err)
-			return 1
-		}
-		overrides[m.envName] = v
+	defer sess.Close()
+	if err := requireScope(sess, OpRead); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
 	}
 
 	bin, err := exec.LookPath(cmdArgs[0])
@@ -106,12 +78,85 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 
-	for _, m := range mappings {
-		_ = appendAudit(homeDir, AuditEvent{
-			Action: "vault.exec", Alias: m.alias,
-			Outcome: "ok",
-			Reason:  "env=" + m.envName + " cmd=" + filepath.Base(bin),
-		})
+	overrides := map[string]string{}
+	if *forRecipe != "" {
+		// Publisher recipe: a single alias presented in the credential
+		// environment the named tool reads (the recipe sets the env-var
+		// names, so --prefix/--upper and =ENV/comma mappings don't apply).
+		rec, ok := lookupPublishRecipe(*forRecipe)
+		if !ok {
+			fmt.Fprintf(stderr, "error: unknown --for recipe %q (known: %s)\n", *forRecipe, strings.Join(publishRecipeNames(), ", "))
+			return 1
+		}
+		spec := fs.Arg(0)
+		if strings.ContainsAny(spec, ",=") {
+			fmt.Fprintln(stderr, "error: --for takes a single alias (the recipe sets the env-var names)")
+			return 1
+		}
+		if *prefix != "" || *upper {
+			fmt.Fprintln(stderr, "error: --for sets the env-var names; drop --prefix/--upper")
+			return 1
+		}
+		_, alias, err := findAliasRef(s, spec)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		ns, _ := splitAlias(alias)
+		v, err := sess.getValue(alias, ns)
+		if err != nil {
+			_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "error", Reason: "keyring: " + err.Error()})
+			fmt.Fprintf(stderr, "error: reading %s: %s\n", alias, err)
+			return 1
+		}
+		reg := *registry
+		if reg == "" {
+			reg = rec.defaultRegistry
+		}
+		for k, val := range rec.env(v, reg) {
+			overrides[k] = val
+		}
+		_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "ok", Reason: "for=" + rec.name + " cmd=" + filepath.Base(bin)})
+	} else {
+		mappings, err := parseExecAliases(fs.Arg(0), *prefix, *upper)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		// Resolve every alias reference (default-namespace sugar, ':name'
+		// root escape) to its stored name before any keyring access.
+		for i := range mappings {
+			_, name, err := findAliasRef(s, mappings[i].alias)
+			if err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
+			mappings[i].alias = name
+		}
+		for _, m := range mappings {
+			if _, dup := overrides[m.envName]; dup {
+				fmt.Fprintf(stderr, "error: duplicate env name %q in mapping\n", m.envName)
+				return 1
+			}
+			ns, _ := splitAlias(m.alias)
+			v, err := sess.getValue(m.alias, ns)
+			if err != nil {
+				_ = appendAudit(homeDir, AuditEvent{
+					Action: "vault.exec", Alias: m.alias,
+					Outcome: "error", Reason: "keyring: " + err.Error(),
+				})
+				fmt.Fprintf(stderr, "error: reading %s: %s\n", m.alias, err)
+				return 1
+			}
+			overrides[m.envName] = v
+		}
+		for _, m := range mappings {
+			_ = appendAudit(homeDir, AuditEvent{
+				Action: "vault.exec", Alias: m.alias,
+				Outcome: "ok",
+				Reason:  "env=" + m.envName + " cmd=" + filepath.Base(bin),
+			})
+		}
 	}
 
 	env := buildExecEnv(*clearEnv, overrides)

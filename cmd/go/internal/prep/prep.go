@@ -12,6 +12,7 @@ import (
 	jsonic "github.com/jsonicjs/jsonic/go"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
 type cmd struct{}
@@ -30,7 +31,8 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 func Run(args []string, stdout, stderr io.Writer) int {
 	dir := "."
 	if len(args) > 0 {
-		dir = args[0]
+		// Expand a leading ~ the shell left verbatim (e.g. a quoted dir).
+		dir = pathutil.Expand(args[0])
 	}
 
 	if _, err := Do(dir); err != nil {

@@ -31,6 +31,22 @@ func TestValidSuffix(t *testing.T) {
 	}
 }
 
+func TestFolderTildeExpandedViaFlag(t *testing.T) {
+	home := testHome(t)
+
+	// A ~ that the shell did not expand (e.g. from --folder=~/sub) must
+	// resolve under the home folder, not a literal "~" directory.
+	if code, _, errOut := runVault(t, "", "--folder", "~/sub", "init", "--backend=file"); code != 0 {
+		t.Fatalf("init: %s", errOut)
+	}
+	if _, err := os.Stat(filepath.Join(home, "sub", "vault.jsonic")); err != nil {
+		t.Errorf("store not under expanded home: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("~", "sub")); err == nil {
+		t.Errorf("a literal ~ folder was created")
+	}
+}
+
 func TestSplitLocationArgs(t *testing.T) {
 	cases := []struct {
 		name      string

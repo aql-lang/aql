@@ -29,7 +29,7 @@ func TestAuditInitAddRm(t *testing.T) {
 		"--from-stdin", "--provider=openai", "k"); code != 0 {
 		t.Fatalf("add: %s", errOut)
 	}
-	if code, _, errOut := runVault(t, "", "rm", "k"); code != 0 {
+	if code, _, errOut := runVault(t, "", "rm", "--yes", "k"); code != 0 {
 		t.Fatalf("rm: %s", errOut)
 	}
 

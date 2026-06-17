@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	"github.com/aql-lang/aql/cmd/go/internal/prep"
 )
 
@@ -29,7 +30,8 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 func Run(args []string, stdout, stderr io.Writer) int {
 	dir := "."
 	if len(args) > 0 {
-		dir = args[0]
+		// Expand a leading ~ the shell left verbatim (e.g. a quoted dir).
+		dir = pathutil.Expand(args[0])
 	}
 
 	m, err := prep.Do(dir)

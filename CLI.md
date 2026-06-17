@@ -345,22 +345,30 @@ aql register -r https://registry.example.com
 
 ### `aql login`
 
-Log in to a registry; stores a token in the local config.
+Log in to a registry; stores a token in the local config. With
+`--vault`, the token is stored in the (encrypted) vault under an alias
+instead of plaintext `~/.aql/user.jsonic` (requires an initialized vault;
+set `AQL_VAULT_PASSPHRASE` or be prompted).
 
 ```bash
 aql login
 aql login -r https://registry.example.com
+aql login --vault                          # token → vault (alias: aql-registry-token)
+aql login --vault --vault-alias=my-reg     # custom alias
 ```
 
 ### `aql publish`
 
 Upload the current module (or a specified directory) to a registry.
-Requires a prior `aql login`.
+Requires a prior `aql login`. When the token was stored with `aql login
+--vault`, publish reads it back from the vault automatically; `--vault`
+(optionally `--vault-alias=NAME`) forces a vault read.
 
 ```bash
 aql publish                                # current dir
 aql publish ./mymodule
 aql publish -r https://registry.example.com
+aql publish --vault                        # read the token from the vault
 ```
 
 
@@ -548,6 +556,36 @@ aql vault exec --prefix=APP_ --upper api_key -- ./run.sh   # → $APP_API_KEY
 # Sanitize ambient env (keeps PATH/HOME/USER/SHELL/TERM/LANG/LC_ALL/TMPDIR)
 aql vault exec --clear-env api_key -- ./hermetic-tool
 ```
+
+### Publishing a package with a vault-held token
+
+Most package publishers don't read an arbitrary env var — each reads its
+credential from a specific variable (or, for npm, a `~/.npmrc` line). The
+`--for=<tool>` recipe presents one vault secret in the exact form a
+publisher expects, so the token is read from the (encrypted) vault and
+exists only in the child's environment — no `~/.npmrc` edit, nothing on
+the command line:
+
+```bash
+aql vault add --from-stdin npm_token            # store the token once
+aql vault exec --for=npm    npm_token   -- npm publish
+aql vault exec --for=cargo  crates_tok  -- cargo publish
+aql vault exec --for=gem    rubygems    -- gem push pkg.gem
+aql vault exec --for=pypi   pypi_token  -- twine upload dist/*
+aql vault exec --for=uv     pypi_token  -- uv publish
+
+# Scoped / GitHub Packages npm registry:
+aql vault exec --for=npm --registry=npm.pkg.github.com gh_npm -- npm publish
+```
+
+Recipes (`npm`, `cargo`, `gem`, `pypi`/`twine`, `uv`) are pure env
+injection; file-only publishers like docker and maven are not yet
+covered. The recipe sets the env-var names, so `--for` takes a single
+alias (no `=ENV`/`--prefix`/`--upper`).
+
+For AQL's **own** registry, `aql login --vault` stores the registry token
+in the vault instead of plaintext `~/.aql/user.jsonic`, and `aql publish`
+reads it back automatically — see **[publish](#aql-publish)**.
 
 Inside AQL programs the vault is accessed through the `vault`
 capability — see **[Reference §Capabilities](REFERENCE.md#capabilities)**.
