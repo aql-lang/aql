@@ -683,6 +683,39 @@ func TestFnGuardReturnCount(t *testing.T) {
 	}
 }
 
+// TestEmitTrap: a word lenient in check mode but erroring at run time — an
+// orphan gen (gen_without_constructor), an unpack of a missing key
+// (unpack_error) — compiles a terminal OpTrap that raises the byte-identical
+// error, instead of refusing the whole program.
+func TestEmitTrap(t *testing.T) {
+	cases := []struct {
+		src, errSubstr string
+	}{
+		{`gen [T]`, "gen_without_constructor"},
+		{`def m2 {x:1} unpack [y] m2`, "not found"},
+	}
+	for _, tc := range cases {
+		got, reason := compile(t, tc.src)
+		if got == "" {
+			t.Errorf("%q must compile a trap, but refused: %q", tc.src, reason)
+			continue
+		}
+		if !strings.Contains(got, "TRAP") {
+			t.Errorf("%q compiled without a TRAP:\n%s", tc.src, got)
+		}
+		if _, compiled, err := mustRun(t, tc.src); !compiled || err == nil {
+			t.Errorf("%q: compiled=%v err=%v, want compiled with the raised error", tc.src, compiled, err)
+		} else if !strings.Contains(err.Error(), tc.errSubstr) {
+			t.Errorf("%q: error %q does not contain %q", tc.src, err.Error(), tc.errSubstr)
+		}
+	}
+	// NEGATIVE: a suppressed error inside a branch fragment is conditional and
+	// not modelled as a trap, so it keeps the blanket refusal and falls back.
+	if got, _ := compile(t, `if true [def mm {x:1} unpack [y] mm] [1]`); got != "" {
+		t.Errorf("nested suppressed error must refuse (no top-level trap), but compiled:\n%s", got)
+	}
+}
+
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
 // const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
 // the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field map

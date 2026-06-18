@@ -996,9 +996,17 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 					"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]")
 			}
 			// Check mode is lenient (no error), but the compiled stream
-			// elides gen — flag the suppression so the program refuses to
-			// compile and the interpreter raises the real error.
-			e.registry.Check.SuppressedRuntimeError = true
+			// elides gen. Record a TERMINAL trap so a compiled program raises
+			// the byte-identical gen_without_constructor error at this point
+			// (orphan gen errors at end-of-run, exactly where this fires)
+			// instead of refusing; if the trap can't be recorded (nested), keep
+			// the blanket-refusal flag so the program falls back.
+			if !e.registry.Check.Emit.RecordTrap("gen_without_constructor",
+				"gen: parameter spec was not consumed by a type constructor", "gen",
+				"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]",
+				e.currentPos()) {
+				e.registry.Check.SuppressedRuntimeError = true
+			}
 		}
 	}
 

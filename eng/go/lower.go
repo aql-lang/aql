@@ -179,6 +179,8 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerUserCall(ev)
 		case evFallback:
 			reason = lw.lowerFallback(ev)
+		case evTrap:
+			reason = lw.lowerTrap(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -195,7 +197,7 @@ func collectOperands(ev *emitEvent) []emitOperand {
 		return ev.call.ops
 	case evLoop:
 		return []emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut}
-	case evBreak, evContinue:
+	case evBreak, evContinue, evTrap:
 		return nil
 	case evCallUser:
 		return ev.uc.ops
@@ -670,6 +672,15 @@ func (lw *lowerer) lowerContinue(ev *emitEvent) string {
 		return "continue outside a compiled loop (Stage 2)"
 	}
 	lw.emit(OpJmp, lw.loops[len(lw.loops)-1].nextPC, ev.call.pos)
+	return ""
+}
+
+// lowerTrap emits the terminal OpTrap for a check-mode-suppressed runtime error,
+// pooling its TrapSpec. Execution never continues past it.
+func (lw *lowerer) lowerTrap(ev *emitEvent) string {
+	idx := len(lw.p.Traps)
+	lw.p.Traps = append(lw.p.Traps, ev.trap.spec)
+	lw.emit(OpTrap, idx, ev.trap.pos)
 	return ""
 }
 

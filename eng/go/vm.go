@@ -505,6 +505,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			if stack, err = vmMakeMap(p, stack, in.Arg, curDebug, pc); err != nil {
 				return nil, err
 			}
+		case OpTrap:
+			// A check-mode-suppressed runtime error compiled in place: raise the
+			// byte-identical AQL error (the interpreter errors at this same point).
+			tr := &p.Traps[in.Arg]
+			var err error
+			if tr.Hint != "" {
+				err = r.AqlErrorHint(tr.Code, tr.Detail, tr.Word, tr.Hint)
+			} else {
+				err = r.AqlError(tr.Code, tr.Detail, tr.Word)
+			}
+			return nil, stampAt(err, curDebug, pc, r)
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {

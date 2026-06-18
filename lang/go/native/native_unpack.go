@@ -227,11 +227,16 @@ func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Va
 	if !ok {
 		if r.Check.IsActive() {
 			val = NewCarrier(TAny)
-			// Lenient in check mode, but the interpreter errors at
-			// runtime — flag the suppression so a bytecode compile of
-			// this program refuses and falls back (the compiled stream
-			// elides unpack, a RunInCheckMode word).
-			r.Check.SuppressedRuntimeError = true
+			// Lenient in check mode, but the interpreter errors at runtime.
+			// Record a TERMINAL trap so a bytecode compile raises the
+			// byte-identical unpack_error here (the same detail as the
+			// non-check branch below) instead of refusing; if the trap can't be
+			// recorded (a nested unpack), keep the blanket-refusal flag so the
+			// program falls back.
+			if !r.Check.Emit.RecordTrap("unpack_error",
+				"unpack: key "+srcKey+" not found in source", "unpack", "", pos) {
+				r.Check.SuppressedRuntimeError = true
+			}
 		} else {
 			return r.AqlError("unpack_error", "unpack: key "+srcKey+" not found in source", "unpack")
 		}

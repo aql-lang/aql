@@ -192,6 +192,7 @@ const (
 	evContinue
 	evCallUser
 	evFallback
+	evTrap
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
@@ -216,6 +217,14 @@ type emitFallback struct {
 	pos     SrcPos
 }
 
+// emitTrap is a recorded terminal trap: a check-mode-suppressed runtime error
+// (an orphan gen, an unpack of a missing key) compiled as an OpTrap. The
+// program ends at the trap — the recorder drops everything after it.
+type emitTrap struct {
+	spec TrapSpec
+	pos  SrcPos
+}
+
 type emitEvent struct {
 	seq  int
 	kind int
@@ -224,6 +233,7 @@ type emitEvent struct {
 	loop emitLoop
 	uc   emitUserCall
 	fb   emitFallback
+	trap emitTrap
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -281,6 +291,11 @@ type EmitState struct {
 	typeIdx   map[string]int   // type ID → Types index
 	fallbacks []FallbackSpan   // Stage 5 interpreter islands
 	origByID  map[string]Value // stripped literal ID → original value
+	// trapAt is the seq of a recorded TOP-LEVEL terminal trap (a check-mode-
+	// suppressed runtime error compiled as OpTrap), or 0 for none. When set,
+	// Finalize ends the program at the trap. seqs start at 1, so 0 is a safe
+	// "none" sentinel.
+	trapAt int
 }
 
 // emitUnit scopes local-slot numbering to one code unit (the
@@ -1307,6 +1322,29 @@ func (es *EmitState) RememberOriginal(v Value) {
 	es.origByID[v.ID] = v
 }
 
+// RecordTrap records a TERMINAL trap for a check-mode-suppressed runtime error
+// (an orphan gen, an unpack of a missing key): the checker is lenient at this
+// point but the interpreter errors, so the compiled program raises the
+// byte-identical error here via OpTrap instead of refusing the whole program.
+// Only a TOP-LEVEL trap is recorded (frames and units both at depth 1): a trap
+// inside a branch/loop/fn fragment is conditional and not yet modelled, so it
+// returns false and the caller keeps the SuppressedRuntimeError blanket refusal.
+// The first trap wins (execution can reach only one). Returns true when the trap
+// is owned here (recorded now, or already trapping).
+func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) bool {
+	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
+		return false
+	}
+	if es.trapAt != 0 {
+		return true
+	}
+	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
+		spec: TrapSpec{Code: code, Detail: detail, Word: word, Hint: hint},
+		pos:  pos,
+	}})
+	return true
+}
+
 // RememberStrippedOriginals records the pre-strip original of each value that
 // StripToCarriers actually reduced to a carrier (same preserved ID), so the
 // lowerer can later recover the concrete literal. Values toCarrier kept
@@ -2222,6 +2260,15 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if !es.Compilable {
 		return nil, es.Reason, false
 	}
+	if es.trapAt != 0 {
+		// A terminal trap (a check-mode-suppressed runtime error compiled as an
+		// OpTrap) ends the program: keep the events up to and including the trap
+		// — their side effects run first, exactly as in the interpreter — and
+		// drop everything after it plus the residual (both unreachable: the trap
+		// aborts the run, and no result is produced).
+		es.frames[0] = eventsThroughSeq(es.frames[0], es.trapAt)
+		residual = nil
+	}
 	p := &Program{}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
@@ -2495,6 +2542,21 @@ func eventPos(ev emitEvent) SrcPos {
 		return ev.loop.pos
 	case evCallUser:
 		return ev.uc.pos
+	case evTrap:
+		return ev.trap.pos
 	}
 	return ev.br.pos
+}
+
+// eventsThroughSeq returns the prefix of events up to and including the one with
+// the given seq (top-level events are appended in seq order). Used to truncate
+// the trace at a terminal trap, dropping the unreachable tail the lenient check
+// pass recorded after it.
+func eventsThroughSeq(events []emitEvent, seq int) []emitEvent {
+	for i := range events {
+		if events[i].seq == seq {
+			return events[:i+1]
+		}
+	}
+	return events
 }
