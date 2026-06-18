@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -164,7 +165,7 @@ func TestSecretDetailMasksRevealsAndInjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := newRootModel(ctl)
-	cmds := injectCommands("github_token", "github")
+	cmds := injectCommands("aql vault", "github_token", "github")
 
 	masked := m.secretDetailBody("github_token", false, "", cmds, 0)
 	if strings.Contains(masked, "ghp-xyz") {
@@ -188,19 +189,52 @@ func TestSecretDetailMasksRevealsAndInjects(t *testing.T) {
 
 func TestInjectCommandsMatchProvider(t *testing.T) {
 	// A provider that is a known recipe -> --for matches it.
-	got := injectCommands("vxg:github", "github")
+	got := injectCommands("aql vault", "vxg:github", "github")
 	if len(got) != 3 || !strings.Contains(got[2].cmd, "--for=github ") {
 		t.Errorf("github provider should yield --for=github: %q", got[2].cmd)
 	}
-	if c := injectCommands("k", "cargo")[2].cmd; !strings.Contains(c, "--for=cargo ") || !strings.Contains(c, "cargo publish") {
+	if c := injectCommands("aql vault", "k", "cargo")[2].cmd; !strings.Contains(c, "--for=cargo ") || !strings.Contains(c, "cargo publish") {
 		t.Errorf("cargo: %q", c)
 	}
 	// A non-recipe provider (or none) -> generic placeholder.
-	if c := injectCommands("k", "openai")[2].cmd; !strings.Contains(c, "--for=<tool>") {
+	if c := injectCommands("aql vault", "k", "openai")[2].cmd; !strings.Contains(c, "--for=<tool>") {
 		t.Errorf("non-recipe provider should be generic: %q", c)
 	}
-	if c := injectCommands("k", "")[2].cmd; !strings.Contains(c, "--for=<tool>") {
+	if c := injectCommands("aql vault", "k", "")[2].cmd; !strings.Contains(c, "--for=<tool>") {
 		t.Errorf("no provider should be generic: %q", c)
+	}
+	// The exec prefix carries the active vault's location flags.
+	loc := injectCommands("aql vault --folder=~/.vxgaql01 --suffix=sdk01", "vxg:github", "github")
+	for _, ic := range loc {
+		if !strings.HasPrefix(ic.cmd, "aql vault --folder=~/.vxgaql01 --suffix=sdk01 exec ") {
+			t.Errorf("sample command should carry the vault location: %q", ic.cmd)
+		}
+	}
+}
+
+func TestVaultLocationFlags(t *testing.T) {
+	ctl, _ := newTestController(t)
+	m := newRootModel(ctl)
+	// The default vault (~/.aql, no suffix) adds no flags.
+	ctl.folder = homeAQLDir(ctl.homeDir)
+	ctl.suffix = ""
+	if got := m.vaultLocationFlags(); got != "" {
+		t.Errorf("default vault should add no flags, got %q", got)
+	}
+	if got := m.execPrefix(); got != "aql vault" {
+		t.Errorf("default execPrefix = %q", got)
+	}
+	if got := m.withVaultLocation("aql vault list"); got != "aql vault list" {
+		t.Errorf("default withVaultLocation = %q", got)
+	}
+	// A non-default vault contributes --folder/--suffix.
+	ctl.folder = filepath.Join(ctl.homeDir, ".vxgaql01")
+	ctl.suffix = "sdk01"
+	if got := m.vaultLocationFlags(); !strings.Contains(got, "--folder=~/.vxgaql01") || !strings.Contains(got, "--suffix=sdk01") {
+		t.Errorf("non-default flags = %q", got)
+	}
+	if got := m.withVaultLocation("aql vault list"); !strings.HasPrefix(got, "aql vault --folder=~/.vxgaql01 --suffix=sdk01 list") {
+		t.Errorf("withVaultLocation = %q", got)
 	}
 }
 

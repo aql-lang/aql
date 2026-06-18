@@ -300,32 +300,33 @@ func (m *rootModel) buildSecretDetail(alias string) screen {
 	if a, ok := m.ctl.alias(alias); ok {
 		provider = a.Provider
 	}
-	return &secretDetailScreen{m: m, alias: alias, cmds: injectCommands(alias, provider)}
+	return &secretDetailScreen{m: m, alias: alias, cmds: injectCommands(m.execPrefix(), alias, provider)}
 }
 
 // injectCommands are the exec recipes shown (and copyable) on the detail page,
-// each with a note on its purpose. The --for recipe is chosen to match the
-// secret's provider when that provider is a known tool.
-func injectCommands(alias, provider string) []injectCmd {
+// each with a note on its purpose. execPrefix is "aql vault" plus any location
+// flags for the active vault, so the samples target the right vault. The --for
+// recipe is chosen to match the secret's provider when it is a known tool.
+func injectCommands(execPrefix, alias, provider string) []injectCmd {
 	env := strings.ToUpper(aliasBase(alias))
 	cmds := []injectCmd{
 		{
-			"aql vault exec " + alias + " -- <your command>",
+			execPrefix + " exec " + alias + " -- <your command>",
 			"Run any command with the secret injected as the $" + aliasBase(alias) + " environment variable.",
 		},
 		{
-			"aql vault exec " + alias + "=" + env + " -- <your command>",
+			execPrefix + " exec " + alias + "=" + env + " -- <your command>",
 			"Same, but choose the variable's name (here $" + env + ").",
 		},
 	}
 	if rec, ok := lookupPublishRecipe(provider); ok {
 		cmds = append(cmds, injectCmd{
-			"aql vault exec --for=" + rec.name + " " + alias + " -- " + recipeExampleCmd(rec.name),
+			execPrefix + " exec --for=" + rec.name + " " + alias + " -- " + recipeExampleCmd(rec.name),
 			"Inject the token in " + rec.name + "'s exact credential env — --for=" + rec.name + " matches this secret's provider.",
 		})
 	} else {
 		cmds = append(cmds, injectCmd{
-			"aql vault exec --for=<tool> " + alias + " -- <publish command>",
+			execPrefix + " exec --for=<tool> " + alias + " -- <publish command>",
 			"Set up a tool's credential env — --for=" + strings.Join(publishRecipeNames(), "·") + ".",
 		})
 	}
