@@ -4,10 +4,29 @@ Status: **largely implemented** (2026-06, branch
 `claude/pensive-thompson-vv4387`). This was a `.0` proposal; the bulk of it has
 now landed across 11 gate-clean commits. **Read the new
 [Implementation report](#implementation-report-2026-06) and
-[Completion guide](#completion-guide-the-remaining-73--the-path-to-p7) first** —
+[Completion guide](#completion-guide-the-remaining-71--the-path-to-p7) first** —
 they record what landed, what was deliberately *not* done (with reasons), and
 what the next session should do. The original analysis (§0–§10) is preserved
 below, with inline **LANDED** / **NOT DONE** annotations.
+
+**Follow-on review session (2026-06, branch `claude/lucid-davinci-ajtxt5`).** A
+critical re-read verified every claim below against the live tree (numbers exact,
+gates green, opcodes sound) and acted on its own recommendations across more
+gate-clean commits:
+
+- **§4.5 finished** — the last name-keyed table, `callableWords`, was the only
+  remaining instance of the eng↔module coupling §4.5 set out to remove (it
+  hard-coded the `aql:test` words `test-test` / `test-describe`). It is now a
+  word-level `Signature.Callable` (`*CallableSpec`) declaration; eng names no
+  callable word. See the corrected §4.5 note.
+- **Trailing fn-value boundary** (completion-guide #1, the "biggest lever") —
+  `5 m.f`, `[..] r.one-of` now compile via the new `OpCallDynamicTrailing`.
+  Ratchet **73 → 71**.
+- **Doc precision** — two overstatements in the original report are corrected
+  inline (the §4.1a "`layoutOperands` deleted / unreachable by construction"
+  claim, and §4.5's "all five tables migrated"), and the P7 distance is stated
+  honestly. The `refusalCeiling` history was moved out of the test into
+  [§11](#11-refusal-ceiling-decrement-history) below.
 
 This note is a router + analysis for the next person (or session) working on the
 AQL bytecode compiler. It captures (a) how the checker and the bytecode compiler
@@ -63,24 +82,45 @@ per commit: `fmt/vet/lint/test` × 35 packages + coverage + differential +
   user-fn frames so closures still raise `each_error`); the suppression case
   added `OpTrap`.
 - **§6 meta** — **LANDED.** `rootCause` second axis on the histogram.
-- **§4.5** — **LANDED.** A capability *bitfield* (`CompileReadsFn`/`StoresFn`/
-  `ModuleFold`/`IslandPure`/`FallbackBody`); a word-level `NativeFunc.CompileEffect`
-  OR'd into each sig keeps per-word classification to one declaration. All five
-  name tables migrated; `checkModeLiteralWords` **kept** (consulted pre-dispatch
-  on raw tokens, where no matched sig exists).
+- **§4.5** — **LANDED (completed in the follow-on session).** A capability
+  *bitfield* (`CompileReadsFn`/`StoresFn`/`ModuleFold`/`IslandPure`/`FallbackBody`);
+  a word-level `NativeFunc.CompileEffect` OR'd into each sig keeps per-word
+  classification to one declaration. Five capability tables migrated to the
+  bitfield; `checkModeLiteralWords` **kept** (consulted pre-dispatch on raw
+  tokens, where no matched sig exists). **Correction to the original note ("all
+  five migrated"):** the §4.5 problem statement listed *seven* tables, and the
+  seventh — `callableWords` — is NOT a capability flag (it carries structural
+  per-word data: the body operand position, output count, and an `inputs`
+  closure), so it could not fold into the bitfield, and it still hard-coded the
+  `aql:test` module words `test-test` / `test-describe` — the exact eng↔module
+  coupling §4.5 targeted. The follow-on session lifted it to a word-level
+  `Signature.Callable` (`*CallableSpec{BodyPos, BodyOut, Inputs}`, copied from
+  `NativeFunc.Callable` at registration, read back via the resolved
+  `sig.Callable`). eng now names **no** callable word — the core transforms
+  declare in `lang/native`, the `aql:test` bodies in their own module. The
+  package-global `callableWords` map is deleted.
 - **§4.6** — **NOT DONE.** The `carrierResults` try-chain collapse is *not
   cleanly feasible*: the fallthrough is load-bearing — the same word (`get`)
   takes static-index-fold / module-fold / island / plain-call paths by operand
   *shape*, not by its declared effect.
-- **§4.1/§4.2 big bet** — **LANDED (headline).** `OpReverse` + `spillSeat`
-  delete the `layoutOperands` ladder (`reorder`/`shapeBeyond`/`notAdjacent`/
-  `underflow` gone). A hard operand shape now spills its event operands to
-  **frame-local destinations** (`OpStoreLocal`) and re-pushes in sig order — DDCG's
-  "data destination = a frame slot", generalized from the existing
-  `planValueDefLocals` promotion. The operand-shape refusal class is **unreachable
-  by construction**. **Not needed:** the §4.2 `valueNumber` reframe (`producedBy`
-  already *is* the value-graph DAG); recording-side destination-threading and
-  `DUP`/`TUCK`/`ROT` (the spill subsumes them — no current-corpus payoff).
+- **§4.1/§4.2 big bet** — **LANDED (headline).** `OpReverse` + `spillSeat` turn
+  the `layoutOperands` ladder's *hard* cases (the `reorder`/`shapeBeyond`/
+  `notAdjacent` shapes that used to refuse outright) into a spill: a hard operand
+  shape spills its event operands to **frame-local destinations** (`OpStoreLocal`)
+  and re-pushes in sig order — DDCG's "data destination = a frame slot",
+  generalized from the existing `planValueDefLocals` promotion. **Precision (a
+  correction to the original wording "ladder deleted / unreachable by
+  construction"):** the `layoutOperands` 0/1/2/N ladder is NOT deleted — it still
+  exists, and its hard cases now *delegate to* `spillSeat` rather than refusing.
+  `spillSeat` itself still *declines* in two cases (fewer stack slots than event
+  operands, or a genuinely non-operand value interleaved on top), so the refusal
+  class is not literally "unreachable by construction" — it is empirically **0 on
+  the current corpus** (verified: no operand-shape bucket in the histogram), and
+  the spill's success path is parity-tested directly (`bytecode_findings_test.go`,
+  the `[1 (2 add 3) 4]` interleave) since the corpus does not drive it. **Not
+  needed:** the §4.2 `valueNumber` reframe (`producedBy` already *is* the
+  value-graph DAG); recording-side destination-threading and `DUP`/`TUCK`/`ROT`
+  (the spill subsumes them — no current-corpus payoff).
 
 **Honest verdict on the big bet.** Its payoff was **structural, not numeric**:
 the operand-layout refusals were already at 0 (cleared by `OpReverse`), so
@@ -91,50 +131,75 @@ operand-layout** — see the completion guide.
 
 ---
 
-## Completion guide (the remaining 73 + the path to P7)
+## Completion guide (the remaining 71 + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2384 compiled (5 islanded), 312 check-errors, 73 refused.**
-Root-cause axis: **soundness 40 · scheduling 14 · coverage 19 · opcode 0 ·
-correct-error 0.**
+**2769 rows — 2386 compiled (5 islanded), 312 check-errors, 71 refused.**
+Root-cause axis: **soundness 40 · scheduling 12 · coverage 19 · opcode 0 ·
+correct-error 0.** (Was 73 / scheduling 14 before the follow-on session landed
+the trailing fn-value boundary.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
 | 20 | operand provenance | soundness | provenance for generic/module/class operands (re-test §4.3 back-pointer here) |
 | 12 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch |
 | 10 | quoted-operand word | coverage | compile the `usurp`/`ref`-family inert cases |
-| 8 | residual lowering | scheduling\* | **the fn-value-call boundary** (`5 m.f`, `[..] r.one-of`) — NOT operand layout |
 | 6 | code-body word (NoEvalArgs) | coverage | the `aql:test` 2-body property words |
-| 6 | if-branch lowering | scheduling\* | **branch-result-modeling** (computed-else, variadic-statement-if, `usurp if`) |
+| 6 | if-branch lowering | scheduling\* | **branch-result-modeling** (computed-else, variadic-statement-if, `usurp if`) — now the lead scheduling frontier |
+| 6 | residual lowering | scheduling\* | NO LONGER the fn-value boundary (that cleared): `codequote`/`macroexpand` (meta, "not materialisable") + residual-ordering (`1 add2 vs`, parselang/Test.run-spec "result above a literal") |
 | 5 | dynamic input | soundness | soundness-gated; needs runtime guards |
 | 2 | user fn call (Stage 3) | coverage | meta |
-| 3 | dispatch recovery · fn-value-call boundary · function-value-reaches-word (1 each) | soundness | the fn-value boundary again |
+| 1 | dispatch recovery | soundness | best-guess straddle |
+| 1 | fn-value-call boundary | soundness | the **2-arg mixed** apply `3 m.f 2` — the trailing path is bounded to one arg |
+| 1 | function value reaches word | soundness | a patrun dynamic fn value |
 | 1 | other: branch leaves extra values | coverage | branch lowering |
 
 \* The "scheduling" label is misleading post-DDCG: operand-layout scheduling is
-*solved*. The 14 "scheduling" rows are the **fn-value/dynamic auto-apply
-residuals** (8) and **branch-result-modeling** (6) — different problems that
-operand destinations do not touch.
+*solved*, and the trailing fn-value cluster is now compiled too. The 12 remaining
+"scheduling" rows are **branch-result-modeling** (6) and the **residual-ordering /
+meta** residuals (6) — none is operand layout.
 
 **Priority order for the next session** (highest leverage first):
 
-1. **The fn-value-call boundary.** Generalize `OpCallDynamic` to the trailing /
-   mid-residual fn value and the method-field apply (`5 m.f`, `r.one-of`). This
-   single cluster covers the scheduling-residual 8 *and* the soundness fn-value
-   rows — the biggest lever, and the hardest. `Finalize`'s `residualHasFnOrDynamic`
-   gate (`emit.go`) is where the residual currently bails; that is the seam.
-2. **Branch-result-modeling.** Represent a variadic (0-or-1) branch/loop merge as
-   a first-class "maybe" value a downstream consumer can absorb (today only the
-   program residual can), clearing computed-else and variadic-statement-if. See
-   `lowerArms` / `lw.variadic` in `lower.go`.
+1. **Branch-result-modeling** (now the top remaining lever). Represent a variadic
+   (0-or-1) branch/loop merge as a first-class "maybe" value a downstream consumer
+   can absorb (today only the program residual can), clearing computed-else and
+   variadic-statement-if. See `lowerArms` / `lw.variadic` in `lower.go`. This is
+   research-grade — the follow-on session assessed it as having no clean,
+   sound, bounded sub-case (the candidates touch either an intentional soundness
+   boundary, e.g. a cross-fn `break`, or the deep variadic-merge model), so it was
+   *not* attempted in code there; a real attempt should expect to refactor the
+   merge model, not patch a case.
+2. **Finish the fn-value-call boundary.** The trailing **1-arg** apply landed
+   (`OpCallDynamicTrailing`, `5 m.f` / `[..] r.one-of`). What remains is the
+   **2-arg mixed** form `3 m.f 2` (forward + stack split) — the island's forward
+   collection orders args opposite to the interpreter's top-down stack
+   collection, so a sound version needs the apply to receive the args in stack
+   order (a spill, or an apply opcode that reverses its args). `resolveDynamicApply`
+   (`emit.go`) is the seam; `callDynamic(…, trailing bool, …)` (`vm.go`) is the VM
+   apply.
 3. **Re-test the §4.3 back-pointer** against the 20 operand-provenance rows. The
    full carrier back-pointer is only justified if it *clears* provenance refusals
    (lost originals); measure before building.
-4. **Coverage words.** The quoted-operand meta words (`usurp`/`ref`) and the
-   2-body `aql:test` code words are word-class gaps, not deep problems.
+4. **Coverage words.** The quoted-operand meta words (`usurp`/`ref`), the 2-body
+   `aql:test` code words, and the `codequote`/`macroexpand` residuals are
+   word-class gaps, not deep problems.
 
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
+
+**Honest distance to P7 (do not read "71" as "almost there").** Of the 71
+refusals, **40 are soundness-gated** — 20 operand-provenance (a heterogeneous
+long tail, and the §4.3 back-pointer is only *maybe* the fix), 12 + 5 dynamic
+output/input (the hardest frontier: each needs richer runtime poly or runtime
+guards, essentially generalizing `OpCallNativePoly` to dynamic results). Those
+40 do not yield to more lowering; they need a soundness story per cluster. Add
+the **5 islands** (higher-order/dynamic) that also gate P7. So the realistic
+near-term goal is **lowering the ceiling and shrinking the islands**, not
+imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains the
+right vehicle, but P7 is several substantial pieces of work away. The cheap wins
+(operand layout, the correct-error paths, the trailing fn-value boundary,
+the §4.5 decoupling) are now banked; what is left is genuinely hard.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -237,8 +302,8 @@ the try-chain), `eng/go/callable_words.go` (closure-body compilation).
 ## 2. Current state (numbers, June 2026)
 
 **Numbers below are the pre-implementation (82-refused) snapshot — kept for the
-breakdown prose. The CURRENT live state is 73 refused; see the
-[Completion guide](#completion-guide-the-remaining-73--the-path-to-p7) for the
+breakdown prose. The CURRENT live state is 71 refused; see the
+[Completion guide](#completion-guide-the-remaining-71--the-path-to-p7) for the
 up-to-date histogram and root-cause split.**
 
 The ratchet is **far** ahead of the prose in
@@ -494,9 +559,11 @@ trace is built), not a lowering-side patch.
    back-pointer declined as net-negative).
 
 **Medium, high-payoff (the information-sharing win):**
-4. §4.5 — `Signature.CompileEffect`. — **LANDED** (bitfield; 5 tables migrated).
-   Then §4.6 — unify the recorder spine and collapse the `carrierResults`
-   try-chain. — **NOT DONE** (fallthrough load-bearing; not cleanly feasible).
+4. §4.5 — `Signature.CompileEffect`. — **LANDED** (bitfield; 5 capability tables
+   migrated, plus the 7th — `callableWords` — lifted to `Signature.Callable` in
+   the follow-on session, completing the eng↔module decoupling). Then §4.6 —
+   unify the recorder spine and collapse the `carrierResults` try-chain. —
+   **NOT DONE** (fallthrough load-bearing; not cleanly feasible).
 5. **Emit a Trap/Raise opcode** (§5 last row). — **LANDED** (`OpTrap` + exact
    `OpRet`; cleared all 8 correct-refusal rows).
 
@@ -595,3 +662,62 @@ way to see what a change cleared. The June session used exactly this.
    rationale in `compiled_coverage_test.go`, as the existing entries do.
 4. Do **not** retry fn-body container assembly without first solving the
    scope-resolution divergence (`§2`, the reverted dead end).
+
+---
+
+## 11. Refusal-ceiling decrement history
+
+The full per-decrement rationale used to live in one ~6 KB string literal on
+`refusalCeiling` in `compiled_coverage_test.go`. That comment now keeps only the
+most recent few decrements inline (plus a pointer here); the older trail is
+recorded below, newest-first, so the test stays readable. Each entry is a
+`from -> to` transition with the change that earned it. The deeper narrative for
+the recent ones is in the [Implementation report](#implementation-report-2026-06)
+and §2; this is the index.
+
+**Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
+
+- **73 → 71** — trailing fn-value auto-apply: `5 m.f` / `[..] r.one-of` (the fn
+  trails its arg) compile via the new `OpCallDynamicTrailing` (rotate the fn to
+  the residual front; identical to `OpCallDynamic` when callable, fn-on-top when
+  not). Bounded to one arg.
+
+**Review session (branch `claude/checker-bytecode-compiler-info-pqd2w0`):**
+
+- **74 → 73** — `OpReverse` N-event reverse operand layout (`is-between (a)(b)(c)`).
+- **79 → 74** — suppressed-runtime-error rows compile a terminal `OpTrap`
+  (orphan `gen`, `unpack` of a missing key); nested traps still fall back.
+- **82 → 79** — user-fn return-count mismatch compiles via exact-count `OpRet`
+  (frame stack-base, scoped to user-fn frames; closures keep `each_error`).
+- **94 → 82** — fn-storing words (minilang/parselang `register`) bake the fn as
+  an inert const (stored, never invoked on the VM tape).
+- **95 → 94** — `aql:test` describe-body closures (`Test.describe "g" [body]`).
+- **107 → 95** — `aql:test` case-body closures (`Test.test "n" [body]`, 0-output
+  side-effect bodies; closure path generalized to 0-or-1 outputs).
+- **109 → 107** — `OpMakeList` of make-instance lists (fresh instances per run).
+- **112 → 109** — `OpMakeMap` for computed `make` construction bodies.
+- **113 → 112** — residual ordering via local promotion (event-above-literal,
+  for non-fn/dynamic residuals).
+- **115 → 113** — N-event already-in-layout lowering (3+ adjacent event operands
+  in sig order).
+
+**Earlier (pre-115, branches `bytecode-compiler-review-*` and the P0–P5 plan),
+condensed:** fn-body return-count phantom (119→115); fn-value field calls
+`{b:f/r}` via poly-get + `OpCallDynamic` (129→119); branch-fragment value-def
+locals (135→129); value-def-locals + class mutable-default bake (140→135);
+factory-apply, a returned closure applied via leading `OpCallDynamic` (140→139);
+and the long P0→P5 ramp behind that — `StructUtil` result types (222→216),
+filter result typing (224→222), then P0 651 → P3 642 (wide poly) → P4 616
+(`OpCallDynamic`) → P5 598 (multi/0-result calls) → make carrier-identity 580 →
+value-def locals (`OpStoreLocal`) 568 → dup carrier-identity 565 → predicate
+provenance 555 → if value-else arm 545 → case desugar 542 → multi/0-return fns
+538 → fn-value apply 527 → method fields 521 → if-guard 519 → dynamic-output
+core builtins 514 → module inner natives 459 → 3-arg push+swap 453 →
+strict-disjunct poly 445 → atom-keyed set 425 → computed-else if 421 →
+variadic-else if 417 → fn-value introspection 407 → filter lambda 402 → map
+lambda 399 → `with-decimal` 394 → `args.N` 390 → `word`/splice 363 →
+`macroexpand` 359 → make container defaults 349 → `usurp` 312 → case no-default
+310 → query DSL 283 → reach lenses 268 → scalar carrier-keep 258 →
+module-synthetic const-fold 227 → `OpMakeList` 213 → (+11 minilang corpus 224,
++1 patrun 217) → type-pattern operands 196 → generic schema 185 → typed-list
+generics 181 → `fnsig` 178 → surface types 159.
