@@ -103,6 +103,7 @@ var comparisonNatives = []NativeFunc{
 			Args:    []*Type{TAny, TAny},
 			Handler: eng.TcmpHandler,
 			Returns: []*Type{TInteger}, BarrierPos: -1,
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	{

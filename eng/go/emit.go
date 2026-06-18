@@ -38,20 +38,6 @@ const (
 	SiteMeta    = "meta"
 )
 
-// fnIntrospectionWords READ a fn value (its type, arity, or type-algebra over
-// it) and never INVOKE it — so a fn-value operand may bake as an inert const
-// the handler inspects (`typeof (f/r)`, `Positive tcmp Function`). Words that
-// invoke a fn value (apply, the higher-order forms, and `is` over a predicate
-// fn, whose handler applies the predicate) are deliberately EXCLUDED: their
-// handlers re-step the fn on the tape, which the VM cannot honour.
-var fnIntrospectionWords = map[string]bool{
-	"typeof": true, "inspect": true,
-	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
-	// arity/param/return introspection: READ a fn's signature shape, never
-	// invoke it, so the fn value bakes as a const the handler inspects.
-	"arityof": true, "paramsof": true, "returnsof": true,
-}
-
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -1507,11 +1493,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// territory. A fn-STORING word (minilang/parselang register) is exempt:
 	// it stashes the fn in a module rule table for later interpreter-side
 	// invocation, never the VM tape, so the fn rides as an inert const.
-	introspect := fnIntrospectionWords[word]
-	// A fn-STORING word (minilang/parselang register) declares CompileInertFn:
-	// it stashes the fn value for later interpreter-side invocation, never the VM
-	// tape, so a fn-valued operand rides as an inert const.
-	inertFn := sig.CompileEffect == CompileInertFn
+	// A word declaring CompileReadsFn (introspection) or CompileStoresFn
+	// (minilang/parselang register) treats its fn-valued argument as INERT data,
+	// never invoking it on the VM tape, so a fn-valued operand is allowed (rides
+	// as an inert const). introspect (READS only) additionally bakes even a
+	// CAPTURING fn below, since only the immutable shape is read.
+	introspect := sig.CompileEffect == CompileReadsFn
+	inertFn := introspect || sig.CompileEffect == CompileStoresFn
 	for _, t := range sig.Args {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			if inertFn {
@@ -1524,14 +1512,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	}
 	for _, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
-			// An INTROSPECTION word READS a fn value (its type/arity) and never
-			// invokes it, so the immutable fn value rides as a plain const
-			// operand the handler inspects — unlike a fn-INVOKING word (apply,
-			// higher-order, or `is` over a predicate fn), whose handler re-steps
-			// the fn on the tape, which the VM cannot honour. A fn-STORING word
-			// (register) likewise keeps the fn as data — the module interpreter,
-			// not the VM, runs it later.
-			if introspect || inertFn {
+			// A CompileReadsFn / CompileStoresFn word READS a fn value (its
+			// type/arity) or STORES it, never invoking it, so the immutable fn
+			// value rides as a plain const operand the handler inspects/stashes —
+			// unlike a fn-INVOKING
+			// word (apply, higher-order, or `is` over a predicate fn), whose
+			// handler re-steps the fn on the tape, which the VM cannot honour.
+			if inertFn {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++

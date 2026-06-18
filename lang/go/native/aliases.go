@@ -207,8 +207,9 @@ const (
 
 	// Compile-effect classifications (eng.CompileEffect) for the bytecode
 	// recorder — declared on a NativeSig instead of a name-keyed eng table.
-	CompileDefault = eng.CompileDefault
-	CompileInertFn = eng.CompileInertFn
+	CompileDefault  = eng.CompileDefault
+	CompileReadsFn  = eng.CompileReadsFn
+	CompileStoresFn = eng.CompileStoresFn
 )
 
 // Flow-control signal values exposed by the engine. These travel

@@ -170,7 +170,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			QuoteArgs:     map[int]bool{0: true},
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
-			CompileEffect: native.CompileInertFn, // stores the fn for interpreter-side dispatch
+			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
 			Handler:       miniRegisterHandler(exports),
 		}},
 	})
@@ -204,7 +204,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			QuoteArgs:     map[int]bool{0: true},
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
-			CompileEffect: native.CompileInertFn, // stores the fn for interpreter-side dispatch
+			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
 			Handler:       miniRegisterCompiledHandler(exports),
 		}},
 	})

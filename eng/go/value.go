@@ -342,13 +342,19 @@ const (
 	// the handler invokes the fn on the tape, which the VM cannot honour, so the
 	// recorder refuses (Stage 3).
 	CompileDefault CompileEffect = iota
-	// CompileInertFn marks a word that treats its fn-valued argument as INERT
-	// data — it READS the fn (introspection: typeof / arityof / type-algebra) or
-	// STORES it for later interpreter-side invocation (minilang / parselang
-	// register), never invoking it on the VM tape. The fn then rides as an inert
-	// const operand the handler inspects or stashes (a capturing / sub-registry
-	// fn still declines at isInertConst, so only a pure fn literal compiles).
-	CompileInertFn
+	// CompileReadsFn marks an INTROSPECTION word that READS a fn value's
+	// immutable shape (typeof / inspect / arityof / type-algebra) and never
+	// invokes it. The fn bakes as a const the handler inspects — and because only
+	// the shape is read, even a CAPTURING fn is safe to bake (its captures are
+	// irrelevant to its signature).
+	CompileReadsFn
+	// CompileStoresFn marks a word that STORES a fn value for later
+	// interpreter-side invocation (minilang / parselang register), never the VM
+	// tape. A fn-valued operand rides as an inert const; but unlike
+	// CompileReadsFn, only a PURE fn literal bakes (a capturing / sub-registry fn
+	// declines at isInertConst), because the stored fn is invoked later and must
+	// keep its real binding.
+	CompileStoresFn
 )
 
 // FnDefInfo holds the function specification for a def-defined function.

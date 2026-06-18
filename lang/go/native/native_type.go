@@ -160,6 +160,7 @@ var typeNatives = []NativeFunc{
 			Args:    []*Type{TAny},
 			Handler: typeofHandler,
 			Returns: []*Type{TType}, BarrierPos: -1,
+			CompileEffect: CompileReadsFn, // reads a fn value's type, never invokes it
 		}},
 	},
 	{
@@ -176,10 +177,11 @@ var typeNatives = []NativeFunc{
 		Name: "teq",
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    teqHandler,
-			Returns:    []*Type{TBoolean},
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       teqHandler,
+			Returns:       []*Type{TBoolean},
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	{
@@ -208,20 +210,22 @@ var typeNatives = []NativeFunc{
 		Name: "tor",
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    eng.TorHandler,
-			ReturnsFn:  eng.TorReturnsFn,
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       eng.TorHandler,
+			ReturnsFn:     eng.TorReturnsFn,
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	{
 		Name: "tand",
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    eng.TandHandler,
-			Returns:    []*Type{TAny},
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       eng.TandHandler,
+			Returns:       []*Type{TAny},
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	// `tnot` (type negation / complement) — closes the type algebra
@@ -231,10 +235,11 @@ var typeNatives = []NativeFunc{
 		Name: "tnot",
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny},
-			BarrierPos: -1,
-			Handler:    eng.TnotHandler,
-			ReturnsFn:  eng.TnotReturnsFn,
+			Args:          []*Type{TAny},
+			BarrierPos:    -1,
+			Handler:       eng.TnotHandler,
+			ReturnsFn:     eng.TnotReturnsFn,
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	{
