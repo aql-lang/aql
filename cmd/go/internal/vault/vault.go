@@ -190,7 +190,7 @@ var modeDocs = []modeDoc{
 	{"proxy", "run a local credential broker for agents and tools"},
 	{"providers", "list built-in provider presets"},
 	{"folder", "list vault folders; `folder add <dir>` registers an existing vault"},
-	{"scan", "scan files for leaked secret-like strings"},
+	{"scan", "scan files for leaked secret-like strings (--home checks credential dotfiles)"},
 	{"audit", "show the structured audit log"},
 	{"rotate", "replace a stored secret value, optionally revoking caps"},
 	{"policy", "declaratively apply / show vault aliases and capabilities"},

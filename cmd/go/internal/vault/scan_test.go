@@ -142,6 +142,78 @@ func TestScanRespectsMaxBytes(t *testing.T) {
 	}
 }
 
+func TestScanHomeCredentialFiles(t *testing.T) {
+	home := testHome(t)
+	npmTok := "np" + "m_" + strings.Repeat("a", 36)
+	awsSecret := strings.Repeat("b", 40)
+	pypiTok := "py" + "pi-" + strings.Repeat("c", 40)
+	gitTok := strings.Repeat("d", 30)
+	netrcPw := strings.Repeat("e", 24)
+	gemKey := "rubygems_" + strings.Repeat("f", 40)
+
+	writeFile(t, filepath.Join(home, ".npmrc"), "//registry.npmjs.org/:_authToken="+npmTok+"\n")
+	writeFile(t, filepath.Join(home, ".aws", "credentials"),
+		"[default]\naws_access_key_id = "+fakeAWS+"\naws_secret_access_key = "+awsSecret+"\n")
+	writeFile(t, filepath.Join(home, ".pypirc"),
+		"[pypi]\nusername = __token__\npassword = "+pypiTok+"\n")
+	writeFile(t, filepath.Join(home, ".git-credentials"), "https://user:"+gitTok+"@github.com\n")
+	writeFile(t, filepath.Join(home, ".netrc"), "machine api.example.com login u password "+netrcPw+"\n")
+	writeFile(t, filepath.Join(home, ".gem", "credentials"), "---\n:rubygems_api_key: "+gemKey+"\n")
+
+	code, out, _ := runVault(t, "", "scan", "--home")
+	if code != 2 {
+		t.Fatalf("expected exit 2 with findings, got %d\n%s", code, out)
+	}
+	for _, want := range []string{
+		"npm:authToken", "aws:secret_access_key", "pypi:password",
+		"git:url-password", "netrc:password", "rubygems:api_key",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("scan --home missing %q\n%s", want, out)
+		}
+	}
+	// Raw secrets must never be printed (masked to a short preview).
+	for _, secret := range []string{npmTok, awsSecret, pypiTok, gitTok, netrcPw, gemKey} {
+		if strings.Contains(out, secret) {
+			t.Error("scan --home printed a raw secret value")
+		}
+	}
+}
+
+func TestScanHomeSkipsEnvRefsAndPlaceholders(t *testing.T) {
+	home := testHome(t)
+	// ${VAR}/$VAR are the *recommended* secure form (secret lives in the
+	// environment, not on disk); <your-token> is an obvious placeholder.
+	writeFile(t, filepath.Join(home, ".npmrc"),
+		"//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n_authToken=<your-token>\n")
+	writeFile(t, filepath.Join(home, ".pypirc"), "[pypi]\npassword = $PYPI_TOKEN\n")
+
+	code, out, _ := runVault(t, "", "scan", "--home")
+	if code != 0 {
+		t.Errorf("env-ref/placeholder creds should yield no findings, got code=%d\n%s", code, out)
+	}
+}
+
+func TestScanHomeCrossReferencesVault(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	tok := "np" + "m_" + strings.Repeat("a", 36)
+	if code, _, e := runVault(t, tok+"\n", "add", "--from-stdin", "--provider=npm", "npmtok"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	writeFile(t, filepath.Join(home, ".npmrc"), "_authToken="+tok+"\n")
+
+	// --match-vault tells the user this plaintext cred is already vaulted,
+	// so the on-disk copy can be deleted.
+	code, out, _ := runVault(t, "", "scan", "--home", "--match-vault")
+	if code != 2 {
+		t.Fatalf("expected exit 2, got %d\n%s", code, out)
+	}
+	if !strings.Contains(out, "matches alias npmtok") {
+		t.Errorf("expected vault cross-reference for the dotfile cred, got %s", out)
+	}
+}
+
 func TestPreviewMasksSecret(t *testing.T) {
 	for _, in := range []string{"", "shortval", fakeOpenAI, fakeAWS} {
 		got := preview(in)

@@ -65,25 +65,32 @@ type scanResult struct {
 }
 
 // runScan implements `aql vault scan`. By default it walks the
-// current directory; one or more paths may be passed positionally
-// to scan a focused subtree (e.g. `vault scan .env src/`).
+// current directory, matching provider-token shapes in file contents;
+// one or more paths may be passed positionally to scan a focused
+// subtree (e.g. `vault scan .env src/`). With --home it additionally
+// inspects the well-known credential dotfiles (~/.npmrc, ~/.netrc,
+// ~/.aws/credentials, …) for plaintext secrets in those tools' own
+// formats — a `vault scan --home` sweep surfaces credentials sitting in
+// cleartext on disk that belong in the vault.
 func runScan(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault scan", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	quiet := fs.Bool("quiet", false, "suppress per-finding output; rely on exit code")
 	matchVault := fs.Bool("match-vault", false, "cross-reference findings against vault aliases")
+	home := fs.Bool("home", false, "scan well-known credential dotfiles in your home directory (~/.npmrc, ~/.netrc, ~/.aws/credentials, ~/.pypirc, ~/.gem/credentials, …) for plaintext secrets")
 	maxBytes := fs.Int64("max-bytes", 5<<20, "skip files larger than this many bytes")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	paths := fs.Args()
-	if len(paths) == 0 {
+	if len(paths) == 0 && !*home {
+		// Default to the working directory — but only when --home didn't
+		// already give the scan something to do.
 		paths = []string{"."}
-	} else {
-		// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
-		for i, p := range paths {
-			paths[i] = pathutil.ExpandTilde(p, homeDir)
-		}
+	}
+	// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
+	for i, p := range paths {
+		paths[i] = pathutil.ExpandTilde(p, homeDir)
 	}
 
 	// Optional vault cross-reference. Failing to load the vault
@@ -99,6 +106,13 @@ func runScan(args []string, homeDir string, stdout, stderr io.Writer) int {
 	}
 
 	var findings []scanResult
+	if *home {
+		if homeDir == "" {
+			fmt.Fprintln(stderr, "warning: --home: cannot locate your home directory")
+		} else {
+			findings = append(findings, scanCredentialFiles(homeDir, *maxBytes, vaultIndex)...)
+		}
+	}
 	for _, p := range paths {
 		more, err := scanPath(p, *maxBytes, vaultIndex)
 		if err != nil {
