@@ -239,6 +239,7 @@ type EmitState struct {
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
 	zeroOutSeq map[int]bool        // branch seq → 0-output statement guard (residual skips it)
 	typeOut    map[int]bool        // event seq → its output is itself a type body
+	valueDefs  map[int]bool        // event seq → bound to a NAMED value-def (`def x (expr)`)
 	genericSeq map[int]bool        // event seq → recorded by the GENERIC RecordCall path (a plain native), not a structured hook
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
@@ -301,6 +302,7 @@ func NewEmitState() *EmitState {
 		producedBy: map[string]producer{},
 		zeroOutSeq: map[int]bool{},
 		typeOut:    map[int]bool{},
+		valueDefs:  map[int]bool{},
 		genericSeq: map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
@@ -421,6 +423,24 @@ func (es *EmitState) setProducedAt(out Value, seq, idx int) {
 	es.producedBy[out.ID] = producer{seq: seq, idx: idx}
 	if IsTypeBody(out) {
 		es.typeOut[seq] = true
+	}
+}
+
+// MarkValueDef records that value v is bound to a NAMED `def x (expr)` binding,
+// so the lowerer promotes v's producing event to a frame LOCAL (STORE_LOCAL +
+// PUSH_LOCAL per reference) instead of leaving it on the simulated stack. A
+// named binding may be consumed in ANY order — `def a (make …) def b (make …)
+// a.x … b.x` uses a (produced first) before b (on top), which the single-
+// consume stack discipline cannot seat — whereas a local re-pushes freely. Only
+// a single-result producing event qualifies (a multi-result `dup` needs the
+// carrier-identity path); a const / local / unproduced value is a no-op.
+// Nil-receiver-safe; called from the def handler's install choke point.
+func (es *EmitState) MarkValueDef(v Value) {
+	if es == nil || !es.Compilable {
+		return
+	}
+	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
+		es.valueDefs[pr.seq] = true
 	}
 }
 
@@ -1658,6 +1678,17 @@ func (es *EmitState) intern(v Value) int {
 	return len(es.consts) - 1
 }
 
+// isFreshenedInstance reports whether v is a concrete MUTABLE instance that
+// make's FreshenDefault (core_make.go) copies per instance when v is a
+// class-schema field default — an Object/Array/Store/flex value. Admitting one
+// as a SCHEMA member (ONLY through typeBodyConstOK's memberOK, never standalone)
+// is mutation-safe precisely because every `make` freshens it into its own copy;
+// outside a type body nothing freshens it, so isInertConst keeps it out of the
+// const pool. Pairs with the const-bake regression gate.
+func isFreshenedInstance(v Value) bool {
+	return IsObjectInstance(v) || IsArray(v) || IsStore(v) || IsFlexList(v)
+}
+
 // isTypeBodyPayload reports a structural type-body payload — pooled
 // without dedup, like compounds (identity must not merge).
 func isTypeBodyPayload(v Value) bool {
@@ -1699,15 +1730,17 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		}
 	}
 	memberOK := func(m Value) bool {
-		// A concrete instance default (`class {x:(make Foo 1)}`) is a const-safe
-		// SCHEMA member: make copies the type body's defaults per instance, so
-		// the baked instance is never the one a later `set` mutates (the
-		// mutation-safety invariant holds — unlike a data-map member, which
-		// isInertConst still rejects). Const-folded by constFoldContainerVal.
-		if !m.Carrier && !m.Dynamic {
-			if _, ok := m.Data.(ObjectInstanceInfo); ok {
-				return true
-			}
+		// A concrete mutable instance default (`class {x:(make Foo 1)}`,
+		// `{items:(flex [])}`, `{bits:(make Array [0 0 0])}`) is a const-safe SCHEMA
+		// member: `make` runs FreshenDefault over every field default
+		// (core_make.go), handing each instance its OWN fresh copy, so the baked
+		// body is a READ-ONLY TEMPLATE — never the mutable value a later `set`
+		// writes. The mutation-safety invariant therefore holds for a default
+		// INSIDE a type body, even though isInertConst still (correctly) rejects
+		// the same instance standing alone or as a data-list member, where nothing
+		// freshens it. Const-folded by constFoldContainerVal.
+		if !m.Carrier && !m.Dynamic && isFreshenedInstance(m) {
+			return true
 		}
 		return typeBodyConstOKParam(m, isParam) || isInertConst(m)
 	}

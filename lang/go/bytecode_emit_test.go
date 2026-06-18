@@ -1105,13 +1105,14 @@ func TestEmitTypeOperands(t *testing.T) {
 		t.Fatalf("generic body baked %v, want a faithful r:1.0", outG)
 	}
 
-	// Negative: a type body whose interior holds a check-mode CARRIER that the
-	// scalar-keep does NOT cover — a mutable-INSTANCE default (`items:(flex [])`)
-	// whose make-result is a non-bakeable instance carrier — must still refuse.
-	// Baking the analysis artefact in would diverge from the interpreter's
-	// per-instance rebuild (caught by the differential gate).
-	if _, r := compile(t, `def C class {items:(flex [])} def Holder gen [T] refine Record [item:T] end Holder of [C]`); r == "" {
-		t.Error("instance-tainted type body compiled but must refuse")
+	// A mutable-INSTANCE default (`items:(flex [])`) inside a class body now bakes
+	// as a const TEMPLATE: make's FreshenDefault copies it per instance, so the
+	// shared baked body is never an instance's mutable field. A generic over such
+	// a class therefore compiles and matches the interpreter's per-instance
+	// rebuild. (The mutation-safety NEGATIVE — a mutable instance must NOT bake
+	// STANDALONE — lives in eng/go/bytecode_constbake_test.go.)
+	if outF, cF, eF := mustRun(t, `def C class {items:(flex [])} def Holder gen [T] refine Record [item:T] end Holder of [C]`); !cF || eF != nil || !strings.Contains(fmt.Sprint(outF), "items:[]") {
+		t.Errorf("flex-default generic body: compiled=%v err=%v out=%v", cF, eF, outF)
 	}
 }
 

@@ -297,12 +297,14 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] == 1:
-			// Consumed exactly once (inline or as the residual) — stays on the
-			// simulated stack for its single consumer; no local needed.
-		default:
-			// Referenced more than once: store into a frame slot now and re-push
-			// per reference (references rewritten to local operands below).
+		case refs[ev.seq] >= 2 || es.valueDefs[ev.seq]:
+			// Promote to a frame slot (store now, re-push per reference) when the
+			// result is referenced more than once, OR it is a NAMED value-def
+			// (`def x (expr)`, marked via MarkValueDef): a binding may be consumed
+			// in any order, not just stack order — `def a (make…) def b (make…)
+			// a.x … b.x` reads a (produced first, now deeper) before b — which the
+			// single-consume simulated stack cannot seat, but a local re-pushes
+			// freely. The extra STORE/PUSH for an in-order single use is harmless.
 			if promoted == nil {
 				promoted = map[int]int{}
 			}
@@ -310,6 +312,9 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				promoted[ev.seq] = unit.numLocals
 				unit.numLocals++
 			}
+		default:
+			// A single anonymous (non-def) use — stays on the simulated stack for
+			// its one consumer; no local needed.
 		}
 	}
 	if promoted != nil {

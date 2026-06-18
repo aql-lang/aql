@@ -1419,3 +1419,44 @@ func mustNew(t *testing.T) *AQL {
 	}
 	return a
 }
+
+// Value-def-locals + class mutable-default bake: a `def name (expr)` binding is
+// promoted to a frame LOCAL so it re-pushes in any order (not just stack order),
+// which lets `def a (make…) def b (make…) a.x … b.x` — a used before b though b
+// is on top — compile; and a class body with a mutable default (flex/Array/…)
+// bakes as a const TEMPLATE that make freshens per instance. The critical
+// property is PER-INSTANCE ISOLATION: a mutation to one instance must NOT leak
+// to another (the negative), which holds because make's FreshenDefault runs
+// identically in both engines.
+func TestValueDefLocalsClassIsolation(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		// flex default + push to a only: b stays empty (isolation).
+		{"flex isolation", `def Foo class {items:(flex [])} def a (make Foo {}) def b (make Foo {}) (a.items push 1) b.items`, "[[1] []]"},
+		// Array default + set on a only: b unchanged.
+		{"array isolation", `def Bits class {bits:(make Array [0 0 0])} def a (make Bits {}) def b (make Bits {}) set 0 9 a.bits end b.bits`, "[Array[0 0 0]]"},
+		// nested instance default + set on a.i only: b.i.n unchanged.
+		{"nested isolation", `def Inner class {n:0} def Outer class {i:(make Inner {})} def a (make Outer {}) def b (make Outer {}) set n 9 a.i end b.i.n`, "[0]"},
+		// two value-defs read OUT of production order (a before b, b on top).
+		{"out-of-order defs", `def a (make Array [1 2 3]) def b (make Array [4 5 6]) a.0 add b.0`, "[5]"},
+	} {
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: expected compiled, fell back: %s", c.name, c.src)
+		}
+		if (errC != nil) != (errI != nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: divergence c=%v(%v) i=%v(%v)", c.name, gotC, errC, gotI, errI)
+		}
+		// The want values ARE the negative: a 1 leaking into b's column, or b's
+		// field changing, would mean the bake shared a mutable default or the
+		// value-def promotion crossed instances. `[[1] []]` (not `[[1] [1]]`) is
+		// the per-instance-isolation contract.
+		if fmt.Sprint(gotC) != c.want {
+			t.Errorf("%s: got %v, want %s (isolation broken?)", c.name, gotC, c.want)
+		}
+	}
+
+	// The standalone "a mutable instance must NOT bake as a const" negative is
+	// pinned in eng/go/bytecode_constbake_test.go; here the isolation wants above
+	// are the behavioural negative.
+}
