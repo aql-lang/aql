@@ -744,6 +744,34 @@ func TestEmitReverse(t *testing.T) {
 	}
 }
 
+// TestEmitSpillSeat: an operand shape the cheap stack-only paths can't seat —
+// two COMPUTED args plus a trailing inert arg (`range (a) (b) const`), which the
+// old layoutOperands refused as "operand shape beyond Stage 1" — now compiles by
+// spilling the event operands to frame-local destinations (STORE_LOCAL) and
+// re-pushing in sig order (DDCG frame-slot destinations). The result must match
+// the interpreter.
+func TestEmitSpillSeat(t *testing.T) {
+	src := `range (1 add 0) (5 sub 0) 1` // range 1 5 1 -> [1 2 3 4]; sig[0],sig[1] computed, sig[2] const
+	got, reason := compile(t, src)
+	if got == "" {
+		t.Fatalf("%q must compile via spill, but refused: %q", src, reason)
+	}
+	if !strings.Contains(got, "STORE_LOCAL") {
+		t.Errorf("%q compiled without a spill (STORE_LOCAL):\n%s", src, got)
+	}
+	res, compiled, err := mustRun(t, src)
+	if !compiled || err != nil {
+		t.Fatalf("%q: compiled=%v err=%v", src, compiled, err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("%q: result = %v, want a single list [1 2 3 4]", src, res)
+	}
+	// NEGATIVE: an all-inert call never spills (no event operands to seat).
+	if g2, _ := compile(t, `range 1 5 1`); strings.Contains(g2, "STORE_LOCAL") {
+		t.Errorf("all-const call must not spill:\n%s", g2)
+	}
+}
+
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
 // const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
 // the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field map

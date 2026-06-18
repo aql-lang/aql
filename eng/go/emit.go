@@ -2301,9 +2301,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
+	// Seed the lowerer's frame-local counter from the unit's planned locals;
+	// spillSeat bumps it for spill temps. Written back below so Program.NumLocals
+	// covers them.
+	lw.numLocals = es.units[0].numLocals
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}
+	es.units[0].numLocals = lw.numLocals
 
 	// Residual reconciliation.
 	lastPos := SrcPos{}
@@ -2459,9 +2464,17 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
+		}
+		// spillSeat may have allocated frame-local temps during lowering; grow
+		// NLocals (and the debug name table) so the VM frame holds them.
+		if flw.numLocals > cf.NLocals {
+			cf.NLocals = flw.numLocals
+			for len(cf.LocalNames) < cf.NLocals {
+				cf.LocalNames = append(cf.LocalNames, "")
+			}
 		}
 		if !diverged {
 			// Reconcile the body's N result operands with the simulated

@@ -91,6 +91,68 @@ type lowerer struct {
 	dead     map[int]bool // single-result value-defs referenced zero times: drop the result
 	loops    []loopCtx
 	maxDepth int
+	// numLocals is the current unit's frame-local count, seeded from the unit's
+	// recorded locals and bumped by allocLocal for spill temps (spillSeat). The
+	// caller writes it back to the unit's NumLocals after lowering so the VM
+	// allocates a frame large enough for the temps.
+	numLocals int
+}
+
+// allocLocal reserves a fresh frame-local slot in the current unit (for a
+// spill-and-reload temp). The unit's NumLocals is reconciled from lw.numLocals
+// after lowering.
+func (lw *lowerer) allocLocal() int {
+	t := lw.numLocals
+	lw.numLocals++
+	return t
+}
+
+// spillSeat is the destination-driven (DDCG) fallback for an operand shape the
+// cheap stack-only paths can't seat: a call's computed (event) operands sit on
+// the contiguous top of the simulated stack (straight-line code leaves them
+// there), possibly in a permutation or interleaved at sig positions with inert
+// operands not yet pushed. It SPILLS each event operand to a fresh frame-local
+// destination (OpStoreLocal, popping the top), then re-pushes EVERY operand in
+// sig order (deepest first, so sig position 0 lands on top) — an event from its
+// temp local (PUSH_LOCAL), an inert operand via pushOperand. This seats any
+// shape without a 3-deep stack rotate. It declines (returning failMsg, the
+// caller's original refusal wording) only when a top slot is NOT one of the
+// call's event operands — a non-operand value is interleaved, which a local
+// spill cannot reach (STORE_LOCAL pops the top). Promotion is sound: a local
+// re-pushes the exact value in any order.
+func (lw *lowerer) spillSeat(ops []emitOperand, results []int, n int, pos SrcPos, failMsg string) string {
+	ne := len(results)
+	if len(lw.vm) < ne {
+		return failMsg
+	}
+	temp := make(map[int]int, ne) // ops index → spill-temp slot
+	for k := 0; k < ne; k++ {
+		slot := lw.vm[len(lw.vm)-1]
+		oi := -1
+		for _, i := range results {
+			if _, seated := temp[i]; !seated && slotIs(slot, ops[i]) {
+				oi = i
+				break
+			}
+		}
+		if oi < 0 {
+			return failMsg
+		}
+		t := lw.allocLocal()
+		lw.emit(OpStoreLocal, t, pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		temp[oi] = t
+	}
+	for i := n - 1; i >= 0; i-- {
+		if t, ok := temp[i]; ok {
+			lw.emit(OpPushLocal, t, pos)
+			lw.vm = append(lw.vm, nonEventSlot)
+		} else {
+			lw.pushOperand(ops[i], pos)
+		}
+	}
+	lw.note()
+	return ""
 }
 
 // vmSlot is one entry on the lowerer's simulated operand stack: the producing
@@ -392,13 +454,15 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 // layoutMsgs holds the call-site-specific diagnostic wording for
 // layoutOperands, so the shared engine can stay word/fn-agnostic while
 // preserving each caller's exact reason strings.
+// Each field is the refusal wording for one shape the spill fallback could not
+// seat (a non-operand value interleaved on top of the simulated stack); when the
+// spill succeeds — the common case — no message is used.
 type layoutMsgs struct {
 	loopResults  string // an operand is a variadic loop result
 	resultNotTop string // the lone prior-result operand is not on top
 	reorder      string // a single result operand needs reordering (>2 ops)
-	shapeBeyond  string // operand count/shape beyond the current stage
-	underflow    string // fewer than 2 sim entries for a 2-result shape
-	notAdjacent  string // two result operands are not adjacent on top
+	shapeBeyond  string // operand count/shape the spill could not seat
+	notAdjacent  string // two result operands not adjacent / not on top
 }
 
 // swapTop2 emits OpSwap and mirrors it on the simulated stack.
@@ -508,28 +572,29 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 			}
 		default:
 			// The result operand sits in a MIDDLE sig position (0 < ri < n-1):
-			// seating it needs a 3-deep rotate the VM has no opcode for. No
-			// spec row hits this shape; refuse so the program falls back.
-			return msg.reorder
+			// the cheap stack paths can't seat it (a 3-deep rotate). Spill the
+			// event operand to a frame-local destination and re-push in sig order.
+			return lw.spillSeat(ops, results, n, pos, msg.reorder)
 		}
 	case 2:
-		if n != 2 {
-			return msg.shapeBeyond
+		if n == 2 && len(lw.vm) >= 2 {
+			top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
+			switch {
+			case slotIs(top, ops[0]) && slotIs(below, ops[1]):
+				return "" // already in layout
+			case slotIs(top, ops[1]) && slotIs(below, ops[0]):
+				lw.swapTop2(pos)
+				return ""
+			}
 		}
-		if len(lw.vm) < 2 {
-			return msg.underflow
-		}
-		top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
-		switch {
-		case slotIs(top, ops[0]) && slotIs(below, ops[1]):
-			// already in layout
-		case slotIs(top, ops[1]) && slotIs(below, ops[0]):
-			lw.swapTop2(pos)
-		default:
-			return msg.notAdjacent
-		}
+		// Two events with inert operands (n>2), or two events not cleanly adjacent
+		// on top: spill the events to frame-local destinations and re-push all
+		// operands in sig order.
+		return lw.spillSeat(ops, results, n, pos, msg.notAdjacent)
 	default:
-		return msg.shapeBeyond
+		// Three or more event operands not already in (forward or reverse) sig
+		// order: spill them to frame-local destinations and re-push in sig order.
+		return lw.spillSeat(ops, results, n, pos, msg.shapeBeyond)
 	}
 	return ""
 }
@@ -577,7 +642,6 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		resultNotTop: "stack discipline: result operand of " + c.word + " is not on top",
 		reorder:      "operand shape at " + c.word + " needs reordering beyond Stage 1",
 		shapeBeyond:  "operand shape at " + c.word + " beyond Stage 1",
-		underflow:    "stack discipline underflow at " + c.word,
 		notAdjacent:  "stack discipline: operands of " + c.word + " not adjacent on top",
 	}); reason != "" {
 		return reason
@@ -726,7 +790,6 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 		resultNotTop: "stack discipline: fn arg result is not on top (call of " + lw.es.fnRecs[uc.unit].name + ")",
 		reorder:      "fn arg shape needs reordering beyond Stage 3",
 		shapeBeyond:  "fn arg shape beyond Stage 3",
-		underflow:    "stack discipline underflow at fn call",
 		notAdjacent:  "stack discipline: fn args not adjacent on top",
 	}); reason != "" {
 		return reason
