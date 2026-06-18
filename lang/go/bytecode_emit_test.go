@@ -281,12 +281,15 @@ func TestEmitP5MultiResult(t *testing.T) {
 		t.Fatalf("multi-return fn result = %v, want [1 2]", gotMR)
 	}
 
-	// Negative: a body whose value count differs from the DECLARED returns
-	// is a return-count error the interpreter raises — refuse and fall back.
-	if got, reason := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got != "" {
-		t.Errorf("count-mismatch fn compiled but must refuse:\n%s", got)
-	} else if !strings.Contains(reason, "body value count differs") {
-		t.Errorf("unexpected count-mismatch refusal reason: %q", reason)
+	// A body whose value count differs from the DECLARED returns is the
+	// interpreter's return-count type_error. It now COMPILES the error path —
+	// the VM's RET enforces the exact count and raises the byte-identical error
+	// — rather than refusing and falling back.
+	if got, reason := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got == "" {
+		t.Errorf("count-mismatch fn must now compile the error path, but refused: %q", reason)
+	}
+	if _, compiled, err := mustRun(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); !compiled || err == nil {
+		t.Errorf("count-mismatch fn: compiled=%v err=%v, want compiled with the raised count error", compiled, err)
 	}
 }
 
@@ -668,11 +671,15 @@ func TestFnGuardReturnCount(t *testing.T) {
 	if _, compiled, err := mustRun(t, guard+`f 0`); !compiled || err == nil {
 		t.Errorf("f 0: compiled=%v err=%v, want compiled with the raised error", compiled, err)
 	}
-	// NEGATIVE: a GENUINE count mismatch (body leaves 2 DEFINITE values, declared
-	// 1) is the interpreter's return-count error, so it stays refused and falls
-	// back rather than miscompiling a wrong residual.
-	if _, r := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); r == "" {
-		t.Error("genuine 2-value body compiled but must refuse (return-count mismatch)")
+	// A GENUINE count mismatch (body leaves 2 DEFINITE values, declared 1) is the
+	// interpreter's return-count type_error. It now COMPILES the error path (the
+	// VM's RET enforces the exact count) rather than refusing — and running it
+	// raises the matching error, matching the interpreter.
+	if got, r := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got == "" {
+		t.Errorf("count-mismatch fn must now compile the error path, but refused: %q", r)
+	}
+	if _, compiled, err := mustRun(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); !compiled || err == nil {
+		t.Errorf("count-mismatch fn: compiled=%v err=%v, want compiled with the raised count error", compiled, err)
 	}
 }
 

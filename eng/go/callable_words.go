@@ -114,6 +114,7 @@ func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, para
 	// Record the closure's input convention on the unit (consistent across a
 	// memo hit: the key includes name+input types, which determine the shape).
 	es.fnRecs[unit].inShape = shape
+	es.fnRecs[unit].closure = true
 	if finish == nil {
 		// Memo hit: the unit is already compiled in this state.
 		return unit, es.active()

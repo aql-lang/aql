@@ -323,6 +323,13 @@ type fnUnitRec struct {
 	// (ClosureInValue by default; ClosureInKeyVal for a map-iteration lambda).
 	// Copied into CompiledFn.InShape at lowering. Zero (value) for user fns.
 	inShape ClosureInShape
+	// closure marks a higher-order body unit (each/scan/…$body) compiled via
+	// compileClosureBody, as opposed to a genuine user fn. A return-count
+	// mismatch in a closure body is the higher-order word's OWN runtime error
+	// (each_error "body produced no result"), not the fn return-count
+	// type_error — so a closure keeps refusing the mismatch (islands) while a
+	// user fn compiles the error path (the VM RET raises the matching error).
+	closure bool
 }
 
 // NewEmitState returns a fresh recording state.
@@ -1112,14 +1119,21 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				}
 				ops = append(ops, op)
 			}
-			// A DECLARED fn must leave exactly len(returns) RUNTIME values: a
-			// different count (now measured over real operands, phantom guards
-			// excluded) is the return-COUNT error the interpreter raises, so refuse
-			// and let the program fall back. An UNDECLARED fn (an anonymous lambda
-			// whose Returns were nilled, or a 0-return fn) is NOT count-checked by
-			// the interpreter, so its body residual — 0 or N values — is taken as-is.
-			if len(rec.returns) > 0 && len(ops) != len(rec.returns) {
-				es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
+			// A DECLARED fn must leave exactly len(returns) RUNTIME values; a
+			// different count (measured over real operands, phantom guards
+			// excluded) is a return-COUNT mismatch. For a genuine USER fn that is
+			// the type_error the interpreter raises at __RC, so rather than refuse
+			// we COMPILE the body and let the VM's RET enforce the count — it raises
+			// the byte-identical type_error (shared returnCountErrorText), erroring
+			// exactly where the interpreter does instead of falling back. For a
+			// CLOSURE body (each/scan/…$body) the mismatch is instead the
+			// higher-order word's OWN runtime error (each_error "body produced no
+			// result"), a different taxonomy — so a closure keeps refusing and
+			// islands, letting the interpreter raise the matching error. An
+			// UNDECLARED fn (an anonymous lambda whose Returns were nilled, or a
+			// 0-return fn) is NOT count-checked: its residual is taken as-is.
+			if rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
 			}
 			rec.outOps = ops
