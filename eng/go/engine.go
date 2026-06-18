@@ -2307,7 +2307,11 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				// is a fn that's also a registered callable.
 				noEval := match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]
 				if !noEval {
-					evaluated, err := e.autoEvalMap(match.Args[i])
+					// A `make` construction body is DATA: its computed shared-mutable
+					// values record as per-run OpMakeMap events rather than baking as
+					// aliasable consts (a class/refine SCHEMA body keeps folding its
+					// field defaults). Keyed on the dispatched word.
+					evaluated, err := e.autoEvalMap(match.Args[i], match.Name == "make")
 					if err != nil {
 						return err
 					}
@@ -2956,7 +2960,7 @@ func (e *Engine) autoEvalStack() error {
 			}
 			e.tape.Set(i, result)
 		} else if val.Parent.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
-			result, err := e.autoEvalMap(val)
+			result, err := e.autoEvalMap(val, false)
 			if err != nil {
 				return err
 			}
@@ -3125,7 +3129,7 @@ func (e *Engine) evalParenExprResults(items []Value) ([]Value, error) {
 //	{x:[1 add 2]} → {x:[3]}     (list evaluated, stays as list)
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
-func (e *Engine) autoEvalMap(val Value) (Value, error) {
+func (e *Engine) autoEvalMap(val Value, dataMap bool) (Value, error) {
 	m, _ := AsMutableMap(val)
 	out := NewOrderedMap()
 	if m.Implicit {
@@ -3200,8 +3204,17 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			topFrame := es == nil || len(es.frames) == 1
 			if e.registry.Check.IsActive() && topFrame && !e.exprRefsCarrier(items) {
 				if folded, ok := e.constFoldContainerVal(items); ok {
-					out.Set(resolvedKey, folded)
-					continue
+					// Bake the computed value as a const EXCEPT in a `make`
+					// construction body (dataMap) when the value is shared-mutable: a
+					// data-map instance is stored VERBATIM by make (MakeClassFieldValue),
+					// so a baked const would alias across runs. Leave it to the recording
+					// eval below — its make event records, and RecordMakeMap re-assembles
+					// the map per run. A SCHEMA default (dataMap=false) still folds + bakes
+					// as a template that make's FreshenDefault copies, unchanged.
+					if !dataMap || !containsSharedMutable(folded) {
+						out.Set(resolvedKey, folded)
+						continue
+					}
 				}
 			}
 			result, err := e.evalParenExprResults(items)
@@ -3244,7 +3257,24 @@ func (e *Engine) autoEvalMap(val Value) (Value, error) {
 			out.Set(resolvedKey, NewList(result))
 		}
 	}
-	return NewMap(out), nil
+	res := NewMap(out)
+	// RECORDING mode: a `make` construction body whose values are COMPUTED (an
+	// event carrier, not bakeable as an inert const) records an OpMakeMap assembly
+	// of the evaluated values, so the map resolves to a real per-run event the
+	// outer make consumes — otherwise it is an unresolvable residual and the
+	// program falls back. A fully-literal / const-folded map stays inert and bakes
+	// as a pooled const. Top frame only (a body map re-evaluates per call).
+	if dataMap && e.isTop && e.registry.Check.IsActive() {
+		if es := e.registry.Check.Emit; es != nil && !isInertConst(res) {
+			keys := out.Keys()
+			vals := make([]Value, len(keys))
+			for i, k := range keys {
+				vals[i], _ = out.Get(k)
+			}
+			es.RecordMakeMap(e.registry, keys, vals, out.Implicit, res, val.Pos)
+		}
+	}
+	return res, nil
 }
 
 // exprRefsCarrier reports whether a folded container expression references a
@@ -4102,7 +4132,10 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
 				noEval := sig.NoEvalMapArgs != nil && sig.NoEvalMapArgs[i]
 				if !noEval {
-					evaluated, err := e.autoEvalMap(args[i])
+					// This FnDef/module-wrapper path never dispatches the core `make`
+					// word (a core native goes through execMatch), so its map args are
+					// not construction bodies — keep the const-fold path.
+					evaluated, err := e.autoEvalMap(args[i], false)
 					if err != nil {
 						return err
 					}

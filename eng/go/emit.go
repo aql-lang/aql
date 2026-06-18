@@ -117,6 +117,9 @@ type emitCall struct {
 	pos      SrcPos
 	poly     bool // dispatch via OpCallNativePoly (runtime MatchSignature)
 	makeList bool // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	makeMap  bool // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	mapKeys  []string
+	mapImpl  bool // the source map's Implicit flag
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -1600,6 +1603,53 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "[…]", ops: ops, nout: 1, pos: pos, makeList: true}})
+	es.setProduced(out, seq)
+	return true
+}
+
+// RecordMakeMap records the assembly of a COMPUTED map literal whose values are
+// not bakeable as an inert const — `make`'s construction body with a computed
+// field value (`make Outer {i:(make Inner …)}`, `{a:(context get 'x')}`).
+// autoEvalMap evaluated each value (their dispatches already recorded their own
+// events) and `vals` are the resulting values in `keys` order; `out` is the map.
+// The N value operands resolve normally (an event result, a const, a local) and
+// the dispatch lowers to OpMakeMap, which pops them and pairs each with its key.
+// The keys ride in the Program (MakeMapSpec) rather than the stack, so only the
+// values are operands. Returns false — leaving es untouched, so the map stays an
+// unresolvable residual and the program falls back — when a value has no compiled
+// home (a fn value, a nested dynamic carrier) or is a bare type node (a
+// type-pattern map, not a data map). Top frame only, mirroring RecordMakeList: a
+// map inside a fn body / closure / branch arm is re-evaluated per call, often
+// with a different scope, so freezing one assembly would diverge.
+func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool {
+	if !es.active() || len(es.frames) != 1 || len(keys) != len(vals) || len(keys) == 0 {
+		return false
+	}
+	// ops are in value order (vals[0] pairs with keys[0]); OpMakeMap reads the
+	// popped run deepest-first as value 0, so reverse like RecordMakeList:
+	// ops[0] is the LAST value (laid out on top), ops[N-1] the first (deepest).
+	ops := make([]emitOperand, len(vals))
+	for i := range vals {
+		// A bare type node value means a TYPE-pattern map (`{a:Integer}`) — the
+		// operand of `is`/`typeof`, not a data map to assemble. Never a make body.
+		if IsBareTypeNode(vals[i]) {
+			return false
+		}
+		// A computed value produced by `make` (a mutable instance) is exactly what
+		// this assembly exists to thread as a fresh per-run event — unlike
+		// RecordMakeList, which keeps instance lists on the typed-def const-bake
+		// path. So no make-producer exclusion here.
+		op, ok := es.resolveOperand(vals[i])
+		if !ok {
+			return false
+		}
+		ops[len(vals)-1-i] = op
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: "{…}", ops: ops, nout: 1, pos: pos,
+		makeMap: true, mapKeys: append([]string(nil), keys...), mapImpl: implicit,
+	}})
 	es.setProduced(out, seq)
 	return true
 }

@@ -560,6 +560,12 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		// Assemble the n laid-out operands into a list (a computed list literal,
 		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.
 		lw.emit(OpMakeList, n, c.pos)
+	} else if c.makeMap {
+		// Assemble the n laid-out VALUE operands into a map (a computed make
+		// body, `make Outer {i:(make Inner …)}`); the keys ride in MakeMaps.
+		mi := len(lw.p.MakeMaps)
+		lw.p.MakeMaps = append(lw.p.MakeMaps, MakeMapSpec{Keys: c.mapKeys, Implicit: c.mapImpl})
+		lw.emit(OpMakeMap, mi, c.pos)
 	} else if c.poly {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.

@@ -124,6 +124,15 @@ const (
 	// then assembled. A fully-literal list (`[1 2 3]`) stays a pooled const and
 	// never needs this.
 	OpMakeList
+	// OpMakeMap pops the values of a COMPUTED map literal off the top of the
+	// stack and assembles them with the key list held in Program.MakeMaps[Arg]
+	// into a single map (Keys[i] ← the i-th value, deepest of the popped run
+	// becomes value 0). It lowers `make`'s construction body whose field VALUES
+	// are computed and not bakeable as an inert const — `make Outer {i:(make
+	// Inner …)}` — so the inner instance is freshly built each run rather than a
+	// frozen, aliasable const. A fully-literal / const-foldable map stays a
+	// pooled const and never needs this.
+	OpMakeMap
 )
 
 func (o Opcode) String() string {
@@ -166,6 +175,8 @@ func (o Opcode) String() string {
 		return "DROP"
 	case OpMakeList:
 		return "MAKE_LIST"
+	case OpMakeMap:
+		return "MAKE_MAP"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -268,6 +279,16 @@ type FallbackSpan struct {
 	Desc   string
 }
 
+// MakeMapSpec names the key list (and the source map's Implicit flag) of one
+// OpMakeMap assembly: the VM pops len(Keys) values and pairs Keys[i] with the
+// i-th value (deepest popped = value 0). The keys ride here rather than as
+// stack operands so OpMakeMap only handles the VALUE operands (which may be
+// computed event results), reusing the same operand-layout engine as a call.
+type MakeMapSpec struct {
+	Keys     []string
+	Implicit bool
+}
+
 // Program is a compiled unit: code, interned constants, the signature
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
@@ -277,6 +298,7 @@ type Program struct {
 	Sigs      []SigRef
 	PolyRefs  []PolyRef
 	Fallbacks []FallbackSpan
+	MakeMaps  []MakeMapSpec
 	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
 	MaxStack  int      // a floor when the program loops (results accumulate)
@@ -391,6 +413,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
 		case OpMakeList:
 			fmt.Fprintf(sb, " n%-3d ; assemble %d into a list", in.Arg, in.Arg)
+		case OpMakeMap:
+			mm := p.MakeMaps[in.Arg]
+			fmt.Fprintf(sb, " m%-3d ; assemble {%s}", in.Arg, strings.Join(mm.Keys, " "))
 		}
 		sb.WriteByte('\n')
 	}
