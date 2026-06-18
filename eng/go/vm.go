@@ -270,10 +270,16 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 // those args — the fn-value-call boundary (plan P4). A compiled closure runs
 // VM-native via the re-entrant runner; any other callable (an FnDef method
 // like `r.int`) is applied through the island sub-engine, which auto-applies
-// it exactly as the interpreter does. A NON-callable value is left on the
-// stack with its args (the interpreter leaves a non-callable residual
-// untouched), so a dynamic value that turns out to be data does not diverge.
-func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+// it exactly as the interpreter does. A NON-callable value is left as the
+// residual untouched, so a dynamic value that turns out to be data does not
+// diverge.
+//
+// `trailing` selects the SOURCE shape and only changes the non-callable
+// residual: for a LEADING fn (`(mk2 5) 10`) the value stays below its args
+// ([value, args]); for a TRAILING fn (`5 m.f`, `[..] r.one-of`) the interpreter
+// leaves the value ON TOP of its args, so a non-callable trailing value is
+// rotated up from the base. The callable result is identical either way.
+func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	r := vc.r
 	if len(stack) < n+1 {
 		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC underflow")
@@ -292,8 +298,13 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 		return append(stack[:base], results...), nil
 	}
 	if !isAppliableFn(fnVal) {
-		// Not callable: leave the value and its args as the residual,
-		// matching the interpreter (it does not apply a non-Function).
+		// Not callable: leave the value as the residual, matching the interpreter
+		// (it does not apply a non-Function). A trailing fn sits ON TOP of its
+		// args there, so rotate it up from the base; a leading fn stays below.
+		if trailing {
+			rotated := append(stack[:base:base], stack[base+1:]...)
+			return append(rotated, fnVal), nil
+		}
 		return stack, nil
 	}
 	// A trivial-delegation native method (its dispatchable sig is `[Word(name)]`
@@ -640,8 +651,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, err
 			}
 			stack = ns
-		case OpCallDynamic:
-			ns, err := vc.callDynamic(int(in.Arg), stack, curDebug, pc)
+		case OpCallDynamic, OpCallDynamicTrailing:
+			// Trailing only changes the non-callable residual order (see
+			// callDynamic); the comparison is an expression, not a branch.
+			ns, err := vc.callDynamic(int(in.Arg), in.Op == OpCallDynamicTrailing, stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}

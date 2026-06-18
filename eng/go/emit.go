@@ -2224,6 +2224,105 @@ func isInertConstMember(v Value) bool {
 	return isInertConst(v)
 }
 
+// resolveDynamicApply classifies the residual's fn-value-call boundary (report
+// §9.1) and returns the residual (rotated for a trailing apply), the apply
+// opcode to emit once the residual is on the stack (0 = none), and a refusal
+// reason for an fn-value shape the static residual cannot reproduce.
+//
+// Handled: a dynamic value LEADING the residual with static args after it
+// (`r.int 0 100`); a Function/FnDef CARRIER leading it (the factory `(mk2 5)
+// 10`); and a single dynamic / fn value TRAILING one static arg (`5 m.f`,
+// `[..] r.one-of`) — rotated to [fn, arg] so the reconciliation lays it out
+// like the leading boundary, with OpCallDynamicTrailing restoring the fn-on-top
+// order if the value is not callable. Every other dynamic / fn-value-precedes-
+// args shape, and any unconsumed fn-value carrier, refuses.
+func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value, Opcode, string) {
+	// Leading dynamic value (statically Any — the checker cannot tell a Function
+	// from data) with every following arg static.
+	applyDynamic := false
+	if len(residual) >= 2 && residual[0].Dynamic {
+		applyDynamic = !anyDynamicTail(residual)
+	}
+	// Leading Function/FnDef CARRIER (the factory pattern: a returned closure now
+	// on the stack) with no dynamic / fn value after it. A carrier always applies
+	// — the one non-applied shape (an inert `f/r`) is a CONCRETE const, not a
+	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
+	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
+		applyDynamic = !anyFnOrDynamicTail(residual)
+	}
+	if applyDynamic {
+		return residual, OpCallDynamic, ""
+	}
+	if rot, ok := es.trailingApply(lw, residual); ok {
+		return rot, OpCallDynamicTrailing, ""
+	}
+	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
+	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
+	// FnDefInfo). All refuse so the program falls back faithfully.
+	for i := 0; i+1 < len(residual); i++ {
+		if residual[i].Dynamic {
+			return residual, 0, "dynamic value precedes residual args (fn-value-call boundary)"
+		}
+		if isFnValueResidual(residual[i]) {
+			return residual, 0, "fn value precedes residual args (auto-dispatch boundary)"
+		}
+	}
+	for i := range residual {
+		if isFnTypedCarrier(residual[i]) {
+			return residual, 0, "unconsumed fn-value carrier in residual (closure render)"
+		}
+	}
+	return residual, 0, ""
+}
+
+// anyDynamicTail reports whether any residual entry after the first is dynamic.
+func anyDynamicTail(residual []Value) bool {
+	for i := 1; i < len(residual); i++ {
+		if residual[i].Dynamic {
+			return true
+		}
+	}
+	return false
+}
+
+// anyFnOrDynamicTail reports whether any residual entry after the first is a
+// dynamic or fn value (so a leading carrier's args are not all static).
+func anyFnOrDynamicTail(residual []Value) bool {
+	for i := 1; i < len(residual); i++ {
+		if residual[i].Dynamic || isFnValueResidual(residual[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// trailingApply detects the trailing fn-value auto-apply shape (`5 m.f`,
+// `[data] r.one-of`): the residual's LAST entry is a dynamic / fn value produced
+// by an event on top of the simulated stack, and the SINGLE entry before it is
+// the static value it auto-applies to. On a match it returns the residual
+// ROTATED to [fn, arg] (so the reconciliation lays it out like the leading
+// boundary) and true. Bounded to one arg: with >1 the island's forward
+// collection would order them opposite to the interpreter's top-down stack
+// collection.
+func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool) {
+	if len(residual) != 2 {
+		return residual, false
+	}
+	fnv := residual[1]
+	pr, isEvent := es.producedBy[fnv.ID]
+	if !isEvent || pr.idx != 0 || !(fnv.Dynamic || isFnValueResidual(fnv)) {
+		return residual, false
+	}
+	if len(lw.vm) < 1 || lw.vm[len(lw.vm)-1].seq != pr.seq || lw.vm[len(lw.vm)-1].idx != 0 {
+		return residual, false
+	}
+	arg := residual[0]
+	if _, argIsEvent := es.producedBy[arg.ID]; argIsEvent || arg.Dynamic || isFnValueResidual(arg) {
+		return residual, false
+	}
+	return []Value{fnv, arg}, true
+}
+
 // Finalize linearises the recorded events into a Program. residual
 // is the check run's final carrier stack — the program's declared
 // result: event-produced entries must match the simulated stack in
@@ -2317,73 +2416,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if n := len(es.frames[0]); n > 0 {
 		lastPos = eventPos(es.frames[0][n-1])
 	}
-	// Fn-value-call boundary (report §9.1): the interpreter auto-applies a
-	// FUNCTION value sitting in the residual to the values that follow it
-	// (`r.int 0 100` — a method field applied to 0 100). A dynamic carrier
-	// is statically Any, so the checker cannot tell a Function from data.
-	// When a dynamic value leads the residual and the rest are non-dynamic
-	// args, emit OpCallDynamic: at run time it applies the value IF it is a
-	// Function, else leaves value+args as-is — faithful either way (plan
-	// P4). Any OTHER dynamic-precedes-args shape (a dynamic value mid-
-	// residual, or dynamic args) refuses.
-	applyDynamic := false
-	if len(residual) >= 2 && residual[0].Dynamic {
-		restStatic := true
-		for i := 1; i < len(residual); i++ {
-			if residual[i].Dynamic {
-				restStatic = false
-				break
-			}
-		}
-		applyDynamic = restStatic
-	}
-	// Fn-values-on-the-stack (`(mk2 5) 10` → 11). A Function/FnDef-typed CARRIER
-	// leading the residual is a [Function]-returning call result (the factory
-	// pattern: `mk2`'s body returned a closure, now on the stack) — ALWAYS the
-	// interpreter's auto-apply case, because the one non-applied shape (an inert
-	// `f/r`) is a CONCRETE const, never a carrier. So the apply-vs-inert ambiguity
-	// the comment below describes is resolved by the carrier bit: a carrier lead
-	// applies, a concrete-fn lead stays refused. OpCallDynamic then applies it
-	// faithfully at run time (callDynamic leaves a non-callable untouched). The
-	// rest must be static — no dynamic, no further fn value.
-	fnCarrierLead := false
-	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
-		rest := true
-		for i := 1; i < len(residual); i++ {
-			if residual[i].Dynamic || isFnValueResidual(residual[i]) {
-				rest = false
-				break
-			}
-		}
-		fnCarrierLead = rest
-	}
-	applyDynamic = applyDynamic || fnCarrierLead
-	if !applyDynamic {
-		for i := 0; i+1 < len(residual); i++ {
-			if residual[i].Dynamic {
-				return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
-			}
-		}
-		// A fn value followed by residual args is an auto-dispatch boundary the
-		// residual cannot resolve statically: the interpreter applies a plain
-		// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2]. The carrier
-		// lead is handled above; a CONCRETE fn value ahead of args stays refused
-		// (the inert case), so both fall back faithfully.
-		for i := 0; i+1 < len(residual); i++ {
-			if isFnValueResidual(residual[i]) {
-				return nil, "fn value precedes residual args (auto-dispatch boundary)", false
-			}
-		}
-		// An unconsumed Function/FnDef-typed CARRIER anywhere in the residual is a
-		// runtime closure that would be the rendered result — and a VM closure
-		// value prints differently from the interpreter's FnDefInfo, so refuse
-		// rather than diverge on the render. (A concrete baked fn value — Carrier
-		// false, the introspection case — renders identically and is exempt.)
-		for i := range residual {
-			if isFnTypedCarrier(residual[i]) {
-				return nil, "unconsumed fn-value carrier in residual (closure render)", false
-			}
-		}
+	// Fn-value-call boundary (report §9.1): classify the residual for a runtime
+	// fn-value apply (a leading dynamic / carrier value, or a trailing dynamic /
+	// fn value over one arg), returning the apply opcode and refusing the
+	// shapes the static residual cannot reproduce. dynOp is emitted after the
+	// residual is laid out below.
+	residual, dynOp, dynReason := es.resolveDynamicApply(lw, residual)
+	if dynReason != "" {
+		return nil, dynReason, false
 	}
 	vi := 0
 	tail := []emitOperand{}
@@ -2430,10 +2470,12 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	for _, op := range tail {
 		lw.pushOperand(op, lastPos)
 	}
-	if applyDynamic {
-		// The leading dynamic value (residual[0]) and its args are now on
-		// the stack; apply the value to the trailing args at run time.
-		lw.emit(OpCallDynamic, len(residual)-1, lastPos)
+	if dynOp != 0 {
+		// The fn value (leading, or trailing rotated to the front) sits at the
+		// base of the residual with its args above; apply it at run time. The
+		// trailing op additionally restores the fn-on-top order if the value
+		// turns out not to be callable (see resolveDynamicApply / callDynamic).
+		lw.emit(dynOp, len(residual)-1, lastPos)
 	}
 
 	// Lower the compiled fn units. Tail positions are marked first so
