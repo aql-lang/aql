@@ -2112,7 +2112,50 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			residualSeqs = append(residualSeqs, pr.seq)
 		}
 	}
-	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
+	// Residual ordering. The reconciliation below seats event results in stack
+	// order with literals/types as a trailing tail (on top), so it requires the
+	// residual to be in event*-literal* order. A residual with an event ABOVE a
+	// literal (`1 2 word [add] 10` → [literal, event]) refused as "call result
+	// above a literal". When the residual is out of order — and it is NOT the
+	// fn-value / dynamic auto-apply lead shape, which lays the residual out on the
+	// stack for OpCallDynamic and must not be promoted — force EVERY residual
+	// event to a frame local: a local re-pushes in any order, so the
+	// reconciliation pushes the whole residual (locals + consts + types) in exact
+	// order. The promotion only fires for an out-of-order residual, so the common
+	// in-order case is untouched.
+	// A residual that holds ANY fn value or dynamic value is the auto-apply
+	// boundary's territory (a leading or TRAILING fn applied to its neighbours —
+	// `5 m.f` → [5, fn], `[..] r.one-of`): reordering it would drop the apply and
+	// diverge. Leave those to the fn-value / refusal logic below; only a residual
+	// of pure resolvable data reorders.
+	var forceOrder map[int]bool
+	residualHasFnOrDynamic := false
+	for _, rv := range residual {
+		if rv.Dynamic || isFnValueResidual(rv) {
+			residualHasFnOrDynamic = true
+			break
+		}
+	}
+	if !residualHasFnOrDynamic {
+		seenLiteral, outOfOrder := false, false
+		for _, rv := range residual {
+			pr, isEvent := es.producedBy[rv.ID]
+			if isEvent && pr.idx == 0 && !es.zeroOutSeq[pr.seq] {
+				if seenLiteral {
+					outOfOrder = true
+				}
+			} else {
+				seenLiteral = true
+			}
+		}
+		if outOfOrder {
+			forceOrder = make(map[int]bool, len(residualSeqs))
+			for _, seq := range residualSeqs {
+				forceOrder[seq] = true
+			}
+		}
+	}
+	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}

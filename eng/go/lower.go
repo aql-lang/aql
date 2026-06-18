@@ -311,7 +311,11 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 // carrier-identity DUP path, not a single local; branch/loop variadic results
 // never reach here. Slots are allocated from the unit's local namespace.
 // Returns seq → slot and rewrites every reference in place to a local operand.
-func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int) (map[int]int, map[int]bool) {
+// forceOrder names event seqs that MUST be promoted to a frame local even when
+// referenced once — the program residual is not in seatable event*-literal*
+// order (an event sits above a literal), so every residual event becomes a
+// local and the reconciliation re-pushes the whole residual in exact order.
+func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
 	for i := range events {
@@ -353,7 +357,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] >= 2 || es.valueDefs[ev.seq] || fragRef[ev.seq]:
+		case refs[ev.seq] >= 2 || es.valueDefs[ev.seq] || fragRef[ev.seq] || forceOrder[ev.seq]:
 			// Promote to a frame slot (store now, re-push per reference) when the
 			// result is referenced more than once, OR it is a NAMED value-def
 			// (`def x (expr)`, marked via MarkValueDef), OR it is read from INSIDE a
