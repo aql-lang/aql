@@ -1045,21 +1045,17 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		resume()
 		rec.frag = es.TakeFragment()
 		if !fragDiverges(rec.frag) {
-			// A DECLARED fn must leave exactly len(returns) values: a
-			// different count is the return-COUNT error the interpreter
-			// raises, so refuse and let the program fall back. An UNDECLARED
-			// fn (an anonymous lambda whose Returns were nilled, or a
-			// 0-return fn) is NOT count-checked by the interpreter, so its
-			// body residual — 0 or N values — is taken as-is.
-			if len(rec.returns) > 0 && len(bodyStk) != len(rec.returns) {
-				es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
-				return
-			}
 			// Resolve every residual value to an operand, in stack order
 			// (bottom→top), so the unit leaves the body's N results for its
-			// caller. A 0-result body leaves outOps empty (a bare RET).
-			ops := make([]emitOperand, len(bodyStk))
-			for i, v := range bodyStk {
+			// caller. A 0-output statement guard (`if cond [raise]`) registered a
+			// phantom None in the residual but produces 0 runtime values, so it
+			// leaves NO operand — skip it, exactly as the top-level residual
+			// reconciliation does. A 0-result body leaves outOps empty (a bare RET).
+			ops := make([]emitOperand, 0, len(bodyStk))
+			for _, v := range bodyStk {
+				if pr, ok := es.producedBy[v.ID]; ok && es.zeroOutSeq[pr.seq] {
+					continue
+				}
 				// A body that RETURNS an anonymous capture-free lambda (the factory
 				// pattern `def mk fn [[x][Function][([y]=>…)]]`) compiles the
 				// returned fn to its own closure unit, so the body leaves a runtime
@@ -1077,7 +1073,17 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 					es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
 					return
 				}
-				ops[i] = op
+				ops = append(ops, op)
+			}
+			// A DECLARED fn must leave exactly len(returns) RUNTIME values: a
+			// different count (now measured over real operands, phantom guards
+			// excluded) is the return-COUNT error the interpreter raises, so refuse
+			// and let the program fall back. An UNDECLARED fn (an anonymous lambda
+			// whose Returns were nilled, or a 0-return fn) is NOT count-checked by
+			// the interpreter, so its body residual — 0 or N values — is taken as-is.
+			if len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+				es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
+				return
 			}
 			rec.outOps = ops
 		}

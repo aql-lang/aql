@@ -651,6 +651,31 @@ func mustRun(t *testing.T, src string) ([]any, bool, error) {
 	return a.RunCompiled(src)
 }
 
+// A DECLARED fn whose body holds a 0-output statement guard (`if cond [raise]`)
+// followed by a real result now compiles: the guard registers a phantom None in
+// the analyzer's residual but produces NO runtime value, so it is excluded from
+// the return-count check and leaves no operand — exactly as the top-level
+// residual reconciliation handles it. Without the exclusion the phantom inflated
+// the body count and the fn refused as "value count differs from declared
+// returns".
+func TestFnGuardReturnCount(t *testing.T) {
+	// Positive: a guard + real result compiles and matches BOTH the fall-through
+	// (f 5 -> 6) and the raising (f 0 -> error) paths.
+	guard := `def f fn [[n:Integer] [Integer] [if (n eq 0) [raise "zero"] def q (n add 1) q]] `
+	if got, compiled, err := mustRun(t, guard+`f 5`); !compiled || err != nil || len(got) != 1 || got[0] != int64(6) {
+		t.Errorf("f 5: compiled=%v got=%v err=%v, want compiled 6", compiled, got, err)
+	}
+	if _, compiled, err := mustRun(t, guard+`f 0`); !compiled || err == nil {
+		t.Errorf("f 0: compiled=%v err=%v, want compiled with the raised error", compiled, err)
+	}
+	// NEGATIVE: a GENUINE count mismatch (body leaves 2 DEFINITE values, declared
+	// 1) is the interpreter's return-count error, so it stays refused and falls
+	// back rather than miscompiling a wrong residual.
+	if _, r := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); r == "" {
+		t.Error("genuine 2-value body compiled but must refuse (return-count mismatch)")
+	}
+}
+
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
 // const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
 // the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field map
