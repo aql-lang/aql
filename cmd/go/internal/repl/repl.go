@@ -102,6 +102,12 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			continue
 		}
 
+		// `exit` and `quit` are extra REPL words that shut down the loop,
+		// matching the EOF behaviour without needing Ctrl-D.
+		if isExitWord(line) {
+			return
+		}
+
 		// Check for meta commands (/help, /stack, etc.).
 		handled, metaErr := meta.ParseAndRun(line, &MetaContext{
 			Out:      out,
@@ -137,6 +143,17 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			}
 			fmt.Fprintln(out, strings.Join(parts, " "))
 		}
+	}
+}
+
+// isExitWord reports whether a REPL line is one of the shutdown words
+// (`exit` or `quit`), ignoring surrounding whitespace.
+func isExitWord(line string) bool {
+	switch strings.TrimSpace(line) {
+	case "exit", "quit":
+		return true
+	default:
+		return false
 	}
 }
 

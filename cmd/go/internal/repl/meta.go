@@ -162,6 +162,8 @@ func metaHelp(mr *MetaRegistry) MetaHandler {
 			cmd := mr.Lookup(name)
 			fmt.Fprintf(ctx.Out, "  /%-12s %s\n", name, cmd.Summary)
 		}
+		fmt.Fprintln(ctx.Out)
+		fmt.Fprintln(ctx.Out, "Type exit or quit (or Ctrl-D) to leave the REPL.")
 		return nil
 	}
 }
