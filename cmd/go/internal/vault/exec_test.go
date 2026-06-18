@@ -117,6 +117,74 @@ func TestExecForRejectsBadUsage(t *testing.T) {
 	}
 }
 
+func TestParseForRecipes(t *testing.T) {
+	// Explicit pairs each name their own secret (distinct tokens).
+	bs, err := parseForRecipes([]string{"npm=npm", "github=vxg:github"}, "")
+	if err != nil || len(bs) != 2 ||
+		bs[0].rec.name != "npm" || bs[0].alias != "npm" ||
+		bs[1].rec.name != "github" || bs[1].alias != "vxg:github" {
+		t.Fatalf("explicit pairs: %+v err=%v", bs, err)
+	}
+	// Legacy bare recipe takes its secret from the positional alias.
+	bs, err = parseForRecipes([]string{"npm"}, "npm_token")
+	if err != nil || len(bs) != 1 || bs[0].alias != "npm_token" {
+		t.Fatalf("legacy bare: %+v err=%v", bs, err)
+	}
+	// Recipe aliases resolve (twine -> pypi).
+	if bs, _ := parseForRecipes([]string{"twine=pypi"}, ""); len(bs) != 1 || bs[0].rec.name != "pypi" {
+		t.Errorf("twine should resolve to pypi: %+v", bs)
+	}
+	// A bare entry with no positional alias guides to the recipe=alias form.
+	if _, err := parseForRecipes([]string{"npm"}, ""); err == nil || !strings.Contains(err.Error(), "--for=npm=<alias>") {
+		t.Errorf("bare without positional should guide, got %v", err)
+	}
+	if _, err := parseForRecipes([]string{"bogus"}, "x"); err == nil || !strings.Contains(err.Error(), "unknown") {
+		t.Errorf("unknown recipe should error, got %v", err)
+	}
+	// A bare entry can't take a list/remap positional; an explicit alias can't carry =/,.
+	if _, err := parseForRecipes([]string{"npm"}, "a,b"); err == nil {
+		t.Error("bare entry with a list positional should be rejected")
+	}
+	if _, err := parseForRecipes([]string{"npm=a=b"}, ""); err == nil {
+		t.Error("explicit alias containing '=' should be rejected")
+	}
+}
+
+func TestExecForMultiple(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "npm-tok\n", "add", "--from-stdin", "npm"); code != 0 {
+		t.Fatalf("add npm: %s", e)
+	}
+	if code, _, e := runVault(t, "ghp-tok\n", "add", "--from-stdin", "gh"); code != 0 {
+		t.Fatalf("add gh: %s", e)
+	}
+	// One child process, two tools: npm's per-registry token AND GitHub's
+	// GH_TOKEN, each injected from its own secret in a single exec.
+	code, out, errOut := runVault(t, "",
+		"exec", "--for=npm=npm", "--for=github=gh", "--",
+		"sh", "-c", "printf %s:%s \"$(printenv 'npm_config_//registry.npmjs.org/:_authToken')\" \"$GH_TOKEN\"")
+	if code != 0 {
+		t.Fatalf("multi --for: %s", errOut)
+	}
+	if strings.TrimSpace(out) != "npm-tok:ghp-tok" {
+		t.Errorf("multi --for env = %q, want npm-tok:ghp-tok", out)
+	}
+
+	// Two recipes that would set the same env var to different secrets is a
+	// mistake, not a silent last-wins.
+	if code, _, e := runVault(t, "a\n", "add", "--from-stdin", "n1"); code != 0 {
+		t.Fatalf("add n1: %s", e)
+	}
+	if code, _, e := runVault(t, "b\n", "add", "--from-stdin", "n2"); code != 0 {
+		t.Fatalf("add n2: %s", e)
+	}
+	if code, _, errOut := runVault(t, "", "exec", "--for=npm=n1", "--for=npm=n2", "--", "sh", "-c", "true"); code == 0 || !strings.Contains(errOut, "both set") {
+		t.Errorf("colliding recipes should error, got code=%d err=%q", code, errOut)
+	}
+}
+
 func TestExecRenameAndUpper(t *testing.T) {
 	requireSh(t)
 	testHome(t)

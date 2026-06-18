@@ -600,8 +600,24 @@ aql vault exec --for=terraform tfc_token -- terraform apply
 aql vault exec --for=npm --registry=npm.pkg.github.com gh_npm -- npm publish
 ```
 
-Recipes are pure env injection — a single secret into the exact variable(s)
-each tool reads:
+`--for` is **repeatable**, and each entry may name its own secret as
+`--for=<tool>=<alias>`, so one child process can carry several tools'
+credentials at once — e.g. publish to npm *and* push a GitHub release tag
+from a single `make publish`, each token from its own vault secret:
+
+```bash
+aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
+```
+
+Each `--for=<tool>=<alias>` is independent: distinct tokens use distinct
+aliases; one token serving two tools just repeats the alias
+(`--for=github=gh_pat --for=npm=gh_pat`). The bare `--for=<tool> <alias>`
+form (secret from the positional arg) still works for a single tool. If two
+recipes would set the same variable to different secrets, exec stops with an
+error rather than silently picking one.
+
+Recipes are pure env injection — a secret into the exact variable(s) each
+tool reads:
 
 | `--for=` | Tool(s) | Env var(s) |
 |---|---|---|
@@ -612,8 +628,8 @@ each tool reads:
 | `composer`/`packagist` | PHP | `COMPOSER_AUTH` (http-basic JSON) |
 | `github`/`gh` · `gitlab`/`glab` · `terraform`/`tf` | CLI tokens | `GH_TOKEN`+`GITHUB_TOKEN` / `GITLAB_TOKEN` / `TF_TOKEN_<host>` |
 
-The recipe sets the env-var names, so `--for` takes a single alias (no
-`=ENV`/`--prefix`/`--upper`). Tools that need a config file or two
+The recipe sets the env-var names, so an alias under `--for` takes no
+`=ENV`/`--prefix`/`--upper` remap. Tools that need a config file or two
 credentials (maven, gradle, conan, docker/helm, nuget's `--api-key`,
 pub.dev, jsr) are not covered — they can't be expressed as a single
 env-injected secret.
