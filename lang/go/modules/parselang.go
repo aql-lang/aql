@@ -1,15 +1,28 @@
 package modules
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
+	tabnascsv "github.com/tabnas/csv/go"
+	tabnasfeed "github.com/tabnas/feed/go"
 	tabnasini "github.com/tabnas/ini/go"
+	tabnasjson "github.com/tabnas/json/go"
+	tabnasjson5 "github.com/tabnas/json5/go"
+	tabnasjsonc "github.com/tabnas/jsonc/go"
+	tabnasjsonic "github.com/tabnas/jsonic/go"
+	tabnasmarkdown "github.com/tabnas/markdown/go"
+	tabnastoml "github.com/tabnas/toml/go"
+	tabnasxml "github.com/tabnas/xml/go"
+	tabnasyaml "github.com/tabnas/yaml/go"
+	tabnaszon "github.com/tabnas/zon/go"
 )
 
 // The aql:parselang module — the ParseLang namespace of named parsers
@@ -103,12 +116,15 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}, []*native.Type{native.TString}, nil, subReg))
 
 	// ---- built-in parser kinds ----------------------------------------
-	// `ini` ships in the box, so `import "aql:parselang"` then `parse ini
-	// '<text>'` works with no host registration. It decodes INI text to a
-	// Map via github.com/tabnas/ini/go and gets source resolution (String
-	// or {src:…}) for free, like every host parser.
-	if err := installHostParser(exports, subReg, iniParserSpec()); err != nil {
-		return native.ModuleDesc{}, err
+	// The tabnas parser family (ini, json, jsonic, json5, jsonc, csv, toml,
+	// yaml, xml, zon, markdown, feed) ships in the box, so `import
+	// "aql:parselang"` then `parse <kind> '<text>'` works with no host
+	// registration. Each gets source resolution (String or {src:…}) for
+	// free, like every host parser.
+	for _, spec := range tabnasParserSpecs() {
+		if err := installHostParser(exports, subReg, spec); err != nil {
+			return native.ModuleDesc{}, err
+		}
 	}
 
 	// ---- host-registered parsers --------------------------------------
@@ -335,39 +351,146 @@ func parseRegisterHandler(exports *native.OrderedMap) native.Handler {
 	}
 }
 
-// iniParserSpec is the built-in `ini` parser kind. `parse ini '<text>'`
-// decodes INI text to a Map using github.com/tabnas/ini/go: top-level
-// `key = value` lines become Map fields, a `[section]` header becomes a
-// nested Map (a dotted `[a.b]` header nests further), and each value is a
-// String unless the parser recognises a boolean. Malformed input raises
-// [aql/parse_syntax_error] — loud, never a silent none.
-func iniParserSpec() ParseLangSpec {
-	return ParseLangSpec{
-		Name:    "ini",
-		Returns: []*native.Type{native.TMap},
-		Handler: parseIniHandler,
+// tabnasParser is the shape of a tabnas decoder: source text → generic Go
+// data (map[string]any / []any / scalars), or a parse error.
+type tabnasParser func(src string) (any, error)
+
+// tabnasParserSpecs returns the parser kinds backed by the tabnas parser
+// family (github.com/tabnas/*). Every kind ships built-in — importing
+// aql:parselang is enough to use `parse <kind> '<text>'`, no host
+// registration needed. They share one any→Value conversion, so a parsed map
+// becomes an AQL Map, a list an AQL List, and scalars their AQL counterparts.
+//
+// Shapes: the JSON family (json / jsonic / json5 / jsonc) plus yaml / zon
+// yield whatever their top level denotes (Map, List or scalar); csv and
+// markdown yield a List of rows / blocks; ini / toml / xml / feed yield a Map.
+func tabnasParserSpecs() []ParseLangSpec {
+	// jsonicPlugin adapts a tabnas jsonic plugin (json5, csv, xml, …) — which
+	// installs its grammar onto a parser instance — into a tabnasParser.
+	jsonicPlugin := func(install func(*tabnasjsonic.Jsonic) error) tabnasParser {
+		return func(src string) (any, error) {
+			j := tabnasjsonic.Make()
+			if err := install(j); err != nil {
+				return nil, err
+			}
+			return j.Parse(src)
+		}
+	}
+	defs := []struct {
+		name    string
+		returns *native.Type
+		parse   tabnasParser
+	}{
+		// INI: [section] headers nest a Map; booleans decode to Booleans.
+		{"ini", native.TMap, func(s string) (any, error) { return tabnasini.Parse(s) }},
+		// JSON family — top level may be an object, array or scalar.
+		{"json", native.TAny, func(s string) (any, error) { return tabnasjson.Parse(s) }},
+		{"jsonic", native.TAny, func(s string) (any, error) { return tabnasjsonic.Parse(s) }},
+		{"json5", native.TAny, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
+			return tabnasjson5.Json5(j, tabnasjson5.Defaults())
+		})},
+		{"jsonc", native.TAny, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
+			return tabnasjsonc.Jsonc(j, map[string]any{})
+		})},
+		// CSV: a List of rows, each row a List of field strings.
+		{"csv", native.TList, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
+			return tabnascsv.Csv(j, map[string]any{})
+		})},
+		{"toml", native.TMap, func(s string) (any, error) { return tabnastoml.Parse(s) }},
+		{"yaml", native.TAny, func(s string) (any, error) { return tabnasyaml.Parse(s) }},
+		// XML: an element tree Map ({name, attributes, children, …}).
+		{"xml", native.TMap, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
+			return tabnasxml.Xml(j, map[string]any{})
+		})},
+		{"zon", native.TAny, func(s string) (any, error) { return tabnaszon.Parse(s) }},
+		// Markdown: a List of blocks. object:false keeps rows as plain Lists
+		// (the default ordered-map record shape has no exported accessors).
+		{"markdown", native.TList, func(s string) (any, error) {
+			j := tabnasjsonic.Make()
+			if err := j.UseDefaults(tabnasmarkdown.Markdown, tabnasmarkdown.Defaults,
+				map[string]any{"object": false}); err != nil {
+				return nil, err
+			}
+			return j.Parse(s)
+		}},
+		// Feed (RSS/Atom): normalised to a Map. The plugin returns a typed
+		// AtomFeed struct, so a JSON round-trip flattens it to generic data.
+		{"feed", native.TMap, func(s string) (any, error) {
+			j := tabnasjsonic.Make()
+			if err := tabnasfeed.Feed(j, tabnasfeed.Defaults); err != nil {
+				return nil, err
+			}
+			v, err := j.Parse(s)
+			if err != nil {
+				return nil, err
+			}
+			return jsonRoundTrip(v)
+		}},
+	}
+	specs := make([]ParseLangSpec, len(defs))
+	for i, d := range defs {
+		specs[i] = ParseLangSpec{
+			Name:    d.name,
+			Returns: []*native.Type{d.returns},
+			Handler: tabnasParseHandler(d.name, d.parse),
+		}
+	}
+	return specs
+}
+
+// tabnasParseHandler builds the parser native for one tabnas kind: it runs
+// the decoder over the (already-resolved) source string and converts the
+// result to an AQL Value. A decode failure raises [aql/parse_syntax_error].
+func tabnasParseHandler(kind string, parse tabnasParser) native.Handler {
+	target := "parse_" + kind
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+		src, err := args[0].AsConcreteString() // resolved by the framework
+		if err != nil {
+			return nil, r.AqlError("parse_error", kind+": src: "+err.Error(), target)
+		}
+		v, perr := parse(src)
+		if perr != nil {
+			return nil, r.AqlErrorHint("parse_syntax_error",
+				kind+": "+firstCleanLine(perr.Error()), target,
+				"check that the source is well-formed "+kind)
+		}
+		return []native.Value{tabnasAnyToValue(v)}, nil
 	}
 }
 
-// parseIniHandler runs the tabnas INI parser over the (already-resolved)
-// source string and converts its map[string]any result into an AQL Map.
-func parseIniHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	src, err := args[0].AsConcreteString() // resolved by the framework
+// jsonRoundTrip flattens an arbitrary Go value (e.g. a typed feed struct) to
+// generic data — map[string]any / []any / scalars — via encoding/json, so the
+// shared converter can handle it uniformly.
+func jsonRoundTrip(v any) (any, error) {
+	b, err := json.Marshal(v)
 	if err != nil {
-		return nil, r.AqlError("parse_error", "ini: src: "+err.Error(), "parse_ini")
+		return nil, err
 	}
-	m, perr := tabnasini.Parse(src)
-	if perr != nil {
-		return nil, r.AqlErrorHint("parse_syntax_error",
-			"ini: "+perr.Error(), "parse_ini",
-			"check that section headers read [name] and entries read key = value")
+	var out any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
 	}
-	return []native.Value{iniMapToValue(m)}, nil
+	return out, nil
 }
 
-// iniMapToValue converts a decoded INI map to an AQL Map, ordering keys
-// deterministically (the parser hands back an unordered Go map).
-func iniMapToValue(m map[string]any) native.Value {
+// ansiEscape matches the SGR colour escapes the tabnas parsers embed in their
+// diagnostics. The pattern is a compile-time constant, so MustCompile is safe.
+var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// firstCleanLine returns the first line of a parser diagnostic with colour
+// escapes stripped — the tabnas/jsonic parsers emit richly-formatted
+// multi-line errors; the AQL error keeps just the headline.
+func firstCleanLine(msg string) string {
+	msg = ansiEscape.ReplaceAllString(msg, "")
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = msg[:i]
+	}
+	return strings.TrimSpace(msg)
+}
+
+// tabnasMapToValue converts a decoded map to an AQL Map, ordering keys
+// deterministically (the parsers hand back unordered Go maps).
+func tabnasMapToValue(m map[string]any) native.Value {
 	om := native.NewOrderedMap()
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -375,15 +498,15 @@ func iniMapToValue(m map[string]any) native.Value {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		om.Set(k, iniAnyToValue(m[k]))
+		om.Set(k, tabnasAnyToValue(m[k]))
 	}
 	return native.NewMap(om)
 }
 
-// iniAnyToValue maps a single decoded INI value to an AQL Value. The parser
-// emits strings, booleans, numbers, nested section maps and value lists; an
-// unrecognised shape degrades to its string form rather than erroring.
-func iniAnyToValue(v any) native.Value {
+// tabnasAnyToValue maps a single decoded value to an AQL Value. The parsers
+// emit strings, booleans, numbers, nested maps and lists; an unrecognised
+// shape degrades to its string form rather than erroring.
+func tabnasAnyToValue(v any) native.Value {
 	switch val := v.(type) {
 	case nil:
 		return native.NewTypeLiteral(native.TNone)
@@ -403,11 +526,11 @@ func iniAnyToValue(v any) native.Value {
 	case []any:
 		elems := make([]native.Value, len(val))
 		for i, item := range val {
-			elems[i] = iniAnyToValue(item)
+			elems[i] = tabnasAnyToValue(item)
 		}
 		return native.NewList(elems)
 	case map[string]any:
-		return iniMapToValue(val)
+		return tabnasMapToValue(val)
 	default:
 		return native.NewString(fmt.Sprintf("%v", val))
 	}
