@@ -576,10 +576,12 @@ func TestEmitDeadValueDef(t *testing.T) {
 
 // TestEmitFnValueData: a no-capture function VALUE used as data — a residual
 // (`f/r`), a map member (`{b:f/r}`), or an arity/param introspection operand —
-// bakes as a const, so these compile. The auto-dispatch boundary (a fn value
-// standing AHEAD of residual args) is deliberately refused so it falls back
-// faithfully: a plain `(mk2 5) 10` applies the returned fn, an inert `f/r 2`
-// does not, and the residual cannot tell them apart.
+// bakes as a const, so these compile. The auto-dispatch boundary splits on the
+// CARRIER bit: a [Function]-typed CARRIER leading the residual (`(mk2 5) 10` —
+// the factory pattern) is always the interpreter's auto-apply case and now
+// compiles VM-native (see TestFactoryApplyCompiles); an inert CONCRETE fn value
+// ahead of args (`f/r 2`) is left as a stranded [fn args] residual and stays
+// refused so it falls back faithfully.
 func TestEmitFnValueData(t *testing.T) {
 	const inc = `def f fn [[x:Integer] [Integer] [x add 1]] `
 	for _, c := range []struct{ src, want string }{
@@ -602,11 +604,13 @@ func TestEmitFnValueData(t *testing.T) {
 	if _, r := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a (mk 5) a`); r == "" {
 		t.Error("a captured closure value compiled as a const but must not (closure state)")
 	}
-	// Auto-dispatch boundary: a fn value ahead of residual args must fall back
-	// (not compile to a stranded [fn args] residual). It must refuse to compile;
-	// the differential gate proves the fallback matches the interpreter.
-	if _, r := compile(t, `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] (mk2 5) 10`); r == "" {
-		t.Error("a fn value ahead of residual args compiled but must fall back (auto-dispatch boundary)")
+	// Auto-dispatch boundary: a CONCRETE (inert) fn value ahead of residual args
+	// must still fall back — the interpreter leaves it as a stranded [fn args]
+	// residual (NOT an apply), and a concrete fn is not a [Function]-typed
+	// CARRIER, so it stays refused. (The factory-apply `(mk2 5) 10` — a CARRIER
+	// lead — now compiles VM-native; see TestFactoryApplyCompiles.)
+	if _, r := compile(t, inc+`f/r 2`); r == "" {
+		t.Error("a concrete fn value ahead of residual args compiled but must fall back")
 	}
 }
 

@@ -213,6 +213,13 @@ type EmitState struct {
 	// lower; Reason names the first offender.
 	Compilable bool
 	Reason     string
+
+	// reg is the registry the check pass runs against — set once at the top of
+	// Engine.Run while emit is active. It lets recorder-internal helpers reuse
+	// the lang-layer closure compiler (compileClosureBody) for a fn VALUE a body
+	// RETURNS (the factory pattern), which needs r but is reached from a finish
+	// closure that has only es. Nil outside a compile pass.
+	reg *Registry
 	// SiteCounts tallies dispatches per site class while recording is
 	// active (counting stops once the program is marked
 	// uncompilable, with the rest of the recording).
@@ -450,6 +457,66 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		return emitOperand{}, false
 	}
 	return constOperand(es.intern(lit)), true
+}
+
+// tryReturnedClosure compiles a fn VALUE that a body RETURNS — the factory
+// pattern `def mk fn [[x:Integer] [Function] [([y:Integer] => […])]]`, whose
+// body residual is an anonymous lambda — into its own closure unit, yielding an
+// opClosure operand (lowering to OpPushClosure). The caller (the fn-finish
+// residual resolution) falls back here when resolveOperand cannot place the
+// value. Probe-guarded so a refusal leaves the real state untouched.
+//
+// Only an ANONYMOUS, single-own-sig, capture-free FnDefInfo qualifies: a named
+// ref re-dispatches by name; an overloaded fn needs runtime MatchFnSig; a
+// CAPTURING lambda would need its captures resolved+threaded in this scope
+// (deferred); a sentinel body targets an enclosing frame. Anything else returns
+// false and the program falls back faithfully.
+func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool) {
+	if es == nil || es.reg == nil || v.Carrier || v.Dynamic {
+		return emitOperand{}, false
+	}
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok || !fd.Anonymous || len(fd.Captured) > 0 {
+		return emitOperand{}, false
+	}
+	// Exactly one own (non-fallback) signature — FirstOwnSig is otherwise not
+	// guaranteed to be the overload a runtime MatchFnSig would pick.
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	lam, hasOwn := fd.FirstOwnSig()
+	if own != 1 || !hasOwn || len(lam.Body) == 0 || bodyToksHaveSentinel(lam.Body) {
+		return emitOperand{}, false
+	}
+	inputs := make([]Value, len(lam.Params))
+	paramNames := make([]string, len(lam.Params))
+	for i, p := range lam.Params {
+		t := p.Type
+		if t == nil {
+			t = TAny
+		}
+		inputs[i] = NewCarrier(t)
+		paramNames[i] = p.Name
+	}
+	r := es.reg
+	// PROBE in a throwaway emit state (mirrors recordClosureDispatch), so a body
+	// that refuses leaves THIS program untouched and the value stays unresolved.
+	r.Check.Emit = NewEmitState()
+	r.Check.Emit.reg = r
+	_, probeOK := compileClosureBody(r, "fnval", lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	r.Check.Emit = es
+	if !probeOK {
+		return emitOperand{}, false
+	}
+	// REAL: compile into this program (deterministic success after a clean probe).
+	unit, realOK := compileClosureBody(r, "fnval", lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	if !realOK || unit < 0 {
+		return emitOperand{}, false
+	}
+	return emitOperand{kind: opClosure, closureUnit: unit}, true
 }
 
 // OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE
@@ -952,7 +1019,19 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// caller. A 0-result body leaves outOps empty (a bare RET).
 			ops := make([]emitOperand, len(bodyStk))
 			for i, v := range bodyStk {
-				op, okOut := es.resolveOperand(v)
+				// A body that RETURNS an anonymous capture-free lambda (the factory
+				// pattern `def mk fn [[x][Function][([y]=>…)]]`) compiles the
+				// returned fn to its own closure unit, so the body leaves a runtime
+				// closure VALUE on the stack — applied VM-native by a later stack
+				// OpCallDynamic (`(mk 5) 10`). Tried BEFORE resolveOperand because a
+				// capture-free anonymous fn would otherwise bake as an inert const
+				// and apply through a callDynamic interpreter island instead of the
+				// VM. A non-fn / named / capturing / multi-sig value declines here
+				// and falls through to the normal resolution.
+				op, okOut := es.tryReturnedClosure(v, rec.pos)
+				if !okOut {
+					op, okOut = es.resolveOperand(v)
+				}
 				if !okOut {
 					es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
 					return
@@ -2008,28 +2087,52 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		applyDynamic = restStatic
 	}
+	// Fn-values-on-the-stack (`(mk2 5) 10` → 11). A Function/FnDef-typed CARRIER
+	// leading the residual is a [Function]-returning call result (the factory
+	// pattern: `mk2`'s body returned a closure, now on the stack) — ALWAYS the
+	// interpreter's auto-apply case, because the one non-applied shape (an inert
+	// `f/r`) is a CONCRETE const, never a carrier. So the apply-vs-inert ambiguity
+	// the comment below describes is resolved by the carrier bit: a carrier lead
+	// applies, a concrete-fn lead stays refused. OpCallDynamic then applies it
+	// faithfully at run time (callDynamic leaves a non-callable untouched). The
+	// rest must be static — no dynamic, no further fn value.
+	fnCarrierLead := false
+	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
+		rest := true
+		for i := 1; i < len(residual); i++ {
+			if residual[i].Dynamic || isFnValueResidual(residual[i]) {
+				rest = false
+				break
+			}
+		}
+		fnCarrierLead = rest
+	}
+	applyDynamic = applyDynamic || fnCarrierLead
 	if !applyDynamic {
 		for i := 0; i+1 < len(residual); i++ {
 			if residual[i].Dynamic {
 				return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
 			}
 		}
-	}
-	// A fn value followed by residual args is an auto-dispatch boundary the
-	// residual cannot resolve statically: the interpreter applies a plain
-	// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2], and the two are
-	// indistinguishable here. The lead may be a concrete fn value (a baked
-	// const) OR a Function-typed call-result carrier (`mk2 5`'s declared
-	// [Function] return) — neither is a Dynamic/Any carrier, so applyDynamic
-	// above does not own it. Refuse so both fall back faithfully — a fn value
-	// stands ONLY as the last residual / a container member / an introspection
-	// operand, never ahead of args.
-	for i := 0; i+1 < len(residual); i++ {
-		rv := residual[i]
-		_, isFnData := rv.Data.(FnDefInfo)
-		isFnTyped := rv.Parent != nil && (rv.Parent.ConformsTo(TFunction) || rv.Parent.ConformsTo(TFnDef))
-		if isFnData || isFnTyped {
-			return nil, "fn value precedes residual args (auto-dispatch boundary)", false
+		// A fn value followed by residual args is an auto-dispatch boundary the
+		// residual cannot resolve statically: the interpreter applies a plain
+		// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2]. The carrier
+		// lead is handled above; a CONCRETE fn value ahead of args stays refused
+		// (the inert case), so both fall back faithfully.
+		for i := 0; i+1 < len(residual); i++ {
+			if isFnValueResidual(residual[i]) {
+				return nil, "fn value precedes residual args (auto-dispatch boundary)", false
+			}
+		}
+		// An unconsumed Function/FnDef-typed CARRIER anywhere in the residual is a
+		// runtime closure that would be the rendered result — and a VM closure
+		// value prints differently from the interpreter's FnDefInfo, so refuse
+		// rather than diverge on the render. (A concrete baked fn value — Carrier
+		// false, the introspection case — renders identically and is exempt.)
+		for i := range residual {
+			if isFnTypedCarrier(residual[i]) {
+				return nil, "unconsumed fn-value carrier in residual (closure render)", false
+			}
 		}
 	}
 	vi := 0
@@ -2140,6 +2243,26 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	lw.p.MaxStack = lw.maxDepth
 	lw.p.NumLocals = es.units[0].numLocals
 	return lw.p, "", true
+}
+
+// isFnTypedCarrier reports whether v is a Function/FnDef-typed CARRIER — a
+// [Function]-returning call result on the simulated stack (e.g. `(mk2 5)`), as
+// distinct from a CONCRETE baked fn value (Carrier false, the introspection /
+// inert-`/r` case). The carrier bit is what resolves the apply-vs-inert
+// ambiguity in Finalize: a carrier lead auto-applies, a concrete fn does not.
+func isFnTypedCarrier(v Value) bool {
+	return v.Carrier && v.Parent != nil &&
+		(v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
+}
+
+// isFnValueResidual reports whether v is ANY fn value — a concrete FnDefInfo (a
+// baked /r reference) or a Function/FnDef-typed value (carrier or not). Used to
+// keep a fn value out of the trailing-arg positions of a leading-fn apply.
+func isFnValueResidual(v Value) bool {
+	if _, ok := v.Data.(FnDefInfo); ok {
+		return true
+	}
+	return v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
 }
 
 func eventPos(ev emitEvent) SrcPos {

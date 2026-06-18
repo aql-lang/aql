@@ -729,6 +729,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// calls to push carrier return values declared on the signature.
 	if e.registry.Check.IsActive() {
 		if es := e.registry.Check.Emit; es != nil {
+			es.reg = e.registry // back-pointer for returned-closure compilation
 			pre := input
 			input = StripToCarriers(input)
 			for i := range input {

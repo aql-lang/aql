@@ -1365,3 +1365,57 @@ func TestStepBudgetNoSpuriousLimit(t *testing.T) {
 		t.Fatalf("compiled/interpreted results differ on a long loop:\n  compiled=%v\n  interpreted=%v", gotC, gotI)
 	}
 }
+
+// Fn-values-on-the-stack: a fn that RETURNS an anonymous capture-free closure
+// (the factory pattern) compiles to OpPushClosure inside its unit, and a
+// [Function]-typed CARRIER leading the residual is applied to its trailing args
+// by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
+func TestFactoryApplyCompiles(t *testing.T) {
+	const factory = `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] `
+
+	// POSITIVE — the factory result applied to an arg compiles natively to 11,
+	// with the closure push + dynamic apply in the stream.
+	apply := factory + `(mk2 5) 10`
+	a, _ := New()
+	prog, reason, _, cerr := a.CompileCheck(apply)
+	if cerr != nil || prog == nil {
+		t.Fatalf("factory-apply did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if !strings.Contains(dis, "PUSH_CLOSURE") || !strings.Contains(dis, "CALL_DYNAMIC") {
+		t.Fatalf("factory-apply lowered without the closure/dynamic ops:\n%s", dis)
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(apply)
+	gotI, _ := mustNew(t).Run(apply)
+	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[11]" {
+		t.Fatalf("factory-apply parity: compiled=%v gotC=%v gotI=%v (want [11])", compiled, gotC, gotI)
+	}
+
+	// NEGATIVE — the boundaries that must keep falling back (faithfully):
+	for _, neg := range []struct{ name, src string }{
+		// A bare closure RESULT must not compile — a VM closure prints
+		// differently from the interpreter's FnDefInfo, so it falls back.
+		{"bare closure residual", factory + `(mk2 5)`},
+		// A CAPTURING factory (`[y] => [x add y]` closes over x) is not yet
+		// compiled here; it must fall back, not silently miscompile.
+		{"capturing factory", `def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] (mk 5) 10`},
+	} {
+		gC, comp, eC := mustNew(t).RunCompiled(neg.src)
+		gI, eI := mustNew(t).Run(neg.src)
+		if comp {
+			t.Errorf("%s: expected fallback (wasCompiled=false), got compiled", neg.name)
+		}
+		if (eC != nil) != (eI != nil) || fmt.Sprint(gC) != fmt.Sprint(gI) {
+			t.Errorf("%s: fallback diverged: c=%v(%v) i=%v(%v)", neg.name, gC, eC, gI, eI)
+		}
+	}
+}
+
+func mustNew(t *testing.T) *AQL {
+	t.Helper()
+	a, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return a
+}
