@@ -97,6 +97,39 @@ func normaliseReason(reason string) string {
 	}
 }
 
+// rootCause maps a normalised refusal bucket to its underlying axis, the second
+// dimension of the ratchet (review §6 meta-improvement). It tells a future
+// session WHICH kind of investment clears a bucket:
+//
+//   - correct-error: the row is KNOWN to error; it should compile an error
+//     program (OpTrap / a RET count check), never refuse. Must stay 0 — this is
+//     the proof of the Trap/Raise work.
+//   - soundness:     compiling would (or might) diverge from the interpreter —
+//     dynamic/opaque values, the fn-value-call boundary, lost provenance. Needs
+//     a soundness story (e.g. richer runtime dispatch), not just more lowering.
+//   - scheduling:    the analysis is fine but the lowerer can't arrange the
+//     stack — the stack-scheduling / DDCG territory (review §4.1).
+//   - opcode:        a missing VM primitive (DUP/ROT/TUCK for deep stack words).
+//   - coverage:      a word class / feature the compiler does not model yet
+//     (code-body DSL words, quoted-operand meta words, user-fn dispatch).
+func rootCause(bucket string) string {
+	switch bucket {
+	case "suppressed runtime error", "multi-return fn":
+		return "correct-error"
+	case "dynamic input", "dynamic/opaque output", "fn-value-call boundary",
+		"dispatch recovery (best guess)", "operand provenance",
+		"function value reaches word (Stage 3)", "context-dependent word (args/__pa)":
+		return "soundness"
+	case "residual lowering (Stage 1 limit)", "stack discipline (lowering)",
+		"operand shape (Stage 1 limit)", "if-branch lowering", "multi-result call":
+		return "scheduling"
+	case "full-stack word (depth/pick/roll)":
+		return "opcode"
+	default:
+		return "coverage"
+	}
+}
+
 func TestCompiledCoverage(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
 	entries, err := os.ReadDir(specDir)
@@ -178,7 +211,23 @@ func TestCompiledCoverage(t *testing.T) {
 	t.Logf("compiled coverage: %d rows — %d compiled (%d islanded), %d check-errors, %d refused",
 		rows, compiled, islanded, checkErr, refused)
 	for _, h := range hist {
-		t.Logf("  refusal %4d  %s", h.n, h.reason)
+		t.Logf("  refusal %4d  %s  [%s]", h.n, h.reason, rootCause(h.reason))
+	}
+
+	// Second axis: bucket the refusals by ROOT CAUSE so a future session can see
+	// which kind of investment moves the number (soundness vs lowering vs a
+	// missing opcode vs a known-error path). The correct-error axis is the proof
+	// of the Trap/Raise work — those rows now compile an error program, so it
+	// must stay 0.
+	byCause := map[string]int{}
+	for _, h := range hist {
+		byCause[rootCause(h.reason)] += h.n
+	}
+	for _, cause := range []string{"correct-error", "soundness", "scheduling", "opcode", "coverage"} {
+		t.Logf("  root-cause %4d  %s", byCause[cause], cause)
+	}
+	if byCause["correct-error"] != 0 {
+		t.Errorf("correct-error refusals %d (want 0): a known-to-error row must compile an OpTrap / RET error path, not refuse", byCause["correct-error"])
 	}
 
 	if refused > refusalCeiling {
