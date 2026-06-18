@@ -357,7 +357,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] >= 2 || es.valueDefs[ev.seq] || fragRef[ev.seq] || forceOrder[ev.seq]:
+		case refs[ev.seq] >= 2 || es.eventInfo[ev.seq].valueDef || fragRef[ev.seq] || forceOrder[ev.seq]:
 			// Promote to a frame slot (store now, re-push per reference) when the
 			// result is referenced more than once, OR it is a NAMED value-def
 			// (`def x (expr)`, marked via MarkValueDef), OR it is read from INSIDE a

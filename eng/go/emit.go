@@ -123,6 +123,20 @@ func typeOperand(idx int) emitOperand   { return emitOperand{kind: opType, idx: 
 // stay distinguishable when a downstream operand resolves one of them.
 type producer struct{ seq, idx int }
 
+// eventFlags are the per-event compile flags, keyed by event seq in
+// EmitState.eventInfo. Each is a property of the producing event:
+//   - zeroOut:  branch seq → 0-output statement guard (residual skips it)
+//   - typeOut:  event seq → its output is itself a type body
+//   - valueDef: event seq → bound to a NAMED value-def (`def x (expr)`)
+//   - generic:  event seq → recorded by the GENERIC RecordCall path (a plain
+//     native), not a structured hook
+type eventFlags struct {
+	zeroOut  bool
+	typeOut  bool
+	valueDef bool
+	generic  bool
+}
+
 type emitCall struct {
 	word     string
 	sig      *Signature
@@ -254,16 +268,19 @@ type EmitState struct {
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
-	zeroOutSeq map[int]bool        // branch seq → 0-output statement guard (residual skips it)
-	typeOut    map[int]bool        // event seq → its output is itself a type body
-	valueDefs  map[int]bool        // event seq → bound to a NAMED value-def (`def x (expr)`)
-	genericSeq map[int]bool        // event seq → recorded by the GENERIC RecordCall path (a plain native), not a structured hook
-	consts     []Value
-	constIdx   map[string]int // CanonValue → Consts index
-	types      []TypeRef
-	typeIdx    map[string]int   // type ID → Types index
-	fallbacks  []FallbackSpan   // Stage 5 interpreter islands
-	origByID   map[string]Value // stripped literal ID → original value
+	// eventInfo holds the per-event compile flags, keyed by event seq. It
+	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
+	// maps: each is a "property of event N", read via a producer's seq
+	// (producedBy[id].seq), so they stay seq-keyed rather than moving onto the
+	// value-copied emitEvent struct (a flag set after append wouldn't reach the
+	// frame/fragment copies).
+	eventInfo map[int]eventFlags
+	consts    []Value
+	constIdx  map[string]int // CanonValue → Consts index
+	types     []TypeRef
+	typeIdx   map[string]int   // type ID → Types index
+	fallbacks []FallbackSpan   // Stage 5 interpreter islands
+	origByID  map[string]Value // stripped literal ID → original value
 }
 
 // emitUnit scopes local-slot numbering to one code unit (the
@@ -317,10 +334,7 @@ func NewEmitState() *EmitState {
 		units:      []*emitUnit{{localByID: map[string]int{}}},
 		fnUnits:    map[string]int{},
 		producedBy: map[string]producer{},
-		zeroOutSeq: map[int]bool{},
-		typeOut:    map[int]bool{},
-		valueDefs:  map[int]bool{},
-		genericSeq: map[int]bool{},
+		eventInfo:  map[int]eventFlags{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
 		origByID:   map[string]Value{},
@@ -439,7 +453,9 @@ func (es *EmitState) setProduced(out Value, seq int) {
 func (es *EmitState) setProducedAt(out Value, seq, idx int) {
 	es.producedBy[out.ID] = producer{seq: seq, idx: idx}
 	if IsTypeBody(out) {
-		es.typeOut[seq] = true
+		f := es.eventInfo[seq]
+		f.typeOut = true
+		es.eventInfo[seq] = f
 	}
 }
 
@@ -457,7 +473,9 @@ func (es *EmitState) MarkValueDef(v Value) {
 		return
 	}
 	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
-		es.valueDefs[pr.seq] = true
+		f := es.eventInfo[pr.seq]
+		f.valueDef = true
+		es.eventInfo[pr.seq] = f
 	}
 }
 
@@ -475,7 +493,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		// output was NOT a type is an ID collision (a `make` result
 		// inheriting the type literal's ID): resolve it as its own type
 		// operand / const below, not the unrelated event.
-		if !IsTypeBody(v) || es.typeOut[pr.seq] {
+		if !IsTypeBody(v) || es.eventInfo[pr.seq].typeOut {
 			return eventOperand(pr.seq, pr.idx), true
 		}
 	}
@@ -570,7 +588,7 @@ func (es *EmitState) OperandRepushable(v Value) bool {
 	}
 	// An event operand is the value's stack-discipline truth (pushed once);
 	// it cannot be re-pushed for a second reference.
-	if pr, ok := es.producedBy[v.ID]; ok && (!IsTypeBody(v) || es.typeOut[pr.seq]) {
+	if pr, ok := es.producedBy[v.ID]; ok && (!IsTypeBody(v) || es.eventInfo[pr.seq].typeOut) {
 		return false
 	}
 	if _, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
@@ -601,7 +619,7 @@ func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
 		return false
 	}
 	pr, ok := es.producedBy[v.ID]
-	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.typeOut[pr.seq])
+	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.eventInfo[pr.seq].typeOut)
 }
 
 // materialise recovers the fully concrete value behind a stripped
@@ -882,7 +900,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		// phantom. Mark the seq so Finalize's residual reconciliation skips it
 		// rather than expecting a stack slot. Keeping the setProduced above
 		// lets RecordCall's double-record guard elide this if dispatch.
-		es.zeroOutSeq[seq] = true
+		f := es.eventInfo[seq]
+		f.zeroOut = true
+		es.eventInfo[seq] = f
 	}
 }
 
@@ -1070,7 +1090,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// reconciliation does. A 0-result body leaves outOps empty (a bare RET).
 			ops := make([]emitOperand, 0, len(bodyStk))
 			for _, v := range bodyStk {
-				if pr, ok := es.producedBy[v.ID]; ok && es.zeroOutSeq[pr.seq] {
+				if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
 					continue
 				}
 				// A body that RETURNS an anonymous capture-free lambda (the factory
@@ -1308,9 +1328,9 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// 'n')` — both gets return the same deterministic-ID result once their key
 	// is concrete) collides with a prior generic event, and skipping the second
 	// would orphan its receiver push. Those fall through to the carrier-identity
-	// de-collision below (which mints a fresh ID), so guard on !genericSeq.
+	// de-collision below (which mints a fresh ID), so guard on !eventInfo.generic.
 	if len(outs) > 0 {
-		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.genericSeq[pr.seq] {
+		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.eventInfo[pr.seq].generic {
 			return
 		}
 	}
@@ -1500,7 +1520,9 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// by the DUP lowering, so skip pr.seq == seq; and a result that IS one of the
 	// call's inputs (an identity/stack word passing a value through) keeps its ID,
 	// so skip an output whose ID appears in args.
-	es.genericSeq[seq] = true
+	gf := es.eventInfo[seq]
+	gf.generic = true
+	es.eventInfo[seq] = gf
 	var argIDs map[string]bool
 	for i := range outs {
 		if pr, ok := es.producedBy[outs[i].ID]; ok && pr.seq != seq {
@@ -2217,7 +2239,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		seenLiteral, outOfOrder := false, false
 		for _, rv := range residual {
 			pr, isEvent := es.producedBy[rv.ID]
-			if isEvent && pr.idx == 0 && !es.zeroOutSeq[pr.seq] {
+			if isEvent && pr.idx == 0 && !es.eventInfo[pr.seq].zeroOut {
 				if seenLiteral {
 					outOfOrder = true
 				}
@@ -2317,7 +2339,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// A 0-output statement guard (`if cond [raise]`) registered a
 			// phantom None result but produces 0 runtime values: it left no
 			// stack slot, so skip it here rather than expecting one.
-			if es.zeroOutSeq[pr.seq] {
+			if es.eventInfo[pr.seq].zeroOut {
 				continue
 			}
 			// A promoted value-def local is no longer on the simulated stack
