@@ -117,6 +117,26 @@ func NewTape(vals []Value, headroom int) *Tape {
 	return NewTapeWith(vals, TapeConfig{InitialSize: len(vals) + headroom}, nil)
 }
 
+// growthCeiling computes the bounded-growth ceiling initial·factorᴺ in float
+// (to avoid overflow), clamped to [initial, maxIntCap]. It is the single source
+// of the growth-ceiling arithmetic, shared by NewTapeWith (the tape's own cap)
+// and vmStackCeiling (the VM value-stack / frame cap) so both engines fail with
+// the same resource taxonomy at the same bound.
+func growthCeiling(initial, maxGrows int, factor float64) int {
+	ceil := float64(initial)
+	for i := 0; i < maxGrows; i++ {
+		ceil *= factor
+	}
+	capped := maxIntCap
+	if ceil < float64(maxIntCap) {
+		capped = int(ceil)
+	}
+	if capped < initial { // never below the starting capacity
+		capped = initial
+	}
+	return capped
+}
+
 // NewTapeWith builds a tape holding vals with bounded growth configured
 // by cfg. warn (may be nil) receives one-time 90/95/99% capacity
 // warnings.
@@ -127,23 +147,11 @@ func NewTapeWith(vals []Value, cfg TapeConfig, warn func(string)) *Tape {
 	}
 	buf := make([]Value, initial)
 	copy(buf, vals)
-	// Ceiling = initial · factorᴺ, in float to avoid overflow, clamped.
-	ceil := float64(initial)
-	for i := 0; i < maxGrows; i++ {
-		ceil *= factor
-	}
-	maxCap := maxIntCap
-	if ceil < float64(maxIntCap) {
-		maxCap = int(ceil)
-	}
-	if maxCap < initial {
-		maxCap = initial
-	}
 	return &Tape{
 		buf:      buf,
 		gapStart: len(vals),
 		gapEnd:   initial,
-		maxCap:   maxCap,
+		maxCap:   growthCeiling(initial, maxGrows, factor),
 		maxGrows: maxGrows,
 		grows0:   maxGrows,
 		factor:   factor,

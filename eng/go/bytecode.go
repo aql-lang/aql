@@ -165,54 +165,40 @@ const (
 	OpCallDynamicTrailing
 )
 
+// opcodeNames is the single source of each opcode's disassembler mnemonic,
+// indexed by the opcode value so the name and the iota order cannot drift. The
+// disassembler renders the mnemonic via Op.String() and switches separately
+// only to format each opcode's ARGUMENT (a different concern — it reads the
+// program's const/sig/type/fallback pools).
+var opcodeNames = [...]string{
+	OpPushConst:           "PUSH_CONST",
+	OpSwap:                "SWAP",
+	OpCallNative:          "CALL_NATIVE",
+	OpJmp:                 "JMP",
+	OpJmpIfFalse:          "JMP_IF_FALSE",
+	OpPushLocal:           "PUSH_LOCAL",
+	OpForSetup:            "FOR_SETUP",
+	OpForNext:             "FOR_NEXT",
+	OpCallUser:            "CALL_USER",
+	OpTailCallUser:        "TAIL_CALL_USER",
+	OpRet:                 "RET",
+	OpPushType:            "PUSH_TYPE",
+	OpFallback:            "FALLBACK",
+	OpPushClosure:         "PUSH_CLOSURE",
+	OpCallNativePoly:      "CALL_NATIVE_POLY",
+	OpCallDynamic:         "CALL_DYNAMIC",
+	OpStoreLocal:          "STORE_LOCAL",
+	OpDrop:                "DROP",
+	OpMakeList:            "MAKE_LIST",
+	OpMakeMap:             "MAKE_MAP",
+	OpTrap:                "TRAP",
+	OpReverse:             "REVERSE",
+	OpCallDynamicTrailing: "CALL_DYNAMIC_TRAILING",
+}
+
 func (o Opcode) String() string {
-	switch o {
-	case OpPushConst:
-		return "PUSH_CONST"
-	case OpSwap:
-		return "SWAP"
-	case OpCallNative:
-		return "CALL_NATIVE"
-	case OpJmp:
-		return "JMP"
-	case OpJmpIfFalse:
-		return "JMP_IF_FALSE"
-	case OpPushLocal:
-		return "PUSH_LOCAL"
-	case OpForSetup:
-		return "FOR_SETUP"
-	case OpForNext:
-		return "FOR_NEXT"
-	case OpCallUser:
-		return "CALL_USER"
-	case OpTailCallUser:
-		return "TAIL_CALL_USER"
-	case OpRet:
-		return "RET"
-	case OpPushType:
-		return "PUSH_TYPE"
-	case OpFallback:
-		return "FALLBACK"
-	case OpPushClosure:
-		return "PUSH_CLOSURE"
-	case OpCallNativePoly:
-		return "CALL_NATIVE_POLY"
-	case OpCallDynamic:
-		return "CALL_DYNAMIC"
-	case OpStoreLocal:
-		return "STORE_LOCAL"
-	case OpDrop:
-		return "DROP"
-	case OpMakeList:
-		return "MAKE_LIST"
-	case OpMakeMap:
-		return "MAKE_MAP"
-	case OpTrap:
-		return "TRAP"
-	case OpReverse:
-		return "REVERSE"
-	case OpCallDynamicTrailing:
-		return "CALL_DYNAMIC_TRAILING"
+	if int(o) < len(opcodeNames) && opcodeNames[o] != "" {
+		return opcodeNames[o]
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }

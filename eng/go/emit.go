@@ -38,6 +38,16 @@ const (
 	SiteMeta    = "meta"
 )
 
+// Synthetic word names for the compiler-internal assembly events — a computed
+// list literal (OpMakeList) and a computed map / make body (OpMakeMap). They are
+// not real AQL words; the recorder stamps them on the emitCall it records and
+// producerWord / makeListRange read them back, so the two sides must use the
+// same string. Centralised here rather than repeated as literals.
+const (
+	wordMakeList = "[…]"
+	wordMakeMap  = "{…}"
+)
+
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -144,6 +154,52 @@ type emitBranch struct {
 	pos                   SrcPos
 }
 
+// armKind classifies one `if` arm, collapsing the emitBranch boolean flags
+// (thenIsVal / elsIsVal / elsComputed / hasThenOut / hasElsOut / hasElse) into a
+// single discriminant. RecordBranch sets the flags as it discovers each arm's
+// shape; consumers ask thenArm() / elseArm() and SWITCH on the result instead of
+// re-deriving the kind from flag combinations. The flags stay the storage (one
+// — hasThenOut/hasElsOut — is mutated by markTailCalls, so the kind tracks tail
+// marking automatically).
+type armKind uint8
+
+const (
+	armAbsent   armKind = iota // arm not present (a 2-arg if's missing else)
+	armBodyOut                 // a […] body fragment that nets one value
+	armBodyVoid                // a […] body that nets 0 values or diverges (still runs)
+	armValue                   // a plain already-evaluated value operand (`if c 99 88`)
+	armComputed                // an eagerly-computed (event) else value (`if c [t] (expr)`)
+)
+
+// thenArm classifies the then arm. A then arm is always present (even a 2-arg
+// if has one); it is a value, a value-netting body, or a void/diverging body.
+func (br *emitBranch) thenArm() armKind {
+	switch {
+	case br.thenIsVal:
+		return armValue
+	case br.hasThenOut:
+		return armBodyOut
+	default:
+		return armBodyVoid
+	}
+}
+
+// elseArm classifies the else arm — armAbsent for a 2-arg if.
+func (br *emitBranch) elseArm() armKind {
+	switch {
+	case !br.hasElse:
+		return armAbsent
+	case br.elsComputed:
+		return armComputed
+	case br.elsIsVal:
+		return armValue
+	case br.hasElsOut:
+		return armBodyOut
+	default:
+		return armBodyVoid
+	}
+}
+
 // emitLoop is a recorded counted `for`: the count operand, the
 // captured body fragment (final fixed-point round), its single
 // per-iteration result, and the iterator's local slot. The loop's
@@ -200,12 +256,18 @@ type emitTrap struct {
 	pos  SrcPos
 }
 
+// emitEvent is one node of the recorded trace, tagged by kind. The two largest
+// payloads — emitBranch and emitLoop, each carrying several inline emitOperands
+// — ride behind pointers (set only for their kind, nil otherwise) so the common
+// evCall event does not pay their size on every copy through frames / fragments;
+// the small payloads stay inline. Every consumer is kind-guarded, so a nil
+// br/loop on a non-matching event is never dereferenced.
 type emitEvent struct {
 	seq  int
 	kind int
 	call emitCall
-	br   emitBranch
-	loop emitLoop
+	br   *emitBranch
+	loop *emitLoop
 	uc   emitUserCall
 	fb   emitFallback
 	trap emitTrap
@@ -649,15 +711,15 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 	}
 	switch d := v.Data.(type) {
 	case ListPayload:
-		rebuilt := false
 		elems := d.Elems
-		for i, e := range elems {
-			m, ok := es.materialise(e)
+		rebuilt := false
+		for i, e := range d.Elems {
+			m, changed, ok := es.materialiseMember(e)
 			if !ok {
 				return v, false
 			}
-			if m.Carrier != e.Carrier || m.ID != e.ID {
-				if !rebuilt {
+			if changed {
+				if !rebuilt { // copy-on-first-change, then patch in place
 					elems = append([]Value(nil), d.Elems...)
 					rebuilt = true
 				}
@@ -674,19 +736,17 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 		if d.M == nil {
 			return v, false
 		}
+		keys := d.M.Keys()
 		var nm *OrderedMap
-		for _, k := range d.M.Keys() {
+		for i, k := range keys {
 			mv, _ := d.M.Get(k)
-			m, ok := es.materialise(mv)
+			m, changed, ok := es.materialiseMember(mv)
 			if !ok {
 				return v, false
 			}
-			if nm == nil && (m.Carrier != mv.Carrier || m.ID != mv.ID) {
+			if changed && nm == nil { // copy the unchanged prefix, then this member
 				nm = NewOrderedMap()
-				for _, pk := range d.M.Keys() {
-					if pk == k {
-						break
-					}
+				for _, pk := range keys[:i] {
 					pv, _ := d.M.Get(pk)
 					nm.Set(pk, pv)
 				}
@@ -703,6 +763,19 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 		return v, true
 	}
 	return v, true
+}
+
+// materialiseMember materialises one container member and reports whether it
+// CHANGED — a stripped carrier recovered to a concrete original (different
+// Carrier flag or ID). ok=false when the member's original is unknown, so the
+// whole container cannot be recovered. The shared per-member step of
+// materialise's list and map arms.
+func (es *EmitState) materialiseMember(e Value) (m Value, changed, ok bool) {
+	m, ok = es.materialise(e)
+	if !ok {
+		return e, false, false
+	}
+	return m, m.Carrier != e.Carrier || m.ID != e.ID, true
 }
 
 // fragDiverges reports whether a captured fragment's trailing event
@@ -752,12 +825,13 @@ func eventDivergesDeep(ev *emitEvent) bool {
 			// Only the taken (then) arm is reachable.
 			return fragDivergesDeep(ev.br.then)
 		}
-		if !ev.br.hasElse {
+		switch ev.br.elseArm() {
+		case armAbsent:
 			return false // the implicit false path falls through to the merge
-		}
-		if ev.br.elsIsVal {
+		case armValue, armComputed:
 			return false // a value / computed else arm never diverges
 		}
+		// Both arms are bodies: the branch diverges only if both do.
 		return fragDivergesDeep(ev.br.then) && fragDivergesDeep(ev.br.els)
 	}
 	return false
@@ -790,7 +864,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	if !es.active() {
 		return
 	}
-	ev := emitEvent{kind: evBranch, br: emitBranch{
+	ev := emitEvent{kind: evBranch, br: &emitBranch{
 		constCond: b.ConstCond, hasElse: b.HasElse, pos: b.Pos,
 	}}
 	resolveArm := func(frag *EmitFragment, stk []Value, name string) (emitOperand, bool, bool) {
@@ -1279,7 +1353,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 		es.MarkUncompilable("for: computed range start/step (Stage 2 follow-on)")
 		return
 	}
-	lp := emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos}
+	lp := &emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos}
 	if len(bodyStk) > 0 && !fragDiverges(body) {
 		bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
 		if !ok {
@@ -1414,196 +1488,15 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	if !es.active() {
 		return
 	}
-	// A dispatch whose output is already registered was recorded by a
-	// structured hook (RecordBranch owns the `if` dispatch; a user-fn
-	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
-	// the generic path must not double-record or refuse it. A structured
-	// hook registers all results together, so checking the first suffices.
-	// The producer must be a STRUCTURED hook, not a prior GENERIC native call:
-	// a repeated identical computed call (`(context get 'n') add (context get
-	// 'n')` — both gets return the same deterministic-ID result once their key
-	// is concrete) collides with a prior generic event, and skipping the second
-	// would orphan its receiver push. Those fall through to the carrier-identity
-	// de-collision below (which mints a fresh ID), so guard on !eventInfo.generic.
-	if len(outs) > 0 {
-		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.eventInfo[pr.seq].generic {
-			return
-		}
-	}
-	// `apply` of a fn VALUE (`…args fn apply`): apply's ReturnsFn returns the
-	// fn concrete, so the check engine RE-STEPS it — the fn then dispatches
-	// against its preceding stack args and records as an ordinary CALL_USER.
-	// Elide apply's own dispatch (it produces nothing the VM runs); without
-	// this the generic path below refuses it as "function value reaches apply".
-	// The Reach-apply sig (a TReach operand, not an FnDef) is untouched.
-	if word == "apply" && len(args) >= 1 {
-		if _, ok := args[0].Data.(FnDefInfo); ok {
-			return
-		}
-	}
-	// Compile-time NAME RESOLUTION: a get/getr whose result is a
-	// statically-known callable or namespace (a module export wrapper,
-	// a module-export instance) executed during the check pass —
-	// `MathUtil.sqrt 16.0` is the tokens `MathUtil get sqrt 16.0`, and
-	// the resolved wrapper's own dispatch records the REAL call (the
-	// inner native's sig through execMatch on this engine, so CALL_
-	// NATIVE parity holds). Elide the resolution event; if the value
-	// instead flows somewhere data-like, downstream provenance refuses
-	// and the program falls back.
-	if (word == "get" || word == "getr") && len(outs) == 1 && IsConcrete(outs[0]) {
-		switch outs[0].Data.(type) {
-		case FnDefInfo, ExtensionPayload:
-			return
-		}
-	}
-	switch {
-	case sig == nil:
-		es.MarkUncompilable("dispatch without a signature at " + word)
-		return
-	case word == "":
-		// Anonymous / fn-value dispatch (usurp wrappers, F4 value
-		// calls): the callee is a runtime value, Stage 3 territory.
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("anonymous function dispatch (Stage 3)")
-		return
-	case sig.RunInCheckMode:
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("compile-time word " + word)
-		return
-	case sig.FnFrame != nil:
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("user fn call " + word + " (Stage 3)")
-		return
-	case sig.FullStack:
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("full-stack word " + word)
-		return
-	case word == "args" || word == "__pa":
-		// `args` reads the interpreter's per-call args stack, which the
-		// VM's CALL_USER frame does not maintain (it binds params to
-		// frame locals instead). A compiled fn body that reads `args`
-		// would fail with "args: not inside a function" — refuse so the
-		// program falls back to the interpreter.
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("context-dependent word " + word)
-		return
-	case len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args):
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
-		return
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
-		// Implicit-quote operands (usurp, force-arity, ref-family):
-		// dispatch-manipulating meta words whose results the engine
-		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
-		// quoted key is an inert Atom const (its fn-valued module-resolution
-		// case is elided above; a dynamic or fn-valued result still refuses via
-		// the later cases). For `set` the quoted key is the atom field name of
-		// an object/class/store/flex field write (`p set x 7`); the receiver is
-		// a non-const instance (mutation-safety holds — instance types are
-		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
-		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
-		// so the word-name match admits only the real mutator, never a usurp.
-		// quoteInertOK is the principled extension of that exemption to a MODULE
-		// INNER NATIVE whose quoted operands are inert Atom consts — the query
-		// DSL's table names (`Query.from people`, `Query.join visits`): the inner
-		// native is reached via the wrapper's trivial delegation, so the
-		// interpreter runs the SAME handler with the same baked atom.
-		es.SiteCounts[SiteMeta]++
-		es.MarkUncompilable("quoted-operand word " + word)
-		return
-	case anyDynamicCarrier(args):
-		es.SiteCounts[SiteDynamic]++
-		es.MarkUncompilable("dynamic input at " + word)
-		return
-	case anyDynamicCarrier(outs) && !forceDynOut:
-		// Dynamic outputs mean the checker could not type the word
-		// (missing annotations, opaque wrappers like a def-bound
-		// usurp value): the recorded signature is a best guess, not a
-		// proof — don't bake it in. forceDynOut (dynOutNativeOK) is the
-		// exception: a CONCRETE-args core builtin whose dynamic result is a
-		// declared-Any return bakes faithfully and falls through here.
-		es.SiteCounts[SiteDynamic]++
-		es.MarkUncompilable("unannotated or opaque word " + word)
-		return
-	case word == "break" && len(outs) == 0:
-		// A flow-control terminator, not a call: the enclosing loop's
-		// lowering turns it into a JMP to the loop end.
-		es.appendEvent(emitEvent{kind: evBreak, call: emitCall{word: word, pos: pos}})
-		return
-	case word == "continue" && len(outs) == 0:
-		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
-		return
-	case word == "for" && makeListRange(es, args):
-		// `for` over a COMPUTED range list (`for [1, (1 add 2)] [i]`) — the range
-		// assembled via OpMakeList. A literal-const or local range lowers fine
-		// (OpForSetup, or a CALL_NATIVE over the const list), but the CALL_NATIVE
-		// for-handler over a RUNTIME-assembled range diverges, so keep it refused
-		// (the interpreter handles the computed range).
-		es.MarkUncompilable("for: computed range list (Stage 2 follow-on)")
+	if es.recordCallElided(word, args, outs) {
 		return
 	}
-	// P5 multi-result lowering: a 0-result side-effect word (set/raise/drop/
-	// printstr/sleep…) or a genuine N-result word records like any call — the
-	// VM's OpCallNative already pushes every handler result, so no VM change is
-	// needed. MUTATION-SAFETY (load-bearing, see isInertConst): the only
-	// 0-result words are in-place mutators on Array/Object/Store/context
-	// receivers, and those instance types are NOT const-bakeable (absent from
-	// isInertConst's whitelist), so a pooled compound const can never reach one
-	// — the receiver is always a computed event or a frame local.
-	// Function-valued operands mean a fn-invoking word (apply, usurp,
-	// higher-order forms): their handlers return values the ENGINE
-	// re-steps on the tape, which a VM cannot honour. Stage 3
-	// territory. A fn-STORING word (minilang/parselang register) is exempt:
-	// it stashes the fn in a module rule table for later interpreter-side
-	// invocation, never the VM tape, so the fn rides as an inert const.
-	// A word declaring CompileReadsFn (introspection) or CompileStoresFn
-	// (minilang/parselang register) treats its fn-valued argument as INERT data,
-	// never invoking it on the VM tape, so a fn-valued operand is allowed (rides
-	// as an inert const). introspect (READS only) additionally bakes even a
-	// CAPTURING fn below, since only the immutable shape is read.
-	introspect := sig.CompileEffect.Has(CompileReadsFn)
-	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
-	for _, t := range sig.Args {
-		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
-			if inertFn {
-				continue
-			}
-			es.SiteCounts[SiteMeta]++
-			es.MarkUncompilable("function-valued operand at " + word + " (Stage 3)")
-			return
-		}
+	if es.recordCallRefusal(word, sig, args, outs, pos, forceDynOut, quoteInertOK) {
+		return
 	}
-	for _, a := range args {
-		if _, ok := a.Data.(FnDefInfo); ok {
-			// A CompileReadsFn / CompileStoresFn word READS a fn value (its
-			// type/arity) or STORES it, never invoking it, so the immutable fn
-			// value rides as a plain const operand the handler inspects/stashes —
-			// unlike a fn-INVOKING
-			// word (apply, higher-order, or `is` over a predicate fn), whose
-			// handler re-steps the fn on the tape, which the VM cannot honour.
-			if inertFn {
-				continue
-			}
-			es.SiteCounts[SiteMeta]++
-			es.MarkUncompilable("function value reaches " + word + " (Stage 3)")
-			return
-		}
-	}
-	ops := make([]emitOperand, len(args))
-	for i, a := range args {
-		op, ok := es.resolveOperand(a)
-		if !ok && introspect && IsConcrete(a) {
-			if _, isFn := a.Data.(FnDefInfo); isFn {
-				// Bake the concrete (immutable) fn value as a const the
-				// introspection handler reads at run time.
-				op, ok = constOperand(es.intern(a)), true
-			}
-		}
-		if !ok {
-			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
-			return
-		}
-		ops[i] = op
+	ops, ok := es.recordCallOperands(word, sig, args)
+	if !ok {
+		return
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: sig.CompileEffect.Has(CompileDiverges)}})
@@ -1638,6 +1531,195 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		}
 		es.setProducedAt(outs[i], seq, i)
 	}
+}
+
+// recordCallElided reports whether a dispatch is ELIDED — already recorded by a
+// structured hook, or a compile-time name resolution that produces nothing the
+// VM runs. The caller returns without recording when this is true.
+func (es *EmitState) recordCallElided(word string, args, outs []Value) bool {
+	// A dispatch whose output is already registered was recorded by a
+	// structured hook (RecordBranch owns the `if` dispatch; a user-fn
+	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
+	// the generic path must not double-record or refuse it. A structured
+	// hook registers all results together, so checking the first suffices.
+	// The producer must be a STRUCTURED hook, not a prior GENERIC native call:
+	// a repeated identical computed call (`(context get 'n') add (context get
+	// 'n')` — both gets return the same deterministic-ID result once their key
+	// is concrete) collides with a prior generic event, and skipping the second
+	// would orphan its receiver push. Those fall through to the carrier-identity
+	// de-collision in RecordCall (which mints a fresh ID), so guard on !generic.
+	if len(outs) > 0 {
+		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.eventInfo[pr.seq].generic {
+			return true
+		}
+	}
+	// `apply` of a fn VALUE (`…args fn apply`): apply's ReturnsFn returns the
+	// fn concrete, so the check engine RE-STEPS it — the fn then dispatches
+	// against its preceding stack args and records as an ordinary CALL_USER.
+	// Elide apply's own dispatch (it produces nothing the VM runs); without
+	// this RecordCall would refuse it as "function value reaches apply". The
+	// Reach-apply sig (a TReach operand, not an FnDef) is untouched.
+	if word == "apply" && len(args) >= 1 {
+		if _, ok := args[0].Data.(FnDefInfo); ok {
+			return true
+		}
+	}
+	// Compile-time NAME RESOLUTION: a get/getr whose result is a
+	// statically-known callable or namespace (a module export wrapper,
+	// a module-export instance) executed during the check pass —
+	// `MathUtil.sqrt 16.0` is the tokens `MathUtil get sqrt 16.0`, and
+	// the resolved wrapper's own dispatch records the REAL call (the
+	// inner native's sig through execMatch on this engine, so CALL_
+	// NATIVE parity holds). Elide the resolution event; if the value
+	// instead flows somewhere data-like, downstream provenance refuses
+	// and the program falls back.
+	if (word == "get" || word == "getr") && len(outs) == 1 && IsConcrete(outs[0]) {
+		switch outs[0].Data.(type) {
+		case FnDefInfo, ExtensionPayload:
+			return true
+		}
+	}
+	return false
+}
+
+// recordCallRefusal classifies a dispatch the recorder cannot lower as a generic
+// CALL_NATIVE. It returns true (the dispatch is handled) after either marking the
+// program uncompilable, or recording a flow-control terminator (break/continue —
+// the enclosing loop's lowering turns these into jumps). It returns false for an
+// ordinary lowerable call, which RecordCall then records.
+func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) bool {
+	switch {
+	case sig == nil:
+		es.MarkUncompilable("dispatch without a signature at " + word)
+	case word == "":
+		// Anonymous / fn-value dispatch (usurp wrappers, F4 value
+		// calls): the callee is a runtime value, Stage 3 territory.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("anonymous function dispatch (Stage 3)")
+	case sig.RunInCheckMode:
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("compile-time word " + word)
+	case sig.FnFrame != nil:
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("user fn call " + word + " (Stage 3)")
+	case sig.FullStack:
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("full-stack word " + word)
+	case word == "args" || word == "__pa":
+		// `args` reads the interpreter's per-call args stack, which the
+		// VM's CALL_USER frame does not maintain (it binds params to
+		// frame locals instead). A compiled fn body that reads `args`
+		// would fail with "args: not inside a function" — refuse so the
+		// program falls back to the interpreter.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("context-dependent word " + word)
+	case len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args):
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
+	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
+		// Implicit-quote operands (usurp, force-arity, ref-family):
+		// dispatch-manipulating meta words whose results the engine
+		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
+		// quoted key is an inert Atom const (its fn-valued module-resolution
+		// case is elided above; a dynamic or fn-valued result still refuses via
+		// the later cases). For `set` the quoted key is the atom field name of
+		// an object/class/store/flex field write (`p set x 7`); the receiver is
+		// a non-const instance (mutation-safety holds — instance types are
+		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
+		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
+		// so the word-name match admits only the real mutator, never a usurp.
+		// quoteInertOK is the principled extension of that exemption to a MODULE
+		// INNER NATIVE whose quoted operands are inert Atom consts — the query
+		// DSL's table names (`Query.from people`, `Query.join visits`): the inner
+		// native is reached via the wrapper's trivial delegation, so the
+		// interpreter runs the SAME handler with the same baked atom.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("quoted-operand word " + word)
+	case anyDynamicCarrier(args):
+		es.SiteCounts[SiteDynamic]++
+		es.MarkUncompilable("dynamic input at " + word)
+	case anyDynamicCarrier(outs) && !forceDynOut:
+		// Dynamic outputs mean the checker could not type the word
+		// (missing annotations, opaque wrappers like a def-bound
+		// usurp value): the recorded signature is a best guess, not a
+		// proof — don't bake it in. forceDynOut (dynOutNativeOK) is the
+		// exception: a CONCRETE-args core builtin whose dynamic result is a
+		// declared-Any return bakes faithfully and falls through here.
+		es.SiteCounts[SiteDynamic]++
+		es.MarkUncompilable("unannotated or opaque word " + word)
+	case word == "break" && len(outs) == 0:
+		// A flow-control terminator, not a call: the enclosing loop's
+		// lowering turns it into a JMP to the loop end.
+		es.appendEvent(emitEvent{kind: evBreak, call: emitCall{word: word, pos: pos}})
+	case word == "continue" && len(outs) == 0:
+		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
+	case word == "for" && makeListRange(es, args):
+		// `for` over a COMPUTED range list (`for [1, (1 add 2)] [i]`) — the range
+		// assembled via OpMakeList. A literal-const or local range lowers fine
+		// (OpForSetup, or a CALL_NATIVE over the const list), but the CALL_NATIVE
+		// for-handler over a RUNTIME-assembled range diverges, so keep it refused
+		// (the interpreter handles the computed range).
+		es.MarkUncompilable("for: computed range list (Stage 2 follow-on)")
+	default:
+		return false
+	}
+	return true
+}
+
+// recordCallOperands resolves a lowerable native dispatch's operands. It refuses
+// (marking the program uncompilable, returning ok=false) when a fn-valued operand
+// would reach a fn-INVOKING word — that handler re-steps the fn on the tape,
+// which the VM cannot honour (Stage 3). A word declaring CompileReadsFn
+// (introspection) or CompileStoresFn (minilang/parselang register) treats its
+// fn-valued argument as INERT data — read or stashed, never invoked on the VM
+// tape — so the fn rides as a plain const operand; introspect (READS only) bakes
+// even a CAPTURING fn, since only the immutable shape is read.
+//
+// MUTATION-SAFETY (load-bearing, see isInertConst): the only 0-result words are
+// in-place mutators on Array/Object/Store/context receivers, and those instance
+// types are NOT const-bakeable (absent from isInertConst's whitelist), so a
+// pooled compound const can never reach one — the receiver is always a computed
+// event or a frame local.
+func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Value) ([]emitOperand, bool) {
+	introspect := sig.CompileEffect.Has(CompileReadsFn)
+	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
+	for _, t := range sig.Args {
+		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			if inertFn {
+				continue
+			}
+			es.SiteCounts[SiteMeta]++
+			es.MarkUncompilable("function-valued operand at " + word + " (Stage 3)")
+			return nil, false
+		}
+	}
+	for _, a := range args {
+		if _, ok := a.Data.(FnDefInfo); ok {
+			if inertFn {
+				continue
+			}
+			es.SiteCounts[SiteMeta]++
+			es.MarkUncompilable("function value reaches " + word + " (Stage 3)")
+			return nil, false
+		}
+	}
+	ops := make([]emitOperand, len(args))
+	for i, a := range args {
+		op, ok := es.resolveOperand(a)
+		if !ok && introspect && IsConcrete(a) {
+			if _, isFn := a.Data.(FnDefInfo); isFn {
+				// Bake the concrete (immutable) fn value as a const the
+				// introspection handler reads at run time.
+				op, ok = constOperand(es.intern(a)), true
+			}
+		}
+		if !ok {
+			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
+			return nil, false
+		}
+		ops[i] = op
+	}
+	return ops, true
 }
 
 // RecordPolyCall records a native dispatch the checker could not commit to
@@ -1686,7 +1768,7 @@ func (es *EmitState) producerWord(id string) (string, bool) {
 // computed range list.
 func makeListRange(es *EmitState, args []Value) bool {
 	for i := range args {
-		if w, ok := es.producerWord(args[i].ID); ok && w == "[…]" {
+		if w, ok := es.producerWord(args[i].ID); ok && w == wordMakeList {
 			return true
 		}
 	}
@@ -1749,7 +1831,7 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 		ops[len(ins)-1-i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "[…]", ops: ops, nout: 1, pos: pos, makeList: true}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordMakeList, ops: ops, nout: 1, pos: pos, makeList: true}})
 	es.setProduced(out, seq)
 	return true
 }
@@ -1794,7 +1876,7 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
-		word: "{…}", ops: ops, nout: 1, pos: pos,
+		word: wordMakeMap, ops: ops, nout: 1, pos: pos,
 		makeMap: true, mapKeys: append([]string(nil), keys...), mapImpl: implicit,
 	}})
 	es.setProduced(out, seq)
@@ -1923,6 +2005,33 @@ func isTypeBodyPayload(v Value) bool {
 	return false
 }
 
+// allInert reports whether pred holds for every value in ms — the shared
+// "every member must be const-safe" loop of the type-body const-bake checks.
+func allInert(ms []Value, pred func(Value) bool) bool {
+	for _, m := range ms {
+		if !pred(m) {
+			return false
+		}
+	}
+	return true
+}
+
+// allFieldsInert reports whether pred holds for every value in an ordered map
+// (a nil map is not const-bakeable). Shared by the structural-type-body and
+// surface-type const-bake checks.
+func allFieldsInert(m *OrderedMap, pred func(Value) bool) bool {
+	if m == nil {
+		return false
+	}
+	for _, k := range m.Keys() {
+		fv, _ := m.Get(k)
+		if !pred(fv) {
+			return false
+		}
+	}
+	return true
+}
+
 // typeBodyConstOK walks a structural type body's interior: every
 // reachable constraint/default must be a bare type node, an inert
 // constant, or another clean type body. A check-mode CARRIER inside
@@ -1968,31 +2077,17 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		}
 		return typeBodyConstOKParam(m, isParam) || isInertConst(m)
 	}
-	fieldsOK := func(m *OrderedMap) bool {
-		if m == nil {
-			return false
-		}
-		for _, k := range m.Keys() {
-			fv, _ := m.Get(k)
-			if !memberOK(fv) {
-				return false
-			}
-		}
-		return true
-	}
 	switch d := v.Data.(type) {
 	case RecordTypeInfo:
-		return fieldsOK(d.Fields)
+		return allFieldsInert(d.Fields, memberOK)
 	case OptionsTypeInfo:
-		return fieldsOK(d.Fields)
+		return allFieldsInert(d.Fields, memberOK)
 	case ChildTypeInfo:
 		if !memberOK(d.Child) {
 			return false
 		}
-		for _, e := range d.Elements {
-			if !memberOK(e) {
-				return false
-			}
+		if !allInert(d.Elements, memberOK) {
+			return false
 		}
 		for _, en := range d.Entries {
 			if !memberOK(en.Value) {
@@ -2001,12 +2096,7 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		}
 		return true
 	case DisjunctInfo:
-		for _, a := range d.Alternatives {
-			if !memberOK(a) {
-				return false
-			}
-		}
-		return true
+		return allInert(d.Alternatives, memberOK)
 	case ObjectTypeInfo:
 		// A class / object type body is const-bakeable iff every field
 		// default is plain data — a method (fn-value) field is not, so a
@@ -2015,14 +2105,14 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		// copied), so it stays canonical at run time; `make` recovers the
 		// field schema from the baked body. The parent chain's fields must
 		// be data too (AllFields merges them).
-		return fieldsOK(d.AllFields())
+		return allFieldsInert(d.AllFields(), memberOK)
 	case TableTypeInfo:
 		// A Table type body (`make Test.TestSet …`, a module-exported
 		// Table type as a get-fold result or residual) is a thin wrapper
 		// over the row RecordType — const-safe exactly when that record's
-		// field types are (fieldsOK). The canonical *Type rides the body's
-		// payload pointer (shared, not copied), like every structural body.
-		return fieldsOK(d.Record.Fields)
+		// field types are. The canonical *Type rides the body's payload
+		// pointer (shared, not copied), like every structural body.
+		return allFieldsInert(d.Record.Fields, memberOK)
 	}
 	return false
 }
@@ -2176,13 +2266,9 @@ func surfaceConstOK(s *SurfaceInfo) bool {
 	if s.Required == nil {
 		return true
 	}
-	for _, k := range s.Required.Keys() {
-		v, _ := s.Required.Get(k)
-		if !(isInertConst(v) || typeBodyConstOK(v)) {
-			return false
-		}
-	}
-	return true
+	return allFieldsInert(s.Required, func(v Value) bool {
+		return isInertConst(v) || typeBodyConstOK(v)
+	})
 }
 
 // schemaConstOK reports whether a generic schema bakes as a const: its body
@@ -2536,34 +2622,26 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if dynReason != "" {
 		return nil, dynReason, false
 	}
-	vi := 0
-	tail := []emitOperand{}
+	// Resolve each residual value to its operand — skipping a 0-output statement
+	// guard's phantom None (zeroOut), re-pushing a promoted value-def local from
+	// its slot, and materialising a bare type node / inert const — then hand the
+	// operand sequence to the shared seat primitive. A variadic loop result is
+	// allowed here (the program residual may absorb it), unlike a fn body.
+	ops := make([]emitOperand, 0, len(residual))
 	for _, rv := range residual {
 		if pr, ok := es.producedBy[rv.ID]; ok {
-			// A 0-output statement guard (`if cond [raise]`) registered a
-			// phantom None result but produces 0 runtime values: it left no
-			// stack slot, so skip it here rather than expecting one.
 			if es.eventInfo[pr.seq].zeroOut {
 				continue
 			}
-			// A promoted value-def local is no longer on the simulated stack
-			// (STORE_LOCAL consumed it); re-push it from its slot like any
-			// other materialised tail operand.
 			if slot, isProm := lw.promoted[pr.seq]; isProm {
-				tail = append(tail, localOperand(slot))
+				ops = append(ops, localOperand(slot))
 				continue
 			}
-			if len(tail) > 0 {
-				return nil, "residual shape beyond Stage 1 (call result above a literal)", false
-			}
-			if vi >= len(lw.vm) || lw.vm[vi].seq != pr.seq || lw.vm[vi].idx != pr.idx {
-				return nil, "residual shape beyond Stage 1 (call results reordered)", false
-			}
-			vi++
+			ops = append(ops, eventOperand(pr.seq, pr.idx))
 			continue
 		}
 		if IsBareTypeNode(rv) && rv.ID != "" {
-			tail = append(tail, typeOperand(es.internType(rv)))
+			ops = append(ops, typeOperand(es.internType(rv)))
 			continue
 		}
 		lit, okLit := es.materialise(rv)
@@ -2573,13 +2651,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		if !isInertConst(lit) {
 			return nil, "residual value not statically materialisable", false
 		}
-		tail = append(tail, constOperand(es.intern(lit)))
+		ops = append(ops, constOperand(es.intern(lit)))
 	}
-	if vi != len(lw.vm) {
-		return nil, "residual shape beyond Stage 1 (unconsumed call results)", false
-	}
-	for _, op := range tail {
-		lw.pushOperand(op, lastPos)
+	if reason := lw.seatResults(ops, false, seatMsgs{
+		aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
+		reordered:    "residual shape beyond Stage 1 (call results reordered)",
+		unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
+	}, lastPos); reason != "" {
+		return nil, reason, false
 	}
 	if dynOp != 0 {
 		// The fn value (leading, or trailing rotated to the front) sits at the
