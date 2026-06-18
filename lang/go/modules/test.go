@@ -225,6 +225,13 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// recorded results in place.
 		{
 			Name: "test-describe",
+			// Test.describe "g" [body] — a SIDE-EFFECT grouping body (BodyOut 0)
+			// whose nested Test.test cases each compile to their own closure. The
+			// word DECLARES its closure shape here (module-side), so eng names no
+			// aql:test word — review §4.5.
+			Callable: &native.CallableSpec{BodyPos: 1, BodyOut: 0, Inputs: func(_ []native.Value) []native.Value {
+				return []native.Value{}
+			}},
 			Signatures: []native.NativeSig{{
 				Args:       []*native.Type{native.TString, native.TList},
 				NoEvalArgs: map[int]bool{1: true},
@@ -266,6 +273,12 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// assertion errors so other tests continue.
 		{
 			Name: "test-test",
+			// Test.test "n" [body] — a SIDE-EFFECT case body (BodyOut 0) whose
+			// assertions raise on failure and otherwise net nothing. Declared
+			// module-side so eng holds no aql:test name — review §4.5.
+			Callable: &native.CallableSpec{BodyPos: 1, BodyOut: 0, Inputs: func(_ []native.Value) []native.Value {
+				return []native.Value{}
+			}},
 			Signatures: []native.NativeSig{{
 				Args:       []*native.Type{native.TString, native.TList},
 				NoEvalArgs: map[int]bool{1: true},
@@ -274,7 +287,8 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 					run := activeRun(parent)
 					// Compiled path: the body arrived as a compiled CLOSURE (the
 					// bytecode compiler lowers `Test.test "n" [body]` via the
-					// callableWords closure path); run it through the VM seam. The
+					// closure path keyed on this word's declared Callable spec); run
+					// it through the VM seam. The
 					// interpreter path runs the token list in a sub-engine. Both nets
 					// 0 values; an assertion failure raises, runCase records pass/fail.
 					if native.IsCompiledClosure(args[1]) {

@@ -819,16 +819,14 @@ func TestEmitRefusals(t *testing.T) {
 		src        string
 		wantReason string
 	}{
-		// A branch reading an enclosing computation INSIDE A FN BODY still breaks
-		// the closed-fragment rule: only frame 0 runs planValueDefLocals, so a fn
-		// unit's enclosing computed value cannot be promoted to a re-pushable
-		// local across the arm's scope floor. (The TOP-LEVEL form of this —
-		// `def y (1 add 2) if (1 gt 0) [y mul 2] [0]` — now compiles via
-		// value-def-locals across the fragment; see
-		// TestEnclosingReadInBranchCompiles.)
-		{`def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 5`, "branch reads enclosing computation"},
-		// (`word [1 add 2]` USED to be refused here; the splice now compiles by
+		// A loop RESULT read inside a branch arm: Stage-2 loops are variadic and
+		// only feed the program residual, so the list `xs` cannot be consumed by a
+		// branch fragment. Refuses cleanly rather than miscompiling. (The enclosing
+		// COMPUTED-value read — `def y (expr) … if … y …`, top-level OR in a fn
+		// body — now compiles via per-unit value-def-locals; see
+		// TestEnclosingReadInBranchCompiles. And `word [1 add 2]` now compiles by
 		// inline expansion — see TestWordSpliceCompilesNative.)
+		{`def xs (for 3 [i]) if (xs.0 gt 0) [xs] [[9]]`, "consumes loop results"},
 	}
 	for _, c := range cases {
 		got, reason := compile(t, c.src)

@@ -1050,6 +1050,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			CheckFullStackFn: sig.CheckFullStackFn,
 			ParkResult:       sig.ParkResult,
 			CompileEffect:    sig.CompileEffect | fn.CompileEffect,
+			Callable:         fn.Callable,
 		}
 		// One path. `BarrierAllForward` (-1) on a NativeSig is the
 		// "default all-forward" sentinel; `0` is explicit all-stack.

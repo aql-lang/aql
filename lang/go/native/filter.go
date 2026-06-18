@@ -23,7 +23,7 @@ import (
 // keeps a SUBSET of the same shape, so a List stays a List of the same
 // element type and a Map stays a Map. Without it filter declared no Returns
 // and poisoned every result with dynamic(Any). The predicate body is compiled
-// separately by the closure path (callableWords["filter"]); this types only
+// separately by the closure path (filter's declared Callable spec); this types only
 // the result. A non-collection or computed receiver keeps dynamic(Any).
 func filterReturnsFn(args []Value, _ *Registry) []Value {
 	if len(args) < 2 {

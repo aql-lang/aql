@@ -75,6 +75,7 @@ type (
 	NativeFunc          = eng.NativeFunc
 	NativeSig           = eng.NativeSig
 	CompileEffect       = eng.CompileEffect
+	CallableSpec        = eng.CallableSpec
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo
 	ObjectTypeInfo      = eng.ObjectTypeInfo
 	SurfaceInfo         = eng.SurfaceInfo
@@ -213,6 +214,8 @@ const (
 	CompileModuleFold   = eng.CompileModuleFold
 	CompileIslandPure   = eng.CompileIslandPure
 	CompileFallbackBody = eng.CompileFallbackBody
+	CompileQuoteInert   = eng.CompileQuoteInert
+	CompileDiverges     = eng.CompileDiverges
 )
 
 // Flow-control signal values exposed by the engine. These travel

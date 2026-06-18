@@ -246,6 +246,29 @@ func latticeNode(v native.Value) *native.Type {
 }
 
 // fnSigs returns the signature list for a Function / FnDef / FnUndef value.
+// returnsofResult computes returnsof's output for fn: the single declared
+// return Type, a List of return Types, or Any when fn has no resolvable
+// signature. Shared by the runtime handler and the check-mode ReturnsFn so the
+// static type the compiler bakes matches the value the VM produces.
+func returnsofResult(fn native.Value, r *native.Registry) (native.Value, error) {
+	sigs, err := fnSigs(fn, "TypeUtil.returnsof", r)
+	if err != nil {
+		return native.Value{}, err
+	}
+	if len(sigs) == 0 || len(sigs[0].Returns) == 0 {
+		return native.NewTypeLiteral(native.TAny), nil
+	}
+	returns := sigs[0].Returns
+	if len(returns) == 1 {
+		return native.NewTypeLiteral(returns[0]), nil
+	}
+	elems := make([]native.Value, len(returns))
+	for i, rt := range returns {
+		elems[i] = native.NewTypeLiteral(rt)
+	}
+	return native.NewList(elems), nil
+}
+
 func fnSigs(v native.Value, opName string, r *native.Registry) ([]native.FnSig, error) {
 	if fn, ok := v.Data.(native.FnDefInfo); ok {
 		return fn.OwnSigs(), nil
@@ -555,23 +578,25 @@ var typeModuleNatives = []native.NativeFunc{
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				fn := args[0]
-				sigs, err := fnSigs(fn, "TypeUtil.returnsof", r)
+				v, err := returnsofResult(args[0], r)
 				if err != nil {
 					return nil, err
 				}
-				if len(sigs) == 0 || len(sigs[0].Returns) == 0 {
-					return []native.Value{native.NewTypeLiteral(native.TAny)}, nil
+				return []native.Value{v}, nil
+			},
+			// Static return: the fn's declared return type is known at check time
+			// for a concrete fn (the same value the handler computes), so report it
+			// precisely instead of the opaque TAny — that makes the output a
+			// concrete type node (not a dynamic carrier), so the dispatch bakes a
+			// CALL_NATIVE like arityof/typeof rather than refusing as a dynamic
+			// output. A non-resolvable (carrier/dynamic) fn falls back to a dynamic
+			// carrier, which still refuses.
+			ReturnsFn: func(args []native.Value, r *native.Registry) []native.Value {
+				v, err := returnsofResult(args[0], r)
+				if err != nil {
+					return []native.Value{native.NewCarrier(native.TAny)}
 				}
-				returns := sigs[0].Returns
-				if len(returns) == 1 {
-					return []native.Value{native.NewTypeLiteral(returns[0])}, nil
-				}
-				elems := make([]native.Value, len(returns))
-				for i, rt := range returns {
-					elems[i] = native.NewTypeLiteral(rt)
-				}
-				return []native.Value{native.NewList(elems)}, nil
+				return []native.Value{v}
 			},
 			Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			CompileEffect: native.CompileReadsFn, // reads a fn's return type, never invokes it

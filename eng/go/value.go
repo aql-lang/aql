@@ -330,6 +330,14 @@ type FnSig struct {
 	// The zero value is CompileDefault (an ordinary word). Set on the NativeSig
 	// at registration; copied here by RegisterNativeFunc.
 	CompileEffect CompileEffect
+	// Callable, when non-nil, declares this word as a code-body higher-order
+	// word whose body compiles to a closure unit (each / fold / do / a test
+	// case body, …). The bytecode recorder reads the closure shape from here —
+	// the body operand's position, its per-invocation output count, and the
+	// input carriers it consumes — instead of a name-keyed eng table, so eng
+	// names no specific (often module) word. Copied from NativeFunc.Callable
+	// onto every signature at registration. nil = not closure-eligible.
+	Callable *CallableSpec
 }
 
 // CompileEffect is a set of compile-relevant capability flags a word declares
@@ -368,6 +376,29 @@ const (
 	// / filter / select / group / do / case / where / having / order / …) that
 	// may compile its body as a Stage-5 interpreter island.
 	CompileFallbackBody
+	// CompileQuoteInert marks a word whose implicit-quote (QuoteArgs) operand is
+	// INERT DATA the handler consumes verbatim — a quoted symbol (`quote name`,
+	// `raise bad_input …`) or a quoted code body held as data (`timeout 1000
+	// [body]`) — so the word bakes as a plain CALL_NATIVE once each quoted operand
+	// resolves to an inert const: the VM runs the SAME handler over the SAME baked
+	// value as the interpreter. It is the opt-in for the QuoteArgs refusal, the
+	// declared analogue of the get/getr/set exemption. Do NOT set it on a
+	// dispatch-manipulating meta word (usurp / force-arity / ref) whose quoted
+	// operand drives a RE-STEPPING result the VM cannot reproduce by re-running
+	// the handler.
+	CompileQuoteInert
+	// CompileDiverges marks a word whose handler ALWAYS raises (it never returns
+	// normally) — `raise`, the user-error constructor. A call to it is recorded as
+	// a CALL_NATIVE (the handler raises the byte-identical error at run time) but
+	// the recorder treats it as a DIVERGENT terminal: control never reaches the
+	// fragment's end, so a closure body ending in it (`do [raise …]`, `error`'s
+	// handler tail) compiles with NO RET — the error propagates out of the VM and
+	// the catching word (`do` / `error`) turns it into the Error value via
+	// InvokeBody, exactly as the interpreter does. This is the bytecode side of
+	// structured exception handling: a trapping closure body is catchable rather
+	// than uncompilable. The divergence is sound in a branch/loop arm too (the
+	// arm never produces a value, like break/continue).
+	CompileDiverges
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
@@ -377,6 +408,30 @@ const CompileDefault CompileEffect = 0
 
 // Has reports whether the effect set includes flag f.
 func (e CompileEffect) Has(f CompileEffect) bool { return e&f != 0 }
+
+// CallableSpec declares a code-body higher-order word's closure-compilation
+// shape, so the bytecode recorder reads it from the resolved Signature
+// (sig.Callable) rather than a name-keyed eng table — decoupling eng from the
+// (often module) word names that own these words. A word declares one on its
+// NativeFunc; RegisterNativeFunc copies the pointer onto every signature. nil
+// on a Signature means the word is not closure-eligible.
+type CallableSpec struct {
+	// BodyPos is the body operand's sig position (the code list / lambda).
+	BodyPos int
+	// BodyOut is how many values the body nets per invocation: 1 for a
+	// map/transform body (each / fold / do), 0 for a SIDE-EFFECT body (a test
+	// case whose assertions raise on failure and otherwise leave nothing). It
+	// sets the compiled unit's declared return count.
+	BodyOut int
+	// Inputs returns the per-invocation input carriers the body consumes, in the
+	// order the driving handler supplies them via InvokeBody. The carriers are
+	// GENERALISED types (not one call's concrete values) so the body compiles
+	// once for every invocation. args is the call's full operand list, so a word
+	// can derive the input type from its data operand (e.g. each's element type)
+	// or its seed (fold's accumulator). Returns an empty slice for a 0-input body
+	// (do / a test case). nil declines the compile (an unexpected operand shape).
+	Inputs func(args []Value) []Value
+}
 
 // FnDefInfo holds the function specification for a def-defined function.
 // Name is the function's registered name (set by InstallDef). If Registry is

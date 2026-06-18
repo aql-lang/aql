@@ -147,8 +147,7 @@ WORD enum
 WORD eq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD error
-  [Node/List Ideal/Error] barrier=2 noeval={0} returns=[Any]
-  [Node/List Any] barrier=2 noeval={0} returns=[Any]
+  [Node/List Any] barrier=1 noeval={0} returns=[Any]
 WORD escape
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]

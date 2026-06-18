@@ -77,11 +77,13 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		// import with a still-uncompilable operation: the import side effect must
 		// still be rolled back before the whole-program fallback re-runs.
 		`"aql:math-util" import end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
-		// aql:test import isolation: `Test.test` and `Test.describe` cases now
-		// compile via the callableWords closure path, so pair the import with
-		// `Test.check-prop` (still uncompilable — a property driver with two
-		// bodies) to keep the row on the fallback path.
-		`"aql:test" import end (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"`,
+		// aql:test import isolation: Test.test / Test.describe cases (closure
+		// path) AND the property words prop/check-prop/skip (their inert bodies
+		// bake as consts — the dot-access reach inside now an inert member) all
+		// compile, so pair the import with the predicate-fn `is` (still
+		// uncompilable — the VM cannot re-step the fn body, exactly as row 2/3)
+		// to keep the row on the fallback path and exercise the import rollback.
+		`"aql:test" import end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
 	}
 	for _, src := range cases {
 		ac, err := New()

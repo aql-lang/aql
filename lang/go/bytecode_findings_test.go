@@ -1482,6 +1482,11 @@ func TestEnclosingReadInBranchCompiles(t *testing.T) {
 		{"if-enclosing", `def y (1 add 2) if (y gt 0) [y mul 2] [0]`, "[6]"},
 		// enclosing instance read across a branch.
 		{"if-instance", `def a (make Array [1 2 3]) if (a.0 gt 0) [a.1] [99]`, "[2]"},
+		// The SAME enclosing-read pattern INSIDE A FN BODY now compiles too:
+		// planValueDefLocals runs for every unit, not just frame 0, so the fn
+		// unit's `def y (n add 1)` promotes to a frame slot read across the arm.
+		{"fn-body-enclosing", `def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 5`, "[12]"},
+		{"fn-body-enclosing-else", `def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 0`, "[0]"},
 	} {
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
 		gotI, errI := mustNew(t).Run(c.src)
@@ -1494,15 +1499,5 @@ func TestEnclosingReadInBranchCompiles(t *testing.T) {
 		if fmt.Sprint(gotC) != c.want {
 			t.Errorf("%s: got %v, want %s", c.name, gotC, c.want)
 		}
-	}
-
-	// NEGATIVE: only frame 0 promotes value-def locals, so the SAME enclosing
-	// read inside a FN BODY branch still refuses (pinned as the reason-bearing
-	// negative in eng's TestEmitRefusals; here assert it falls back, not
-	// miscompiles).
-	if _, compiled, _ := mustNew(t).RunCompiled(
-		`def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 5`,
-	); compiled {
-		t.Error("fn-body enclosing-read branch compiled but must fall back (frame-0-only promotion)")
 	}
 }

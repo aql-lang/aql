@@ -277,6 +277,13 @@ var mathNatives = []NativeFunc{
 	},
 	{
 		Name: "with-decimal",
+		// with-decimal {opts} [body] — runs a 0-input body inside a scoped
+		// BigDecimal rounding context (opts at sig 0, body at sig 1). Like `do`,
+		// the body nets its single residual; the handler pushes the context around
+		// InvokeBody so the VM-run body's BigDecimal ops read the override.
+		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, Inputs: func(_ []Value) []Value {
+			return []Value{}
+		}},
 		Signatures: []NativeSig{{
 			Args:       []*Type{TMap, TList},
 			Handler:    withDecimalHandler,
