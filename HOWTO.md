@@ -40,8 +40,13 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Use the built-in `aql:time-util` module](#use-the-built-in-aqltime-module)
 * [Use the built-in `aql:matrix-util` module](#use-the-built-in-aqlmatrix-module)
 * [Store secrets in the vault](#store-secrets-in-the-vault)
+* [Scan for plaintext credentials on disk](#scan-for-plaintext-credentials-on-disk)
+* [Grant scoped access to an agent](#grant-scoped-access-to-an-agent)
 * [Trace and debug](#trace-and-debug)
 * [Use `end` to stop forward collection](#use-end-to-stop-forward-collection)
+* [Sandbox untrusted code](#sandbox-untrusted-code)
+* [Run AQL as a service](#run-aql-as-a-service)
+* [Inspect permission profiles](#inspect-permission-profiles)
 
 
 ## Define and use custom words
@@ -1027,10 +1032,22 @@ aql vault exec --for=cargo crates_tok -- cargo publish
 aql vault exec --for=pypi  pypi_token -- twine upload dist/*
 ```
 
-Recipes: `npm` (use `--registry=HOST` for GitHub Packages/scoped),
-`cargo`, `gem`, `pypi`/`twine`, `uv`. For AQL's own registry, `aql
-login --vault` keeps the registry token in the vault and `aql publish`
-reads it back automatically.
+`--for` is **repeatable**, and each entry can name its own secret as
+`--for=<tool>=<alias>`, so one command can credential several tools at
+once — e.g. publish to npm *and* push a GitHub release tag, each token
+from its own secret:
+
+```
+aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
+```
+
+Recipes cover the major ecosystems — `npm`/`yarn`/`pnpm`/`bun`,
+`pypi`/`uv`/`poetry`/`hatch`/`flit`, `cargo`, `gem`, `hex`, `swift`,
+`cocoapods`, `composer`, `github`, `gitlab`, `terraform` (use
+`--registry=HOST` for the registry-scoped ones). The full table is in
+[CLI.md → Publishing](CLI.md#publishing-a-package-with-a-vault-held-token).
+For AQL's own registry, `aql login --vault` keeps the registry token in
+the vault and `aql publish` reads it back automatically.
 
 Inside AQL, secrets are surfaced via the `vault` capability:
 
@@ -1040,6 +1057,49 @@ vault get "github_token"
 
 The backend is OS-specific (macOS Keychain, Linux Secret Service,
 Windows Credential Manager, 1Password, or a file fallback).
+
+Prefer the menu-driven UI for day-to-day work: `aql vault -i` opens an
+interactive TUI that browses and edits secrets, capabilities, and
+passwords, and always shows the available keys on screen.
+
+
+## Scan for plaintext credentials on disk
+
+`aql vault scan` flags secrets that have leaked into files:
+
+```
+aql vault scan .                  # scan a directory tree for secret-like tokens
+aql vault scan --home             # scan credential dotfiles (~/.npmrc, ~/.netrc, ~/.aws/credentials, …)
+aql vault scan --home --match-vault   # …and mark which on-disk creds are already vaulted
+```
+
+`scan .` matches provider-token shapes in file contents; `--home`
+instead checks the well-known credential files in their own formats,
+so it catches an npm `_authToken` or a `.netrc` password that the
+content scan would miss. It exits `2` when it finds anything (handy in
+CI), masks every value, and skips env-var references like
+`${NPM_TOKEN}`. Migrate a finding into the vault, then delete the
+plaintext copy.
+
+
+## Grant scoped access to an agent
+
+Rather than hand a CI job or an LLM agent a raw token, mint a
+**capability** — a one-time bearer token bound to an alias, scope, and
+TTL — and let the broker inject the real secret:
+
+```
+aql vault grant --agent=ci --hosts=api.openai.com --ttl=2h openai_key
+# → prints a bearer token ONCE; store it as the agent's secret
+aql vault proxy                   # run the loopback broker the agent calls
+aql vault revoke <token-id>       # kill a capability immediately
+aql vault audit --action proxy.request --last 20   # see what the agent did
+```
+
+The token is stored only as a hash, expires on its TTL, and never
+exposes the underlying secret — the agent talks to the proxy, the
+proxy talks to the provider. `aql vault mcp` does the same over the
+Model Context Protocol for MCP-aware agents.
 
 
 ## Trace and debug
@@ -1194,3 +1254,56 @@ policies.
 For running AQL-from-AQL with stricter permissions (test harnesses,
 plugin sandboxes), the `aql:vm` native module exposes
 `Vm.run`/`Vm.run-with` with capability attenuation.
+
+
+## Run AQL as a service
+
+Beyond the one-shot commands, `aql` ships long-running services. Each
+owns a port or stdio and shuts down gracefully on SIGINT/SIGTERM.
+
+```bash
+aql registry -r ~/registry -p 8080   # serve modules + auth endpoints over HTTP
+aql exec -bind 127.0.0.1:8091        # HTTP code-execution endpoint (POST /v1/exec)
+aql lsp                              # Language Server on stdio (for editors)
+aql lsp -p 7000                      # …or over TCP
+```
+
+Type-check or run code against the HTTP endpoint:
+
+```bash
+curl -s localhost:8091/v1/exec -d '{"code":"add 1 2"}'   # → 3
+```
+
+**Compose several services in one process** with `serve`, separating
+segments with `+`; they share one lifecycle:
+
+```bash
+aql serve registry -r ~/registry -p 8080 + exec -p 8091 + api
+aql serve --config services.yaml      # …or declare the segments in a file
+```
+
+The `api` service exposes a control plane. **Drive a running
+supervisor** with `ctl` (or the `tui`):
+
+```bash
+aql ctl status            # list services and their state
+aql ctl pause exec        # pause / resume / stop a service
+aql tui                   # terminal UI against the same api service
+```
+
+`ctl` and `tui` discover the api URL and token from the supervisor's
+discovery file; pass `--api`/`--token` to target one explicitly.
+
+
+## Inspect permission profiles
+
+`aql policy` documents and tests the permission profiles used by
+`--perms` (see [Sandbox untrusted code](#sandbox-untrusted-code)):
+
+```bash
+aql policy list                       # built-in profiles, most-permissive first
+aql policy show sandbox --json        # the resolved profile as JSON
+aql policy validate ./my-policy.jsonic
+aql policy test sandbox fileops.write path=/etc/passwd   # exit 0 = allowed, 1 = denied
+aql policy explain sandbox fileops.write path=/etc/passwd  # the blame chain
+```

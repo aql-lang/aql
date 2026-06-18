@@ -997,8 +997,68 @@ expiring capability tokens instead of the secrets themselves — see the
 **[CLI Reference](CLI.md#aql-vault)** for the proxy, capabilities,
 `vault mv`, and `vault verify`.
 
+### Publish with a recipe
 
-## 22. Where to next
+Package publishers each read their token from a different place. A
+**recipe** (`--for=<tool>`) injects the secret in exactly the form one
+tool expects — no `~/.npmrc` edit, nothing on the command line:
+
+```bash
+aql vault exec --for=npm npm_token -- npm publish
+```
+
+`--for` is repeatable, and each entry can name its own secret, so one
+command can credential several tools at once — publish to npm *and*
+push a GitHub release tag, each from its own secret:
+
+```bash
+aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
+```
+
+### Scan for leaked secrets
+
+`vault scan` finds secrets that escaped into files — and, with
+`--home`, into the credential dotfiles tools leave lying around:
+
+```bash
+aql vault scan .          # secret-like tokens in this directory tree
+aql vault scan --home     # plaintext creds in ~/.npmrc, ~/.netrc, ~/.aws/credentials, …
+```
+
+It masks every value and exits non-zero when it finds something, so it
+drops straight into a pre-commit hook or CI. Move a finding into the
+vault, then delete the plaintext.
+
+Prefer a menu to flags? `aql vault -i` opens an interactive TUI over
+everything above.
+
+
+## 22. Build and publish a module
+
+A reusable AQL module is a directory with an `aql.jsonic` manifest. The
+build-and-publish path is a short pipeline:
+
+```bash
+aql prep                 # parse aql.jsonic → .aql/aql.json
+aql pack                 # build a publishable zip under .aql/_pack/
+aql register             # one-time: create an account on a registry
+aql login                # authenticate; store the token (add --vault to keep it in the vault)
+aql publish              # pack + upload the current module
+aql clean                # remove .aql/* build artifacts
+```
+
+On another machine, pull a published module into a project and import
+it:
+
+```bash
+aql install mymod-1.0.0  # download into .aql/ and record the dependency
+```
+
+The registry URL defaults to a local server; pass `-r <url>` to target
+another, and run your own with `aql registry -r ~/registry -p 8080`.
+
+
+## 23. Where to next
 
 - **[How-To Guides](HOWTO.md)** — practical recipes by task.
 - **[Reference](REFERENCE.md)** — every word, every type.
@@ -1014,5 +1074,8 @@ Common next steps:
 * Run `aql fmt script.aql` to canonicalise indentation.
 * Build a small module, package it with `aql pack`, and publish it
   with `aql publish`.
+* Serve AQL over HTTP or to an editor: `aql registry`, `aql exec`,
+  `aql lsp`, or several at once under `aql serve` — see
+  [How-To → Run AQL as a service](HOWTO.md#run-aql-as-a-service).
 
 Welcome to AQL.
