@@ -52,6 +52,20 @@ var fnIntrospectionWords = map[string]bool{
 	"arityof": true, "paramsof": true, "returnsof": true,
 }
 
+// fnStoreWords STORE a fn VALUE for later interpreter-side invocation — a
+// minilang/parselang rule registered into the module's rule table — and never
+// invoke it on the VM tape. So the fn rides as an inert const the handler
+// stashes (like an introspection operand); the later rule invocation runs
+// through the module's own interpreter, not the VM, so baking the fn by value
+// is faithful. A dormant entry unless the owning module is loaded (string-keyed,
+// no import coupling). A capturing / sub-registry fn still refuses at operand
+// resolution (isInertConst declines it), so only a pure fn literal compiles.
+var fnStoreWords = map[string]bool{
+	"minilang-register":          true,
+	"minilang-register-compiled": true,
+	"parselang-register":         true,
+}
+
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -1423,23 +1437,31 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// Function-valued operands mean a fn-invoking word (apply, usurp,
 	// higher-order forms): their handlers return values the ENGINE
 	// re-steps on the tape, which a VM cannot honour. Stage 3
-	// territory.
+	// territory. A fn-STORING word (minilang/parselang register) is exempt:
+	// it stashes the fn in a module rule table for later interpreter-side
+	// invocation, never the VM tape, so the fn rides as an inert const.
+	introspect := fnIntrospectionWords[word]
+	fnStore := fnStoreWords[word]
 	for _, t := range sig.Args {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			if fnStore {
+				continue
+			}
 			es.SiteCounts[SiteMeta]++
 			es.MarkUncompilable("function-valued operand at " + word + " (Stage 3)")
 			return
 		}
 	}
-	introspect := fnIntrospectionWords[word]
 	for _, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
 			// An INTROSPECTION word READS a fn value (its type/arity) and never
 			// invokes it, so the immutable fn value rides as a plain const
 			// operand the handler inspects — unlike a fn-INVOKING word (apply,
 			// higher-order, or `is` over a predicate fn), whose handler re-steps
-			// the fn on the tape, which the VM cannot honour.
-			if introspect {
+			// the fn on the tape, which the VM cannot honour. A fn-STORING word
+			// (register) likewise keeps the fn as data — the module interpreter,
+			// not the VM, runs it later.
+			if introspect || fnStore {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
