@@ -495,6 +495,13 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			copy(elems, stack[len(stack)-n:])
 			stack = stack[:len(stack)-n]
 			stack = append(stack, NewList(elems))
+		case OpMakeMap:
+			// Assemble the top values into a map paired with the spec's keys (a
+			// computed make-construction body, `make Outer {i:(make Inner …)}`).
+			var err error
+			if stack, err = vmMakeMap(p, stack, in.Arg, curDebug, pc); err != nil {
+				return nil, err
+			}
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {
@@ -762,6 +769,25 @@ func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
 // caller and error-scraping tooling see a structured error, not a raw Go
 // string — and RunCompiled treats it as a fall-back-to-interpreter signal.
 // Reaching one is a compiler bug; the message keeps the pc/source detail.
+// vmMakeMap pops the values of an OpMakeMap assembly off the top of stack and
+// returns the stack with the assembled map pushed: the deepest of the popped
+// run is value 0, paired with Keys[0]. Extracted from vmContext.run to keep that
+// loop's cyclomatic complexity bounded.
+func vmMakeMap(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]Value, error) {
+	spec := p.MakeMaps[arg]
+	n := len(spec.Keys)
+	if len(stack) < n {
+		return nil, vmErrAt(debug, pc, "MAKE_MAP stack underflow")
+	}
+	vals := stack[len(stack)-n:]
+	om := NewOrderedMap()
+	om.Implicit = spec.Implicit
+	for i, k := range spec.Keys {
+		om.Set(k, vals[i])
+	}
+	return append(stack[:len(stack)-n], NewMap(om)), nil
+}
+
 func vmErrAt(debug []SrcPos, pc int, msg string) error {
 	pos := SrcPos{}
 	if pc >= 0 && pc < len(debug) {

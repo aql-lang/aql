@@ -52,6 +52,20 @@ var fnIntrospectionWords = map[string]bool{
 	"arityof": true, "paramsof": true, "returnsof": true,
 }
 
+// fnStoreWords STORE a fn VALUE for later interpreter-side invocation — a
+// minilang/parselang rule registered into the module's rule table — and never
+// invoke it on the VM tape. So the fn rides as an inert const the handler
+// stashes (like an introspection operand); the later rule invocation runs
+// through the module's own interpreter, not the VM, so baking the fn by value
+// is faithful. A dormant entry unless the owning module is loaded (string-keyed,
+// no import coupling). A capturing / sub-registry fn still refuses at operand
+// resolution (isInertConst declines it), so only a pure fn literal compiles.
+var fnStoreWords = map[string]bool{
+	"minilang-register":          true,
+	"minilang-register-compiled": true,
+	"parselang-register":         true,
+}
+
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -117,6 +131,9 @@ type emitCall struct {
 	pos      SrcPos
 	poly     bool // dispatch via OpCallNativePoly (runtime MatchSignature)
 	makeList bool // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	makeMap  bool // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	mapKeys  []string
+	mapImpl  bool // the source map's Implicit flag
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -1420,23 +1437,31 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// Function-valued operands mean a fn-invoking word (apply, usurp,
 	// higher-order forms): their handlers return values the ENGINE
 	// re-steps on the tape, which a VM cannot honour. Stage 3
-	// territory.
+	// territory. A fn-STORING word (minilang/parselang register) is exempt:
+	// it stashes the fn in a module rule table for later interpreter-side
+	// invocation, never the VM tape, so the fn rides as an inert const.
+	introspect := fnIntrospectionWords[word]
+	fnStore := fnStoreWords[word]
 	for _, t := range sig.Args {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+			if fnStore {
+				continue
+			}
 			es.SiteCounts[SiteMeta]++
 			es.MarkUncompilable("function-valued operand at " + word + " (Stage 3)")
 			return
 		}
 	}
-	introspect := fnIntrospectionWords[word]
 	for _, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
 			// An INTROSPECTION word READS a fn value (its type/arity) and never
 			// invokes it, so the immutable fn value rides as a plain const
 			// operand the handler inspects — unlike a fn-INVOKING word (apply,
 			// higher-order, or `is` over a predicate fn), whose handler re-steps
-			// the fn on the tape, which the VM cannot honour.
-			if introspect {
+			// the fn on the tape, which the VM cannot honour. A fn-STORING word
+			// (register) likewise keeps the fn as data — the module interpreter,
+			// not the VM, runs it later.
+			if introspect || fnStore {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -1584,12 +1609,15 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 		if IsBareTypeNode(ins[i]) {
 			return false
 		}
-		if w, isEvent := es.producerWord(ins[i].ID); isEvent && (!r.IsBuiltinWord(w) || w == "make") {
-			// `make` yields a MUTABLE instance that bakes as a const SCHEMA MEMBER
-			// (the make-default work) when the list is bound to a typed variable
-			// (`def xs:[:(Box of …)] [(make …)]`), which a typed-def REPARENT then
-			// re-IDs — assembling it via OpMakeList instead severs that linkage and
-			// the residual refuses. Keep instance lists on the const-bake path.
+		if w, isEvent := es.producerWord(ins[i].ID); isEvent && !r.IsBuiltinWord(w) {
+			// A MODULE / user word may be stateful (`list-of [Rand.int …] N` — the
+			// generator advances a seed), so freezing one assembly of its check-mode
+			// result would replicate it instead of re-running per use. Those refuse.
+			// `make` is NO LONGER excluded: an OpMakeList of make EVENTS rebuilds
+			// fresh instances per run (sound, like OpMakeMap), so an instance list —
+			// `def xs [(make Box …) (make Box …)]`, typed or not — assembles natively
+			// and feeds each/fold/get rather than refusing on the const-bake path
+			// (where isInertConst rejects the mutable members).
 			return false
 		}
 		op, ok := es.resolveOperand(ins[i])
@@ -1604,6 +1632,53 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 	return true
 }
 
+// RecordMakeMap records the assembly of a COMPUTED map literal whose values are
+// not bakeable as an inert const — `make`'s construction body with a computed
+// field value (`make Outer {i:(make Inner …)}`, `{a:(context get 'x')}`).
+// autoEvalMap evaluated each value (their dispatches already recorded their own
+// events) and `vals` are the resulting values in `keys` order; `out` is the map.
+// The N value operands resolve normally (an event result, a const, a local) and
+// the dispatch lowers to OpMakeMap, which pops them and pairs each with its key.
+// The keys ride in the Program (MakeMapSpec) rather than the stack, so only the
+// values are operands. Returns false — leaving es untouched, so the map stays an
+// unresolvable residual and the program falls back — when a value has no compiled
+// home (a fn value, a nested dynamic carrier) or is a bare type node (a
+// type-pattern map, not a data map). Top frame only, mirroring RecordMakeList: a
+// map inside a fn body / closure / branch arm is re-evaluated per call, often
+// with a different scope, so freezing one assembly would diverge.
+func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool {
+	if !es.active() || len(es.frames) != 1 || len(keys) != len(vals) || len(keys) == 0 {
+		return false
+	}
+	// ops are in value order (vals[0] pairs with keys[0]); OpMakeMap reads the
+	// popped run deepest-first as value 0, so reverse like RecordMakeList:
+	// ops[0] is the LAST value (laid out on top), ops[N-1] the first (deepest).
+	ops := make([]emitOperand, len(vals))
+	for i := range vals {
+		// A bare type node value means a TYPE-pattern map (`{a:Integer}`) — the
+		// operand of `is`/`typeof`, not a data map to assemble. Never a make body.
+		if IsBareTypeNode(vals[i]) {
+			return false
+		}
+		// A computed value produced by `make` (a mutable instance) is exactly what
+		// this assembly exists to thread as a fresh per-run event — unlike
+		// RecordMakeList, which keeps instance lists on the typed-def const-bake
+		// path. So no make-producer exclusion here.
+		op, ok := es.resolveOperand(vals[i])
+		if !ok {
+			return false
+		}
+		ops[len(vals)-1-i] = op
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: "{…}", ops: ops, nout: 1, pos: pos,
+		makeMap: true, mapKeys: append([]string(nil), keys...), mapImpl: implicit,
+	}})
+	es.setProduced(out, seq)
+	return true
+}
+
 // RecordClosureCall records a higher-order word's dispatch where the code BODY
 // at position bodyPos was compiled to closure unit `unit` (plan P2). The body
 // operand lowers to OpPushClosure (the handler invokes it through the VM via
@@ -1611,7 +1686,7 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 // leaving es UNTOUCHED, when an operand is dynamic or of unknown provenance —
 // the caller then keeps the island path.
 func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, outs []Value, pos SrcPos) bool {
-	if !es.active() || sig == nil || len(outs) != 1 {
+	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
 	// A DYNAMIC non-body operand can't resolve; refuse. A dynamic OUTPUT is
@@ -1637,8 +1712,10 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: 1, pos: pos}})
-	es.setProduced(outs[0], seq)
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	if len(outs) == 1 {
+		es.setProduced(outs[0], seq)
+	}
 	return true
 }
 
@@ -2112,7 +2189,50 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			residualSeqs = append(residualSeqs, pr.seq)
 		}
 	}
-	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs)
+	// Residual ordering. The reconciliation below seats event results in stack
+	// order with literals/types as a trailing tail (on top), so it requires the
+	// residual to be in event*-literal* order. A residual with an event ABOVE a
+	// literal (`1 2 word [add] 10` → [literal, event]) refused as "call result
+	// above a literal". When the residual is out of order — and it is NOT the
+	// fn-value / dynamic auto-apply lead shape, which lays the residual out on the
+	// stack for OpCallDynamic and must not be promoted — force EVERY residual
+	// event to a frame local: a local re-pushes in any order, so the
+	// reconciliation pushes the whole residual (locals + consts + types) in exact
+	// order. The promotion only fires for an out-of-order residual, so the common
+	// in-order case is untouched.
+	// A residual that holds ANY fn value or dynamic value is the auto-apply
+	// boundary's territory (a leading or TRAILING fn applied to its neighbours —
+	// `5 m.f` → [5, fn], `[..] r.one-of`): reordering it would drop the apply and
+	// diverge. Leave those to the fn-value / refusal logic below; only a residual
+	// of pure resolvable data reorders.
+	var forceOrder map[int]bool
+	residualHasFnOrDynamic := false
+	for _, rv := range residual {
+		if rv.Dynamic || isFnValueResidual(rv) {
+			residualHasFnOrDynamic = true
+			break
+		}
+	}
+	if !residualHasFnOrDynamic {
+		seenLiteral, outOfOrder := false, false
+		for _, rv := range residual {
+			pr, isEvent := es.producedBy[rv.ID]
+			if isEvent && pr.idx == 0 && !es.zeroOutSeq[pr.seq] {
+				if seenLiteral {
+					outOfOrder = true
+				}
+			} else {
+				seenLiteral = true
+			}
+		}
+		if outOfOrder {
+			forceOrder = make(map[int]bool, len(residualSeqs))
+			for _, seq := range residualSeqs {
+				forceOrder[seq] = true
+			}
+		}
+	}
+	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}

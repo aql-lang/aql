@@ -311,7 +311,11 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 // carrier-identity DUP path, not a single local; branch/loop variadic results
 // never reach here. Slots are allocated from the unit's local namespace.
 // Returns seq → slot and rewrites every reference in place to a local operand.
-func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int) (map[int]int, map[int]bool) {
+// forceOrder names event seqs that MUST be promoted to a frame local even when
+// referenced once — the program residual is not in seatable event*-literal*
+// order (an event sits above a literal), so every residual event becomes a
+// local and the reconciliation re-pushes the whole residual in exact order.
+func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
 	for i := range events {
@@ -353,7 +357,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] >= 2 || es.valueDefs[ev.seq] || fragRef[ev.seq]:
+		case refs[ev.seq] >= 2 || es.valueDefs[ev.seq] || fragRef[ev.seq] || forceOrder[ev.seq]:
 			// Promote to a frame slot (store now, re-push per reference) when the
 			// result is referenced more than once, OR it is a NAMED value-def
 			// (`def x (expr)`, marked via MarkValueDef), OR it is read from INSIDE a
@@ -418,6 +422,29 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 				return msg.loopResults
 			}
 			results = append(results, i)
+		}
+	}
+	// N-event already-in-layout fast path. When EVERY operand is a prior-result
+	// (event) operand AND they already sit on top of the simulated stack in sig
+	// order (ops[0] on top, ops[1] next-deeper, …), no reordering is needed —
+	// verify the positions and accept, emitting nothing. This generalises the
+	// case-1 (ri==0/n-1) and case-2 already-in-layout paths to any N: a computed
+	// list `[gensym gensym gensym]` or a call over N computed args
+	// (`is-between (a) (b) (c)`) leaves its results adjacent and in order, which
+	// the old 3+-results default refused outright. Soundness: it only ACCEPTS a
+	// layout already correct (slotIs verifies each slot), so it can never seat an
+	// operand wrongly; a non-matching layout falls through to the switch (and its
+	// existing refusals) unchanged.
+	if n > 0 && len(results) == n && len(lw.vm) >= n {
+		allInPlace := true
+		for i := 0; i < n; i++ {
+			if !slotIs(lw.vm[len(lw.vm)-1-i], ops[i]) {
+				allInPlace = false
+				break
+			}
+		}
+		if allInPlace {
+			return ""
 		}
 	}
 	switch len(results) {
@@ -533,6 +560,12 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		// Assemble the n laid-out operands into a list (a computed list literal,
 		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.
 		lw.emit(OpMakeList, n, c.pos)
+	} else if c.makeMap {
+		// Assemble the n laid-out VALUE operands into a map (a computed make
+		// body, `make Outer {i:(make Inner …)}`); the keys ride in MakeMaps.
+		mi := len(lw.p.MakeMaps)
+		lw.p.MakeMaps = append(lw.p.MakeMaps, MakeMapSpec{Keys: c.mapKeys, Implicit: c.mapImpl})
+		lw.emit(OpMakeMap, mi, c.pos)
 	} else if c.poly {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.

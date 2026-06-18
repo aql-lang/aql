@@ -230,15 +230,27 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
-					body, err := native.RequireConcreteList(args[1], "Test.describe")
-					if err != nil {
-						return nil, err
-					}
 					run := activeRun(parent)
+					// Run the grouping body with the group name pushed on the path.
+					// Compiled path: the body arrived as a closure (nested Test.test
+					// cases each compiled to their own closure); run it via the VM
+					// seam. Interpreter path: sub-engine over the token list.
+					runBody := func() error {
+						if native.IsCompiledClosure(args[1]) {
+							_, e := native.InvokeBody(r, args[1], nil)
+							return e
+						}
+						body, err := native.RequireConcreteList(args[1], "Test.describe")
+						if err != nil {
+							return err
+						}
+						_, e := native.New(r).Run(body.Slice())
+						return e
+					}
 					run.mu.Lock()
 					run.path = append(run.path, name)
 					run.mu.Unlock()
-					_, runErr := native.New(r).Run(body.Slice())
+					runErr := runBody()
 					run.mu.Lock()
 					run.path = run.path[:len(run.path)-1]
 					run.mu.Unlock()
@@ -259,12 +271,28 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
+					run := activeRun(parent)
+					// Compiled path: the body arrived as a compiled CLOSURE (the
+					// bytecode compiler lowers `Test.test "n" [body]` via the
+					// callableWords closure path); run it through the VM seam. The
+					// interpreter path runs the token list in a sub-engine. Both nets
+					// 0 values; an assertion failure raises, runCase records pass/fail.
+					if native.IsCompiledClosure(args[1]) {
+						body := args[1]
+						run.runCase(r, name, func() error {
+							_, err := native.InvokeBody(r, body, nil)
+							return err
+						})
+						return nil, nil
+					}
 					body, err := native.RequireConcreteList(args[1], "Test.test")
 					if err != nil {
 						return nil, err
 					}
-					run := activeRun(parent)
-					run.runCase(r, name, body.Slice())
+					run.runCase(r, name, func() error {
+						_, e := native.New(r).Run(body.Slice())
+						return e
+					})
 					return nil, nil
 				},
 				Returns: []*native.Type{}, BarrierPos: -1,
@@ -969,13 +997,13 @@ func shrinkFailingInput(
 
 // runCase executes one test body, catching errors and recording a
 // TestResult under the current describe path.
-func (run *testRun) runCase(r *native.Registry, name string, body []native.Value) {
+func (run *testRun) runCase(r *native.Registry, name string, runBody func() error) {
 	run.mu.Lock()
 	pathCopy := append([]string(nil), run.path...)
 	run.mu.Unlock()
 
 	start := time.Now()
-	_, err := native.New(r).Run(body)
+	err := runBody()
 	elapsed := time.Since(start)
 
 	ok := err == nil
