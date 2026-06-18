@@ -136,9 +136,11 @@ func metaAttribution(source, reason string) (string, bool) {
 // Reconciled to the live actual (was a long-stale 201, set when refusals
 // numbered in the hundreds and never lowered as the ratchet fell); the
 // inert-reach code-body fix cleared the last non-meta `rand-map-from` row, the
-// catch frame cleared 2 non-meta `error [handler]` rows (42 → 40), and
-// value-def-locals in fn units cleared the 4 `error [… case …]` rows (40 → 36).
-const nonMetaCeiling = 36
+// catch frame cleared 2 non-meta `error [handler]` rows (42 → 40),
+// value-def-locals in fn units cleared the 4 `error [… case …]` rows (40 → 36),
+// and dropping RecordClosureCall's dynamic-input pre-decline cleared the caught
+// dynamic-error `error [get code]` row (36 → 35).
+const nonMetaCeiling = 35
 
 // TestMetaFallbackBoundary classifies every refused/islanded spec value row as
 // META (an expected, allowlisted interpreter fallback) or NON-META (remaining

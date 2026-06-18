@@ -164,15 +164,15 @@ operand-layout** — see the completion guide.
 ## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2410 compiled (5 islanded), 312 check-errors, 47 refused.**
-Root-cause axis: **soundness 30 · scheduling 9 · coverage 8 · opcode 0 ·
+**2769 rows — 2411 compiled (5 islanded), 312 check-errors, 46 refused.**
+Root-cause axis: **soundness 29 · scheduling 9 · coverage 8 · opcode 0 ·
 correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
 follow-on session, before the trailing fn-value boundary (→ 71), the
 quoted-operand inert words (→ 64), `rand-list-of` (→ 63), the value-arm `if`
 (→ 60), `returnsof` (→ 59), the module Table-type get fold (→ 57), the
-dot-access reach in an inert body (→ 53), the catch frame (→ 51), and
-value-def-locals in fn units (→ 47) landed. The remaining soundness rows are
-the hard core; see below.)
+dot-access reach in an inert body (→ 53), the catch frame (→ 51),
+value-def-locals in fn units (→ 47), and the dynamic-input-to-closure fix
+(→ 46) landed. The remaining soundness rows are the hard core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
@@ -182,7 +182,7 @@ the hard core; see below.)
 | 2 | code-body word (NoEvalArgs) | coverage | `reach` with a **computed key segment** (×2, `reach 5 [a (add 1 2) c]` / `reach 0 [x (k)]` — needs a foldable/bakeable `ParenExpr` segment in the NoEval body). The 2-body property words `prop`/`check-prop`/`skip` were NOT a closure problem — they bake their inert bodies as consts and only refused on the dot-access reach inside them, now cleared via `inertReachMember`. `rand-list-of` cleared via a `CallableSpec` |
 | 3 | if-branch lowering | scheduling\* | 1 computed-else/variadic-statement-if (**branch-result-modeling** — the variadic-merge refactor) + **2 cross-fn `break`/`continue`** (break inside a fn breaking the CALLER's loop — a cross-unit SOUNDNESS boundary, mislabeled scheduling, should stay refused). The value-arm/usurp-if rows cleared via symmetric value-then |
 | 6 | residual lowering | scheduling\* | NO LONGER the fn-value boundary (that cleared): `codequote`/`macroexpand` (meta, "not materialisable") + residual-ordering (`1 add2 vs`, parselang/Test.run-spec "result above a literal") |
-| 5 | dynamic input | soundness | soundness-gated; needs runtime guards |
+| 4 | dynamic input | soundness | soundness-gated; needs runtime guards. The simple cases already poly (`d drop`), and a caught DYNAMIC error to `error [handler]` now compiles (RecordClosureCall no longer pre-declines a resolvable dynamic input). The 4 remaining have specific blockers: flex-list mutation (`drop l`), the IO-context dynamic store receiver (`set` ×2), and the struct-module sub-registry (`getpath`, non-core poly) |
 | 2 | user fn call (Stage 3) | coverage | meta |
 | 1 | dispatch recovery | soundness | best-guess straddle |
 | 1 | fn-value-call boundary | soundness | the **2-arg mixed** apply `3 m.f 2` — the trailing path is bounded to one arg |
@@ -282,13 +282,14 @@ residual-ordering / meta** residuals — none is operand layout.
 bare-type clause) + **2 `each`/`scan`-over-map with a net-0 `drop` body** — see
 priority 5.
 
-**Honest distance to P7 (do not read "47" as "almost there").** Of the 47
-refusals, **30 are soundness-gated** — 17 operand-provenance (a heterogeneous
+**Honest distance to P7 (do not read "46" as "almost there").** Of the 46
+refusals, **29 are soundness-gated** — 17 operand-provenance (a heterogeneous
 long tail dominated by *correct* dynamic/error refusals; the §4.3 back-pointer
-was measured against it and is NOT justified — see priority 3), 5 dynamic input
-(runtime guards), the 5 dynamic-output rows that are all correct refusals
-(`await` + path-modifier — the error cluster is now fully compiled), plus a few
-singletons. Those do not yield to more lowering; they need a soundness story per
+was measured against it and is NOT justified — see priority 3), 4 dynamic input
+(runtime guards — simple cases already poly, the caught-dynamic-error case now
+compiles, the 4 left have specific blockers), the 5 dynamic-output rows that are
+all correct refusals (`await` + path-modifier — the error cluster is now fully
+compiled), plus a few singletons. Those do not yield to more lowering; they need a soundness story per
 cluster. Add the **5 islands** (higher-order/dynamic) that also gate P7. So the
 realistic near-term goal is **lowering the ceiling and shrinking the islands**,
 not imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains
@@ -779,6 +780,15 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **47 → 46** — dynamic input to a closure-dispatch word: `RecordClosureCall`
+  pre-declined ANY dynamic non-body operand, but the resolveOperand loop below
+  already declines one that genuinely can't resolve. A caught `do` error reaching
+  `error [handler]` is a resolvable event whose closure input is a FIXED `TError`
+  carrier — independent of the dynamic value, so the handler runs faithfully over
+  whatever it is. Dropping the pre-decline compiles `do [{x:1} !. y] error [get
+  code]` island-free, differential-clean. The 4 remaining dynamic-input rows keep
+  their own blockers (flex mutation, IO-context `set` receiver, struct-module
+  `getpath`).
 - **51 → 47** — value-def-locals in fn units: `planValueDefLocals` (the
   computed-result → frame-slot promotion) now runs for EVERY compiled unit, not
   just the top-level program — called in `StartFnCompile`'s `finish` while the

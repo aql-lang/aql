@@ -1811,16 +1811,14 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
-	// A DYNAMIC non-body operand can't resolve; refuse. A dynamic OUTPUT is
-	// fine — the body is compiled and the data operand concrete, so the
-	// dispatch is faithful; the result type being Any only means a downstream
-	// typed dispatch over it polys or refuses (e.g. filter's element-typed
-	// result). So check inputs, not the output.
-	for i := range args {
-		if i != bodyPos && (args[i].Carrier && args[i].Dynamic) {
-			return false
-		}
-	}
+	// A dynamic OUTPUT is fine — the body is compiled and the result type being
+	// Any only means a downstream typed dispatch over it polys or refuses. A
+	// dynamic non-body INPUT is handled by resolveOperand below: when it is a
+	// resolvable event (a caught `do` error reaching `error [handler]`, whose
+	// closure input is a FIXED carrier independent of the dynamic value — so the
+	// handler runs faithfully over whatever the value turns out to be) it rides
+	// as a stack operand; when it cannot resolve, resolveOperand declines and the
+	// island path stands. Faithfulness rides the differential gate.
 	ops := make([]emitOperand, len(args))
 	for i := range args {
 		if i == bodyPos {

@@ -26,6 +26,12 @@ func TestCatchFrame(t *testing.T) {
 		{`do [21 mul 2]`, "[42]"},                               // non-raising body still nets its value
 		{`do [raise "boom"] error [get message] end`, "[boom]"}, // handler reads the message
 		{`do [raise {code: too_big/q, message: "out of range", limit: 99}] error [case [[get code eq bad_input/q] [get message] [get code eq too_big/q] [get limit] "unexpected"]]`, "[99]"}, // predicate-clause case handler
+		// A caught DYNAMIC error (a getr-miss raises not_found, statically Any):
+		// the error reaches `error [handler]` as a dynamic value, but its closure
+		// input is a FIXED TError carrier independent of that value, so the handler
+		// runs faithfully — RecordClosureCall resolves the dynamic input as a stack
+		// operand rather than refusing it outright.
+		{`do [{x:1} !. y] error [get code]`, "[not_found]"},
 	}
 	for _, c := range pos {
 		a, _ := New()
