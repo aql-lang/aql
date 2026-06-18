@@ -47,6 +47,11 @@ is, see the **[Explanation](EXPLANATION.md)**.
 * [Built-in modules](#built-in-modules)
 * [Error codes](#error-codes)
 * [Capabilities](#capabilities)
+* [CLI reference](#cli-reference)
+  * [Subcommands](#subcommands)
+  * [Vault modes](#vault-modes)
+  * [Permission flags](#permission-flags)
+  * [Exit codes](#exit-codes)
 
 
 ## Syntax
@@ -2055,3 +2060,118 @@ disable any of them.
 
 Words attempting to use a disabled capability raise an
 `Error{code:'cap_denied}`.
+
+
+## CLI reference
+
+This section is a compact index of the `aql` binary. It is generated
+from the same source as the live help — `aql help` lists the
+subcommands and `aql help <subcommand>` summarises one — and the full
+operational documentation, with every flag and worked examples, is
+[CLI.md](CLI.md). For the *language* (words, categories, modules) use
+`aql describe` instead; see [AGENTS.md](AGENTS.md) for the
+`help` (tool) vs `describe` (language) split.
+
+### Subcommands
+
+One-shot commands (run and exit):
+
+| Subcommand | Purpose | Key flags |
+|------------|---------|-----------|
+| `run` / `aql [script]` | Execute a script, `-e` expression, or (no args) the REPL | `-e`, `-check`, `-compile`, `-options`, `--perms`, `--allow`/`--deny` |
+| `do <words…>` | Evaluate the arguments as one AQL expression and print the result | `--perms`, `--allow`/`--deny`, `--compile` |
+| `check [script]` | Static type-check; print diagnostics | `--json`, `--soft`, `--emit`, `-e` |
+| `fmt [file…]` | Format `.aql` files in place (whole tree if no args) | — |
+| `describe [name]` | Document a word, category, or module (the *language*) | — |
+| `help [subcommand]` | CLI usage, or one subcommand's summary | — |
+| `prep [dir]` | Parse `aql.jsonic` → `.aql/aql.json` | — |
+| `pack [dir]` | Build a publishable module zip (runs `prep` first) | — |
+| `clean [dir]` | Delete `.aql/*` except dotfiles | — |
+| `install <name>-x.y.z` | Download and install a module from a registry | `-r <url>` |
+| `register` | Create an account on a registry | `-r <url>` |
+| `login` | Log in to a registry; store the token | `-r <url>`, `--vault`, `--vault-alias` |
+| `publish [dir]` | Pack and upload the current module | `-r <url>`, `--vault`, `--vault-alias` |
+| `vault <mode>` | Manage the local key vault (see below) | `--folder`, `--suffix`, `-i` |
+| `policy <op>` | Inspect permission profiles: `list`, `show`, `validate`, `test`, `explain` | — |
+| `ctl <op> [svc]` | Control a running `aql serve`: `status`, `info`, `pause`, `resume`, `stop` | `--api`, `--token` |
+
+Long-running services (stay up; composable under `serve`):
+
+| Service | Purpose | Key flags |
+|---------|---------|-----------|
+| `repl` | Interactive read-eval-print loop (also bare `aql`) | `-r` |
+| `registry` | Serve modules + auth endpoints over HTTP | `-r <folder>`, `-p <port>` |
+| `lsp` | Language Server over stdio (default) or TCP | `-p <port>`, `-host` |
+| `exec` | HTTP code-execution endpoint (`POST /v1/exec`) | `-bind`, `-p`, `-r`, `--perms` |
+| `serve <svc> [+ <svc>…]` | Run one or more services in one process | `-c/--config <file>` |
+| `tui` | Terminal UI driven by a running supervisor's `api` | `--api`, `--token` |
+
+### Vault modes
+
+`aql vault [--folder=PATH] [--suffix=NAME] <mode> [args…]`, or
+`aql vault -i` for the interactive TUI. Passphrases are prompted
+hidden; set `AQL_VAULT_PASSPHRASE` only for non-interactive use.
+Backends: `auto` (default), `keychain`, `secret-service`, `wincred`,
+`file`, `1password`.
+
+| Mode | Purpose | Notable flags |
+|------|---------|---------------|
+| `init` | Initialise the vault; choose a backend | `--backend`, `--force` |
+| `status` | Print backend, secret count, lock state, generation | — |
+| `add [ns:]<alias>` | Store a secret | `--from-stdin`/`--from-env`/`--from-clipboard`, `--provider`, `--namespace`, `--expiry`, `-y` |
+| `get <alias>` | Retrieve a secret (redacted unless `--reveal`) | `--reveal` |
+| `list` | List aliases and metadata (no values) | `--namespace` |
+| `expiry` | List/set/clear expiry reminders | `--namespace`, `--within` |
+| `rm <alias>` | Remove a secret | `-y` |
+| `mv <from> <to>` | Rename a key, move namespaces, or rename a namespace (`ns:`) | — |
+| `rotate <alias>` | Replace a secret's value | `--from-stdin`/…, `--revoke-caps`, `--expiry`, `-y` |
+| `verify` | Reconcile store and keyring (alias `fsck`) | `--prune` |
+| `import <file>` | Import from a `.env` file or an encrypted bundle | — |
+| `export` | Export a portable, passphrase-encrypted bundle | `--out`, `--namespace` |
+| `grant <alias>` | Mint a scoped capability token (shown once) | `--agent`, `--hosts`, `--methods`, `--ttl`, `--max-calls`, `--max-cost-cents`, `--require-approval` |
+| `revoke <token-id>` | Revoke a capability token | — |
+| `lock` / `unlock` | Block / re-enable `get`/`grant` | — |
+| `config` | View or set config (e.g. `namespace.default`, `journal.keep`) | `--set k=v`, `--unset k` |
+| `password <verb>` | Scoped passwords (keyslots): `add`/`assign`/`set`/`rm`/`list` | `--scope`, `--namespaces`, `--rekey`, `-y` |
+| `policy` | Declaratively `apply`/`show` aliases + capabilities | — |
+| `proxy` | Local credential broker (HTTP) | `--listen`, `--allow-public` |
+| `mcp` | Stdio MCP server exposing aliases as tools | `--agent` |
+| `exec … -- <cmd>` | Run a command with secrets injected as env vars | `--for=RECIPE[=alias]` (repeatable), `--registry`, `--dry-run`, `--upper`, `--prefix`, `--clear-env` |
+| `providers` | List built-in provider presets | — |
+| `folder` | List known vaults; `folder add <dir>` registers one | — |
+| `scan [paths…]` | Scan file contents for secret-like strings | `--home`, `--match-vault`, `--quiet`, `--max-bytes` |
+| `audit` | Show the structured audit log | `--tail`, `--json` |
+| `history` | Show the content-revision history | `--limit` |
+| `restore <gen>` | Restore vault metadata to a past generation (admin) | `--list`, `--dry-run`, `-y` |
+
+### Permission flags
+
+Shared by every subcommand that runs user code (`run`, `do`, `exec`,
+and the REPL). A *policy* is a set of allow/deny rules over
+`scope.op` pairs; profiles are named bundles. See
+[CLI.md → Permissions](CLI.md#permissions).
+
+| Flag | Meaning |
+|------|---------|
+| `--perms <p>` | Policy: a profile name, a file path, or inline jsonic (auto-detected) |
+| `--perms-file <path>` | Policy file path (explicit) |
+| `--perms-inline <jsonic>` | Inline policy (explicit; `@-` = stdin, `@path` = file) |
+| `--allow <scope.op>` | Add an allow rule (repeatable) |
+| `--deny <scope.op>` | Add a deny rule (repeatable) |
+| `--allow-global <cap>` | Raise a global hard cap (repeatable) |
+| `--deny-global <cap>` | Lower a global hard cap (repeatable) |
+| `--policy-dry-run` | Observe-only: log what the policy would do, allow every call |
+
+Environment fallbacks: `AQL_POLICY`, `AQL_POLICY_FILE`. Bytecode
+compilation: `-compile` / `AQL_COMPILE` enable it, `AQL_NO_COMPILE`
+disables.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Error (parse, type-check failure, runtime error, I/O, usage) |
+| `2` | `vault scan` only: findings were reported |
+
+A child process run under `vault exec` propagates its own exit code.

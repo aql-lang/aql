@@ -32,6 +32,8 @@ syntax, the type system, and the runtime. It complements the
 * [Ideals and type-kinds](#ideals-and-type-kinds)
 * [Generics as memoised type construction](#generics-as-memoised-type-construction)
 * [Capabilities](#capabilities)
+* [The CLI: two surfaces](#the-cli-two-surfaces)
+* [The vault: why a local credential store](#the-vault-why-a-local-credential-store)
 * [Design influences](#design-influences)
 
 
@@ -786,6 +788,107 @@ because the per-call enforcement happens *inside* the words. Finer
 sandboxing (e.g., a path whitelist for `read`) is layered on top
 via the `capabilities.FileOps` interface, which an embedder
 provides directly.
+
+A second, finer layer sits above capabilities: **policy profiles**.
+Where a capability is a single on/off flag per system, a policy is a
+set of allow/deny rules over `scope.op` pairs (`disk.read`,
+`network`, `vault.get`, …) with optional quantitative caps. The CLI
+exposes them with `--perms <profile|file|inline>` plus ad-hoc
+`--allow`/`--deny` rules, and `aql policy {list,show,test,explain}`
+inspects them — `explain` prints the blame chain for a decision, so
+"why was this denied?" is always answerable. Capabilities decide
+*whether a kind of effect is possible at all*; policy decides
+*which specific calls are permitted*. See the [Reference → CLI](REFERENCE.md#cli-reference)
+and [CLI.md → Permissions](CLI.md#permissions) for the surface.
+
+
+## The CLI: two surfaces
+
+The `aql` binary has two kinds of subcommand, and the split is
+deliberate.
+
+**One-shot commands** run, transform, or inspect and then exit:
+`run`/`do` evaluate code, `check` type-checks, `fmt` formats, the
+project verbs (`prep`, `pack`, `install`, `publish`, …) move modules
+in and out of registries, and `vault` manages secrets. They are
+ordinary Unix tools — read input, write output, set an exit code —
+so they compose in shell pipelines and CI without ceremony.
+
+**Long-running services** stay up and serve: `repl`, `registry` (an
+HTTP module host), `lsp` (a Language Server for editors), `exec` (an
+HTTP code-execution endpoint), and the vault `proxy` (a credential
+broker). The umbrella `serve` command composes several of them into
+one process under a single graceful-shutdown lifecycle —
+`aql serve registry … + exec …` — and `ctl`/`tui` drive a running
+supervisor through its `api` service. The reason services are a
+separate surface is that they each own a scarce resource (a port, or
+stdio) and a lifetime; making that explicit keeps the one-shot tools
+free of server concerns and lets the supervisor reject conflicts
+(two services both wanting stdin) up front.
+
+The same permission model spans both surfaces: every execution path
+that runs user code (`run`, `do`, `exec`, the REPL) accepts the
+policy flags above, so an HTTP `exec` endpoint is sandboxed the same
+way a local `aql do` is.
+
+
+## The vault: why a local credential store
+
+Agents and build tools need credentials, and the usual answers are
+bad: a token pasted into `~/.npmrc` or `.env` is plaintext on disk;
+a token in a cloud secret manager needs the network and an identity
+just to start. The vault is a **local-first, encrypted** store that
+sits between those — secrets live on your machine, encrypted at
+rest, reachable without a network round-trip.
+
+Three design choices shape it:
+
+* **Metadata and values are split.** The store file
+  (`vault.jsonic`) holds only *locations and metadata* — alias
+  names, providers, namespaces, expiry reminders — never secret
+  values. The values live in the chosen **backend** (the OS keychain
+  by default; an encrypted file, Secret Service, wincred, or
+  1Password otherwise). So the file you might accidentally commit or
+  back up carries no secrets, and the same metadata can front
+  different backends on different machines.
+
+* **Delegation is by capability, not by sharing the secret.** You
+  rarely want to hand an agent the raw token. `vault grant` mints a
+  **scoped capability token** — a bearer string shown once, stored
+  only as a hash — bound to an alias, a host/method allowlist, a TTL,
+  and optional call/cost caps. The agent presents it to the
+  `proxy` (or the `mcp` server), which injects the real secret
+  server-side and enforces the scope. Revocation (`vault revoke`) is
+  immediate because the broker checks the live store on every call.
+  This mirrors the capability-token pattern: authority is
+  attenuable, expiring, and auditable, and the secret itself never
+  leaves the broker.
+
+* **Multi-party access is by keyslot.** A vault can be opened by
+  several **scoped passwords** (`vault password`), each a keyslot
+  granting a scope (read/write/move/admin) over a set of namespaces.
+  This is how a CI password can read `ci:` secrets without being able
+  to touch `prod:`, and how access is rotated (`--rekey`) or revoked
+  without re-encrypting the whole vault.
+
+Around that core: every mutation is **integrity-sealed** and written
+to an append-only **content history** (`vault history` /
+`restore`), and every read/grant/exec is recorded in a structured
+**audit log** that never contains secret values. The interactive
+**TUI** (`aql vault -i`) exists because the surface is large (~30
+modes, hidden-input prompts, typed confirmations) and hard to
+discover by flag alone; it always shows the available keys on
+screen.
+
+Finally, the vault's *consumption* surface — `exec`, `proxy`, `mcp` —
+is kept CLI-only and never run from the TUI. `exec` injects secrets
+into a child process's environment (with `--for` recipes that place
+a token in the exact variable a publishing tool reads, so the secret
+never touches `~/.npmrc` or the command line); `proxy` and `mcp` are
+long-lived brokers. Each hands the terminal, a port, or stdio to
+something else, which is the services surface, not an interactive
+menu. The full operational reference is [CLI.md → Secrets](CLI.md#secrets);
+a worked walkthrough is [Tutorial → the vault](TUTORIAL.md#21-manage-secrets-with-the-vault).
 
 
 ## Design influences

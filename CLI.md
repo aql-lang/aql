@@ -383,6 +383,7 @@ A local credentials vault, backed by the OS keyring where possible
 ```bash
 aql vault -i                            # interactive TUI (menu-driven; keys shown on screen)
 aql vault init                          # initialise, pick backend
+aql vault status                        # backend, secret count, lock state, generation
 aql vault add --from-clipboard github_token   # read from clipboard, then wipe it
 aql vault add --from-stdin github_token       # read one line from stdin
 aql vault add github_token                     # prompt (input not echoed)
@@ -398,6 +399,10 @@ aql vault expiry clear github_token     # remove an expiry
 aql vault rm github_token               # remove (also: remove, delete)
 aql vault mv github_token proj:gh       # rename / move between namespaces (also: rename)
 aql vault mv proj: team:                # rename a whole namespace
+aql vault rotate --from-stdin github_token         # replace the value (keeps the alias/metadata)
+aql vault rotate --revoke-caps --from-stdin github_token  # …and revoke every capability on it (incident response)
+aql vault lock                          # block get/grant until unlocked
+aql vault unlock                        # re-enable access
 aql vault verify                        # reconcile store + keyring (--prune repairs)
 aql vault export --out=vault.aqlx       # portable, passphrase-encrypted bundle
 aql vault import vault.aqlx             # restore a bundle (or a .env file)
@@ -411,6 +416,12 @@ aql vault audit                         # show the structured audit log
 aql vault audit --action proxy.request --last 20
 aql vault audit --json                  # raw JSONL
 aql vault policy apply policy.aql       # declaratively apply policy
+aql vault config                        # show vault config
+aql vault config --set namespace.default=proj   # set a config key (also --unset)
+aql vault password add --scope=read --namespaces=ci ci-bot  # scoped password (keyslot)
+aql vault password list                 # list keyslots and their scope/namespaces
+aql vault history                       # content-revision history (newest first)
+aql vault restore 7                     # restore metadata to generation 7 (admin)
 aql vault proxy                         # run local credential broker (loopback only)
 aql vault mcp                           # stdio MCP server over aliases
 aql vault exec gh,openai -- mycmd       # run mycmd with secrets in env
@@ -421,6 +432,67 @@ aql vault folder add ~/.othervault      # register an already-existing vault int
 aql vault --folder=/secure/vault --suffix=work init   # vault at /secure/vault/vault.work.*
 AQL_VAULT_FOLDER=/secure/vault AQL_VAULT_SUFFIX=work aql vault list
 ```
+
+#### Mode notes
+
+A few modes that need more than one line:
+
+- **`rotate`** replaces a secret's *value* while keeping the alias and
+  its metadata. Read the new value the same ways as `add`
+  (`--from-stdin`/`--from-env`/`--from-clipboard`, or an interactive
+  prompt). `--revoke-caps` additionally revokes every capability
+  scoped to the alias — the incident-response move when a token leaks.
+  `--expiry` updates the reminder; omit it to keep the current one.
+
+- **`lock` / `unlock`** flip a flag in the store that blocks `get` and
+  `grant` (and most mutations) without destroying anything — useful
+  for an admin handoff or while investigating an incident. The values
+  stay encrypted in the backend; `unlock` re-enables access.
+
+- **`config`** reads and writes vault settings. `aql vault config`
+  prints them; `--set key=value` / `--unset key` change one. Keys the
+  vault reads: `namespace.default` (the namespace bare aliases use),
+  `journal.keep` (how many content-history generations to retain), and
+  `audit.enabled` (set to `false` to stop writing the audit log).
+
+- **`password`** manages **keyslots** — the scoped passwords that can
+  open the vault. `password add --scope=<read|write|move|admin>
+  --namespaces=<list> <name>` mints one (a `*` namespace = all, `:` =
+  root); `assign` binds it to a user, `set` changes its value, `rm`
+  removes it (`--rekey` re-encrypts the namespaces it could reach),
+  and `list` shows them. This is how a CI password reads `ci:` secrets
+  without being able to touch `prod:`. See
+  [Explanation → the vault](EXPLANATION.md#the-vault-why-a-local-credential-store)
+  for the model.
+
+- **`history` / `restore`** expose the append-only content journal.
+  `history` lists past generations (`--limit N` for the newest few);
+  `restore <generation>` rolls the *metadata* back to one of them
+  (admin-scoped; `--list` enumerates restorable points, `--dry-run`
+  previews). Secret values in the backend are not rewound.
+
+- **`scan`** matches provider-token *shapes* in file contents
+  (defaults to `.`). `--home` instead sweeps the well-known credential
+  dotfiles (`~/.npmrc`, `~/.netrc`, `~/.aws/credentials`, `~/.pypirc`,
+  `~/.gem/credentials`, …) for plaintext secrets in those tools' own
+  formats; `--match-vault` flags which findings are already vaulted;
+  `--quiet` prints nothing and relies on the exit code (`2` = found);
+  `--max-bytes` skips large files. Env-var references like
+  `${NPM_TOKEN}` and obvious placeholders are not flagged.
+
+- **`audit`** prints the structured log. Each event records an
+  `action` (e.g. `vault.add`, `vault.exec`, `proxy.request`), the
+  `alias`, an `outcome` (`ok`/`error`/`denied`), and a `reason` —
+  never a secret value. Filter with `--action`/`--last`, or `--json`
+  for raw JSONL.
+
+- **`mcp`** runs a stdio [Model Context Protocol](https://modelcontextprotocol.io)
+  server that exposes the vault's aliases to an MCP-aware agent as
+  request tools, brokering the real secret server-side exactly like
+  `proxy`. `--agent=<name>` sets the identity attributed in the audit
+  log and matched against capabilities (default `mcp`). It speaks
+  JSON-RPC on stdin/stdout, so it is launched by the agent host, not
+  run interactively.
 
 #### Interactive TUI (`aql vault -i`)
 
