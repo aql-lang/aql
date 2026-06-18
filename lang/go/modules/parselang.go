@@ -2,11 +2,14 @@ package modules
 
 import (
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 	"sync"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
+	tabnasini "github.com/tabnas/ini/go"
 )
 
 // The aql:parselang module — the ParseLang namespace of named parsers
@@ -98,6 +101,15 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("source", wrapMiniFnDef("parselang-source", [][]native.FnParam{
 		{{Type: native.TAny}},
 	}, []*native.Type{native.TString}, nil, subReg))
+
+	// ---- built-in parser kinds ----------------------------------------
+	// `ini` ships in the box, so `import "aql:parselang"` then `parse ini
+	// '<text>'` works with no host registration. It decodes INI text to a
+	// Map via github.com/tabnas/ini/go and gets source resolution (String
+	// or {src:…}) for free, like every host parser.
+	if err := installHostParser(exports, subReg, iniParserSpec()); err != nil {
+		return native.ModuleDesc{}, err
+	}
 
 	// ---- host-registered parsers --------------------------------------
 	// create=true: record the live module even with no host parsers yet,
@@ -320,6 +332,84 @@ func parseRegisterHandler(exports *native.OrderedMap) native.Handler {
 		}
 		exports.Set(key, args[1])
 		return nil, nil
+	}
+}
+
+// iniParserSpec is the built-in `ini` parser kind. `parse ini '<text>'`
+// decodes INI text to a Map using github.com/tabnas/ini/go: top-level
+// `key = value` lines become Map fields, a `[section]` header becomes a
+// nested Map (a dotted `[a.b]` header nests further), and each value is a
+// String unless the parser recognises a boolean. Malformed input raises
+// [aql/parse_syntax_error] — loud, never a silent none.
+func iniParserSpec() ParseLangSpec {
+	return ParseLangSpec{
+		Name:    "ini",
+		Returns: []*native.Type{native.TMap},
+		Handler: parseIniHandler,
+	}
+}
+
+// parseIniHandler runs the tabnas INI parser over the (already-resolved)
+// source string and converts its map[string]any result into an AQL Map.
+func parseIniHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	src, err := args[0].AsConcreteString() // resolved by the framework
+	if err != nil {
+		return nil, r.AqlError("parse_error", "ini: src: "+err.Error(), "parse_ini")
+	}
+	m, perr := tabnasini.Parse(src)
+	if perr != nil {
+		return nil, r.AqlErrorHint("parse_syntax_error",
+			"ini: "+perr.Error(), "parse_ini",
+			"check that section headers read [name] and entries read key = value")
+	}
+	return []native.Value{iniMapToValue(m)}, nil
+}
+
+// iniMapToValue converts a decoded INI map to an AQL Map, ordering keys
+// deterministically (the parser hands back an unordered Go map).
+func iniMapToValue(m map[string]any) native.Value {
+	om := native.NewOrderedMap()
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		om.Set(k, iniAnyToValue(m[k]))
+	}
+	return native.NewMap(om)
+}
+
+// iniAnyToValue maps a single decoded INI value to an AQL Value. The parser
+// emits strings, booleans, numbers, nested section maps and value lists; an
+// unrecognised shape degrades to its string form rather than erroring.
+func iniAnyToValue(v any) native.Value {
+	switch val := v.(type) {
+	case nil:
+		return native.NewTypeLiteral(native.TNone)
+	case bool:
+		return native.NewBoolean(val)
+	case string:
+		return native.NewString(val)
+	case float64:
+		if val == math.Trunc(val) && !math.IsInf(val, 0) && !math.IsNaN(val) {
+			return native.NewInteger(int64(val))
+		}
+		return native.NewFloat(val)
+	case int:
+		return native.NewInteger(int64(val))
+	case int64:
+		return native.NewInteger(val)
+	case []any:
+		elems := make([]native.Value, len(val))
+		for i, item := range val {
+			elems[i] = iniAnyToValue(item)
+		}
+		return native.NewList(elems)
+	case map[string]any:
+		return iniMapToValue(val)
+	default:
+		return native.NewString(fmt.Sprintf("%v", val))
 	}
 }
 

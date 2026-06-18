@@ -38,7 +38,7 @@ import (
 // never raise them without a documented decision.
 const (
 	pinnedFalsePositives     = 120 // value rows the checker wrongly errors on (June 2026; was 119 — +1 module-minilang §7 register-compiled-then-use row, like the MiniLang.register rows the checker can't see the runtime register for; was 114 — +5 module-parselang register-then-parse rows; was 132 — macro installs in check mode; was 122 — make returns a value carrier of the made type, not the type literal)
-	pinnedUnflaggedErrorRows = 141 // ERROR rows the checker is silent on (+2 record.tsv §V runtime-only errors: a numeric record field now rejects a non-numeric (String/Boolean) source at make time, which the static checker does not predict; +1 patrun.tsv runtime-only error the checker can't predict statically — a non-Scalar pattern value to `add`; was 138 — fold-over-map result typing surfaces one more error; June 2026; was 136 — +3 module-minilang §7 runtime-only errors: mini_no_transducer / mini_bad_compiler / mini_bad_name; was 131 — +5 module-parselang runtime-only errors; was 132)
+	pinnedUnflaggedErrorRows = 143 // ERROR rows the checker is silent on (+2 module-parselang §5 ini runtime-only errors: parse_file_unsupported / parse_bad_source resolve the source in the runtime shell, so the static checker cannot predict them; +2 record.tsv §V runtime-only errors: a numeric record field now rejects a non-numeric (String/Boolean) source at make time, which the static checker does not predict; +1 patrun.tsv runtime-only error the checker can't predict statically — a non-Scalar pattern value to `add`; was 138 — fold-over-map result typing surfaces one more error; June 2026; was 136 — +3 module-minilang §7 runtime-only errors: mini_no_transducer / mini_bad_compiler / mini_bad_name; was 131 — +5 module-parselang runtime-only errors; was 132)
 )
 
 func TestCheckAccuracyRatchet(t *testing.T) {
@@ -392,7 +392,7 @@ func stackTypes(vs []eng.Value) string {
 // caught. Unlike type-soundness this is a PRECISION metric, not a
 // soundness one: a high count is imprecise, not unsound.
 
-const pinnedAnyFrontierRows = 225 // pristine origin/main already measures 208 against the prior 194 pin — a pre-existing precision regression on main (the per-file breakdown here is identical to main except for patrun.tsv), NOT introduced by this branch; +17 patrun.tsv rows whose `find` returns a dynamic Any (the matcher is a dynamic-dispatch container, so a found value's static type is unknowable). was 194 — fold over a map narrows to the accumulator type (the list ReturnsFns are collection-agnostic); was 196; was 201 (list-index), 208 (struct-util), 217 (filter), 241 (case), 286 (item #4 field access); see TestCheckAnyFrontier
+const pinnedAnyFrontierRows = 229 // was 225 — +4 module-parselang ini rows (parse returns Any, so a parsed value accessed with get ends Any). pristine origin/main already measures 208 against the prior 194 pin — a pre-existing precision regression on main (the per-file breakdown here is identical to main except for patrun.tsv), NOT introduced by this branch; +17 patrun.tsv rows whose `find` returns a dynamic Any (the matcher is a dynamic-dispatch container, so a found value's static type is unknowable). was 194 — fold over a map narrows to the accumulator type (the list ReturnsFns are collection-agnostic); was 196; was 201 (list-index), 208 (struct-util), 217 (filter), 241 (case), 286 (item #4 field access); see TestCheckAnyFrontier
 
 func TestCheckAnyFrontier(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")

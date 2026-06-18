@@ -4,14 +4,21 @@ go 1.24.7
 
 require (
 	github.com/aql-lang/aql/eng/go v0.0.0
+	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/jsonicjs/csv/go v0.1.2
 	github.com/jsonicjs/jsonic/go v0.1.6
+	github.com/tabnas/ini/go v0.2.0
 	golang.org/x/text v0.21.0
 	modernc.org/sqlite v1.46.1
 	voxgiguniversalsdk v0.1.1
 )
 
-require github.com/cockroachdb/apd/v3 v3.2.3 // indirect
+require (
+	github.com/tabnas/hoover/go v0.2.0 // indirect
+	github.com/tabnas/json/go v0.2.0 // indirect
+	github.com/tabnas/jsonic/go v0.2.0 // indirect
+	github.com/tabnas/parser/go v0.2.0 // indirect
+)
 
 require (
 	github.com/jsonicjs/directive/go v0.1.0 // indirect

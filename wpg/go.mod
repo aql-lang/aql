@@ -16,6 +16,11 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/tabnas/hoover/go v0.2.0 // indirect
+	github.com/tabnas/ini/go v0.2.0 // indirect
+	github.com/tabnas/json/go v0.2.0 // indirect
+	github.com/tabnas/jsonic/go v0.2.0 // indirect
+	github.com/tabnas/parser/go v0.2.0 // indirect
 	github.com/voxgig/struct v0.1.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/sys v0.37.0 // indirect
