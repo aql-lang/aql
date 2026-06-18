@@ -164,20 +164,43 @@ func TestSecretDetailMasksRevealsAndInjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := newRootModel(ctl)
+	cmds := injectCommands("github_token", "github")
 
-	masked := m.secretDetailBody("github_token", false, "", 0)
+	masked := m.secretDetailBody("github_token", false, "", cmds, 0)
 	if strings.Contains(masked, "ghp-xyz") {
 		t.Error("masked detail must not show the value")
 	}
-	for _, want := range []string{"hidden", "github", "aql vault exec github_token", "--for=npm"} {
+	// The --for recipe matches the secret's provider (github, not npm).
+	for _, want := range []string{"hidden", "github", "aql vault exec github_token", "--for=github"} {
 		if !strings.Contains(masked, want) {
 			t.Errorf("detail missing %q", want)
 		}
 	}
+	if strings.Contains(masked, "--for=npm") {
+		t.Error("--for should match the provider (github), not be hardcoded npm")
+	}
 
-	shown := m.secretDetailBody("github_token", true, "ghp-xyz", 0)
+	shown := m.secretDetailBody("github_token", true, "ghp-xyz", cmds, 0)
 	if !strings.Contains(shown, "ghp-xyz") {
 		t.Error("revealed detail should show the value")
+	}
+}
+
+func TestInjectCommandsMatchProvider(t *testing.T) {
+	// A provider that is a known recipe -> --for matches it.
+	got := injectCommands("vxg:github", "github")
+	if len(got) != 3 || !strings.Contains(got[2].cmd, "--for=github ") {
+		t.Errorf("github provider should yield --for=github: %q", got[2].cmd)
+	}
+	if c := injectCommands("k", "cargo")[2].cmd; !strings.Contains(c, "--for=cargo ") || !strings.Contains(c, "cargo publish") {
+		t.Errorf("cargo: %q", c)
+	}
+	// A non-recipe provider (or none) -> generic placeholder.
+	if c := injectCommands("k", "openai")[2].cmd; !strings.Contains(c, "--for=<tool>") {
+		t.Errorf("non-recipe provider should be generic: %q", c)
+	}
+	if c := injectCommands("k", "")[2].cmd; !strings.Contains(c, "--for=<tool>") {
+		t.Errorf("no provider should be generic: %q", c)
 	}
 }
 
@@ -203,6 +226,23 @@ func TestSecretDetailSelectRevealCopy(t *testing.T) {
 	}
 	if !strings.Contains(s.View(80, 24), "▸ ") {
 		t.Error("the selected inject command should carry the ▸ cursor")
+	}
+}
+
+func TestProviderOptionsUnion(t *testing.T) {
+	vals := map[string]int{}
+	for _, o := range providerOptions() {
+		vals[o.Value]++
+	}
+	// HTTP providers AND publish-recipe tools are all selectable.
+	for _, want := range []string{"", "openai", "anthropic", "github", "generic", "npm", "cargo", "pypi", "yarn", "pnpm", "terraform", "hex", "cocoapods"} {
+		if vals[want] == 0 {
+			t.Errorf("provider options missing %q", want)
+		}
+	}
+	// github is both a provider preset and a recipe — must appear once.
+	if vals["github"] != 1 {
+		t.Errorf("github should appear once, got %d", vals["github"])
 	}
 }
 

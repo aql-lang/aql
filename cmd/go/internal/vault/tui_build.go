@@ -7,6 +7,7 @@ package vault
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -295,14 +296,19 @@ type injectCmd struct {
 }
 
 func (m *rootModel) buildSecretDetail(alias string) screen {
-	return &secretDetailScreen{m: m, alias: alias, cmds: injectCommands(alias)}
+	provider := ""
+	if a, ok := m.ctl.alias(alias); ok {
+		provider = a.Provider
+	}
+	return &secretDetailScreen{m: m, alias: alias, cmds: injectCommands(alias, provider)}
 }
 
 // injectCommands are the exec recipes shown (and copyable) on the detail page,
-// each with a note on its purpose.
-func injectCommands(alias string) []injectCmd {
+// each with a note on its purpose. The --for recipe is chosen to match the
+// secret's provider when that provider is a known tool.
+func injectCommands(alias, provider string) []injectCmd {
 	env := strings.ToUpper(aliasBase(alias))
-	return []injectCmd{
+	cmds := []injectCmd{
 		{
 			"aql vault exec " + alias + " -- <your command>",
 			"Run any command with the secret injected as the $" + aliasBase(alias) + " environment variable.",
@@ -311,10 +317,46 @@ func injectCommands(alias string) []injectCmd {
 			"aql vault exec " + alias + "=" + env + " -- <your command>",
 			"Same, but choose the variable's name (here $" + env + ").",
 		},
-		{
-			"aql vault exec --for=npm " + alias + " -- npm publish",
-			"Set up a tool's credential env — --for=npm·yarn·pnpm·bun·pypi·uv·poetry·cargo·gem·hex·swift·cocoapods·composer·github·gitlab·terraform.",
-		},
+	}
+	if rec, ok := lookupPublishRecipe(provider); ok {
+		cmds = append(cmds, injectCmd{
+			"aql vault exec --for=" + rec.name + " " + alias + " -- " + recipeExampleCmd(rec.name),
+			"Inject the token in " + rec.name + "'s exact credential env — --for=" + rec.name + " matches this secret's provider.",
+		})
+	} else {
+		cmds = append(cmds, injectCmd{
+			"aql vault exec --for=<tool> " + alias + " -- <publish command>",
+			"Set up a tool's credential env — --for=" + strings.Join(publishRecipeNames(), "·") + ".",
+		})
+	}
+	return cmds
+}
+
+// recipeExampleCmd is a representative command for a --for recipe.
+func recipeExampleCmd(name string) string {
+	switch name {
+	case "cargo":
+		return "cargo publish"
+	case "gem":
+		return "gem push pkg.gem"
+	case "pypi":
+		return "twine upload dist/*"
+	case "hex":
+		return "mix hex.publish"
+	case "swift":
+		return "swift package-registry publish"
+	case "cocoapods":
+		return "pod trunk push *.podspec"
+	case "composer":
+		return "composer install"
+	case "github":
+		return "gh release upload v1 dist/*"
+	case "gitlab":
+		return "glab release create v1"
+	case "terraform":
+		return "terraform apply"
+	default: // npm, yarn, pnpm, bun, uv, poetry, hatch, flit
+		return name + " publish"
 	}
 }
 
@@ -407,7 +449,7 @@ func (s *secretDetailScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 }
 
 func (s *secretDetailScreen) View(width, height int) string {
-	return s.m.secretDetailBody(s.alias, s.shown, s.value, s.cursor)
+	return s.m.secretDetailBody(s.alias, s.shown, s.value, s.cmds, s.cursor)
 }
 
 // detailValueCol is where the value column starts ("  " + 11-wide label).
@@ -419,8 +461,8 @@ func detailRow(label, value string) string {
 }
 
 // secretDetailBody renders the detail page for an alias with the given reveal
-// state and selected command index.
-func (m *rootModel) secretDetailBody(alias string, shown bool, value string, sel int) string {
+// state, inject commands, and selected command index.
+func (m *rootModel) secretDetailBody(alias string, shown bool, value string, cmds []injectCmd, sel int) string {
 	a, ok := m.ctl.alias(alias)
 	var b strings.Builder
 	b.WriteString(tuiTitleStyle.Render("Secret  " + alias))
@@ -448,7 +490,7 @@ func (m *rootModel) secretDetailBody(alias string, shown bool, value string, sel
 	b.WriteByte('\n')
 	b.WriteString(tuiSectionStyle.Render("Inject into a process — ↑/↓ select · c copy"))
 	b.WriteByte('\n')
-	for i, ic := range injectCommands(alias) {
+	for i, ic := range cmds {
 		cursor, style := "  ", tuiPathStyle
 		if i == sel {
 			cursor, style = tuiCursorStyle.Render("▸ "), tuiPathStyle.Bold(true)
@@ -472,12 +514,29 @@ func expiryCountdown(rfc3339 string) string {
 	return expiryStatus(t, time.Now())
 }
 
-// providerOptions builds the Provider select: "(none)" plus the known
-// provider presets, so the field is a constrained choice, not free text.
+// providerOptions builds the Provider select: "(none)" plus every service
+// aql knows about — the HTTP provider presets (openai, anthropic, …) AND the
+// publish-recipe tools (npm, cargo, pypi, …) — deduped and sorted, so a secret
+// can be tagged with the tool/service it belongs to without free text.
 func providerOptions() []huh.Option[string] {
-	opts := []huh.Option[string]{huh.NewOption("(none)", "")}
+	seen := map[string]bool{}
+	var names []string
+	add := func(n string) {
+		if n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
 	for _, p := range ListProviders() {
-		opts = append(opts, huh.NewOption(p.Name, p.Name))
+		add(p.Name)
+	}
+	for _, n := range publishRecipeNames() {
+		add(n)
+	}
+	sort.Strings(names)
+	opts := []huh.Option[string]{huh.NewOption("(none)", "")}
+	for _, n := range names {
+		opts = append(opts, huh.NewOption(n, n))
 	}
 	return opts
 }
