@@ -579,11 +579,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			locals[lp.slot] = NewInteger(lp.cur)
 			lp.cur += lp.step
-		case OpSwap:
-			if len(stack) < 2 {
-				return nil, vmErrAt(curDebug, pc, "SWAP underflow")
+		case OpSwap, OpReverse:
+			// SWAP is reverse-of-2; OpReverse reverses the top Arg. Shared helper.
+			var err error
+			if stack, err = vmShuffle(stack, in.Op, int(in.Arg), curDebug, pc); err != nil {
+				return nil, err
 			}
-			stack[len(stack)-1], stack[len(stack)-2] = stack[len(stack)-2], stack[len(stack)-1]
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
 			n := len(s.Sig.Args)
@@ -770,6 +771,23 @@ func vmReturnTypeErr(r *Registry, funcName string, index int, expected *Type, go
 
 func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
 	return r.AqlError("type_error", returnCountErrorText(funcName, expected, got), funcName)
+}
+
+// vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
+// case, OpReverse takes n from arg. Used to seat an N-operand call's computed
+// args (which evaluate into reverse sig order) onto the stack in sig order.
+func vmShuffle(stack []Value, op Opcode, arg int, debug []SrcPos, pc int) ([]Value, error) {
+	n := 2
+	if op == OpReverse {
+		n = arg
+	}
+	if len(stack) < n {
+		return nil, vmErrAt(debug, pc, op.String()+" underflow")
+	}
+	for i, j := len(stack)-n, len(stack)-1; i < j; i, j = i+1, j-1 {
+		stack[i], stack[j] = stack[j], stack[i]
+	}
+	return stack, nil
 }
 
 // checkReturnContract enforces a compiled fn's declared return contract at a RET

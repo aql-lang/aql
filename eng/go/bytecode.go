@@ -142,6 +142,15 @@ const (
 	// (shared taxonomy text) at exactly the point execution reaches it. Terminal:
 	// the recorder ends the program at the trap (everything after is unreachable).
 	OpTrap
+	// OpReverse reverses the top Arg operand-stack values in place. It is the
+	// stack-scheduling primitive for an N-operand call whose computed args sit in
+	// exact REVERSE signature order — the common forward-call shape `f (a)(b)(c)`,
+	// where the args evaluate left→right so sig position 0 ends up DEEPEST, but the
+	// call wants it on top. SWAP handles N=2; OpReverse generalises it to N≥3
+	// (the 3-deep rotate the VM previously had no opcode for, so layoutOperands
+	// refused). Emitted only when layoutOperands recognises an exact reverse, so
+	// it can never seat an operand wrongly.
+	OpReverse
 )
 
 func (o Opcode) String() string {
@@ -188,6 +197,8 @@ func (o Opcode) String() string {
 		return "MAKE_MAP"
 	case OpTrap:
 		return "TRAP"
+	case OpReverse:
+		return "REVERSE"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -443,6 +454,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " m%-3d ; assemble {%s}", in.Arg, strings.Join(mm.Keys, " "))
 		case OpTrap:
 			fmt.Fprintf(sb, " x%-3d ; trap %s", in.Arg, p.Traps[in.Arg].Code)
+		case OpReverse:
+			fmt.Fprintf(sb, " n%-3d ; reverse top %d", in.Arg, in.Arg)
 		}
 		sb.WriteByte('\n')
 	}

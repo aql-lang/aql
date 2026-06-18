@@ -449,6 +449,30 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 			return ""
 		}
 	}
+	// N-event reverse fast path (N≥3). When every operand is a prior-result
+	// (event) operand sitting in exact REVERSE sig order on top — ops[n-1] on
+	// top, ops[0] deepest — one OpReverse seats them in sig order. This is the
+	// common forward-call shape `f (a)(b)(c)`: the args evaluate left→right so
+	// sig position 0 lands DEEPEST, but the call wants it on top. N=2 is the
+	// case-2 SWAP below; N≥3 needed the 3-deep rotate the VM lacked. Like the
+	// in-layout fast path it only ACCEPTS an exactly-recognised layout (slotIs
+	// verifies every slot), so it can never seat an operand wrongly.
+	if n >= 3 && len(results) == n && len(lw.vm) >= n {
+		allReversed := true
+		for i := 0; i < n; i++ {
+			if !slotIs(lw.vm[len(lw.vm)-1-i], ops[n-1-i]) {
+				allReversed = false
+				break
+			}
+		}
+		if allReversed {
+			lw.emit(OpReverse, n, pos)
+			for a, b := len(lw.vm)-n, len(lw.vm)-1; a < b; a, b = a+1, b-1 {
+				lw.vm[a], lw.vm[b] = lw.vm[b], lw.vm[a]
+			}
+			return ""
+		}
+	}
 	switch len(results) {
 	case 0:
 		// Push consts/locals deepest-first so sig position 0 lands on top.

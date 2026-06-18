@@ -716,6 +716,34 @@ func TestEmitTrap(t *testing.T) {
 	}
 }
 
+// TestEmitReverse: an N-arg (N>=3) call whose args are all COMPUTED evaluates
+// them left-to-right (sig position 0 lands deepest), so the lowerer reverses the
+// top N with one OpReverse to seat them in sig order — the 3-deep rotate the VM
+// previously had no opcode for (it refused as "operand shape beyond Stage 1").
+func TestEmitReverse(t *testing.T) {
+	src := `range (1 add 0) (4 sub 0) (2 sub 1)` // range 1 4 1 -> [1 2 3], all 3 args computed
+	got, reason := compile(t, src)
+	if got == "" {
+		t.Fatalf("%q must compile via OpReverse, but refused: %q", src, reason)
+	}
+	if !strings.Contains(got, "REVERSE") {
+		t.Errorf("%q compiled without a REVERSE:\n%s", src, got)
+	}
+	// The reversed operands must produce the SAME result as the interpreter.
+	res, compiled, err := mustRun(t, src)
+	if !compiled || err != nil {
+		t.Fatalf("%q: compiled=%v err=%v", src, compiled, err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("%q: result = %v, want a single list", src, res)
+	}
+	// NEGATIVE: a 2-computed-arg call still uses SWAP, not REVERSE (REVERSE is
+	// only for N>=3 — the case SWAP cannot cover).
+	if g2, _ := compile(t, `range (1 add 0) (4 sub 0)`); strings.Contains(g2, "REVERSE") {
+		t.Errorf("2-arg call must use SWAP, not REVERSE:\n%s", g2)
+	}
+}
+
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
 // const-bakes, so `m.f args` compiles — a poly `get` returns the fn (dynamic),
 // the fn-value-call boundary (CALL_DYNAMIC) applies it. A NAMED ref field map
