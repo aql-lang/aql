@@ -135,9 +135,10 @@ func metaAttribution(source, reason string) (string, bool) {
 // re-scoped P7 gate ("only meta falls back") holds. Never raise it.
 // Reconciled to the live actual (was a long-stale 201, set when refusals
 // numbered in the hundreds and never lowered as the ratchet fell); the
-// inert-reach code-body fix cleared the last non-meta `rand-map-from` row, and
-// the catch frame cleared 2 non-meta `error [handler]` rows (42 → 40).
-const nonMetaCeiling = 40
+// inert-reach code-body fix cleared the last non-meta `rand-map-from` row, the
+// catch frame cleared 2 non-meta `error [handler]` rows (42 → 40), and
+// value-def-locals in fn units cleared the 4 `error [… case …]` rows (40 → 36).
+const nonMetaCeiling = 36
 
 // TestMetaFallbackBoundary classifies every refused/islanded spec value row as
 // META (an expected, allowlisted interpreter fallback) or NON-META (remaining

@@ -164,19 +164,20 @@ operand-layout** — see the completion guide.
 ## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2406 compiled (5 islanded), 312 check-errors, 51 refused.**
-Root-cause axis: **soundness 34 · scheduling 9 · coverage 8 · opcode 0 ·
+**2769 rows — 2410 compiled (5 islanded), 312 check-errors, 47 refused.**
+Root-cause axis: **soundness 30 · scheduling 9 · coverage 8 · opcode 0 ·
 correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
 follow-on session, before the trailing fn-value boundary (→ 71), the
 quoted-operand inert words (→ 64), `rand-list-of` (→ 63), the value-arm `if`
 (→ 60), `returnsof` (→ 59), the module Table-type get fold (→ 57), the
-dot-access reach in an inert body (→ 53), and the catch frame (→ 51) landed.
-The remaining soundness rows are the hard core; see below.)
+dot-access reach in an inert body (→ 53), the catch frame (→ 51), and
+value-def-locals in fn units (→ 47) landed. The remaining soundness rows are
+the hard core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
 | 17 | operand provenance | soundness | provenance for generic/module/class operands. The module-exported Table-type sub-case landed (Table joined the structural-type-body const family) and `Rand.map-from` cleared via the inert-reach-member fix; the rest is a heterogeneous tail dominated by correct dynamic/error refusals — §4.3 back-pointer still NOT justified, see below |
-| 5 | dynamic/opaque output | soundness | NOT uniform (priority 5): the **catch frame LANDED** — `raise` is CompileDiverges (a divergent closure body compiles with no RET; the error propagates and `do`/`error` catch it via InvokeBody), and `error` collapsed to one (List, Any) sig with a runtime IsError branch so its handler body compiles as a closure. Cleared `error [get message]` + the predicate-clause `error [case …]` (2 of 6). The other **4 `error [get code case [value-clauses]]`** refuse on a COMPUTED scrutinee the fn-unit value-def-locals promotion can't seat (needs value-def-locals in fn units — the branch-result-modeling refactor). The **4 path-modifier** re-dispatch fns (usurp family, meta) + **1 `await`** (async) are correct refusals |
+| 5 | dynamic/opaque output | soundness | **error cluster COMPLETE** — all 6 `error [handler]` rows now compile (catch frame: `raise` is CompileDiverges so a divergent closure body compiles with no RET and the error propagates to `do`/`error` via InvokeBody; `error` is one (List, Any) sig with a runtime IsError branch; AND value-def-locals now run per-unit so a `get code case […]` computed scrutinee seats inside the handler closure). The remaining 5 are all **correct refusals**: **4 path-modifier** re-dispatch fns (usurp family, meta) + **1 `await`** (async). This bucket is now effectively floored |
 | 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
 | 2 | code-body word (NoEvalArgs) | coverage | `reach` with a **computed key segment** (×2, `reach 5 [a (add 1 2) c]` / `reach 0 [x (k)]` — needs a foldable/bakeable `ParenExpr` segment in the NoEval body). The 2-body property words `prop`/`check-prop`/`skip` were NOT a closure problem — they bake their inert bodies as consts and only refused on the dot-access reach inside them, now cleared via `inertReachMember`. `rand-list-of` cleared via a `CallableSpec` |
 | 3 | if-branch lowering | scheduling\* | 1 computed-else/variadic-statement-if (**branch-result-modeling** — the variadic-merge refactor) + **2 cross-fn `break`/`continue`** (break inside a fn breaking the CALLER's loop — a cross-unit SOUNDNESS boundary, mislabeled scheduling, should stay refused). The value-arm/usurp-if rows cleared via symmetric value-then |
@@ -247,61 +248,60 @@ residual-ordering / meta** residuals — none is operand layout.
    in the NoEval key list — plus `timeout`/`interval`'s materialised carried code
    BODY (priority 3) and the `codequote`/`macroexpand` meta residuals.
 
-5. **Dynamic-output / island core** — **catch frame LANDED (follow-on session),
-   2 of 6 error rows cleared; 4 remain on a separate refactor.** The 11
-   dynamic-output rows are NOT one cluster: **5 are correct/meta refusals** —
-   `await` (async) + the 4 path-modifier re-dispatch fns (usurp family) — leave
-   them. The catch-frame insight turned out simpler than "trap-vs-catch opcode":
-   `raise` is a CALL_NATIVE whose handler returns an error at run time (which the
-   VM already propagates and `do`/`error` already catch via `InvokeBody`), so the
-   ONLY block was that the recorder refused a closure body that nets fewer values
-   than declared. Marking `raise` **CompileDiverges** (it always raises → control
-   never returns past it) makes such a body DIVERGENT: it compiles with no RET,
-   vacuously satisfying any BodyOut, and the runtime error propagates to the
-   catcher — sound in a branch/loop arm too (like break/continue). `error` was
-   then collapsed to ONE `(List, Any)` sig with a runtime `IsError` branch (a
-   static TError-vs-TAny pick was unsound — the checker types `do [raise …]` as
-   Any and baked the pass-through even when the runtime value is an Error) + a
-   `CallableSpec` so the handler body compiles as a closure. This cleared
-   `error [get message]` and the predicate-clause `error [case [[pred] [blk] …]]`.
-   The remaining **4 `error [get code case [value-clauses]]`** rows refuse because
-   their handler has a COMPUTED scrutinee (`get code`) that `CanSeatAcrossFragment`
-   cannot seat inside a fn unit (`len(units) != 1` bails — the value-def-locals
-   promotion is top-level only). Clearing them needs **value-def-locals extended
-   to fn units** — the same branch-result-modeling refactor as priority 1; do that
-   first, then these 4 follow for free.
-   The **5 islands** are separate: **3 `case`** (the desugar bails on a code-body
-   scrutinee `case [1 add 1] […]` and a bare-type clause `case 1 Integer`) and
-   **2 `each`/`scan` over a map with a `drop` body** (`{a:1} each [drop]` — the
-   body nets 0, not the 1 the map-iteration closure expects). Both are edge shapes,
-   not the catch-frame.
+5. **Dynamic-output / island core** — **error cluster COMPLETE (follow-on
+   session): all 6 `error [handler]` rows compile.** The dynamic-output bucket was
+   never one cluster: the residual **5 are correct/meta refusals** — `await`
+   (async) + the 4 path-modifier re-dispatch fns (usurp family) — leave them. The
+   error cluster fell in two landings: (a) the **catch frame** — `raise` is a
+   CALL_NATIVE whose handler returns an error the VM already propagates and
+   `do`/`error` already catch via `InvokeBody`, so the only block was the recorder
+   refusing a closure body that nets fewer values than declared; marking `raise`
+   **CompileDiverges** (always raises → control never returns past it) makes such a
+   body DIVERGENT (compiles with no RET, vacuously satisfying any BodyOut; sound in
+   a branch/loop arm too), and `error` collapsed to ONE `(List, Any)` sig with a
+   runtime `IsError` branch (a static TError-vs-TAny pick was unsound) + a
+   `CallableSpec` so the handler body is a closure. (b) **value-def-locals in fn
+   units** — `planValueDefLocals` (the computed-result → frame-slot promotion) now
+   runs for EVERY unit, not just the top-level program (in `StartFnCompile`'s
+   `finish`, while the unit is live, with the unit's OUTPUT operands as the
+   residual-equivalent extra refs), and `CanSeatAcrossFragment` dropped its
+   `len(units) != 1` guard. So a `get code case […]` computed scrutinee seats as a
+   frame local inside the handler closure, clearing the 4
+   `error [get code case [value-clauses]]` rows. (A non-repushable computed event
+   reaching `CanSeatAcrossFragment` is always in the current unit — an
+   enclosing-scope value is a capture, hence a local — so its promotion lands in
+   the right unit's slots.)
+   The **5 islands** are separate and remain: **3 `case`** (the desugar bails on a
+   code-body scrutinee `case [1 add 1] […]` and a bare-type clause `case 1
+   Integer`) and **2 `each`/`scan` over a map with a `drop` body** (`{a:1} each
+   [drop]` — the body nets 0, not the 1 the map-iteration closure expects). Both
+   are edge shapes, not the catch-frame.
 
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` reaching 0. The 5 islands are **3 `case`** (code-body scrutinee /
 bare-type clause) + **2 `each`/`scan`-over-map with a net-0 `drop` body** — see
 priority 5.
 
-**Honest distance to P7 (do not read "51" as "almost there").** Of the 51
-refusals, **34 are soundness-gated** — 17 operand-provenance (a heterogeneous
+**Honest distance to P7 (do not read "47" as "almost there").** Of the 47
+refusals, **30 are soundness-gated** — 17 operand-provenance (a heterogeneous
 long tail dominated by *correct* dynamic/error refusals; the §4.3 back-pointer
-was measured against it and is NOT justified — see priority 3), the dynamic
-output/input frontier (richer runtime poly or runtime guards — the `error`
-catch-frame cleared 2 here, the 4 case-scrutinee rows wait on value-def-locals in
-fn units, and `await`/path-modifier are correct refusals), plus a few singletons.
-Those 34 do not yield to more lowering; they need a soundness story per cluster.
-Add the **5 islands** (higher-order/dynamic) that also gate P7. So the realistic
-near-term goal is **lowering the ceiling and shrinking the islands**, not
-imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains the
-right vehicle, but P7 is several substantial pieces of work away. The
+was measured against it and is NOT justified — see priority 3), 5 dynamic input
+(runtime guards), the 5 dynamic-output rows that are all correct refusals
+(`await` + path-modifier — the error cluster is now fully compiled), plus a few
+singletons. Those do not yield to more lowering; they need a soundness story per
+cluster. Add the **5 islands** (higher-order/dynamic) that also gate P7. So the
+realistic near-term goal is **lowering the ceiling and shrinking the islands**,
+not imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains
+the right vehicle, but P7 is several substantial pieces of work away. The
 cheap/bounded wins (operand layout, the correct-error paths, the trailing
 fn-value boundary, the quoted-operand inert words, `rand-list-of`, the value-arm
 `if`, `returnsof`, the module Table-type get fold, the inert-reach code body, the
-catch frame, the §4.5 decoupling) are now banked; the remaining non-soundness
-rows are the variadic-merge refactor + per-mechanism coverage gaps — the
-soundness rows are the genuinely hard core, and they are the same work that
-clears the 5 islands. The **value-def-locals-in-fn-units** refactor (priority 1)
-is now doubly-leveraged: it clears both the variadic-statement-if row AND the 4
-`error [… case …]` rows.
+catch frame, value-def-locals in fn units, the §4.5 decoupling) are now banked.
+The **variadic-merge / branch-result-modeling** refactor (priority 1) is the next
+structural lever — it clears the 1 variadic-statement-if row and is a prerequisite
+for representing a 0-or-1 branch/loop result as a first-class value (distinct from
+the value-def-locals work that just landed). The rest are per-mechanism coverage
+gaps + the irreducible soundness/meta tail.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -779,6 +779,18 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **51 → 47** — value-def-locals in fn units: `planValueDefLocals` (the
+  computed-result → frame-slot promotion) now runs for EVERY compiled unit, not
+  just the top-level program — called in `StartFnCompile`'s `finish` while the
+  unit is live, with the unit's OUTPUT operands as the residual-equivalent extra
+  references, and `CanSeatAcrossFragment` dropped its `len(units) != 1` guard. So
+  a computed scrutinee read across a desugared `case` if-chain (`get code case
+  […]`) seats as a frame local inside a fn unit. Cleared the 4
+  `error [get code case [value-clauses]]` rows — completing the error cluster (all
+  6 `error [handler]` rows now compile; the residual dynamic-output rows are
+  `await` + path-modifier, correct refusals). Sound because a non-repushable
+  computed event reaching `CanSeatAcrossFragment` is always produced in the
+  current unit (an enclosing value is a capture → local → repushable).
 - **53 → 51** — catch frame (`do` / `error` closure bodies that raise): `raise` is
   a CALL_NATIVE whose handler returns an error the VM already propagates and
   `do`/`error` already catch via `InvokeBody` — the only block was the recorder

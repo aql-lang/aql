@@ -320,6 +320,14 @@ type fnUnitRec struct {
 	// type_error — so a closure keeps refusing the mismatch (islands) while a
 	// user fn compiles the error path (the VM RET raises the matching error).
 	closure bool
+	// promoted / dead are the value-def-local plan for THIS unit's body —
+	// computed by planValueDefLocals at finish (while the unit is still live) and
+	// read by the lowerer (flw.promoted / flw.dead) when the unit lowers. Mirrors
+	// the top-level program's plan; nil for a unit with no promotions. A computed
+	// result read across a body fragment (a `case` scrutinee re-tested down the
+	// if-chain) is promoted to a frame slot here, the same as at frame 0.
+	promoted map[int]int
+	dead     map[int]bool
 }
 
 // NewEmitState returns a fresh recording state.
@@ -603,19 +611,22 @@ func (es *EmitState) OperandRepushable(v Value) bool {
 // CanSeatAcrossFragment reports whether v can be read INSIDE a branch / loop
 // fragment that a multi-reference desugar is about to record. Either v is
 // already re-pushable (OperandRepushable: a const, frame local, or type node),
-// OR it is a COMPUTED single-result event in the TOP-LEVEL frame — which
-// planValueDefLocals promotes to a frame local once a fragment read is seen,
-// reachable across the scope floor. A computed event in a nested fn unit is not
-// promoted (only frame 0 runs planValueDefLocals), so it cannot be seated and
-// the desugar must keep its conservative non-compiling path. Side-effect free,
+// OR it is a COMPUTED single-result event — which planValueDefLocals promotes to
+// a frame local once a fragment read is seen, reachable across the scope floor.
+// The promotion now runs for EVERY unit (the top-level program AND each fn body
+// — see the planValueDefLocals call in StartFnCompile's finish), so a computed
+// scrutinee inside a fn unit (a `case` in an `error`/`do` handler closure) seats
+// too. A non-repushable computed event reaching here is always produced in the
+// CURRENT unit — an enclosing-scope value is a capture, hence a local (repushable
+// above) — so its promotion lands in the right unit's slots. Side-effect free,
 // like OperandRepushable — the promotion itself happens later, driven purely by
 // the fragment reference the desugar then records.
 func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
+	if es == nil {
+		return false
+	}
 	if es.OperandRepushable(v) {
 		return true
-	}
-	if es == nil || len(es.units) != 1 {
-		return false
 	}
 	pr, ok := es.producedBy[v.ID]
 	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.eventInfo[pr.seq].typeOut)
@@ -1156,6 +1167,26 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				return
 			}
 			rec.outOps = ops
+		}
+		// Value-def locals for THIS unit (the top-level program's promotion,
+		// scoped to a fn body): a computed result referenced more than once, read
+		// from INSIDE a body fragment (a `case` scrutinee re-tested down the
+		// desugared if-chain — the case-in-closure enabler), or bound to a named
+		// def must be stored in a frame slot and re-pushed, not left on the
+		// single-consume stack. Run while the unit `u` is live so its slot
+		// allocations land in u.numLocals (→ rec.numLoc below); the unit's OUTPUT
+		// operands are its residual-equivalent extra references, and are rewritten
+		// for any promoted producer (planValueDefLocals rewrote the events in
+		// place, but outOps is a separate slice).
+		outSeqs := make([]int, 0, len(rec.outOps))
+		for _, op := range rec.outOps {
+			if op.kind == opEvent && op.resIdx == 0 {
+				outSeqs = append(outSeqs, op.idx)
+			}
+		}
+		rec.promoted, rec.dead = es.planValueDefLocals(u, rec.frag.events, outSeqs, nil)
+		for i := range rec.outOps {
+			promoteOperand(&rec.outOps[i], rec.promoted)
 		}
 		// The unit is closed: its events' outputs cannot be stack
 		// values in the enclosing scope, so drop their provenance
@@ -2590,7 +2621,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}
