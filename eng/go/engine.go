@@ -567,18 +567,17 @@ func (e *Engine) stampErrPos(err error) error {
 	return err
 }
 
-// returnCountError builds a detailed AqlError for wrong number of return values.
+// returnCountError builds a detailed AqlError for wrong number of return
+// values. The detail text is shared with the VM via returnCountErrorText.
 func (e *Engine) returnCountError(funcName string, expected, got int, pos SrcPos) *AqlError {
-	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
 	src := e.effectiveSource()
-	return makeAqlErrorAt("type_error", detail, funcName, src, "", pos)
+	return makeAqlErrorAt("type_error", returnCountErrorText(funcName, expected, got), funcName, src, "", pos)
 }
 
-// returnTypeError builds a detailed AqlError for a return type mismatch.
+// returnTypeError builds a detailed AqlError for a return type mismatch. The
+// detail/hint text is shared with the VM via returnTypeErrorText.
 func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value, pos SrcPos) *AqlError {
-	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s",
-		funcName, index, expected, got.Parent)
-	hint := "value: " + diagValue(got)
+	detail, hint := returnTypeErrorText(funcName, index, expected, got)
 	src := e.effectiveSource()
 	return makeAqlErrorAt("type_error", detail, funcName, src, hint, pos)
 }
@@ -680,6 +679,12 @@ func resolveAtomReferents(r *Registry, vals []Value) {
 }
 
 func (e *Engine) Run(input []Value) (result []Value, runErr error) {
+	// Count this interpreter activation against the registry so a compiled
+	// RunProgram can see (at its entry) that an interpreter run is in flight.
+	// Balanced on every exit path, including panic unwind.
+	e.registry.enterInterpRun()
+	defer e.registry.exitInterpRun()
+
 	// Last-resort panic guard at the top-level engine boundary. A bug in
 	// any handler or in the step loop should surface to the user as a
 	// clean AQL error, never as a goroutine stack trace. Only the

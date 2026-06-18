@@ -35,12 +35,17 @@ import (
 // this run installs/restores r.Invoker (the body-closure seam) and mutates the
 // registry's scopes, so a concurrent RunProgram OR a concurrent interpreter
 // Run on the same registry would race on r.Invoker and the shared defs/types.
-// The vmRunning CAS below rejects an overlapping compiled run with a clear
-// error, but it cannot see an interpreter Run on another goroutine — so the
-// rule is the same one the interpreter already follows: give each goroutine
-// its own *Registry. AQL's concurrent words honour this by forking an isolated
-// registry per branch (ForkConcurrent); host callers run each instance on its
-// own registry.
+// Two guards run at entry: the vmRunning CAS rejects an overlapping compiled
+// run, and an interpRunActive() check rejects starting a compiled run while an
+// interpreter run is in flight (the depth counter Engine.Run maintains). What
+// neither can catch is a fresh interpreter Run STARTING on another goroutine
+// once this compiled run is already underway — the VM's own islands re-enter
+// Engine.Run on this same registry, so a registry-level flag cannot tell a
+// legitimate island from a foreign run without goroutine identity. That last
+// shape stays the caller's responsibility under the same rule the interpreter
+// already follows: give each goroutine its own *Registry. AQL's concurrent
+// words honour this by forking an isolated registry per branch
+// (ForkConcurrent); host callers run each instance on its own registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	return runProgram(p, r, DefaultStepLimit)
 }
@@ -129,6 +134,17 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 				"", "", "")
 		}
 		defer atomic.StoreInt32(&r.vmRunning, 0)
+		// Also reject starting a compiled run while an INTERPRETER run is in
+		// flight on this same registry — the cross-engine race the CAS above
+		// cannot catch. Safe to check here: RunProgram has not yet spawned any
+		// island sub-engine, so a non-zero depth means a DISTINCT interpreter
+		// run (the compiled run's own islands increment the depth only later).
+		if r.interpRunActive() {
+			// The deferred StoreInt32 above releases vmRunning on this return.
+			return nil, makeAqlError("concurrency_error",
+				"bytecode: an interpreter run is already active on this registry; concurrent runs need their own registry (ForkConcurrent)",
+				"", "", "")
+		}
 	}
 	// Last-resort panic guard, mirroring the interpreter's top-level recover
 	// (engine.go Run): a bug in a compiled-reachable handler or in the VM loop
@@ -701,18 +717,18 @@ func stampAt(err error, debug []SrcPos, pc int, r *Registry) error {
 	return ae
 }
 
-// vmReturnTypeErr / vmReturnCountErr mirror the interpreter's
-// returnTypeError / returnCountError (engine.go) byte-for-byte — same
-// detail text, same type_error taxonomy — so error-scraping tooling
-// never learns which engine ran.
+// vmReturnTypeErr / vmReturnCountErr raise the interpreter's
+// returnTypeError / returnCountError text — same detail/hint, same type_error
+// taxonomy — so error-scraping tooling never learns which engine ran. The
+// strings come from the shared returnTypeErrorText / returnCountErrorText
+// (return_check_msg.go); only the error-construction plumbing differs.
 func vmReturnTypeErr(r *Registry, funcName string, index int, expected *Type, got Value) error {
-	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s", funcName, index, expected, got.Parent)
-	return r.AqlErrorHint("type_error", detail, funcName, "value: "+diagValue(got))
+	detail, hint := returnTypeErrorText(funcName, index, expected, got)
+	return r.AqlErrorHint("type_error", detail, funcName, hint)
 }
 
 func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
-	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
-	return r.AqlError("type_error", detail, funcName)
+	return r.AqlError("type_error", returnCountErrorText(funcName, expected, got), funcName)
 }
 
 // vmErrAt builds an internal_error AqlError for a VM-internal soundness

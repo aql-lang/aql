@@ -1330,3 +1330,38 @@ func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 		t.Fatalf("parity broke: compiled=%v gotC=%v gotI=%v (want [15])", compiled, gotC, gotI)
 	}
 }
+
+// Step-budget agreement (the RunCompiled LIMITATION note). The interpreter
+// meters DefaultStepLimit per tape token; the VM meters it per bytecode
+// instruction. The contract is one-directional: a long TERMINATING program both
+// engines can finish must produce IDENTICAL results, and the VM must NEVER trip
+// evaluation_limit on a program the interpreter completes (the VM stream is
+// leaner, so it reaches at least as far). A long counted loop with a tight
+// arithmetic body is the canonical long-but-bounded compute: it stays well under
+// the cap in both, so it pins the agreement. (A genuine runaway is out of scope
+// here — that one trips fast in both by design.)
+func TestStepBudgetNoSpuriousLimit(t *testing.T) {
+	// A counted loop accumulating a per-iteration arithmetic value. Large enough
+	// to span many thousands of dispatch steps, small enough that BOTH engines
+	// finish far under DefaultStepLimit (10M).
+	const src = `for 6000 [(i mul 2)]`
+
+	ci, _ := New()
+	gotC, compiled, errC := ci.RunCompiled(src)
+	if !compiled {
+		t.Skip("the counted-loop shape no longer compiles; nothing to compare")
+	}
+	ii, _ := New()
+	gotI, errI := ii.Run(src)
+
+	// Neither engine may spuriously raise on a program the other completes.
+	if (errC != nil) != (errI != nil) {
+		t.Fatalf("step-budget divergence on a terminating loop: compiled err=%v interpreted err=%v", errC, errI)
+	}
+	if errC != nil {
+		t.Fatalf("both engines errored on a bounded loop that should complete: %v", errC)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Fatalf("compiled/interpreted results differ on a long loop:\n  compiled=%v\n  interpreted=%v", gotC, gotI)
+	}
+}

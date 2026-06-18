@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"sync/atomic"
 )
 
 // Registry is the kernel's shared state: function-name registrations,
@@ -154,6 +155,43 @@ type Registry struct {
 	// RunCompiled path. It is a plain int32 (not atomic.Bool) so the Registry
 	// stays copyable for ForkConcurrent's shallow clone.
 	vmRunning int32
+
+	// interpRunDepth counts live interpreter Engine.Run activations on this
+	// registry — the top-level run AND every re-entrant sub-engine run (module
+	// loads, islands, higher-order bodies). It exists so a compiled RunProgram
+	// can detect at its ENTRY that an interpreter run is already in flight — the
+	// one cross-engine race the vmRunning CAS structurally cannot see, since that
+	// flag only guards compiled-vs-compiled. The reverse direction
+	// (interpreter-starts-while-compiled-active) stays caller-responsibility:
+	// the VM's own islands re-enter Engine.Run on this same registry, so a
+	// registry-level flag cannot distinguish a legitimate island from a foreign
+	// concurrent run without goroutine identity. Atomic so a foreign goroutine's
+	// run is visible to the entry check.
+	interpRunDepth int32
+}
+
+// enterInterpRun / exitInterpRun bracket one interpreter Engine.Run activation
+// on this registry (top-level and every re-entrant sub-engine run). Pair them
+// with defer at the Run boundary so the count is balanced across normal returns,
+// error returns, and panic unwinds.
+func (r *Registry) enterInterpRun() {
+	if r != nil {
+		atomic.AddInt32(&r.interpRunDepth, 1)
+	}
+}
+
+func (r *Registry) exitInterpRun() {
+	if r != nil {
+		atomic.AddInt32(&r.interpRunDepth, -1)
+	}
+}
+
+// interpRunActive reports whether an interpreter Engine.Run is currently in
+// flight on this registry. Read by RunProgram at its entry (before it spawns any
+// island sub-engine), so a true result there means a DISTINCT interpreter run —
+// a concurrent misuse — not the compiled run's own islands.
+func (r *Registry) interpRunActive() bool {
+	return r != nil && atomic.LoadInt32(&r.interpRunDepth) > 0
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).

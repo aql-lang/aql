@@ -2,6 +2,10 @@ package eng
 
 // The bytecode recording pass — Stage 1 of design/aql-bytecode-plan.0.md.
 //
+// For the POSITIVE statement of what compiles and why — the rule each refusal
+// gate below is defending — see design/COMPILABLE-SUBSET.md. Keep it in lockstep
+// when widening the subset; the gates here are a checklist against that rule.
+//
 // The compiler is the carrier checker with a recording side effect:
 // when CheckState.Emit is set, every check-mode dispatch that flows
 // through carrierResults records a call event with full operand
@@ -1721,7 +1725,6 @@ func isInertConst(v Value) bool {
 		// The bound is recovered for a stripped operand via origByID
 		// (RememberOriginal at the constructor); type-algebra words
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
-		_ = d
 		return true
 	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
@@ -2083,7 +2086,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	// Lower the compiled fn units. Tail positions are marked first so
 	// the lowering emits TAIL_CALL_USER (frame replacement — the
 	// language's tail-call guarantee carries into compiled mode).
-	for i, rec := range es.fnRecs {
+	for _, rec := range es.fnRecs {
 		if !rec.finished {
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
@@ -2129,7 +2132,6 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// A fully diverging body (every path tail-calls) emits no RET —
 		// control leaves via the callee's eventual RET.
 		p.Fns = append(p.Fns, cf)
-		_ = i
 	}
 
 	lw.p.Consts = es.consts // interning may have grown during reconciliation

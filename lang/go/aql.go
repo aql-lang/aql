@@ -499,6 +499,20 @@ func convertResults(result []eng.Value) []any {
 // reports which path ran (for tooling; never branch program logic on
 // it).
 //
+// LIMITATION — the step budget is the one place this is NOT byte-for-byte
+// transparent. The interpreter meters its DefaultStepLimit per tape token
+// stepped; the VM meters the SAME cap per bytecode instruction. The compiled
+// stream is leaner than the expanded token walk, so for any given program the
+// VM reaches at least as far as the interpreter before the cap — the divergence
+// is one-directional: a long-but-terminating computation that the interpreter
+// would abort with evaluation_limit may COMPLETE under compilation; the reverse
+// never happens (the VM does not spuriously raise evaluation_limit on a program
+// the interpreter finishes). A genuine runaway trips evaluation_limit fast in
+// both. So at the ceiling, Run and RunCompiled are observably different
+// programs; everywhere below it they agree. TestStepBudgetNoSpuriousLimit pins
+// the agreement on a long terminating loop; TestPropertyDifferential keeps the
+// generated corpus well under the cap so the divergence never makes it flaky.
+//
 // Two boundaries qualify "identical results":
 //
 //   - Internal errors. A compiled-mode VM/lowering soundness assertion or a

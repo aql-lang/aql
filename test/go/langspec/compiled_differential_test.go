@@ -4,6 +4,9 @@
 // through the bytecode VM and the interpreter. The compiled-row
 // count is pinned with a floor so a regression that silently refuses
 // everything (vacuously passing the equality check) is caught.
+//
+// See design/COMPILABLE-SUBSET.md for the positive statement of what this gate
+// is guarding — the rule each emitter refusal is defending.
 package langspec
 
 import (
