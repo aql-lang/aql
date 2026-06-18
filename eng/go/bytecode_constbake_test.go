@@ -64,3 +64,42 @@ func TestIsInertConstRejectsMutableInstances(t *testing.T) {
 		}
 	}
 }
+
+// A Table type body is a thin wrapper over its row RecordType (TableTypeInfo
+// embeds RecordTypeInfo), so it joins the structural-type-body family
+// (Record/Options/Object/Disjunct) the const whitelist already admits: a
+// module-exported Table type (`Test.TestSet`) folds to a const so the get over
+// the immutable module export bakes rather than refusing "unknown provenance".
+// Soundness rides the SAME typeBodyConstOK interior check the record uses — a
+// carrier/dynamic field in the row schema must still keep the whole type off the
+// const path. Paired positive/negative pins both edges.
+func TestIsInertConstTableTypeBody(t *testing.T) {
+	dataFields := NewOrderedMap()
+	dataFields.Set("name", NewTypeLiteral(TString)) // bare type nodes — data schema
+	dataFields.Set("value", NewTypeLiteral(TInteger))
+	dataTable := NewTableType(RecordTypeInfo{Fields: dataFields})
+
+	// POSITIVE — a Table over a data-only record schema bakes as a const.
+	if !isInertConst(dataTable) {
+		t.Errorf("isInertConst(Table{name:String value:Integer}) = false; a Table type over a "+
+			"data-only record must be const-bakeable (it is a thin wrapper over RecordTypeInfo, "+
+			"which already bakes). Disassemble: %v", dataTable)
+	}
+	if !typeBodyConstOK(dataTable) {
+		t.Error("typeBodyConstOK(data Table) = false; want true")
+	}
+
+	// NEGATIVE — a carrier in the row schema (a check-mode artefact that must
+	// never be materialised) keeps the Table type off the const path, exactly
+	// as it would the bare record.
+	carrierFields := NewOrderedMap()
+	carrierFields.Set("rows", NewCarrier(TList))
+	carrierTable := NewTableType(RecordTypeInfo{Fields: carrierFields})
+	if isInertConst(carrierTable) {
+		t.Error("isInertConst(Table over carrier-bearing record) = true; a carrier interior must " +
+			"keep the structural type body off the const pool")
+	}
+	if typeBodyConstOK(carrierTable) {
+		t.Error("typeBodyConstOK(carrier Table) = true; want false")
+	}
+}

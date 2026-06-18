@@ -1979,6 +1979,13 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		// field schema from the baked body. The parent chain's fields must
 		// be data too (AllFields merges them).
 		return fieldsOK(d.AllFields())
+	case TableTypeInfo:
+		// A Table type body (`make Test.TestSet …`, a module-exported
+		// Table type as a get-fold result or residual) is a thin wrapper
+		// over the row RecordType — const-safe exactly when that record's
+		// field types are (fieldsOK). The canonical *Type rides the body's
+		// payload pointer (shared, not copied), like every structural body.
+		return fieldsOK(d.Record.Fields)
 	}
 	return false
 }
@@ -2025,14 +2032,16 @@ func isInertConst(v Value) bool {
 		// (RememberOriginal at the constructor); type-algebra words
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
 		return true
-	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
+	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo, TableTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
 		// use site — make's operand). Sound as consts when their
 		// interior is carrier-free (typeBodyConstOK): the payload is
 		// pointer-backed (shared, not copied) and the minted lattice
 		// node rides the body's Parent POINTER, which stays
 		// canonical. Never deduped. A class/object body qualifies only
-		// when every field default is data (no method fn-values).
+		// when every field default is data (no method fn-values). A
+		// Table type (`Test.TestSet`) is a thin wrapper over its row
+		// RecordType, so it folds whenever that record does.
 		return typeBodyConstOK(v)
 	case FnUndefInfo:
 		// A function SIGNATURE value (`fnsig [[Integer] [String]]`,

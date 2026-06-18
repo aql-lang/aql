@@ -164,17 +164,17 @@ operand-layout** — see the completion guide.
 ## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2398 compiled (5 islanded), 312 check-errors, 59 refused.**
-Root-cause axis: **soundness 39 · scheduling 9 · coverage 11 · opcode 0 ·
+**2769 rows — 2400 compiled (5 islanded), 312 check-errors, 57 refused.**
+Root-cause axis: **soundness 37 · scheduling 9 · coverage 11 · opcode 0 ·
 correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
 follow-on session, before the trailing fn-value boundary (→ 71), the
 quoted-operand inert words (→ 64), `rand-list-of` (→ 63), the value-arm `if`
-(→ 60), and `returnsof` (→ 59) landed. The remaining soundness rows are the hard
-core; see below.)
+(→ 60), `returnsof` (→ 59), and the module Table-type get fold (→ 57) landed.
+The remaining soundness rows are the hard core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
-| 20 | operand provenance | soundness | provenance for generic/module/class operands (re-test §4.3 back-pointer here) |
+| 18 | operand provenance | soundness | provenance for generic/module/class operands. The module-exported Table-type sub-case landed (Table joined the structural-type-body const family); the rest is a heterogeneous tail dominated by correct dynamic/error refusals — §4.3 back-pointer still NOT justified, see below |
 | 11 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch. NOT uniform: `error [handler]` over a dynamic error (×6 — the `get` handler body islands → islandCeiling risk), the path-modifier re-dispatch fns `forward-args`/`stack-args`/`force-arity` (×4, meta), `await` (async). `returnsof` cleared via a precise `ReturnsFn` |
 | 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
 | 5 | code-body word (NoEvalArgs) | coverage | `reach` with a computed key segment (×2, needs a foldable/bakeable `ParenExpr` in the NoEval body) + the 2-body property words `test-prop`/`check-prop`/`skip` (×3, need 2-body closure support). `rand-list-of` cleared via a `CallableSpec` |
@@ -214,9 +214,25 @@ residual-ordering / meta** residuals — none is operand layout.
    order (a spill, or an apply opcode that reverses its args). `resolveDynamicApply`
    (`emit.go`) is the seam; `callDynamic(…, trailing bool, …)` (`vm.go`) is the VM
    apply.
-3. **Re-test the §4.3 back-pointer** against the 20 operand-provenance rows. The
-   full carrier back-pointer is only justified if it *clears* provenance refusals
-   (lost originals); measure before building.
+3. **Re-test the §4.3 back-pointer** against the operand-provenance rows —
+   **measured (follow-on session); back-pointer still NOT justified.** The 20-row
+   bucket was dumped and categorised: ~10 are *correct* refusals (genuinely
+   dynamic — minilang/parselang/rand ×5, generic-`make` where `T` is a runtime
+   type param ×3, macroexpand ×1; plus 3 error-producing programs — `x/r`/`x/u`
+   `illegal_ref`, `MathUtil!.nope` `not_found` — that the compiler falls back on
+   and faithfully re-raises). The rest are *distinct* mechanisms, not one lost-
+   original axis: closure/free-var body results (×3), 0-arg-fn-in-map-value
+   dispatch (×1), if-else module-call (×1), concrete-`make` inside a dynamic
+   StructUtil pipeline (×1), module-export Table-type get (×2). Only the last was
+   a clean bounded win, and it needed NO back-pointer: a Table type literal
+   carries a `TableTypeInfo` payload, so `tryFoldModuleConst`'s ride switch
+   (`isInertConst` | bare-type-node) rejected it — unlike a bare type node
+   (`Test.TestCase`) which already folds. `TableTypeInfo` wraps its row
+   `RecordTypeInfo`, so adding it to the structural-type-body family in
+   `isInertConst` + `typeBodyConstOK` (same `fieldsOK` interior check; a carrier
+   interior still refuses) folded the get and compiled the downstream
+   make/is/istype (→ 57). The remaining ~6 each want bespoke machinery, none a
+   shared back-pointer — chase per-row only if a row blocks a wider cluster.
 4. **Coverage words.** Partly banked: the quoted-operand *inert* cluster
    (`quote`/`codequote`/`raise` via `CompileQuoteInert`) and the `rand-list-of`
    generator body (a `CallableSpec`). What remains is NOT uniform — each needs a
@@ -229,23 +245,25 @@ residual-ordering / meta** residuals — none is operand layout.
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
 
-**Honest distance to P7 (do not read "59" as "almost there").** Of the 59
-refusals, **39 are soundness-gated** — 20 operand-provenance (a heterogeneous
-long tail, and the §4.3 back-pointer is only *maybe* the fix), 11 + 5 dynamic
+**Honest distance to P7 (do not read "57" as "almost there").** Of the 57
+refusals, **37 are soundness-gated** — 18 operand-provenance (a heterogeneous
+long tail dominated by *correct* dynamic/error refusals; the §4.3 back-pointer
+was measured against it and is NOT justified — see priority 3), 11 + 5 dynamic
 output/input (the hardest frontier: each needs richer runtime poly or runtime
 guards, essentially generalizing `OpCallNativePoly` to dynamic results), plus a
-few singletons. Those 39 do not yield to more lowering; they need a soundness
+few singletons. Those 37 do not yield to more lowering; they need a soundness
 story per cluster. Add the **5 islands** (higher-order/dynamic) that also gate
 P7. So the realistic near-term goal is **lowering the ceiling and shrinking the
 islands**, not imminent `OpFallback` deletion — the incremental, gate-clean
 ratchet remains the right vehicle, but P7 is several substantial pieces of work
 away. The cheap/bounded wins (operand layout, the correct-error paths, the
 trailing fn-value boundary, the quoted-operand inert words, `rand-list-of`, the
-value-arm `if`, `returnsof`, the §4.5 decoupling) are now banked; of the
-remaining 20 non-soundness rows, **2 are really soundness** (the cross-fn
-break/continue), 1 is the variadic-merge refactor, and the rest are per-mechanism
-coverage gaps — the 39 (really 41) soundness rows are the genuinely hard core,
-and they are the same work that clears the 5 islands.
+value-arm `if`, `returnsof`, the module Table-type get fold, the §4.5
+decoupling) are now banked; of the remaining 20 non-soundness rows, **2 are
+really soundness** (the cross-fn break/continue), 1 is the variadic-merge
+refactor, and the rest are per-mechanism coverage gaps — the 37 (really 39)
+soundness rows are the genuinely hard core, and they are the same work that
+clears the 5 islands.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -723,6 +741,19 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **59 → 57** — module-exported Table-type get fold: a Table type literal
+  (`Test.TestSet`) carries a `TableTypeInfo` payload, so `tryFoldModuleConst`'s
+  ride switch (`isInertConst` | bare-type-node) rejected it and the get over the
+  immutable module export refused "unknown provenance … at get" — unlike a BARE
+  type node (`Test.TestCase`, `Data==nil`) which already folds. `TableTypeInfo`
+  wraps its row `RecordTypeInfo`, so it joins the structural-type-body const
+  family in `isInertConst` + `typeBodyConstOK` (same `fieldsOK` interior check;
+  a carrier interior still refuses). The get bakes the immutable type and the
+  downstream make/is/istype compile natively (both `Test.TestSet` rows). This was
+  the one clean bounded win in the operand-provenance bucket; the §4.3
+  back-pointer was measured against the rest and is NOT justified (see the
+  completion-guide priority 3 — ~10 of the remaining rows are correct dynamic/
+  error refusals, the rest want bespoke per-row machinery).
 - **60 → 59** — `returnsof` static return type: a `ReturnsFn` computes the fn's
   precise declared return at check time, so `TypeUtil.returnsof` reports a
   concrete type node instead of the opaque `TAny` and bakes a `CALL_NATIVE` like
