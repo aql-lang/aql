@@ -30,6 +30,11 @@ gate-clean commits:
   quoted-operand rows. Ratchet **71 → 64**. The 3 `timeout`/`interval` rows whose
   code BODY reaches the check as a carrier (no recoverable inert provenance) stay
   refused — a §4.3 / `materialise` gap, not the flag.
+- **`rand-list-of` generator body** (completion-guide code-body cluster) —
+  `Rand.list-of [body] n` runs a 0-input generator body n times; it now declares
+  a `CallableSpec` (the same closure shape as `do`) and its handler runs the
+  compiled closure via `InvokeBody`. Ratchet **64 → 63**. The other 5 code-body
+  rows need distinct, more-involved mechanisms (see the completion-guide note).
 - **Doc precision** — two overstatements in the original report are corrected
   inline (the §4.1a "`layoutOperands` deleted / unreachable by construction"
   claim, and §4.5's "all five tables migrated"), and the P7 distance is stated
@@ -142,19 +147,19 @@ operand-layout** — see the completion guide.
 ## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2393 compiled (5 islanded), 312 check-errors, 64 refused.**
-Root-cause axis: **soundness 40 · scheduling 12 · coverage 12 · opcode 0 ·
+**2769 rows — 2394 compiled (5 islanded), 312 check-errors, 63 refused.**
+Root-cause axis: **soundness 40 · scheduling 12 · coverage 11 · opcode 0 ·
 correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
-follow-on session, before the trailing fn-value boundary (→ 71) and the
-quoted-operand inert words (→ 64) landed. The 40 soundness rows are untouched —
-that is the hard core; see below.)
+follow-on session, before the trailing fn-value boundary (→ 71), the
+quoted-operand inert words (→ 64), and `rand-list-of` (→ 63) landed. The 40
+soundness rows are untouched — that is the hard core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
 | 20 | operand provenance | soundness | provenance for generic/module/class operands (re-test §4.3 back-pointer here) |
 | 12 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch |
 | 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
-| 6 | code-body word (NoEvalArgs) | coverage | the `aql:test` 2-body property words |
+| 5 | code-body word (NoEvalArgs) | coverage | `reach` with a computed key segment (×2, needs a foldable/bakeable `ParenExpr` in the NoEval body) + the 2-body property words `test-prop`/`check-prop`/`skip` (×3, need 2-body closure support). `rand-list-of` cleared via a `CallableSpec` |
 | 6 | if-branch lowering | scheduling\* | **branch-result-modeling** (computed-else, variadic-statement-if, `usurp if`) — now the lead scheduling frontier |
 | 6 | residual lowering | scheduling\* | NO LONGER the fn-value boundary (that cleared): `codequote`/`macroexpand` (meta, "not materialisable") + residual-ordering (`1 add2 vs`, parselang/Test.run-spec "result above a literal") |
 | 5 | dynamic input | soundness | soundness-gated; needs runtime guards |
@@ -191,16 +196,19 @@ meta** residuals (6) — none is operand layout.
 3. **Re-test the §4.3 back-pointer** against the 20 operand-provenance rows. The
    full carrier back-pointer is only justified if it *clears* provenance refusals
    (lost originals); measure before building.
-4. **Coverage words.** The quoted-operand *inert* cluster is mostly done
-   (`quote`/`codequote`/`raise` via `CompileQuoteInert`); what remains there is
-   `timeout`/`interval`, blocked on materialising a carried code BODY (priority
-   3's machinery, not the flag). Still open: the 2-body `aql:test` code words and
-   the `codequote`/`macroexpand` residuals — word-class gaps, not deep problems.
+4. **Coverage words.** Partly banked: the quoted-operand *inert* cluster
+   (`quote`/`codequote`/`raise` via `CompileQuoteInert`) and the `rand-list-of`
+   generator body (a `CallableSpec`). What remains is NOT uniform — each needs a
+   distinct mechanism: `timeout`/`interval` want a materialised carried code BODY
+   (priority 3); `reach 5 [a (add 1 2) c]` (×2) wants a foldable/bakeable
+   `ParenExpr` segment in its NoEval key list; `test-prop`/`check-prop`/`skip`
+   (×3) want 2-body closure support (the closure path is single-body); and the
+   `codequote`/`macroexpand` residuals are their own meta cases.
 
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
 
-**Honest distance to P7 (do not read "64" as "almost there").** Of the 64
+**Honest distance to P7 (do not read "63" as "almost there").** Of the 63
 refusals, **40 are soundness-gated** — 20 operand-provenance (a heterogeneous
 long tail, and the §4.3 back-pointer is only *maybe* the fix), 12 + 5 dynamic
 output/input (the hardest frontier: each needs richer runtime poly or runtime
@@ -211,8 +219,8 @@ near-term goal is **lowering the ceiling and shrinking the islands**, not
 imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains the
 right vehicle, but P7 is several substantial pieces of work away. The cheap wins
 (operand layout, the correct-error paths, the trailing fn-value boundary, the
-quoted-operand inert words, the §4.5 decoupling) are now banked; the remaining
-24 non-soundness rows are scheduling (branch-result-modeling) + coverage
+quoted-operand inert words, `rand-list-of`, the §4.5 decoupling) are now banked;
+the remaining 23 non-soundness rows are scheduling (branch-result-modeling) + coverage
 (word-class gaps), and the 40 soundness rows are genuinely hard.
 
 ### Dead ends / proven not worth it (save the dig)
@@ -691,6 +699,11 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **64 → 63** — `rand-list-of` generator body: `Rand.list-of [body] n` declares a
+  `CallableSpec` (the `do` closure shape, 0-input/1-output), so the body compiles
+  to a closure the handler runs n times via `InvokeBody` instead of refusing the
+  NoEvalArgs code body. Differential-clean (the RNG draws advance the same module
+  generator, so compiled == interpreted).
 - **71 → 64** — quoted-operand inert words: `quote` / `codequote` / `raise` /
   `timeout` / `interval` declare `CompileQuoteInert`, so the recorder bakes their
   inert quoted operand + `CALL_NATIVE` (the get/getr/set exemption, made
