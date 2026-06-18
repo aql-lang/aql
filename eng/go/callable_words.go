@@ -71,6 +71,13 @@ var callableWords = map[string]callableWord{
 	"test-test": {bodyPos: 1, bodyOut: 0, inputs: func(a []Value) []Value {
 		return []Value{}
 	}},
+	// test-describe [body] (`Test.describe "g" [ Test.test … ]`): a SIDE-EFFECT
+	// grouping body (bodyOut 0) whose nested `Test.test` cases each compile as
+	// their own closure. The handler pushes the group name on the path around
+	// the InvokeBody run.
+	"test-describe": {bodyPos: 1, bodyOut: 0, inputs: func(a []Value) []Value {
+		return []Value{}
+	}},
 }
 
 // compileClosureBody compiles a code body (bodyToks) consuming the given input

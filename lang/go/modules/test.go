@@ -230,15 +230,27 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true},
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
-					body, err := native.RequireConcreteList(args[1], "Test.describe")
-					if err != nil {
-						return nil, err
-					}
 					run := activeRun(parent)
+					// Run the grouping body with the group name pushed on the path.
+					// Compiled path: the body arrived as a closure (nested Test.test
+					// cases each compiled to their own closure); run it via the VM
+					// seam. Interpreter path: sub-engine over the token list.
+					runBody := func() error {
+						if native.IsCompiledClosure(args[1]) {
+							_, e := native.InvokeBody(r, args[1], nil)
+							return e
+						}
+						body, err := native.RequireConcreteList(args[1], "Test.describe")
+						if err != nil {
+							return err
+						}
+						_, e := native.New(r).Run(body.Slice())
+						return e
+					}
 					run.mu.Lock()
 					run.path = append(run.path, name)
 					run.mu.Unlock()
-					_, runErr := native.New(r).Run(body.Slice())
+					runErr := runBody()
 					run.mu.Lock()
 					run.path = run.path[:len(run.path)-1]
 					run.mu.Unlock()
