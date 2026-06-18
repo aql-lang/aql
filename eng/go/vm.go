@@ -35,12 +35,17 @@ import (
 // this run installs/restores r.Invoker (the body-closure seam) and mutates the
 // registry's scopes, so a concurrent RunProgram OR a concurrent interpreter
 // Run on the same registry would race on r.Invoker and the shared defs/types.
-// The vmRunning CAS below rejects an overlapping compiled run with a clear
-// error, but it cannot see an interpreter Run on another goroutine — so the
-// rule is the same one the interpreter already follows: give each goroutine
-// its own *Registry. AQL's concurrent words honour this by forking an isolated
-// registry per branch (ForkConcurrent); host callers run each instance on its
-// own registry.
+// Two guards run at entry: the vmRunning CAS rejects an overlapping compiled
+// run, and an interpRunActive() check rejects starting a compiled run while an
+// interpreter run is in flight (the depth counter Engine.Run maintains). What
+// neither can catch is a fresh interpreter Run STARTING on another goroutine
+// once this compiled run is already underway — the VM's own islands re-enter
+// Engine.Run on this same registry, so a registry-level flag cannot tell a
+// legitimate island from a foreign run without goroutine identity. That last
+// shape stays the caller's responsibility under the same rule the interpreter
+// already follows: give each goroutine its own *Registry. AQL's concurrent
+// words honour this by forking an isolated registry per branch
+// (ForkConcurrent); host callers run each instance on its own registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	return runProgram(p, r, DefaultStepLimit)
 }
@@ -129,6 +134,17 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 				"", "", "")
 		}
 		defer atomic.StoreInt32(&r.vmRunning, 0)
+		// Also reject starting a compiled run while an INTERPRETER run is in
+		// flight on this same registry — the cross-engine race the CAS above
+		// cannot catch. Safe to check here: RunProgram has not yet spawned any
+		// island sub-engine, so a non-zero depth means a DISTINCT interpreter
+		// run (the compiled run's own islands increment the depth only later).
+		if r.interpRunActive() {
+			// The deferred StoreInt32 above releases vmRunning on this return.
+			return nil, makeAqlError("concurrency_error",
+				"bytecode: an interpreter run is already active on this registry; concurrent runs need their own registry (ForkConcurrent)",
+				"", "", "")
+		}
 	}
 	// Last-resort panic guard, mirroring the interpreter's top-level recover
 	// (engine.go Run): a bug in a compiled-reachable handler or in the VM loop
@@ -222,14 +238,17 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	// A get/getr whose result is a NAMED method with a 0-arg overload is
-	// auto-applied by the interpreter the instant it is produced (`r.bool`).
-	// Mirror that: dispatch it 0-arg VM-native. A method needing args
+	// A get/getr whose result is a NAMED trivial-delegation METHOD with a 0-arg
+	// overload is auto-applied by the interpreter the instant it is produced
+	// (`r.bool`). Mirror that: dispatch it 0-arg VM-native. A method needing args
 	// (`r.int`) has no 0-arg sig, so it stays a value and flows to a later
 	// CALL_DYNAMIC; an anonymous fn stays data (the interpreter does not
-	// auto-invoke a 0-arg anonymous value).
+	// auto-invoke a 0-arg anonymous value). The isDelegationFnDef guard is
+	// essential: a USER fn ref (`{b:f/r}`) is NOT a 0-arg method — tryNativeFnApply
+	// would match its InstallFnDef-registered handler and call it argless,
+	// diverging. A user fn stays a value here and applies correctly at CALL_DYNAMIC.
 	if (pr.Word == "get" || pr.Word == "getr") && len(results) == 1 {
-		if fnDef, ok := results[0].Data.(FnDefInfo); ok && !fnDef.Anonymous {
+		if fnDef, ok := results[0].Data.(FnDefInfo); ok && !fnDef.Anonymous && isDelegationFnDef(fnDef) {
 			if applied, done, aerr := vc.tryNativeFnApply(fnDef, nil); done {
 				if aerr != nil {
 					return nil, stampAt(aerr, curDebug, pc, r)
@@ -274,11 +293,15 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 		// matching the interpreter (it does not apply a non-Function).
 		return stack, nil
 	}
-	// A trivial-delegation native method (its dispatchable sig carries a
-	// Handler) dispatches VM-NATIVE: MatchSignature picks the overload the
-	// interpreter would and the handler runs directly — no sub-engine. A
-	// non-trivial body (a user fn) falls through to the island.
-	if fnDef, ok := fnVal.Data.(FnDefInfo); ok {
+	// A trivial-delegation native method (its dispatchable sig is `[Word(name)]`
+	// — a module wrapper like rand-int) dispatches VM-NATIVE: MatchSignature
+	// picks the overload the interpreter would and the inner handler runs
+	// directly — no sub-engine. A user fn carries a REAL body, NOT a delegation
+	// word, so it must NOT take this path: tryNativeFnApply would match the
+	// InstallFnDef-registered Handler and call it outside the dispatch frame it
+	// expects — diverging. Those fall through to the island, which runs the body
+	// faithfully as a nested Run.
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -304,6 +327,24 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 		return nil, vmErrAt(curDebug, pc, "tape-coupled dynamic result")
 	}
 	return append(stack[:base], results...), nil
+}
+
+// isDelegationFnDef reports whether a Function VALUE is a trivial-delegation
+// wrapper — EVERY own sig is a `[Word(inner)]` pass-through to an inner native
+// (a module method like rand-int / MathUtil.sqrt), safely dispatched VM-native
+// via tryNativeFnApply. A user fn carries a REAL body, so it is NOT a delegation
+// and must island instead. An anonymous lambda or a sig-less value is not one.
+func isDelegationFnDef(fd FnDefInfo) bool {
+	sigs := fd.OwnSigs()
+	if len(sigs) == 0 {
+		return false
+	}
+	for i := range sigs {
+		if _, ok := trivialDelegationTarget(&sigs[i]); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // tryNativeFnApply dispatches a Function VALUE VM-native when it resolves to a
@@ -701,18 +742,18 @@ func stampAt(err error, debug []SrcPos, pc int, r *Registry) error {
 	return ae
 }
 
-// vmReturnTypeErr / vmReturnCountErr mirror the interpreter's
-// returnTypeError / returnCountError (engine.go) byte-for-byte — same
-// detail text, same type_error taxonomy — so error-scraping tooling
-// never learns which engine ran.
+// vmReturnTypeErr / vmReturnCountErr raise the interpreter's
+// returnTypeError / returnCountError text — same detail/hint, same type_error
+// taxonomy — so error-scraping tooling never learns which engine ran. The
+// strings come from the shared returnTypeErrorText / returnCountErrorText
+// (return_check_msg.go); only the error-construction plumbing differs.
 func vmReturnTypeErr(r *Registry, funcName string, index int, expected *Type, got Value) error {
-	detail := fmt.Sprintf("%s: return value %d: expected %s, got %s", funcName, index, expected, got.Parent)
-	return r.AqlErrorHint("type_error", detail, funcName, "value: "+diagValue(got))
+	detail, hint := returnTypeErrorText(funcName, index, expected, got)
+	return r.AqlErrorHint("type_error", detail, funcName, hint)
 }
 
 func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
-	detail := fmt.Sprintf("%s: expected %d return value(s), got %d", funcName, expected, got)
-	return r.AqlError("type_error", detail, funcName)
+	return r.AqlError("type_error", returnCountErrorText(funcName, expected, got), funcName)
 }
 
 // vmErrAt builds an internal_error AqlError for a VM-internal soundness

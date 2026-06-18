@@ -170,12 +170,14 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	if len(elems) < 2 {
 		return dynAny
 	}
-	// COMPILE desugar to a nested-`if` chain — ONLY when emission is active
-	// and the case value is re-pushable (it is re-tested against every clause
-	// guard inside the else fragments; a computed event could not be
-	// re-pushed). if3ReturnsFn returns the branch-join type AND records the
+	// COMPILE desugar to a nested-`if` chain — ONLY when emission is active and
+	// the case value can be seated inside every clause guard / block fragment it
+	// is re-tested in. CanSeatAcrossFragment admits a const / local / type node
+	// directly, and a COMPUTED top-level scrutinee (`case (1 add 1) […]`) that
+	// planValueDefLocals then promotes to a frame local once the fragment reads
+	// are recorded. if3ReturnsFn returns the branch-join type AND records the
 	// lowering.
-	if r.Check.Emit != nil && r.Check.Emit.OperandRepushable(v) {
+	if r.Check.Emit != nil && r.Check.Emit.CanSeatAcrossFragment(v) {
 		cond := NewList(caseGuardTokens(v, elems[0]))
 		then := NewList(caseBlockTokens(v, elems[1]))
 		rest := buildCaseChain(v, elems, 2)

@@ -576,10 +576,12 @@ func TestEmitDeadValueDef(t *testing.T) {
 
 // TestEmitFnValueData: a no-capture function VALUE used as data — a residual
 // (`f/r`), a map member (`{b:f/r}`), or an arity/param introspection operand —
-// bakes as a const, so these compile. The auto-dispatch boundary (a fn value
-// standing AHEAD of residual args) is deliberately refused so it falls back
-// faithfully: a plain `(mk2 5) 10` applies the returned fn, an inert `f/r 2`
-// does not, and the residual cannot tell them apart.
+// bakes as a const, so these compile. The auto-dispatch boundary splits on the
+// CARRIER bit: a [Function]-typed CARRIER leading the residual (`(mk2 5) 10` —
+// the factory pattern) is always the interpreter's auto-apply case and now
+// compiles VM-native (see TestFactoryApplyCompiles); an inert CONCRETE fn value
+// ahead of args (`f/r 2`) is left as a stranded [fn args] residual and stays
+// refused so it falls back faithfully.
 func TestEmitFnValueData(t *testing.T) {
 	const inc = `def f fn [[x:Integer] [Integer] [x add 1]] `
 	for _, c := range []struct{ src, want string }{
@@ -602,11 +604,13 @@ func TestEmitFnValueData(t *testing.T) {
 	if _, r := compile(t, `def mk fn [[x:Integer] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def a (mk 5) a`); r == "" {
 		t.Error("a captured closure value compiled as a const but must not (closure state)")
 	}
-	// Auto-dispatch boundary: a fn value ahead of residual args must fall back
-	// (not compile to a stranded [fn args] residual). It must refuse to compile;
-	// the differential gate proves the fallback matches the interpreter.
-	if _, r := compile(t, `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] (mk2 5) 10`); r == "" {
-		t.Error("a fn value ahead of residual args compiled but must fall back (auto-dispatch boundary)")
+	// Auto-dispatch boundary: a CONCRETE (inert) fn value ahead of residual args
+	// must still fall back — the interpreter leaves it as a stranded [fn args]
+	// residual (NOT an apply), and a concrete fn is not a [Function]-typed
+	// CARRIER, so it stays refused. (The factory-apply `(mk2 5) 10` — a CARRIER
+	// lead — now compiles VM-native; see TestFactoryApplyCompiles.)
+	if _, r := compile(t, inc+`f/r 2`); r == "" {
+		t.Error("a concrete fn value ahead of residual args compiled but must fall back")
 	}
 }
 
@@ -645,6 +649,31 @@ func mustRun(t *testing.T, src string) ([]any, bool, error) {
 		t.Fatal(err)
 	}
 	return a.RunCompiled(src)
+}
+
+// A DECLARED fn whose body holds a 0-output statement guard (`if cond [raise]`)
+// followed by a real result now compiles: the guard registers a phantom None in
+// the analyzer's residual but produces NO runtime value, so it is excluded from
+// the return-count check and leaves no operand — exactly as the top-level
+// residual reconciliation handles it. Without the exclusion the phantom inflated
+// the body count and the fn refused as "value count differs from declared
+// returns".
+func TestFnGuardReturnCount(t *testing.T) {
+	// Positive: a guard + real result compiles and matches BOTH the fall-through
+	// (f 5 -> 6) and the raising (f 0 -> error) paths.
+	guard := `def f fn [[n:Integer] [Integer] [if (n eq 0) [raise "zero"] def q (n add 1) q]] `
+	if got, compiled, err := mustRun(t, guard+`f 5`); !compiled || err != nil || len(got) != 1 || got[0] != int64(6) {
+		t.Errorf("f 5: compiled=%v got=%v err=%v, want compiled 6", compiled, got, err)
+	}
+	if _, compiled, err := mustRun(t, guard+`f 0`); !compiled || err == nil {
+		t.Errorf("f 0: compiled=%v err=%v, want compiled with the raised error", compiled, err)
+	}
+	// NEGATIVE: a GENUINE count mismatch (body leaves 2 DEFINITE values, declared
+	// 1) is the interpreter's return-count error, so it stays refused and falls
+	// back rather than miscompiling a wrong residual.
+	if _, r := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); r == "" {
+		t.Error("genuine 2-value body compiled but must refuse (return-count mismatch)")
+	}
 }
 
 // TestEmitMethodField: a map whose field is an UNNAMED inline fn (`{f: fn […]}`)
@@ -694,9 +723,14 @@ func TestEmitRefusals(t *testing.T) {
 		src        string
 		wantReason string
 	}{
-		// A branch reading an enclosing computation breaks the closed-
-		// fragment rule (Stage 3, with locals).
-		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
+		// A branch reading an enclosing computation INSIDE A FN BODY still breaks
+		// the closed-fragment rule: only frame 0 runs planValueDefLocals, so a fn
+		// unit's enclosing computed value cannot be promoted to a re-pushable
+		// local across the arm's scope floor. (The TOP-LEVEL form of this —
+		// `def y (1 add 2) if (1 gt 0) [y mul 2] [0]` — now compiles via
+		// value-def-locals across the fragment; see
+		// TestEnclosingReadInBranchCompiles.)
+		{`def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 5`, "branch reads enclosing computation"},
 		// (`word [1 add 2]` USED to be refused here; the splice now compiles by
 		// inline expansion — see TestWordSpliceCompilesNative.)
 	}
@@ -1112,13 +1146,14 @@ func TestEmitTypeOperands(t *testing.T) {
 		t.Fatalf("generic body baked %v, want a faithful r:1.0", outG)
 	}
 
-	// Negative: a type body whose interior holds a check-mode CARRIER that the
-	// scalar-keep does NOT cover — a mutable-INSTANCE default (`items:(flex [])`)
-	// whose make-result is a non-bakeable instance carrier — must still refuse.
-	// Baking the analysis artefact in would diverge from the interpreter's
-	// per-instance rebuild (caught by the differential gate).
-	if _, r := compile(t, `def C class {items:(flex [])} def Holder gen [T] refine Record [item:T] end Holder of [C]`); r == "" {
-		t.Error("instance-tainted type body compiled but must refuse")
+	// A mutable-INSTANCE default (`items:(flex [])`) inside a class body now bakes
+	// as a const TEMPLATE: make's FreshenDefault copies it per instance, so the
+	// shared baked body is never an instance's mutable field. A generic over such
+	// a class therefore compiles and matches the interpreter's per-instance
+	// rebuild. (The mutation-safety NEGATIVE — a mutable instance must NOT bake
+	// STANDALONE — lives in eng/go/bytecode_constbake_test.go.)
+	if outF, cF, eF := mustRun(t, `def C class {items:(flex [])} def Holder gen [T] refine Record [item:T] end Holder of [C]`); !cF || eF != nil || !strings.Contains(fmt.Sprint(outF), "items:[]") {
+		t.Errorf("flex-default generic body: compiled=%v err=%v out=%v", cF, eF, outF)
 	}
 }
 
@@ -1296,22 +1331,38 @@ func TestEmitMinilangCompiles(t *testing.T) {
 // see TestEmitMethodField). A NAMED ref field (`{b: f/r}`) still falls back to
 // the interpreter (it would diverge through the island), with the correct
 // result — the remaining sanctioned fn-value-from-map fallback.
-func TestEmitFnValueCallFallsBack(t *testing.T) {
-	// Positive: unnamed-fn method field compiles.
-	if _, r := compile(t, `def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`); r != "" {
-		t.Errorf("unnamed-fn method field must compile, refused: %s", r)
+// A fn-VALUE held in a baked map/object field and APPLIED (`m.b 2`) compiles:
+// the field bakes as an inert const member (isInertConstMember admits a capture-
+// free named ref), get poly-folds it, and CALL_DYNAMIC applies it. Faithfulness
+// rides on the trivial-delegation guard: callPoly's 0-arg auto-apply and
+// callDynamic's VM-native fast path fire ONLY for a `[Word(inner)]` delegation
+// method (isDelegationFnDef) — a USER fn (real body) routes through the island,
+// which runs its body exactly as the interpreter would. Both an unnamed inline
+// fn and a named `/r` ref work.
+func TestEmitFnValueFieldCallCompiles(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want int64
+	}{
+		{`def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`, 6},           // unnamed inline
+		{`def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/r}  m.b 2`, 3}, // named ref
+		{`def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: inc/r}  ops.f 5`, 6},
+		{`def m {a:add/r} end m.a 1 2`, 3}, // builtin ref
+	} {
+		got, compiled, err := mustRun(t, c.src)
+		if !compiled || err != nil {
+			t.Errorf("%q: compiled=%v err=%v (want compiled, no error)", c.src, compiled, err)
+			continue
+		}
+		if len(got) != 1 || got[0] != c.want {
+			t.Errorf("%q = %v, want %d", c.src, got, c.want)
+		}
 	}
-	// Negative: a NAMED ref field falls back (not compiled) but still correct.
-	src := `def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/r}  m.b 2`
-	if _, r := compile(t, src); r == "" {
-		t.Error("named-ref method field compiled but must fall back")
-	}
-	out, compiled, err := mustRun(t, src)
-	if err != nil || compiled {
-		t.Fatalf("named-ref fallback: compiled=%v err=%v", compiled, err)
-	}
-	if len(out) != 1 || out[0] != int64(3) {
-		t.Fatalf("m.b 2 fallback = %v, want 3", out)
+	// NEGATIVE: a BARE inert ref directly followed by an arg (`f/r 2`) is NOT
+	// applied by the interpreter — the /r leaves it inert data, residual [f, 2] —
+	// so the compiler must refuse rather than auto-apply it (which would diverge).
+	if _, r := compile(t, `def f fn [[x:Integer] [Integer] [add x 1]]  f/r 2`); r == "" {
+		t.Error("bare inert ref `f/r 2` compiled but must refuse (interpreter leaves it inert)")
 	}
 }
 

@@ -1330,3 +1330,173 @@ func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 		t.Fatalf("parity broke: compiled=%v gotC=%v gotI=%v (want [15])", compiled, gotC, gotI)
 	}
 }
+
+// Step-budget agreement (the RunCompiled LIMITATION note). The interpreter
+// meters DefaultStepLimit per tape token; the VM meters it per bytecode
+// instruction. The contract is one-directional: a long TERMINATING program both
+// engines can finish must produce IDENTICAL results, and the VM must NEVER trip
+// evaluation_limit on a program the interpreter completes (the VM stream is
+// leaner, so it reaches at least as far). A long counted loop with a tight
+// arithmetic body is the canonical long-but-bounded compute: it stays well under
+// the cap in both, so it pins the agreement. (A genuine runaway is out of scope
+// here — that one trips fast in both by design.)
+func TestStepBudgetNoSpuriousLimit(t *testing.T) {
+	// A counted loop accumulating a per-iteration arithmetic value. Large enough
+	// to span many thousands of dispatch steps, small enough that BOTH engines
+	// finish far under DefaultStepLimit (10M).
+	const src = `for 6000 [(i mul 2)]`
+
+	ci, _ := New()
+	gotC, compiled, errC := ci.RunCompiled(src)
+	if !compiled {
+		t.Skip("the counted-loop shape no longer compiles; nothing to compare")
+	}
+	ii, _ := New()
+	gotI, errI := ii.Run(src)
+
+	// Neither engine may spuriously raise on a program the other completes.
+	if (errC != nil) != (errI != nil) {
+		t.Fatalf("step-budget divergence on a terminating loop: compiled err=%v interpreted err=%v", errC, errI)
+	}
+	if errC != nil {
+		t.Fatalf("both engines errored on a bounded loop that should complete: %v", errC)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Fatalf("compiled/interpreted results differ on a long loop:\n  compiled=%v\n  interpreted=%v", gotC, gotI)
+	}
+}
+
+// Fn-values-on-the-stack: a fn that RETURNS an anonymous capture-free closure
+// (the factory pattern) compiles to OpPushClosure inside its unit, and a
+// [Function]-typed CARRIER leading the residual is applied to its trailing args
+// by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
+func TestFactoryApplyCompiles(t *testing.T) {
+	const factory = `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] `
+
+	// POSITIVE — the factory result applied to an arg compiles natively to 11,
+	// with the closure push + dynamic apply in the stream.
+	apply := factory + `(mk2 5) 10`
+	a, _ := New()
+	prog, reason, _, cerr := a.CompileCheck(apply)
+	if cerr != nil || prog == nil {
+		t.Fatalf("factory-apply did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if !strings.Contains(dis, "PUSH_CLOSURE") || !strings.Contains(dis, "CALL_DYNAMIC") {
+		t.Fatalf("factory-apply lowered without the closure/dynamic ops:\n%s", dis)
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(apply)
+	gotI, _ := mustNew(t).Run(apply)
+	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[11]" {
+		t.Fatalf("factory-apply parity: compiled=%v gotC=%v gotI=%v (want [11])", compiled, gotC, gotI)
+	}
+
+	// NEGATIVE — the boundaries that must keep falling back (faithfully):
+	for _, neg := range []struct{ name, src string }{
+		// A bare closure RESULT must not compile — a VM closure prints
+		// differently from the interpreter's FnDefInfo, so it falls back.
+		{"bare closure residual", factory + `(mk2 5)`},
+		// A CAPTURING factory (`[y] => [x add y]` closes over x) is not yet
+		// compiled here; it must fall back, not silently miscompile.
+		{"capturing factory", `def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] (mk 5) 10`},
+	} {
+		gC, comp, eC := mustNew(t).RunCompiled(neg.src)
+		gI, eI := mustNew(t).Run(neg.src)
+		if comp {
+			t.Errorf("%s: expected fallback (wasCompiled=false), got compiled", neg.name)
+		}
+		if (eC != nil) != (eI != nil) || fmt.Sprint(gC) != fmt.Sprint(gI) {
+			t.Errorf("%s: fallback diverged: c=%v(%v) i=%v(%v)", neg.name, gC, eC, gI, eI)
+		}
+	}
+}
+
+func mustNew(t *testing.T) *AQL {
+	t.Helper()
+	a, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return a
+}
+
+// Value-def-locals + class mutable-default bake: a `def name (expr)` binding is
+// promoted to a frame LOCAL so it re-pushes in any order (not just stack order),
+// which lets `def a (make…) def b (make…) a.x … b.x` — a used before b though b
+// is on top — compile; and a class body with a mutable default (flex/Array/…)
+// bakes as a const TEMPLATE that make freshens per instance. The critical
+// property is PER-INSTANCE ISOLATION: a mutation to one instance must NOT leak
+// to another (the negative), which holds because make's FreshenDefault runs
+// identically in both engines.
+func TestValueDefLocalsClassIsolation(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		// flex default + push to a only: b stays empty (isolation).
+		{"flex isolation", `def Foo class {items:(flex [])} def a (make Foo {}) def b (make Foo {}) (a.items push 1) b.items`, "[[1] []]"},
+		// Array default + set on a only: b unchanged.
+		{"array isolation", `def Bits class {bits:(make Array [0 0 0])} def a (make Bits {}) def b (make Bits {}) set 0 9 a.bits end b.bits`, "[Array[0 0 0]]"},
+		// nested instance default + set on a.i only: b.i.n unchanged.
+		{"nested isolation", `def Inner class {n:0} def Outer class {i:(make Inner {})} def a (make Outer {}) def b (make Outer {}) set n 9 a.i end b.i.n`, "[0]"},
+		// two value-defs read OUT of production order (a before b, b on top).
+		{"out-of-order defs", `def a (make Array [1 2 3]) def b (make Array [4 5 6]) a.0 add b.0`, "[5]"},
+	} {
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: expected compiled, fell back: %s", c.name, c.src)
+		}
+		if (errC != nil) != (errI != nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: divergence c=%v(%v) i=%v(%v)", c.name, gotC, errC, gotI, errI)
+		}
+		// The want values ARE the negative: a 1 leaking into b's column, or b's
+		// field changing, would mean the bake shared a mutable default or the
+		// value-def promotion crossed instances. `[[1] []]` (not `[[1] [1]]`) is
+		// the per-instance-isolation contract.
+		if fmt.Sprint(gotC) != c.want {
+			t.Errorf("%s: got %v, want %s (isolation broken?)", c.name, gotC, c.want)
+		}
+	}
+
+	// The standalone "a mutable instance must NOT bake as a const" negative is
+	// pinned in eng/go/bytecode_constbake_test.go; here the isolation wants above
+	// are the behavioural negative.
+}
+
+// Branch-fragment value-def locals: a value computed in the ENCLOSING scope and
+// read INSIDE a branch arm / loop body / clause guard is promoted to a frame
+// local (STORE_LOCAL once, PUSH_LOCAL per cross-floor read) instead of refusing
+// on the closed-fragment scopeFloor rule. This is the enabler for compiling a
+// computed-scrutinee `case (expr) […]` (whose desugar re-tests the scrutinee in
+// every clause fragment) and any `def x (expr) … if/for … x …`.
+func TestEnclosingReadInBranchCompiles(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		// computed scrutinee re-tested in each clause guard/block fragment.
+		{"computed-case", `case (1 add 1) [2 "two" "other"]`, "[two]"},
+		{"computed-case-def", `def x 5 case (x add 1) [6 "six" "no"]`, "[six]"},
+		// enclosing computed value read in an if condition AND then-arm.
+		{"if-enclosing", `def y (1 add 2) if (y gt 0) [y mul 2] [0]`, "[6]"},
+		// enclosing instance read across a branch.
+		{"if-instance", `def a (make Array [1 2 3]) if (a.0 gt 0) [a.1] [99]`, "[2]"},
+	} {
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: expected compiled, fell back: %s", c.name, c.src)
+		}
+		if (errC != nil) != (errI != nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: divergence c=%v(%v) i=%v(%v)", c.name, gotC, errC, gotI, errI)
+		}
+		if fmt.Sprint(gotC) != c.want {
+			t.Errorf("%s: got %v, want %s", c.name, gotC, c.want)
+		}
+	}
+
+	// NEGATIVE: only frame 0 promotes value-def locals, so the SAME enclosing
+	// read inside a FN BODY branch still refuses (pinned as the reason-bearing
+	// negative in eng's TestEmitRefusals; here assert it falls back, not
+	// miscompiles).
+	if _, compiled, _ := mustNew(t).RunCompiled(
+		`def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 5`,
+	); compiled {
+		t.Error("fn-body enclosing-read branch compiled but must fall back (frame-0-only promotion)")
+	}
+}

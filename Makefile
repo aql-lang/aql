@@ -1,5 +1,5 @@
 .PHONY: all build install test vet fmt lint vuln clean cover cover-html cover-html-open \
-        verify-bytecode \
+        verify-bytecode fuzz-bytecode \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
@@ -97,18 +97,37 @@ vuln:
 #
 # Any divergence, race, or allocation regression fails the gate.
 verify-bytecode: fmt vet lint
-	@echo "==> bytecode: differential + whole-corpus + combination matrix"
-	cd test/go && go test ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombination'
-	@echo "==> bytecode: emitter / return-check / isolation / reuse / alloc pins"
-	cd lang/go && go test . -run 'TestEmit|TestRunCompiled|TestCompiled|TestTapeReload'
-	cd eng/go  && go test . -run 'TestTapeReload|TestVM'
+	@echo "==> bytecode: differential + whole-corpus + combination matrix + property fuzz"
+	cd test/go && go test ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombination|TestPropertyDifferential'
+	@echo "==> bytecode: emitter / return-check / step-budget / isolation / reuse / alloc pins"
+	cd lang/go && go test . -run 'TestEmit|TestRunCompiled|TestCompiled|TestStepBudget|TestTapeReload'
+	@echo "==> bytecode: const-bake mutation-safety + VM pins"
+	cd eng/go  && go test . -run 'TestTapeReload|TestVM|TestIsInertConst'
 	@echo "==> bytecode: -race concurrency gates"
 	cd lang/go && go test . -run 'TestCompiledConcurrencyRaceFree|TestCompiledIslandReuseNoStateLeak' -race
 	cd test/go && go test ./langspec/ -run 'TestSpecCompiledConcurrentRowsRaceFree' -race
 	@echo "==> bytecode: args-aliasing gate (-tags aqldebug, fresh args slice per CALL_NATIVE)"
-	cd lang/go && go test -tags aqldebug . -run 'TestEmit|TestRunCompiled|TestCompiled'
-	cd test/go && go test -tags aqldebug ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombinationParity'
+	cd lang/go && go test -tags aqldebug . -run 'TestEmit|TestRunCompiled|TestCompiled|TestStepBudget'
+	cd test/go && go test -tags aqldebug ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombinationParity|TestPropertyDifferential'
 	@echo "==> bytecode: VERIFY PASSED"
+
+# Nightly / on-demand DEEP property fuzz of the compilable subset. The standard
+# verify-bytecode runs the lean deterministic default; this cranks the seed and
+# iteration budget (override on the command line) and re-runs the generated
+# corpus under BOTH the release build and the -tags aqldebug build (fresh args
+# slice per CALL_NATIVE), so a deep run also exercises the args-aliasing invariant.
+#   make fuzz-bytecode                       # the cranked default below
+#   make fuzz-bytecode FUZZ_SEEDS=40 FUZZ_ITERS=20000
+FUZZ_SEEDS ?= 20
+FUZZ_ITERS ?= 5000
+fuzz-bytecode:
+	@echo "==> bytecode: property fuzz ($(FUZZ_SEEDS) seeds x $(FUZZ_ITERS) iters), release build"
+	cd test/go && AQL_FUZZ_SEEDS=$(FUZZ_SEEDS) AQL_FUZZ_ITERS=$(FUZZ_ITERS) \
+	  go test ./langspec/ -run 'TestPropertyDifferential' -timeout 60m -v
+	@echo "==> bytecode: property fuzz, -tags aqldebug (args-aliasing build)"
+	cd test/go && AQL_FUZZ_SEEDS=$(FUZZ_SEEDS) AQL_FUZZ_ITERS=$(FUZZ_ITERS) \
+	  go test -tags aqldebug ./langspec/ -run 'TestPropertyDifferential' -timeout 60m
+	@echo "==> bytecode: FUZZ PASSED"
 
 clean:
 	@set -e; for m in $(MODULES); do \

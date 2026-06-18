@@ -223,10 +223,48 @@ func promoteOperand(op *emitOperand, promoted map[int]int) {
 	}
 }
 
+// childFragments returns the body fragments a branch / loop event owns — the
+// list-form condition, both `if` arms, and a loop body. Nil entries are kept so
+// callers iterate a fixed shape and skip them; a non-branch/loop event owns
+// none.
+func childFragments(ev *emitEvent) []*EmitFragment {
+	switch ev.kind {
+	case evBranch:
+		return []*EmitFragment{ev.br.condFrag, ev.br.then, ev.br.els}
+	case evLoop:
+		return []*EmitFragment{ev.loop.body}
+	}
+	return nil
+}
+
+// forEachFragmentOperand calls fn for every operand recorded INSIDE ev's body
+// fragments, recursing through nested branches / loops. A reference whose
+// producer lives OUTSIDE the fragment (the enclosing computation) crosses the
+// fragment's scope floor; the only way the fragment can read it is as a frame
+// local, so planValueDefLocals uses this walk to force such a producer's
+// promotion.
+func forEachFragmentOperand(ev *emitEvent, fn func(emitOperand)) {
+	for _, frag := range childFragments(ev) {
+		if frag == nil {
+			continue
+		}
+		for i := range frag.events {
+			fe := &frag.events[i]
+			for _, op := range collectOperands(fe) {
+				fn(op)
+			}
+			forEachFragmentOperand(fe, fn)
+		}
+	}
+}
+
 // rewritePromotedRefs redirects an event's enclosing-scope operands (call /
 // user-call / fallback args, a branch condition, a loop count) to value-def
-// locals. Only enclosing references are rewritten — the producing event of a
-// promoted value lives at the same scope, so its consumers do too.
+// locals, then recurses into any body fragments so a cross-floor reference
+// inside a branch arm / loop body is rewritten the same way. Only producers in
+// the `promoted` map are touched — an intra-fragment result reference (a branch
+// arm's own out, a fragment-local temp) is never promoted, so it is left as the
+// event operand the closed-fragment lowering expects.
 func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 	switch ev.kind {
 	case evCall:
@@ -251,6 +289,14 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 	case evLoop:
 		promoteOperand(&ev.loop.end, promoted)
 	}
+	for _, frag := range childFragments(ev) {
+		if frag == nil {
+			continue
+		}
+		for i := range frag.events {
+			rewritePromotedRefs(&frag.events[i], promoted)
+		}
+	}
 }
 
 // planValueDefLocals decides which of a unit's top-level computed results are
@@ -267,12 +313,23 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 // Returns seq → slot and rewrites every reference in place to a local operand.
 func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
+	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
 	for i := range events {
 		for _, op := range collectOperands(&events[i]) {
 			if op.kind == opEvent && op.resIdx == 0 {
 				refs[op.idx]++
 			}
 		}
+		// A reference inside a body fragment crosses the fragment's scope floor:
+		// the producer is only reachable there as a frame local, so count it AND
+		// flag the producer for forced promotion regardless of the top-level
+		// count (a single cross-floor read still needs the local).
+		forEachFragmentOperand(&events[i], func(op emitOperand) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				refs[op.idx]++
+				fragRef[op.idx] = true
+			}
+		})
 	}
 	for _, seq := range extra {
 		refs[seq]++
@@ -287,22 +344,25 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		switch {
 		case refs[ev.seq] == 0:
 			// A single-result value-def bound to a name referenced zero times (a
-			// dead binding, e.g. `def b (make C {…})` with b never used) — and
-			// never the program residual, which would count toward refs. The call
-			// still runs (side effects preserved), but its result is discarded:
-			// lowerCall drops it rather than leaving it unconsumed on the stack. A
-			// value used inside a branch/loop arm cannot reach here — that arm is
-			// refused by the scopeFloor enclosing-computation guard first.
+			// dead binding, e.g. `def b (make C {…})` with b never used) — never the
+			// program residual or a fragment read, both of which count toward refs.
+			// The call still runs (side effects preserved), but its result is
+			// discarded: lowerCall drops it rather than leaving it unconsumed on the
+			// stack.
 			if dead == nil {
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] == 1:
-			// Consumed exactly once (inline or as the residual) — stays on the
-			// simulated stack for its single consumer; no local needed.
-		default:
-			// Referenced more than once: store into a frame slot now and re-push
-			// per reference (references rewritten to local operands below).
+		case refs[ev.seq] >= 2 || es.valueDefs[ev.seq] || fragRef[ev.seq]:
+			// Promote to a frame slot (store now, re-push per reference) when the
+			// result is referenced more than once, OR it is a NAMED value-def
+			// (`def x (expr)`, marked via MarkValueDef), OR it is read from INSIDE a
+			// branch/loop fragment (fragRef): a binding may be consumed in any order,
+			// not just stack order — `def a (make…) def b (make…) a.x … b.x` reads a
+			// (produced first, now deeper) before b — and a cross-floor fragment read
+			// cannot reach the parent stack at all. The single-consume simulated
+			// stack seats neither; a frame local re-pushes freely from any scope. The
+			// extra STORE/PUSH for an in-order single use is harmless.
 			if promoted == nil {
 				promoted = map[int]int{}
 			}
@@ -310,6 +370,9 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				promoted[ev.seq] = unit.numLocals
 				unit.numLocals++
 			}
+		default:
+			// A single anonymous (non-def) use — stays on the simulated stack for
+			// its one consumer; no local needed.
 		}
 	}
 	if promoted != nil {

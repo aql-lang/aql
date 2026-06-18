@@ -345,8 +345,15 @@ func (p *Program) Disassemble() string {
 		fmt.Fprintf(&sb, "fn f%d %s/%d (locals=%d)%s:\n", fi, p.Fns[fi].Name, p.Fns[fi].NParams, p.Fns[fi].NLocals, slotNames(p.Fns[fi].LocalNames))
 		p.disasmUnit(&sb, p.Fns[fi].Code)
 	}
-	fmt.Fprintf(&sb, "; consts=%d types=%d sigs=%d fallbacks=%d fns=%d max-stack=%d locals=%d\n",
+	fmt.Fprintf(&sb, "; consts=%d types=%d sigs=%d fallbacks=%d fns=%d max-stack=%d locals=%d",
 		len(p.Consts), len(p.Types), len(p.Sigs), len(p.Fallbacks), len(p.Fns), p.MaxStack, p.NumLocals)
+	// polyrefs is appended only when present, so the common (no-poly) summary —
+	// and every golden asserting it — stays byte-identical while a poly program
+	// still surfaces its CALL_NATIVE_POLY table count.
+	if len(p.PolyRefs) > 0 {
+		fmt.Fprintf(&sb, " polyrefs=%d", len(p.PolyRefs))
+	}
+	sb.WriteByte('\n')
 	return sb.String()
 }
 

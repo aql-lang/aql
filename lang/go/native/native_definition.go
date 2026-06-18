@@ -168,6 +168,10 @@ var definitionNatives = []NativeFunc{
 func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stackOnly ...bool) ([]Value, error) {
 	InstallDef(r, name, value, stackOnly...)
 	r.Check.RecordDef(name, pos)
+	// Mark a computed binding for value-def-local promotion in the bytecode
+	// lowerer: a named value may be referenced in any order, so its producing
+	// event is stored to a frame local rather than left on the simulated stack.
+	r.Check.Emit.MarkValueDef(value)
 	return nil, nil
 }
 

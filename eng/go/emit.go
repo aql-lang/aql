@@ -2,6 +2,10 @@ package eng
 
 // The bytecode recording pass — Stage 1 of design/aql-bytecode-plan.0.md.
 //
+// For the POSITIVE statement of what compiles and why — the rule each refusal
+// gate below is defending — see design/COMPILABLE-SUBSET.md. Keep it in lockstep
+// when widening the subset; the gates here are a checklist against that rule.
+//
 // The compiler is the carrier checker with a recording side effect:
 // when CheckState.Emit is set, every check-mode dispatch that flows
 // through carrierResults records a call event with full operand
@@ -209,6 +213,13 @@ type EmitState struct {
 	// lower; Reason names the first offender.
 	Compilable bool
 	Reason     string
+
+	// reg is the registry the check pass runs against — set once at the top of
+	// Engine.Run while emit is active. It lets recorder-internal helpers reuse
+	// the lang-layer closure compiler (compileClosureBody) for a fn VALUE a body
+	// RETURNS (the factory pattern), which needs r but is reached from a finish
+	// closure that has only es. Nil outside a compile pass.
+	reg *Registry
 	// SiteCounts tallies dispatches per site class while recording is
 	// active (counting stops once the program is marked
 	// uncompilable, with the rest of the recording).
@@ -228,6 +239,7 @@ type EmitState struct {
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
 	zeroOutSeq map[int]bool        // branch seq → 0-output statement guard (residual skips it)
 	typeOut    map[int]bool        // event seq → its output is itself a type body
+	valueDefs  map[int]bool        // event seq → bound to a NAMED value-def (`def x (expr)`)
 	genericSeq map[int]bool        // event seq → recorded by the GENERIC RecordCall path (a plain native), not a structured hook
 	consts     []Value
 	constIdx   map[string]int // CanonValue → Consts index
@@ -290,6 +302,7 @@ func NewEmitState() *EmitState {
 		producedBy: map[string]producer{},
 		zeroOutSeq: map[int]bool{},
 		typeOut:    map[int]bool{},
+		valueDefs:  map[int]bool{},
 		genericSeq: map[int]bool{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
@@ -413,6 +426,24 @@ func (es *EmitState) setProducedAt(out Value, seq, idx int) {
 	}
 }
 
+// MarkValueDef records that value v is bound to a NAMED `def x (expr)` binding,
+// so the lowerer promotes v's producing event to a frame LOCAL (STORE_LOCAL +
+// PUSH_LOCAL per reference) instead of leaving it on the simulated stack. A
+// named binding may be consumed in ANY order — `def a (make …) def b (make …)
+// a.x … b.x` uses a (produced first) before b (on top), which the single-
+// consume stack discipline cannot seat — whereas a local re-pushes freely. Only
+// a single-result producing event qualifies (a multi-result `dup` needs the
+// carrier-identity path); a const / local / unproduced value is a no-op.
+// Nil-receiver-safe; called from the def handler's install choke point.
+func (es *EmitState) MarkValueDef(v Value) {
+	if es == nil || !es.Compilable {
+		return
+	}
+	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
+		es.valueDefs[pr.seq] = true
+	}
+}
+
 // resolveOperand maps a dispatch value to its provenance: a prior
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RecordStrip saved).
@@ -448,6 +479,66 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	return constOperand(es.intern(lit)), true
 }
 
+// tryReturnedClosure compiles a fn VALUE that a body RETURNS — the factory
+// pattern `def mk fn [[x:Integer] [Function] [([y:Integer] => […])]]`, whose
+// body residual is an anonymous lambda — into its own closure unit, yielding an
+// opClosure operand (lowering to OpPushClosure). The caller (the fn-finish
+// residual resolution) falls back here when resolveOperand cannot place the
+// value. Probe-guarded so a refusal leaves the real state untouched.
+//
+// Only an ANONYMOUS, single-own-sig, capture-free FnDefInfo qualifies: a named
+// ref re-dispatches by name; an overloaded fn needs runtime MatchFnSig; a
+// CAPTURING lambda would need its captures resolved+threaded in this scope
+// (deferred); a sentinel body targets an enclosing frame. Anything else returns
+// false and the program falls back faithfully.
+func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool) {
+	if es == nil || es.reg == nil || v.Carrier || v.Dynamic {
+		return emitOperand{}, false
+	}
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok || !fd.Anonymous || len(fd.Captured) > 0 {
+		return emitOperand{}, false
+	}
+	// Exactly one own (non-fallback) signature — FirstOwnSig is otherwise not
+	// guaranteed to be the overload a runtime MatchFnSig would pick.
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	lam, hasOwn := fd.FirstOwnSig()
+	if own != 1 || !hasOwn || len(lam.Body) == 0 || bodyToksHaveSentinel(lam.Body) {
+		return emitOperand{}, false
+	}
+	inputs := make([]Value, len(lam.Params))
+	paramNames := make([]string, len(lam.Params))
+	for i, p := range lam.Params {
+		t := p.Type
+		if t == nil {
+			t = TAny
+		}
+		inputs[i] = NewCarrier(t)
+		paramNames[i] = p.Name
+	}
+	r := es.reg
+	// PROBE in a throwaway emit state (mirrors recordClosureDispatch), so a body
+	// that refuses leaves THIS program untouched and the value stays unresolved.
+	r.Check.Emit = NewEmitState()
+	r.Check.Emit.reg = r
+	_, probeOK := compileClosureBody(r, "fnval", lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	r.Check.Emit = es
+	if !probeOK {
+		return emitOperand{}, false
+	}
+	// REAL: compile into this program (deterministic success after a clean probe).
+	unit, realOK := compileClosureBody(r, "fnval", lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	if !realOK || unit < 0 {
+		return emitOperand{}, false
+	}
+	return emitOperand{kind: opClosure, closureUnit: unit}, true
+}
+
 // OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE
 // operand — a const, a frame local, or a (canonical) type node — as opposed
 // to a computed EVENT result (on the simulated stack exactly once) or an
@@ -473,6 +564,27 @@ func (es *EmitState) OperandRepushable(v Value) bool {
 	}
 	lit, ok := es.materialise(v)
 	return ok && isInertConst(lit)
+}
+
+// CanSeatAcrossFragment reports whether v can be read INSIDE a branch / loop
+// fragment that a multi-reference desugar is about to record. Either v is
+// already re-pushable (OperandRepushable: a const, frame local, or type node),
+// OR it is a COMPUTED single-result event in the TOP-LEVEL frame — which
+// planValueDefLocals promotes to a frame local once a fragment read is seen,
+// reachable across the scope floor. A computed event in a nested fn unit is not
+// promoted (only frame 0 runs planValueDefLocals), so it cannot be seated and
+// the desugar must keep its conservative non-compiling path. Side-effect free,
+// like OperandRepushable — the promotion itself happens later, driven purely by
+// the fragment reference the desugar then records.
+func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
+	if es.OperandRepushable(v) {
+		return true
+	}
+	if es == nil || len(es.units) != 1 {
+		return false
+	}
+	pr, ok := es.producedBy[v.ID]
+	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.typeOut[pr.seq])
 }
 
 // materialise recovers the fully concrete value behind a stripped
@@ -933,27 +1045,45 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		resume()
 		rec.frag = es.TakeFragment()
 		if !fragDiverges(rec.frag) {
-			// A DECLARED fn must leave exactly len(returns) values: a
-			// different count is the return-COUNT error the interpreter
-			// raises, so refuse and let the program fall back. An UNDECLARED
-			// fn (an anonymous lambda whose Returns were nilled, or a
-			// 0-return fn) is NOT count-checked by the interpreter, so its
-			// body residual — 0 or N values — is taken as-is.
-			if len(rec.returns) > 0 && len(bodyStk) != len(rec.returns) {
-				es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
-				return
-			}
 			// Resolve every residual value to an operand, in stack order
 			// (bottom→top), so the unit leaves the body's N results for its
-			// caller. A 0-result body leaves outOps empty (a bare RET).
-			ops := make([]emitOperand, len(bodyStk))
-			for i, v := range bodyStk {
-				op, okOut := es.resolveOperand(v)
+			// caller. A 0-output statement guard (`if cond [raise]`) registered a
+			// phantom None in the residual but produces 0 runtime values, so it
+			// leaves NO operand — skip it, exactly as the top-level residual
+			// reconciliation does. A 0-result body leaves outOps empty (a bare RET).
+			ops := make([]emitOperand, 0, len(bodyStk))
+			for _, v := range bodyStk {
+				if pr, ok := es.producedBy[v.ID]; ok && es.zeroOutSeq[pr.seq] {
+					continue
+				}
+				// A body that RETURNS an anonymous capture-free lambda (the factory
+				// pattern `def mk fn [[x][Function][([y]=>…)]]`) compiles the
+				// returned fn to its own closure unit, so the body leaves a runtime
+				// closure VALUE on the stack — applied VM-native by a later stack
+				// OpCallDynamic (`(mk 5) 10`). Tried BEFORE resolveOperand because a
+				// capture-free anonymous fn would otherwise bake as an inert const
+				// and apply through a callDynamic interpreter island instead of the
+				// VM. A non-fn / named / capturing / multi-sig value declines here
+				// and falls through to the normal resolution.
+				op, okOut := es.tryReturnedClosure(v, rec.pos)
+				if !okOut {
+					op, okOut = es.resolveOperand(v)
+				}
 				if !okOut {
 					es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
 					return
 				}
-				ops[i] = op
+				ops = append(ops, op)
+			}
+			// A DECLARED fn must leave exactly len(returns) RUNTIME values: a
+			// different count (now measured over real operands, phantom guards
+			// excluded) is the return-COUNT error the interpreter raises, so refuse
+			// and let the program fall back. An UNDECLARED fn (an anonymous lambda
+			// whose Returns were nilled, or a 0-return fn) is NOT count-checked by
+			// the interpreter, so its body residual — 0 or N values — is taken as-is.
+			if len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+				es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
+				return
 			}
 			rec.outOps = ops
 		}
@@ -1575,6 +1705,17 @@ func (es *EmitState) intern(v Value) int {
 	return len(es.consts) - 1
 }
 
+// isFreshenedInstance reports whether v is a concrete MUTABLE instance that
+// make's FreshenDefault (core_make.go) copies per instance when v is a
+// class-schema field default — an Object/Array/Store/flex value. Admitting one
+// as a SCHEMA member (ONLY through typeBodyConstOK's memberOK, never standalone)
+// is mutation-safe precisely because every `make` freshens it into its own copy;
+// outside a type body nothing freshens it, so isInertConst keeps it out of the
+// const pool. Pairs with the const-bake regression gate.
+func isFreshenedInstance(v Value) bool {
+	return IsObjectInstance(v) || IsArray(v) || IsStore(v) || IsFlexList(v)
+}
+
 // isTypeBodyPayload reports a structural type-body payload — pooled
 // without dedup, like compounds (identity must not merge).
 func isTypeBodyPayload(v Value) bool {
@@ -1616,15 +1757,17 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		}
 	}
 	memberOK := func(m Value) bool {
-		// A concrete instance default (`class {x:(make Foo 1)}`) is a const-safe
-		// SCHEMA member: make copies the type body's defaults per instance, so
-		// the baked instance is never the one a later `set` mutates (the
-		// mutation-safety invariant holds — unlike a data-map member, which
-		// isInertConst still rejects). Const-folded by constFoldContainerVal.
-		if !m.Carrier && !m.Dynamic {
-			if _, ok := m.Data.(ObjectInstanceInfo); ok {
-				return true
-			}
+		// A concrete mutable instance default (`class {x:(make Foo 1)}`,
+		// `{items:(flex [])}`, `{bits:(make Array [0 0 0])}`) is a const-safe SCHEMA
+		// member: `make` runs FreshenDefault over every field default
+		// (core_make.go), handing each instance its OWN fresh copy, so the baked
+		// body is a READ-ONLY TEMPLATE — never the mutable value a later `set`
+		// writes. The mutation-safety invariant therefore holds for a default
+		// INSIDE a type body, even though isInertConst still (correctly) rejects
+		// the same instance standing alone or as a data-list member, where nothing
+		// freshens it. Const-folded by constFoldContainerVal.
+		if !m.Carrier && !m.Dynamic && isFreshenedInstance(m) {
+			return true
 		}
 		return typeBodyConstOKParam(m, isParam) || isInertConst(m)
 	}
@@ -1721,7 +1864,6 @@ func isInertConst(v Value) bool {
 		// The bound is recovered for a stripped operand via origByID
 		// (RememberOriginal at the constructor); type-algebra words
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
-		_ = d
 		return true
 	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
@@ -1938,12 +2080,7 @@ func isInertConstMember(v Value) bool {
 			return true
 		}
 		if fd, ok := v.Data.(FnDefInfo); ok {
-			// Only an UNNAMED (inline `fn […]`) fn value. A named ref (`f/r`,
-			// Name="f") re-dispatches by NAME when applied through the island
-			// sub-engine, where forward collection of the trailing arg differs
-			// from the interpreter — that diverges, so keep named refs
-			// non-const (they refuse and fall back faithfully).
-			return fd.Name == ""
+			return len(fd.Captured) == 0 && fd.Registry == nil
 		}
 	}
 	return isInertConst(v)
@@ -2005,28 +2142,52 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		applyDynamic = restStatic
 	}
+	// Fn-values-on-the-stack (`(mk2 5) 10` → 11). A Function/FnDef-typed CARRIER
+	// leading the residual is a [Function]-returning call result (the factory
+	// pattern: `mk2`'s body returned a closure, now on the stack) — ALWAYS the
+	// interpreter's auto-apply case, because the one non-applied shape (an inert
+	// `f/r`) is a CONCRETE const, never a carrier. So the apply-vs-inert ambiguity
+	// the comment below describes is resolved by the carrier bit: a carrier lead
+	// applies, a concrete-fn lead stays refused. OpCallDynamic then applies it
+	// faithfully at run time (callDynamic leaves a non-callable untouched). The
+	// rest must be static — no dynamic, no further fn value.
+	fnCarrierLead := false
+	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
+		rest := true
+		for i := 1; i < len(residual); i++ {
+			if residual[i].Dynamic || isFnValueResidual(residual[i]) {
+				rest = false
+				break
+			}
+		}
+		fnCarrierLead = rest
+	}
+	applyDynamic = applyDynamic || fnCarrierLead
 	if !applyDynamic {
 		for i := 0; i+1 < len(residual); i++ {
 			if residual[i].Dynamic {
 				return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
 			}
 		}
-	}
-	// A fn value followed by residual args is an auto-dispatch boundary the
-	// residual cannot resolve statically: the interpreter applies a plain
-	// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2], and the two are
-	// indistinguishable here. The lead may be a concrete fn value (a baked
-	// const) OR a Function-typed call-result carrier (`mk2 5`'s declared
-	// [Function] return) — neither is a Dynamic/Any carrier, so applyDynamic
-	// above does not own it. Refuse so both fall back faithfully — a fn value
-	// stands ONLY as the last residual / a container member / an introspection
-	// operand, never ahead of args.
-	for i := 0; i+1 < len(residual); i++ {
-		rv := residual[i]
-		_, isFnData := rv.Data.(FnDefInfo)
-		isFnTyped := rv.Parent != nil && (rv.Parent.ConformsTo(TFunction) || rv.Parent.ConformsTo(TFnDef))
-		if isFnData || isFnTyped {
-			return nil, "fn value precedes residual args (auto-dispatch boundary)", false
+		// A fn value followed by residual args is an auto-dispatch boundary the
+		// residual cannot resolve statically: the interpreter applies a plain
+		// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2]. The carrier
+		// lead is handled above; a CONCRETE fn value ahead of args stays refused
+		// (the inert case), so both fall back faithfully.
+		for i := 0; i+1 < len(residual); i++ {
+			if isFnValueResidual(residual[i]) {
+				return nil, "fn value precedes residual args (auto-dispatch boundary)", false
+			}
+		}
+		// An unconsumed Function/FnDef-typed CARRIER anywhere in the residual is a
+		// runtime closure that would be the rendered result — and a VM closure
+		// value prints differently from the interpreter's FnDefInfo, so refuse
+		// rather than diverge on the render. (A concrete baked fn value — Carrier
+		// false, the introspection case — renders identically and is exempt.)
+		for i := range residual {
+			if isFnTypedCarrier(residual[i]) {
+				return nil, "unconsumed fn-value carrier in residual (closure render)", false
+			}
 		}
 	}
 	vi := 0
@@ -2083,7 +2244,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	// Lower the compiled fn units. Tail positions are marked first so
 	// the lowering emits TAIL_CALL_USER (frame replacement — the
 	// language's tail-call guarantee carries into compiled mode).
-	for i, rec := range es.fnRecs {
+	for _, rec := range es.fnRecs {
 		if !rec.finished {
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
@@ -2129,7 +2290,6 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// A fully diverging body (every path tail-calls) emits no RET —
 		// control leaves via the callee's eventual RET.
 		p.Fns = append(p.Fns, cf)
-		_ = i
 	}
 
 	lw.p.Consts = es.consts // interning may have grown during reconciliation
@@ -2138,6 +2298,26 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	lw.p.MaxStack = lw.maxDepth
 	lw.p.NumLocals = es.units[0].numLocals
 	return lw.p, "", true
+}
+
+// isFnTypedCarrier reports whether v is a Function/FnDef-typed CARRIER — a
+// [Function]-returning call result on the simulated stack (e.g. `(mk2 5)`), as
+// distinct from a CONCRETE baked fn value (Carrier false, the introspection /
+// inert-`/r` case). The carrier bit is what resolves the apply-vs-inert
+// ambiguity in Finalize: a carrier lead auto-applies, a concrete fn does not.
+func isFnTypedCarrier(v Value) bool {
+	return v.Carrier && v.Parent != nil &&
+		(v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
+}
+
+// isFnValueResidual reports whether v is ANY fn value — a concrete FnDefInfo (a
+// baked /r reference) or a Function/FnDef-typed value (carrier or not). Used to
+// keep a fn value out of the trailing-arg positions of a leading-fn apply.
+func isFnValueResidual(v Value) bool {
+	if _, ok := v.Data.(FnDefInfo); ok {
+		return true
+	}
+	return v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
 }
 
 func eventPos(ev emitEvent) SrcPos {

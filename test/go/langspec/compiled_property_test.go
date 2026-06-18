@@ -488,6 +488,35 @@ func genFnProg(r *rand.Rand) *gnode {
 	return &gnode{op: "seq", kids: append(caps, node)} // outer captures ++ the fn prog
 }
 
+// genUserFnProg builds a DIRECTLY-CALLED named fn — the CALL_USER / RET (and,
+// for the recursive form, TAIL_CALL_USER) lowering that nothing else here
+// exercises: genFnProg only ever calls a fn THROUGH a value (apply / stored
+// dispatch), never `name args` directly. Two shapes:
+//
+//   - non-recursive: `def f0 fn [[a:Integer b:Integer][Integer][<body>]] (f0 1 2)`
+//     — a plain frame call with a rich Integer body over the params.
+//   - bounded tail-recursive accumulator: a self-call in the else-arm tail
+//     position (TAIL_CALL_USER), driven by a SMALL literal counter (1..5) so it
+//     terminates in a handful of frames — far under either engine's step budget,
+//     so it can never make the differential flaky.
+func genUserFnProg(r *rand.Rand) *gnode {
+	if r.Intn(2) == 0 {
+		return &gnode{op: "userfnrec", cat: cInt,
+			cmp:  binOps[r.Intn(len(binOps))],
+			n:    1 + r.Intn(5),                                  // bounded recursion depth (1..5)
+			kids: []*gnode{{op: "lit", cat: cInt, n: r.Intn(6)}}, // initial accumulator
+		}
+	}
+	nparams := 1 + r.Intn(2) // 1 or 2
+	params := append([]string{}, []string{"a", "b"}[:nparams]...)
+	node := &gnode{op: "userfn", cat: cInt, n: nparams, keys: params,
+		kids: []*gnode{gen(r, cInt, 3, params)}} // body in the param scope
+	for i := 0; i < nparams; i++ {
+		node.kids = append(node.kids, &gnode{op: "lit", cat: cInt, n: r.Intn(6)})
+	}
+	return node
+}
+
 // renderFnDef renders a fn VALUE: a named-fn `(fn [[params][Integer][body]])` or
 // an afn lambda `([params] => [body])`. The body is already rendered in the
 // param scope.
@@ -604,7 +633,7 @@ func sleaf(r *rand.Rand, c cat) *gnode {
 }
 
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
-	switch r.Intn(9) {
+	switch r.Intn(10) {
 	case 0:
 		return genArrProg(r), nil
 	case 1:
@@ -615,6 +644,8 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 		return genFnProg(r), nil // fn-value indirection (apply / stored dispatch)
 	case 4:
 		return genStrProg(r), nil // StringUtil ops (computed strings, indexof, split…)
+	case 5:
+		return genUserFnProg(r), nil // directly-called named fn (CALL_USER / TAIL_CALL_USER / RET)
 	}
 	scope := []string{}
 	var stmts []*gnode
@@ -815,6 +846,23 @@ func render(n *gnode, scope []string) string {
 			out += " " + render(k, scope)
 		}
 		return out
+	case "userfn":
+		// def f0 fn [[a:Integer b:Integer][Integer][<body>]] (f0 <arg> …)
+		sig := make([]string, len(n.keys))
+		for i, p := range n.keys {
+			sig[i] = p + ":Integer"
+		}
+		args := ""
+		for _, k := range n.kids[1:] {
+			args += " " + render(k, scope)
+		}
+		return "def f0 fn [[" + strings.Join(sig, " ") + "][Integer][" + render(n.kids[0], n.keys) + "]] (f0" + args + ")"
+	case "userfnrec":
+		// Bounded tail-recursive accumulator: the f0 self-call is the else-arm
+		// tail (-> TAIL_CALL_USER); n decreases to the (n lte 0) base case.
+		init := render(n.kids[0], scope)
+		return "def f0 fn [[n:Integer acc:Integer][Integer][if (n lte 0) [acc] [f0 (n sub 1) (acc " +
+			n.cmp + " n)]]] (f0 " + fmt.Sprint(n.n) + " " + init + ")"
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":
