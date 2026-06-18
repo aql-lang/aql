@@ -267,16 +267,6 @@ type FnSig struct {
 	// Used by sigs that take a Map at a code-body slot (e.g. a spec
 	// schema where map values are quoted generators).
 	NoEvalMapArgs map[int]bool
-	// SchemaArg marks a type-CONSTRUCTOR sig (class/object/record/surface)
-	// whose map argument is a const SCHEMA: its field defaults
-	// (`{x:(make Foo 1)}`, `{items:(flex [])}`) build the schema, they are not
-	// runtime computations. While that map auto-evaluates in check mode the
-	// engine (1) MATERIALISES the defaults — runs the pure-data constructors for
-	// real so they become concrete templates the schema can const-bake, instead
-	// of carriers — and (2) SUSPENDS bytecode recording so those dispatches emit
-	// no spurious unconsumed-result events. Distinct from `make`, whose override
-	// map is a genuine runtime value (never SchemaArg).
-	SchemaArg bool
 	// RawParens marks arg positions where a forward ParenExpr is captured
 	// RAW (not pre-evaluated) so the handler receives the paren as code.
 	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.9.md.

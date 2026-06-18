@@ -26,24 +26,6 @@ func (c *CheckState) SkipsSideEffect() bool {
 	return c.IsActive()
 }
 
-// MaterialisingSchema reports whether the engine is materialising a type
-// constructor's SchemaArg defaults — the window in which non-RunInCheckMode
-// constructor handlers run for real (concrete templates) instead of returning
-// carriers. See CheckState.materialiseSchema.
-func (c *CheckState) MaterialisingSchema() bool {
-	return c != nil && c.materialiseSchema > 0
-}
-
-// EnterSchemaMaterialisation opens a schema-materialisation window and returns
-// the matching close func. Set ONLY around a SchemaArg map's auto-evaluation.
-func (c *CheckState) EnterSchemaMaterialisation() func() {
-	if c == nil {
-		return func() {}
-	}
-	c.materialiseSchema++
-	return func() { c.materialiseSchema-- }
-}
-
 // Begin enables check mode and resets the per-pass state (diagnostics,
 // step count, budget flag, defs-installed/used, context-type tracking).
 // Returns a function that switches mode off when called — typically via

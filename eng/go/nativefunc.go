@@ -57,11 +57,6 @@ type NativeSig struct {
 	// should be suppressed. See Signature.NoEvalMapArgs.
 	NoEvalMapArgs map[int]bool
 
-	// SchemaArg marks a type-constructor whose map arg is a const schema;
-	// its defaults materialise concretely and recording is suspended while it
-	// auto-evaluates. See Signature.SchemaArg.
-	SchemaArg bool
-
 	// TypeArgs marks arg positions that must receive a type literal
 	// rather than a concrete value. See Signature.TypeArgs.
 	TypeArgs map[int]bool

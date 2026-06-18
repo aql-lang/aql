@@ -255,16 +255,6 @@ type CheckState struct {
 	Mode        bool
 	Diagnostics []CheckDiagnostic
 
-	// materialiseSchema, when > 0, makes the check-mode dispatch RUN
-	// constructor handlers for real (producing concrete instances) instead of
-	// splicing carrier results. Set ONLY while a type-constructor's SchemaArg
-	// map auto-evaluates (see Signature.SchemaArg), so a class field default
-	// `{items:(flex [])}` materialises a concrete template the schema can
-	// const-bake — WITHOUT changing standalone `flex […]`, which stays a
-	// carrier. Paired with EmitState.Suspend so the materialised dispatches
-	// record no bytecode events. A counter so nested constructors compose.
-	materialiseSchema int
-
 	// FnSummaries caches carrier return-stacks for user-defined fn
 	// bodies keyed by (name + "#" + argTypesJoined). Populated by
 	// analyseFnBody; re-entrant calls (recursion) consult this
@@ -1051,7 +1041,6 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 			RawParens:        sig.RawParens,
 			FormArgs:         sig.FormArgs,
 			NoEvalMapArgs:    sig.NoEvalMapArgs,
-			SchemaArg:        sig.SchemaArg,
 			TypeArgs:         sig.TypeArgs,
 			BarrierPos:       sig.BarrierPos,
 			Fallback:         sig.Fallback,
