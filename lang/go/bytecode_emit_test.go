@@ -1306,22 +1306,38 @@ func TestEmitMinilangCompiles(t *testing.T) {
 // see TestEmitMethodField). A NAMED ref field (`{b: f/r}`) still falls back to
 // the interpreter (it would diverge through the island), with the correct
 // result — the remaining sanctioned fn-value-from-map fallback.
-func TestEmitFnValueCallFallsBack(t *testing.T) {
-	// Positive: unnamed-fn method field compiles.
-	if _, r := compile(t, `def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`); r != "" {
-		t.Errorf("unnamed-fn method field must compile, refused: %s", r)
+// A fn-VALUE held in a baked map/object field and APPLIED (`m.b 2`) compiles:
+// the field bakes as an inert const member (isInertConstMember admits a capture-
+// free named ref), get poly-folds it, and CALL_DYNAMIC applies it. Faithfulness
+// rides on the trivial-delegation guard: callPoly's 0-arg auto-apply and
+// callDynamic's VM-native fast path fire ONLY for a `[Word(inner)]` delegation
+// method (isDelegationFnDef) — a USER fn (real body) routes through the island,
+// which runs its body exactly as the interpreter would. Both an unnamed inline
+// fn and a named `/r` ref work.
+func TestEmitFnValueFieldCallCompiles(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want int64
+	}{
+		{`def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 5`, 6},           // unnamed inline
+		{`def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/r}  m.b 2`, 3}, // named ref
+		{`def inc fn [[n:Integer][Integer][n add 1]]  def ops {f: inc/r}  ops.f 5`, 6},
+		{`def m {a:add/r} end m.a 1 2`, 3}, // builtin ref
+	} {
+		got, compiled, err := mustRun(t, c.src)
+		if !compiled || err != nil {
+			t.Errorf("%q: compiled=%v err=%v (want compiled, no error)", c.src, compiled, err)
+			continue
+		}
+		if len(got) != 1 || got[0] != c.want {
+			t.Errorf("%q = %v, want %d", c.src, got, c.want)
+		}
 	}
-	// Negative: a NAMED ref field falls back (not compiled) but still correct.
-	src := `def f fn [[x:Integer] [Integer] [add x 1]]  def m {b:f/r}  m.b 2`
-	if _, r := compile(t, src); r == "" {
-		t.Error("named-ref method field compiled but must fall back")
-	}
-	out, compiled, err := mustRun(t, src)
-	if err != nil || compiled {
-		t.Fatalf("named-ref fallback: compiled=%v err=%v", compiled, err)
-	}
-	if len(out) != 1 || out[0] != int64(3) {
-		t.Fatalf("m.b 2 fallback = %v, want 3", out)
+	// NEGATIVE: a BARE inert ref directly followed by an arg (`f/r 2`) is NOT
+	// applied by the interpreter — the /r leaves it inert data, residual [f, 2] —
+	// so the compiler must refuse rather than auto-apply it (which would diverge).
+	if _, r := compile(t, `def f fn [[x:Integer] [Integer] [add x 1]]  f/r 2`); r == "" {
+		t.Error("bare inert ref `f/r 2` compiled but must refuse (interpreter leaves it inert)")
 	}
 }
 

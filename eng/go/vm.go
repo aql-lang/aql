@@ -238,14 +238,17 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	// A get/getr whose result is a NAMED method with a 0-arg overload is
-	// auto-applied by the interpreter the instant it is produced (`r.bool`).
-	// Mirror that: dispatch it 0-arg VM-native. A method needing args
+	// A get/getr whose result is a NAMED trivial-delegation METHOD with a 0-arg
+	// overload is auto-applied by the interpreter the instant it is produced
+	// (`r.bool`). Mirror that: dispatch it 0-arg VM-native. A method needing args
 	// (`r.int`) has no 0-arg sig, so it stays a value and flows to a later
 	// CALL_DYNAMIC; an anonymous fn stays data (the interpreter does not
-	// auto-invoke a 0-arg anonymous value).
+	// auto-invoke a 0-arg anonymous value). The isDelegationFnDef guard is
+	// essential: a USER fn ref (`{b:f/r}`) is NOT a 0-arg method — tryNativeFnApply
+	// would match its InstallFnDef-registered handler and call it argless,
+	// diverging. A user fn stays a value here and applies correctly at CALL_DYNAMIC.
 	if (pr.Word == "get" || pr.Word == "getr") && len(results) == 1 {
-		if fnDef, ok := results[0].Data.(FnDefInfo); ok && !fnDef.Anonymous {
+		if fnDef, ok := results[0].Data.(FnDefInfo); ok && !fnDef.Anonymous && isDelegationFnDef(fnDef) {
 			if applied, done, aerr := vc.tryNativeFnApply(fnDef, nil); done {
 				if aerr != nil {
 					return nil, stampAt(aerr, curDebug, pc, r)
@@ -290,11 +293,15 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 		// matching the interpreter (it does not apply a non-Function).
 		return stack, nil
 	}
-	// A trivial-delegation native method (its dispatchable sig carries a
-	// Handler) dispatches VM-NATIVE: MatchSignature picks the overload the
-	// interpreter would and the handler runs directly — no sub-engine. A
-	// non-trivial body (a user fn) falls through to the island.
-	if fnDef, ok := fnVal.Data.(FnDefInfo); ok {
+	// A trivial-delegation native method (its dispatchable sig is `[Word(name)]`
+	// — a module wrapper like rand-int) dispatches VM-NATIVE: MatchSignature
+	// picks the overload the interpreter would and the inner handler runs
+	// directly — no sub-engine. A user fn carries a REAL body, NOT a delegation
+	// word, so it must NOT take this path: tryNativeFnApply would match the
+	// InstallFnDef-registered Handler and call it outside the dispatch frame it
+	// expects — diverging. Those fall through to the island, which runs the body
+	// faithfully as a nested Run.
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -320,6 +327,24 @@ func (vc *vmContext) callDynamic(n int, stack []Value, curDebug []SrcPos, pc int
 		return nil, vmErrAt(curDebug, pc, "tape-coupled dynamic result")
 	}
 	return append(stack[:base], results...), nil
+}
+
+// isDelegationFnDef reports whether a Function VALUE is a trivial-delegation
+// wrapper — EVERY own sig is a `[Word(inner)]` pass-through to an inner native
+// (a module method like rand-int / MathUtil.sqrt), safely dispatched VM-native
+// via tryNativeFnApply. A user fn carries a REAL body, so it is NOT a delegation
+// and must island instead. An anonymous lambda or a sig-less value is not one.
+func isDelegationFnDef(fd FnDefInfo) bool {
+	sigs := fd.OwnSigs()
+	if len(sigs) == 0 {
+		return false
+	}
+	for i := range sigs {
+		if _, ok := trivialDelegationTarget(&sigs[i]); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // tryNativeFnApply dispatches a Function VALUE VM-native when it resolves to a

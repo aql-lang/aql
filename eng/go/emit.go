@@ -2074,12 +2074,7 @@ func isInertConstMember(v Value) bool {
 			return true
 		}
 		if fd, ok := v.Data.(FnDefInfo); ok {
-			// Only an UNNAMED (inline `fn […]`) fn value. A named ref (`f/r`,
-			// Name="f") re-dispatches by NAME when applied through the island
-			// sub-engine, where forward collection of the trailing arg differs
-			// from the interpreter — that diverges, so keep named refs
-			// non-const (they refuse and fall back faithfully).
-			return fd.Name == ""
+			return len(fd.Captured) == 0 && fd.Registry == nil
 		}
 	}
 	return isInertConst(v)
