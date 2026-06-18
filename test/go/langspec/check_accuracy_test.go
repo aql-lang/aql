@@ -38,7 +38,7 @@ import (
 // never raise them without a documented decision.
 const (
 	pinnedFalsePositives     = 120 // value rows the checker wrongly errors on (June 2026; was 119 — +1 module-minilang §7 register-compiled-then-use row, like the MiniLang.register rows the checker can't see the runtime register for; was 114 — +5 module-parselang register-then-parse rows; was 132 — macro installs in check mode; was 122 — make returns a value carrier of the made type, not the type literal)
-	pinnedUnflaggedErrorRows = 139 // ERROR rows the checker is silent on (+1 patrun.tsv runtime-only error the checker can't predict statically — a non-Scalar pattern value to `add`; was 138 — fold-over-map result typing surfaces one more error; June 2026; was 136 — +3 module-minilang §7 runtime-only errors: mini_no_transducer / mini_bad_compiler / mini_bad_name; was 131 — +5 module-parselang runtime-only errors; was 132)
+	pinnedUnflaggedErrorRows = 141 // ERROR rows the checker is silent on (+2 record.tsv §V runtime-only errors: a numeric record field now rejects a non-numeric (String/Boolean) source at make time, which the static checker does not predict; +1 patrun.tsv runtime-only error the checker can't predict statically — a non-Scalar pattern value to `add`; was 138 — fold-over-map result typing surfaces one more error; June 2026; was 136 — +3 module-minilang §7 runtime-only errors: mini_no_transducer / mini_bad_compiler / mini_bad_name; was 131 — +5 module-parselang runtime-only errors; was 132)
 )
 
 func TestCheckAccuracyRatchet(t *testing.T) {

@@ -26,6 +26,9 @@ false guard 42	None	yields None when the condition fails
 # §5  truthiness — if coerces its condition
 if 1 [1] [2]	1	non-zero is truthy → then
 if none [1] [2]	2	None is falsy → else
+if "false" [1] [2]	1	a non-empty string is truthy — even "false" (no magic-token falsy case, WAT §E)
+if "FALSE" [1] [2]	1	likewise "FALSE" — string content is never inspected
+if "" [1] [2]	2	the empty string is the only falsy string
 #
 # §6  statement-boundary commit — an else-less `if` whose args arrived
 # via evaluation (a paren condition) fires when the NEXT function word

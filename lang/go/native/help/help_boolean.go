@@ -2,40 +2,57 @@ package help
 
 func init() {
 	register(&Entry{
-		Word:        "and",
-		Summary:     "Logical AND of two booleans.",
-		Description: "Returns true only when both operands are true.",
+		Word:    "and",
+		Summary: "Logical AND of two Booleans; over other types, a truthy short-circuit that returns an operand.",
+		Description: "With two Booleans, returns true only when both are true. The " +
+			"`[Any Any]` overload accepts operands of any type: it coerces them via " +
+			"`convert boolean` truthiness and returns one of the OPERANDS " +
+			"(Python/Lisp short-circuit), not necessarily a Boolean — `and 1 2` → 1, " +
+			"`and 0 9` → 0. The checker types this overload as the join of the operand " +
+			"types, so `and 1 2` is accepted and inferred Integer, not rejected.",
 	})
 
 	register(&Entry{
-		Word:        "or",
-		Summary:     "Logical OR of two booleans.",
-		Description: "Returns true when at least one operand is true.",
+		Word:    "or",
+		Summary: "Logical OR of two Booleans; over other types, a truthy short-circuit that returns an operand.",
+		Description: "With two Booleans, returns true when at least one is true. The " +
+			"`[Any Any]` overload accepts operands of any type: it coerces them via " +
+			"`convert boolean` truthiness and returns one of the OPERANDS " +
+			"(Python/Lisp short-circuit), not necessarily a Boolean — `0 or 9` → 9, " +
+			"`5 or 9` → 5. The checker types this overload as the join of the operand " +
+			"types, not Boolean.",
 	})
 
 	register(&Entry{
-		Word:        "not",
-		Summary:     "Logical NOT of a boolean.",
-		Description: "Inverts the boolean value.",
+		Word:    "not",
+		Summary: "Logical NOT; coerces any operand via truthiness and always returns a Boolean.",
+		Description: "With a Boolean, inverts it. The `[Any]` overload accepts any " +
+			"operand and coerces it via `convert boolean` truthiness before inverting, " +
+			"so `not 5` → false and `not 0` → true. Always returns a Boolean.",
 	})
 
 	register(&Entry{
-		Word:        "xor",
-		Summary:     "Logical XOR of two booleans.",
-		Description: "Returns true when exactly one operand is true.",
+		Word:    "xor",
+		Summary: "Logical XOR of two Booleans; coerces other types via truthiness.",
+		Description: "Returns true when exactly one operand is true. The `[Any Any]` " +
+			"overload coerces non-Boolean operands via `convert boolean` rules and " +
+			"always returns a Boolean (unlike `and`/`or`, which return an operand).",
 	})
 
 	register(&Entry{
-		Word:        "nand",
-		Summary:     "Logical NAND of two booleans.",
-		Description: "Returns false only when both operands are true (NOT AND).",
+		Word:    "nand",
+		Summary: "Logical NAND of two Booleans; coerces other types via truthiness.",
+		Description: "Returns false only when both operands are true (NOT AND). The " +
+			"`[Any Any]` overload coerces non-Boolean operands via `convert boolean` " +
+			"rules and always returns a Boolean.",
 	})
 
 	register(&Entry{
 		Word:    "implies",
-		Summary: "Logical implication of two booleans.",
+		Summary: "Logical implication of two Booleans; coerces other types via truthiness.",
 		Description: "Returns false only when the first is true and the second is false: " +
-			"a b implies computes (!a || b).",
+			"a b implies computes (!a || b). The `[Any Any]` overload coerces non-Boolean " +
+			"operands via `convert boolean` rules and always returns a Boolean.",
 	})
 
 	register(&Entry{

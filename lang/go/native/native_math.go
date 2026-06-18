@@ -12,8 +12,10 @@ import (
 // mod, pow. Each shares a [TNumber, TNumber] base signature wired
 // through numericBinaryHandler; add/sub additionally carry the
 // temporal overloads (date+CalDuration, datetime+ClkDuration, etc.)
-// and add carries the [TScalar, TScalar] string-concatenation
-// overload used when both inputs coerce to strings.
+// and add carries the [TString, TScalar] / [TScalar, TString]
+// string-concatenation overloads, used when AT LEAST ONE input is a
+// String (the other Scalar coerces to its string form). Two
+// non-String scalars match neither overload and are a type error.
 //
 // All [TNumber, TNumber] handlers compute b op a (i.e.
 // args[1] op args[0]). Under §1.4 the swap form `a op b` is the
@@ -116,7 +118,15 @@ var mathNatives = []NativeFunc{
 				}),
 				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 			},
-			{Args: []*Type{TScalar, TScalar}, Handler: addConcatHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			// String concatenation requires AT LEAST ONE String operand;
+			// the other may be any Scalar (coerced via ValToString). Two
+			// non-String scalars (e.g. `add true 1`, `add true false`)
+			// match NEITHER overload and raise a no-signature error — the type
+			// system expresses "string-or-bust" directly rather than
+			// silently stringifying any Scalar pair. See
+			// design/WAT-AUDIT.5.md §G.
+			{Args: []*Type{TString, TScalar}, Handler: addConcatHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TScalar, TString}, Handler: addConcatHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TDate, TCalDuration}, Handler: addDateCalHandler, Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, TClkDuration}, Handler: addDateTimeClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, TClkDuration}, Handler: addInstantClkHandler, Returns: []*Type{TInstant}, BarrierPos: -1},

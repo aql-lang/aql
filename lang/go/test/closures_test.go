@@ -1,6 +1,7 @@
 package test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -325,8 +326,15 @@ func TestClosureCheckModeAnalyseFnBodyUsesCaptures(t *testing.T) {
 	}
 }
 
-// Same test minus captures: body's reference to x stays undefined,
-// AnalyseFnBody emits a diagnostic, no Integer inference.
+// Same test minus captures: body's reference to x stays undefined, so
+// AnalyseFnBody emits an undefined_word diagnostic for x. (With captures the
+// companion test above sees no such diagnostic and infers Integer.) The
+// residual type itself is no longer a reliable discriminator: since `add` was
+// tightened to require a Number/String operand, an undefined `x` no longer
+// matches `add`'s old `[Scalar Scalar]` catch-all (which used to make the
+// residual String), and the analyser's best-fit recovery now assumes the
+// numeric overload — so the *diagnostic*, not the residual, is what proves x
+// went unresolved.
 func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {
@@ -343,12 +351,17 @@ func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
 		eng.NewInteger(1),
 	}
 	// Same body, no captures — x is undefined in body's scope.
-	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, nil, nil)
-	// We expect either an empty/Any residual or a non-Integer carrier
-	// because x doesn't resolve; the analyser falls back to lenient
-	// undefined-word handling.
-	if len(result) == 1 && result[0].Parent.Equal(eng.TInteger) {
-		t.Errorf("residual unexpectedly inferred Integer without captures: %v", result)
+	eng.AnalyseFnBody(reg, "test", nil, body, nil, nil, nil)
+
+	foundUndefinedX := false
+	for _, d := range reg.Check.Diagnostics {
+		if d.Code == "undefined_word" && strings.Contains(d.Detail, "x") {
+			foundUndefinedX = true
+			break
+		}
+	}
+	if !foundUndefinedX {
+		t.Errorf("expected an undefined_word diagnostic for x without captures; got %v", reg.Check.Diagnostics)
 	}
 }
 

@@ -623,13 +623,22 @@ func CoerceBoolean(v Value) bool {
 		return true
 	}
 	text := ValToString(v)
+	// A String is falsy only when empty. The former magic-token rule —
+	// where the String "false" was the one non-empty string treated as
+	// falsy, so "FALSE"/"0"/"no" were truthy but "false" was not — is
+	// removed (WAT-AUDIT.5.md §E): string CONTENT is never inspected.
+	if ValueType(v).ConformsTo(TString) {
+		return text != ""
+	}
+	// A non-String that renders as "false" is an unresolved boolean
+	// literal reaching truthiness as a Word/Atom (a bare `false` clause
+	// condition in `if [false …]`, a quoted `false` atom). It keeps its
+	// boolean reading; everything else is truthy unless it renders empty.
 	switch text {
-	case "true":
-		return true
 	case "false", "":
 		return false
 	default:
-		return text != ""
+		return true
 	}
 }
 

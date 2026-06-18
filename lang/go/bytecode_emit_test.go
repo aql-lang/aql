@@ -68,7 +68,7 @@ func TestEmitGoldens(t *testing.T) {
 		// RecordStrip preserves the originals for interning.
 		{`'a' add 'b'`, `0000 PUSH_CONST  k1   ; 'a' (ProperString)
 0001 PUSH_CONST  k0   ; 'b' (ProperString)
-0002 CALL_NATIVE s0   ; add (Scalar, Scalar)
+0002 CALL_NATIVE s0   ; add (String, Scalar)
 ; consts=2 types=0 sigs=1 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// `if` lowers to JMP_IF_FALSE / JMP: condition code first, a
@@ -712,16 +712,20 @@ func TestEmitRefusals(t *testing.T) {
 	}
 }
 
-// Negative: a polymorphic (partitioned) site is classified and
-// refused — later stages emit CALL_NATIVE_POLY here.
-// A strict-disjunct straddle (`y` is Integer|String from the two `if` arms,
-// reaching more than one `add` overload) lowers to OpCallNativePoly: the VM
-// re-matches the one concrete runtime alternative, so it no longer refuses as
-// "polymorphic dispatch" (roadmap item 4). Faithfulness is the load-bearing
-// assertion — the runtime value (1, the true arm) dispatches `1 add 1 = 2` in
-// both engines.
+// Stage 3: a polymorphic (partitioned) site is classified and lowered to
+// OpCallNativePoly. A strict-disjunct straddle (`y` is Integer|String from the
+// two `if` arms) reaching more than one `is` overload lowers to a runtime-
+// matched poly call: the VM re-matches the one concrete runtime alternative,
+// so it no longer refuses as "polymorphic dispatch" (roadmap item 4).
+// Faithfulness is the load-bearing assertion — the runtime value (1, the true
+// arm) dispatches `1 is Integer = true` in both engines.
+//
+// (`add` used to be the straddle word here, via its old `[Scalar Scalar]`
+// catch-all; once that overload was tightened to require a String operand,
+// `Integer|String add 1` no longer has a single whole-disjunct seed overload,
+// so the straddle moved to `is`, which keeps the same shape.)
 func TestEmitPolySiteLowersToRuntimeMatch(t *testing.T) {
-	const src = `def y if (1 gt 0) [1] ['s'] y add 1`
+	const src = `def y if (1 gt 0) [1] ['s'] y is Integer`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -734,7 +738,7 @@ func TestEmitPolySiteLowersToRuntimeMatch(t *testing.T) {
 		t.Fatalf("strict-disjunct straddle did not compile: reason=%q", reason)
 	}
 	if !strings.Contains(prog.Disassemble(), "CALL_NATIVE_POLY") {
-		t.Errorf("expected a runtime-matched poly call for the straddling add:\n%s", prog.Disassemble())
+		t.Errorf("expected a runtime-matched poly call for the straddling is:\n%s", prog.Disassemble())
 	}
 	gotC, compiled, errC := a.RunCompiled(src)
 	if !compiled || errC != nil {
@@ -742,8 +746,8 @@ func TestEmitPolySiteLowersToRuntimeMatch(t *testing.T) {
 	}
 	b, _ := New()
 	gotI, _ := b.Run(src)
-	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[2]" {
-		t.Errorf("poly add: compiled=%v interp=%v (want [2])", gotC, gotI)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[true]" {
+		t.Errorf("poly is: compiled=%v interp=%v (want [true])", gotC, gotI)
 	}
 }
 
@@ -921,7 +925,14 @@ func TestRunCompiledMutualTailGuarantee(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, compiled2, err2 := b.RunCompiled(`def od fn [[n:Integer] [Integer] [if (n eq 0) [0] [1 add (ev (n sub 1))]]] def ev fn [[n:Integer] [Integer] [if (n eq 0) [0] [1 add (od (n sub 1))]]] ev 100000`)
+	// Non-tail because each recursive call's result is consumed (dropped)
+	// before the frame returns `n`, so the call is not in tail position and
+	// frames stack. `drop` takes an Any operand, so the cross-unit forward
+	// reference (`od` references `ev`, defined after it) type-checks without
+	// relying on `add` absorbing the forward-ref result — `add` was tightened
+	// to require a Number/String operand and no longer matches an as-yet-
+	// untyped forward reference.
+	_, compiled2, err2 := b.RunCompiled(`def od fn [[n:Integer] [Integer] [if (n eq 0) [0] [ev (n sub 1) drop n]]] def ev fn [[n:Integer] [Integer] [if (n eq 0) [0] [od (n sub 1) drop n]]] ev 100000`)
 	if !compiled2 {
 		t.Fatal("mutual non-tail program fell back to the interpreter")
 	}

@@ -824,13 +824,19 @@ func TestMakeFieldValueAlreadyMatches(t *testing.T) {
 }
 
 func TestMakeFieldValueConvert(t *testing.T) {
-	v, err := makeFieldValue(NewString("99"), NewTypeLiteral(TNumber))
-	if err != nil {
-		t.Fatalf("error: %v", err)
+	// A numeric field rejects a non-numeric source rather than laundering
+	// the String "99" into a number by stringify-then-reparse (WAT §V).
+	if _, err := makeFieldValue(NewString("99"), NewTypeLiteral(TNumber)); err == nil {
+		t.Error("expected a String into a Number field to be rejected, got no error")
 	}
-	_as46, _ := AsInteger(v)
-	if _as46 != 99 {
-		t.Errorf("expected 99, got %s", v)
+	// Numeric widening between Number leaves is still coerced: an Integer
+	// satisfies a Float field as 99.0.
+	v, err := makeFieldValue(NewInteger(99), NewTypeLiteral(TFloat))
+	if err != nil {
+		t.Fatalf("Integer into Float field: %v", err)
+	}
+	if f, _ := AsFloat(v); f != 99.0 {
+		t.Errorf("expected 99.0, got %s", v)
 	}
 }
 

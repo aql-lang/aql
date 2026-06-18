@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -906,6 +907,25 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 			}
 			return NewInteger(n.Int64()), nil
 		}
+		// Numeric source: convert directly instead of stringifying and
+		// re-parsing. An Integer passes through; a Float truncates toward
+		// zero. Previously `convert Integer 3.0` stringified to "3.0" and
+		// then failed ParseInt on the decimal point (WAT-AUDIT.5.md §Q/W).
+		// A base implies a string source in a particular radix, so the
+		// fast path only applies to the plain (base == "") form.
+		if base == "" {
+			if src.Parent.ConformsTo(TInteger) {
+				n, _ := AsInteger(src)
+				return NewInteger(n), nil
+			}
+			if src.Parent.ConformsTo(TFloat) {
+				f, _ := AsFloat(src)
+				if math.IsNaN(f) || math.IsInf(f, 0) || f < float64(math.MinInt64) || f >= float64(math.MaxInt64) {
+					return Value{}, fmt.Errorf("convert: %s overflows Integer (int64) range", ValToString(src))
+				}
+				return NewInteger(int64(f)), nil
+			}
+		}
 		text := ValToString(src)
 		if base == "" {
 			n, err := strconv.ParseInt(text, 10, 64)
@@ -932,7 +952,30 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		return NewInteger(n), nil
 
 	case targetType.ConformsTo(TBoolean):
-		return NewBoolean(CoerceBoolean(src)), nil
+		// Explicit conversion PARSES a String's content (mirroring make's
+		// MakeConvert): "true"/"false" map to the booleans, every other
+		// non-empty string is truthy. This is deliberately distinct from
+		// `if`-truthiness (CoerceBoolean), where a String is judged only by
+		// emptiness and "false" is truthy (WAT-AUDIT.5.md §E) — `convert
+		// Boolean` reads the text, `if` reads presence.
+		switch {
+		case src.Parent.ConformsTo(TBoolean):
+			return src, nil
+		case src.Parent.ConformsTo(TNumber):
+			n, _ := AsNumber(src)
+			return NewBoolean(n != 0), nil
+		case src.Parent.ConformsTo(TString):
+			switch ValToString(src) {
+			case "true":
+				return NewBoolean(true), nil
+			case "false":
+				return NewBoolean(false), nil
+			default:
+				return NewBoolean(ValToString(src) != ""), nil
+			}
+		default:
+			return NewBoolean(CoerceBoolean(src)), nil
+		}
 
 	case targetType.Equal(TAtom):
 		return NewAtom(ValToString(src)), nil

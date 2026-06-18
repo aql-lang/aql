@@ -1111,6 +1111,19 @@ func MakeFieldValueR(val Value, constraint Value, r *Registry) (Value, error) {
 		if val.Parent.ConformsTo(constraintType) {
 			return val, nil
 		}
+		// A numeric field must not launder a non-numeric source into a
+		// number by stringify-then-reparse: `make Point ["1" "2"]` for a
+		// [x:Number y:Number] record used to yield {x:1 y:2}, and a Boolean
+		// source produced the confusing `cannot convert "true" to number`
+		// (WAT-AUDIT.5.md §V). A numeric field now admits only a numeric
+		// source — Integer↔Float widening still coerces via MakeConvert, but
+		// a String/Boolean/Atom is rejected. (Explicit scalar `make Number
+		// "99"` is a different, deliberately lenient path and is unaffected.)
+		if constraintType.ConformsTo(TNumber) && !val.Parent.ConformsTo(TNumber) {
+			return Value{}, fmt.Errorf(
+				"field expects %s but %s is not a number",
+				constraintType.Leaf(), val.String())
+		}
 		return MakeConvert(val, constraintType)
 	}
 

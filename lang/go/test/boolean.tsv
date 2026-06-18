@@ -617,10 +617,11 @@ String tor Number tor Boolean tor None	String|Number|Boolean|None
 # 26. any/all — scalar edge cases (strings, atoms, none)
 # =====================================================================
 
-# String literal "true"/"false" coerce to actual booleans.
-["false" "false"] any	false
+# Truthiness inspects presence, not string content: any non-empty string
+# is truthy — including "false" (WAT §E removed the magic-token case).
+["false" "false"] any	true
 ["false" "true"] any	true
-["true" "false"] all	false
+["true" "false"] all	true
 ["true" "x"] all	true
 
 # Strings that look like numbers don't coerce numerically — non-empty
