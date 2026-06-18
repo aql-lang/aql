@@ -420,6 +420,29 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 			results = append(results, i)
 		}
 	}
+	// N-event already-in-layout fast path. When EVERY operand is a prior-result
+	// (event) operand AND they already sit on top of the simulated stack in sig
+	// order (ops[0] on top, ops[1] next-deeper, …), no reordering is needed —
+	// verify the positions and accept, emitting nothing. This generalises the
+	// case-1 (ri==0/n-1) and case-2 already-in-layout paths to any N: a computed
+	// list `[gensym gensym gensym]` or a call over N computed args
+	// (`is-between (a) (b) (c)`) leaves its results adjacent and in order, which
+	// the old 3+-results default refused outright. Soundness: it only ACCEPTS a
+	// layout already correct (slotIs verifies each slot), so it can never seat an
+	// operand wrongly; a non-matching layout falls through to the switch (and its
+	// existing refusals) unchanged.
+	if n > 0 && len(results) == n && len(lw.vm) >= n {
+		allInPlace := true
+		for i := 0; i < n; i++ {
+			if !slotIs(lw.vm[len(lw.vm)-1-i], ops[i]) {
+				allInPlace = false
+				break
+			}
+		}
+		if allInPlace {
+			return ""
+		}
+	}
 	switch len(results) {
 	case 0:
 		// Push consts/locals deepest-first so sig position 0 lands on top.
