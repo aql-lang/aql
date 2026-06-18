@@ -30,7 +30,7 @@ import (
 // row is not a statically-invalid check-diagnostics row). The runtime-
 // independence phases lower it monotonically; it must reach 0 before the
 // interpreter fallback can be deleted (plan P7). Never raise it.
-const refusalCeiling = 71 // trailing fn-value auto-apply (`5 m.f`, `[..] r.one-of`) compiles via OpCallDynamicTrailing 73 -> 71; OpReverse N-event reverse 74 -> 73; suppressed-runtime OpTrap 79 -> 74; exact-count OpRet 82 -> 79. The full decrement history (94 -> ... -> 159) is in design/checker-compiler-architecture-review.0.md §11. Lower this monotonically with a one-line rationale; never raise (the §11 entries are the template).
+const refusalCeiling = 64 // quoted-operand inert words: quote / codequote / raise / timeout / interval declare CompileQuoteInert, so the recorder bakes their inert quoted operand (a quoted symbol, or a code body held as data) + CALL_NATIVE instead of refusing — the get/getr/set exemption made declarable. Cleared 7 of the 10 quoted-operand rows; the 3 timeout/interval rows whose code BODY reaches the check as a carrier without recoverable inert provenance stay refused (a §4.3 / materialise gap, not the flag) 71 -> 64. trailing fn-value auto-apply (`5 m.f`, `[..] r.one-of`) compiles via OpCallDynamicTrailing 73 -> 71; OpReverse N-event reverse 74 -> 73; suppressed-runtime OpTrap 79 -> 74; exact-count OpRet 82 -> 79. The full decrement history (94 -> ... -> 159) is in design/checker-compiler-architecture-review.0.md §11. Lower this monotonically with a one-line rationale; never raise (the §11 entries are the template).
 
 // islandCeiling is the maximum number of compiled programs allowed to embed an
 // interpreter island (OpFallback). Islands re-enter the interpreter sub-engine

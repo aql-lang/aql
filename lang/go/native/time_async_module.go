@@ -33,6 +33,10 @@ var TimeAsyncModuleNatives = []NativeFunc{
 	},
 	{
 		Name: "timeout",
+		// The /q'd body (a code list, or an atom naming a fn) is inert data the
+		// handler stores in the Timeout instance; it bakes + CALL_NATIVE (the body
+		// still runs interpreted when the timer fires).
+		CompileEffect: CompileQuoteInert,
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: timeoutListHandler, Returns: []*Type{TTimeout}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: timeoutWordHandler, Returns: []*Type{TTimeout}, BarrierPos: -1},
@@ -40,6 +44,8 @@ var TimeAsyncModuleNatives = []NativeFunc{
 	},
 	{
 		Name: "interval",
+		// Like timeout: the /q'd body is inert data stored in the Interval.
+		CompileEffect: CompileQuoteInert,
 		Signatures: []NativeSig{
 			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*Type{TInterval}, BarrierPos: -1},

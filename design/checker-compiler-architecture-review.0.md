@@ -4,7 +4,7 @@ Status: **largely implemented** (2026-06, branch
 `claude/pensive-thompson-vv4387`). This was a `.0` proposal; the bulk of it has
 now landed across 11 gate-clean commits. **Read the new
 [Implementation report](#implementation-report-2026-06) and
-[Completion guide](#completion-guide-the-remaining-71--the-path-to-p7) first** —
+[Completion guide](#completion-guide-remaining-refusals--the-path-to-p7) first** —
 they record what landed, what was deliberately *not* done (with reasons), and
 what the next session should do. The original analysis (§0–§10) is preserved
 below, with inline **LANDED** / **NOT DONE** annotations.
@@ -22,6 +22,14 @@ gate-clean commits:
 - **Trailing fn-value boundary** (completion-guide #1, the "biggest lever") —
   `5 m.f`, `[..] r.one-of` now compile via the new `OpCallDynamicTrailing`.
   Ratchet **73 → 71**.
+- **Quoted-operand inert words** (completion-guide coverage cluster) —
+  `quote` / `codequote` / `raise` / `timeout` / `interval` declare a new
+  `CompileQuoteInert` effect, so the recorder bakes their inert quoted operand
+  (a symbol, or a code body held as data) + `CALL_NATIVE` instead of refusing —
+  the declarable analogue of the get/getr/set exemption. Cleared 7 of the 10
+  quoted-operand rows. Ratchet **71 → 64**. The 3 `timeout`/`interval` rows whose
+  code BODY reaches the check as a carrier (no recoverable inert provenance) stay
+  refused — a §4.3 / `materialise` gap, not the flag.
 - **Doc precision** — two overstatements in the original report are corrected
   inline (the §4.1a "`layoutOperands` deleted / unreachable by construction"
   claim, and §4.5's "all five tables migrated"), and the P7 distance is stated
@@ -131,19 +139,21 @@ operand-layout** — see the completion guide.
 
 ---
 
-## Completion guide (the remaining 71 + the path to P7)
+## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2386 compiled (5 islanded), 312 check-errors, 71 refused.**
-Root-cause axis: **soundness 40 · scheduling 12 · coverage 19 · opcode 0 ·
-correct-error 0.** (Was 73 / scheduling 14 before the follow-on session landed
-the trailing fn-value boundary.)
+**2769 rows — 2393 compiled (5 islanded), 312 check-errors, 64 refused.**
+Root-cause axis: **soundness 40 · scheduling 12 · coverage 12 · opcode 0 ·
+correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
+follow-on session, before the trailing fn-value boundary (→ 71) and the
+quoted-operand inert words (→ 64) landed. The 40 soundness rows are untouched —
+that is the hard core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
 | 20 | operand provenance | soundness | provenance for generic/module/class operands (re-test §4.3 back-pointer here) |
 | 12 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch |
-| 10 | quoted-operand word | coverage | compile the `usurp`/`ref`-family inert cases |
+| 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
 | 6 | code-body word (NoEvalArgs) | coverage | the `aql:test` 2-body property words |
 | 6 | if-branch lowering | scheduling\* | **branch-result-modeling** (computed-else, variadic-statement-if, `usurp if`) — now the lead scheduling frontier |
 | 6 | residual lowering | scheduling\* | NO LONGER the fn-value boundary (that cleared): `codequote`/`macroexpand` (meta, "not materialisable") + residual-ordering (`1 add2 vs`, parselang/Test.run-spec "result above a literal") |
@@ -181,14 +191,16 @@ meta** residuals (6) — none is operand layout.
 3. **Re-test the §4.3 back-pointer** against the 20 operand-provenance rows. The
    full carrier back-pointer is only justified if it *clears* provenance refusals
    (lost originals); measure before building.
-4. **Coverage words.** The quoted-operand meta words (`usurp`/`ref`), the 2-body
-   `aql:test` code words, and the `codequote`/`macroexpand` residuals are
-   word-class gaps, not deep problems.
+4. **Coverage words.** The quoted-operand *inert* cluster is mostly done
+   (`quote`/`codequote`/`raise` via `CompileQuoteInert`); what remains there is
+   `timeout`/`interval`, blocked on materialising a carried code BODY (priority
+   3's machinery, not the flag). Still open: the 2-body `aql:test` code words and
+   the `codequote`/`macroexpand` residuals — word-class gaps, not deep problems.
 
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
 
-**Honest distance to P7 (do not read "71" as "almost there").** Of the 71
+**Honest distance to P7 (do not read "64" as "almost there").** Of the 64
 refusals, **40 are soundness-gated** — 20 operand-provenance (a heterogeneous
 long tail, and the §4.3 back-pointer is only *maybe* the fix), 12 + 5 dynamic
 output/input (the hardest frontier: each needs richer runtime poly or runtime
@@ -198,8 +210,10 @@ the **5 islands** (higher-order/dynamic) that also gate P7. So the realistic
 near-term goal is **lowering the ceiling and shrinking the islands**, not
 imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains the
 right vehicle, but P7 is several substantial pieces of work away. The cheap wins
-(operand layout, the correct-error paths, the trailing fn-value boundary,
-the §4.5 decoupling) are now banked; what is left is genuinely hard.
+(operand layout, the correct-error paths, the trailing fn-value boundary, the
+quoted-operand inert words, the §4.5 decoupling) are now banked; the remaining
+24 non-soundness rows are scheduling (branch-result-modeling) + coverage
+(word-class gaps), and the 40 soundness rows are genuinely hard.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -302,8 +316,8 @@ the try-chain), `eng/go/callable_words.go` (closure-body compilation).
 ## 2. Current state (numbers, June 2026)
 
 **Numbers below are the pre-implementation (82-refused) snapshot — kept for the
-breakdown prose. The CURRENT live state is 71 refused; see the
-[Completion guide](#completion-guide-the-remaining-71--the-path-to-p7) for the
+breakdown prose. The CURRENT live state is 64 refused; see the
+[Completion guide](#completion-guide-remaining-refusals--the-path-to-p7) for the
 up-to-date histogram and root-cause split.**
 
 The ratchet is **far** ahead of the prose in
@@ -677,6 +691,11 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **71 → 64** — quoted-operand inert words: `quote` / `codequote` / `raise` /
+  `timeout` / `interval` declare `CompileQuoteInert`, so the recorder bakes their
+  inert quoted operand + `CALL_NATIVE` (the get/getr/set exemption, made
+  declarable). Cleared 7 of 10; the 3 `timeout`/`interval` rows whose code body is
+  a carrier stay refused (a §4.3 / `materialise` gap).
 - **73 → 71** — trailing fn-value auto-apply: `5 m.f` / `[..] r.one-of` (the fn
   trails its arg) compile via the new `OpCallDynamicTrailing` (rotate the fn to
   the residual front; identical to `OpCallDynamic` when callable, fn-on-top when

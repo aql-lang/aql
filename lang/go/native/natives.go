@@ -18,6 +18,9 @@ var Natives = []NativeFunc{
 	// ---- control flow ----
 	{
 		Name: "quote",
+		// The /q'd-Atom sig produces an inert quoted symbol the VM can bake +
+		// CALL_NATIVE faithfully (the TAny sig is RunInCheckMode and unaffected).
+		CompileEffect: CompileQuoteInert,
 
 		Signatures: []NativeSig{
 			{
@@ -46,6 +49,8 @@ var Natives = []NativeFunc{
 	// behave exactly like `quote`. See design/PAREN-REPRESENTATION.9.md §2.2.
 	{
 		Name: "codequote",
+		// Like quote: the /q'd-Atom sig bakes its inert symbol + CALL_NATIVE.
+		CompileEffect: CompileQuoteInert,
 
 		Signatures: []NativeSig{
 			{

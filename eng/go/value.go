@@ -376,6 +376,17 @@ const (
 	// / filter / select / group / do / case / where / having / order / …) that
 	// may compile its body as a Stage-5 interpreter island.
 	CompileFallbackBody
+	// CompileQuoteInert marks a word whose implicit-quote (QuoteArgs) operand is
+	// INERT DATA the handler consumes verbatim — a quoted symbol (`quote name`,
+	// `raise bad_input …`) or a quoted code body held as data (`timeout 1000
+	// [body]`) — so the word bakes as a plain CALL_NATIVE once each quoted operand
+	// resolves to an inert const: the VM runs the SAME handler over the SAME baked
+	// value as the interpreter. It is the opt-in for the QuoteArgs refusal, the
+	// declared analogue of the get/getr/set exemption. Do NOT set it on a
+	// dispatch-manipulating meta word (usurp / force-arity / ref) whose quoted
+	// operand drives a RE-STEPPING result the VM cannot reproduce by re-running
+	// the handler.
+	CompileQuoteInert
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A

@@ -22,6 +22,9 @@ import "fmt"
 var errorNatives = []NativeFunc{
 	{
 		Name: "raise",
+		// The /q'd error-code Atom is inert data; raise bakes + CALL_NATIVE,
+		// raising the byte-identical error at run time (it declares no returns).
+		CompileEffect: CompileQuoteInert,
 
 		Signatures: []NativeSig{
 			// raise <code> <message> — the /q'd Atom position lets a
