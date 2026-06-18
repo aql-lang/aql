@@ -1587,12 +1587,15 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 		if IsBareTypeNode(ins[i]) {
 			return false
 		}
-		if w, isEvent := es.producerWord(ins[i].ID); isEvent && (!r.IsBuiltinWord(w) || w == "make") {
-			// `make` yields a MUTABLE instance that bakes as a const SCHEMA MEMBER
-			// (the make-default work) when the list is bound to a typed variable
-			// (`def xs:[:(Box of …)] [(make …)]`), which a typed-def REPARENT then
-			// re-IDs — assembling it via OpMakeList instead severs that linkage and
-			// the residual refuses. Keep instance lists on the const-bake path.
+		if w, isEvent := es.producerWord(ins[i].ID); isEvent && !r.IsBuiltinWord(w) {
+			// A MODULE / user word may be stateful (`list-of [Rand.int …] N` — the
+			// generator advances a seed), so freezing one assembly of its check-mode
+			// result would replicate it instead of re-running per use. Those refuse.
+			// `make` is NO LONGER excluded: an OpMakeList of make EVENTS rebuilds
+			// fresh instances per run (sound, like OpMakeMap), so an instance list —
+			// `def xs [(make Box …) (make Box …)]`, typed or not — assembles natively
+			// and feeds each/fold/get rather than refusing on the const-bake path
+			// (where isInertConst rejects the mutable members).
 			return false
 		}
 		op, ok := es.resolveOperand(ins[i])
