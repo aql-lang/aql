@@ -11,6 +11,11 @@ var controlNatives = []NativeFunc{
 	{
 		Name:          "do",
 		CompileEffect: CompileFallbackBody,
+		// do [body] — runs the body with no inputs and returns its single residual
+		// value (a multi-value body nets != 1 and refuses to the island).
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(_ []Value) []Value {
+			return []Value{}
+		}},
 
 		Signatures: []NativeSig{
 			{

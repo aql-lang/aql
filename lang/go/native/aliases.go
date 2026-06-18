@@ -75,6 +75,7 @@ type (
 	NativeFunc          = eng.NativeFunc
 	NativeSig           = eng.NativeSig
 	CompileEffect       = eng.CompileEffect
+	CallableSpec        = eng.CallableSpec
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo
 	ObjectTypeInfo      = eng.ObjectTypeInfo
 	SurfaceInfo         = eng.SurfaceInfo

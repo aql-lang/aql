@@ -887,7 +887,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	// regression on islandCeiling) for no gain — the reach form has no body to
 	// run. Decline so it refuses; the lens-as-const value/apply/getpath forms
 	// (which do not route here) still compile natively.
-	if spec, ok := callableWords[word]; ok && spec.bodyPos < len(args) && IsReach(args[spec.bodyPos]) {
+	if sig.Callable != nil && sig.Callable.BodyPos < len(args) && IsReach(args[sig.Callable.BodyPos]) {
 		return false
 	}
 	// A dispatch whose output is already recorded was handled by a structured
