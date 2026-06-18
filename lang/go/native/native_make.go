@@ -21,7 +21,8 @@ import "github.com/aql-lang/aql/eng/go"
 // wiring.
 var makeNatives = []NativeFunc{
 	{
-		Name: "make",
+		Name:          "make",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{
 			// make is an IMPURE constructor: each call mints a fresh

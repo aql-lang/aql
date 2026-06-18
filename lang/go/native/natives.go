@@ -197,7 +197,8 @@ var Natives = []NativeFunc{
 
 	// ---- size ----
 	{
-		Name: "size",
+		Name:          "size",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny}, Handler: sizeHandler, BarrierPos: -1, Returns: []*Type{TInteger}},
@@ -221,7 +222,8 @@ var Natives = []NativeFunc{
 
 	// ---- filter ----
 	{
-		Name: "filter",
+		Name:          "filter",
+		CompileEffect: CompileFallbackBody,
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},

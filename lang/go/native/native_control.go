@@ -9,7 +9,8 @@ package native
 // independently testable.
 var controlNatives = []NativeFunc{
 	{
-		Name: "do",
+		Name:          "do",
+		CompileEffect: CompileFallbackBody,
 
 		Signatures: []NativeSig{
 			{
@@ -75,7 +76,8 @@ var controlNatives = []NativeFunc{
 		// way — value pushed first, like the `error [handler]` block
 		// — and its result is case's result. No match and no default
 		// produces nothing, like `if` without an else.
-		Name: "case",
+		Name:          "case",
+		CompileEffect: CompileFallbackBody,
 
 		Signatures: []NativeSig{
 			// One Any/Any sig; the handler disambiguates the two call

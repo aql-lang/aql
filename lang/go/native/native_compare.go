@@ -97,7 +97,8 @@ var comparisonNatives = []NativeFunc{
 		// lattice total order (the order sort and the collection
 		// words use). Reach for it when you want cross-type ordering
 		// that cmp refuses, e.g. `1 tcmp "a"`.
-		Name: "tcmp",
+		Name:          "tcmp",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},

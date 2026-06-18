@@ -1498,8 +1498,8 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// never invoking it on the VM tape, so a fn-valued operand is allowed (rides
 	// as an inert const). introspect (READS only) additionally bakes even a
 	// CAPTURING fn below, since only the immutable shape is read.
-	introspect := sig.CompileEffect == CompileReadsFn
-	inertFn := introspect || sig.CompileEffect == CompileStoresFn
+	introspect := sig.CompileEffect.Has(CompileReadsFn)
+	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
 	for _, t := range sig.Args {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			if inertFn {

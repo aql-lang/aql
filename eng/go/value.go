@@ -332,22 +332,21 @@ type FnSig struct {
 	CompileEffect CompileEffect
 }
 
-// CompileEffect declares a word's compile-relevant semantics so the bytecode
-// recorder can classify it from the Signature rather than from a name-keyed
-// table — decoupling eng from specific (module) word names.
+// CompileEffect is a set of compile-relevant capability flags a word declares
+// so the bytecode recorder can classify it from the Signature rather than from
+// name-keyed tables — decoupling eng from specific (often module) word names.
+// It is a BITFIELD: the flags are orthogonal and a word may carry several (e.g.
+// `typeof` reads a fn value AND is a pure module reader AND re-dispatches as an
+// island-pure word). The zero value, CompileDefault, is an ordinary word.
 type CompileEffect uint8
 
 const (
-	// CompileDefault is an ordinary word. A fn-valued operand reaching it means
-	// the handler invokes the fn on the tape, which the VM cannot honour, so the
-	// recorder refuses (Stage 3).
-	CompileDefault CompileEffect = iota
 	// CompileReadsFn marks an INTROSPECTION word that READS a fn value's
 	// immutable shape (typeof / inspect / arityof / type-algebra) and never
 	// invokes it. The fn bakes as a const the handler inspects — and because only
 	// the shape is read, even a CAPTURING fn is safe to bake (its captures are
 	// irrelevant to its signature).
-	CompileReadsFn
+	CompileReadsFn CompileEffect = 1 << iota
 	// CompileStoresFn marks a word that STORES a fn value for later
 	// interpreter-side invocation (minilang / parselang register), never the VM
 	// tape. A fn-valued operand rides as an inert const; but unlike
@@ -355,7 +354,29 @@ const (
 	// declines at isInertConst), because the stored fn is invoked later and must
 	// keep its real binding.
 	CompileStoresFn
+	// CompileModuleFold marks a PURE reader word (get / getr / convert / typeof /
+	// is / size / has) whose result over an import-bound module value plus inert
+	// const operands is deterministic — so the recorder const-folds it.
+	CompileModuleFold
+	// CompileIslandPure marks a PURE typed-dispatch word (get / getr / size /
+	// make / is / typeof / type-algebra) with no side effects: where the checker
+	// could not commit to one overload, the word may run as an interpreter island
+	// that re-dispatches on the real runtime value (and a stack-form island when
+	// it has no threaded body inputs).
+	CompileIslandPure
+	// CompileFallbackBody marks a code-body higher-order word (each / fold / scan
+	// / filter / select / group / do / case / where / having / order / …) that
+	// may compile its body as a Stage-5 interpreter island.
+	CompileFallbackBody
 )
+
+// CompileDefault is an ordinary word: no compile-relevant capability. A
+// fn-valued operand reaching it means the handler invokes the fn on the tape,
+// which the VM cannot honour, so the recorder refuses (Stage 3).
+const CompileDefault CompileEffect = 0
+
+// Has reports whether the effect set includes flag f.
+func (e CompileEffect) Has(f CompileEffect) bool { return e&f != 0 }
 
 // FnDefInfo holds the function specification for a def-defined function.
 // Name is the function's registered name (set by InstallDef). If Registry is

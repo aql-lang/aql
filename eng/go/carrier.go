@@ -511,17 +511,12 @@ func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
 	return true
 }
 
-// moduleConstFoldWords are the PURE reader words whose result over a
-// compile-time-known module value is a compile-time constant. `import` binds a
-// ModuleExport / Module instance that is immutable and deterministic, so a
-// get/getr (`MathUtil.$name`, `X.$module.name`), convert (`convert Map Foo`),
-// or typeof / is over it always yields the same value — it can be baked rather
-// than re-read at run time. Kept to a known-pure set so an impure word over a
-// module (none exists today, but defensively) can never const-fold.
-var moduleConstFoldWords = map[string]bool{
-	"get": true, "getr": true, "convert": true,
-	"typeof": true, "is": true, "size": true, "has": true,
-}
+// The PURE reader words whose result over a compile-time-known module value is a
+// compile-time constant (get / getr / convert / typeof / is / size / has) now
+// DECLARE CompileModuleFold on their NativeFunc (lang layer). `import` binds an
+// immutable, deterministic ModuleExport / Module instance, so a read over it
+// always yields the same value — baked rather than re-read at run time. See
+// tryFoldModuleConst.
 
 // isModuleFamilyValue reports whether v is a concrete module instance — an
 // Ideal/Module descriptor or an Ideal/ModuleExport namespace (the values
@@ -560,8 +555,8 @@ func isModuleFamilyValue(v Value) bool {
 // never folds.
 func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
 	es := r.Check.Emit
-	if !es.active() || !moduleConstFoldWords[word] || len(outs) != 1 ||
-		sig == nil || sig.Handler == nil || len(sig.NoEvalArgs) > 0 {
+	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileModuleFold) || len(outs) != 1 ||
+		sig.Handler == nil || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	sawModule := false
@@ -642,7 +637,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	if anyDynamicCarrier(args) || !anyDynamicCarrier(outs) {
 		return false
 	}
-	if fallbackWords[word] {
+	if sig.CompileEffect.Has(CompileFallbackBody) {
 		return false
 	}
 	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
@@ -777,7 +772,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 		return false
 	}
 	// Code-body higher-order words compile to closures, not poly.
-	if fallbackWords[word] {
+	if sig.CompileEffect.Has(CompileFallbackBody) {
 		return false
 	}
 	// Only a REGISTERED builtin native — never a user-def fn or a usurp/ref
@@ -796,7 +791,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	}
 	// Shapes the VM re-match cannot faithfully dispatch: code bodies,
 	// quoted/meta operands, user-fn frames, full-stack words, compile-time
-	// words. (islandPureWords/get pass these — get's key is its only
+	// words. (a CompileIslandPure get passes these — get's key is its only
 	// QuoteArg and is handled below.)
 	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
 		return false
@@ -843,37 +838,19 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	return es.RecordPolyCall(word, args, outs, pos)
 }
 
-// fallbackWords is the allow-set of code-body higher-order words that
-// may compile as Stage-5 interpreter islands: pure data transforms
-// that apply a code body to data and return data, with no registry
-// mutation. Conservative — expand only with the differential gate
-// green. Words with compile-time / registry-mutating semantics (do,
-// var, module, word-splice, def, case/select dispatch) stay out.
-var fallbackWords = map[string]bool{
-	"each": true, "fold": true, "scan": true,
-	"for-each": true, "select": true, "group": true,
-	"filter": true, "outer": true, "inner": true,
-	"do": true, "case": true, "where": true,
-	"having": true, "order": true,
-}
-
-// islandPureWords are the F4 general dynamic-dispatch words: pure typed
-// dispatches (no side effects, no registry mutation, no fn-value
-// re-stepping) whose forward-form span re-DISPATCHES faithfully through a
-// sub-engine. A site the checker widened to a dynamic carrier — a `get`
-// returning Any, a dynamic-receiver `make`/`is`/`typeof`/`size`, a type-
-// algebra query — re-runs the construct against the REAL runtime value
-// instead of baking a static signature the value might not match. The
-// sub-engine picks the overload at run time exactly as the interpreter
-// would, so soundness holds without a static sig commitment; the dynamic
-// result flows on and a downstream TYPED dispatch still refuses via
-// anyDynamicCarrier. (Report §9.1's TYPE_CHECK boundary, realised as an
-// interpreter island — the island IS the runtime guard.)
-var islandPureWords = map[string]bool{
-	"get": true, "getr": true, "size": true, "make": true,
-	"is": true, "typeof": true,
-	"teq": true, "tcmp": true, "tnot": true, "tor": true, "tand": true,
-}
+// The code-body higher-order words that may compile as Stage-5 interpreter
+// islands (each / fold / scan / filter / select / group / outer / inner / do /
+// case / where / having / order — pure data transforms applying a code body to
+// data, no registry mutation) DECLARE CompileFallbackBody on their NativeFunc.
+//
+// The F4 general dynamic-dispatch words — pure typed dispatches (get / getr /
+// size / make / is / typeof / type-algebra) with no side effects, whose
+// forward-form span re-DISPATCHES faithfully through a sub-engine when the
+// checker widened the site to a dynamic carrier — DECLARE CompileIslandPure. The
+// sub-engine picks the overload at run time exactly as the interpreter would, so
+// soundness holds without a static sig commitment; the dynamic result flows on
+// and a downstream TYPED dispatch still refuses via anyDynamicCarrier. (Report
+// §9.1's TYPE_CHECK boundary, realised as an interpreter island.)
 
 // tryRecordFallback attempts to compile a refused code-body higher-order
 // word as an interpreter island: the construct re-runs through a
@@ -899,7 +876,7 @@ var islandPureWords = map[string]bool{
 // TYPED dispatch via anyDynamicCarrier.
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es := r.Check.Emit
-	if !es.active() || !(fallbackWords[word] || islandPureWords[word]) || len(outs) != 1 || sig == nil {
+	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileFallbackBody|CompileIslandPure) || len(outs) != 1 {
 		return false
 	}
 	// A higher-order callable word dispatched on its LENS (Reach) form, not a
@@ -929,7 +906,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	// to dynamic, refusing every downstream typed dispatch (a net
 	// coverage LOSS). The code-body words always island (they never lower
 	// to CALL_NATIVE).
-	if islandPureWords[word] && !fallbackWords[word] &&
+	if sig.CompileEffect.Has(CompileIslandPure) && !sig.CompileEffect.Has(CompileFallbackBody) &&
 		!anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
 		return false
 	}
@@ -1029,7 +1006,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	//     forward args — `{m} get a` instead of `get a {m}`. Code-body
 	//     words can't (a baked body list would auto-evaluate when stepped
 	//     on the stack), so they keep the forward-eligible constraint.
-	canStackForm := len(ins) == 0 && islandPureWords[word] && !fallbackWords[word]
+	canStackForm := len(ins) == 0 && sig.CompileEffect.Has(CompileIslandPure) && !sig.CompileEffect.Has(CompileFallbackBody)
 	if !canStackForm && len(args)-len(ins) > barrier {
 		return false
 	}

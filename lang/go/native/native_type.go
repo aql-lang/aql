@@ -154,7 +154,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "typeof",
+		Name:          "typeof",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
@@ -164,7 +165,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "is",
+		Name:          "is",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAny, TAny},
@@ -174,7 +176,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "teq",
+		Name:          "teq",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:          []*Type{TAny, TAny},
@@ -207,7 +210,8 @@ var typeNatives = []NativeFunc{
 	// (eng.TorHandler / eng.TandHandler / eng.TandValues); the
 	// registrations here own the names and dispatch wiring.
 	{
-		Name: "tor",
+		Name:          "tor",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:          []*Type{TAny, TAny},
@@ -218,7 +222,8 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "tand",
+		Name:          "tand",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:          []*Type{TAny, TAny},
@@ -232,7 +237,8 @@ var typeNatives = []NativeFunc{
 	// under Boolean operations. `tnot T` matches v iff v does not match
 	// T. Algorithm lives in eng (eng.TnotHandler / eng.NegateType).
 	{
-		Name: "tnot",
+		Name:          "tnot",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:          []*Type{TAny},
@@ -257,7 +263,8 @@ var typeNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "convert",
+		Name:          "convert",
+		CompileEffect: CompileModuleFold,
 
 		Signatures: []NativeSig{
 			// Ideal → Map / List (per-type IdealConverter; base Ideal → {} / [])

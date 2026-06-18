@@ -128,7 +128,8 @@ var storageNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "get",
+		Name:          "get",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
 			// [Key | Node] — covers Map, List, Options, record-shape. The

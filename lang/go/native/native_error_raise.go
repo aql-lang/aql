@@ -51,7 +51,8 @@ var errorNatives = []NativeFunc{
 		// get on an Error value — code/message plus any raise payload
 		// keys. Registered here (not native_storage.go) to keep the
 		// whole Error surface in one file.
-		Name: "get",
+		Name:          "get",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
