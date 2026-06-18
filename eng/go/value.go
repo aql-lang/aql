@@ -324,7 +324,32 @@ type FnSig struct {
 	// Used by `ref`; apply/usurp deliberately leave it false so they
 	// re-step and invoke.
 	ParkResult bool
+	// CompileEffect declares the word's compile-relevant semantics for the
+	// bytecode recorder, so it can classify the word WITHOUT a name-keyed table
+	// in eng (which couples the engine to specific, often module, word names).
+	// The zero value is CompileDefault (an ordinary word). Set on the NativeSig
+	// at registration; copied here by RegisterNativeFunc.
+	CompileEffect CompileEffect
 }
+
+// CompileEffect declares a word's compile-relevant semantics so the bytecode
+// recorder can classify it from the Signature rather than from a name-keyed
+// table — decoupling eng from specific (module) word names.
+type CompileEffect uint8
+
+const (
+	// CompileDefault is an ordinary word. A fn-valued operand reaching it means
+	// the handler invokes the fn on the tape, which the VM cannot honour, so the
+	// recorder refuses (Stage 3).
+	CompileDefault CompileEffect = iota
+	// CompileInertFn marks a word that treats its fn-valued argument as INERT
+	// data — it READS the fn (introspection: typeof / arityof / type-algebra) or
+	// STORES it for later interpreter-side invocation (minilang / parselang
+	// register), never invoking it on the VM tape. The fn then rides as an inert
+	// const operand the handler inspects or stashes (a capturing / sub-registry
+	// fn still declines at isInertConst, so only a pure fn literal compiles).
+	CompileInertFn
+)
 
 // FnDefInfo holds the function specification for a def-defined function.
 // Name is the function's registered name (set by InstallDef). If Registry is

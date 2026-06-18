@@ -52,20 +52,6 @@ var fnIntrospectionWords = map[string]bool{
 	"arityof": true, "paramsof": true, "returnsof": true,
 }
 
-// fnStoreWords STORE a fn VALUE for later interpreter-side invocation — a
-// minilang/parselang rule registered into the module's rule table — and never
-// invoke it on the VM tape. So the fn rides as an inert const the handler
-// stashes (like an introspection operand); the later rule invocation runs
-// through the module's own interpreter, not the VM, so baking the fn by value
-// is faithful. A dormant entry unless the owning module is loaded (string-keyed,
-// no import coupling). A capturing / sub-registry fn still refuses at operand
-// resolution (isInertConst declines it), so only a pure fn literal compiles.
-var fnStoreWords = map[string]bool{
-	"minilang-register":          true,
-	"minilang-register-compiled": true,
-	"parselang-register":         true,
-}
-
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
@@ -1522,10 +1508,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// it stashes the fn in a module rule table for later interpreter-side
 	// invocation, never the VM tape, so the fn rides as an inert const.
 	introspect := fnIntrospectionWords[word]
-	fnStore := fnStoreWords[word]
+	// A fn-STORING word (minilang/parselang register) declares CompileInertFn:
+	// it stashes the fn value for later interpreter-side invocation, never the VM
+	// tape, so a fn-valued operand rides as an inert const.
+	inertFn := sig.CompileEffect == CompileInertFn
 	for _, t := range sig.Args {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
-			if fnStore {
+			if inertFn {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -1542,7 +1531,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 			// the fn on the tape, which the VM cannot honour. A fn-STORING word
 			// (register) likewise keeps the fn as data — the module interpreter,
 			// not the VM, runs it later.
-			if introspect || fnStore {
+			if introspect || inertFn {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++

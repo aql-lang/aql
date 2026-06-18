@@ -85,4 +85,8 @@ type NativeSig struct {
 	// ParkResult, when true, advances the pointer past the handler's
 	// spliced result instead of re-stepping it. See Signature.ParkResult.
 	ParkResult bool
+
+	// CompileEffect declares the word's compile-relevant semantics for the
+	// bytecode recorder. See Signature.CompileEffect.
+	CompileEffect CompileEffect
 }
