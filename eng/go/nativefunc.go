@@ -17,6 +17,14 @@ package eng
 type NativeFunc struct {
 	Name       string
 	Signatures []NativeSig
+
+	// CompileEffect is a WORD-level compile-effect declaration OR'd into every
+	// one of this word's signatures at registration. Use it for per-word
+	// classifications that apply to all overloads (a pure module reader, an
+	// island-pure dispatch word, a code-body higher-order word) so the bytecode
+	// recorder reads sig.CompileEffect instead of a name-keyed eng table. A
+	// single overload that needs an extra flag can still set NativeSig.CompileEffect.
+	CompileEffect CompileEffect
 }
 
 // NativeSig describes one overload of a native function.
@@ -57,11 +65,6 @@ type NativeSig struct {
 	// should be suppressed. See Signature.NoEvalMapArgs.
 	NoEvalMapArgs map[int]bool
 
-	// SchemaArg marks a type-constructor whose map arg is a const schema;
-	// its defaults materialise concretely and recording is suspended while it
-	// auto-evaluates. See Signature.SchemaArg.
-	SchemaArg bool
-
 	// TypeArgs marks arg positions that must receive a type literal
 	// rather than a concrete value. See Signature.TypeArgs.
 	TypeArgs map[int]bool
@@ -90,4 +93,8 @@ type NativeSig struct {
 	// ParkResult, when true, advances the pointer past the handler's
 	// spliced result instead of re-stepping it. See Signature.ParkResult.
 	ParkResult bool
+
+	// CompileEffect declares the word's compile-relevant semantics for the
+	// bytecode recorder. See Signature.CompileEffect.
+	CompileEffect CompileEffect
 }

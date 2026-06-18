@@ -154,16 +154,19 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "typeof",
+		Name:          "typeof",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
 			Handler: typeofHandler,
 			Returns: []*Type{TType}, BarrierPos: -1,
+			CompileEffect: CompileReadsFn, // reads a fn value's type, never invokes it
 		}},
 	},
 	{
-		Name: "is",
+		Name:          "is",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAny, TAny},
@@ -173,13 +176,15 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "teq",
+		Name:          "teq",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    teqHandler,
-			Returns:    []*Type{TBoolean},
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       teqHandler,
+			Returns:       []*Type{TBoolean},
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	{
@@ -205,36 +210,42 @@ var typeNatives = []NativeFunc{
 	// (eng.TorHandler / eng.TandHandler / eng.TandValues); the
 	// registrations here own the names and dispatch wiring.
 	{
-		Name: "tor",
+		Name:          "tor",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    eng.TorHandler,
-			ReturnsFn:  eng.TorReturnsFn,
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       eng.TorHandler,
+			ReturnsFn:     eng.TorReturnsFn,
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	{
-		Name: "tand",
+		Name:          "tand",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny, TAny},
-			BarrierPos: 1,
-			Handler:    eng.TandHandler,
-			Returns:    []*Type{TAny},
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       eng.TandHandler,
+			Returns:       []*Type{TAny},
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	// `tnot` (type negation / complement) — closes the type algebra
 	// under Boolean operations. `tnot T` matches v iff v does not match
 	// T. Algorithm lives in eng (eng.TnotHandler / eng.NegateType).
 	{
-		Name: "tnot",
+		Name:          "tnot",
+		CompileEffect: CompileIslandPure,
 
 		Signatures: []NativeSig{{
-			Args:       []*Type{TAny},
-			BarrierPos: -1,
-			Handler:    eng.TnotHandler,
-			ReturnsFn:  eng.TnotReturnsFn,
+			Args:          []*Type{TAny},
+			BarrierPos:    -1,
+			Handler:       eng.TnotHandler,
+			ReturnsFn:     eng.TnotReturnsFn,
+			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},
 	{
@@ -252,7 +263,8 @@ var typeNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "convert",
+		Name:          "convert",
+		CompileEffect: CompileModuleFold,
 
 		Signatures: []NativeSig{
 			// Ideal → Map / List (per-type IdealConverter; base Ideal → {} / [])

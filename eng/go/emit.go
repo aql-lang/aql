@@ -27,8 +27,8 @@ package eng
 // per value and toCarrier/copies preserve it, so a dispatch arg is
 // (a) a recorded output of an earlier call, (b) a literal — concrete
 // at the dispatch, or a stripped top-level literal whose original
-// was saved by RecordStrip — or (c) unknown, which marks the program
-// uncompilable rather than guessing.
+// was saved by RememberOriginal — or (c) unknown, which marks the
+// program uncompilable rather than guessing.
 
 // Site classes for SiteCounts.
 const (
@@ -37,34 +37,6 @@ const (
 	SiteDynamic = "dynamic"
 	SiteMeta    = "meta"
 )
-
-// fnIntrospectionWords READ a fn value (its type, arity, or type-algebra over
-// it) and never INVOKE it — so a fn-value operand may bake as an inert const
-// the handler inspects (`typeof (f/r)`, `Positive tcmp Function`). Words that
-// invoke a fn value (apply, the higher-order forms, and `is` over a predicate
-// fn, whose handler applies the predicate) are deliberately EXCLUDED: their
-// handlers re-step the fn on the tape, which the VM cannot honour.
-var fnIntrospectionWords = map[string]bool{
-	"typeof": true, "inspect": true,
-	"tcmp": true, "teq": true, "tand": true, "tor": true, "tnot": true,
-	// arity/param/return introspection: READ a fn's signature shape, never
-	// invoke it, so the fn value bakes as a const the handler inspects.
-	"arityof": true, "paramsof": true, "returnsof": true,
-}
-
-// fnStoreWords STORE a fn VALUE for later interpreter-side invocation — a
-// minilang/parselang rule registered into the module's rule table — and never
-// invoke it on the VM tape. So the fn rides as an inert const the handler
-// stashes (like an introspection operand); the later rule invocation runs
-// through the module's own interpreter, not the VM, so baking the fn by value
-// is faithful. A dormant entry unless the owning module is loaded (string-keyed,
-// no import coupling). A capturing / sub-registry fn still refuses at operand
-// resolution (isInertConst declines it), so only a pure fn literal compiles.
-var fnStoreWords = map[string]bool{
-	"minilang-register":          true,
-	"minilang-register-compiled": true,
-	"parselang-register":         true,
-}
 
 // operandKind discriminates how an emitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
@@ -123,6 +95,20 @@ func typeOperand(idx int) emitOperand   { return emitOperand{kind: opType, idx: 
 // stay distinguishable when a downstream operand resolves one of them.
 type producer struct{ seq, idx int }
 
+// eventFlags are the per-event compile flags, keyed by event seq in
+// EmitState.eventInfo. Each is a property of the producing event:
+//   - zeroOut:  branch seq → 0-output statement guard (residual skips it)
+//   - typeOut:  event seq → its output is itself a type body
+//   - valueDef: event seq → bound to a NAMED value-def (`def x (expr)`)
+//   - generic:  event seq → recorded by the GENERIC RecordCall path (a plain
+//     native), not a structured hook
+type eventFlags struct {
+	zeroOut  bool
+	typeOut  bool
+	valueDef bool
+	generic  bool
+}
+
 type emitCall struct {
 	word     string
 	sig      *Signature
@@ -178,6 +164,7 @@ const (
 	evContinue
 	evCallUser
 	evFallback
+	evTrap
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
@@ -202,6 +189,14 @@ type emitFallback struct {
 	pos     SrcPos
 }
 
+// emitTrap is a recorded terminal trap: a check-mode-suppressed runtime error
+// (an orphan gen, an unpack of a missing key) compiled as an OpTrap. The
+// program ends at the trap — the recorder drops everything after it.
+type emitTrap struct {
+	spec TrapSpec
+	pos  SrcPos
+}
+
 type emitEvent struct {
 	seq  int
 	kind int
@@ -210,6 +205,7 @@ type emitEvent struct {
 	loop emitLoop
 	uc   emitUserCall
 	fb   emitFallback
+	trap emitTrap
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -254,16 +250,24 @@ type EmitState struct {
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
-	zeroOutSeq map[int]bool        // branch seq → 0-output statement guard (residual skips it)
-	typeOut    map[int]bool        // event seq → its output is itself a type body
-	valueDefs  map[int]bool        // event seq → bound to a NAMED value-def (`def x (expr)`)
-	genericSeq map[int]bool        // event seq → recorded by the GENERIC RecordCall path (a plain native), not a structured hook
-	consts     []Value
-	constIdx   map[string]int // CanonValue → Consts index
-	types      []TypeRef
-	typeIdx    map[string]int   // type ID → Types index
-	fallbacks  []FallbackSpan   // Stage 5 interpreter islands
-	origByID   map[string]Value // stripped literal ID → original value
+	// eventInfo holds the per-event compile flags, keyed by event seq. It
+	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
+	// maps: each is a "property of event N", read via a producer's seq
+	// (producedBy[id].seq), so they stay seq-keyed rather than moving onto the
+	// value-copied emitEvent struct (a flag set after append wouldn't reach the
+	// frame/fragment copies).
+	eventInfo map[int]eventFlags
+	consts    []Value
+	constIdx  map[string]int // CanonValue → Consts index
+	types     []TypeRef
+	typeIdx   map[string]int   // type ID → Types index
+	fallbacks []FallbackSpan   // Stage 5 interpreter islands
+	origByID  map[string]Value // stripped literal ID → original value
+	// trapAt is the seq of a recorded TOP-LEVEL terminal trap (a check-mode-
+	// suppressed runtime error compiled as OpTrap), or 0 for none. When set,
+	// Finalize ends the program at the trap. seqs start at 1, so 0 is a safe
+	// "none" sentinel.
+	trapAt int
 }
 
 // emitUnit scopes local-slot numbering to one code unit (the
@@ -306,6 +310,13 @@ type fnUnitRec struct {
 	// (ClosureInValue by default; ClosureInKeyVal for a map-iteration lambda).
 	// Copied into CompiledFn.InShape at lowering. Zero (value) for user fns.
 	inShape ClosureInShape
+	// closure marks a higher-order body unit (each/scan/…$body) compiled via
+	// compileClosureBody, as opposed to a genuine user fn. A return-count
+	// mismatch in a closure body is the higher-order word's OWN runtime error
+	// (each_error "body produced no result"), not the fn return-count
+	// type_error — so a closure keeps refusing the mismatch (islands) while a
+	// user fn compiles the error path (the VM RET raises the matching error).
+	closure bool
 }
 
 // NewEmitState returns a fresh recording state.
@@ -317,10 +328,7 @@ func NewEmitState() *EmitState {
 		units:      []*emitUnit{{localByID: map[string]int{}}},
 		fnUnits:    map[string]int{},
 		producedBy: map[string]producer{},
-		zeroOutSeq: map[int]bool{},
-		typeOut:    map[int]bool{},
-		valueDefs:  map[int]bool{},
-		genericSeq: map[int]bool{},
+		eventInfo:  map[int]eventFlags{},
 		constIdx:   map[string]int{},
 		typeIdx:    map[string]int{},
 		origByID:   map[string]Value{},
@@ -439,7 +447,9 @@ func (es *EmitState) setProduced(out Value, seq int) {
 func (es *EmitState) setProducedAt(out Value, seq, idx int) {
 	es.producedBy[out.ID] = producer{seq: seq, idx: idx}
 	if IsTypeBody(out) {
-		es.typeOut[seq] = true
+		f := es.eventInfo[seq]
+		f.typeOut = true
+		es.eventInfo[seq] = f
 	}
 }
 
@@ -457,13 +467,15 @@ func (es *EmitState) MarkValueDef(v Value) {
 		return
 	}
 	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
-		es.valueDefs[pr.seq] = true
+		f := es.eventInfo[pr.seq]
+		f.valueDef = true
+		es.eventInfo[pr.seq] = f
 	}
 }
 
 // resolveOperand maps a dispatch value to its provenance: a prior
 // event's output, or an inert constant (concrete at the dispatch, or
-// a stripped literal whose original RecordStrip saved).
+// a stripped literal whose original RememberOriginal saved).
 func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// Events first, locals second: a join can REUSE a local's value ID
 	// for its result (JoinCarriers keeps the then-side ID when types
@@ -475,7 +487,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		// output was NOT a type is an ID collision (a `make` result
 		// inheriting the type literal's ID): resolve it as its own type
 		// operand / const below, not the unrelated event.
-		if !IsTypeBody(v) || es.typeOut[pr.seq] {
+		if !IsTypeBody(v) || es.eventInfo[pr.seq].typeOut {
 			return eventOperand(pr.seq, pr.idx), true
 		}
 	}
@@ -570,7 +582,7 @@ func (es *EmitState) OperandRepushable(v Value) bool {
 	}
 	// An event operand is the value's stack-discipline truth (pushed once);
 	// it cannot be re-pushed for a second reference.
-	if pr, ok := es.producedBy[v.ID]; ok && (!IsTypeBody(v) || es.typeOut[pr.seq]) {
+	if pr, ok := es.producedBy[v.ID]; ok && (!IsTypeBody(v) || es.eventInfo[pr.seq].typeOut) {
 		return false
 	}
 	if _, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
@@ -601,11 +613,11 @@ func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
 		return false
 	}
 	pr, ok := es.producedBy[v.ID]
-	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.typeOut[pr.seq])
+	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.eventInfo[pr.seq].typeOut)
 }
 
 // materialise recovers the fully concrete value behind a stripped
-// literal: the value itself, its RecordStrip original, or — for a
+// literal: the value itself, its RememberOriginal original, or — for a
 // concrete container whose MEMBERS were stripped by a sub-engine run
 // (autoEvalMap evaluates each field through Run, which strips) — a
 // rebuilt copy with each carrier member replaced by its recorded
@@ -882,7 +894,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		// phantom. Mark the seq so Finalize's residual reconciliation skips it
 		// rather than expecting a stack slot. Keeping the setProduced above
 		// lets RecordCall's double-record guard elide this if dispatch.
-		es.zeroOutSeq[seq] = true
+		f := es.eventInfo[seq]
+		f.zeroOut = true
+		es.eventInfo[seq] = f
 	}
 }
 
@@ -1070,7 +1084,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// reconciliation does. A 0-result body leaves outOps empty (a bare RET).
 			ops := make([]emitOperand, 0, len(bodyStk))
 			for _, v := range bodyStk {
-				if pr, ok := es.producedBy[v.ID]; ok && es.zeroOutSeq[pr.seq] {
+				if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
 					continue
 				}
 				// A body that RETURNS an anonymous capture-free lambda (the factory
@@ -1092,14 +1106,21 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				}
 				ops = append(ops, op)
 			}
-			// A DECLARED fn must leave exactly len(returns) RUNTIME values: a
-			// different count (now measured over real operands, phantom guards
-			// excluded) is the return-COUNT error the interpreter raises, so refuse
-			// and let the program fall back. An UNDECLARED fn (an anonymous lambda
-			// whose Returns were nilled, or a 0-return fn) is NOT count-checked by
-			// the interpreter, so its body residual — 0 or N values — is taken as-is.
-			if len(rec.returns) > 0 && len(ops) != len(rec.returns) {
-				es.MarkUncompilable("fn " + name + ": body value count differs from declared returns")
+			// A DECLARED fn must leave exactly len(returns) RUNTIME values; a
+			// different count (measured over real operands, phantom guards
+			// excluded) is a return-COUNT mismatch. For a genuine USER fn that is
+			// the type_error the interpreter raises at __RC, so rather than refuse
+			// we COMPILE the body and let the VM's RET enforce the count — it raises
+			// the byte-identical type_error (shared returnCountErrorText), erroring
+			// exactly where the interpreter does instead of falling back. For a
+			// CLOSURE body (each/scan/…$body) the mismatch is instead the
+			// higher-order word's OWN runtime error (each_error "body produced no
+			// result"), a different taxonomy — so a closure keeps refusing and
+			// islands, letting the interpreter raise the matching error. An
+			// UNDECLARED fn (an anonymous lambda whose Returns were nilled, or a
+			// 0-return fn) is NOT count-checked: its residual is taken as-is.
+			if rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
 			}
 			rec.outOps = ops
@@ -1245,27 +1266,24 @@ func (es *EmitState) RecordFallback(span FallbackSpan, ins []Value, out Value, p
 	return true
 }
 
-// RecordStrip remembers the original concrete value behind a
-// top-level literal that StripToCarriers reduced to a carrier — the
-// ID is preserved by the strip, so a later dispatch arg with this ID
-// is that literal.
-func (es *EmitState) RecordStrip(orig, stripped Value) {
-	if es == nil || es.suspended > 0 {
-		return
-	}
-	if stripped.Carrier && !orig.Carrier && orig.ID != "" && orig.ID == stripped.ID {
-		es.origByID[orig.ID] = orig
-	}
-}
-
-// RememberOriginal records a CONCRETE value produced during the check
-// pass against its own ID, so that when a later carrier-strip reduces it
-// (preserving the ID — toCarrier keeps Value.ID) the lowerer can recover
-// the original via materialise/origByID. Used by impure-but-pure-data
-// constructors that run in check mode and whose result is otherwise
-// stripped before reaching a downstream operand — notably the predicate
-// constructors (`Integer gt 10`), whose DepScalarInfo payload toCarrier
-// strips to a bare base-type carrier, losing the bound.
+// RememberOriginal records a CONCRETE value against its own ID so that
+// when a carrier-strip reduces it — toCarrier keeps Value.ID, so the
+// stripped carrier shares the original's ID — the lowerer can recover the
+// concrete value via materialise/origByID. The single recorder behind both
+// strip provenance paths:
+//
+//   - top-level literals that StripToCarriers reduces to carriers (the
+//     caller in engine.Run gates on the strip actually having happened:
+//     same ID, now a carrier);
+//   - impure-but-pure-data constructors that run in check mode and whose
+//     result is stripped before reaching a downstream operand — notably the
+//     predicate constructors (`Integer gt 10`), whose DepScalarInfo payload
+//     toCarrier strips to a bare base-type carrier, losing the bound.
+//
+// A value that is already a carrier/dynamic, or has no ID, is a no-op
+// (nothing concrete to recover). Skips while suspended or once the program
+// is uncompilable (an uncompilable program is never lowered, so its
+// origByID entries are never read).
 func (es *EmitState) RememberOriginal(v Value) {
 	if es == nil || es.suspended > 0 || !es.active() {
 		return
@@ -1274,6 +1292,41 @@ func (es *EmitState) RememberOriginal(v Value) {
 		return
 	}
 	es.origByID[v.ID] = v
+}
+
+// RecordTrap records a TERMINAL trap for a check-mode-suppressed runtime error
+// (an orphan gen, an unpack of a missing key): the checker is lenient at this
+// point but the interpreter errors, so the compiled program raises the
+// byte-identical error here via OpTrap instead of refusing the whole program.
+// Only a TOP-LEVEL trap is recorded (frames and units both at depth 1): a trap
+// inside a branch/loop/fn fragment is conditional and not yet modelled, so it
+// returns false and the caller keeps the SuppressedRuntimeError blanket refusal.
+// The first trap wins (execution can reach only one). Returns true when the trap
+// is owned here (recorded now, or already trapping).
+func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) bool {
+	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
+		return false
+	}
+	if es.trapAt != 0 {
+		return true
+	}
+	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
+		spec: TrapSpec{Code: code, Detail: detail, Word: word, Hint: hint},
+		pos:  pos,
+	}})
+	return true
+}
+
+// RememberStrippedOriginals records the pre-strip original of each value that
+// StripToCarriers actually reduced to a carrier (same preserved ID), so the
+// lowerer can later recover the concrete literal. Values toCarrier kept
+// concrete need no recovery and are skipped. pre and stripped are parallel.
+func (es *EmitState) RememberStrippedOriginals(pre, stripped []Value) {
+	for i := range stripped {
+		if stripped[i].Carrier && pre[i].ID != "" && pre[i].ID == stripped[i].ID {
+			es.RememberOriginal(pre[i])
+		}
+	}
 }
 
 // RecordPoly classifies a partitioned (per-alternative) dispatch.
@@ -1308,9 +1361,9 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// 'n')` — both gets return the same deterministic-ID result once their key
 	// is concrete) collides with a prior generic event, and skipping the second
 	// would orphan its receiver push. Those fall through to the carrier-identity
-	// de-collision below (which mints a fresh ID), so guard on !genericSeq.
+	// de-collision below (which mints a fresh ID), so guard on !eventInfo.generic.
 	if len(outs) > 0 {
-		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.genericSeq[pr.seq] {
+		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.eventInfo[pr.seq].generic {
 			return
 		}
 	}
@@ -1440,11 +1493,16 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// territory. A fn-STORING word (minilang/parselang register) is exempt:
 	// it stashes the fn in a module rule table for later interpreter-side
 	// invocation, never the VM tape, so the fn rides as an inert const.
-	introspect := fnIntrospectionWords[word]
-	fnStore := fnStoreWords[word]
+	// A word declaring CompileReadsFn (introspection) or CompileStoresFn
+	// (minilang/parselang register) treats its fn-valued argument as INERT data,
+	// never invoking it on the VM tape, so a fn-valued operand is allowed (rides
+	// as an inert const). introspect (READS only) additionally bakes even a
+	// CAPTURING fn below, since only the immutable shape is read.
+	introspect := sig.CompileEffect.Has(CompileReadsFn)
+	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
 	for _, t := range sig.Args {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
-			if fnStore {
+			if inertFn {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -1454,14 +1512,13 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	}
 	for _, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
-			// An INTROSPECTION word READS a fn value (its type/arity) and never
-			// invokes it, so the immutable fn value rides as a plain const
-			// operand the handler inspects — unlike a fn-INVOKING word (apply,
-			// higher-order, or `is` over a predicate fn), whose handler re-steps
-			// the fn on the tape, which the VM cannot honour. A fn-STORING word
-			// (register) likewise keeps the fn as data — the module interpreter,
-			// not the VM, runs it later.
-			if introspect || fnStore {
+			// A CompileReadsFn / CompileStoresFn word READS a fn value (its
+			// type/arity) or STORES it, never invoking it, so the immutable fn
+			// value rides as a plain const operand the handler inspects/stashes —
+			// unlike a fn-INVOKING
+			// word (apply, higher-order, or `is` over a predicate fn), whose
+			// handler re-steps the fn on the tape, which the VM cannot honour.
+			if inertFn {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -1500,7 +1557,9 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	// by the DUP lowering, so skip pr.seq == seq; and a result that IS one of the
 	// call's inputs (an identity/stack word passing a value through) keeps its ID,
 	// so skip an output whose ID appears in args.
-	es.genericSeq[seq] = true
+	gf := es.eventInfo[seq]
+	gf.generic = true
+	es.eventInfo[seq] = gf
 	var argIDs map[string]bool
 	for i := range outs {
 		if pr, ok := es.producedBy[outs[i].ID]; ok && pr.seq != seq {
@@ -2177,6 +2236,15 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if !es.Compilable {
 		return nil, es.Reason, false
 	}
+	if es.trapAt != 0 {
+		// A terminal trap (a check-mode-suppressed runtime error compiled as an
+		// OpTrap) ends the program: keep the events up to and including the trap
+		// — their side effects run first, exactly as in the interpreter — and
+		// drop everything after it plus the residual (both unreachable: the trap
+		// aborts the run, and no result is produced).
+		es.frames[0] = eventsThroughSeq(es.frames[0], es.trapAt)
+		residual = nil
+	}
 	p := &Program{}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
@@ -2217,7 +2285,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		seenLiteral, outOfOrder := false, false
 		for _, rv := range residual {
 			pr, isEvent := es.producedBy[rv.ID]
-			if isEvent && pr.idx == 0 && !es.zeroOutSeq[pr.seq] {
+			if isEvent && pr.idx == 0 && !es.eventInfo[pr.seq].zeroOut {
 				if seenLiteral {
 					outOfOrder = true
 				}
@@ -2233,9 +2301,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
+	// Seed the lowerer's frame-local counter from the unit's planned locals;
+	// spillSeat bumps it for spill temps. Written back below so Program.NumLocals
+	// covers them.
+	lw.numLocals = es.units[0].numLocals
 	if reason := lw.lowerEvents(es.frames[0], 0); reason != "" {
 		return nil, reason, false
 	}
+	es.units[0].numLocals = lw.numLocals
 
 	// Residual reconciliation.
 	lastPos := SrcPos{}
@@ -2317,7 +2390,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// A 0-output statement guard (`if cond [raise]`) registered a
 			// phantom None result but produces 0 runtime values: it left no
 			// stack slot, so skip it here rather than expecting one.
-			if es.zeroOutSeq[pr.seq] {
+			if es.eventInfo[pr.seq].zeroOut {
 				continue
 			}
 			// A promoted value-def local is no longer on the simulated stack
@@ -2391,9 +2464,17 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
+		}
+		// spillSeat may have allocated frame-local temps during lowering; grow
+		// NLocals (and the debug name table) so the VM frame holds them.
+		if flw.numLocals > cf.NLocals {
+			cf.NLocals = flw.numLocals
+			for len(cf.LocalNames) < cf.NLocals {
+				cf.LocalNames = append(cf.LocalNames, "")
+			}
 		}
 		if !diverged {
 			// Reconcile the body's N result operands with the simulated
@@ -2450,6 +2531,21 @@ func eventPos(ev emitEvent) SrcPos {
 		return ev.loop.pos
 	case evCallUser:
 		return ev.uc.pos
+	case evTrap:
+		return ev.trap.pos
 	}
 	return ev.br.pos
+}
+
+// eventsThroughSeq returns the prefix of events up to and including the one with
+// the given seq (top-level events are appended in seq order). Used to truncate
+// the trace at a terminal trap, dropping the unreachable tail the lenient check
+// pass recorded after it.
+func eventsThroughSeq(events []emitEvent, seq int) []emitEvent {
+	for i := range events {
+		if events[i].seq == seq {
+			return events[:i+1]
+		}
+	}
+	return events
 }

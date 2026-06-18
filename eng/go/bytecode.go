@@ -133,6 +133,24 @@ const (
 	// frozen, aliasable const. A fully-literal / const-foldable map stays a
 	// pooled const and never needs this.
 	OpMakeMap
+	// OpTrap raises the AQL error described by Program.Traps[Arg] and aborts the
+	// run. It is the compiled form of a check-mode-suppressed runtime error: a
+	// word that is deliberately lenient in check mode but raises at run time (an
+	// orphan `gen [...]`, an `unpack` of a missing key). The checker is lenient,
+	// so the compiled stream would otherwise silently succeed where the
+	// interpreter errors; instead the trap raises the byte-identical error
+	// (shared taxonomy text) at exactly the point execution reaches it. Terminal:
+	// the recorder ends the program at the trap (everything after is unreachable).
+	OpTrap
+	// OpReverse reverses the top Arg operand-stack values in place. It is the
+	// stack-scheduling primitive for an N-operand call whose computed args sit in
+	// exact REVERSE signature order — the common forward-call shape `f (a)(b)(c)`,
+	// where the args evaluate left→right so sig position 0 ends up DEEPEST, but the
+	// call wants it on top. SWAP handles N=2; OpReverse generalises it to N≥3
+	// (the 3-deep rotate the VM previously had no opcode for, so layoutOperands
+	// refused). Emitted only when layoutOperands recognises an exact reverse, so
+	// it can never seat an operand wrongly.
+	OpReverse
 )
 
 func (o Opcode) String() string {
@@ -177,6 +195,10 @@ func (o Opcode) String() string {
 		return "MAKE_LIST"
 	case OpMakeMap:
 		return "MAKE_MAP"
+	case OpTrap:
+		return "TRAP"
+	case OpReverse:
+		return "REVERSE"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -289,6 +311,19 @@ type MakeMapSpec struct {
 	Implicit bool
 }
 
+// TrapSpec describes the AQL error one OpTrap raises: the taxonomy code, the
+// detail message, the word it is attributed to, and an optional hint — built
+// from the SAME strings the interpreter raises for the matching runtime error,
+// so error-scraping tooling can never tell which engine ran. It lowers a
+// check-mode-suppressed runtime error (an orphan gen, an unpack of a missing
+// key) into the compiled stream rather than refusing the whole program.
+type TrapSpec struct {
+	Code   string
+	Detail string
+	Word   string
+	Hint   string
+}
+
 // Program is a compiled unit: code, interned constants, the signature
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
@@ -299,6 +334,7 @@ type Program struct {
 	PolyRefs  []PolyRef
 	Fallbacks []FallbackSpan
 	MakeMaps  []MakeMapSpec
+	Traps     []TrapSpec
 	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
 	MaxStack  int      // a floor when the program loops (results accumulate)
@@ -416,6 +452,10 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		case OpMakeMap:
 			mm := p.MakeMaps[in.Arg]
 			fmt.Fprintf(sb, " m%-3d ; assemble {%s}", in.Arg, strings.Join(mm.Keys, " "))
+		case OpTrap:
+			fmt.Fprintf(sb, " x%-3d ; trap %s", in.Arg, p.Traps[in.Arg].Code)
+		case OpReverse:
+			fmt.Fprintf(sb, " n%-3d ; reverse top %d", in.Arg, in.Arg)
 		}
 		sb.WriteByte('\n')
 	}

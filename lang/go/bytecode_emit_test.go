@@ -65,7 +65,7 @@ func TestEmitGoldens(t *testing.T) {
 ; consts=3 types=0 sigs=2 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// Top-level strings are stripped to carriers by check mode;
-		// RecordStrip preserves the originals for interning.
+		// RememberOriginal preserves the originals for interning.
 		{`'a' add 'b'`, `0000 PUSH_CONST  k1   ; 'a' (ProperString)
 0001 PUSH_CONST  k0   ; 'b' (ProperString)
 0002 CALL_NATIVE s0   ; add (String, Scalar)
@@ -281,12 +281,15 @@ func TestEmitP5MultiResult(t *testing.T) {
 		t.Fatalf("multi-return fn result = %v, want [1 2]", gotMR)
 	}
 
-	// Negative: a body whose value count differs from the DECLARED returns
-	// is a return-count error the interpreter raises — refuse and fall back.
-	if got, reason := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got != "" {
-		t.Errorf("count-mismatch fn compiled but must refuse:\n%s", got)
-	} else if !strings.Contains(reason, "body value count differs") {
-		t.Errorf("unexpected count-mismatch refusal reason: %q", reason)
+	// A body whose value count differs from the DECLARED returns is the
+	// interpreter's return-count type_error. It now COMPILES the error path —
+	// the VM's RET enforces the exact count and raises the byte-identical error
+	// — rather than refusing and falling back.
+	if got, reason := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got == "" {
+		t.Errorf("count-mismatch fn must now compile the error path, but refused: %q", reason)
+	}
+	if _, compiled, err := mustRun(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); !compiled || err == nil {
+		t.Errorf("count-mismatch fn: compiled=%v err=%v, want compiled with the raised count error", compiled, err)
 	}
 }
 
@@ -668,11 +671,104 @@ func TestFnGuardReturnCount(t *testing.T) {
 	if _, compiled, err := mustRun(t, guard+`f 0`); !compiled || err == nil {
 		t.Errorf("f 0: compiled=%v err=%v, want compiled with the raised error", compiled, err)
 	}
-	// NEGATIVE: a GENUINE count mismatch (body leaves 2 DEFINITE values, declared
-	// 1) is the interpreter's return-count error, so it stays refused and falls
-	// back rather than miscompiling a wrong residual.
-	if _, r := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); r == "" {
-		t.Error("genuine 2-value body compiled but must refuse (return-count mismatch)")
+	// A GENUINE count mismatch (body leaves 2 DEFINITE values, declared 1) is the
+	// interpreter's return-count type_error. It now COMPILES the error path (the
+	// VM's RET enforces the exact count) rather than refusing — and running it
+	// raises the matching error, matching the interpreter.
+	if got, r := compile(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); got == "" {
+		t.Errorf("count-mismatch fn must now compile the error path, but refused: %q", r)
+	}
+	if _, compiled, err := mustRun(t, `def r2 fn [[n:Integer] [Integer] [n n]] r2 1`); !compiled || err == nil {
+		t.Errorf("count-mismatch fn: compiled=%v err=%v, want compiled with the raised count error", compiled, err)
+	}
+}
+
+// TestEmitTrap: a word lenient in check mode but erroring at run time — an
+// orphan gen (gen_without_constructor), an unpack of a missing key
+// (unpack_error) — compiles a terminal OpTrap that raises the byte-identical
+// error, instead of refusing the whole program.
+func TestEmitTrap(t *testing.T) {
+	cases := []struct {
+		src, errSubstr string
+	}{
+		{`gen [T]`, "gen_without_constructor"},
+		{`def m2 {x:1} unpack [y] m2`, "not found"},
+	}
+	for _, tc := range cases {
+		got, reason := compile(t, tc.src)
+		if got == "" {
+			t.Errorf("%q must compile a trap, but refused: %q", tc.src, reason)
+			continue
+		}
+		if !strings.Contains(got, "TRAP") {
+			t.Errorf("%q compiled without a TRAP:\n%s", tc.src, got)
+		}
+		if _, compiled, err := mustRun(t, tc.src); !compiled || err == nil {
+			t.Errorf("%q: compiled=%v err=%v, want compiled with the raised error", tc.src, compiled, err)
+		} else if !strings.Contains(err.Error(), tc.errSubstr) {
+			t.Errorf("%q: error %q does not contain %q", tc.src, err.Error(), tc.errSubstr)
+		}
+	}
+	// NEGATIVE: a suppressed error inside a branch fragment is conditional and
+	// not modelled as a trap, so it keeps the blanket refusal and falls back.
+	if got, _ := compile(t, `if true [def mm {x:1} unpack [y] mm] [1]`); got != "" {
+		t.Errorf("nested suppressed error must refuse (no top-level trap), but compiled:\n%s", got)
+	}
+}
+
+// TestEmitReverse: an N-arg (N>=3) call whose args are all COMPUTED evaluates
+// them left-to-right (sig position 0 lands deepest), so the lowerer reverses the
+// top N with one OpReverse to seat them in sig order — the 3-deep rotate the VM
+// previously had no opcode for (it refused as "operand shape beyond Stage 1").
+func TestEmitReverse(t *testing.T) {
+	src := `range (1 add 0) (4 sub 0) (2 sub 1)` // range 1 4 1 -> [1 2 3], all 3 args computed
+	got, reason := compile(t, src)
+	if got == "" {
+		t.Fatalf("%q must compile via OpReverse, but refused: %q", src, reason)
+	}
+	if !strings.Contains(got, "REVERSE") {
+		t.Errorf("%q compiled without a REVERSE:\n%s", src, got)
+	}
+	// The reversed operands must produce the SAME result as the interpreter.
+	res, compiled, err := mustRun(t, src)
+	if !compiled || err != nil {
+		t.Fatalf("%q: compiled=%v err=%v", src, compiled, err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("%q: result = %v, want a single list", src, res)
+	}
+	// NEGATIVE: a 2-computed-arg call still uses SWAP, not REVERSE (REVERSE is
+	// only for N>=3 — the case SWAP cannot cover).
+	if g2, _ := compile(t, `range (1 add 0) (4 sub 0)`); strings.Contains(g2, "REVERSE") {
+		t.Errorf("2-arg call must use SWAP, not REVERSE:\n%s", g2)
+	}
+}
+
+// TestEmitSpillSeat: an operand shape the cheap stack-only paths can't seat —
+// two COMPUTED args plus a trailing inert arg (`range (a) (b) const`), which the
+// old layoutOperands refused as "operand shape beyond Stage 1" — now compiles by
+// spilling the event operands to frame-local destinations (STORE_LOCAL) and
+// re-pushing in sig order (DDCG frame-slot destinations). The result must match
+// the interpreter.
+func TestEmitSpillSeat(t *testing.T) {
+	src := `range (1 add 0) (5 sub 0) 1` // range 1 5 1 -> [1 2 3 4]; sig[0],sig[1] computed, sig[2] const
+	got, reason := compile(t, src)
+	if got == "" {
+		t.Fatalf("%q must compile via spill, but refused: %q", src, reason)
+	}
+	if !strings.Contains(got, "STORE_LOCAL") {
+		t.Errorf("%q compiled without a spill (STORE_LOCAL):\n%s", src, got)
+	}
+	res, compiled, err := mustRun(t, src)
+	if !compiled || err != nil {
+		t.Fatalf("%q: compiled=%v err=%v", src, compiled, err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("%q: result = %v, want a single list [1 2 3 4]", src, res)
+	}
+	// NEGATIVE: an all-inert call never spills (no event operands to seat).
+	if g2, _ := compile(t, `range 1 5 1`); strings.Contains(g2, "STORE_LOCAL") {
+		t.Errorf("all-const call must not spill:\n%s", g2)
 	}
 }
 

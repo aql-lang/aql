@@ -1135,24 +1135,30 @@ func TestOpMakeListCompiles(t *testing.T) {
 		t.Errorf("[1 2 3]: a literal list must bake as a const, not MAKE_LIST")
 	}
 
-	// SCOPING / negative: a const-EVENT-const interleave (`[1 (2 add 3) 4]`)
-	// exceeds the Stage-1 operand layout, so it must NOT compile native — it
-	// falls back with faithful parity.
+	// A const-EVENT-const interleave (`[1 (2 add 3) 4]`) is an operand shape the
+	// cheap stack paths can't seat (the event sits at a middle sig position). It
+	// now compiles NATIVELY by spilling the event operand to a frame-local
+	// destination (STORE_LOCAL) and re-pushing in sig order — no fallback — with
+	// faithful parity.
 	const inter = `[1 (2 add 3) 4]`
 	a, _ := New()
 	prog, _, _, _ := a.CompileCheck(inter)
-	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-		t.Errorf("%q: a const-event-const interleave must not compile native", inter)
+	if prog == nil {
+		t.Fatalf("%q: must compile via spill, but refused", inter)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("%q: must compile native (spill), not island:\n%s", inter, dis)
+	}
+	if !strings.Contains(dis, "STORE_LOCAL") {
+		t.Errorf("%q: expected a spill (STORE_LOCAL):\n%s", inter, dis)
 	}
 	ar, _ := New()
-	gotC, compiled, _ := ar.RunCompiled(inter)
-	if compiled {
-		t.Errorf("%q: must fall back, not compile", inter)
-	}
+	gotC, compiled, errC := ar.RunCompiled(inter)
 	b, _ := New()
 	gotI, _ := b.Run(inter)
-	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[1 5 4]]" {
-		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", inter, gotC, gotI)
+	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[1 5 4]]" {
+		t.Errorf("%q: spill parity broke: compiled=%v gotC=%v interp=%v", inter, compiled, gotC, gotI)
 	}
 }
 

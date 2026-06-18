@@ -166,11 +166,12 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register",
 		Signatures: []native.NativeSig{{
-			Args:       []*native.Type{native.TAtom, native.TFunction},
-			QuoteArgs:  map[int]bool{0: true},
-			Returns:    []*native.Type{},
-			BarrierPos: -1,
-			Handler:    miniRegisterHandler(exports),
+			Args:          []*native.Type{native.TAtom, native.TFunction},
+			QuoteArgs:     map[int]bool{0: true},
+			Returns:       []*native.Type{},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
+			Handler:       miniRegisterHandler(exports),
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("minilang-register", [][]native.FnParam{
@@ -199,11 +200,12 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register-compiled",
 		Signatures: []native.NativeSig{{
-			Args:       []*native.Type{native.TAtom, native.TFunction},
-			QuoteArgs:  map[int]bool{0: true},
-			Returns:    []*native.Type{},
-			BarrierPos: -1,
-			Handler:    miniRegisterCompiledHandler(exports),
+			Args:          []*native.Type{native.TAtom, native.TFunction},
+			QuoteArgs:     map[int]bool{0: true},
+			Returns:       []*native.Type{},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
+			Handler:       miniRegisterCompiledHandler(exports),
 		}},
 	})
 	exports.Set("register-compiled", wrapMiniFnDef("minilang-register-compiled", [][]native.FnParam{

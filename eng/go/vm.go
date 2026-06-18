@@ -57,12 +57,15 @@ type vmLoop struct {
 }
 
 // vmFrame remembers a caller's resumption point across a CALL_USER: the
-// unit and pc to return to, the caller's frame locals, and the open-loop
-// count so RET cannot leak loop state.
+// unit and pc to return to, the caller's frame locals, the open-loop
+// count so RET cannot leak loop state, and the operand-stack depth at
+// call entry (after the callee's params were popped) so RET can verify
+// the body left EXACTLY its declared return count.
 type vmFrame struct {
 	retUnit, retPC int
 	locals         []Value
 	loopBase       int
+	stackBase      int
 }
 
 // vmContext holds the state SHARED across a program run and every re-entrant
@@ -502,6 +505,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			if stack, err = vmMakeMap(p, stack, in.Arg, curDebug, pc); err != nil {
 				return nil, err
 			}
+		case OpTrap:
+			// A check-mode-suppressed runtime error compiled in place: raise the
+			// byte-identical AQL error (the interpreter errors at this same point).
+			tr := &p.Traps[in.Arg]
+			var err error
+			if tr.Hint != "" {
+				err = r.AqlErrorHint(tr.Code, tr.Detail, tr.Word, tr.Hint)
+			} else {
+				err = r.AqlError(tr.Code, tr.Detail, tr.Word)
+			}
+			return nil, stampAt(err, curDebug, pc, r)
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {
@@ -565,11 +579,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			locals[lp.slot] = NewInteger(lp.cur)
 			lp.cur += lp.step
-		case OpSwap:
-			if len(stack) < 2 {
-				return nil, vmErrAt(curDebug, pc, "SWAP underflow")
+		case OpSwap, OpReverse:
+			// SWAP is reverse-of-2; OpReverse reverses the top Arg. Shared helper.
+			var err error
+			if stack, err = vmShuffle(stack, in.Op, int(in.Arg), curDebug, pc); err != nil {
+				return nil, err
 			}
-			stack[len(stack)-1], stack[len(stack)-2] = stack[len(stack)-2], stack[len(stack)-1]
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
 			n := len(s.Sig.Args)
@@ -663,7 +678,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			stack = stack[:len(stack)-fn.NParams]
 			if in.Op == OpCallUser {
-				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops)})
+				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack)})
 				vc.frameDepth++ // balanced by the matching RET below
 			} else {
 				// Tail call: REPLACE the frame — the language's
@@ -694,17 +709,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// one trivial membership test per closure return, deliberately
 			// kept uniform with user-fn return enforcement.)
 			if curUnit >= 0 {
-				rets := p.Fns[curUnit].Returns
-				if len(rets) > 0 {
-					if len(stack) < len(rets) {
-						return nil, stampAt(vmReturnCountErr(r, p.Fns[curUnit].Name, len(rets), len(stack)), curDebug, pc, r)
-					}
-					base := len(stack) - len(rets)
-					for k, exp := range rets {
-						if !stack[base+k].Is(CanonicalType(r, exp)) {
-							return nil, stampAt(vmReturnTypeErr(r, p.Fns[curUnit].Name, k+1, exp, stack[base+k]), curDebug, pc, r)
-						}
-					}
+				stackBase := 0
+				if len(frames) > 0 {
+					stackBase = frames[len(frames)-1].stackBase
+				}
+				if err := checkReturnContract(r, &p.Fns[curUnit], stack, stackBase, len(frames) > 0); err != nil {
+					return nil, stampAt(err, curDebug, pc, r)
 				}
 			}
 			if len(frames) == 0 {
@@ -761,6 +771,54 @@ func vmReturnTypeErr(r *Registry, funcName string, index int, expected *Type, go
 
 func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
 	return r.AqlError("type_error", returnCountErrorText(funcName, expected, got), funcName)
+}
+
+// vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
+// case, OpReverse takes n from arg. Used to seat an N-operand call's computed
+// args (which evaluate into reverse sig order) onto the stack in sig order.
+func vmShuffle(stack []Value, op Opcode, arg int, debug []SrcPos, pc int) ([]Value, error) {
+	n := 2
+	if op == OpReverse {
+		n = arg
+	}
+	if len(stack) < n {
+		return nil, vmErrAt(debug, pc, op.String()+" underflow")
+	}
+	for i, j := len(stack)-n, len(stack)-1; i < j; i, j = i+1, j-1 {
+		stack[i], stack[j] = stack[j], stack[i]
+	}
+	return stack, nil
+}
+
+// checkReturnContract enforces a compiled fn's declared return contract at a RET
+// — the compiled mirror of the interpreter's ReturnCheck (__RC, engine.go). Each
+// declared return must satisfy its type via v.Is(exp), the SAME membership the
+// parameter boundary asks (so a predicate refine runs its predicate, a bare
+// refine stays nominal). When hasFrame is set (a genuine user fn entered via
+// CALL_USER), the body must leave EXACTLY len(Returns) values measured from the
+// frame's entry stackBase — too few OR too many is the return-count type_error.
+// The re-entrant closure / fn-root RET (no frame) runs on a fresh stack and only
+// the underflow is a count error there (a surplus is the higher-order caller's
+// domain) — preserving the prior closure behaviour. Returns nil when satisfied.
+func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase int, hasFrame bool) error {
+	rets := fn.Returns
+	if len(rets) == 0 {
+		return nil
+	}
+	if hasFrame {
+		if produced := len(stack) - stackBase; produced != len(rets) {
+			return vmReturnCountErr(r, fn.Name, len(rets), produced)
+		}
+	} else if len(stack) < len(rets) {
+		return vmReturnCountErr(r, fn.Name, len(rets), len(stack))
+	}
+	base := len(stack) - len(rets)
+	for k, exp := range rets {
+		if !stack[base+k].Is(CanonicalType(r, exp)) {
+			return vmReturnTypeErr(r, fn.Name, k+1, exp, stack[base+k])
+		}
+	}
+	return nil
 }
 
 // vmErrAt builds an internal_error AqlError for a VM-internal soundness

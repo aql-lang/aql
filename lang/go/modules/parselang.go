@@ -57,11 +57,12 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-register",
 		Signatures: []native.NativeSig{{
-			Args:       []*native.Type{native.TAtom, native.TFunction},
-			QuoteArgs:  map[int]bool{0: true},
-			Returns:    []*native.Type{},
-			BarrierPos: -1,
-			Handler:    parseRegisterHandler(exports),
+			Args:          []*native.Type{native.TAtom, native.TFunction},
+			QuoteArgs:     map[int]bool{0: true},
+			Returns:       []*native.Type{},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
+			Handler:       parseRegisterHandler(exports),
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("parselang-register", [][]native.FnParam{

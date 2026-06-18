@@ -17,7 +17,8 @@ import "fmt"
 //	[10,20] 5 getr     → ERROR (index out of bounds)
 var accessorNatives = []NativeFunc{
 	{
-		Name: "getr",
+		Name:          "getr",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
 			// [Key | Node] — key forward, container from stack
@@ -51,7 +52,8 @@ var accessorNatives = []NativeFunc{
 		//	{a:1}    has b       → false  (absent)
 		//	[10,20]  has 1       → true
 		//	none     has a       → false
-		Name: "has",
+		Name:          "has",
+		CompileEffect: CompileModuleFold,
 
 		Signatures: []NativeSig{
 			// [Key | Node] — Map, List, Options, record-shape

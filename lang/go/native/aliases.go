@@ -74,6 +74,7 @@ type (
 	MoveInfo            = eng.MoveInfo
 	NativeFunc          = eng.NativeFunc
 	NativeSig           = eng.NativeSig
+	CompileEffect       = eng.CompileEffect
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo
 	ObjectTypeInfo      = eng.ObjectTypeInfo
 	SurfaceInfo         = eng.SurfaceInfo
@@ -203,6 +204,15 @@ const (
 	DepGTE = eng.DepGTE
 	DepLT  = eng.DepLT
 	DepLTE = eng.DepLTE
+
+	// Compile-effect classifications (eng.CompileEffect) for the bytecode
+	// recorder — declared on a NativeSig instead of a name-keyed eng table.
+	CompileDefault      = eng.CompileDefault
+	CompileReadsFn      = eng.CompileReadsFn
+	CompileStoresFn     = eng.CompileStoresFn
+	CompileModuleFold   = eng.CompileModuleFold
+	CompileIslandPure   = eng.CompileIslandPure
+	CompileFallbackBody = eng.CompileFallbackBody
 )
 
 // Flow-control signal values exposed by the engine. These travel

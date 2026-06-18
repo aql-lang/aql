@@ -1,7 +1,13 @@
 # Checker ↔ Bytecode-Compiler Architecture Review and Plan
 
-Status: **design / proposal** (`.0` — nothing here is implemented unless a
-later commit says so). Date: 2026-06-18.
+Status: **largely implemented** (2026-06, branch
+`claude/pensive-thompson-vv4387`). This was a `.0` proposal; the bulk of it has
+now landed across 11 gate-clean commits. **Read the new
+[Implementation report](#implementation-report-2026-06) and
+[Completion guide](#completion-guide-the-remaining-73--the-path-to-p7) first** —
+they record what landed, what was deliberately *not* done (with reasons), and
+what the next session should do. The original analysis (§0–§10) is preserved
+below, with inline **LANDED** / **NOT DONE** annotations.
 
 This note is a router + analysis for the next person (or session) working on the
 AQL bytecode compiler. It captures (a) how the checker and the bytecode compiler
@@ -12,6 +18,138 @@ and could adopt instead. It is meant to be read alongside
 `design/aql-bytecode-runtime-independence.0.md` (the P5–P7 work plan, now stale
 on numbers — see "Current state" below) and the two module guides
 (`eng/go/CLAUDE.md`, `lang/go/CLAUDE.md`).
+
+---
+
+## Implementation report (2026-06)
+
+The doc's core thesis **held**: the architecture is sound, and incremental
+cleanup + a destination model — *not* a rewrite — was the right call. Eleven
+gate-clean commits on `claude/pensive-thompson-vv4387` took the ratchet
+**82 → 73 refused, islanded 5, differential 0 mismatches throughout** (full gate
+per commit: `fmt/vet/lint/test` × 35 packages + coverage + differential +
+`TestSpecCompiledOrFallback` + `TestOnlyMetaFallsBack` + alloc ceilings).
+
+| Commit | §ref | What landed | Ratchet |
+|---|---|---|---|
+| `a6e30e2` | §4.7 | Delete dead `SchemaArg`/`materialiseSchema` (confirmed no callers) | — |
+| `c8e46d5` | §4.4 | 4 per-event side-maps → one `eventInfo` map | — |
+| `d8d5b94` | §4.3 | Merge `RecordStrip`+`RememberOriginal` (light — see below) | — |
+| `eb6f3b1` | §5 | User-fn return-count error path via exact `OpRet` | 82 → 79 |
+| `9ee0a4c` | §5 | `OpTrap` for orphan-`gen` / `unpack`-missing-key | 79 → 74 |
+| `b4d985d` | §6 | Root-cause axis on the ratchet (`correct-error` asserted 0) | — |
+| `f415ef1` | §4.5 | `Signature.CompileEffect` bitfield; migrate `fnStoreWords` | — |
+| `c9e72a3` | §4.5 | Migrate `fnIntrospectionWords`; split `ReadsFn`/`StoresFn` | — |
+| `0b41ddd` | §4.5 | Migrate the `carrier.go` word tables (ModuleFold/IslandPure/FallbackBody) | — |
+| `380e80b` | §4.1b | `OpReverse` stack-scheduling op (N-event reverse layout) | 74 → 73 |
+| `57dcbb8` | §4.1a | **Spill-to-local DDCG seating — `layoutOperands` special-casing deleted** | — |
+
+**Per-recommendation outcome** (also annotated inline in §4–§6):
+
+- **§4.7** — **LANDED.** Dead code; deleted.
+- **§4.4** — **LANDED (consolidated, not moved).** A true per-`emitEvent`-struct
+  move is *unsafe* (events are value-copied into frames/fragments — a flag set
+  after append never reaches the copies), so the four maps became one seq-keyed
+  `eventInfo`. **Integer value handles deferred:** `Value.ID` is a kernel-wide
+  string, so handles need a field on `Value`.
+- **§4.3** — **PARTIAL (light).** Merged the two strip recorders into one. The
+  full carrier back-pointer was **declined as net-negative**: `origByID` is
+  already recording-scoped (zero cost in normal check mode) and clears *none* of
+  the live provenance refusals, so a `*Value` field on the hot `Value` type was
+  not justified.
+- **§5** — **LANDED.** Both error paths compile now; the `correct-error`
+  root-cause bucket is **0**. The count case needed no new opcode (extended
+  `OpRet` from underflow-only to exact-count via a frame stack-base, scoped to
+  user-fn frames so closures still raise `each_error`); the suppression case
+  added `OpTrap`.
+- **§6 meta** — **LANDED.** `rootCause` second axis on the histogram.
+- **§4.5** — **LANDED.** A capability *bitfield* (`CompileReadsFn`/`StoresFn`/
+  `ModuleFold`/`IslandPure`/`FallbackBody`); a word-level `NativeFunc.CompileEffect`
+  OR'd into each sig keeps per-word classification to one declaration. All five
+  name tables migrated; `checkModeLiteralWords` **kept** (consulted pre-dispatch
+  on raw tokens, where no matched sig exists).
+- **§4.6** — **NOT DONE.** The `carrierResults` try-chain collapse is *not
+  cleanly feasible*: the fallthrough is load-bearing — the same word (`get`)
+  takes static-index-fold / module-fold / island / plain-call paths by operand
+  *shape*, not by its declared effect.
+- **§4.1/§4.2 big bet** — **LANDED (headline).** `OpReverse` + `spillSeat`
+  delete the `layoutOperands` ladder (`reorder`/`shapeBeyond`/`notAdjacent`/
+  `underflow` gone). A hard operand shape now spills its event operands to
+  **frame-local destinations** (`OpStoreLocal`) and re-pushes in sig order — DDCG's
+  "data destination = a frame slot", generalized from the existing
+  `planValueDefLocals` promotion. The operand-shape refusal class is **unreachable
+  by construction**. **Not needed:** the §4.2 `valueNumber` reframe (`producedBy`
+  already *is* the value-graph DAG); recording-side destination-threading and
+  `DUP`/`TUCK`/`ROT` (the spill subsumes them — no current-corpus payoff).
+
+**Honest verdict on the big bet.** Its payoff was **structural, not numeric**:
+the operand-layout refusals were already at 0 (cleared by `OpReverse`), so
+deleting the special-casing moved the ceiling by ~0 — but it made the whole class
+*unreachable as the corpus grows*. The large ceiling drop the doc predicted for
+DDCG lives in the *remaining* refusals, which are **feature-entangled, not
+operand-layout** — see the completion guide.
+
+---
+
+## Completion guide (the remaining 73 + the path to P7)
+
+Live histogram (verify with `go test -run TestCompiledCoverage -v`):
+**2769 rows — 2384 compiled (5 islanded), 312 check-errors, 73 refused.**
+Root-cause axis: **soundness 40 · scheduling 14 · coverage 19 · opcode 0 ·
+correct-error 0.**
+
+| n | bucket | root cause | what it actually needs |
+|---|---|---|---|
+| 20 | operand provenance | soundness | provenance for generic/module/class operands (re-test §4.3 back-pointer here) |
+| 12 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch |
+| 10 | quoted-operand word | coverage | compile the `usurp`/`ref`-family inert cases |
+| 8 | residual lowering | scheduling\* | **the fn-value-call boundary** (`5 m.f`, `[..] r.one-of`) — NOT operand layout |
+| 6 | code-body word (NoEvalArgs) | coverage | the `aql:test` 2-body property words |
+| 6 | if-branch lowering | scheduling\* | **branch-result-modeling** (computed-else, variadic-statement-if, `usurp if`) |
+| 5 | dynamic input | soundness | soundness-gated; needs runtime guards |
+| 2 | user fn call (Stage 3) | coverage | meta |
+| 3 | dispatch recovery · fn-value-call boundary · function-value-reaches-word (1 each) | soundness | the fn-value boundary again |
+| 1 | other: branch leaves extra values | coverage | branch lowering |
+
+\* The "scheduling" label is misleading post-DDCG: operand-layout scheduling is
+*solved*. The 14 "scheduling" rows are the **fn-value/dynamic auto-apply
+residuals** (8) and **branch-result-modeling** (6) — different problems that
+operand destinations do not touch.
+
+**Priority order for the next session** (highest leverage first):
+
+1. **The fn-value-call boundary.** Generalize `OpCallDynamic` to the trailing /
+   mid-residual fn value and the method-field apply (`5 m.f`, `r.one-of`). This
+   single cluster covers the scheduling-residual 8 *and* the soundness fn-value
+   rows — the biggest lever, and the hardest. `Finalize`'s `residualHasFnOrDynamic`
+   gate (`emit.go`) is where the residual currently bails; that is the seam.
+2. **Branch-result-modeling.** Represent a variadic (0-or-1) branch/loop merge as
+   a first-class "maybe" value a downstream consumer can absorb (today only the
+   program residual can), clearing computed-else and variadic-statement-if. See
+   `lowerArms` / `lw.variadic` in `lower.go`.
+3. **Re-test the §4.3 back-pointer** against the 20 operand-provenance rows. The
+   full carrier back-pointer is only justified if it *clears* provenance refusals
+   (lost originals); measure before building.
+4. **Coverage words.** The quoted-operand meta words (`usurp`/`ref`) and the
+   2-body `aql:test` code words are word-class gaps, not deep problems.
+
+**P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
+`islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
+
+### Dead ends / proven not worth it (save the dig)
+
+- **§4.6 try-chain collapse** — fallthrough is load-bearing (operand-shape-dependent path).
+- **§4.4 integer value handles** — blocked by the kernel-wide string `Value.ID`.
+- **§4.3 full back-pointer** — net-negative as a pure refactor; only revisit if it clears provenance rows.
+- **DDCG recording-side threading / `DUP`/`TUCK`/`ROT`** — no payoff (the spill subsumes them; operand-layout refusals already 0).
+- **fn-body container assembly** (the pre-existing reverted dead end, §2) — the scope-resolution divergence is unchanged; do not retry without solving it.
+
+### A correction to §7's verification list
+
+`TestSpecCompiledOrFallback` and `TestOnlyMetaFallsBack` **exist** and are
+load-bearing (error-taxonomy parity + the P7 partition ceilings). The
+`TestCompiledConcurrent` named in §7 **does not exist**; use `go test -race` on
+the existing suites for the race check.
 
 ---
 
@@ -98,9 +236,14 @@ the try-chain), `eng/go/callable_words.go` (closure-body compilation).
 
 ## 2. Current state (numbers, June 2026)
 
+**Numbers below are the pre-implementation (82-refused) snapshot — kept for the
+breakdown prose. The CURRENT live state is 73 refused; see the
+[Completion guide](#completion-guide-the-remaining-73--the-path-to-p7) for the
+up-to-date histogram and root-cause split.**
+
 The ratchet is **far** ahead of the prose in
 `design/aql-bytecode-runtime-independence.0.md` (which still says 459 / 15). The
-live `test/go/langspec/compiled_coverage_test.go` run:
+review-session `test/go/langspec/compiled_coverage_test.go` snapshot:
 
 ```
 2769 rows — 2375 compiled (5 islanded), 312 check-errors, 82 refused
@@ -132,9 +275,11 @@ module outputs (minilang/parselang/rand) (~4), module-type get (~3), macros
 (~1), and assorted (`def m {a:g}`, `x/r`, `x/u`) (~3).
 
 **The two downward ratchets** (gates on P7 = deleting the interpreter fallback):
-`refusalCeiling` (currently 82) and `islandCeiling` (currently 7, actual 5),
-both in `compiled_coverage_test.go`. Both must reach 0 before the `OpFallback`
-machinery can be deleted.
+`refusalCeiling` (**now 73**, was 82) and `islandCeiling` (7, actual 5), both in
+`compiled_coverage_test.go`. Both must reach 0 before the `OpFallback` machinery
+can be deleted. The `suppressed runtime error` (5) and `multi-return fn` (3)
+buckets above are **gone** — they now compile error programs (§5, LANDED), and
+the `operand shape (Stage 1 limit)` row is gone too (§4.1, LANDED).
 
 ### What landed in the June-2026 review session (for continuity)
 
@@ -336,27 +481,37 @@ trace is built), not a lowering-side patch.
 
 ## 6. Recommended sequencing
 
+> **Status: this sequence was executed.** See the
+> [Implementation report](#implementation-report-202606). Annotations below.
+
 **Low-risk, do first (pure simplification, gate-cleanly):**
 1. §4.4 — consolidate `EmitState` side-maps onto `emitEvent`; integer value
-   handles.
-2. §4.7 — delete (or wire) `SchemaArg` / `materialiseSchema`.
+   handles. — **LANDED** (consolidated to one `eventInfo` map; struct-move unsafe,
+   integer handles deferred).
+2. §4.7 — delete (or wire) `SchemaArg` / `materialiseSchema`. — **LANDED** (deleted).
 3. §4.3 — carrier carries its concrete origin; delete the
-   strip/remember/materialise side tables.
+   strip/remember/materialise side tables. — **PARTIAL** (recorders merged; full
+   back-pointer declined as net-negative).
 
 **Medium, high-payoff (the information-sharing win):**
-4. §4.5 — `Signature.CompileEffect`. Then §4.6 — unify the recorder spine and
-   collapse the `carrierResults` try-chain into a dispatch on `CompileEffect`.
-5. **Emit a Trap/Raise opcode** (§5 last row) — clears the 8 "correct-refusal"
-   rows (`suppressed runtime error`, count-mismatch) that otherwise block P7.
+4. §4.5 — `Signature.CompileEffect`. — **LANDED** (bitfield; 5 tables migrated).
+   Then §4.6 — unify the recorder spine and collapse the `carrierResults`
+   try-chain. — **NOT DONE** (fallthrough load-bearing; not cleanly feasible).
+5. **Emit a Trap/Raise opcode** (§5 last row). — **LANDED** (`OpTrap` + exact
+   `OpRet`; cleared all 8 correct-refusal rows).
 
 **The big bet (prototype on a branch, behind the differential gate):**
 6. §4.2 + §4.1a — reframe the trace as a value graph and lower it with
-   destination-driven codegen + a few stack ops (DUP/ROT/TUCK). This is what
-   actually drives the remaining shuffle/provenance refusals toward zero *and*
-   deletes the `layoutOperands` special-casing. Measure the ceiling delta before
-   and after; revert if it cannot stay gate-clean.
+   destination-driven codegen + a few stack ops (DUP/ROT/TUCK). — **LANDED
+   (headline)**: `OpReverse` + spill-to-local destinations deleted the
+   `layoutOperands` special-casing. The value-graph reframe and DUP/ROT/TUCK were
+   *not needed* (`producedBy` already the DAG; spill subsumes the stack ops).
+   Payoff was structural, not numeric — the remaining shuffle/provenance refusals
+   are feature-entangled (fn-value boundary, branch-result-modeling), not operand
+   layout. See the completion guide.
 
-**A meta-improvement to the ratchet itself.** The `refusalCeiling` conflates
+**A meta-improvement to the ratchet itself.** — **LANDED** (`rootCause` axis).
+The `refusalCeiling` conflates
 "genuinely can't compile (soundness)" with "lowering is too weak (scheduling)"
 with "missing opcode". Add a second axis to `normaliseReason` — bucket by *root
 cause* (soundness / scheduling / opcode / correct-error) — so a future session

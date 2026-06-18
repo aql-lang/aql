@@ -32,7 +32,8 @@ var QueryNatives = []NativeFunc{
 		// `select` is the SQL-order entry word: it seeds a new lazy
 		// query with the projection columns. Single forward arg — it
 		// does not consume a builder from the stack, it creates one.
-		Name: "select",
+		Name:          "select",
+		CompileEffect: CompileFallbackBody,
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -63,7 +64,8 @@ var QueryNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "where",
+		Name:          "where",
+		CompileEffect: CompileFallbackBody,
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -73,7 +75,8 @@ var QueryNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "order",
+		Name:          "order",
+		CompileEffect: CompileFallbackBody,
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -83,7 +86,8 @@ var QueryNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "group",
+		Name:          "group",
+		CompileEffect: CompileFallbackBody,
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
@@ -93,7 +97,8 @@ var QueryNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "having",
+		Name:          "having",
+		CompileEffect: CompileFallbackBody,
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
