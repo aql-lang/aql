@@ -478,6 +478,38 @@ func shortenHome(path, home string) string {
 	return path
 }
 
+// vaultLocationFlags renders the --folder/--suffix flags that target the
+// ACTIVE vault, or "" when it is the default (~/.aql, no suffix). Sample
+// commands need these so copy-paste runs against the right vault.
+func (m *rootModel) vaultLocationFlags() string {
+	var fl []string
+	if m.ctl.folder != homeAQLDir(m.ctl.homeDir) {
+		fl = append(fl, "--folder="+shortenHome(m.ctl.folder, m.ctl.homeDir))
+	}
+	if m.ctl.suffix != "" {
+		fl = append(fl, "--suffix="+m.ctl.suffix)
+	}
+	return strings.Join(fl, " ")
+}
+
+// execPrefix is "aql vault" plus the active vault's location flags.
+func (m *rootModel) execPrefix() string {
+	if fl := m.vaultLocationFlags(); fl != "" {
+		return "aql vault " + fl
+	}
+	return "aql vault"
+}
+
+// withVaultLocation injects the active vault's location flags into an
+// "aql vault …" command so it targets the right vault.
+func (m *rootModel) withVaultLocation(cmd string) string {
+	const base = "aql vault"
+	if fl := m.vaultLocationFlags(); fl != "" && strings.HasPrefix(cmd, base+" ") {
+		return base + " " + fl + cmd[len(base):]
+	}
+	return cmd
+}
+
 // headerVersion renders the build version for the header (e.g. "v0.1.0-dev"),
 // trimming the trailing VCS stamp so it stays compact. Empty when no version
 // was injected (e.g. in unit tests).
@@ -512,6 +544,7 @@ func (m *rootModel) commandBar() string {
 	if cmd == "" {
 		return tuiDimStyle.Render("⌘ —")
 	}
+	cmd = m.withVaultLocation(cmd)
 	return tuiDimStyle.Render("⌘ ") + tuiPathStyle.Render(ansi.Truncate(cmd, maxInt(1, m.width-2), "…"))
 }
 
