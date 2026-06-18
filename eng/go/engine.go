@@ -732,9 +732,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			es.reg = e.registry // back-pointer for returned-closure compilation
 			pre := input
 			input = StripToCarriers(input)
-			for i := range input {
-				es.RecordStrip(pre[i], input[i])
-			}
+			es.RememberStrippedOriginals(pre, input)
 		} else {
 			input = StripToCarriers(input)
 		}

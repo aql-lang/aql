@@ -27,8 +27,8 @@ package eng
 // per value and toCarrier/copies preserve it, so a dispatch arg is
 // (a) a recorded output of an earlier call, (b) a literal — concrete
 // at the dispatch, or a stripped top-level literal whose original
-// was saved by RecordStrip — or (c) unknown, which marks the program
-// uncompilable rather than guessing.
+// was saved by RememberOriginal — or (c) unknown, which marks the
+// program uncompilable rather than guessing.
 
 // Site classes for SiteCounts.
 const (
@@ -481,7 +481,7 @@ func (es *EmitState) MarkValueDef(v Value) {
 
 // resolveOperand maps a dispatch value to its provenance: a prior
 // event's output, or an inert constant (concrete at the dispatch, or
-// a stripped literal whose original RecordStrip saved).
+// a stripped literal whose original RememberOriginal saved).
 func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// Events first, locals second: a join can REUSE a local's value ID
 	// for its result (JoinCarriers keeps the then-side ID when types
@@ -623,7 +623,7 @@ func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
 }
 
 // materialise recovers the fully concrete value behind a stripped
-// literal: the value itself, its RecordStrip original, or — for a
+// literal: the value itself, its RememberOriginal original, or — for a
 // concrete container whose MEMBERS were stripped by a sub-engine run
 // (autoEvalMap evaluates each field through Run, which strips) — a
 // rebuilt copy with each carrier member replaced by its recorded
@@ -1265,27 +1265,24 @@ func (es *EmitState) RecordFallback(span FallbackSpan, ins []Value, out Value, p
 	return true
 }
 
-// RecordStrip remembers the original concrete value behind a
-// top-level literal that StripToCarriers reduced to a carrier — the
-// ID is preserved by the strip, so a later dispatch arg with this ID
-// is that literal.
-func (es *EmitState) RecordStrip(orig, stripped Value) {
-	if es == nil || es.suspended > 0 {
-		return
-	}
-	if stripped.Carrier && !orig.Carrier && orig.ID != "" && orig.ID == stripped.ID {
-		es.origByID[orig.ID] = orig
-	}
-}
-
-// RememberOriginal records a CONCRETE value produced during the check
-// pass against its own ID, so that when a later carrier-strip reduces it
-// (preserving the ID — toCarrier keeps Value.ID) the lowerer can recover
-// the original via materialise/origByID. Used by impure-but-pure-data
-// constructors that run in check mode and whose result is otherwise
-// stripped before reaching a downstream operand — notably the predicate
-// constructors (`Integer gt 10`), whose DepScalarInfo payload toCarrier
-// strips to a bare base-type carrier, losing the bound.
+// RememberOriginal records a CONCRETE value against its own ID so that
+// when a carrier-strip reduces it — toCarrier keeps Value.ID, so the
+// stripped carrier shares the original's ID — the lowerer can recover the
+// concrete value via materialise/origByID. The single recorder behind both
+// strip provenance paths:
+//
+//   - top-level literals that StripToCarriers reduces to carriers (the
+//     caller in engine.Run gates on the strip actually having happened:
+//     same ID, now a carrier);
+//   - impure-but-pure-data constructors that run in check mode and whose
+//     result is stripped before reaching a downstream operand — notably the
+//     predicate constructors (`Integer gt 10`), whose DepScalarInfo payload
+//     toCarrier strips to a bare base-type carrier, losing the bound.
+//
+// A value that is already a carrier/dynamic, or has no ID, is a no-op
+// (nothing concrete to recover). Skips while suspended or once the program
+// is uncompilable (an uncompilable program is never lowered, so its
+// origByID entries are never read).
 func (es *EmitState) RememberOriginal(v Value) {
 	if es == nil || es.suspended > 0 || !es.active() {
 		return
@@ -1294,6 +1291,18 @@ func (es *EmitState) RememberOriginal(v Value) {
 		return
 	}
 	es.origByID[v.ID] = v
+}
+
+// RememberStrippedOriginals records the pre-strip original of each value that
+// StripToCarriers actually reduced to a carrier (same preserved ID), so the
+// lowerer can later recover the concrete literal. Values toCarrier kept
+// concrete need no recovery and are skipped. pre and stripped are parallel.
+func (es *EmitState) RememberStrippedOriginals(pre, stripped []Value) {
+	for i := range stripped {
+		if stripped[i].Carrier && pre[i].ID != "" && pre[i].ID == stripped[i].ID {
+			es.RememberOriginal(pre[i])
+		}
+	}
 }
 
 // RecordPoly classifies a partitioned (per-alternative) dispatch.

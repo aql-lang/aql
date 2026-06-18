@@ -65,7 +65,7 @@ func TestEmitGoldens(t *testing.T) {
 ; consts=3 types=0 sigs=2 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// Top-level strings are stripped to carriers by check mode;
-		// RecordStrip preserves the originals for interning.
+		// RememberOriginal preserves the originals for interning.
 		{`'a' add 'b'`, `0000 PUSH_CONST  k1   ; 'a' (ProperString)
 0001 PUSH_CONST  k0   ; 'b' (ProperString)
 0002 CALL_NATIVE s0   ; add (String, Scalar)
