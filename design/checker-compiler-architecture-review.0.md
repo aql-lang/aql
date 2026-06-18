@@ -44,6 +44,14 @@ gate-clean commits:
   if-branch rows are NOT this: 1 computed-else/variadic-statement-if (the
   variadic-merge refactor) + 2 cross-fn `break`/`continue` (a soundness boundary
   — see below).
+- **`returnsof` static return type** (completion-guide dynamic cluster) —
+  `TypeUtil.returnsof` reported its output as the opaque `TAny` (dynamic), so the
+  dispatch refused as a dynamic output — unlike `arityof`/`typeof`, whose concrete
+  output bakes. A `ReturnsFn` now computes the precise return type for a concrete
+  fn (the same value the handler produces), so the output is a concrete type node
+  and bakes a `CALL_NATIVE`. Ratchet **60 → 59**. This was the *one* cleanly
+  tractable row in the dynamic cluster; the other 16 are the hard soundness
+  frontier (see the completion-guide note).
 - **Doc precision** — two overstatements in the original report are corrected
   inline (the §4.1a "`layoutOperands` deleted / unreachable by construction"
   claim, and §4.5's "all five tables migrated"), and the P7 distance is stated
@@ -156,18 +164,18 @@ operand-layout** — see the completion guide.
 ## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2397 compiled (5 islanded), 312 check-errors, 60 refused.**
-Root-cause axis: **soundness 40 · scheduling 9 · coverage 11 · opcode 0 ·
+**2769 rows — 2398 compiled (5 islanded), 312 check-errors, 59 refused.**
+Root-cause axis: **soundness 39 · scheduling 9 · coverage 11 · opcode 0 ·
 correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
 follow-on session, before the trailing fn-value boundary (→ 71), the
-quoted-operand inert words (→ 64), `rand-list-of` (→ 63), and the value-arm `if`
-(→ 60) landed. The 40 soundness rows are untouched — that is the hard core; see
-below.)
+quoted-operand inert words (→ 64), `rand-list-of` (→ 63), the value-arm `if`
+(→ 60), and `returnsof` (→ 59) landed. The remaining soundness rows are the hard
+core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
 | 20 | operand provenance | soundness | provenance for generic/module/class operands (re-test §4.3 back-pointer here) |
-| 12 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch |
+| 11 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch. NOT uniform: `error [handler]` over a dynamic error (×6 — the `get` handler body islands → islandCeiling risk), the path-modifier re-dispatch fns `forward-args`/`stack-args`/`force-arity` (×4, meta), `await` (async). `returnsof` cleared via a precise `ReturnsFn` |
 | 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
 | 5 | code-body word (NoEvalArgs) | coverage | `reach` with a computed key segment (×2, needs a foldable/bakeable `ParenExpr` in the NoEval body) + the 2-body property words `test-prop`/`check-prop`/`skip` (×3, need 2-body closure support). `rand-list-of` cleared via a `CallableSpec` |
 | 3 | if-branch lowering | scheduling\* | 1 computed-else/variadic-statement-if (**branch-result-modeling** — the variadic-merge refactor) + **2 cross-fn `break`/`continue`** (break inside a fn breaking the CALLER's loop — a cross-unit SOUNDNESS boundary, mislabeled scheduling, should stay refused). The value-arm/usurp-if rows cleared via symmetric value-then |
@@ -221,22 +229,23 @@ residual-ordering / meta** residuals — none is operand layout.
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
 
-**Honest distance to P7 (do not read "60" as "almost there").** Of the 60
-refusals, **40 are soundness-gated** — 20 operand-provenance (a heterogeneous
-long tail, and the §4.3 back-pointer is only *maybe* the fix), 12 + 5 dynamic
+**Honest distance to P7 (do not read "59" as "almost there").** Of the 59
+refusals, **39 are soundness-gated** — 20 operand-provenance (a heterogeneous
+long tail, and the §4.3 back-pointer is only *maybe* the fix), 11 + 5 dynamic
 output/input (the hardest frontier: each needs richer runtime poly or runtime
 guards, essentially generalizing `OpCallNativePoly` to dynamic results), plus a
-few singletons. Those 40 do not yield to more lowering; they need a soundness
+few singletons. Those 39 do not yield to more lowering; they need a soundness
 story per cluster. Add the **5 islands** (higher-order/dynamic) that also gate
 P7. So the realistic near-term goal is **lowering the ceiling and shrinking the
 islands**, not imminent `OpFallback` deletion — the incremental, gate-clean
 ratchet remains the right vehicle, but P7 is several substantial pieces of work
 away. The cheap/bounded wins (operand layout, the correct-error paths, the
 trailing fn-value boundary, the quoted-operand inert words, `rand-list-of`, the
-value-arm `if`, the §4.5 decoupling) are now banked; of the remaining 20
-non-soundness rows, **2 are really soundness** (the cross-fn break/continue),
-1 is the variadic-merge refactor, and the rest are per-mechanism coverage gaps —
-the 40 (really 42) soundness rows are the genuinely hard core.
+value-arm `if`, `returnsof`, the §4.5 decoupling) are now banked; of the
+remaining 20 non-soundness rows, **2 are really soundness** (the cross-fn
+break/continue), 1 is the variadic-merge refactor, and the rest are per-mechanism
+coverage gaps — the 39 (really 41) soundness rows are the genuinely hard core,
+and they are the same work that clears the 5 islands.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -714,6 +723,10 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **60 → 59** — `returnsof` static return type: a `ReturnsFn` computes the fn's
+  precise declared return at check time, so `TypeUtil.returnsof` reports a
+  concrete type node instead of the opaque `TAny` and bakes a `CALL_NATIVE` like
+  `arityof`/`typeof`. The one cleanly-tractable row of the dynamic cluster.
 - **63 → 60** — value-arm `if`: `if cond v1 v2` with VALUE arms (not `[body]`
   code) refused "then-branch not captured" (the then was run as a body → nil
   fragment, while only the else handled a value). The then arm is now symmetric
