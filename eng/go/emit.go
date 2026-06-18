@@ -135,6 +135,8 @@ type emitBranch struct {
 	then, els             *EmitFragment
 	thenOut, elsOut       emitOperand
 	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
+	thenIsVal             bool        // then arm is a plain VALUE operand (`if cond 99 88`), not a body fragment
+	thenVal               emitOperand // the value-then operand (const/local/type) when thenIsVal
 	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
 	elsVal                emitOperand // the value-else operand (const/local/type, OR a COMPUTED event when elsComputed) when elsIsVal
 	elsComputed           bool        // else value is a COMPUTED event eagerly on the stack below the cond (`if c [t] (expr)`): SWAP cond up, DROP it on the taken path
@@ -751,6 +753,7 @@ type BranchRecord struct {
 	HasElse         bool
 	Then, Els       *EmitFragment
 	ThenStk, ElsStk []Value
+	ThenValue       *Value // non-nil: the then arm is this already-evaluated VALUE, not a body
 	ElsValue        *Value // non-nil: the else arm is this already-evaluated VALUE, not a body
 	Out             Value
 	Pos             SrcPos
@@ -841,11 +844,30 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		ev.br.then, ev.br.hasThenOut = b.Then, false
 		zeroOut = true
 	} else {
-		thenOut, hasThen, ok := resolveArm(b.Then, b.ThenStk, "then")
-		if !ok {
-			return
+		var hasThen bool
+		if b.ThenValue != nil {
+			// Value-then: the then arm is an already-evaluated value
+			// (`if cond 99 88`), not a `[…]` body — it lowers to a single push in
+			// the then arm, mirroring the value-else below. A COMPUTED then (an
+			// event result eagerly on the stack) would need the stack juggling the
+			// single-result lowering does not do, so refuse it.
+			op, ok := es.resolveOperand(*b.ThenValue)
+			if !ok {
+				es.MarkUncompilable("if: then value of unknown provenance")
+				return
+			}
+			if op.kind == opEvent {
+				es.MarkUncompilable("if: computed then value (Stage 2)")
+				return
+			}
+			ev.br.thenIsVal, ev.br.thenVal, ev.br.hasThenOut, hasThen = true, op, true, true
+		} else {
+			thenOut, h, ok := resolveArm(b.Then, b.ThenStk, "then")
+			if !ok {
+				return
+			}
+			ev.br.then, ev.br.thenOut, ev.br.hasThenOut, hasThen = b.Then, thenOut, h, h
 		}
-		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, thenOut, hasThen
 		if b.HasElse {
 			if b.ElsValue != nil {
 				// Value-else: the else arm is an already-evaluated value

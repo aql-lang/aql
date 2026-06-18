@@ -35,6 +35,15 @@ gate-clean commits:
   a `CallableSpec` (the same closure shape as `do`) and its handler runs the
   compiled closure via `InvokeBody`. Ratchet **64 → 63**. The other 5 code-body
   rows need distinct, more-involved mechanisms (see the completion-guide note).
+- **Value-arm `if`** (completion-guide if-branch cluster) — `if cond v1 v2` with
+  VALUE arms (not `[body]` code) refused "then-branch not captured" because the
+  then arm was run as a body (nil fragment) while only the else handled a value.
+  Made the then arm symmetric with the else (a value-then pushes its value, like
+  value-else). Cleared the direct form AND the usurp-if shape (`usurp if`
+  dispatches `if` with value arms) — 3 rows. Ratchet **63 → 60**. The 3 remaining
+  if-branch rows are NOT this: 1 computed-else/variadic-statement-if (the
+  variadic-merge refactor) + 2 cross-fn `break`/`continue` (a soundness boundary
+  — see below).
 - **Doc precision** — two overstatements in the original report are corrected
   inline (the §4.1a "`layoutOperands` deleted / unreachable by construction"
   claim, and §4.5's "all five tables migrated"), and the P7 distance is stated
@@ -147,12 +156,13 @@ operand-layout** — see the completion guide.
 ## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2394 compiled (5 islanded), 312 check-errors, 63 refused.**
-Root-cause axis: **soundness 40 · scheduling 12 · coverage 11 · opcode 0 ·
+**2769 rows — 2397 compiled (5 islanded), 312 check-errors, 60 refused.**
+Root-cause axis: **soundness 40 · scheduling 9 · coverage 11 · opcode 0 ·
 correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
 follow-on session, before the trailing fn-value boundary (→ 71), the
-quoted-operand inert words (→ 64), and `rand-list-of` (→ 63) landed. The 40
-soundness rows are untouched — that is the hard core; see below.)
+quoted-operand inert words (→ 64), `rand-list-of` (→ 63), and the value-arm `if`
+(→ 60) landed. The 40 soundness rows are untouched — that is the hard core; see
+below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
@@ -160,7 +170,7 @@ soundness rows are untouched — that is the hard core; see below.)
 | 12 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch |
 | 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
 | 5 | code-body word (NoEvalArgs) | coverage | `reach` with a computed key segment (×2, needs a foldable/bakeable `ParenExpr` in the NoEval body) + the 2-body property words `test-prop`/`check-prop`/`skip` (×3, need 2-body closure support). `rand-list-of` cleared via a `CallableSpec` |
-| 6 | if-branch lowering | scheduling\* | **branch-result-modeling** (computed-else, variadic-statement-if, `usurp if`) — now the lead scheduling frontier |
+| 3 | if-branch lowering | scheduling\* | 1 computed-else/variadic-statement-if (**branch-result-modeling** — the variadic-merge refactor) + **2 cross-fn `break`/`continue`** (break inside a fn breaking the CALLER's loop — a cross-unit SOUNDNESS boundary, mislabeled scheduling, should stay refused). The value-arm/usurp-if rows cleared via symmetric value-then |
 | 6 | residual lowering | scheduling\* | NO LONGER the fn-value boundary (that cleared): `codequote`/`macroexpand` (meta, "not materialisable") + residual-ordering (`1 add2 vs`, parselang/Test.run-spec "result above a literal") |
 | 5 | dynamic input | soundness | soundness-gated; needs runtime guards |
 | 2 | user fn call (Stage 3) | coverage | meta |
@@ -170,21 +180,24 @@ soundness rows are untouched — that is the hard core; see below.)
 | 1 | other: branch leaves extra values | coverage | branch lowering |
 
 \* The "scheduling" label is misleading post-DDCG: operand-layout scheduling is
-*solved*, and the trailing fn-value cluster is now compiled too. The 12 remaining
-"scheduling" rows are **branch-result-modeling** (6) and the **residual-ordering /
-meta** residuals (6) — none is operand layout.
+*solved*, and the trailing fn-value and value-arm-if clusters are compiled too.
+The 9 remaining "scheduling" rows are **1 variadic-merge** (branch-result-
+modeling), **2 cross-fn break/continue** (really soundness), and **6
+residual-ordering / meta** residuals — none is operand layout.
 
 **Priority order for the next session** (highest leverage first):
 
-1. **Branch-result-modeling** (now the top remaining lever). Represent a variadic
-   (0-or-1) branch/loop merge as a first-class "maybe" value a downstream consumer
-   can absorb (today only the program residual can), clearing computed-else and
-   variadic-statement-if. See `lowerArms` / `lw.variadic` in `lower.go`. This is
-   research-grade — the follow-on session assessed it as having no clean,
-   sound, bounded sub-case (the candidates touch either an intentional soundness
-   boundary, e.g. a cross-fn `break`, or the deep variadic-merge model), so it was
-   *not* attempted in code there; a real attempt should expect to refactor the
-   merge model, not patch a case.
+1. **Branch-result-modeling** (the variadic-merge refactor). The *tractable* part
+   of the if-branch cluster — the value-arm/usurp-if rows — is now banked (a
+   value-then arm is lowered symmetrically with value-else). What remains is
+   genuinely hard: (a) **1 variadic-statement-if/computed-else** row needs a
+   variadic (0-or-1) branch/loop merge represented as a first-class "maybe" value
+   a downstream consumer can absorb (today only the program residual can) — a
+   refactor of `lowerArms` / `lw.variadic`, not a patch; (b) **2 cross-fn
+   `break`/`continue`** rows (`break` inside a fn that breaks the CALLER's loop)
+   are a cross-unit control-transfer the VM's intra-unit jump cannot reproduce —
+   a SOUNDNESS boundary that should stay refused (relaxing the recording refusal
+   does not help: they then refuse at `lowerBreak`/`lowerContinue`).
 2. **Finish the fn-value-call boundary.** The trailing **1-arg** apply landed
    (`OpCallDynamicTrailing`, `5 m.f` / `[..] r.one-of`). What remains is the
    **2-arg mixed** form `3 m.f 2` (forward + stack split) — the island's forward
@@ -208,20 +221,22 @@ meta** residuals (6) — none is operand layout.
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
 
-**Honest distance to P7 (do not read "63" as "almost there").** Of the 63
+**Honest distance to P7 (do not read "60" as "almost there").** Of the 60
 refusals, **40 are soundness-gated** — 20 operand-provenance (a heterogeneous
 long tail, and the §4.3 back-pointer is only *maybe* the fix), 12 + 5 dynamic
 output/input (the hardest frontier: each needs richer runtime poly or runtime
-guards, essentially generalizing `OpCallNativePoly` to dynamic results). Those
-40 do not yield to more lowering; they need a soundness story per cluster. Add
-the **5 islands** (higher-order/dynamic) that also gate P7. So the realistic
-near-term goal is **lowering the ceiling and shrinking the islands**, not
-imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains the
-right vehicle, but P7 is several substantial pieces of work away. The cheap wins
-(operand layout, the correct-error paths, the trailing fn-value boundary, the
-quoted-operand inert words, `rand-list-of`, the §4.5 decoupling) are now banked;
-the remaining 23 non-soundness rows are scheduling (branch-result-modeling) + coverage
-(word-class gaps), and the 40 soundness rows are genuinely hard.
+guards, essentially generalizing `OpCallNativePoly` to dynamic results), plus a
+few singletons. Those 40 do not yield to more lowering; they need a soundness
+story per cluster. Add the **5 islands** (higher-order/dynamic) that also gate
+P7. So the realistic near-term goal is **lowering the ceiling and shrinking the
+islands**, not imminent `OpFallback` deletion — the incremental, gate-clean
+ratchet remains the right vehicle, but P7 is several substantial pieces of work
+away. The cheap/bounded wins (operand layout, the correct-error paths, the
+trailing fn-value boundary, the quoted-operand inert words, `rand-list-of`, the
+value-arm `if`, the §4.5 decoupling) are now banked; of the remaining 20
+non-soundness rows, **2 are really soundness** (the cross-fn break/continue),
+1 is the variadic-merge refactor, and the rest are per-mechanism coverage gaps —
+the 40 (really 42) soundness rows are the genuinely hard core.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -699,6 +714,12 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **63 → 60** — value-arm `if`: `if cond v1 v2` with VALUE arms (not `[body]`
+  code) refused "then-branch not captured" (the then was run as a body → nil
+  fragment, while only the else handled a value). The then arm is now symmetric
+  with the else (a value-then pushes its value). Cleared the direct value-arm
+  `if` and the usurp-if shape (3 rows). The 3 remaining if-branch rows are 1
+  variadic-merge + 2 cross-fn break/continue (soundness).
 - **64 → 63** — `rand-list-of` generator body: `Rand.list-of [body] n` declares a
   `CallableSpec` (the `do` closure shape, 0-input/1-output), so the body compiles
   to a closure the handler runs n times via `InvokeBody` instead of refusing the

@@ -399,11 +399,26 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	// conditions — guard extraction is syntactic). Emit-gated so
 	// plain checks keep their diagnostics surface unchanged.
 	condFrag, condStk := analyseCondFragment(r, args[0])
-	restoreThen := ApplyGuardNarrowing(r, args[0])
-	es.Emit.ArmBranchCapture()
-	thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
-	thenFrag := es.Emit.TakeFragment()
-	restoreThen()
+	// The then arm may be a `[…]` code body (captured as its own fragment) or an
+	// already-evaluated VALUE (`if cond 99 88` — a literal, a def-bound value, a
+	// paren result), exactly like the else arm below. A non-body then pushes its
+	// value directly in the then arm; no capture is armed (there is no body).
+	thenIsBody := IsConcrete(args[1]) && args[1].Parent.ConformsTo(TList)
+	var thenFrag *EmitFragment
+	var thenStk []Value
+	var thenDefs map[string]Value
+	var thenValue *Value
+	if thenIsBody {
+		restoreThen := ApplyGuardNarrowing(r, args[0])
+		es.Emit.ArmBranchCapture()
+		thenStk, thenDefs = RunCarrierBodyWithDefs(r, args[1])
+		thenFrag = es.Emit.TakeFragment()
+		restoreThen()
+	} else {
+		v := args[1]
+		thenValue = &v
+		thenStk = []Value{v}
+	}
 	// The else arm may be a `[…]` code body (captured as its own fragment)
 	// or an already-evaluated VALUE (`if cond [then] 42` — a literal, a
 	// def-bound value, a paren result). For a non-body else, do NOT arm a
@@ -435,7 +450,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	es.Emit.RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
-		ElsValue: elseValue, Out: out, Pos: args[0].Pos,
+		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
 	})
 	return []Value{out}
 }
