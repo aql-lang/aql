@@ -2251,8 +2251,51 @@ func isInertConstMember(v Value) bool {
 		if fd, ok := v.Data.(FnDefInfo); ok {
 			return len(fd.Captured) == 0 && fd.Registry == nil
 		}
+		// A dot-access reach (`r.int`, `m.a.b`) riding inside a NEVER-evaluated
+		// compound — a NoEvalArgs code body the driving word stores or drops
+		// (Test.prop builds a PropertySpec map; Test.skip discards it;
+		// Test.check-prop CallAQLs it via its native handler), or a quoted code
+		// list. Unlike isInertReach (the STANDALONE detached lens, which must be
+		// receiverless + Eval=false so the engine never expands it at the
+		// pointer), a reach as a MEMBER is pure DATA: the VM pushes the baked
+		// compound verbatim and never expands a reach (in-place expansion is an
+		// interpreter stepLiteral behaviour), and the interpreter equally keeps it
+		// as data inside the inert compound — so the reach bakes by value,
+		// differential-identical. Its receiver / literal-key tokens must
+		// themselves be inert members (Words / atoms / scalars, canonical
+		// Parents); a COMPUTED segment (a paren to evaluate) is code, so refuse.
+		if IsReach(v) {
+			return inertReachMember(v)
+		}
 	}
 	return isInertConst(v)
+}
+
+// inertReachMember reports whether a Reach may ride as a MEMBER of an inert
+// const compound (see isInertConstMember's reach clause). It is deliberately
+// more permissive than isInertReach: a member reach is never expanded at the
+// engine pointer (the containing compound is inert), so a receiver and Eval=true
+// are fine — only a computed segment (a ParenExpr to run) or a non-inert
+// receiver/key token disqualifies it.
+func inertReachMember(v Value) bool {
+	if !IsReach(v) || v.Carrier || v.Dynamic {
+		return false
+	}
+	info, err := AsReach(v)
+	if err != nil {
+		return false
+	}
+	for _, rt := range info.Receiver {
+		if !isInertConstMember(rt) {
+			return false
+		}
+	}
+	for _, seg := range info.Segments {
+		if seg.Computed || !isInertConstMember(seg.KeyLit) {
+			return false
+		}
+	}
+	return true
 }
 
 // resolveDynamicApply classifies the residual's fn-value-call boundary (report

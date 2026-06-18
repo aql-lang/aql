@@ -103,3 +103,51 @@ func TestIsInertConstTableTypeBody(t *testing.T) {
 		t.Error("typeBodyConstOK(carrier Table) = true; want false")
 	}
 }
+
+// A dot-access reach (`r.int`) inside a NEVER-evaluated code body (a NoEvalArgs
+// operand the driving word stores / drops / CallAQLs — Test.prop / Test.skip /
+// Test.check-prop — or a quoted list) is pure DATA: the VM pushes the baked
+// compound verbatim and never expands a reach (in-place expansion is an
+// interpreter behaviour). So a receiver reach rides as a const MEMBER even
+// though the STANDALONE isInertReach (the detached lens) requires receiverless +
+// Eval=false. A COMPUTED segment (a paren to run) is code and still refuses.
+func TestInertReachMember(t *testing.T) {
+	// `r.int` — receiver [Word(r)], one literal-key segment, Eval=true (the
+	// dot-access form the parser builds for a member of a code body).
+	dotReach := NewReach(ReachInfo{
+		Receiver: []Value{NewWord("r")},
+		Segments: []ReachSeg{{KeyLit: NewWord("int")}},
+		Eval:     true,
+	})
+
+	// POSITIVE — a dot-access reach is an inert const MEMBER, so a code body
+	// holding it (`[r.int 0 9]`) bakes as a const list.
+	if !inertReachMember(dotReach) {
+		t.Error("inertReachMember(r.int) = false; a dot-access reach must ride as a const member")
+	}
+	body := NewList([]Value{dotReach, NewInteger(0), NewInteger(9)})
+	if !isInertConst(body) {
+		t.Error("isInertConst([r.int 0 9]) = false; a code body of inert tokens + a reach must bake")
+	}
+	// …but the SAME reach standalone is NOT an inert const — at the engine
+	// pointer it expands in place, so it must reach the runtime as code, never
+	// frozen into the const pool.
+	if isInertConst(dotReach) {
+		t.Error("isInertConst(r.int) = true; a standalone dot-access reach must stay OUT of the const pool")
+	}
+
+	// NEGATIVE — a COMPUTED segment (`r.(k)`, a paren evaluated at run time) is
+	// code, not data, so the reach refuses as a member and keeps its body off
+	// the const path.
+	computedReach := NewReach(ReachInfo{
+		Receiver: []Value{NewWord("p")},
+		Segments: []ReachSeg{{Computed: true, KeyExpr: []Value{NewWord("k")}}},
+		Eval:     true,
+	})
+	if inertReachMember(computedReach) {
+		t.Error("inertReachMember(p.(k)) = true; a computed segment is code and must refuse")
+	}
+	if isInertConst(NewList([]Value{computedReach})) {
+		t.Error("isInertConst([p.(k)]) = true; a reach with a computed segment must keep the body off the const path")
+	}
+}

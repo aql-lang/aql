@@ -164,20 +164,21 @@ operand-layout** — see the completion guide.
 ## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2400 compiled (5 islanded), 312 check-errors, 57 refused.**
-Root-cause axis: **soundness 37 · scheduling 9 · coverage 11 · opcode 0 ·
+**2769 rows — 2404 compiled (5 islanded), 312 check-errors, 53 refused.**
+Root-cause axis: **soundness 36 · scheduling 9 · coverage 8 · opcode 0 ·
 correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
 follow-on session, before the trailing fn-value boundary (→ 71), the
 quoted-operand inert words (→ 64), `rand-list-of` (→ 63), the value-arm `if`
-(→ 60), `returnsof` (→ 59), and the module Table-type get fold (→ 57) landed.
-The remaining soundness rows are the hard core; see below.)
+(→ 60), `returnsof` (→ 59), the module Table-type get fold (→ 57), and the
+dot-access reach in an inert body (→ 53) landed. The remaining soundness rows
+are the hard core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
-| 18 | operand provenance | soundness | provenance for generic/module/class operands. The module-exported Table-type sub-case landed (Table joined the structural-type-body const family); the rest is a heterogeneous tail dominated by correct dynamic/error refusals — §4.3 back-pointer still NOT justified, see below |
+| 17 | operand provenance | soundness | provenance for generic/module/class operands. The module-exported Table-type sub-case landed (Table joined the structural-type-body const family) and `Rand.map-from` cleared via the inert-reach-member fix; the rest is a heterogeneous tail dominated by correct dynamic/error refusals — §4.3 back-pointer still NOT justified, see below |
 | 11 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch. NOT uniform: `error [handler]` over a dynamic error (×6 — the `get` handler body islands → islandCeiling risk), the path-modifier re-dispatch fns `forward-args`/`stack-args`/`force-arity` (×4, meta), `await` (async). `returnsof` cleared via a precise `ReturnsFn` |
 | 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
-| 5 | code-body word (NoEvalArgs) | coverage | `reach` with a computed key segment (×2, needs a foldable/bakeable `ParenExpr` in the NoEval body) + the 2-body property words `test-prop`/`check-prop`/`skip` (×3, need 2-body closure support). `rand-list-of` cleared via a `CallableSpec` |
+| 2 | code-body word (NoEvalArgs) | coverage | `reach` with a **computed key segment** (×2, `reach 5 [a (add 1 2) c]` / `reach 0 [x (k)]` — needs a foldable/bakeable `ParenExpr` segment in the NoEval body). The 2-body property words `prop`/`check-prop`/`skip` were NOT a closure problem — they bake their inert bodies as consts and only refused on the dot-access reach inside them, now cleared via `inertReachMember`. `rand-list-of` cleared via a `CallableSpec` |
 | 3 | if-branch lowering | scheduling\* | 1 computed-else/variadic-statement-if (**branch-result-modeling** — the variadic-merge refactor) + **2 cross-fn `break`/`continue`** (break inside a fn breaking the CALLER's loop — a cross-unit SOUNDNESS boundary, mislabeled scheduling, should stay refused). The value-arm/usurp-if rows cleared via symmetric value-then |
 | 6 | residual lowering | scheduling\* | NO LONGER the fn-value boundary (that cleared): `codequote`/`macroexpand` (meta, "not materialisable") + residual-ordering (`1 add2 vs`, parselang/Test.run-spec "result above a literal") |
 | 5 | dynamic input | soundness | soundness-gated; needs runtime guards |
@@ -233,37 +234,41 @@ residual-ordering / meta** residuals — none is operand layout.
    interior still refuses) folded the get and compiled the downstream
    make/is/istype (→ 57). The remaining ~6 each want bespoke machinery, none a
    shared back-pointer — chase per-row only if a row blocks a wider cluster.
-4. **Coverage words.** Partly banked: the quoted-operand *inert* cluster
-   (`quote`/`codequote`/`raise` via `CompileQuoteInert`) and the `rand-list-of`
-   generator body (a `CallableSpec`). What remains is NOT uniform — each needs a
-   distinct mechanism: `timeout`/`interval` want a materialised carried code BODY
-   (priority 3); `reach 5 [a (add 1 2) c]` (×2) wants a foldable/bakeable
-   `ParenExpr` segment in its NoEval key list; `test-prop`/`check-prop`/`skip`
-   (×3) want 2-body closure support (the closure path is single-body); and the
-   `codequote`/`macroexpand` residuals are their own meta cases.
+4. **Coverage words.** Mostly banked: the quoted-operand *inert* cluster
+   (`quote`/`codequote`/`raise` via `CompileQuoteInert`), the `rand-list-of`
+   generator body (a `CallableSpec`), and the property-test words
+   `prop`/`check-prop`/`skip` — which turned out NOT to need 2-body closure
+   support at all: their two bodies are inert at the call (stored / dropped /
+   CallAQL'd in the handler) and already baked as const operands; they refused
+   only because a dot-access reach (`r.int`) inside a body was not an inert const
+   MEMBER, now fixed via `inertReachMember` (which also cleared `Rand.map-from`).
+   What remains here is the **2 `reach` computed-key rows** (`reach 5 [a (add 1
+   2) c]`, `reach 0 [x (k)]`) — they want a foldable/bakeable `ParenExpr` segment
+   in the NoEval key list — plus `timeout`/`interval`'s materialised carried code
+   BODY (priority 3) and the `codequote`/`macroexpand` meta residuals.
 
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
 `islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
 
-**Honest distance to P7 (do not read "57" as "almost there").** Of the 57
-refusals, **37 are soundness-gated** — 18 operand-provenance (a heterogeneous
+**Honest distance to P7 (do not read "53" as "almost there").** Of the 53
+refusals, **36 are soundness-gated** — 17 operand-provenance (a heterogeneous
 long tail dominated by *correct* dynamic/error refusals; the §4.3 back-pointer
 was measured against it and is NOT justified — see priority 3), 11 + 5 dynamic
 output/input (the hardest frontier: each needs richer runtime poly or runtime
 guards, essentially generalizing `OpCallNativePoly` to dynamic results), plus a
-few singletons. Those 37 do not yield to more lowering; they need a soundness
+few singletons. Those 36 do not yield to more lowering; they need a soundness
 story per cluster. Add the **5 islands** (higher-order/dynamic) that also gate
 P7. So the realistic near-term goal is **lowering the ceiling and shrinking the
 islands**, not imminent `OpFallback` deletion — the incremental, gate-clean
 ratchet remains the right vehicle, but P7 is several substantial pieces of work
 away. The cheap/bounded wins (operand layout, the correct-error paths, the
 trailing fn-value boundary, the quoted-operand inert words, `rand-list-of`, the
-value-arm `if`, `returnsof`, the module Table-type get fold, the §4.5
-decoupling) are now banked; of the remaining 20 non-soundness rows, **2 are
-really soundness** (the cross-fn break/continue), 1 is the variadic-merge
-refactor, and the rest are per-mechanism coverage gaps — the 37 (really 39)
-soundness rows are the genuinely hard core, and they are the same work that
-clears the 5 islands.
+value-arm `if`, `returnsof`, the module Table-type get fold, the inert-reach
+code body, the §4.5 decoupling) are now banked; of the remaining 17 non-soundness
+rows, **2 are really soundness** (the cross-fn break/continue), 1 is the
+variadic-merge refactor, and the rest are per-mechanism coverage gaps — the 36
+(really 38) soundness rows are the genuinely hard core, and they are the same
+work that clears the 5 islands.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -741,6 +746,21 @@ and §2; this is the index.
 
 **Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
 
+- **57 → 53** — dot-access reach in an inert code body: the property-test words
+  `Test.prop` / `Test.check-prop` / `Test.skip` take TWO code bodies
+  (`[r.int 0 100]` + `[0 gte]`) that are inert at the call (prop stores them in a
+  PropertySpec map, skip discards them, check-prop CallAQLs them in its native
+  handler), so `noEvalBodiesInert` already bakes them as const operands — but a
+  dot-access reach (`r.int`, an Eval=true receiver Reach) inside a body was not
+  an inert const MEMBER, so the body list failed `isInertConst`. Unlike
+  `isInertReach` (the STANDALONE detached lens — receiverless, Eval=false, never
+  expanded at the pointer), a reach as a MEMBER of a never-evaluated compound is
+  pure DATA (the VM pushes the baked compound verbatim and never expands a
+  reach), so `inertReachMember` admits a receiver reach whose receiver/literal-key
+  tokens are themselves inert (a computed paren segment still refuses). This was
+  NOT the "2-body closure" problem it looked like — all three bake their bodies
+  as consts. Cleared the 3 code-body rows + `Rand.map-from` (its schema map holds
+  the same reach), all island-free.
 - **59 → 57** — module-exported Table-type get fold: a Table type literal
   (`Test.TestSet`) carries a `TableTypeInfo` payload, so `tryFoldModuleConst`'s
   ride switch (`isInertConst` | bare-type-node) rejected it and the get over the
