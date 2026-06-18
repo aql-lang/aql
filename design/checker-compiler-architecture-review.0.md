@@ -176,7 +176,7 @@ are the hard core; see below.)
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
 | 17 | operand provenance | soundness | provenance for generic/module/class operands. The module-exported Table-type sub-case landed (Table joined the structural-type-body const family) and `Rand.map-from` cleared via the inert-reach-member fix; the rest is a heterogeneous tail dominated by correct dynamic/error refusals — §4.3 back-pointer still NOT justified, see below |
-| 11 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch. NOT uniform: `error [handler]` over a dynamic error (×6 — the `get` handler body islands → islandCeiling risk), the path-modifier re-dispatch fns `forward-args`/`stack-args`/`force-arity` (×4, meta), `await` (async). `returnsof` cleared via a precise `ReturnsFn` |
+| 11 | dynamic/opaque output | soundness | NOT uniform (measured, priority 5): **6 `error [handler]`** rows gated on a **catch-frame** VM feature (a closure body that traps can't be caught → `do [raise …]` islands; naive `error`-compile just converts refusals to islands), **4 path-modifier** re-dispatch fns `forward-args`/`stack-args`/`force-arity` (usurp family, meta — correct refusals), **1 `await`** (async — correct). `returnsof` cleared via a precise `ReturnsFn` |
 | 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
 | 2 | code-body word (NoEvalArgs) | coverage | `reach` with a **computed key segment** (×2, `reach 5 [a (add 1 2) c]` / `reach 0 [x (k)]` — needs a foldable/bakeable `ParenExpr` segment in the NoEval body). The 2-body property words `prop`/`check-prop`/`skip` were NOT a closure problem — they bake their inert bodies as consts and only refused on the dot-access reach inside them, now cleared via `inertReachMember`. `rand-list-of` cleared via a `CallableSpec` |
 | 3 | if-branch lowering | scheduling\* | 1 computed-else/variadic-statement-if (**branch-result-modeling** — the variadic-merge refactor) + **2 cross-fn `break`/`continue`** (break inside a fn breaking the CALLER's loop — a cross-unit SOUNDNESS boundary, mislabeled scheduling, should stay refused). The value-arm/usurp-if rows cleared via symmetric value-then |
@@ -247,8 +247,37 @@ residual-ordering / meta** residuals — none is operand layout.
    in the NoEval key list — plus `timeout`/`interval`'s materialised carried code
    BODY (priority 3) and the `codequote`/`macroexpand` meta residuals.
 
+5. **Dynamic-output / island core** — **measured (follow-on session); a real VM
+   feature, not a patch.** The 11 dynamic-output rows are NOT one cluster: **5 are
+   correct/meta refusals** — `await` (genuinely async) + the 4 path-modifier
+   re-dispatch fns `forward-args`/`stack-args`/`force-arity` (the usurp family,
+   re-step a tape-coupled fn; the meta-fallback allowlist already classifies
+   them). The real target is the **6 `error [handler]` rows** (`do [body] error
+   [handler]`), and the measurement shows they are blocked by a CHAIN, not the
+   handler shape: (a) `error` refuses at the dynamic-output guard (Returns=[TAny],
+   no ReturnsFn / CallableSpec — it never reaches the closure path `do` uses); but
+   (b) the deeper blocker is **trap-vs-catch**: `raise "boom"` compiles standalone
+   (terminal `OpTrap`), yet `do [raise …]` ISLANDS because a compiled closure body
+   that traps cannot be CAUGHT — the trap terminates the VM, and there is no catch
+   frame for `InvokeBody` to convert it back into the `Error` value `do`/`error`
+   return. So routing `error` through the closure path naively only converts the 6
+   refusals into islands (confirmed). The unlock is a **catch-frame opcode**:
+   invoke a closure under a trap handler that returns the error to the caller
+   (then `do`/`error` use `InvokeBody` and the handler body — incl. `get code` /
+   `case` — compiles as a normal closure). That is structured exception handling
+   in the bytecode — a genuine VM feature, the highest-value piece for the
+   `error` cluster, but scope it as a feature.
+   The **5 islands** are separate: **3 `case`** (the desugar bails on a code-body
+   scrutinee `case [1 add 1] […]` and a bare-type clause `case 1 Integer` —
+   `caseReturnsFn` only desugars a non-code-body scrutinee with a clause list) and
+   **2 `each`/`scan` over a map with a `drop` body** (`{a:1} each [drop]` — the
+   body nets 0, not the 1 the map-iteration closure expects, so it islands rather
+   than lowering). Both are edge shapes, not the catch-frame.
+
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
-`islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
+`islandCeiling` reaching 0. The 5 islands are **3 `case`** (code-body scrutinee /
+bare-type clause) + **2 `each`/`scan`-over-map with a net-0 `drop` body** — see
+priority 5.
 
 **Honest distance to P7 (do not read "53" as "almost there").** Of the 53
 refusals, **36 are soundness-gated** — 17 operand-provenance (a heterogeneous
