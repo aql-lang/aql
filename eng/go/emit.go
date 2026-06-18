@@ -566,6 +566,27 @@ func (es *EmitState) OperandRepushable(v Value) bool {
 	return ok && isInertConst(lit)
 }
 
+// CanSeatAcrossFragment reports whether v can be read INSIDE a branch / loop
+// fragment that a multi-reference desugar is about to record. Either v is
+// already re-pushable (OperandRepushable: a const, frame local, or type node),
+// OR it is a COMPUTED single-result event in the TOP-LEVEL frame — which
+// planValueDefLocals promotes to a frame local once a fragment read is seen,
+// reachable across the scope floor. A computed event in a nested fn unit is not
+// promoted (only frame 0 runs planValueDefLocals), so it cannot be seated and
+// the desugar must keep its conservative non-compiling path. Side-effect free,
+// like OperandRepushable — the promotion itself happens later, driven purely by
+// the fragment reference the desugar then records.
+func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
+	if es.OperandRepushable(v) {
+		return true
+	}
+	if es == nil || len(es.units) != 1 {
+		return false
+	}
+	pr, ok := es.producedBy[v.ID]
+	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.typeOut[pr.seq])
+}
+
 // materialise recovers the fully concrete value behind a stripped
 // literal: the value itself, its RecordStrip original, or — for a
 // concrete container whose MEMBERS were stripped by a sub-engine run

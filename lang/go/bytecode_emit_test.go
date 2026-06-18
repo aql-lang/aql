@@ -698,9 +698,14 @@ func TestEmitRefusals(t *testing.T) {
 		src        string
 		wantReason string
 	}{
-		// A branch reading an enclosing computation breaks the closed-
-		// fragment rule (Stage 3, with locals).
-		{`def y (1 add 2) if (1 gt 0) [y mul 2] [0]`, "branch reads enclosing computation"},
+		// A branch reading an enclosing computation INSIDE A FN BODY still breaks
+		// the closed-fragment rule: only frame 0 runs planValueDefLocals, so a fn
+		// unit's enclosing computed value cannot be promoted to a re-pushable
+		// local across the arm's scope floor. (The TOP-LEVEL form of this —
+		// `def y (1 add 2) if (1 gt 0) [y mul 2] [0]` — now compiles via
+		// value-def-locals across the fragment; see
+		// TestEnclosingReadInBranchCompiles.)
+		{`def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 5`, "branch reads enclosing computation"},
 		// (`word [1 add 2]` USED to be refused here; the splice now compiles by
 		// inline expansion — see TestWordSpliceCompilesNative.)
 	}

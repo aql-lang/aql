@@ -1460,3 +1460,43 @@ func TestValueDefLocalsClassIsolation(t *testing.T) {
 	// pinned in eng/go/bytecode_constbake_test.go; here the isolation wants above
 	// are the behavioural negative.
 }
+
+// Branch-fragment value-def locals: a value computed in the ENCLOSING scope and
+// read INSIDE a branch arm / loop body / clause guard is promoted to a frame
+// local (STORE_LOCAL once, PUSH_LOCAL per cross-floor read) instead of refusing
+// on the closed-fragment scopeFloor rule. This is the enabler for compiling a
+// computed-scrutinee `case (expr) […]` (whose desugar re-tests the scrutinee in
+// every clause fragment) and any `def x (expr) … if/for … x …`.
+func TestEnclosingReadInBranchCompiles(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		// computed scrutinee re-tested in each clause guard/block fragment.
+		{"computed-case", `case (1 add 1) [2 "two" "other"]`, "[two]"},
+		{"computed-case-def", `def x 5 case (x add 1) [6 "six" "no"]`, "[six]"},
+		// enclosing computed value read in an if condition AND then-arm.
+		{"if-enclosing", `def y (1 add 2) if (y gt 0) [y mul 2] [0]`, "[6]"},
+		// enclosing instance read across a branch.
+		{"if-instance", `def a (make Array [1 2 3]) if (a.0 gt 0) [a.1] [99]`, "[2]"},
+	} {
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: expected compiled, fell back: %s", c.name, c.src)
+		}
+		if (errC != nil) != (errI != nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: divergence c=%v(%v) i=%v(%v)", c.name, gotC, errC, gotI, errI)
+		}
+		if fmt.Sprint(gotC) != c.want {
+			t.Errorf("%s: got %v, want %s", c.name, gotC, c.want)
+		}
+	}
+
+	// NEGATIVE: only frame 0 promotes value-def locals, so the SAME enclosing
+	// read inside a FN BODY branch still refuses (pinned as the reason-bearing
+	// negative in eng's TestEmitRefusals; here assert it falls back, not
+	// miscompiles).
+	if _, compiled, _ := mustNew(t).RunCompiled(
+		`def f fn [[n:Integer] [Integer] [def y (n add 1) if (n gt 0) [y mul 2] [0]]] f 5`,
+	); compiled {
+		t.Error("fn-body enclosing-read branch compiled but must fall back (frame-0-only promotion)")
+	}
+}
