@@ -5,7 +5,7 @@ import (
 )
 
 // TestResolveForwardArgs_LazySkipOrdering pins the structure-first, lazy
-// forward-argument behaviour at the kernel level (design/LAZY-ARG-RESOLUTION.0.md).
+// forward-argument behaviour at the kernel level (design/LAZY-ARG-RESOLUTION.10.md).
 //
 // `imp` has a String-headed arity-1 overload and a higher-arity overload, so
 // the former eager scan (preEvalParens up to MaxForwardArgs == 2) would

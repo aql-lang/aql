@@ -65,7 +65,7 @@ const (
 	// real NON-tail recursion (~13 parked tokens per level ⇒ ~30k
 	// depth) while bounding a runaway's memory. Tail recursion needs
 	// no headroom at all under tail-call elimination
-	// (design/TCO-STAGED.0.md Stage 6); that guarantee is what brought
+	// (design/TCO-STAGED.10.md Stage 6); that guarantee is what brought
 	// the ceiling down from N=7 (~1.07M entries, ~171MB), whose extra
 	// range existed for deep tail chains that now run in O(1).
 	DefaultTapeInitialFloor = 1024

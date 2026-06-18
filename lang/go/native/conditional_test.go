@@ -88,7 +88,12 @@ func TestIsTruthy(t *testing.T) {
 		{"none", NewTypeLiteral(TNone), false},
 		{"string_nonempty", NewString("hello"), true},
 		{"string_true", NewString("true"), true},
-		{"string_false", NewString("false"), false},
+		// A String is truthy whenever non-empty, including "false" and
+		// "FALSE" — the magic lowercase-"false" case was removed for
+		// strings (WAT-AUDIT.5.md §E). A non-String `false` (an Atom or an
+		// unresolved bareword) keeps its boolean reading and stays falsy.
+		{"string_false", NewString("false"), true},
+		{"string_FALSE", NewString("FALSE"), true},
 		{"string_empty", NewString(""), false},
 		{"atom_nonempty", NewAtom("foo"), true},
 		{"atom_true", NewAtom("true"), true},

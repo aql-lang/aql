@@ -45,7 +45,7 @@ func TestSpecProd(t *testing.T) {
 // TestSpecProdTCODisabled re-runs the entire production spec suite
 // with tail-call elision switched off (Registry.TCO.Disable). Every
 // row pins an exact output, so green in BOTH modes is the dual-mode
-// differential gate of design/TCO-STAGED.0.md: elision must be
+// differential gate of design/TCO-STAGED.10.md: elision must be
 // observationally invisible row-for-row.
 func TestSpecProdTCODisabled(t *testing.T) {
 	runSpecProd(t, true)

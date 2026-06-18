@@ -32,10 +32,15 @@ pow 2 10	100	forward `pow 2 10` = 10^2 = 100
 2 pow 10	1024	swap `2 pow 10` = 2^10 = 1024 (natural reading)
 pow 2 0.5	0.25	`pow 2 0.5` = 0.5^2 = 0.25
 #
-# §3  add on scalars concatenates as String (b ++ a, mirroring b OP a)
-add 1 'x'	'x1'	Integer + String → String concat 'x'++'1'
+# §3  add concatenates as String only when AT LEAST ONE operand is a
+#     String; the other Scalar coerces (b ++ a, mirroring b OP a). Two
+#     non-String scalars match neither overload → type error (WAT §G).
+add 1 'x'	'x1'	Integer + String → String concat 'x'++'1' (one operand is a String)
 add 'a' 'b'	'ba'	String + String concatenates in b++a order
-add true 1	'1true'	Boolean + Integer coerces to String concat
+add true 'x'	'xtrue'	Boolean + String → the String operand admits concat, Boolean coerces
+add 'x' 2.5	'2.5x'	String + Float coerces the Float to its string form
+add true 1	ERROR:no matching signature	Boolean + Integer: neither is a String → no concat, type error
+add true false	ERROR:no matching signature	two Booleans: neither is a String → type error (was silently 'falsetrue')
 #
 # §4  numeric equivalence across leaves
 eq 1 1.0	true	Integer and Float of equal magnitude compare equal

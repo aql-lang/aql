@@ -85,10 +85,18 @@ def R (refine Record [ { a:Integer } { b:String } ]) R	record{a:Integer b:String
 # typeof as `Map`), but its underlying data carries the record's		
 # typed schema for downstream tools.		
 		
-def R (refine Record [ { a:Integer } ]) make R { a:5 }	{a:5}	
-def R (refine Record [ { a:Integer } { b:String } ]) make R { a:1 b:'x' }	{a:1 b:'x'}	
+def R (refine Record [ { a:Integer } ]) make R { a:5 }	{a:5}
+def R (refine Record [ { a:Integer } { b:String } ]) make R { a:1 b:'x' }	{a:1 b:'x'}
 def R (refine Record [ { a:Integer } ]) make R { a:5 } typeof	Map	made record is a Map
-		
+
+# A numeric field coerces between numeric leaves (Integer↔Float widening)
+# but rejects a non-numeric source rather than laundering it into a number
+# via stringify-then-reparse (WAT §V).
+def R (refine Record [ { x:Float } ]) make R { x:3 }	{x:3.0}	Integer widens to a Float field
+def R (refine Record [ { x:Number } ]) make R { x:3 }	{x:3}	Integer satisfies a Number field
+def R (refine Record [ { x:Number } ]) make R { x:'1' }	ERROR:not a number	a String is NOT laundered into a Number field
+def R (refine Record [ { x:Number } ]) make R { x:true }	ERROR:not a number	a Boolean is NOT coerced into a Number field
+
 # ====================================================================		
 # 5. Structural conformance — implicit shape vs explicit record		
 # ====================================================================		

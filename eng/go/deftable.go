@@ -30,7 +30,7 @@ type DefTable struct {
 	// "did any binding change in between" — the TCO gate uses it to
 	// decline eager frame teardown when arg auto-evaluation installed
 	// or removed a binding the parked teardown would have sequenced
-	// differently (design/TCO-STAGED.0.md Stage 3).
+	// differently (design/TCO-STAGED.10.md Stage 3).
 	mutations int64
 }
 

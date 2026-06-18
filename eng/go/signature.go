@@ -265,7 +265,7 @@ func sigTypeMatches(v Value, t *Type) bool {
 	// never carriers): matches iff EVERY alternative matches, so
 	// dispatch distributes over the abstract domain. The selected
 	// signature's returns are then refined per alternative by
-	// disjunctPartitionReturns (design/checker-accuracy-review.0.md A1).
+	// disjunctPartitionReturns (design/checker-accuracy-review.10.md A1).
 	if v.Carrier && !v.Dynamic && IsDisjunct(v) {
 		di, err := AsDisjunct(v)
 		if err == nil && len(di.Alternatives) > 0 {

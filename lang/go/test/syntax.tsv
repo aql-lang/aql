@@ -819,7 +819,7 @@ def Bar refine Record [x:Number y:Boolean z:String] make Bar [1 false "s"]	{x:1 
 def Bar refine Record [x:Number y:Boolean z:String] make Bar [y:false x:2 z:"Z"]	{x:2 y:false z:'Z'}
 
 # make record: field value conversion (string to number)
-def Pair refine Record [a:Number b:Number] make Pair ["3" "7"]	{a:3 b:7}
+def Pair refine Record [a:Number b:Number] make Pair ["3" "7"]		not_a_number
 
 # make with infix form
 def P refine Record [x:Number y:Number] P make [1 2]	{x:1 y:2}
@@ -926,7 +926,7 @@ false or false	false
 "" or "hello"	'hello'
 "" or ""	''
 "true" or false	'true'
-"false" or false	false
+"false" or false	'false'
 
 # and short-circuits and returns the winning value (first falsy, or last truthy)
 1 and 2	2
@@ -935,7 +935,7 @@ false or false	false
 "hello" and "world"	'world'
 "" and "x"	''
 "true" and 1	1
-"false" and 1	'false'
+"false" and 1	1
 
 # === otherwise (null-coalescing: first non-None) ===
 0 otherwise 5	0

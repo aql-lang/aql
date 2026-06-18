@@ -59,7 +59,7 @@ with a recording side effect* — survives intact:
 frame; very deep recursion hits a stack limit. TCO can be added
 later."* That option is gone. Tail-call elimination shipped as a
 **documented language guarantee** (`TCO.10.md` status: IMPLEMENTED
-June 2026; `TCO-STAGED.0.md` Stages 0–6, commits `92a5931`…`5b1537c`;
+June 2026; `TCO-STAGED.10.md` Stages 0–6, commits `92a5931`…`5b1537c`;
 REFERENCE.md "Recursion and tail calls"): self and mutual fn→fn tail
 calls run in O(1) tape and per-call stacks under the documented
 conditions, and the runaway taxonomy is part of the guarantee (tail
@@ -100,13 +100,13 @@ for the design:
 4. **Stage-5 residuals carry over.** Module-boundary pins,
    kill-switch propagation, the foreign-frame guard, and the
    same-registry `CallAQL` value branch (recorded as non-guarantee
-   residuals in `TCO-STAGED.0.md`) need a bytecode answer or an
+   residuals in `TCO-STAGED.10.md`) need a bytecode answer or an
    explicit fallback at those boundaries.
 
 ## R3. Locals promotion is less sound than §2.6/§9.3 assumed
 
 The single most important *new* correctness fact comes out of TCO
-Stage 4b (`TCO-STAGED.0.md`): **eager frame teardown was observable
+Stage 4b (`TCO-STAGED.10.md`): **eager frame teardown was observable
 through dynamic resolution** — outer frames' params and body-locals
 stay visible to the callee chain until the frame unwinds, innermost
 binding wins. In other words, AQL's def table is dynamically scoped

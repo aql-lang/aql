@@ -9,7 +9,7 @@ import "fmt"
 // (buildFnBodyHandler, compileFnDef via buildFnBodyHandler, and
 // execFnDefSig's no-captured-registry branch) builds its frame from
 // these pieces, so the on-tape frame shape cannot diverge between
-// dispatch paths. See design/TCO-STAGED.0.md Stage 1.
+// dispatch paths. See design/TCO-STAGED.10.md Stage 1.
 //
 // A frame on the tape is:
 //
@@ -34,7 +34,7 @@ type FnFrameMeta struct {
 	// HasGen marks a generic fn (the handler installs inferred
 	// type-parameter bindings per call). The eager-teardown gate
 	// declines generic frames until the bind/teardown/Retire
-	// interaction is separately proven (design/TCO-STAGED.0.md
+	// interaction is separately proven (design/TCO-STAGED.10.md
 	// Stage 4).
 	HasGen bool
 	// InstallNames are the binding names this overload's handler

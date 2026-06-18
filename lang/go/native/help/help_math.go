@@ -5,12 +5,15 @@ func init() {
 
 	register(&Entry{
 		Word:    "add",
-		Summary: "Add two numbers, or concatenate two scalars as strings.",
+		Summary: "Add two numbers, or concatenate when at least one operand is a String.",
 		Description: "Adds two numeric values. When both are integers the result is an integer; " +
-			"if either is a float the result is a float. For non-numeric scalars, " +
-			"concatenates their string representations.",
+			"if either is a float the result is a float. When at least one operand is a " +
+			"String, the other Scalar is coerced to its string form and the two are " +
+			"concatenated. Two non-String scalars (e.g. a Boolean and a Number) match " +
+			"neither overload and raise a type error rather than silently stringifying.",
 		Notes: []string{
 			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+			"Concatenation needs a String: `add 1 \"x\"` → 'x1', but `add true 1` is a type error.",
 		},
 	})
 

@@ -184,11 +184,13 @@ not true 42
 Result: `false 42`. Type matching governs *how far* a word reaches,
 but it does **not** make a word reject an argument of a type one of
 its signatures accepts. `add`, for instance, has both a numeric
-signature and a `Scalar`-concatenation signature, so a string is a
+signature and `String`-concatenation signatures, so a string is a
 *valid* second argument: `add 1 "x"` does not stop and fail — it
 collects `"x"` and concatenates, giving `'x1'`. Forward collection
 narrows where the boundary falls; it is not a guarantee that a
-"wrong-looking" value will be refused.
+"wrong-looking" value will be refused. (Concatenation does require a
+`String`, though: that constraint lives in `add`'s signatures — see
+below — not in forward collection.)
 
 ### Forward greediness and stranded operands
 
@@ -283,7 +285,7 @@ import "aql:string-util"          # no `end` needed…
 `import` takes its module path and stops, because the following
 parenthesised expression matches none of its argument shapes. (Earlier
 builds eagerly evaluated that paren *before* `import` ran, so it failed with
-`undefined word: StringUtil` — see `design/LAZY-ARG-RESOLUTION.0.md`.) You
+`undefined word: StringUtil` — see `design/LAZY-ARG-RESOLUTION.10.md`.) You
 still reach for `end` when the next token *could* legitimately be the word's
 argument — most commonly a second string path right after `import`:
 
@@ -312,12 +314,17 @@ separate dispatch construct:
 ```
 add 1 2                           # returns 3 — Integer + Integer
 add 1.0 2                         # returns 3.0 — Float + Number, promotes
-"a" add "b"                       # returns 'ab' — Scalar + Scalar, concatenates
+"a" add "b"                       # returns 'ab' — String + Scalar, concatenates
+add 1 "x"                         # returns 'x1' — Scalar + String, the Integer coerces
+add true 1                        # type error — neither operand is a String
 ```
 
 The same `add` covers numeric addition and string concatenation —
-not because it has an `if isString` inside, but because two of its
-signatures match different argument shapes.
+not because it has an `if isString` inside, but because its signatures
+match different argument shapes. Concatenation lives in two overloads,
+`[String, Scalar]` and `[Scalar, String]`, so it fires only when *at
+least one* operand is a `String`; a `Boolean`+`Number` pair matches
+neither and is a type error rather than a silent stringification.
 
 This makes the type system *active*: it isn't just for verification,
 it drives behaviour.

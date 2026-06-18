@@ -25,6 +25,7 @@ var errorPatterns = map[string]string{
 	"fn_spec_error":    "function spec",
 	"type_error":       "type_error",
 	"swap_hint":        "did you swap the arguments",
+	"not_a_number":     "is not a number",
 }
 
 func TestSyntax(t *testing.T) {

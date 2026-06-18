@@ -6,7 +6,7 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
-// Recursion summaries (design/checker-accuracy-review.0.md A2).
+// Recursion summaries (design/checker-accuracy-review.10.md A2).
 
 // Positive: an UNCHECKED recursive fn's summary is refined past the
 // Any bail-out — the recursive call's result participates in the

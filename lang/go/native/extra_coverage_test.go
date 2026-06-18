@@ -808,8 +808,11 @@ func TestExtraIsTruthyString(t *testing.T) {
 	if !CoerceBoolean(NewString("hello")) {
 		t.Error("non-empty string should be truthy")
 	}
-	if CoerceBoolean(NewString("false")) {
-		t.Error("string 'false' should not be truthy")
+	// A String is truthy whenever non-empty; the magic "false" case was
+	// removed for strings (WAT-AUDIT.5.md §E). (A non-String `false` atom
+	// keeps its boolean reading — see TestExtraIsTruthyAtom.)
+	if !CoerceBoolean(NewString("false")) {
+		t.Error("non-empty string 'false' should be truthy")
 	}
 	if CoerceBoolean(NewString("")) {
 		t.Error("empty string should not be truthy")

@@ -27,7 +27,7 @@ incorporates; read it first — it changes two requirements). Written
 against main @ `6fe4b96`.
 
 The plan follows the discipline that worked for TCO
-(`TCO-STAGED.0.md`): independently shippable stages, nothing changes
+(`TCO-STAGED.10.md`): independently shippable stages, nothing changes
 default behaviour until late, every behavioural stage behind a kill
 switch with a dual-mode differential gate, and a measurement gate
 *before* the build-out so the investment decision is made on current
@@ -172,7 +172,7 @@ and nothing else — any other construct flags the program
   during emission.
 - **Prerequisite (added June 2026): LANDED.** The checker's
   per-alternative disjunct dispatch fix — finding A1 of
-  `checker-accuracy-review.0.md` — shipped on this branch
+  `checker-accuracy-review.10.md` — shipped on this branch
   (`disjunctPartitionReturns`). A strict disjunct input used to
   first-match as a whole, selecting a signature the runtime may not
   take; baking that `sig_id` into `CALL_NATIVE` would have called
