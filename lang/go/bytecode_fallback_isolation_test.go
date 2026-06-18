@@ -77,7 +77,11 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		// import with a still-uncompilable operation: the import side effect must
 		// still be rolled back before the whole-program fallback re-runs.
 		`"aql:math-util" import end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
-		`"aql:test" import end Test.test "a" [1 1 Assert.equal] end Test.fail-count`,
+		// aql:test import isolation: a plain `Test.test "n" [body]` case now
+		// compiles via the callableWords closure path, so pair the import with
+		// `Test.describe` (still uncompilable — its body holds nested test cases)
+		// to keep the row on the fallback path.
+		`"aql:test" import end Test.describe "math" [Test.test "adds" [1 1 Assert.equal]] end Test.fail-count`,
 	}
 	for _, src := range cases {
 		ac, err := New()

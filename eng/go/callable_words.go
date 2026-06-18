@@ -14,6 +14,11 @@ package eng
 type callableWord struct {
 	bodyPos int
 	inputs  func(args []Value) []Value
+	// bodyOut is how many values the body nets per invocation: 1 for a
+	// map/transform body (each/fold/do), 0 for a SIDE-EFFECT body (a test case
+	// whose assertions raise on failure and otherwise leave nothing). It sets the
+	// compiled unit's declared return count and the recorded dispatch's nout.
+	bodyOut int
 }
 
 // callableWords is the closure-eligible set: pure, single-result code-body
@@ -22,18 +27,18 @@ type callableWord struct {
 // return). Expanded only with the differential + full-corpus gates green.
 var callableWords = map[string]callableWord{
 	// each [body] data — body sees one element, returns the mapped value.
-	"each": {0, func(a []Value) []Value {
+	"each": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
 		return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
 	}},
 	// filter [body] data — body sees one element, returns a Boolean.
-	"filter": {0, func(a []Value) []Value {
+	"filter": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
 		return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
 	}},
 	// fold [body] data init — body sees (accumulator, element). InvokeBody
 	// supplies [acc, elem]; acc generalises to the init's type, or (no-init
 	// 2-arg form) to the element type, since the accumulator starts as the
 	// first element.
-	"fold": {0, func(a []Value) []Value {
+	"fold": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
 		elem := DataListElemTypeFromValue(a[1])
 		if len(a) >= 3 {
 			return []Value{NewCarrier(a[2].Parent), NewCarrier(elem)}
@@ -42,20 +47,28 @@ var callableWords = map[string]callableWord{
 	}},
 	// scan [body] data — body sees (accumulator, element); the accumulator
 	// starts as the first element, so both inputs carry the element type.
-	"scan": {0, func(a []Value) []Value {
+	"scan": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
 		e := DataListElemTypeFromValue(a[1])
 		return []Value{NewCarrier(e), NewCarrier(e)}
 	}},
 	// do [body] — runs the body with no inputs and returns its single
 	// residual value (a multi-value body nets != 1 and refuses to the island).
-	"do": {0, func(a []Value) []Value {
+	"do": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
 		return []Value{}
 	}},
 	// with-decimal {opts} [body] — runs a 0-input body inside a scoped
 	// BigDecimal rounding context (opts at sig 0, body at sig 1). Like `do`,
 	// the body nets its single residual; the handler pushes the context around
 	// InvokeBody so the VM-run body's BigDecimal ops read the override.
-	"with-decimal": {1, func(a []Value) []Value {
+	"with-decimal": {bodyPos: 1, bodyOut: 1, inputs: func(a []Value) []Value {
+		return []Value{}
+	}},
+	// test-test [body] (the aql:test module's case runner — `Test.test "n"
+	// [body]`): a SIDE-EFFECT body (bodyOut 0) whose assertions raise on
+	// failure and otherwise net nothing. The handler runs it via InvokeBody
+	// and catches any assertion error to record pass/fail. A dormant entry
+	// unless the aql:test module is loaded (string-keyed, no import coupling).
+	"test-test": {bodyPos: 1, bodyOut: 0, inputs: func(a []Value) []Value {
 		return []Value{}
 	}},
 }
@@ -74,7 +87,14 @@ var callableWords = map[string]callableWord{
 // stack for the body to consume positionally. nil means all-unnamed.
 func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
+	// A side-effect body word (bodyOut 0 — `test-test`) declares NO returns, so
+	// its 0-value residual is taken as-is rather than count-refused against the
+	// default single [TAny]. A word not in callableWords (the fn-VALUE factory,
+	// word "fnval") keeps the single return.
 	declared := []*Type{TAny}
+	if spec, ok := callableWords[word]; ok && spec.bodyOut == 0 {
+		declared = nil
+	}
 	if paramNames == nil {
 		paramNames = make([]string, len(inputs)) // all unnamed: body reads inputs off the stack
 	}
@@ -110,7 +130,9 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 		return false
 	}
 	es := r.Check.Emit
-	if !es.active() || sig == nil || len(outs) != 1 || spec.bodyPos >= len(args) {
+	// 0 or 1 outputs (a side-effect case body nets 0; a map/transform body nets
+	// 1) — RecordClosureCall lowers both; a multi-output word is beyond this path.
+	if !es.active() || sig == nil || len(outs) > 1 || spec.bodyPos >= len(args) {
 		return false
 	}
 	body := args[spec.bodyPos]

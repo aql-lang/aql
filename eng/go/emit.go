@@ -1664,7 +1664,7 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 // leaving es UNTOUCHED, when an operand is dynamic or of unknown provenance —
 // the caller then keeps the island path.
 func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, outs []Value, pos SrcPos) bool {
-	if !es.active() || sig == nil || len(outs) != 1 {
+	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
 	// A DYNAMIC non-body operand can't resolve; refuse. A dynamic OUTPUT is
@@ -1690,8 +1690,10 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: 1, pos: pos}})
-	es.setProduced(outs[0], seq)
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	if len(outs) == 1 {
+		es.setProduced(outs[0], seq)
+	}
 	return true
 }
 
