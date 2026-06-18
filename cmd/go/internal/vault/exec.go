@@ -25,6 +25,14 @@ import (
 // By default an alias maps to an env var of the same name. Use
 // `alias=ENV_NAME` to remap, `--upper` to uppercase the derived
 // names, or `--prefix=PFX` to prepend a fixed prefix.
+//
+// `--for=RECIPE` instead presents an alias in a publishing tool's own
+// credential env (npm, cargo, github, …). It is repeatable, and each
+// entry may name its own secret as `RECIPE=alias`, so one child can
+// carry several tools' credentials — e.g. publish to npm and push a
+// git tag to GitHub from the same `make publish`:
+//
+//	aql vault exec --for=npm=npm --for=github=vxg:github -- make publish
 func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Split the args at the first `--` separator: everything before
 	// is parsed by our flag set; everything after is the child
@@ -37,15 +45,19 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	upper := fs.Bool("upper", false, "uppercase env-var names derived from alias names")
 	clearEnv := fs.Bool("clear-env", false, "do not inherit the parent environment (keeps PATH/HOME/USER/SHELL/TERM/LANG/LC_ALL/TMPDIR only)")
 	prefix := fs.String("prefix", "", "prepend this prefix to env-var names derived from aliases")
-	forRecipe := fs.String("for", "", "present a single alias as a tool's credential env (npm, yarn, pnpm, bun, pypi, uv, poetry, hatch, flit, cargo, gem, hex, swift, cocoapods, composer, github, gitlab, terraform)")
+	var forRecipes repeatedFlag
+	fs.Var(&forRecipes, "for", "present an alias as a tool's credential env: `recipe` (alias from the positional arg) or `recipe=alias`; repeatable to target several tools at once (npm, yarn, pnpm, bun, pypi, uv, poetry, hatch, flit, cargo, gem, hex, swift, cocoapods, composer, github, gitlab, terraform)")
 	registry := fs.String("registry", "", "registry/host for registry-scoped recipes (npm, pnpm, composer, terraform); default per recipe")
 	dryRun := fs.Bool("dry-run", false, "inject a filler value instead of the real secret (no passphrase needed); for testing the plumbing, e.g. `npm publish --dry-run`")
 	if err := fs.Parse(preArgs); err != nil {
 		return 1
 	}
 
-	if fs.NArg() < 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--dry-run] [--for=TOOL [--registry=HOST]] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
+	// In --for mode the secrets can be named inside the flags
+	// (`--for=recipe=alias`), so a positional alias spec is optional.
+	forMode := len(forRecipes) > 0
+	if fs.NArg() < 1 && !forMode {
+		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--dry-run] [--for=RECIPE[=alias] ...] [--registry=HOST] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
 		return 1
 	}
 	if !sawSep || len(cmdArgs) == 0 {
@@ -90,44 +102,54 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	}
 
 	overrides := map[string]string{}
-	if *forRecipe != "" {
-		// Publisher recipe: a single alias presented in the credential
-		// environment the named tool reads (the recipe sets the env-var
-		// names, so --prefix/--upper and =ENV/comma mappings don't apply).
-		rec, ok := lookupPublishRecipe(*forRecipe)
-		if !ok {
-			fmt.Fprintf(stderr, "error: unknown --for recipe %q (known: %s)\n", *forRecipe, strings.Join(publishRecipeNames(), ", "))
-			return 1
-		}
-		spec := fs.Arg(0)
-		if strings.ContainsAny(spec, ",=") {
-			fmt.Fprintln(stderr, "error: --for takes a single alias (the recipe sets the env-var names)")
-			return 1
-		}
+	if forMode {
+		// Publisher recipes: each binds an alias to the credential
+		// environment a tool reads (the recipe sets the env-var names, so
+		// --prefix/--upper and =ENV/comma mappings don't apply). Repeating
+		// --for targets several tools in one process, each from its own
+		// secret — e.g. publish to npm and push a git tag to GitHub from a
+		// single `make publish`.
 		if *prefix != "" || *upper {
 			fmt.Fprintln(stderr, "error: --for sets the env-var names; drop --prefix/--upper")
 			return 1
 		}
-		_, alias, err := findAliasRef(s, spec)
+		positional := ""
+		if fs.NArg() >= 1 {
+			positional = fs.Arg(0)
+		}
+		bindings, err := parseForRecipes(forRecipes, positional)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		ns, _ := splitAlias(alias)
-		v, err := resolveSecret(sess, *dryRun, alias, ns)
-		if err != nil {
-			_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "error", Reason: "keyring: " + err.Error()})
-			fmt.Fprintf(stderr, "error: reading %s: %s\n", alias, err)
-			return 1
+		setBy := map[string]string{} // env var -> recipe that set it (for clear collision errors)
+		for _, b := range bindings {
+			_, alias, err := findAliasRef(s, b.alias)
+			if err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
+			ns, _ := splitAlias(alias)
+			v, err := resolveSecret(sess, *dryRun, alias, ns)
+			if err != nil {
+				_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "error", Reason: "keyring: " + err.Error()})
+				fmt.Fprintf(stderr, "error: reading %s: %s\n", alias, err)
+				return 1
+			}
+			reg := *registry
+			if reg == "" {
+				reg = b.rec.defaultRegistry
+			}
+			for k, val := range b.rec.env(v, reg) {
+				if prev, dup := overrides[k]; dup && prev != val {
+					fmt.Fprintf(stderr, "error: --for=%s and --for=%s both set $%s to different values; run them as separate exec calls\n", setBy[k], b.rec.name, k)
+					return 1
+				}
+				overrides[k] = val
+				setBy[k] = b.rec.name
+			}
+			_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "ok", Reason: auditReason(*dryRun, "for="+b.rec.name+" cmd="+filepath.Base(bin))})
 		}
-		reg := *registry
-		if reg == "" {
-			reg = rec.defaultRegistry
-		}
-		for k, val := range rec.env(v, reg) {
-			overrides[k] = val
-		}
-		_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "ok", Reason: auditReason(*dryRun, "for="+rec.name+" cmd="+filepath.Base(bin))})
 	} else {
 		mappings, err := parseExecAliases(fs.Arg(0), *prefix, *upper)
 		if err != nil {
@@ -210,6 +232,60 @@ func auditReason(dryRun bool, reason string) string {
 		return "dry-run " + reason
 	}
 	return reason
+}
+
+// repeatedFlag collects every occurrence of a flag, so `--for=a --for=b`
+// yields {"a","b"} instead of the last value winning.
+type repeatedFlag []string
+
+func (r *repeatedFlag) String() string { return strings.Join(*r, " ") }
+func (r *repeatedFlag) Set(v string) error {
+	*r = append(*r, v)
+	return nil
+}
+
+// recipeBinding pairs a publisher recipe with the alias whose secret feeds it.
+type recipeBinding struct {
+	rec   publishRecipe
+	alias string
+}
+
+// parseForRecipes turns the repeated --for values into recipe→alias
+// bindings. Each entry is `recipe` (the secret comes from the single
+// positional alias, the legacy form) or `recipe=alias` (the secret is named
+// in-flag, which is what lets several --for entries each target their own
+// secret). A bare entry with no positional alias is an error.
+func parseForRecipes(entries []string, positional string) ([]recipeBinding, error) {
+	positional = strings.TrimSpace(positional)
+	out := make([]recipeBinding, 0, len(entries))
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		name, alias := e, ""
+		if eq := strings.IndexByte(e, '='); eq >= 0 {
+			name = strings.TrimSpace(e[:eq])
+			alias = strings.TrimSpace(e[eq+1:])
+		}
+		rec, ok := lookupPublishRecipe(name)
+		if !ok {
+			return nil, fmt.Errorf("unknown --for recipe %q (known: %s)", name, strings.Join(publishRecipeNames(), ", "))
+		}
+		if alias == "" {
+			if positional == "" {
+				return nil, fmt.Errorf("--for=%s needs an alias; write --for=%s=<alias>", name, name)
+			}
+			if strings.ContainsAny(positional, ",=") {
+				return nil, fmt.Errorf("--for takes a single alias (the recipe sets the env-var names)")
+			}
+			alias = positional
+		} else if strings.ContainsAny(alias, ",=") {
+			return nil, fmt.Errorf("invalid alias %q for --for=%s", alias, name)
+		}
+		out = append(out, recipeBinding{rec: rec, alias: alias})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no --for recipes specified")
+	}
+	return out, nil
 }
 
 // execMapping pairs a vault alias with the env-var name the
