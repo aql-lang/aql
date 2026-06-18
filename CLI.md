@@ -404,7 +404,9 @@ aql vault import vault.aqlx             # restore a bundle (or a .env file)
 aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
 aql vault revoke <token-id>             # revoke a token
 aql vault providers                     # list built-in provider presets
-aql vault scan .                        # scan files for leaked secrets
+aql vault scan .                        # scan files for leaked secret-like strings
+aql vault scan --home                   # scan credential dotfiles (~/.npmrc, ~/.netrc, ~/.aws/credentials, …) for plaintext secrets
+aql vault scan --home --match-vault     # …and flag which on-disk creds are already vaulted
 aql vault audit                         # show the structured audit log
 aql vault audit --action proxy.request --last 20
 aql vault audit --json                  # raw JSONL
