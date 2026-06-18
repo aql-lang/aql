@@ -387,6 +387,18 @@ const (
 	// operand drives a RE-STEPPING result the VM cannot reproduce by re-running
 	// the handler.
 	CompileQuoteInert
+	// CompileDiverges marks a word whose handler ALWAYS raises (it never returns
+	// normally) — `raise`, the user-error constructor. A call to it is recorded as
+	// a CALL_NATIVE (the handler raises the byte-identical error at run time) but
+	// the recorder treats it as a DIVERGENT terminal: control never reaches the
+	// fragment's end, so a closure body ending in it (`do [raise …]`, `error`'s
+	// handler tail) compiles with NO RET — the error propagates out of the VM and
+	// the catching word (`do` / `error`) turns it into the Error value via
+	// InvokeBody, exactly as the interpreter does. This is the bytecode side of
+	// structured exception handling: a trapping closure body is catchable rather
+	// than uncompilable. The divergence is sound in a branch/loop arm too (the
+	// arm never produces a value, like break/continue).
+	CompileDiverges
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A

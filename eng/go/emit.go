@@ -120,6 +120,7 @@ type emitCall struct {
 	makeMap  bool // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys  []string
 	mapImpl  bool // the source map's Implicit flag
+	diverges bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -702,6 +703,13 @@ func fragDiverges(frag *EmitFragment) bool {
 	}
 	last := &frag.events[len(frag.events)-1]
 	if last.kind == evCallUser && last.uc.tail {
+		return true
+	}
+	if last.kind == evCall && last.call.diverges {
+		// A CompileDiverges word (raise) always raises: the fragment never
+		// produces a residual past it, so it diverges like break/continue. A
+		// closure body ending here compiles with no RET; the error propagates
+		// out of the VM run and the catching word (do/error) wraps it.
 		return true
 	}
 	return last.kind == evBreak || last.kind == evContinue
@@ -1567,7 +1575,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: sig.CompileEffect.Has(CompileDiverges)}})
 	// Carrier-identity de-collision (the deferred runtime-independence item, in
 	// its targeted form). A call OUTPUT whose ID already maps to a PRIOR event is
 	// a repeated identical computed call: `(context get 'n') add (context get

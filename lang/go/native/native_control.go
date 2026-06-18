@@ -157,29 +157,35 @@ var controlNatives = []NativeFunc{
 	},
 	{
 		Name: "error",
+		// do [body] error [handler] — the handler runs as a closure with the
+		// caught Error pushed as its one input (BodyPos 0, BodyOut 1). A handler
+		// that CONSUMES the error (`[get message]`, `[get code case …]`) nets 1
+		// and compiles; one that IGNORES it (`["fallback"]`) leaves error+result
+		// (nets 2), refuses the closure, and the CompileFallbackBody island owns
+		// it — where the InvokeBody sub-engine + the stack-neutrality strip run,
+		// exactly as before.
+		CompileEffect: CompileFallbackBody,
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(_ []Value) []Value {
+			return []Value{NewCarrier(TError)}
+		}},
 
+		// ONE sig (List, Any): the handler runs when the body raised (the do
+		// result is an Error), else the result passes through. The two cases were
+		// formerly two sigs (TError vs TAny), but a STATIC pick is unsound for the
+		// compiled path — the checker types `do [raise …]` as Any and would bake
+		// the pass-through sig even when the runtime value is an Error. One sig
+		// with a runtime IsError branch keeps dispatch mono (so the handler body
+		// compiles as a closure) and correct on both paths.
 		Signatures: []NativeSig{
-			{
-				Args:       []*Type{TList, TError},
-				NoEvalArgs: map[int]bool{0: true},
-				Handler:    errorHandler,
-				// The error branch leaves the HANDLER's result (the
-				// caught error only when the handler passes it
-				// through), so the static return is Any, like the
-				// success pass-through.
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			// Success pass-through: `do [risky] error [handler]` must
-			// compose when risky SUCCEEDS too — a non-Error result
-			// skips the handler and passes through unchanged. Without
-			// this, attaching a handler made the success path a loud
-			// signature_error, so the documented pattern only worked
-			// when the body failed.
 			{
 				Args:       []*Type{TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    errorPassHandler,
-				Returns:    []*Type{TAny}, BarrierPos: -1,
+				Handler:    errorHandler,
+				// BarrierPos 1: the handler list is forward-collected, but the
+				// do-result (position 1) MUST come from the stack — never a trailing
+				// token. The former TError sig filtered a following `3` by type; the
+				// merged Any sig would otherwise grab it (`error [print] 3 mul 4`).
+				Returns: []*Type{TAny}, BarrierPos: 1,
 			},
 		},
 	},
@@ -702,21 +708,23 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 // errorPassHandler is `error`'s success path: the guarded body
 // produced a normal value, so the handler list is discarded and the
 // value passes through unchanged.
-func errorPassHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{args[1]}, nil
-}
-
 func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.AqlError("error_error", "error: handler must be a concrete list, got type literal", "error")
 	}
-	sub := New(r)
-	_lst, _ := AsList(args[0])
-	body := _lst.Slice()
-	input := make([]Value, 0, 1+len(body))
-	input = append(input, args[1])
-	input = append(input, body...)
-	out, err := sub.Run(input)
+	// Success pass-through: a non-Error do result skips the handler and passes
+	// through unchanged (`do [risky] error [handler]` composes when risky
+	// SUCCEEDS too). The runtime branch is what lets `error` keep ONE (List, Any)
+	// sig — a mono dispatch whose handler body compiles as a closure — while still
+	// doing the right thing on the dynamically-error-or-value do result.
+	if !IsError(args[1]) {
+		return []Value{args[1]}, nil
+	}
+	// Run the handler with the caught error pushed as its one input. Routed
+	// through InvokeBody so a compiled handler closure runs VM-native (r.Invoker
+	// set); with no Invoker a fresh sub-engine runs the reconstructed token
+	// stream — byte-identical to the historical `New(r).Run([err, body…])`.
+	out, err := InvokeBody(r, args[0], []Value{args[1]})
 	if err != nil {
 		return nil, err
 	}

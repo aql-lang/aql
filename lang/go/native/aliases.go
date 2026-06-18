@@ -215,6 +215,7 @@ const (
 	CompileIslandPure   = eng.CompileIslandPure
 	CompileFallbackBody = eng.CompileFallbackBody
 	CompileQuoteInert   = eng.CompileQuoteInert
+	CompileDiverges     = eng.CompileDiverges
 )
 
 // Flow-control signal values exposed by the engine. These travel
