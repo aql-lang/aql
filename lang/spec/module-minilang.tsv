@@ -27,7 +27,7 @@
 "aql:minilang" import end  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  register / kinds — out-of-band exports (not mini-callable)
-"aql:minilang" import end  MiniLang.kinds	[re/q bf/q gex/q m/q]	the registered kind atoms, in registration order
+"aql:minilang" import end  MiniLang.kinds	[re/q bf/q gex/q m/q jp/q jq/q]	the registered kind atoms, in registration order
 "aql:minilang" import end  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 "aql:minilang" import end  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
 #
@@ -115,3 +115,27 @@ MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:minilang" import end  mini m 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
 "aql:minilang" import end  mini m 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
 "aql:minilang" import end  mini m 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error
+#
+# §jpq  jp — JSONPath (github.com/ohler55/ojg) — and jq — jq filter
+#       (github.com/itchyny/gojq). The document is the stack subject and may be
+#       any AQL shape: a Node (Map/List), Object, Array, Table or Record. Both
+#       return a LIST of results (jp: matched nodes; jq: the output stream). A
+#       MAP/Record subject needs an explicit {} opts (a bare map is otherwise
+#       claimed as mini's opts — the same gotcha as gex).
+"aql:minilang" import end  {store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store.book[*].title' {}	['A' 'B']	JSONPath over a Node — matched nodes as a List
+"aql:minilang" import end  {a:1 b:2} mini jq '.a + .b' {}	[3]	a jq filter over a Node; jq's output stream is a List
+"aql:minilang" import end  [{n:1} {n:2} {n:3}] mini jp '$[*].n'	[1 2 3]	a List subject needs no {} (only a Map subject is claimed as opts)
+"aql:minilang" import end  [1 2 3 4] mini jq '.[] | select(. > 2)'	[3 4]	jq select over a List subject
+"aql:minilang" import end  (make Array [{k:10} {k:20}]) mini jp '$[*].k'	[10 20]	an Array projects to a List for the query
+"aql:minilang" import end  (make Array [1 2 3]) mini jq 'add'	[6]	jq add over an Array
+"aql:minilang" import end  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'	[7]	an Object projects to its field map
+"aql:minilang" import end  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'	[16]	jq over an Object
+"aql:minilang" import end  def R (refine Record [{a:Integer b:String}])  (make R {a:5 b:'hi'}) mini jp '$.b' {}	['hi']	a Record (a Map) — needs the explicit {} like any Map subject
+"aql:minilang" import end  def Row (refine Record [{a:Integer b:String}])  def T (refine Table Row)  (make T [[1 'x'] [2 'y']]) mini jp '$[*].a'	[1 2]	a Table projects to its rows (field maps)
+"aql:minilang" import end  def Row (refine Record [{a:Integer}])  def T (refine Table Row)  (make T [[1] [2] [3]]) mini jq 'map(.a) | add'	[6]	jq over a Table's rows
+"aql:minilang" import end  {a:1 b:2} MiniLang.lang_jp '$.a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
+"aql:minilang" import end  {a:1 b:2} MiniLang.lang_jq '.b' {} end	[2]	the desugared jq call
+#
+# §jpq  negatives
+"aql:minilang" import end  {a:1} mini jp '$.[' {}	ERROR:mini_parse_error	a malformed JSONPath is a loud parse error
+"aql:minilang" import end  {a:1} mini jq '.[' {}	ERROR:mini_parse_error	a malformed jq filter is a loud parse error
