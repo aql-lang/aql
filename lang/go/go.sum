@@ -110,6 +110,8 @@ github.com/voxgig/struct/go v0.1.0 h1:Q+BpZnvavy6OTFI9jN7o0jteHgUJrHj5NXwctuHBIv
 github.com/voxgig/struct/go v0.1.0/go.mod h1:cEn/wJ98CHkdS0WPKUc2Jks/ITFk1Ootg4DKqKxQOHY=
 github.com/voxgig/udk/go v0.1.1 h1:X9DrViSJj+jWSNiCqIWkrRPleY6vx/7i41as7p+DsiQ=
 github.com/voxgig/udk/go v0.1.1/go.mod h1:1ltnVC7/LnlTx4+GlHgcTGbfRhfGqTsubvAtBdoe8/8=
+go.etcd.io/bbolt v1.3.11 h1:yGEzV1wPz2yVCLsD8ZAiGHhHVlczyC9d1rP43/VCRJ0=
+go.etcd.io/bbolt v1.3.11/go.mod h1:dksAq7YMXoljX0xu6VF5DMZGbhYYoLUalEiSySYAS4I=
 golang.org/x/crypto v0.37.0 h1:kJNSjF/Xp7kU0iB2Z+9viTPMW4EqqsrywMXLJOOsXSE=
 golang.org/x/crypto v0.37.0/go.mod h1:vg+k43peMZ0pUMhYmVAWysMK35e6ioLh3wB8ZCAfbVc=
 golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 h1:mgKeJMpvi0yx/sU5GsxQ7p6s2wtOnGAHZWCHUM4KGzY=

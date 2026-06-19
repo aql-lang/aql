@@ -42,6 +42,7 @@ require (
 	github.com/tabnas/yaml/go v0.2.0 // indirect
 	github.com/tabnas/zon/go v0.2.0 // indirect
 	github.com/voxgig/struct v0.1.0 // indirect
+	go.etcd.io/bbolt v1.3.11 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/sync v0.17.0 // indirect

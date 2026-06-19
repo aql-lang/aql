@@ -119,21 +119,8 @@ func CanonicalKVKind(kind string) (string, bool) {
 }
 
 // kvUnknownKind is the shared error for an unrecognised backend kind.
+// openExternalKV / canonicalExternalKVKind are build-tagged
+// (keyval_external.go on native, keyval_external_stub.go on wasm).
 func kvUnknownKind(kind string) error {
 	return fmt.Errorf("unknown keyval backend %q (want memory, file, redis, mongo, or s3)", kind)
-}
-
-// openExternalKV opens a non-memory backend. The external backends
-// (file/redis/mongo/s3) land in later phases; until then every external
-// kind is unknown.
-//
-// TODO(keyval): split into build-tagged files (native drivers vs wasm
-// stub) when the first external backend is added.
-func openExternalKV(kind, _ string) (KeyValBackend, error) {
-	return nil, kvUnknownKind(kind)
-}
-
-// canonicalExternalKVKind canonicalizes a non-memory backend kind.
-func canonicalExternalKVKind(string) (string, bool) {
-	return "", false
 }

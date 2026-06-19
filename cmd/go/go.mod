@@ -75,6 +75,7 @@ require (
 	github.com/tabnas/zon/go v0.2.0 // indirect
 	github.com/voxgig/struct v0.1.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	go.etcd.io/bbolt v1.3.11 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
