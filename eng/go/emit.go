@@ -1536,7 +1536,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	if !es.active() {
 		return
 	}
-	if es.recordCallElided(word, args, outs) {
+	if es.recordCallElided(word, sig, args, outs) {
 		return
 	}
 	if es.recordCallRefusal(word, sig, args, outs, pos, forceDynOut, quoteInertOK) {
@@ -1584,7 +1584,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 // recordCallElided reports whether a dispatch is ELIDED — already recorded by a
 // structured hook, or a compile-time name resolution that produces nothing the
 // VM runs. The caller returns without recording when this is true.
-func (es *EmitState) recordCallElided(word string, args, outs []Value) bool {
+func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []Value) bool {
 	// A dispatch whose output is already registered was recorded by a
 	// structured hook (RecordBranch owns the `if` dispatch; a user-fn
 	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
@@ -1600,6 +1600,16 @@ func (es *EmitState) recordCallElided(word string, args, outs []Value) bool {
 		if pr, ok := es.producedBy[outs[0].ID]; ok && !es.eventInfo[pr.seq].generic {
 			return true
 		}
+	}
+	// A user fn returning ZERO values (`def v fn [[x:Integer] [] []]`): its
+	// ReturnsFn recorded a 0-output CALL_USER and returned no carriers, so there
+	// is no output ID to key the elision above on. The compiled 0-output call is
+	// unambiguous — a user-fn dispatch whose body unit DECLINED to compile
+	// returns a single Any approximation instead (len(outs)==1), so it falls
+	// through to recordCallRefusal and the program falls back. Only the compiled
+	// case reaches here with an empty residual.
+	if sig != nil && sig.FnFrame != nil && len(outs) == 0 {
+		return true
 	}
 	// `apply` of a fn VALUE (`…args fn apply`): apply's ReturnsFn returns the
 	// fn concrete, so the check engine RE-STEPS it — the fn then dispatches
