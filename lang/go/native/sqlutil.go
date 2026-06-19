@@ -1,6 +1,27 @@
 package native
 
-import "strings"
+import (
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+// kvSecretRE matches password/pwd tokens in a key-value connection
+// string, for redaction.
+var kvSecretRE = regexp.MustCompile(`(?i)\b(password|pwd)=([^;\s]*)`)
+
+// redactConnString returns a display-safe form of a connection string
+// with any password removed. URL-form strings are redacted via
+// url.Redacted (password → "xxxxx"); key-value strings have
+// password/pwd tokens masked. Shared by the SQL and key-value backends.
+func redactConnString(dsn string) string {
+	if strings.Contains(dsn, "://") {
+		if u, err := url.Parse(dsn); err == nil && u.Scheme != "" {
+			return u.Redacted()
+		}
+	}
+	return kvSecretRE.ReplaceAllString(dsn, "$1=***")
+}
 
 // quoteIdent quotes a SQL identifier with backticks. Backticks rather
 // than the SQL-standard double quotes because of SQLite's legacy

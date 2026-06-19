@@ -33,6 +33,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"rand":        BuildRandModule,
 	"query":       BuildQueryModule,
 	"db":          BuildDBModule,
+	"keyval":      BuildKeyValModule,
 	"struct-util": BuildStructModule,
 	"io":          BuildIOModule,
 	"net":         BuildNetModule,

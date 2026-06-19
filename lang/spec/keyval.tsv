@@ -1,0 +1,15 @@
+# AQL Language Specification: the aql:keyval module
+# Format: input<TAB>expected<TAB>description
+#
+# Pluggable key-value stores. These rows use the in-memory backend so
+# they are hermetic and deterministic; external backends (file, redis,
+# mongo, s3) share the same word surface. Negative cases live in
+# lang/go/native/keyval_module_test.go.
+
+"aql:keyval" import end convert List KV.$module	['KV']	import binds the KV namespace
+"aql:keyval" import end def kv (KV.open "memory") end def a (kv KV.set "k" 42) end kv KV.get "k"	42	set then get round-trips a value
+"aql:keyval" import end def kv (KV.open "memory") end kv KV.get "missing"	none	get returns None for an absent key
+"aql:keyval" import end def kv (KV.open "memory") end def a (kv KV.set "k" 1) end kv KV.has "k"	true	has reports membership
+"aql:keyval" import end def kv (KV.open "memory") end def a (kv KV.set "k" 1) end kv KV.del "k"	true	del reports whether the key existed
+"aql:keyval" import end def kv (KV.open "memory") end def a (kv KV.set "a" 1) end def b (kv KV.set "b" 2) end kv KV.keys ""	['a' 'b']	keys lists stored keys
+"aql:keyval" import end def kv (KV.open "memory") end kv KV.close end true	true	close releases the store

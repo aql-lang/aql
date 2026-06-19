@@ -113,6 +113,7 @@ var KnownScopes = []string{
 	"network",
 	"sqlite",
 	"db",
+	"keyval",
 	"formats",
 	"env",
 	"process",
@@ -124,7 +125,7 @@ var KnownScopes = []string{
 // clock). These are the scopes that honour scope.install = false.
 func IsCapabilityScope(scope string) bool {
 	switch scope {
-	case "fileops", "network", "sqlite", "db", "formats", "env", "process", "clock":
+	case "fileops", "network", "sqlite", "db", "keyval", "formats", "env", "process", "clock":
 		return true
 	}
 	return false

@@ -93,6 +93,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Patrun":           5004, // pattern-dispatch table — lang/go/native/native_patrun.go
 		"Ideal/DBConn":           5005, // external DB connection — lang/go/native/native_db_conn.go
 		"Ideal/RemoteTable":      5006, // remote-table source for query pushdown — lang/go/native/native_db_conn.go
+		"Ideal/KVStore":          5007, // key-value store handle — lang/go/native/native_kvstore.go
 		"Word/__IS":              51,
 		"Type/Disjunct/Enum":     62,
 		"Word/__PE":              63,

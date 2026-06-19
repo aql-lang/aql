@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
@@ -189,20 +187,9 @@ func (s *SQLDatabase) StoreTempTable(TableData) (string, error) {
 // DropTable is a no-op on read-only external backends.
 func (s *SQLDatabase) DropTable(string) {}
 
-// kvSecretRE matches password/pwd tokens in a key-value DSN.
-var kvSecretRE = regexp.MustCompile(`(?i)\b(password|pwd)=([^;\s]*)`)
-
 // redactDSN returns a display-safe form of a DSN with any password
-// removed. URL-form DSNs are redacted via url.Redacted (password →
-// "xxxxx"); key-value DSNs have password/pwd tokens masked.
-func redactDSN(dsn string) string {
-	if strings.Contains(dsn, "://") {
-		if u, err := url.Parse(dsn); err == nil && u.Scheme != "" {
-			return u.Redacted()
-		}
-	}
-	return kvSecretRE.ReplaceAllString(dsn, "$1=***")
-}
+// removed (shared logic in redactConnString).
+func redactDSN(dsn string) string { return redactConnString(dsn) }
 
 // redactError strips a DSN (and any embedded password) from a driver
 // error so credentials never surface in messages shown to the user.

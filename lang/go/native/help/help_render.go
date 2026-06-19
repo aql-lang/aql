@@ -31,6 +31,7 @@ var moduleCatalog = []ModuleInfo{
 	{"rand", "Pseudo-random number generation."},
 	{"query", "SQL-style query pipelines: from, where, join, group, order."},
 	{"db", "External SQL databases: open, sql, exec, tables, schema, table, close."},
+	{"keyval", "Key-value stores (memory/file/redis/mongo/s3): open, get, set, del, has, keys, close."},
 	{"struct-util", "Structured-data utilities: merge, walk, transform, jsonify, …."},
 	{"io", "I/O: read, write, stdin/stdout/stderr, printstr, trace."},
 	{"net", "HTTP requests and API access: fetch, prepare, direct."},
