@@ -55,6 +55,10 @@ if [1 eq 1] (add 1 2) 88	3	list-form cond; true yields the paren then
 if [1 eq 2] (add 1 2) 88	88	list-form cond; false yields the value else
 if [1 eq 1] 99 (add 1 2)	99	list-form cond; true yields the value then
 if [1 eq 2] 99 (add 1 2)	3	list-form cond; false yields the paren else
+# BOTH arms computed: both parens run eagerly (faithful), the branch selects one
+if (1 eq 1) (add 1 2) (sub 9 4)	3	both-computed; true selects the then paren
+if (1 eq 2) (add 1 2) (sub 9 4)	-5	both-computed; false selects the else paren
+add 10 (if (1 eq 1) (add 1 2) (sub 9 4))	13	both-computed result consumed downstream
 # …and the statement-boundary commit composes with the core definition
 # idiom: a def-fn AFTER the guard still defines (fn's speculative fill
 # is untouched — the smaller-arity probe fails for def, so it waits for

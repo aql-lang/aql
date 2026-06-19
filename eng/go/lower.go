@@ -978,6 +978,11 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		}
 		return ""
 	}
+	if br.thenComputed && br.elsComputed {
+		// `if (c) (a) (b)` — BOTH arms eagerly computed: the three events stack
+		// as [cond, then, else]; select one with OpReverse + JMP_IF_FALSE.
+		return lw.lowerBothComputed(ev)
+	}
 	if br.elsComputed || br.thenComputed {
 		// One arm's value is an eagerly-computed event (`if c [t] (expr)` or
 		// `if c (expr) e`). It is the last thing evaluated before the branch, so
@@ -1114,6 +1119,46 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		}
 		lw.note()
 	}
+	return ""
+}
+
+// lowerBothComputed lowers `if (c) (a) (b)` where BOTH arms are eagerly-computed
+// events. Entry sim/runtime stack is [.., cond, thenVal, elsVal] (elsVal on top).
+// Both arms ran already (paren args evaluate eagerly — faithful to the
+// interpreter, which also evaluates both), so this only SELECTS one: it rotates
+// the cond to the top (OpReverse 3 → [elsVal, thenVal, cond]), branches, and
+// DROPs the unselected value on each path. The merge is a single (non-variadic)
+// slot.
+func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
+	br := ev.br
+	if len(lw.vm) < 3 ||
+		!slotIs(lw.vm[len(lw.vm)-1], br.elsVal) ||
+		!slotIs(lw.vm[len(lw.vm)-2], br.thenVal) ||
+		!slotIs(lw.vm[len(lw.vm)-3], br.cond) {
+		return "if: both-computed stack layout (Stage 2)"
+	}
+	if lw.variadic[br.thenVal.idx] || lw.variadic[br.elsVal.idx] {
+		return "if: both-computed arm is a variadic loop value (Stage 2)"
+	}
+	// Reverse the top three so the cond lands on top: [elsVal, thenVal, cond].
+	lw.emit(OpReverse, 3, br.pos)
+	n := len(lw.vm)
+	lw.vm[n-3], lw.vm[n-1] = lw.vm[n-1], lw.vm[n-3]
+	jf := lw.emit(OpJmpIfFalse, 0, br.pos) // pop cond → [elsVal, thenVal]
+	// TRUE/fall-through: the result is thenVal (now on top), so drop elsVal
+	// beneath it: SWAP then DROP → [thenVal].
+	lw.emit(OpSwap, 0, br.pos)
+	lw.emit(OpDrop, 0, br.pos)
+	jend := lw.emit(OpJmp, 0, br.pos)
+	// FALSE: stack is [elsVal, thenVal] (thenVal on top); the result is elsVal,
+	// so drop thenVal → [elsVal].
+	(*lw.code)[jf].Arg = int32(len(*lw.code))
+	lw.emit(OpDrop, 0, br.pos)
+	(*lw.code)[jend].Arg = int32(len(*lw.code))
+	// Sim: the three input slots (cond/then/else) collapse to one merge slot.
+	lw.vm = lw.vm[:len(lw.vm)-3]
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+	lw.note()
 	return ""
 }
 

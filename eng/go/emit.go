@@ -990,24 +990,30 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				}
 				if op.kind == opEvent {
 					// A COMPUTED else value (`if cond [then] (add 1 2)`) is
-					// eagerly on the stack BELOW the cond event. The lowerer
-					// SWAPs the cond to the top, branches, and DROPs the else on
-					// the taken path (it survives on the false path as the
-					// result). Only the plain-event-cond layout [cond, elseVal]
-					// is handled; a const / condFrag / const-cond condition sits
-					// elsewhere, so refuse those (unchanged).
+					// eagerly on the stack below the cond/then events. The lowerer
+					// branches and DROPs the unselected eager value(s).
 					if ev.br.thenComputed {
-						// `if cond (a) (b)` — BOTH arms computed means two eager
-						// values stacked below the cond; the single-eager lowering
-						// cannot seat that, so refuse (bounded — falls back).
-						es.MarkUncompilable("if: both arms are computed values (Stage 2)")
-						return
+						// `if cond (a) (b)` — BOTH arms computed. The three events
+						// stack as [cond, then, else]; lowerBothComputed selects one
+						// with OpReverse + JMP_IF_FALSE. It needs the cond on the
+						// stack (an event), so a const / condFrag / const-cond
+						// condition (where thenComputed was set under
+						// computedArmCondOK's wider rule) refuses here.
+						if ev.br.cond.kind != opEvent {
+							es.MarkUncompilable("if: both computed arms need an event condition (Stage 2)")
+							return
+						}
+						ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut, ev.br.elsComputed = true, op, true, true
+					} else {
+						// Single computed else: only the plain-event-cond layout
+						// [cond, elseVal] (SWAP), a list-form cond (inline), or a
+						// const/local cond (pushed) is handled — computedArmCondOK.
+						if !computedArmCondOK(b, ev.br.cond) {
+							es.MarkUncompilable("if: computed else value with non-stack condition (Stage 2)")
+							return
+						}
+						ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut, ev.br.elsComputed = true, op, true, true
 					}
-					if !computedArmCondOK(b, ev.br.cond) {
-						es.MarkUncompilable("if: computed else value with non-stack condition (Stage 2)")
-						return
-					}
-					ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut, ev.br.elsComputed = true, op, true, true
 				} else {
 					ev.br.elsIsVal, ev.br.elsVal, ev.br.hasElsOut = true, op, true
 				}

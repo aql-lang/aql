@@ -40,15 +40,8 @@ func TestEmitValueArmIf(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: `if cond (a) (b)` — BOTH arms are computed events — stacks two
-	// eager values below the cond, which the single-eager computed-branch
-	// lowering cannot seat, so the recorder refuses it (and falls back
-	// faithfully). A SINGLE computed arm (then OR else) does compile; see
-	// TestEmitComputedThenIf.
-	const bothComputed = `def x 0  if (x eq 0) (add 1 2) (sub 10 1)`
-	m, _ := New()
-	mp, reason, _, _ := m.CompileCheck(bothComputed)
-	if mp != nil {
-		t.Errorf("%q: both-computed arms must NOT compile (got a program); reason=%q", bothComputed, reason)
-	}
+	// `if cond (a) (b)` — both arms computed — compiles via the OpReverse select
+	// lowering (TestBothComputedIfLowers). A computed value arm needs a STACK
+	// (event) condition, though: with no computed arm at all, a plain value arm
+	// still lowers as a select here.
 }
