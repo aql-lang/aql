@@ -147,7 +147,8 @@ type emitBranch struct {
 	thenOut, elsOut       emitOperand
 	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
 	thenIsVal             bool        // then arm is a plain VALUE operand (`if cond 99 88`), not a body fragment
-	thenVal               emitOperand // the value-then operand (const/local/type) when thenIsVal
+	thenVal               emitOperand // the value-then operand (const/local/type, OR a COMPUTED event when thenComputed) when thenIsVal
+	thenComputed          bool        // then value is a COMPUTED event eagerly on the stack below the cond (`if c (expr) e`): SWAP cond up, DROP it on the FALSE path
 	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
 	elsVal                emitOperand // the value-else operand (const/local/type, OR a COMPUTED event when elsComputed) when elsIsVal
 	elsComputed           bool        // else value is a COMPUTED event eagerly on the stack below the cond (`if c [t] (expr)`): SWAP cond up, DROP it on the taken path
@@ -168,13 +169,16 @@ const (
 	armBodyOut                 // a […] body fragment that nets one value
 	armBodyVoid                // a […] body that nets 0 values or diverges (still runs)
 	armValue                   // a plain already-evaluated value operand (`if c 99 88`)
-	armComputed                // an eagerly-computed (event) else value (`if c [t] (expr)`)
+	armComputed                // an eagerly-computed (event) arm value (`if c [t] (expr)` / `if c (expr) e`)
 )
 
 // thenArm classifies the then arm. A then arm is always present (even a 2-arg
-// if has one); it is a value, a value-netting body, or a void/diverging body.
+// if has one); it is a computed event value, a plain value, a value-netting
+// body, or a void/diverging body.
 func (br *emitBranch) thenArm() armKind {
 	switch {
+	case br.thenComputed:
+		return armComputed
 	case br.thenIsVal:
 		return armValue
 	case br.hasThenOut:
@@ -950,10 +954,20 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				return
 			}
 			if op.kind == opEvent {
-				es.MarkUncompilable("if: computed then value (Stage 2)")
-				return
+				// A COMPUTED then value (`if cond (add 1 2) 88`) is eagerly on the
+				// stack BELOW the cond event — the mirror of the computed-else case.
+				// The lowerer SWAPs the cond above it, branches, and DROPs it on the
+				// FALSE path (it survives on the TRUE path as the result). Only the
+				// plain-event-cond layout [cond, thenVal] is handled; a const /
+				// condFrag / const-cond condition sits elsewhere, so refuse those.
+				if !computedArmCondOK(b, ev.br.cond) {
+					es.MarkUncompilable("if: computed then value with non-stack condition (Stage 2)")
+					return
+				}
+				ev.br.thenIsVal, ev.br.thenVal, ev.br.hasThenOut, ev.br.thenComputed, hasThen = true, op, true, true, true
+			} else {
+				ev.br.thenIsVal, ev.br.thenVal, ev.br.hasThenOut, hasThen = true, op, true, true
 			}
-			ev.br.thenIsVal, ev.br.thenVal, ev.br.hasThenOut, hasThen = true, op, true, true
 		} else {
 			thenOut, h, ok := resolveArm(b.Then, b.ThenStk, "then")
 			if !ok {
@@ -982,7 +996,14 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 					// result). Only the plain-event-cond layout [cond, elseVal]
 					// is handled; a const / condFrag / const-cond condition sits
 					// elsewhere, so refuse those (unchanged).
-					if b.ConstCond != nil || b.CondFrag != nil || ev.br.cond.kind != opEvent {
+					if ev.br.thenComputed {
+						// `if cond (a) (b)` — BOTH arms computed means two eager
+						// values stacked below the cond; the single-eager lowering
+						// cannot seat that, so refuse (bounded — falls back).
+						es.MarkUncompilable("if: both arms are computed values (Stage 2)")
+						return
+					}
+					if !computedArmCondOK(b, ev.br.cond) {
 						es.MarkUncompilable("if: computed else value with non-stack condition (Stage 2)")
 						return
 					}
@@ -1015,6 +1036,15 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		f.zeroOut = true
 		es.eventInfo[seq] = f
 	}
+}
+
+// computedArmCondOK reports whether the branch condition is a plain event on the
+// stack — the only condition shape the computed-arm (eager-value) lowering
+// handles. A const-folded condition, a list-form condition body, or a const /
+// local condition operand each sit elsewhere on (or off) the stack, so a
+// computed then/else value with one of those refuses and falls back.
+func computedArmCondOK(b BranchRecord, cond emitOperand) bool {
+	return b.ConstCond == nil && b.CondFrag == nil && cond.kind == opEvent
 }
 
 // ArmLoopCapture makes the NEXT AnalyseLoopBody record its final

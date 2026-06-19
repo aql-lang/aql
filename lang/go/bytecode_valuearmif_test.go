@@ -40,14 +40,15 @@ func TestEmitValueArmIf(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: a COMPUTED then value (`(add 1 2)` — an event eagerly on the
-	// stack) is not a plain value arm; the recorder refuses it rather than
-	// risk the stack juggling the single-result lowering does not do. It then
-	// falls back faithfully (RunCompiled returns the interpreter's result).
-	const computed = `def x 0  if (x eq 0) (add 1 2) 88`
+	// NEGATIVE: `if cond (a) (b)` — BOTH arms are computed events — stacks two
+	// eager values below the cond, which the single-eager computed-branch
+	// lowering cannot seat, so the recorder refuses it (and falls back
+	// faithfully). A SINGLE computed arm (then OR else) does compile; see
+	// TestEmitComputedThenIf.
+	const bothComputed = `def x 0  if (x eq 0) (add 1 2) (sub 10 1)`
 	m, _ := New()
-	mp, reason, _, _ := m.CompileCheck(computed)
+	mp, reason, _, _ := m.CompileCheck(bothComputed)
 	if mp != nil {
-		t.Errorf("%q: a computed then value must NOT compile via the value-then path (got a program); reason=%q", computed, reason)
+		t.Errorf("%q: both-computed arms must NOT compile (got a program); reason=%q", bothComputed, reason)
 	}
 }

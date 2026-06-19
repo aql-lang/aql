@@ -283,16 +283,19 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 			fn(op)
 		}
 	default: // evBranch
-		// elsVal is the value-else operand — meaningful only when elsIsVal, and
-		// an opEvent only for the computed-else shape (`if c [t] (expr)`); for any
-		// other branch it is the zero opNone, which both consumers (the scopeFloor
-		// enclosing-scope guard and the value-def ref count) skip. Including it
-		// keeps the operand set complete so the safety guard never misses a
-		// computed-else reference into an enclosing computation.
+		// thenVal / elsVal are the value-arm operands — meaningful only when
+		// thenIsVal / elsIsVal, and an opEvent only for the computed-arm shapes
+		// (`if c (expr) e` / `if c [t] (expr)`); for any other branch each is the
+		// zero opNone, which both consumers (the scopeFloor enclosing-scope guard
+		// and the value-def ref count) skip. Including them keeps the operand set
+		// complete so a computed-arm event is REFERENCE-COUNTED — otherwise
+		// planValueDefLocals sees it as zero-referenced, marks it dead, and the
+		// lowerer drops the value the computed-branch lowering needs on the stack.
 		fn(ev.br.cond)
 		fn(ev.br.condOut)
 		fn(ev.br.thenOut)
 		fn(ev.br.elsOut)
+		fn(ev.br.thenVal)
 		fn(ev.br.elsVal)
 	}
 }
@@ -365,10 +368,12 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 		}
 	case evBranch:
 		promoteOperand(&ev.br.cond, promoted)
-		// A computed-else value (`if c [t] (expr)`) is an enclosing-scope
-		// reference too; rewrite it in lockstep with collectOperands counting
-		// it. (A promoted computed-else then refuses at lowerBranch's stack-
-		// layout check and falls back — sound, never a wrong result.)
+		// A computed-arm value (`if c (expr) e` / `if c [t] (expr)`) is an
+		// enclosing-scope reference too; rewrite it in lockstep with
+		// forEachOperand counting it. (A promoted computed arm then refuses at
+		// lowerBranch's stack-layout check and falls back — sound, never a wrong
+		// result.)
+		promoteOperand(&ev.br.thenVal, promoted)
 		promoteOperand(&ev.br.elsVal, promoted)
 	case evLoop:
 		promoteOperand(&ev.loop.end, promoted)
@@ -961,7 +966,7 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	if br.constCond != nil {
 		// Statically-taken branch: inline the taken fragment (always a body in
 		// const-cond form — never a value-then).
-		if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, br.pos); reason != "" {
+		if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, true, br.pos); reason != "" {
 			return reason
 		}
 		if br.hasThenOut {
@@ -973,21 +978,28 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		}
 		return ""
 	}
-	if br.elsComputed {
-		// Computed else (`if cond [then] (expr)`): the else value is eagerly on
-		// the stack BELOW the cond event. Bring the cond to the top so
-		// JMP_IF_FALSE can consume it; the else value stays below — the result
-		// on the false path, DROPped before the then-body on the true path.
-		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-1], br.elsVal) || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
-			return "if: computed-else stack layout (Stage 2)"
+	if br.elsComputed || br.thenComputed {
+		// One arm's value is an eagerly-computed event sitting just BELOW the
+		// cond event on the stack (`if c [t] (expr)` or `if c (expr) e`). Bring
+		// the cond above it so JMP_IF_FALSE can consume it; the eager value stays
+		// as the result of ITS path, and the OTHER (non-eager) arm DROPs it and
+		// produces its own value.
+		eager, nonEagerHasOut := br.elsVal, br.hasThenOut
+		if br.thenComputed {
+			eager, nonEagerHasOut = br.thenVal, br.hasElsOut
 		}
-		if !br.hasThenOut {
-			return "if: computed else with diverging then (Stage 2)"
+		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-1], eager) || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
+			return "if: computed-branch stack layout (Stage 2)"
+		}
+		if !nonEagerHasOut {
+			// The non-eager arm must net a value (the eager value is the other
+			// path's result); a diverging / 0-value arm is not modelled here.
+			return "if: computed-branch non-eager arm diverges (Stage 2)"
 		}
 		lw.swapTop2(br.pos)
 		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; the else value stays
-		return lw.lowerArmsComputed(ev, jf)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; the eager value stays
+		return lw.lowerComputedBranch(ev, jf)
 	}
 	// Condition on top of stack: a pre-evaluated value, or an inline
 	// list-form condition body lowered here (it nets one Boolean).
@@ -1018,16 +1030,13 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	}
 }
 
-// lowerArms emits the then/else arms after the JMP_IF_FALSE at jf.
-// A diverging arm's terminator already jumped out of the construct,
-// so it needs no jump-to-end and contributes no value; the merge
-// point then carries only the surviving arm's value. The 2-arg form
-// (no else) merges with 0-or-1 values — a VARIADIC result.
 // lowerArm emits one if-arm as a single (or zero) merge value: a plain value
 // operand is pushed; a body fragment is lowered with its out (nil when the arm
-// nets nothing or diverges — it still runs). Shared by the then and else arms of
-// lowerArms; the computed-else arm has its own path (lowerArmsComputed).
-func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, out *emitOperand, pos SrcPos) string {
+// nets nothing or diverges — it still runs). allowVariadic passes through to
+// lowerFragment (the merge of two body arms may be variadic; a computed-branch
+// arm may not). Shared by lowerArms, lowerBranch's const-cond inline, and the
+// non-eager arm of lowerComputedBranch.
+func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
 	switch kind {
 	case armValue:
 		// Push the literal/local/type operand as the arm's single result
@@ -1036,15 +1045,20 @@ func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, o
 		lw.vm = lw.vm[:len(lw.vm)-1]
 		return ""
 	case armBodyOut:
-		return lw.lowerFragment(frag, out, true, pos)
+		return lw.lowerFragment(frag, out, allowVariadic, pos)
 	default: // armBodyVoid — a 0-value / diverging body
-		return lw.lowerFragment(frag, nil, true, pos)
+		return lw.lowerFragment(frag, nil, allowVariadic, pos)
 	}
 }
 
+// lowerArms emits the then/else arms after the JMP_IF_FALSE at jf.
+// A diverging arm's terminator already jumped out of the construct,
+// so it needs no jump-to-end and contributes no value; the merge
+// point then carries only the surviving arm's value. The 2-arg form
+// (no else) merges with 0-or-1 values — a VARIADIC result.
 func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	br := ev.br
-	if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, br.pos); reason != "" {
+	if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, true, br.pos); reason != "" {
 		return reason
 	}
 	if !br.hasElse {
@@ -1066,7 +1080,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		jend = lw.emit(OpJmp, 0, br.pos)
 	}
 	(*lw.code)[jf].Arg = int32(len(*lw.code))
-	if reason := lw.lowerArm(br.elseArm(), br.elsVal, br.els, &br.elsOut, br.pos); reason != "" {
+	if reason := lw.lowerArm(br.elseArm(), br.elsVal, br.els, &br.elsOut, true, br.pos); reason != "" {
 		return reason
 	}
 	if jend >= 0 {
@@ -1105,23 +1119,41 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	return ""
 }
 
-// lowerArmsComputed lowers a computed-else `if cond [then] (expr)` after the
-// JMP_IF_FALSE at jf. Entry sim/runtime stack is [.., elseVal] (the cond was
-// just consumed; the eagerly-computed else value remains). The TAKEN path drops
-// the else value and runs the then-body; the FALSE path falls through with the
-// else value as the result. Both arms net exactly one value, so the result is a
-// single (non-variadic) merge slot.
-func (lw *lowerer) lowerArmsComputed(ev *emitEvent, jf int) string {
+// lowerComputedBranch lowers an `if` whose THEN or ELSE value is an eagerly-
+// computed event, after the JMP_IF_FALSE at jf. Entry sim/runtime stack is
+// [.., eager] (the cond was just consumed; the eager arm value remains). The
+// eager value is the result of ITS path; the OTHER (non-eager) arm DROPs it and
+// produces its own value (a plain value push or a body fragment). Both arms net
+// exactly one value, so the merge is a single (non-variadic) slot.
+//
+//   - computed ELSE (`if c [t] (expr)`): the eager value is the FALSE-path
+//     result; the TRUE (fall-through) path drops it and runs the then arm.
+//   - computed THEN (`if c (expr) e`): the eager value is the TRUE-path result;
+//     the FALSE (jump-target) path drops it and runs the else arm.
+func (lw *lowerer) lowerComputedBranch(ev *emitEvent, jf int) string {
 	br := ev.br
-	// True path: discard the else value, then run the then-body.
-	lw.emit(OpDrop, 0, br.pos)
-	lw.vm = lw.vm[:len(lw.vm)-1] // else value dropped on this path
-	if reason := lw.lowerFragment(br.then, &br.thenOut, false, br.pos); reason != "" {
-		return reason
+	if br.thenComputed {
+		// TRUE/fall-through keeps the eager then value; jump over the else arm.
+		jend := lw.emit(OpJmp, 0, br.pos)
+		(*lw.code)[jf].Arg = int32(len(*lw.code)) // FALSE lands here
+		lw.emit(OpDrop, 0, br.pos)                // discard the eager then value
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		if reason := lw.lowerArm(br.elseArm(), br.elsVal, br.els, &br.elsOut, false, br.pos); reason != "" {
+			return reason
+		}
+		(*lw.code)[jend].Arg = int32(len(*lw.code))
+	} else {
+		// TRUE/fall-through drops the eager else value and runs the then arm;
+		// the FALSE path falls through with the eager value intact.
+		lw.emit(OpDrop, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, false, br.pos); reason != "" {
+			return reason
+		}
+		jend := lw.emit(OpJmp, 0, br.pos)
+		(*lw.code)[jf].Arg = int32(len(*lw.code)) // FALSE lands here, eager value intact
+		(*lw.code)[jend].Arg = int32(len(*lw.code))
 	}
-	jend := lw.emit(OpJmp, 0, br.pos)
-	(*lw.code)[jf].Arg = int32(len(*lw.code)) // false path lands here, else value intact
-	(*lw.code)[jend].Arg = int32(len(*lw.code))
 	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 	lw.note()
 	return ""

@@ -272,6 +272,65 @@ func TestComputedElseIfLowers(t *testing.T) {
 	}
 }
 
+// Roadmap item 6 (computed-THEN) — the mirror of the computed-else case:
+// `if cond (expr) e` where the THEN is an eagerly-evaluated paren result on the
+// stack. It lowers via SWAP (cond to top) + JMP_IF_FALSE, keeping the eager then
+// value on the TRUE (fall-through) path and DROPping it on the FALSE path before
+// producing the else arm. Covers a value else, a body else, and both directions;
+// the both-arms-computed shape stays refused (the negative half).
+func TestComputedThenIfLowers(t *testing.T) {
+	const src = `def x 0  if (x eq 0) (add 1 2) 88`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("computed-then if did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") || !strings.Contains(dis, "DROP") || !strings.Contains(dis, "SWAP") {
+		t.Errorf("expected a native SWAP/JMP_IF_FALSE/DROP lowering:\n%s", dis)
+	}
+
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def x 0  if (x eq 0) (add 1 2) 88`, "3"},          // taken: computed then is the result
+		{`def x 1  if (x eq 0) (add 1 2) 88`, "88"},         // not taken: value else
+		{`def x 0  if (x eq 0) (add 1 2) [sub 10 1]`, "3"},  // taken, body else
+		{`def x 1  if (x eq 0) (add 1 2) [sub 10 1]`, "-9"}, // not taken, body else
+		{`add 10 (if (1 eq 1) (add 1 2) 88)`, "13"},         // consumed downstream
+	} {
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, errC)
+		}
+		d, _ := New()
+		gotI, _ := d.Run(c.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
+			t.Errorf("%q: compiled=%v interp=%v (want [%s])", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: both arms computed (`if c (a) (b)`) stacks two eager values and
+	// stays refused — it must fall back, with the interpreter's result.
+	const both = `def x 0  if (x eq 0) (add 1 2) (sub 10 1)`
+	n, _ := New()
+	if bp, _, _, _ := n.CompileCheck(both); bp != nil {
+		t.Errorf("%q: both-computed arms must NOT compile natively", both)
+	}
+	nb, _ := New()
+	gotC, _, errC := nb.RunCompiled(both)
+	nbi, _ := New()
+	gotI, _ := nbi.Run(both)
+	if errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("%q: fallback parity broke: gotC=%v errC=%v gotI=%v", both, gotC, errC, gotI)
+	}
+}
+
 // Roadmap item 6b — a statement-`if` where exactly one arm nets a value and the
 // other nets 0 WITHOUT diverging (`if c [99] []`, `if c [] [99]`,
 // `if c [raise] [99]`) lowers as a VARIADIC (0-or-1) branch result instead of
