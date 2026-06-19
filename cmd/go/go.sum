@@ -96,6 +96,8 @@ github.com/tabnas/debug/go v0.2.0 h1:7NvwsdMdv0h/AS0lqxe1Fj3i+GzC4CDsRCND222YYI8
 github.com/tabnas/debug/go v0.2.0/go.mod h1:ScInhnXqJuXIiVuCCrLiX6R7sMhmviUk3535FJgnoi4=
 github.com/tabnas/directive/go v0.2.0 h1:d9tzwQG2fyJ3W1l4kTHPjWYmqLf9QzRndU+uQOV1icI=
 github.com/tabnas/directive/go v0.2.0/go.mod h1:NCXUWyi24dYonJV0V8MUzCNNb46jaNNKRAah22AzCTc=
+github.com/tabnas/expr/go v0.2.0 h1:cS/t6B8ieRYUYPjyqTXs9ou3gmiRnV31MuAZ81RXiCc=
+github.com/tabnas/expr/go v0.2.0/go.mod h1:aDMV8YKvH8pkilgHVqtFWSrOc/YBfMN3dBOzrY63vDI=
 github.com/tabnas/feed/go v0.2.0 h1:JZ96Oxnz1mVDg67y4Qoh5dYH3TsTsn/HAVjvSnJVn2Q=
 github.com/tabnas/feed/go v0.2.0/go.mod h1:+9drpjAOLnnXNnOp78pvPEa6sVznWvs9oOamAYpB4fQ=
 github.com/tabnas/hoover/go v0.2.0 h1:ImNMaYkH4Vcs6sWfDAJQ59UeOfJ0n3gIFJOt+GEkJTY=

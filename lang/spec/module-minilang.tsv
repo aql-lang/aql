@@ -27,7 +27,7 @@
 "aql:minilang" import end  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  register / kinds — out-of-band exports (not mini-callable)
-"aql:minilang" import end  MiniLang.kinds	[re/q bf/q gex/q]	the registered kind atoms, in registration order
+"aql:minilang" import end  MiniLang.kinds	[re/q bf/q gex/q m/q]	the registered kind atoms, in registration order
 "aql:minilang" import end  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 "aql:minilang" import end  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
 #
@@ -96,3 +96,22 @@ MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:minilang" import end  "axc" +gex/a*?c/	None	`*?` is literal, so a real char does not match it
 "aql:minilang" import end  if ("ax" +gex/a*/) ['Y'] ['N']	'Y'	a matched subject is truthy
 "aql:minilang" import end  if ("bx" +gex/a*/) ['Y'] ['N']	'N'	None is falsy, so a non-match takes the else branch
+#
+# §m  m — traditional maths formula evaluator (tabnas/expr). Variables are
+#     bound by the named params; operators + - * / % ^ (power, right-assoc),
+#     unary +/-, and parens. Numeric coercion follows AQL: all-integer operands
+#     stay Integer (division truncates like `div`), any Float promotes to Float.
+"aql:minilang" import end  mini m 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
+"aql:minilang" import end  mini m 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (AQL coercion)
+"aql:minilang" import end  mini m '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
+"aql:minilang" import end  mini m '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
+"aql:minilang" import end  mini m '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
+"aql:minilang" import end  mini m 'x/y' {x:5 y:2}	2	integer operands → truncating integer division, like `div`
+"aql:minilang" import end  mini m 'x/y' {x:5.0 y:2}	2.5	a Float operand → real division
+"aql:minilang" import end  mini m 'x' {x:42}	42	a bare variable resolves to its param
+"aql:minilang" import end  (MiniLang.lang_m 'x*y-z^2' {x:3 y:4 z:2} end)	8	mini is sugar — the desugared standard call is equivalent
+#
+# §m  negatives
+"aql:minilang" import end  mini m 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
+"aql:minilang" import end  mini m 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
+"aql:minilang" import end  mini m 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error

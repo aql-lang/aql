@@ -47,6 +47,7 @@ require (
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/tabnas/csv/go v0.2.0 // indirect
 	github.com/tabnas/directive/go v0.2.0 // indirect
+	github.com/tabnas/expr/go v0.2.0 // indirect
 	github.com/tabnas/feed/go v0.2.0 // indirect
 	github.com/tabnas/hoover/go v0.2.0 // indirect
 	github.com/tabnas/ini/go v0.2.0 // indirect

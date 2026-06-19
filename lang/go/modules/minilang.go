@@ -156,6 +156,23 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TAny}, nil, subReg))
 
+	// ---- kind: m — traditional maths formula evaluator -----------------
+	// [src opts] → [Number]. Evaluate a formula like `x*y-z^2` (operators
+	// + - * / % ^, unary +/-, parens) whose variables are bound by the
+	// named params (opts). Backed by the tabnas/expr Pratt parser; numeric
+	// coercion follows AQL's integer/float domain rules. See minilang_math.go.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-m",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap},
+			Returns:    []*native.Type{native.TNumber},
+			BarrierPos: -1,
+			Handler:    miniMathHandler,
+		}},
+	})
+	exports.Set("lang_m", wrapMiniFnDef("minilang-m", [][]native.FnParam{stdPrefix},
+		[]*native.Type{native.TNumber}, nil, subReg))
+
 	// ---- out-of-band: register -----------------------------------------
 	// MiniLang.register <name> <fn> installs an AQL function as the
 	// mini-language `lang_<name>`. The fn must carry the standard

@@ -6,6 +6,7 @@ require (
 	github.com/aql-lang/aql/eng/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/tabnas/csv/go v0.2.0
+	github.com/tabnas/expr/go v0.2.0
 	github.com/tabnas/feed/go v0.2.0
 	github.com/tabnas/ini/go v0.2.0
 	github.com/tabnas/json/go v0.2.0

@@ -10,6 +10,11 @@ func init() {
 			"anchored whole-subject match (`*` any run, `?` one char, `**`/`*?` literal `*`/`?`). " +
 			"Returns the stack subject if it matches else None; filters a List to matching " +
 			"elements and a Map to entries whose key matches.",
+		"lang_m": "Traditional maths formula: `mini m '<formula>' {vars}` — evaluate an " +
+			"arithmetic expression (operators + - * / % ^, unary +/-, parens; ^ is " +
+			"right-associative and binds tighter than * /) whose variables are bound by the " +
+			"named params. Numeric coercion follows AQL: all-integer operands stay Integer " +
+			"(division truncates like `div`), any Float promotes to Float. github.com/tabnas/expr/go.",
 		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
 			"Every fn signature must start with the standard prefix [src:String opts:Map …].",
 		"kinds": "List the registered mini-language kind atoms.",
