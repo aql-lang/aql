@@ -11,7 +11,7 @@ import (
 
 func TestParseColumnSpecAtoms(t *testing.T) {
 	cols := NewList([]Value{NewAtom("name"), NewAtom("age")})
-	specs, err := parseColumnSpec(cols)
+	specs, err := parseColumnSpec(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestParseColumnSpecAtoms(t *testing.T) {
 
 func TestParseColumnSpecStrings(t *testing.T) {
 	cols := NewList([]Value{NewString("name")})
-	specs, err := parseColumnSpec(cols)
+	specs, err := parseColumnSpec(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestParseColumnSpecAlias(t *testing.T) {
 	// [name, person_name] alias pair
 	pair := NewList([]Value{NewAtom("name"), NewAtom("person_name")})
 	cols := NewList([]Value{pair})
-	specs, err := parseColumnSpec(cols)
+	specs, err := parseColumnSpec(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestParseColumnSpecAggregate(t *testing.T) {
 	// [count name cnt]
 	agg := NewList([]Value{NewAtom("count"), NewAtom("name"), NewAtom("cnt")})
 	cols := NewList([]Value{agg})
-	specs, err := parseColumnSpec(cols)
+	specs, err := parseColumnSpec(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestParseColumnSpecCountStar(t *testing.T) {
 	// [count * total]
 	agg := NewList([]Value{NewAtom("count"), NewAtom("*"), NewAtom("total")})
 	cols := NewList([]Value{agg})
-	specs, err := parseColumnSpec(cols)
+	specs, err := parseColumnSpec(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestParseColumnSpecCast(t *testing.T) {
 	// [cast age integer age_int]
 	cast := NewList([]Value{NewAtom("cast"), NewAtom("age"), NewAtom("integer"), NewAtom("age_int")})
 	cols := NewList([]Value{cast})
-	specs, err := parseColumnSpec(cols)
+	specs, err := parseColumnSpec(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestParseColumnSpecCastNoAlias(t *testing.T) {
 	// [cast age integer]
 	cast := NewList([]Value{NewAtom("cast"), NewAtom("age"), NewAtom("integer")})
 	cols := NewList([]Value{cast})
-	specs, err := parseColumnSpec(cols)
+	specs, err := parseColumnSpec(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestParseColumnSpecSumAvgMinMax(t *testing.T) {
 	for _, fn := range []string{"sum", "avg", "min", "max"} {
 		agg := NewList([]Value{NewAtom(fn), NewAtom("val")})
 		cols := NewList([]Value{agg})
-		specs, err := parseColumnSpec(cols)
+		specs, err := parseColumnSpec(defaultDialect(), cols)
 		if err != nil {
 			t.Errorf("%s: %v", fn, err)
 			continue
@@ -202,7 +202,7 @@ func TestSqlTypeToAQLType(t *testing.T) {
 // ========================
 
 func TestValueToSQLString(t *testing.T) {
-	got, err := valueToSQL(NewString("hello"))
+	got, err := valueToSQL(defaultDialect(), NewString("hello"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestValueToSQLString(t *testing.T) {
 }
 
 func TestValueToSQLInt(t *testing.T) {
-	got, err := valueToSQL(NewInteger(42))
+	got, err := valueToSQL(defaultDialect(), NewInteger(42))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestValueToSQLInt(t *testing.T) {
 }
 
 func TestValueToSQLBool(t *testing.T) {
-	got, err := valueToSQL(NewBoolean(true))
+	got, err := valueToSQL(defaultDialect(), NewBoolean(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestValueToSQLBool(t *testing.T) {
 }
 
 func TestValueToSQLNone(t *testing.T) {
-	got, err := valueToSQL(Value{Parent: TNone})
+	got, err := valueToSQL(defaultDialect(), Value{Parent: TNone})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestValueToSQLNone(t *testing.T) {
 }
 
 func TestValueToSQLAtom(t *testing.T) {
-	got, err := valueToSQL(NewAtom("foo"))
+	got, err := valueToSQL(defaultDialect(), NewAtom("foo"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestValueToSQLAtom(t *testing.T) {
 }
 
 func TestValueToSQLWord(t *testing.T) {
-	got, err := valueToSQL(NewWord("bar"))
+	got, err := valueToSQL(defaultDialect(), NewWord("bar"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestValueToSQLWord(t *testing.T) {
 }
 
 func TestValueToSQLStringWithQuote(t *testing.T) {
-	got, err := valueToSQL(NewString("it's"))
+	got, err := valueToSQL(defaultDialect(), NewString("it's"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestValueToSQLStringWithQuote(t *testing.T) {
 
 func TestBuildInListValues(t *testing.T) {
 	inList := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
-	got, err := buildInList(inList)
+	got, err := buildInList(defaultDialect(), inList)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func TestBuildInListValues(t *testing.T) {
 }
 
 func TestBuildInListSingleValue(t *testing.T) {
-	got, err := buildInList(NewInteger(42))
+	got, err := buildInList(defaultDialect(), NewInteger(42))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestBuildInListFromTableValues(t *testing.T) {
 	row2.Set("id", NewInteger(20))
 	td := TableData{Record: rec, Rows: []Value{NewMap(row1), NewMap(row2)}}
 
-	got, err := buildInListFromTable(td)
+	got, err := buildInListFromTable(defaultDialect(), td)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestBuildInListFromTableEmpty(t *testing.T) {
 	rec := RecordTypeInfo{Fields: fields}
 	td := TableData{Record: rec, Rows: nil}
 
-	got, err := buildInListFromTable(td)
+	got, err := buildInListFromTable(defaultDialect(), td)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestBuildInListFromTableInWhere(t *testing.T) {
 	td := TableData{Record: rec, Rows: []Value{NewMap(row)}}
 	tdVal := Value{Parent: TList, Data: td}
 
-	got, err := buildInList(tdVal)
+	got, err := buildInList(defaultDialect(), tdVal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +474,7 @@ func TestResolveScalarValueTableData(t *testing.T) {
 
 func TestBuildGroupByClause(t *testing.T) {
 	cols := NewList([]Value{NewAtom("dept"), NewAtom("role")})
-	clause, err := buildGroupByClause(cols)
+	clause, err := buildGroupByClause(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +485,7 @@ func TestBuildGroupByClause(t *testing.T) {
 
 func TestBuildGroupByClauseEmpty(t *testing.T) {
 	cols := NewList([]Value{})
-	_, err := buildGroupByClause(cols)
+	_, err := buildGroupByClause(defaultDialect(), cols)
 	if err == nil {
 		t.Error("expected error for empty group by")
 	}

@@ -39,6 +39,21 @@ type QueryBuilder struct {
 	Joins     []JoinClause
 	Alias     string // table alias for the FROM source
 	SetOps    []SetOp
+	// Dialect selects the SQL flavour used when this builder
+	// materializes. It defaults to the embedded SQLite dialect; an
+	// external connection (a later phase) rebinds it so the query
+	// targets that backend's SQL. Never nil after construction.
+	Dialect Dialect
+}
+
+// dialectOf returns the builder's dialect, falling back to the embedded
+// SQLite default for zero-value builders (e.g. those produced by older
+// call sites or by struct literals that predate the field).
+func (qb *QueryBuilder) dialectOf() Dialect {
+	if qb.Dialect == nil {
+		return defaultDialect()
+	}
+	return qb.Dialect
 }
 
 // NewQueryBuilder creates a QueryBuilder from a table data source.
@@ -49,6 +64,7 @@ func NewQueryBuilder(r *Registry, td TableData) QueryBuilder {
 		Registry:  r,
 		Limit:     -1,
 		Offset:    -1,
+		Dialect:   defaultDialect(),
 	}
 }
 
@@ -61,11 +77,13 @@ func newSelectBuilder(r *Registry, cols []columnSpec) QueryBuilder {
 		Registry: r,
 		Limit:    -1,
 		Offset:   -1,
+		Dialect:  defaultDialect(),
 	}
 }
 
 // buildSQL constructs the full SQL query string.
 func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
+	d := qb.dialectOf()
 	var buf strings.Builder
 	buf.WriteString("SELECT ")
 	if qb.Distinct {
@@ -73,19 +91,19 @@ func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
 	}
 	buf.WriteString(colSQL)
 	buf.WriteString(" FROM ")
-	buf.WriteString(quoteIdent(tableName))
+	buf.WriteString(d.QuoteIdent(tableName))
 	if qb.Alias != "" {
 		buf.WriteString(" AS ")
-		buf.WriteString(quoteIdent(qb.Alias))
+		buf.WriteString(d.QuoteIdent(qb.Alias))
 	}
 	for _, j := range qb.Joins {
 		buf.WriteString(" ")
 		buf.WriteString(j.Type)
 		buf.WriteString(" ")
-		buf.WriteString(quoteIdent(j.Table))
+		buf.WriteString(d.QuoteIdent(j.Table))
 		if j.Alias != "" {
 			buf.WriteString(" AS ")
-			buf.WriteString(quoteIdent(j.Alias))
+			buf.WriteString(d.QuoteIdent(j.Alias))
 		}
 		if j.On != "" {
 			buf.WriteString(" ON ")
@@ -129,16 +147,9 @@ func (qb *QueryBuilder) buildSQL(tableName string, colSQL string) string {
 		buf.WriteString(" ORDER BY ")
 		buf.WriteString(qb.OrderBy)
 	}
-	if qb.Limit >= 0 {
-		fmt.Fprintf(&buf, " LIMIT %d", qb.Limit)
-	} else if qb.Offset >= 0 {
-		// SQLite has no bare OFFSET clause — an offset without a limit
-		// must ride on the unlimited LIMIT -1.
-		buf.WriteString(" LIMIT -1")
-	}
-	if qb.Offset >= 0 {
-		fmt.Fprintf(&buf, " OFFSET %d", qb.Offset)
-	}
+	// LIMIT/OFFSET rendering is dialect-specific (SQLite's bare-offset
+	// "LIMIT -1" quirk, SQL Server's OFFSET..FETCH requiring ORDER BY).
+	buf.WriteString(d.LimitOffset(qb.Limit, qb.Offset, qb.OrderBy != ""))
 	return buf.String()
 }
 
@@ -286,6 +297,7 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		defer HostSQLite(qb.Registry).DropTable(t)
 	}
 
+	d := qb.dialectOf()
 	var colSQL string
 	if cols == nil {
 		colSQL = "*"
@@ -295,14 +307,14 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 			if c.Raw != "" {
 				// Raw SQL expression (aggregate, cast, etc.)
 				if c.Alias != "" {
-					parts[i] = c.Raw + " AS " + quoteIdent(c.Alias)
+					parts[i] = c.Raw + " AS " + d.QuoteIdent(c.Alias)
 				} else {
 					parts[i] = c.Raw
 				}
 			} else if c.Alias != "" {
-				parts[i] = quoteIdent(c.Name) + " AS " + quoteIdent(c.Alias)
+				parts[i] = d.QuoteIdent(c.Name) + " AS " + d.QuoteIdent(c.Alias)
 			} else {
-				parts[i] = quoteIdent(c.Name)
+				parts[i] = d.QuoteIdent(c.Name)
 			}
 		}
 		colSQL = strings.Join(parts, ", ")
@@ -556,7 +568,7 @@ type columnSpec struct {
 //   - [[count * total]]          — COUNT(*) AS "total"
 //   - [[cast age integer]]       — CAST("age" AS INTEGER)
 //   - [[cast age integer a]]     — CAST("age" AS INTEGER) AS "a"
-func parseColumnSpec(colList Value) ([]columnSpec, error) {
+func parseColumnSpec(d Dialect, colList Value) ([]columnSpec, error) {
 	_lst, _ := AsList(colList)
 	elems := _lst.Slice()
 	cols := make([]columnSpec, 0, len(elems))
@@ -585,7 +597,7 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 
 			// Check for cast: [cast col type] or [cast col type alias]
 			if firstName == "cast" {
-				spec, err := parseCastSpec(pair)
+				spec, err := parseCastSpec(d, pair)
 				if err != nil {
 					return nil, err
 				}
@@ -595,7 +607,7 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 
 			// Check for aggregate: [count col alias] or [sum col alias] etc.
 			if aggregateFuncs[firstName] {
-				spec, err := parseAggregateSpec(firstName, pair[1:])
+				spec, err := parseAggregateSpec(d, firstName, pair[1:])
 				if err != nil {
 					return nil, err
 				}
@@ -609,7 +621,7 @@ func parseColumnSpec(colList Value) ([]columnSpec, error) {
 				if err != nil {
 					return nil, fmt.Errorf("select scalar subquery: %w", err)
 				}
-				sqlVal, err := valueToSQL(scalar)
+				sqlVal, err := valueToSQL(d, scalar)
 				if err != nil {
 					return nil, fmt.Errorf("select scalar subquery: %w", err)
 				}
@@ -659,7 +671,7 @@ func nameFromValue(v Value) string {
 // parseAggregateSpec parses the arguments after the aggregate function name.
 // remaining is the elements after the function name, e.g., for [count name cnt]
 // remaining = [name, cnt].
-func parseAggregateSpec(fnName string, remaining []Value) (columnSpec, error) {
+func parseAggregateSpec(d Dialect, fnName string, remaining []Value) (columnSpec, error) {
 	if len(remaining) == 0 || len(remaining) > 2 {
 		return columnSpec{}, fmt.Errorf("%s: expected [%s col] or [%s col alias]", fnName, fnName, fnName)
 	}
@@ -674,7 +686,7 @@ func parseAggregateSpec(fnName string, remaining []Value) (columnSpec, error) {
 	if col == "*" {
 		raw = fn + "(*)"
 	} else {
-		raw = fn + "(" + quoteIdent(col) + ")"
+		raw = fn + "(" + d.QuoteIdent(col) + ")"
 	}
 
 	alias := strings.ToLower(fn) + "_" + col
@@ -690,7 +702,7 @@ func parseAggregateSpec(fnName string, remaining []Value) (columnSpec, error) {
 }
 
 // parseCastSpec parses [cast col type] or [cast col type alias] into a columnSpec.
-func parseCastSpec(elems []Value) (columnSpec, error) {
+func parseCastSpec(d Dialect, elems []Value) (columnSpec, error) {
 	if len(elems) < 3 || len(elems) > 4 {
 		return columnSpec{}, fmt.Errorf("cast: expected [cast column type] or [cast column type alias]")
 	}
@@ -700,8 +712,8 @@ func parseCastSpec(elems []Value) (columnSpec, error) {
 		return columnSpec{}, fmt.Errorf("cast: column and type must be atoms or strings")
 	}
 
-	sqlType := aqlTypenameToSQLType(typeName)
-	raw := "CAST(" + quoteIdent(col) + " AS " + sqlType + ")"
+	sqlType := d.AQLTypenameToColumnType(typeName)
+	raw := "CAST(" + d.QuoteIdent(col) + " AS " + sqlType + ")"
 
 	alias := col
 	if len(elems) == 4 {
@@ -711,7 +723,7 @@ func parseCastSpec(elems []Value) (columnSpec, error) {
 	return columnSpec{
 		Raw:        raw,
 		Alias:      alias,
-		ResultType: sqlTypeToAQLType(sqlType),
+		ResultType: d.ColumnTypeToAQLType(sqlType),
 	}, nil
 }
 
@@ -813,7 +825,7 @@ var logicalOps = map[string]string{
 //	[column in (select [col] from table)]      — IN (subquery result)
 //	[column not in [v1 v2 v3]]                 — NOT IN (v1, v2, v3)
 //	[... and/or ...]                           — logical connectives
-func buildWhereClause(condList Value) (string, error) {
+func buildWhereClause(d Dialect, condList Value) (string, error) {
 	_lst, _ := AsList(condList)
 	elems := _lst.Slice()
 	if len(elems) == 0 {
@@ -834,7 +846,7 @@ func buildWhereClause(condList Value) (string, error) {
 			}
 			// If followed by a sub-list, negate the whole group.
 			if elems[i].Parent.Equal(TList) {
-				inner, err := buildWhereClause(elems[i])
+				inner, err := buildWhereClause(d, elems[i])
 				if err != nil {
 					return "", err
 				}
@@ -853,7 +865,7 @@ func buildWhereClause(condList Value) (string, error) {
 			// Otherwise, NOT applies to the next single condition.
 			// Collect tokens for the single condition: col op val
 			// (or col not in [...], col is null, etc.)
-			singleCond, consumed, err := parseSingleCondition(elems, i)
+			singleCond, consumed, err := parseSingleCondition(d, elems, i)
 			if err != nil {
 				return "", err
 			}
@@ -873,7 +885,7 @@ func buildWhereClause(condList Value) (string, error) {
 		// --- Sub-list (parenthesized group) ---
 		// [[col op val or col op val] and ...]  → (...) AND ...
 		if elems[i].Parent.Equal(TList) {
-			inner, err := buildWhereClause(elems[i])
+			inner, err := buildWhereClause(d, elems[i])
 			if err != nil {
 				return "", err
 			}
@@ -891,7 +903,7 @@ func buildWhereClause(condList Value) (string, error) {
 		}
 
 		// --- Standard condition ---
-		singleCond, consumed, err := parseSingleCondition(elems, i)
+		singleCond, consumed, err := parseSingleCondition(d, elems, i)
 		if err != nil {
 			return "", err
 		}
@@ -914,7 +926,7 @@ func buildWhereClause(condList Value) (string, error) {
 
 // parseSingleCondition parses one condition starting at elems[start].
 // Returns the SQL string and the new index after the condition.
-func parseSingleCondition(elems []Value, start int) (string, int, error) {
+func parseSingleCondition(d Dialect, elems []Value, start int) (string, int, error) {
 	i := start
 	col := valueToColName(elems[i])
 	if col == "" {
@@ -938,7 +950,7 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 		next := valueToColName(elems[i])
 		if next == "null" {
 			i++
-			return fmt.Sprintf("%s IS NULL", quoteIdent(col)), i, nil
+			return fmt.Sprintf("%s IS NULL", d.QuoteIdent(col)), i, nil
 		} else if next == "not" {
 			i++
 			if i >= len(elems) {
@@ -949,7 +961,7 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 				return "", i, fmt.Errorf("expected null after is not, got %q", nn)
 			}
 			i++
-			return fmt.Sprintf("%s IS NOT NULL", quoteIdent(col)), i, nil
+			return fmt.Sprintf("%s IS NOT NULL", d.QuoteIdent(col)), i, nil
 		} else {
 			return "", i, fmt.Errorf("expected null or not after is, got %q", next)
 		}
@@ -960,17 +972,17 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 		if i+1 >= len(elems) {
 			return "", i, fmt.Errorf("between requires two values")
 		}
-		lo, err := valueToSQL(elems[i])
+		lo, err := valueToSQL(d, elems[i])
 		if err != nil {
 			return "", i, err
 		}
 		i++
-		hi, err := valueToSQL(elems[i])
+		hi, err := valueToSQL(d, elems[i])
 		if err != nil {
 			return "", i, err
 		}
 		i++
-		return fmt.Sprintf("%s BETWEEN %s AND %s", quoteIdent(col), lo, hi), i, nil
+		return fmt.Sprintf("%s BETWEEN %s AND %s", d.QuoteIdent(col), lo, hi), i, nil
 
 	case "in":
 		// in [v1 v2 v3]
@@ -978,12 +990,12 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 		if i >= len(elems) {
 			return "", i, fmt.Errorf("in requires a value list")
 		}
-		inSQL, err := buildInList(elems[i])
+		inSQL, err := buildInList(d, elems[i])
 		if err != nil {
 			return "", i, err
 		}
 		i++
-		return fmt.Sprintf("%s IN (%s)", quoteIdent(col), inSQL), i, nil
+		return fmt.Sprintf("%s IN (%s)", d.QuoteIdent(col), inSQL), i, nil
 
 	case "not":
 		// not between / not in
@@ -998,28 +1010,28 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 			if i+1 >= len(elems) {
 				return "", i, fmt.Errorf("not between requires two values")
 			}
-			lo, err := valueToSQL(elems[i])
+			lo, err := valueToSQL(d, elems[i])
 			if err != nil {
 				return "", i, err
 			}
 			i++
-			hi, err := valueToSQL(elems[i])
+			hi, err := valueToSQL(d, elems[i])
 			if err != nil {
 				return "", i, err
 			}
 			i++
-			return fmt.Sprintf("%s NOT BETWEEN %s AND %s", quoteIdent(col), lo, hi), i, nil
+			return fmt.Sprintf("%s NOT BETWEEN %s AND %s", d.QuoteIdent(col), lo, hi), i, nil
 		case "in":
 			i++
 			if i >= len(elems) {
 				return "", i, fmt.Errorf("not in requires a value list")
 			}
-			inSQL, err := buildInList(elems[i])
+			inSQL, err := buildInList(d, elems[i])
 			if err != nil {
 				return "", i, err
 			}
 			i++
-			return fmt.Sprintf("%s NOT IN (%s)", quoteIdent(col), inSQL), i, nil
+			return fmt.Sprintf("%s NOT IN (%s)", d.QuoteIdent(col), inSQL), i, nil
 		default:
 			return "", i, fmt.Errorf("expected between or in after not, got %q", next)
 		}
@@ -1029,6 +1041,15 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 		sqlOp, ok := comparisonOps[opName]
 		if !ok {
 			return "", i, fmt.Errorf("unknown comparison operator %q", opName)
+		}
+		// Reject operators the target dialect cannot express rather
+		// than emitting SQL it will reject.
+		caps := d.Caps()
+		if opName == "glob" && !caps.Glob {
+			return "", i, fmt.Errorf("operator %q not supported by %s dialect", opName, d.Name())
+		}
+		if opName == "regexp" && !caps.Regexp {
+			return "", i, fmt.Errorf("operator %q not supported by %s dialect", opName, d.Name())
 		}
 		i++
 		if i >= len(elems) {
@@ -1040,7 +1061,7 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 		if err != nil {
 			return "", i, fmt.Errorf("where scalar subquery: %w", err)
 		}
-		sqlVal, err := valueToSQL(val)
+		sqlVal, err := valueToSQL(d, val)
 		if err != nil {
 			return "", i, err
 		}
@@ -1056,26 +1077,25 @@ func parseSingleCondition(elems []Value, start int) (string, int, error) {
 					return "", i, fmt.Errorf("collate must be followed by nocase, binary, or rtrim")
 				}
 				cname := strings.ToLower(valueToColName(elems[i]))
-				switch cname {
-				case "nocase", "binary", "rtrim":
-					collateSuffix = " COLLATE " + strings.ToUpper(cname)
-					i++
-				default:
-					return "", i, fmt.Errorf("collate must be followed by nocase, binary, or rtrim, got %q", cname)
+				collSQL, ok := caps.Collations[cname]
+				if !ok {
+					return "", i, fmt.Errorf("collation %q not supported by %s dialect", cname, d.Name())
 				}
+				collateSuffix = " COLLATE " + collSQL
+				i++
 			}
 		}
 
-		return fmt.Sprintf("%s %s %s%s", quoteIdent(col), sqlOp, sqlVal, collateSuffix), i, nil
+		return fmt.Sprintf("%s %s %s%s", d.QuoteIdent(col), sqlOp, sqlVal, collateSuffix), i, nil
 	}
 }
 
 // buildInList converts a list value to a comma-separated SQL value list.
 // If the value is a table result (from a subquery), extracts the first column values.
-func buildInList(v Value) (string, error) {
+func buildInList(d Dialect, v Value) (string, error) {
 	if !v.Parent.Equal(TList) {
 		// Single value
-		sql, err := valueToSQL(v)
+		sql, err := valueToSQL(d, v)
 		if err != nil {
 			return "", err
 		}
@@ -1084,14 +1104,14 @@ func buildInList(v Value) (string, error) {
 
 	// Check for subquery result: TableData or QueryBuilder.
 	if td, ok := v.Data.(TableData); ok {
-		return buildInListFromTable(td)
+		return buildInListFromTable(d, td)
 	}
 	if qb, ok := unwrapQB(v); ok {
 		td, err := qb.Materialize()
 		if err != nil {
 			return "", fmt.Errorf("in subquery: %w", err)
 		}
-		return buildInListFromTable(td)
+		return buildInListFromTable(d, td)
 	}
 
 	_lst, _ := AsList(v)
@@ -1101,7 +1121,7 @@ func buildInList(v Value) (string, error) {
 	}
 	parts := make([]string, len(elems))
 	for i, e := range elems {
-		sql, err := valueToSQL(e)
+		sql, err := valueToSQL(d, e)
 		if err != nil {
 			return "", err
 		}
@@ -1112,7 +1132,7 @@ func buildInList(v Value) (string, error) {
 
 // buildInListFromTable extracts the first column values from a TableData
 // and returns them as a comma-separated SQL value list for use in IN clauses.
-func buildInListFromTable(td TableData) (string, error) {
+func buildInListFromTable(d Dialect, td TableData) (string, error) {
 	cols := td.Record.Fields.Keys()
 	if len(cols) == 0 {
 		return "", fmt.Errorf("in subquery: result has no columns")
@@ -1131,7 +1151,7 @@ func buildInListFromTable(td TableData) (string, error) {
 		if !ok {
 			continue
 		}
-		sql, err := valueToSQL(val)
+		sql, err := valueToSQL(d, val)
 		if err != nil {
 			return "", fmt.Errorf("in subquery value: %w", err)
 		}
@@ -1191,8 +1211,10 @@ func resolveScalarValue(v Value) (Value, error) {
 	return v, nil
 }
 
-// valueToSQL converts a Value to a SQL literal string.
-func valueToSQL(v Value) (string, error) {
+// valueToSQL converts a Value to a SQL literal string for the given
+// dialect. Most literals are dialect-agnostic; the boolean
+// representation is delegated to the dialect.
+func valueToSQL(d Dialect, v Value) (string, error) {
 	switch {
 	case v.Parent.ConformsTo(TString):
 		_as23, _ := AsString(v)
@@ -1202,10 +1224,7 @@ func valueToSQL(v Value) (string, error) {
 		return fmt.Sprintf("%d", _as24), nil
 	case v.Parent.ConformsTo(TBoolean):
 		_as25, _ := AsBoolean(v)
-		if _as25 {
-			return "'true'", nil
-		}
-		return "'false'", nil
+		return d.BooleanLiteral(_as25), nil
 	case v.Parent.Equal(TAtom):
 		_as26, _ := AsAtom(v)
 		return "'" + strings.ReplaceAll(_as26, "'", "''") + "'", nil
@@ -1220,7 +1239,7 @@ func valueToSQL(v Value) (string, error) {
 }
 
 // buildGroupByClause translates a column list into a SQL GROUP BY clause.
-func buildGroupByClause(colList Value) (string, error) {
+func buildGroupByClause(d Dialect, colList Value) (string, error) {
 	_lst, _ := AsList(colList)
 	elems := _lst.Slice()
 	if len(elems) == 0 {
@@ -1232,14 +1251,14 @@ func buildGroupByClause(colList Value) (string, error) {
 		if name == "" {
 			return "", fmt.Errorf("groupby: expected column name, got %s", e.Parent)
 		}
-		parts = append(parts, quoteIdent(name))
+		parts = append(parts, d.QuoteIdent(name))
 	}
 	return strings.Join(parts, ", "), nil
 }
 
 // buildJoinCondition translates a condition list into a SQL ON clause.
 // Supports dot-separated qualified names: [a.id eq b.id]
-func buildJoinCondition(condList Value) (string, error) {
+func buildJoinCondition(d Dialect, condList Value) (string, error) {
 	_lst, _ := AsList(condList)
 	elems := _lst.Slice()
 	if len(elems) == 0 {
@@ -1276,7 +1295,7 @@ func buildJoinCondition(condList Value) (string, error) {
 		}
 		i++
 
-		parts = append(parts, fmt.Sprintf("%s %s %s", quoteJoinCol(lhs), sqlOp, quoteJoinCol(rhs)))
+		parts = append(parts, fmt.Sprintf("%s %s %s", quoteJoinCol(d, lhs), sqlOp, quoteJoinCol(d, rhs)))
 
 		// Check for logical connector.
 		if i < len(elems) {
@@ -1293,11 +1312,11 @@ func buildJoinCondition(condList Value) (string, error) {
 }
 
 // quoteJoinCol quotes a column reference that may be dot-qualified (table.col).
-func quoteJoinCol(name string) string {
+func quoteJoinCol(d Dialect, name string) string {
 	if idx := strings.IndexByte(name, '.'); idx >= 0 {
-		return quoteIdent(name[:idx]) + "." + quoteIdent(name[idx+1:])
+		return d.QuoteIdent(name[:idx]) + "." + d.QuoteIdent(name[idx+1:])
 	}
-	return quoteIdent(name)
+	return d.QuoteIdent(name)
 }
 
 // buildOrderClause translates a column list into a SQL ORDER BY clause.
@@ -1306,7 +1325,7 @@ func quoteJoinCol(name string) string {
 //   - [col1 asc, col2 desc]          — with direction
 //   - [col1 asc nulls first]         — with nulls placement
 //   - [1, 2 desc]                    — positional (1-based)
-func buildOrderClause(colList Value) (string, error) {
+func buildOrderClause(d Dialect, colList Value) (string, error) {
 	_lst, _ := AsList(colList)
 	elems := _lst.Slice()
 	if len(elems) == 0 {
@@ -1332,11 +1351,7 @@ func buildOrderClause(colList Value) (string, error) {
 		}
 	}
 
-	collations := map[string]string{
-		"nocase": "NOCASE",
-		"binary": "BINARY",
-		"rtrim":  "RTRIM",
-	}
+	collations := d.Caps().Collations
 
 	var parts []string
 	i := 0
@@ -1378,14 +1393,14 @@ func buildOrderClause(colList Value) (string, error) {
 				next := strings.ToLower(valueToColName(elems[i]))
 				colSQL, ok := collations[next]
 				if !ok {
-					return "", fmt.Errorf("collate must be followed by nocase, binary, or rtrim, got %q", next)
+					return "", fmt.Errorf("collation %q not supported by %s dialect", next, d.Name())
 				}
 				parts[len(parts)-1] += " " + sql + " " + colSQL
 			} else {
 				parts[len(parts)-1] += " " + sql
 			}
 		} else {
-			parts = append(parts, quoteIdent(name))
+			parts = append(parts, d.QuoteIdent(name))
 		}
 		i++
 	}

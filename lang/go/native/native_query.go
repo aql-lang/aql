@@ -217,15 +217,15 @@ func fromValueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 // queryWhereHandler sets the WHERE clause. args[0] is the condition list
 // (forward), args[1] is the upstream builder (stack).
 func queryWhereHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	qb, err := toQueryBuilder(r, args[1])
+	if err != nil {
+		return nil, fmt.Errorf("where: %w", err)
+	}
 	condList, err := resolveParenSubExprs(r, args[0])
 	if err != nil {
 		return nil, fmt.Errorf("where: %w", err)
 	}
-	clause, err := buildWhereClause(condList)
-	if err != nil {
-		return nil, fmt.Errorf("where: %w", err)
-	}
-	qb, err := toQueryBuilder(r, args[1])
+	clause, err := buildWhereClause(qb.dialectOf(), condList)
 	if err != nil {
 		return nil, fmt.Errorf("where: %w", err)
 	}
@@ -243,7 +243,7 @@ func selectColsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, fmt.Errorf("select: %w", err)
 	}
-	cols, err := parseColumnSpec(colList)
+	cols, err := parseColumnSpec(defaultDialect(), colList)
 	if err != nil {
 		return nil, err
 	}
@@ -256,11 +256,11 @@ func selectColsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 
 // queryOrderHandler sets the ORDER BY clause.
 func queryOrderHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	clause, err := buildOrderClause(args[0])
+	qb, err := toQueryBuilder(r, args[1])
 	if err != nil {
 		return nil, fmt.Errorf("order: %w", err)
 	}
-	qb, err := toQueryBuilder(r, args[1])
+	clause, err := buildOrderClause(qb.dialectOf(), args[0])
 	if err != nil {
 		return nil, fmt.Errorf("order: %w", err)
 	}
@@ -270,11 +270,11 @@ func queryOrderHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 
 // queryGroupHandler sets the GROUP BY clause.
 func queryGroupHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	clause, err := buildGroupByClause(args[0])
+	qb, err := toQueryBuilder(r, args[1])
 	if err != nil {
 		return nil, fmt.Errorf("group: %w", err)
 	}
-	qb, err := toQueryBuilder(r, args[1])
+	clause, err := buildGroupByClause(qb.dialectOf(), args[0])
 	if err != nil {
 		return nil, fmt.Errorf("group: %w", err)
 	}
@@ -285,15 +285,15 @@ func queryGroupHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 // queryHavingHandler sets the HAVING clause. It shares the WHERE-clause
 // builder since HAVING uses the same condition grammar.
 func queryHavingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	qb, err := toQueryBuilder(r, args[1])
+	if err != nil {
+		return nil, fmt.Errorf("having: %w", err)
+	}
 	condList, err := resolveParenSubExprs(r, args[0])
 	if err != nil {
 		return nil, fmt.Errorf("having: %w", err)
 	}
-	clause, err := buildWhereClause(condList)
-	if err != nil {
-		return nil, fmt.Errorf("having: %w", err)
-	}
-	qb, err := toQueryBuilder(r, args[1])
+	clause, err := buildWhereClause(qb.dialectOf(), condList)
 	if err != nil {
 		return nil, fmt.Errorf("having: %w", err)
 	}
@@ -372,11 +372,11 @@ func queryJoinNative(name, joinType string) NativeFunc {
 
 // queryOnHandler sets the ON condition of the most recent join.
 func queryOnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	clause, err := buildJoinCondition(args[0])
+	qb, err := toQueryBuilder(r, args[1])
 	if err != nil {
 		return nil, fmt.Errorf("on: %w", err)
 	}
-	qb, err := toQueryBuilder(r, args[1])
+	clause, err := buildJoinCondition(qb.dialectOf(), args[0])
 	if err != nil {
 		return nil, fmt.Errorf("on: %w", err)
 	}
@@ -389,10 +389,15 @@ func queryOnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 
 // queryUsingHandler sets the USING columns of the most recent join.
 func queryUsingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	qb, err := toQueryBuilder(r, args[1])
+	if err != nil {
+		return nil, fmt.Errorf("using: %w", err)
+	}
 	lst, err := AsList(args[0])
 	if err != nil {
 		return nil, fmt.Errorf("using: %w", err)
 	}
+	d := qb.dialectOf()
 	elems := lst.Slice()
 	cols := make([]string, 0, len(elems))
 	for _, e := range elems {
@@ -400,11 +405,7 @@ func queryUsingHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		if colName == "" {
 			return nil, fmt.Errorf("using: expected column name, got %s", e.Parent)
 		}
-		cols = append(cols, quoteIdent(colName))
-	}
-	qb, err := toQueryBuilder(r, args[1])
-	if err != nil {
-		return nil, fmt.Errorf("using: %w", err)
+		cols = append(cols, d.QuoteIdent(colName))
 	}
 	if len(qb.Joins) == 0 {
 		return nil, fmt.Errorf("using: no preceding join")

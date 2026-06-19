@@ -942,7 +942,7 @@ func TestNewRegistryHasStore(t *testing.T) {
 
 func TestBuildWhereClauseEmpty(t *testing.T) {
 	cond := NewList([]Value{})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +953,7 @@ func TestBuildWhereClauseEmpty(t *testing.T) {
 
 func TestBuildWhereClauseSimpleEq(t *testing.T) {
 	cond := NewList([]Value{NewAtom("name"), NewAtom("eq"), NewString("alice")})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -976,7 +976,7 @@ func TestBuildWhereClauseLtGteLteNeq(t *testing.T) {
 	}
 	for _, tt := range tests {
 		cond := NewList([]Value{NewAtom("age"), NewAtom(tt.op), NewInteger(25)})
-		clause, err := buildWhereClause(cond)
+		clause, err := buildWhereClause(defaultDialect(), cond)
 		if err != nil {
 			t.Errorf("op %s: %v", tt.op, err)
 			continue
@@ -989,7 +989,7 @@ func TestBuildWhereClauseLtGteLteNeq(t *testing.T) {
 
 func TestBuildWhereClauseIsNull(t *testing.T) {
 	cond := NewList([]Value{NewAtom("name"), NewAtom("is"), NewAtom("null")})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1000,7 +1000,7 @@ func TestBuildWhereClauseIsNull(t *testing.T) {
 
 func TestBuildWhereClauseIsNotNull(t *testing.T) {
 	cond := NewList([]Value{NewAtom("name"), NewAtom("is"), NewAtom("not"), NewAtom("null")})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1011,7 +1011,7 @@ func TestBuildWhereClauseIsNotNull(t *testing.T) {
 
 func TestBuildWhereClauseBetween(t *testing.T) {
 	cond := NewList([]Value{NewAtom("age"), NewAtom("between"), NewInteger(20), NewInteger(30)})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1023,7 +1023,7 @@ func TestBuildWhereClauseBetween(t *testing.T) {
 func TestBuildWhereClauseIn(t *testing.T) {
 	inList := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
 	cond := NewList([]Value{NewAtom("id"), NewAtom("in"), inList})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1035,7 +1035,7 @@ func TestBuildWhereClauseIn(t *testing.T) {
 func TestBuildWhereClauseNotIn(t *testing.T) {
 	inList := NewList([]Value{NewInteger(1), NewInteger(2)})
 	cond := NewList([]Value{NewAtom("id"), NewAtom("not"), NewAtom("in"), inList})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1046,7 +1046,7 @@ func TestBuildWhereClauseNotIn(t *testing.T) {
 
 func TestBuildWhereClauseNotBetween(t *testing.T) {
 	cond := NewList([]Value{NewAtom("age"), NewAtom("not"), NewAtom("between"), NewInteger(20), NewInteger(30)})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1061,7 +1061,7 @@ func TestBuildWhereClauseAndOr(t *testing.T) {
 		NewAtom("and"),
 		NewAtom("name"), NewAtom("eq"), NewString("alice"),
 	})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1074,7 +1074,7 @@ func TestBuildWhereClauseCollate(t *testing.T) {
 	cond := NewList([]Value{
 		NewAtom("name"), NewAtom("eq"), NewString("alice"), NewAtom("collate"), NewAtom("nocase"),
 	})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1087,7 +1087,7 @@ func TestBuildWhereClauseNotPrefix(t *testing.T) {
 	// not [sub-condition]
 	sub := NewList([]Value{NewAtom("age"), NewAtom("gt"), NewInteger(20)})
 	cond := NewList([]Value{NewAtom("not"), sub})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1100,7 +1100,7 @@ func TestBuildWhereClauseSubgroup(t *testing.T) {
 	// [[age gt 20] and name eq "alice"]
 	sub := NewList([]Value{NewAtom("age"), NewAtom("gt"), NewInteger(20)})
 	cond := NewList([]Value{sub, NewAtom("and"), NewAtom("name"), NewAtom("eq"), NewString("alice")})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1112,7 +1112,7 @@ func TestBuildWhereClauseSubgroup(t *testing.T) {
 func TestBuildWhereClauseValueBoolNone(t *testing.T) {
 	// Test boolean and none in WHERE value
 	cond := NewList([]Value{NewAtom("active"), NewAtom("eq"), NewBoolean(true)})
-	clause, err := buildWhereClause(cond)
+	clause, err := buildWhereClause(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1127,7 +1127,7 @@ func TestBuildWhereClauseValueBoolNone(t *testing.T) {
 
 func TestBuildJoinConditionSimple(t *testing.T) {
 	cond := NewList([]Value{NewAtom("id"), NewAtom("eq"), NewAtom("dept_id")})
-	clause, err := buildJoinCondition(cond)
+	clause, err := buildJoinCondition(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1138,7 +1138,7 @@ func TestBuildJoinConditionSimple(t *testing.T) {
 
 func TestBuildJoinConditionDotQualified(t *testing.T) {
 	cond := NewList([]Value{NewString("a.id"), NewAtom("eq"), NewString("b.id")})
-	clause, err := buildJoinCondition(cond)
+	clause, err := buildJoinCondition(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1154,7 +1154,7 @@ func TestBuildJoinConditionMultipleWithAnd(t *testing.T) {
 		NewAtom("and"),
 		NewAtom("type"), NewAtom("eq"), NewAtom("kind"),
 	})
-	clause, err := buildJoinCondition(cond)
+	clause, err := buildJoinCondition(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1165,7 +1165,7 @@ func TestBuildJoinConditionMultipleWithAnd(t *testing.T) {
 
 func TestBuildJoinConditionEmpty(t *testing.T) {
 	cond := NewList([]Value{})
-	clause, err := buildJoinCondition(cond)
+	clause, err := buildJoinCondition(defaultDialect(), cond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1176,11 +1176,11 @@ func TestBuildJoinConditionEmpty(t *testing.T) {
 
 func TestQuoteJoinCol(t *testing.T) {
 	// Simple name
-	if got := quoteJoinCol("name"); !strings.Contains(got, "name") {
+	if got := quoteJoinCol(defaultDialect(), "name"); !strings.Contains(got, "name") {
 		t.Errorf("expected 'name' in result, got %q", got)
 	}
 	// Dot-qualified
-	got := quoteJoinCol("people.id")
+	got := quoteJoinCol(defaultDialect(), "people.id")
 	if !strings.Contains(got, ".") {
 		t.Errorf("expected dot in result, got %q", got)
 	}
@@ -1192,7 +1192,7 @@ func TestQuoteJoinCol(t *testing.T) {
 
 func TestBuildOrderClauseSimple(t *testing.T) {
 	cols := NewList([]Value{NewAtom("name")})
-	clause, err := buildOrderClause(cols)
+	clause, err := buildOrderClause(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1203,7 +1203,7 @@ func TestBuildOrderClauseSimple(t *testing.T) {
 
 func TestBuildOrderClauseDesc(t *testing.T) {
 	cols := NewList([]Value{NewAtom("age"), NewAtom("desc")})
-	clause, err := buildOrderClause(cols)
+	clause, err := buildOrderClause(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1214,7 +1214,7 @@ func TestBuildOrderClauseDesc(t *testing.T) {
 
 func TestBuildOrderClauseNullsFirst(t *testing.T) {
 	cols := NewList([]Value{NewAtom("score"), NewAtom("asc"), NewAtom("nulls"), NewAtom("first")})
-	clause, err := buildOrderClause(cols)
+	clause, err := buildOrderClause(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1225,7 +1225,7 @@ func TestBuildOrderClauseNullsFirst(t *testing.T) {
 
 func TestBuildOrderClauseCollateNocase(t *testing.T) {
 	cols := NewList([]Value{NewAtom("name"), NewAtom("collate"), NewAtom("nocase"), NewAtom("asc")})
-	clause, err := buildOrderClause(cols)
+	clause, err := buildOrderClause(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1236,7 +1236,7 @@ func TestBuildOrderClauseCollateNocase(t *testing.T) {
 
 func TestBuildOrderClausePositional(t *testing.T) {
 	cols := NewList([]Value{NewInteger(1), NewInteger(2)})
-	clause, err := buildOrderClause(cols)
+	clause, err := buildOrderClause(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1247,7 +1247,7 @@ func TestBuildOrderClausePositional(t *testing.T) {
 
 func TestBuildOrderClauseMultiple(t *testing.T) {
 	cols := NewList([]Value{NewAtom("city"), NewAtom("asc"), NewAtom("name"), NewAtom("desc")})
-	clause, err := buildOrderClause(cols)
+	clause, err := buildOrderClause(defaultDialect(), cols)
 	if err != nil {
 		t.Fatal(err)
 	}
