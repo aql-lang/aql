@@ -21,3 +21,25 @@ func joinQuoted(names []string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// firstColumnStrings returns the first column of every row in td as a
+// string slice. Used by ListTables-style introspection queries that
+// project a single name column.
+func firstColumnStrings(td TableData) []string {
+	cols := td.Record.Fields.Keys()
+	if len(cols) == 0 {
+		return nil
+	}
+	first := cols[0]
+	out := make([]string, 0, len(td.Rows))
+	for _, row := range td.Rows {
+		m, err := AsMap(row)
+		if err != nil {
+			continue
+		}
+		if v, ok := m.Get(first); ok {
+			out = append(out, ValToString(v))
+		}
+	}
+	return out
+}

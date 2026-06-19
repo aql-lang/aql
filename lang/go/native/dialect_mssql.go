@@ -87,3 +87,13 @@ func (MSSQLDialect) ComparisonOperator(name string) (string, bool) {
 // Caps: SQL Server COLLATE names (SQL_Latin1_General_*) do not map to
 // SQLite's nocase/binary/rtrim.
 func (MSSQLDialect) Caps() DialectCaps { return DialectCaps{} }
+
+func (MSSQLDialect) IntrospectTablesSQL() string {
+	return "SELECT table_name FROM information_schema.tables " +
+		"WHERE table_type = 'BASE TABLE' ORDER BY table_name"
+}
+
+func (MSSQLDialect) IntrospectColumnsSQL(table string) string {
+	return "SELECT column_name AS name, data_type AS type FROM information_schema.columns " +
+		"WHERE table_name = '" + escapeSQLLiteral(table) + "' ORDER BY ordinal_position"
+}

@@ -178,48 +178,86 @@ func (s *SQLiteStore) StoreTempTable(td TableData) (string, error) {
 // proper AQL types. If nil, the result schema is inferred from SQLite
 // column types reported by the driver.
 func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData, error) {
+	return s.QueryParams(querySQL, nil, schema)
+}
+
+// QueryParams executes a SELECT with positional bind parameters.
+func (s *SQLiteStore) QueryParams(querySQL string, params []any, schema *RecordTypeInfo) (TableData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(querySQL)
+	rows, err := s.db.Query(querySQL, params...)
 	if err != nil {
 		return TableData{}, fmt.Errorf("sqlite query: %w", err)
 	}
 	defer rows.Close()
 
+	td, err := scanSQLRows(rows, schema, SQLiteDialect{})
+	if err != nil {
+		return TableData{}, fmt.Errorf("sqlite: %w", err)
+	}
+	return td, nil
+}
+
+// Exec runs a non-SELECT statement with optional bind parameters.
+func (s *SQLiteStore) Exec(execSQL string, params []any) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res, err := s.db.Exec(execSQL, params...)
+	if err != nil {
+		return 0, fmt.Errorf("sqlite exec: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil // driver doesn't report it; not an error
+	}
+	return n, nil
+}
+
+// scanSQLRows reads a database/sql result set into TableData. When
+// schema is non-nil its field types drive value coercion (preserving
+// the historical behaviour exactly); when nil, column types are
+// inferred from the driver's reported type names via the dialect. The
+// raw scan + coercion is identical across SQLite and external backends.
+func scanSQLRows(rows *sql.Rows, schema *RecordTypeInfo, d Dialect) (TableData, error) {
 	cols, err := rows.Columns()
 	if err != nil {
-		return TableData{}, fmt.Errorf("sqlite columns: %w", err)
+		return TableData{}, fmt.Errorf("columns: %w", err)
 	}
 
-	// Resolve the type for each result column.
 	colTypes := make([]*Type, len(cols))
+	var dbTypes []*sql.ColumnType
+	if schema == nil {
+		dbTypes, _ = rows.ColumnTypes()
+	}
 	for i, col := range cols {
 		colTypes[i] = TString // default
-		if schema != nil {
+		switch {
+		case schema != nil:
 			if fieldVal, ok := schema.Fields.Get(col); ok {
 				colTypes[i] = fieldVal.Parent
+			}
+		case dbTypes != nil && i < len(dbTypes):
+			if dn := dbTypes[i].DatabaseTypeName(); dn != "" {
+				colTypes[i] = d.ColumnTypeToAQLType(dn)
 			}
 		}
 	}
 
-	// Build record schema for the result.
 	fields := NewOrderedMap()
 	for i, col := range cols {
 		fields.Set(col, NewTypeLiteral(colTypes[i]))
 	}
 	record := RecordTypeInfo{Fields: fields}
 
-	// Scan using interface{} to get native SQLite types.
 	var resultRows []Value
 	scanDest := make([]interface{}, len(cols))
 	for i := range scanDest {
 		scanDest[i] = new(interface{})
 	}
-
 	for rows.Next() {
 		if err := rows.Scan(scanDest...); err != nil {
-			return TableData{}, fmt.Errorf("sqlite scan: %w", err)
+			return TableData{}, fmt.Errorf("scan: %w", err)
 		}
 		om := NewOrderedMap()
 		for i, col := range cols {
@@ -229,9 +267,8 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 		resultRows = append(resultRows, NewMap(om))
 	}
 	if err := rows.Err(); err != nil {
-		return TableData{}, fmt.Errorf("sqlite rows: %w", err)
+		return TableData{}, fmt.Errorf("rows: %w", err)
 	}
-
 	return TableData{Record: record, Rows: resultRows}, nil
 }
 

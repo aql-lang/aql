@@ -80,3 +80,13 @@ func (MySQLDialect) ComparisonOperator(name string) (string, bool) {
 // Caps: MySQL COLLATE names (utf8mb4_*) do not map to SQLite's
 // nocase/binary/rtrim.
 func (MySQLDialect) Caps() DialectCaps { return DialectCaps{} }
+
+func (MySQLDialect) IntrospectTablesSQL() string {
+	return "SELECT table_name FROM information_schema.tables " +
+		"WHERE table_schema = DATABASE() ORDER BY table_name"
+}
+
+func (MySQLDialect) IntrospectColumnsSQL(table string) string {
+	return "SELECT column_name AS name, data_type AS type FROM information_schema.columns " +
+		"WHERE table_schema = DATABASE() AND table_name = '" + escapeSQLLiteral(table) + "' ORDER BY ordinal_position"
+}

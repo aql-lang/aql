@@ -59,6 +59,14 @@ type Dialect interface {
 	// SQL Server, or Postgres's `~` for regexp).
 	ComparisonOperator(name string) (string, bool)
 
+	// IntrospectTablesSQL returns a query projecting one column of user
+	// table names.
+	IntrospectTablesSQL() string
+
+	// IntrospectColumnsSQL returns a query projecting two columns
+	// aliased `name` and `type` describing the columns of table.
+	IntrospectColumnsSQL(table string) string
+
 	// Caps reports the optional-feature support for this dialect.
 	Caps() DialectCaps
 }
@@ -142,6 +150,22 @@ func (SQLiteDialect) ComparisonOperator(name string) (string, bool) {
 
 func (SQLiteDialect) Caps() DialectCaps {
 	return DialectCaps{Collations: sqliteCollations}
+}
+
+func (SQLiteDialect) IntrospectTablesSQL() string {
+	return "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+}
+
+func (SQLiteDialect) IntrospectColumnsSQL(table string) string {
+	return "SELECT name, type FROM pragma_table_info('" + escapeSQLLiteral(table) + "')"
+}
+
+// escapeSQLLiteral escapes single quotes for embedding a value as a SQL
+// string literal. Used only for introspection queries against
+// information_schema / pragma tables where the table name is a literal,
+// not an identifier.
+func escapeSQLLiteral(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
 }
 
 // columnTypeFor maps an AQL field type to a dialect column type using

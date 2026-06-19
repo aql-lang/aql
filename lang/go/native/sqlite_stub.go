@@ -142,10 +142,20 @@ func (s *SQLiteStore) StoreTempTable(td TableData) (string, error) {
 
 // Query executes a SELECT and returns results as TableData.
 func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData, error) {
+	return s.QueryParams(querySQL, nil, schema)
+}
+
+// QueryParams executes a SELECT with positional bind parameters.
+func (s *SQLiteStore) QueryParams(querySQL string, params []any, schema *RecordTypeInfo) (TableData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	results := s.db.Call("exec", querySQL)
+	var results js.Value
+	if len(params) > 0 {
+		results = s.db.Call("exec", querySQL, anySliceToJS(params))
+	} else {
+		results = s.db.Call("exec", querySQL)
+	}
 	if results.Length() == 0 {
 		// Empty result set.
 		fields := NewOrderedMap()
@@ -212,6 +222,32 @@ func (s *SQLiteStore) DropTable(name string) {
 	defer s.mu.Unlock()
 	s.db.Call("run", fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdent(name)))
 	delete(s.tables, name)
+}
+
+// Exec runs a non-SELECT statement with optional bind parameters and
+// returns the number of rows modified.
+func (s *SQLiteStore) Exec(execSQL string, params []any) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(params) > 0 {
+		s.db.Call("run", execSQL, anySliceToJS(params))
+	} else {
+		s.db.Call("run", execSQL)
+	}
+	if mod := s.db.Call("getRowsModified"); mod.Type() == js.TypeNumber {
+		return int64(mod.Int()), nil
+	}
+	return 0, nil
+}
+
+// anySliceToJS converts positional bind parameters to a JS array for
+// sql.js exec/run.
+func anySliceToJS(params []any) js.Value {
+	arr := js.Global().Get("Array").New(len(params))
+	for i, p := range params {
+		arr.SetIndex(i, js.ValueOf(p))
+	}
+	return arr
 }
 
 // aqlValueToJSParam converts an AQL Value to a JS value for sql.js binding.

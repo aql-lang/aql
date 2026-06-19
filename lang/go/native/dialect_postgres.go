@@ -78,3 +78,13 @@ func (PostgresDialect) ComparisonOperator(name string) (string, bool) {
 // Caps: Postgres COLLATE names (ICU/libc locales) do not correspond to
 // SQLite's nocase/binary/rtrim, so no AQL collation is offered.
 func (PostgresDialect) Caps() DialectCaps { return DialectCaps{} }
+
+func (PostgresDialect) IntrospectTablesSQL() string {
+	return "SELECT table_name FROM information_schema.tables " +
+		"WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_name"
+}
+
+func (PostgresDialect) IntrospectColumnsSQL(table string) string {
+	return "SELECT column_name AS name, data_type AS type FROM information_schema.columns " +
+		"WHERE table_name = '" + escapeSQLLiteral(table) + "' ORDER BY ordinal_position"
+}

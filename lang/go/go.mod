@@ -5,7 +5,10 @@ go 1.24.7
 require (
 	github.com/aql-lang/aql/eng/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/itchyny/gojq v0.12.19
+	github.com/jackc/pgx/v5 v5.7.5
+	github.com/microsoft/go-mssqldb v1.8.0
 	github.com/ohler55/ojg v1.28.1
 	github.com/tabnas/csv/go v0.2.0
 	github.com/tabnas/expr/go v0.2.0
@@ -21,16 +24,24 @@ require (
 	github.com/tabnas/xml/go v0.2.0
 	github.com/tabnas/yaml/go v0.2.0
 	github.com/tabnas/zon/go v0.2.0
-	golang.org/x/text v0.21.0
+	golang.org/x/text v0.24.0
 	modernc.org/sqlite v1.46.1
 	voxgiguniversalsdk v0.1.1
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
+	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/tabnas/directive/go v0.2.0 // indirect
 	github.com/tabnas/hoover/go v0.2.0 // indirect
 	github.com/tabnas/parser/go v0.2.0 // indirect
+	golang.org/x/crypto v0.37.0 // indirect
+	golang.org/x/sync v0.17.0 // indirect
 )
 
 require (
