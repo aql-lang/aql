@@ -13,6 +13,10 @@ func openExternalKV(kind, dsn string) (KeyValBackend, error) {
 		return NewFileKVStore(dsn)
 	case "redis", "valkey":
 		return NewRedisKVStore(dsn)
+	case "mongo", "mongodb":
+		return NewMongoKVStore(dsn)
+	case "s3", "minio":
+		return NewS3KVStore(dsn)
 	default:
 		return nil, kvUnknownKind(kind)
 	}
@@ -25,6 +29,10 @@ func canonicalExternalKVKind(kind string) (string, bool) {
 		return "file", true
 	case "redis", "valkey":
 		return "redis", true
+	case "mongo", "mongodb":
+		return "mongo", true
+	case "s3", "minio":
+		return "s3", true
 	default:
 		return "", false
 	}
