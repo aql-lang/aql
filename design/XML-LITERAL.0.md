@@ -1,15 +1,18 @@
 # AQL Literal XML Embedding Design
 
-Status: Increments 1–4 **LANDED**. Increment 1: static (non-interpolated)
+Status: Increments 1–5 **LANDED**. Increment 1: static (non-interpolated)
 `Node/Xml` literals parse end-to-end, build an immutable element value,
 render back to well-formed XML, and carry structural equality. Increment
 2: `${}` interpolation (§4) — in text, child, and attribute positions.
 Increment 3: the mutable `Node/Xml/FlexXml` variant via `flex`/`node`,
 with in-place `append` (children) and `set` (attributes). Increment 4:
 `parse xml` now yields a `Node/Xml` element (not a generic Map), so a
-parsed document and a source literal are deeply equal (§5.6). The
-remaining increment (the query/accessor words `elem`/`text`/`cs/`) is
-design-only — see §7.
+parsed document and a source literal are deeply equal (§5.6). Increment
+5: the accessor/query words — `tag`/`attr`/`cren` via dotted access, plus
+the computed `xml-elem` / `xml-text` / `xml-attr` (all `xml-` prefixed so
+they never shadow the generic `text`/`elem` identifiers). The `cs/`
+CSS-selector surface (§4) remains a follow-up — it rides the
+(as-yet-unlanded) `cs` mini-language kind.
 
 Implementation landed in Increment 1:
 - type `Node/Xml` (FixedID 108) + `XmlElementPayload{Tag,Attr,Cren}` +
@@ -77,6 +80,22 @@ Implementation landed in Increment 4 (`parse xml` alignment):
 - batteries: `TestXmlParseAlignment` (`lang/go/test/xml_literal_test.go`),
   updated rows in `lang/go/test/parselang_tabnas_test.go` and
   `lang/spec/module-parselang.tsv`.
+
+Implementation landed in Increment 5 (accessor / query words):
+- `get` reads the well-known fields of a Node/Xml (or FlexXml): `'tag'` →
+  String, `'attr'` → Map, `'cren'` → List, any other key → None. Sigs are
+  `[Atom|Xml]`/`[String|Xml]`, more specific than `[Key|Node]` so they win
+  for an XML receiver — dotted access `x.tag` / `x.attr` / `x.cren` works
+  (`lang/go/native/native_storage.go::getXmlHandler`).
+- computed words in `lang/go/native/native_xml.go` (`xmlNatives`, wired in
+  `register.go`): `xml-elem` (element children only), `xml-text` (subtree
+  text), `xml-attr <name> <xml>` (attribute value or None). `eng.XmlParts`
+  is the exported (tag, attr, cren) view they share (`eng/go/core_xml.go`,
+  aliased in `native/aliases.go`).
+- batteries: `TestXmlAccessors` (`lang/go/test/xml_literal_test.go`); the
+  fnmodel equivalence golden regenerated (3 new words + 2 get sigs).
+- not done: the `cs/` CSS-selector words (`xml-is`, selector engine) —
+  deferred with the `cs` mini-language kind.
 
 Literal XML embedded directly in AQL source — `<tag …>…</tag>` written
 in-line where a value is expected — producing a first-class `Node/Xml`

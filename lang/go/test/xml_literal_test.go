@@ -137,6 +137,38 @@ func TestXmlParseAlignment(t *testing.T) {
 	}
 }
 
+// TestXmlAccessors covers Increment 5: the stored fields via dotted
+// access (tag/attr/cren) and the computed query words elem/text/xml-attr.
+func TestXmlAccessors(t *testing.T) {
+	cases := []struct {
+		src  string
+		want any
+	}{
+		// stored fields via dotted access
+		{`(<a x="1" y="2"/>).tag`, "a"},
+		{`(<a x="1"/>).attr.x`, "1"},
+		{`(<p>hi</p>).cren size`, int64(1)},
+		// xml-elem: element children only (text nodes dropped)
+		{`(xml-elem <a>t<b/>u<c/></a>) size`, int64(2)},
+		// xml-text: concatenated subtree text content
+		{`xml-text <a>x<b>y</b>z</a>`, "xyz"},
+		// xml-attr: a present attribute, and a missing one → none
+		{`xml-attr 'x' <a x="1"/>`, "1"},
+		{`typeof (xml-attr 'z' <a x="1"/>)`, "None"},
+		// the words work on a parsed element too (same Node/Xml shape)
+		{`"aql:parselang" import end  xml-text (parse xml '<a>hi<b>!</b></a>')`, "hi!"},
+	}
+	for _, c := range cases {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("lang.New: %v", err)
+		}
+		if got := runLast(t, a, c.src); got != c.want {
+			t.Errorf("%q: got %v (%T), want %v", c.src, got, got, c.want)
+		}
+	}
+}
+
 // TestXmlLiteralErrorsEndToEnd pins the loud-failure contract.
 func TestXmlLiteralErrorsEndToEnd(t *testing.T) {
 	for _, src := range []string{`<a></b>`, `<a>`, `<a x=1/>`, `<p>${x</p>`} {

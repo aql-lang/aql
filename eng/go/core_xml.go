@@ -61,6 +61,13 @@ func IsXmlValue(v Value) bool {
 	return ok
 }
 
+// XmlParts is the exported (tag, attr, cren) view of an XML element, for
+// the lang-layer accessor words (elem / text / xml-attr / get). ok is
+// false for a bare type literal or non-XML value.
+func XmlParts(v Value) (tag string, attr *OrderedMap, cren []Value, ok bool) {
+	return xmlParts(v)
+}
+
 // formatXmlInto serialises one element. Empty-cren elements self-close
 // (`<tag/>`); otherwise `<tag attrs>children</tag>`. Attribute values
 // and text are entity-escaped. Child elements of either kind recurse.

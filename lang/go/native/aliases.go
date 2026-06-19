@@ -247,6 +247,8 @@ var (
 	AsMutableMap              = eng.AsMutableMap
 	AsFlexList                = eng.AsFlexList
 	AsFlexXml                 = eng.AsFlexXml
+	IsXmlValue                = eng.IsXmlValue
+	XmlParts                  = eng.XmlParts
 	AsObjectInstance          = eng.AsObjectInstance
 	AsObjectType              = eng.AsObjectType
 	AsOptionsType             = eng.AsOptionsType

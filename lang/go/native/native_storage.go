@@ -185,6 +185,13 @@ var storageNatives = []NativeFunc{
 				Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
 				ReturnsFn: getStoreReturnsFn,
 			},
+			// [Key | Node/Xml] — well-known field read: 'tag' / 'attr' /
+			// 'cren' (any other key → none). More specific than the
+			// [Key | Node] sigs above, so it wins for an XML receiver and
+			// keeps getNodeHandler off the non-map XML payload. Covers
+			// FlexXml too (it conforms to Node/Xml).
+			{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TXml}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
 		},
 	},
 	{
@@ -343,6 +350,28 @@ func setFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	}
 	fd.Attr.Set(StoreKey(args[0]), val)
 	return []Value{container}, nil
+}
+
+// getXmlHandler reads a well-known field of a Node/Xml (or FlexXml)
+// element: 'tag' → String, 'attr' → Map, 'cren' → List of all children.
+// Any other key reads as None (lenient, like a missing map key), so
+// `x.tag` / `x.attr` / `x.cren` dotted access works. The element-only
+// view and subtree text are the computed words `elem` / `text`.
+func getXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	tag, attr, cren, ok := XmlParts(args[1])
+	if !ok {
+		return nil, r.AqlError("get_error", "get: cannot access field on a non-Xml value", "get")
+	}
+	switch getKey(args[0]) {
+	case "tag":
+		return []Value{NewString(tag)}, nil
+	case "attr":
+		return []Value{NewMap(attr)}, nil
+	case "cren":
+		return []Value{NewList(cren)}, nil
+	default:
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
