@@ -1,0 +1,16 @@
+# AQL Language Specification: the aql:db module
+# Format: input<TAB>expected<TAB>description
+#
+# External SQL database access (open/sql/exec/tables/schema/close).
+# These rows use an embedded SQLite connection (kind "sqlite", shared-
+# cache memory DB) so they are hermetic and deterministic — no server.
+# The introspection word is `schema` (not `describe`, a core word).
+# Negative cases (wrong arg types, unknown kind, redaction) live in
+# lang/go/native/db_module_test.go and sql_database_test.go.
+
+"aql:db" import end convert List DB.$module	['DB']	import binds the DB namespace
+"aql:db" import end def c (DB.open "sqlite" ":memory:") end def x (c DB.exec "create table t (n integer)") end c DB.exec "insert into t values (1)"	1	exec returns rows affected
+"aql:db" import end def c (DB.open "sqlite" ":memory:") end def x (c DB.exec "create table t (n integer)") end c DB.tables	['t']	tables lists table names
+"aql:db" import end def c (DB.open "sqlite" ":memory:") end def x (c DB.exec "create table t (n integer)") end c DB.schema "t"	{n:'Integer'}	schema returns column types
+"aql:db" import end def c (DB.open "sqlite" ":memory:") end def y (c DB.exec "create table t (n integer)") end def z (c DB.exec "insert into t values (7)") end c DB.sql "select n from t"	[{n:7}]	sql returns rows as a table
+"aql:db" import end def c (DB.open "sqlite" ":memory:") end c DB.close end true	true	close releases the connection

@@ -38,8 +38,13 @@ func resolveDriver(kind string) (driver string, d Dialect, err error) {
 		return "mysql", MySQLDialect{}, nil
 	case "sqlserver", "mssql", "azuresql":
 		return "sqlserver", MSSQLDialect{}, nil
+	case "sqlite", "sqlite3":
+		// The embedded engine, opened as a database/sql connection
+		// (e.g. a file path or ":memory:"). Distinct from the ambient
+		// HostSQLite compute store.
+		return "sqlite", SQLiteDialect{}, nil
 	default:
-		return "", nil, fmt.Errorf("unknown database kind %q (want postgres, mysql, or sqlserver)", kind)
+		return "", nil, fmt.Errorf("unknown database kind %q (want postgres, mysql, sqlserver, or sqlite)", kind)
 	}
 }
 
@@ -67,9 +72,17 @@ func OpenSQLDatabase(kind, dsn string) (*SQLDatabase, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: open: %w", dialect.Name(), redactError(err, dsn))
 	}
-	db.SetMaxOpenConns(8)
-	db.SetMaxIdleConns(4)
-	db.SetConnMaxLifetime(30 * time.Minute)
+	if driver == "sqlite" {
+		// A SQLite ":memory:" database is per-connection, so the pool
+		// must hold exactly one connection or successive statements
+		// would hit different (empty) databases. File-backed SQLite is
+		// also single-writer, so one connection is the safe default.
+		db.SetMaxOpenConns(1)
+	} else {
+		db.SetMaxOpenConns(8)
+		db.SetMaxIdleConns(4)
+		db.SetConnMaxLifetime(30 * time.Minute)
+	}
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("%s: connect: %w", dialect.Name(), redactError(err, dsn))

@@ -112,6 +112,7 @@ var KnownScopes = []string{
 	"fileops",
 	"network",
 	"sqlite",
+	"db",
 	"formats",
 	"env",
 	"process",
@@ -123,7 +124,7 @@ var KnownScopes = []string{
 // clock). These are the scopes that honour scope.install = false.
 func IsCapabilityScope(scope string) bool {
 	switch scope {
-	case "fileops", "network", "sqlite", "formats", "env", "process", "clock":
+	case "fileops", "network", "sqlite", "db", "formats", "env", "process", "clock":
 		return true
 	}
 	return false
@@ -159,6 +160,9 @@ func GlobalsFor(scope, op string) []string {
 			return []string{"disk.write"}
 		}
 	case "network":
+		return []string{"network"}
+	case "db":
+		// Every external-database operation is a network egress.
 		return []string{"network"}
 	case "process":
 		return []string{"process"}

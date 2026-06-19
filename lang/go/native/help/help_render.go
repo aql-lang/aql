@@ -30,6 +30,7 @@ var moduleCatalog = []ModuleInfo{
 	{"test", "Assertions and helpers for in-language tests."},
 	{"rand", "Pseudo-random number generation."},
 	{"query", "SQL-style query pipelines: from, where, join, group, order."},
+	{"db", "External SQL databases: open, sql, exec, tables, schema, close."},
 	{"struct-util", "Structured-data utilities: merge, walk, transform, jsonify, …."},
 	{"io", "I/O: read, write, stdin/stdout/stderr, printstr, trace."},
 	{"net", "HTTP requests and API access: fetch, prepare, direct."},
