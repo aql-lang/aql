@@ -676,10 +676,19 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	if sig.CompileEffect.Has(CompileFallbackBody) {
 		return false
 	}
-	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
-	// regardless; screen here so they don't slip through forceDynOut).
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode ||
-		len(sig.NoEvalArgs) > 0 || len(sig.QuoteArgs) > 0 {
+	// Meta / re-stepping shapes never bake (RecordCall refuses them regardless;
+	// screen here so they don't slip through forceDynOut).
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.QuoteArgs) > 0 {
+		return false
+	}
+	// A code-body (NoEvalArgs) native bakes only when its bodies are INERT consts
+	// with no enclosing-loop sentinel — the SAME screen RecordCall's code-body
+	// refusal uses (noEvalBodiesInert), not a blanket NoEvalArgs exclusion. An
+	// inert body bakes as a code-as-data const and the handler sub-runs it
+	// faithfully (`await` runs its parallels; a body-running native runs its
+	// body), so the dynamic (declared-Any) result is sound to bake. A non-inert
+	// or sentinel-bearing body stays refused.
+	if len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args) {
 		return false
 	}
 	for _, t := range sig.Args {
