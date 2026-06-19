@@ -11,6 +11,8 @@ func openExternalKV(kind, dsn string) (KeyValBackend, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "file", "bolt", "bbolt":
 		return NewFileKVStore(dsn)
+	case "redis", "valkey":
+		return NewRedisKVStore(dsn)
 	default:
 		return nil, kvUnknownKind(kind)
 	}
@@ -21,6 +23,8 @@ func canonicalExternalKVKind(kind string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "file", "bolt", "bbolt":
 		return "file", true
+	case "redis", "valkey":
+		return "redis", true
 	default:
 		return "", false
 	}

@@ -10,6 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/microsoft/go-mssqldb v1.8.0
 	github.com/ohler55/ojg v1.28.1
+	github.com/redis/go-redis/v9 v9.7.3
 	github.com/tabnas/csv/go v0.2.0
 	github.com/tabnas/expr/go v0.2.0
 	github.com/tabnas/feed/go v0.2.0
@@ -32,6 +33,10 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
+	github.com/alicebob/miniredis/v2 v2.33.0 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
@@ -41,6 +46,7 @@ require (
 	github.com/tabnas/directive/go v0.2.0 // indirect
 	github.com/tabnas/hoover/go v0.2.0 // indirect
 	github.com/tabnas/parser/go v0.2.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 )
