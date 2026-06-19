@@ -2,6 +2,15 @@
 
 Status: design draft, no implementation.
 
+> **Scope note.** This document is about encoding an entire AQL
+> *program* as an XML tree (`<aql><def>…</def></aql>`) — XML as an
+> alternate *concrete syntax*. For embedding literal XML *data values*
+> into ordinary concatenative source (the JSX/TSX analogue,
+> `<div>…</div>` written inline as a `Node/Xml` value), see
+> `design/XML-LITERAL.0.md`. The two share the `${}` interpolation
+> convention (§3) and the CSS-selector query surface (§4); they are
+> otherwise independent.
+
 A tree-structured XML format as an alternate concrete syntax for AQL
 programs and data. The XML form is targeted at tooling, code
 generation, and embedding in document workflows where the concatenative
