@@ -1664,7 +1664,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 	case len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args):
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
-	case len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
+	case hasUncoveredQuoteArg(sig) && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
@@ -1967,6 +1967,22 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 		es.setProduced(outs[0], seq)
 	}
 	return true
+}
+
+// hasUncoveredQuoteArg reports whether sig has a QuoteArgs position that is NOT
+// also a NoEvalArgs position. The QuoteArgs refusal targets dispatch-
+// manipulating meta operands (usurp / force-arity / ref-family) whose result the
+// engine re-steps; a quoted operand that is ALSO a NoEvalArgs code body
+// (`timeout 1000 [body]`, `interval`) is already validated as inert by the
+// noEvalBodiesInert path and bakes as a plain const, so it must not be double-
+// refused here.
+func hasUncoveredQuoteArg(sig *Signature) bool {
+	for i := range sig.QuoteArgs {
+		if sig.QuoteArgs[i] && !sig.NoEvalArgs[i] {
+			return true
+		}
+	}
+	return false
 }
 
 // noEvalBodiesInert reports whether every NoEvalArgs (un-evaluated code-body)
@@ -2437,6 +2453,28 @@ func isInertConstMember(v Value) bool {
 		// Parents); a COMPUTED segment (a paren to evaluate) is code, so refuse.
 		if IsReach(v) {
 			return inertReachMember(v)
+		}
+		// A deferred paren expression (`(add 1 2)`, `(k)`) riding inside a
+		// NEVER-evaluated compound — a `reach` key list's computed segment
+		// (`reach 5 [a (add 1 2) c]`), where the paren is stored unevaluated and
+		// re-run at APPLY time over the shared registry, not stepped at the VM
+		// pointer. Like the Word / Reach member cases this is pure DATA: the VM
+		// pushes the baked compound verbatim and the reach handler builds the
+		// same Computed segment the interpreter does, so it bakes by value
+		// differential-identically. Its tokens must themselves be inert members
+		// (Words / atoms / scalars / nested inert parens) — a token that would
+		// drag in a carrier or mutable instance refuses.
+		if IsParenExpr(v) {
+			toks, err := AsParenExpr(v)
+			if err != nil {
+				return false
+			}
+			for _, tk := range toks {
+				if !isInertConstMember(tk) {
+					return false
+				}
+			}
+			return true
 		}
 	}
 	return isInertConst(v)

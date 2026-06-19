@@ -292,7 +292,7 @@ WORD inspect
   [Scalar/Atom] barrier=1 quote={0} returns=[Node/Map/Inspect]
   [Any] barrier=1 returns=[Node/Map/Inspect]
 WORD interval
-  [Scalar/Number/Integer Node/List] barrier=2 quote={1} returns=[Ideal/Interval]
+  [Scalar/Number/Integer Node/List] barrier=2 noeval={1} quote={1} returns=[Ideal/Interval]
   [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Interval]
 WORD iota
   [Scalar/Number/Integer] barrier=1 +returnsfn
@@ -567,7 +567,7 @@ WORD tcmp
 WORD teq
   [Any Any] barrier=1 returns=[Scalar/Boolean]
 WORD timeout
-  [Scalar/Number/Integer Node/List] barrier=2 quote={1} returns=[Ideal/Timeout]
+  [Scalar/Number/Integer Node/List] barrier=2 noeval={1} quote={1} returns=[Ideal/Timeout]
   [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Timeout]
 WORD tnot
   [Any] barrier=1 +returnsfn
