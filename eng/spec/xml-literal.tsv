@@ -18,3 +18,15 @@ typeof <a/>	Xml	the value is a Node/Xml
 <a></b>	ERROR:mismatched	closing tag must match the opening tag
 <a>	ERROR:unterminated	unclosed element at end of source
 <a x=1/>	ERROR:quoted value	attribute values must be quoted
+# ---- Increment 2: ${} interpolation (design §4) ----------------------
+# (kernel-safe expressions only — `add`/`mul` are lang-layer words, so the
+#  arithmetic-bearing rows live in lang/go/test/xml_literal_test.go.)
+<p>${1}</p>	<p>1</p>	text interpolation evaluates the hole expression
+<p>n=${42}</p>	<p>n=42</p>	literal text merges with a scalar hole
+<a x=${42}/>	<a x="42"/>	bare ${} as the whole attribute value
+<a class="n${1}"/>	<a class="n1"/>	mixed literal + ${} attribute value
+<a>${<b/>}</a>	<a><b/></a>	a Node/Xml hole becomes one child element
+<ul>${[<li>x</li> <li>y</li>]}</ul>	<ul><li>x</li><li>y</li></ul>	a List hole splices each element as a child
+<a><b>${1}</b></a>	<a><b>1</b></a>	interpolation nested inside a child element
+typeof <p>${1}</p>	Xml	an interpolated literal still evaluates to a Node/Xml
+<p>${1 add</p>	ERROR:unterminated	an unterminated ${ is a syntax error

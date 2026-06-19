@@ -93,6 +93,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/MiniLangCompiled": 5003, // compiled-minilang carrier — lang/go/modules/minilang.go
 		"Ideal/Patrun":           5004, // pattern-dispatch table — lang/go/native/native_patrun.go
 		"Word/__IS":              51,
+		"Word/__XI":              109, // interpolated XML literal skeleton
 		"Type/Disjunct/Enum":     62,
 		"Word/__PE":              63,
 		"Word/__IN/__DC":         64,

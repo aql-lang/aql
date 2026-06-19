@@ -100,6 +100,40 @@ func TestXmlLiteralGenericsUntouched(t *testing.T) {
 	}
 }
 
+// TestXmlLiteralFreezeVsInterp pins the parse-time split: a literal with
+// no ${} freezes to a constant Node/Xml; one with any ${} hole becomes a
+// deferred Word/__XI skeleton the engine evaluates at runtime.
+func TestXmlLiteralFreezeVsInterp(t *testing.T) {
+	// No interpolation → constant Node/Xml.
+	for _, src := range []string{`<a/>`, `<a x="1">t<b/></a>`} {
+		v := parseOneXml(t, src)
+		if !v.Is(eng.TXml) {
+			t.Errorf("%q: want Node/Xml (frozen), got %s", src, eng.ValueType(v).Path())
+		}
+	}
+	// Any ${} hole (text, attribute, or child position) → deferred skeleton.
+	for _, src := range []string{
+		`<p>${x}</p>`,
+		`<a href=${u}/>`,
+		`<a class="b ${k}"/>`,
+		`<ul>${items}</ul>`,
+		`<a><b>${x}</b></a>`,
+	} {
+		v := parseOneXml(t, src)
+		if !v.Is(eng.TXmlInterp) {
+			t.Errorf("%q: want Word/__XI (deferred), got %s", src, eng.ValueType(v).Path())
+		}
+	}
+}
+
+func TestXmlLiteralInterpErrors(t *testing.T) {
+	for _, src := range []string{`<p>${x</p>`, `<a x=${y/>`} {
+		if _, err := Parse(src); err == nil {
+			t.Errorf("%q: expected error, got none", src)
+		}
+	}
+}
+
 func TestXmlLiteralErrors(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{`<a></b>`, "mismatched"},

@@ -904,6 +904,17 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// stepLiteral so forward collection works correctly.
 			e.tape.Set(e.pointer, result)
 
+		case IsXmlInterp(val):
+			// Interpolated XML literal: evaluate the skeleton in place to
+			// a concrete Node/Xml, then re-step it as the value (no pointer
+			// advance) so forward collection sees a Node/Xml — mirrors the
+			// IsInterpString case above.
+			result, err := e.evalXmlInterp(val)
+			if err != nil {
+				return nil, err
+			}
+			e.tape.Set(e.pointer, result)
+
 		case IsMark(val):
 			e.stepMark(val)
 
@@ -1362,6 +1373,25 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			continue
 		}
 
+		// Interpolated XML literal: same as InterpString — its type
+		// (Node/Xml) is only knowable after evaluation, so evaluate in
+		// place when a viable overload consumes this position, then prune.
+		if IsXmlInterp(tok) {
+			if !viableConsumes(pos) {
+				break
+			}
+			result, err := e.evalXmlInterp(tok)
+			if err != nil {
+				return err
+			}
+			result.Pos = tok.Pos
+			e.tape.Set(scanIdx, result)
+			pruneViable(pos, result)
+			pos++
+			scanIdx++
+			continue
+		}
+
 		// Paren expression value (paren-nesting Step 3): expand it back to
 		// its OpenParen … CloseParen marker span in place, then re-process
 		// — the IsOpenParen branch above collapses it on THIS engine. See
@@ -1615,6 +1645,16 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 			// paren-wrapped template — `raise (`bad: ${x}`)` — collapses
 			// to a String rather than a raw InterpString token.
 			result, err := e.evalInterpString(v)
+			if err != nil {
+				e.pointer = savedPointer
+				return err
+			}
+			result.Pos = v.Pos
+			e.tape.Set(e.pointer, result)
+		case IsXmlInterp(v):
+			// Mirror the InterpString case: a paren-wrapped interpolated
+			// XML literal — `f (<p>${x}</p>)` — collapses to a Node/Xml.
+			result, err := e.evalXmlInterp(v)
 			if err != nil {
 				e.pointer = savedPointer
 				return err
@@ -3015,6 +3055,19 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 	if err != nil || parts == nil {
 		return NewString(""), nil
 	}
+	s, err := e.evalInterpParts(parts)
+	if err != nil {
+		return Value{}, err
+	}
+	return NewString(s), nil
+}
+
+// evalInterpParts evaluates a list of InterpParts (literal segments plus
+// `${expr}` holes), running each expression part in a sub-engine,
+// stringifying its results, and concatenating into one string. Shared by
+// evalInterpString and the XML-attribute / text evaluation in
+// evalXmlInterp.
+func (e *Engine) evalInterpParts(parts []InterpPart) (string, error) {
 	var buf strings.Builder
 	for _, part := range parts {
 		if part.Expr == nil {
@@ -3024,7 +3077,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 		sub := New(e.registry)
 		result, err := sub.Run(part.Expr)
 		if err != nil {
-			return Value{}, err
+			return "", err
 		}
 		for _, r := range result {
 			buf.WriteString(ValToString(r))
@@ -3038,7 +3091,100 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 			break
 		}
 	}
-	return NewString(buf.String()), nil
+	return buf.String(), nil
+}
+
+// evalXmlInterp evaluates an interpolated XML literal skeleton (Word/__XI)
+// to a concrete Node/Xml value, running each embedded `${expr}` against
+// the live registry — the structural analogue of evalInterpString. See
+// design/XML-LITERAL.0.md §4.
+func (e *Engine) evalXmlInterp(val Value) (Value, error) {
+	tmpl, err := AsXmlInterp(val)
+	if err != nil {
+		return Value{}, err
+	}
+	return e.buildXmlFromTmpl(tmpl)
+}
+
+// buildXmlFromTmpl recursively evaluates an XmlTmpl into a Node/Xml value.
+// Attribute values evaluate via evalInterpParts; children evaluate per
+// XmlCren kind — a literal becomes a text node, a nested template recurses,
+// and an expression hole splices per the design's rule (a List contributes
+// each element, a Node/Xml is one child element, any other value becomes a
+// text node). Adjacent text is merged so a `hello ${name}` run yields one
+// text node rather than two.
+func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, error) {
+	attr := NewOrderedMap()
+	for _, a := range t.Attr {
+		s, err := e.evalInterpParts(a.Parts)
+		if err != nil {
+			return Value{}, err
+		}
+		attr.Set(a.Name, NewString(s))
+		if e.registry.FlowCtrl != FlowNone {
+			return NewXmlElement(t.Tag, attr, nil), nil
+		}
+	}
+
+	var cren []Value
+	addText := func(s string) {
+		if s == "" {
+			return
+		}
+		if n := len(cren); n > 0 {
+			if sp, ok := cren[n-1].Data.(StrPayload); ok {
+				cren[n-1] = NewString(sp.S + s)
+				return
+			}
+		}
+		cren = append(cren, NewString(s))
+	}
+	var addChild func(r Value)
+	addChild = func(r Value) {
+		switch {
+		case IsConcrete(r) && r.Parent.ConformsTo(TList):
+			rl, err := AsList(r)
+			if err != nil {
+				return
+			}
+			for i := 0; i < rl.Len(); i++ {
+				addChild(rl.Get(i))
+			}
+		case IsXmlElement(r):
+			cren = append(cren, r)
+		default:
+			addText(ValToString(r))
+		}
+	}
+
+	for _, c := range t.Cren {
+		switch c.Kind {
+		case XmlCrenLit:
+			addText(c.Lit)
+		case XmlCrenChild:
+			if c.Child == nil {
+				continue
+			}
+			child, err := e.buildXmlFromTmpl(*c.Child)
+			if err != nil {
+				return Value{}, err
+			}
+			cren = append(cren, child)
+		case XmlCrenExpr:
+			sub := New(e.registry)
+			results, err := sub.Run(c.Expr)
+			if err != nil {
+				return Value{}, err
+			}
+			for _, r := range results {
+				addChild(r)
+			}
+			if e.registry.FlowCtrl != FlowNone {
+				return NewXmlElement(t.Tag, attr, cren), nil
+			}
+		}
+	}
+	return NewXmlElement(t.Tag, attr, cren), nil
 }
 
 // expandParenExpr returns a ParenExpr's tokens wrapped in OpenParen …
@@ -3174,6 +3320,17 @@ func (e *Engine) autoEvalMap(val Value, dataMap bool) (Value, error) {
 		// Interpolated string: evaluate inline.
 		if IsInterpString(v) {
 			result, err := e.evalInterpString(v)
+			if err != nil {
+				return Value{}, err
+			}
+			out.Set(resolvedKey, result)
+			continue
+		}
+
+		// Interpolated XML literal as a map value: evaluate inline to a
+		// Node/Xml, mirroring the InterpString case.
+		if IsXmlInterp(v) {
+			result, err := e.evalXmlInterp(v)
 			if err != nil {
 				return Value{}, err
 			}

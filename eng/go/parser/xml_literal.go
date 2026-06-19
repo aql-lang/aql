@@ -65,7 +65,7 @@ func setupXmlMatcher(j *jsonic.Jsonic, t parserTokens) {
 		cursor := lex.Cursor()
 		s := lex.Src
 		afterLA := cursor.SI // position just past the `<` the val.Open alt consumed
-		v, end, err := buildXmlElement(s, afterLA)
+		tmpl, end, err := buildXmlTmpl(s, afterLA)
 		if err != nil {
 			// Absorb the rest of the source so leftover tokens don't
 			// trigger a confusing jsonic error before conversion surfaces
@@ -76,6 +76,17 @@ func setupXmlMatcher(j *jsonic.Jsonic, t parserTokens) {
 			// No progress (`<` at end of source): decline and let normal
 			// lexing report the unexpected character.
 			return nil
+		}
+		// No interpolation anywhere → freeze to a constant Node/Xml (the
+		// Increment-1 path). Otherwise emit the skeleton; the engine
+		// evaluates it to a Node/Xml at runtime. See evalXmlInterp.
+		var v eng.Value
+		if err == nil {
+			if cv, ok := freezeXmlTmpl(tmpl); ok {
+				v = cv
+			} else {
+				v = eng.NewXmlInterp(*tmpl)
+			}
 		}
 		la := afterLA - 1
 		if la < 0 {
@@ -108,24 +119,26 @@ func isXmlSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
-// buildXmlElement parses one element from s starting at i (the index just
-// after the element's opening `<`) and returns the built Node/Xml value,
-// the index just past the element's final `>`, and any error. On a
-// well-formedness error it returns a usable stop index (> i where
-// possible) so the matcher can still advance the cursor and surface the
-// error through conversion. When the very first character is not a tag
-// name, it returns end == i so the matcher declines.
-func buildXmlElement(s string, i int) (eng.Value, int, error) {
+// buildXmlTmpl parses one element from s starting at i (the index just
+// after the element's opening `<`) and returns its skeleton (XmlTmpl), the
+// index just past the element's final `>`, and any error. The skeleton
+// captures literal text and `${expr}` holes uniformly; the matcher then
+// either freezes a hole-free skeleton to a constant Node/Xml or emits it
+// for runtime evaluation (see freezeXmlTmpl / evalXmlInterp). On a
+// well-formedness error it returns a usable stop index (> i where possible)
+// so the matcher can still advance the cursor and surface the error through
+// conversion. When the very first character is not a tag name, it returns
+// end == i so the matcher declines.
+func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 	n := len(s)
 	if i >= n || !isXmlNameStart(s[i]) {
-		return eng.Value{}, i, fmt.Errorf("xml: expected a tag name after '<'")
+		return nil, i, fmt.Errorf("xml: expected a tag name after '<'")
 	}
 	nameStart := i
 	for i < n && isXmlNameChar(s[i]) {
 		i++
 	}
-	tag := s[nameStart:i]
-	attr := eng.NewOrderedMap()
+	t := &eng.XmlTmpl{Tag: s[nameStart:i]}
 
 	// Opening-tag attributes, up to `>` or `/>`.
 	for {
@@ -133,20 +146,20 @@ func buildXmlElement(s string, i int) (eng.Value, int, error) {
 			i++
 		}
 		if i >= n {
-			return eng.Value{}, n, fmt.Errorf("xml: unterminated opening tag <%s>", tag)
+			return nil, n, fmt.Errorf("xml: unterminated opening tag <%s>", t.Tag)
 		}
 		if s[i] == '/' {
 			if i+1 < n && s[i+1] == '>' {
-				return eng.NewXmlElement(tag, attr, nil), i + 2, nil
+				return t, i + 2, nil
 			}
-			return eng.Value{}, i + 1, fmt.Errorf("xml: expected '/>' to close <%s>", tag)
+			return nil, i + 1, fmt.Errorf("xml: expected '/>' to close <%s>", t.Tag)
 		}
 		if s[i] == '>' {
 			i++
 			break
 		}
 		if !isXmlNameStart(s[i]) {
-			return eng.Value{}, i + 1, fmt.Errorf("xml: invalid attribute name in <%s>", tag)
+			return nil, i + 1, fmt.Errorf("xml: invalid attribute name in <%s>", t.Tag)
 		}
 		anStart := i
 		for i < n && isXmlNameChar(s[i]) {
@@ -156,42 +169,57 @@ func buildXmlElement(s string, i int) (eng.Value, int, error) {
 		for i < n && isXmlSpace(s[i]) {
 			i++
 		}
-		aval := ""
+		// Default (valueless) attribute → empty string, like strict XML.
+		parts := []eng.InterpPart{{Lit: ""}}
 		if i < n && s[i] == '=' {
 			i++
 			for i < n && isXmlSpace(s[i]) {
 				i++
 			}
-			if i >= n || (s[i] != '"' && s[i] != '\'') {
-				return eng.Value{}, i, fmt.Errorf("xml: attribute %q in <%s> must have a quoted value", aname, tag)
+			if i < n && s[i] == '$' && i+1 < n && s[i+1] == '{' {
+				// Bare interpolation as the whole value: `name=${expr}`.
+				toks, end, err := scanInterp(s, i)
+				if err != nil {
+					return nil, end, err
+				}
+				parts = []eng.InterpPart{{Expr: toks}}
+				i = end
+			} else if i < n && (s[i] == '"' || s[i] == '\'') {
+				vparts, end, err := scanAttrValue(s, i+1, s[i], aname, t.Tag)
+				if err != nil {
+					return nil, end, err
+				}
+				parts = vparts
+				i = end
+			} else {
+				return nil, i, fmt.Errorf("xml: attribute %q in <%s> must have a quoted value", aname, t.Tag)
 			}
-			q := s[i]
-			i++
-			vStart := i
-			for i < n && s[i] != q {
-				i++
-			}
-			if i >= n {
-				return eng.Value{}, n, fmt.Errorf("xml: unterminated value for attribute %q in <%s>", aname, tag)
-			}
-			aval = unescapeXml(s[vStart:i])
-			i++ // past closing quote
 		}
-		attr.Set(aname, eng.NewString(aval))
+		t.Attr = append(t.Attr, eng.XmlAttrTmpl{Name: aname, Parts: parts})
 	}
 
 	// Element content, up to the matching `</tag>`.
-	var cren []eng.Value
 	var text strings.Builder
 	flush := func() {
 		if text.Len() > 0 {
-			cren = append(cren, eng.NewString(unescapeXml(text.String())))
+			t.Cren = append(t.Cren, eng.XmlCren{Kind: eng.XmlCrenLit, Lit: unescapeXml(text.String())})
 			text.Reset()
 		}
 	}
 	for {
 		if i >= n {
-			return eng.Value{}, n, fmt.Errorf("xml: unterminated element <%s>", tag)
+			return nil, n, fmt.Errorf("xml: unterminated element <%s>", t.Tag)
+		}
+		// ${expr} interpolation hole in content (child position).
+		if s[i] == '$' && i+1 < n && s[i+1] == '{' {
+			flush()
+			toks, end, err := scanInterp(s, i)
+			if err != nil {
+				return nil, end, err
+			}
+			t.Cren = append(t.Cren, eng.XmlCren{Kind: eng.XmlCrenExpr, Expr: toks})
+			i = end
+			continue
 		}
 		if s[i] != '<' {
 			text.WriteByte(s[i])
@@ -218,12 +246,12 @@ func buildXmlElement(s string, i int) (eng.Value, int, error) {
 				if stop > n {
 					stop = n
 				}
-				return eng.Value{}, stop, fmt.Errorf("xml: malformed closing tag for <%s>", tag)
+				return nil, stop, fmt.Errorf("xml: malformed closing tag for <%s>", t.Tag)
 			}
-			if cname != tag {
-				return eng.Value{}, j + 1, fmt.Errorf("xml: mismatched closing tag </%s> for <%s>", cname, tag)
+			if cname != t.Tag {
+				return nil, j + 1, fmt.Errorf("xml: mismatched closing tag </%s> for <%s>", cname, t.Tag)
 			}
-			return eng.NewXmlElement(tag, attr, cren), j + 1, nil
+			return t, j + 1, nil
 		}
 		if i+3 < n && s[i+1] == '!' && s[i+2] == '-' && s[i+3] == '-' {
 			flush()
@@ -232,20 +260,147 @@ func buildXmlElement(s string, i int) (eng.Value, int, error) {
 				k++
 			}
 			if k+2 >= n {
-				return eng.Value{}, n, fmt.Errorf("xml: unterminated comment in <%s>", tag)
+				return nil, n, fmt.Errorf("xml: unterminated comment in <%s>", t.Tag)
 			}
 			i = k + 3
 			continue
 		}
 		// Child element.
 		flush()
-		child, ni, err := buildXmlElement(s, i+1)
+		child, ni, err := buildXmlTmpl(s, i+1)
 		if err != nil {
-			return eng.Value{}, ni, err
+			return nil, ni, err
 		}
-		cren = append(cren, child)
+		t.Cren = append(t.Cren, eng.XmlCren{Kind: eng.XmlCrenChild, Child: child})
 		i = ni
 	}
+}
+
+// scanAttrValue parses a quoted attribute value beginning at i (just past
+// the opening quote q) into InterpParts — literal segments plus `${expr}`
+// holes — returning the index just past the closing quote.
+func scanAttrValue(s string, i int, q byte, aname, tag string) ([]eng.InterpPart, int, error) {
+	n := len(s)
+	var parts []eng.InterpPart
+	var lit strings.Builder
+	flush := func() {
+		if lit.Len() > 0 {
+			parts = append(parts, eng.InterpPart{Lit: unescapeXml(lit.String())})
+			lit.Reset()
+		}
+	}
+	for i < n {
+		if s[i] == q {
+			flush()
+			if len(parts) == 0 {
+				parts = []eng.InterpPart{{Lit: ""}}
+			}
+			return parts, i + 1, nil
+		}
+		if s[i] == '$' && i+1 < n && s[i+1] == '{' {
+			flush()
+			toks, end, err := scanInterp(s, i)
+			if err != nil {
+				return nil, end, err
+			}
+			parts = append(parts, eng.InterpPart{Expr: toks})
+			i = end
+			continue
+		}
+		lit.WriteByte(s[i])
+		i++
+	}
+	return nil, n, fmt.Errorf("xml: unterminated value for attribute %q in <%s>", aname, tag)
+}
+
+// scanInterp consumes a `${ … }` interpolation beginning at i (where
+// s[i:i+2] == "${"), returning the parsed expression tokens, the index
+// just past the closing `}`, and any error. The matching brace is found by
+// depth counting that skips over quoted strings (', ", `), so a `}` inside
+// a string does not close the hole early.
+func scanInterp(s string, i int) ([]eng.Value, int, error) {
+	n := len(s)
+	j := i + 2
+	depth := 1
+	for j < n {
+		switch s[j] {
+		case '\'', '"', '`':
+			q := s[j]
+			j++
+			for j < n {
+				if s[j] == '\\' && j+1 < n {
+					j += 2
+					continue
+				}
+				if s[j] == q {
+					j++
+					break
+				}
+				j++
+			}
+		case '{':
+			depth++
+			j++
+		case '}':
+			depth--
+			if depth == 0 {
+				inner := strings.TrimSpace(s[i+2 : j])
+				toks, err := Parse(inner)
+				if err != nil {
+					return nil, j + 1, fmt.Errorf("xml: in ${...}: %w", err)
+				}
+				return toks, j + 1, nil
+			}
+			j++
+		default:
+			j++
+		}
+	}
+	return nil, n, fmt.Errorf("xml: unterminated ${...} interpolation")
+}
+
+// freezeXmlTmpl returns a constant Node/Xml value for a skeleton with no
+// `${expr}` holes anywhere (ok == true), or ok == false when any hole is
+// present — in which case the matcher emits the skeleton for runtime
+// evaluation. The frozen value is byte-identical to the Increment-1
+// constant build.
+func freezeXmlTmpl(t *eng.XmlTmpl) (eng.Value, bool) {
+	attr := eng.NewOrderedMap()
+	for _, a := range t.Attr {
+		s, ok := staticParts(a.Parts)
+		if !ok {
+			return eng.Value{}, false
+		}
+		attr.Set(a.Name, eng.NewString(s))
+	}
+	var cren []eng.Value
+	for _, c := range t.Cren {
+		switch c.Kind {
+		case eng.XmlCrenLit:
+			cren = append(cren, eng.NewString(c.Lit))
+		case eng.XmlCrenChild:
+			cv, ok := freezeXmlTmpl(c.Child)
+			if !ok {
+				return eng.Value{}, false
+			}
+			cren = append(cren, cv)
+		case eng.XmlCrenExpr:
+			return eng.Value{}, false
+		}
+	}
+	return eng.NewXmlElement(t.Tag, attr, cren), true
+}
+
+// staticParts concatenates InterpParts when none is an expression hole.
+func staticParts(parts []eng.InterpPart) (string, bool) {
+	var b strings.Builder
+	for _, p := range parts {
+		if p.Expr != nil {
+			return "", false
+		}
+		b.WriteString(p.Lit)
+	}
+	return b.String(), true
 }
 
 var xmlUnescaper = strings.NewReplacer(

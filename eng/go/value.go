@@ -1202,6 +1202,33 @@ func NewXmlElement(tag string, attr *OrderedMap, cren []Value) Value {
 	return NewValueRaw(TXml, XmlElementPayload{Tag: tag, Attr: attr, Cren: cren})
 }
 
+// NewXmlInterp creates an interpolated XML literal skeleton (Word/__XI).
+// The engine evaluates it in place to a concrete Node/Xml at runtime,
+// like an InterpString. See payload.go::XmlInterpPayload and
+// engine.go::evalXmlInterp.
+func NewXmlInterp(tmpl XmlTmpl) Value {
+	return NewValueRaw(TXmlInterp, XmlInterpPayload{Tmpl: tmpl})
+}
+
+// IsXmlElement reports whether v is a concrete Node/Xml element value.
+func IsXmlElement(v Value) bool {
+	_, ok := v.Data.(XmlElementPayload)
+	return ok
+}
+
+// IsXmlInterp reports whether v is an interpolated XML literal skeleton.
+func IsXmlInterp(v Value) bool {
+	return v.Parent.Equal(TXmlInterp)
+}
+
+// AsXmlInterp returns the template backing an interpolated XML skeleton.
+func AsXmlInterp(v Value) (XmlTmpl, error) {
+	if xi, ok := v.Data.(XmlInterpPayload); ok {
+		return xi.Tmpl, nil
+	}
+	return XmlTmpl{}, fmt.Errorf("AsXmlInterp: not an xml-interp value (got %T)", v.Data)
+}
+
 // NewFlexMap creates a mutable FlexMap value. It reuses MapPayload —
 // the *OrderedMap is pointer-backed, so in-place mutation is visible
 // through every Value copy sharing the payload. Like NewFlexList,

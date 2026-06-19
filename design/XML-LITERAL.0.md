@@ -1,9 +1,10 @@
 # AQL Literal XML Embedding Design
 
-Status: Increment 1 **LANDED** — static (non-interpolated) `Node/Xml`
-literals parse end-to-end, build an immutable element value, render back
-to well-formed XML, and carry structural equality. Remaining increments
-(interpolation `${}`, mutable `Node/FlexXml` via `flex`, `parse xml`
+Status: Increments 1–2 **LANDED**. Increment 1: static (non-interpolated)
+`Node/Xml` literals parse end-to-end, build an immutable element value,
+render back to well-formed XML, and carry structural equality. Increment
+2: `${}` interpolation (§4) — in text, child, and attribute positions.
+Remaining increments (mutable `Node/FlexXml` via `flex`, `parse xml`
 alignment, and the query/accessor words) are design-only — see §7.
 
 Implementation landed in Increment 1:
@@ -17,6 +18,26 @@ Implementation landed in Increment 1:
   `eng/go/parser/grammar.go`, `eng/go/parser/parse.go`.
 - batteries: `eng/spec/xml-literal.tsv`,
   `eng/go/parser/xml_literal_test.go`, `lang/go/test/xml_literal_test.go`.
+
+Implementation landed in Increment 2 (interpolation):
+- a literal embedding any `${expr}` builds a deferred skeleton instead of
+  a constant — type `Word/__XI` (FixedID 109) + `XmlInterpPayload`/`XmlTmpl`
+  (`eng/go/payload.go`, `eng/go/types.go`, `eng/go/typetable.go`,
+  `eng/go/value.go` `NewXmlInterp`/`AsXmlInterp`/`IsXmlInterp`/`IsXmlElement`).
+- the lex matcher builds an `XmlTmpl` and *freezes* it to a constant
+  `Node/Xml` when no hole is present, else emits the skeleton; `${…}` is
+  extracted by brace-depth scan (quote-aware) and parsed via `Parse`
+  (`eng/go/parser/xml_literal.go`).
+- the engine evaluates the skeleton in place to a `Node/Xml` —
+  `evalXmlInterp`/`buildXmlFromTmpl`, mirroring `evalInterpString` and
+  dispatched at the same four sites (main loop, forward-collection,
+  paren-eval, map-value). The child splice rule: a List contributes each
+  element, a `Node/Xml` is one child, any other value becomes a text node;
+  adjacent text merges (`eng/go/engine.go`).
+- batteries: interpolation rows in `eng/spec/xml-literal.tsv`,
+  `TestXmlLiteralFreezeVsInterp`/`TestXmlLiteralInterpErrors`
+  (`eng/go/parser/xml_literal_test.go`), `TestXmlLiteralInterpolation`
+  (`lang/go/test/xml_literal_test.go`).
 
 Literal XML embedded directly in AQL source — `<tag …>…</tag>` written
 in-line where a value is expected — producing a first-class `Node/Xml`
