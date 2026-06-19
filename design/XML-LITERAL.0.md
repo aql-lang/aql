@@ -1,11 +1,13 @@
 # AQL Literal XML Embedding Design
 
-Status: Increments 1–2 **LANDED**. Increment 1: static (non-interpolated)
+Status: Increments 1–3 **LANDED**. Increment 1: static (non-interpolated)
 `Node/Xml` literals parse end-to-end, build an immutable element value,
 render back to well-formed XML, and carry structural equality. Increment
 2: `${}` interpolation (§4) — in text, child, and attribute positions.
-Remaining increments (mutable `Node/FlexXml` via `flex`, `parse xml`
-alignment, and the query/accessor words) are design-only — see §7.
+Increment 3: the mutable `Node/Xml/FlexXml` variant via `flex`/`node`,
+with in-place `append` (children) and `set` (attributes). Remaining
+increments (`parse xml` alignment and the query/accessor words) are
+design-only — see §7.
 
 Implementation landed in Increment 1:
 - type `Node/Xml` (FixedID 108) + `XmlElementPayload{Tag,Attr,Cren}` +
@@ -38,6 +40,26 @@ Implementation landed in Increment 2 (interpolation):
   `TestXmlLiteralFreezeVsInterp`/`TestXmlLiteralInterpErrors`
   (`eng/go/parser/xml_literal_test.go`), `TestXmlLiteralInterpolation`
   (`lang/go/test/xml_literal_test.go`).
+
+Implementation landed in Increment 3 (mutable FlexXml):
+- type `Node/Xml/FlexXml` (FixedID 110, child of Node/Xml so it inherits
+  the Xml Behavior) + pointer-backed `*FlexXmlData` payload
+  (`eng/go/types.go`, `eng/go/typetable.go`, `eng/go/payload.go`,
+  `eng/go/value.go` `NewFlexXml`/`AsFlexXml`, `eng/go/util.go` `IsFlexXml`).
+- `xmlBehavior` now reads either payload through a shared `xmlParts`
+  accessor, so Format/Equal treat immutable and flex elements uniformly
+  (`eng/go/core_xml.go`).
+- the kernel flex primitives gained an Xml branch: `FlexDeepCopy`,
+  `NodeDeepCopy`, `containsFlex`, `AdoptIntoFlex`, and `MakeNodeHandler`
+  (`make FlexXml`/`make Xml`) — a flex copy is deep and never aliases the
+  immutable source (`eng/go/core_flex.go`).
+- words: `flex`/`node` round-trip XML unchanged; `append <child> f` (and a
+  List splice) grow children in place; `set <name> <val> f` sets an
+  attribute (DOM setAttribute) (`lang/go/native/native_flex.go`,
+  `native_storage.go`, aliases in `native/aliases.go`).
+- batteries: `TestXmlFlexEndToEnd` (`lang/go/test/xml_literal_test.go`),
+  `TestFlexXmlRoundTrip` (`eng/go/flex_xml_test.go`), Node/Xml/FlexXml in
+  the FixedID stability snapshot.
 
 Literal XML embedded directly in AQL source — `<tag …>…</tag>` written
 in-line where a value is expected — producing a first-class `Node/Xml`

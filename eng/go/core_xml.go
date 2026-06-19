@@ -16,19 +16,19 @@ type xmlBehavior struct{}
 func (xmlBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
 
 func (xmlBehavior) Format(v Value) string {
-	x, ok := v.Data.(XmlElementPayload)
+	tag, attr, cren, ok := xmlParts(v)
 	if !ok {
 		// Bare type literal (Data == nil) or unexpected payload.
 		return "Xml"
 	}
 	var b strings.Builder
-	formatXmlInto(&b, x)
+	formatXmlInto(&b, tag, attr, cren)
 	return b.String()
 }
 
 func (xmlBehavior) Equal(a, b Value) bool {
-	xa, okA := a.Data.(XmlElementPayload)
-	xb, okB := b.Data.(XmlElementPayload)
+	_, _, _, okA := xmlParts(a)
+	_, _, _, okB := xmlParts(b)
 	if okA != okB {
 		return false
 	}
@@ -36,18 +36,40 @@ func (xmlBehavior) Equal(a, b Value) bool {
 		// Both bare type literals: equal iff same lattice node.
 		return DefaultBehavior.Equal(a, b)
 	}
-	return xmlElementsEqual(xa, xb)
+	return xmlElementsEqual(a, b)
+}
+
+// xmlParts extracts the (tag, attr, cren) view of an XML element value,
+// from either the immutable XmlElementPayload or the mutable
+// *FlexXmlData. ok is false for a bare type literal or non-XML value, so
+// Format / Equal / the conversion walks treat both element shapes
+// uniformly. See design/XML-LITERAL.0.md §5.
+func xmlParts(v Value) (tag string, attr *OrderedMap, cren []Value, ok bool) {
+	switch x := v.Data.(type) {
+	case XmlElementPayload:
+		return x.Tag, x.Attr, x.Cren, true
+	case *FlexXmlData:
+		return x.Tag, x.Attr, x.Cren, true
+	}
+	return "", nil, nil, false
+}
+
+// IsXmlValue reports whether v is a concrete XML element of either kind
+// (immutable Node/Xml or mutable Node/Xml/FlexXml).
+func IsXmlValue(v Value) bool {
+	_, _, _, ok := xmlParts(v)
+	return ok
 }
 
 // formatXmlInto serialises one element. Empty-cren elements self-close
 // (`<tag/>`); otherwise `<tag attrs>children</tag>`. Attribute values
-// and text are entity-escaped.
-func formatXmlInto(b *strings.Builder, x XmlElementPayload) {
+// and text are entity-escaped. Child elements of either kind recurse.
+func formatXmlInto(b *strings.Builder, tag string, attr *OrderedMap, cren []Value) {
 	b.WriteByte('<')
-	b.WriteString(x.Tag)
-	if x.Attr != nil {
-		for _, k := range x.Attr.Keys() {
-			val, _ := x.Attr.Get(k)
+	b.WriteString(tag)
+	if attr != nil {
+		for _, k := range attr.Keys() {
+			val, _ := attr.Get(k)
 			b.WriteByte(' ')
 			b.WriteString(k)
 			b.WriteString(`="`)
@@ -55,20 +77,20 @@ func formatXmlInto(b *strings.Builder, x XmlElementPayload) {
 			b.WriteByte('"')
 		}
 	}
-	if len(x.Cren) == 0 {
+	if len(cren) == 0 {
 		b.WriteString("/>")
 		return
 	}
 	b.WriteByte('>')
-	for _, c := range x.Cren {
-		if cx, ok := c.Data.(XmlElementPayload); ok {
-			formatXmlInto(b, cx)
+	for _, c := range cren {
+		if ctag, cattr, ccren, ok := xmlParts(c); ok {
+			formatXmlInto(b, ctag, cattr, ccren)
 			continue
 		}
 		b.WriteString(escapeXmlText(xmlChildText(c)))
 	}
 	b.WriteString("</")
-	b.WriteString(x.Tag)
+	b.WriteString(tag)
 	b.WriteByte('>')
 }
 
@@ -81,32 +103,35 @@ func xmlChildText(v Value) string {
 	return v.String()
 }
 
-func xmlElementsEqual(a, b XmlElementPayload) bool {
-	if a.Tag != b.Tag || len(a.Cren) != len(b.Cren) {
+// xmlElementsEqual compares two XML element values structurally, reading
+// each through xmlParts so an immutable Node/Xml and a content-equal
+// FlexXml compare equal (flexness is a mutability mode, not identity).
+func xmlElementsEqual(a, b Value) bool {
+	at, aattr, acren, _ := xmlParts(a)
+	bt, battr, bcren, _ := xmlParts(b)
+	if at != bt || len(acren) != len(bcren) {
 		return false
 	}
-	ak, bk := orderedMapLen(a.Attr), orderedMapLen(b.Attr)
-	if ak != bk {
+	if orderedMapLen(aattr) != orderedMapLen(battr) {
 		return false
 	}
-	if a.Attr != nil {
-		for _, k := range a.Attr.Keys() {
-			av, _ := a.Attr.Get(k)
-			bv, ok := b.Attr.Get(k)
+	if aattr != nil {
+		for _, k := range aattr.Keys() {
+			av, _ := aattr.Get(k)
+			bv, ok := battr.Get(k)
 			if !ok || xmlChildText(av) != xmlChildText(bv) {
 				return false
 			}
 		}
 	}
-	for i := range a.Cren {
-		ca, cb := a.Cren[i], b.Cren[i]
-		cax, aIsEl := ca.Data.(XmlElementPayload)
-		cbx, bIsEl := cb.Data.(XmlElementPayload)
+	for i := range acren {
+		ca, cb := acren[i], bcren[i]
+		aIsEl, bIsEl := IsXmlValue(ca), IsXmlValue(cb)
 		if aIsEl != bIsEl {
 			return false
 		}
 		if aIsEl {
-			if !xmlElementsEqual(cax, cbx) {
+			if !xmlElementsEqual(ca, cb) {
 				return false
 			}
 			continue

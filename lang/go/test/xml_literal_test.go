@@ -77,6 +77,39 @@ func TestXmlLiteralInterpolation(t *testing.T) {
 	}
 }
 
+// TestXmlFlexEndToEnd covers the mutable Node/Xml/FlexXml variant:
+// `flex` makes a mutable copy, `append`/`set` mutate in place, `node`
+// converts back to an immutable Node/Xml. See design/XML-LITERAL.0.md §5.
+func TestXmlFlexEndToEnd(t *testing.T) {
+	cases := []struct {
+		src  string
+		want any
+	}{
+		// flex round-trips through rendering, and reports its own type.
+		{`flex <a x="1"><b/></a>`, `<a x="1"><b/></a>`},
+		{`typeof (flex <a/>)`, "FlexXml"},
+		{`typeof <a/>`, "Xml"},
+		// append a child element in place (nested so the call is one result).
+		{`append <li>y</li> (append <li>x</li> (flex <ul/>))`, "<ul><li>x</li><li>y</li></ul>"},
+		// a List of children splices.
+		{`append [<li>x</li> <li>y</li>] (flex <ul/>)`, "<ul><li>x</li><li>y</li></ul>"},
+		// set an attribute in place (DOM setAttribute).
+		{`set 'class' 'card' (flex <a/>)`, `<a class="card"/>`},
+		// node converts a mutated flex tree back to an immutable Node/Xml.
+		{`node (append <b/> (flex <a/>))`, "<a><b/></a>"},
+		{`typeof (node (flex <a/>))`, "Xml"},
+	}
+	for _, c := range cases {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("lang.New: %v", err)
+		}
+		if got := runLast(t, a, c.src); got != c.want {
+			t.Errorf("%q: got %v (%T), want %v", c.src, got, got, c.want)
+		}
+	}
+}
+
 // TestXmlLiteralErrorsEndToEnd pins the loud-failure contract.
 func TestXmlLiteralErrorsEndToEnd(t *testing.T) {
 	for _, src := range []string{`<a></b>`, `<a>`, `<a x=1/>`, `<p>${x</p>`} {

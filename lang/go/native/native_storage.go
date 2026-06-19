@@ -125,6 +125,20 @@ var storageNatives = []NativeFunc{
 				Handler: setFlexListHandler,
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
+
+			// FlexXml (in-place attribute set; name → value, like the DOM
+			// setAttribute. Children grow via `append`.)
+			{
+				Args:    []*Type{TString, TAny, TFlexXml},
+				Handler: setFlexXmlHandler,
+				Returns: []*Type{TFlexXml}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TFlexXml},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setFlexXmlHandler,
+				Returns:   []*Type{TFlexXml}, BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -312,6 +326,22 @@ func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		return nil, r.AqlError("set_error", aerr.Error(), "set")
 	}
 	fd.Elems[idx] = val
+	return []Value{container}, nil
+}
+
+func setFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	fd, err := AsFlexXml(container)
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a FlexXml, got "+container.Parent.String(), "set")
+	}
+	// Attributes are String-valued; store a String view of the value so a
+	// flex attribute round-trips through `node` and renders correctly.
+	val := args[1]
+	if !val.Is(TString) {
+		val = NewString(ValToString(val))
+	}
+	fd.Attr.Set(StoreKey(args[0]), val)
 	return []Value{container}, nil
 }
 

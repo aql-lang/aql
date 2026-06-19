@@ -2403,6 +2403,25 @@ func AsFlexList(v Value) (*FlexListData, error) {
 	return nil, fmt.Errorf("AsFlexList: not a flex list payload (got %T)", v.Data)
 }
 
+// NewFlexXml creates a mutable Node/Xml/FlexXml element. attr may be nil
+// (treated as no attributes); cren may be nil (no children). The payload
+// is pointer-backed so append/set mutate in place. See core_flex.go.
+func NewFlexXml(tag string, attr *OrderedMap, cren []Value) Value {
+	if attr == nil {
+		attr = NewOrderedMap()
+	}
+	return NewValueRaw(TFlexXml, &FlexXmlData{Tag: tag, Attr: attr, Cren: cren})
+}
+
+// AsFlexXml returns the pointer-backed FlexXmlData of a FlexXml value;
+// mutators reassign through it so every Value copy observes the change.
+func AsFlexXml(v Value) (*FlexXmlData, error) {
+	if fd, ok := v.Data.(*FlexXmlData); ok {
+		return fd, nil
+	}
+	return nil, fmt.Errorf("AsFlexXml: not a flex xml payload (got %T)", v.Data)
+}
+
 // AsXmlElement returns the XmlElementPayload backing a Node/Xml value,
 // or an error when v is a type literal or a non-Xml value.
 func AsXmlElement(v Value) (XmlElementPayload, error) {

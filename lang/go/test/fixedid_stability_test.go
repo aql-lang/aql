@@ -51,6 +51,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Node/Map":                     14,
 		"Node/Map/FlexMap":             78,
 		"Node/Xml":                     108,
+		"Node/Xml/FlexXml":             110,
 		"Ideal/Table":                  15,
 		"Ideal/Reach":                  29,
 		"Ideal/Record":                 16,

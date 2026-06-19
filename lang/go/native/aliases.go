@@ -142,6 +142,8 @@ var (
 	TFlexList = eng.TFlexList
 	TMap      = eng.TMap
 	TFlexMap  = eng.TFlexMap
+	TXml      = eng.TXml
+	TFlexXml  = eng.TFlexXml
 	TMark     = eng.TMark
 	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
 	TMove           = eng.TMove
@@ -244,6 +246,7 @@ var (
 	AsMutableList             = eng.AsMutableList
 	AsMutableMap              = eng.AsMutableMap
 	AsFlexList                = eng.AsFlexList
+	AsFlexXml                 = eng.AsFlexXml
 	AsObjectInstance          = eng.AsObjectInstance
 	AsObjectType              = eng.AsObjectType
 	AsOptionsType             = eng.AsOptionsType

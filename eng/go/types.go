@@ -35,6 +35,7 @@ var (
 	TMap            = mustType("Node/Map")
 	TFlexMap        = mustType("Node/Map/FlexMap")
 	TXml            = mustType("Node/Xml")
+	TFlexXml        = mustType("Node/Xml/FlexXml")
 	TOptions        = mustType("Ideal/Options")
 	TTable          = mustType("Ideal/Table")
 	TRecord         = mustType("Ideal/Record")

@@ -173,6 +173,19 @@ type XmlCren struct {
 	Expr  []Value
 }
 
+// FlexXmlData is the mutable backing for a Node/Xml/FlexXml element —
+// the build-in-place counterpart of the immutable XmlElementPayload. It
+// is pointer-backed (stored as *FlexXmlData, like *FlexListData) so
+// in-place mutation — append a child, set an attribute — is visible
+// through every Value copy sharing the payload. Attr is a fresh
+// *OrderedMap (never aliased with an immutable source). Constructed by
+// NewFlexXml. See design/XML-LITERAL.0.md §5 and core_flex.go.
+type FlexXmlData struct {
+	Tag  string
+	Attr *OrderedMap
+	Cren []Value
+}
+
 // ParenExprPayload carries the unevaluated tokens of a paren-expression
 // awaiting inline evaluation. Wrapping []Value.
 type ParenExprPayload struct{ Toks []Value }
@@ -365,6 +378,7 @@ func (GenInstRef) payloadMarker()         {}
 func (*FlexListData) payloadMarker()      {}
 func (XmlElementPayload) payloadMarker()  {}
 func (XmlInterpPayload) payloadMarker()   {}
+func (*FlexXmlData) payloadMarker()       {}
 func (*StoreInstanceInfo) payloadMarker() {}
 func (*ArrayInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()       {}
