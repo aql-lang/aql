@@ -377,7 +377,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 				snap := r.Defs.Snapshot()
 				toks2, err2 := ExpandMacroForm(r, args[0])
 				r.Defs.Restore(snap)
-				if err2 == nil && NewList(toks2).String() == lst.String() {
+				if err2 == nil && constFoldAgrees(NewList(toks2), lst) {
 					return []Value{lst}
 				}
 			}
@@ -550,6 +550,27 @@ func isModuleFamilyValue(v Value) bool {
 	return false
 }
 
+// constFoldAgrees reports whether two const-fold probe evaluations produced
+// the SAME bakeable value, compared by CanonValue — the exact structural key
+// the const interner dedups by (emit.go's constIdx). It is the shared
+// determinism gate behind every twice-and-compare const-bake
+// (tryFoldModuleConst, the macroexpand splice in carrierResults, and the
+// engine's constFoldContainerVal): a clock / rand / mutation-bearing read
+// whose two probes drift renders a different canon and is refused, so no
+// nondeterministic value is ever frozen into the program.
+//
+// CanonValue, NOT String(): String() is a DISPLAY rendering that conflates
+// values which bake DIFFERENTLY — a bare type node vs the string of its name
+// (`Integer` vs 'Integer'), an atom vs a same-spelled string (name/q vs
+// 'name'), an Integer vs an equal-magnitude Float, a fn vs a same-shaped fn
+// with a different body — so two genuinely divergent probes could
+// String()-match and freeze an UNSOUND const. CanonValue is the bake
+// identity itself ("same canon" ⟺ "interns to one const"), and it is no
+// coarser than String() on any bakeable shape, so a legitimately
+// deterministic fold still agrees (no coverage change) while the
+// conflations String() hid can no longer slip a frozen value through.
+func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
+
 // tryFoldModuleConst const-folds a PURE read whose result is a compile-time
 // constant because it depends only on a module value (immutable, import-bound)
 // plus inert consts / type operands — `MathUtil.$name` -> 'MathUtil',
@@ -595,7 +616,7 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 		return false
 	}
 	two, ok := concreteHandlerEval(r, sig, args)
-	if !ok || one.String() != two.String() {
+	if !ok || !constFoldAgrees(one, two) {
 		return false
 	}
 	switch {

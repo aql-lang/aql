@@ -3428,7 +3428,7 @@ func (e *Engine) constFoldContainerVal(items []Value) (Value, bool) {
 		return Value{}, false
 	}
 	two, ok := e.concreteEvalOnce(items)
-	if !ok || one.String() != two.String() {
+	if !ok || !constFoldAgrees(one, two) {
 		return Value{}, false
 	}
 	return one, true
