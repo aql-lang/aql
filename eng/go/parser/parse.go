@@ -103,7 +103,7 @@ func withPos(v eng.Value, pos eng.SrcPos) eng.Value {
 //   - Inside lists at the top level: unquoted text → words (quotation).
 //   - Inside lists inside maps: all text → scalar data.
 func Parse(src string) ([]eng.Value, error) {
-	j := jsonic.Make(jsonic.Options{
+	j := SafeMake(jsonic.Options{
 		// tabnas groups the output-shaping flags under Info: Text wraps
 		// scalars in Text{Str,Quote} (quoted/unquoted distinction), List/Map
 		// return ListRef/MapRef carriers with structural metadata. These were

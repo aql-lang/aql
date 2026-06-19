@@ -9,10 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	jsonic "github.com/tabnas/jsonic/go"
-
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/aql-lang/aql/eng/go/parser"
 )
 
 type cmd struct{}
@@ -54,8 +53,7 @@ func Do(dir string) (map[string]any, error) {
 		return nil, err
 	}
 
-	j := jsonic.Make()
-	parsed, err := j.Parse(string(data))
+	parsed, err := parser.SafeParse(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("invalid jsonic: %w", err)
 	}

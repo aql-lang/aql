@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	jsonic "github.com/tabnas/jsonic/go"
+	"github.com/aql-lang/aql/eng/go/parser"
 )
 
 // Load resolves name to a Policy. Resolution order:
@@ -115,8 +115,7 @@ func FromMap(m map[string]any) (Policy, error) {
 
 // parseProfile decodes a jsonic byte slice into a *Profile.
 func parseProfile(data []byte, sourceName string) (*Profile, error) {
-	j := jsonic.Make()
-	raw, err := j.Parse(string(data))
+	raw, err := parser.SafeParse(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("policy: %s: %w", sourceName, err)
 	}

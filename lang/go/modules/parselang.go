@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/native"
 	tabnascsv "github.com/tabnas/csv/go"
 	tabnasfeed "github.com/tabnas/feed/go"
@@ -383,7 +384,7 @@ func tabnasParserSpecs() []ParseLangSpec {
 	// a tabnasParser, merging the caller's opts over the kind's defaults.
 	jsonicPlugin := func(defaults map[string]any, install func(*tabnasjsonic.Jsonic, map[string]any) error) tabnasParser {
 		return func(src string, opts map[string]any) (any, error) {
-			j := tabnasjsonic.Make()
+			j := parser.SafeMake()
 			if err := install(j, mergeOpts(defaults, opts)); err != nil {
 				return nil, err
 			}
@@ -402,7 +403,7 @@ func tabnasParserSpecs() []ParseLangSpec {
 		{"ini", native.TMap, ignoreOpts(func(s string) (any, error) { return tabnasini.Parse(s) })},
 		// JSON family — top level may be an object, array or scalar.
 		{"json", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasjson.Parse(s) })},
-		{"jsonic", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasjsonic.Parse(s) })},
+		{"jsonic", native.TAny, ignoreOpts(func(s string) (any, error) { return parser.SafeParse(s) })},
 		{"json5", native.TAny, jsonicPlugin(tabnasjson5.Defaults(), tabnasjson5.Json5)},
 		{"jsonc", native.TAny, jsonicPlugin(nil, tabnasjsonc.Jsonc)},
 		// CSV: a List of rows, each row a List of field strings.
@@ -415,7 +416,7 @@ func tabnasParserSpecs() []ParseLangSpec {
 		// Markdown: a List of blocks. object:false keeps rows as plain Lists
 		// (the default ordered-map record shape has no exported accessors).
 		{"markdown", native.TList, func(s string, opts map[string]any) (any, error) {
-			j := tabnasjsonic.Make()
+			j := parser.SafeMake()
 			if err := j.UseDefaults(tabnasmarkdown.Markdown, tabnasmarkdown.Defaults,
 				mergeOpts(map[string]any{"object": false}, opts)); err != nil {
 				return nil, err
@@ -425,7 +426,7 @@ func tabnasParserSpecs() []ParseLangSpec {
 		// Feed (RSS/Atom): normalised to a Map. The plugin returns a typed
 		// AtomFeed struct, so a JSON round-trip flattens it to generic data.
 		{"feed", native.TMap, func(s string, opts map[string]any) (any, error) {
-			j := tabnasjsonic.Make()
+			j := parser.SafeMake()
 			if err := tabnasfeed.Feed(j, mergeOpts(tabnasfeed.Defaults, opts)); err != nil {
 				return nil, err
 			}

@@ -9,6 +9,7 @@ import (
 	jsonic "github.com/tabnas/jsonic/go"
 	multisource "github.com/tabnas/multisource/go"
 
+	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
@@ -40,7 +41,7 @@ func (f *TextFormat) Encode(v Value) (string, error) {
 type JSONFormat struct{}
 
 func (f *JSONFormat) Decode(content string) ([]Value, error) {
-	result, err := jsonic.Parse(content)
+	result, err := parser.SafeParse(content)
 	if err != nil {
 		return nil, fmt.Errorf("invalid json: %w", err)
 	}
@@ -65,11 +66,13 @@ type JsonicFormat struct {
 func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 	var j *jsonic.Jsonic
 	if f.Resolver != nil {
-		j = multisource.MakeJsonic(multisource.MultiSourceOptions{
-			Resolver: f.Resolver,
+		j = parser.GuardMake(func() *jsonic.Jsonic {
+			return multisource.MakeJsonic(multisource.MultiSourceOptions{
+				Resolver: f.Resolver,
+			})
 		})
 	} else {
-		j = jsonic.Make()
+		j = parser.SafeMake()
 	}
 	result, err := j.Parse(content)
 	if err != nil {
@@ -195,7 +198,7 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 	// configure a jsonic instance with the CSV grammar, then parse. object:false
 	// + header:false yields raw rows ([]any of []any), matching the previous
 	// CsvOptions{Object:false, Header:false, Field:{Separation:sep}}.
-	j := jsonic.Make()
+	j := parser.SafeMake()
 	if err := csvpkg.Csv(j, map[string]any{
 		"object": false,
 		"header": false,
