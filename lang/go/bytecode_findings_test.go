@@ -331,6 +331,52 @@ func TestComputedThenIfLowers(t *testing.T) {
 	}
 }
 
+// Roadmap item 6 (computed-arm CONDITIONS) — a computed then/else arm compiles
+// not only under a pre-evaluated event condition (`if (x eq 0) (expr) e`, which
+// needs a SWAP) but also under a LIST-FORM condition body (`if [x gt 0] (expr) e`
+// — lowered inline above the eager value, no SWAP) and a CONST/LOCAL condition
+// (`if flag (expr) e` — pushed above the eager value). All must compile native
+// and match the interpreter in both directions, for both computed-then and
+// computed-else.
+func TestComputedArmConditions(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		// list-form condition, computed then
+		{`def x 0  if [x eq 0] (add 1 2) 88`, "3"},
+		{`def x 1  if [x eq 0] (add 1 2) 88`, "88"},
+		// list-form condition, computed else
+		{`def x 0  if [x eq 0] 99 (add 1 2)`, "99"},
+		{`def x 1  if [x eq 0] 99 (add 1 2)`, "3"},
+		// local (fn-param) condition, computed then
+		{`def f fn [[flag:Boolean] [Integer] [if flag (add 1 2) 88]]  f true`, "3"},
+		{`def f fn [[flag:Boolean] [Integer] [if flag (add 1 2) 88]]  f false`, "88"},
+		// local condition, computed else
+		{`def g fn [[flag:Boolean] [Integer] [if flag 99 (add 1 2)]]  g true`, "99"},
+		{`def g fn [[flag:Boolean] [Integer] [if flag 99 (add 1 2)]]  g false`, "3"},
+	}
+	for _, c := range cases {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: must compile (computed-arm condition); reason=%q err=%v", c.src, reason, cerr)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: must compile native, not island:\n%s", c.src, prog.Disassemble())
+			continue
+		}
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(c.src)
+		d, _ := New()
+		gotI, _ := d.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
+			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=[%s]", c.src, compiled, gotC, errC, gotI, c.want)
+		}
+	}
+}
+
 // Roadmap item 6b — a statement-`if` where exactly one arm nets a value and the
 // other nets 0 WITHOUT diverging (`if c [99] []`, `if c [] [99]`,
 // `if c [raise] [99]`) lowers as a VARIADIC (0-or-1) branch result instead of

@@ -979,26 +979,24 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		return ""
 	}
 	if br.elsComputed || br.thenComputed {
-		// One arm's value is an eagerly-computed event sitting just BELOW the
-		// cond event on the stack (`if c [t] (expr)` or `if c (expr) e`). Bring
-		// the cond above it so JMP_IF_FALSE can consume it; the eager value stays
-		// as the result of ITS path, and the OTHER (non-eager) arm DROPs it and
-		// produces its own value.
+		// One arm's value is an eagerly-computed event (`if c [t] (expr)` or
+		// `if c (expr) e`). It is the last thing evaluated before the branch, so
+		// it sits on TOP of the sim stack; the OTHER (non-eager) arm DROPs it and
+		// produces its own value, so it must net a value here.
 		eager, nonEagerHasOut := br.elsVal, br.hasThenOut
 		if br.thenComputed {
 			eager, nonEagerHasOut = br.thenVal, br.hasElsOut
 		}
-		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-1], eager) || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
-			return "if: computed-branch stack layout (Stage 2)"
-		}
 		if !nonEagerHasOut {
-			// The non-eager arm must net a value (the eager value is the other
-			// path's result); a diverging / 0-value arm is not modelled here.
 			return "if: computed-branch non-eager arm diverges (Stage 2)"
 		}
-		lw.swapTop2(br.pos)
-		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; the eager value stays
+		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], eager) {
+			return "if: computed-branch eager value not on top (Stage 2)"
+		}
+		jf, reason := lw.lowerComputedCond(br)
+		if reason != "" {
+			return reason
+		}
 		return lw.lowerComputedBranch(ev, jf)
 	}
 	// Condition on top of stack: a pre-evaluated value, or an inline
@@ -1117,6 +1115,40 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		lw.note()
 	}
 	return ""
+}
+
+// lowerComputedCond materialises a computed-arm branch's condition as a Boolean
+// on TOP of the already-on-stack eager arm value and emits JMP_IF_FALSE
+// (consuming it), returning the jf pc. The eager value is the top sim slot on
+// entry and remains so on return. It handles the three condition shapes the
+// recorder admits for a computed arm:
+//
+//   - a list-form condition body (`if [x gt 0] (expr) e`): lowered inline above
+//     the eager value, netting one Boolean (not tracked in the parent sim);
+//   - an event cond (`if (x eq 0) (expr) e`): the cond event sits just BELOW the
+//     eager value — SWAP it to the top;
+//   - a const / local / type cond (`if flag (expr) e`): pushed above the eager.
+func (lw *lowerer) lowerComputedCond(br *emitBranch) (int, string) {
+	switch {
+	case br.condFrag != nil:
+		if reason := lw.lowerFragment(br.condFrag, &br.condOut, false, br.pos); reason != "" {
+			return 0, reason
+		}
+		return lw.emit(OpJmpIfFalse, 0, br.pos), ""
+	case br.cond.kind == opEvent:
+		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
+			return 0, "if: computed-branch condition not below the eager value (Stage 2)"
+		}
+		lw.swapTop2(br.pos)
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; eager value stays on top
+		return jf, ""
+	default:
+		lw.pushOperand(br.cond, br.pos)
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; eager value stays on top
+		return jf, ""
+	}
 }
 
 // lowerComputedBranch lowers an `if` whose THEN or ELSE value is an eagerly-

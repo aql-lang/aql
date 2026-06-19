@@ -1038,13 +1038,25 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	}
 }
 
-// computedArmCondOK reports whether the branch condition is a plain event on the
-// stack — the only condition shape the computed-arm (eager-value) lowering
-// handles. A const-folded condition, a list-form condition body, or a const /
-// local condition operand each sit elsewhere on (or off) the stack, so a
-// computed then/else value with one of those refuses and falls back.
+// computedArmCondOK reports whether the branch condition is one the computed-arm
+// (eager-value) lowering can materialise as a Boolean on top of the eager value:
+// an event cond (SWAPped up from just below the eager value), a list-form
+// condition body (lowered inline), or a const / local / type cond (pushed). A
+// statically-known (const-folded) condition is handled by the disjoint
+// const-cond path, never here.
 func computedArmCondOK(b BranchRecord, cond emitOperand) bool {
-	return b.ConstCond == nil && b.CondFrag == nil && cond.kind == opEvent
+	if b.ConstCond != nil {
+		return false
+	}
+	if b.CondFrag != nil {
+		return true
+	}
+	switch cond.kind {
+	case opEvent, opConst, opLocal, opType:
+		return true
+	default:
+		return false
+	}
 }
 
 // ArmLoopCapture makes the NEXT AnalyseLoopBody record its final
