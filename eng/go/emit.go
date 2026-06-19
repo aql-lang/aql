@@ -1024,8 +1024,13 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				}
 				ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
 				if !hasThen && !hasEls {
-					es.MarkUncompilable("if: both branches diverge (Stage 2)")
-					return
+					// Both arms produce 0 values — an empty `[]`, a 0-value word
+					// (set/printstr), or a diverging break/continue/raise on BOTH
+					// sides: the if is a 0-value STATEMENT on every path. Record it
+					// zeroOut (no merge slot, like the 2-arg no-else guard) rather
+					// than refusing; both arm fragments still lower, so their effects
+					// and divergence run.
+					zeroOut = true
 				}
 			}
 		}
@@ -2794,7 +2799,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}

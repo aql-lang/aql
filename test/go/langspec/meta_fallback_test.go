@@ -140,7 +140,11 @@ func metaAttribution(source, reason string) (string, bool) {
 // value-def-locals in fn units cleared the 4 `error [… case …]` rows (40 → 36),
 // and dropping RecordClosureCall's dynamic-input pre-decline cleared the caught
 // dynamic-error `error [get code]` row (36 → 35).
-const nonMetaCeiling = 35
+// 35 -> 29: the cross-fn break/continue compilation (OpFlowBreak/OpFlowContinue
+// + the 0-value-if zeroOut and AnalyseFnBody phantom-strip enablers) cleared the
+// 2 recursion.tsv §9 rows, and the ceiling re-tightens to the live actual after
+// earlier landings left it slack.
+const nonMetaCeiling = 29
 
 // TestMetaFallbackBoundary classifies every refused/islanded spec value row as
 // META (an expected, allowlisted interpreter fallback) or NON-META (remaining

@@ -2363,8 +2363,32 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		}
 	}
 
+	result = stripZeroOutResiduals(r, result)
 	r.Check.FnSummaries[key] = result
 	return result
+}
+
+// stripZeroOutResiduals drops a body residual's 0-output statement-guard
+// phantoms — a trailing `if cond [stmt] []` / `if cond [raise]` registers a
+// phantom None carrier but produces 0 RUNTIME values — so a 0-return fn whose
+// body is such a guard returns the right count to a multi-value caller (`b i
+// i`, where b's call must net 0 so the loop body nets just the trailing i).
+// Mirrors the fn-UNIT residual reconciliation (StartFnCompile.finish, which
+// skips the same zeroOut events) on the CALL side. Recording-active only: the
+// zeroOut flag is set during the compile pass.
+func stripZeroOutResiduals(r *Registry, stk []Value) []Value {
+	es := r.Check.Emit
+	if es == nil || !es.active() || len(stk) == 0 {
+		return stk
+	}
+	filtered := make([]Value, 0, len(stk))
+	for _, v := range stk {
+		if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
+			continue
+		}
+		filtered = append(filtered, v)
+	}
+	return filtered
 }
 
 // carrierStacksEqual reports whether two carrier stacks agree

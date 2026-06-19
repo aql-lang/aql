@@ -50,10 +50,20 @@ func RunProgram(p *Program, r *Registry) ([]Value, error) {
 	return runProgram(p, r, DefaultStepLimit)
 }
 
-// vmLoop is one open counted loop's iteration state.
+// vmLoop is one open counted loop's iteration state. exitPC / nextPC / unit /
+// iterBase are read only by a cross-frame flow signal (OpFlowBreak /
+// OpFlowContinue): a break/continue raised in a callee unwinds to the nearest
+// open loop and resumes there. exitPC is the loop's break target (after the
+// back-edge), nextPC its FOR_NEXT (continue target), unit the code unit the
+// loop lives in, and iterBase the operand-stack depth at the CURRENT
+// iteration's start (so a signal drops exactly the current iteration's partial
+// pushes, like the interpreter's mark→move splice).
 type vmLoop struct {
 	cur, end, step int64
 	slot           int
+	exitPC, nextPC int
+	unit           int
+	iterBase       int
 }
 
 // vmFrame remembers a caller's resumption point across a CALL_USER: the
@@ -599,23 +609,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			stack = append(stack, NewTypeLiteral(t))
 		case OpForSetup:
-			if len(stack) < 3 {
-				return nil, vmErrAt(curDebug, pc, "FOR_SETUP underflow")
+			var err error
+			if stack, loops, err = vc.opForSetup(stack, loops, int(in.Arg), curCode, curUnit, pc, curDebug); err != nil {
+				return nil, err
 			}
-			// Pops start (top), end, step — the same range triple
-			// parseRange yields; step semantics match runForLoop,
-			// including the zero-step error and negative steps.
-			start, err1 := stack[len(stack)-1].AsConcreteInteger()
-			endV, err2 := stack[len(stack)-2].AsConcreteInteger()
-			stepV, err3 := stack[len(stack)-3].AsConcreteInteger()
-			stack = stack[:len(stack)-3]
-			if err1 != nil || err2 != nil || err3 != nil {
-				return nil, stampAt(r.AqlError("for_error", "for: range must be concrete Integers", "for"), curDebug, pc, r)
-			}
-			if stepV == 0 {
-				return nil, stampAt(r.AqlError("for_error", "for: step cannot be zero", "for"), curDebug, pc, r)
-			}
-			loops = append(loops, vmLoop{cur: start, end: endV, step: stepV, slot: int(in.Arg)})
 		case OpForNext:
 			if len(loops) == 0 {
 				return nil, vmErrAt(curDebug, pc, "FOR_NEXT without a loop")
@@ -632,6 +629,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			locals[lp.slot] = NewInteger(lp.cur)
 			lp.cur += lp.step
+			// Record this iteration's operand-stack base so a cross-frame
+			// break/continue drops exactly the current iteration's partial pushes
+			// (completed iterations' results sit below it and survive).
+			lp.iterBase = len(stack)
 		case OpSwap, OpReverse:
 			// SWAP is reverse-of-2; OpReverse reverses the top Arg. Shared helper.
 			var err error
@@ -794,6 +795,16 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			locals = f.locals
 			enterUnit(f.retUnit)
 			pc = f.retPC - 1
+		case OpFlowBreak, OpFlowContinue:
+			// A break/continue raised in a fn body with no enclosing loop in its
+			// own unit targets the nearest open loop in an ANCESTOR frame — the
+			// interpreter's cross-frame FlowCtrl, compiled (see flowSignal).
+			var u int
+			var err error
+			if frames, loops, locals, stack, pc, u, err = vc.flowSignal(in.Op, frames, loops, locals, stack, pc, curUnit, curDebug); err != nil {
+				return nil, err
+			}
+			enterUnit(u)
 		default:
 			return nil, vmErrAt(curDebug, pc, "unknown opcode")
 		}
@@ -802,6 +813,73 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 		return nil, vmErrAt(curDebug, len(curCode)-1, "code unit ended without RET")
 	}
 	return stack, nil
+}
+
+// opForSetup opens a counted loop for OpForSetup: it pops the range triple
+// (start on top, then end, then step — the same shape parseRange yields, with
+// runForLoop's zero-step error and negative-step semantics) and appends the
+// vmLoop. exitPC / nextPC ride the existing instruction stream: the lowerer
+// always emits FOR_NEXT immediately after FOR_SETUP, and FOR_NEXT.Arg is the
+// loop's exit pc (patched in lowerLoop), so a cross-frame flow signal finds the
+// loop's targets without a side table. Returns the trimmed stack and the
+// grown loop slice. Split out of run to keep that switch under the complexity
+// budget.
+func (vc *vmContext) opForSetup(stack []Value, loops []vmLoop, slot int, curCode []Instr, curUnit, pc int, debug []SrcPos) ([]Value, []vmLoop, error) {
+	if len(stack) < 3 {
+		return nil, nil, vmErrAt(debug, pc, "FOR_SETUP underflow")
+	}
+	start, err1 := stack[len(stack)-1].AsConcreteInteger()
+	endV, err2 := stack[len(stack)-2].AsConcreteInteger()
+	stepV, err3 := stack[len(stack)-3].AsConcreteInteger()
+	stack = stack[:len(stack)-3]
+	if err1 != nil || err2 != nil || err3 != nil {
+		return nil, nil, stampAt(vc.r.AqlError("for_error", "for: range must be concrete Integers", "for"), debug, pc, vc.r)
+	}
+	if stepV == 0 {
+		return nil, nil, stampAt(vc.r.AqlError("for_error", "for: step cannot be zero", "for"), debug, pc, vc.r)
+	}
+	loops = append(loops, vmLoop{
+		cur: start, end: endV, step: stepV, slot: slot,
+		exitPC: int(curCode[pc+1].Arg), nextPC: pc + 1, unit: curUnit, iterBase: len(stack),
+	})
+	return stack, loops, nil
+}
+
+// flowSignal resolves a cross-frame break/continue (OpFlowBreak /
+// OpFlowContinue — see the opcode docs): a break/continue raised in a fn body
+// with no enclosing loop in its OWN unit targets the nearest open loop, which
+// lives in an ANCESTOR frame. It unwinds every frame opened since that loop
+// (restoring the caller's locals; the returned unit is the loop's, re-entered
+// by run's enterUnit), discards the current iteration's partial operand pushes
+// (trim to the loop's iteration base — completed iterations' results sit below
+// and survive), then points pc at the loop's exit (break) or FOR_NEXT
+// (continue). With no open loop at all it returns an internal_error so
+// RunCompiled falls back and the interpreter raises the canonical "outside
+// loop" taxonomy. Returns the updated frames/loops/locals/stack/pc and the unit
+// to re-enter. This is engine.go's handleLoopBreak / handleLoopContinue,
+// compiled. Split out of run to keep that switch under the complexity budget.
+func (vc *vmContext) flowSignal(op Opcode, frames []vmFrame, loops []vmLoop, locals, stack []Value, pc, curUnit int, debug []SrcPos) ([]vmFrame, []vmLoop, []Value, []Value, int, int, error) {
+	if len(loops) == 0 {
+		return nil, nil, nil, nil, 0, 0, vmErrAt(debug, pc, "flow signal with no enclosing loop")
+	}
+	target := len(loops) - 1
+	lp := loops[target]
+	unit := curUnit
+	for len(frames) > 0 && frames[len(frames)-1].loopBase > target {
+		f := frames[len(frames)-1]
+		frames = frames[:len(frames)-1]
+		vc.frameDepth--
+		locals = f.locals
+		unit = f.retUnit
+	}
+	stack = stack[:lp.iterBase]
+	if op == OpFlowBreak {
+		loops = loops[:target]
+		pc = lp.exitPC - 1
+	} else {
+		pc = lp.nextPC - 1
+	}
+	return frames, loops, locals, stack, pc, unit, nil
 }
 
 // stampAt / vmErrAt are the per-unit debug-table variants of the
