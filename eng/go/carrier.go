@@ -364,7 +364,22 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	if word == "macroexpand" && len(args) == 1 {
 		if toks, err := ExpandMacroForm(r, args[0]); err == nil {
 			if lst := NewList(toks); isInertConst(lst) {
-				return []Value{lst}
+				// Determinism guard (mirrors tryFoldModuleConst /
+				// constFoldContainerVal): ExpandMacroForm runs the macro template
+				// through a sub-engine, which is NOT guaranteed pure — a template
+				// reading now/rand/mutable state expands differently each step, and
+				// isInertConst accepting the result does not imply determinism (an
+				// unevaluated (now) member is inert). Bake the check-time expansion
+				// only when a second expansion agrees; on mismatch fall through to
+				// refuse so the interpreter expands at its own step. The probe runs
+				// under a def-stack snapshot so it leaves no new side effect beyond
+				// the first expansion's (which is preserved, as before).
+				snap := r.Defs.Snapshot()
+				toks2, err2 := ExpandMacroForm(r, args[0])
+				r.Defs.Restore(snap)
+				if err2 == nil && NewList(toks2).String() == lst.String() {
+					return []Value{lst}
+				}
 			}
 		}
 	}
@@ -2166,6 +2181,18 @@ func FnAnalysisKey(name string, args []Value, captures []CapturedBinding, body [
 // the analyser aborted (recursion detected or body not available) —
 // callers should treat that as an Any carrier.
 func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type) []Value {
+	// Fn-body analysis runs nested sub-engines — not part of the
+	// caller's straight line; pause bytecode recording, UNLESS a fn
+	// compilation armed capture (StartFnCompile): the body's events then
+	// record into the open fn fragment. Resolved at ENTRY, above every
+	// early return below, so an armed analysis that bails early — empty
+	// body, a cached summary, the per-fn analysis quota, or in-flight
+	// recursion — still CONSUMES the one-shot fnArm rather than stranding
+	// it for the next, unrelated AnalyseFnBody (whose guard would then
+	// mis-consume it and leak that body's events into the live fn
+	// fragment). Mirrors how captureArm/loopArm are consumed at the top
+	// of their analysis functions.
+	defer r.Check.Emit.fnBodyGuard()()
 	if len(body) == 0 {
 		return nil
 	}
@@ -2236,12 +2263,6 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// (RescueForwardRefDiagnostics).
 	r.Check.FnBodyDepth++
 	defer func() { r.Check.FnBodyDepth-- }()
-
-	// Fn-body analysis runs nested sub-engines — not part of the
-	// caller's straight line; pause bytecode recording, UNLESS a fn
-	// compilation armed capture (StartFnCompile): the body's events
-	// then record into the open fn fragment.
-	defer r.Check.Emit.fnBodyGuard()()
 
 	// runOnce performs one full body analysis: snapshot def-stack
 	// depths so any defs the body, captures, or parameter bindings

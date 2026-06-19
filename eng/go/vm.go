@@ -263,7 +263,16 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	}
 	mr := MatchSignature(sigs, window, WordInfo{ArgCount: n})
 	if mr == nil || mr.Sig == nil || mr.Sig.Handler == nil {
-		return nil, stampAt(makeAqlError("signature_error", "no matching signature for "+pr.Word, pr.Word, r.Source, ""), curDebug, pc, r)
+		// No runtime match. The interpreter's signature_error is built from its
+		// live tape / forward-collection state (engine.go sigError) — available
+		// signatures, a reorder hint, the nearby stack types — which the VM
+		// cannot faithfully reproduce, so emitting a bare signature_error here
+		// DIVERGES from the interpreter's detail/hint. Route through the
+		// whole-program fallback instead (internal_error → RunCompiled re-runs
+		// the interpreter), which raises the canonical, byte-identical error.
+		// Sound because the interpreter takes the SAME MatchSignature first-match
+		// and so reaches the same no-match.
+		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
 	}
 	results, err := mr.Sig.Handler(mr.Args, r.Contexts.TopData(), nil, r)
 	if err != nil {
@@ -311,6 +320,15 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	r := vc.r
 	if len(stack) < n+1 {
 		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC underflow")
+	}
+	if trailing && n != 1 {
+		// OpCallDynamicTrailing is emitted only with arity 1 (bytecode.go): the
+		// non-callable residual rotation below puts the fn back on top of its
+		// single arg, but with >1 arg the forward args would be collected in the
+		// opposite order to the interpreter's top-down stack collection. Assert
+		// it so a future lowering bug degrades to a loud internal_error →
+		// fallback rather than silently mis-ordering the residual.
+		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC_TRAILING with arity != 1")
 	}
 	base := len(stack) - n - 1
 	fnVal := stack[base]
@@ -432,6 +450,15 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 	r := vc.r
 	if len(stack) < fb.NIn {
 		return nil, vmErrAt(curDebug, pc, "FALLBACK underflow at "+fb.Desc)
+	}
+	if fb.NIn > 1 {
+		// The lowerer threads only 0 or 1 input into an island (lower.go refuses
+		// >1): a multi-input island would preload the threaded values bottom→top,
+		// the OPPOSITE of the interpreter's top-down collection (the same
+		// inversion that bounds OpCallDynamicTrailing to arity 1). Assert it so a
+		// future lowering bug degrades to a loud internal_error → whole-program
+		// fallback rather than silently mis-ordering the island's inputs.
+		return nil, vmErrAt(curDebug, pc, "FALLBACK threads >1 input at "+fb.Desc)
 	}
 	island := make([]Value, 0, fb.NIn+len(fb.Tokens))
 	island = append(island, stack[len(stack)-fb.NIn:]...)
@@ -714,10 +741,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				// return slot is untouched; loop state cannot leak
 				// across a tail boundary in the compiled subset (tail
 				// position excludes open loops by construction), but
-				// trim defensively to the frame's base.
+				// trim defensively to the enclosing activation's loop
+				// base — the calling frame's loopBase, or 0 at the
+				// activation root (no frame; `loops` starts empty per
+				// run()) — UNCONDITIONALLY, so a mis-emitted tail-in-loop
+				// cannot leak a stale vmLoop into the replacement unit
+				// (the old guard skipped the trim entirely when frameless).
+				loopBase := 0
 				if len(frames) > 0 {
-					loops = loops[:frames[len(frames)-1].loopBase]
+					loopBase = frames[len(frames)-1].loopBase
 				}
+				loops = loops[:loopBase]
 			}
 			locals = nl
 			enterUnit(int(in.Arg))
