@@ -7,78 +7,14 @@ package eng
 // closure through the VM's re-entrant runner (vmContext.invokeClosure) via the
 // InvokeBody seam — no interpreter sub-engine.
 
-// callableWord describes such a word: bodyPos is the body operand's sig
-// position, and inputs returns the per-invocation input carriers (generalised
-// types, so the body does not constant-fold one call's values) in the order
-// InvokeBody supplies them to the body.
-type callableWord struct {
-	bodyPos int
-	inputs  func(args []Value) []Value
-	// bodyOut is how many values the body nets per invocation: 1 for a
-	// map/transform body (each/fold/do), 0 for a SIDE-EFFECT body (a test case
-	// whose assertions raise on failure and otherwise leave nothing). It sets the
-	// compiled unit's declared return count and the recorded dispatch's nout.
-	bodyOut int
-}
-
-// callableWords is the closure-eligible set: pure, single-result code-body
-// transforms whose handlers run their body via InvokeBody. Each body nets
-// exactly one value per invocation (the closure unit's single declared
-// return). Expanded only with the differential + full-corpus gates green.
-var callableWords = map[string]callableWord{
-	// each [body] data — body sees one element, returns the mapped value.
-	"each": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
-		return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
-	}},
-	// filter [body] data — body sees one element, returns a Boolean.
-	"filter": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
-		return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
-	}},
-	// fold [body] data init — body sees (accumulator, element). InvokeBody
-	// supplies [acc, elem]; acc generalises to the init's type, or (no-init
-	// 2-arg form) to the element type, since the accumulator starts as the
-	// first element.
-	"fold": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
-		elem := DataListElemTypeFromValue(a[1])
-		if len(a) >= 3 {
-			return []Value{NewCarrier(a[2].Parent), NewCarrier(elem)}
-		}
-		return []Value{NewCarrier(elem), NewCarrier(elem)}
-	}},
-	// scan [body] data — body sees (accumulator, element); the accumulator
-	// starts as the first element, so both inputs carry the element type.
-	"scan": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
-		e := DataListElemTypeFromValue(a[1])
-		return []Value{NewCarrier(e), NewCarrier(e)}
-	}},
-	// do [body] — runs the body with no inputs and returns its single
-	// residual value (a multi-value body nets != 1 and refuses to the island).
-	"do": {bodyPos: 0, bodyOut: 1, inputs: func(a []Value) []Value {
-		return []Value{}
-	}},
-	// with-decimal {opts} [body] — runs a 0-input body inside a scoped
-	// BigDecimal rounding context (opts at sig 0, body at sig 1). Like `do`,
-	// the body nets its single residual; the handler pushes the context around
-	// InvokeBody so the VM-run body's BigDecimal ops read the override.
-	"with-decimal": {bodyPos: 1, bodyOut: 1, inputs: func(a []Value) []Value {
-		return []Value{}
-	}},
-	// test-test [body] (the aql:test module's case runner — `Test.test "n"
-	// [body]`): a SIDE-EFFECT body (bodyOut 0) whose assertions raise on
-	// failure and otherwise net nothing. The handler runs it via InvokeBody
-	// and catches any assertion error to record pass/fail. A dormant entry
-	// unless the aql:test module is loaded (string-keyed, no import coupling).
-	"test-test": {bodyPos: 1, bodyOut: 0, inputs: func(a []Value) []Value {
-		return []Value{}
-	}},
-	// test-describe [body] (`Test.describe "g" [ Test.test … ]`): a SIDE-EFFECT
-	// grouping body (bodyOut 0) whose nested `Test.test` cases each compile as
-	// their own closure. The handler pushes the group name on the path around
-	// the InvokeBody run.
-	"test-describe": {bodyPos: 1, bodyOut: 0, inputs: func(a []Value) []Value {
-		return []Value{}
-	}},
-}
+// The closure-eligible set is NOT a name-keyed table in eng. Each such word
+// DECLARES its closure shape on its NativeFunc as a *CallableSpec (BodyPos /
+// BodyOut / Inputs), which RegisterNativeFunc copies onto every signature; the
+// recorder reads it back via the resolved sig.Callable. eng therefore names no
+// specific word — the core transforms (each / fold / scan / do / filter /
+// with-decimal) declare in lang/native, and module words (the aql:test case /
+// describe bodies) declare in their own module, with no eng↔module coupling.
+// See eng/go/value.go::CallableSpec and review §4.5.
 
 // compileClosureBody compiles a code body (bodyToks) consuming the given input
 // carriers into its own fn unit, returning (unitIndex, ok). The body is
@@ -92,14 +28,14 @@ var callableWords = map[string]callableWord{
 // `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
-func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
+func compileClosureBody(r *Registry, word string, bodyOut int, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
-	// A side-effect body word (bodyOut 0 — `test-test`) declares NO returns, so
-	// its 0-value residual is taken as-is rather than count-refused against the
-	// default single [TAny]. A word not in callableWords (the fn-VALUE factory,
-	// word "fnval") keeps the single return.
+	// A side-effect body word (bodyOut 0 — a test case body) declares NO returns,
+	// so its 0-value residual is taken as-is rather than count-refused against the
+	// default single [TAny]. The fn-VALUE factory path (word "fnval") passes
+	// bodyOut 1, so it keeps the single return.
 	declared := []*Type{TAny}
-	if spec, ok := callableWords[word]; ok && spec.bodyOut == 0 {
+	if bodyOut == 0 {
 		declared = nil
 	}
 	if paramNames == nil {
@@ -133,17 +69,17 @@ func compileClosureBody(r *Registry, word string, bodyToks, inputs []Value, para
 // the REAL emit state untouched — the probe runs in a throwaway state — so the
 // caller falls through to the island path.
 func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
-	spec, ok := callableWords[word]
-	if !ok {
+	if sig == nil || sig.Callable == nil {
 		return false
 	}
+	spec := *sig.Callable
 	es := r.Check.Emit
 	// 0 or 1 outputs (a side-effect case body nets 0; a map/transform body nets
 	// 1) — RecordClosureCall lowers both; a multi-output word is beyond this path.
-	if !es.active() || sig == nil || len(outs) > 1 || spec.bodyPos >= len(args) {
+	if !es.active() || len(outs) > 1 || spec.BodyPos >= len(args) {
 		return false
 	}
-	body := args[spec.bodyPos]
+	body := args[spec.BodyPos]
 
 	// A lambda VALUE body (`filter ([p:Any] => …) data`): the afn's named
 	// param binds to the WORD'S callback shape ({key,value} pair for list
@@ -170,7 +106,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	if bodyHasSentinel(body) {
 		return false
 	}
-	inputs := spec.inputs(args)
+	inputs := spec.Inputs(args)
 	if inputs == nil {
 		return false
 	}
@@ -193,7 +129,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 // refusal to stand — for a shape the word has no lambda convention for, an
 // arity mismatch, a capturing lambda (deferred), or a body that does not
 // compile.
-func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Signature, args []Value, fd *FnDefInfo, outs []Value, pos SrcPos) bool {
+func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Signature, args []Value, fd *FnDefInfo, outs []Value, pos SrcPos) bool {
 	lam, ok := fd.FirstOwnSig()
 	if !ok || len(lam.Body) == 0 {
 		return false
@@ -220,7 +156,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Si
 	if bodyToksHaveSentinel(lam.Body) {
 		return false
 	}
-	inputs, shape, ok := lambdaCallbackInputs(r, word, args, lam)
+	inputs, shape, ok := lambdaCallbackInputs(r, word, spec, args)
 	if !ok || len(lam.Params) != len(inputs) {
 		return false
 	}
@@ -274,7 +210,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec callableWord, sig *Si
 // real-compiles it and records the dispatch (the body operand lowering to
 // OpPushClosure). paramNames is nil for the token form (stack-consumed inputs)
 // and the lambda's param names for the lambda form.
-func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, outs []Value, pos SrcPos) bool {
+func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, outs []Value, pos SrcPos) bool {
 	capOps := make([]emitOperand, len(captures))
 	for i, cb := range captures {
 		op, ok := r.Check.Emit.resolveOperand(cb.Value)
@@ -293,7 +229,7 @@ func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Sig
 	// real program untouched (graceful fall-through to the island).
 	real := r.Check.Emit
 	r.Check.Emit = NewEmitState()
-	_, probeOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, shape, pos)
+	_, probeOk := compileClosureBody(r, word, spec.BodyOut, bodyToks, inputs, paramNames, captures, shape, pos)
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -301,16 +237,16 @@ func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Sig
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, bodyToks, inputs, paramNames, captures, shape, pos)
+	unit, realOk := compileClosureBody(r, word, spec.BodyOut, bodyToks, inputs, paramNames, captures, shape, pos)
 	if !realOk || unit < 0 {
 		return false
 	}
-	return real.RecordClosureCall(word, sig, args, spec.bodyPos, unit, capOps, outs, pos)
+	return real.RecordClosureCall(word, sig, args, spec.BodyPos, unit, capOps, outs, pos)
 }
 
 // lambdaCallbackInputs returns the representative input carriers a higher-order
 // word presents to a LAMBDA callback — the word's callback shape, which differs
-// from the token-quotation form (spec.inputs) — plus the runtime ClosureInShape
+// from the token-quotation form (spec.Inputs) — plus the runtime ClosureInShape
 // the driving handler reads to present each entry:
 //
 //   - filter over a LIST: one {key, value} pair Map (the element via `.value`).
@@ -322,12 +258,11 @@ func recordClosureDispatch(r *Registry, word string, spec callableWord, sig *Sig
 // convention (the caller then leaves the refusal to stand): a list each/fold,
 // a no-init map fold, and for-each (whose check-mode output count does not match
 // its 0-result runtime) all stay on the refusal path.
-func lambdaCallbackInputs(r *Registry, word string, args []Value, _ *Signature) ([]Value, ClosureInShape, bool) {
-	spec, ok := callableWords[word]
-	if !ok || spec.bodyPos+1 >= len(args) {
+func lambdaCallbackInputs(r *Registry, word string, spec CallableSpec, args []Value) ([]Value, ClosureInShape, bool) {
+	if spec.BodyPos+1 >= len(args) {
 		return nil, ClosureInValue, false
 	}
-	data := args[spec.bodyPos+1] // the data operand follows the body operand
+	data := args[spec.BodyPos+1] // the data operand follows the body operand
 	if !IsConcrete(data) {
 		return nil, ClosureInValue, false
 	}
@@ -349,8 +284,8 @@ func lambdaCallbackInputs(r *Registry, word string, args []Value, _ *Signature) 
 	case "fold":
 		// Init form only (`init fold (lambda) {m}` → args [lambda, map, init]):
 		// the accumulator carries the seed's type, the entry rides as a KeyVal.
-		if isMap && len(args) > spec.bodyPos+2 {
-			acc := args[spec.bodyPos+2]
+		if isMap && len(args) > spec.BodyPos+2 {
+			acc := args[spec.BodyPos+2]
 			return []Value{NewCarrier(acc.Parent), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
 	case "scan":

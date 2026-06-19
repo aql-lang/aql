@@ -4,10 +4,59 @@ Status: **largely implemented** (2026-06, branch
 `claude/pensive-thompson-vv4387`). This was a `.0` proposal; the bulk of it has
 now landed across 11 gate-clean commits. **Read the new
 [Implementation report](#implementation-report-2026-06) and
-[Completion guide](#completion-guide-the-remaining-73--the-path-to-p7) first** —
+[Completion guide](#completion-guide-remaining-refusals--the-path-to-p7) first** —
 they record what landed, what was deliberately *not* done (with reasons), and
 what the next session should do. The original analysis (§0–§10) is preserved
 below, with inline **LANDED** / **NOT DONE** annotations.
+
+**Follow-on review session (2026-06, branch `claude/lucid-davinci-ajtxt5`).** A
+critical re-read verified every claim below against the live tree (numbers exact,
+gates green, opcodes sound) and acted on its own recommendations across more
+gate-clean commits:
+
+- **§4.5 finished** — the last name-keyed table, `callableWords`, was the only
+  remaining instance of the eng↔module coupling §4.5 set out to remove (it
+  hard-coded the `aql:test` words `test-test` / `test-describe`). It is now a
+  word-level `Signature.Callable` (`*CallableSpec`) declaration; eng names no
+  callable word. See the corrected §4.5 note.
+- **Trailing fn-value boundary** (completion-guide #1, the "biggest lever") —
+  `5 m.f`, `[..] r.one-of` now compile via the new `OpCallDynamicTrailing`.
+  Ratchet **73 → 71**.
+- **Quoted-operand inert words** (completion-guide coverage cluster) —
+  `quote` / `codequote` / `raise` / `timeout` / `interval` declare a new
+  `CompileQuoteInert` effect, so the recorder bakes their inert quoted operand
+  (a symbol, or a code body held as data) + `CALL_NATIVE` instead of refusing —
+  the declarable analogue of the get/getr/set exemption. Cleared 7 of the 10
+  quoted-operand rows. Ratchet **71 → 64**. The 3 `timeout`/`interval` rows whose
+  code BODY reaches the check as a carrier (no recoverable inert provenance) stay
+  refused — a §4.3 / `materialise` gap, not the flag.
+- **`rand-list-of` generator body** (completion-guide code-body cluster) —
+  `Rand.list-of [body] n` runs a 0-input generator body n times; it now declares
+  a `CallableSpec` (the same closure shape as `do`) and its handler runs the
+  compiled closure via `InvokeBody`. Ratchet **64 → 63**. The other 5 code-body
+  rows need distinct, more-involved mechanisms (see the completion-guide note).
+- **Value-arm `if`** (completion-guide if-branch cluster) — `if cond v1 v2` with
+  VALUE arms (not `[body]` code) refused "then-branch not captured" because the
+  then arm was run as a body (nil fragment) while only the else handled a value.
+  Made the then arm symmetric with the else (a value-then pushes its value, like
+  value-else). Cleared the direct form AND the usurp-if shape (`usurp if`
+  dispatches `if` with value arms) — 3 rows. Ratchet **63 → 60**. The 3 remaining
+  if-branch rows are NOT this: 1 computed-else/variadic-statement-if (the
+  variadic-merge refactor) + 2 cross-fn `break`/`continue` (a soundness boundary
+  — see below).
+- **`returnsof` static return type** (completion-guide dynamic cluster) —
+  `TypeUtil.returnsof` reported its output as the opaque `TAny` (dynamic), so the
+  dispatch refused as a dynamic output — unlike `arityof`/`typeof`, whose concrete
+  output bakes. A `ReturnsFn` now computes the precise return type for a concrete
+  fn (the same value the handler produces), so the output is a concrete type node
+  and bakes a `CALL_NATIVE`. Ratchet **60 → 59**. This was the *one* cleanly
+  tractable row in the dynamic cluster; the other 16 are the hard soundness
+  frontier (see the completion-guide note).
+- **Doc precision** — two overstatements in the original report are corrected
+  inline (the §4.1a "`layoutOperands` deleted / unreachable by construction"
+  claim, and §4.5's "all five tables migrated"), and the P7 distance is stated
+  honestly. The `refusalCeiling` history was moved out of the test into
+  [§11](#11-refusal-ceiling-decrement-history) below.
 
 This note is a router + analysis for the next person (or session) working on the
 AQL bytecode compiler. It captures (a) how the checker and the bytecode compiler
@@ -63,24 +112,45 @@ per commit: `fmt/vet/lint/test` × 35 packages + coverage + differential +
   user-fn frames so closures still raise `each_error`); the suppression case
   added `OpTrap`.
 - **§6 meta** — **LANDED.** `rootCause` second axis on the histogram.
-- **§4.5** — **LANDED.** A capability *bitfield* (`CompileReadsFn`/`StoresFn`/
-  `ModuleFold`/`IslandPure`/`FallbackBody`); a word-level `NativeFunc.CompileEffect`
-  OR'd into each sig keeps per-word classification to one declaration. All five
-  name tables migrated; `checkModeLiteralWords` **kept** (consulted pre-dispatch
-  on raw tokens, where no matched sig exists).
+- **§4.5** — **LANDED (completed in the follow-on session).** A capability
+  *bitfield* (`CompileReadsFn`/`StoresFn`/`ModuleFold`/`IslandPure`/`FallbackBody`);
+  a word-level `NativeFunc.CompileEffect` OR'd into each sig keeps per-word
+  classification to one declaration. Five capability tables migrated to the
+  bitfield; `checkModeLiteralWords` **kept** (consulted pre-dispatch on raw
+  tokens, where no matched sig exists). **Correction to the original note ("all
+  five migrated"):** the §4.5 problem statement listed *seven* tables, and the
+  seventh — `callableWords` — is NOT a capability flag (it carries structural
+  per-word data: the body operand position, output count, and an `inputs`
+  closure), so it could not fold into the bitfield, and it still hard-coded the
+  `aql:test` module words `test-test` / `test-describe` — the exact eng↔module
+  coupling §4.5 targeted. The follow-on session lifted it to a word-level
+  `Signature.Callable` (`*CallableSpec{BodyPos, BodyOut, Inputs}`, copied from
+  `NativeFunc.Callable` at registration, read back via the resolved
+  `sig.Callable`). eng now names **no** callable word — the core transforms
+  declare in `lang/native`, the `aql:test` bodies in their own module. The
+  package-global `callableWords` map is deleted.
 - **§4.6** — **NOT DONE.** The `carrierResults` try-chain collapse is *not
   cleanly feasible*: the fallthrough is load-bearing — the same word (`get`)
   takes static-index-fold / module-fold / island / plain-call paths by operand
   *shape*, not by its declared effect.
-- **§4.1/§4.2 big bet** — **LANDED (headline).** `OpReverse` + `spillSeat`
-  delete the `layoutOperands` ladder (`reorder`/`shapeBeyond`/`notAdjacent`/
-  `underflow` gone). A hard operand shape now spills its event operands to
-  **frame-local destinations** (`OpStoreLocal`) and re-pushes in sig order — DDCG's
-  "data destination = a frame slot", generalized from the existing
-  `planValueDefLocals` promotion. The operand-shape refusal class is **unreachable
-  by construction**. **Not needed:** the §4.2 `valueNumber` reframe (`producedBy`
-  already *is* the value-graph DAG); recording-side destination-threading and
-  `DUP`/`TUCK`/`ROT` (the spill subsumes them — no current-corpus payoff).
+- **§4.1/§4.2 big bet** — **LANDED (headline).** `OpReverse` + `spillSeat` turn
+  the `layoutOperands` ladder's *hard* cases (the `reorder`/`shapeBeyond`/
+  `notAdjacent` shapes that used to refuse outright) into a spill: a hard operand
+  shape spills its event operands to **frame-local destinations** (`OpStoreLocal`)
+  and re-pushes in sig order — DDCG's "data destination = a frame slot",
+  generalized from the existing `planValueDefLocals` promotion. **Precision (a
+  correction to the original wording "ladder deleted / unreachable by
+  construction"):** the `layoutOperands` 0/1/2/N ladder is NOT deleted — it still
+  exists, and its hard cases now *delegate to* `spillSeat` rather than refusing.
+  `spillSeat` itself still *declines* in two cases (fewer stack slots than event
+  operands, or a genuinely non-operand value interleaved on top), so the refusal
+  class is not literally "unreachable by construction" — it is empirically **0 on
+  the current corpus** (verified: no operand-shape bucket in the histogram), and
+  the spill's success path is parity-tested directly (`bytecode_findings_test.go`,
+  the `[1 (2 add 3) 4]` interleave) since the corpus does not drive it. **Not
+  needed:** the §4.2 `valueNumber` reframe (`producedBy` already *is* the
+  value-graph DAG); recording-side destination-threading and `DUP`/`TUCK`/`ROT`
+  (the spill subsumes them — no current-corpus payoff).
 
 **Honest verdict on the big bet.** Its payoff was **structural, not numeric**:
 the operand-layout refusals were already at 0 (cleared by `OpReverse`), so
@@ -91,50 +161,148 @@ operand-layout** — see the completion guide.
 
 ---
 
-## Completion guide (the remaining 73 + the path to P7)
+## Completion guide (remaining refusals + the path to P7)
 
 Live histogram (verify with `go test -run TestCompiledCoverage -v`):
-**2769 rows — 2384 compiled (5 islanded), 312 check-errors, 73 refused.**
-Root-cause axis: **soundness 40 · scheduling 14 · coverage 19 · opcode 0 ·
-correct-error 0.**
+**2769 rows — 2411 compiled (5 islanded), 312 check-errors, 46 refused.**
+Root-cause axis: **soundness 29 · scheduling 9 · coverage 8 · opcode 0 ·
+correct-error 0.** (Was 73 / scheduling 14 / coverage 19 at the start of the
+follow-on session, before the trailing fn-value boundary (→ 71), the
+quoted-operand inert words (→ 64), `rand-list-of` (→ 63), the value-arm `if`
+(→ 60), `returnsof` (→ 59), the module Table-type get fold (→ 57), the
+dot-access reach in an inert body (→ 53), the catch frame (→ 51),
+value-def-locals in fn units (→ 47), and the dynamic-input-to-closure fix
+(→ 46) landed. The remaining soundness rows are the hard core; see below.)
 
 | n | bucket | root cause | what it actually needs |
 |---|---|---|---|
-| 20 | operand provenance | soundness | provenance for generic/module/class operands (re-test §4.3 back-pointer here) |
-| 12 | dynamic/opaque output | soundness | richer runtime poly for dynamic dispatch |
-| 10 | quoted-operand word | coverage | compile the `usurp`/`ref`-family inert cases |
-| 8 | residual lowering | scheduling\* | **the fn-value-call boundary** (`5 m.f`, `[..] r.one-of`) — NOT operand layout |
-| 6 | code-body word (NoEvalArgs) | coverage | the `aql:test` 2-body property words |
-| 6 | if-branch lowering | scheduling\* | **branch-result-modeling** (computed-else, variadic-statement-if, `usurp if`) |
-| 5 | dynamic input | soundness | soundness-gated; needs runtime guards |
+| 17 | operand provenance | soundness | provenance for generic/module/class operands. The module-exported Table-type sub-case landed (Table joined the structural-type-body const family) and `Rand.map-from` cleared via the inert-reach-member fix; the rest is a heterogeneous tail dominated by correct dynamic/error refusals — §4.3 back-pointer still NOT justified, see below |
+| 5 | dynamic/opaque output | soundness | **error cluster COMPLETE** — all 6 `error [handler]` rows now compile (catch frame: `raise` is CompileDiverges so a divergent closure body compiles with no RET and the error propagates to `do`/`error` via InvokeBody; `error` is one (List, Any) sig with a runtime IsError branch; AND value-def-locals now run per-unit so a `get code case […]` computed scrutinee seats inside the handler closure). The remaining 5 are all **correct refusals**: **4 path-modifier** re-dispatch fns (usurp family, meta) + **1 `await`** (async). This bucket is now effectively floored |
+| 3 | quoted-operand word | coverage | the 3 `timeout`/`interval` rows whose code BODY is a carrier (no recoverable inert provenance) — needs body materialisation (§4.3), NOT the flag; `quote`/`codequote`/`raise` cleared via `CompileQuoteInert` |
+| 2 | code-body word (NoEvalArgs) | coverage | `reach` with a **computed key segment** (×2, `reach 5 [a (add 1 2) c]` / `reach 0 [x (k)]` — needs a foldable/bakeable `ParenExpr` segment in the NoEval body). The 2-body property words `prop`/`check-prop`/`skip` were NOT a closure problem — they bake their inert bodies as consts and only refused on the dot-access reach inside them, now cleared via `inertReachMember`. `rand-list-of` cleared via a `CallableSpec` |
+| 3 | if-branch lowering | scheduling\* | 1 computed-else/variadic-statement-if (**branch-result-modeling** — the variadic-merge refactor) + **2 cross-fn `break`/`continue`** (break inside a fn breaking the CALLER's loop — a cross-unit SOUNDNESS boundary, mislabeled scheduling, should stay refused). The value-arm/usurp-if rows cleared via symmetric value-then |
+| 6 | residual lowering | scheduling\* | NO LONGER the fn-value boundary (that cleared): `codequote`/`macroexpand` (meta, "not materialisable") + residual-ordering (`1 add2 vs`, parselang/Test.run-spec "result above a literal") |
+| 4 | dynamic input | soundness | soundness-gated; needs runtime guards. The simple cases already poly (`d drop`), and a caught DYNAMIC error to `error [handler]` now compiles (RecordClosureCall no longer pre-declines a resolvable dynamic input). The 4 remaining have specific blockers: flex-list mutation (`drop l`), the IO-context dynamic store receiver (`set` ×2), and the struct-module sub-registry (`getpath`, non-core poly) |
 | 2 | user fn call (Stage 3) | coverage | meta |
-| 3 | dispatch recovery · fn-value-call boundary · function-value-reaches-word (1 each) | soundness | the fn-value boundary again |
+| 1 | dispatch recovery | soundness | best-guess straddle |
+| 1 | fn-value-call boundary | soundness | the **2-arg mixed** apply `3 m.f 2` — the trailing path is bounded to one arg |
+| 1 | function value reaches word | soundness | a patrun dynamic fn value |
 | 1 | other: branch leaves extra values | coverage | branch lowering |
 
 \* The "scheduling" label is misleading post-DDCG: operand-layout scheduling is
-*solved*. The 14 "scheduling" rows are the **fn-value/dynamic auto-apply
-residuals** (8) and **branch-result-modeling** (6) — different problems that
-operand destinations do not touch.
+*solved*, and the trailing fn-value and value-arm-if clusters are compiled too.
+The 9 remaining "scheduling" rows are **1 variadic-merge** (branch-result-
+modeling), **2 cross-fn break/continue** (really soundness), and **6
+residual-ordering / meta** residuals — none is operand layout.
 
 **Priority order for the next session** (highest leverage first):
 
-1. **The fn-value-call boundary.** Generalize `OpCallDynamic` to the trailing /
-   mid-residual fn value and the method-field apply (`5 m.f`, `r.one-of`). This
-   single cluster covers the scheduling-residual 8 *and* the soundness fn-value
-   rows — the biggest lever, and the hardest. `Finalize`'s `residualHasFnOrDynamic`
-   gate (`emit.go`) is where the residual currently bails; that is the seam.
-2. **Branch-result-modeling.** Represent a variadic (0-or-1) branch/loop merge as
-   a first-class "maybe" value a downstream consumer can absorb (today only the
-   program residual can), clearing computed-else and variadic-statement-if. See
-   `lowerArms` / `lw.variadic` in `lower.go`.
-3. **Re-test the §4.3 back-pointer** against the 20 operand-provenance rows. The
-   full carrier back-pointer is only justified if it *clears* provenance refusals
-   (lost originals); measure before building.
-4. **Coverage words.** The quoted-operand meta words (`usurp`/`ref`) and the
-   2-body `aql:test` code words are word-class gaps, not deep problems.
+1. **Branch-result-modeling** (the variadic-merge refactor). The *tractable* part
+   of the if-branch cluster — the value-arm/usurp-if rows — is now banked (a
+   value-then arm is lowered symmetrically with value-else). What remains is
+   genuinely hard: (a) **1 variadic-statement-if/computed-else** row needs a
+   variadic (0-or-1) branch/loop merge represented as a first-class "maybe" value
+   a downstream consumer can absorb (today only the program residual can) — a
+   refactor of `lowerArms` / `lw.variadic`, not a patch; (b) **2 cross-fn
+   `break`/`continue`** rows (`break` inside a fn that breaks the CALLER's loop)
+   are a cross-unit control-transfer the VM's intra-unit jump cannot reproduce —
+   a SOUNDNESS boundary that should stay refused (relaxing the recording refusal
+   does not help: they then refuse at `lowerBreak`/`lowerContinue`).
+2. **Finish the fn-value-call boundary.** The trailing **1-arg** apply landed
+   (`OpCallDynamicTrailing`, `5 m.f` / `[..] r.one-of`). What remains is the
+   **2-arg mixed** form `3 m.f 2` (forward + stack split) — the island's forward
+   collection orders args opposite to the interpreter's top-down stack
+   collection, so a sound version needs the apply to receive the args in stack
+   order (a spill, or an apply opcode that reverses its args). `resolveDynamicApply`
+   (`emit.go`) is the seam; `callDynamic(…, trailing bool, …)` (`vm.go`) is the VM
+   apply.
+3. **Re-test the §4.3 back-pointer** against the operand-provenance rows —
+   **measured (follow-on session); back-pointer still NOT justified.** The 20-row
+   bucket was dumped and categorised: ~10 are *correct* refusals (genuinely
+   dynamic — minilang/parselang/rand ×5, generic-`make` where `T` is a runtime
+   type param ×3, macroexpand ×1; plus 3 error-producing programs — `x/r`/`x/u`
+   `illegal_ref`, `MathUtil!.nope` `not_found` — that the compiler falls back on
+   and faithfully re-raises). The rest are *distinct* mechanisms, not one lost-
+   original axis: closure/free-var body results (×3), 0-arg-fn-in-map-value
+   dispatch (×1), if-else module-call (×1), concrete-`make` inside a dynamic
+   StructUtil pipeline (×1), module-export Table-type get (×2). Only the last was
+   a clean bounded win, and it needed NO back-pointer: a Table type literal
+   carries a `TableTypeInfo` payload, so `tryFoldModuleConst`'s ride switch
+   (`isInertConst` | bare-type-node) rejected it — unlike a bare type node
+   (`Test.TestCase`) which already folds. `TableTypeInfo` wraps its row
+   `RecordTypeInfo`, so adding it to the structural-type-body family in
+   `isInertConst` + `typeBodyConstOK` (same `fieldsOK` interior check; a carrier
+   interior still refuses) folded the get and compiled the downstream
+   make/is/istype (→ 57). The remaining ~6 each want bespoke machinery, none a
+   shared back-pointer — chase per-row only if a row blocks a wider cluster.
+4. **Coverage words.** Mostly banked: the quoted-operand *inert* cluster
+   (`quote`/`codequote`/`raise` via `CompileQuoteInert`), the `rand-list-of`
+   generator body (a `CallableSpec`), and the property-test words
+   `prop`/`check-prop`/`skip` — which turned out NOT to need 2-body closure
+   support at all: their two bodies are inert at the call (stored / dropped /
+   CallAQL'd in the handler) and already baked as const operands; they refused
+   only because a dot-access reach (`r.int`) inside a body was not an inert const
+   MEMBER, now fixed via `inertReachMember` (which also cleared `Rand.map-from`).
+   What remains here is the **2 `reach` computed-key rows** (`reach 5 [a (add 1
+   2) c]`, `reach 0 [x (k)]`) — they want a foldable/bakeable `ParenExpr` segment
+   in the NoEval key list — plus `timeout`/`interval`'s materialised carried code
+   BODY (priority 3) and the `codequote`/`macroexpand` meta residuals.
+
+5. **Dynamic-output / island core** — **error cluster COMPLETE (follow-on
+   session): all 6 `error [handler]` rows compile.** The dynamic-output bucket was
+   never one cluster: the residual **5 are correct/meta refusals** — `await`
+   (async) + the 4 path-modifier re-dispatch fns (usurp family) — leave them. The
+   error cluster fell in two landings: (a) the **catch frame** — `raise` is a
+   CALL_NATIVE whose handler returns an error the VM already propagates and
+   `do`/`error` already catch via `InvokeBody`, so the only block was the recorder
+   refusing a closure body that nets fewer values than declared; marking `raise`
+   **CompileDiverges** (always raises → control never returns past it) makes such a
+   body DIVERGENT (compiles with no RET, vacuously satisfying any BodyOut; sound in
+   a branch/loop arm too), and `error` collapsed to ONE `(List, Any)` sig with a
+   runtime `IsError` branch (a static TError-vs-TAny pick was unsound) + a
+   `CallableSpec` so the handler body is a closure. (b) **value-def-locals in fn
+   units** — `planValueDefLocals` (the computed-result → frame-slot promotion) now
+   runs for EVERY unit, not just the top-level program (in `StartFnCompile`'s
+   `finish`, while the unit is live, with the unit's OUTPUT operands as the
+   residual-equivalent extra refs), and `CanSeatAcrossFragment` dropped its
+   `len(units) != 1` guard. So a `get code case […]` computed scrutinee seats as a
+   frame local inside the handler closure, clearing the 4
+   `error [get code case [value-clauses]]` rows. (A non-repushable computed event
+   reaching `CanSeatAcrossFragment` is always in the current unit — an
+   enclosing-scope value is a capture, hence a local — so its promotion lands in
+   the right unit's slots.)
+   The **5 islands** are separate and remain: **3 `case`** (the desugar bails on a
+   code-body scrutinee `case [1 add 1] […]` and a bare-type clause `case 1
+   Integer`) and **2 `each`/`scan` over a map with a `drop` body** (`{a:1} each
+   [drop]` — the body nets 0, not the 1 the map-iteration closure expects). Both
+   are edge shapes, not the catch-frame.
 
 **P7 (delete `OpFallback`)** stays gated on **both** `refusalCeiling` *and*
-`islandCeiling` (the 5 remaining higher-order/dynamic islands) reaching 0.
+`islandCeiling` reaching 0. The 5 islands are **3 `case`** (code-body scrutinee /
+bare-type clause) + **2 `each`/`scan`-over-map with a net-0 `drop` body** — see
+priority 5.
+
+**Honest distance to P7 (do not read "46" as "almost there").** Of the 46
+refusals, **29 are soundness-gated** — 17 operand-provenance (a heterogeneous
+long tail dominated by *correct* dynamic/error refusals; the §4.3 back-pointer
+was measured against it and is NOT justified — see priority 3), 4 dynamic input
+(runtime guards — simple cases already poly, the caught-dynamic-error case now
+compiles, the 4 left have specific blockers), the 5 dynamic-output rows that are
+all correct refusals (`await` + path-modifier — the error cluster is now fully
+compiled), plus a few singletons. Those do not yield to more lowering; they need a soundness story per
+cluster. Add the **5 islands** (higher-order/dynamic) that also gate P7. So the
+realistic near-term goal is **lowering the ceiling and shrinking the islands**,
+not imminent `OpFallback` deletion — the incremental, gate-clean ratchet remains
+the right vehicle, but P7 is several substantial pieces of work away. The
+cheap/bounded wins (operand layout, the correct-error paths, the trailing
+fn-value boundary, the quoted-operand inert words, `rand-list-of`, the value-arm
+`if`, `returnsof`, the module Table-type get fold, the inert-reach code body, the
+catch frame, value-def-locals in fn units, the §4.5 decoupling) are now banked.
+The **variadic-merge / branch-result-modeling** refactor (priority 1) is the next
+structural lever — it clears the 1 variadic-statement-if row and is a prerequisite
+for representing a 0-or-1 branch/loop result as a first-class value (distinct from
+the value-def-locals work that just landed). The rest are per-mechanism coverage
+gaps + the irreducible soundness/meta tail.
 
 ### Dead ends / proven not worth it (save the dig)
 
@@ -237,8 +405,8 @@ the try-chain), `eng/go/callable_words.go` (closure-body compilation).
 ## 2. Current state (numbers, June 2026)
 
 **Numbers below are the pre-implementation (82-refused) snapshot — kept for the
-breakdown prose. The CURRENT live state is 73 refused; see the
-[Completion guide](#completion-guide-the-remaining-73--the-path-to-p7) for the
+breakdown prose. The CURRENT live state is 64 refused; see the
+[Completion guide](#completion-guide-remaining-refusals--the-path-to-p7) for the
 up-to-date histogram and root-cause split.**
 
 The ratchet is **far** ahead of the prose in
@@ -494,9 +662,11 @@ trace is built), not a lowering-side patch.
    back-pointer declined as net-negative).
 
 **Medium, high-payoff (the information-sharing win):**
-4. §4.5 — `Signature.CompileEffect`. — **LANDED** (bitfield; 5 tables migrated).
-   Then §4.6 — unify the recorder spine and collapse the `carrierResults`
-   try-chain. — **NOT DONE** (fallthrough load-bearing; not cleanly feasible).
+4. §4.5 — `Signature.CompileEffect`. — **LANDED** (bitfield; 5 capability tables
+   migrated, plus the 7th — `callableWords` — lifted to `Signature.Callable` in
+   the follow-on session, completing the eng↔module decoupling). Then §4.6 —
+   unify the recorder spine and collapse the `carrierResults` try-chain. —
+   **NOT DONE** (fallthrough load-bearing; not cleanly feasible).
 5. **Emit a Trap/Raise opcode** (§5 last row). — **LANDED** (`OpTrap` + exact
    `OpRet`; cleared all 8 correct-refusal rows).
 
@@ -595,3 +765,146 @@ way to see what a change cleared. The June session used exactly this.
    rationale in `compiled_coverage_test.go`, as the existing entries do.
 4. Do **not** retry fn-body container assembly without first solving the
    scope-resolution divergence (`§2`, the reverted dead end).
+
+---
+
+## 11. Refusal-ceiling decrement history
+
+The full per-decrement rationale used to live in one ~6 KB string literal on
+`refusalCeiling` in `compiled_coverage_test.go`. That comment now keeps only the
+most recent few decrements inline (plus a pointer here); the older trail is
+recorded below, newest-first, so the test stays readable. Each entry is a
+`from -> to` transition with the change that earned it. The deeper narrative for
+the recent ones is in the [Implementation report](#implementation-report-2026-06)
+and §2; this is the index.
+
+**Follow-on session (branch `claude/lucid-davinci-ajtxt5`):**
+
+- **47 → 46** — dynamic input to a closure-dispatch word: `RecordClosureCall`
+  pre-declined ANY dynamic non-body operand, but the resolveOperand loop below
+  already declines one that genuinely can't resolve. A caught `do` error reaching
+  `error [handler]` is a resolvable event whose closure input is a FIXED `TError`
+  carrier — independent of the dynamic value, so the handler runs faithfully over
+  whatever it is. Dropping the pre-decline compiles `do [{x:1} !. y] error [get
+  code]` island-free, differential-clean. The 4 remaining dynamic-input rows keep
+  their own blockers (flex mutation, IO-context `set` receiver, struct-module
+  `getpath`).
+- **51 → 47** — value-def-locals in fn units: `planValueDefLocals` (the
+  computed-result → frame-slot promotion) now runs for EVERY compiled unit, not
+  just the top-level program — called in `StartFnCompile`'s `finish` while the
+  unit is live, with the unit's OUTPUT operands as the residual-equivalent extra
+  references, and `CanSeatAcrossFragment` dropped its `len(units) != 1` guard. So
+  a computed scrutinee read across a desugared `case` if-chain (`get code case
+  […]`) seats as a frame local inside a fn unit. Cleared the 4
+  `error [get code case [value-clauses]]` rows — completing the error cluster (all
+  6 `error [handler]` rows now compile; the residual dynamic-output rows are
+  `await` + path-modifier, correct refusals). Sound because a non-repushable
+  computed event reaching `CanSeatAcrossFragment` is always produced in the
+  current unit (an enclosing value is a capture → local → repushable).
+- **53 → 51** — catch frame (`do` / `error` closure bodies that raise): `raise` is
+  a CALL_NATIVE whose handler returns an error the VM already propagates and
+  `do`/`error` already catch via `InvokeBody` — the only block was the recorder
+  refusing a closure body that nets fewer values than declared. Marking `raise`
+  **CompileDiverges** (it always raises → control never returns past it) makes
+  such a body DIVERGENT: it compiles with NO RET (vacuously satisfying any
+  BodyOut), and the runtime error propagates to the catcher (sound in a
+  branch/loop arm too, like break/continue). `error` was then collapsed to ONE
+  `(List, Any)` sig with a runtime `IsError` branch — a static TError-vs-TAny pick
+  was unsound (the checker types `do [raise …]` as Any and baked the pass-through
+  even when the runtime value is an Error) — plus a `CallableSpec` so the handler
+  body compiles as a closure. Cleared `error [get message]` + the predicate-clause
+  `error [case …]`. The other 4 `error [get code case [value-clauses]]` rows wait
+  on value-def-locals in fn units (a computed scrutinee `CanSeatAcrossFragment`
+  can't seat when `len(units) != 1`).
+- **57 → 53** — dot-access reach in an inert code body: the property-test words
+  `Test.prop` / `Test.check-prop` / `Test.skip` take TWO code bodies
+  (`[r.int 0 100]` + `[0 gte]`) that are inert at the call (prop stores them in a
+  PropertySpec map, skip discards them, check-prop CallAQLs them in its native
+  handler), so `noEvalBodiesInert` already bakes them as const operands — but a
+  dot-access reach (`r.int`, an Eval=true receiver Reach) inside a body was not
+  an inert const MEMBER, so the body list failed `isInertConst`. Unlike
+  `isInertReach` (the STANDALONE detached lens — receiverless, Eval=false, never
+  expanded at the pointer), a reach as a MEMBER of a never-evaluated compound is
+  pure DATA (the VM pushes the baked compound verbatim and never expands a
+  reach), so `inertReachMember` admits a receiver reach whose receiver/literal-key
+  tokens are themselves inert (a computed paren segment still refuses). This was
+  NOT the "2-body closure" problem it looked like — all three bake their bodies
+  as consts. Cleared the 3 code-body rows + `Rand.map-from` (its schema map holds
+  the same reach), all island-free.
+- **59 → 57** — module-exported Table-type get fold: a Table type literal
+  (`Test.TestSet`) carries a `TableTypeInfo` payload, so `tryFoldModuleConst`'s
+  ride switch (`isInertConst` | bare-type-node) rejected it and the get over the
+  immutable module export refused "unknown provenance … at get" — unlike a BARE
+  type node (`Test.TestCase`, `Data==nil`) which already folds. `TableTypeInfo`
+  wraps its row `RecordTypeInfo`, so it joins the structural-type-body const
+  family in `isInertConst` + `typeBodyConstOK` (same `fieldsOK` interior check;
+  a carrier interior still refuses). The get bakes the immutable type and the
+  downstream make/is/istype compile natively (both `Test.TestSet` rows). This was
+  the one clean bounded win in the operand-provenance bucket; the §4.3
+  back-pointer was measured against the rest and is NOT justified (see the
+  completion-guide priority 3 — ~10 of the remaining rows are correct dynamic/
+  error refusals, the rest want bespoke per-row machinery).
+- **60 → 59** — `returnsof` static return type: a `ReturnsFn` computes the fn's
+  precise declared return at check time, so `TypeUtil.returnsof` reports a
+  concrete type node instead of the opaque `TAny` and bakes a `CALL_NATIVE` like
+  `arityof`/`typeof`. The one cleanly-tractable row of the dynamic cluster.
+- **63 → 60** — value-arm `if`: `if cond v1 v2` with VALUE arms (not `[body]`
+  code) refused "then-branch not captured" (the then was run as a body → nil
+  fragment, while only the else handled a value). The then arm is now symmetric
+  with the else (a value-then pushes its value). Cleared the direct value-arm
+  `if` and the usurp-if shape (3 rows). The 3 remaining if-branch rows are 1
+  variadic-merge + 2 cross-fn break/continue (soundness).
+- **64 → 63** — `rand-list-of` generator body: `Rand.list-of [body] n` declares a
+  `CallableSpec` (the `do` closure shape, 0-input/1-output), so the body compiles
+  to a closure the handler runs n times via `InvokeBody` instead of refusing the
+  NoEvalArgs code body. Differential-clean (the RNG draws advance the same module
+  generator, so compiled == interpreted).
+- **71 → 64** — quoted-operand inert words: `quote` / `codequote` / `raise` /
+  `timeout` / `interval` declare `CompileQuoteInert`, so the recorder bakes their
+  inert quoted operand + `CALL_NATIVE` (the get/getr/set exemption, made
+  declarable). Cleared 7 of 10; the 3 `timeout`/`interval` rows whose code body is
+  a carrier stay refused (a §4.3 / `materialise` gap).
+- **73 → 71** — trailing fn-value auto-apply: `5 m.f` / `[..] r.one-of` (the fn
+  trails its arg) compile via the new `OpCallDynamicTrailing` (rotate the fn to
+  the residual front; identical to `OpCallDynamic` when callable, fn-on-top when
+  not). Bounded to one arg.
+
+**Review session (branch `claude/checker-bytecode-compiler-info-pqd2w0`):**
+
+- **74 → 73** — `OpReverse` N-event reverse operand layout (`is-between (a)(b)(c)`).
+- **79 → 74** — suppressed-runtime-error rows compile a terminal `OpTrap`
+  (orphan `gen`, `unpack` of a missing key); nested traps still fall back.
+- **82 → 79** — user-fn return-count mismatch compiles via exact-count `OpRet`
+  (frame stack-base, scoped to user-fn frames; closures keep `each_error`).
+- **94 → 82** — fn-storing words (minilang/parselang `register`) bake the fn as
+  an inert const (stored, never invoked on the VM tape).
+- **95 → 94** — `aql:test` describe-body closures (`Test.describe "g" [body]`).
+- **107 → 95** — `aql:test` case-body closures (`Test.test "n" [body]`, 0-output
+  side-effect bodies; closure path generalized to 0-or-1 outputs).
+- **109 → 107** — `OpMakeList` of make-instance lists (fresh instances per run).
+- **112 → 109** — `OpMakeMap` for computed `make` construction bodies.
+- **113 → 112** — residual ordering via local promotion (event-above-literal,
+  for non-fn/dynamic residuals).
+- **115 → 113** — N-event already-in-layout lowering (3+ adjacent event operands
+  in sig order).
+
+**Earlier (pre-115, branches `bytecode-compiler-review-*` and the P0–P5 plan),
+condensed:** fn-body return-count phantom (119→115); fn-value field calls
+`{b:f/r}` via poly-get + `OpCallDynamic` (129→119); branch-fragment value-def
+locals (135→129); value-def-locals + class mutable-default bake (140→135);
+factory-apply, a returned closure applied via leading `OpCallDynamic` (140→139);
+and the long P0→P5 ramp behind that — `StructUtil` result types (222→216),
+filter result typing (224→222), then P0 651 → P3 642 (wide poly) → P4 616
+(`OpCallDynamic`) → P5 598 (multi/0-result calls) → make carrier-identity 580 →
+value-def locals (`OpStoreLocal`) 568 → dup carrier-identity 565 → predicate
+provenance 555 → if value-else arm 545 → case desugar 542 → multi/0-return fns
+538 → fn-value apply 527 → method fields 521 → if-guard 519 → dynamic-output
+core builtins 514 → module inner natives 459 → 3-arg push+swap 453 →
+strict-disjunct poly 445 → atom-keyed set 425 → computed-else if 421 →
+variadic-else if 417 → fn-value introspection 407 → filter lambda 402 → map
+lambda 399 → `with-decimal` 394 → `args.N` 390 → `word`/splice 363 →
+`macroexpand` 359 → make container defaults 349 → `usurp` 312 → case no-default
+310 → query DSL 283 → reach lenses 268 → scalar carrier-keep 258 →
+module-synthetic const-fold 227 → `OpMakeList` 213 → (+11 minilang corpus 224,
++1 patrun 217) → type-pattern operands 196 → generic schema 185 → typed-list
+generics 181 → `fnsig` 178 → surface types 159.

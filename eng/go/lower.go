@@ -985,14 +985,22 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 // (no else) merges with 0-or-1 values — a VARIADIC result.
 func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	br := &ev.br
-	thenOut := func() *emitOperand {
-		if br.hasThenOut {
-			return &br.thenOut
+	if br.thenIsVal {
+		// Value-then (`if cond 99 88`): push the literal/local/type operand as the
+		// arm's single result, mirroring the value-else below (pushOperand tracked
+		// it; the merge slot owns the count).
+		lw.pushOperand(br.thenVal, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+	} else {
+		thenOut := func() *emitOperand {
+			if br.hasThenOut {
+				return &br.thenOut
+			}
+			return nil
+		}()
+		if reason := lw.lowerFragment(br.then, thenOut, true, br.pos); reason != "" {
+			return reason
 		}
-		return nil
-	}()
-	if reason := lw.lowerFragment(br.then, thenOut, true, br.pos); reason != "" {
-		return reason
 	}
 	if !br.hasElse {
 		// 2-arg if: false path jumps straight to the merge.
@@ -1009,7 +1017,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		return ""
 	}
 	jend := -1
-	if !fragDiverges(br.then) {
+	if br.thenIsVal || !fragDiverges(br.then) {
 		jend = lw.emit(OpJmp, 0, br.pos)
 	}
 	(*lw.code)[jf].Arg = int32(len(*lw.code))

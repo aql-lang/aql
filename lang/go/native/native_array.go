@@ -287,6 +287,10 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name:          "each",
 		CompileEffect: CompileFallbackBody,
+		// each [body] data — the body sees one element and returns the mapped value.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(a []Value) []Value {
+			return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
+		}},
 
 		Signatures: []NativeSig{
 			{
@@ -334,6 +338,17 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name:          "fold",
 		CompileEffect: CompileFallbackBody,
+		// fold [body] data init — the body sees (accumulator, element). InvokeBody
+		// supplies [acc, elem]; acc generalises to the init's type, or (no-init
+		// 2-arg form) to the element type, since the accumulator starts as the
+		// first element.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(a []Value) []Value {
+			elem := DataListElemTypeFromValue(a[1])
+			if len(a) >= 3 {
+				return []Value{NewCarrier(a[2].Parent), NewCarrier(elem)}
+			}
+			return []Value{NewCarrier(elem), NewCarrier(elem)}
+		}},
 
 		Signatures: []NativeSig{
 			{
@@ -368,6 +383,12 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name:          "scan",
 		CompileEffect: CompileFallbackBody,
+		// scan [body] data — the body sees (accumulator, element); the accumulator
+		// starts as the first element, so both inputs carry the element type.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(a []Value) []Value {
+			e := DataListElemTypeFromValue(a[1])
+			return []Value{NewCarrier(e), NewCarrier(e)}
+		}},
 
 		Signatures: []NativeSig{
 			{

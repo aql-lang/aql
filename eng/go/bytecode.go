@@ -151,6 +151,18 @@ const (
 	// refused). Emitted only when layoutOperands recognises an exact reverse, so
 	// it can never seat an operand wrongly.
 	OpReverse
+	// OpCallDynamicTrailing applies a runtime FUNCTION value to the Arg values
+	// BENEATH it — the source shape where the fn TRAILS its argument (`5 m.f`,
+	// where the fn `m.f` produces auto-applies to the 5 beneath it; `[..] r.one-of`).
+	// The recorder lays the operands out exactly like OpCallDynamic — fn at the
+	// base, the Arg args above — so the callable path is identical. The ONLY
+	// difference is the NON-callable residual: where leading OpCallDynamic leaves
+	// [fn, args] (fn below), the interpreter's trailing form leaves the fn ON TOP
+	// of its args, so this op rotates the fn back above its args when the value
+	// turns out not to be callable — keeping the residual byte-identical to the
+	// interpreter. Bounded to Arg==1: with >1 arg the island's forward collection
+	// would order them opposite to the interpreter's top-down stack collection.
+	OpCallDynamicTrailing
 )
 
 func (o Opcode) String() string {
@@ -199,6 +211,8 @@ func (o Opcode) String() string {
 		return "TRAP"
 	case OpReverse:
 		return "REVERSE"
+	case OpCallDynamicTrailing:
+		return "CALL_DYNAMIC_TRAILING"
 	}
 	return fmt.Sprintf("OP(%d)", uint8(o))
 }
@@ -447,6 +461,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " p%-3d ; %s/%d (poly)", in.Arg, pr.Word, pr.Arity)
 		case OpCallDynamic:
 			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
+		case OpCallDynamicTrailing:
+			fmt.Fprintf(sb, " /%d ; apply trailing fn-value", in.Arg)
 		case OpMakeList:
 			fmt.Fprintf(sb, " n%-3d ; assemble %d into a list", in.Arg, in.Arg)
 		case OpMakeMap:

@@ -1,0 +1,53 @@
+package lang
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+// TestEmitValueArmIf: `if cond v1 v2` with VALUE arms (not `[body]` code lists)
+// now lowers the then arm symmetrically with the else arm — a select (push v1 /
+// push v2 around JMP_IF_FALSE) — instead of refusing "then-branch not captured".
+// This covers the direct form, a dynamic condition, and the usurp-if shape
+// (`usurp if` dispatches `if` with value arms). The negative half pins that a
+// COMPUTED then value (an event eagerly on the stack) still refuses the
+// value-then path rather than miscompiling.
+func TestEmitValueArmIf(t *testing.T) {
+	cases := []struct{ src, want string }{
+		{`if true 99 88`, "[99]"},
+		{`if false 99 88`, "[88]"},
+		{`def x 0  if (x eq 0) 99 88`, "[99]"},         // dynamic (event) condition, value arms
+		{`def ifu (usurp if)  true ifu 88 99`, "[99]"}, // usurp-if reverses to value arms
+		{`def ifu (usurp if)  false ifu 88 99`, "[88]"},
+	}
+	for _, c := range cases {
+		a, _ := New()
+		prog, _, _, _ := a.CompileCheck(c.src)
+		if prog == nil {
+			t.Errorf("%q: must compile (value-arm if), but refused", c.src)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: must compile native (value-arm select), not island:\n%s", c.src, prog.Disassemble())
+		}
+		ar, _ := New()
+		gotC, compiled, errC := ar.RunCompiled(c.src)
+		b, _ := New()
+		gotI, errI := b.Run(c.src)
+		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s", c.src, compiled, gotC, errC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: a COMPUTED then value (`(add 1 2)` — an event eagerly on the
+	// stack) is not a plain value arm; the recorder refuses it rather than
+	// risk the stack juggling the single-result lowering does not do. It then
+	// falls back faithfully (RunCompiled returns the interpreter's result).
+	const computed = `def x 0  if (x eq 0) (add 1 2) 88`
+	m, _ := New()
+	mp, reason, _, _ := m.CompileCheck(computed)
+	if mp != nil {
+		t.Errorf("%q: a computed then value must NOT compile via the value-then path (got a program); reason=%q", computed, reason)
+	}
+}

@@ -120,6 +120,7 @@ type emitCall struct {
 	makeMap  bool // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys  []string
 	mapImpl  bool // the source map's Implicit flag
+	diverges bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -135,6 +136,8 @@ type emitBranch struct {
 	then, els             *EmitFragment
 	thenOut, elsOut       emitOperand
 	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
+	thenIsVal             bool        // then arm is a plain VALUE operand (`if cond 99 88`), not a body fragment
+	thenVal               emitOperand // the value-then operand (const/local/type) when thenIsVal
 	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
 	elsVal                emitOperand // the value-else operand (const/local/type, OR a COMPUTED event when elsComputed) when elsIsVal
 	elsComputed           bool        // else value is a COMPUTED event eagerly on the stack below the cond (`if c [t] (expr)`): SWAP cond up, DROP it on the taken path
@@ -317,6 +320,14 @@ type fnUnitRec struct {
 	// type_error — so a closure keeps refusing the mismatch (islands) while a
 	// user fn compiles the error path (the VM RET raises the matching error).
 	closure bool
+	// promoted / dead are the value-def-local plan for THIS unit's body —
+	// computed by planValueDefLocals at finish (while the unit is still live) and
+	// read by the lowerer (flw.promoted / flw.dead) when the unit lowers. Mirrors
+	// the top-level program's plan; nil for a unit with no promotions. A computed
+	// result read across a body fragment (a `case` scrutinee re-tested down the
+	// if-chain) is promoted to a frame slot here, the same as at frame 0.
+	promoted map[int]int
+	dead     map[int]bool
 }
 
 // NewEmitState returns a fresh recording state.
@@ -555,13 +566,15 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	// that refuses leaves THIS program untouched and the value stays unresolved.
 	r.Check.Emit = NewEmitState()
 	r.Check.Emit.reg = r
-	_, probeOK := compileClosureBody(r, "fnval", lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
+	// 0-output side-effect body like a test case).
+	_, probeOK := compileClosureBody(r, "fnval", 1, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		return emitOperand{}, false
 	}
@@ -598,19 +611,22 @@ func (es *EmitState) OperandRepushable(v Value) bool {
 // CanSeatAcrossFragment reports whether v can be read INSIDE a branch / loop
 // fragment that a multi-reference desugar is about to record. Either v is
 // already re-pushable (OperandRepushable: a const, frame local, or type node),
-// OR it is a COMPUTED single-result event in the TOP-LEVEL frame — which
-// planValueDefLocals promotes to a frame local once a fragment read is seen,
-// reachable across the scope floor. A computed event in a nested fn unit is not
-// promoted (only frame 0 runs planValueDefLocals), so it cannot be seated and
-// the desugar must keep its conservative non-compiling path. Side-effect free,
+// OR it is a COMPUTED single-result event — which planValueDefLocals promotes to
+// a frame local once a fragment read is seen, reachable across the scope floor.
+// The promotion now runs for EVERY unit (the top-level program AND each fn body
+// — see the planValueDefLocals call in StartFnCompile's finish), so a computed
+// scrutinee inside a fn unit (a `case` in an `error`/`do` handler closure) seats
+// too. A non-repushable computed event reaching here is always produced in the
+// CURRENT unit — an enclosing-scope value is a capture, hence a local (repushable
+// above) — so its promotion lands in the right unit's slots. Side-effect free,
 // like OperandRepushable — the promotion itself happens later, driven purely by
 // the fragment reference the desugar then records.
 func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
+	if es == nil {
+		return false
+	}
 	if es.OperandRepushable(v) {
 		return true
-	}
-	if es == nil || len(es.units) != 1 {
-		return false
 	}
 	pr, ok := es.producedBy[v.ID]
 	return ok && pr.idx == 0 && (!IsTypeBody(v) || es.eventInfo[pr.seq].typeOut)
@@ -700,6 +716,13 @@ func fragDiverges(frag *EmitFragment) bool {
 	if last.kind == evCallUser && last.uc.tail {
 		return true
 	}
+	if last.kind == evCall && last.call.diverges {
+		// A CompileDiverges word (raise) always raises: the fragment never
+		// produces a residual past it, so it diverges like break/continue. A
+		// closure body ending here compiles with no RET; the error propagates
+		// out of the VM run and the catching word (do/error) wraps it.
+		return true
+	}
 	return last.kind == evBreak || last.kind == evContinue
 }
 
@@ -749,6 +772,7 @@ type BranchRecord struct {
 	HasElse         bool
 	Then, Els       *EmitFragment
 	ThenStk, ElsStk []Value
+	ThenValue       *Value // non-nil: the then arm is this already-evaluated VALUE, not a body
 	ElsValue        *Value // non-nil: the else arm is this already-evaluated VALUE, not a body
 	Out             Value
 	Pos             SrcPos
@@ -839,11 +863,30 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		ev.br.then, ev.br.hasThenOut = b.Then, false
 		zeroOut = true
 	} else {
-		thenOut, hasThen, ok := resolveArm(b.Then, b.ThenStk, "then")
-		if !ok {
-			return
+		var hasThen bool
+		if b.ThenValue != nil {
+			// Value-then: the then arm is an already-evaluated value
+			// (`if cond 99 88`), not a `[…]` body — it lowers to a single push in
+			// the then arm, mirroring the value-else below. A COMPUTED then (an
+			// event result eagerly on the stack) would need the stack juggling the
+			// single-result lowering does not do, so refuse it.
+			op, ok := es.resolveOperand(*b.ThenValue)
+			if !ok {
+				es.MarkUncompilable("if: then value of unknown provenance")
+				return
+			}
+			if op.kind == opEvent {
+				es.MarkUncompilable("if: computed then value (Stage 2)")
+				return
+			}
+			ev.br.thenIsVal, ev.br.thenVal, ev.br.hasThenOut, hasThen = true, op, true, true
+		} else {
+			thenOut, h, ok := resolveArm(b.Then, b.ThenStk, "then")
+			if !ok {
+				return
+			}
+			ev.br.then, ev.br.thenOut, ev.br.hasThenOut, hasThen = b.Then, thenOut, h, h
 		}
-		ev.br.then, ev.br.thenOut, ev.br.hasThenOut = b.Then, thenOut, hasThen
 		if b.HasElse {
 			if b.ElsValue != nil {
 				// Value-else: the else arm is an already-evaluated value
@@ -1124,6 +1167,26 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				return
 			}
 			rec.outOps = ops
+		}
+		// Value-def locals for THIS unit (the top-level program's promotion,
+		// scoped to a fn body): a computed result referenced more than once, read
+		// from INSIDE a body fragment (a `case` scrutinee re-tested down the
+		// desugared if-chain — the case-in-closure enabler), or bound to a named
+		// def must be stored in a frame slot and re-pushed, not left on the
+		// single-consume stack. Run while the unit `u` is live so its slot
+		// allocations land in u.numLocals (→ rec.numLoc below); the unit's OUTPUT
+		// operands are its residual-equivalent extra references, and are rewritten
+		// for any promoted producer (planValueDefLocals rewrote the events in
+		// place, but outOps is a separate slice).
+		outSeqs := make([]int, 0, len(rec.outOps))
+		for _, op := range rec.outOps {
+			if op.kind == opEvent && op.resIdx == 0 {
+				outSeqs = append(outSeqs, op.idx)
+			}
+		}
+		rec.promoted, rec.dead = es.planValueDefLocals(u, rec.frag.events, outSeqs, nil)
+		for i := range rec.outOps {
+			promoteOperand(&rec.outOps[i], rec.promoted)
 		}
 		// The unit is closed: its events' outputs cannot be stack
 		// values in the enclosing scope, so drop their provenance
@@ -1543,7 +1606,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: sig.CompileEffect.Has(CompileDiverges)}})
 	// Carrier-identity de-collision (the deferred runtime-independence item, in
 	// its targeted form). A call OUTPUT whose ID already maps to a PRIOR event is
 	// a repeated identical computed call: `(context get 'n') add (context get
@@ -1748,16 +1811,14 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
-	// A DYNAMIC non-body operand can't resolve; refuse. A dynamic OUTPUT is
-	// fine — the body is compiled and the data operand concrete, so the
-	// dispatch is faithful; the result type being Any only means a downstream
-	// typed dispatch over it polys or refuses (e.g. filter's element-typed
-	// result). So check inputs, not the output.
-	for i := range args {
-		if i != bodyPos && (args[i].Carrier && args[i].Dynamic) {
-			return false
-		}
-	}
+	// A dynamic OUTPUT is fine — the body is compiled and the result type being
+	// Any only means a downstream typed dispatch over it polys or refuses. A
+	// dynamic non-body INPUT is handled by resolveOperand below: when it is a
+	// resolvable event (a caught `do` error reaching `error [handler]`, whose
+	// closure input is a FIXED carrier independent of the dynamic value — so the
+	// handler runs faithfully over whatever the value turns out to be) it rides
+	// as a stack operand; when it cannot resolve, resolveOperand declines and the
+	// island path stands. Faithfulness rides the differential gate.
 	ops := make([]emitOperand, len(args))
 	for i := range args {
 		if i == bodyPos {
@@ -1955,6 +2016,13 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		// field schema from the baked body. The parent chain's fields must
 		// be data too (AllFields merges them).
 		return fieldsOK(d.AllFields())
+	case TableTypeInfo:
+		// A Table type body (`make Test.TestSet …`, a module-exported
+		// Table type as a get-fold result or residual) is a thin wrapper
+		// over the row RecordType — const-safe exactly when that record's
+		// field types are (fieldsOK). The canonical *Type rides the body's
+		// payload pointer (shared, not copied), like every structural body.
+		return fieldsOK(d.Record.Fields)
 	}
 	return false
 }
@@ -2001,14 +2069,16 @@ func isInertConst(v Value) bool {
 		// (RememberOriginal at the constructor); type-algebra words
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
 		return true
-	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo:
+	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo, TableTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
 		// use site — make's operand). Sound as consts when their
 		// interior is carrier-free (typeBodyConstOK): the payload is
 		// pointer-backed (shared, not copied) and the minted lattice
 		// node rides the body's Parent POINTER, which stays
 		// canonical. Never deduped. A class/object body qualifies only
-		// when every field default is data (no method fn-values).
+		// when every field default is data (no method fn-values). A
+		// Table type (`Test.TestSet`) is a thin wrapper over its row
+		// RecordType, so it folds whenever that record does.
 		return typeBodyConstOK(v)
 	case FnUndefInfo:
 		// A function SIGNATURE value (`fnsig [[Integer] [String]]`,
@@ -2218,8 +2288,150 @@ func isInertConstMember(v Value) bool {
 		if fd, ok := v.Data.(FnDefInfo); ok {
 			return len(fd.Captured) == 0 && fd.Registry == nil
 		}
+		// A dot-access reach (`r.int`, `m.a.b`) riding inside a NEVER-evaluated
+		// compound — a NoEvalArgs code body the driving word stores or drops
+		// (Test.prop builds a PropertySpec map; Test.skip discards it;
+		// Test.check-prop CallAQLs it via its native handler), or a quoted code
+		// list. Unlike isInertReach (the STANDALONE detached lens, which must be
+		// receiverless + Eval=false so the engine never expands it at the
+		// pointer), a reach as a MEMBER is pure DATA: the VM pushes the baked
+		// compound verbatim and never expands a reach (in-place expansion is an
+		// interpreter stepLiteral behaviour), and the interpreter equally keeps it
+		// as data inside the inert compound — so the reach bakes by value,
+		// differential-identical. Its receiver / literal-key tokens must
+		// themselves be inert members (Words / atoms / scalars, canonical
+		// Parents); a COMPUTED segment (a paren to evaluate) is code, so refuse.
+		if IsReach(v) {
+			return inertReachMember(v)
+		}
 	}
 	return isInertConst(v)
+}
+
+// inertReachMember reports whether a Reach may ride as a MEMBER of an inert
+// const compound (see isInertConstMember's reach clause). It is deliberately
+// more permissive than isInertReach: a member reach is never expanded at the
+// engine pointer (the containing compound is inert), so a receiver and Eval=true
+// are fine — only a computed segment (a ParenExpr to run) or a non-inert
+// receiver/key token disqualifies it.
+func inertReachMember(v Value) bool {
+	if !IsReach(v) || v.Carrier || v.Dynamic {
+		return false
+	}
+	info, err := AsReach(v)
+	if err != nil {
+		return false
+	}
+	for _, rt := range info.Receiver {
+		if !isInertConstMember(rt) {
+			return false
+		}
+	}
+	for _, seg := range info.Segments {
+		if seg.Computed || !isInertConstMember(seg.KeyLit) {
+			return false
+		}
+	}
+	return true
+}
+
+// resolveDynamicApply classifies the residual's fn-value-call boundary (report
+// §9.1) and returns the residual (rotated for a trailing apply), the apply
+// opcode to emit once the residual is on the stack (0 = none), and a refusal
+// reason for an fn-value shape the static residual cannot reproduce.
+//
+// Handled: a dynamic value LEADING the residual with static args after it
+// (`r.int 0 100`); a Function/FnDef CARRIER leading it (the factory `(mk2 5)
+// 10`); and a single dynamic / fn value TRAILING one static arg (`5 m.f`,
+// `[..] r.one-of`) — rotated to [fn, arg] so the reconciliation lays it out
+// like the leading boundary, with OpCallDynamicTrailing restoring the fn-on-top
+// order if the value is not callable. Every other dynamic / fn-value-precedes-
+// args shape, and any unconsumed fn-value carrier, refuses.
+func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value, Opcode, string) {
+	// Leading dynamic value (statically Any — the checker cannot tell a Function
+	// from data) with every following arg static.
+	applyDynamic := false
+	if len(residual) >= 2 && residual[0].Dynamic {
+		applyDynamic = !anyDynamicTail(residual)
+	}
+	// Leading Function/FnDef CARRIER (the factory pattern: a returned closure now
+	// on the stack) with no dynamic / fn value after it. A carrier always applies
+	// — the one non-applied shape (an inert `f/r`) is a CONCRETE const, not a
+	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
+	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
+		applyDynamic = !anyFnOrDynamicTail(residual)
+	}
+	if applyDynamic {
+		return residual, OpCallDynamic, ""
+	}
+	if rot, ok := es.trailingApply(lw, residual); ok {
+		return rot, OpCallDynamicTrailing, ""
+	}
+	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
+	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
+	// FnDefInfo). All refuse so the program falls back faithfully.
+	for i := 0; i+1 < len(residual); i++ {
+		if residual[i].Dynamic {
+			return residual, 0, "dynamic value precedes residual args (fn-value-call boundary)"
+		}
+		if isFnValueResidual(residual[i]) {
+			return residual, 0, "fn value precedes residual args (auto-dispatch boundary)"
+		}
+	}
+	for i := range residual {
+		if isFnTypedCarrier(residual[i]) {
+			return residual, 0, "unconsumed fn-value carrier in residual (closure render)"
+		}
+	}
+	return residual, 0, ""
+}
+
+// anyDynamicTail reports whether any residual entry after the first is dynamic.
+func anyDynamicTail(residual []Value) bool {
+	for i := 1; i < len(residual); i++ {
+		if residual[i].Dynamic {
+			return true
+		}
+	}
+	return false
+}
+
+// anyFnOrDynamicTail reports whether any residual entry after the first is a
+// dynamic or fn value (so a leading carrier's args are not all static).
+func anyFnOrDynamicTail(residual []Value) bool {
+	for i := 1; i < len(residual); i++ {
+		if residual[i].Dynamic || isFnValueResidual(residual[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// trailingApply detects the trailing fn-value auto-apply shape (`5 m.f`,
+// `[data] r.one-of`): the residual's LAST entry is a dynamic / fn value produced
+// by an event on top of the simulated stack, and the SINGLE entry before it is
+// the static value it auto-applies to. On a match it returns the residual
+// ROTATED to [fn, arg] (so the reconciliation lays it out like the leading
+// boundary) and true. Bounded to one arg: with >1 the island's forward
+// collection would order them opposite to the interpreter's top-down stack
+// collection.
+func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool) {
+	if len(residual) != 2 {
+		return residual, false
+	}
+	fnv := residual[1]
+	pr, isEvent := es.producedBy[fnv.ID]
+	if !isEvent || pr.idx != 0 || !(fnv.Dynamic || isFnValueResidual(fnv)) {
+		return residual, false
+	}
+	if len(lw.vm) < 1 || lw.vm[len(lw.vm)-1].seq != pr.seq || lw.vm[len(lw.vm)-1].idx != 0 {
+		return residual, false
+	}
+	arg := residual[0]
+	if _, argIsEvent := es.producedBy[arg.ID]; argIsEvent || arg.Dynamic || isFnValueResidual(arg) {
+		return residual, false
+	}
+	return []Value{fnv, arg}, true
 }
 
 // Finalize linearises the recorded events into a Program. residual
@@ -2315,73 +2527,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if n := len(es.frames[0]); n > 0 {
 		lastPos = eventPos(es.frames[0][n-1])
 	}
-	// Fn-value-call boundary (report §9.1): the interpreter auto-applies a
-	// FUNCTION value sitting in the residual to the values that follow it
-	// (`r.int 0 100` — a method field applied to 0 100). A dynamic carrier
-	// is statically Any, so the checker cannot tell a Function from data.
-	// When a dynamic value leads the residual and the rest are non-dynamic
-	// args, emit OpCallDynamic: at run time it applies the value IF it is a
-	// Function, else leaves value+args as-is — faithful either way (plan
-	// P4). Any OTHER dynamic-precedes-args shape (a dynamic value mid-
-	// residual, or dynamic args) refuses.
-	applyDynamic := false
-	if len(residual) >= 2 && residual[0].Dynamic {
-		restStatic := true
-		for i := 1; i < len(residual); i++ {
-			if residual[i].Dynamic {
-				restStatic = false
-				break
-			}
-		}
-		applyDynamic = restStatic
-	}
-	// Fn-values-on-the-stack (`(mk2 5) 10` → 11). A Function/FnDef-typed CARRIER
-	// leading the residual is a [Function]-returning call result (the factory
-	// pattern: `mk2`'s body returned a closure, now on the stack) — ALWAYS the
-	// interpreter's auto-apply case, because the one non-applied shape (an inert
-	// `f/r`) is a CONCRETE const, never a carrier. So the apply-vs-inert ambiguity
-	// the comment below describes is resolved by the carrier bit: a carrier lead
-	// applies, a concrete-fn lead stays refused. OpCallDynamic then applies it
-	// faithfully at run time (callDynamic leaves a non-callable untouched). The
-	// rest must be static — no dynamic, no further fn value.
-	fnCarrierLead := false
-	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
-		rest := true
-		for i := 1; i < len(residual); i++ {
-			if residual[i].Dynamic || isFnValueResidual(residual[i]) {
-				rest = false
-				break
-			}
-		}
-		fnCarrierLead = rest
-	}
-	applyDynamic = applyDynamic || fnCarrierLead
-	if !applyDynamic {
-		for i := 0; i+1 < len(residual); i++ {
-			if residual[i].Dynamic {
-				return nil, "dynamic value precedes residual args (fn-value-call boundary)", false
-			}
-		}
-		// A fn value followed by residual args is an auto-dispatch boundary the
-		// residual cannot resolve statically: the interpreter applies a plain
-		// `(mk2 5) 10` (→ 11) but leaves an inert `f/r 2` as [fn 2]. The carrier
-		// lead is handled above; a CONCRETE fn value ahead of args stays refused
-		// (the inert case), so both fall back faithfully.
-		for i := 0; i+1 < len(residual); i++ {
-			if isFnValueResidual(residual[i]) {
-				return nil, "fn value precedes residual args (auto-dispatch boundary)", false
-			}
-		}
-		// An unconsumed Function/FnDef-typed CARRIER anywhere in the residual is a
-		// runtime closure that would be the rendered result — and a VM closure
-		// value prints differently from the interpreter's FnDefInfo, so refuse
-		// rather than diverge on the render. (A concrete baked fn value — Carrier
-		// false, the introspection case — renders identically and is exempt.)
-		for i := range residual {
-			if isFnTypedCarrier(residual[i]) {
-				return nil, "unconsumed fn-value carrier in residual (closure render)", false
-			}
-		}
+	// Fn-value-call boundary (report §9.1): classify the residual for a runtime
+	// fn-value apply (a leading dynamic / carrier value, or a trailing dynamic /
+	// fn value over one arg), returning the apply opcode and refusing the
+	// shapes the static residual cannot reproduce. dynOp is emitted after the
+	// residual is laid out below.
+	residual, dynOp, dynReason := es.resolveDynamicApply(lw, residual)
+	if dynReason != "" {
+		return nil, dynReason, false
 	}
 	vi := 0
 	tail := []emitOperand{}
@@ -2428,10 +2581,12 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	for _, op := range tail {
 		lw.pushOperand(op, lastPos)
 	}
-	if applyDynamic {
-		// The leading dynamic value (residual[0]) and its args are now on
-		// the stack; apply the value to the trailing args at run time.
-		lw.emit(OpCallDynamic, len(residual)-1, lastPos)
+	if dynOp != 0 {
+		// The fn value (leading, or trailing rotated to the front) sits at the
+		// base of the residual with its args above; apply it at run time. The
+		// trailing op additionally restores the fn-on-top order if the value
+		// turns out not to be callable (see resolveDynamicApply / callDynamic).
+		lw.emit(dynOp, len(residual)-1, lastPos)
 	}
 
 	// Lower the compiled fn units. Tail positions are marked first so
@@ -2464,7 +2619,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}

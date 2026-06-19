@@ -22,6 +22,12 @@ import "fmt"
 var errorNatives = []NativeFunc{
 	{
 		Name: "raise",
+		// The /q'd error-code Atom is inert data; raise bakes + CALL_NATIVE,
+		// raising the byte-identical error at run time (it declares no returns).
+		// CompileDiverges marks it as an always-raising terminal, so a closure
+		// body ending in `raise` (a caught `do [raise …]` / `error` handler tail)
+		// compiles with no RET — the error propagates and the catcher wraps it.
+		CompileEffect: CompileQuoteInert | CompileDiverges,
 
 		Signatures: []NativeSig{
 			// raise <code> <message> — the /q'd Atom position lets a

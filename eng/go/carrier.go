@@ -703,6 +703,22 @@ func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value)
 	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
+	// A word that DECLARES CompileQuoteInert (quote / codequote / raise / timeout
+	// / interval): its quoted operand is inert data the handler consumes verbatim
+	// — a quoted symbol, or a quoted code body held as data — so it bakes as a
+	// plain CALL_NATIVE once every quoted operand is an inert const (an Atom, or a
+	// quoted code list). The VM runs the same handler over the same baked value.
+	// Unlike the module-inner branch below, this admits a non-Atom inert operand
+	// (a `[body]` list) and a core builtin, but a non-inert quoted operand still
+	// declines so the program falls back.
+	if sig.CompileEffect.Has(CompileQuoteInert) {
+		for i := range args {
+			if sig.QuoteArgs[i] && !isInertConst(args[i]) {
+				return false
+			}
+		}
+		return true
+	}
 	for i := range args {
 		if !sig.QuoteArgs[i] {
 			continue
@@ -887,7 +903,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	// regression on islandCeiling) for no gain — the reach form has no body to
 	// run. Decline so it refuses; the lens-as-const value/apply/getpath forms
 	// (which do not route here) still compile natively.
-	if spec, ok := callableWords[word]; ok && spec.bodyPos < len(args) && IsReach(args[spec.bodyPos]) {
+	if sig.Callable != nil && sig.Callable.BodyPos < len(args) && IsReach(args[sig.Callable.BodyPos]) {
 		return false
 	}
 	// A dispatch whose output is already recorded was handled by a structured

@@ -64,3 +64,90 @@ func TestIsInertConstRejectsMutableInstances(t *testing.T) {
 		}
 	}
 }
+
+// A Table type body is a thin wrapper over its row RecordType (TableTypeInfo
+// embeds RecordTypeInfo), so it joins the structural-type-body family
+// (Record/Options/Object/Disjunct) the const whitelist already admits: a
+// module-exported Table type (`Test.TestSet`) folds to a const so the get over
+// the immutable module export bakes rather than refusing "unknown provenance".
+// Soundness rides the SAME typeBodyConstOK interior check the record uses — a
+// carrier/dynamic field in the row schema must still keep the whole type off the
+// const path. Paired positive/negative pins both edges.
+func TestIsInertConstTableTypeBody(t *testing.T) {
+	dataFields := NewOrderedMap()
+	dataFields.Set("name", NewTypeLiteral(TString)) // bare type nodes — data schema
+	dataFields.Set("value", NewTypeLiteral(TInteger))
+	dataTable := NewTableType(RecordTypeInfo{Fields: dataFields})
+
+	// POSITIVE — a Table over a data-only record schema bakes as a const.
+	if !isInertConst(dataTable) {
+		t.Errorf("isInertConst(Table{name:String value:Integer}) = false; a Table type over a "+
+			"data-only record must be const-bakeable (it is a thin wrapper over RecordTypeInfo, "+
+			"which already bakes). Disassemble: %v", dataTable)
+	}
+	if !typeBodyConstOK(dataTable) {
+		t.Error("typeBodyConstOK(data Table) = false; want true")
+	}
+
+	// NEGATIVE — a carrier in the row schema (a check-mode artefact that must
+	// never be materialised) keeps the Table type off the const path, exactly
+	// as it would the bare record.
+	carrierFields := NewOrderedMap()
+	carrierFields.Set("rows", NewCarrier(TList))
+	carrierTable := NewTableType(RecordTypeInfo{Fields: carrierFields})
+	if isInertConst(carrierTable) {
+		t.Error("isInertConst(Table over carrier-bearing record) = true; a carrier interior must " +
+			"keep the structural type body off the const pool")
+	}
+	if typeBodyConstOK(carrierTable) {
+		t.Error("typeBodyConstOK(carrier Table) = true; want false")
+	}
+}
+
+// A dot-access reach (`r.int`) inside a NEVER-evaluated code body (a NoEvalArgs
+// operand the driving word stores / drops / CallAQLs — Test.prop / Test.skip /
+// Test.check-prop — or a quoted list) is pure DATA: the VM pushes the baked
+// compound verbatim and never expands a reach (in-place expansion is an
+// interpreter behaviour). So a receiver reach rides as a const MEMBER even
+// though the STANDALONE isInertReach (the detached lens) requires receiverless +
+// Eval=false. A COMPUTED segment (a paren to run) is code and still refuses.
+func TestInertReachMember(t *testing.T) {
+	// `r.int` — receiver [Word(r)], one literal-key segment, Eval=true (the
+	// dot-access form the parser builds for a member of a code body).
+	dotReach := NewReach(ReachInfo{
+		Receiver: []Value{NewWord("r")},
+		Segments: []ReachSeg{{KeyLit: NewWord("int")}},
+		Eval:     true,
+	})
+
+	// POSITIVE — a dot-access reach is an inert const MEMBER, so a code body
+	// holding it (`[r.int 0 9]`) bakes as a const list.
+	if !inertReachMember(dotReach) {
+		t.Error("inertReachMember(r.int) = false; a dot-access reach must ride as a const member")
+	}
+	body := NewList([]Value{dotReach, NewInteger(0), NewInteger(9)})
+	if !isInertConst(body) {
+		t.Error("isInertConst([r.int 0 9]) = false; a code body of inert tokens + a reach must bake")
+	}
+	// …but the SAME reach standalone is NOT an inert const — at the engine
+	// pointer it expands in place, so it must reach the runtime as code, never
+	// frozen into the const pool.
+	if isInertConst(dotReach) {
+		t.Error("isInertConst(r.int) = true; a standalone dot-access reach must stay OUT of the const pool")
+	}
+
+	// NEGATIVE — a COMPUTED segment (`r.(k)`, a paren evaluated at run time) is
+	// code, not data, so the reach refuses as a member and keeps its body off
+	// the const path.
+	computedReach := NewReach(ReachInfo{
+		Receiver: []Value{NewWord("p")},
+		Segments: []ReachSeg{{Computed: true, KeyExpr: []Value{NewWord("k")}}},
+		Eval:     true,
+	})
+	if inertReachMember(computedReach) {
+		t.Error("inertReachMember(p.(k)) = true; a computed segment is code and must refuse")
+	}
+	if isInertConst(NewList([]Value{computedReach})) {
+		t.Error("isInertConst([p.(k)]) = true; a reach with a computed segment must keep the body off the const path")
+	}
+}
