@@ -28,14 +28,18 @@ package eng
 // `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
-func compileClosureBody(r *Registry, word string, bodyOut int, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
+func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK bool, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
 	// A side-effect body word (bodyOut 0 — a test case body) declares NO returns,
 	// so its 0-value residual is taken as-is rather than count-refused against the
 	// default single [TAny]. The fn-VALUE factory path (word "fnval") passes
-	// bodyOut 1, so it keeps the single return.
+	// bodyOut 1, so it keeps the single return. An EmptyBodyErrors word
+	// (each/fold/scan) also declares no returns even at bodyOut 1: a 0-net body is
+	// the handler's OWN runtime error, raised faithfully at invoke time, so the
+	// closure is left count-agnostic rather than count-refused (which would
+	// island).
 	declared := []*Type{TAny}
-	if bodyOut == 0 {
+	if bodyOut == 0 || emptyBodyOK {
 		declared = nil
 	}
 	if paramNames == nil {
@@ -229,7 +233,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	// real program untouched (graceful fall-through to the island).
 	real := r.Check.Emit
 	r.Check.Emit = NewEmitState()
-	_, probeOk := compileClosureBody(r, word, spec.BodyOut, bodyToks, inputs, paramNames, captures, shape, pos)
+	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, bodyToks, inputs, paramNames, captures, shape, pos)
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -237,7 +241,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, spec.BodyOut, bodyToks, inputs, paramNames, captures, shape, pos)
+	unit, realOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, bodyToks, inputs, paramNames, captures, shape, pos)
 	if !realOk || unit < 0 {
 		return false
 	}

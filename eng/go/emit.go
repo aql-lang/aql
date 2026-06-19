@@ -634,13 +634,13 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit.reg = r
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		return emitOperand{}, false
 	}

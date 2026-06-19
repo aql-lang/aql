@@ -423,6 +423,18 @@ type CallableSpec struct {
 	// case whose assertions raise on failure and otherwise leave nothing). It
 	// sets the compiled unit's declared return count.
 	BodyOut int
+	// EmptyBodyErrors marks a word whose driving HANDLER itself raises a
+	// runtime error when an invocation's body nets 0 values — each / fold /
+	// scan raise `<word>_error "body produced no result"` from their InvokeBody
+	// loop (invokeBodyTop / the list eachHandler return the empty residual and
+	// the handler raises). For such a word a 0-net body is NOT a compile
+	// refusal: the body compiles as a count-AGNOSTIC closure (declared nil
+	// returns, like a side-effect body) so the handler raises the byte-identical
+	// error at run time, instead of refusing the closure and islanding to let
+	// the interpreter raise. The handler arbitrates the residual uniformly —
+	// it takes the LAST value and errors on none — so a 1- or N-value body is
+	// handled identically to before; only the unenforced count differs.
+	EmptyBodyErrors bool
 	// Inputs returns the per-invocation input carriers the body consumes, in the
 	// order the driving handler supplies them via InvokeBody. The carriers are
 	// GENERALISED types (not one call's concrete values) so the body compiles
