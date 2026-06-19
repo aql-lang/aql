@@ -475,11 +475,17 @@ func TestEmitGenericSchema(t *testing.T) {
 	if got, _, err := mustRun(t, `def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mapper of [Integer String])`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "true" {
 		t.Errorf("instantiated-fnsig teq: got %v err=%v, want [true]", got, err)
 	}
-	// Negative: `make` of a generic instantiated inside a generic fn body still
-	// refuses (the instantiation operand's type variable is a fn-frame local,
-	// not resolvable at compile time).
-	if _, r := compile(t, `def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end (boxit 5) typeof`); r == "" {
-		t.Error("make of a generic instantiated in a fn body compiled but must still refuse")
+	// `make` of a generic instantiated inside a generic fn body now COMPILES: the
+	// make body is a consumed dataMap arg evaluated in the call's scope (the T
+	// binding reaches the body-internal instantiation), so OpMakeMap re-assembles
+	// per call soundly (generics-fn.tsv boxit row). Its compiled typeof matches
+	// the interpreter.
+	const genFnBody = `def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end (boxit 5) typeof`
+	if _, r := compile(t, genFnBody); r != "" {
+		t.Errorf("make of a generic instantiated in a fn body must compile, refused: %s", r)
+	}
+	if got, _, err := mustRun(t, genFnBody); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "Box of [Integer]" {
+		t.Errorf("generic-fn-body make typeof: got %v err=%v, want [Box of [Integer]]", got, err)
 	}
 }
 
@@ -637,14 +643,17 @@ func TestEmitModuleInnerNative(t *testing.T) {
 			t.Fatalf("%s: compiled=%v err=%v (want compiled, no error)", src, compiled, err)
 		}
 	}
-	// Negative: a user-def meta wrapper (`def ff (force-arity 2 add)`) is NOT a
-	// module inner native — its opaque, def-bound value must refuse, not bake
-	// through the module-inner exemption. (A usurp'd `if` no longer belongs here:
-	// usurp resolves to a concrete reversed `if` dispatch in the check pass, which
-	// now compiles soundly via the computed-arm branch path — see
-	// TestComputedArmConditions.)
-	if _, r := compile(t, `def ff (force-arity 2 add) ff 1 2`); r == "" {
-		t.Error("force-arity'd user def compiled but must refuse (opaque meta wrapper)")
+	// A force-arity'd user def (`def ff (force-arity 2 add)`) now COMPILES like
+	// usurp: force-arity's re-dispatch wrapper runs in check mode (RunInCheckMode),
+	// so the carrier compiler steps the re-dispatch and bakes the underlying `add`
+	// call directly (path-modifier.tsv). The compiled result matches the
+	// interpreter. (A usurp'd `if` likewise resolves to a concrete reversed `if`
+	// dispatch — see TestComputedArmConditions.)
+	if _, r := compile(t, `def ff (force-arity 2 add) ff 1 2`); r != "" {
+		t.Errorf("force-arity'd user def must compile, refused: %s", r)
+	}
+	if got, _, err := mustRun(t, `def ff (force-arity 2 add) ff 1 2`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "3" {
+		t.Errorf("force-arity def call: got %v err=%v, want [3]", got, err)
 	}
 }
 
