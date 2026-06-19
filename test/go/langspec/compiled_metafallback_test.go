@@ -34,9 +34,6 @@
 package langspec
 
 import (
-	"bufio"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -125,72 +122,9 @@ const (
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {
-	specDir := filepath.Join("..", "..", "..", "lang", "spec")
-	entries, err := os.ReadDir(specDir)
-	if err != nil {
-		t.Fatalf("read %s: %v", specDir, err)
-	}
-
-	var interp, reducible, errorRows, computeGap int
-	tier1By := map[string]int{}
-	tier2By := map[string]int{}
-	computeByReason := map[string]int{}
-
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
-			continue
-		}
-		f, err := os.Open(filepath.Join(specDir, e.Name()))
-		if err != nil {
-			t.Fatalf("open: %v", err)
-		}
-		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-		for scanner.Scan() {
-			line := strings.TrimRight(scanner.Text(), " \t")
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			parts := strings.Split(line, "\t")
-			if len(parts) < 2 {
-				continue
-			}
-			input := strings.TrimSpace(parts[0])
-
-			a := newDifferentialInstance(t)
-			prog, reason, _, cerr := a.CompileCheck(input)
-			switch {
-			case cerr != nil, reason == "check diagnostics":
-				continue // statically invalid in both engines — not the gate's concern
-			case prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK"):
-				continue // fully native
-			}
-			// Refused, or an islanded Program: not fully native. Classify.
-			switch tier, name := classify(input); tier {
-			case 1:
-				interp++
-				tier1By[name]++
-			case 2:
-				reducible++
-				tier2By[name]++
-			default:
-				if errorRowReason(reason) {
-					errorRows++
-					continue
-				}
-				computeGap++
-				r := normaliseReason(reason)
-				if reason == "" {
-					r = "island (OpFallback span)"
-				}
-				computeByReason[r]++
-			}
-		}
-		f.Close()
-		if err := scanner.Err(); err != nil {
-			t.Fatalf("scanner: %v", err)
-		}
-	}
+	c := gatherCensus(t)
+	interp, reducible, errorRows, computeGap := c.interp, c.reducible, c.errorRows, c.computeGap
+	tier1By, tier2By, computeByReason := c.tier1By, c.tier2By, c.computeBy
 
 	t.Logf("re-scoped P7 partition: %d interpreter-only (tier 1, permanent), %d reducible (tier 2, TODO), %d error-row, %d COMPUTE GAP",
 		interp, reducible, errorRows, computeGap)

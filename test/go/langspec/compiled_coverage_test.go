@@ -17,9 +17,6 @@
 package langspec
 
 import (
-	"bufio"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -131,66 +128,9 @@ func rootCause(bucket string) string {
 }
 
 func TestCompiledCoverage(t *testing.T) {
-	specDir := filepath.Join("..", "..", "..", "lang", "spec")
-	entries, err := os.ReadDir(specDir)
-	if err != nil {
-		t.Fatalf("read %s: %v", specDir, err)
-	}
-
-	var rows, compiled, checkErr, refused, islanded int
-	buckets := map[string]int{}
-
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
-			continue
-		}
-		path := filepath.Join(specDir, e.Name())
-		f, err := os.Open(path)
-		if err != nil {
-			t.Fatalf("open %s: %v", path, err)
-		}
-		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-		for scanner.Scan() {
-			line := strings.TrimRight(scanner.Text(), " \t")
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			parts := strings.Split(line, "\t")
-			if len(parts) < 2 {
-				continue
-			}
-			input := strings.TrimSpace(parts[0])
-			rows++
-
-			a := newDifferentialInstance(t)
-			prog, reason, _, cerr := a.CompileCheck(input)
-			switch {
-			case cerr != nil, reason == "check diagnostics":
-				// Statically invalid in both engines: a parse/check Go error,
-				// or error-severity check diagnostics (a type-error row).
-				// CompileCheck returns a nil Program for these with the row
-				// genuinely erroring in the interpreter too — not a refusal.
-				checkErr++
-			case prog != nil:
-				compiled++
-				// An islanded program still re-enters the interpreter at run
-				// time (OpFallback → sub-engine). Driving this to zero — by
-				// compiling each island shape natively — is the run-time-
-				// independence goal; track it as a downward ratchet.
-				if strings.Contains(prog.Disassemble(), "FALLBACK") {
-					islanded++
-				}
-			default:
-				refused++
-				buckets[normaliseReason(reason)]++
-			}
-		}
-		f.Close()
-		if err := scanner.Err(); err != nil {
-			t.Fatalf("scanner error in %s: %v", path, err)
-		}
-	}
+	c := gatherCensus(t)
+	rows, compiled, checkErr, refused, islanded := c.rows, c.compiled, c.checkErr, c.refused, c.islanded
+	buckets := c.refusalBuckets
 
 	// Histogram, most-frequent first.
 	type kv struct {

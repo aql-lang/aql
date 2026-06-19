@@ -1,5 +1,5 @@
 .PHONY: all build install test vet fmt lint vuln clean cover cover-html cover-html-open \
-        verify-bytecode fuzz-bytecode \
+        verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
@@ -72,6 +72,15 @@ vuln:
 	  echo "==> vuln $$m"; \
 	  ( cd $$m && govulncheck ./... ); \
 	done
+
+# ---- compiled-coverage status surface ----------------------------------
+#
+# Regenerate test/go/langspec/COMPILED_STATUS.md from the live spec corpus.
+# Run after any change that moves compiled coverage; TestCompiledStatus fails
+# if the committed surface is stale.
+status:
+	cd test/go && AQL_WRITE_STATUS=1 go test ./langspec/ -run TestCompiledStatus
+	@echo "==> wrote test/go/langspec/COMPILED_STATUS.md"
 
 # ---- bytecode verification gate ----------------------------------------
 #
