@@ -91,6 +91,12 @@ type lowerer struct {
 	dead     map[int]bool // single-result value-defs referenced zero times: drop the result
 	loops    []loopCtx
 	maxDepth int
+	// isFnUnit marks a lowerer driving a USER FN body unit (not the main
+	// program). A break/continue with no enclosing loop in such a unit is a
+	// cross-frame flow signal — it targets the caller's loop — so it lowers to
+	// OpFlowBreak/OpFlowContinue rather than refusing. At the main unit the same
+	// shape stays a refusal (a top-level break outside any loop).
+	isFnUnit bool
 	// numLocals is the current unit's frame-local count, seeded from the unit's
 	// recorded locals and bumped by allocLocal for spill temps (spillSeat). The
 	// caller writes it back to the unit's NumLocals after lowering so the VM
@@ -797,6 +803,11 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 // accepts because it targets the loop header.
 func (lw *lowerer) lowerBreak(ev *emitEvent) string {
 	if len(lw.loops) == 0 {
+		if lw.isFnUnit {
+			// Cross-frame break: targets the caller's loop at run time.
+			lw.emit(OpFlowBreak, 0, ev.call.pos)
+			return ""
+		}
 		return "break outside a compiled loop (Stage 2)"
 	}
 	h := lw.emit(OpJmp, 0, ev.call.pos)
@@ -807,6 +818,11 @@ func (lw *lowerer) lowerBreak(ev *emitEvent) string {
 
 func (lw *lowerer) lowerContinue(ev *emitEvent) string {
 	if len(lw.loops) == 0 {
+		if lw.isFnUnit {
+			// Cross-frame continue: targets the caller's loop at run time.
+			lw.emit(OpFlowContinue, 0, ev.call.pos)
+			return ""
+		}
 		return "continue outside a compiled loop (Stage 2)"
 	}
 	lw.emit(OpJmp, lw.loops[len(lw.loops)-1].nextPC, ev.call.pos)

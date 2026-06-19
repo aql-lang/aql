@@ -1024,8 +1024,13 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				}
 				ev.br.els, ev.br.elsOut, ev.br.hasElsOut = b.Els, elsOut, hasEls
 				if !hasThen && !hasEls {
-					es.MarkUncompilable("if: both branches diverge (Stage 2)")
-					return
+					// Both arms produce 0 values — an empty `[]`, a 0-value word
+					// (set/printstr), or a diverging break/continue/raise on BOTH
+					// sides: the if is a 0-value STATEMENT on every path. Record it
+					// zeroOut (no merge slot, like the 2-arg no-else guard) rather
+					// than refusing; both arm fragments still lower, so their effects
+					// and divergence run.
+					zeroOut = true
 				}
 			}
 		}
@@ -1905,11 +1910,13 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 // values are operands. Returns false — leaving es untouched, so the map stays an
 // unresolvable residual and the program falls back — when a value has no compiled
 // home (a fn value, a nested dynamic carrier) or is a bare type node (a
-// type-pattern map, not a data map). Top frame only, mirroring RecordMakeList: a
-// map inside a fn body / closure / branch arm is re-evaluated per call, often
-// with a different scope, so freezing one assembly would diverge.
+// type-pattern map, not a data map). The sole caller (autoEvalMap) gates this on
+// dataMap — make's CONSUMED construction body — which make evaluates in the
+// current scope, so it is sound inside a fn body / branch arm: the OpMakeMap
+// re-assembles from its operands per call, never frozen, and is never a deferred
+// residual. No top-frame restriction here.
 func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool {
-	if !es.active() || len(es.frames) != 1 || len(keys) != len(vals) || len(keys) == 0 {
+	if !es.active() || len(keys) != len(vals) || len(keys) == 0 {
 		return false
 	}
 	// ops are in value order (vals[0] pairs with keys[0]); OpMakeMap reads the
@@ -2794,7 +2801,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
-		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead}
+		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}

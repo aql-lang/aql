@@ -364,7 +364,22 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	if word == "macroexpand" && len(args) == 1 {
 		if toks, err := ExpandMacroForm(r, args[0]); err == nil {
 			if lst := NewList(toks); isInertConst(lst) {
-				return []Value{lst}
+				// Determinism guard (mirrors tryFoldModuleConst /
+				// constFoldContainerVal): ExpandMacroForm runs the macro template
+				// through a sub-engine, which is NOT guaranteed pure — a template
+				// reading now/rand/mutable state expands differently each step, and
+				// isInertConst accepting the result does not imply determinism (an
+				// unevaluated (now) member is inert). Bake the check-time expansion
+				// only when a second expansion agrees; on mismatch fall through to
+				// refuse so the interpreter expands at its own step. The probe runs
+				// under a def-stack snapshot so it leaves no new side effect beyond
+				// the first expansion's (which is preserved, as before).
+				snap := r.Defs.Snapshot()
+				toks2, err2 := ExpandMacroForm(r, args[0])
+				r.Defs.Restore(snap)
+				if err2 == nil && constFoldAgrees(NewList(toks2), lst) {
+					return []Value{lst}
+				}
 			}
 		}
 	}
@@ -535,6 +550,27 @@ func isModuleFamilyValue(v Value) bool {
 	return false
 }
 
+// constFoldAgrees reports whether two const-fold probe evaluations produced
+// the SAME bakeable value, compared by CanonValue — the exact structural key
+// the const interner dedups by (emit.go's constIdx). It is the shared
+// determinism gate behind every twice-and-compare const-bake
+// (tryFoldModuleConst, the macroexpand splice in carrierResults, and the
+// engine's constFoldContainerVal): a clock / rand / mutation-bearing read
+// whose two probes drift renders a different canon and is refused, so no
+// nondeterministic value is ever frozen into the program.
+//
+// CanonValue, NOT String(): String() is a DISPLAY rendering that conflates
+// values which bake DIFFERENTLY — a bare type node vs the string of its name
+// (`Integer` vs 'Integer'), an atom vs a same-spelled string (name/q vs
+// 'name'), an Integer vs an equal-magnitude Float, a fn vs a same-shaped fn
+// with a different body — so two genuinely divergent probes could
+// String()-match and freeze an UNSOUND const. CanonValue is the bake
+// identity itself ("same canon" ⟺ "interns to one const"), and it is no
+// coarser than String() on any bakeable shape, so a legitimately
+// deterministic fold still agrees (no coverage change) while the
+// conflations String() hid can no longer slip a frozen value through.
+func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
+
 // tryFoldModuleConst const-folds a PURE read whose result is a compile-time
 // constant because it depends only on a module value (immutable, import-bound)
 // plus inert consts / type operands — `MathUtil.$name` -> 'MathUtil',
@@ -580,7 +616,7 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 		return false
 	}
 	two, ok := concreteHandlerEval(r, sig, args)
-	if !ok || one.String() != two.String() {
+	if !ok || !constFoldAgrees(one, two) {
 		return false
 	}
 	switch {
@@ -640,10 +676,19 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	if sig.CompileEffect.Has(CompileFallbackBody) {
 		return false
 	}
-	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
-	// regardless; screen here so they don't slip through forceDynOut).
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode ||
-		len(sig.NoEvalArgs) > 0 || len(sig.QuoteArgs) > 0 {
+	// Meta / re-stepping shapes never bake (RecordCall refuses them regardless;
+	// screen here so they don't slip through forceDynOut).
+	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.QuoteArgs) > 0 {
+		return false
+	}
+	// A code-body (NoEvalArgs) native bakes only when its bodies are INERT consts
+	// with no enclosing-loop sentinel — the SAME screen RecordCall's code-body
+	// refusal uses (noEvalBodiesInert), not a blanket NoEvalArgs exclusion. An
+	// inert body bakes as a code-as-data const and the handler sub-runs it
+	// faithfully (`await` runs its parallels; a body-running native runs its
+	// body), so the dynamic (declared-Any) result is sound to bake. A non-inert
+	// or sentinel-bearing body stays refused.
+	if len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args) {
 		return false
 	}
 	for _, t := range sig.Args {
@@ -2166,6 +2211,18 @@ func FnAnalysisKey(name string, args []Value, captures []CapturedBinding, body [
 // the analyser aborted (recursion detected or body not available) —
 // callers should treat that as an Any carrier.
 func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type) []Value {
+	// Fn-body analysis runs nested sub-engines — not part of the
+	// caller's straight line; pause bytecode recording, UNLESS a fn
+	// compilation armed capture (StartFnCompile): the body's events then
+	// record into the open fn fragment. Resolved at ENTRY, above every
+	// early return below, so an armed analysis that bails early — empty
+	// body, a cached summary, the per-fn analysis quota, or in-flight
+	// recursion — still CONSUMES the one-shot fnArm rather than stranding
+	// it for the next, unrelated AnalyseFnBody (whose guard would then
+	// mis-consume it and leak that body's events into the live fn
+	// fragment). Mirrors how captureArm/loopArm are consumed at the top
+	// of their analysis functions.
+	defer r.Check.Emit.fnBodyGuard()()
 	if len(body) == 0 {
 		return nil
 	}
@@ -2236,12 +2293,6 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// (RescueForwardRefDiagnostics).
 	r.Check.FnBodyDepth++
 	defer func() { r.Check.FnBodyDepth-- }()
-
-	// Fn-body analysis runs nested sub-engines — not part of the
-	// caller's straight line; pause bytecode recording, UNLESS a fn
-	// compilation armed capture (StartFnCompile): the body's events
-	// then record into the open fn fragment.
-	defer r.Check.Emit.fnBodyGuard()()
 
 	// runOnce performs one full body analysis: snapshot def-stack
 	// depths so any defs the body, captures, or parameter bindings
@@ -2321,8 +2372,32 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		}
 	}
 
+	result = stripZeroOutResiduals(r, result)
 	r.Check.FnSummaries[key] = result
 	return result
+}
+
+// stripZeroOutResiduals drops a body residual's 0-output statement-guard
+// phantoms — a trailing `if cond [stmt] []` / `if cond [raise]` registers a
+// phantom None carrier but produces 0 RUNTIME values — so a 0-return fn whose
+// body is such a guard returns the right count to a multi-value caller (`b i
+// i`, where b's call must net 0 so the loop body nets just the trailing i).
+// Mirrors the fn-UNIT residual reconciliation (StartFnCompile.finish, which
+// skips the same zeroOut events) on the CALL side. Recording-active only: the
+// zeroOut flag is set during the compile pass.
+func stripZeroOutResiduals(r *Registry, stk []Value) []Value {
+	es := r.Check.Emit
+	if es == nil || !es.active() || len(stk) == 0 {
+		return stk
+	}
+	filtered := make([]Value, 0, len(stk))
+	for _, v := range stk {
+		if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
+			continue
+		}
+		filtered = append(filtered, v)
+	}
+	return filtered
 }
 
 // carrierStacksEqual reports whether two carrier stacks agree

@@ -178,6 +178,12 @@ func rebarrierFunction(v Value, stack bool) (Value, bool) {
 			origBarrier = len(src.Params)
 		}
 		ws.Handler = rebarrierDispatchHandler(orig, origBarrier)
+		// Like usurp (UsurpFunction): the wrapper re-dispatches the ORIGINAL in
+		// caller order, so running it in CHECK mode lets the carrier compiler step
+		// the re-dispatch and compile the original call directly — `forward-args f
+		// a b` / `a b stack-args f` lower exactly like the plain `f` call — instead
+		// of refusing the opaque wrapper. Soundness rides the differential.
+		ws.RunInCheckMode = true
 		normalizeSig(&ws)
 		wrapped = append(wrapped, ws)
 	}
@@ -216,6 +222,10 @@ func ForceArityFunction(v Value, n int) (Value, bool) {
 		// forward) so force-arity composes over stack-form wrappers
 		// (e.g. force-arity over stack-args).
 		Handler: rebarrierDispatchHandler(orig, funcSigBarrier(orig, n)),
+		// Re-dispatch in check mode so the carrier compiler compiles the original
+		// call directly (`force-arity 2 f a b` lowers like `f a b`), mirroring
+		// usurp / rebarrier. Soundness rides the differential.
+		RunInCheckMode: true,
 	}
 	normalizeSig(&sig)
 	return NewFunction(FnDefInfo{
