@@ -475,6 +475,7 @@ var (
 	NewStoreValue         = eng.NewStoreValue
 	NewStoreWithPrototype = eng.NewStoreWithPrototype
 	NewString             = eng.NewString
+	NewXmlElement         = eng.NewXmlElement
 	NewTableType          = eng.NewTableType
 	// NewTimeOfDay moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewTimeout moved to lang/go/engine/native_misc.go (Step 8).

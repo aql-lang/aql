@@ -388,6 +388,15 @@ func DeepEqual(a, b Value) bool {
 		return true
 	}
 
+	// XML elements (immutable Node/Xml or mutable FlexXml): structural
+	// equality over tag / attributes / children, so a `parse xml` result
+	// and the equivalent embedded literal — and a flex copy and its source
+	// — compare deeply equal (attribute order is not significant). See
+	// core_xml.go::xmlElementsEqual and design/XML-LITERAL.0.md §5.6.
+	if IsXmlValue(a) && IsXmlValue(b) {
+		return xmlElementsEqual(a, b)
+	}
+
 	// Class / object instances: structural equality requires the SAME
 	// (exact) type — a Point3 is never deq-equal to a Point even with
 	// equal visible fields — and field-wise deep equality. The key set

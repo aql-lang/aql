@@ -110,6 +110,33 @@ func TestXmlFlexEndToEnd(t *testing.T) {
 	}
 }
 
+// TestXmlParseAlignment pins Increment 4: `parse xml` yields a Node/Xml
+// element — the same shape an embedded literal produces — so it renders
+// back to well-formed XML and is the same type. See XML-LITERAL.0.md §5.6.
+func TestXmlParseAlignment(t *testing.T) {
+	const imp = `"aql:parselang" import end  `
+	cases := []struct {
+		src  string
+		want any
+	}{
+		{`typeof (parse xml '<a/>')`, "Xml"},
+		{`parse xml '<a x="1"/>'`, `<a x="1"/>`},
+		{`parse xml '<p>hi</p>'`, "<p>hi</p>"},
+		{`parse xml '<r><a>1</a></r>'`, "<r><a>1</a></r>"},
+		// a parsed element and the equivalent literal are deeply equal.
+		{`(parse xml '<a x="1"><b/></a>') deq <a x="1"><b/></a>`, "true"},
+	}
+	for _, c := range cases {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("lang.New: %v", err)
+		}
+		if got := runLast(t, a, imp+c.src); got != c.want {
+			t.Errorf("%q: got %v (%T), want %v", c.src, got, got, c.want)
+		}
+	}
+}
+
 // TestXmlLiteralErrorsEndToEnd pins the loud-failure contract.
 func TestXmlLiteralErrorsEndToEnd(t *testing.T) {
 	for _, src := range []string{`<a></b>`, `<a>`, `<a x=1/>`, `<p>${x</p>`} {

@@ -410,8 +410,10 @@ func tabnasParserSpecs() []ParseLangSpec {
 		{"csv", native.TList, jsonicPlugin(nil, tabnascsv.Csv)},
 		{"toml", native.TMap, ignoreOpts(func(s string) (any, error) { return tabnastoml.Parse(s) })},
 		{"yaml", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasyaml.Parse(s) })},
-		// XML: an element tree Map ({name, attributes, children, …}).
-		{"xml", native.TMap, jsonicPlugin(nil, tabnasxml.Xml)},
+		// XML: a Node/Xml element tree — the SAME value an embedded
+		// `<tag>…</tag>` literal produces, so a parsed document and a
+		// source literal are interchangeable. See design/XML-LITERAL.0.md §5.6.
+		{"xml", native.TXml, jsonicPlugin(nil, tabnasxml.Xml)},
 		{"zon", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnaszon.Parse(s) })},
 		// Markdown: a List of blocks. object:false keeps rows as plain Lists
 		// (the default ordered-map record shape has no exported accessors).
@@ -439,10 +441,17 @@ func tabnasParserSpecs() []ParseLangSpec {
 	}
 	specs := make([]ParseLangSpec, len(defs))
 	for i, d := range defs {
+		// XML decodes to a dedicated Node/Xml value (not a generic Map) so
+		// `parse xml` and an embedded `<…>` literal yield the same shape;
+		// every other kind uses the generic any→Value conversion.
+		convert := tabnasAnyToValue
+		if d.name == "xml" {
+			convert = tabnasXmlToValue
+		}
 		specs[i] = ParseLangSpec{
 			Name:    d.name,
 			Returns: []*native.Type{d.returns},
-			Handler: tabnasParseHandler(d.name, d.parse),
+			Handler: tabnasParseHandler(d.name, d.parse, convert),
 		}
 	}
 	return specs
@@ -462,7 +471,7 @@ func builtinParserKind(name string) bool {
 // tabnasParseHandler builds the parser native for one tabnas kind: it runs
 // the decoder over the (already-resolved) source string and converts the
 // result to an AQL Value. A decode failure raises [aql/parse_syntax_error].
-func tabnasParseHandler(kind string, parse tabnasParser) native.Handler {
+func tabnasParseHandler(kind string, parse tabnasParser, convert func(any) native.Value) native.Handler {
 	target := "parse_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework
@@ -475,8 +484,47 @@ func tabnasParseHandler(kind string, parse tabnasParser) native.Handler {
 				kind+": "+firstCleanLine(perr.Error()), target,
 				"check that the source is well-formed "+kind)
 		}
-		return []native.Value{tabnasAnyToValue(v)}, nil
+		return []native.Value{convert(v)}, nil
 	}
+}
+
+// tabnasXmlToValue maps the tabnas XML decoder's output to a Node/Xml
+// element value, the same shape an embedded `<tag>…</tag>` literal
+// produces. The decoder yields `{name, localName, attributes, children}`
+// where children interleaves text strings and nested element maps; this
+// walks that tree into NewXmlElement(tag, attr, cren). A non-element top
+// level (defensive) falls back to the generic conversion.
+func tabnasXmlToValue(v any) native.Value {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return tabnasAnyToValue(v)
+	}
+	tag, _ := m["name"].(string)
+	attr := native.NewOrderedMap()
+	if am, ok := m["attributes"].(map[string]any); ok {
+		keys := make([]string, 0, len(am))
+		for k := range am {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys) // tabnas hands back an unordered map; sort for determinism
+		for _, k := range keys {
+			attr.Set(k, native.NewString(fmt.Sprintf("%v", am[k])))
+		}
+	}
+	var cren []native.Value
+	if ch, ok := m["children"].([]any); ok {
+		for _, c := range ch {
+			switch cc := c.(type) {
+			case string:
+				cren = append(cren, native.NewString(cc))
+			case map[string]any:
+				cren = append(cren, tabnasXmlToValue(cc))
+			default:
+				cren = append(cren, native.NewString(fmt.Sprintf("%v", cc)))
+			}
+		}
+	}
+	return native.NewXmlElement(tag, attr, cren)
 }
 
 // optsToMap converts the parser's opts argument (the middle `parse <kind>

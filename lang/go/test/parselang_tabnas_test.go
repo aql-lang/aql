@@ -28,7 +28,9 @@ func TestParseLangTabnasFamily(t *testing.T) {
 		{"csv", `((parse csv 'a,b\n1,2') get 0) get 1`, "b"},
 		{"toml", `(parse toml 'b = "hi"') get 'b'`, "hi"},
 		{"yaml", `(parse yaml 'b: hi') get 'b'`, "hi"},
-		{"xml", `(parse xml '<r><a>1</a></r>') get 'name'`, "r"},
+		// XML now decodes to a Node/Xml element (not a generic Map), so it
+		// renders back to well-formed XML — the same value a literal yields.
+		{"xml", `parse xml '<r><a>1</a></r>'`, "<r><a>1</a></r>"},
 		{"zon", `(parse zon '.{ .a = 1, .b = "hi" }') get 'b'`, "hi"},
 		{"markdown", `((parse markdown '# T\n\nhello world') get 0) get 0`, "hello world"},
 		{"feed", `(parse feed '<rss version="2.0"><channel><title>T</title></channel></rss>') get 'format'`, "atom"},

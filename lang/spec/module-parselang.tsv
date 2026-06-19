@@ -62,7 +62,7 @@ ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:parselang" import end  ((ParseLang.parse_csv 'a,b\n1,2' {} end) get 0) get 1	'b'	CSV → List of rows; row 0 is the header
 "aql:parselang" import end  (ParseLang.parse_toml 'b = "hi"' {} end) get 'b'	'hi'	TOML table → Map
 "aql:parselang" import end  (ParseLang.parse_yaml 'b: hi' {} end) get 'b'	'hi'	YAML mapping → Map
-"aql:parselang" import end  (ParseLang.parse_xml '<r><a>1</a></r>' {} end) get 'name'	'r'	XML → element-tree Map; .name is the root tag
+"aql:parselang" import end  ParseLang.parse_xml '<r><a>1</a></r>' {} end	<r><a>1</a></r>	XML → a Node/Xml element that renders back to well-formed XML
 "aql:parselang" import end  (ParseLang.parse_zon '.{ .a = 1, .b = "hi" }' {} end) get 'b'	'hi'	ZON (Zig object notation) → Map
 "aql:parselang" import end  ((ParseLang.parse_markdown '# T\n\nhello world' {} end) get 0) get 0	'hello world'	Markdown → List of blocks
 "aql:parselang" import end  (ParseLang.parse_feed '<rss version="2.0"><channel><title>My Feed</title></channel></rss>' {} end) get 'format'	'atom'	RSS/Atom feed → normalised atom-shaped Map

@@ -1,12 +1,14 @@
 # AQL Literal XML Embedding Design
 
-Status: Increments 1–3 **LANDED**. Increment 1: static (non-interpolated)
+Status: Increments 1–4 **LANDED**. Increment 1: static (non-interpolated)
 `Node/Xml` literals parse end-to-end, build an immutable element value,
 render back to well-formed XML, and carry structural equality. Increment
 2: `${}` interpolation (§4) — in text, child, and attribute positions.
 Increment 3: the mutable `Node/Xml/FlexXml` variant via `flex`/`node`,
-with in-place `append` (children) and `set` (attributes). Remaining
-increments (`parse xml` alignment and the query/accessor words) are
+with in-place `append` (children) and `set` (attributes). Increment 4:
+`parse xml` now yields a `Node/Xml` element (not a generic Map), so a
+parsed document and a source literal are deeply equal (§5.6). The
+remaining increment (the query/accessor words `elem`/`text`/`cs/`) is
 design-only — see §7.
 
 Implementation landed in Increment 1:
@@ -60,6 +62,21 @@ Implementation landed in Increment 3 (mutable FlexXml):
 - batteries: `TestXmlFlexEndToEnd` (`lang/go/test/xml_literal_test.go`),
   `TestFlexXmlRoundTrip` (`eng/go/flex_xml_test.go`), Node/Xml/FlexXml in
   the FixedID stability snapshot.
+
+Implementation landed in Increment 4 (`parse xml` alignment):
+- the tabnas `parse xml` handler now converts its `{name, attributes,
+  children}` output into a `Node/Xml` element via `tabnasXmlToValue`
+  rather than a generic Map — text children stay Strings, element
+  children recurse, attributes sort for determinism
+  (`lang/go/modules/parselang.go`; `Returns` is now `TXml`; doc updated in
+  `docs_parselang.go`). `NewXmlElement` re-exported in `native/aliases.go`.
+- `DeepEqual` gained an XML branch routing to `xmlElementsEqual`
+  (`eng/go/compare.go`), so `deq` is true for a parsed element and the
+  equivalent literal (and for a flex copy and its source); attribute
+  order is not significant.
+- batteries: `TestXmlParseAlignment` (`lang/go/test/xml_literal_test.go`),
+  updated rows in `lang/go/test/parselang_tabnas_test.go` and
+  `lang/spec/module-parselang.tsv`.
 
 Literal XML embedded directly in AQL source — `<tag …>…</tag>` written
 in-line where a value is expected — producing a first-class `Node/Xml`
