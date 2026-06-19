@@ -1037,20 +1037,17 @@ func parseSingleCondition(d Dialect, elems []Value, start int) (string, int, err
 		}
 
 	default:
-		// Standard comparison: op value [collate nocase|binary|rtrim]
-		sqlOp, ok := comparisonOps[opName]
-		if !ok {
+		// Standard comparison: op value [collate nocase|binary|rtrim].
+		// The dialect resolves the operator and rejects any it cannot
+		// express rather than emitting SQL the backend would choke on.
+		if _, known := comparisonOps[opName]; !known {
 			return "", i, fmt.Errorf("unknown comparison operator %q", opName)
 		}
-		// Reject operators the target dialect cannot express rather
-		// than emitting SQL it will reject.
+		sqlOp, ok := d.ComparisonOperator(opName)
+		if !ok {
+			return "", i, fmt.Errorf("operator %q not supported by %s dialect", opName, d.Name())
+		}
 		caps := d.Caps()
-		if opName == "glob" && !caps.Glob {
-			return "", i, fmt.Errorf("operator %q not supported by %s dialect", opName, d.Name())
-		}
-		if opName == "regexp" && !caps.Regexp {
-			return "", i, fmt.Errorf("operator %q not supported by %s dialect", opName, d.Name())
-		}
 		i++
 		if i >= len(elems) {
 			return "", i, fmt.Errorf("incomplete condition: expected value after %q", opName)
@@ -1279,9 +1276,12 @@ func buildJoinCondition(d Dialect, condList Value) (string, error) {
 		}
 
 		opName := valueToColName(elems[i])
-		sqlOp, ok := comparisonOps[opName]
-		if !ok {
+		if _, known := comparisonOps[opName]; !known {
 			return "", fmt.Errorf("unknown comparison operator %q in join condition", opName)
+		}
+		sqlOp, ok := d.ComparisonOperator(opName)
+		if !ok {
+			return "", fmt.Errorf("operator %q not supported by %s dialect in join condition", opName, d.Name())
 		}
 		i++
 

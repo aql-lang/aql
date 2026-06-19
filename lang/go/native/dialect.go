@@ -53,6 +53,12 @@ type Dialect interface {
 	// Postgres/SQL Server use TRUE/FALSE or 1/0).
 	BooleanLiteral(b bool) string
 
+	// ComparisonOperator returns the SQL operator for an AQL comparison
+	// word (eq/neq/lt/gt/lte/gte/like/glob/regexp) and false when this
+	// dialect cannot express it (e.g. GLOB outside SQLite, REGEXP on
+	// SQL Server, or Postgres's `~` for regexp).
+	ComparisonOperator(name string) (string, bool)
+
 	// Caps reports the optional-feature support for this dialect.
 	Caps() DialectCaps
 }
@@ -61,10 +67,6 @@ type Dialect interface {
 // so the query builder can reject (or rewrite) clauses a target cannot
 // express rather than emitting invalid SQL.
 type DialectCaps struct {
-	// Glob is true when the GLOB operator is available (SQLite only).
-	Glob bool
-	// Regexp is true when a REGEXP-style operator is available.
-	Regexp bool
 	// Collations maps a lowercased AQL collation name (nocase / binary
 	// / rtrim) to the dialect's COLLATE name, or is absent when the
 	// dialect does not support that collation.
@@ -131,10 +133,62 @@ func (SQLiteDialect) BooleanLiteral(b bool) string {
 	return "'false'"
 }
 
+// ComparisonOperator for SQLite supports the full operator set,
+// including the SQLite-only GLOB and REGEXP.
+func (SQLiteDialect) ComparisonOperator(name string) (string, bool) {
+	op, ok := comparisonOps[name]
+	return op, ok
+}
+
 func (SQLiteDialect) Caps() DialectCaps {
-	return DialectCaps{
-		Glob:       true,
-		Regexp:     true,
-		Collations: sqliteCollations,
+	return DialectCaps{Collations: sqliteCollations}
+}
+
+// columnTypeFor maps an AQL field type to a dialect column type using
+// the same conformance order as the legacy SQLite mapper (Integer
+// before the wider Number). Shared by every dialect's
+// AQLTypeToColumnType.
+func columnTypeFor(t *Type, integer, float, number, boolean, text string) string {
+	switch {
+	case t.ConformsTo(TInteger):
+		return integer
+	case t.ConformsTo(TFloat):
+		return float
+	case t.ConformsTo(TNumber):
+		return number
+	case t.ConformsTo(TBoolean):
+		return boolean
+	default:
+		return text
 	}
+}
+
+// columnTypeForName maps an AQL type *name* (as written in a `cast`
+// clause) to a dialect column/CAST type. An unrecognised name passes
+// through upper-cased, matching the legacy behaviour. Shared by every
+// dialect's AQLTypenameToColumnType.
+func columnTypeForName(name, integer, float, text, boolean string) string {
+	switch strings.ToLower(name) {
+	case "integer", "int":
+		return integer
+	case "real", "float", "number", "decimal":
+		return float
+	case "text", "string":
+		return text
+	case "boolean", "bool":
+		return boolean
+	default:
+		return strings.ToUpper(name)
+	}
+}
+
+// normalizeSQLType strips any size/precision suffix from a SQL type
+// name and upper-cases it, so driver-reported names like "varchar(255)"
+// or "NUMERIC(10,2)" map cleanly. Shared by every dialect's
+// ColumnTypeToAQLType.
+func normalizeSQLType(s string) string {
+	if i := strings.IndexByte(s, '('); i >= 0 {
+		s = s[:i]
+	}
+	return strings.ToUpper(strings.TrimSpace(s))
 }

@@ -169,6 +169,15 @@ type noFeatureDialect struct{ SQLiteDialect }
 func (noFeatureDialect) Name() string      { return "nofeature" }
 func (noFeatureDialect) Caps() DialectCaps { return DialectCaps{Collations: map[string]string{}} }
 
+// ComparisonOperator rejects GLOB and REGEXP but keeps the universal
+// operators (delegated to the embedded SQLite dialect).
+func (n noFeatureDialect) ComparisonOperator(name string) (string, bool) {
+	if name == "glob" || name == "regexp" {
+		return "", false
+	}
+	return n.SQLiteDialect.ComparisonOperator(name)
+}
+
 func TestDialectRejectsUnsupportedFeatures(t *testing.T) {
 	d := noFeatureDialect{}
 
