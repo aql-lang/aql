@@ -108,6 +108,58 @@ func TestStartMultipleResults(t *testing.T) {
 	}
 }
 
+func TestIsExitWord(t *testing.T) {
+	tests := []struct {
+		line string
+		want bool
+	}{
+		{"exit", true},
+		{"quit", true},
+		{"  exit  ", true},
+		{"\tquit\n", true},
+		{"exits", false},
+		{"quitter", false},
+		{"1 add 2", false},
+		{"/exit", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		if got := isExitWord(tc.line); got != tc.want {
+			t.Errorf("isExitWord(%q) = %v, want %v", tc.line, got, tc.want)
+		}
+	}
+}
+
+func TestStartExitWordShutsDown(t *testing.T) {
+	// `exit` should stop the loop: the line after it must never run.
+	in := strings.NewReader("exit\n1 add 2\n")
+	out := &bytes.Buffer{}
+	Start(in, out, "")
+	if strings.Contains(out.String(), "3") {
+		t.Errorf("expected exit to stop the loop before evaluating later input, got %q", out.String())
+	}
+}
+
+func TestStartQuitWordShutsDown(t *testing.T) {
+	// `quit` should stop the loop: the line after it must never run.
+	in := strings.NewReader("quit\n4 add 5\n")
+	out := &bytes.Buffer{}
+	Start(in, out, "")
+	if strings.Contains(out.String(), "9") {
+		t.Errorf("expected quit to stop the loop before evaluating later input, got %q", out.String())
+	}
+}
+
+func TestStartExitWordWithWhitespace(t *testing.T) {
+	// Surrounding whitespace should still trigger shutdown.
+	in := strings.NewReader("  exit  \n6 add 7\n")
+	out := &bytes.Buffer{}
+	Start(in, out, "")
+	if strings.Contains(out.String(), "13") {
+		t.Errorf("expected padded exit to stop the loop, got %q", out.String())
+	}
+}
+
 func TestStartReadlineError(t *testing.T) {
 	orig := newReadline
 	defer func() { newReadline = orig }()

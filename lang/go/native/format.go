@@ -5,10 +5,11 @@ import (
 	"math"
 	"strings"
 
-	csvpkg "github.com/jsonicjs/csv/go"
-	jsonic "github.com/jsonicjs/jsonic/go"
-	multisource "github.com/jsonicjs/multisource/go"
+	csvpkg "github.com/tabnas/csv/go"
+	jsonic "github.com/tabnas/jsonic/go"
+	multisource "github.com/tabnas/multisource/go"
 
+	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
@@ -40,7 +41,7 @@ func (f *TextFormat) Encode(v Value) (string, error) {
 type JSONFormat struct{}
 
 func (f *JSONFormat) Decode(content string) ([]Value, error) {
-	result, err := jsonic.Parse(content)
+	result, err := parser.SafeParse(content)
 	if err != nil {
 		return nil, fmt.Errorf("invalid json: %w", err)
 	}
@@ -65,11 +66,13 @@ type JsonicFormat struct {
 func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 	var j *jsonic.Jsonic
 	if f.Resolver != nil {
-		j = multisource.MakeJsonic(multisource.MultiSourceOptions{
-			Resolver: f.Resolver,
+		j = parser.GuardMake(func() *jsonic.Jsonic {
+			return multisource.MakeJsonic(multisource.MultiSourceOptions{
+				Resolver: f.Resolver,
+			})
 		})
 	} else {
-		j = jsonic.Make()
+		j = parser.SafeMake()
 	}
 	result, err := j.Parse(content)
 	if err != nil {
@@ -191,16 +194,36 @@ func (f *TSVFormat) Encode(v Value) (string, error) {
 // a record (map) keyed by those headers. The result is wrapped in a
 // table type whose record schema has all-string fields.
 func decodeDelimited(content string, sep string) ([]Value, error) {
-	noObj := false
-	noHdr := false
-	records, err := csvpkg.Parse(content, csvpkg.CsvOptions{
-		Object: &noObj,
-		Header: &noHdr,
-		Field:  &csvpkg.FieldOptions{Separation: sep},
-	})
+	// tabnas/csv is a jsonic plugin (not a standalone Parse like jsonicjs/csv):
+	// configure a jsonic instance with the CSV grammar, then parse. object:false
+	// + header:false yields raw rows ([]any of []any), matching the previous
+	// CsvOptions{Object:false, Header:false, Field:{Separation:sep}}.
+	j := parser.SafeMake()
+	if err := csvpkg.Csv(j, map[string]any{
+		"object": false,
+		"header": false,
+		// number/value coercion OFF: keep field text literal, matching the
+		// legacy jsonicjs/csv behaviour (decodeDelimited builds an all-String
+		// record schema; numeric typing is the caller's concern) — without
+		// number/value, "30" stays the String "30" rather than the Integer 30.
+		//
+		// NB: the tabnas/csv `strict` flag (which would also keep a
+		// jsonic-shaped field like "{x:1}" literal instead of parsing it to a
+		// map) is deliberately NOT set — with strict:true the plugin
+		// infinite-loops on ordinary CSV (see decodeDelimited tests). A
+		// jsonic-shaped cell is the rare case and degrades to its string form
+		// in the conversion loop below, which is acceptable.
+		"number": false,
+		"value":  false,
+		"field":  map[string]any{"separation": sep},
+	}); err != nil {
+		return nil, fmt.Errorf("csv: %w", err)
+	}
+	parsed, err := j.Parse(content)
 	if err != nil {
 		return nil, fmt.Errorf("csv: %w", err)
 	}
+	records, _ := parsed.([]any)
 
 	if len(records) == 0 {
 		return []Value{NewList([]Value{})}, nil
