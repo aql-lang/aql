@@ -199,10 +199,17 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 	if err := csvpkg.Csv(j, map[string]any{
 		"object": false,
 		"header": false,
-		// number/value coercion OFF: keep every field a String, matching the
+		// number/value coercion OFF: keep field text literal, matching the
 		// legacy jsonicjs/csv behaviour (decodeDelimited builds an all-String
-		// record schema; numeric typing is the caller's concern). tabnas/csv
-		// otherwise coerces "30" → 30, breaking string-keyed filters.
+		// record schema; numeric typing is the caller's concern) — without
+		// number/value, "30" stays the String "30" rather than the Integer 30.
+		//
+		// NB: the tabnas/csv `strict` flag (which would also keep a
+		// jsonic-shaped field like "{x:1}" literal instead of parsing it to a
+		// map) is deliberately NOT set — with strict:true the plugin
+		// infinite-loops on ordinary CSV (see decodeDelimited tests). A
+		// jsonic-shaped cell is the rare case and degrades to its string form
+		// in the conversion loop below, which is acceptable.
 		"number": false,
 		"value":  false,
 		"field":  map[string]any{"separation": sep},

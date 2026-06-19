@@ -203,6 +203,12 @@ func RegisterHostParser(reg *native.Registry, spec ParseLangSpec) error {
 	if spec.Handler == nil {
 		return fmt.Errorf("register parser %q: handler must not be nil", spec.Name)
 	}
+	// Reject a collision with a built-in kind here, BEFORE import: state.live
+	// is nil until aql:parselang is built, so the duplicate would otherwise
+	// only surface as a delayed import failure when the built-ins are installed.
+	if builtinParserKind(spec.Name) {
+		return fmt.Errorf("register parser %q: already registered (built-in)", spec.Name)
+	}
 	state := parseLangHostStateFor(reg, true)
 	state.mu.Lock()
 	defer state.mu.Unlock()
@@ -351,9 +357,10 @@ func parseRegisterHandler(exports *native.OrderedMap) native.Handler {
 	}
 }
 
-// tabnasParser is the shape of a tabnas decoder: source text → generic Go
-// data (map[string]any / []any / scalars), or a parse error.
-type tabnasParser func(src string) (any, error)
+// tabnasParser is the shape of a tabnas decoder: source text + the caller's
+// `parse` opts → generic Go data (map[string]any / []any / scalars), or a
+// parse error.
+type tabnasParser func(src string, opts map[string]any) (any, error)
 
 // tabnasParserSpecs returns the parser kinds backed by the tabnas parser
 // family (github.com/tabnas/*). Every kind ships built-in — importing
@@ -364,17 +371,27 @@ type tabnasParser func(src string) (any, error)
 // Shapes: the JSON family (json / jsonic / json5 / jsonc) plus yaml / zon
 // yield whatever their top level denotes (Map, List or scalar); csv and
 // markdown yield a List of rows / blocks; ini / toml / xml / feed yield a Map.
+//
+// The middle `parse <kind> <opts> <source>` opts map is forwarded to the
+// jsonic-plugin kinds (json5 / jsonc / csv / xml / markdown / feed), whose
+// option model IS a generic map — e.g. `parse csv {field:{separation:';'}}`.
+// The standalone-Parse kinds (json / jsonic / yaml / toml / zon / ini) take
+// typed (not map) options upstream, so they ignore opts for now.
 func tabnasParserSpecs() []ParseLangSpec {
 	// jsonicPlugin adapts a tabnas jsonic plugin (json5, csv, xml, …) — which
-	// installs its grammar onto a parser instance — into a tabnasParser.
-	jsonicPlugin := func(install func(*tabnasjsonic.Jsonic) error) tabnasParser {
-		return func(src string) (any, error) {
+	// installs its grammar onto a parser instance from a map of options — into
+	// a tabnasParser, merging the caller's opts over the kind's defaults.
+	jsonicPlugin := func(defaults map[string]any, install func(*tabnasjsonic.Jsonic, map[string]any) error) tabnasParser {
+		return func(src string, opts map[string]any) (any, error) {
 			j := tabnasjsonic.Make()
-			if err := install(j); err != nil {
+			if err := install(j, mergeOpts(defaults, opts)); err != nil {
 				return nil, err
 			}
 			return j.Parse(src)
 		}
+	}
+	ignoreOpts := func(parse func(string) (any, error)) tabnasParser {
+		return func(src string, _ map[string]any) (any, error) { return parse(src) }
 	}
 	defs := []struct {
 		name    string
@@ -382,42 +399,34 @@ func tabnasParserSpecs() []ParseLangSpec {
 		parse   tabnasParser
 	}{
 		// INI: [section] headers nest a Map; booleans decode to Booleans.
-		{"ini", native.TMap, func(s string) (any, error) { return tabnasini.Parse(s) }},
+		{"ini", native.TMap, ignoreOpts(func(s string) (any, error) { return tabnasini.Parse(s) })},
 		// JSON family — top level may be an object, array or scalar.
-		{"json", native.TAny, func(s string) (any, error) { return tabnasjson.Parse(s) }},
-		{"jsonic", native.TAny, func(s string) (any, error) { return tabnasjsonic.Parse(s) }},
-		{"json5", native.TAny, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
-			return tabnasjson5.Json5(j, tabnasjson5.Defaults())
-		})},
-		{"jsonc", native.TAny, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
-			return tabnasjsonc.Jsonc(j, map[string]any{})
-		})},
+		{"json", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasjson.Parse(s) })},
+		{"jsonic", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasjsonic.Parse(s) })},
+		{"json5", native.TAny, jsonicPlugin(tabnasjson5.Defaults(), tabnasjson5.Json5)},
+		{"jsonc", native.TAny, jsonicPlugin(nil, tabnasjsonc.Jsonc)},
 		// CSV: a List of rows, each row a List of field strings.
-		{"csv", native.TList, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
-			return tabnascsv.Csv(j, map[string]any{})
-		})},
-		{"toml", native.TMap, func(s string) (any, error) { return tabnastoml.Parse(s) }},
-		{"yaml", native.TAny, func(s string) (any, error) { return tabnasyaml.Parse(s) }},
+		{"csv", native.TList, jsonicPlugin(nil, tabnascsv.Csv)},
+		{"toml", native.TMap, ignoreOpts(func(s string) (any, error) { return tabnastoml.Parse(s) })},
+		{"yaml", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasyaml.Parse(s) })},
 		// XML: an element tree Map ({name, attributes, children, …}).
-		{"xml", native.TMap, jsonicPlugin(func(j *tabnasjsonic.Jsonic) error {
-			return tabnasxml.Xml(j, map[string]any{})
-		})},
-		{"zon", native.TAny, func(s string) (any, error) { return tabnaszon.Parse(s) }},
+		{"xml", native.TMap, jsonicPlugin(nil, tabnasxml.Xml)},
+		{"zon", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnaszon.Parse(s) })},
 		// Markdown: a List of blocks. object:false keeps rows as plain Lists
 		// (the default ordered-map record shape has no exported accessors).
-		{"markdown", native.TList, func(s string) (any, error) {
+		{"markdown", native.TList, func(s string, opts map[string]any) (any, error) {
 			j := tabnasjsonic.Make()
 			if err := j.UseDefaults(tabnasmarkdown.Markdown, tabnasmarkdown.Defaults,
-				map[string]any{"object": false}); err != nil {
+				mergeOpts(map[string]any{"object": false}, opts)); err != nil {
 				return nil, err
 			}
 			return j.Parse(s)
 		}},
 		// Feed (RSS/Atom): normalised to a Map. The plugin returns a typed
 		// AtomFeed struct, so a JSON round-trip flattens it to generic data.
-		{"feed", native.TMap, func(s string) (any, error) {
+		{"feed", native.TMap, func(s string, opts map[string]any) (any, error) {
 			j := tabnasjsonic.Make()
-			if err := tabnasfeed.Feed(j, tabnasfeed.Defaults); err != nil {
+			if err := tabnasfeed.Feed(j, mergeOpts(tabnasfeed.Defaults, opts)); err != nil {
 				return nil, err
 			}
 			v, err := j.Parse(s)
@@ -438,6 +447,17 @@ func tabnasParserSpecs() []ParseLangSpec {
 	return specs
 }
 
+// builtinParserKind reports whether name is one of the built-in tabnas parser
+// kinds (json, csv, ini, …) — the names tabnasParserSpecs installs.
+func builtinParserKind(name string) bool {
+	for _, spec := range tabnasParserSpecs() {
+		if spec.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // tabnasParseHandler builds the parser native for one tabnas kind: it runs
 // the decoder over the (already-resolved) source string and converts the
 // result to an AQL Value. A decode failure raises [aql/parse_syntax_error].
@@ -448,7 +468,7 @@ func tabnasParseHandler(kind string, parse tabnasParser) native.Handler {
 		if err != nil {
 			return nil, r.AqlError("parse_error", kind+": src: "+err.Error(), target)
 		}
-		v, perr := parse(src)
+		v, perr := parse(src, optsToMap(args[1]))
 		if perr != nil {
 			return nil, r.AqlErrorHint("parse_syntax_error",
 				kind+": "+firstCleanLine(perr.Error()), target,
@@ -456,6 +476,38 @@ func tabnasParseHandler(kind string, parse tabnasParser) native.Handler {
 		}
 		return []native.Value{tabnasAnyToValue(v)}, nil
 	}
+}
+
+// optsToMap converts the parser's opts argument (the middle `parse <kind>
+// <opts> <source>` map, `{}` when the caller gave none) to a generic
+// map[string]any the tabnas plugins understand. A non-Map / empty value
+// yields nil, so a kind's defaults pass through mergeOpts untouched.
+func optsToMap(v native.Value) map[string]any {
+	if !v.Parent.ConformsTo(native.TMap) || !native.IsConcrete(v) {
+		return nil
+	}
+	m, ok := native.ValueToAny(v).(map[string]any)
+	if !ok {
+		return nil
+	}
+	return m
+}
+
+// mergeOpts returns a fresh map of base overlaid with over — the caller's
+// `parse` opts win over a kind's defaults, leaving both inputs untouched.
+// Either may be nil.
+func mergeOpts(base, over map[string]any) map[string]any {
+	if len(base) == 0 && len(over) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(base)+len(over))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range over {
+		out[k] = v
+	}
+	return out
 }
 
 // jsonRoundTrip flattens an arbitrary Go value (e.g. a typed feed struct) to
@@ -515,7 +567,10 @@ func tabnasAnyToValue(v any) native.Value {
 	case string:
 		return native.NewString(val)
 	case float64:
-		if val == math.Trunc(val) && !math.IsInf(val, 0) && !math.IsNaN(val) {
+		// A whole-valued number stays an Integer, but ONLY when it fits in
+		// int64 — an out-of-range float (e.g. 1e20 from a JSON/YAML source)
+		// would convert implementation-dependently, so keep it a Float.
+		if val == math.Trunc(val) && val >= math.MinInt64 && val < math.MaxInt64 {
 			return native.NewInteger(int64(val))
 		}
 		return native.NewFloat(val)

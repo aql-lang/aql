@@ -70,6 +70,29 @@ func TestParseLangTabnasDesugar(t *testing.T) {
 	}
 }
 
+// TestParseLangTabnasOpts proves the middle `parse <kind> <opts> <source>`
+// map is forwarded to a jsonic-plugin kind: a custom CSV field separator
+// makes ';' split columns where the default ',' would not.
+func TestParseLangTabnasOpts(t *testing.T) {
+	imp := `"aql:parselang" import end  `
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	// With separation ';', the header row 'a;b' becomes two fields, so
+	// row 0 field 1 is "b". Without the opt the whole 'a;b' is one field.
+	got := runLast(t, a, imp+`((parse csv {field:{separation:';'}} 'a;b\n1;2') get 0) get 1`)
+	if got != "b" {
+		t.Errorf("csv opts: got %v (%T), want \"b\"", got, got)
+	}
+	// Negative: the same source under the default ',' separator keeps 'a;b'
+	// as a single field, so field 1 is out of range / the row has one cell.
+	def := runLast(t, a, imp+`(parse csv 'a;b\n1;2') get 0`)
+	if s := fmt.Sprintf("%v", def); !strings.Contains(s, "a;b") {
+		t.Errorf("csv default sep: row 0 = %v, want a single 'a;b' field", def)
+	}
+}
+
 // TestParseLangTabnasKinds confirms every built-in kind is listed by
 // ParseLang.kinds with no host registration.
 func TestParseLangTabnasKinds(t *testing.T) {
