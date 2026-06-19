@@ -40,10 +40,23 @@ type QueryBuilder struct {
 	Alias     string // table alias for the FROM source
 	SetOps    []SetOp
 	// Dialect selects the SQL flavour used when this builder
-	// materializes. It defaults to the embedded SQLite dialect; an
-	// external connection (a later phase) rebinds it so the query
-	// targets that backend's SQL. Never nil after construction.
+	// materializes. It defaults to the embedded SQLite dialect; a remote
+	// `from` source rebinds it so the query targets that backend's SQL.
+	// Never nil after construction.
 	Dialect Dialect
+
+	// RemoteConn is non-nil when `from` bound a remote table (via
+	// DB.table). The query then pushes down to this connection rather
+	// than running on the embedded engine.
+	RemoteConn *DBConn
+	// RemoteTable is the remote source table name (valid when
+	// RemoteConn is set).
+	RemoteTable string
+	// RawCols is the unparsed `select` projection list, retained so the
+	// column SQL can be (re)built in the final dialect at materialize
+	// time — the embedded path bakes it eagerly with SQLite, the remote
+	// path needs the remote dialect.
+	RawCols Value
 }
 
 // dialectOf returns the builder's dialect, falling back to the embedded
@@ -298,50 +311,13 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 	}
 
 	d := qb.dialectOf()
-	var colSQL string
-	if cols == nil {
-		colSQL = "*"
-	} else {
-		parts := make([]string, len(cols))
-		for i, c := range cols {
-			if c.Raw != "" {
-				// Raw SQL expression (aggregate, cast, etc.)
-				if c.Alias != "" {
-					parts[i] = c.Raw + " AS " + d.QuoteIdent(c.Alias)
-				} else {
-					parts[i] = c.Raw
-				}
-			} else if c.Alias != "" {
-				parts[i] = d.QuoteIdent(c.Name) + " AS " + d.QuoteIdent(c.Alias)
-			} else {
-				parts[i] = d.QuoteIdent(c.Name)
-			}
-		}
-		colSQL = strings.Join(parts, ", ")
-	}
+	colSQL := buildColSQL(d, cols)
 
 	// Build schema hint for the result columns.
 	merged := qb.mergedSchema()
 	resultSchema := &merged
 	if cols != nil {
-		resultFields := NewOrderedMap()
-		for _, c := range cols {
-			outputName := c.Name
-			if c.Alias != "" {
-				outputName = c.Alias
-			}
-			if c.Raw != "" && c.Alias != "" {
-				outputName = c.Alias
-			}
-			if c.ResultType != nil {
-				resultFields.Set(outputName, NewTypeLiteral(c.ResultType))
-			} else if fieldVal, ok := merged.Fields.Get(c.Name); ok {
-				resultFields.Set(outputName, fieldVal)
-			} else {
-				resultFields.Set(outputName, NewTypeLiteral(TString))
-			}
-		}
-		resultSchema = &RecordTypeInfo{Fields: resultFields}
+		resultSchema = resultSchemaFromCols(cols, merged)
 	}
 
 	query := qb.buildSQL(tableName, colSQL)
@@ -350,6 +326,117 @@ func (qb *QueryBuilder) MaterializeWithColumns(cols []columnSpec) (TableData, er
 		return TableData{}, err
 	}
 	return result, nil
+}
+
+// buildColSQL renders the projection list for the given dialect. cols ==
+// nil means SELECT *.
+func buildColSQL(d Dialect, cols []columnSpec) string {
+	if cols == nil {
+		return "*"
+	}
+	parts := make([]string, len(cols))
+	for i, c := range cols {
+		switch {
+		case c.Raw != "":
+			// Raw SQL expression (aggregate, cast, etc.).
+			if c.Alias != "" {
+				parts[i] = c.Raw + " AS " + d.QuoteIdent(c.Alias)
+			} else {
+				parts[i] = c.Raw
+			}
+		case c.Alias != "":
+			parts[i] = d.QuoteIdent(c.Name) + " AS " + d.QuoteIdent(c.Alias)
+		default:
+			parts[i] = d.QuoteIdent(c.Name)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// resultSchemaFromCols derives the projected result schema from the
+// column specs, resolving plain-column types against the source schema.
+func resultSchemaFromCols(cols []columnSpec, merged RecordTypeInfo) *RecordTypeInfo {
+	fields := NewOrderedMap()
+	for _, c := range cols {
+		outputName := c.Name
+		if c.Alias != "" {
+			outputName = c.Alias
+		}
+		switch {
+		case c.ResultType != nil:
+			fields.Set(outputName, NewTypeLiteral(c.ResultType))
+		case merged.Fields != nil:
+			if fieldVal, ok := merged.Fields.Get(c.Name); ok {
+				fields.Set(outputName, fieldVal)
+			} else {
+				fields.Set(outputName, NewTypeLiteral(TString))
+			}
+		default:
+			fields.Set(outputName, NewTypeLiteral(TString))
+		}
+	}
+	return &RecordTypeInfo{Fields: fields}
+}
+
+// remoteColumns re-parses the captured select list in the builder's
+// (remote) dialect, so aggregate/cast column SQL targets the right
+// backend. nil means SELECT *.
+func (qb *QueryBuilder) remoteColumns() ([]columnSpec, error) {
+	if !IsConcrete(qb.RawCols) {
+		return nil, nil
+	}
+	cols, err := parseColumnSpec(qb.dialectOf(), qb.RawCols)
+	if err != nil {
+		return nil, err
+	}
+	if len(cols) == 0 {
+		return nil, nil
+	}
+	return cols, nil
+}
+
+// materializeRemote pushes the whole query down to the remote
+// connection. Joins and set operations are not expressible across a
+// remote connection here (they would mix dialects), so they error
+// rather than silently producing wrong results.
+func (qb *QueryBuilder) materializeRemote() (TableData, error) {
+	if len(qb.Joins) > 0 || len(qb.SetOps) > 0 {
+		return TableData{}, fmt.Errorf(
+			"query: joins / set operations across a remote connection are not supported — fetch with DB.sql instead")
+	}
+	d := qb.dialectOf()
+	cols, err := qb.remoteColumns()
+	if err != nil {
+		return TableData{}, err
+	}
+	colSQL := buildColSQL(d, cols)
+	query := qb.buildSQL(qb.RemoteTable, colSQL)
+
+	var schema *RecordTypeInfo
+	if cols != nil {
+		// Resolve plain-column types against the remote table schema;
+		// fall back to driver inference when it is unavailable.
+		merged := RecordTypeInfo{Fields: NewOrderedMap()}
+		if rec, derr := qb.RemoteConn.Backend.DescribeTable(qb.RemoteTable); derr == nil {
+			merged = rec
+		}
+		schema = resultSchemaFromCols(cols, merged)
+	}
+	return qb.RemoteConn.Backend.QueryParams(query, nil, schema)
+}
+
+// remoteSourceRecord returns the remote query's result schema without
+// running it.
+func (qb *QueryBuilder) remoteSourceRecord() RecordTypeInfo {
+	merged := RecordTypeInfo{Fields: NewOrderedMap()}
+	if rec, err := qb.RemoteConn.Backend.DescribeTable(qb.RemoteTable); err == nil {
+		merged = rec
+	}
+	cols, err := qb.remoteColumns()
+	if err != nil || cols == nil {
+		return merged
+	}
+	return *resultSchemaFromCols(cols, merged)
 }
 
 // ensureSetOpSources ensures all set-op right-hand sources are in SQLite.
@@ -428,6 +515,9 @@ func (qb QueryBuilder) Materialize() (TableData, error) {
 		return TableData{}, fmt.Errorf("select: query has no FROM table")
 	}
 	local := qb
+	if local.RemoteConn != nil {
+		return local.materializeRemote()
+	}
 	if local.Cols == nil {
 		return local.materializeAll()
 	}
@@ -442,6 +532,9 @@ func (qb QueryBuilder) SourceRecord() RecordTypeInfo {
 		return RecordTypeInfo{Fields: NewOrderedMap()}
 	}
 	local := qb
+	if local.RemoteConn != nil {
+		return local.remoteSourceRecord()
+	}
 	merged := local.mergedSchema()
 	if local.Cols == nil {
 		return merged

@@ -14,3 +14,4 @@
 "aql:db" import end def c (DB.open "sqlite" ":memory:") end def x (c DB.exec "create table t (n integer)") end c DB.schema "t"	{n:'Integer'}	schema returns column types
 "aql:db" import end def c (DB.open "sqlite" ":memory:") end def y (c DB.exec "create table t (n integer)") end def z (c DB.exec "insert into t values (7)") end c DB.sql "select n from t"	[{n:7}]	sql returns rows as a table
 "aql:db" import end def c (DB.open "sqlite" ":memory:") end c DB.close end true	true	close releases the connection
+"aql:db" import end "aql:query" import end def pg (DB.open "sqlite" ":memory:") end def a (pg DB.exec "create table u (id integer)") end def b (pg DB.exec "insert into u values (5)") end Query.select [] Query.from (pg DB.table "u")	[{id:5}]	DB.table feeds Query.from for remote pushdown

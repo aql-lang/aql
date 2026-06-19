@@ -56,3 +56,40 @@ func (c *DBConn) Close() error {
 	c.closed = true
 	return c.Backend.Close()
 }
+
+// TRemoteSource is Ideal/RemoteTable — a reference to a table on an open
+// connection, produced by DB.table and consumed by Query.from to drive
+// remote pushdown. FixedID 5006.
+var TRemoteSource = registerRemoteSourceType()
+
+func registerRemoteSourceType() *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/RemoteTable", 5006, nil)
+	if err != nil {
+		recordTypeInitErr(fmt.Errorf("native_db_conn: register Ideal/RemoteTable: %w", err))
+	}
+	return t
+}
+
+// RemoteSource names a table on a specific connection. It is the bridge
+// between the aql:db connection layer and the aql:query DSL: Query.from
+// accepts it and either pushes the whole query down to conn or fetches
+// the table into the embedded engine.
+type RemoteSource struct {
+	Conn  *DBConn
+	Table string
+}
+
+// NewRemoteSource wraps a remote-table reference as a value.
+func NewRemoteSource(rs *RemoteSource) Value {
+	return eng.NewExtension(TRemoteSource, rs)
+}
+
+// AsRemoteSource extracts a *RemoteSource payload from a value.
+func AsRemoteSource(v Value) (*RemoteSource, bool) {
+	ep, ok := v.Data.(eng.ExtensionPayload)
+	if !ok {
+		return nil, false
+	}
+	rs, ok := ep.Body.(*RemoteSource)
+	return rs, ok
+}

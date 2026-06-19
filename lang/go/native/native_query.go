@@ -61,6 +61,14 @@ var QueryNatives = []NativeFunc{
 				Returns:    []*Type{TList},
 				BarrierPos: -1,
 			},
+			{
+				// remote form: `from (conn DB.table "users")` — pushes
+				// the query down to the remote connection.
+				Args:       []*Type{TRemoteSource, TList},
+				Handler:    fromRemoteHandler,
+				Returns:    []*Type{TList},
+				BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -214,6 +222,28 @@ func fromValueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	return []Value{wrapQB(qb)}, nil
 }
 
+// fromRemoteHandler binds a remote table (from DB.table) as the query
+// source. It records the connection and switches the builder to the
+// remote dialect so every later clause builds backend-correct SQL, then
+// the query pushes down at materialize time.
+func fromRemoteHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	rs, ok := AsRemoteSource(args[0])
+	if !ok {
+		return nil, fmt.Errorf("from: expected a remote table source")
+	}
+	qb, err := toQueryBuilder(r, args[1])
+	if err != nil {
+		return nil, fmt.Errorf("from: %w", err)
+	}
+	qb.RemoteConn = rs.Conn
+	qb.RemoteTable = rs.Table
+	qb.HasSource = true
+	if rs.Conn != nil && rs.Conn.Backend != nil {
+		qb.Dialect = rs.Conn.Backend.Dialect()
+	}
+	return []Value{wrapQB(qb)}, nil
+}
+
 // queryWhereHandler sets the WHERE clause. args[0] is the condition list
 // (forward), args[1] is the upstream builder (stack).
 func queryWhereHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -251,7 +281,11 @@ func selectColsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		// Empty column list means SELECT * .
 		cols = nil
 	}
-	return []Value{wrapQB(newSelectBuilder(r, cols))}, nil
+	qb := newSelectBuilder(r, cols)
+	// Retain the unparsed projection so a remote `from` can rebuild the
+	// column SQL in the remote dialect at materialize time.
+	qb.RawCols = colList
+	return []Value{wrapQB(qb)}, nil
 }
 
 // queryOrderHandler sets the ORDER BY clause.

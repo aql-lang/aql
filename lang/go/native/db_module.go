@@ -67,6 +67,12 @@ var DBModuleNatives = []NativeFunc{
 			{Args: []*Type{TString, TDBConn}, Handler: dbSchemaHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
+	{
+		Name: "table",
+		Signatures: []NativeSig{
+			{Args: []*Type{TString, TDBConn}, Handler: dbTableHandler, Returns: []*Type{TRemoteSource}, BarrierPos: -1},
+		},
+	},
 }
 
 // checkDBPolicy gates a db-scope operation. A nil registry or absent
@@ -266,6 +272,21 @@ func dbSchemaHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		out.Set(k, NewString(TypeNameOf(fv)))
 	}
 	return []Value{NewMap(out)}, nil
+}
+
+// dbTableHandler returns a remote-table source for the query DSL:
+// `Query.from (pg DB.table "users")`. No query runs yet — Query decides
+// at materialization whether to push down to conn or fetch locally.
+func dbTableHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	name, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, fmt.Errorf("db table: %w", err)
+	}
+	c, err := dbConnArg(r, args[1], "table")
+	if err != nil {
+		return nil, err
+	}
+	return []Value{NewRemoteSource(&RemoteSource{Conn: c, Table: name})}, nil
 }
 
 // aqlListToParams converts a list value of scalars into positional bind

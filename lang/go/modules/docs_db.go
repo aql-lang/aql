@@ -8,5 +8,6 @@ func init() {
 		"exec":   "Run a raw SQL statement (DML/DDL); returns rows affected.",
 		"tables": "List the table names in a database.",
 		"schema": "Return the column schema of a table as a {column: type} map.",
+		"table":  "Reference a remote table as a source for Query.from (pushdown).",
 	})
 }
