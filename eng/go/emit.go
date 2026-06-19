@@ -1910,11 +1910,13 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 // values are operands. Returns false — leaving es untouched, so the map stays an
 // unresolvable residual and the program falls back — when a value has no compiled
 // home (a fn value, a nested dynamic carrier) or is a bare type node (a
-// type-pattern map, not a data map). Top frame only, mirroring RecordMakeList: a
-// map inside a fn body / closure / branch arm is re-evaluated per call, often
-// with a different scope, so freezing one assembly would diverge.
+// type-pattern map, not a data map). The sole caller (autoEvalMap) gates this on
+// dataMap — make's CONSUMED construction body — which make evaluates in the
+// current scope, so it is sound inside a fn body / branch arm: the OpMakeMap
+// re-assembles from its operands per call, never frozen, and is never a deferred
+// residual. No top-frame restriction here.
 func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool {
-	if !es.active() || len(es.frames) != 1 || len(keys) != len(vals) || len(keys) == 0 {
+	if !es.active() || len(keys) != len(vals) || len(keys) == 0 {
 		return false
 	}
 	// ops are in value order (vals[0] pairs with keys[0]); OpMakeMap reads the
