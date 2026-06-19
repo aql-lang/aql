@@ -35,19 +35,24 @@ var TimeAsyncModuleNatives = []NativeFunc{
 		Name: "timeout",
 		// The /q'd body (a code list, or an atom naming a fn) is inert data the
 		// handler stores in the Timeout instance; it bakes + CALL_NATIVE (the body
-		// still runs interpreted when the timer fires).
+		// still runs interpreted when the timer fires). The list body is also
+		// NoEvalArgs: the execMatch auto-eval gate keys ONLY off NoEvalArgs (not
+		// QuoteArgs), so without it `TimeUtil.timeout 1000 [body]` — dispatched
+		// via the module wrapper's trivial delegation, which runs execMatch on
+		// THIS sig — would sub-Run the body eagerly instead of storing it.
 		CompileEffect: CompileQuoteInert,
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: timeoutListHandler, Returns: []*Type{TTimeout}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Handler: timeoutListHandler, Returns: []*Type{TTimeout}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: timeoutWordHandler, Returns: []*Type{TTimeout}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "interval",
-		// Like timeout: the /q'd body is inert data stored in the Interval.
+		// Like timeout: the /q'd body is inert data stored in the Interval, and
+		// the list body is NoEvalArgs so the wrapper does not eagerly sub-Run it.
 		CompileEffect: CompileQuoteInert,
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
 		},
 	},

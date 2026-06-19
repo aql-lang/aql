@@ -125,4 +125,5 @@ now	ERROR:undefined_word	`now` is no longer a core word
 "aql:time-util" import end  typeof (TimeUtil.timeout 1000 [1 add 2])	Timeout	timeout schedules a body → Timeout handle
 "aql:time-util" import end  typeof (TimeUtil.interval 1000 [1 add 2])	Interval	interval repeats a body → Interval handle
 "aql:time-util" import end  100 (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) add 23	123	cancel stops a timer (no value); 100+23
+"aql:time-util" import end  typeof (TimeUtil.timeout 100000 [totally-undefined-xyz])	Timeout	body is stored as code, not eagerly run (undefined word would raise)
 "aql:time-util" import end  100 (TimeUtil.sleep 0) add 23	123	sleep 0 pauses then continues; 100+23

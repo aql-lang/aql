@@ -465,10 +465,22 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			return out
 		}
 		if len(stk) == 0 {
-			// No declared returns and an empty body residual: keep the
-			// check-mode Any approximation (unchanged), and do NOT record a
-			// call — the Any carrier has no producing event, so a downstream
-			// consumer refuses and the program falls back, as before.
+			// No declared returns and an empty body residual: the fn produces
+			// ZERO values at run time (`def v fn [[x:Integer] [] []]  v 1 99`
+			// → [99]; `def r (f 1)` → def_error: nothing to bind). When the body
+			// unit compiled, record a 0-output CALL_USER so the residual matches
+			// runtime exactly (the call runs for its effects; the next token is
+			// the residual) and return zero values. When the unit did NOT compile
+			// (fnUnit < 0, plain check mode), keep the lenient Any approximation
+			// so downstream provenance refuses and the program falls back.
+			if fnUnit >= 0 {
+				pos := SrcPos{}
+				if len(args) > 0 {
+					pos = args[0].Pos
+				}
+				es.RecordUserCall(fnUnit, args, nil, pos)
+				return nil
+			}
 			return []Value{NewCarrier(TAny)}
 		}
 		// Undeclared fn (anonymous lambda, 0-return fn) with a non-empty body

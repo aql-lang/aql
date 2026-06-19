@@ -637,10 +637,14 @@ func TestEmitModuleInnerNative(t *testing.T) {
 			t.Fatalf("%s: compiled=%v err=%v (want compiled, no error)", src, compiled, err)
 		}
 	}
-	// Negative: a user-def usurp value (`def ifu (usurp if)`) is NOT a module
-	// inner native and re-steps (tape-coupled) — it must refuse, not bake.
-	if _, r := compile(t, `def ifu (usurp if) ifu (1 eq 1) [10] [20]`); r == "" {
-		t.Error("usurp'd user def compiled but must refuse (re-steps)")
+	// Negative: a user-def meta wrapper (`def ff (force-arity 2 add)`) is NOT a
+	// module inner native — its opaque, def-bound value must refuse, not bake
+	// through the module-inner exemption. (A usurp'd `if` no longer belongs here:
+	// usurp resolves to a concrete reversed `if` dispatch in the check pass, which
+	// now compiles soundly via the computed-arm branch path — see
+	// TestComputedArmConditions.)
+	if _, r := compile(t, `def ff (force-arity 2 add) ff 1 2`); r == "" {
+		t.Error("force-arity'd user def compiled but must refuse (opaque meta wrapper)")
 	}
 }
 

@@ -272,6 +272,157 @@ func TestComputedElseIfLowers(t *testing.T) {
 	}
 }
 
+// Roadmap item 6 (computed-THEN) — the mirror of the computed-else case:
+// `if cond (expr) e` where the THEN is an eagerly-evaluated paren result on the
+// stack. It lowers via SWAP (cond to top) + JMP_IF_FALSE, keeping the eager then
+// value on the TRUE (fall-through) path and DROPping it on the FALSE path before
+// producing the else arm. Covers a value else, a body else, and both directions;
+// the both-arms-computed shape stays refused (the negative half).
+func TestComputedThenIfLowers(t *testing.T) {
+	const src = `def x 0  if (x eq 0) (add 1 2) 88`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("computed-then if did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") || !strings.Contains(dis, "DROP") || !strings.Contains(dis, "SWAP") {
+		t.Errorf("expected a native SWAP/JMP_IF_FALSE/DROP lowering:\n%s", dis)
+	}
+
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def x 0  if (x eq 0) (add 1 2) 88`, "3"},          // taken: computed then is the result
+		{`def x 1  if (x eq 0) (add 1 2) 88`, "88"},         // not taken: value else
+		{`def x 0  if (x eq 0) (add 1 2) [sub 10 1]`, "3"},  // taken, body else
+		{`def x 1  if (x eq 0) (add 1 2) [sub 10 1]`, "-9"}, // not taken, body else
+		{`add 10 (if (1 eq 1) (add 1 2) 88)`, "13"},         // consumed downstream
+	} {
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, errC)
+		}
+		d, _ := New()
+		gotI, _ := d.Run(c.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
+			t.Errorf("%q: compiled=%v interp=%v (want [%s])", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// Both arms computed (`if c (a) (b)`) now compiles too — see
+	// TestBothComputedIfLowers for the dedicated coverage.
+}
+
+// Roadmap item 6 (computed-arm CONDITIONS) — a computed then/else arm compiles
+// not only under a pre-evaluated event condition (`if (x eq 0) (expr) e`, which
+// needs a SWAP) but also under a LIST-FORM condition body (`if [x gt 0] (expr) e`
+// — lowered inline above the eager value, no SWAP) and a CONST/LOCAL condition
+// (`if flag (expr) e` — pushed above the eager value). All must compile native
+// and match the interpreter in both directions, for both computed-then and
+// computed-else.
+func TestComputedArmConditions(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		// list-form condition, computed then
+		{`def x 0  if [x eq 0] (add 1 2) 88`, "3"},
+		{`def x 1  if [x eq 0] (add 1 2) 88`, "88"},
+		// list-form condition, computed else
+		{`def x 0  if [x eq 0] 99 (add 1 2)`, "99"},
+		{`def x 1  if [x eq 0] 99 (add 1 2)`, "3"},
+		// local (fn-param) condition, computed then
+		{`def f fn [[flag:Boolean] [Integer] [if flag (add 1 2) 88]]  f true`, "3"},
+		{`def f fn [[flag:Boolean] [Integer] [if flag (add 1 2) 88]]  f false`, "88"},
+		// local condition, computed else
+		{`def g fn [[flag:Boolean] [Integer] [if flag 99 (add 1 2)]]  g true`, "99"},
+		{`def g fn [[flag:Boolean] [Integer] [if flag 99 (add 1 2)]]  g false`, "3"},
+	}
+	for _, c := range cases {
+		a, _ := New()
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: must compile (computed-arm condition); reason=%q err=%v", c.src, reason, cerr)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: must compile native, not island:\n%s", c.src, prog.Disassemble())
+			continue
+		}
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(c.src)
+		d, _ := New()
+		gotI, _ := d.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
+			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=[%s]", c.src, compiled, gotC, errC, gotI, c.want)
+		}
+	}
+}
+
+// Roadmap item 6 (BOTH arms computed) — `if (c) (a) (b)` where both arms are
+// eagerly-computed parens. Both run (paren args are eager — faithful to the
+// interpreter), so the lowering only SELECTS: it rotates the cond to the top
+// (OpReverse 3) and drops the unselected value. Covers both directions, an
+// event condition, and downstream consumption. The remaining bounded case — a
+// non-event (list-form / const) condition with both arms computed — stays
+// refused (the negative half).
+func TestBothComputedIfLowers(t *testing.T) {
+	const src = `add 10 (if (1 eq 1) (add 1 2) (sub 9 4))`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("both-computed if did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") || !strings.Contains(dis, "REVERSE") {
+		t.Errorf("expected a native OpReverse select lowering:\n%s", dis)
+	}
+
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`if (1 eq 1) (add 1 2) (sub 9 4)`, "3"},           // true: then
+		{`if (1 eq 2) (add 1 2) (sub 9 4)`, "-5"},          // false: else (4-9)
+		{`add 10 (if (1 eq 1) (add 1 2) (sub 9 4))`, "13"}, // consumed downstream, true
+		{`add 10 (if (1 eq 2) (add 1 2) (sub 9 4))`, "5"},  // consumed downstream, false
+		{`def n 7  if (n eq 0) (mul 2 3) (mul 4 5)`, "20"}, // false: else, dynamic cond
+	} {
+		b, _ := New()
+		gotC, compiled, errC := b.RunCompiled(c.src)
+		d, _ := New()
+		gotI, _ := d.Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
+			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=[%s]", c.src, compiled, gotC, errC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: both arms computed with a NON-event (list-form) condition needs
+	// the cond materialised above two eager values, which lowerBothComputed does
+	// not model — it stays refused and falls back with the interpreter's result.
+	const listCond = `if [1 eq 1] (add 1 2) (sub 9 4)`
+	n, _ := New()
+	if np, _, _, _ := n.CompileCheck(listCond); np != nil {
+		t.Errorf("%q: both-computed with a list-form cond must NOT compile natively", listCond)
+	}
+	nb, _ := New()
+	gotC, _, errC := nb.RunCompiled(listCond)
+	nbi, _ := New()
+	gotI, _ := nbi.Run(listCond)
+	if errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("%q: fallback parity broke: gotC=%v errC=%v gotI=%v", listCond, gotC, errC, gotI)
+	}
+}
+
 // Roadmap item 6b — a statement-`if` where exactly one arm nets a value and the
 // other nets 0 WITHOUT diverging (`if c [99] []`, `if c [] [99]`,
 // `if c [raise] [99]`) lowers as a VARIADIC (0-or-1) branch result instead of

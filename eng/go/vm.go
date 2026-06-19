@@ -120,6 +120,34 @@ func tapeCoupled(results []Value) bool {
 	return false
 }
 
+// island returns the run's reused interpreter sub-engine, building it lazily on
+// first use. One engine serves every OpFallback / CALL_DYNAMIC island in the
+// run, with reuseTape set so a hot island in a loop reloads its tape in place
+// rather than allocating a fresh engine+tape per iteration. Reuse is sound only
+// because island runs are never nested or concurrent within a run (see
+// vmContext.islandEng).
+func (vc *vmContext) island() *Engine {
+	if vc.islandEng == nil {
+		vc.islandEng = New(vc.r)
+		vc.islandEng.SetSource(vc.r.Source)
+		vc.islandEng.reuseTape = true
+	}
+	return vc.islandEng
+}
+
+// screenResults rejects handler / island results that carry a tape-coupled
+// token (Word/Mark/Move/Forward/OpenParen/Splice) — a value the interpreter
+// would re-STEP rather than treat as data. No compiled-reachable handler should
+// produce one (the emitter refuses fn-invoking / code-splicing words); reaching
+// here is a compiler bug, so it fails loudly with the call site's label instead
+// of pushing a token as data. Returns nil when the results are clean.
+func (vc *vmContext) screenResults(results []Value, label string, debug []SrcPos, pc int) error {
+	if tapeCoupled(results) {
+		return vmErrAt(debug, pc, "tape-coupled "+label)
+	}
+	return nil
+}
+
 func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr error) {
 	if p == nil {
 		return nil, fmt.Errorf("bytecode: nil program")
@@ -260,8 +288,8 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 			}
 		}
 	}
-	if tapeCoupled(results) {
-		return nil, vmErrAt(curDebug, pc, "tape-coupled poly result at "+pr.Word)
+	if err := vc.screenResults(results, "poly result at "+pr.Word, curDebug, pc); err != nil {
+		return nil, err
 	}
 	return append(stack[:len(stack)-n], results...), nil
 }
@@ -328,17 +356,12 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	island := make([]Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
-	if vc.islandEng == nil {
-		vc.islandEng = New(r)
-		vc.islandEng.SetSource(r.Source)
-		vc.islandEng.reuseTape = true
-	}
-	results, err := vc.islandEng.Run(island)
+	results, err := vc.island().Run(island)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if tapeCoupled(results) {
-		return nil, vmErrAt(curDebug, pc, "tape-coupled dynamic result")
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
+		return nil, err
 	}
 	return append(stack[:base], results...), nil
 }
@@ -414,20 +437,12 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 	island = append(island, stack[len(stack)-fb.NIn:]...)
 	island = append(island, fb.Tokens...)
 	stack = stack[:len(stack)-fb.NIn]
-	// Reuse one island sub-engine across every OpFallback in this run: it
-	// reloads its tape in place, so a hot island in a loop does not allocate
-	// a fresh engine+tape per iteration.
-	if vc.islandEng == nil {
-		vc.islandEng = New(r)
-		vc.islandEng.SetSource(r.Source)
-		vc.islandEng.reuseTape = true
-	}
-	results, err := vc.islandEng.Run(island)
+	results, err := vc.island().Run(island)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if tapeCoupled(results) {
-		return nil, vmErrAt(curDebug, pc, "tape-coupled island result at "+fb.Desc)
+	if err := vc.screenResults(results, "island result at "+fb.Desc, curDebug, pc); err != nil {
+		return nil, err
 	}
 	return append(stack, results...), nil
 }
@@ -635,8 +650,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// compiled — the emitter refuses fn-invoking and
 			// code-splicing words. Fail loudly, never push tokens as
 			// data.
-			if tapeCoupled(results) {
-				return nil, vmErrAt(curDebug, pc, "tape-coupled handler result at "+s.Word)
+			if err := vc.screenResults(results, "handler result at "+s.Word, curDebug, pc); err != nil {
+				return nil, err
 			}
 			stack = append(stack, results...)
 		case OpFallback:
@@ -834,12 +849,6 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 	return nil
 }
 
-// vmErrAt builds an internal_error AqlError for a VM-internal soundness
-// violation (a simulated/runtime stack disagreement the lowerer thought
-// impossible). It carries the AQL taxonomy code — so a direct RunProgram
-// caller and error-scraping tooling see a structured error, not a raw Go
-// string — and RunCompiled treats it as a fall-back-to-interpreter signal.
-// Reaching one is a compiler bug; the message keeps the pc/source detail.
 // vmMakeMap pops the values of an OpMakeMap assembly off the top of stack and
 // returns the stack with the assembled map pushed: the deepest of the popped
 // run is value 0, paired with Keys[0]. Extracted from vmContext.run to keep that
@@ -859,6 +868,12 @@ func vmMakeMap(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]
 	return append(stack[:len(stack)-n], NewMap(om)), nil
 }
 
+// vmErrAt builds an internal_error AqlError for a VM-internal soundness
+// violation (a simulated/runtime stack disagreement the lowerer thought
+// impossible). It carries the AQL taxonomy code — so a direct RunProgram
+// caller and error-scraping tooling see a structured error, not a raw Go
+// string — and RunCompiled treats it as a fall-back-to-interpreter signal.
+// Reaching one is a compiler bug; the message keeps the pc/source detail.
 func vmErrAt(debug []SrcPos, pc int, msg string) error {
 	pos := SrcPos{}
 	if pc >= 0 && pc < len(debug) {
@@ -899,15 +914,5 @@ func vmStackCeiling(r *Registry) int {
 		cfg = r.TapeConfig
 	}
 	initial, maxGrows, factor := cfg.resolve(0)
-	ceil := float64(initial)
-	for i := 0; i < maxGrows; i++ {
-		ceil *= factor
-	}
-	if ceil >= float64(maxIntCap) {
-		return maxIntCap
-	}
-	if int(ceil) < initial {
-		return initial
-	}
-	return int(ceil)
+	return growthCeiling(initial, maxGrows, factor)
 }

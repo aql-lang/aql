@@ -40,14 +40,8 @@ func TestEmitValueArmIf(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: a COMPUTED then value (`(add 1 2)` — an event eagerly on the
-	// stack) is not a plain value arm; the recorder refuses it rather than
-	// risk the stack juggling the single-result lowering does not do. It then
-	// falls back faithfully (RunCompiled returns the interpreter's result).
-	const computed = `def x 0  if (x eq 0) (add 1 2) 88`
-	m, _ := New()
-	mp, reason, _, _ := m.CompileCheck(computed)
-	if mp != nil {
-		t.Errorf("%q: a computed then value must NOT compile via the value-then path (got a program); reason=%q", computed, reason)
-	}
+	// `if cond (a) (b)` — both arms computed — compiles via the OpReverse select
+	// lowering (TestBothComputedIfLowers). A computed value arm needs a STACK
+	// (event) condition, though: with no computed arm at all, a plain value arm
+	// still lowers as a select here.
 }

@@ -22,7 +22,7 @@ package eng
 // program residual may absorb it. break/continue inside the body
 // jump to end_pc / head via the lowerer's loop-context stack.
 func (lw *lowerer) lowerLoop(ev *emitEvent) string {
-	lp := &ev.loop
+	lp := ev.loop
 	// Operand layout for FOR_SETUP: start on top, then end, then
 	// step. start/step are consts (RecordLoop enforced); the end may
 	// be a computed value already on top of the simulated stack — a
@@ -219,10 +219,14 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 	for i := range events {
 		ev := &events[i]
 		if scopeFloor > 0 {
-			for _, op := range collectOperands(ev) {
+			var crossed bool
+			forEachOperand(ev, func(op emitOperand) {
 				if op.kind == opEvent && op.idx <= scopeFloor {
-					return "branch reads enclosing computation (Stage 3)"
+					crossed = true
 				}
+			})
+			if crossed {
+				return "branch reads enclosing computation (Stage 3)"
 			}
 		}
 		var reason string
@@ -253,26 +257,47 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 	return ""
 }
 
-func collectOperands(ev *emitEvent) []emitOperand {
+// forEachOperand calls fn for every enclosing-scope operand an event references
+// — call / user-call / fallback args, a branch condition and arm outs, a loop's
+// range and body out. A callback (rather than a returned slice) keeps the hot
+// planning loops — the scopeFloor guard and planValueDefLocals — allocation-free.
+func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 	switch ev.kind {
 	case evCall:
-		return ev.call.ops
+		for _, op := range ev.call.ops {
+			fn(op)
+		}
 	case evLoop:
-		return []emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut}
+		fn(ev.loop.start)
+		fn(ev.loop.end)
+		fn(ev.loop.step)
+		fn(ev.loop.bodyOut)
 	case evBreak, evContinue, evTrap:
-		return nil
+		// no operands
 	case evCallUser:
-		return ev.uc.ops
+		for _, op := range ev.uc.ops {
+			fn(op)
+		}
 	case evFallback:
-		return ev.fb.ins
+		for _, op := range ev.fb.ins {
+			fn(op)
+		}
+	default: // evBranch
+		// thenVal / elsVal are the value-arm operands — meaningful only when
+		// thenIsVal / elsIsVal, and an opEvent only for the computed-arm shapes
+		// (`if c (expr) e` / `if c [t] (expr)`); for any other branch each is the
+		// zero opNone, which both consumers (the scopeFloor enclosing-scope guard
+		// and the value-def ref count) skip. Including them keeps the operand set
+		// complete so a computed-arm event is REFERENCE-COUNTED — otherwise
+		// planValueDefLocals sees it as zero-referenced, marks it dead, and the
+		// lowerer drops the value the computed-branch lowering needs on the stack.
+		fn(ev.br.cond)
+		fn(ev.br.condOut)
+		fn(ev.br.thenOut)
+		fn(ev.br.elsOut)
+		fn(ev.br.thenVal)
+		fn(ev.br.elsVal)
 	}
-	// elsVal is the value-else operand — meaningful only when elsIsVal, and
-	// an opEvent only for the computed-else shape (`if c [t] (expr)`); for any
-	// other branch it is the zero opNone, which both consumers (the scopeFloor
-	// enclosing-scope guard and the value-def ref count) skip. Including it
-	// keeps the operand set complete so the safety guard never misses a
-	// computed-else reference into an enclosing computation.
-	return []emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut, ev.br.elsVal}
 }
 
 // promoteOperand rewrites one ENCLOSING-scope operand: a single-result
@@ -314,9 +339,7 @@ func forEachFragmentOperand(ev *emitEvent, fn func(emitOperand)) {
 		}
 		for i := range frag.events {
 			fe := &frag.events[i]
-			for _, op := range collectOperands(fe) {
-				fn(op)
-			}
+			forEachOperand(fe, fn)
 			forEachFragmentOperand(fe, fn)
 		}
 	}
@@ -345,10 +368,12 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 		}
 	case evBranch:
 		promoteOperand(&ev.br.cond, promoted)
-		// A computed-else value (`if c [t] (expr)`) is an enclosing-scope
-		// reference too; rewrite it in lockstep with collectOperands counting
-		// it. (A promoted computed-else then refuses at lowerBranch's stack-
-		// layout check and falls back — sound, never a wrong result.)
+		// A computed-arm value (`if c (expr) e` / `if c [t] (expr)`) is an
+		// enclosing-scope reference too; rewrite it in lockstep with
+		// forEachOperand counting it. (A promoted computed arm then refuses at
+		// lowerBranch's stack-layout check and falls back — sound, never a wrong
+		// result.)
+		promoteOperand(&ev.br.thenVal, promoted)
 		promoteOperand(&ev.br.elsVal, promoted)
 	case evLoop:
 		promoteOperand(&ev.loop.end, promoted)
@@ -383,11 +408,11 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
 	for i := range events {
-		for _, op := range collectOperands(&events[i]) {
+		forEachOperand(&events[i], func(op emitOperand) {
 			if op.kind == opEvent && op.resIdx == 0 {
 				refs[op.idx]++
 			}
-		}
+		})
 		// A reference inside a body fragment crosses the fragment's scope floor:
 		// the producer is only reachable there as a frame local, so count it AND
 		// flag the producer for forced promotion regardless of the top-level
@@ -599,26 +624,36 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 	return ""
 }
 
-// reconcileResults arranges a unit's N result operands (bottom→top) as the
-// final stack, ready for a RET. Each event operand must already sit on the
-// simulated stack in order — it was left there by its own event — and inert
-// operands (const / local / type) are pushed as a trailing tail above the
-// last event result. who prefixes the refusal reason ("fn name"). This is
-// the fn-unit mirror of Finalize's program-residual reconciliation, the
-// multi-result generalisation of the old single-result body tail.
-func (lw *lowerer) reconcileResults(ops []emitOperand, who string, pos SrcPos) string {
+// seatMsgs carries a seatResults caller's exact refusal wording, so the shared
+// seat primitive stays caller-agnostic while preserving each site's reasons.
+type seatMsgs struct {
+	variadic     string // an event operand is a variadic loop result (when rejected)
+	aboveLiteral string // an event operand sits above an already-pushed inert tail
+	reordered    string // an event operand is not the next simulated-stack slot
+	unconsumed   string // simulated-stack results remain after seating all operands
+}
+
+// seatResults arranges a sequence of result operands (bottom→top) as the final
+// stack. Each event operand must already sit on the simulated stack in order —
+// left there by its own event — and inert operands (const / local / type) are
+// pushed as a trailing tail above the last event result. It is the shared core
+// of the program-residual reconciliation (Finalize) and the fn-unit RET
+// reconciliation (reconcileResults). rejectVariadic refuses a variadic (loop)
+// event result: a fn body may not return one (Stage 3), though the program
+// residual may absorb it. msgs supplies the caller's refusal wording.
+func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic bool, msgs seatMsgs, pos SrcPos) string {
 	vi := 0
 	var tail []emitOperand
 	for _, op := range ops {
 		if op.kind == opEvent {
-			if lw.variadic[op.idx] {
-				return who + ": result is a variadic loop value (Stage 3)"
+			if rejectVariadic && lw.variadic[op.idx] {
+				return msgs.variadic
 			}
 			if len(tail) > 0 {
-				return who + ": result above a literal (Stage 3)"
+				return msgs.aboveLiteral
 			}
 			if vi >= len(lw.vm) || !slotIs(lw.vm[vi], op) {
-				return who + ": body leaves extra values (Stage 3 lowers in-order results)"
+				return msgs.reordered
 			}
 			vi++
 			continue
@@ -626,12 +661,27 @@ func (lw *lowerer) reconcileResults(ops []emitOperand, who string, pos SrcPos) s
 		tail = append(tail, op)
 	}
 	if vi != len(lw.vm) {
-		return who + ": body leaves extra values (Stage 3 lowers in-order results)"
+		return msgs.unconsumed
 	}
 	for _, op := range tail {
 		lw.pushOperand(op, pos)
 	}
 	return ""
+}
+
+// reconcileResults arranges a unit's N result operands (bottom→top) as the
+// final stack, ready for a RET. who prefixes the refusal reason ("fn name").
+// This is the fn-unit caller of the shared seatResults primitive — it rejects a
+// variadic loop result (a fn body may not return one in Stage 3), the one way it
+// differs from Finalize's program-residual reconciliation.
+func (lw *lowerer) reconcileResults(ops []emitOperand, who string, pos SrcPos) string {
+	extra := who + ": body leaves extra values (Stage 3 lowers in-order results)"
+	return lw.seatResults(ops, true, seatMsgs{
+		variadic:     who + ": result is a variadic loop value (Stage 3)",
+		aboveLiteral: who + ": result above a literal (Stage 3)",
+		reordered:    extra,
+		unconsumed:   extra,
+	}, pos)
 }
 
 func (lw *lowerer) lowerCall(ev *emitEvent) string {
@@ -912,16 +962,11 @@ func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasO
 }
 
 func (lw *lowerer) lowerBranch(ev *emitEvent) string {
-	br := &ev.br
-	armOut := func(has bool, op *emitOperand) *emitOperand {
-		if has {
-			return op
-		}
-		return nil
-	}
+	br := ev.br
 	if br.constCond != nil {
-		// Statically-taken branch: inline the taken fragment.
-		if reason := lw.lowerFragment(br.then, armOut(br.hasThenOut, &br.thenOut), true, br.pos); reason != "" {
+		// Statically-taken branch: inline the taken fragment (always a body in
+		// const-cond form — never a value-then).
+		if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, true, br.pos); reason != "" {
 			return reason
 		}
 		if br.hasThenOut {
@@ -933,21 +978,31 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		}
 		return ""
 	}
-	if br.elsComputed {
-		// Computed else (`if cond [then] (expr)`): the else value is eagerly on
-		// the stack BELOW the cond event. Bring the cond to the top so
-		// JMP_IF_FALSE can consume it; the else value stays below — the result
-		// on the false path, DROPped before the then-body on the true path.
-		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-1], br.elsVal) || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
-			return "if: computed-else stack layout (Stage 2)"
+	if br.thenComputed && br.elsComputed {
+		// `if (c) (a) (b)` — BOTH arms eagerly computed: the three events stack
+		// as [cond, then, else]; select one with OpReverse + JMP_IF_FALSE.
+		return lw.lowerBothComputed(ev)
+	}
+	if br.elsComputed || br.thenComputed {
+		// One arm's value is an eagerly-computed event (`if c [t] (expr)` or
+		// `if c (expr) e`). It is the last thing evaluated before the branch, so
+		// it sits on TOP of the sim stack; the OTHER (non-eager) arm DROPs it and
+		// produces its own value, so it must net a value here.
+		eager, nonEagerHasOut := br.elsVal, br.hasThenOut
+		if br.thenComputed {
+			eager, nonEagerHasOut = br.thenVal, br.hasElsOut
 		}
-		if !br.hasThenOut {
-			return "if: computed else with diverging then (Stage 2)"
+		if !nonEagerHasOut {
+			return "if: computed-branch non-eager arm diverges (Stage 2)"
 		}
-		lw.swapTop2(br.pos)
-		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; the else value stays
-		return lw.lowerArmsComputed(ev, jf)
+		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], eager) {
+			return "if: computed-branch eager value not on top (Stage 2)"
+		}
+		jf, reason := lw.lowerComputedCond(br)
+		if reason != "" {
+			return reason
+		}
+		return lw.lowerComputedBranch(ev, jf)
 	}
 	// Condition on top of stack: a pre-evaluated value, or an inline
 	// list-form condition body lowered here (it nets one Boolean).
@@ -978,29 +1033,36 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 	}
 }
 
+// lowerArm emits one if-arm as a single (or zero) merge value: a plain value
+// operand is pushed; a body fragment is lowered with its out (nil when the arm
+// nets nothing or diverges — it still runs). allowVariadic passes through to
+// lowerFragment (the merge of two body arms may be variadic; a computed-branch
+// arm may not). Shared by lowerArms, lowerBranch's const-cond inline, and the
+// non-eager arm of lowerComputedBranch.
+func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
+	switch kind {
+	case armValue:
+		// Push the literal/local/type operand as the arm's single result
+		// (pushOperand tracked it; the merge slot owns the count).
+		lw.pushOperand(val, pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		return ""
+	case armBodyOut:
+		return lw.lowerFragment(frag, out, allowVariadic, pos)
+	default: // armBodyVoid — a 0-value / diverging body
+		return lw.lowerFragment(frag, nil, allowVariadic, pos)
+	}
+}
+
 // lowerArms emits the then/else arms after the JMP_IF_FALSE at jf.
 // A diverging arm's terminator already jumped out of the construct,
 // so it needs no jump-to-end and contributes no value; the merge
 // point then carries only the surviving arm's value. The 2-arg form
 // (no else) merges with 0-or-1 values — a VARIADIC result.
 func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
-	br := &ev.br
-	if br.thenIsVal {
-		// Value-then (`if cond 99 88`): push the literal/local/type operand as the
-		// arm's single result, mirroring the value-else below (pushOperand tracked
-		// it; the merge slot owns the count).
-		lw.pushOperand(br.thenVal, br.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1]
-	} else {
-		thenOut := func() *emitOperand {
-			if br.hasThenOut {
-				return &br.thenOut
-			}
-			return nil
-		}()
-		if reason := lw.lowerFragment(br.then, thenOut, true, br.pos); reason != "" {
-			return reason
-		}
+	br := ev.br
+	if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, true, br.pos); reason != "" {
+		return reason
 	}
 	if !br.hasElse {
 		// 2-arg if: false path jumps straight to the merge.
@@ -1021,22 +1083,8 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 		jend = lw.emit(OpJmp, 0, br.pos)
 	}
 	(*lw.code)[jf].Arg = int32(len(*lw.code))
-	if br.elsIsVal {
-		// Value-else: push the literal/local/type operand as the arm's
-		// single result (mirrors lowerFragment's const-out accounting —
-		// pushOperand tracked it; the merge slot below owns the count).
-		lw.pushOperand(br.elsVal, br.pos)
-		lw.vm = lw.vm[:len(lw.vm)-1]
-	} else {
-		elsOut := func() *emitOperand {
-			if br.hasElsOut {
-				return &br.elsOut
-			}
-			return nil
-		}()
-		if reason := lw.lowerFragment(br.els, elsOut, true, br.pos); reason != "" {
-			return reason
-		}
+	if reason := lw.lowerArm(br.elseArm(), br.elsVal, br.els, &br.elsOut, true, br.pos); reason != "" {
+		return reason
 	}
 	if jend >= 0 {
 		(*lw.code)[jend].Arg = int32(len(*lw.code))
@@ -1074,23 +1122,115 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	return ""
 }
 
-// lowerArmsComputed lowers a computed-else `if cond [then] (expr)` after the
-// JMP_IF_FALSE at jf. Entry sim/runtime stack is [.., elseVal] (the cond was
-// just consumed; the eagerly-computed else value remains). The TAKEN path drops
-// the else value and runs the then-body; the FALSE path falls through with the
-// else value as the result. Both arms net exactly one value, so the result is a
-// single (non-variadic) merge slot.
-func (lw *lowerer) lowerArmsComputed(ev *emitEvent, jf int) string {
-	br := &ev.br
-	// True path: discard the else value, then run the then-body.
-	lw.emit(OpDrop, 0, br.pos)
-	lw.vm = lw.vm[:len(lw.vm)-1] // else value dropped on this path
-	if reason := lw.lowerFragment(br.then, &br.thenOut, false, br.pos); reason != "" {
-		return reason
+// lowerBothComputed lowers `if (c) (a) (b)` where BOTH arms are eagerly-computed
+// events. Entry sim/runtime stack is [.., cond, thenVal, elsVal] (elsVal on top).
+// Both arms ran already (paren args evaluate eagerly — faithful to the
+// interpreter, which also evaluates both), so this only SELECTS one: it rotates
+// the cond to the top (OpReverse 3 → [elsVal, thenVal, cond]), branches, and
+// DROPs the unselected value on each path. The merge is a single (non-variadic)
+// slot.
+func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
+	br := ev.br
+	if len(lw.vm) < 3 ||
+		!slotIs(lw.vm[len(lw.vm)-1], br.elsVal) ||
+		!slotIs(lw.vm[len(lw.vm)-2], br.thenVal) ||
+		!slotIs(lw.vm[len(lw.vm)-3], br.cond) {
+		return "if: both-computed stack layout (Stage 2)"
 	}
+	if lw.variadic[br.thenVal.idx] || lw.variadic[br.elsVal.idx] {
+		return "if: both-computed arm is a variadic loop value (Stage 2)"
+	}
+	// Reverse the top three so the cond lands on top: [elsVal, thenVal, cond].
+	lw.emit(OpReverse, 3, br.pos)
+	n := len(lw.vm)
+	lw.vm[n-3], lw.vm[n-1] = lw.vm[n-1], lw.vm[n-3]
+	jf := lw.emit(OpJmpIfFalse, 0, br.pos) // pop cond → [elsVal, thenVal]
+	// TRUE/fall-through: the result is thenVal (now on top), so drop elsVal
+	// beneath it: SWAP then DROP → [thenVal].
+	lw.emit(OpSwap, 0, br.pos)
+	lw.emit(OpDrop, 0, br.pos)
 	jend := lw.emit(OpJmp, 0, br.pos)
-	(*lw.code)[jf].Arg = int32(len(*lw.code)) // false path lands here, else value intact
+	// FALSE: stack is [elsVal, thenVal] (thenVal on top); the result is elsVal,
+	// so drop thenVal → [elsVal].
+	(*lw.code)[jf].Arg = int32(len(*lw.code))
+	lw.emit(OpDrop, 0, br.pos)
 	(*lw.code)[jend].Arg = int32(len(*lw.code))
+	// Sim: the three input slots (cond/then/else) collapse to one merge slot.
+	lw.vm = lw.vm[:len(lw.vm)-3]
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+	lw.note()
+	return ""
+}
+
+// lowerComputedCond materialises a computed-arm branch's condition as a Boolean
+// on TOP of the already-on-stack eager arm value and emits JMP_IF_FALSE
+// (consuming it), returning the jf pc. The eager value is the top sim slot on
+// entry and remains so on return. It handles the three condition shapes the
+// recorder admits for a computed arm:
+//
+//   - a list-form condition body (`if [x gt 0] (expr) e`): lowered inline above
+//     the eager value, netting one Boolean (not tracked in the parent sim);
+//   - an event cond (`if (x eq 0) (expr) e`): the cond event sits just BELOW the
+//     eager value — SWAP it to the top;
+//   - a const / local / type cond (`if flag (expr) e`): pushed above the eager.
+func (lw *lowerer) lowerComputedCond(br *emitBranch) (int, string) {
+	switch {
+	case br.condFrag != nil:
+		if reason := lw.lowerFragment(br.condFrag, &br.condOut, false, br.pos); reason != "" {
+			return 0, reason
+		}
+		return lw.emit(OpJmpIfFalse, 0, br.pos), ""
+	case br.cond.kind == opEvent:
+		if len(lw.vm) < 2 || !slotIs(lw.vm[len(lw.vm)-2], br.cond) {
+			return 0, "if: computed-branch condition not below the eager value (Stage 2)"
+		}
+		lw.swapTop2(br.pos)
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; eager value stays on top
+		return jf, ""
+	default:
+		lw.pushOperand(br.cond, br.pos)
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed; eager value stays on top
+		return jf, ""
+	}
+}
+
+// lowerComputedBranch lowers an `if` whose THEN or ELSE value is an eagerly-
+// computed event, after the JMP_IF_FALSE at jf. Entry sim/runtime stack is
+// [.., eager] (the cond was just consumed; the eager arm value remains). The
+// eager value is the result of ITS path; the OTHER (non-eager) arm DROPs it and
+// produces its own value (a plain value push or a body fragment). Both arms net
+// exactly one value, so the merge is a single (non-variadic) slot.
+//
+//   - computed ELSE (`if c [t] (expr)`): the eager value is the FALSE-path
+//     result; the TRUE (fall-through) path drops it and runs the then arm.
+//   - computed THEN (`if c (expr) e`): the eager value is the TRUE-path result;
+//     the FALSE (jump-target) path drops it and runs the else arm.
+func (lw *lowerer) lowerComputedBranch(ev *emitEvent, jf int) string {
+	br := ev.br
+	if br.thenComputed {
+		// TRUE/fall-through keeps the eager then value; jump over the else arm.
+		jend := lw.emit(OpJmp, 0, br.pos)
+		(*lw.code)[jf].Arg = int32(len(*lw.code)) // FALSE lands here
+		lw.emit(OpDrop, 0, br.pos)                // discard the eager then value
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		if reason := lw.lowerArm(br.elseArm(), br.elsVal, br.els, &br.elsOut, false, br.pos); reason != "" {
+			return reason
+		}
+		(*lw.code)[jend].Arg = int32(len(*lw.code))
+	} else {
+		// TRUE/fall-through drops the eager else value and runs the then arm;
+		// the FALSE path falls through with the eager value intact.
+		lw.emit(OpDrop, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, false, br.pos); reason != "" {
+			return reason
+		}
+		jend := lw.emit(OpJmp, 0, br.pos)
+		(*lw.code)[jf].Arg = int32(len(*lw.code)) // FALSE lands here, eager value intact
+		(*lw.code)[jend].Arg = int32(len(*lw.code))
+	}
 	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 	lw.note()
 	return ""
