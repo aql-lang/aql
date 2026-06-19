@@ -5,8 +5,6 @@ go 1.24.7
 require (
 	github.com/aql-lang/aql/eng/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
-	github.com/jsonicjs/csv/go v0.1.2
-	github.com/jsonicjs/jsonic/go v0.1.6
 	github.com/tabnas/csv/go v0.2.0
 	github.com/tabnas/feed/go v0.2.0
 	github.com/tabnas/ini/go v0.2.0
@@ -15,6 +13,7 @@ require (
 	github.com/tabnas/jsonc/go v0.2.0
 	github.com/tabnas/jsonic/go v0.2.0
 	github.com/tabnas/markdown/go v0.2.0
+	github.com/tabnas/multisource/go v0.2.0
 	github.com/tabnas/toml/go v0.2.0
 	github.com/tabnas/xml/go v0.2.0
 	github.com/tabnas/yaml/go v0.2.0
@@ -25,13 +24,9 @@ require (
 )
 
 require (
+	github.com/tabnas/directive/go v0.2.0 // indirect
 	github.com/tabnas/hoover/go v0.2.0 // indirect
 	github.com/tabnas/parser/go v0.2.0 // indirect
-)
-
-require (
-	github.com/jsonicjs/directive/go v0.1.0 // indirect
-	github.com/jsonicjs/multisource/go v0.1.2
 )
 
 require (

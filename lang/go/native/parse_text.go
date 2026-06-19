@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // parseTextHandler implements `StructUtil.parse` — jsonic/JSON text →

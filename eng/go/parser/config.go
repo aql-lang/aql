@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // ParseConfig parses a jsonic configuration string into a nested map —

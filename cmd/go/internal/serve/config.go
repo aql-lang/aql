@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // loadConfig parses path and returns the segment list that the

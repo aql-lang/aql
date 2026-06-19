@@ -180,17 +180,39 @@ normally using the cached modules.
 
 ## Jsonic Token Usage
 
-AQL uses `github.com/jsonicjs/jsonic/go` (v0.1.6) for all tokenization and
-structural parsing. There is exactly one parser — it lives in the
-standalone **eng** module at `eng/go/parser/parse.go`
+AQL uses `github.com/tabnas/jsonic/go` (v0.2.0) for all tokenization and
+structural parsing. (This replaced the legacy `github.com/jsonicjs/jsonic/go`
+v0.1.6 — the tabnas family is an API-compatible superset port; the swap
+removed the jsonicjs dependency entirely.) There is exactly one parser — it
+lives in the standalone **eng** module at `eng/go/parser/parse.go`
 (`github.com/aql-lang/aql/eng/go/parser`); `lang.Parse` re-exports
 it. (The old hand-rolled lexer / token / AST / tree-walking evaluator
 were removed — jsonic is the sole parsing path.) Key jsonic integration:
 
-- **Options**: `TextInfo:true` (quoted vs unquoted distinction),
-  `ListRef/MapRef:true` (structural metadata), `Pair:true` and `Child:true`
-  (typed list/map syntax like `[:String]` and `{:String}`), `Lex:false`
-  (raw values for custom processing).
+- **Options**: the output-shaping flags moved under `Options.Info`:
+  `Info:{Text:true}` (quoted vs unquoted distinction), `Info:{List:true,
+  Map:true}` (ListRef/MapRef structural metadata) — these were the top-level
+  `TextInfo`/`ListRef`/`MapRef` flags in jsonicjs. Plus `List:{Pair:true,
+  Child:true}` and `Map:{Child:true}` (typed list/map syntax like `[:String]`
+  and `{:String}`), `Value:{Lex:false}` (raw values for custom processing).
+- **RuleSpec API**: tabnas exposes rule alternates/actions through accessor
+  METHODS (`AddOpen`/`ClearOpen`/`OpenAlts`, `AddBO`/`AddBC`/`ClearActions`,
+  …), not the exported `Open`/`Close`/`BO`/`BC` slice fields jsonicjs had.
+  `grammar.go` wraps these in `setOpen`/`prependOpen`/`setBO`/… helpers so the
+  rule definitions still read as field assignments. `RuleDefiner` takes a
+  second `*Parser` arg: `func(rs *jsonic.RuleSpec, _ *jsonic.Parser)`.
+- **Custom lex matchers**: jsonicjs's `j.AddMatcher(name, priority, fn)` is
+  gone; the `addMatcher` helper appends to `Config().CustomMatchers`
+  (priority-interleaved against the built-in matchers using the SAME bands —
+  match=1e6, fixed=2e6, …), preserving exact ordering.
+- **val coalescer gotcha (CRITICAL)**: tabnas's val rule coalesces the val's
+  value from `r.Child.Node` after a close-pushed child completes (`@val-bc`
+  re-run), and `@val-ac` restores the primitive token value when the child
+  left its node undefined. So a rule pushed from `val.Close` that folds into
+  its PARENT's node (dotchain, arrowfold, angle) MUST also mirror the result
+  onto its OWN `r.Node`, or the fold is dropped. Dotchain additionally pushes
+  one segment per `val.Close` (not an `R:"dotchain"` self-loop) so `r.Child`
+  tracks the latest segment.
 - **Custom tokens**: `(`, `)`, `.`, `;`, `` ` ``, `${` are registered via
   `j.Token()` so jsonic lexes them as separate fixed tokens even when
   adjacent to text.
@@ -210,8 +232,9 @@ were removed — jsonic is the sole parsing path.) Key jsonic integration:
   `StringChars` so it is not consumed by the built-in string matcher.
   Instead, `` ` `` (#BT), `${` (#IS), and template literal text (#TL) are
   handled by custom tokens and grammar rules:
-  - A `LexMatcher` (priority 1M) checks `rule.K["aql_tpl"]` to produce
-    #TL tokens for literal text segments only inside template strings.
+  - A `LexMatcher` (priority 1M, registered via `addMatcher`) checks
+    `rule.K["aql_tpl"]` to produce #TL tokens for literal text segments only
+    inside template strings.
   - `"interp"` rule: opened by #BT in val, sets `K["aql_tpl"]` in BO,
     collects parts into an `interpGroup`.
   - `"ielem"` rule: matches #TL (literal text) or #IS (interpolation start).
@@ -663,9 +686,10 @@ before `quote` marks it, and `quote word …` captures the literal token
 forward form.
 
 To add new syntax: register a token with `j.Token()`, extend the `"val"`
-rule with `j.Rule()`, and add conversion logic in the appropriate
-`convert*` function. For context-sensitive lexing, use `j.AddMatcher()`
-with the v0.1.6 rule-aware `LexMatcher` signature
+rule with `j.Rule()` (definer `func(rs *jsonic.RuleSpec, _ *jsonic.Parser)`,
+mutating via the `setOpen`/`prependClose`/`setBO`/… helpers), and add
+conversion logic in the appropriate `convert*` function. For context-sensitive
+lexing, use the `addMatcher` helper with the rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
 

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // Load resolves name to a Policy. Resolution order:
