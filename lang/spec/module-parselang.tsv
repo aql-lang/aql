@@ -23,7 +23,7 @@
 "aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (ParseLang.parse_calc 'x + y' {} end) get 1	'+'	parse is pure sugar — the desugared standard call is equivalent
 #
 # §3  register / kinds / source — out-of-band exports
-"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ParseLang.kinds	[calc/q]	the registered parser-kind atoms
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ParseLang.kinds	[ini/q json/q jsonic/q json5/q jsonc/q csv/q toml/q yaml/q xml/q zon/q markdown/q feed/q calc/q]	the registered parser-kind atoms (the tabnas family ships built-in, calc is registered here)
 "aql:parselang" import end  ParseLang.source 'x + y'	'x + y'	the source resolver passes a String through
 "aql:parselang" import end  ParseLang.source {src:'a b'}	'a b'	the source resolver unwraps {src:…}
 #
@@ -37,3 +37,41 @@ ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:parselang" import end  ParseLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:parse_bad_signature	the standard prefix [source:String opts:Map …] is enforced
 "aql:parselang" import end  ParseLang.register parse_x (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	the parse_ prefix is register's job, not the caller's
 "aql:parselang" import end  ParseLang.register Bad (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	capitalised parser names are rejected (types)
+#
+# §5  ini — the built-in INI parser (github.com/tabnas/ini/go). No host
+#     registration needed: importing the module is enough. Top-level
+#     `key = value` lines become Map fields, `[section]` headers nest a Map,
+#     and a recognised boolean decodes to a Boolean.
+"aql:parselang" import end  (parse ini 'b = hello') get 'b'	'hello'	a top-level key/value decodes to a String field
+"aql:parselang" import end  (parse ini {src:'b = hello'}) get 'b'	'hello'	a {src:…} Source map resolves like every other parser
+"aql:parselang" import end  ((parse ini 'a = 1\n[sec]\nx = true') get 'sec') get 'x'	true	a [section] header nests a Map; a recognised boolean decodes to a Boolean
+"aql:parselang" import end  (ParseLang.parse_ini 'b = hello' {} end) get 'b'	'hello'	parse is pure sugar — the desugared standard call is equivalent
+#
+# §5  ini negatives
+"aql:parselang" import end  parse ini {file:'cfg.ini'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1, ini included
+"aql:parselang" import end  parse ini {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
+#
+# §6  the rest of the tabnas parser family (github.com/tabnas/*) — all built
+#     in, all reached the same way. These pin the desugared standard call so
+#     every parser export is covered; the JSON family + yaml/zon return the
+#     decoded top level, csv/markdown a List of rows/blocks, toml/xml/feed a Map.
+"aql:parselang" import end  (ParseLang.parse_json '{"a":1,"b":"hi"}' {} end) get 'b'	'hi'	JSON object → Map
+"aql:parselang" import end  (ParseLang.parse_jsonic '{a:1, b:"hi"}' {} end) get 'b'	'hi'	jsonic (relaxed JSON): unquoted keys
+"aql:parselang" import end  (ParseLang.parse_json5 '{a:1, b:0x10}' {} end) get 'b'	16	JSON5: hex literal decodes to an Integer
+"aql:parselang" import end  (ParseLang.parse_jsonc '{"a":1, "b":2}' {} end) get 'b'	2	JSONC (JSON with comments)
+"aql:parselang" import end  ((ParseLang.parse_csv 'a,b\n1,2' {} end) get 0) get 1	'b'	CSV → List of rows; row 0 is the header
+"aql:parselang" import end  (ParseLang.parse_toml 'b = "hi"' {} end) get 'b'	'hi'	TOML table → Map
+"aql:parselang" import end  (ParseLang.parse_yaml 'b: hi' {} end) get 'b'	'hi'	YAML mapping → Map
+"aql:parselang" import end  (ParseLang.parse_xml '<r><a>1</a></r>' {} end) get 'name'	'r'	XML → element-tree Map; .name is the root tag
+"aql:parselang" import end  (ParseLang.parse_zon '.{ .a = 1, .b = "hi" }' {} end) get 'b'	'hi'	ZON (Zig object notation) → Map
+"aql:parselang" import end  ((ParseLang.parse_markdown '# T\n\nhello world' {} end) get 0) get 0	'hello world'	Markdown → List of blocks
+"aql:parselang" import end  (ParseLang.parse_feed '<rss version="2.0"><channel><title>My Feed</title></channel></rss>' {} end) get 'format'	'atom'	RSS/Atom feed → normalised atom-shaped Map
+#
+# §7  the `parse <kind>` sugar across shapes — object, list and scalar field
+"aql:parselang" import end  (parse json '{"a":1,"b":"hi"}') get 'b'	'hi'	sugar over an object source
+"aql:parselang" import end  ((parse csv 'x,y\n3,4') get 1) get 0	3	sugar over a list (CSV row) source; numeric fields decode to Integers
+"aql:parselang" import end  (parse yaml 'greeting: hello') get 'greeting'	'hello'	sugar over a YAML mapping
+#
+# §8  syntax-error negatives — a malformed source raises parse_syntax_error
+"aql:parselang" import end  parse json '{not valid'	ERROR:parse_syntax_error	malformed JSON is a loud parse error
+"aql:parselang" import end  parse toml '= = ='	ERROR:parse_syntax_error	malformed TOML is a loud parse error

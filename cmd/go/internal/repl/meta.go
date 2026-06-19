@@ -6,8 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 
+	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/native/help"
 )
@@ -115,7 +116,7 @@ func parseMetaArgs(s string) ([]any, error) {
 		return nil, nil
 	}
 
-	j := jsonic.Make(jsonic.Options{})
+	j := parser.SafeMake(jsonic.Options{})
 	result, err := j.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("arg parse error: %w", err)
@@ -162,6 +163,8 @@ func metaHelp(mr *MetaRegistry) MetaHandler {
 			cmd := mr.Lookup(name)
 			fmt.Fprintf(ctx.Out, "  /%-12s %s\n", name, cmd.Summary)
 		}
+		fmt.Fprintln(ctx.Out)
+		fmt.Fprintln(ctx.Out, "Type exit or quit (or Ctrl-D) to leave the REPL.")
 		return nil
 	}
 }

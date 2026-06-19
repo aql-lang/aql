@@ -97,6 +97,14 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			continue
 		}
 
+		// `exit` and `quit` are extra REPL words that shut down the loop,
+		// matching the EOF behaviour without needing Ctrl-D. Checked BEFORE
+		// the pause gate so a paused Service can still be exited from stdin
+		// (the gate would otherwise swallow the line as ignored input).
+		if isExitWord(line) {
+			return
+		}
+
 		if paused != nil && paused.Load() {
 			fmt.Fprintln(out, "  (paused — input ignored)")
 			continue
@@ -137,6 +145,17 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			}
 			fmt.Fprintln(out, strings.Join(parts, " "))
 		}
+	}
+}
+
+// isExitWord reports whether a REPL line is one of the shutdown words
+// (`exit` or `quit`), ignoring surrounding whitespace.
+func isExitWord(line string) bool {
+	switch strings.TrimSpace(line) {
+	case "exit", "quit":
+		return true
+	default:
+		return false
 	}
 }
 

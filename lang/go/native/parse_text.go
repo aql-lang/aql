@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	"github.com/aql-lang/aql/eng/go/parser"
 )
 
 // parseTextHandler implements `StructUtil.parse` — jsonic/JSON text →
@@ -21,7 +21,7 @@ func parseTextHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return nil, r.AqlError("parse_error",
 			fmt.Sprintf("parse: argument must be a string, got %s", args[0].String()), "parse")
 	}
-	result, perr := jsonic.Make().Parse(text)
+	result, perr := parser.SafeParse(text)
 	if perr != nil {
 		return nil, r.AqlError("parse_error",
 			fmt.Sprintf("parse: invalid jsonic/JSON: %v", perr), "parse")

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	"github.com/aql-lang/aql/eng/go/parser"
 )
 
 // loadConfig parses path and returns the segment list that the
@@ -30,8 +30,7 @@ func loadConfig(path string) ([][]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: %w", err)
 	}
-	j := jsonic.Make()
-	parsed, err := j.Parse(string(data))
+	parsed, err := parser.SafeParse(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("config: invalid jsonic: %w", err)
 	}

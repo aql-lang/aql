@@ -156,6 +156,56 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TAny}, nil, subReg))
 
+	// ---- kind: m — traditional maths formula evaluator -----------------
+	// [src opts] → [Number]. Evaluate a formula like `x*y-z^2` (operators
+	// + - * / % ^, unary +/-, parens) whose variables are bound by the
+	// named params (opts). Backed by the tabnas/expr Pratt parser; numeric
+	// coercion follows AQL's integer/float domain rules. See minilang_math.go.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-m",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap},
+			Returns:    []*native.Type{native.TNumber},
+			BarrierPos: -1,
+			Handler:    miniMathHandler,
+		}},
+	})
+	exports.Set("lang_m", wrapMiniFnDef("minilang-m", [][]native.FnParam{stdPrefix},
+		[]*native.Type{native.TNumber}, nil, subReg))
+
+	// ---- kind: jp — JSONPath query (github.com/ohler55/ojg) -------------
+	// [src opts doc:Any] → [List]. Run a JSONPath query over the stack
+	// subject — a Node (Map/List), Object, Array, Table or Record — and
+	// return the matched nodes as a List. See minilang_query.go.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-jp",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
+			Returns:    []*native.Type{native.TList},
+			BarrierPos: -1,
+			Handler:    miniJsonPathHandler,
+		}},
+	})
+	exports.Set("lang_jp", wrapMiniFnDef("minilang-jp", [][]native.FnParam{
+		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
+	}, []*native.Type{native.TList}, nil, subReg))
+
+	// ---- kind: jq — jq filter (github.com/itchyny/gojq) ----------------
+	// [src opts doc:Any] → [List]. Run a jq filter over the stack subject
+	// (the same data shapes as jp) and return its output stream as a List.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-jq",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
+			Returns:    []*native.Type{native.TList},
+			BarrierPos: -1,
+			Handler:    miniJqHandler,
+		}},
+	})
+	exports.Set("lang_jq", wrapMiniFnDef("minilang-jq", [][]native.FnParam{
+		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
+	}, []*native.Type{native.TList}, nil, subReg))
+
 	// ---- out-of-band: register -----------------------------------------
 	// MiniLang.register <name> <fn> installs an AQL function as the
 	// mini-language `lang_<name>`. The fn must carry the standard

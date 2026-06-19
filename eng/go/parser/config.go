@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // ParseConfig parses a jsonic configuration string into a nested map —
@@ -22,7 +22,7 @@ import (
 // keyed. Numbers come back as Go int or float64, strings as string,
 // booleans as bool — the caller coerces per option.
 func ParseConfig(s string) (map[string]any, error) {
-	j := jsonic.Make(jsonic.Options{})
+	j := SafeMake(jsonic.Options{})
 	v, err := j.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("invalid options syntax: %w", err)

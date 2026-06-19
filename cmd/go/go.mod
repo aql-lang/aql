@@ -11,7 +11,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/chzyer/readline v1.5.1
-	github.com/jsonicjs/jsonic/go v0.1.6
+	github.com/tabnas/jsonic/go v0.2.0
 	golang.org/x/crypto v0.32.0
 	golang.org/x/sys v0.38.0
 	golang.org/x/term v0.28.0
@@ -33,9 +33,8 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/jsonicjs/csv/go v0.1.2 // indirect
-	github.com/jsonicjs/directive/go v0.1.0 // indirect
-	github.com/jsonicjs/multisource/go v0.1.2 // indirect
+	github.com/itchyny/gojq v0.12.19 // indirect
+	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
@@ -45,9 +44,26 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/ohler55/ojg v1.28.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
+	github.com/tabnas/csv/go v0.2.0 // indirect
+	github.com/tabnas/directive/go v0.2.0 // indirect
+	github.com/tabnas/expr/go v0.2.0 // indirect
+	github.com/tabnas/feed/go v0.2.0 // indirect
+	github.com/tabnas/hoover/go v0.2.0 // indirect
+	github.com/tabnas/ini/go v0.2.0 // indirect
+	github.com/tabnas/json/go v0.2.0 // indirect
+	github.com/tabnas/json5/go v0.2.0 // indirect
+	github.com/tabnas/jsonc/go v0.2.0 // indirect
+	github.com/tabnas/markdown/go v0.2.0 // indirect
+	github.com/tabnas/multisource/go v0.2.0 // indirect
+	github.com/tabnas/parser/go v0.2.0 // indirect
+	github.com/tabnas/toml/go v0.2.0 // indirect
+	github.com/tabnas/xml/go v0.2.0 // indirect
+	github.com/tabnas/yaml/go v0.2.0 // indirect
+	github.com/tabnas/zon/go v0.2.0 // indirect
 	github.com/voxgig/struct v0.1.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect

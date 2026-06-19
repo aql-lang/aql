@@ -10,7 +10,7 @@ import (
 
 	"github.com/aql-lang/aql/eng/go"
 	"github.com/cockroachdb/apd/v3"
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // typeNames is derived from the engine's canonical registry to prevent drift.
@@ -103,13 +103,15 @@ func withPos(v eng.Value, pos eng.SrcPos) eng.Value {
 //   - Inside lists at the top level: unquoted text → words (quotation).
 //   - Inside lists inside maps: all text → scalar data.
 func Parse(src string) ([]eng.Value, error) {
-	j := jsonic.Make(jsonic.Options{
-		TextInfo: boolPtr(true),
-		ListRef:  boolPtr(true),
-		MapRef:   boolPtr(true),
-		List:     &jsonic.ListOptions{Pair: boolPtr(true), Child: boolPtr(true)},
-		Map:      &jsonic.MapOptions{Child: boolPtr(true)},
-		Value:    &jsonic.ValueOptions{Lex: boolPtr(false)},
+	j := SafeMake(jsonic.Options{
+		// tabnas groups the output-shaping flags under Info: Text wraps
+		// scalars in Text{Str,Quote} (quoted/unquoted distinction), List/Map
+		// return ListRef/MapRef carriers with structural metadata. These were
+		// the top-level TextInfo/ListRef/MapRef flags in the legacy jsonicjs.
+		Info:  &jsonic.InfoOptions{Text: boolPtr(true), List: boolPtr(true), Map: boolPtr(true)},
+		List:  &jsonic.ListOptions{Pair: boolPtr(true), Child: boolPtr(true)},
+		Map:   &jsonic.MapOptions{Child: boolPtr(true)},
+		Value: &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
 
 	// Stage 1: Lex setup — register tokens and custom matchers.

@@ -1,11 +1,77 @@
 package parser
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go"
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
+
+// The tabnas jsonic engine exposes RuleSpec alternates and actions through
+// accessor methods (AddOpen/ClearOpen/OpenAlts, AddBO/ClearActions, …) rather
+// than the exported Open/Close/BO/BC slice fields the legacy jsonicjs parser
+// used. These helpers re-create the field-assignment idioms the AQL grammar is
+// written against, so the rule definitions read the same:
+//
+//	setOpen(rs, alts)      — replace the open alternates       (was rs.Open = alts)
+//	prependOpen(rs, alts)  — prepend before existing opens     (was rs.Open = append(alts, rs.Open...))
+//	rs.AddOpen(alt)        — append one open alternate         (was rs.Open = append(rs.Open, alt))
+//	setBO(rs, actions)     — replace the before-open actions   (was rs.BO = actions)
+//
+// (…and the Close / BC / AC / AO equivalents.)
+func setOpen(rs *jsonic.RuleSpec, alts []*jsonic.AltSpec) { rs.ClearOpen(); rs.AddOpen(alts...) }
+func setClose(rs *jsonic.RuleSpec, alts []*jsonic.AltSpec) {
+	rs.ClearClose()
+	rs.AddClose(alts...)
+}
+
+func prependOpen(rs *jsonic.RuleSpec, alts []*jsonic.AltSpec) {
+	existing := rs.OpenAlts()
+	rs.ClearOpen()
+	rs.AddOpen(append(alts, existing...)...)
+}
+
+func prependClose(rs *jsonic.RuleSpec, alts []*jsonic.AltSpec) {
+	existing := rs.CloseAlts()
+	rs.ClearClose()
+	rs.AddClose(append(alts, existing...)...)
+}
+
+func setBO(rs *jsonic.RuleSpec, actions []jsonic.StateAction) {
+	rs.ClearActions("bo")
+	for _, a := range actions {
+		rs.AddBO(a)
+	}
+}
+
+func setBC(rs *jsonic.RuleSpec, actions []jsonic.StateAction) {
+	rs.ClearActions("bc")
+	for _, a := range actions {
+		rs.AddBC(a)
+	}
+}
+
+func setAC(rs *jsonic.RuleSpec, actions []jsonic.StateAction) {
+	rs.ClearActions("ac")
+	for _, a := range actions {
+		rs.AddAC(a)
+	}
+}
+
+// addMatcher re-creates jsonicjs's AddMatcher(name, priority, fn): it appends a
+// priority-ordered custom lex matcher. The tabnas lexer interleaves
+// Config.CustomMatchers by priority against the built-in matchers using the
+// SAME bands (match=1e6, fixed=2e6, space=3e6, …), so the AQL matchers keep
+// their exact relative ordering.
+func addMatcher(j *jsonic.Jsonic, name string, priority int, fn jsonic.LexMatcher) {
+	cfg := j.Config()
+	cfg.CustomMatchers = append(cfg.CustomMatchers,
+		&jsonic.MatcherEntry{Name: name, Priority: priority, Match: fn})
+	sort.Slice(cfg.CustomMatchers, func(i, k int) bool {
+		return cfg.CustomMatchers[i].Priority < cfg.CustomMatchers[k].Priority
+	})
+}
 
 // parserTokens holds the custom jsonic token IDs registered for AQL grammar.
 // Passed between grammar setup stages so token IDs are defined once.
@@ -70,7 +136,7 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 // stays `0d5` + dot-access. Runs only outside template strings.
 func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
 	isDigit := func(c byte) bool { return (c >= '0' && c <= '9') || c == '_' }
-	j.AddMatcher("big_number", 1000001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+	addMatcher(j, "big_number", 1000001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if rule != nil {
 			if _, ok := rule.K["aql_tpl"]; ok {
 				return nil // inside a template string: leave to the literal matcher
@@ -154,7 +220,7 @@ func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
 		return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'
 	}
 	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
-	j.AddMatcher("minilang_literal", 1000002, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+	addMatcher(j, "minilang_literal", 1000002, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if rule != nil {
 			if _, ok := rule.K["aql_tpl"]; ok {
 				return nil // inside a template string: not a minilang literal
@@ -228,7 +294,7 @@ func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
 // produces #TL tokens for literal text inside template strings. Active only
 // when rule.K["aql_tpl"] is set (inside a backtick-opened interp rule).
 func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
-	j.AddMatcher("template_literal", 1000000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+	addMatcher(j, "template_literal", 1000000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if rule == nil {
 			return nil
 		}
@@ -288,8 +354,8 @@ func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
 // setupValRule extends the jsonic "val" rule with AQL-specific alternates:
 // parens, template strings, close-paren markers, semicolons, ?, !, |, and dots.
 func setupValRule(j *jsonic.Jsonic, t parserTokens) {
-	j.Rule("val", func(rs *jsonic.RuleSpec) {
-		rs.Open = append([]*jsonic.AltSpec{
+	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependOpen(rs, []*jsonic.AltSpec{
 			// Minilang literal `+name<delim>src<delim>`: the matcher stashed a
 			// miniLitVal on the token; carry it to the converter as the node.
 			{S: [][]jsonic.Tin{{t.ML}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
@@ -328,7 +394,7 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 			{S: [][]jsonic.Tin{{t.DT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: ".", Quote: ""}
 			}},
-		}, rs.Open...)
+		})
 	})
 
 	// Dot-chain continuation. After a value closes, a following `.` (or
@@ -357,11 +423,11 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 	inPairValue := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
 		return r.Parent != nil && r.Parent != jsonic.NoRule && r.Parent.Name == "pair"
 	}
-	j.Rule("val", func(rs *jsonic.RuleSpec) {
-		rs.Close = append([]*jsonic.AltSpec{
+	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.DT}}, C: inPairValue, P: "dotchain", B: 1},
 			{S: [][]jsonic.Tin{{t.BG}, {t.DT}}, C: inPairValue, P: "dotchain", B: 2},
-		}, rs.Close...)
+		})
 	})
 
 	// dotchain rule: collects the `.key` / `!.key` segments that follow a
@@ -383,8 +449,8 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 	// chain segment — in a map, `{a: bf.n b: 9}` has `b` as the next
 	// pair's key, not part of `bf.n` — so the loop is gated strictly on
 	// a leading `.`/`!`, never on a key alone.
-	j.Rule("dotchain", func(rs *jsonic.RuleSpec) {
-		rs.BO = []jsonic.StateAction{
+	j.Rule("dotchain", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// On the first dotchain rule for this value, seed the
 				// parent val's Node as a parenGroup holding the receiver.
@@ -401,24 +467,43 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 				}
 				r.Parent.Node = parenGroup{recv}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		// Mirror the accumulated chain (built into the PARENT val's Node by the
+		// segment actions) into THIS rule's own Node. tabnas's val coalescer
+		// (`@val-bc`, re-run after a close-pushed child completes) sets the
+		// val's value from r.Child.Node — so the folded parenGroup must live on
+		// the dotchain's own node, not only on the parent's, to survive. Each
+		// looped dotchain (the val's current child) refreshes its node to the
+		// running parenGroup; the final one carries the complete chain.
+		setBC(rs, []jsonic.StateAction{
+			func(r *jsonic.Rule, ctx *jsonic.Context) {
+				if r.Parent == nil || r.Parent == jsonic.NoRule {
+					return
+				}
+				if pg, ok := r.Parent.Node.(parenGroup); ok {
+					r.Node = pg
+				}
+			},
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			// `. key` — plain member access: append "." then the key.
 			{S: [][]jsonic.Tin{{t.DT}, jsonic.TinSetKEY}, A: dotchainSeg(".")},
 			// `!` — strict (getr) marker; the following `. key` is taken
 			// by the next loop iteration. `!` only appears mid-chain
 			// before a dot, so emitting it alone here is safe.
 			{S: [][]jsonic.Tin{{t.BG}}, A: dotchainMarker("!")},
-		}
-		rs.Close = []*jsonic.AltSpec{
-			// Another segment follows (a `.` or `!`) — loop. A bare key
-			// is NOT a continuation (it belongs to the enclosing map/list).
-			{S: [][]jsonic.Tin{{t.DT}}, R: "dotchain", B: 1},
-			{S: [][]jsonic.Tin{{t.BG}}, R: "dotchain", B: 1},
-			// Anything else ends the chain; backtrack so the enclosing
-			// context (map pair, list elem, …) consumes the next token.
+		})
+		setClose(rs, []*jsonic.AltSpec{
+			// One segment per push: end and backtrack so the enclosing val
+			// re-closes. A following `.`/`!` re-fires the val.Close dotchain
+			// alt, pushing a FRESH dotchain that accumulates onto the same
+			// parent parenGroup. (R-looping within this rule would leave the
+			// val's r.Child pointing at the first dotchain, whose node was
+			// snapshotted at one segment — tabnas's val coalescer then drops
+			// the rest of the chain. Re-pushing per segment keeps r.Child on
+			// the latest dotchain, which carries the full chain.)
 			{B: 1},
-		}
+		})
 	})
 
 	// Arrow fold. `SIG => BODY` groups as `(SIG afn BODY)` — the arrow
@@ -481,14 +566,14 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 		}
 		return true
 	}
-	j.Rule("val", func(rs *jsonic.RuleSpec) {
-		rs.Close = append([]*jsonic.AltSpec{
+	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.AR}}, C: arrowFoldable, P: "arrowfold", B: 1},
-		}, rs.Close...)
+		})
 	})
 
-	j.Rule("arrowfold", func(rs *jsonic.RuleSpec) {
-		rs.BO = []jsonic.StateAction{
+	j.Rule("arrowfold", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Seed the parent val's Node: the already-parsed value
 				// becomes the sig half of (SIG afn BODY). deSite the
@@ -502,8 +587,8 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 				}
 				r.Parent.Node = parenGroup{recv, jsonic.Text{Str: "afn", Quote: ""}}
 			},
-		}
-		rs.BC = []jsonic.StateAction{
+		})
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Append the body val to the parent's parenGroup.
 				if r.Parent == nil || r.Parent == jsonic.NoRule {
@@ -513,20 +598,27 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 					return
 				}
 				if pg, ok := r.Parent.Node.(parenGroup); ok {
-					r.Parent.Node = parenGroup(append([]any(pg), r.Child.Node))
+					grp := parenGroup(append([]any(pg), r.Child.Node))
+					r.Parent.Node = grp
+					// Mirror the assembled group onto this rule's own Node:
+					// tabnas's val coalescer (`@val-bc`, re-run after this
+					// close-pushed rule completes) sets the parent val's value
+					// from r.Child.Node, so the (SIG afn BODY) group must live
+					// here, not only on the parent. (Same reason as dotchain.)
+					r.Node = grp
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			// Consume the arrow, parse exactly one following val as the body.
 			{S: [][]jsonic.Tin{{t.AR}}, P: "val"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			// Single shot — chaining is the BODY val's own fold (see the
 			// arrowfold parent gate above). Backtrack so the enclosing
 			// context consumes the next token.
 			{B: 1},
-		}
+		})
 	})
 
 	// Elem-level arrow fold. A bare pair OUTSIDE parens — `def double
@@ -544,8 +636,8 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 		pair, ok := r.U["pair"]
 		return ok && pair == true
 	}
-	j.Rule("elem", func(rs *jsonic.RuleSpec) {
-		rs.Close = append([]*jsonic.AltSpec{
+	j.Rule("elem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.AR}}, C: elemPairArrow, P: "arrowfoldelem", B: 1,
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					// The elem's BC runs AGAIN when the elem finally
@@ -556,11 +648,11 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 					// BO pops as the sig).
 					r.U["pair"] = false
 				}},
-		}, rs.Close...)
+		})
 	})
 
-	j.Rule("arrowfoldelem", func(rs *jsonic.RuleSpec) {
-		rs.BO = []jsonic.StateAction{
+	j.Rule("arrowfoldelem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Pop the just-appended pair map off the parent elem's
 				// list node and hold it as the sig half. The elem and its
@@ -592,8 +684,8 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 					}
 				}
 			},
-		}
-		rs.BC = []jsonic.StateAction{
+		})
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Append (SIG afn BODY) where the bare pair sat.
 				sig, ok := r.U["af_sig"]
@@ -620,23 +712,28 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 					}
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.AR}}, P: "val"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			{B: 1},
-		}
+		})
 	})
 
 	// Capture source position: wrap every value node with the row/col of its
 	// opening token, so the converter can stamp eng.Value.Pos for precise
-	// error reporting (mirrors aontu's addsite). The BC fires on val-rule
-	// close — after the Open alternates above have set r.Node (including the
-	// marker Texts), so markers carry positions too. The wrapper is unwrapped
-	// (deSite) at every node-type switch in parse.go and never leaks.
-	j.Rule("val", func(rs *jsonic.RuleSpec) {
-		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+	// error reporting (mirrors aontu's addsite). This runs in the AFTER-CLOSE
+	// (AC) phase, NOT before-close: the tabnas jsonic grammar installs a
+	// `@val-ac` hook that re-resolves a primitive value from its token after
+	// BC, which would otherwise overwrite the sited wrapper for every value
+	// except the first. Running in AC — after `@val-ac` — makes the wrapper
+	// the final node for every value. The Open alternates above have already
+	// set r.Node (including the marker Texts), so markers carry positions too.
+	// The wrapper is unwrapped (deSite) at every node-type switch in parse.go
+	// and never leaks.
+	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		rs.AddAC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if r.Node == nil || jsonic.IsUndefined(r.Node) {
 				return
 			}
@@ -712,8 +809,8 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 
 	// --- Optional field syntax: key?:value in pair context ---
 
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
-		rs.Open = append([]*jsonic.AltSpec{
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependOpen(rs, []*jsonic.AltSpec{
 			// Match KEY ? — save key via K (propagated), push to pair.
 			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {t.QM}},
 				P: "pair", K: map[string]any{"aql_qm": true},
@@ -732,11 +829,32 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					r.U["key"] = r.K["key"]
 				}},
-		}, rs.Open...)
+			// Optional shorthand with NO value — `{foo?}`. The inner pair
+			// pushed by the `KEY ?` alt sees the closing brace; backtrack so
+			// the map closes, and record the key both as a shorthand (so
+			// convertMapData synthesises `foo: foo`) and as optional (Meta
+			// "qm"). Without this the empty pushed pair has no alt for the
+			// closing brace and errors. (The legacy jsonicjs pair rule closed
+			// an empty pushed pair on the brace implicitly; tabnas does not.)
+			{S: [][]jsonic.Tin{{jsonic.TinCB}},
+				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+					_, ok := r.K["aql_qm"]
+					return ok
+				},
+				B: 1,
+				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+					if k, ok := r.K["key"]; ok {
+						r.U["key"] = k
+						if ks, ok := k.(string); ok {
+							r.U["aql_sh"] = ks
+						}
+					}
+				}},
+		})
 	})
 
 	// Record optional keys in MapRef.Meta via pair.BC callback.
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if _, ok := r.K["aql_qm"]; !ok {
 				return
@@ -760,8 +878,8 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 
 	// --- Computed key syntax: {[key]:value} in pair context ---
 
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
-		rs.Open = append([]*jsonic.AltSpec{
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependOpen(rs, []*jsonic.AltSpec{
 			// Step 1: match [ — set computed key flag, push to pair.
 			{S: [][]jsonic.Tin{{jsonic.TinOS}},
 				P: "pair", K: map[string]any{"aql_ck": true}},
@@ -787,11 +905,11 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					r.U["key"] = r.K["key"]
 				}},
-		}, rs.Open...)
+		})
 	})
 
 	// Record computed keys in MapRef.Meta via pair.BC callback.
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if _, ok := r.K["aql_ck"]; !ok {
 				return
@@ -815,8 +933,8 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 
 	// --- Shorthand field syntax: {foo} ≡ {foo: foo}, {foo/r} ≡ {foo: foo/r} ---
 
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
-		rs.Open = append(rs.Open, &jsonic.AltSpec{
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		rs.AddOpen(&jsonic.AltSpec{
 			// A lone unquoted-text key with no following colon. Appended
 			// LAST so it never shadows a real `key:value` pair: the base
 			// KEY CL alt (and the prepended qm/ck alts) are tried first,
@@ -836,7 +954,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 	})
 
 	// Record shorthand keys in MapRef.Meta["sh"] via pair.BC callback.
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			raw, ok := r.U["aql_sh"].(string)
 			if !ok || raw == "" {
@@ -857,7 +975,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// plain string map afterwards, so it needs this flag to know the key
 	// was an explicit literal — e.g. to allow a `/` in it that would be an
 	// illegal word modifier on a bare key.
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if r.O0.Tin != jsonic.TinST {
 				return
@@ -880,8 +998,8 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 
 	// --- Optional field syntax in list context: [x?:Integer] ---
 
-	j.Rule("elem", func(rs *jsonic.RuleSpec) {
-		rs.Open = append([]*jsonic.AltSpec{
+	j.Rule("elem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependOpen(rs, []*jsonic.AltSpec{
 			// Step 1: match KEY ? — save key, push to elem.
 			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {t.QM}},
 				P: "elem", K: map[string]any{"aql_qm": true},
@@ -902,11 +1020,11 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					r.U["key"] = r.K["key"].(string) + "?"
 				}},
-		}, rs.Open...)
+		})
 	})
 
 	// Propagate the outer elem's updated Node to grandparent (list rule).
-	j.Rule("elem", func(rs *jsonic.RuleSpec) {
+	j.Rule("elem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if _, ok := r.K["aql_qm"]; !ok {
 				return
@@ -946,15 +1064,15 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		pk, ok := r.N["pk"]
 		return !ok || pk > 0
 	}
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
-		rs.Close = append([]*jsonic.AltSpec{
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.AR}}, C: arrowEndsDive, B: 1},
-		}, rs.Close...)
+		})
 	})
-	j.Rule("map", func(rs *jsonic.RuleSpec) {
-		rs.Close = append([]*jsonic.AltSpec{
+	j.Rule("map", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.AR}}, C: arrowEndsDive, B: 1},
-		}, rs.Close...)
+		})
 	})
 }
 
@@ -963,8 +1081,8 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// Paren rule: collects values between ( and ) into a parenGroup.
 	// Works like a simplified list rule but closes on ) instead of ].
-	j.Rule("paren", func(rs *jsonic.RuleSpec) {
-		rs.BO = []jsonic.StateAction{
+	j.Rule("paren", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = make([]any, 0)
 			},
@@ -982,15 +1100,15 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 					r.N["dmap"] = 1
 				}
 			},
-		}
-		rs.BC = []jsonic.StateAction{
+		})
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if arr, ok := r.Node.([]any); ok {
 					r.Node = parenGroup(arr)
 				}
 			},
-		}
-		rs.AC = []jsonic.StateAction{
+		})
+		setAC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if r.U["closed"] != true {
 					if pg, ok := r.Node.(parenGroup); ok {
@@ -998,8 +1116,8 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 					}
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			// Empty parens: (). Match the ")" but BACKTRACK (B:1) so the
 			// Close phase consumes it exactly once — like a non-empty paren,
 			// whose pelem also backtracks the ")" for paren.Close. Consuming
@@ -1009,18 +1127,18 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 			{S: [][]jsonic.Tin{{t.CP}}, B: 1},
 			// First element
 			{P: "pelem"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.CP}}, U: map[string]any{"closed": true}},
 			// End of source: auto-close (unclosed paren)
 			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
-		}
+		})
 	})
 
 	// Pelem (paren element): each item inside a paren group.
 	// Pushes to val for each value, appends to parent paren's list.
-	j.Rule("pelem", func(rs *jsonic.RuleSpec) {
-		rs.BC = []jsonic.StateAction{
+	j.Rule("pelem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if !jsonic.IsUndefined(r.Child.Node) {
 					if arr, ok := r.Node.([]any); ok {
@@ -1031,11 +1149,11 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 					}
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			{P: "val"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			// ) ends the paren group (backtrack so paren.Close consumes it)
 			{S: [][]jsonic.Tin{{t.CP}}, B: 1},
 			// End of source inside paren: auto-close (unclosed paren)
@@ -1044,7 +1162,7 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 			{S: [][]jsonic.Tin{{jsonic.TinCA}}, R: "pelem"},
 			// Space-separated: next element (backtrack to re-read token)
 			{R: "pelem", B: 1},
-		}
+		})
 	})
 }
 
@@ -1054,34 +1172,34 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// Interp rule: collects template string parts between backticks.
 	// K["aql_tpl"] is set in BO so the custom matcher produces #TL tokens
 	// for literal text segments. Parts are accumulated in Node as an interpGroup.
-	j.Rule("interp", func(rs *jsonic.RuleSpec) {
-		rs.BO = []jsonic.StateAction{
+	j.Rule("interp", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = interpGroup{}
 				// Set K so the custom matcher knows we're inside a template.
 				// K propagates to child rules.
 				r.K["aql_tpl"] = true
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			// Empty template: `` (immediate closing backtick)
 			{S: [][]jsonic.Tin{{t.BT}}},
 			// First element: push to ielem.
 			{P: "ielem"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			// Closing backtick ends the template.
 			{S: [][]jsonic.Tin{{t.BT}}},
 			// End of source: unterminated template string (auto-close).
 			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
-		}
+		})
 	})
 
 	// Ielem rule: each element inside a template string.
 	// Handles #TL (literal text) and #IS (interpolation start).
 	// On close, appends its own Node to the parent interp's interpGroup.
-	j.Rule("ielem", func(rs *jsonic.RuleSpec) {
-		rs.BC = []jsonic.StateAction{
+	j.Rule("ielem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Collect the node value. For #TL, the action sets r.Node directly.
 				// For #IS→iexpr, the child rule sets r.Node (iexprGroup) via push.
@@ -1098,8 +1216,8 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 					}
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			// Literal text segment.
 			{S: [][]jsonic.Tin{{t.TL}},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
@@ -1110,23 +1228,23 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 				}},
 			// Interpolation start ${ — push to iexpr to collect the expression.
 			{S: [][]jsonic.Tin{{t.IS}}, P: "iexpr"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			// Closing backtick: backtrack so interp.Close can consume it.
 			{S: [][]jsonic.Tin{{t.BT}}, B: 1},
 			// End of source.
 			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
 			// Next element (another literal or interpolation).
 			{R: "ielem", B: 1},
-		}
+		})
 	})
 
 	// Iexpr rule: collects expression values between ${ and }.
 	// Pushes to val for each value, collects into a list.
 	// Clears aql_tpl in BO so that expression content is parsed normally
 	// (the custom matcher won't fire inside expressions).
-	j.Rule("iexpr", func(rs *jsonic.RuleSpec) {
-		rs.BO = []jsonic.StateAction{
+	j.Rule("iexpr", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = make([]any, 0)
 				// Clear template mode so expressions parse normally.
@@ -1144,33 +1262,33 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 					r.N["dmap"] = 1
 				}
 			},
-		}
-		rs.BC = []jsonic.StateAction{
+		})
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Wrap the collected values as an iexprGroup.
 				if arr, ok := r.Node.([]any); ok {
 					r.Node = iexprGroup(arr)
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			// Empty expression: ${}
 			{S: [][]jsonic.Tin{{jsonic.TinCB}}},
 			// First expression value.
 			{P: "ieval"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			// Closing brace } ends the expression.
 			{S: [][]jsonic.Tin{{jsonic.TinCB}}},
 			// End of source inside expression.
 			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
-		}
+		})
 	})
 
 	// Ieval rule: each value inside an interpolation expression.
 	// Similar to pelem but closes on } instead of ).
-	j.Rule("ieval", func(rs *jsonic.RuleSpec) {
-		rs.BC = []jsonic.StateAction{
+	j.Rule("ieval", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if !jsonic.IsUndefined(r.Child.Node) {
 					if arr, ok := r.Node.([]any); ok {
@@ -1181,11 +1299,11 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 					}
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			{P: "val"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			// } ends the expression (backtrack so iexpr.Close consumes it).
 			{S: [][]jsonic.Tin{{jsonic.TinCB}}, B: 1},
 			// End of source.
@@ -1194,7 +1312,7 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 			{S: [][]jsonic.Tin{{jsonic.TinCA}}, R: "ieval"},
 			// Space-separated: next expression value.
 			{R: "ieval", B: 1},
-		}
+		})
 	})
 }
 
@@ -1228,14 +1346,14 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 		c := txt.Str[0]
 		return c >= 'A' && c <= 'Z'
 	}
-	j.Rule("val", func(rs *jsonic.RuleSpec) {
-		rs.Close = append([]*jsonic.AltSpec{
+	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		prependClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.LA}}, C: angleGate, P: "angle"},
-		}, rs.Close...)
+		})
 	})
 
-	j.Rule("angle", func(rs *jsonic.RuleSpec) {
-		rs.BO = []jsonic.StateAction{
+	j.Rule("angle", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = make([]any, 0)
 			},
@@ -1253,8 +1371,8 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 					r.N["dmap"] = 1
 				}
 			},
-		}
-		rs.BC = []jsonic.StateAction{
+		})
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if r.Parent == nil || r.Parent == jsonic.NoRule {
 					return
@@ -1269,13 +1387,19 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 					name = txt.Str
 				}
 				arr, _ := r.Node.([]any)
-				r.Parent.Node = sited{Node: angleGroup{Name: name, Items: arr}, Pos: pos}
+				grp := sited{Node: angleGroup{Name: name, Items: arr}, Pos: pos}
+				r.Parent.Node = grp
+				// Mirror onto this rule's own Node: tabnas's val coalescer
+				// (`@val-bc`, re-run after this close-pushed rule completes)
+				// sets the parent val's value from r.Child.Node, so the
+				// angleGroup must live here too (same reason as dotchain).
+				r.Node = grp
 			},
-		}
+		})
 		// The "closed" flag is set by the Close alternate, which runs
 		// AFTER BC — so the unclosed-at-EOF rewrite happens in AC (the
 		// unclosed-paren technique).
-		rs.AC = []jsonic.StateAction{
+		setAC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if r.U["closed"] == true {
 					return
@@ -1284,25 +1408,28 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 					return
 				}
 				name := ""
-				if s, ok := r.Parent.Node.(sited); ok {
+				if s, ok := r.Node.(sited); ok {
 					if ag, isAg := s.Node.(angleGroup); isAg {
 						name = ag.Name
 					}
 				}
+				// Set our own Node (the val coalesces from r.Child.Node); also
+				// keep the parent in sync for any direct readers.
+				r.Node = unclosedAngle{Name: name}
 				r.Parent.Node = unclosedAngle{Name: name}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			// Empty group `Name<>`: backtrack so Close consumes the `>`
 			// exactly once (the empty-paren technique).
 			{S: [][]jsonic.Tin{{t.RA}}, B: 1},
 			{P: "aelem"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			{S: [][]jsonic.Tin{{t.RA}}, U: map[string]any{"closed": true}},
 			// End of source: unclosed — flagged by the BC fold above.
 			{S: [][]jsonic.Tin{{jsonic.TinZZ}}},
-		}
+		})
 	})
 
 	// Aelem: each item inside an angle group (the pelem shape with `>`
@@ -1310,8 +1437,8 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// closes on another `<` re-enters the angle rule, and the two `>`s
 	// close inner then outer (no C++-style `>>` shift problem — `>` is
 	// a standalone token).
-	j.Rule("aelem", func(rs *jsonic.RuleSpec) {
-		rs.BC = []jsonic.StateAction{
+	j.Rule("aelem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		setBC(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if !jsonic.IsUndefined(r.Child.Node) {
 					if arr, ok := r.Node.([]any); ok {
@@ -1322,11 +1449,11 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 					}
 				}
 			},
-		}
-		rs.Open = []*jsonic.AltSpec{
+		})
+		setOpen(rs, []*jsonic.AltSpec{
 			{P: "val"},
-		}
-		rs.Close = []*jsonic.AltSpec{
+		})
+		setClose(rs, []*jsonic.AltSpec{
 			// > ends the group (backtrack so angle.Close consumes it).
 			{S: [][]jsonic.Tin{{t.RA}}, B: 1},
 			// End of source inside the group: unclosed.
@@ -1335,7 +1462,7 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 			{S: [][]jsonic.Tin{{jsonic.TinCA}}, R: "aelem"},
 			// Space-separated: next item.
 			{R: "aelem", B: 1},
-		}
+		})
 	})
 }
 

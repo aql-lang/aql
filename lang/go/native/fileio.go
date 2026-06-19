@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
+	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // Special path constants for stdio streams.

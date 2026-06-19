@@ -23,11 +23,10 @@ import (
 	"strings"
 	"syscall"
 
-	jsonic "github.com/jsonicjs/jsonic/go"
-
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/aql-lang/aql/eng/go/parser"
 )
 
 // cmd is the Command implementation for `aql registry`.
@@ -366,8 +365,7 @@ func toInt(v any) (int, bool) {
 
 // parseJsonic parses jsonic-formatted bytes into a map.
 func parseJsonic(data []byte) (map[string]any, error) {
-	j := jsonic.Make()
-	result, err := j.Parse(string(data))
+	result, err := parser.SafeParse(string(data))
 	if err != nil {
 		return nil, err
 	}

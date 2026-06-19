@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	multisource "github.com/jsonicjs/multisource/go"
+	multisource "github.com/tabnas/multisource/go"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
 )
