@@ -545,6 +545,12 @@ var builtinDecls = []builtinDecl{
 	{Path: "Node/Map", FixedID: 14, Rank: 30_200_000_000},
 	{Path: "Node/Map/Inspect", FixedID: 31, Rank: 30_210_000_000},
 	{Path: "Node/Map/FlexMap", FixedID: 78, Rank: 30_220_000_000},
+	// Node/Xml — the immutable element value embedded XML literals
+	// (`<tag>…</tag>`) and `parse xml` produce. A dedicated Node-branch
+	// type (not a Map subtype) with a custom Behavior that serialises
+	// back to XML; see design/XML-LITERAL.0.md and core_xml.go. The
+	// parser emits it directly, so it is kernel-declared.
+	{Path: "Node/Xml", FixedID: 108, Rank: 30_300_000_000},
 
 	// Ideal branch — the structural type-kinds (Object, Array, Record,
 	// Options, Error, Store, Table) are direct children of Ideal: peer

@@ -119,6 +119,7 @@ func Parse(src string) ([]eng.Value, error) {
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
 	setupMiniLitMatcher(j, t)
+	setupXmlMatcher(j, t)
 
 	// Stage 2: Grammar setup — extend rules for AQL syntax.
 	setupValRule(j, t)
@@ -126,6 +127,7 @@ func Parse(src string) ([]eng.Value, error) {
 	setupParenGrammar(j, t)
 	setupAngleGrammar(j, t)
 	setupInterpGrammar(j, t)
+	setupXmlGrammar(j, t)
 	setupNumberSub(j)
 
 	// Stage 3: Parse and convert to engine values.
@@ -582,6 +584,14 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
 		})), nil
 
+	case xmlElemVal:
+		// Embedded XML literal `<tag>…</tag>`: the matcher already built
+		// the immutable Node/Xml value; surface any build error here.
+		if val.Err != nil {
+			return eng.Value{}, val.Err
+		}
+		return val.V, nil
+
 	case numberVal:
 		return numberValToValue(val)
 
@@ -881,6 +891,14 @@ func convertDataValueInner(v any) (eng.Value, error) {
 		return eng.NewSplice(eng.NewList([]eng.Value{
 			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
 		})), nil
+
+	case xmlElemVal:
+		// Embedded XML literal in data context (a map value): same
+		// immutable Node/Xml value the matcher built.
+		if val.Err != nil {
+			return eng.Value{}, val.Err
+		}
+		return val.V, nil
 
 	case numberVal:
 		return numberValToValue(val)

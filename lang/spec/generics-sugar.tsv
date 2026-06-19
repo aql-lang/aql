@@ -45,8 +45,8 @@ def Box<T> class {value:T} def m (macro [[e] [ quote [ unquote e ] ]]) end macro
 "aql:vm" import end def Box<T> class {value:T} end Vm.parse "Box<Integer>"	(quote [paren([word(Box) word(of) [Integer]])])	Vm.parse of sugared source emits the canonical stream
 #
 # §4  negatives — the gate and the entry grammar are loud
-5 < 3	ERROR:unexpected	`<` after a non-type value is a syntax error (comparisons are lt/gt)
-box<Integer>	ERROR:unexpected	the gate requires a CAPITALISED name before `<`
+5 < 3	ERROR:tag name	`<` in value position now opens an XML literal (design/XML-LITERAL.0.md); ` 3` is not a tag name. Comparisons are lt/gt, never `<`.
+box<Integer>	ERROR:unterminated	lowercase name is NOT generics (the gate requires a CAPITALISED name); the value-position `<Integer>` is then read as an unterminated XML literal
 def Box<t> class {value:t}	ERROR:capitalised	parameters follow the type-name convention
 def Box<T class {value:T}	ERROR:unclosed angle	a missing `>` is a parse error, not a silent re-lex
 def Sorted<T extends> refine Record [x:T]	ERROR:needs a value	a dangling `extends` is rejected at parse time

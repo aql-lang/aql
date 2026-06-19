@@ -1192,6 +1192,16 @@ func NewFlexList(elems []Value) Value {
 	return NewValueRaw(TFlexList, &FlexListData{Elems: elems})
 }
 
+// NewXmlElement creates an immutable Node/Xml element value. attr may
+// be nil (treated as no attributes); cren may be nil (no children).
+// See design/XML-LITERAL.0.md and core_xml.go.
+func NewXmlElement(tag string, attr *OrderedMap, cren []Value) Value {
+	if attr == nil {
+		attr = NewOrderedMap()
+	}
+	return NewValueRaw(TXml, XmlElementPayload{Tag: tag, Attr: attr, Cren: cren})
+}
+
 // NewFlexMap creates a mutable FlexMap value. It reuses MapPayload —
 // the *OrderedMap is pointer-backed, so in-place mutation is visible
 // through every Value copy sharing the payload. Like NewFlexList,
@@ -2364,6 +2374,15 @@ func AsFlexList(v Value) (*FlexListData, error) {
 		return fd, nil
 	}
 	return nil, fmt.Errorf("AsFlexList: not a flex list payload (got %T)", v.Data)
+}
+
+// AsXmlElement returns the XmlElementPayload backing a Node/Xml value,
+// or an error when v is a type literal or a non-Xml value.
+func AsXmlElement(v Value) (XmlElementPayload, error) {
+	if x, ok := v.Data.(XmlElementPayload); ok {
+		return x, nil
+	}
+	return XmlElementPayload{}, fmt.Errorf("AsXmlElement: not an Xml element payload (got %T)", v.Data)
 }
 
 // AsMap returns a read-only view of the map payload.

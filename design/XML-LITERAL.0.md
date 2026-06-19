@@ -1,6 +1,22 @@
 # AQL Literal XML Embedding Design
 
-Status: design draft, no implementation (completeness 0).
+Status: Increment 1 **LANDED** — static (non-interpolated) `Node/Xml`
+literals parse end-to-end, build an immutable element value, render back
+to well-formed XML, and carry structural equality. Remaining increments
+(interpolation `${}`, mutable `Node/FlexXml` via `flex`, `parse xml`
+alignment, and the query/accessor words) are design-only — see §7.
+
+Implementation landed in Increment 1:
+- type `Node/Xml` (FixedID 108) + `XmlElementPayload{Tag,Attr,Cren}` +
+  `xmlBehavior` (Format → XML, structural Equal): `eng/go/core_xml.go`,
+  `eng/go/payload.go`, `eng/go/value.go` (`NewXmlElement`/`AsXmlElement`),
+  `eng/go/typetable.go`, `eng/go/types.go`.
+- grammar: a `val.Open` `<` alternate pushes an `xml` rule that arms the
+  `xml_literal` lex matcher; the matcher scans the whole balanced element
+  and builds the value directly: `eng/go/parser/xml_literal.go`,
+  `eng/go/parser/grammar.go`, `eng/go/parser/parse.go`.
+- batteries: `eng/spec/xml-literal.tsv`,
+  `eng/go/parser/xml_literal_test.go`, `lang/go/test/xml_literal_test.go`.
 
 Literal XML embedded directly in AQL source — `<tag …>…</tag>` written
 in-line where a value is expected — producing a first-class `Node/Xml`

@@ -111,6 +111,20 @@ type MapPayload struct{ M *OrderedMap }
 // Constructed by NewFlexList.
 type FlexListData struct{ Elems []Value }
 
+// XmlElementPayload is the immutable backing for a Node/Xml element
+// value (an embedded `<tag>…</tag>` literal, or the future remapped
+// `parse xml` output). Tag is the element name; Attr is the
+// insertion-ordered attribute map (name → String value); Cren ("child
+// nodes") holds every child in document order — nested Node/Xml
+// elements and Scalar/String text nodes interleaved. The element-only
+// view (DOM `children`) and concatenated text (DOM `textContent`) are
+// computed from Cren by words, not stored. See design/XML-LITERAL.0.md.
+type XmlElementPayload struct {
+	Tag  string
+	Attr *OrderedMap
+	Cren []Value
+}
+
 // ParenExprPayload carries the unevaluated tokens of a paren-expression
 // awaiting inline evaluation. Wrapping []Value.
 type ParenExprPayload struct{ Toks []Value }
@@ -301,6 +315,7 @@ func (GenParam) payloadMarker()           {}
 func (*TypeSchemaInfo) payloadMarker()    {}
 func (GenInstRef) payloadMarker()         {}
 func (*FlexListData) payloadMarker()      {}
+func (XmlElementPayload) payloadMarker()  {}
 func (*StoreInstanceInfo) payloadMarker() {}
 func (*ArrayInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()       {}
