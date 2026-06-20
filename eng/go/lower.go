@@ -437,24 +437,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	var dead map[int]bool
 	for i := range events {
 		ev := &events[i]
-		// A single-result CALL (native evCall) or USER/closure CALL (evCallUser —
-		// the dynamic-dispatch / module-fn path, e.g. `test-invoke` invoking a
-		// subject fn) is promotable: its one result may be bound to a name
-		// (`def actual (in subject test-invoke)`) and read more than once, read
-		// across a fragment floor, or forced into residual order, all of which
-		// the single-consume simulated stack cannot seat. Multi-result and
-		// 0-result calls are not promoted here (their residual is handled by the
-		// caller's reconciliation).
-		var nout int
-		switch ev.kind {
-		case evCall:
-			nout = ev.call.nout
-		case evCallUser:
-			nout = ev.uc.nout
-		default:
-			continue
-		}
-		if nout != 1 {
+		if ev.kind != evCall || ev.call.nout != 1 {
 			continue
 		}
 		switch {
@@ -884,24 +867,6 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 	}
 	lw.emit(OpCallUser, uc.unit, uc.pos)
 	lw.vm = lw.vm[:len(lw.vm)-n]
-	// A value-def local: this single result is referenced more than once (or read
-	// across a fragment floor, or forced into residual order), so store it into a
-	// frame slot now and re-push per reference — the references were rewritten to
-	// local operands. The promotion pre-pass marks only nout==1 events, so nothing
-	// is left on the stack. Mirrors lowerCall's promotion tail.
-	if slot, ok := lw.promoted[ev.seq]; ok {
-		lw.emit(OpStoreLocal, slot, uc.pos)
-		lw.note()
-		return ""
-	}
-	if lw.dead[ev.seq] {
-		// A single-result user call referenced zero times: the call ran for its
-		// side effects, but the result is discarded — drop it so it is not left
-		// unconsumed on the stack.
-		lw.emit(OpDrop, 0, uc.pos)
-		lw.note()
-		return ""
-	}
 	// Push one simulated slot per result the unit returns (P5 multi-result):
 	// 0 for a 0-return fn, N for a multi-return fn — idx 0..N-1 deepest-first,
 	// matching the order the VM's CALL_USER leaves the unit's residual.

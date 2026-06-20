@@ -1888,53 +1888,42 @@ func TestTopTakingClosureTrim(t *testing.T) {
 	}
 }
 
-// A single-result CALL_USER / dynamic-dispatch result (e.g. aql:test's
-// `test-invoke` invoking a subject fn compiled to its own unit) is value-def-
-// local promotable: when bound to a name and read more than once, it stores to
-// a frame slot and re-pushes per reference, instead of leaving the result
-// unconsumed on the stack ("residual shape beyond Stage 1"). With that and the
-// `get`-over-carrier leniency in a module fn's CallAQL body, the declarative
-// aql:test runner (`Test.run-spec`) compiles — the each [var [[s] … run-spec]]
-// shape the voxgig-aql/decision unit_spec suite uses. Byte-identical to interp.
-func TestDynamicDispatchUserCallPromotes(t *testing.T) {
-	for _, src := range []string{
-		// run-spec invokes a subject fn by NAME (test-invoke → CALL_USER), records
-		// the outcome, and returns 0 — the result is dropped, the trailing 0 stands.
-		`import "aql:test" end
-def subject fn [[x:Integer] [Integer] [x]]
-def specs [{name:"s" subject:subject/q cases:[{name:"c" in:[0] out:0}] subs:[]}]
-def _ (specs each [var [[s] s Test.run-spec end 0]])
-0`,
-		// A module fn doing get on an each-element-derived Map param (the carrier
-		// path getNodeHandler must answer dynamically, not error).
-		`import "aql:test" end
-def subject fn [[x:Integer] [Integer] [x]]
-def spec {name:"s" subject:subject/q cases:[{name:"c" in:[0] out:0}] subs:[]}
-spec Test.run-spec end
-0`,
-	} {
-		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
-		if cerr != nil {
-			t.Fatalf("%q: check error %v", src, cerr)
-		}
-		if prog == nil {
-			t.Errorf("%q: expected to compile, refused: %s", src, reason)
-		}
-		gotC, compiled, errC := mustNew(t).RunCompiled(src)
-		gotI, errI := mustNew(t).Run(src)
-		if !compiled {
-			t.Errorf("%q: expected a compiled run, not a fallback", src)
-		}
-		if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-			t.Errorf("%q: compiled=%v (%v) interp=%v (%v)", src, gotC, errC, gotI, errI)
+// A `${expr}` interpolation whose value is only known at RUNTIME (a carrier — a
+// fn param, an each-element field read) must not be const-folded: ValToString
+// of a carrier renders its type tag ("dynamic(Any)"), which the interpreter
+// never produces, so baking it diverges. evalInterpString now returns a String
+// CARRIER and refuses recording for such a string, so the program falls back to
+// the interpreter and builds the real value. Found via voxgig-aql/decision
+// prop suites (`  pass: ${nm}` where nm = a get over the each-element carrier).
+func TestInterpStringRuntimePartFallsBack(t *testing.T) {
+	// nm is a field read over the each-element carrier → dynamic; the interp
+	// string must NOT bake "dynamic(Any)". Compiled (with fallback) == interp.
+	const src = `def rs [{name:"a"} {name:"b"}]
+(rs each [var [[r] def nm (r "name" get) ` + "`x ${nm}`" + ` ]])`
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	gotI, errI := mustNew(t).Run(src)
+	if compiled {
+		t.Errorf("a runtime-valued interpolation must refuse (no runtime string-interp op), got a compiled run")
+	}
+	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+	}
+	for _, v := range []string{fmt.Sprint(gotC), fmt.Sprint(gotI)} {
+		if strings.Contains(v, "dynamic(") {
+			t.Errorf("interp string leaked a carrier render: %q", v)
 		}
 	}
 
-	// NEGATIVE: `get` over a bare type LITERAL (not a carrier) is a genuine
-	// type-literal access — it must still error, at run AND compile, exactly as
-	// before. Only an abstract CARRIER (analysis-only) reads dynamically.
-	const badGet = `Map get "x"`
-	if _, errI := mustNew(t).Run(badGet); errI == nil {
-		t.Errorf("%q: get on a bare type literal must error at runtime", badGet)
+	// POSITIVE: a fully-CONCRETE interpolation still compiles and folds.
+	prog, reason, _, cerr := mustNew(t).CompileCheck("def n 5\n`value ${n}`")
+	if cerr != nil {
+		t.Fatalf("concrete interp: check error %v", cerr)
+	}
+	if prog == nil {
+		t.Errorf("a concrete interpolation should still compile, refused: %s", reason)
+	}
+	gotc, _, _ := mustNew(t).RunCompiled("def n 5\n`value ${n}`")
+	if fmt.Sprint(gotc) != "[value 5]" {
+		t.Errorf("concrete interp: got %v want [value 5]", gotc)
 	}
 }
