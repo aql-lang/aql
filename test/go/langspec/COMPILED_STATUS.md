@@ -9,12 +9,12 @@ Corpus: **2830** spec value rows (**2517** compilable, 313 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2486 |
-| compiled with an interpreter island | 3 |
+| compiled natively (fallback-free) | 2487 |
+| compiled with an interpreter island | 2 |
 | refused (whole-program fallback) | 28 |
 | static check-error (invalid in both engines) | 313 |
 
-**2489 / 2517** compilable rows produce a Program (98% — 2486 of those fully native).
+**2489 / 2517** compilable rows produce a Program (98% — 2487 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -23,10 +23,10 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
 | refusals (whole-program fallback) | 28 | 28 | → 0 |
-| interpreter islands (OpFallback) | 3 | 3 | → 0 |
+| interpreter islands (OpFallback) | 2 | 2 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 6 | 6 | → 0 |
-| compute frontier | 25 | 86 | → 0 |
+| compute frontier | 24 | 86 | → 0 |
 
 ## Refusals by reason
 
@@ -51,7 +51,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 ## Re-scoped P7 partition
 
-Over the 31 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **6** reducible (tier 2, TODO), **0** allowlisted error rows, **25** compute-frontier gaps.
+Over the 30 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **6** reducible (tier 2, TODO), **0** allowlisted error rows, **24** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -72,7 +72,7 @@ _None._
 | ---: | --- |
 | 12 | operand provenance |
 | 4 | dynamic input |
-| 3 | island (OpFallback span) |
+| 2 | island (OpFallback span) |
 | 1 | dispatch recovery (best guess) |
 | 1 | fn-value-call boundary |
 | 1 | function value reaches word (Stage 3) |
