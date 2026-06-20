@@ -59,15 +59,27 @@ func TestDXOptionsParamRejectsNonMap(t *testing.T) {
 	}
 }
 
-// §6.1 — forward over-collection error hints at parens / end / ;.
+// §6.1 — forward over-collection error hints at parens as the fix for a
+// call-as-argument, and clarifies `end` / `;` is NOT a grouping substitute
+// (a trailing `;` does not rescue `print Decision.eval-cond c x` — only parens
+// make the call's RESULT the argument).
 func TestDXForwardPrecedenceHint(t *testing.T) {
 	err := dxErr(t, `def inc fn [[n:Integer] [Integer] [n add 1]]  inc inc 5`)
 	if err == nil {
 		t.Fatal("expected a signature error")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "parens") || !strings.Contains(msg, "end") {
-		t.Errorf("expected a forward-precedence hint mentioning parens/end, got:\n%s", msg)
+	if !strings.Contains(msg, "parens") {
+		t.Errorf("expected a forward-precedence hint pointing at parens, got:\n%s", msg)
+	}
+	// The hint must NOT present `end` / `;` as a way to group a call-as-argument
+	// — it must say so explicitly, or omit the `;` advice. Guard against the old
+	// "group with parens — or end it with `end` or `;`" conflation regressing.
+	if strings.Contains(msg, "or end it with") {
+		t.Errorf("hint still offers `end`/`;` as a grouping substitute (the conflation this fixes):\n%s", msg)
+	}
+	if strings.Contains(msg, "`;`") && !strings.Contains(msg, "NOT") {
+		t.Errorf("hint mentions `;` without clarifying it does not nest a following call:\n%s", msg)
 	}
 }
 

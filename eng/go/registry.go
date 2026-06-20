@@ -730,7 +730,8 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 				return nil, r.AqlErrorHint("signature_error",
 					"no matching signature for "+name, name,
 					"forward args for "+name+" may have run into the next word; "+
-						"group the call with parens — ("+name+" …) — or end it with `end` or `;`")
+						"group the call in parens so its RESULT becomes the argument — ("+name+" …). "+
+						"`end` / `;` only ends the statement — it does NOT turn a following word into a nested call.")
 			}
 			return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
 		},
