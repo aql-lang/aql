@@ -1707,3 +1707,50 @@ func TestIslandBurndownEmptyBodyAndCaseTrap(t *testing.T) {
 		}
 	}
 }
+
+// Completion item — codequote (code-as-data) compiles. `codequote (expr)`
+// captures the paren RAW as a Quoted ParenExpr (`codequote (1 add 2)` →
+// `paren([1 word(add) 2])`). A Quoted ParenExpr is immutable data: the
+// interpreter's stepLiteral leaves it unevaluated and the VM never re-steps a
+// const, so it bakes as an inert PUSH_CONST exactly like the macroexpand token
+// list. The negative half: an UNQUOTED ParenExpr is expanded and re-stepped in
+// place, so isInertConst must never bake one (gated on v.Quoted).
+func TestCodequoteCompilesNative(t *testing.T) {
+	for _, c := range []string{
+		`codequote (1 add 2)`,
+		`codequote (nosuchword)`,
+		`codequote (a.b.c)`,
+		`codequote (if x [1] [2])`,
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%q did not compile: reason=%q err=%v", c, reason, cerr)
+		}
+		dis := prog.Disassemble()
+		if strings.Contains(dis, "FALLBACK") || !strings.Contains(dis, "PUSH_CONST") {
+			t.Errorf("%q: want a native PUSH_CONST bake (no island):\n%s", c, dis)
+		}
+		// Byte-identical to the interpreter.
+		gotC, compiled, errC := mustNew(t).RunCompiled(c)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled=%v err=%v", c, compiled, errC)
+		}
+		gotI, _ := mustNew(t).Run(c)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v interp=%v", c, gotC, gotI)
+		}
+	}
+
+	// Negative: a Quoted ParenExpr is data, but the standalone isInertConst gate
+	// must still reject a non-codequote'd value that LOOKS paren-shaped. A normal
+	// paren `(1 add 2)` evaluates to 3 (no ParenExpr survives), so it compiles as
+	// arithmetic, never as a baked ParenExpr const — assert the result is the
+	// evaluated value, not the code.
+	gotC, compiled, errC := mustNew(t).RunCompiled(`(1 add 2)`)
+	if !compiled || errC != nil {
+		t.Fatalf("plain paren: compiled=%v err=%v", compiled, errC)
+	}
+	if fmt.Sprint(gotC) != "[3]" {
+		t.Errorf("plain paren must evaluate, not bake as code: got %v", gotC)
+	}
+}

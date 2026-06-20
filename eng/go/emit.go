@@ -2059,7 +2059,10 @@ func (es *EmitState) intern(v Value) int {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
-	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) {
+	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) || IsParenExpr(v) {
+		// Compounds, structural type bodies, and codequote'd ParenExprs are never
+		// deduped: like the list/map identity rule, two source codequotes stay two
+		// distinct const values rather than CanonValue-merging into one.
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
@@ -2314,6 +2317,16 @@ func isInertConst(v Value) bool {
 		// qualifies — the dot-access Eval reach (which the engine expands in
 		// place) is excluded.
 		return isInertReach(v)
+	case ParenExprPayload:
+		// A codequote'd (Quoted) ParenExpr — `codequote (1 add 2)` →
+		// `paren([1 word(add) 2])`. It is immutable CODE-AS-DATA: stepLiteral
+		// leaves a Quoted ParenExpr unevaluated (engine.go step 4), and the VM
+		// never re-steps a const, so it bakes by value exactly like the
+		// macroexpand token list. An UNQUOTED ParenExpr is expanded and
+		// re-stepped in place, so it is NEVER a const — gate strictly on Quoted.
+		// Its tokens must themselves be inert members (Words / atoms / scalars /
+		// nested inert parens), screened by isInertConstMember.
+		return isInertQuotedParen(v)
 	case *TypeSchemaInfo:
 		// An installed generic schema (`def Box gen [T] class {value:T}`). The
 		// schema is immutable data — its instantiation memo lives in the
@@ -2393,6 +2406,30 @@ func schemaConstOK(s *TypeSchemaInfo) bool {
 		}
 	}
 	return memberOK(s.Body)
+}
+
+// isInertQuotedParen reports whether v is a codequote'd (Quoted) ParenExpr that
+// bakes as a const. A Quoted ParenExpr is CODE-AS-DATA: the interpreter's
+// stepLiteral leaves it unevaluated (engine.go step 4 gates on `!v.Quoted`),
+// and the VM never re-steps a const, so it pushes verbatim like the macroexpand
+// token list — the compiled residual renders byte-identically to the
+// interpreter's data value. An UNQUOTED ParenExpr is expanded and re-stepped in
+// place, so it is NEVER baked here. Every token must itself be an inert const
+// member (Words / atoms / scalars / nested inert parens), via isInertConstMember.
+func isInertQuotedParen(v Value) bool {
+	if !v.Quoted || v.Carrier || v.Dynamic {
+		return false
+	}
+	toks, err := AsParenExpr(v)
+	if err != nil {
+		return false
+	}
+	for _, tk := range toks {
+		if !isInertConstMember(tk) {
+			return false
+		}
+	}
+	return true
 }
 
 // isInertReach reports whether v is an INERT receiverless lens — a first-class
