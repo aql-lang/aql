@@ -449,8 +449,19 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	InstallJoinedDefs(r, thenDefs, elseDefs)
 	joined := JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
-		es.Emit.MarkUncompilable("if: branches produce no value (Stage 2 lowers single-result branches)")
-		return nil
+		// BOTH arms produce 0 values (empty `[]`, a 0-value word, or a
+		// diverging break/continue/raise): the if is a 0-value STATEMENT, not a
+		// value-producing branch. Record it (RecordBranch marks the event
+		// zeroOut and the lowering emits no merge slot) rather than refusing —
+		// mirroring the 2-arg if2 guard. The registered result is a phantom None
+		// the residual reconciliation skips.
+		out := NewCarrier(TNone)
+		es.Emit.RecordBranch(BranchRecord{
+			Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
+			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
+			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
+		})
+		return []Value{out}
 	}
 	out := joined[len(joined)-1]
 	es.Emit.RecordBranch(BranchRecord{

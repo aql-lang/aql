@@ -3426,8 +3426,14 @@ func (e *Engine) autoEvalMap(val Value, dataMap bool) (Value, error) {
 	// of the evaluated values, so the map resolves to a real per-run event the
 	// outer make consumes — otherwise it is an unresolvable residual and the
 	// program falls back. A fully-literal / const-folded map stays inert and bakes
-	// as a pooled const. Top frame only (a body map re-evaluates per call).
-	if dataMap && e.isTop && e.registry.Check.IsActive() {
+	// as a pooled const. dataMap is set ONLY for make's construction body (a
+	// CONSUMED arg, match.Name == "make" at the execMatch call site), which make
+	// evaluates IN the current scope before constructing — so it records even
+	// inside a fn body / branch arm (the OpMakeMap re-assembles per call from its
+	// operands, matching make's per-call evaluation). It is never a deferred
+	// residual, so the late-rebinding hazard that gates plain residual lists/maps
+	// does not apply, and the top-frame restriction is unnecessary here.
+	if dataMap && e.registry.Check.IsActive() {
 		if es := e.registry.Check.Emit; es != nil && !isInertConst(res) {
 			keys := out.Keys()
 			vals := make([]Value, len(keys))
@@ -3585,7 +3591,7 @@ func (e *Engine) constFoldContainerVal(items []Value) (Value, bool) {
 		return Value{}, false
 	}
 	two, ok := e.concreteEvalOnce(items)
-	if !ok || one.String() != two.String() {
+	if !ok || !constFoldAgrees(one, two) {
 		return Value{}, false
 	}
 	return one, true

@@ -105,36 +105,42 @@ the rest as work:
 
 **✅ LANDED** (`test/go/langspec/compiled_metafallback_test.go`,
 `TestOnlyMetaFallsBack`). The gate partitions every refused/islanded spec value
-row into three tiers plus error-rows, each on its own ratchet. Current partition
-(June 2026): **2 interpreter-only (tier 1), 96 reducible (tier 2), 12
-error-row, 258 compute gap**.
+row into three tiers plus error-rows, each on its own ratchet. Live numbers are
+generated into `test/go/langspec/COMPILED_STATUS.md` (the one shared census in
+`compiled_census_test.go`), so the figures here are an illustrative snapshot, not
+a hand-maintained ledger. Snapshot (mid-June 2026): **0 interpreter-only (tier
+1), 6 reducible (tier 2), 0 error-row, 35 compute gap** (36 refused + 5 islanded).
 
 1. ✅ **Tier 1 — `interpreterOnlyWords` (permanent, capped at 3).** Executes
    runtime-constructed code: `Vm.run`/`Vm.run-with`. The legitimate, permanent
    home of the island. A NEW tier-1 entry is an *irreducibility claim* the gate
    forces you to justify.
-2. ✅ **Tier 2 — `reducibleWords` (ratcheted, `reducibleCeiling = 96`).**
+2. ✅ **Tier 2 — `reducibleWords` (ratcheted, `reducibleCeiling = 6`).**
    Refused by a NAMED missing feature, each `why` recording what compiling it
-   takes: usurp 43, Test/Assert 28, quote 10, flex 7, minilang 5, word 3 (residual
-   splices). These are TODOs, not exclusions — they ratchet to 0 like any other
-   work. (The earlier draft mislabeled this tier "irreducible meta"; that
-   laundered unfinished work as impossibility. `args.N`, the 30-row `word` macro
-   splice, `macroexpand`, and `with-decimal` disproved the framing concretely —
-   each moved OUT of this tier to native code.)
-3. ✅ **Compute frontier (ratcheted, `computeRefusalCeiling = 258`).** Cascades
-   (operand-provenance 140), code-body DSL bodies (47), Stage-1 lowering (~24),
-   dynamic in/out (~24), 9 islands, user-fn dispatch (5). Error rows (12) are
-   allowlisted via `errorRowReason` (the checker refuses so the interpreter
-   raises the taxonomy; making the VM raise them stays available).
+   takes. These are TODOs, not exclusions — they ratchet to 0 like any other
+   work. The bucket has drained as usurp / quote / word / macroexpand /
+   Test-Assert mostly moved to native. (The earlier draft mislabeled this tier
+   "irreducible meta"; that laundered unfinished work as impossibility. `args.N`,
+   the 30-row `word` macro splice, `macroexpand`, and `with-decimal` disproved
+   the framing concretely — each moved OUT of this tier to native code. The old
+   parallel boundary gate that curated a *permanent*-meta allowlist —
+   `meta_fallback_test.go` / `TestMetaFallbackBoundary` — was retired for the
+   same reason: a second, contradictory walk that excused reducible work as
+   permanent. This gate is now the sole boundary partition.)
+3. ✅ **Compute frontier (ratcheted, `computeRefusalCeiling = 86`).** Operand-
+   provenance cascades, code-body DSL bodies, Stage-1 lowering residuals, dynamic
+   in/out, the islands, user-fn dispatch. Error rows are allowlisted via
+   `errorRowReason` (the checker refuses so the interpreter raises the taxonomy;
+   making the VM raise them stays available).
 4. **PENDING** (gated on tiers 2 + 3 reaching 0): the §P7 deletion of the
    *unbounded* whole-program fallback — `RunCompiled` stops calling `a.Run(src)`
    for arbitrary refusals and runs the compiled `Program`, whose `OpFallback`
    island is then provably confined to tier-1 spans. The island machinery stays.
 
 This is "complete delivery": all reducible code native; the island confined to
-runtime code-eval. The gate MEASURES the distance (96 reducible + 258 compute)
-instead of asserting an impossible absolute — and keeps tier 2 honestly on the
-work list rather than excused as "meta."
+runtime code-eval. The gate MEASURES the distance (reducible + compute) instead
+of asserting an impossible absolute — and keeps tier 2 honestly on the work list
+rather than excused as "meta."
 
 ## 4. Sequenced roadmap (tractable clusters)
 

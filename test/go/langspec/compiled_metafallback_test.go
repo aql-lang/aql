@@ -31,12 +31,17 @@
 // When BOTH ratchets reach 0, only tier 1 falls back, and the unbounded
 // whole-program fallback in RunCompiled can be narrowed to the tier-1 island
 // spans (§3 step 4).
+//
+// This is the SOLE boundary gate. An earlier parallel gate (meta_fallback_test.go,
+// TestMetaFallbackBoundary) curated a permanent-META allowlist and re-walked the
+// corpus independently — both the "permanent meta" framing (repudiated here and
+// in design §3) and the second walk (the shared census in compiled_census_test.go
+// is the one walk) were stale, so it was retired. Its disposition is subsumed:
+// total refusals are ratcheted by refusalCeiling, and the per-tier breakdown by
+// the three ceilings below.
 package langspec
 
 import (
-	"bufio"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -120,77 +125,14 @@ func errorRowReason(reason string) bool {
 // reach it, only tier 1 falls back and the unbounded fallback can be narrowed.
 const (
 	interpreterOnlyCeiling = 3  // Vm.run / Vm.run-with — execute runtime-computed code. NOW 0: the corpus's last tier-1 row, Vm.run(canon [1 {a:none} x/q]), compiled once OpMakeList let the canon list assemble. Kept at 3 for headroom — a Vm.run of a genuinely RUNTIME string would re-populate it
-	reducibleCeiling       = 48 // Test/Assert 21, quote 10, usurp 9, flex 6, minilang/parselang 8 (+3 from merged PR #142) — each a named, reducible compiler/VM TODO; 54 -> 52 when structural type-pattern operands started baking (two rows that refused at a reducible word past the now-compiled pattern dropped out); 52 -> 51 when dead value-defs stopped refusing (a reducible-word row past a now-dropped dead binding fell out); 51 -> 48 when arity/param/return introspection over a baked fn value compiled (those rows left the reducible bucket)
+	reducibleCeiling       = 6  // each a named, reducible compiler/VM TODO; 54 -> 52 when structural type-pattern operands started baking (two rows that refused at a reducible word past the now-compiled pattern dropped out); 52 -> 51 when dead value-defs stopped refusing (a reducible-word row past a now-dropped dead binding fell out); 51 -> 48 when arity/param/return introspection over a baked fn value compiled (those rows left the reducible bucket); 48 -> 6: re-tightened to the live actual (the ratchet had stalled at 48 while usurp / quote / word / macroexpand / Test-Assert mostly moved to native, draining the bucket); a fixed, small word set with deterministic classification, so kept tight like refusalCeiling
 	computeRefusalCeiling  = 86 // operand-provenance cascades, code-body DSL words, Stage-1 lowering residuals, dynamic in/out, 5 islands, user-fn dispatch (+8 from merged PR #142 minilang/parselang corpus rows that fall back faithfully; +1 patrun.tsv — a mutable Patrun dispatch / `add` 3-arg-overload row falls back, the bytecode fix is tracked on a separate branch); 166 -> 137: structural type-pattern operands (`{a:Integer}`, `[Integer String]`, `[Resource Entity]`) now bake as const members, so static is/typeof/size over them compiles; 137 -> 126: generic schema bakes as a const, unblocking make/is/typeof/residual over top-level generic types; 126 -> 122: schema body check admits a type-parameter Word, so typed-list-field generic schemas (`{items:[:T]}`) bake too; 122 -> 119: a function-signature value bakes as pure descriptor data, unblocking fnsig residual/typeof and fnsig-bodied generic schemas; 119 -> 100: a surface type bakes as a const (shared canonical descriptor; the compiled path keeps check-pass mints so it never goes stale), unblocking the surface type-algebra cluster; 100 -> 97: typed-def object construction records its skipped make event, giving the bound instance make-equivalent provenance; 97 -> 90: a single-result value-def referenced zero times drops its dead result (OpDrop) rather than refusing as an unconsumed call result; 90 -> 85: a no-capture fn value bakes as a const so it stands as data (residual, map member, introspection operand), with an auto-dispatch-boundary guard keeping a fn-ahead-of-args residual on the fallback path; 85 -> 86: +1 arithmetic.tsv — `add`'s String-concat overloads (`[String Scalar]`/`[Scalar String]`) gained a second Scalar→String coercion row (Boolean and Float operands, both positions) when the old `[Scalar Scalar]` overload was tightened to require a String; the coercion concat still falls back faithfully
 )
 
 func TestOnlyMetaFallsBack(t *testing.T) {
-	specDir := filepath.Join("..", "..", "..", "lang", "spec")
-	entries, err := os.ReadDir(specDir)
-	if err != nil {
-		t.Fatalf("read %s: %v", specDir, err)
-	}
-
-	var interp, reducible, errorRows, computeGap int
-	tier1By := map[string]int{}
-	tier2By := map[string]int{}
-	computeByReason := map[string]int{}
-
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
-			continue
-		}
-		f, err := os.Open(filepath.Join(specDir, e.Name()))
-		if err != nil {
-			t.Fatalf("open: %v", err)
-		}
-		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-		for scanner.Scan() {
-			line := strings.TrimRight(scanner.Text(), " \t")
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			parts := strings.Split(line, "\t")
-			if len(parts) < 2 {
-				continue
-			}
-			input := strings.TrimSpace(parts[0])
-
-			a := newDifferentialInstance(t)
-			prog, reason, _, cerr := a.CompileCheck(input)
-			switch {
-			case cerr != nil, reason == "check diagnostics":
-				continue // statically invalid in both engines — not the gate's concern
-			case prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK"):
-				continue // fully native
-			}
-			// Refused, or an islanded Program: not fully native. Classify.
-			switch tier, name := classify(input); tier {
-			case 1:
-				interp++
-				tier1By[name]++
-			case 2:
-				reducible++
-				tier2By[name]++
-			default:
-				if errorRowReason(reason) {
-					errorRows++
-					continue
-				}
-				computeGap++
-				r := normaliseReason(reason)
-				if reason == "" {
-					r = "island (OpFallback span)"
-				}
-				computeByReason[r]++
-			}
-		}
-		f.Close()
-		if err := scanner.Err(); err != nil {
-			t.Fatalf("scanner: %v", err)
-		}
-	}
+	c := gatherCensus(t)
+	interp, reducible, errorRows, computeGap := c.interp, c.reducible, c.errorRows, c.computeGap
+	tier1By, tier2By, computeByReason := c.tier1By, c.tier2By, c.computeBy
 
 	t.Logf("re-scoped P7 partition: %d interpreter-only (tier 1, permanent), %d reducible (tier 2, TODO), %d error-row, %d COMPUTE GAP",
 		interp, reducible, errorRows, computeGap)

@@ -163,6 +163,20 @@ const (
 	// interpreter. Bounded to Arg==1: with >1 arg the island's forward collection
 	// would order them opposite to the interpreter's top-down stack collection.
 	OpCallDynamicTrailing
+	// OpFlowBreak / OpFlowContinue lower a break / continue that sits in a FN
+	// BODY with no enclosing loop in its OWN unit — a flow-control signal that
+	// targets the nearest loop in an ANCESTOR frame (the interpreter's
+	// cross-frame FlowCtrl, compiled). The VM unwinds the frames opened since
+	// that loop, discards the current iteration's partial operand pushes (down
+	// to the loop's iteration base — matching the interpreter, which drops the
+	// values between the loop mark and the signal), then jumps to the loop's
+	// exit (break) or its FOR_NEXT (continue). A same-unit break/continue stays
+	// a static JMP (lowerBreak / lowerContinue) — these ops are the cross-frame
+	// case only. Reaching one with no open loop at all is a "break outside loop"
+	// runtime error, surfaced as an internal_error so RunCompiled falls back and
+	// the interpreter raises the canonical taxonomy.
+	OpFlowBreak
+	OpFlowContinue
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -194,6 +208,8 @@ var opcodeNames = [...]string{
 	OpTrap:                "TRAP",
 	OpReverse:             "REVERSE",
 	OpCallDynamicTrailing: "CALL_DYNAMIC_TRAILING",
+	OpFlowBreak:           "FLOW_BREAK",
+	OpFlowContinue:        "FLOW_CONTINUE",
 }
 
 func (o Opcode) String() string {
