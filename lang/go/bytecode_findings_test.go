@@ -1797,19 +1797,45 @@ func TestVarRefusesCleanly(t *testing.T) {
 		}
 	}
 
-	// A `var` block INSIDE a closure body that nets exactly one value is
-	// unaffected — the splice re-steps and compiles, byte-identical to the
-	// interpreter (the refusal is only for a var whose own dispatch would bake).
-	const inClosure = `def xs [1 2 3] (xs each [var [[v] v mul 2]])`
-	got, compiled, err := mustNew(t).RunCompiled(inClosure)
+	// A `var` block inside an `each` body REFUSES the const-bake (an executing
+	// word's body that references a name can't bake — the sub-engine re-run would
+	// resolve a name the VM holds as a frame local against the registry instead;
+	// see execBodyRefsNames). It falls back to the interpreter with the correct
+	// result. Both directions of the value-arm pin the byte-identical fallback.
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def xs [1 2 3] (xs each [var [[v] v mul 2]])`, "[[2 4 6]]"},
+		{`def xs [1 2 3] (xs each [var [[v] v 0]])`, "[[0 0 0]]"},
+	} {
+		got, compiled, err := mustNew(t).RunCompiled(c.src)
+		if err != nil {
+			t.Fatalf("%q: %v", c.src, err)
+		}
+		gotI, _ := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%q: an each-var body must refuse (sound fallback), not compile", c.src)
+		}
+		if fmt.Sprint(got) != fmt.Sprint(gotI) || fmt.Sprint(got) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, got, gotI, c.want)
+		}
+	}
+
+	// The soundness hazard the gate guards: a CAPTURING each-var body (the body
+	// names a fn param) must NOT compile to a CALL_NATIVE whose const body is
+	// re-run in a sub-engine — it would resolve the param against the registry,
+	// not the VM frame, and diverge. It refuses and falls back, byte-identical.
+	const capturing = `def f0 fn [[a:Integer] [Integer] [(size ([0] each [var [[v] a 2]]))]] (f0 2)`
+	gotC, compiled, err := mustNew(t).RunCompiled(capturing)
 	if err != nil {
-		t.Fatalf("each[var]: %v", err)
+		t.Fatalf("capturing each-var: %v", err)
 	}
-	gotI, _ := mustNew(t).Run(inClosure)
-	if !compiled {
-		t.Errorf("each[var] single-value body should compile, fell back")
+	gotI, _ := mustNew(t).Run(capturing)
+	if compiled {
+		t.Errorf("capturing each-var body must refuse (frame-local hazard), not compile")
 	}
-	if fmt.Sprint(got) != fmt.Sprint(gotI) || fmt.Sprint(got) != "[[2 4 6]]" {
-		t.Errorf("each[var]: compiled=%v interp=%v want [[2 4 6]]", got, gotI)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("capturing each-var: compiled=%v interp=%v (divergence!)", gotC, gotI)
 	}
 }

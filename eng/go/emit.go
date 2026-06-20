@@ -1683,13 +1683,26 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || !noEvalBodiesInert(sig, args)):
-		// A code-body word is refused when its body is not inert data, OR when it
-		// EXECUTES the body by splicing it onto the tape (CompileExecutesBody, e.g.
-		// `var`): the handler then returns tape-coupled tokens the VM cannot run,
-		// so baking it as a CALL_NATIVE — which an inert word-list body would
-		// otherwise permit — produces a program that trips the VM's tape-coupled
-		// result screen. Refuse cleanly instead.
+	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !noEvalBodiesInert(sig, args)):
+		// A code-body word is refused when:
+		//   - its body is not inert data; OR
+		//   - it SPLICES the body onto the tape (CompileExecutesBody, e.g. `var`):
+		//     the handler returns tape-coupled tokens the VM cannot run, so baking a
+		//     CALL_NATIVE (which an inert word-list body would otherwise permit)
+		//     trips the VM's tape-coupled-result screen; OR
+		//   - it EXECUTES the body via InvokeBody (sig.Callable != nil — each / fold
+		//     / scan / filter / do / case / …) AND the body references a NAME
+		//     (execBodyRefsNames). Such a word is normally compiled by the closure
+		//     path (PUSH_CLOSURE); if that path declined, const-baking the body and
+		//     RE-RUNNING it in a sub-engine is unsound when the body names a binding,
+		//     because the sub-engine resolves a name the COMPILED context holds as a
+		//     VM frame local (a fn param/capture, a `for` iterator, a promoted
+		//     value-`def`) against the registry instead — diverging (the property
+		//     fuzzer's var-block bodies caught this across all three frame-local
+		//     kinds). A body of pure inert DATA with no name references (`do [10 20
+		//     30]`) re-runs identically, so it still bakes. (Data-reading code words
+		//     like the query-DSL clauses declare NO CallableSpec, so their inert
+		//     clause always bakes a plain CALL_NATIVE.)
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 	case hasUncoveredQuoteArg(sig) && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
@@ -2039,6 +2052,63 @@ func noEvalBodiesInert(sig *Signature, args []Value) bool {
 		}
 	}
 	return true
+}
+
+// execBodyRefsNames reports whether a body-EXECUTING word's (sig.Callable != nil)
+// inert NoEvalArgs body references a NAME — any Word or Reach token, at any depth.
+// Such a token is resolved at run time: if the const-baked body is re-run in a
+// sub-engine, the name resolves against the registry, but the compiled context may
+// hold it as a VM frame local (fn param/capture, `for` iterator, promoted
+// value-`def`) — so the re-run diverges. A body of pure inert DATA (scalars, data
+// lists/maps — `do [10 20 30]`) references nothing and re-runs identically. Found
+// by the property fuzzer's var-block closure bodies.
+func execBodyRefsNames(sig *Signature, args []Value) bool {
+	for i := range args {
+		if !sig.NoEvalArgs[i] {
+			continue
+		}
+		if valueRefsName(args[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// valueRefsName recursively reports whether v contains a Word or Reach token —
+// a name that resolves to a binding at run time — anywhere in its structure
+// (list elements, map values, paren-expr tokens). A Splice marker also wraps a
+// name-bearing payload, so it counts. Conservative: an unknown payload that
+// could carry a name is NOT data, so only the known pure-data shapes return
+// false.
+func valueRefsName(v Value) bool {
+	if IsWord(v) || IsReach(v) || IsSplice(v) {
+		return true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if valueRefsName(e) {
+				return true
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if valueRefsName(mv) {
+				return true
+			}
+		}
+	case ParenExprPayload:
+		for _, tk := range d.Toks {
+			if valueRefsName(tk) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // internType pools a type operand by canonical ID.
