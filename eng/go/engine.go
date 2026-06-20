@@ -1059,7 +1059,20 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		}
 	}
 
-	return e.tape.TakeAll(), nil
+	return e.reconcileTopResidual(e.tape.TakeAll()), nil
+}
+
+// reconcileTopResidual reconciles the top-level program residual the same
+// way fn-body summaries are (carrier.go stripZeroOutResiduals at
+// StartFnCompile finish): a trailing 0-output statement guard — `if cond
+// [printstr …] [printstr …]` — registers a phantom None carrier but
+// produces 0 runtime values, so the residual must skip it. Recording-active
+// only; the uncompilable case nets 0 at the source (if2/if3ReturnsFn).
+func (e *Engine) reconcileTopResidual(out []Value) []Value {
+	if e.isTop && e.registry.Check.IsActive() {
+		return stripZeroOutResiduals(e.registry, out)
+	}
+	return out
 }
 
 // resolveOrphanedForwards handles end-of-input by resolving pending forwards.
