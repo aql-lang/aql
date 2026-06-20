@@ -2360,6 +2360,19 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 				Detail: "fn body analysis error for " + name + ": " + err.Error(),
 				Word:   name,
 			})
+			// A body that ERRORS under an ARMED recording (this analysis is being
+			// compiled into an open fn/closure unit) cannot be faithfully lowered:
+			// the unit would close EMPTY (the error aborted the body before its
+			// residual recorded), and an empty unit SILENTLY DIVERGES from the
+			// interpreter (a `var`-let or higher-order body whose check-mode error
+			// is mere imprecision — e.g. `get` on an element carrier — runs fine at
+			// runtime, so the VM's empty closure raises `body produced no result`
+			// where the interpreter succeeds). Refuse so the program falls back to
+			// the interpreter instead. Only when active: a SUSPENDED (plain) nested
+			// analysis records nothing anyway and must not latch the program.
+			if es := r.Check.Emit; es != nil && es.active() {
+				es.MarkUncompilable("fn body analysis error in " + name + ": " + err.Error())
+			}
 			result = nil
 		}
 		r.Defs.Restore(snapshot)

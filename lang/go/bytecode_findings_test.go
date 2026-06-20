@@ -1756,18 +1756,16 @@ func TestCodequoteCompilesNative(t *testing.T) {
 }
 
 // Found via the voxgig-aql/decision project's diverge.sh (--force-compile over
-// suites that use `each [var [[v] … 0]]`). `var` is a block-with-locals word:
-// its handler SPLICES def/body/undef tokens onto the tape for the engine to
-// re-step, so it can never be a CALL_NATIVE. Its body is an inert word-list,
-// though, so it used to pass noEvalBodiesInert and bake as a CALL_NATIVE — whose
-// handler then returned tape-coupled tokens the VM rejects, surfacing an
-// internal_error instead of a clean refusal. The CompileExecutesBody flag now
-// makes the recorder refuse it (Stage 2 code-body), and --compile falls back to
-// the interpreter with the correct result.
-func TestVarRefusesCleanly(t *testing.T) {
-	// Top-level `var` SPLICES (its dispatch used to bake a CALL_NATIVE that
-	// returned tape tokens → VM internal_error). It now REFUSES cleanly, and
-	// --compile falls back to the interpreter with the correct result.
+// suites that use `each [var [[v] … 0]]`). `var` is a block-with-locals (let)
+// word: its handler SPLICES def/body/undef tokens onto the tape for the engine
+// to re-step. RunInCheckMode lets the recorder FOLLOW that splice, so the inline
+// let lowers as its body's events with the bound names as promoted value-def
+// locals — exactly as a hand-written `def NAME val end … undef NAME` compiles.
+// The body's words (including a fn param/loop-var/capture referenced inside it)
+// resolve to their VM frame slots because they record into the SAME open unit,
+// so the historical frame-local divergence cannot arise.
+func TestVarCompilesAsLet(t *testing.T) {
+	// Top-level `var` compiles as a let, byte-identical to the interpreter.
 	for _, c := range []struct {
 		src  string
 		want string
@@ -1775,68 +1773,75 @@ func TestVarRefusesCleanly(t *testing.T) {
 		{`5 var [[v] v add 1]`, "[6]"},
 		{`def r (5 var [[v] v 0]) r`, "[0 5]"},
 	} {
-		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		prog, _, _, cerr := mustNew(t).CompileCheck(c.src)
 		if cerr != nil {
 			t.Fatalf("%q: unexpected check error %v", c.src, cerr)
 		}
-		if prog != nil {
-			t.Errorf("%q: expected a refusal, got a Program:\n%s", c.src, prog.Disassemble())
-		}
-		if !strings.Contains(reason, "var") {
-			t.Errorf("%q: refusal should name var, got %q", c.src, reason)
+		if prog == nil {
+			t.Errorf("%q: expected a compiled Program (var compiles as a let)", c.src)
 		}
 		got, compiled, err := mustNew(t).RunCompiled(c.src)
 		if err != nil {
-			t.Fatalf("%q: RunCompiled error %v (must not surface internal_error)", c.src, err)
+			t.Fatalf("%q: RunCompiled error %v", c.src, err)
 		}
-		if compiled {
-			t.Errorf("%q: expected an interpreter fallback, not a compiled run", c.src)
+		if !compiled {
+			t.Errorf("%q: expected a compiled run, got an interpreter fallback", c.src)
 		}
 		if fmt.Sprint(got) != c.want {
 			t.Errorf("%q: got %v want %s", c.src, got, c.want)
 		}
 	}
 
-	// A `var` block inside an `each` body REFUSES the const-bake (an executing
-	// word's body that references a name can't bake — the sub-engine re-run would
-	// resolve a name the VM holds as a frame local against the registry instead;
-	// see execBodyRefsNames). It falls back to the interpreter with the correct
-	// result. Both directions of the value-arm pin the byte-identical fallback.
+	// A `var` block inside an `each` body compiles as the closure's let, including
+	// the CAPTURING case (the body names a fn param `a`): the param records to its
+	// closure capture slot, so the compiled run matches the interpreter — the very
+	// frame-local divergence the const-bake path could not handle.
 	for _, c := range []struct {
 		src  string
 		want string
 	}{
 		{`def xs [1 2 3] (xs each [var [[v] v mul 2]])`, "[[2 4 6]]"},
 		{`def xs [1 2 3] (xs each [var [[v] v 0]])`, "[[0 0 0]]"},
+		{`def f0 fn [[a:Integer] [Integer] [(size ([0] each [var [[v] a 2]]))]] (f0 2)`, "[1]"},
 	} {
 		got, compiled, err := mustNew(t).RunCompiled(c.src)
 		if err != nil {
 			t.Fatalf("%q: %v", c.src, err)
 		}
 		gotI, _ := mustNew(t).Run(c.src)
-		if compiled {
-			t.Errorf("%q: an each-var body must refuse (sound fallback), not compile", c.src)
+		if !compiled {
+			t.Errorf("%q: an each-var let body should compile", c.src)
 		}
 		if fmt.Sprint(got) != fmt.Sprint(gotI) || fmt.Sprint(got) != c.want {
 			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, got, gotI, c.want)
 		}
 	}
 
-	// The soundness hazard the gate guards: a CAPTURING each-var body (the body
-	// names a fn param) must NOT compile to a CALL_NATIVE whose const body is
-	// re-run in a sub-engine — it would resolve the param against the registry,
-	// not the VM frame, and diverge. It refuses and falls back, byte-identical.
-	const capturing = `def f0 fn [[a:Integer] [Integer] [(size ([0] each [var [[v] a 2]]))]] (f0 2)`
-	gotC, compiled, err := mustNew(t).RunCompiled(capturing)
+	// SOUNDNESS GATE: a let body that ERRORS under check-mode analysis (here
+	// `s get a/q`, where the each-element carrier `s` is conservatively under-typed
+	// and `get` rejects it as a non-concrete map — mere imprecision, the runtime
+	// `s` is a concrete Map and the interpreter returns [1 2]) must NOT compile to
+	// an EMPTY closure (which would raise each_error "body produced no result" at
+	// the VM, diverging from the interpreter). The armed-body-error refusal in
+	// AnalyseFnBody marks the program uncompilable, so it falls back byte-identical.
+	const guarded = `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`
+	prog, _, _, cerr := mustNew(t).CompileCheck(guarded)
+	if cerr != nil {
+		t.Fatalf("guarded each-var: unexpected check error %v", cerr)
+	}
+	if prog != nil {
+		t.Errorf("guarded each-var: a check-mode body error must refuse, got a Program:\n%s", prog.Disassemble())
+	}
+	gotG, compiled, err := mustNew(t).RunCompiled(guarded)
 	if err != nil {
-		t.Fatalf("capturing each-var: %v", err)
+		t.Fatalf("guarded each-var: %v", err)
 	}
-	gotI, _ := mustNew(t).Run(capturing)
+	gotGI, _ := mustNew(t).Run(guarded)
 	if compiled {
-		t.Errorf("capturing each-var body must refuse (frame-local hazard), not compile")
+		t.Errorf("guarded each-var: a check-mode body error must refuse, not compile")
 	}
-	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("capturing each-var: compiled=%v interp=%v (divergence!)", gotC, gotI)
+	if fmt.Sprint(gotG) != fmt.Sprint(gotGI) || fmt.Sprint(gotG) != "[[1 2]]" {
+		t.Errorf("guarded each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
 	}
 }
 
