@@ -386,6 +386,15 @@ type fnUnitRec struct {
 	// type_error — so a closure keeps refusing the mismatch (islands) while a
 	// user fn compiles the error path (the VM RET raises the matching error).
 	closure bool
+	// takesTop marks a closure whose driving handler reads only the TOP of the
+	// body residual (each / fold / scan / filter / rand-list-of —
+	// CallableSpec.BodyResultTop). For such a unit, finish DROPS the unconsumed
+	// values the body leaves below its top result (notably the per-invocation
+	// input a body that ignores its element leaves on the stack, `each [add 1 0]`
+	// → `[input, 3]`): the handler never reads below the top, so the RET keeps
+	// only the events plus the trailing tail. A whole-residual handler (`do`)
+	// leaves this false, keeping the strict in-order reconciliation.
+	takesTop bool
 	// promoted / dead are the value-def-local plan for THIS unit's body —
 	// computed by planValueDefLocals at finish (while the unit is still live) and
 	// read by the lowerer (flw.promoted / flw.dead) when the unit lowers. Mirrors
@@ -641,13 +650,13 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit.reg = r
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		return emitOperand{}, false
 	}
@@ -1300,6 +1309,17 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
 			}
+			// A TOP-TAKING closure's driving handler reads only the top of the body
+			// residual (each / fold / scan / filter — CallableSpec.BodyResultTop), so
+			// the values the body leaves BELOW its result — notably the per-invocation
+			// input a body that ignores its element leaves on the stack (`each [add 1
+			// 0]` → [input, 3]) — are never observed and are dropped here. Without this,
+			// the residual [inert-input, computed-result] refuses at the RET (an event
+			// above an inert, "result above a literal"), even though the handler only
+			// ever reads the top.
+			if rec.takesTop && len(ops) > 1 {
+				ops = trimToTopResult(ops)
+			}
 			rec.outOps = ops
 		}
 		// Value-def locals for THIS unit (the top-level program's promotion,
@@ -1344,6 +1364,26 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		es.units = es.units[:len(es.units)-1]
 	}
 	return unit, finish, true
+}
+
+// trimToTopResult drops the operands a TOP-TAKING closure body leaves BELOW its
+// result. The driving handler (each / fold / scan / filter) reads only the top of
+// the body residual, so everything beneath it is never observed. The residual is
+// [leading-inerts…, events…, trailing-inerts…]; the leading inerts are the values
+// the body left below its first COMPUTED result — the per-invocation input a body
+// that ignores its element leaves on the stack (`each [add 1 0]` → [input, 3]).
+// Keeping from the first EVENT operand preserves the events (physically on the
+// sim stack) and the trailing tail (which carries the top) while dropping those
+// leading inerts; a residual with NO event is pure data whose only result is the
+// TOP operand. Only called for len(ops) > 1; never drops an event (the top is at
+// or after the first event) or a trailing inert.
+func trimToTopResult(ops []emitOperand) []emitOperand {
+	for i := range ops {
+		if ops[i].kind == opEvent {
+			return ops[i:]
+		}
+	}
+	return ops[len(ops)-1:]
 }
 
 // RecordUserCall records one call of a compiled fn unit. args are in

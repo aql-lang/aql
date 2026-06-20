@@ -132,7 +132,18 @@ func gen(r *rand.Rand, c cat, depth int, scope []string) *gnode {
 		}
 		return genMap(r, randVCat(r), depth-1, scope)
 	case cList:
-		switch r.Intn(8) {
+		switch r.Intn(9) {
+		case 7:
+			// `(<litList> each [(<expr>) <lit>])` — a top-taking closure body that
+			// leaves a COMPUTED value below a trailing throwaway literal, so the
+			// residual is [element, <computed>, <lit>]. The handler reads only the
+			// top (the lit), so the compiler drops the element and the computed
+			// value below it (trimToTopResult); without that the event-above-inert
+			// residual refused. The body uses an empty scope, so it has no captures
+			// and compiles as a real closure (PUSH_CLOSURE), exercising the trim.
+			ebody := gen(r, cInt, depth-1, nil)
+			return &gnode{op: "eachtail", cat: cList, ecat: cInt, n: r.Intn(6),
+				kids: []*gnode{genLitList(r), ebody}}
 		case 6:
 			// `(<litList> each [var [[v] <body using v> <lit>]])` — the var-block
 			// closure-body idiom (a let-binding plus a trailing throwaway literal,
@@ -790,6 +801,13 @@ func render(n *gnode, scope []string) string {
 		return "(fold [" + n.cmp + "] " + render(n.kids[0], scope) + " " + fmt.Sprint(n.n) + ")"
 	case "each":
 		return "(each [" + n.cmp + " " + fmt.Sprint(n.n) + "] " + render(n.kids[0], scope) + ")"
+	case "eachtail":
+		// kids[0] = the literal list; kids[1] = a computed Integer body expression
+		// (no scope → no captures); n = the trailing throwaway literal each element
+		// maps to. The body leaves [computed, lit] above the element; the top-taking
+		// trim keeps only what the handler reads.
+		return "(" + render(n.kids[0], scope) + " each [" + render(n.kids[1], nil) +
+			" " + fmt.Sprint(n.n) + "])"
 	case "eachvar":
 		// kids[0] = the literal list to iterate; kids[1] = the var-block body
 		// (an Integer expression that may reference the bound `v`); n = the

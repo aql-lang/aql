@@ -455,6 +455,17 @@ type CallableSpec struct {
 	// or its seed (fold's accumulator). Returns an empty slice for a 0-input body
 	// (do / a test case). nil declines the compile (an unexpected operand shape).
 	Inputs func(args []Value) []Value
+	// BodyResultTop marks a driving handler that reads only the TOP of each
+	// invocation's body residual (`res[len(res)-1]`) — each / fold / scan / filter.
+	// The body may then leave UNCONSUMED values below that top (notably the
+	// per-invocation INPUT a body that ignores its element leaves on the stack,
+	// `each [add 1 0]` → `[input, 3]`), and the compiler may safely DROP them at
+	// the RET: the handler never reads below the top. A handler that reads the
+	// WHOLE residual (`do`, returning every value) leaves this false, so its
+	// closure keeps the strict in-order reconciliation. Verified against the
+	// handlers (native_array.go each/fold/scan, native/filter.go) — each takes
+	// res[len(res)-1].
+	BodyResultTop bool
 }
 
 // FnDefInfo holds the function specification for a def-defined function.

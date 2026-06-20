@@ -1839,3 +1839,46 @@ func TestVarRefusesCleanly(t *testing.T) {
 		t.Errorf("capturing each-var: compiled=%v interp=%v (divergence!)", gotC, gotI)
 	}
 }
+
+// A top-taking higher-order word (each/fold/scan/filter) reads only res[len-1]
+// of its body residual, so a body that leaves values BELOW its result — most
+// commonly an `each` body that IGNORES its element and computes a result over a
+// trailing throwaway (`each [add 1 0]` → the element sits under [3, 0]) — used to
+// refuse "result above a literal" at the closure RET. trimToTopResult drops the
+// unobserved below-top operands (CallableSpec.BodyResultTop) so the body compiles
+// as a real closure, byte-identical to the interpreter. The negative half: `do`
+// reads the WHOLE residual (no BodyResultTop), so its body is NOT trimmed.
+func TestTopTakingClosureTrim(t *testing.T) {
+	for _, c := range []struct {
+		src         string
+		mustCompile bool
+	}{
+		{`([1 2 3] each [add 1 0])`, true},          // element ignored; result computed below 0
+		{`([1 2 3] each [(size [9 9]) 0])`, true},   // computed event below the throwaway
+		{`([1 2 3] each [99 0])`, true},             // pure-data residual, top kept
+		{`([1 2 3] each [mul 2])`, true},            // single-value body unaffected
+		{`(fold [add 1 0] [1 2 3] 0)`, true},        // fold takes top too
+		{`(do [10 20 30])`, true},                   // do takes ALL — not trimmed, still compiles
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if c.mustCompile && prog == nil {
+			t.Errorf("%q: expected to compile, refused: %s", c.src, reason)
+		}
+		// Byte-identical to the interpreter either way.
+		gotC, _, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v (%v) interp=%v (%v)", c.src, gotC, errC, gotI, errI)
+		}
+	}
+
+	// `do [10 20 30]` must return ALL three values — proof the trim is scoped to
+	// top-taking words and does not corrupt a whole-residual handler.
+	got, _, _ := mustNew(t).RunCompiled(`do [10 20 30]`)
+	if fmt.Sprint(got) != "[10 20 30]" {
+		t.Errorf("do must keep the whole residual, got %v", got)
+	}
+}
