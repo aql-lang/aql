@@ -50,6 +50,8 @@ func TestFixedIDStability(t *testing.T) {
 		"Node/List/FlexList":           79,
 		"Node/Map":                     14,
 		"Node/Map/FlexMap":             78,
+		"Node/Xml":                     108,
+		"Node/Xml/FlexXml":             110,
 		"Ideal/Table":                  15,
 		"Ideal/Reach":                  29,
 		"Ideal/Record":                 16,
@@ -92,6 +94,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/MiniLangCompiled": 5003, // compiled-minilang carrier — lang/go/modules/minilang.go
 		"Ideal/Patrun":           5004, // pattern-dispatch table — lang/go/native/native_patrun.go
 		"Word/__IS":              51,
+		"Word/__XI":              109, // interpolated XML literal skeleton
 		"Type/Disjunct/Enum":     62,
 		"Word/__PE":              63,
 		"Word/__IN/__DC":         64,

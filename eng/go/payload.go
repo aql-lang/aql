@@ -111,6 +111,81 @@ type MapPayload struct{ M *OrderedMap }
 // Constructed by NewFlexList.
 type FlexListData struct{ Elems []Value }
 
+// XmlElementPayload is the immutable backing for a Node/Xml element
+// value (an embedded `<tag>…</tag>` literal, or the future remapped
+// `parse xml` output). Tag is the element name; Attr is the
+// insertion-ordered attribute map (name → String value); Cren ("child
+// nodes") holds every child in document order — nested Node/Xml
+// elements and Scalar/String text nodes interleaved. The element-only
+// view (DOM `children`) and concatenated text (DOM `textContent`) are
+// computed from Cren by words, not stored. See design/XML-LITERAL.0.md.
+type XmlElementPayload struct {
+	Tag  string
+	Attr *OrderedMap
+	Cren []Value
+}
+
+// XmlInterpPayload is the backing for an interpolated XML literal — the
+// deferred analogue of XmlElementPayload. A literal that embeds any
+// `${expr}` (in text, a child position, or an attribute value) cannot be
+// built at parse time, so the matcher emits this skeleton (Word/__XI) and
+// the engine evaluates it in place to a concrete Node/Xml at runtime,
+// exactly as InterpStringPayload defers a `${}` template string. A
+// literal with no interpolation stays a constant XmlElementPayload. See
+// design/XML-LITERAL.0.md §4 and engine.go::evalXmlInterp.
+type XmlInterpPayload struct{ Tmpl XmlTmpl }
+
+// XmlTmpl is one element in an XML interpolation skeleton. Tag is static
+// (interpolated tag names are deferred — design §7). Each attribute value
+// is a list of InterpParts (literal + `${expr}` segments concatenated to
+// a String at eval time); each child is an XmlCren (literal text, a nested
+// element, or a `${expr}` hole).
+type XmlTmpl struct {
+	Tag  string
+	Attr []XmlAttrTmpl
+	Cren []XmlCren
+}
+
+// XmlAttrTmpl is one attribute of an XmlTmpl: a name and the InterpParts
+// its value evaluates from.
+type XmlAttrTmpl struct {
+	Name  string
+	Parts []InterpPart
+}
+
+// XmlCrenKind discriminates the three child shapes in an XmlTmpl.
+type XmlCrenKind int
+
+const (
+	XmlCrenLit   XmlCrenKind = iota // literal text node (Lit)
+	XmlCrenChild                    // nested element (Child)
+	XmlCrenExpr                     // ${expr} hole (Expr) — splice rule at eval
+)
+
+// XmlCren is one child slot of an XmlTmpl. Exactly one of Lit / Child /
+// Expr is meaningful, per Kind. An Expr hole evaluates at runtime: a List
+// result splices each element as a child, a Node/Xml result is one child
+// element, any other value becomes a text node.
+type XmlCren struct {
+	Kind  XmlCrenKind
+	Lit   string
+	Child *XmlTmpl
+	Expr  []Value
+}
+
+// FlexXmlData is the mutable backing for a Node/Xml/FlexXml element —
+// the build-in-place counterpart of the immutable XmlElementPayload. It
+// is pointer-backed (stored as *FlexXmlData, like *FlexListData) so
+// in-place mutation — append a child, set an attribute — is visible
+// through every Value copy sharing the payload. Attr is a fresh
+// *OrderedMap (never aliased with an immutable source). Constructed by
+// NewFlexXml. See design/XML-LITERAL.0.md §5 and core_flex.go.
+type FlexXmlData struct {
+	Tag  string
+	Attr *OrderedMap
+	Cren []Value
+}
+
 // ParenExprPayload carries the unevaluated tokens of a paren-expression
 // awaiting inline evaluation. Wrapping []Value.
 type ParenExprPayload struct{ Toks []Value }
@@ -301,6 +376,9 @@ func (GenParam) payloadMarker()           {}
 func (*TypeSchemaInfo) payloadMarker()    {}
 func (GenInstRef) payloadMarker()         {}
 func (*FlexListData) payloadMarker()      {}
+func (XmlElementPayload) payloadMarker()  {}
+func (XmlInterpPayload) payloadMarker()   {}
+func (*FlexXmlData) payloadMarker()       {}
 func (*StoreInstanceInfo) payloadMarker() {}
 func (*ArrayInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()       {}

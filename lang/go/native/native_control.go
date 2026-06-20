@@ -461,6 +461,14 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
 		})
+		// The phantom None is only meaningful while bytecode recording is
+		// live (the lowering tracks the zeroOut slot and the top-level
+		// residual strips it). On a plain or uncompilable check there is no
+		// recorded event to strip, so the if must net 0 like the runtime —
+		// otherwise the None leaks onto CheckResult.Stack.
+		if !es.Emit.Active() {
+			return nil
+		}
 		return []Value{out}
 	}
 	out := joined[len(joined)-1]
@@ -502,7 +510,8 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	restore()
 	InstallJoinedDefs(r, thenDefs, nil)
 	var out Value
-	if len(thenStk) == 0 {
+	zeroGuard := len(thenStk) == 0
+	if zeroGuard {
 		out = NewCarrier(TNone)
 	} else {
 		out = JoinCarriers(thenStk[len(thenStk)-1], NewCarrier(TNone))
@@ -514,6 +523,13 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: false,
 		Then: thenFrag, ThenStk: thenStk, Out: out, Pos: args[0].Pos,
 	})
+	// A 0-value statement guard's phantom None only belongs on the carrier
+	// stack while recording is live (mirrors if3ReturnsFn): a plain or
+	// uncompilable check has no recorded event to strip it, so it must net
+	// 0 like the runtime rather than leak a None onto the residual.
+	if zeroGuard && !es.Emit.Active() {
+		return nil
+	}
 	return []Value{out}
 }
 

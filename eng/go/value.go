@@ -1192,6 +1192,43 @@ func NewFlexList(elems []Value) Value {
 	return NewValueRaw(TFlexList, &FlexListData{Elems: elems})
 }
 
+// NewXmlElement creates an immutable Node/Xml element value. attr may
+// be nil (treated as no attributes); cren may be nil (no children).
+// See design/XML-LITERAL.0.md and core_xml.go.
+func NewXmlElement(tag string, attr *OrderedMap, cren []Value) Value {
+	if attr == nil {
+		attr = NewOrderedMap()
+	}
+	return NewValueRaw(TXml, XmlElementPayload{Tag: tag, Attr: attr, Cren: cren})
+}
+
+// NewXmlInterp creates an interpolated XML literal skeleton (Word/__XI).
+// The engine evaluates it in place to a concrete Node/Xml at runtime,
+// like an InterpString. See payload.go::XmlInterpPayload and
+// engine.go::evalXmlInterp.
+func NewXmlInterp(tmpl XmlTmpl) Value {
+	return NewValueRaw(TXmlInterp, XmlInterpPayload{Tmpl: tmpl})
+}
+
+// IsXmlElement reports whether v is a concrete Node/Xml element value.
+func IsXmlElement(v Value) bool {
+	_, ok := v.Data.(XmlElementPayload)
+	return ok
+}
+
+// IsXmlInterp reports whether v is an interpolated XML literal skeleton.
+func IsXmlInterp(v Value) bool {
+	return v.Parent.Equal(TXmlInterp)
+}
+
+// AsXmlInterp returns the template backing an interpolated XML skeleton.
+func AsXmlInterp(v Value) (XmlTmpl, error) {
+	if xi, ok := v.Data.(XmlInterpPayload); ok {
+		return xi.Tmpl, nil
+	}
+	return XmlTmpl{}, fmt.Errorf("AsXmlInterp: not an xml-interp value (got %T)", v.Data)
+}
+
 // NewFlexMap creates a mutable FlexMap value. It reuses MapPayload —
 // the *OrderedMap is pointer-backed, so in-place mutation is visible
 // through every Value copy sharing the payload. Like NewFlexList,
@@ -2364,6 +2401,34 @@ func AsFlexList(v Value) (*FlexListData, error) {
 		return fd, nil
 	}
 	return nil, fmt.Errorf("AsFlexList: not a flex list payload (got %T)", v.Data)
+}
+
+// NewFlexXml creates a mutable Node/Xml/FlexXml element. attr may be nil
+// (treated as no attributes); cren may be nil (no children). The payload
+// is pointer-backed so append/set mutate in place. See core_flex.go.
+func NewFlexXml(tag string, attr *OrderedMap, cren []Value) Value {
+	if attr == nil {
+		attr = NewOrderedMap()
+	}
+	return NewValueRaw(TFlexXml, &FlexXmlData{Tag: tag, Attr: attr, Cren: cren})
+}
+
+// AsFlexXml returns the pointer-backed FlexXmlData of a FlexXml value;
+// mutators reassign through it so every Value copy observes the change.
+func AsFlexXml(v Value) (*FlexXmlData, error) {
+	if fd, ok := v.Data.(*FlexXmlData); ok {
+		return fd, nil
+	}
+	return nil, fmt.Errorf("AsFlexXml: not a flex xml payload (got %T)", v.Data)
+}
+
+// AsXmlElement returns the XmlElementPayload backing a Node/Xml value,
+// or an error when v is a type literal or a non-Xml value.
+func AsXmlElement(v Value) (XmlElementPayload, error) {
+	if x, ok := v.Data.(XmlElementPayload); ok {
+		return x, nil
+	}
+	return XmlElementPayload{}, fmt.Errorf("AsXmlElement: not an Xml element payload (got %T)", v.Data)
 }
 
 // AsMap returns a read-only view of the map payload.

@@ -50,6 +50,9 @@ var categories = []Category{
 		"append", "push", "pop", "shift", "unshift", "size", "enum", "node",
 		"flex",
 	}},
+	{"xml", "Query and accessor words for Node/Xml elements.", []string{
+		"xml-elem", "xml-text", "xml-attr",
+	}},
 	{"storage", "Variables, value access, references, and lenses.", []string{
 		"set", "get", "getr", "has", "context", "keys", "vals",
 		"reach", "apply", "rebind", "ref", "referent",

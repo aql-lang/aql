@@ -416,6 +416,13 @@ func (es *EmitState) active() bool {
 	return es != nil && es.Compilable && es.suspended == 0
 }
 
+// Active is the exported view of active() for native handlers that
+// must mirror the bytecode-recording state — e.g. a 0-output `if`
+// statement guard only puts its phantom None on the carrier stack
+// while recording is live (the lowering tracks it); a plain or
+// uncompilable check must net 0, like the runtime.
+func (es *EmitState) Active() bool { return es.active() }
+
 // MarkUncompilable latches the program uncompilable, keeping the
 // FIRST reason (later marks are consequences of the first).
 func (es *EmitState) MarkUncompilable(reason string) {

@@ -124,9 +124,19 @@ func IsFlexList(v Value) bool {
 	return ok
 }
 
-// IsFlexNode reports whether v is a concrete flex node of either kind.
+// IsFlexXml reports whether v is a concrete FlexXml — a mutable
+// Node/Xml/FlexXml value with a pointer-backed FlexXmlData store.
+func IsFlexXml(v Value) bool {
+	if v.Parent == nil || !v.Parent.Equal(TFlexXml) || !IsConcrete(v) {
+		return false
+	}
+	_, ok := v.Data.(*FlexXmlData)
+	return ok
+}
+
+// IsFlexNode reports whether v is a concrete flex node of any kind.
 func IsFlexNode(v Value) bool {
-	return IsFlexMap(v) || IsFlexList(v)
+	return IsFlexMap(v) || IsFlexList(v) || IsFlexXml(v)
 }
 
 // MapFieldString fetches a String-valued field from a ReadMap.
