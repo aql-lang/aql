@@ -10,6 +10,8 @@ supports.
 
 * [Quick start](#quick-start)
 * [General usage](#general-usage)
+  * [`--options`](#--options--engine-options-as-jsonic)
+  * [Bytecode compilation](#bytecode-compilation)
 * [Language execution](#language-execution)
   * [`aql` / `aql run`](#aql--aql-run)
   * [`aql do`](#aql-do)
@@ -78,6 +80,8 @@ Global flags accepted by `aql` (and equivalently by `aql run`):
 | `-r PATH` | Path to a local registry (used by import and install). |
 | `-s INT` | Random seed for ID generation. Default: current time. |
 | `-check` | Run static type-check before execution; abort on error. |
+| `-compile` | **Experimental.** Execute via the bytecode compiler when the program is compilable; silently fall back to the interpreter otherwise (see [Bytecode compilation](#bytecode-compilation)). |
+| `-force-compile` | **Experimental.** Require the bytecode compiler; abort with the refusal reason if the program is not compilable (see [Bytecode compilation](#bytecode-compilation)). |
 | `-options OPTS` | Engine options as a jsonic blob (see below). |
 | `-version` | Print the version and exit. |
 
@@ -121,6 +125,45 @@ program (deep recursion, huge generated programs); lower it to trip a
 runaway sooner. See `design/TAPE-DATA-STRUCTURE.10.md`.
 
 
+### Bytecode compilation
+
+> **Experimental.** AQL ships an optional bytecode compiler that lowers the
+> statically-typed subset of a program to a compact instruction stream and runs
+> it on a small VM. **Execution defaults to the interpreter** — the compiler is
+> opt-in and produces results identical to the interpreter, so the choice is
+> purely about performance (and about exercising the compiler).
+
+There are two modes, selected per run by a flag or an environment variable:
+
+| Flag | Env | Behaviour |
+|------|-----|-----------|
+| `--compile` | `AQL_COMPILE` | **Best-effort.** Compile and run on the VM when the whole program is compilable; **silently fall back** to the interpreter when any part is not. Never changes the result. |
+| `--force-compile` | `AQL_FORCE_COMPILE` | **Strict.** *Require* the bytecode path. If the program is not compilable, abort with the emitter's refusal reason instead of falling back. Use this to *guarantee* a run went through the compiler (verifying the compilable subset, benchmarking the VM, or catching a compiler regression the silent fallback would hide). |
+| *(none)* | `AQL_NO_COMPILE` | **Interpreter** — the default. `AQL_NO_COMPILE` is a forward-compatible kill switch that **overrides** both of the above (and the future default flip), so a deployment can pin the interpreter. |
+
+Precedence: `AQL_NO_COMPILE` wins over everything; otherwise `--force-compile` /
+`AQL_FORCE_COMPILE` wins over `--compile` / `AQL_COMPILE`.
+
+```bash
+aql --compile script.aql              # try the compiler, fall back silently
+aql --force-compile script.aql        # demand the compiler; fail loudly if it can't
+AQL_COMPILE=1 aql script.aql          # same as --compile, via the environment
+AQL_NO_COMPILE=1 aql --compile s.aql  # kill switch: runs the interpreter anyway
+aql do --force-compile 1 add 2        # the flags work on `aql do` too
+```
+
+A `--force-compile` refusal names the construct the emitter could not lower:
+
+```
+$ aql --force-compile -e '(size (for 5 [i]))'
+error: force-compile: consumes loop results (Stage 2 loops only feed the program residual)
+```
+
+Both flags are accepted by `aql` / `aql run` and by `aql do`. Genuine runtime
+errors (e.g. division by zero, a type error) surface identically in every mode;
+only the *uncompilable* outcome differs — silently absorbed by `--compile`,
+reported by `--force-compile`.
+
 ## Language execution
 
 ### `aql` / `aql run`
@@ -159,6 +202,10 @@ expression with `--`:
 ```bash
 aql do -- '-7 0 add'           # leading negative literal needs --   (prints -7)
 ```
+
+`aql do` accepts the same `--compile` / `--force-compile` flags as `aql run`
+(see [Bytecode compilation](#bytecode-compilation)); place them before the
+expression: `aql do --force-compile 1 add 2`.
 
 ### `aql check`
 
