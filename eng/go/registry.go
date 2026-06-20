@@ -125,6 +125,15 @@ type Registry struct {
 	// reserved) — gensyms are used as binders (`def <gensym> …`).
 	gensymN uint64
 
+	// regID is a process-stable identity minted once at construction
+	// (NewRegistry). It discriminates fn-analysis memo keys across
+	// registries: a native module builds its own sub-registry, and a
+	// module-private fn (`decide`, `apply-op`, …) analysed under a shared
+	// check pass must not collide with a same-named, same-positioned
+	// parent fn. FnAnalysisKey prefixes this id; read it via
+	// AnalysisScopeID. See design/module-fn-checkstate-ownership.1.md §5a.
+	regID uint64
+
 	// macroCache memoizes macro expansions keyed on (macro name + operand
 	// canon). See macroCacheGet / MacroCacheClear. Nil until first use.
 	macroCache map[string][]Value
@@ -453,8 +462,30 @@ func NewRegistry() (*Registry, error) {
 		// without the historical zero-as-magic overload.
 		Check: CheckState{StepBudget: -1},
 	}
+	// Mint a process-stable scope id so fn-analysis memo keys can be
+	// namespaced per registry (parent vs module sub-registry). A
+	// ForkConcurrent shallow-copy inherits the parent's id, which is fine
+	// — forks isolate execution scopes but never run check-mode analysis
+	// concurrently with the parent.
+	r.regID = atomic.AddUint64(&regIDCounter, 1)
 	registerKernelIdeals(r)
 	return r, nil
+}
+
+// regIDCounter mints the monotonic per-registry scope ids assigned in
+// NewRegistry. Process-global and atomic so id minting is race-free even
+// when hosts construct registries from multiple goroutines.
+var regIDCounter uint64
+
+// AnalysisScopeID returns the registry's process-stable scope id, used to
+// namespace fn-analysis memo keys (FnAnalysisKey) so a module
+// sub-registry's fns cannot alias a parent's under a shared check pass.
+// Returns 0 for a nil registry.
+func (r *Registry) AnalysisScopeID() uint64 {
+	if r == nil {
+		return 0
+	}
+	return r.regID
 }
 
 // SetParseFunc sets the parser callback used by file-based import.

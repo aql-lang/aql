@@ -46,7 +46,7 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 		paramNames = make([]string, len(inputs)) // all unnamed: body reads inputs off the stack
 	}
 	name := word + "$body"
-	key := FnAnalysisKey(name, inputs, captures, bodyToks)
+	key := FnAnalysisKey(r.AnalysisScopeID(), name, inputs, captures, bodyToks)
 	unit, finish, ok := es.StartFnCompile(key, name, inputs, declared, paramNames, captures, false, pos)
 	if !ok {
 		return -1, false
