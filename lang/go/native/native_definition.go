@@ -86,6 +86,14 @@ var definitionNatives = []NativeFunc{
 		// handler returns tape-coupled tokens the VM cannot run. The flag makes
 		// the bytecode recorder refuse it cleanly (Stage 2 code-body) even though
 		// its body is an inert word-list. See CompileExecutesBody.
+		//
+		// Compiling var as an INLINE let (RunInCheckMode, so the splice records as
+		// events) works for simple bodies but is NOT yet sound: a MODULE-fn call in
+		// the body (e.g. `Test.run-spec`) dispatches through a sub-registry CallAQL
+		// that records into the sub-engine, not this unit, leaving an empty closure
+		// that diverges (each_error where the interpreter succeeds). Re-enable only
+		// once the recorder threads module-fn / sub-registry calls into the open
+		// unit — see the decision-module spike notes.
 		CompileEffect: CompileExecutesBody,
 
 		Signatures: []NativeSig{{
