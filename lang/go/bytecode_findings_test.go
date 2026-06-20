@@ -1887,3 +1887,54 @@ func TestTopTakingClosureTrim(t *testing.T) {
 		t.Errorf("do must keep the whole residual, got %v", got)
 	}
 }
+
+// A single-result CALL_USER / dynamic-dispatch result (e.g. aql:test's
+// `test-invoke` invoking a subject fn compiled to its own unit) is value-def-
+// local promotable: when bound to a name and read more than once, it stores to
+// a frame slot and re-pushes per reference, instead of leaving the result
+// unconsumed on the stack ("residual shape beyond Stage 1"). With that and the
+// `get`-over-carrier leniency in a module fn's CallAQL body, the declarative
+// aql:test runner (`Test.run-spec`) compiles — the each [var [[s] … run-spec]]
+// shape the voxgig-aql/decision unit_spec suite uses. Byte-identical to interp.
+func TestDynamicDispatchUserCallPromotes(t *testing.T) {
+	for _, src := range []string{
+		// run-spec invokes a subject fn by NAME (test-invoke → CALL_USER), records
+		// the outcome, and returns 0 — the result is dropped, the trailing 0 stands.
+		`import "aql:test" end
+def subject fn [[x:Integer] [Integer] [x]]
+def specs [{name:"s" subject:subject/q cases:[{name:"c" in:[0] out:0}] subs:[]}]
+def _ (specs each [var [[s] s Test.run-spec end 0]])
+0`,
+		// A module fn doing get on an each-element-derived Map param (the carrier
+		// path getNodeHandler must answer dynamically, not error).
+		`import "aql:test" end
+def subject fn [[x:Integer] [Integer] [x]]
+def spec {name:"s" subject:subject/q cases:[{name:"c" in:[0] out:0}] subs:[]}
+spec Test.run-spec end
+0`,
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", src, cerr)
+		}
+		if prog == nil {
+			t.Errorf("%q: expected to compile, refused: %s", src, reason)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		gotI, errI := mustNew(t).Run(src)
+		if !compiled {
+			t.Errorf("%q: expected a compiled run, not a fallback", src)
+		}
+		if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v (%v) interp=%v (%v)", src, gotC, errC, gotI, errI)
+		}
+	}
+
+	// NEGATIVE: `get` over a bare type LITERAL (not a carrier) is a genuine
+	// type-literal access — it must still error, at run AND compile, exactly as
+	// before. Only an abstract CARRIER (analysis-only) reads dynamically.
+	const badGet = `Map get "x"`
+	if _, errI := mustNew(t).Run(badGet); errI == nil {
+		t.Errorf("%q: get on a bare type literal must error at runtime", badGet)
+	}
+}

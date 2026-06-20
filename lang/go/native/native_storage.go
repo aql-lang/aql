@@ -478,6 +478,20 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	key := args[0]
 	container := args[1]
 	if !IsConcrete(container) {
+		// An abstract Map/List CARRIER (a fn param typed `m:Map`, an each-element
+		// carrier) has no payload to read, so a field access yields an abstract
+		// result — a dynamic(Any) carrier, exactly what the getNodeReturns intercept
+		// produces. That intercept normally answers before the handler runs, but a
+		// dispatch inside a MODULE fn's CallAQL body runs in the module's own
+		// sub-registry, whose Check mode is not the parent's, so the handler is
+		// reached directly; keying off the Carrier bit (only analysis produces
+		// carriers — runtime values are always concrete) keeps that path matching
+		// the intercept instead of raising a spurious get_error the runtime never
+		// sees. A non-concrete, non-carrier container is a genuine type-literal
+		// access (`Map get x`) — keep the error for it.
+		if container.Carrier {
+			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
 	}
 	// Integer key: list index access.
