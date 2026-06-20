@@ -571,6 +571,43 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 	return convertResults(result), true, nil
 }
 
+// RunCompiledStrict is RunCompiled in FORCE mode: it REQUIRES the bytecode
+// path. Where RunCompiled silently falls back to the interpreter for a program
+// the emitter cannot lower (or a VM/lowering soundness assertion), RunCompiledStrict
+// surfaces that as an error instead — the returned message carries the emitter's
+// refusal reason, or the VM's internal_error. Use it to GUARANTEE a program ran
+// through the compiler (verifying the compilable subset, benchmarking the VM in
+// isolation, or catching a compiler regression that would otherwise hide behind
+// the fallback). Genuine AQL runtime errors (type_error, div-by-zero, the
+// resource ceilings) are returned as-is, exactly as RunCompiled returns them.
+//
+// Side-effect parity matches RunCompiled: on the compiled path the check pass's
+// RunInCheckMode words (def/import/type/macro) persist; on every error path the
+// registry is rolled back to its pre-check state.
+func (a *AQL) RunCompiledStrict(src string) ([]any, error) {
+	snap := a.registry.SnapshotForCompile()
+	prog, reason, _, err := a.CompileCheck(src)
+	if err != nil {
+		a.registry.RestoreForCompile(snap)
+		return nil, err
+	}
+	if prog == nil {
+		a.registry.RestoreForCompile(snap)
+		if reason == "" {
+			reason = "program is not compilable"
+		}
+		return nil, errors.New("force-compile: " + reason)
+	}
+	result, err := eng.RunProgram(prog, a.registry)
+	if err != nil {
+		// Force mode does NOT fall back: surface the error (including an
+		// internal_error, which under RunCompiled would silently re-run the
+		// interpreter) so a compiler bug is visible rather than masked.
+		return nil, err
+	}
+	return convertResults(result), nil
+}
+
 // runtimeShouldFallback reports whether a compiled-mode RUN error should be
 // resolved by re-running on the interpreter rather than surfaced. True for an
 // internal_error (a VM/lowering soundness assertion or a recovered handler

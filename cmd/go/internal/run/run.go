@@ -54,7 +54,8 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
-	compileMode := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (also enabled by AQL_COMPILE; AQL_NO_COMPILE disables)")
+	compileFlag := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (also enabled by AQL_COMPILE; AQL_NO_COMPILE disables)")
+	forceCompileFlag := fs.Bool("force-compile", false, "EXPERIMENTAL: REQUIRE the bytecode compiler — abort with the refusal reason if the program is not compilable, instead of falling back to the interpreter (also enabled by AQL_FORCE_COMPILE; AQL_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
@@ -123,7 +124,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
-		if err := EvalOptionsMode(stdout, source, o, resolveCompileMode(*compileMode)); err != nil {
+		if err := EvalOptionsMode(stdout, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag)); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -161,20 +162,45 @@ func EvalWithPolicy(w io.Writer, source string, registry string, seed int64, pol
 // policy, tape bounds). The CLI builds Options from its flags —
 // including --options — and calls this.
 func EvalOptions(w io.Writer, source string, o lang.Options) error {
-	return EvalOptionsMode(w, source, o, false)
+	return EvalOptionsMode(w, source, o, CompileOff)
 }
 
-// resolveCompileMode applies the bytecode-mode rollout contract
-// (design/aql-bytecode-plan.0.md, "Developer experience"): compiled mode
-// is opt-in via the `--compile` flag OR `AQL_COMPILE` in the environment,
-// and `AQL_NO_COMPILE` is the forward-compatible kill switch that wins
-// over both (it becomes the lone control when the default flips in Stage
-// 7). Results are identical to the interpreter either way.
-func resolveCompileMode(flag bool) bool {
+// CompileMode selects which execution engine EvalOptionsMode drives: the
+// interpreter (the default), the best-effort bytecode compiler (silent
+// fallback), or the bytecode compiler in FORCE mode (error if uncompilable).
+type CompileMode int
+
+const (
+	// CompileOff runs the interpreter — the default.
+	CompileOff CompileMode = iota
+	// CompileTry runs the bytecode compiler when the program is compilable and
+	// silently falls back to the interpreter otherwise (the `--compile` flag).
+	CompileTry
+	// CompileForce REQUIRES the bytecode path: an uncompilable program (or a VM
+	// soundness assertion) aborts with the refusal reason rather than falling
+	// back (the `--force-compile` flag).
+	CompileForce
+)
+
+// ResolveCompileMode applies the bytecode-mode rollout contract
+// (design/aql-bytecode-plan.0.md, "Developer experience"): compiled mode is
+// opt-in via the `--compile` / `--force-compile` flags OR the `AQL_COMPILE` /
+// `AQL_FORCE_COMPILE` environment variables, and `AQL_NO_COMPILE` is the
+// forward-compatible kill switch that wins over all of them (it becomes the
+// lone control when the default flips in Stage 7). FORCE wins over TRY when
+// both are requested. Results are identical to the interpreter either way; the
+// only difference FORCE makes is surfacing a refusal instead of falling back.
+func ResolveCompileMode(compile, force bool) CompileMode {
 	if envEnabled("AQL_NO_COMPILE") {
-		return false
+		return CompileOff
 	}
-	return flag || envEnabled("AQL_COMPILE")
+	if force || envEnabled("AQL_FORCE_COMPILE") {
+		return CompileForce
+	}
+	if compile || envEnabled("AQL_COMPILE") {
+		return CompileTry
+	}
+	return CompileOff
 }
 
 // envEnabled reports whether an env var is set to a truthy value
@@ -188,21 +214,26 @@ func envEnabled(name string) bool {
 	}
 }
 
-// EvalOptionsMode is EvalOptions with the execution engine selected:
-// compile=true runs the bytecode path when the emitter can lower the
-// program, silently falling back to the interpreter otherwise.
-// Results are identical either way — the flag is opt-in performance,
-// never semantics (design/aql-bytecode-plan.0.md, ground rules).
-func EvalOptionsMode(w io.Writer, source string, o lang.Options, compile bool) error {
+// EvalOptionsMode is EvalOptions with the execution engine selected by mode:
+// CompileOff runs the interpreter; CompileTry runs the bytecode path when the
+// emitter can lower the program and silently falls back otherwise; CompileForce
+// REQUIRES the bytecode path and errors (with the refusal reason) when the
+// program is not compilable. CompileTry results are identical to the
+// interpreter — the flag is opt-in performance, never semantics
+// (design/aql-bytecode-plan.0.md, ground rules).
+func EvalOptionsMode(w io.Writer, source string, o lang.Options, mode CompileMode) error {
 	a, err := lang.New(o)
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
 
 	var result []any
-	if compile {
+	switch mode {
+	case CompileForce:
+		result, err = a.RunCompiledStrict(source)
+	case CompileTry:
 		result, _, err = a.RunCompiled(source)
-	} else {
+	default:
 		result, err = a.Run(source)
 	}
 	if err != nil {
