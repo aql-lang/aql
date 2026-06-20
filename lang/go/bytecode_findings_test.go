@@ -1652,3 +1652,58 @@ func TestEnclosingReadInBranchCompiles(t *testing.T) {
 		}
 	}
 }
+
+// Island burn-down (islandCeiling 7 -> 2). Two shapes that used to embed an
+// OpFallback island now compile natively:
+//
+//   - a map each/scan with a 0-NET body (`{a:1} each [drop]`): the body is the
+//     handler's OWN each_error/scan_error ("body produced no result"), raised
+//     from the InvokeBody loop, so EmptyBodyErrors compiles the body as a
+//     count-agnostic closure and the compiled handler raises the byte-identical
+//     error instead of islanding.
+//   - `case` with a non-list clause argument (`case 1 Integer`): a static
+//     case_error the checker is lenient about — compiled as a terminal OpTrap
+//     that raises the byte-identical error rather than islanding.
+//
+// Each must (a) compile without a FALLBACK island and (b) raise the same error
+// taxonomy + detail as the interpreter.
+func TestIslandBurndownEmptyBodyAndCaseTrap(t *testing.T) {
+	cases := []struct {
+		name, src, code, mustContain string
+	}{
+		{"each-drop-map", `{a:1} each [drop]`, "each_error", "each"},
+		{"scan-drop-map", `{a:1 b:2} scan [drop drop]`, "scan_error", "scan"},
+		{"case-nonlist-clauses", `case 1 Integer`, "case_error", "TRAP"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%s: did not compile: reason=%q err=%v", c.name, reason, cerr)
+			continue
+		}
+		dis := prog.Disassemble()
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: compiled with an island, want a native bake:\n%s", c.name, dis)
+		}
+		if !strings.Contains(dis, c.mustContain) {
+			t.Errorf("%s: disassembly missing %q:\n%s", c.name, c.mustContain, dis)
+		}
+		// Error parity: same taxonomy code AND same detail as the interpreter.
+		_, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if !compiled {
+			t.Errorf("%s: fell back at run time", c.name)
+		}
+		_, errI := mustNew(t).Run(c.src)
+		var aeC, aeI *eng.AqlError
+		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
+			t.Errorf("%s: expected AqlError from both engines, got c=%v i=%v", c.name, errC, errI)
+			continue
+		}
+		if aeC.Code != c.code || aeI.Code != c.code {
+			t.Errorf("%s: code mismatch compiled=%q interp=%q want %q", c.name, aeC.Code, aeI.Code, c.code)
+		}
+		if aeC.Detail != aeI.Detail {
+			t.Errorf("%s: detail divergence\n compiled=%q\n interp=%q", c.name, aeC.Detail, aeI.Detail)
+		}
+	}
+}

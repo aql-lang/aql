@@ -154,7 +154,25 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	if isCodeBody(v) && !isCodeBody(clauses) {
 		v, clauses = clauses, v
 	}
-	if isCodeBody(v) || !isCodeBody(clauses) {
+	if isCodeBody(v) {
+		// A code-body scrutinee (`case [body] [clauses]`) runs the body and
+		// dispatches on its last result; that run-and-dispatch is not yet
+		// lowered (and a 0-net body is the run-time case_error), so it stays on
+		// the island / whole-program fallback path.
+		return dynAny
+	}
+	if !isCodeBody(clauses) {
+		// The clause argument is not a list: caseHandler raises case_error. The
+		// checker is lenient (returns a carrier), but compiled mode raises the
+		// byte-identical error via a TERMINAL OpTrap instead of islanding — the
+		// trap keeps the events before it, drops the case dispatch (which would
+		// otherwise island), and aborts exactly where the interpreter does. A
+		// nested case (RecordTrap declines, frames/units != 1) keeps the island.
+		if es := r.Check.Emit; es != nil {
+			es.RecordTrap("case_error",
+				"case: clause list must be a concrete list of match/block pairs (optional trailing default)",
+				"case", "", args[0].Pos)
+		}
 		return dynAny
 	}
 	lst, _ := AsList(clauses)

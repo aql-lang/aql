@@ -110,6 +110,7 @@ func computeCensus() (*census, error) {
 				continue
 			}
 			input := strings.TrimSpace(parts[0])
+			expectErr := strings.HasPrefix(strings.TrimSpace(parts[1]), "ERROR:")
 			c.rows++
 
 			a, err := lang.New()
@@ -146,7 +147,16 @@ func computeCensus() (*census, error) {
 				c.reducible++
 				c.tier2By[name]++
 			default:
-				if errorRowReason(reason) {
+				// A refused/islanded row whose SPEC expects an error is a
+				// correct-error row: the checker refuses (or islands) so the
+				// interpreter raises the matching taxonomy, and the full-corpus
+				// gate confirms parity. The spec's ERROR: marker is the
+				// authoritative signal — it distinguishes these from value rows
+				// that happen to share a refusal reason (`x/r` illegal_ref vs
+				// `mini re` dynamic output both refuse "...unknown provenance").
+				// errorRowReason stays as a secondary signal for the few error
+				// reasons that are intrinsically diagnostic.
+				if expectErr || errorRowReason(reason) {
 					c.errorRows++
 					continue
 				}

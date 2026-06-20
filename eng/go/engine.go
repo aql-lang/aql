@@ -327,15 +327,18 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 		// signatures, the most common cause of this error is that forward
 		// collection ran into a following word (another call, a builtin)
 		// before it could gather enough arguments — e.g. `inc inc 5` or
-		// `f a g b`. Point the user at the fixes (group with parens, or
-		// terminate collection with `end` / `;`) so they aren't left to
-		// guess from a bare "no matching signature".
+		// `f a g b`. The fix is PARENS — group the call so its result becomes
+		// the argument; `end` / `;` only ends the statement and will NOT nest a
+		// following word into a sub-call (a trailing `;` does not rescue
+		// `print Decision.eval-cond c x`). Point at parens so they aren't left
+		// to guess from a bare "no matching signature".
 		if hint.Len() > 0 {
 			hint.WriteString("\n  = ")
 		}
 		hint.WriteString("forward args for " + name +
-			" may have run into the next word; group the call with parens " +
-			"— (" + name + " …) — or end it with `end` or `;`")
+			" may have run into the next word; group the call in parens so its " +
+			"RESULT becomes the argument — (" + name + " …). `end` / `;` only ends " +
+			"the statement — it does NOT turn a following word into a nested call.")
 	}
 
 	if e.tape.Len() > 0 {
