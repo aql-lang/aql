@@ -81,11 +81,20 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "var",
 
+		// var SPLICES its body (def/body/undef tokens) onto the tape for the
+		// engine to re-step. RunInCheckMode lets the recorder follow that splice
+		// so the inline let lowers as the body's events with the bound names as
+		// promoted value-def locals (the def/body/undef tokens record exactly as a
+		// hand-written `def NAME val end … undef NAME` would). A body word the
+		// recorder cannot lower marks the program uncompilable through the same
+		// path it does anywhere else, so a refusing body REFUSES rather than
+		// producing a silent empty unit.
 		Signatures: []NativeSig{{
-			Args:       []*Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Handler:    varHandler,
-			Returns:    []*Type{TAny}, BarrierPos: -1,
+			Args:           []*Type{TList},
+			NoEvalArgs:     map[int]bool{0: true},
+			Handler:        varHandler,
+			RunInCheckMode: true,
+			Returns:        []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{

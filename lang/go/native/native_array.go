@@ -291,8 +291,8 @@ var allArrayNatives = []NativeFunc{
 		// A 0-net body is each's own each_error ("body produced no result"), raised
 		// faithfully from InvokeBody, so EmptyBodyErrors compiles it natively rather
 		// than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, Inputs: func(a []Value) []Value {
-			return []Value{NewCarrier(DataListElemTypeFromValue(a[1]))}
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
+			return []Value{NewElementCarrier(DataListElemTypeFromValue(a[1]))}
 		}},
 
 		Signatures: []NativeSig{
@@ -346,12 +346,12 @@ var allArrayNatives = []NativeFunc{
 		// 2-arg form) to the element type, since the accumulator starts as the
 		// first element. A 0-net body is fold's own fold_error, raised faithfully,
 		// so EmptyBodyErrors keeps it native rather than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, Inputs: func(a []Value) []Value {
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
 			elem := DataListElemTypeFromValue(a[1])
 			if len(a) >= 3 {
-				return []Value{NewCarrier(a[2].Parent), NewCarrier(elem)}
+				return []Value{NewCarrier(a[2].Parent), NewElementCarrier(elem)}
 			}
-			return []Value{NewCarrier(elem), NewCarrier(elem)}
+			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}
 		}},
 
 		Signatures: []NativeSig{
@@ -391,9 +391,9 @@ var allArrayNatives = []NativeFunc{
 		// starts as the first element, so both inputs carry the element type. A
 		// 0-net body is scan's own scan_error, raised faithfully, so EmptyBodyErrors
 		// keeps it native rather than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, Inputs: func(a []Value) []Value {
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
 			e := DataListElemTypeFromValue(a[1])
-			return []Value{NewCarrier(e), NewCarrier(e)}
+			return []Value{NewElementCarrier(e), NewElementCarrier(e)}
 		}},
 
 		Signatures: []NativeSig{
@@ -1398,7 +1398,11 @@ func eachReturnsFn(args []Value, r *Registry) []Value {
 func analyseHigherOrderBody(r *Registry, body Value, elems ...*Type) []Value {
 	vals := make([]Value, len(elems))
 	for i, t := range elems {
-		vals[i] = NewCarrier(t)
+		// An UNTYPED element (TAny — an untyped list like `Test.results end`'s
+		// declared `[List]`) rides as a DYNAMIC carrier so a body access (`get`,
+		// a field read) matches optimistically rather than failing no_signature
+		// against the bare Any root. A known element type stays strict.
+		vals[i] = NewElementCarrier(t)
 	}
 	return analyseHigherOrderBodyVals(r, body, vals...)
 }

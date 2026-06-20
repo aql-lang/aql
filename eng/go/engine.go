@@ -3071,9 +3071,24 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 	if err != nil || parts == nil {
 		return NewString(""), nil
 	}
-	s, err := e.evalInterpParts(parts)
+	s, dynamic, err := e.evalInterpParts(parts)
 	if err != nil {
 		return Value{}, err
+	}
+	if dynamic {
+		// A `${expr}` part evaluated to a NON-CONCRETE value — a carrier, which
+		// exists only during static analysis (a fn param, an each-element field
+		// read like `${r "name" get}`). The interpolated string therefore depends
+		// on runtime data and is NOT a compile-time constant: stringifying the
+		// carrier would bake its render ("dynamic(Any)") into the program and
+		// diverge from the interpreter (which builds the real string at run time).
+		// Return a String CARRIER (the value is unknown) and, when recording,
+		// refuse — the VM has no runtime string-interpolation op, so the program
+		// falls back to the interpreter. Mirrors how a dynamic word output refuses.
+		if es := e.registry.Check.Emit; es != nil && es.active() {
+			es.MarkUncompilable("interpolated string with a runtime-computed part")
+		}
+		return NewCarrier(TString), nil
 	}
 	return NewString(s), nil
 }
@@ -3083,8 +3098,9 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 // stringifying its results, and concatenating into one string. Shared by
 // evalInterpString and the XML-attribute / text evaluation in
 // evalXmlInterp.
-func (e *Engine) evalInterpParts(parts []InterpPart) (string, error) {
+func (e *Engine) evalInterpParts(parts []InterpPart) (string, bool, error) {
 	var buf strings.Builder
+	dynamic := false
 	for _, part := range parts {
 		if part.Expr == nil {
 			buf.WriteString(part.Lit)
@@ -3093,9 +3109,16 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (string, error) {
 		sub := New(e.registry)
 		result, err := sub.Run(part.Expr)
 		if err != nil {
-			return "", err
+			return "", dynamic, err
 		}
 		for _, r := range result {
+			// A non-concrete (carrier) part means the value is only known at
+			// runtime — flag it so the caller does not bake the carrier's render
+			// as a constant string. ValToString of a carrier yields a type tag
+			// ("dynamic(Any)"), which the runtime never produces.
+			if !IsConcrete(r) {
+				dynamic = true
+			}
 			buf.WriteString(ValToString(r))
 		}
 		// If the expression raised a flow-control signal, stop
@@ -3107,7 +3130,7 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (string, error) {
 			break
 		}
 	}
-	return buf.String(), nil
+	return buf.String(), dynamic, nil
 }
 
 // evalXmlInterp evaluates an interpolated XML literal skeleton (Word/__XI)
@@ -3132,7 +3155,7 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, error) {
 	attr := NewOrderedMap()
 	for _, a := range t.Attr {
-		s, err := e.evalInterpParts(a.Parts)
+		s, _, err := e.evalInterpParts(a.Parts)
 		if err != nil {
 			return Value{}, err
 		}

@@ -399,6 +399,18 @@ const (
 	// than uncompilable. The divergence is sound in a branch/loop arm too (the
 	// arm never produces a value, like break/continue).
 	CompileDiverges
+	// CompileExecutesBody marks a word whose NoEvalArgs body is CODE the handler
+	// SPLICES onto the tape for re-execution (a block-with-locals word like `var`),
+	// as opposed to one it READS or STORES as data (a query clause, a Test.prop
+	// spec, a timeout body). Such a handler RETURNS tape-coupled tokens
+	// (def/body/undef, mark/move) the interpreter re-steps — which the VM cannot
+	// run — so the recorder must REFUSE it (Stage 2 code-body) even when the body
+	// is an inert word-list that would otherwise pass noEvalBodiesInert and bake as
+	// a CALL_NATIVE. Without this flag `var [[v] …]` baked to a CALL_NATIVE whose
+	// handler then tripped the VM's tape-coupled-result screen at run time. Closure-
+	// compilable body words (each / fold / do — they declare a CallableSpec) take
+	// the closure path before reaching the refusal, so they do NOT set this.
+	CompileExecutesBody
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
@@ -443,6 +455,17 @@ type CallableSpec struct {
 	// or its seed (fold's accumulator). Returns an empty slice for a 0-input body
 	// (do / a test case). nil declines the compile (an unexpected operand shape).
 	Inputs func(args []Value) []Value
+	// BodyResultTop marks a driving handler that reads only the TOP of each
+	// invocation's body residual (`res[len(res)-1]`) — each / fold / scan / filter.
+	// The body may then leave UNCONSUMED values below that top (notably the
+	// per-invocation INPUT a body that ignores its element leaves on the stack,
+	// `each [add 1 0]` → `[input, 3]`), and the compiler may safely DROP them at
+	// the RET: the handler never reads below the top. A handler that reads the
+	// WHOLE residual (`do`, returning every value) leaves this false, so its
+	// closure keeps the strict in-order reconciliation. Verified against the
+	// handlers (native_array.go each/fold/scan, native/filter.go) — each takes
+	// res[len(res)-1].
+	BodyResultTop bool
 }
 
 // FnDefInfo holds the function specification for a def-defined function.

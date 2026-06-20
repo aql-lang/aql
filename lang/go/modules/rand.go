@@ -327,7 +327,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 			// `do`, so the recorder compiles `[body]` to a closure unit and the
 			// handler runs it via the VM seam instead of a sub-engine (the body's
 			// RNG draws advance the same module generator either way).
-			Callable: &native.CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(_ []native.Value) []native.Value {
+			Callable: &native.CallableSpec{BodyPos: 0, BodyOut: 1, BodyResultTop: true, Inputs: func(_ []native.Value) []native.Value {
 				return []native.Value{}
 			}},
 			Signatures: []native.NativeSig{{

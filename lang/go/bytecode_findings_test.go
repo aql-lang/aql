@@ -1707,3 +1707,223 @@ func TestIslandBurndownEmptyBodyAndCaseTrap(t *testing.T) {
 		}
 	}
 }
+
+// Completion item — codequote (code-as-data) compiles. `codequote (expr)`
+// captures the paren RAW as a Quoted ParenExpr (`codequote (1 add 2)` →
+// `paren([1 word(add) 2])`). A Quoted ParenExpr is immutable data: the
+// interpreter's stepLiteral leaves it unevaluated and the VM never re-steps a
+// const, so it bakes as an inert PUSH_CONST exactly like the macroexpand token
+// list. The negative half: an UNQUOTED ParenExpr is expanded and re-stepped in
+// place, so isInertConst must never bake one (gated on v.Quoted).
+func TestCodequoteCompilesNative(t *testing.T) {
+	for _, c := range []string{
+		`codequote (1 add 2)`,
+		`codequote (nosuchword)`,
+		`codequote (a.b.c)`,
+		`codequote (if x [1] [2])`,
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%q did not compile: reason=%q err=%v", c, reason, cerr)
+		}
+		dis := prog.Disassemble()
+		if strings.Contains(dis, "FALLBACK") || !strings.Contains(dis, "PUSH_CONST") {
+			t.Errorf("%q: want a native PUSH_CONST bake (no island):\n%s", c, dis)
+		}
+		// Byte-identical to the interpreter.
+		gotC, compiled, errC := mustNew(t).RunCompiled(c)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled=%v err=%v", c, compiled, errC)
+		}
+		gotI, _ := mustNew(t).Run(c)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v interp=%v", c, gotC, gotI)
+		}
+	}
+
+	// Negative: a Quoted ParenExpr is data, but the standalone isInertConst gate
+	// must still reject a non-codequote'd value that LOOKS paren-shaped. A normal
+	// paren `(1 add 2)` evaluates to 3 (no ParenExpr survives), so it compiles as
+	// arithmetic, never as a baked ParenExpr const — assert the result is the
+	// evaluated value, not the code.
+	gotC, compiled, errC := mustNew(t).RunCompiled(`(1 add 2)`)
+	if !compiled || errC != nil {
+		t.Fatalf("plain paren: compiled=%v err=%v", compiled, errC)
+	}
+	if fmt.Sprint(gotC) != "[3]" {
+		t.Errorf("plain paren must evaluate, not bake as code: got %v", gotC)
+	}
+}
+
+// Found via the voxgig-aql/decision project's diverge.sh (--force-compile over
+// suites that use `each [var [[v] … 0]]`). `var` is a block-with-locals (let)
+// word: its handler SPLICES def/body/undef tokens onto the tape for the engine
+// to re-step. RunInCheckMode lets the recorder FOLLOW that splice, so the inline
+// let lowers as its body's events with the bound names as promoted value-def
+// locals — exactly as a hand-written `def NAME val end … undef NAME` compiles.
+// The body's words (including a fn param/loop-var/capture referenced inside it)
+// resolve to their VM frame slots because they record into the SAME open unit,
+// so the historical frame-local divergence cannot arise.
+func TestVarCompilesAsLet(t *testing.T) {
+	// Top-level `var` compiles as a let, byte-identical to the interpreter.
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`5 var [[v] v add 1]`, "[6]"},
+		{`def r (5 var [[v] v 0]) r`, "[0 5]"},
+	} {
+		prog, _, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: unexpected check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Errorf("%q: expected a compiled Program (var compiles as a let)", c.src)
+		}
+		got, compiled, err := mustNew(t).RunCompiled(c.src)
+		if err != nil {
+			t.Fatalf("%q: RunCompiled error %v", c.src, err)
+		}
+		if !compiled {
+			t.Errorf("%q: expected a compiled run, got an interpreter fallback", c.src)
+		}
+		if fmt.Sprint(got) != c.want {
+			t.Errorf("%q: got %v want %s", c.src, got, c.want)
+		}
+	}
+
+	// A `var` block inside an `each` body compiles as the closure's let, including
+	// the CAPTURING case (the body names a fn param `a`): the param records to its
+	// closure capture slot, so the compiled run matches the interpreter — the very
+	// frame-local divergence the const-bake path could not handle.
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`def xs [1 2 3] (xs each [var [[v] v mul 2]])`, "[[2 4 6]]"},
+		{`def xs [1 2 3] (xs each [var [[v] v 0]])`, "[[0 0 0]]"},
+		{`def f0 fn [[a:Integer] [Integer] [(size ([0] each [var [[v] a 2]]))]] (f0 2)`, "[1]"},
+	} {
+		got, compiled, err := mustNew(t).RunCompiled(c.src)
+		if err != nil {
+			t.Fatalf("%q: %v", c.src, err)
+		}
+		gotI, _ := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: an each-var let body should compile", c.src)
+		}
+		if fmt.Sprint(got) != fmt.Sprint(gotI) || fmt.Sprint(got) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, got, gotI, c.want)
+		}
+	}
+
+	// SOUNDNESS GATE: a let body that ERRORS under check-mode analysis (here
+	// `s get a/q`, where the each-element carrier `s` is conservatively under-typed
+	// and `get` rejects it as a non-concrete map — mere imprecision, the runtime
+	// `s` is a concrete Map and the interpreter returns [1 2]) must NOT compile to
+	// an EMPTY closure (which would raise each_error "body produced no result" at
+	// the VM, diverging from the interpreter). The armed-body-error refusal in
+	// AnalyseFnBody marks the program uncompilable, so it falls back byte-identical.
+	const guarded = `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`
+	prog, _, _, cerr := mustNew(t).CompileCheck(guarded)
+	if cerr != nil {
+		t.Fatalf("guarded each-var: unexpected check error %v", cerr)
+	}
+	if prog != nil {
+		t.Errorf("guarded each-var: a check-mode body error must refuse, got a Program:\n%s", prog.Disassemble())
+	}
+	gotG, compiled, err := mustNew(t).RunCompiled(guarded)
+	if err != nil {
+		t.Fatalf("guarded each-var: %v", err)
+	}
+	gotGI, _ := mustNew(t).Run(guarded)
+	if compiled {
+		t.Errorf("guarded each-var: a check-mode body error must refuse, not compile")
+	}
+	if fmt.Sprint(gotG) != fmt.Sprint(gotGI) || fmt.Sprint(gotG) != "[[1 2]]" {
+		t.Errorf("guarded each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
+	}
+}
+
+// A top-taking higher-order word (each/fold/scan/filter) reads only res[len-1]
+// of its body residual, so a body that leaves values BELOW its result — most
+// commonly an `each` body that IGNORES its element and computes a result over a
+// trailing throwaway (`each [add 1 0]` → the element sits under [3, 0]) — used to
+// refuse "result above a literal" at the closure RET. trimToTopResult drops the
+// unobserved below-top operands (CallableSpec.BodyResultTop) so the body compiles
+// as a real closure, byte-identical to the interpreter. The negative half: `do`
+// reads the WHOLE residual (no BodyResultTop), so its body is NOT trimmed.
+func TestTopTakingClosureTrim(t *testing.T) {
+	for _, c := range []struct {
+		src         string
+		mustCompile bool
+	}{
+		{`([1 2 3] each [add 1 0])`, true},        // element ignored; result computed below 0
+		{`([1 2 3] each [(size [9 9]) 0])`, true}, // computed event below the throwaway
+		{`([1 2 3] each [99 0])`, true},           // pure-data residual, top kept
+		{`([1 2 3] each [mul 2])`, true},          // single-value body unaffected
+		{`(fold [add 1 0] [1 2 3] 0)`, true},      // fold takes top too
+		{`(do [10 20 30])`, true},                 // do takes ALL — not trimmed, still compiles
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if c.mustCompile && prog == nil {
+			t.Errorf("%q: expected to compile, refused: %s", c.src, reason)
+		}
+		// Byte-identical to the interpreter either way.
+		gotC, _, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v (%v) interp=%v (%v)", c.src, gotC, errC, gotI, errI)
+		}
+	}
+
+	// `do [10 20 30]` must return ALL three values — proof the trim is scoped to
+	// top-taking words and does not corrupt a whole-residual handler.
+	got, _, _ := mustNew(t).RunCompiled(`do [10 20 30]`)
+	if fmt.Sprint(got) != "[10 20 30]" {
+		t.Errorf("do must keep the whole residual, got %v", got)
+	}
+}
+
+// A `${expr}` interpolation whose value is only known at RUNTIME (a carrier — a
+// fn param, an each-element field read) must not be const-folded: ValToString
+// of a carrier renders its type tag ("dynamic(Any)"), which the interpreter
+// never produces, so baking it diverges. evalInterpString now returns a String
+// CARRIER and refuses recording for such a string, so the program falls back to
+// the interpreter and builds the real value. Found via voxgig-aql/decision
+// prop suites (`  pass: ${nm}` where nm = a get over the each-element carrier).
+func TestInterpStringRuntimePartFallsBack(t *testing.T) {
+	// nm is a field read over the each-element carrier → dynamic; the interp
+	// string must NOT bake "dynamic(Any)". Compiled (with fallback) == interp.
+	const src = `def rs [{name:"a"} {name:"b"}]
+(rs each [var [[r] def nm (r "name" get) ` + "`x ${nm}`" + ` ]])`
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	gotI, errI := mustNew(t).Run(src)
+	if compiled {
+		t.Errorf("a runtime-valued interpolation must refuse (no runtime string-interp op), got a compiled run")
+	}
+	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+	}
+	for _, v := range []string{fmt.Sprint(gotC), fmt.Sprint(gotI)} {
+		if strings.Contains(v, "dynamic(") {
+			t.Errorf("interp string leaked a carrier render: %q", v)
+		}
+	}
+
+	// POSITIVE: a fully-CONCRETE interpolation still compiles and folds.
+	prog, reason, _, cerr := mustNew(t).CompileCheck("def n 5\n`value ${n}`")
+	if cerr != nil {
+		t.Fatalf("concrete interp: check error %v", cerr)
+	}
+	if prog == nil {
+		t.Errorf("a concrete interpolation should still compile, refused: %s", reason)
+	}
+	gotc, _, _ := mustNew(t).RunCompiled("def n 5\n`value ${n}`")
+	if fmt.Sprint(gotc) != "[value 5]" {
+		t.Errorf("concrete interp: got %v want [value 5]", gotc)
+	}
+}

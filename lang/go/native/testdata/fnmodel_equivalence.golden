@@ -630,7 +630,7 @@ WORD validate
 WORD vals
   [Node/Map] barrier=1 returns=[Node/List]
 WORD var
-  [Node/List] barrier=1 noeval={0} returns=[Any]
+  [Node/List] barrier=1 runcheck noeval={0} returns=[Any]
 WORD walk
   [Type/Function Type/Function Any] barrier=3
   [Type/Function Any] barrier=2

@@ -386,6 +386,15 @@ type fnUnitRec struct {
 	// type_error — so a closure keeps refusing the mismatch (islands) while a
 	// user fn compiles the error path (the VM RET raises the matching error).
 	closure bool
+	// takesTop marks a closure whose driving handler reads only the TOP of the
+	// body residual (each / fold / scan / filter / rand-list-of —
+	// CallableSpec.BodyResultTop). For such a unit, finish DROPS the unconsumed
+	// values the body leaves below its top result (notably the per-invocation
+	// input a body that ignores its element leaves on the stack, `each [add 1 0]`
+	// → `[input, 3]`): the handler never reads below the top, so the RET keeps
+	// only the events plus the trailing tail. A whole-residual handler (`do`)
+	// leaves this false, keeping the strict in-order reconciliation.
+	takesTop bool
 	// promoted / dead are the value-def-local plan for THIS unit's body —
 	// computed by planValueDefLocals at finish (while the unit is still live) and
 	// read by the lowerer (flw.promoted / flw.dead) when the unit lowers. Mirrors
@@ -641,13 +650,13 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit.reg = r
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		return emitOperand{}, false
 	}
@@ -1300,6 +1309,17 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
 			}
+			// A TOP-TAKING closure's driving handler reads only the top of the body
+			// residual (each / fold / scan / filter — CallableSpec.BodyResultTop), so
+			// the values the body leaves BELOW its result — notably the per-invocation
+			// input a body that ignores its element leaves on the stack (`each [add 1
+			// 0]` → [input, 3]) — are never observed and are dropped here. Without this,
+			// the residual [inert-input, computed-result] refuses at the RET (an event
+			// above an inert, "result above a literal"), even though the handler only
+			// ever reads the top.
+			if rec.takesTop && len(ops) > 1 {
+				ops = trimToTopResult(ops)
+			}
 			rec.outOps = ops
 		}
 		// Value-def locals for THIS unit (the top-level program's promotion,
@@ -1344,6 +1364,26 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		es.units = es.units[:len(es.units)-1]
 	}
 	return unit, finish, true
+}
+
+// trimToTopResult drops the operands a TOP-TAKING closure body leaves BELOW its
+// result. The driving handler (each / fold / scan / filter) reads only the top of
+// the body residual, so everything beneath it is never observed. The residual is
+// [leading-inerts…, events…, trailing-inerts…]; the leading inerts are the values
+// the body left below its first COMPUTED result — the per-invocation input a body
+// that ignores its element leaves on the stack (`each [add 1 0]` → [input, 3]).
+// Keeping from the first EVENT operand preserves the events (physically on the
+// sim stack) and the trailing tail (which carries the top) while dropping those
+// leading inerts; a residual with NO event is pure data whose only result is the
+// TOP operand. Only called for len(ops) > 1; never drops an event (the top is at
+// or after the first event) or a trailing inert.
+func trimToTopResult(ops []emitOperand) []emitOperand {
+	for i := range ops {
+		if ops[i].kind == opEvent {
+			return ops[i:]
+		}
+	}
+	return ops[len(ops)-1:]
 }
 
 // RecordUserCall records one call of a compiled fn unit. args are in
@@ -1683,7 +1723,26 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args):
+	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !noEvalBodiesInert(sig, args)):
+		// A code-body word is refused when:
+		//   - its body is not inert data; OR
+		//   - it SPLICES the body onto the tape (CompileExecutesBody, e.g. `var`):
+		//     the handler returns tape-coupled tokens the VM cannot run, so baking a
+		//     CALL_NATIVE (which an inert word-list body would otherwise permit)
+		//     trips the VM's tape-coupled-result screen; OR
+		//   - it EXECUTES the body via InvokeBody (sig.Callable != nil — each / fold
+		//     / scan / filter / do / case / …) AND the body references a NAME
+		//     (execBodyRefsNames). Such a word is normally compiled by the closure
+		//     path (PUSH_CLOSURE); if that path declined, const-baking the body and
+		//     RE-RUNNING it in a sub-engine is unsound when the body names a binding,
+		//     because the sub-engine resolves a name the COMPILED context holds as a
+		//     VM frame local (a fn param/capture, a `for` iterator, a promoted
+		//     value-`def`) against the registry instead — diverging (the property
+		//     fuzzer's var-block bodies caught this across all three frame-local
+		//     kinds). A body of pure inert DATA with no name references (`do [10 20
+		//     30]`) re-runs identically, so it still bakes. (Data-reading code words
+		//     like the query-DSL clauses declare NO CallableSpec, so their inert
+		//     clause always bakes a plain CALL_NATIVE.)
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 	case hasUncoveredQuoteArg(sig) && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
@@ -2035,6 +2094,63 @@ func noEvalBodiesInert(sig *Signature, args []Value) bool {
 	return true
 }
 
+// execBodyRefsNames reports whether a body-EXECUTING word's (sig.Callable != nil)
+// inert NoEvalArgs body references a NAME — any Word or Reach token, at any depth.
+// Such a token is resolved at run time: if the const-baked body is re-run in a
+// sub-engine, the name resolves against the registry, but the compiled context may
+// hold it as a VM frame local (fn param/capture, `for` iterator, promoted
+// value-`def`) — so the re-run diverges. A body of pure inert DATA (scalars, data
+// lists/maps — `do [10 20 30]`) references nothing and re-runs identically. Found
+// by the property fuzzer's var-block closure bodies.
+func execBodyRefsNames(sig *Signature, args []Value) bool {
+	for i := range args {
+		if !sig.NoEvalArgs[i] {
+			continue
+		}
+		if valueRefsName(args[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// valueRefsName recursively reports whether v contains a Word or Reach token —
+// a name that resolves to a binding at run time — anywhere in its structure
+// (list elements, map values, paren-expr tokens). A Splice marker also wraps a
+// name-bearing payload, so it counts. Conservative: an unknown payload that
+// could carry a name is NOT data, so only the known pure-data shapes return
+// false.
+func valueRefsName(v Value) bool {
+	if IsWord(v) || IsReach(v) || IsSplice(v) {
+		return true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if valueRefsName(e) {
+				return true
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if valueRefsName(mv) {
+				return true
+			}
+		}
+	case ParenExprPayload:
+		for _, tk := range d.Toks {
+			if valueRefsName(tk) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // internType pools a type operand by canonical ID.
 func (es *EmitState) internType(v Value) int {
 	if i, ok := es.typeIdx[v.ID]; ok {
@@ -2059,7 +2175,10 @@ func (es *EmitState) intern(v Value) int {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
-	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) {
+	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) || IsParenExpr(v) {
+		// Compounds, structural type bodies, and codequote'd ParenExprs are never
+		// deduped: like the list/map identity rule, two source codequotes stay two
+		// distinct const values rather than CanonValue-merging into one.
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
@@ -2314,6 +2433,16 @@ func isInertConst(v Value) bool {
 		// qualifies — the dot-access Eval reach (which the engine expands in
 		// place) is excluded.
 		return isInertReach(v)
+	case ParenExprPayload:
+		// A codequote'd (Quoted) ParenExpr — `codequote (1 add 2)` →
+		// `paren([1 word(add) 2])`. It is immutable CODE-AS-DATA: stepLiteral
+		// leaves a Quoted ParenExpr unevaluated (engine.go step 4), and the VM
+		// never re-steps a const, so it bakes by value exactly like the
+		// macroexpand token list. An UNQUOTED ParenExpr is expanded and
+		// re-stepped in place, so it is NEVER a const — gate strictly on Quoted.
+		// Its tokens must themselves be inert members (Words / atoms / scalars /
+		// nested inert parens), screened by isInertConstMember.
+		return isInertQuotedParen(v)
 	case *TypeSchemaInfo:
 		// An installed generic schema (`def Box gen [T] class {value:T}`). The
 		// schema is immutable data — its instantiation memo lives in the
@@ -2393,6 +2522,30 @@ func schemaConstOK(s *TypeSchemaInfo) bool {
 		}
 	}
 	return memberOK(s.Body)
+}
+
+// isInertQuotedParen reports whether v is a codequote'd (Quoted) ParenExpr that
+// bakes as a const. A Quoted ParenExpr is CODE-AS-DATA: the interpreter's
+// stepLiteral leaves it unevaluated (engine.go step 4 gates on `!v.Quoted`),
+// and the VM never re-steps a const, so it pushes verbatim like the macroexpand
+// token list — the compiled residual renders byte-identically to the
+// interpreter's data value. An UNQUOTED ParenExpr is expanded and re-stepped in
+// place, so it is NEVER baked here. Every token must itself be an inert const
+// member (Words / atoms / scalars / nested inert parens), via isInertConstMember.
+func isInertQuotedParen(v Value) bool {
+	if !v.Quoted || v.Carrier || v.Dynamic {
+		return false
+	}
+	toks, err := AsParenExpr(v)
+	if err != nil {
+		return false
+	}
+	for _, tk := range toks {
+		if !isInertConstMember(tk) {
+			return false
+		}
+	}
+	return true
 }
 
 // isInertReach reports whether v is an INERT receiverless lens — a first-class

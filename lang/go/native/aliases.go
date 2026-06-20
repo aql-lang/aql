@@ -218,6 +218,7 @@ const (
 	CompileFallbackBody = eng.CompileFallbackBody
 	CompileQuoteInert   = eng.CompileQuoteInert
 	CompileDiverges     = eng.CompileDiverges
+	CompileExecutesBody = eng.CompileExecutesBody
 )
 
 // Flow-control signal values exposed by the engine. These travel
@@ -426,6 +427,7 @@ var (
 	NewBoolean                = eng.NewBoolean
 	// NewCalDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = eng.NewCarrier
+	NewElementCarrier        = eng.NewElementCarrier
 	NewCarrierTypedList      = eng.NewCarrierTypedList
 	NewCarrierTypedListValue = eng.NewCarrierTypedListValue
 	NewDynamicCarrier        = eng.NewDynamicCarrier

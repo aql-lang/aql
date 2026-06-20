@@ -28,7 +28,7 @@ package eng
 // `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
-func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK bool, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
+func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, takesTop bool, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
 	es := r.Check.Emit
 	// A side-effect body word (bodyOut 0 — a test case body) declares NO returns,
 	// so its 0-value residual is taken as-is rather than count-refused against the
@@ -55,6 +55,7 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK bool,
 	// memo hit: the key includes name+input types, which determine the shape).
 	es.fnRecs[unit].inShape = shape
 	es.fnRecs[unit].closure = true
+	es.fnRecs[unit].takesTop = takesTop
 	if finish == nil {
 		// Memo hit: the unit is already compiled in this state.
 		return unit, es.active()
@@ -233,7 +234,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	// real program untouched (graceful fall-through to the island).
 	real := r.Check.Emit
 	r.Check.Emit = NewEmitState()
-	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, bodyToks, inputs, paramNames, captures, shape, pos)
+	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -241,7 +242,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, bodyToks, inputs, paramNames, captures, shape, pos)
+	unit, realOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	if !realOk || unit < 0 {
 		return false
 	}
