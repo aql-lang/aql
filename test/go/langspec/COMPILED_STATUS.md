@@ -26,7 +26,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | interpreter islands (OpFallback) | 2 | 2 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 6 | 6 | → 0 |
-| compute frontier | 24 | 86 | → 0 |
+| compute frontier | 18 | 86 | → 0 |
 
 ## Refusals by reason
 
@@ -51,7 +51,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 ## Re-scoped P7 partition
 
-Over the 30 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **6** reducible (tier 2, TODO), **0** allowlisted error rows, **24** compute-frontier gaps.
+Over the 30 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **6** reducible (tier 2, TODO), **6** allowlisted error rows, **18** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -70,13 +70,13 @@ _None._
 
 | count | reason |
 | ---: | --- |
-| 12 | operand provenance |
+| 7 | operand provenance |
 | 4 | dynamic input |
-| 2 | island (OpFallback span) |
 | 1 | dispatch recovery (best guess) |
 | 1 | fn-value-call boundary |
 | 1 | function value reaches word (Stage 3) |
 | 1 | if-branch lowering |
+| 1 | island (OpFallback span) |
 | 1 | other: fn m: branch leaves extra values (Stage 2 lowers single-result branches) |
 | 1 | residual lowering (Stage 1 limit) |
 
