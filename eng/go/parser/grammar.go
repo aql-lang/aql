@@ -76,20 +76,21 @@ func addMatcher(j *jsonic.Jsonic, name string, priority int, fn jsonic.LexMatche
 // parserTokens holds the custom jsonic token IDs registered for AQL grammar.
 // Passed between grammar setup stages so token IDs are defined once.
 type parserTokens struct {
-	OP jsonic.Tin // (
-	CP jsonic.Tin // )
-	DT jsonic.Tin // .
-	SC jsonic.Tin // ;
-	QM jsonic.Tin // ?
-	BG jsonic.Tin // !
-	PI jsonic.Tin // |
-	AR jsonic.Tin // => (lambda arrow → aliases the word `afn`)
-	BT jsonic.Tin // ` (backtick)
-	IS jsonic.Tin // ${ (interp start)
-	TL jsonic.Tin // template literal segment
-	LA jsonic.Tin // < (angle open — general-purpose token, D14)
-	RA jsonic.Tin // > (angle close)
-	ML jsonic.Tin // minilang literal: +name<delim>src<delim> (matcher-produced)
+	OP  jsonic.Tin // (
+	CP  jsonic.Tin // )
+	DT  jsonic.Tin // .
+	SC  jsonic.Tin // ;
+	QM  jsonic.Tin // ?
+	BG  jsonic.Tin // !
+	PI  jsonic.Tin // |
+	AR  jsonic.Tin // => (lambda arrow → aliases the word `afn`)
+	BT  jsonic.Tin // ` (backtick)
+	IS  jsonic.Tin // ${ (interp start)
+	TL  jsonic.Tin // template literal segment
+	LA  jsonic.Tin // < (angle open — general-purpose token, D14)
+	RA  jsonic.Tin // > (angle close)
+	ML  jsonic.Tin // minilang literal: +name<delim>src<delim> (matcher-produced)
+	XML jsonic.Tin // embedded XML literal <tag>…</tag> (matcher-produced)
 }
 
 // setupBaseTokens registers the fixed AQL tokens and removes backtick from
@@ -122,6 +123,11 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 		LA: j.Token("#LA", "<"),
 		RA: j.Token("#RA", ">"),
 		ML: j.Token("#ML"),
+		// #XML carries a whole embedded XML literal (`<tag>…</tag>`),
+		// produced by the xml_literal matcher when it is armed inside the
+		// xml rule (which the val.Open `<` alternate pushes). See
+		// setupXmlGrammar / setupXmlMatcher and design/XML-LITERAL.0.md.
+		XML: j.Token("#XML"),
 	}
 }
 
@@ -362,6 +368,13 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 				r.Node = r.O0.Val
 			}},
 			{S: [][]jsonic.Tin{{t.OP}}, P: "paren"},
+			// `<` in VALUE-OPEN position opens an embedded XML literal →
+			// push the xml rule (which arms the xml_literal matcher). This
+			// is disjoint from the generics angle sugar, which consumes `<`
+			// only as a val.Close suffix after a capitalised name
+			// (setupAngleGrammar) — so `Box<Int>` stays generics and a
+			// fresh-position `<div>` is XML. See design/XML-LITERAL.0.md §3.
+			{S: [][]jsonic.Tin{{t.LA}}, P: "xml"},
 			// Backtick opens a template string → push to interp rule.
 			{S: [][]jsonic.Tin{{t.BT}}, P: "interp"},
 			// Bare ) outside a paren group: produce a marker so the engine

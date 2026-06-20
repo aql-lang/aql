@@ -64,6 +64,14 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 		}
 		return
 	}
+	// Interpolated XML literal: walk every ${...} expression in the
+	// skeleton (attribute values and child holes, recursively) so a
+	// closure over `<p>${x}</p>` captures `x`.
+	if IsXmlInterp(v) {
+		tmpl, _ := AsXmlInterp(v)
+		walkXmlTmplExprs(tmpl, callback)
+		return
+	}
 	// Map payload: walk each value (keys are strings, not Words).
 	if v.Parent.Equal(TMap) && v.Data != nil {
 		m, _ := AsMap(v)
@@ -78,6 +86,32 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 	}
 	// All other shapes (numbers, strings, booleans, atoms, type
 	// literals, markers): nothing to capture.
+}
+
+// walkXmlTmplExprs walks every ${...} expression token in an XML
+// interpolation skeleton — attribute values and child holes — recursing
+// into nested child templates, so closure-capture analysis sees the word
+// references inside a `<tag attr=${e}>${e2}</tag>` literal.
+func walkXmlTmplExprs(t XmlTmpl, callback func(WordInfo, Value)) {
+	for _, a := range t.Attr {
+		for _, p := range a.Parts {
+			for _, tok := range p.Expr {
+				walkBodyValue(tok, callback)
+			}
+		}
+	}
+	for _, c := range t.Cren {
+		switch c.Kind {
+		case XmlCrenExpr:
+			for _, tok := range c.Expr {
+				walkBodyValue(tok, callback)
+			}
+		case XmlCrenChild:
+			if c.Child != nil {
+				walkXmlTmplExprs(*c.Child, callback)
+			}
+		}
+	}
 }
 
 // ComputeCaptures walks a single fn-sig body and returns the list of

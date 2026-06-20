@@ -26,7 +26,9 @@ WORD and
 WORD any
   [Node/List] barrier=1 returns=[Scalar/Boolean]
 WORD append
+  [Node/List Node/Xml/FlexXml] barrier=2 returns=[Node/Xml/FlexXml]
   [Node/List Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
+  [Any Node/Xml/FlexXml] barrier=2 returns=[Node/Xml/FlexXml]
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
 WORD apply
   [Ideal/Reach Any] barrier=2 returns=[Any]
@@ -212,6 +214,7 @@ WORD get
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Error] barrier=2 returns=[Any]
   [Scalar/String Ideal/Object] barrier=1 +returnsfn
+  [Scalar/String Node/Xml] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
@@ -222,6 +225,7 @@ WORD get
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Error] barrier=2 quote={0} returns=[Any]
   [Scalar/Atom Ideal/Object] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Node/Xml] barrier=1 quote={0} returns=[Any]
   [Scalar/Atom Node] barrier=1 quote={0} +returnsfn
   [Any None] barrier=1 returns=[None]
 WORD getpath
@@ -493,6 +497,7 @@ WORD set
   [Scalar/String Any Ideal/Class] barrier=3
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Ideal/Object] barrier=3
+  [Scalar/String Any Node/Xml/FlexXml] barrier=3 returns=[Node/Xml/FlexXml]
   [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap]
   [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
   [Scalar/Number/Integer Any Ideal/Array] barrier=3
@@ -501,6 +506,7 @@ WORD set
   [Scalar/Atom Any Ideal/Class] barrier=3 quote={0}
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Object] barrier=3 quote={0}
+  [Scalar/Atom Any Node/Xml/FlexXml] barrier=3 quote={0} returns=[Node/Xml/FlexXml]
   [Scalar/Atom Any Node/Map/FlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap]
   [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map]
 WORD setpath
@@ -640,6 +646,13 @@ WORD write
   [Scalar/String Any Node/Map] barrier=3
   [Scalar/Path Scalar/String] barrier=2
   [Scalar/String Scalar/String] barrier=2
+WORD xml-attr
+  [Scalar/String Node/Xml] barrier=2 returns=[Any]
+  [Scalar/Atom Node/Xml] barrier=2 quote={0} returns=[Any]
+WORD xml-elem
+  [Node/Xml] barrier=1 returns=[Node/List]
+WORD xml-text
+  [Node/Xml] barrier=1 returns=[Scalar/String]
 WORD xnor
   [Scalar/Boolean Scalar/Boolean] barrier=2 returns=[Scalar/Boolean]
   [Any Any] barrier=2 returns=[Scalar/Boolean]

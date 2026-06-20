@@ -142,6 +142,8 @@ var (
 	TFlexList = eng.TFlexList
 	TMap      = eng.TMap
 	TFlexMap  = eng.TFlexMap
+	TXml      = eng.TXml
+	TFlexXml  = eng.TFlexXml
 	TMark     = eng.TMark
 	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
 	TMove           = eng.TMove
@@ -244,6 +246,9 @@ var (
 	AsMutableList             = eng.AsMutableList
 	AsMutableMap              = eng.AsMutableMap
 	AsFlexList                = eng.AsFlexList
+	AsFlexXml                 = eng.AsFlexXml
+	IsXmlValue                = eng.IsXmlValue
+	XmlParts                  = eng.XmlParts
 	AsObjectInstance          = eng.AsObjectInstance
 	AsObjectType              = eng.AsObjectType
 	AsOptionsType             = eng.AsOptionsType
@@ -472,6 +477,7 @@ var (
 	NewStoreValue         = eng.NewStoreValue
 	NewStoreWithPrototype = eng.NewStoreWithPrototype
 	NewString             = eng.NewString
+	NewXmlElement         = eng.NewXmlElement
 	NewTableType          = eng.NewTableType
 	// NewTimeOfDay moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewTimeout moved to lang/go/engine/native_misc.go (Step 8).

@@ -545,6 +545,16 @@ var builtinDecls = []builtinDecl{
 	{Path: "Node/Map", FixedID: 14, Rank: 30_200_000_000},
 	{Path: "Node/Map/Inspect", FixedID: 31, Rank: 30_210_000_000},
 	{Path: "Node/Map/FlexMap", FixedID: 78, Rank: 30_220_000_000},
+	// Node/Xml — the immutable element value embedded XML literals
+	// (`<tag>…</tag>`) and `parse xml` produce. A dedicated Node-branch
+	// type (not a Map subtype) with a custom Behavior that serialises
+	// back to XML; see design/XML-LITERAL.0.md and core_xml.go. The
+	// parser emits it directly, so it is kernel-declared.
+	{Path: "Node/Xml", FixedID: 108, Rank: 30_300_000_000},
+	// Node/Xml/FlexXml — the mutable build-in-place variant of Node/Xml,
+	// reached via `flex <xml>`, mirroring FlexMap/FlexList. Inherits the
+	// Xml Behavior through the parent chain. See design/XML-LITERAL.0.md §5.
+	{Path: "Node/Xml/FlexXml", FixedID: 110, Rank: 30_310_000_000},
 
 	// Ideal branch — the structural type-kinds (Object, Array, Record,
 	// Options, Error, Store, Table) are direct children of Ideal: peer
@@ -589,6 +599,10 @@ var builtinDecls = []builtinDecl{
 	{Path: "Word/__ED", FixedID: 73, IsInternal: true, Alias: "End", Rank: 50_100_003_000},
 	{Path: "Word/__PE", FixedID: 63, IsInternal: true, Rank: 50_100_004_000},
 	{Path: "Word/__IS", FixedID: 51, IsInternal: true, Rank: 50_100_005_000},
+	// Word/__XI — interpolated XML literal skeleton (`<p>${x}</p>`). A
+	// runtime marker like __IS: the engine evaluates it in place to a
+	// Node/Xml. See design/XML-LITERAL.0.md §4 and core_xml.go.
+	{Path: "Word/__XI", FixedID: 109, IsInternal: true, Rank: 50_100_005_500},
 	{Path: "Word/__FN", FixedID: 23, IsInternal: true, Alias: "Fndef", Rank: 50_100_006_000},
 	{Path: "Word/__RC", FixedID: 25, IsInternal: true, Alias: "Returncheck", Rank: 50_100_007_000},
 	{Path: "Word/__MK", FixedID: 27, IsInternal: true, Alias: "Mark", Rank: 50_100_008_000},

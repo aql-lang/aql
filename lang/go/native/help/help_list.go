@@ -136,4 +136,28 @@ func init() {
 			"immutable List/Map defaults.",
 		Examples: []string{`flex [1 2 3]   ;# => [1 2 3]  (now mutable)`},
 	})
+
+	register(&Entry{
+		Word:    "xml-elem",
+		Summary: "The element children of an Xml node (text nodes dropped).",
+		Description: "Returns the child elements of a Node/Xml as a List — the DOM `children` view. Text children " +
+			"are dropped; use the `cren` field (e.g. x.cren) for all children including text.",
+		Examples: []string{`xml-elem <a>t<b/><c/></a>   ;# => [<b/> <c/>]`},
+	})
+
+	register(&Entry{
+		Word:    "xml-text",
+		Summary: "The concatenated text content of an Xml subtree.",
+		Description: "Walks a Node/Xml element and concatenates every text node in document order — the DOM " +
+			"`textContent` view.",
+		Examples: []string{`xml-text <a>x<b>y</b>z</a>   ;# => 'xyz'`},
+	})
+
+	register(&Entry{
+		Word:    "xml-attr",
+		Summary: "Read one attribute value of an Xml element, or none.",
+		Description: "Looks up an attribute by name on a Node/Xml element, returning its String value or none when " +
+			"the attribute is absent. The full attribute map is the `attr` field (x.attr).",
+		Examples: []string{`xml-attr 'x' <a x="1"/>   ;# => '1'`},
+	})
 }

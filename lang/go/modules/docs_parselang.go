@@ -13,7 +13,7 @@ func init() {
 		"parse_csv":      "Built-in CSV parser: `parse csv <text>` → a List of rows, each a List of fields (numeric fields decode to numbers). github.com/tabnas/csv/go.",
 		"parse_toml":     "Built-in TOML parser: `parse toml <text>` → a Map. github.com/tabnas/toml/go.",
 		"parse_yaml":     "Built-in YAML parser: `parse yaml <text>` → the decoded value (typically a Map). github.com/tabnas/yaml/go.",
-		"parse_xml":      "Built-in XML parser: `parse xml <text>` → an element-tree Map ({name, attributes, children, …}). github.com/tabnas/xml/go.",
+		"parse_xml":      "Built-in XML parser: `parse xml <text>` → a Node/Xml element ({tag, attr, cren}) — the same value an embedded `<tag>…</tag>` literal produces. github.com/tabnas/xml/go.",
 		"parse_zon":      "Built-in ZON parser: `parse zon <text>` — Zig Object Notation → the decoded value. github.com/tabnas/zon/go.",
 		"parse_markdown": "Built-in Markdown parser: `parse markdown <text>` → a List of blocks. github.com/tabnas/markdown/go.",
 		"parse_feed":     "Built-in feed parser: `parse feed <text>` — RSS/Atom → a normalised atom-shaped Map. github.com/tabnas/feed/go.",

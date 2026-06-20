@@ -475,17 +475,17 @@ func TestEmitGenericSchema(t *testing.T) {
 	if got, _, err := mustRun(t, `def Mapper gen [T U] fnsig [[T] [U]] end (Mapper of [Integer String]) teq (Mapper of [Integer String])`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "true" {
 		t.Errorf("instantiated-fnsig teq: got %v err=%v, want [true]", got, err)
 	}
-	// `make` of a generic instantiated inside a generic fn body now COMPILES: the
-	// make body is a consumed dataMap arg evaluated in the call's scope (the T
-	// binding reaches the body-internal instantiation), so OpMakeMap re-assembles
-	// per call soundly (generics-fn.tsv boxit row). Its compiled typeof matches
-	// the interpreter.
-	const genFnBody = `def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end (boxit 5) typeof`
-	if _, r := compile(t, genFnBody); r != "" {
+	// `make` of a generic instantiated inside a generic fn body compiles:
+	// the call site `boxit 5` monomorphises T to Integer, so the
+	// computed-construction body records its make event with a resolved
+	// type operand (see "compile make with a computed construction body in
+	// a fn body"). The compiled typeof matches the interpreter.
+	const innerMake = `def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end (boxit 5) typeof`
+	if _, r := compile(t, innerMake); r != "" {
 		t.Errorf("make of a generic instantiated in a fn body must compile, refused: %s", r)
 	}
-	if got, _, err := mustRun(t, genFnBody); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "Box of [Integer]" {
-		t.Errorf("generic-fn-body make typeof: got %v err=%v, want [Box of [Integer]]", got, err)
+	if got, _, err := mustRun(t, innerMake); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "Box of [Integer]" {
+		t.Errorf("inner-make typeof: got %v err=%v, want [Box of [Integer]]", got, err)
 	}
 }
 
@@ -643,17 +643,18 @@ func TestEmitModuleInnerNative(t *testing.T) {
 			t.Fatalf("%s: compiled=%v err=%v (want compiled, no error)", src, compiled, err)
 		}
 	}
-	// A force-arity'd user def (`def ff (force-arity 2 add)`) now COMPILES like
-	// usurp: force-arity's re-dispatch wrapper runs in check mode (RunInCheckMode),
-	// so the carrier compiler steps the re-dispatch and bakes the underlying `add`
-	// call directly (path-modifier.tsv). The compiled result matches the
-	// interpreter. (A usurp'd `if` likewise resolves to a concrete reversed `if`
-	// dispatch — see TestComputedArmConditions.)
-	if _, r := compile(t, `def ff (force-arity 2 add) ff 1 2`); r != "" {
+	// A def-bound dispatch-modifier wrapper (`def ff (force-arity 2 add)`)
+	// compiles: ForceArityFunction's wrapper sig runs in check mode, so the
+	// carrier compiler steps the re-dispatch and bakes the inner `add` call
+	// directly — `ff 1 2` lowers exactly like `add 1 2` (see "compile the
+	// dispatch-modifier word forms"). It is a static dispatch-shape change,
+	// byte-identical to the runtime one, so the compiled result matches.
+	const forceArityDef = `def ff (force-arity 2 add) ff 1 2`
+	if _, r := compile(t, forceArityDef); r != "" {
 		t.Errorf("force-arity'd user def must compile, refused: %s", r)
 	}
-	if got, _, err := mustRun(t, `def ff (force-arity 2 add) ff 1 2`); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "3" {
-		t.Errorf("force-arity def call: got %v err=%v, want [3]", got, err)
+	if got, _, err := mustRun(t, forceArityDef); err != nil || len(got) != 1 || fmt.Sprint(got[0]) != "3" {
+		t.Errorf("force-arity'd user def: got %v err=%v, want [3]", got, err)
 	}
 }
 

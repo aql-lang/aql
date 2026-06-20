@@ -125,6 +125,20 @@ var storageNatives = []NativeFunc{
 				Handler: setFlexListHandler,
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
+
+			// FlexXml (in-place attribute set; name → value, like the DOM
+			// setAttribute. Children grow via `append`.)
+			{
+				Args:    []*Type{TString, TAny, TFlexXml},
+				Handler: setFlexXmlHandler,
+				Returns: []*Type{TFlexXml}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TFlexXml},
+				QuoteArgs: map[int]bool{0: true},
+				Handler:   setFlexXmlHandler,
+				Returns:   []*Type{TFlexXml}, BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -171,6 +185,13 @@ var storageNatives = []NativeFunc{
 				Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
 				ReturnsFn: getStoreReturnsFn,
 			},
+			// [Key | Node/Xml] — well-known field read: 'tag' / 'attr' /
+			// 'cren' (any other key → none). More specific than the
+			// [Key | Node] sigs above, so it wins for an XML receiver and
+			// keeps getNodeHandler off the non-map XML payload. Covers
+			// FlexXml too (it conforms to Node/Xml).
+			{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
+			{Args: []*Type{TString, TXml}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
 		},
 	},
 	{
@@ -313,6 +334,50 @@ func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	}
 	fd.Elems[idx] = val
 	return []Value{container}, nil
+}
+
+func setFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	fd, err := AsFlexXml(container)
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a FlexXml, got "+container.Parent.String(), "set")
+	}
+	name := StoreKey(args[0])
+	if !eng.IsValidXmlName(name) {
+		return nil, r.AqlErrorHint("set_error",
+			"set: "+name+" is not a valid XML attribute name", "set",
+			"attribute names start with a letter or '_' and contain letters, digits, '-', '.', or ':'")
+	}
+	// Attributes are String-valued; store a String view of the value so a
+	// flex attribute round-trips through `node` and renders correctly.
+	val := args[1]
+	if !val.Is(TString) {
+		val = NewString(ValToString(val))
+	}
+	fd.Attr.Set(StoreKey(args[0]), val)
+	return []Value{container}, nil
+}
+
+// getXmlHandler reads a well-known field of a Node/Xml (or FlexXml)
+// element: 'tag' → String, 'attr' → Map, 'cren' → List of all children.
+// Any other key reads as None (lenient, like a missing map key), so
+// `x.tag` / `x.attr` / `x.cren` dotted access works. The element-only
+// view and subtree text are the computed words `elem` / `text`.
+func getXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	tag, attr, cren, ok := XmlParts(args[1])
+	if !ok {
+		return nil, r.AqlError("get_error", "get: cannot access field on a non-Xml value", "get")
+	}
+	switch getKey(args[0]) {
+	case "tag":
+		return []Value{NewString(tag)}, nil
+	case "attr":
+		return []Value{NewMap(attr)}, nil
+	case "cren":
+		return []Value{NewList(cren)}, nil
+	default:
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
 }
 
 func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

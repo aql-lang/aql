@@ -59,7 +59,46 @@ func FlexDeepCopy(v Value) (Value, error) {
 		}
 		return WithPos(NewFlexList(elems), v), nil
 	}
+	if v.Parent.ConformsTo(TXml) && IsConcrete(v) {
+		tag, attr, cren, ok := xmlParts(v)
+		if !ok {
+			return Value{}, fmt.Errorf("flex: cannot make a flex copy of %s", v.String())
+		}
+		nattr, ncren, ferr := flexXmlChildren(attr, cren)
+		if ferr != nil {
+			return Value{}, ferr
+		}
+		return WithPos(NewFlexXml(tag, nattr, ncren), v), nil
+	}
 	return v, nil
+}
+
+// flexXmlChildren deep-flex-copies an XML element's attributes and child
+// nodes into fresh containers — the shared core of FlexDeepCopy's Xml
+// branch. The attribute *OrderedMap is rebuilt (never aliased with an
+// immutable source) so a flex element's attributes are independently
+// mutable.
+func flexXmlChildren(attr *OrderedMap, cren []Value) (*OrderedMap, []Value, error) {
+	nattr := NewOrderedMap()
+	if attr != nil {
+		for _, k := range attr.Keys() {
+			av, _ := attr.Get(k)
+			fv, ferr := FlexDeepCopy(av)
+			if ferr != nil {
+				return nil, nil, ferr
+			}
+			nattr.Set(k, fv)
+		}
+	}
+	ncren := make([]Value, len(cren))
+	for i, c := range cren {
+		fv, ferr := FlexDeepCopy(c)
+		if ferr != nil {
+			return nil, nil, ferr
+		}
+		ncren[i] = fv
+	}
+	return nattr, ncren, nil
 }
 
 // NodeDeepCopy is the inverse of FlexDeepCopy: FlexMaps become plain
@@ -103,6 +142,32 @@ func NodeDeepCopy(v Value) (Value, error) {
 		}
 		return WithPos(NewList(elems), v), nil
 	}
+	if v.Parent.ConformsTo(TXml) && IsConcrete(v) {
+		tag, attr, cren, ok := xmlParts(v)
+		if !ok {
+			return Value{}, fmt.Errorf("node: cannot convert %s to an immutable node", v.String())
+		}
+		nattr := NewOrderedMap()
+		if attr != nil {
+			for _, k := range attr.Keys() {
+				av, _ := attr.Get(k)
+				nv, nerr := NodeDeepCopy(av)
+				if nerr != nil {
+					return Value{}, nerr
+				}
+				nattr.Set(k, nv)
+			}
+		}
+		ncren := make([]Value, len(cren))
+		for i, c := range cren {
+			nv, nerr := NodeDeepCopy(c)
+			if nerr != nil {
+				return Value{}, nerr
+			}
+			ncren[i] = nv
+		}
+		return WithPos(NewXmlElement(tag, nattr, ncren), v), nil
+	}
 	return v, nil
 }
 
@@ -130,6 +195,24 @@ func containsFlex(v Value) bool {
 		if lst, err := AsList(v); err == nil && !lst.IsNil() {
 			for i := 0; i < lst.Len(); i++ {
 				if containsFlex(lst.Get(i)) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	if v.Parent.ConformsTo(TXml) {
+		if _, attr, cren, ok := xmlParts(v); ok {
+			if attr != nil {
+				for _, k := range attr.Keys() {
+					av, _ := attr.Get(k)
+					if containsFlex(av) {
+						return true
+					}
+				}
+			}
+			for _, c := range cren {
+				if containsFlex(c) {
 					return true
 				}
 			}
@@ -176,6 +259,9 @@ func AdoptIntoFlex(v Value) (Value, error) {
 			return FlexDeepCopy(v)
 		}
 		return v, nil
+	}
+	if v.Parent.ConformsTo(TXml) {
+		return FlexDeepCopy(v)
 	}
 	return v, nil
 }
@@ -256,6 +342,24 @@ func MakeNodeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	case target.Equal(TList):
 		if !srcVal.Parent.ConformsTo(TList) || !IsConcrete(srcVal) {
 			return nil, fmt.Errorf("make: List source must be a concrete list, got %s", srcVal.String())
+		}
+		out, err := NodeDeepCopy(srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{out}, nil
+	case target.Equal(TFlexXml):
+		if !srcVal.Parent.ConformsTo(TXml) || !IsConcrete(srcVal) {
+			return nil, fmt.Errorf("make: FlexXml source must be a concrete Xml element, got %s", srcVal.String())
+		}
+		out, err := FlexDeepCopy(srcVal)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{out}, nil
+	case target.Equal(TXml):
+		if !srcVal.Parent.ConformsTo(TXml) || !IsConcrete(srcVal) {
+			return nil, fmt.Errorf("make: Xml source must be a concrete Xml element, got %s", srcVal.String())
 		}
 		out, err := NodeDeepCopy(srcVal)
 		if err != nil {

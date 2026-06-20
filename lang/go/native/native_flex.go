@@ -63,6 +63,18 @@ var flexNatives = []NativeFunc{
 				Handler: appendElemHandler,
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
+			// FlexXml: append child nodes (elements or text) in place.
+			// A List splices its elements; any other value is one child.
+			{
+				Args:    []*Type{TList, TFlexXml},
+				Handler: appendXmlListHandler,
+				Returns: []*Type{TFlexXml}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TAny, TFlexXml},
+				Handler: appendXmlChildHandler,
+				Returns: []*Type{TFlexXml}, BarrierPos: -1,
+			},
 		},
 	},
 }
@@ -101,6 +113,41 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.AqlError("append_error", aerr.Error(), "append")
 	}
 	fd.Elems = append(fd.Elems, elem)
+	return []Value{args[1]}, nil
+}
+
+func appendXmlChildHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fd, err := AsFlexXml(args[1])
+	if err != nil {
+		return nil, r.AqlError("append_error", "append: expected a FlexXml, got "+args[1].Parent.String(), "append")
+	}
+	// A flex tree stays entirely mutable: a plain Node/Xml child is
+	// deep-flexed on the way in; flex handles share.
+	child, aerr := eng.AdoptIntoFlex(args[0])
+	if aerr != nil {
+		return nil, r.AqlError("append_error", aerr.Error(), "append")
+	}
+	fd.Cren = append(fd.Cren, child)
+	return []Value{args[1]}, nil
+}
+
+func appendXmlListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fd, err := AsFlexXml(args[1])
+	if err != nil {
+		return nil, r.AqlError("append_error", "append: expected a FlexXml, got "+args[1].Parent.String(), "append")
+	}
+	src, err := RequireConcreteList(args[0], "append")
+	if err != nil {
+		return nil, r.AqlError("append_error", err.Error(), "append")
+	}
+	elems := src.Slice()
+	for _, el := range elems {
+		child, aerr := eng.AdoptIntoFlex(el)
+		if aerr != nil {
+			return nil, r.AqlError("append_error", aerr.Error(), "append")
+		}
+		fd.Cren = append(fd.Cren, child)
+	}
 	return []Value{args[1]}, nil
 }
 
