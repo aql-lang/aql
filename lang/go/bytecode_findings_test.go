@@ -1853,12 +1853,12 @@ func TestTopTakingClosureTrim(t *testing.T) {
 		src         string
 		mustCompile bool
 	}{
-		{`([1 2 3] each [add 1 0])`, true},          // element ignored; result computed below 0
-		{`([1 2 3] each [(size [9 9]) 0])`, true},   // computed event below the throwaway
-		{`([1 2 3] each [99 0])`, true},             // pure-data residual, top kept
-		{`([1 2 3] each [mul 2])`, true},            // single-value body unaffected
-		{`(fold [add 1 0] [1 2 3] 0)`, true},        // fold takes top too
-		{`(do [10 20 30])`, true},                   // do takes ALL — not trimmed, still compiles
+		{`([1 2 3] each [add 1 0])`, true},        // element ignored; result computed below 0
+		{`([1 2 3] each [(size [9 9]) 0])`, true}, // computed event below the throwaway
+		{`([1 2 3] each [99 0])`, true},           // pure-data residual, top kept
+		{`([1 2 3] each [mul 2])`, true},          // single-value body unaffected
+		{`(fold [add 1 0] [1 2 3] 0)`, true},      // fold takes top too
+		{`(do [10 20 30])`, true},                 // do takes ALL — not trimmed, still compiles
 	} {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
 		if cerr != nil {
