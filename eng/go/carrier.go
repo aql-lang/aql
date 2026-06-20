@@ -182,7 +182,7 @@ func DataListElemTypeFromValue(data Value) *Type {
 // is future work.
 func toCarrier(v Value) Value {
 	if IsWord(v) || IsForward(v) || IsMark(v) || IsMove(v) ||
-		IsOpenParen(v) || IsParenExpr(v) || IsInterpString(v) ||
+		IsOpenParen(v) || IsParenExpr(v) || IsInterpString(v) || IsXmlInterp(v) ||
 		IsReturnCheck(v) || IsDefCleanup(v) {
 		return v
 	}

@@ -139,6 +139,7 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 		i++
 	}
 	t := &eng.XmlTmpl{Tag: s[nameStart:i]}
+	seenAttr := map[string]bool{}
 
 	// Opening-tag attributes, up to `>` or `/>`.
 	for {
@@ -166,6 +167,10 @@ func buildXmlTmpl(s string, i int) (*eng.XmlTmpl, int, error) {
 			i++
 		}
 		aname := s[anStart:i]
+		if seenAttr[aname] {
+			return nil, i, fmt.Errorf("xml: duplicate attribute %q in <%s>", aname, t.Tag)
+		}
+		seenAttr[aname] = true
 		for i < n && isXmlSpace(s[i]) {
 			i++
 		}

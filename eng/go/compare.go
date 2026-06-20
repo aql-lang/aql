@@ -240,6 +240,12 @@ func ExactEqual(a, b Value) bool {
 	if nodeFamily(a.Parent).Equal(TMap) && nodeFamily(b.Parent).Equal(TMap) {
 		return a.Parent.Equal(b.Parent) && sameContainer(a.Data, b.Data)
 	}
+	// XML elements: identity like Map/List — `eq` is container identity
+	// (a flex copy / a fresh literal is not eq to its source), while `deq`
+	// (DeepEqual) is structural. See design/XML-LITERAL.0.md §5.
+	if IsXmlValue(a) && IsXmlValue(b) {
+		return a.Parent.Equal(b.Parent) && sameContainer(a.Data, b.Data)
+	}
 	// Ideal/Array: identity IS the container — two Arrays are equal
 	// only when they are the same array instance (aliased bindings),
 	// never by content. Content comparison goes through
@@ -290,6 +296,23 @@ func sameContainer(a, b Payload) bool {
 		// backing-array probe: the store pointer IS the container.
 		bv, ok := b.(*FlexListData)
 		return ok && av == bv
+	case *FlexXmlData:
+		// Pointer identity — the FlexXml store pointer IS the container.
+		bv, ok := b.(*FlexXmlData)
+		return ok && av == bv
+	case XmlElementPayload:
+		// An immutable Node/Xml has no pointer-backed store; it aliases
+		// by its shared attribute map and children slice (a value dup'd
+		// from one binding stays eq to its source; two fresh literals do
+		// not). Empty children alias as the single empty children.
+		bv, ok := b.(XmlElementPayload)
+		if !ok || av.Tag != bv.Tag || av.Attr != bv.Attr {
+			return false
+		}
+		if len(av.Cren) == 0 || len(bv.Cren) == 0 {
+			return len(av.Cren) == len(bv.Cren)
+		}
+		return &av.Cren[0] == &bv.Cren[0]
 	case *ArrayInstanceInfo:
 		bv, ok := b.(*ArrayInstanceInfo)
 		return ok && av == bv

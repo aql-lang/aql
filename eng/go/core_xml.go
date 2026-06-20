@@ -163,6 +163,31 @@ var xmlAttrEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;",
 func escapeXmlText(s string) string { return xmlTextEscaper.Replace(s) }
 func escapeXmlAttr(s string) string { return xmlAttrEscaper.Replace(s) }
 
+// IsValidXmlName reports whether s is a usable XML tag / attribute name
+// (a name-start char then name chars). Mirrors the literal parser's
+// isXmlNameStart / isXmlNameChar so a FlexXml mutation cannot store a key
+// that would render as malformed XML (e.g. `set "bad name" …`).
+func IsValidXmlName(s string) bool {
+	if s == "" {
+		return false
+	}
+	isStart := func(c byte) bool {
+		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+	}
+	isChar := func(c byte) bool {
+		return isStart(c) || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == ':'
+	}
+	if !isStart(s[0]) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if !isChar(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func init() {
 	TXml.Behavior = xmlBehavior{}
 }

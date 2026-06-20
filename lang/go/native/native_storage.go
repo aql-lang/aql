@@ -342,6 +342,12 @@ func setFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, r.AqlError("set_error", "set: expected a FlexXml, got "+container.Parent.String(), "set")
 	}
+	name := StoreKey(args[0])
+	if !eng.IsValidXmlName(name) {
+		return nil, r.AqlErrorHint("set_error",
+			"set: "+name+" is not a valid XML attribute name", "set",
+			"attribute names start with a letter or '_' and contain letters, digits, '-', '.', or ':'")
+	}
 	// Attributes are String-valued; store a String view of the value so a
 	// flex attribute round-trips through `node` and renders correctly.
 	val := args[1]

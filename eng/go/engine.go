@@ -3139,22 +3139,30 @@ func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, error) {
 		}
 		cren = append(cren, NewString(s))
 	}
-	var addChild func(r Value)
-	addChild = func(r Value) {
-		switch {
-		case IsConcrete(r) && r.Parent.ConformsTo(TList):
-			rl, err := AsList(r)
-			if err != nil {
+	// addOne adds a single evaluated value as one child node: an XML
+	// element (immutable Node/Xml OR mutable FlexXml) becomes a child
+	// element, any other value becomes a text node.
+	addOne := func(r Value) {
+		if IsXmlValue(r) {
+			cren = append(cren, r)
+			return
+		}
+		addText(ValToString(r))
+	}
+	// addChild applies the ${...} child-hole splice rule: a List
+	// contributes each of its TOP-LEVEL elements (one level only — a
+	// nested list element is kept as a single value, not flattened, the
+	// same as `append [..]` on a FlexXml); any other value is one child.
+	addChild := func(r Value) {
+		if IsConcrete(r) && r.Parent.ConformsTo(TList) {
+			if rl, err := AsList(r); err == nil {
+				for i := 0; i < rl.Len(); i++ {
+					addOne(rl.Get(i))
+				}
 				return
 			}
-			for i := 0; i < rl.Len(); i++ {
-				addChild(rl.Get(i))
-			}
-		case IsXmlElement(r):
-			cren = append(cren, r)
-		default:
-			addText(ValToString(r))
 		}
+		addOne(r)
 	}
 
 	for _, c := range t.Cren {

@@ -169,6 +169,62 @@ func TestXmlAccessors(t *testing.T) {
 	}
 }
 
+// TestXmlReviewFixes pins the PR-review corrections (PR #159):
+// structural eq/deq, FlexXml children in interpolation, one-level child
+// splice, attribute-name validation, and duplicate-attribute rejection.
+func TestXmlReviewFixes(t *testing.T) {
+	cases := []struct {
+		src  string
+		want any
+	}{
+		// eq is container identity; deq is structural.
+		{`def x <a/> x eq x`, "true"},
+		{`(<a/>) eq (<a/>)`, "false"},
+		{`(<a x="1"><b/></a>) deq (<a x="1"><b/></a>)`, "true"},
+		// a FlexXml child interpolates as an element, not escaped text.
+		{`def b (flex <b/>) <a>${b}</a>`, "<a><b/></a>"},
+		// the child-hole splice is ONE level: a nested list stays one value.
+		{`<a>${[<b/> <c/>]}</a>`, "<a><b/><c/></a>"},
+		{`<a>${[[1 2]]}</a>`, "<a>[1 2]</a>"},
+		// a closure over a ${} expression captures the outer binding.
+		{`def mk ([x:String] => [([] => [<p>${x}</p>])]) def f (mk "bob") f`, "<p>bob</p>"},
+	}
+	for _, c := range cases {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("lang.New: %v", err)
+		}
+		if got := runLast(t, a, c.src); got != c.want {
+			t.Errorf("%q: got %v (%T), want %v", c.src, got, got, c.want)
+		}
+	}
+
+	// Negatives: invalid FlexXml attribute name, duplicate literal attribute.
+	for _, src := range []string{`set 'bad name' '1' (flex <a/>)`, `<a x="1" x="2"/>`} {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("lang.New: %v", err)
+		}
+		if _, err := a.Run(src); err == nil {
+			t.Errorf("%q: expected error, got none", src)
+		}
+	}
+
+	// Check mode must not strip a Word/__XI literal to a payload-less
+	// carrier (it stays evaluable): `aql check` succeeds and infers Xml.
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	res, err := a.Check(`def x "y" <p>${x}</p>`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if len(res.Stack) != 1 || res.Stack[0] != "Xml" {
+		t.Errorf("check: expected [Xml], got %v", res.Stack)
+	}
+}
+
 // TestXmlLiteralErrorsEndToEnd pins the loud-failure contract.
 func TestXmlLiteralErrorsEndToEnd(t *testing.T) {
 	for _, src := range []string{`<a></b>`, `<a>`, `<a x=1/>`, `<p>${x</p>`} {
