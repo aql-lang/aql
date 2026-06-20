@@ -1683,7 +1683,13 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args):
+	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || !noEvalBodiesInert(sig, args)):
+		// A code-body word is refused when its body is not inert data, OR when it
+		// EXECUTES the body by splicing it onto the tape (CompileExecutesBody, e.g.
+		// `var`): the handler then returns tape-coupled tokens the VM cannot run,
+		// so baking it as a CALL_NATIVE — which an inert word-list body would
+		// otherwise permit — produces a program that trips the VM's tape-coupled
+		// result screen. Refuse cleanly instead.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
 	case hasUncoveredQuoteArg(sig) && word != "get" && word != "getr" && word != "set" && !quoteInertOK:

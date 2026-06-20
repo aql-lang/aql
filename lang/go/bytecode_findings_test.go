@@ -1754,3 +1754,62 @@ func TestCodequoteCompilesNative(t *testing.T) {
 		t.Errorf("plain paren must evaluate, not bake as code: got %v", gotC)
 	}
 }
+
+// Found via the voxgig-aql/decision project's diverge.sh (--force-compile over
+// suites that use `each [var [[v] … 0]]`). `var` is a block-with-locals word:
+// its handler SPLICES def/body/undef tokens onto the tape for the engine to
+// re-step, so it can never be a CALL_NATIVE. Its body is an inert word-list,
+// though, so it used to pass noEvalBodiesInert and bake as a CALL_NATIVE — whose
+// handler then returned tape-coupled tokens the VM rejects, surfacing an
+// internal_error instead of a clean refusal. The CompileExecutesBody flag now
+// makes the recorder refuse it (Stage 2 code-body), and --compile falls back to
+// the interpreter with the correct result.
+func TestVarRefusesCleanly(t *testing.T) {
+	// Top-level `var` SPLICES (its dispatch used to bake a CALL_NATIVE that
+	// returned tape tokens → VM internal_error). It now REFUSES cleanly, and
+	// --compile falls back to the interpreter with the correct result.
+	for _, c := range []struct {
+		src  string
+		want string
+	}{
+		{`5 var [[v] v add 1]`, "[6]"},
+		{`def r (5 var [[v] v 0]) r`, "[0 5]"},
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: unexpected check error %v", c.src, cerr)
+		}
+		if prog != nil {
+			t.Errorf("%q: expected a refusal, got a Program:\n%s", c.src, prog.Disassemble())
+		}
+		if !strings.Contains(reason, "var") {
+			t.Errorf("%q: refusal should name var, got %q", c.src, reason)
+		}
+		got, compiled, err := mustNew(t).RunCompiled(c.src)
+		if err != nil {
+			t.Fatalf("%q: RunCompiled error %v (must not surface internal_error)", c.src, err)
+		}
+		if compiled {
+			t.Errorf("%q: expected an interpreter fallback, not a compiled run", c.src)
+		}
+		if fmt.Sprint(got) != c.want {
+			t.Errorf("%q: got %v want %s", c.src, got, c.want)
+		}
+	}
+
+	// A `var` block INSIDE a closure body that nets exactly one value is
+	// unaffected — the splice re-steps and compiles, byte-identical to the
+	// interpreter (the refusal is only for a var whose own dispatch would bake).
+	const inClosure = `def xs [1 2 3] (xs each [var [[v] v mul 2]])`
+	got, compiled, err := mustNew(t).RunCompiled(inClosure)
+	if err != nil {
+		t.Fatalf("each[var]: %v", err)
+	}
+	gotI, _ := mustNew(t).Run(inClosure)
+	if !compiled {
+		t.Errorf("each[var] single-value body should compile, fell back")
+	}
+	if fmt.Sprint(got) != fmt.Sprint(gotI) || fmt.Sprint(got) != "[[2 4 6]]" {
+		t.Errorf("each[var]: compiled=%v interp=%v want [[2 4 6]]", got, gotI)
+	}
+}

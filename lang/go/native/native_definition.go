@@ -81,6 +81,13 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "var",
 
+		// var SPLICES its body (def/body/undef tokens) onto the tape for the
+		// engine to re-step, so it can never compile to a CALL_NATIVE — the
+		// handler returns tape-coupled tokens the VM cannot run. The flag makes
+		// the bytecode recorder refuse it cleanly (Stage 2 code-body) even though
+		// its body is an inert word-list. See CompileExecutesBody.
+		CompileEffect: CompileExecutesBody,
+
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
