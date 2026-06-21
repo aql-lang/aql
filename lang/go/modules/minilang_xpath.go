@@ -3,6 +3,7 @@ package modules
 import (
 	"math"
 	"strings"
+	"sync"
 
 	"github.com/antchfx/xpath"
 	"github.com/aql-lang/aql/lang/go/native"
@@ -30,6 +31,43 @@ import (
 // root) and walks it through the xpNav NodeNavigator. Each element node keeps
 // a back-reference to its source AQL value so a match converts straight back
 // without re-rendering.
+//
+// The mirror is the deliberate adapter, not a stopgap. antchfx clones the
+// navigator at essentially every axis step / predicate (Copy()), so the mirror
+// trades one O(n) build for O(1) Copy and O(1) parent/sibling hops; a
+// path-stack navigator over the AQL values in place would make every Copy
+// O(depth) (re-deriving siblings from the parent's Cren), i.e. O(nodes·depth)
+// overall — slower, not lazier. Adding parent pointers to the kernel
+// XmlElementPayload is the wrong direction: Node/Xml is an immutable by-value
+// tree with structural sharing, and a child→parent back-pointer would break its
+// equality / clone / render contract for one consumer's benefit. What IS worth
+// caching is the compiled expression, not the tree — see miniXPathExprs.
+
+// miniXPathExprs memoizes compiled XPath expressions keyed by source, so an
+// `xp` call in a loop compiles its expression once per process — the same
+// per-src compile memo the `re` kind keeps (miniCompiledPattern). A compiled
+// *xpath.Expr is safe to reuse across calls: Evaluate/Select fork their mutable
+// iterator state via q.Clone() and never mutate the expression. (The per-call
+// xpNode mirror is NOT memoized — the document varies per call, unlike the
+// expression.)
+var (
+	miniXPathMu    sync.Mutex
+	miniXPathExprs = map[string]*xpath.Expr{}
+)
+
+func miniCompiledXPath(src string) (*xpath.Expr, error) {
+	miniXPathMu.Lock()
+	defer miniXPathMu.Unlock()
+	if e, ok := miniXPathExprs[src]; ok {
+		return e, nil
+	}
+	e, err := xpath.Compile(src)
+	if err != nil {
+		return nil, err
+	}
+	miniXPathExprs[src] = e
+	return e, nil
+}
 
 // xpNode is a navigable mirror of one AQL Node/Xml node. Only element and text
 // nodes are tree nodes; attributes hang off their element as xpAttr (the
@@ -239,7 +277,7 @@ func miniXPathHandler(args []native.Value, _ map[string]native.Value, _ []native
 			"xp: expected an Xml element, got "+doc.Parent.String(), "lang_xp",
 			"the xp document must be a Node/Xml value (an <tag>…</tag> literal)")
 	}
-	expr, perr := xpath.Compile(src)
+	expr, perr := miniCompiledXPath(src)
 	if perr != nil {
 		return nil, r.AqlErrorHint("mini_parse_error", "xp: "+perr.Error(), "lang_xp",
 			"write an XPath like //book/title, //@id or count(//item)")
