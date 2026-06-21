@@ -2024,3 +2024,44 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 		t.Errorf("valid mini re parity: compiled=%v interp=%v", gotC, gotI)
 	}
 }
+
+// Cluster 7a — a 0-net code-body case scrutinee compiles to a case_error trap.
+// `case [f 1] [...]` where f produces no value is the runtime case_error
+// ("value expression produced no value to dispatch on"); caseReturnsFn detects
+// the empty residual via the RECORDING analysis and records a terminal OpTrap
+// instead of islanding. (A type-only run would mis-see the empty-body fn as
+// 1-value, so the recording residual is load-bearing.)
+func TestCaseEmptyScrutineeTrapCompiles(t *testing.T) {
+	const src = `def f fn [[x:Integer] [] []] case [f 1] [2 "two" "other"]`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("check error %v", cerr)
+	}
+	if prog == nil {
+		t.Fatalf("expected a trap program, refused: %s", reason)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+		t.Errorf("expected a terminal TRAP, no island:\n%s", dis)
+	}
+	_, compiled, errC := mustNew(t).RunCompiled(src)
+	if !compiled {
+		t.Errorf("trap program did not run compiled (fell back)")
+	}
+	_, errI := mustNew(t).Run(src)
+	if codeOf(errC) != "case_error" || codeOf(errI) != "case_error" {
+		t.Errorf("compiled=[%s] interp=[%s], want both case_error", codeOf(errC), codeOf(errI))
+	}
+
+	// NEGATIVE: a code-body scrutinee that DOES produce a value must NOT trap —
+	// it stays faithful (islanded today) and yields the real dispatch result, not
+	// a spurious case_error.
+	const ok = `case [1 add 1] [2 "two" "other"]`
+	gotC, _, errC2 := mustNew(t).RunCompiled(ok)
+	gotI, errI2 := mustNew(t).Run(ok)
+	if errC2 != nil || errI2 != nil {
+		t.Fatalf("value scrutinee: compiled err=%v interp err=%v", errC2, errI2)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("value scrutinee parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}

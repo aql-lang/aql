@@ -156,9 +156,30 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	}
 	if isCodeBody(v) {
 		// A code-body scrutinee (`case [body] [clauses]`) runs the body and
-		// dispatches on its last result; that run-and-dispatch is not yet
-		// lowered (and a 0-net body is the run-time case_error), so it stays on
-		// the island / whole-program fallback path.
+		// dispatches on its last result. A 0-net body is the run-time case_error
+		// (caseHandler: "value expression produced no value to dispatch on"). In
+		// compile mode, detect that and record a TERMINAL OpTrap raising the
+		// byte-identical error instead of islanding (a top-level trap; a nested
+		// case declines and keeps the island). The residual count must come from
+		// the RECORDING analysis (analyseCondFragment): a type-only RunCarrierBody
+		// gives an empty-body 0-return fn (`[f 1]`) a bogus 1-value Any
+		// approximation, which would miss the trap. The captured fragment is
+		// discarded (the trap truncates the program; for the value-producing case
+		// the island still owns the dispatch), and the scrutinee analysis' own
+		// diagnostics are dropped (the trap/island owns the error, and the island
+		// path never surfaced them before). A value-producing code-body scrutinee
+		// stays on the island (its run-and-dispatch lowering is 7b, not yet built);
+		// plain check keeps the prior dynAny.
+		if es := r.Check.Emit; es != nil && es.Active() {
+			nDiag := len(r.Check.Diagnostics)
+			_, stk := analyseCondFragment(r, v)
+			r.Check.TruncateDiagnostics(nDiag)
+			if len(stk) == 0 {
+				es.RecordTrap("case_error",
+					"case: value expression produced no value to dispatch on",
+					"case", "", v.Pos)
+			}
+		}
 		return dynAny
 	}
 	if !isCodeBody(clauses) {
