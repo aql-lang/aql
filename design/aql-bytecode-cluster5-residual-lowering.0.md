@@ -191,6 +191,19 @@ before landing.
   already declares `Returns: []` correctly, so leaf output-count modeling is not
   the problem; containment is.
 
+  **Attempted fix + architectural blocker found (reverted, gate-clean).** Tried
+  routing the module-fn value dispatch (`execFnDefSig` capturedReg branch) through
+  the unit-compiling `buildFnBodyReturnsFn` (`StartFnCompile` + `AnalyseFnBody` +
+  `RecordUserCall`) instead of `CallAQL`. It fired but returned a bare `[Any]`:
+  debug showed the module sub-registry has a **separate, inactive EmitState**
+  (`mainES == capturedReg.Check.Emit` is FALSE, `capturedReg.Check.Emit.Active()`
+  is FALSE), so `StartFnCompile` declines and no unit records. The real prerequisite
+  is therefore **cross-registry EmitState sharing**: a module-preamble AQL fn must
+  unit-compile against the MAIN program's EmitState while resolving names in its own
+  sub-registry scope. That is a foundational module-compilation change (how
+  `BuildXxxModule` sub-registries relate to the compiling program's Check/Emit), not
+  a local edit — the next dedicated step for test:38 (and any real-body module fn).
+
 ### Bottom line
 
 `islandCeiling` is **0** (no compiled program islands). `refusalCeiling` is now
