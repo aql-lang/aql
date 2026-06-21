@@ -3,6 +3,7 @@ package lang
 import (
 	"errors"
 	"io"
+	"strconv"
 
 	"github.com/aql-lang/aql/eng/go"
 
@@ -82,6 +83,10 @@ var NewMap = native.NewMap
 
 // NewAtom creates an atom Value from a bare name.
 var NewAtom = native.NewAtom
+
+// NewTypeLiteral creates the type-literal Value for a *Type — e.g. as an
+// alternative for DefineEnum, or a value standing for a type.
+var NewTypeLiteral = native.NewTypeLiteral
 
 // NewMemFileOps creates an in-memory file system for testing.
 func NewMemFileOps() *capabilities.MemFileOps {
@@ -355,6 +360,86 @@ func (a *AQL) Register(name string, sigs ...Signature) {
 // modules into a test instance without an explicit import).
 func (a *AQL) RegisterNativeFunc(n native.NativeFunc) {
 	a.registry.RegisterNativeFunc(n)
+}
+
+// DefineType installs a user type from a body Value by the SAME path the
+// `def Name body` word uses (eng.InstallType), and returns the minted
+// type handle for use in Register'd signatures. This is the embedding-API
+// counterpart of running `def`, but with the *Type handed back — closing
+// the gap where an embedder could define a type in source yet never
+// obtain its handle.
+//
+// `body` is an ordinary type body: a bare type literal (alias), a refine
+// prefab (newtype), a disjunct (DefineEnum / NewDisjunct — union/enum), a
+// negation, a record/object/schema body, etc. For a body expressed in AQL
+// syntax, use DefineTypeFromSource; for a membership rule expressed as a
+// Go func, use DefineMemberType.
+func (a *AQL) DefineType(name string, body Value) (*Type, error) {
+	return a.registry.DefineType(name, body)
+}
+
+// DefineEnum installs `name` as the union/enumeration of the given
+// alternatives — the embedding equivalent of `def Name (v0 tor v1 …)`.
+// Alternatives may be concrete values (a closed enum) or type literals
+// (a union). Returns the minted type handle.
+func (a *AQL) DefineEnum(name string, alternatives ...Value) (*Type, error) {
+	return a.registry.DefineEnum(name, alternatives...)
+}
+
+// DefineMemberType installs `name` as the type whose inhabitants are the
+// concrete values satisfying member — a membership rule expressed as a Go
+// func (the one case DefineType's body path cannot express). The name is
+// bound (resolves in source and exports like a `def`-installed type) and
+// the minted handle returned.
+func (a *AQL) DefineMemberType(name string, parent *Type, member func(v Value) bool) (*Type, error) {
+	return a.registry.DefineMemberType(name, parent, member)
+}
+
+// DefineTypeFromSource installs `name` with a body written in AQL syntax
+// — it runs `def Name <bodySource>` on the instance and returns the
+// minted type handle. The most direct embedding form: the host writes the
+// body exactly as it would in a script (e.g.
+// DefineTypeFromSource("Point", "refine Record [x:Integer y:Integer]"))
+// and gets the *Type back to thread into Register'd signatures.
+func (a *AQL) DefineTypeFromSource(name, bodySource string) (*Type, error) {
+	// `name` is composed into a `def` program, so it must be a plain type
+	// identifier — never source. Reject anything else BEFORE running, so a
+	// name like `X end <code>` cannot terminate the def and execute
+	// trailing source against the registry. (`bodySource` is intentionally
+	// source; `name` is not.) The clash / part checks still run inside
+	// InstallType when the def executes.
+	if !validTypeIdent(name) {
+		return nil, errors.New("define type: invalid type name " + strconv.Quote(name) +
+			" (must be a capitalised identifier of letters, digits, '_', '-', '/')")
+	}
+	if _, err := a.Run("def " + name + " " + bodySource); err != nil {
+		return nil, err
+	}
+	if t := a.registry.LookupTypeName(name); t != nil {
+		return t, nil
+	}
+	return nil, errors.New("define type " + name + ": installed but did not resolve")
+}
+
+// validTypeIdent reports whether name is a safe type identifier to splice
+// into a `def` program: capitalised, and otherwise only letters, digits,
+// and the path/word separators '_', '-', '/'. This excludes whitespace
+// and every AQL-significant character (quotes, parens, brackets, ';',
+// 'end', …), so a name can never break out of the def-name position.
+func validTypeIdent(name string) bool {
+	if name == "" || name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			c == '_', c == '-', c == '/':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // FnParam describes one parameter of a function signature — re-exported so

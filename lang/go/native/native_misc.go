@@ -246,8 +246,13 @@ func init() {
 
 // ---- file I/O handlers ----
 
-// extractPath returns the path string from a String or Path value.
+// extractPath returns the routing path from a Stream handle, Path, or
+// String value. A Stream atom (stdin/stdout/stderr) resolves to its
+// internal stream sentinel so doRead/doWrite route to the host stream.
 func extractPath(v Value) string {
+	if sentinel, ok := streamSentinel(v); ok {
+		return sentinel
+	}
 	if IsPath(v) {
 		_as5, _ := AsPath(v)
 		return _as5.String()
@@ -256,8 +261,12 @@ func extractPath(v Value) string {
 	return _as6
 }
 
-// returnPath wraps the result path: if input was a Path, return Path; else String.
+// returnPath wraps the result: a Stream handle or Path returns itself;
+// a String path returns the resolved string.
 func returnPath(v Value, pathStr string) Value {
+	if _, ok := streamSentinel(v); ok {
+		return v
+	}
 	if IsPath(v) {
 		return v
 	}
@@ -311,6 +320,19 @@ func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	return []Value{returnPath(args[0], path)}, nil
 }
 
+// writeAnyHandler: [path/string/stream, any] -> [path/string/stream].
+// Serializes non-string data with no options map required — the value is
+// encoded as jsonic (the same default the options form upgrades to).
+func writeAnyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	path := extractPath(args[0])
+	content := valueToJsonic(args[1])
+	result, err := doWrite(r, path, content, "utf8", "jsonic", "write", "lf")
+	if err != nil {
+		return result, err
+	}
+	return []Value{returnPath(args[0], path)}, nil
+}
+
 // write: [path/string, any, map] -> [path/string] (for non-string data with fmt)
 func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
@@ -324,18 +346,6 @@ func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		return result, err
 	}
 	return []Value{returnPath(args[0], path)}, nil
-}
-
-func stdinHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(pathStdin)}, nil
-}
-
-func stdoutHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(pathStdout)}, nil
-}
-
-func stderrHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(pathStderr)}, nil
 }
 
 // ---- help / describe handlers ----

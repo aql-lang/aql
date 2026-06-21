@@ -255,18 +255,10 @@ func (g *genParamUnifier) Format(v Value) string {
 	if IsBareTypeNode(v) {
 		return g.param.Name
 	}
-	if g.prev != nil {
-		return g.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
+	return baseBehavior(g.prev).Format(v)
 }
 
-func (g *genParamUnifier) Equal(a, b Value) bool {
-	if g.prev != nil {
-		return g.prev.Equal(a, b)
-	}
-	return DefaultBehavior.Equal(a, b)
-}
+func (g *genParamUnifier) Equal(a, b Value) bool { return baseBehavior(g.prev).Equal(a, b) }
 
 // boundNode extracts the lattice node a bound value denotes, when it
 // denotes one directly: a bare type literal IS its node; an object
@@ -353,12 +345,7 @@ type schemaUnifier struct {
 	info *TypeSchemaInfo
 }
 
-func (s *schemaUnifier) Match(v Value, t *Type) bool {
-	if s.prev != nil {
-		return s.prev.Match(v, t)
-	}
-	return DefaultBehavior.Match(v, t)
-}
+func (s *schemaUnifier) Match(v Value, t *Type) bool { return baseBehavior(s.prev).Match(v, t) }
 
 func (s *schemaUnifier) Format(v Value) string {
 	if IsTypeSchema(v) {
@@ -368,18 +355,10 @@ func (s *schemaUnifier) Format(v Value) string {
 		}
 		return fmt.Sprintf("schema<%s>[%s]", s.info.Name, strings.Join(names, " "))
 	}
-	if s.prev != nil {
-		return s.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
+	return baseBehavior(s.prev).Format(v)
 }
 
-func (s *schemaUnifier) Equal(a, b Value) bool {
-	if s.prev != nil {
-		return s.prev.Equal(a, b)
-	}
-	return DefaultBehavior.Equal(a, b)
-}
+func (s *schemaUnifier) Equal(a, b Value) bool { return baseBehavior(s.prev).Equal(a, b) }
 
 // InstallSchemaUnifier attaches a schemaUnifier to a minted schema
 // node. Called by InstallType's TypeSchema branch.

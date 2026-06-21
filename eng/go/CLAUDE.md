@@ -367,6 +367,36 @@ layer needs it (e.g. type registration policy, payload-marker
 rules), the concern is **language-wide** and belongs here, not
 duplicated in lang.
 
+### Two categories — pick by lifetime, not by "is it a user type"
+
+`RegisterExternalBuiltin` is for types that are **global and
+wire-stable**: one identity for the whole process, a FixedID baked
+into serialised `Value.ID`s (matrix, time, fetch, the timers,
+third-party plugins). It is NOT the path for a type that is
+**module-scoped or behaves like an AQL `def`** — those are
+per-registry, have no FixedID, and must not bloat the builtin name
+index or the FixedID snapshot.
+
+For the second category, host-Go code routes through the **same
+installer the `def` word uses** (`InstallType`), so a Go-defined type
+and a source-defined one are indistinguishable — same unifier, canon,
+dispatch wiring. Do NOT hand-roll `MintType` + a bespoke `TypeBehavior`
+for these; reach for:
+
+| Host need | Use | AQL twin |
+| --- | --- | --- |
+| Any `def`-expressible body (alias, refine, union, negation, record, object, schema, …) | `(*Registry).DefineType(name, body)` → `*Type` | `def Name body` |
+| A value/type union | `(*Registry).DefineEnum(name, alts…)` | `def Name (v0 tor v1 …)` |
+| Membership as a **Go func** (the one shape `InstallType` can't express) | `(*Registry).DefineMemberType(name, parent, fn)` (mints + binds) or `r.Types.MintMemberType(...)` (mint only — module-scoped, reached via an export, like aql:io's `StreamKind`) | `def Name (refine Base …)` |
+
+`MemberBehavior(func(Value) bool)` is the shared kernel wiring under
+`MintMemberType`: one predicate yields Match, Unify, canon delegation
+and `is`/dispatch agreement — the same `matchMembership` /
+`unifyMembership` contract the AQL predicate path (`predicateUnifier`)
+routes through (`eng/go/membership.go`). Embedders get all of this on
+the public surface: `lang.AQL.DefineType` / `DefineTypeFromSource` /
+`DefineEnum` / `DefineMemberType`.
+
 ## FixedID Allocation
 
 FixedIDs are baked into serialised Value IDs

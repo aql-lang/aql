@@ -223,7 +223,7 @@ func ExactEqual(a, b Value) bool {
 		_as12, _ := AsBoolean(b)
 		return _as13 == _as12
 	}
-	if a.Parent.Equal(TAtom) && b.Parent.Equal(TAtom) {
+	if a.Parent.ConformsTo(TAtom) && b.Parent.ConformsTo(TAtom) {
 		_as15, _ := AsAtom(a)
 		_as14, _ := AsAtom(b)
 		return _as15 == _as14
@@ -360,7 +360,7 @@ func DeepEqual(a, b Value) bool {
 		_as20, _ := AsBoolean(b)
 		return _as21 == _as20
 	}
-	if a.Parent.Equal(TAtom) && b.Parent.Equal(TAtom) {
+	if a.Parent.ConformsTo(TAtom) && b.Parent.ConformsTo(TAtom) {
 		_as23, _ := AsAtom(a)
 		_as22, _ := AsAtom(b)
 		return _as23 == _as22

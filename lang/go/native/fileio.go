@@ -179,7 +179,7 @@ func valueToJsonic(v Value) string {
 		return "false"
 	case IsNoneShape(v):
 		return "null"
-	case v.Parent.Equal(TAtom):
+	case v.Parent.ConformsTo(TAtom):
 		_as4, _ := AsAtom(v)
 		return fmt.Sprintf("%q", _as4)
 	case v.Parent.ConformsTo(TList):
@@ -209,6 +209,10 @@ func valueToJsonic(v Value) string {
 func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 	var data []byte
 	var err error
+
+	if path == pathStdout || path == pathStderr {
+		return nil, r.AqlError("read_error", "read: cannot read from an output stream", "read")
+	}
 
 	if path == pathStdin {
 		data, err = io.ReadAll(r.Input)

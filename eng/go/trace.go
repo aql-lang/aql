@@ -60,7 +60,7 @@ func TraceColorize(v Value) string {
 			return cCyan + "true" + cReset
 		}
 		return cCyan + "false" + cReset
-	case v.Parent.Equal(TAtom):
+	case v.Parent.ConformsTo(TAtom):
 		s, err := AsAtom(v)
 		if err != nil {
 			return cRed + fmt.Sprintf("%v", v.Data) + cReset

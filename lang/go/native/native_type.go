@@ -615,18 +615,13 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			// value's Parent.
 			return []Value{NewBoolean(a.Parent.ConformsTo(bNode))}, nil
 		}
-		// A const singleton RHS answers membership through its own
-		// Behavior (the v.Is(t) doctrine): the plain inhabitant is a
-		// member (`1 is (typeof (const 1))` → true), everything else —
-		// including the cross-leaf 1.0 — is not. Other custom
-		// behaviors deliberately do NOT route here: bare-refine
-		// newtypes keep their strict-identity `is` via the Unify path
-		// below.
-		if canon := CanonicalType(r, bNode); canon != nil {
-			if cb, isConst := canon.Behavior.(constBehavior); isConst {
-				return []Value{NewBoolean(cb.Match(a, canon))}, nil
-			}
-		}
+		// A const singleton RHS (and every other membership type) answers
+		// `is` through the shared Unify path below — `1 is (const 1)` →
+		// true, `1.0 is (const 1)` → false (same-base strict) — so it needs
+		// no special-case here. (Const used to route through its bespoke
+		// Behavior.Match; converging it onto MemberBehavior gave it a
+		// matching Unify, making this branch redundant.)
+		//
 		// Both sides are bare type literals: the question is purely
 		// lattice subtyping. Settle directly via IsSubtypeOf rather
 		// than via Unify, whose List/Map/DepScalar/FnDef branches

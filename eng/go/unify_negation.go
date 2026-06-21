@@ -82,28 +82,14 @@ type negationUnifier struct {
 // prev/Default walk — mirroring disjunctUnifier.
 func (n *negationUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
-		if n.prev != nil {
-			return n.prev.Match(v, t)
-		}
-		return DefaultBehavior.Match(v, t)
+		return baseBehavior(n.prev).Match(v, t)
 	}
 	_, err := unifyNegation(NegationInfo{Inner: n.inner}, v)
 	return err == nil
 }
 
-func (n *negationUnifier) Format(v Value) string {
-	if n.prev != nil {
-		return n.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
-}
-
-func (n *negationUnifier) Equal(a, b Value) bool {
-	if n.prev != nil {
-		return n.prev.Equal(a, b)
-	}
-	return DefaultBehavior.Equal(a, b)
-}
+func (n *negationUnifier) Format(v Value) string { return baseBehavior(n.prev).Format(v) }
+func (n *negationUnifier) Equal(a, b Value) bool { return baseBehavior(n.prev).Equal(a, b) }
 
 // installNegationUnifier attaches a negationUnifier to def, wrapping any
 // existing Behavior. Called by InstallType when minting a negation type
