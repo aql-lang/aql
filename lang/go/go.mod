@@ -3,6 +3,7 @@ module github.com/aql-lang/aql/lang/go
 go 1.24.7
 
 require (
+	github.com/antchfx/xpath v1.3.6
 	github.com/aql-lang/aql/eng/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/itchyny/gojq v0.12.19

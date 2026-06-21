@@ -22,6 +22,11 @@ func init() {
 		"lang_jq": "jq filter: `<doc> mini jq '<filter>'` — run a jq filter (e.g. .items[].name) " +
 			"over the stack subject (same shapes as jp) and return its output stream as a List. " +
 			"github.com/itchyny/gojq.",
+		"lang_xp": "XPath query: `<xml> mini xp '<path>'` — run an XPath (e.g. //book/title, " +
+			"//@id, count(//item)) over the stack Node/Xml subject and return a List: matched " +
+			"nodes for a node-set (an element as its Node/Xml value, an attribute/text node as a " +
+			"String), or a one-element list for a scalar count/string/boolean result. " +
+			"github.com/antchfx/xpath.",
 		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
 			"Every fn signature must start with the standard prefix [src:String opts:Map …].",
 		"kinds": "List the registered mini-language kind atoms.",

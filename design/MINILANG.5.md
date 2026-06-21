@@ -206,7 +206,7 @@ becoming ordinary kind atoms (no lexer involvement):
 | `tr` | transliterate (Perl `tr///`) | `subject:String` → `[String]`; `opts` flags `d`/`s`/`c` |
 | `jp` ✅ | JsonPath (github.com/ohler55/ojg) | `doc:Any` → `[List]` of matched nodes — **landed** |
 | `jq` ✅ | jq filter (github.com/itchyny/gojq) | `doc:Any` → `[List]` (the output stream) — **landed** |
-| `xp` | XPath | `doc:Any` → `[Any]` |
+| `xp` ✅ | XPath (github.com/antchfx/xpath) | `doc:Xml` → `[List]` of results (elements as Node/Xml values, attribute/text nodes as Strings, a scalar count/string/boolean as a one-element list) — **landed** |
 | `cs` | CSS selector | `doc:Any` → `[Any]` (pairs with XML.0.md) |
 | `gl` | glob | `path:String` → `[Boolean]` |
 | `sh` | POSIX shell pattern | `path:String` → `[Boolean]` |
@@ -436,6 +436,68 @@ body are visible wherever that module's import is; `undef`-style
 teardown on scope exit matches existing binding rules. Two modules
 registering the same kind name collide loudly at import time.
 
+### Memoising an AQL-registered kind
+
+A built-in kind caches its compiled artifact in a private,
+process-global Go map (`re`'s `miniCompiledPattern`, `xp`'s
+`miniXPathExprs`) — a table an AQL kind author cannot reach, and there
+is **no automatic per-kind cache**: the registered `fn` body runs on
+every `mini` call. So an AQL kind memoises the same way conceptually —
+it holds **its own cross-call cache** and short-circuits on a hit. The
+cache is a **mutable container** keyed by `src`: a `flex` map (or a
+`Store`), either module-level (a dynamic binding the body resolves at
+call time) or — cleaner, because it encapsulates the cache with the
+kind — **closure-captured** via a factory `fn` (a `flex` map is
+pointer-backed, so the captured value shares its state across calls,
+the standard factory-retains-state pattern from CLOSURES):
+
+```
+"aql:minilang" import end
+
+# A factory whose returned fn captures a per-kind cache. Models a kind
+# whose `src` carries an expensive "compile" step (here just `add src src`).
+def make-dbl fn [[] [Function] [
+  def cache (flex {})                                  # captured, mutable
+  fn [[src:String opts:Map subject:String] [String] [
+    def hit (cache get (src))                          # ← (src), not src
+    if (hit is None)
+      [ def r (add src src)                            #   the expensive step
+        set (src) r cache drop                         # ← (src), not src
+        r ]
+      [ hit ]                                          #   cache hit
+  ]]
+]] end
+
+MiniLang.register dbl (make-dbl) end
+"z" mini dbl 'aa'        # computes, caches → 'aaaa'
+"z" mini dbl 'aa'        # cache hit        → 'aaaa'
+"z" mini dbl 'bb'        # computes, caches → 'bbbb'
+```
+
+**The one non-obvious rule:** `get` / `set` (and the `m.k` dot form)
+**quote their key** (the `/q` slot, like `def`), so a *variable* key
+must be parenthesised to evaluate it — `get (src)` / `set (src) v m`.
+A bare `get src` keys on the literal atom `src`, so every entry
+collides on one key and every lookup falsely hits. A *constant* key
+needs no parens (`set 'n' …`, `cache.size`).
+
+The standard-library spec pins this: `lang/spec/module-minilang.tsv §3`
+registers a memoising `dbl` and asserts the body computes exactly
+**twice** for three calls across two distinct `src` (the repeat is a
+hit). A module-level `def cache (flex {})` referenced from the body
+works identically — the factory just keeps the cache out of the
+program namespace.
+
+Note the contrast with the built-ins: an AQL kind's cache is **per
+kind-instance / per engine**, not process-global, so it needs no mutex
+(one engine steps single-threaded) and never leaks across `lang.New()`
+instances — the inverse trade-off to the Go memos, which take a mutex
+to share one table across every instance. The compile hook (§13,
+`register-compiled`) is a *staging* mechanism — it splices precomputed
+tokens at the call site, materialising "compile once" only on the
+bytecode-compiled path — not a runtime cache; for interpreter-side
+memoisation the captured-`flex`-map pattern above is the route.
+
 ---
 
 ## 8. Errors
@@ -598,7 +660,7 @@ Empirical findings the design must respect:
 | 1 | **LANDED 2026-06-12** (scoped to two kinds): native `mini` (two sigs `[Atom/q String]` / `[Atom/q String Map]`; `lang_` resolution with expansion-time `mini_unknown_lang`; auto-`end`; opts normalized to `{}`; `RunInCheckMode` so the checker steps the expansion) + `aql:minilang` with `re` (Go `regexp`, per-src compile memo) and `bf` (brainfuck — filter + generator forms, `opts.steps` budget) + `MiniLang.register` / `MiniLang.kinds` + battery `lang/spec/module-minilang.tsv`. Implementation notes: `mini` returns an `__SP` splice of the standard-call tokens (the `word` mechanism) rather than going through the macro expander — so there is no expansion cache (the `re` compile memo covers the hot cost) and `macroexpand` does not apply to `mini`; src is spliced as collected, so dynamic src works for runtime kinds. Deferred from the original Phase-1 row: `re-sub` / `re-test` / `re-all` |
 | 2 | **`m`** ✅ (Pratt maths via github.com/tabnas/expr — the rev-1 `math` kind, shipped as `m`), **`jp`** ✅ (JSONPath via github.com/ohler55/ojg), **`jq`** ✅ (jq via github.com/itchyny/gojq); remaining: `tr`, `fm`, `gl`. `jp`/`jq` take any AQL document — a Node (Map/List), Object, Array, Table or Record — converting it to generic data (Ideals project through their IdealConverter) and the matches back to AQL values; both return a List of results (a Map/Record subject needs an explicit `{}` opts, the same gotcha as `gex`) |
 | 3 | **compile hooks**: a kind may register an expansion-time compiler `(src, opts-form) → token list` that `mini` splices *instead of* the standard call — staged compilation of the DSL (parse once ever, splice precompiled carrier values, surface `src` syntax errors at expansion time with call-site spans; requires literal `src`). The standard call remains the semantic reference and the dynamic-src fallback |
-| 4 | remaining catalogue kinds (`xp`, `cs`, `ur`, `dt`, `sh`); the `+` literal shortcut — **LANDED** (§12) |
+| 4 | **`xp`** ✅ (XPath via github.com/antchfx/xpath — queries a Node/Xml document, the stack subject, now that XML is a node type; a navigable mirror tree feeds the antchfx cursor model); remaining catalogue kinds (`cs`, `ur`, `dt`, `sh`); the `+` literal shortcut — **LANDED** (§12) |
 
 ---
 

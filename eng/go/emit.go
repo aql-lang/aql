@@ -2438,6 +2438,32 @@ func isInertConst(v Value) bool {
 			}
 		}
 		return true
+	case XmlElementPayload:
+		// An immutable Node/Xml literal (`<a x="1"><b/>text</a>`). It is a
+		// constant value at parse time (parser/xml_literal.go emits
+		// NewXmlElement; only a ${}-interpolated literal becomes the deferred
+		// Word/__XI builder, which is genuine runtime construction and stays
+		// refused). Value-semantics with structural sharing — never mutated in
+		// place: the MUTABLE FlexXml is *FlexXmlData, which falls to default and
+		// never bakes (the bytecode_constbake_test mutation-safety guard) — so it
+		// is sound to pool, exactly like the List / Map cases. Bakes when its
+		// attribute values and child nodes are themselves inert members (text
+		// scalars + nested immutable elements, recursed via isInertConstMember →
+		// isInertConst).
+		for _, c := range d.Cren {
+			if !isInertConstMember(c) {
+				return false
+			}
+		}
+		if d.Attr != nil {
+			for _, k := range d.Attr.Keys() {
+				av, _ := d.Attr.Get(k)
+				if !isInertConstMember(av) {
+					return false
+				}
+			}
+		}
+		return true
 	case ReachInfo:
 		// A receiverless inert lens (`$.name`, `$.a.b`, `$!.x`, `$.1`). See
 		// isInertReach: only the non-eval, no-receiver, all-literal-key shape

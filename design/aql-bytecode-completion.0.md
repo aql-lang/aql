@@ -498,3 +498,75 @@ capture, and `StringUtil.*` string ops — landed divergence-free on first hunt
 doubles as a standing soundness witness for the constructs it already covers, not
 only a bug-finder. This is the durable answer
 to "why is this so fiddly": fund the ORACLE, not the manual probing.
+
+### Const-fold soundness is per-payload-shape — the Node/Xml case (2026-06)
+
+A worked instance of the §6 hazard "a Program is not a correct Program," found
+and fixed on the `xp`/XML branch. It has two halves, and the second only
+appeared *because of* the first.
+
+**(a) Extending the const pool to immutable `Node/Xml`.** A non-interpolated XML
+literal (`<a x="1"><b/>hi</a>`) is a constant `NewXmlElement` value at parse
+time — just another node on the stack — yet it refused with `residual value not
+statically materialisable`, because `isInertConst` (`emit.go`) enumerated every
+bakeable payload *except* `XmlElementPayload` and so fell to `default:false`. The
+one-case gap cascaded: `<a/> size` refused at `size` ("operand of unknown
+provenance"), and a `mini xp` over an inline `<doc>…</doc>` refused, which is why
+`xp` had to be quarantined in the spec's `hermeticExempt`. Adding the case —
+mirroring the List/Map cases, gated on the attribute values and children being
+inert members (recursed through `isInertConstMember`) — bakes the literal as a
+pooled const. The MUTATION-SAFETY invariant (a pooled const is pushed by the SAME
+pointer on every loop iteration, so a mutable value must never bake) holds by
+construction: `Node/Xml` is immutable, and its mutable twin `FlexXml`
+(`*FlexXmlData`) stays in `default` and never bakes. Pinned positive-immutable +
+negative-flex in `bytecode_constbake_test.go`. Consequence: XML literals compile
+native, the `xp` spec rows leave `hermeticExempt`, and refusals do not move
+(rows that used to refuse now bake).
+
+**(b) The fold that (a) exposed — a silent miscompile of interpolated XML.** An
+interpolated literal `<p>${x}</p>` is NOT a constant; it is the deferred
+`Word/__XI` runtime builder. But `evalXmlInterp` evaluated it eagerly even under
+the recorder, where a `${expr}` hole resolves to a check-mode **carrier**. For a
+text/scalar hole the carrier preserves its literal, so the fold was correct; for
+a **node-valued** hole `${b}` the carrier is type-only and `ValToString` renders
+it as its tag `"Xml"`. Before (a), the resulting wrong `<a>Xml</a>` could not
+bake, so it refused and fell back — *accidentally* correct. After (a) it FROZE
+into the program: `<a>${b}</a>` compiled to `<a>Xml</a>` and `<ul>${ks}</ul>` to
+`<ul>XmlXml</ul>`, diverging silently from the interpreter. No gate caught it —
+`lang/spec` carries no interpolated-XML rows, so the differential corpus never
+exercised the combination (the same blind spot the property generator exists to
+close).
+
+The fix mirrors the correct precedent for the structural twin, `evalInterpString`
+(engine.go ~3078): thread a `dynamic` flag through `buildXmlFromTmpl` — true when
+any hole (an attribute part, a child expression, or a nested template) evaluates
+to a non-concrete value — and have `evalXmlInterp`, **when recording**, call
+`MarkUncompilable("interpolated XML with a runtime-computed part")` and return an
+Xml *carrier* instead of baking the check-mode tree. The program then falls back
+and the interpreter builds the real tree. Runtime is provably unchanged: there
+are no carriers at run time, so `dynamic` never fires and the concrete element is
+returned. Net: an all-concrete interpolation (scalar / text / attribute holes)
+compiles native and correct; a node-valued hole falls back faithfully; pinned
+compiled == interpreted across every interpolation shape in
+`lang/go/test/xml_interp_compiled_test.go`.
+
+**The principle**, restated from the three property-based divergences above: a
+const-fold valid for one payload SHAPE can be silently invalid for another, so a
+permissive `isInertConst` is only HALF of a soundness obligation — the other half
+is that *anything which reached a foldable value through a check-mode
+approximation must refuse*. `evalInterpString` already encoded that half;
+`evalXmlInterp` had not, and (a) turned the omission from a harmless refusal into
+a wrong answer. Both interpolation builders (`__XI`, `__IS`) now share the rule:
+the recorder never bakes an interpolation whose holes are not compile-time
+concrete. The catch was, once again, the differential — `compiles` is not
+`compiles correctly`, and a green `NATIVE` disposition over a wrong value is the
+exact failure mode the §6 gates exist to make impossible.
+
+A process note that shaped *where* this could be tested: `refusalCeiling`
+(`compiled_coverage_test.go`) sits at its limit and only ratchets DOWN, so any
+spec value row that refuses breaks the gate. XML-literal rows could not enter
+`lang/spec` until (a) made them native; the genuinely-refusing surface (FlexXml
+`set`/`append` mutation, `/q`-atom `xml-attr`, binding-fed `${}` interpolation)
+therefore stays in Go tests, with `lang/spec/xml.tsv` confined to the
+natively-compilable read/typing surface. Disposition was checked per row before
+adding, not assumed.
