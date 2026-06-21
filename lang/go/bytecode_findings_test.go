@@ -2076,6 +2076,51 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 	}
 }
 
+// Bare-value map-field const-fold: a bare word that is a 0-arg fn auto-fires as a
+// map value (`{a:g}` → `{a:42}`, like the parenthesised `{a:(g)}`). The bare form
+// previously fell to autoEvalMap's sub-engine eval, leaving a check-mode carrier
+// of unknown provenance that refused; it now const-folds to its concrete result
+// (identical to the interpreter's sub-engine eval) and the map bakes as a const.
+func TestBareFnMapFieldCompiles(t *testing.T) {
+	cases := []string{
+		`def g fn [[] [Integer] [42]] def m {a:g} m`,
+		`def g fn [[] [Integer] [42]] {a:g}`,
+	}
+	for _, src := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", src, reason)
+		}
+		if dis := prog.Disassemble(); strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", src, dis)
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(src)
+		gotI, eI := mustNew(t).Run(src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", src, gotC, gotI)
+		}
+	}
+
+	// NEGATIVE: a plain literal map and a bare def-bound value still compile with
+	// parity — the fold must not change their behaviour.
+	for _, src := range []string{`def m {a:5 b:"x"} m`, `def x 7 def m {a:x} m`} {
+		gotC, _, eC := mustNew(t).RunCompiled(src)
+		gotI, eI := mustNew(t).Run(src)
+		if eC != nil || eI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v(%v) interp=%v(%v)", src, gotC, eC, gotI, eI)
+		}
+	}
+}
+
 // Cluster 7a — a 0-net code-body case scrutinee compiles to a case_error trap.
 // `case [f 1] [...]` where f produces no value is the runtime case_error
 // ("value expression produced no value to dispatch on"); caseReturnsFn detects

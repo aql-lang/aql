@@ -183,10 +183,14 @@ before landing.
 ### Bottom line
 
 `islandCeiling` is **0** (no compiled program islands). `refusalCeiling` is now
-**19**: the `getr`-of-missing-ModuleExport `not_found` row landed as a top-level
-OpTrap (enabled by making `MarkUncompilable` a no-op once a terminal trap is
-set, so the getr's own residual refusal — which blocks even valid keys — is moot
-because the trap truncates the program). That exhausts the error-trap wins: the
+**17**: (a) the `getr`-of-missing-ModuleExport `not_found` row landed as a
+top-level OpTrap (enabled by making `MarkUncompilable` a no-op once a terminal
+trap is set, so the getr's own residual refusal — which blocks even valid keys —
+is moot because the trap truncates the program); (b) a bare-value map-field
+const-fold extended the ParenExpr `constFoldContainerVal` to the un-parenthesised
+case in `autoEvalMap`, so a bare 0-arg fn auto-firing as a map value (`{a:g}`)
+folds like `{a:(g)}` — clearing `map.tsv:163` and `module-struct.tsv:83` (its
+class field-default map). That exhausts the error-trap wins: the
 only remaining refused ERROR row is `macro.tsv:45` (a recursive macro), and it is
 NOT trappable from check mode — at check time `loopy` resolves to a carrier, not
 a concrete macro FnDef, so `expandAllMacros` never re-expands and never hits the

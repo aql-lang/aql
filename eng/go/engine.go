@@ -3469,6 +3469,25 @@ func (e *Engine) autoEvalMap(val Value, dataMap bool) (Value, error) {
 			continue
 		}
 
+		// CHECK-MODE const-fold for a bare value — the mirror of the ParenExpr
+		// fold above for the un-parenthesised form. A bare word that is a 0-arg
+		// fn auto-fires as a map value (`{a:g}` → `{a:42}`, exactly like the
+		// parenthesised `{a:(g)}`); evaluated abstractly in the sub-engine below
+		// it leaves a carrier of unknown provenance and the map refuses. When the
+		// value is DETERMINISTIC at the top frame and references no carrier
+		// binding, fold it to its concrete result (identical to the sub-engine
+		// eval the interpreter runs) so the map bakes as a const. Same gating and
+		// mutation-safety screen as the ParenExpr branch.
+		if es := e.registry.Check.Emit; e.registry.Check.IsActive() &&
+			(es == nil || len(es.frames) == 1) && !e.exprRefsCarrier([]Value{v}) {
+			if folded, ok := e.constFoldContainerVal([]Value{v}); ok {
+				if !dataMap || !containsSharedMutable(folded) {
+					out.Set(resolvedKey, folded)
+					continue
+				}
+			}
+		}
+
 		// Evaluate each value in a sub-engine.
 		sub := New(e.registry)
 		result, err := sub.Run([]Value{v})
