@@ -65,6 +65,53 @@ func TestIsInertConstRejectsMutableInstances(t *testing.T) {
 	}
 }
 
+// An immutable Node/Xml literal (`<a x="1"><b/>hi</a>`) is a constant value at
+// parse time (parser emits NewXmlElement; only a ${}-interpolated literal
+// becomes the deferred Word/__XI runtime builder). It is value-semantics with
+// structural sharing — never mutated in place — so it joins the const whitelist
+// like the List / Map cases, gated on its attribute values and child nodes being
+// inert members. The MUTABLE twin, FlexXml (*FlexXmlData), must stay OFF the
+// const pool: a baked FlexXml shared across loop iterations would be corrupted by
+// an in-place `set` / `append`, exactly the hazard the mutable-instance test
+// guards. Paired positive/negative pins both edges.
+func TestIsInertConstXmlLiteral(t *testing.T) {
+	attr := NewOrderedMap()
+	attr.Set("x", NewString("1"))
+	// <a x="1"><b/>hi</a> — attribute value, a nested immutable element, and a
+	// text child, all inert members.
+	xml := NewXmlElement("a", attr, []Value{
+		NewXmlElement("b", nil, nil),
+		NewString("hi"),
+	})
+
+	// POSITIVE — an immutable element with inert interior bakes, standalone and
+	// as a member of a const compound.
+	if !isInertConst(xml) {
+		t.Errorf(`isInertConst(<a x="1"><b/>hi</a>) = false; an immutable Node/Xml literal with an inert interior must be const-bakeable`)
+	}
+	if !isInertConst(NewList([]Value{xml})) {
+		t.Error("isInertConst([<a/>…]) = false; a list of immutable XML literals must bake")
+	}
+
+	// NEGATIVE — the MUTABLE FlexXml twin must never bake, standalone or nested.
+	flex := NewFlexXml("a", nil, nil)
+	if isInertConst(flex) {
+		t.Error("isInertConst(flex <a/>) = true; the MUTABLE FlexXml must NOT const-bake " +
+			"(an in-place set/append would corrupt a pooled const across iterations)")
+	}
+	if isInertConstMember(flex) {
+		t.Error("isInertConstMember(flex <a/>) = true; a mutable FlexXml must not ride inside a const compound")
+	}
+	if isInertConst(NewList([]Value{flex})) {
+		t.Error("isInertConst([flex <a/>]) = true; a list holding a mutable FlexXml must not bake")
+	}
+	// A mutable FlexXml CHILD must keep its containing immutable element off the
+	// const path too (the interior member check must catch it).
+	if isInertConst(NewXmlElement("p", nil, []Value{flex})) {
+		t.Error("isInertConst(<p>{flex}</p>) = true; an immutable element wrapping a mutable FlexXml child must not bake")
+	}
+}
+
 // A Table type body is a thin wrapper over its row RecordType (TableTypeInfo
 // embeds RecordTypeInfo), so it joins the structural-type-body family
 // (Record/Options/Object/Disjunct) the const whitelist already admits: a

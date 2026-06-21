@@ -140,11 +140,19 @@ MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:minilang" import end  {a:1} mini jp '$.[' {}	ERROR:mini_parse_error	a malformed JSONPath is a loud parse error
 "aql:minilang" import end  {a:1} mini jq '.[' {}	ERROR:mini_parse_error	a malformed jq filter is a loud parse error
 #
-# §xp  xp — XPath (github.com/antchfx/xpath) over a Node/Xml document. The kind
-#       is exercised by Go tests, NOT a spec row: its only subject shape is an
-#       inline <tag>…</tag> XML literal, which the bytecode compiler cannot yet
-#       statically materialise (it refuses with "residual value not statically
-#       materialisable"), so any xp value row would regress the never-raised
-#       compile-refusal ceiling. MiniLang.lang_xp is therefore listed in
-#       hermeticExempt (coverage_test.go) and covered by
-#       lang/go/test/minilang_xpath_test.go. The kinds row above pins xp/q.
+# §xp  xp — XPath (github.com/antchfx/xpath) over a Node/Xml document (the stack
+#       subject, an <tag>…</tag> literal). Returns a LIST: matched nodes for a
+#       node-set (an element as its Node/Xml value, an attribute/text node as a
+#       String) or a one-element list for a scalar count/string/boolean result.
+"aql:minilang" import end  <r><a>1</a><a>2</a></r> mini xp '//a'	[<a>1</a> <a>2</a>]	a node-set of element matches comes back as Node/Xml values
+"aql:minilang" import end  <r><a>1</a><a>2</a></r> mini xp '//a/text()'	['1' '2']	text nodes come back as Strings
+"aql:minilang" import end  <r id="7"><a/></r> mini xp '//@id'	['7']	an attribute node comes back as its String value
+"aql:minilang" import end  <r><a/><a/><a/></r> mini xp 'count(//a)'	[3]	a count() result is one Integer (integral number → Integer)
+"aql:minilang" import end  <r><a/><a/></r> mini xp 'count(//a) > 1'	[true]	a boolean XPath result is one Boolean
+"aql:minilang" import end  <lib><book><title>A</title></book><book><title>B</title></book></lib> mini xp '//book[2]/title/text()'	['B']	a positional predicate selects the second book
+"aql:minilang" import end  def hits (<r><a>1</a><a>2</a></r> mini xp '//a') end  xml-text (hits.0)	'1'	an element match composes with the xml-* accessor words
+"aql:minilang" import end  <r><a/></r> MiniLang.lang_xp '//a' {} end	[<a/>]	mini is sugar — the desugared standard call is equivalent
+#
+# §xp  negatives
+"aql:minilang" import end  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPath is a loud parse error
+"aql:minilang" import end  {a:1} mini xp '//a' {}	ERROR:uncalled_function	the document must be a Node/Xml — a Map subject does not match the xp signature, so the call is left uncalled
