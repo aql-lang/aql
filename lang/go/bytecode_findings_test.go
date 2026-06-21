@@ -1977,3 +1977,50 @@ func TestIllegalRefTrapCompiles(t *testing.T) {
 		t.Errorf("legal /r parity: compiled=%v interp=%v", gotC, gotI)
 	}
 }
+
+// Completion item 1 (cont.) — expansion-time error traps for mini/parse. A core
+// `mini <kind>` / `parse <kind>` whose kind needs an import that is absent
+// degrades to a dynamic carrier under the lenient checker (the import "may be
+// outside the checked fragment"), so the row refused downstream. A top-level
+// RecordTrap in that branch now compiles a terminal OpTrap raising the
+// byte-identical *_unknown_lang, exactly as the interpreter does at the call site.
+func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
+	cases := []struct{ src, code string }{
+		{`mini re 'a'`, "mini_unknown_lang"},
+		{`+re/[a-z]+/`, "mini_unknown_lang"},
+		{`parse calc 'x'`, "parse_unknown_lang"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected a trap program, refused: %s", c.src, reason)
+		}
+		if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected a terminal TRAP, no island:\n%s", c.src, dis)
+		}
+		_, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if !compiled {
+			t.Errorf("%q: trap program did not run compiled (fell back)", c.src)
+		}
+		_, errI := mustNew(t).Run(c.src)
+		if codeOf(errC) != c.code || codeOf(errI) != c.code {
+			t.Errorf("%q: compiled=[%s] interp=[%s], want both %s", c.src, codeOf(errC), codeOf(errI), c.code)
+		}
+	}
+
+	// NEGATIVE: with the import present, a VALID kind must NOT trap — it compiles
+	// (or faithfully falls back) and produces the real value, never an
+	// *_unknown_lang error.
+	const ok = `"aql:minilang" import end  ("AbcD" mini re '[a-z]+').fst.m`
+	gotC, _, errC := mustNew(t).RunCompiled(ok)
+	gotI, errI := mustNew(t).Run(ok)
+	if errC != nil || errI != nil {
+		t.Fatalf("valid mini re: compiled err=%v interp err=%v", errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("valid mini re parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}

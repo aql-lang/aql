@@ -9,12 +9,12 @@ Corpus: **2830** spec value rows (**2518** compilable, 312 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2492 |
+| compiled natively (fallback-free) | 2495 |
 | compiled with an interpreter island | 2 |
-| refused (whole-program fallback) | 24 |
+| refused (whole-program fallback) | 21 |
 | static check-error (invalid in both engines) | 312 |
 
-**2494 / 2518** compilable rows produce a Program (99% — 2492 of those fully native).
+**2497 / 2518** compilable rows produce a Program (99% — 2495 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,7 +22,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 24 | 24 | → 0 |
+| refusals (whole-program fallback) | 21 | 21 | → 0 |
 | interpreter islands (OpFallback) | 2 | 2 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 3 | 3 | → 0 |
@@ -32,7 +32,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | count | bucket | root cause |
 | ---: | --- | --- |
-| 11 | operand provenance | soundness |
+| 8 | operand provenance | soundness |
 | 4 | dynamic input | soundness |
 | 4 | residual lowering (Stage 1 limit) | scheduling |
 | 1 | dispatch recovery (best guess) | soundness |
@@ -44,14 +44,14 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 18 |
+| soundness | 15 |
 | scheduling | 5 |
 | opcode | 0 |
 | coverage | 1 |
 
 ## Re-scoped P7 partition
 
-Over the 26 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **3** reducible (tier 2, TODO), **5** allowlisted error rows, **18** compute-frontier gaps.
+Over the 23 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **3** reducible (tier 2, TODO), **2** allowlisted error rows, **18** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
