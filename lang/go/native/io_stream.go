@@ -4,47 +4,51 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// StreamKindType is the type of the three standard-stream handles
-// returned by the IO words `stdin` / `stdout` / `stderr`. It is an Atom
-// subtype whose inhabitants are EXACTLY the three atoms `stdin`,
-// `stdout`, `stderr` — a closed enumeration the `read`/`write`
-// signatures use to tell a stream target apart from a file path. The
-// handles are plain Atoms (the language's purpose-built symbol type);
-// StreamKindType is the refinement that admits only the three of them.
-//
-// It is NOT a builtin: it is MINTED into the lattice (OriginUserDef, no
-// FixedID, absent from the builtin name index and the FixedID snapshot)
-// and surfaced to AQL only through the `aql:io` module, as
-// `IO.StreamKind` (see modules/io.go). The stable package-level pointer
-// lets the read/write signature slices reference it at slice-init time
-// without making it globally resolvable as a bare type name.
-var StreamKindType = registerStreamKindType()
-
 // streamSentinels maps each admitted stream atom to the internal routing
 // path doRead/doWrite use to reach the host stream. The angle-bracket
-// strings are no longer user-visible — they are an implementation
-// detail behind the Stream atoms.
+// strings are not user-visible — they are an implementation detail
+// behind the Stream atoms. Stream membership is decided by NAME (these
+// keys), so read/write routing is independent of which StreamKind node
+// tags a handle.
 var streamSentinels = map[string]string{
 	"stdin":  pathStdin,
 	"stdout": pathStdout,
 	"stderr": pathStderr,
 }
 
-func registerStreamKindType() *eng.Type {
-	// MintTypeWithBehavior adds the node to eng.Builtin's ID index (so
-	// canonicalization / serialization resolve it) but, unlike
-	// RegisterExternalBuiltin, assigns no FixedID and no name/path entry
-	// — it is a user-minted lattice node, reached only via the module
-	// export, never as a global builtin.
-	return eng.Builtin.MintTypeWithBehavior("StreamKind", eng.TAtom, streamBehavior{})
+// MintStreamKind mints the StreamKind type into r's type table and
+// returns the node. StreamKind is owned by the aql:io module —
+// BuildIOModule mints one per import into the module's sub-registry (see
+// modules/io.go) — and is deliberately NOT a global builtin: it has no
+// FixedID, is absent from the builtin name index and the FixedID
+// snapshot, and is reachable from AQL only through the module export
+// `IO.StreamKind`. The returned node tags the stdin/stdout/stderr
+// handles and backs that module instance's read/write Stream signatures.
+//
+// It is an Atom subtype whose inhabitants are EXACTLY the three atoms
+// stdin/stdout/stderr — a closed enumeration the read/write signatures
+// use to tell a stream target apart from a file path.
+func MintStreamKind(r *Registry) *Type {
+	return r.Types.MintTypeWithBehavior("StreamKind", eng.TAtom, streamBehavior{})
+}
+
+// NewStreamKind mints a standalone StreamKind (into its own dynamic type
+// table) for test helpers that register the io words under bare names
+// without a host registry to mint into. Production code mints per import
+// via MintStreamKind into the module sub-registry. Membership is
+// name-based, so a standalone StreamKind tags and admits the handles
+// exactly like a per-import one.
+func NewStreamKind() *Type {
+	return eng.NewDynamicTypeTable().MintTypeWithBehavior("StreamKind", eng.TAtom, streamBehavior{})
 }
 
 // streamBehavior admits exactly the three stream atoms. A concrete atom
-// whose name is one of the three is a Stream regardless of whether its
-// tag is the base Atom type or StreamKind itself; everything else (other
-// atoms, non-atoms) falls back to the default lattice check, so a bare
-// `StreamKind` type literal still answers "is this the type itself"
-// while no stray value sneaks in.
+// whose name is one of the three is a StreamKind regardless of whether
+// its tag is the base Atom type or a StreamKind node; everything else
+// (other atoms, non-atoms) falls back to the default lattice check, so a
+// bare `StreamKind` type literal still answers "is this the type itself"
+// while no stray value sneaks in. Membership is name-based, so handles
+// minted by one import are accepted by another's StreamKind too.
 type streamBehavior struct{}
 
 func (streamBehavior) Match(v Value, t *Type) bool {
@@ -65,7 +69,7 @@ func (streamBehavior) Format(v Value) string { return eng.DefaultBehavior.Format
 // `/q` atom suffix.
 func (streamBehavior) FormatDelegate() {}
 
-// Unify admits a concrete stream atom against the StreamKind type, in
+// Unify admits a concrete stream atom against a StreamKind type, in
 // either argument order. dispatchUnifier starts its walk at the more
 // specific denoted type, so `atom is IO.StreamKind` (and `case`, return
 // checks, typed containers — every Unify-based membership test) reaches
@@ -83,19 +87,20 @@ func (streamBehavior) Unify(a, b Value) (Value, *eng.UnifyError) {
 }
 
 // newStreamAtom returns the Atom handle for a standard stream, tagged
-// with the StreamKind type so its static and runtime types agree (the
-// `read`/`write` Stream signatures, `typeof`, and the soundness checker
+// with the given StreamKind type so its static and runtime types agree
+// (the read/write Stream signatures, `typeof`, and the soundness checker
 // all see StreamKind). The payload is a plain AtomPayload, so every
 // atom-aware path (rendering, comparison, `quote`) treats it as the
 // symbol it is.
-func newStreamAtom(name string) Value {
-	return eng.ReparentValue(eng.NewAtom(name), StreamKindType)
+func newStreamAtom(name string, streamKind *Type) Value {
+	return eng.ReparentValue(eng.NewAtom(name), streamKind)
 }
 
 // streamSentinel maps a stream-handle value to its internal routing
 // path, reporting whether v is a stream handle at all. Used by
 // extractPath / returnPath to route the Stream-typed signatures through
-// the shared doRead/doWrite plumbing.
+// the shared doRead/doWrite plumbing. Name-based: independent of the
+// handle's StreamKind tag.
 func streamSentinel(v Value) (string, bool) {
 	name, err := v.AsConcreteAtom()
 	if err != nil {

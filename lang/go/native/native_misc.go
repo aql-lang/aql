@@ -348,18 +348,6 @@ func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	return []Value{returnPath(args[0], path)}, nil
 }
 
-func stdinHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{newStreamAtom("stdin")}, nil
-}
-
-func stdoutHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{newStreamAtom("stdout")}, nil
-}
-
-func stderrHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{newStreamAtom("stderr")}, nil
-}
-
 // ---- help / describe handlers ----
 
 // helpOverviewHandler implements the 0-arg `help` word: a language

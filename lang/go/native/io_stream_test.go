@@ -6,10 +6,25 @@ import (
 	"testing"
 )
 
+// ioRegistry returns a registry with the aql:io words registered against
+// a freshly minted StreamKind — the same shape BuildIOModule produces per
+// import — and returns that StreamKind so tests can assert against it.
+func ioRegistry(t *testing.T) (*Registry, *Type) {
+	t.Helper()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sk := MintStreamKind(r)
+	for _, n := range IOModuleNativeFuncs(sk) {
+		r.RegisterNativeFunc(n)
+	}
+	return r, sk
+}
+
 // The stream handles are Atoms of the StreamKind type — not string sentinels.
 func TestStreamHandlesAreStreamKindAtoms(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
+	r, sk := ioRegistry(t)
 
 	for _, name := range []string{"stdin", "stdout", "stderr"} {
 		result := runAQL(t, r, []Value{NewWord(name)})
@@ -23,32 +38,40 @@ func TestStreamHandlesAreStreamKindAtoms(t *testing.T) {
 		if n, _ := AsAtom(got); n != name {
 			t.Errorf("%s: atom name = %q, want %q", name, n, name)
 		}
-		if !got.Is(StreamKindType) {
+		if !got.Is(sk) {
 			t.Errorf("%s: handle does not inhabit StreamKind", name)
 		}
-		if !got.Parent.Equal(StreamKindType) {
+		if !got.Parent.Equal(sk) {
 			t.Errorf("%s: typeof handle = %s, want StreamKind", name, got.Parent)
 		}
 	}
 }
 
-// StreamKind admits exactly the three handles — and nothing else.
+// StreamKind admits exactly the three handles — and nothing else. Membership
+// is name-based, so a handle minted by one StreamKind is admitted by another.
 func TestStreamKindTypeMembership(t *testing.T) {
-	if !newStreamAtom("stdout").Is(StreamKindType) {
-		t.Error("stdout atom should be a StreamKind")
+	r, _ := DefaultRegistry()
+	sk := MintStreamKind(r)
+	other := MintStreamKind(r) // a distinct StreamKind node
+
+	if !newStreamAtom("stdout", sk).Is(sk) {
+		t.Error("stdout handle should be a StreamKind")
+	}
+	if !newStreamAtom("stdout", sk).Is(other) {
+		t.Error("a handle minted by one StreamKind should inhabit another (name-based)")
 	}
 	// A bare atom of the right name is admitted too (the type IS those atoms).
-	if !NewAtom("stderr").Is(StreamKindType) {
+	if !NewAtom("stderr").Is(sk) {
 		t.Error("a bare `stderr` atom should be a StreamKind")
 	}
 	// Unrelated atoms and non-atoms are rejected.
-	if NewAtom("foo").Is(StreamKindType) {
+	if NewAtom("foo").Is(sk) {
 		t.Error("`foo` atom must not be a StreamKind")
 	}
-	if NewString("stdout").Is(StreamKindType) {
+	if NewString("stdout").Is(sk) {
 		t.Error("the String \"stdout\" must not be a StreamKind")
 	}
-	if NewInteger(1).Is(StreamKindType) {
+	if NewInteger(1).Is(sk) {
 		t.Error("an Integer must not be a StreamKind")
 	}
 }
@@ -77,8 +100,7 @@ func TestWriteNonStringNoOptsMap(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r, _ := DefaultRegistry()
-			registerIOWords(r)
+			r, _ := ioRegistry(t)
 			setupMemFS(t, r)
 
 			// write path value  (no opts map)
@@ -106,22 +128,21 @@ func TestWriteNonStringNoOptsMap(t *testing.T) {
 // Writing to a stream handle routes to the host writer (no newline), and
 // returns the handle itself.
 func TestWriteToStdoutStream(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
+	r, sk := ioRegistry(t)
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	result := runAQL(t, r, []Value{NewWord("write"), newStreamAtom("stdout"), NewString("hello")})
+	result := runAQL(t, r, []Value{NewWord("write"), newStreamAtom("stdout", sk), NewString("hello")})
 	if buf.String() != "hello" {
 		t.Errorf("stdout = %q, want %q", buf.String(), "hello")
 	}
-	if len(result) != 1 || !result[0].Is(StreamKindType) {
+	if len(result) != 1 || !result[0].Is(sk) {
 		t.Fatalf("write should return the StreamKind handle, got %v", result)
 	}
 
 	// A non-string value to a stream serializes with no opts map.
 	buf.Reset()
-	runAQL(t, r, append([]Value{NewWord("write"), newStreamAtom("stdout")},
+	runAQL(t, r, append([]Value{NewWord("write"), newStreamAtom("stdout", sk)},
 		mapTokens("x", NewInteger(7))...))
 	if got := buf.String(); got != `{"x":7}` {
 		t.Errorf("stdout = %q, want %q", got, `{"x":7}`)
@@ -130,10 +151,9 @@ func TestWriteToStdoutStream(t *testing.T) {
 
 // Reading from an output stream is a clean error, not a panic.
 func TestReadOutputStreamErrors(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
+	r, sk := ioRegistry(t)
 
-	err := runAQLError(t, r, []Value{NewWord("read"), newStreamAtom("stdout")})
+	err := runAQLError(t, r, []Value{NewWord("read"), newStreamAtom("stdout", sk)})
 	if err == nil {
 		t.Fatal("expected an error reading from stdout")
 	}
@@ -149,9 +169,11 @@ func TestStreamKindTypeLiteralNoPanic(t *testing.T) {
 			t.Fatalf("panic on StreamKind type literal: %v", rec)
 		}
 	}()
-	lit := NewTypeLiteral(StreamKindType)
+	r, _ := DefaultRegistry()
+	sk := MintStreamKind(r)
+	lit := NewTypeLiteral(sk)
 	_, _ = streamSentinel(lit) // type literal → not a concrete stream atom
-	_ = lit.Is(StreamKindType)
+	_ = lit.Is(sk)
 	_ = extractPath(lit)
 }
 

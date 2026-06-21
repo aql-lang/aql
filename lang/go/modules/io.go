@@ -28,19 +28,22 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
-	for _, n := range native.IOModuleNatives {
+	// StreamKind — the type of the stdin/stdout/stderr handles — is owned
+	// by this module: minted per import into the sub-registry, never a
+	// global builtin. It tags the handles and types the read/write Stream
+	// signatures, and is exported as a type literal so `x is IO.StreamKind`
+	// works after import.
+	streamKind := native.MintStreamKind(subReg)
+	ioNatives := native.IOModuleNativeFuncs(streamKind)
+	for _, n := range ioNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
 	exports := native.NewOrderedMap()
-	for _, n := range native.IOModuleNatives {
+	for _, n := range ioNatives {
 		exports.Set(n.Name, makeModuleFnDef(n, subReg))
 	}
-
-	// StreamKind — the type of the stdin/stdout/stderr handles — is a
-	// module-scoped type, not a global builtin. Export it as a type
-	// literal so `x is IO.StreamKind` works after import.
-	exports.Set("StreamKind", native.NewTypeLiteral(native.StreamKindType))
+	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
 
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
