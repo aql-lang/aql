@@ -156,9 +156,44 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	}
 	if isCodeBody(v) {
 		// A code-body scrutinee (`case [body] [clauses]`) runs the body and
-		// dispatches on its last result; that run-and-dispatch is not yet
-		// lowered (and a 0-net body is the run-time case_error), so it stays on
-		// the island / whole-program fallback path.
+		// dispatches on its last result. In compile mode:
+		//   - 0-net body → the run-time case_error (caseHandler): record a TERMINAL
+		//     OpTrap raising the byte-identical error. The residual count must come
+		//     from the RECORDING analyseCondFragment — a type-only RunCarrierBody
+		//     gives an empty-body 0-return fn (`[f 1]`) a bogus 1-value count that
+		//     would miss the trap.
+		//   - 1+-net body, a SINGLE clause + default, both blocks VALUES
+		//     (`case [1 add 1] [2 "two" "other"]`) → desugar to a nested `if` whose
+		//     guard runs the body ONCE via `do`: `if (do [body] m __casematch)
+		//     [then] [default]`. Because there is exactly ONE guard and the blocks
+		//     are values, `do [body]` is evaluated exactly once — so this needs no
+		//     scrutinee seating and is sound for ANY body (no recompute). Any other
+		//     shape (multi-clause, code-body blocks, no default) keeps the island.
+		// Plain check (no emit) keeps the prior dynAny.
+		if es := r.Check.Emit; es != nil && es.Active() {
+			nDiag := len(r.Check.Diagnostics)
+			_, stk := analyseCondFragment(r, v)
+			r.Check.TruncateDiagnostics(nDiag)
+			if len(stk) == 0 {
+				es.RecordTrap("case_error",
+					"case: value expression produced no value to dispatch on",
+					"case", "", v.Pos)
+				return dynAny
+			}
+			if isCodeBody(clauses) {
+				if lst, _ := AsList(clauses); !lst.IsNil() {
+					elems := lst.Slice()
+					if len(elems) == 3 && !isCodeBody(elems[1]) && !isCodeBody(elems[2]) {
+						// `[do]` + the normal guard tokens: do runs the body once,
+						// leaving its value as the scrutinee for the match.
+						cond := NewList(append([]Value{NewWord("do")}, caseGuardTokens(v, elems[0])...))
+						then := NewList(caseBlockTokens(v, elems[1]))
+						rest := NewList(caseBlockTokens(v, elems[2]))
+						return if3ReturnsFn([]Value{cond, then, rest}, r)
+					}
+				}
+			}
+		}
 		return dynAny
 	}
 	if !isCodeBody(clauses) {

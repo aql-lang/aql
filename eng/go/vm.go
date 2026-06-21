@@ -260,8 +260,14 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	if len(stack) < n {
 		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY underflow at "+pr.Word)
 	}
+	// A MODULE poly word (`StructUtil.getpath`) re-matches over its OWN
+	// sub-registry's signatures; a core word over the main registry.
+	lookupReg := r
+	if pr.Reg != nil {
+		lookupReg = pr.Reg
+	}
 	var sigs []Signature
-	if fn := r.Lookup(pr.Word); fn != nil {
+	if fn := lookupReg.Lookup(pr.Word); fn != nil {
 		sigs = fn.Signatures
 	}
 	// Build the args in sig order (position 0 = top of stack, as OpCallNative
@@ -394,6 +400,41 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	return append(stack[:base], results...), nil
 }
 
+// callDynamicOp routes a fn-value-call-boundary opcode to its handler, keeping
+// the VM's run loop a single case. Trailing only changes the non-callable
+// residual order (see callDynamic); mixed islands an interior-fn window.
+func (vc *vmContext) callDynamicOp(op Opcode, arg int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if op == OpCallDynamicMixed {
+		return vc.callDynamicMixed(arg, stack, curDebug, pc)
+	}
+	return vc.callDynamic(arg, op == OpCallDynamicTrailing, stack, curDebug, pc)
+}
+
+// callDynamicMixed handles the MIXED fn-value-call boundary (`3 m.f 2`): a
+// dynamic / fn value sits INTERIOR to a window of static args (some below it,
+// some above). The window of `w` stack values is the same token sequence the
+// interpreter ran, so islanding it verbatim reproduces the interpreter exactly:
+// the fn auto-applies — forward-collecting the after-args into its leading sig
+// positions and the before-args from the stack — for whatever arity it turns
+// out to have, and a non-callable value simply stays put (the island Run leaves
+// it on the stack). The leading / trailing OpCallDynamic layouts cannot express
+// this because the args straddle the fn.
+func (vc *vmContext) callDynamicMixed(w int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if w < 1 || len(stack) < w {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC_MIXED underflow")
+	}
+	base := len(stack) - w
+	window := append([]Value(nil), stack[base:]...)
+	results, err := vc.island().Run(window)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, vc.r)
+	}
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
+		return nil, err
+	}
+	return append(stack[:base], results...), nil
+}
+
 // isDelegationFnDef reports whether a Function VALUE is a trivial-delegation
 // wrapper — EVERY own sig is a `[Word(inner)]` pass-through to an inner native
 // (a module method like rand-int / MathUtil.sqrt), safely dispatched VM-native
@@ -503,6 +544,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 	defer func() { vc.frameDepth = entryFrameDepth }()
 	var loops []vmLoop
 	var frames []vmFrame
+	// marks is the variadic-region mark stack (OpStackMark / OpDropToMark /
+	// OpPopMark): each entry is a saved stack depth so a 0-or-1 (runtime-variadic)
+	// value produced above the mark can be discarded by truncation regardless of
+	// its actual count. Per-run, like loops/frames.
+	var marks []int
 	// argScratch is per-run (NOT shared on vc): a re-entrant closure run's
 	// CALL_NATIVE must not clobber an outer handler's args slice, which
 	// aliases this buffer until the handler returns (a higher-order handler
@@ -550,6 +596,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, vmErrAt(curDebug, pc, "DROP stack underflow")
 			}
 			stack = stack[:len(stack)-1]
+		case OpStackMark, OpDropToMark, OpPopMark:
+			var err error
+			if marks, stack, err = vmMark(in.Op, marks, stack, curDebug, pc); err != nil {
+				return nil, err
+			}
 		case OpMakeList:
 			// Assemble the top Arg values into a list (a computed list literal,
 			// `[1 add 2]`); order preserved, deepest becomes element 0.
@@ -694,10 +745,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, err
 			}
 			stack = ns
-		case OpCallDynamic, OpCallDynamicTrailing:
-			// Trailing only changes the non-callable residual order (see
-			// callDynamic); the comparison is an expression, not a branch.
-			ns, err := vc.callDynamic(int(in.Arg), in.Op == OpCallDynamicTrailing, stack, curDebug, pc)
+		case OpCallDynamic, OpCallDynamicTrailing, OpCallDynamicMixed:
+			// The fn-value-call boundary family: leading / trailing-1 (callDynamic)
+			// and interior-window (callDynamicMixed). callDynamicOp routes by opcode
+			// so run's dispatch stays a single case.
+			ns, err := vc.callDynamicOp(in.Op, int(in.Arg), stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}
@@ -914,6 +966,39 @@ func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
 }
 
 // vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
+// vmMark executes the variadic-region opcodes (OpStackMark / OpDropToMark /
+// OpPopMark) — a 0-or-1 (runtime-variable count) value produced above a saved
+// depth is truncated away (DropToMark) or kept (PopMark). Extracted from the
+// main run loop so its branches don't inflate that switch's cyclomatic
+// complexity. Returns the updated mark stack and operand stack.
+func vmMark(op Opcode, marks []int, stack []Value, debug []SrcPos, pc int) ([]int, []Value, error) {
+	switch op {
+	case OpStackMark:
+		// Open a variadic region: remember the current depth so a 0-or-1 value
+		// produced above it can be truncated away later.
+		return append(marks, len(stack)), stack, nil
+	case OpDropToMark:
+		// Close a region on the path that DISCARDS the 0-or-1 eager: pop the mark
+		// and truncate the stack back to it.
+		if len(marks) == 0 {
+			return marks, stack, vmErrAt(debug, pc, "DROP_TO_MARK with no open mark")
+		}
+		m := marks[len(marks)-1]
+		marks = marks[:len(marks)-1]
+		if m > len(stack) {
+			return marks, stack, vmErrAt(debug, pc, "DROP_TO_MARK above current depth")
+		}
+		return marks, stack[:m], nil
+	default: // OpPopMark
+		// Close a region on the path that KEEPS the eager: discard the mark
+		// without touching the stack.
+		if len(marks) == 0 {
+			return marks, stack, vmErrAt(debug, pc, "POP_MARK with no open mark")
+		}
+		return marks[:len(marks)-1], stack, nil
+	}
+}
+
 // case, OpReverse takes n from arg. Used to seat an N-operand call's computed
 // args (which evaluate into reverse sig order) onto the stack in sig order.
 func vmShuffle(stack []Value, op Opcode, arg int, debug []SrcPos, pc int) ([]Value, error) {

@@ -140,9 +140,10 @@ func sigPattern(s *Signature, i int) (Value, bool) {
 // MatchResult holds a matched signature and the positionally matched args.
 type MatchResult struct {
 	Sig       *Signature
-	Args      []Value // args in signature order
-	Positions []int   // absolute stack indices of each arg (nil for 0-arg)
-	Name      string  // word name being dispatched (for tracing/recording)
+	Args      []Value   // args in signature order
+	Positions []int     // absolute stack indices of each arg (nil for 0-arg)
+	Name      string    // word name being dispatched (for tracing/recording)
+	Reg       *Registry // sub-registry owning Sig for a module delegation dispatch (nil = main)
 }
 
 // MatchSignature finds the first matching signature for a function given the
