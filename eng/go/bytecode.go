@@ -190,6 +190,20 @@ const (
 	OpStackMark
 	OpDropToMark
 	OpPopMark
+	// OpCallDynamicMixed handles the MIXED fn-value-call boundary: a runtime
+	// FUNCTION value sitting INTERIOR to the program residual, with static args
+	// both BELOW it and ABOVE it (`3 m.f 2` — `m.f` is a 2-arg fn collecting the
+	// forward `2` into sig[0] and the stack `3` into sig[1]). Neither the leading
+	// (OpCallDynamic) nor the trailing (OpCallDynamicTrailing) layout fits, since
+	// args straddle the fn. Arg is the WINDOW size (everything from the deepest
+	// before-arg through the last after-arg, inclusive of the fn). The VM islands
+	// that window verbatim — it is the same token sequence the interpreter ran, so
+	// the fn auto-applies (or, if the value is not callable, stays put) with full
+	// fidelity for any arity and any before/after split. The recorder promotes the
+	// fn's producing event to a frame local so the residual re-pushes in source
+	// order (the fn sits above a before-arg literal, which the in-order
+	// reconciliation otherwise forbids).
+	OpCallDynamicMixed
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -226,6 +240,7 @@ var opcodeNames = [...]string{
 	OpStackMark:           "STACK_MARK",
 	OpDropToMark:          "DROP_TO_MARK",
 	OpPopMark:             "POP_MARK",
+	OpCallDynamicMixed:    "CALL_DYNAMIC_MIXED",
 }
 
 func (o Opcode) String() string {
@@ -241,6 +256,12 @@ func (o Opcode) String() string {
 type PolyRef struct {
 	Word  string
 	Arity int
+	// Reg is the sub-registry whose signatures the VM re-matches a MODULE poly
+	// word over (`StructUtil.getpath` — a sub-registry word). Nil means the main
+	// registry (the common case: a core builtin like get/size/is). The pointer
+	// is the same sub-registry the check pass created on the shared registry, so
+	// it stays valid for the compiled run (RunProgram runs on that registry).
+	Reg *Registry
 }
 
 // ClosureInShape tags HOW a higher-order word must present each per-invocation

@@ -71,12 +71,12 @@ func TestDynamicResultContagion(t *testing.T) {
 	r, _ := NewRegistry()
 	sig := &Signature{Returns: []*Type{TInteger}}
 
-	strict := carrierResults(r, "w", sig, []Value{NewCarrier(TString)}, SrcPos{})
+	strict := carrierResults(r, "w", sig, []Value{NewCarrier(TString)}, SrcPos{}, nil)
 	if len(strict) != 1 || strict[0].Dynamic {
 		t.Errorf("strict args must yield a strict result, got Dynamic=%v", strict[0].Dynamic)
 	}
 
-	dyn := carrierResults(r, "w", sig, []Value{NewDynamicCarrier(TAny)}, SrcPos{})
+	dyn := carrierResults(r, "w", sig, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, nil)
 	if len(dyn) != 1 || !dyn[0].Dynamic {
 		t.Fatalf("a dynamic arg must make the result dynamic, got Dynamic=%v", dyn[0].Dynamic)
 	}
@@ -109,7 +109,7 @@ func TestDynamicFirstMatchPartition(t *testing.T) {
 
 	// The dispatch result is dynamic(Boolean|Atom), not just dynamic(Boolean).
 	sig := &Signature{Args: []*Type{TInteger}, Returns: []*Type{TBoolean}}
-	out := carrierResults(r, "wdiv", sig, []Value{intStr}, SrcPos{})
+	out := carrierResults(r, "wdiv", sig, []Value{intStr}, SrcPos{}, nil)
 	if len(out) != 1 || !out[0].Dynamic {
 		t.Fatalf("expected a single dynamic result, got %v", out)
 	}

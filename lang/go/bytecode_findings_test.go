@@ -2249,3 +2249,304 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 		t.Errorf("Test harness parity: compiled=%v(%v) interp=%v(%v)", gotC, errC, gotI, errI)
 	}
 }
+
+// Stage H — dispatch-recovery operand order. `3 and "x"` types as the
+// disjunct Integer|String (`and`'s operand-join return), which straddles
+// `add`'s overloads, so matchSignature fails and checkModeAssumeSig
+// recovers. The strict-disjunct straddle is a sound runtime re-dispatch
+// (each runtime alternative matches one concrete overload), so the recovery
+// now records OpCallNativePoly instead of latching the program uncompilable
+// — mirroring the normal-path handling in carrierResults.
+func TestDispatchRecoveryPolyCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		{`(3 and "x") add 1`, "[x1]"}, // false guard truthy: and → "x", "x" add 1 → x1
+		{`(0 and "x") add 1`, "[1]"},  // 0 falsy: and → 0, 0 add 1 → 1
+		{`(5 and 2) add 1`, "[3]"},    // numeric path: and → 2, 2 add 1 → 3
+		{`(0 and 2) add 1`, "[1]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// OPERAND ORDER (the regression guard). The recovered call must consume
+	// its operands in the SAME order as the interpreter: `(3 and "x") add 1`
+	// is `"x" add 1` → x1 (forward arg 1 = sig[0], stack "x" = sig[1]), which
+	// is DISTINCT from the all-forward `add "x" 1` → 1x. The prior poly
+	// attempt recorded the raw tape order and produced 1x for the first — pin
+	// the distinction so the operand-order rebuild can't silently regress.
+	for _, c := range []struct{ src, want string }{
+		{`(3 and "x") add 1`, "[x1]"},
+		{`add "x" 1`, "[1x]"},
+		{`"x" add 1`, "[x1]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: order: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
+// Stage B — conditional dynamic apply in a branch. `if (n eq 0) [99]
+// MathUtil.sqrt 16`: the else arm is the module-export fn value sqrt and the
+// trailing 16 applies ONLY when the branch produced the callable. Two parts:
+// (1) the trivial-delegation module fn value bakes as an inert const (so the
+// else operand resolves), and (2) the branch result carries a mayBeFn flag so
+// resolveDynamicApply lowers the trailing arg to a runtime-conditional
+// OpCallDynamic — callDynamic applies sqrt on the else path (→ 4.0) and leaves
+// [99 16] on the then path. One compiled program is faithful on both branches.
+func TestConditionalBranchApplyCompiles(t *testing.T) {
+	const imp = `"aql:math-util" import end `
+	cases := []struct{ src, want string }{
+		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt 16`, "[4.0]"},          // else: sqrt 16 → 4.0
+		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 16]"},        // then: 99, 16 stays
+		{imp + `def n 0 if (n eq 0) MathUtil.sqrt [99] 16`, "[4.0]"},          // then-arm fn mirror
+		{imp + `def n 5 if (n eq 0) MathUtil.sqrt [99] 16`, "[99 16]"},        // else: 99, 16 stays
+		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt`, "[fn sqrt(Number)]"}, // no trailing: bare fn value
+		{imp + `MathUtil.sqrt`, "[fn sqrt(Number)]"},                          // bare module fn value bakes
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		// 4.0 renders as "4" via fmt of the []any; compare compiled to interp
+		// (the authoritative value) and to the expected rendering.
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE 1: a non-fn branch result must NOT apply the trailing arg —
+	// `if (n eq 0) ["a"] 7 16` leaves [7 16] (7 is not callable), and the
+	// mayBeFn flag is never set, so no OpCallDynamic is emitted.
+	// NEGATIVE 2: a CAPTURING fn value as an arm must not be baked/applied
+	// unsoundly — it stays off the native path (compiled==interp regardless).
+	for _, c := range []struct{ src, want string }{
+		{`def n 5 if (n eq 0) ["a"] 7 16`, "[7 16]"},
+		{`def n 0 if (n eq 0) ["a"] 7 16`, "[a 16]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: no-apply: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
+// Stage D — sub-registry poly dispatch. A module word (StructUtil.getpath)
+// with a DYNAMIC input refused at "dynamic input at getpath" because
+// tryRecordPoly's CORE-dispatch guard required a main-registry builtin, and
+// getpath lives in the struct-util sub-registry. The recorder now threads the
+// owning sub-registry (via MatchResult.Reg) and records a PolyRef carrying it;
+// callPoly re-matches over that registry's signatures. getpath/setpath are pure
+// data transforms, value-faithful under runtime re-match.
+func TestSubRegistryPolyCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		// Dynamic input (the setpath result) into getpath — the poly row.
+		{`"aql:struct-util" import end  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[7]"},
+		// Static-input baseline still compiles (a plain baked CALL_NATIVE).
+		{`"aql:struct-util" import end  StructUtil.getpath $.a.b {a:{b:1}}`, "[1]"},
+		// A dynamic miss returns None — the re-match picks the same overload.
+		{`"aql:struct-util" import end  StructUtil.getpath $.a.z (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[None]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: the poly threading must not change a CORE dynamic dispatch — a
+	// core word (size) over a dynamic receiver (no sub-registry) still
+	// re-matches over the MAIN registry (PolyRef.Reg nil), compiled == interp.
+	for _, c := range []struct{ src, want string }{
+		{`size (if true ["ab"] ["cde"])`, "[2]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: core get: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
+// Stage G — mixed fn-value-call boundary. A dynamic fn value INTERIOR to the
+// residual (`3 m.f 2`: forward `2` -> sig[0], stack `3` -> sig[1]) fits neither
+// the leading nor the trailing-1-arg apply layout and refused "dynamic value
+// precedes residual args". OpCallDynamicMixed islands the whole [before, fn,
+// after] window verbatim — the same token sequence the interpreter ran — so the
+// fn auto-applies with full fidelity (any arity, callable or not).
+func TestMixedFnValueApplyCompiles(t *testing.T) {
+	const fn2 = `def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])}  `
+	cases := []struct{ src, want string }{
+		{fn2 + `3 m.f 2`, "[203]"},                                          // the mixed row: a=2 (forward), b=3 (stack)
+		{fn2 + `m.f 2 3`, "[203]"},                                          // two-forward (leading) — unchanged
+		{fn2 + `10 m.f 20`, "[2010]"},                                       // a=20 (forward), b=10 (stack)
+		{`def m {f: (fn [[a:Integer][Integer][a mul 10]])}  5 m.f`, "[50]"}, // trailing-1 — unchanged
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: an INTERIOR value that is NOT callable must NOT be applied — the
+	// island leaves it in place, so the residual is byte-identical to interp.
+	// `3 m.g 2` where m.g is a plain integer: the residual stays [3, 42, 2].
+	for _, c := range []struct{ src, want string }{
+		{`def m {g: 42}  3 m.g 2`, "[3 42 2]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: non-callable interior: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
+// Stage (patrun) — a fn VALUE stored in a Patrun dispatch table. The patrun
+// `add` overload stashes its value arg and never invokes it on the VM tape, so
+// declaring CompileStoresFn lets a PURE fn literal ride as an inert const
+// instead of refusing "function value reaches add". A genuinely CAPTURING
+// closure still declines at isInertConst and falls back faithfully.
+func TestPatrunFnValueStoreCompiles(t *testing.T) {
+	const mk = `def api (patrun)  add {cmd:"sum"} ([m:Map] => [m.x add m.y]) api  `
+	// POSITIVE: pure stored fn compiles natively (no island) and dispatches.
+	pos := []struct{ src, want string }{
+		{mk + `def h (find {cmd:"sum" x:3 y:4} api)  h {x:3 y:4}`, "[7]"},
+		{mk, "[]"}, // the add alone (0-result mutation) compiles
+	}
+	for _, c := range pos {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: a genuinely CAPTURING closure (captures the enclosing fn param
+	// `bse`) stored in a patrun declines the const-bake (isInertConst rejects a
+	// Captured fn) and falls back — compiled == interp, no divergence.
+	capSrc := `def mk fn [[bse:Integer] [Patrun] [def p (patrun)  add {cmd:"x"} ([m:Map] => [m.v add bse]) p  p]]  def api (mk 100)  def h (find {cmd:"x" v:5} api)  h {v:5}`
+	gotC, _, eC := mustNew(t).RunCompiled(capSrc)
+	gotI, eI := mustNew(t).Run(capSrc)
+	if eC != nil || eI != nil {
+		t.Fatalf("capturing: compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[105]" {
+		t.Errorf("capturing closure: compiled=%v interp=%v want [105]", gotC, gotI)
+	}
+
+	// NEGATIVE: arithmetic add is untouched by the patrun overload's flag.
+	g2, _, _ := mustNew(t).RunCompiled(`add 1 2`)
+	if fmt.Sprint(g2) != "[3]" {
+		t.Errorf("arithmetic add: got %v want [3]", g2)
+	}
+}

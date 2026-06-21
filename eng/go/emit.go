@@ -117,6 +117,10 @@ type eventFlags struct {
 	typeOut  bool
 	valueDef bool
 	generic  bool
+	// mayBeFn marks a BRANCH event whose result may be a Function at run time
+	// (an arm is an fn value), so a trailing arg over it in the residual lowers
+	// to a runtime-conditional OpCallDynamic (`if c [99] MathUtil.sqrt 16`).
+	mayBeFn bool
 }
 
 type emitCall struct {
@@ -125,9 +129,10 @@ type emitCall struct {
 	ops      []emitOperand
 	nout     int // number of results the call pushes (0 for a side-effect word, N for multi-result)
 	pos      SrcPos
-	poly     bool // dispatch via OpCallNativePoly (runtime MatchSignature)
-	makeList bool // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	makeMap  bool // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	poly     bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg  *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
+	makeList bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	makeMap  bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys  []string
 	mapImpl  bool // the source map's Implicit flag
 	diverges bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
@@ -946,6 +951,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	}
 	// Arms.
 	zeroOut := false
+	// mayBeFn: an arm is an fn VALUE, so the branch result may be callable at
+	// run time — a trailing residual arg over it is a conditional apply.
+	mayBeFn := false
 	if b.ConstCond != nil {
 		out, has, ok := resolveArm(b.Then, b.ThenStk, "taken")
 		if !ok {
@@ -979,6 +987,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 			if !ok {
 				es.MarkUncompilable("if: then value of unknown provenance")
 				return
+			}
+			if isFnValueResidual(*b.ThenValue) {
+				mayBeFn = true
 			}
 			if op.kind == opEvent {
 				// A COMPUTED then value (`if cond (add 1 2) 88`) is eagerly on the
@@ -1014,6 +1025,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				if !ok {
 					es.MarkUncompilable("if: else value of unknown provenance")
 					return
+				}
+				if isFnValueResidual(*b.ElsValue) {
+					mayBeFn = true
 				}
 				if op.kind == opEvent {
 					// A COMPUTED else value (`if cond [then] (add 1 2)`) is
@@ -1072,6 +1086,11 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		// lets RecordCall's double-record guard elide this if dispatch.
 		f := es.eventInfo[seq]
 		f.zeroOut = true
+		es.eventInfo[seq] = f
+	}
+	if mayBeFn {
+		f := es.eventInfo[seq]
+		f.mayBeFn = true
 		es.eventInfo[seq] = f
 	}
 }
@@ -1867,7 +1886,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 // OpCallNativePoly, which re-matches the word's signatures at run time (plan
 // P3). Operands resolve normally (the dynamic one is a prior event's result);
 // returns false, leaving es untouched, when one is of unknown provenance.
-func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos) bool {
+func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry) bool {
 	if !es.active() || len(outs) != 1 {
 		return false
 	}
@@ -1880,7 +1899,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos)
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true, polyReg: ownerReg}})
 	es.setProduced(outs[0], seq)
 	return true
 }
@@ -2407,7 +2426,23 @@ func isInertConst(v Value) bool {
 		// value is a separate dispatch path (a bare `(fn …) args` auto-dispatch
 		// records the fn-body splice and refuses; a `/r`-referenced fn does not
 		// auto-dispatch, so `f/r` / `{b:f/r}` are pure data).
-		return len(d.Captured) == 0 && d.Registry == nil
+		if len(d.Captured) > 0 {
+			return false
+		}
+		if d.Registry == nil {
+			return true
+		}
+		// A module-export TRIVIAL-DELEGATION wrapper (`MathUtil.sqrt`): every own
+		// sig is a `[Word(inner)]` pass-through, so it holds no closure state to
+		// snapshot. The sub-registry pointer it carries is the SAME object the
+		// compiled run shares (RunProgram runs on the check-pass registry), and
+		// the VM applies it faithfully at run time via callDynamic →
+		// tryNativeFnApply (which re-resolves the inner native in that registry).
+		// So it bakes as DATA — a bare residual (`MathUtil.sqrt`), a branch-arm
+		// operand (`if c [99] MathUtil.sqrt`), or a container member. A module fn
+		// with a REAL AQL body is NOT a delegation wrapper and stays refused (its
+		// body would need CallAQL in the sub-registry, which the VM cannot do).
+		return isDelegationFnDef(d)
 	case *SurfaceInfo:
 		// A surface type (`def Shape surface {area: (fnsig …)}`): an immutable
 		// contract descriptor riding its canonical minted node via the Type
@@ -2747,11 +2782,34 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 	}
+	// Leading BRANCH result that MAY be a fn (an arm is an fn value, so the
+	// merge produced a value that is sometimes callable — `if c [99]
+	// MathUtil.sqrt 16`) over static args: a runtime-conditional apply.
+	// callDynamic applies the value when the branch produced the callable and
+	// leaves [value, arg] when it produced the data alternative, so the single
+	// OpCallDynamic is faithful on both runtime branches. (The merge widens the
+	// fn arm's type to its lattice parent — Word — so the disjunct carrier no
+	// longer reads as Function; the branch-event mayBeFn flag is the precise
+	// signal the static residual type cannot recover.)
+	if !applyDynamic && len(residual) >= 2 {
+		if pr, ok := es.producedBy[residual[0].ID]; ok && es.eventInfo[pr.seq].mayBeFn {
+			applyDynamic = !anyFnOrDynamicTail(residual)
+		}
+	}
 	if applyDynamic {
 		return residual, OpCallDynamic, ""
 	}
 	if rot, ok := es.trailingApply(lw, residual); ok {
 		return rot, OpCallDynamicTrailing, ""
+	}
+	// MIXED boundary: a single dynamic / fn value INTERIOR to the residual with
+	// static args both below and above it (`3 m.f 2`). The producing event was
+	// promoted to a frame local (Finalize's mixedDynamicApplyShape gate), so the
+	// residual now re-pushes in source order; OpCallDynamicMixed islands the whole
+	// window verbatim. The promoted entry stays Dynamic in `residual`, so the
+	// in-order ops loop maps it to its local and the window lays out unchanged.
+	if _, ok := es.mixedDynamicApplyShape(residual); ok {
+		return residual, OpCallDynamicMixed, ""
 	}
 	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
 	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
@@ -2818,6 +2876,35 @@ func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool
 		return residual, false
 	}
 	return []Value{fnv, arg}, true
+}
+
+// mixedDynamicApplyShape detects the MIXED fn-value-call boundary: EXACTLY one
+// residual entry is a dynamic / fn value, it sits STRICTLY INTERIOR (≥1 entry
+// below it AND ≥1 above it), and it is event-produced (so the producing event
+// can be promoted to a frame local and the residual re-pushed in source order).
+// Returns the interior index. `3 m.f 2` → residual [3, m.f, 2], index 1. The
+// before/after entries need not be checked here for materialisability — the ops
+// loop refuses any that cannot resolve, falling back faithfully.
+func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
+	if len(residual) < 3 {
+		return 0, false
+	}
+	dynIdx := -1
+	for i, rv := range residual {
+		if rv.Dynamic || isFnValueResidual(rv) {
+			if dynIdx != -1 {
+				return 0, false // more than one dynamic / fn value
+			}
+			dynIdx = i
+		}
+	}
+	if dynIdx <= 0 || dynIdx >= len(residual)-1 {
+		return 0, false // not strictly interior (leading / trailing are separate)
+	}
+	if pr, ok := es.producedBy[residual[dynIdx].ID]; !ok || pr.idx != 0 {
+		return 0, false // not event-produced — cannot promote to a local
+	}
+	return dynIdx, true
 }
 
 // Finalize linearises the recorded events into a Program. residual
@@ -2898,6 +2985,19 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			}
 		}
 	}
+	// MIXED fn-value-call boundary (`3 m.f 2`): the interior fn sits above a
+	// before-arg literal, so the in-order reconciliation would refuse "result
+	// above a literal". Promote EVERY residual event to a frame local so the whole
+	// window (before-args, the fn, after-args) re-pushes in source order, ready for
+	// OpCallDynamicMixed to island it. (residualHasFnOrDynamic suppressed the
+	// reorder block above; this is the one fn-value shape that DOES reorder, since
+	// the island consumes the window in source order, not the apply-on-top layout.)
+	if _, ok := es.mixedDynamicApplyShape(residual); ok {
+		forceOrder = make(map[int]bool, len(residualSeqs))
+		for _, seq := range residualSeqs {
+			forceOrder[seq] = true
+		}
+	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
 	lw.markBefore, lw.variadicElse = planVariadicClaims(es.frames[0])
 	// Seed the lowerer's frame-local counter from the unit's planned locals;
@@ -2966,7 +3066,13 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// base of the residual with its args above; apply it at run time. The
 		// trailing op additionally restores the fn-on-top order if the value
 		// turns out not to be callable (see resolveDynamicApply / callDynamic).
-		lw.emit(dynOp, len(residual)-1, lastPos)
+		// The MIXED op instead islands the WHOLE window (the fn is interior), so it
+		// takes the full residual length, not len-1.
+		arg := len(residual) - 1
+		if dynOp == OpCallDynamicMixed {
+			arg = len(residual)
+		}
+		lw.emit(dynOp, arg, lastPos)
 	}
 
 	// Lower the compiled fn units. Tail positions are marked first so

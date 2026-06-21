@@ -96,8 +96,13 @@ var patrunNatives = []NativeFunc{
 	{
 		Name: "add",
 		Signatures: []NativeSig{
-			// add PATTERN VALUE PATRUN — register a rule (in place).
-			{Args: []*Type{TMap, TAny, TPatrun}, Handler: patrunAddHandler, Returns: []*Type{}, BarrierPos: -1},
+			// add PATTERN VALUE PATRUN — register a rule (in place). The VALUE
+			// may be a fn (the dispatch-table pattern: `add {cmd:"sum"} (=>…)
+			// pm`), which the handler STASHES in the patrun and never invokes on
+			// the VM tape — so a PURE fn literal rides as an inert const
+			// (CompileStoresFn; a capturing fn declines at isInertConst and falls
+			// back, keeping its real binding).
+			{Args: []*Type{TMap, TAny, TPatrun}, Handler: patrunAddHandler, Returns: []*Type{}, BarrierPos: -1, CompileEffect: CompileStoresFn},
 		},
 	},
 	{

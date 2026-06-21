@@ -2472,7 +2472,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			return nil
 		}
 
-		results := carrierResults(e.registry, name, match.Sig, match.Args, pos)
+		results := carrierResults(e.registry, name, match.Sig, match.Args, pos, match.Reg)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 
@@ -3974,7 +3974,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		if wrapperSig != nil {
 			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
 			if trivialDelegation && sig.Handler != nil {
-				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name}
+				// The inner native lives in fnDef.Registry (the module sub-
+				// registry). Carry it on the match so the recorder can re-match a
+				// dynamic-input dispatch via OpCallNativePoly over that registry
+				// (`StructUtil.getpath` over a computed receiver), instead of
+				// refusing — the VM's callPoly resolves the word there.
+				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name, Reg: fnDef.Registry}
 				if len(positions) > 0 {
 					match.Args = make([]Value, len(positions))
 					for i, pos := range positions {
@@ -6110,6 +6115,30 @@ func (e *Engine) checkModeFallbackPositions(n int) []int {
 	return positions
 }
 
+// sigOrderArgs reorders the recovery path's tape-ordered operands
+// (the first nStack are stack args, ascending toward the pointer; the
+// rest are forward args in source order) into SIGNATURE order, where
+// sig[0] is the top of the stack. Per the one kernel arg convention,
+// forward args fill the leading sig positions in source order and the
+// stack args fill the remainder top-down — so the ascending stack run
+// is reversed. The result feeds RecordPolyCall, which (like every other
+// recorded dispatch) takes args in sig order so the VM re-match reads
+// them faithfully.
+func sigOrderArgs(args []Value, nStack int) []Value {
+	if nStack < 0 || nStack > len(args) {
+		nStack = len(args)
+	}
+	out := make([]Value, 0, len(args))
+	// Forward args (sig[0..k-1]) — already in source order.
+	out = append(out, args[nStack:]...)
+	// Stack args (sig[k..N-1]) — top of stack is the last (closest to the
+	// pointer) of the ascending run, so walk it in reverse.
+	for i := nStack - 1; i >= 0; i-- {
+		out = append(out, args[i])
+	}
+	return out
+}
+
 // checkModeAssumeSig is the recovery path for unmatched signatures in
 // check mode: emit a diagnostic (with pos attached), gather up to N
 // adjacent positions as synthetic args, synthesise carrier results
@@ -6184,7 +6213,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	for i, p := range positions {
 		args[i] = e.tape.At(p)
 	}
-	results := carrierResults(e.registry, w.Name, synth, args, pos)
+	results := carrierResults(e.registry, w.Name, synth, args, pos, nil)
 	e.spliceCheckResults(positions, results)
 	return true, nil
 }
@@ -6253,9 +6282,17 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		}
 	}
 	sig := best
-	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 	n := sig.TotalArgs()
 	positions := e.checkModeFallbackPositions(n)
+	// nStack is how many of the gathered positions are STACK args (before
+	// the pointer, ascending); the remainder are FORWARD args (after the
+	// pointer, source order). checkModeFallbackPositions lays them out in
+	// that tape order — stack-before then forward-after — which is NOT
+	// signature order. Recorded below for the poly-recovery operand rebuild.
+	nStack := len(e.resolvedIndicesBefore(n))
+	if nStack > len(positions) {
+		nStack = len(positions)
+	}
 	args := make([]Value, len(positions))
 	for i, p := range positions {
 		av := e.tape.At(p)
@@ -6281,9 +6318,24 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// exact path that would fail; the blanket no_signature error
 	// would be wrong for the paths that DO dispatch.
 	if out, ok := disjunctPartitionReturns(e.registry, w.Name, args, pos); ok {
+		// A strict-disjunct straddle is a runtime-dispatch case, not an
+		// inherent refusal: when the word is a safe poly candidate (core
+		// builtin, single result, no meta/fn-value/code-body sig), record
+		// OpCallNativePoly so the VM re-matches the one concrete alternative
+		// at run time — e.g. `(3 and "x") add 1` → `'x1'`, mirroring the
+		// normal-path handling in carrierResults. The poly call needs its
+		// operands in SIGNATURE order (sig[0] = top of stack): forward args
+		// fill the leading positions in source order, then the stack args
+		// fill the rest top-down (the deepest-last ascending run reversed).
+		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
+		// operand-order divergence. Only refuse when poly isn't safe.
+		if !tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil) {
+			e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		}
 		e.spliceCheckResults(positions, out)
 		return nil
 	}
+	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 	e.registry.Check.AddDiagnostic(CheckDiagnostic{
 		Code:   "no_signature",
 		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
@@ -6291,7 +6343,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Row:    pos.Row,
 		Col:    pos.Col,
 	})
-	results := carrierResults(e.registry, w.Name, sig, args, pos)
+	results := carrierResults(e.registry, w.Name, sig, args, pos, nil)
 	e.spliceCheckResults(positions, results)
 	return nil
 }

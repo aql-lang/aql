@@ -353,7 +353,7 @@ func isLiteralWord(v Value) bool {
 // args are the carrier-typed input values in signature order (same
 // args that would be passed to the runtime handler). pos carries the
 // word's source location so diagnostics can point at it.
-func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
+func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry) []Value {
 	// `args` inside a compiled fn body projects the frame's params (pushed by
 	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
 	// then folds to param N — a frame local — via tryFoldStaticIndex; bare
@@ -414,7 +414,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
 		// OpCallNativePoly so the VM re-matches the one concrete alternative at
 		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
-		if !tryRecordPoly(r, word, sig, args, out, pos, true) {
+		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg) {
 			r.Check.Emit.RecordPoly(word)
 		}
 		return out
@@ -499,7 +499,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	if !tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
-		!tryRecordPoly(r, word, sig, args, out, pos, false) &&
+		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
 		r.Check.Emit.RecordCall(word, sig, args, out, pos,
@@ -844,10 +844,18 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // faithfully; only the dynamic-only gate is bypassed, every other safety gate
 // (core builtin, no meta/fn-value/code-body sig, sig identity, resolvable
 // operands) still applies.
-func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool) bool {
+func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry) bool {
 	es := r.Check.Emit
 	if !es.active() || sig == nil || len(outs) != 1 {
 		return false
+	}
+	// matchReg is the registry whose signatures the VM re-matches over: a module
+	// sub-registry for a delegation-dispatched module word (`StructUtil.getpath`),
+	// else the main registry. The recorder validates the matched sig against it
+	// below, and the PolyRef carries it so callPoly looks up the right word.
+	matchReg := r
+	if ownerReg != nil {
+		matchReg = ownerReg
 	}
 	// Code-body higher-order words compile to closures, not poly.
 	if sig.CompileEffect.Has(CompileFallbackBody) {
@@ -856,8 +864,9 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// Only a REGISTERED builtin native — never a user-def fn or a usurp/ref
 	// wrapper (`def ifu (usurp if)`), whose dispatch re-steps tokens and
 	// returns tape-coupled values the VM cannot push. The runtime
-	// MatchSignature re-dispatches over the builtin's own signatures.
-	if !r.IsBuiltinWord(word) {
+	// MatchSignature re-dispatches over the builtin's own signatures. For a
+	// module word the builtin lives in its OWN sub-registry (matchReg).
+	if !matchReg.IsBuiltinWord(word) {
 		return false
 	}
 	// Only a genuinely dynamic dispatch (the case the checker could not
@@ -895,11 +904,11 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// named 0-arg method result (`r.bool`), and a method needing args
 	// (`r.int`) stays a value and flows to CALL_DYNAMIC — so both atom- and
 	// integer-keyed gets poly.
-	// CORE-dispatch guard: the matched sig must be the word's main-registry
-	// binding, since the runtime MatchSignature re-matches over r.Lookup's
-	// signatures (a module-qualified sub-registry sig would re-run the core
-	// word of that name).
-	fn := r.Lookup(word)
+	// CORE-dispatch guard: the matched sig must be the word's binding IN THE
+	// REGISTRY the VM will re-match over (matchReg), since callPoly re-matches
+	// over matchReg.Lookup's signatures — a sig that is not that registry's
+	// binding would re-run a different word of the same name.
+	fn := matchReg.Lookup(word)
 	if fn == nil {
 		return false
 	}
@@ -913,7 +922,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	if !sigOK {
 		return false
 	}
-	return es.RecordPolyCall(word, args, outs, pos)
+	return es.RecordPolyCall(word, args, outs, pos, ownerReg)
 }
 
 // The code-body higher-order words that may compile as Stage-5 interpreter

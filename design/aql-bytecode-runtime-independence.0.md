@@ -86,7 +86,14 @@ result (the differential caught it). Cleared the struct-util / module-word
 opaque cluster: −55 refusals, +48 compiled differential rows. Files:
 `eng/go/carrier.go` (dynOutNativeOK + isModuleInnerSig).
 
-Current ratchets: **459 refused / 15 islanded** (from 651 / 115 at P0;
+Current ratchets (live, 2026-06): **11 refused / 0 islanded**. The detailed
+remaining-row breakdown and per-cluster recommendations now live in
+`design/checker-compiler-architecture-review.0.md` (Completion guide + §11),
+which is the canonical status doc; re-run `go test -run TestCompiledCoverage -v`
+for the live histogram. The figures below are the historical P0→459 ramp this
+doc recorded:
+
+Historical ratchets: **459 refused / 15 islanded** (from 651 / 115 at P0;
 616 / 29 before P5; 598 / 26 after P5; 580 → 568 → 565 across carrier-identity;
 555 after predicate-type provenance; 545 after if value-else; 542 after case;
 538 after multi-return / 0-return / anonymous-lambda fns; 527 after apply of a
