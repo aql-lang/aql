@@ -115,3 +115,68 @@ interleavings) → Gap A row-3 (accumulating recursion, hardest). Each lowers
 
 These three reverts are the empirical boundary of what the single-result lowerer
 can do; Gap A/B are the structural answer.
+
+## Verified findings (2026-06 session) — Gap A needs a NEW VM opcode
+
+Concrete tracing of the two "most tractable" rows confirmed they are **not**
+bounded lowering fixes; both need a runtime mechanism the VM lacks today.
+
+### Row fwd-barrier:87 — the chained variadic-if requires a variadic stack region
+
+`def n 0 if (n eq 0) [98] if (n eq 0) [99] add 1 2`. Verified interpreter
+contract across polarities (the contract any compiled form must reproduce):
+
+| program | result | why |
+| --- | --- | --- |
+| `def n 0 … (n eq 0) [98] … (n eq 0) [99] add 1 2` | `99 3` | both guards true: 98 produced then **claimed+discarded** as the 2nd if's else |
+| `def n 5 … (n eq 0) [98] … (n eq 0) [99] add 1 2` | `3` | 1st if 0 values; 2nd if false → else claims **nothing** (0 values) |
+| `def n 5 … (n eq 0) [98] … (n eq 5) [99] add 1 2` | `99 3` | 1st if 0 values; 2nd if true → then 99 |
+
+So the 1st if leaves a genuine **0-or-1 (variadic)** value, and the 2nd if's
+else claims it at runtime-variable depth. Lowering trace (`AQL_BRDBG`): at the
+2nd if the sim stack is `[eager(seq=firstIf), cond(seq=2ndCond)]` with the
+**cond on top** (the eager came from a prior statement, the cond was evaluated
+after it) — the inverse of the normal computed-else layout, which is why
+`lower.go:1052` rejects it.
+
+**Soundness disproof of the cheap fix.** Restructuring to nest the 1st if as the
+2nd if's else fragment (`if c2 [99] [if c1 [98]]`) is **UNSOUND**: it makes the
+1st if's body run only on the `c2`-false path, but the interpreter runs it
+**unconditionally** (it is a separate statement) — a side-effecting 1st body
+(`if (n eq 0) [print 1]`) would diverge. The 1st if must execute unconditionally
+and leave a 0-or-1 value the 2nd if claims at variable depth.
+
+**Required primitive.** The VM opcode set (`bytecode.go`) has **no** variable-
+depth stack primitive (no mark / move / drop-to-mark; the stack discipline is
+strictly fixed-offset, which all 2498 compiling rows rely on). Compiling this
+soundly needs a new pair — e.g. `OpStackMark` (push the current depth onto a
+mark stack) + `OpDropToMark` (truncate to a saved mark, keeping the top k) — so
+the 2nd if's then-arm can discard the 0-or-1 eager regardless of its presence,
+and the merge can leave a 0-or-1 result. `RecordBranch` then carries the arm
+count **range** (`[lo,hi]`) instead of a single `Out`, and `lowerArms` /
+`lowerComputedBranch` emit the marks. This is the count-range model from Gap A,
+now pinned to a concrete opcode requirement. High blast radius (every if/case
+lowers through these paths) — design + full differential/parity verification
+before landing.
+
+### Group B residual shapes (probed `AQL_RESDBG`)
+
+- **module-parselang:23** residual is `[None, 'x+y', <dynamic event>]`: the
+  dynamic sublanguage `parse_calc` leaks its literal args into the residual AND
+  marks the result `Dynamic`, which disables `forceOrder` (`emit.go:2840`). Not
+  the clean "literal above call result" shape — needs dynamic-but-resolvable
+  results to be promotable, plus the leaked args understood.
+- **module-test:38** residual is a single `Test.summary` event but `seatResults`
+  returns `reordered` (`lower.go:686`) because `lw.vm` carries a leftover from
+  `Test.run-spec` whose carrier-modeled output count (1) ≠ its runtime 0-output.
+  Needs the fn-body 0-output sim modeling fixed so the discarded run-spec result
+  is not simulated on the stack.
+
+### Bottom line
+
+`islandCeiling` is **0** (no compiled program islands). Every remaining refusal
+needs a VM value-model / opcode addition (variadic stack region; reference cells
+for flex; dynamic-dispatch poly-extension; dynamic-scope frames), a high-blast
+structural refactor, or is interpreter-bound (the divergent `macro.tsv:45`
+expansion, only discoverable at runtime). No bounded, sound, gate-clean win
+remains — confirmed again this session at the opcode level.
