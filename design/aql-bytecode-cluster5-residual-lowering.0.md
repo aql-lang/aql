@@ -166,11 +166,19 @@ before landing.
   marks the result `Dynamic`, which disables `forceOrder` (`emit.go:2840`). Not
   the clean "literal above call result" shape — needs dynamic-but-resolvable
   results to be promotable, plus the leaked args understood.
-- **module-test:38** residual is a single `Test.summary` event but `seatResults`
-  returns `reordered` (`lower.go:686`) because `lw.vm` carries a leftover from
-  `Test.run-spec` whose carrier-modeled output count (1) ≠ its runtime 0-output.
-  Needs the fn-body 0-output sim modeling fixed so the discarded run-spec result
-  is not simulated on the stack.
+- **module-test:38** residual is a single `Test.summary` event, but `seatResults`
+  returns `reordered` (`lower.go:686`) because `lw.vm` carries **two leftover
+  `evCallUser name="double"` results**. Root cause (traced with an event dump):
+  the two leftovers are the test's *subject* (`double`) invoked on each case's
+  inputs (`[3]`, `[0]`). `Test.run-spec` analyses its concrete cases at compile
+  time, but because it is a **module-preamble AQL fn not compiled as an isolated
+  unit**, those internal subject-invocations are recorded into the MAIN frame and
+  their results leak onto the program residual. At runtime they are consumed
+  inside run-spec (which nets 0 via the `BodyOut:0` `test-describe`). The fix is
+  fn-unit isolation for module-preamble AQL fns (plan cluster 2) so a module-fn's
+  internal residual is contained — NOT a residual-seat tweak. `test-describe`
+  already declares `Returns: []` correctly, so leaf output-count modeling is not
+  the problem; containment is.
 
 ### Bottom line
 
