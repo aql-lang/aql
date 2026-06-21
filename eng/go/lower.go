@@ -89,8 +89,16 @@ type lowerer struct {
 	variadic map[int]bool // loop seqs: N runtime values, not one
 	promoted map[int]int  // value-def locals: producing event seq → frame local slot
 	dead     map[int]bool // single-result value-defs referenced zero times: drop the result
-	loops    []loopCtx
-	maxDepth int
+	// markBefore / variadicElse drive the chained variadic-statement-if (a 2-arg
+	// `if`'s 0-or-1 result claimed as the else of a following `if`). markBefore[seq]
+	// emits an OpStackMark before that event opens a variadic region; variadicElse[seq]
+	// lowers the claiming branch via the mark (DROP_TO_MARK / POP_MARK) instead of
+	// the fixed-offset computed-else path. Both keyed by event seq, computed by
+	// planVariadicClaims.
+	markBefore   map[int]bool
+	variadicElse map[int]bool
+	loops        []loopCtx
+	maxDepth     int
 	// isFnUnit marks a lowerer driving a USER FN body unit (not the main
 	// program). A break/continue with no enclosing loop in such a unit is a
 	// cross-frame flow signal — it targets the caller's loop — so it lowers to
@@ -221,9 +229,54 @@ func (lw *lowerer) emit(op Opcode, arg int, pos SrcPos) int {
 // lowerEvents lowers a trace. scopeFloor is the closed-fragment rule:
 // an operand produced by an event with seq <= scopeFloor lives in the
 // enclosing scope, which Stage 2 branch fragments must not read.
+// planVariadicClaims scans a straight-line frame for the chained variadic-if:
+// a computed-else branch whose else operand is the 0-or-1 result of a PRIOR
+// 2-arg (no-else) `if`. The producer leaves a runtime-variable count, so the
+// claiming if cannot drop it at a fixed offset — it needs a stack-mark region.
+// Returns markBefore (the seq before which to open the region — the producer's
+// cond event if it is an event, else the producer itself) and variadicElse (the
+// claiming branch seqs). nil maps when no claim is present (the common case).
+func planVariadicClaims(events []emitEvent) (markBefore, variadicElse map[int]bool) {
+	byseq := func(seq int) *emitEvent {
+		for i := range events {
+			if events[i].seq == seq {
+				return &events[i]
+			}
+		}
+		return nil
+	}
+	for i := range events {
+		ev := &events[i]
+		if ev.kind != evBranch || ev.br == nil || !ev.br.elsComputed || ev.br.elsVal.kind != opEvent {
+			continue
+		}
+		prod := byseq(ev.br.elsVal.idx)
+		// The producer must be a 2-arg (no-else) value-producing `if` — exactly the
+		// 0-or-1 variadic statement guard. (A 3-arg if's result is non-variadic and
+		// the existing computed-else path handles it.)
+		if prod == nil || prod.kind != evBranch || prod.br == nil || prod.br.hasElse || !prod.br.hasThenOut {
+			continue
+		}
+		markSeq := prod.seq
+		if prod.br.cond.kind == opEvent {
+			markSeq = prod.br.cond.idx // open the region before the producer's cond eval
+		}
+		if markBefore == nil {
+			markBefore = map[int]bool{}
+			variadicElse = map[int]bool{}
+		}
+		markBefore[markSeq] = true
+		variadicElse[ev.seq] = true
+	}
+	return markBefore, variadicElse
+}
+
 func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 	for i := range events {
 		ev := &events[i]
+		if lw.markBefore[ev.seq] {
+			lw.emit(OpStackMark, 0, eventPos(*ev))
+		}
 		if scopeFloor > 0 {
 			var crossed bool
 			forEachOperand(ev, func(op emitOperand) {
@@ -1030,6 +1083,36 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 			}
 			lw.note()
 		}
+		return ""
+	}
+	if lw.variadicElse[ev.seq] {
+		// Chained variadic-if: the else operand is a PRIOR 2-arg `if`'s 0-or-1
+		// result, sitting above an OpStackMark (opened by planVariadicClaims /
+		// lowerEvents); the cond (an event) is on top. The TRUE path discards the
+		// 0-or-1 eager via DROP_TO_MARK and runs the then arm; the FALSE path keeps
+		// the eager as the else result via POP_MARK. The merge is itself 0-or-1.
+		if br.cond.kind != opEvent || len(lw.vm) < 2 ||
+			!slotIs(lw.vm[len(lw.vm)-1], br.cond) || !slotIs(lw.vm[len(lw.vm)-2], br.elsVal) {
+			return "if: variadic-else claim stack layout (Stage 2)"
+		}
+		jf := lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // cond consumed
+		// TRUE: discard the 0-or-1 eager (truncate to the mark) and run the then arm.
+		lw.emit(OpDropToMark, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1] // eager folded into the merge
+		if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, false, br.pos); reason != "" {
+			return reason
+		}
+		jend := lw.emit(OpJmp, 0, br.pos)
+		// FALSE: keep the eager as the else result; discard the mark.
+		(*lw.code)[jf].Arg = int32(len(*lw.code))
+		lw.emit(OpPopMark, 0, br.pos)
+		(*lw.code)[jend].Arg = int32(len(*lw.code))
+		// Merge: then nets one value, else nets the 0-or-1 eager → a VARIADIC
+		// (0-or-1) result the program residual absorbs.
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+		lw.variadic[ev.seq] = true
+		lw.note()
 		return ""
 	}
 	if br.thenComputed && br.elsComputed {

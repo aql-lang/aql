@@ -121,6 +121,17 @@ can do; Gap A/B are the structural answer.
 Concrete tracing of the two "most tractable" rows confirmed they are **not**
 bounded lowering fixes; both need a runtime mechanism the VM lacks today.
 
+### Row fwd-barrier:87 — LANDED (variadic stack region; refusals 17 → 16)
+
+Implemented the variadic stack region described below: `OpStackMark` /
+`OpDropToMark` / `OpPopMark` (bytecode.go + a vm.go per-run mark stack), a
+`planVariadicClaims` pre-pass (lower.go) that detects a computed-else branch whose
+else is a prior 2-arg-if result, an `OpStackMark` opened before the producer's
+cond, and a mark-based claiming-if lowering (TRUE path `DROP_TO_MARK` discards the
+0-or-1 eager then runs the then arm; FALSE path `POP_MARK` keeps it; the merge is
+a 0-or-1 the residual absorbs). Verified across guard polarities, 0 divergences,
+full verify-bytecode green. The original analysis is retained below for the record.
+
 ### Row fwd-barrier:87 — the chained variadic-if requires a variadic stack region
 
 `def n 0 if (n eq 0) [98] if (n eq 0) [99] add 1 2`. Verified interpreter

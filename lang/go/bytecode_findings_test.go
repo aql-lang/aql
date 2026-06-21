@@ -2121,6 +2121,44 @@ func TestBareFnMapFieldCompiles(t *testing.T) {
 	}
 }
 
+// Cluster-5 Gap A — chained variadic-statement-if: a 2-arg `if`'s 0-or-1 result
+// is claimed as the else of a following `if`. The variadic depth is only known at
+// run time, so the claiming if cannot drop it at a fixed offset — it uses a
+// variadic stack region (OpStackMark / OpDropToMark / OpPopMark).
+func TestChainedVariadicIfCompiles(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{`def n 0 if (n eq 0) [98] if (n eq 0) [99] add 1 2`, "[99 3]"},
+		{`def n 5 if (n eq 0) [98] if (n eq 0) [99] add 1 2`, "[3]"},
+		{`def n 5 if (n eq 0) [98] if (n eq 5) [99] add 1 2`, "[99 3]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if dis := prog.Disassemble(); strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, dis)
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
 // Cluster 7a — a 0-net code-body case scrutinee compiles to a case_error trap.
 // `case [f 1] [...]` where f produces no value is the runtime case_error
 // ("value expression produced no value to dispatch on"); caseReturnsFn detects

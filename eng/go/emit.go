@@ -2873,6 +2873,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
+	lw.markBefore, lw.variadicElse = planVariadicClaims(es.frames[0])
 	// Seed the lowerer's frame-local counter from the unit's planned locals;
 	// spillSeat bumps it for spill temps. Written back below so Program.NumLocals
 	// covers them.

@@ -503,6 +503,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 	defer func() { vc.frameDepth = entryFrameDepth }()
 	var loops []vmLoop
 	var frames []vmFrame
+	// marks is the variadic-region mark stack (OpStackMark / OpDropToMark /
+	// OpPopMark): each entry is a saved stack depth so a 0-or-1 (runtime-variadic)
+	// value produced above the mark can be discarded by truncation regardless of
+	// its actual count. Per-run, like loops/frames.
+	var marks []int
 	// argScratch is per-run (NOT shared on vc): a re-entrant closure run's
 	// CALL_NATIVE must not clobber an outer handler's args slice, which
 	// aliases this buffer until the handler returns (a higher-order handler
@@ -550,6 +555,29 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, vmErrAt(curDebug, pc, "DROP stack underflow")
 			}
 			stack = stack[:len(stack)-1]
+		case OpStackMark:
+			// Open a variadic region: remember the current depth so a 0-or-1
+			// value produced above it can be truncated away later.
+			marks = append(marks, len(stack))
+		case OpDropToMark:
+			// Close a variadic region on the path that discards the 0-or-1 eager:
+			// pop the mark and truncate the stack back to it.
+			if len(marks) == 0 {
+				return nil, vmErrAt(curDebug, pc, "DROP_TO_MARK with no open mark")
+			}
+			m := marks[len(marks)-1]
+			marks = marks[:len(marks)-1]
+			if m > len(stack) {
+				return nil, vmErrAt(curDebug, pc, "DROP_TO_MARK above current depth")
+			}
+			stack = stack[:m]
+		case OpPopMark:
+			// Close a variadic region on the path that KEEPS the eager: discard
+			// the mark without touching the stack.
+			if len(marks) == 0 {
+				return nil, vmErrAt(curDebug, pc, "POP_MARK with no open mark")
+			}
+			marks = marks[:len(marks)-1]
 		case OpMakeList:
 			// Assemble the top Arg values into a list (a computed list literal,
 			// `[1 add 2]`); order preserved, deepest becomes element 0.
