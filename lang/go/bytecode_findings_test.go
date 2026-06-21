@@ -2309,3 +2309,70 @@ func TestDispatchRecoveryPolyCompiles(t *testing.T) {
 		}
 	}
 }
+
+// Stage B — conditional dynamic apply in a branch. `if (n eq 0) [99]
+// MathUtil.sqrt 16`: the else arm is the module-export fn value sqrt and the
+// trailing 16 applies ONLY when the branch produced the callable. Two parts:
+// (1) the trivial-delegation module fn value bakes as an inert const (so the
+// else operand resolves), and (2) the branch result carries a mayBeFn flag so
+// resolveDynamicApply lowers the trailing arg to a runtime-conditional
+// OpCallDynamic — callDynamic applies sqrt on the else path (→ 4.0) and leaves
+// [99 16] on the then path. One compiled program is faithful on both branches.
+func TestConditionalBranchApplyCompiles(t *testing.T) {
+	const imp = `"aql:math-util" import end `
+	cases := []struct{ src, want string }{
+		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt 16`, "[4.0]"},          // else: sqrt 16 → 4.0
+		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 16]"},        // then: 99, 16 stays
+		{imp + `def n 0 if (n eq 0) MathUtil.sqrt [99] 16`, "[4.0]"},          // then-arm fn mirror
+		{imp + `def n 5 if (n eq 0) MathUtil.sqrt [99] 16`, "[99 16]"},        // else: 99, 16 stays
+		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt`, "[fn sqrt(Number)]"}, // no trailing: bare fn value
+		{imp + `MathUtil.sqrt`, "[fn sqrt(Number)]"},                          // bare module fn value bakes
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		// 4.0 renders as "4" via fmt of the []any; compare compiled to interp
+		// (the authoritative value) and to the expected rendering.
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE 1: a non-fn branch result must NOT apply the trailing arg —
+	// `if (n eq 0) ["a"] 7 16` leaves [7 16] (7 is not callable), and the
+	// mayBeFn flag is never set, so no OpCallDynamic is emitted.
+	// NEGATIVE 2: a CAPTURING fn value as an arm must not be baked/applied
+	// unsoundly — it stays off the native path (compiled==interp regardless).
+	for _, c := range []struct{ src, want string }{
+		{`def n 5 if (n eq 0) ["a"] 7 16`, "[7 16]"},
+		{`def n 0 if (n eq 0) ["a"] 7 16`, "[a 16]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: no-apply: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}

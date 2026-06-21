@@ -117,6 +117,10 @@ type eventFlags struct {
 	typeOut  bool
 	valueDef bool
 	generic  bool
+	// mayBeFn marks a BRANCH event whose result may be a Function at run time
+	// (an arm is an fn value), so a trailing arg over it in the residual lowers
+	// to a runtime-conditional OpCallDynamic (`if c [99] MathUtil.sqrt 16`).
+	mayBeFn bool
 }
 
 type emitCall struct {
@@ -946,6 +950,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	}
 	// Arms.
 	zeroOut := false
+	// mayBeFn: an arm is an fn VALUE, so the branch result may be callable at
+	// run time — a trailing residual arg over it is a conditional apply.
+	mayBeFn := false
 	if b.ConstCond != nil {
 		out, has, ok := resolveArm(b.Then, b.ThenStk, "taken")
 		if !ok {
@@ -979,6 +986,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 			if !ok {
 				es.MarkUncompilable("if: then value of unknown provenance")
 				return
+			}
+			if isFnValueResidual(*b.ThenValue) {
+				mayBeFn = true
 			}
 			if op.kind == opEvent {
 				// A COMPUTED then value (`if cond (add 1 2) 88`) is eagerly on the
@@ -1014,6 +1024,9 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				if !ok {
 					es.MarkUncompilable("if: else value of unknown provenance")
 					return
+				}
+				if isFnValueResidual(*b.ElsValue) {
+					mayBeFn = true
 				}
 				if op.kind == opEvent {
 					// A COMPUTED else value (`if cond [then] (add 1 2)`) is
@@ -1072,6 +1085,11 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		// lets RecordCall's double-record guard elide this if dispatch.
 		f := es.eventInfo[seq]
 		f.zeroOut = true
+		es.eventInfo[seq] = f
+	}
+	if mayBeFn {
+		f := es.eventInfo[seq]
+		f.mayBeFn = true
 		es.eventInfo[seq] = f
 	}
 }
@@ -2407,7 +2425,23 @@ func isInertConst(v Value) bool {
 		// value is a separate dispatch path (a bare `(fn …) args` auto-dispatch
 		// records the fn-body splice and refuses; a `/r`-referenced fn does not
 		// auto-dispatch, so `f/r` / `{b:f/r}` are pure data).
-		return len(d.Captured) == 0 && d.Registry == nil
+		if len(d.Captured) > 0 {
+			return false
+		}
+		if d.Registry == nil {
+			return true
+		}
+		// A module-export TRIVIAL-DELEGATION wrapper (`MathUtil.sqrt`): every own
+		// sig is a `[Word(inner)]` pass-through, so it holds no closure state to
+		// snapshot. The sub-registry pointer it carries is the SAME object the
+		// compiled run shares (RunProgram runs on the check-pass registry), and
+		// the VM applies it faithfully at run time via callDynamic →
+		// tryNativeFnApply (which re-resolves the inner native in that registry).
+		// So it bakes as DATA — a bare residual (`MathUtil.sqrt`), a branch-arm
+		// operand (`if c [99] MathUtil.sqrt`), or a container member. A module fn
+		// with a REAL AQL body is NOT a delegation wrapper and stays refused (its
+		// body would need CallAQL in the sub-registry, which the VM cannot do).
+		return isDelegationFnDef(d)
 	case *SurfaceInfo:
 		// A surface type (`def Shape surface {area: (fnsig …)}`): an immutable
 		// contract descriptor riding its canonical minted node via the Type
@@ -2746,6 +2780,20 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
 	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
+	}
+	// Leading BRANCH result that MAY be a fn (an arm is an fn value, so the
+	// merge produced a value that is sometimes callable — `if c [99]
+	// MathUtil.sqrt 16`) over static args: a runtime-conditional apply.
+	// callDynamic applies the value when the branch produced the callable and
+	// leaves [value, arg] when it produced the data alternative, so the single
+	// OpCallDynamic is faithful on both runtime branches. (The merge widens the
+	// fn arm's type to its lattice parent — Word — so the disjunct carrier no
+	// longer reads as Function; the branch-event mayBeFn flag is the precise
+	// signal the static residual type cannot recover.)
+	if !applyDynamic && len(residual) >= 2 {
+		if pr, ok := es.producedBy[residual[0].ID]; ok && es.eventInfo[pr.seq].mayBeFn {
+			applyDynamic = !anyFnOrDynamicTail(residual)
+		}
 	}
 	if applyDynamic {
 		return residual, OpCallDynamic, ""
