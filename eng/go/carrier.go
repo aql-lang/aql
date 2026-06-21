@@ -2169,9 +2169,9 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 	}
 }
 
-// FnAnalysisKey builds the memo key for one fn-body analysis: name +
-// arg type paths + captured-name set + the body's construction site.
-// The captures are included so two anonymous lambdas with identical
+// FnAnalysisKey builds the memo key for one fn-body analysis: scope id +
+// name + arg type paths + captured-name set + the body's construction
+// site. The captures are included so two anonymous lambdas with identical
 // bodies but different capture sets don't collide; the construction
 // site (the first body token's source position) so two DIFFERENT
 // definitions sharing a name and arg types — `def f fn […] … def f
@@ -2179,11 +2179,22 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 // every call to the FIRST definition's code unit). The same
 // construction re-analysed (recursion, repeated calls) carries the
 // same body tokens, so memoisation and in-flight recursion detection
-// are unaffected. core_helpers' compile hook must build the SAME key
-// (its FnSummaries delete relies on the match) — that's why this is
-// a named helper, not two inlined loops.
-func FnAnalysisKey(name string, args []Value, captures []CapturedBinding, body []Value) string {
+// are unaffected.
+//
+// scopeID is the AnalysisScopeID of the registry whose body is being
+// analysed. It namespaces the key so a module sub-registry's fn cannot
+// alias a same-named, same-positioned parent fn once a check pass is
+// shared across registries (design/module-fn-checkstate-ownership.1.md
+// §5a) — the position suffix alone does not disambiguate, because parent
+// and module are parsed from independent sources whose positions overlap.
+// core_helpers' compile hook must build the SAME key (its FnSummaries
+// delete relies on the match) — that's why this is a named helper, not
+// two inlined loops, and why every caller passes r.AnalysisScopeID() of
+// the same registry r that AnalyseFnBody runs the body in.
+func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []CapturedBinding, body []Value) string {
 	var sb strings.Builder
+	sb.WriteString(strconv.FormatUint(scopeID, 10))
+	sb.WriteByte('#')
 	sb.WriteString(name)
 	sb.WriteByte('#')
 	for _, a := range args {
@@ -2243,7 +2254,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	if len(body) == 0 {
 		return nil
 	}
-	key := FnAnalysisKey(name, args, captures, body)
+	key := FnAnalysisKey(r.AnalysisScopeID(), name, args, captures, body)
 
 	if r.Check.FnSummaries == nil {
 		r.Check.FnSummaries = map[string][]Value{}

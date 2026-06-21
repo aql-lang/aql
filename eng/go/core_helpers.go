@@ -378,7 +378,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			for i, a := range args {
 				genArgs[i] = NewCarrier(a.Parent)
 			}
-			key := FnAnalysisKey(nameCopy, args, capturesCopy, bodyCopy)
+			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, args, capturesCopy, bodyCopy)
 			paramNames := make([]string, len(sigParams))
 			for i, p := range sigParams {
 				paramNames[i] = p.Name
