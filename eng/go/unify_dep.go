@@ -28,10 +28,7 @@ type depScalarUnifier struct {
 
 func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
-		if d.prev != nil {
-			return d.prev.Match(v, t)
-		}
-		return DefaultBehavior.Match(v, t)
+		return baseBehavior(d.prev).Match(v, t)
 	}
 	if !v.Parent.ConformsTo(d.baseType) {
 		return false
@@ -39,19 +36,8 @@ func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 	return depScalarCheck(d.depInfo, v)
 }
 
-func (d *depScalarUnifier) Format(v Value) string {
-	if d.prev != nil {
-		return d.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
-}
-
-func (d *depScalarUnifier) Equal(a, b Value) bool {
-	if d.prev != nil {
-		return d.prev.Equal(a, b)
-	}
-	return DefaultBehavior.Equal(a, b)
-}
+func (d *depScalarUnifier) Format(v Value) string { return baseBehavior(d.prev).Format(v) }
+func (d *depScalarUnifier) Equal(a, b Value) bool { return baseBehavior(d.prev).Equal(a, b) }
 
 // installDepScalarUnifier attaches a depScalarUnifier to def. Called
 // by InstallType when minting a DepScalar-bodied user type so the

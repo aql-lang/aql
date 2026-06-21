@@ -33,44 +33,26 @@ func MemberBehavior(member func(v Value) bool) TypeBehavior {
 	return memberBehavior{member: member}
 }
 
-// Match reports membership. A bare type literal or carrier is "the type
-// itself" / an abstract placeholder, not an inhabitant, so it defers to
-// the lattice walk; concrete values are put to the predicate.
+// Match reports membership via the shared contract: a non-inhabitant
+// defers to the lattice walk; a concrete value is put to the predicate.
 func (b memberBehavior) Match(v Value, t *Type) bool {
-	if !IsConcrete(v) {
-		return DefaultBehavior.Match(v, t)
-	}
-	return b.member(v)
+	return matchMembership(v, t, nil, b.member)
 }
 
-// Unify admits the concrete side that satisfies the predicate, in either
-// argument order (dispatchUnifier starts at the more specific denoted
-// type, so the membership test is reached for `value is Type` and the
-// reverse). A concrete member wins. When there is a concrete operand and
-// none satisfy the predicate, the result is a DEFINITIVE failure — not
-// ErrNoUnifier — so the kernel's structural fallback cannot re-admit a
-// non-member by lattice subtyping alone (the soundness hole a plain
-// opt-out leaves). A purely type-level unification (no concrete operand,
-// e.g. literal-vs-literal) defers to the structural rule, which doesn't
-// need the predicate.
+// Unify admits a concrete member, in either argument order, via the
+// shared contract — a non-member with a concrete operand fails
+// definitively (no structural re-admission), a type-level pair defers to
+// the structural rule. The Go predicate yields the candidate unchanged on
+// a match.
 func (b memberBehavior) Unify(a, c Value) (Value, *UnifyError) {
-	sawConcrete := false
-	for _, v := range []Value{a, c} {
-		if IsConcrete(v) {
-			sawConcrete = true
-			if b.member(v) {
-				return v, nil
-			}
-		}
-	}
-	if sawConcrete {
-		return Value{}, unifyFail("value is not a member of the type", a, c)
-	}
-	return unifySameOrSubtype(a, c)
+	return unifyMembership(a, c, "the member type", func(v Value) (Value, bool, error) {
+		return v, b.member(v), nil
+	})
 }
 
-func (b memberBehavior) Equal(a, c Value) bool { return DefaultBehavior.Equal(a, c) }
-func (b memberBehavior) Format(v Value) string { return DefaultBehavior.Format(v) }
+func (b memberBehavior) Equal(a, c Value) bool           { return baseBehavior(nil).Equal(a, c) }
+func (b memberBehavior) Format(v Value) string           { return baseBehavior(nil).Format(v) }
+func (b memberBehavior) Compare(a, c Value) (int, error) { return baseCompare(nil, a, c) }
 
 // FormatDelegate marks the behavior as delegating Format to the kernel
 // default, so canon / Value.String render a member by its lattice family

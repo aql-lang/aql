@@ -143,10 +143,7 @@ type surfaceUnifier struct {
 // Shape-literal is "the type itself", not an inhabitant.
 func (s *surfaceUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
-		if s.prev != nil {
-			return s.prev.Match(v, t)
-		}
-		return DefaultBehavior.Match(v, t)
+		return baseBehavior(s.prev).Match(v, t)
 	}
 	for p := v.Parent; p != nil; p = p.Parent {
 		if s.info.Conform[p.ID] {
@@ -163,18 +160,10 @@ func (s *surfaceUnifier) Format(v Value) string {
 		ops = append(ops, info.Required.Keys()...)
 		return fmt.Sprintf("surface<%s>{%s}", info.Name, strings.Join(ops, " "))
 	}
-	if s.prev != nil {
-		return s.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
+	return baseBehavior(s.prev).Format(v)
 }
 
-func (s *surfaceUnifier) Equal(a, b Value) bool {
-	if s.prev != nil {
-		return s.prev.Equal(a, b)
-	}
-	return DefaultBehavior.Equal(a, b)
-}
+func (s *surfaceUnifier) Equal(a, b Value) bool { return baseBehavior(s.prev).Equal(a, b) }
 
 // SurfaceInfoOf returns the surface payload when t (or an ancestor)
 // is a surface-minted node — i.e. carries the surfaceUnifier. Used by
