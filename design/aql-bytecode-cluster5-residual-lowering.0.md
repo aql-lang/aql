@@ -1,0 +1,117 @@
+# AQL Bytecode — Cluster 5: variadic branch / multi-shape residual lowering
+
+Status: design. The linchpin for the remaining ~21 not-fully-native spec rows.
+Companion to `aql-bytecode-finish-line.0.md` (the cluster roadmap) and
+`aql-bytecode-completion.0.md`. Grounded in the concrete rows that refuse today.
+
+## Why this is the linchpin
+
+After the error-row traps and the user-call-residual seating landed
+(`refusalCeiling` 26 → 20, `islandCeiling` 2 → 1, `reducibleCeiling` 4 → 2), the
+remaining rows cluster into two families. This doc specs the **structural**
+family — the one that unblocks the most rows at once. The Stage-1/Stage-2 lowerer
+(`eng/go/lower.go`, `eng/go/emit.go`) models **single-result branches** and an
+**event\*-literal\*-ordered residual**; the rows below break one of those
+assumptions. Each was verified by `CompileCheck` + the interpreter oracle.
+
+## The rows (verified shapes + expected results)
+
+1. **Sequential variadic-statement-`if` with else-claiming**
+   `def n 0 if (n eq 0) [98] if (n eq 0) [99] add 1 2` → `99 3`
+   (forward-barrier.tsv:87). A 2-arg `if` is a 0-or-1 variadic statement; the
+   SECOND guard claims the FIRST guard's `98` as its else (plan-consistent stack
+   claim). The single-`if` form `if (n eq 0) [99] add 1 2` → `99 3` already
+   compiles; the refusal is the *chained* variadic where one if's residual feeds
+   the next if's else slot. Reason: `if-branch lowering`.
+
+2. **Export/value claimed as a variadic else across a forward barrier**
+   `… def n 5 if (n eq 0) [99] MathUtil.sqrt 16` → `4.0`
+   (forward-barrier.tsv:83). The `MathUtil.sqrt` export VALUE lands in the 2-arg
+   if's else slot; n=5 (false) → else → the chain proceeds `sqrt 16`. Reason:
+   `operand provenance`. Same family as (1): a variadic-if whose else is a
+   forward-collected value, not a `[…]` body.
+
+3. **Stack-accumulating recursion (multi-value fn residual)**
+   `def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]] m 3`
+   (recursion.tsv) → `6 4 2`. The fn declares 0 returns but each else level
+   leaves `n mul 2` on the stack and recurses, so the residual GROWS per frame.
+   Reason: `fn m: branch leaves extra values (Stage 2 lowers single-result
+   branches)`. Needs N-value branch arms whose counts differ (then=0, else=1+).
+
+4. **Multi-token / multi-value residuals** — already partly addressed (the
+   user-call-above-literal seat). Remaining: `macroexpand`+quote recursion
+   (an ERROR row, `expansion too deep` — its check-mode path is NOT the
+   `carrierResults` macroexpand branch, so the trap must be placed where the
+   recursive expansion's carrier is produced), the parselang `parse_calc …` get
+   chain, and the Test.run-spec harness accumulation. Reason: `residual lowering
+   (Stage 1 limit)`.
+
+## The two lowering gaps
+
+### Gap A — variadic branch-result merge (rows 1, 2, 3)
+
+`lowerFragment` (`lower.go:763`) requires a branch arm to end as exactly `[out]`
+or empty; `lowerArms` merges single-result arms. The gap: arms whose net counts
+DIFFER (then=0/else=1, or then=1/else=N) and whose result is consumed by a
+FOLLOWING statement (the else-claim) or accumulates (recursion).
+
+**Design.** Model a branch's result as a **count range** `[lo, hi]` (already
+partially present: `lw.variadic`, the 2-arg-if 0-or-1, the nested-variadic case
+chains). Generalise:
+- `RecordBranch` records each arm's residual operand LIST (not a single `Out`),
+  plus a merged range. `lowerArms` emits a merge that leaves `hi` slots, with the
+  taken arm filling `lo..its-count` and the lowerer tracking the variadic count
+  on `lw.vm` for the downstream consumer.
+- The forward-barrier else-claim (rows 1, 2): the parser already lays the NEXT
+  statement's value into the if's else slot at plan time (the interpreter's
+  behaviour). The compiler must lower the if so the else slot is the
+  forward-collected operand — i.e. the variadic-if's else is an OPERAND, lowered
+  like a 3-arg if whose else arm is a single pushed value (the
+  `if cond [then] value` path already exists in `if3ReturnsFn`, lines 423-448);
+  extend it to the case where the else value is itself a following dispatch
+  result (sqrt 16) or a prior if's variadic residual.
+- The accumulating recursion (row 3): a fn whose body residual is variadic/N
+  needs `StartFnCompile` to accept an N-or-range residual and the `OpRet` to
+  leave N values (it already loops over `Returns`); the branch arm count
+  mismatch (then=0, else=1) merges to a 0-or-1 that the recursive `CALL_USER`
+  then re-grows per frame. This is the hardest — it needs the per-frame residual
+  to compose across the recursive call, not just a single merge.
+
+Files: `eng/go/lower.go` (`lowerArms`/`lowerFragment`/`lowerArmsComputed`),
+`eng/go/emit.go` (`RecordBranch` arm-list + range), `lang/go/native/conditional.go`
+(`if3ReturnsFn`/`if2ReturnsFn` arm residual capture).
+
+### Gap B — generalised residual reconciliation (row 4 family)
+
+The program-residual reconciliation (`emit.go` ~2820-2925) now handles an
+out-of-order `[literal, event]` via `forceOrder`+`planValueDefLocals` (extended
+to user calls). Remaining shapes: a residual interleaving consts, multiple
+events, and module/parse-fn results; a residual that is itself a multi-element
+LIST from `macroexpand`/parse. These need the seat primitive (`seatResults`) to
+handle arbitrary interleavings by promoting EVERY out-of-order producer to a
+local (the mechanism exists; widen the `outOfOrder` detection and ensure
+module-fn / parse-fn results are promotable like `evCallUser` now is).
+
+## Sequencing & discipline
+
+Land each sub-step gate-clean (the differential + whole-corpus parity + property
+fuzz is the backstop — it caught every unsound attempt during cluster 1/5 probing
+and must stay 0-divergence). Recommended order: Gap A row-2 (variadic-else as a
+forward operand, smallest) → Gap A row-1 (chained variadic) → Gap B (residual
+interleavings) → Gap A row-3 (accumulating recursion, hardest). Each lowers
+`refusalCeiling` and is committed with before/after numbers.
+
+## Soundness notes (verified hazards — do NOT regress)
+
+- A fn-body list literal `[c1]` (`def-node-binding.tsv`) is evaluated by the
+  interpreter in a scope where the param is NOT the bare-word binding — naive
+  `OpMakeList`-over-locals gives `[[9]]` vs the interpreter's `[[1]]`. Verified &
+  reverted. Any fn-body container assembly must match the interpreter's scope.
+- The dispatch-recovery path (`engine.go` ~6199) must NOT poly-lower without
+  fixing operand stack order: `(3 and "x") add 1` poly-lowered to `[1x]` vs the
+  interpreter's `[x1]` (operands mis-ordered). Verified & reverted.
+- User-call result promotion must stay `forceOrder`-only: broad promotion
+  (refs≥2/valueDef/dead) diverged the Test.run-spec harness. Verified & narrowed.
+
+These three reverts are the empirical boundary of what the single-result lowerer
+can do; Gap A/B are the structural answer.
