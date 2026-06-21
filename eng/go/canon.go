@@ -132,7 +132,7 @@ func CanonValue(v Value) string {
 			return "true"
 		}
 		return "false"
-	case v.Parent.Equal(TAtom):
+	case v.Parent.ConformsTo(TAtom):
 		s, _ := AsAtom(v)
 		return s + "/q"
 	case IsBoundedType(v):

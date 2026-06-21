@@ -2135,7 +2135,7 @@ func AsPath(v Value) (PathInfo, error) {
 }
 
 func IsAtom(v Value) bool {
-	return v.Parent.Equal(TAtom)
+	return v.Parent.ConformsTo(TAtom)
 }
 
 // AsAtom returns the string payload. Returns "" if Data is nil.
@@ -2613,7 +2613,7 @@ func kernelFormatDefault(v Value) string {
 	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
 		return fmt.Sprintf("'%s'", s)
-	case v.Parent.Equal(TAtom):
+	case v.Parent.ConformsTo(TAtom):
 		s, _ := AsAtom(v)
 		return s
 	// Big leaves come before Integer/Float: they don't conform to either,

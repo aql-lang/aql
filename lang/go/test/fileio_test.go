@@ -373,8 +373,8 @@ func TestStdinWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := formatStack(result)
-	if got != "'<stdin>'" {
-		t.Errorf("stdin word: got %s, want '<stdin>'", got)
+	if got != "stdin" {
+		t.Errorf("stdin word: got %s, want stdin (the stdin Stream atom)", got)
 	}
 }
 
@@ -395,8 +395,8 @@ func TestStdoutWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := formatStack(result)
-	if got != "'<stdout>'" {
-		t.Errorf("stdout word: got %s, want '<stdout>'", got)
+	if got != "stdout" {
+		t.Errorf("stdout word: got %s, want stdout (the stdout Stream atom)", got)
 	}
 }
 
@@ -417,8 +417,8 @@ func TestStderrWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := formatStack(result)
-	if got != "'<stderr>'" {
-		t.Errorf("stderr word: got %s, want '<stderr>'", got)
+	if got != "stderr" {
+		t.Errorf("stderr word: got %s, want stderr (the stderr Stream atom)", got)
 	}
 }
 
@@ -440,8 +440,8 @@ func TestWriteStdout(t *testing.T) {
 	if stdout != "hello out" {
 		t.Errorf("stdout content: got %q, want %q", stdout, "hello out")
 	}
-	if stack != "'<stdout>'" {
-		t.Errorf("return value: got %s, want '<stdout>'", stack)
+	if stack != "stdout" {
+		t.Errorf("return value: got %s, want stdout (the stdout Stream atom)", stack)
 	}
 }
 
@@ -453,8 +453,8 @@ func TestWriteStderr(t *testing.T) {
 	if stderr != "error msg" {
 		t.Errorf("stderr content: got %q, want %q", stderr, "error msg")
 	}
-	if stack != "'<stderr>'" {
-		t.Errorf("return value: got %s, want '<stderr>'", stack)
+	if stack != "stderr" {
+		t.Errorf("return value: got %s, want stderr (the stderr Stream atom)", stack)
 	}
 }
 

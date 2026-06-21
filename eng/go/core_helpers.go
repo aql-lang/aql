@@ -861,7 +861,7 @@ func IsLiteralTypeBody(v Value) bool {
 		v.Parent.ConformsTo(TNumber),
 		v.Parent.ConformsTo(TString),
 		v.Parent.ConformsTo(TBoolean),
-		v.Parent.Equal(TAtom),
+		v.Parent.ConformsTo(TAtom),
 		v.Parent.Equal(TPath):
 		return v.Data != nil
 	}

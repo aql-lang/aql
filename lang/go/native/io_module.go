@@ -19,13 +19,17 @@ import "github.com/aql-lang/aql/eng/go"
 // exactly as the former core words did.
 //
 //	printstr  write a value's formatted form without a trailing newline
-//	read      read a file (path or string; optional options map)
-//	write     write a file (path or string; value; optional options map)
-//	stdin     read all of standard input as a string
-//	stdout    the standard-output stream handle
-//	stderr    the standard-error stream handle
+//	read      read a file or stream (path/string/Stream; optional options map)
+//	write     write a file or stream (path/string/Stream; value; optional options map)
+//	stdin     the standard-input stream handle (a Stream atom)
+//	stdout    the standard-output stream handle (a Stream atom)
+//	stderr    the standard-error stream handle (a Stream atom)
 //	trace     run a list as a sub-program with step-by-step tracing
 //	folder    create / list a filesystem folder (Path; optional options)
+//
+// The stream handles are Atoms of the Stream type (lang/go/native/io_stream.go),
+// a closed enumeration of exactly {stdin, stdout, stderr}; read/write carry
+// dedicated Stream signatures so a stream target is distinct from a file path.
 var IOModuleNatives = []NativeFunc{
 	{
 		Name: "printstr",
@@ -42,19 +46,31 @@ var IOModuleNatives = []NativeFunc{
 			{Args: []*Type{TPath}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TString, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TString}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TStream, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TStream}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, TStream}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
+		// write returns the target it wrote to, tagged with the target's
+		// type (a file path, or the Stream handle for a standard stream),
+		// so the result can be threaded straight into read.
 		Name: "write",
 		Signatures: []NativeSig{
-			{Args: []*Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TPath, TString}, Handler: writeHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TString, TString}, Handler: writeHandler, Returns: []*Type{}, BarrierPos: -1},
+			{Args: []*Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{TPath}, BarrierPos: -1},
+			{Args: []*Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{TPath}, BarrierPos: -1},
+			{Args: []*Type{TPath, TString}, Handler: writeHandler, Returns: []*Type{TPath}, BarrierPos: -1},
+			{Args: []*Type{TPath, TAny}, Handler: writeAnyHandler, Returns: []*Type{TPath}, BarrierPos: -1},
+			{Args: []*Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString, TString}, Handler: writeHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString, TAny}, Handler: writeAnyHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TStream, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{TStream}, BarrierPos: -1},
+			{Args: []*Type{TStream, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{TStream}, BarrierPos: -1},
+			{Args: []*Type{TStream, TString}, Handler: writeHandler, Returns: []*Type{TStream}, BarrierPos: -1},
+			{Args: []*Type{TStream, TAny}, Handler: writeAnyHandler, Returns: []*Type{TStream}, BarrierPos: -1},
 		},
 	},
 	{
@@ -62,7 +78,7 @@ var IOModuleNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: stdinHandler,
-			Returns: []*Type{TString}, BarrierPos: -1,
+			Returns: []*Type{TStream}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -70,7 +86,7 @@ var IOModuleNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: stdoutHandler,
-			Returns: []*Type{TString}, BarrierPos: -1,
+			Returns: []*Type{TStream}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -78,7 +94,7 @@ var IOModuleNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: stderrHandler,
-			Returns: []*Type{TString}, BarrierPos: -1,
+			Returns: []*Type{TStream}, BarrierPos: -1,
 		}},
 	},
 	{

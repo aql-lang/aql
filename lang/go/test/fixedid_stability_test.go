@@ -57,6 +57,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Record":                 16,
 		"Word":                         17,
 		"Scalar/Atom":                  18,
+		"Scalar/Atom/Stream":           1009, // IO stream handles — lang/go/native/io_stream.go
 		"Type/Function":                19,
 		"Word/__IN":                    20,
 		"Word/__FW":                    21,

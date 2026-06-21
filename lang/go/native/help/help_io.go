@@ -31,18 +31,19 @@ func init() {
 			"CSV/TSV files are loaded into SQLite-backed tables automatically.",
 		Notes: []string{
 			"Options: enc, fmt, nl.",
-			"Use stdin to read from standard input.",
+			"Pass the stdin stream handle to read from standard input.",
 		},
 	})
 
 	register(&Entry{
 		Word:    "write",
 		Summary: "Write content to a file.",
-		Description: "Writes content to the file at path. Returns the path. " +
+		Description: "Writes content to the file at path. Returns the path. Non-string values are " +
+			"serialized automatically (no options map required). " +
 			"Use {mode: \"append\"} to append instead of overwriting.",
 		Notes: []string{
 			"Options: enc, fmt, mode (write/append), nl.",
-			"Use stdout or stderr for standard streams.",
+			"Pass the stdout or stderr stream handle to write to a standard stream.",
 		},
 	})
 
@@ -56,19 +57,19 @@ func init() {
 
 	register(&Entry{
 		Word:        "stdin",
-		Summary:     "Push the stdin path string.",
-		Description: "Pushes the special path \"<stdin>\" for use with read. Stack-only.",
+		Summary:     "Push the stdin stream handle.",
+		Description: "Pushes the `stdin` atom — a value of the Stream type — for use with read. Stack-only.",
 	})
 
 	register(&Entry{
 		Word:        "stdout",
-		Summary:     "Push the stdout path string.",
-		Description: "Pushes the special path \"<stdout>\" for use with write. Stack-only.",
+		Summary:     "Push the stdout stream handle.",
+		Description: "Pushes the `stdout` atom — a value of the Stream type — for use with write. Stack-only.",
 	})
 
 	register(&Entry{
 		Word:        "stderr",
-		Summary:     "Push the stderr path string.",
-		Description: "Pushes the special path \"<stderr>\" for use with write. Stack-only.",
+		Summary:     "Push the stderr stream handle.",
+		Description: "Pushes the `stderr` atom — a value of the Stream type — for use with write. Stack-only.",
 	})
 }
