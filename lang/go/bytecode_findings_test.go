@@ -2065,3 +2065,46 @@ func TestCaseEmptyScrutineeTrapCompiles(t *testing.T) {
 		t.Errorf("value scrutinee parity: compiled=%v interp=%v", gotC, gotI)
 	}
 }
+
+// Cluster 5 (partial) — a user-fn-call result above a literal in the program
+// residual. `def add2 fn […] 1 add2 2 3` leaves residual [1, 5] (literal 1
+// below, the add2 CALL_USER result 5 on top); it refused "residual shape beyond
+// Stage 1 (call result above a literal)" because the out-of-order residual
+// promotion (forceOrder → frame local) handled only native (evCall) results,
+// never user calls (evCallUser). Now a user-call result seats to a local and
+// re-pushes in order.
+func TestUserCallResidualAboveLiteral(t *testing.T) {
+	cases := []string{
+		`def add2 fn [[x:Integer y:Integer][Integer][x add y]] 1 add2 2 3`,
+		// The word-splice spec row: vs splices 2 3, so `1 add2 vs` → residual [1, 5].
+		`def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] 1 add2 vs`,
+	}
+	for _, src := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%q: did not compile: reason=%q err=%v", src, reason, cerr)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected native, got an island:\n%s", src, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled run: compiled=%v err=%v", src, compiled, errC)
+		}
+		gotI, _ := mustNew(t).Run(src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", src, gotC, gotI)
+		}
+	}
+
+	// NEGATIVE: a user call whose result feeds a harness/accumulation (not a
+	// plain out-of-order residual) must NOT be promoted — the Test.run-spec
+	// harness diverged when user-call results were promoted broadly, so it stays
+	// on fallback. Assert it still falls back faithfully (compiled == interp).
+	const harness = `"aql:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
+	gotC, _, errC := mustNew(t).RunCompiled(harness)
+	gotI, errI := mustNew(t).Run(harness)
+	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("Test harness parity: compiled=%v(%v) interp=%v(%v)", gotC, errC, gotI, errI)
+	}
+}

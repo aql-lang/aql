@@ -437,11 +437,35 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	var dead map[int]bool
 	for i := range events {
 		ev := &events[i]
-		if ev.kind != evCall || ev.call.nout != 1 {
+		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
+		// promoted to a frame local: its result stores once and re-pushes per
+		// reference. (Without evCallUser, a user-call result above a literal in the
+		// residual — `1 add2 2 3` → [1, 5] — could not be seated in order and
+		// refused "call result above a literal".)
+		var nout int
+		isUser := false
+		switch ev.kind {
+		case evCall:
+			nout = ev.call.nout
+		case evCallUser:
+			nout, isUser = ev.uc.nout, true
+		default:
 			continue
 		}
+		if nout != 1 {
+			continue
+		}
+		// A user-fn call (evCallUser) is promoted ONLY to fix an out-of-order
+		// residual (forceOrder) — a user-call result above a literal,
+		// `1 add2 2 3` → [1, 5]. The other promotion triggers (refs>=2 / valueDef /
+		// fragRef / the dead-result drop) stay NATIVE-only: a user call may feed a
+		// harness/accumulation the residual ref count does not capture (Test.run-spec),
+		// where storing-once or dropping its result diverges.
+		promoteUser := isUser && forceOrder[ev.seq]
 		switch {
-		case refs[ev.seq] == 0:
+		case isUser && !promoteUser:
+			// leave the user-call result on the simulated stack (Stage-3 layout)
+		case !isUser && refs[ev.seq] == 0:
 			// A single-result value-def bound to a name referenced zero times (a
 			// dead binding, e.g. `def b (make C {…})` with b never used) — never the
 			// program residual or a fragment read, both of which count toward refs.
@@ -867,6 +891,20 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 	}
 	lw.emit(OpCallUser, uc.unit, uc.pos)
 	lw.vm = lw.vm[:len(lw.vm)-n]
+	// A value-def local (single result referenced more than once, or an
+	// out-of-order residual forced to a slot): store now, re-push per reference
+	// (references were rewritten to local operands). Mirrors lowerCall.
+	if slot, ok := lw.promoted[ev.seq]; ok {
+		lw.emit(OpStoreLocal, slot, uc.pos)
+		lw.note()
+		return ""
+	}
+	if lw.dead[ev.seq] {
+		// Result referenced zero times: the call ran for effects, drop the result.
+		lw.emit(OpDrop, 0, uc.pos)
+		lw.note()
+		return ""
+	}
 	// Push one simulated slot per result the unit returns (P5 multi-result):
 	// 0 for a 0-return fn, N for a multi-return fn — idx 0..N-1 deepest-first,
 	// matching the order the VM's CALL_USER leaves the unit's residual.
