@@ -182,9 +182,19 @@ before landing.
 
 ### Bottom line
 
-`islandCeiling` is **0** (no compiled program islands). Every remaining refusal
-needs a VM value-model / opcode addition (variadic stack region; reference cells
-for flex; dynamic-dispatch poly-extension; dynamic-scope frames), a high-blast
-structural refactor, or is interpreter-bound (the divergent `macro.tsv:45`
-expansion, only discoverable at runtime). No bounded, sound, gate-clean win
-remains — confirmed again this session at the opcode level.
+`islandCeiling` is **0** (no compiled program islands). `refusalCeiling` is now
+**19**: the `getr`-of-missing-ModuleExport `not_found` row landed as a top-level
+OpTrap (enabled by making `MarkUncompilable` a no-op once a terminal trap is
+set, so the getr's own residual refusal — which blocks even valid keys — is moot
+because the trap truncates the program). That exhausts the error-trap wins: the
+only remaining refused ERROR row is `macro.tsv:45` (a recursive macro), and it is
+NOT trappable from check mode — at check time `loopy` resolves to a carrier, not
+a concrete macro FnDef, so `expandAllMacros` never re-expands and never hits the
+256-depth limit it raises at runtime. Detecting the divergence statically needs
+concrete macro-binding fidelity in check mode (broad, risky, previously reverted).
+
+Every OTHER remaining refusal needs a VM value-model / opcode addition (variadic
+stack region; reference cells for flex; dynamic-dispatch poly-extension;
+dynamic-scope frames) or a high-blast structural refactor. No further bounded,
+sound, gate-clean win remains — confirmed this session by tracing each candidate
+to its root cause.
