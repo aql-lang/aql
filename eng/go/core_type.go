@@ -276,14 +276,12 @@ func IsValueOfType(v, t Value) bool {
 //
 // When the body is an anonymous ObjectType (from `refine Object {…}`),
 // binding it under NAME renames it `Object/NAME` (or `<parent>/NAME`
-// when it inherits) so `typeof` / `is` report the nominal name.
-func InstallType(r *Registry, name string, body Value) error {
-	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
-		return &AqlError{
-			Code:   "type_error",
-			Detail: "type: body must be a type value or literal, got " + body.String(),
-		}
-	}
+// validateTypeName runs the name checks every type binding must pass —
+// capitalisation, no part conflicting with an existing type, and no clash
+// with a registered function or a value def. Shared by InstallType (the
+// `def` path) and the host-Go DefineMemberType path so both refuse to
+// shadow a builtin/user type or mint under an invalid name.
+func validateTypeName(r *Registry, name string) error {
 	if !IsCapitalisedName(name) {
 		return &AqlError{
 			Code:   "type_error",
@@ -306,6 +304,20 @@ func InstallType(r *Registry, name string, body Value) error {
 			Code:   "type_error",
 			Detail: "type " + name + ": name clash — already a def'd value",
 		}
+	}
+	return nil
+}
+
+// when it inherits) so `typeof` / `is` report the nominal name.
+func InstallType(r *Registry, name string, body Value) error {
+	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
+		return &AqlError{
+			Code:   "type_error",
+			Detail: "type: body must be a type value or literal, got " + body.String(),
+		}
+	}
+	if err := validateTypeName(r, name); err != nil {
+		return err
 	}
 	if IsObjectType(body) {
 		info, _ := AsObjectType(body)

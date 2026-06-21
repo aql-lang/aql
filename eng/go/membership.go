@@ -41,34 +41,42 @@ func matchMembership(v Value, t *Type, prev TypeBehavior, member func(Value) boo
 	return member(v)
 }
 
-// unifyMembership is the shared Unify contract. It admits a concrete
-// operand the oracle accepts (yielding the oracle's possibly-narrowed
-// output); when a concrete operand is present and none are accepted it
-// fails DEFINITIVELY — not ErrNoUnifier — so the kernel's structural
-// fallback cannot re-admit a non-member by lattice subtyping alone. With
-// no concrete operand (a purely type-level unification) it defers to the
-// structural rule, which needs no predicate.
+// unifyMembership is the shared Unify contract. The membership question —
+// "does the concrete candidate inhabit this type?" — only applies when
+// EXACTLY ONE operand is concrete (the candidate) and the other is the
+// type (a bare literal, or a check-mode carrier). When BOTH operands are
+// concrete it is a value-vs-value question (e.g. `stdin is stdout`, two
+// distinct members of the SAME type), and when NEITHER is it is purely
+// type-level; both defer to the structural rule (value / lattice
+// equality), NOT membership — admitting the first satisfying member would
+// otherwise treat distinct members as equal.
+//
+// On the membership branch it admits the candidate the oracle accepts
+// (yielding the oracle's possibly-narrowed output), and fails
+// DEFINITIVELY when the candidate is rejected — not ErrNoUnifier — so the
+// kernel's structural fallback cannot re-admit a non-member by lattice
+// subtyping alone.
 //
 // admit returns (output, matched, err): output is the value to yield on a
 // match — the candidate itself for a Go predicate, or RunPredicate's
 // result for an AQL one.
 func unifyMembership(a, c Value, typeName string, admit func(Value) (Value, bool, error)) (Value, *UnifyError) {
-	sawConcrete := false
-	for _, v := range []Value{a, c} {
-		if !IsConcrete(v) {
-			continue
-		}
-		sawConcrete = true
-		out, matched, err := admit(v)
-		if err != nil {
-			return Value{}, &UnifyError{Reason: typeName + ": " + err.Error(), A: a, B: c}
-		}
-		if matched {
-			return out, nil
-		}
+	aConc, cConc := IsConcrete(a), IsConcrete(c)
+	if aConc == cConc {
+		// Both concrete (value vs value) or both abstract (type level):
+		// settle by the structural rule, not the predicate.
+		return unifySameOrSubtype(a, c)
 	}
-	if sawConcrete {
-		return Value{}, unifyFail("value is not a member of "+typeName, a, c)
+	candidate := a
+	if cConc {
+		candidate = c
 	}
-	return unifySameOrSubtype(a, c)
+	out, matched, err := admit(candidate)
+	if err != nil {
+		return Value{}, &UnifyError{Reason: typeName + ": " + err.Error(), A: a, B: c}
+	}
+	if matched {
+		return out, nil
+	}
+	return Value{}, unifyFail("value is not a member of "+typeName, a, c)
 }

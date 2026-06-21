@@ -3,6 +3,7 @@ package lang
 import (
 	"errors"
 	"io"
+	"strconv"
 
 	"github.com/aql-lang/aql/eng/go"
 
@@ -401,6 +402,16 @@ func (a *AQL) DefineMemberType(name string, parent *Type, member func(v Value) b
 // DefineTypeFromSource("Point", "refine Record [x:Integer y:Integer]"))
 // and gets the *Type back to thread into Register'd signatures.
 func (a *AQL) DefineTypeFromSource(name, bodySource string) (*Type, error) {
+	// `name` is composed into a `def` program, so it must be a plain type
+	// identifier — never source. Reject anything else BEFORE running, so a
+	// name like `X end <code>` cannot terminate the def and execute
+	// trailing source against the registry. (`bodySource` is intentionally
+	// source; `name` is not.) The clash / part checks still run inside
+	// InstallType when the def executes.
+	if !validTypeIdent(name) {
+		return nil, errors.New("define type: invalid type name " + strconv.Quote(name) +
+			" (must be a capitalised identifier of letters, digits, '_', '-', '/')")
+	}
 	if _, err := a.Run("def " + name + " " + bodySource); err != nil {
 		return nil, err
 	}
@@ -408,6 +419,27 @@ func (a *AQL) DefineTypeFromSource(name, bodySource string) (*Type, error) {
 		return t, nil
 	}
 	return nil, errors.New("define type " + name + ": installed but did not resolve")
+}
+
+// validTypeIdent reports whether name is a safe type identifier to splice
+// into a `def` program: capitalised, and otherwise only letters, digits,
+// and the path/word separators '_', '-', '/'. This excludes whitespace
+// and every AQL-significant character (quotes, parens, brackets, ';',
+// 'end', …), so a name can never break out of the def-name position.
+func validTypeIdent(name string) bool {
+	if name == "" || name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9',
+			c == '_', c == '-', c == '/':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // FnParam describes one parameter of a function signature — re-exported so

@@ -62,11 +62,11 @@ func (r *Registry) DefineEnum(name string, alternatives ...Value) (*Type, error)
 // aql:io's StreamKind. DefineMemberType is the def-style sibling that
 // also binds the name.)
 func (r *Registry) DefineMemberType(name string, parent *Type, member func(v Value) bool) (*Type, error) {
-	if !IsCapitalisedName(name) {
-		return nil, &AqlError{
-			Code:   "type_error",
-			Detail: "type " + name + ": type names must start with a capital letter",
-		}
+	// Same name validation InstallType applies — capitalisation, no part
+	// clash, no shadowing of a registered function or value def — so this
+	// def-style path cannot mint over a builtin/user type.
+	if err := validateTypeName(r, name); err != nil {
+		return nil, err
 	}
 	def := r.Types.MintMemberType(name, parent, member)
 	r.Defs.PushType(name, def, NewTypeLiteral(def))

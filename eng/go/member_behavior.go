@@ -61,17 +61,31 @@ func (b memberBehavior) Compare(a, c Value) (int, error) { return baseCompare(ni
 func (b memberBehavior) FormatDelegate() {}
 
 // MintMemberType mints `name` as a subtype of parent whose inhabitants
-// are exactly the concrete values satisfying member, with the full
-// Match/Unify/Format wiring (MemberBehavior) attached. It is the
-// host-Go equivalent of an AQL refinement (`def Name (refine Parent …)`):
-// one call yields a node that behaves like a first-class type across
-// dispatch, `is`, `case` and return checks, and the returned *Type is
-// ready to drop into native signatures and to tag values with.
+// are exactly the concrete values that conform to parent AND satisfy
+// member, with the full Match/Unify/Format wiring (MemberBehavior)
+// attached. It is the host-Go equivalent of an AQL refinement
+// (`def Name (refine Parent …)`): one call yields a node that behaves
+// like a first-class type across dispatch, `is`, `case` and return
+// checks, and the returned *Type is ready to drop into native signatures
+// and to tag values with.
+//
+// The declared parent is enforced as a gate around `member` — the same
+// guarantee the AQL predicate path gives via its input-type check — so a
+// permissive or partial predicate cannot admit values outside the
+// family (a `TInteger` member type never accepts a String, however lax
+// the predicate). A value tagged with this node passes the gate via
+// ancestry.
 //
 // Like every minted type the node carries no FixedID and is absent from
 // the builtin name index and the FixedID snapshot — it is owned by
 // whoever minted it (a module sub-registry, a host plugin), not a kernel
 // builtin.
 func (tt *TypeTable) MintMemberType(name string, parent *Type, member func(v Value) bool) *Type {
-	return tt.MintTypeWithBehavior(name, parent, MemberBehavior(member))
+	gated := member
+	if parent != nil {
+		gated = func(v Value) bool {
+			return v.Parent != nil && v.Parent.ConformsTo(parent) && member(v)
+		}
+	}
+	return tt.MintTypeWithBehavior(name, parent, MemberBehavior(gated))
 }
