@@ -436,6 +436,68 @@ body are visible wherever that module's import is; `undef`-style
 teardown on scope exit matches existing binding rules. Two modules
 registering the same kind name collide loudly at import time.
 
+### Memoising an AQL-registered kind
+
+A built-in kind caches its compiled artifact in a private,
+process-global Go map (`re`'s `miniCompiledPattern`, `xp`'s
+`miniXPathExprs`) — a table an AQL kind author cannot reach, and there
+is **no automatic per-kind cache**: the registered `fn` body runs on
+every `mini` call. So an AQL kind memoises the same way conceptually —
+it holds **its own cross-call cache** and short-circuits on a hit. The
+cache is a **mutable container** keyed by `src`: a `flex` map (or a
+`Store`), either module-level (a dynamic binding the body resolves at
+call time) or — cleaner, because it encapsulates the cache with the
+kind — **closure-captured** via a factory `fn` (a `flex` map is
+pointer-backed, so the captured value shares its state across calls,
+the standard factory-retains-state pattern from CLOSURES):
+
+```
+"aql:minilang" import end
+
+# A factory whose returned fn captures a per-kind cache. Models a kind
+# whose `src` carries an expensive "compile" step (here just `add src src`).
+def make-dbl fn [[] [Function] [
+  def cache (flex {})                                  # captured, mutable
+  fn [[src:String opts:Map subject:String] [String] [
+    def hit (cache get (src))                          # ← (src), not src
+    if (hit is None)
+      [ def r (add src src)                            #   the expensive step
+        set (src) r cache drop                         # ← (src), not src
+        r ]
+      [ hit ]                                          #   cache hit
+  ]]
+]] end
+
+MiniLang.register dbl (make-dbl) end
+"z" mini dbl 'aa'        # computes, caches → 'aaaa'
+"z" mini dbl 'aa'        # cache hit        → 'aaaa'
+"z" mini dbl 'bb'        # computes, caches → 'bbbb'
+```
+
+**The one non-obvious rule:** `get` / `set` (and the `m.k` dot form)
+**quote their key** (the `/q` slot, like `def`), so a *variable* key
+must be parenthesised to evaluate it — `get (src)` / `set (src) v m`.
+A bare `get src` keys on the literal atom `src`, so every entry
+collides on one key and every lookup falsely hits. A *constant* key
+needs no parens (`set 'n' …`, `cache.size`).
+
+The standard-library spec pins this: `lang/spec/module-minilang.tsv §3`
+registers a memoising `dbl` and asserts the body computes exactly
+**twice** for three calls across two distinct `src` (the repeat is a
+hit). A module-level `def cache (flex {})` referenced from the body
+works identically — the factory just keeps the cache out of the
+program namespace.
+
+Note the contrast with the built-ins: an AQL kind's cache is **per
+kind-instance / per engine**, not process-global, so it needs no mutex
+(one engine steps single-threaded) and never leaks across `lang.New()`
+instances — the inverse trade-off to the Go memos, which take a mutex
+to share one table across every instance. The compile hook (§13,
+`register-compiled`) is a *staging* mechanism — it splices precomputed
+tokens at the call site, materialising "compile once" only on the
+bytecode-compiled path — not a runtime cache; for interpreter-side
+memoisation the captured-`flex`-map pattern above is the route.
+
 ---
 
 ## 8. Errors

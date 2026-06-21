@@ -30,6 +30,14 @@
 "aql:minilang" import end  MiniLang.kinds	[re/q bf/q gex/q m/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
 "aql:minilang" import end  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 "aql:minilang" import end  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
+# Memoising an AQL kind: built-in re/xp cache their compiled artifact in a private
+# Go map a kind author can't reach, so an AQL kind holds its OWN cross-call cache —
+# a mutable `flex` map (module-level or closure-captured), keyed by src. CRITICAL:
+# get/set quote the key, so a VARIABLE key must be parenthesised — `get (src)` /
+# `set (src) v m` (a bare `get src` keys on the literal atom `src`). Here `calls.n`
+# counts the compute path: 3 calls, 2 distinct srcs → the body runs twice, the
+# repeat 'aa' is a cache hit. See design/MINILANG.5.md §7.
+"aql:minilang" import end  def calls (flex {n:0}) end  def cache (flex {}) end  MiniLang.register dbl (fn [[src:String opts:Map subject:String] [String] [if ((cache get (src)) is None) [set 'n' ((calls get 'n') add 1) calls drop  def r (add src src)  set (src) r cache drop  r] [cache get (src)]]]) end  def x ("z" mini dbl 'aa') end  def y ("z" mini dbl 'aa') end  def z2 ("z" mini dbl 'bb') end  calls get 'n'	2	a user-registered kind memoises per src in a flex map — 3 calls, 2 distinct srcs, body computes twice (the repeat is a hit)
 #
 # §4  the auto-`end` theft guard
 "aql:minilang" import end  "x1" mini re '\\d' "ZZ"	{ok:true ms:[{m:'1' i:1 e:2 g:[]}] fst:{m:'1' i:1 e:2 g:[]} lst:{m:'1' i:1 e:2 g:[]} n:1} 'ZZ'	the token after the mini call is NOT stolen as the subject
