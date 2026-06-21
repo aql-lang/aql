@@ -9,12 +9,12 @@ Corpus: **2830** spec value rows (**2518** compilable, 312 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2497 |
-| compiled with an interpreter island | 1 |
+| compiled natively (fallback-free) | 2498 |
+| compiled with an interpreter island | 0 |
 | refused (whole-program fallback) | 20 |
 | static check-error (invalid in both engines) | 312 |
 
-**2498 / 2518** compilable rows produce a Program (99% — 2497 of those fully native).
+**2498 / 2518** compilable rows produce a Program (99% — 2498 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -23,10 +23,10 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
 | refusals (whole-program fallback) | 20 | 20 | → 0 |
-| interpreter islands (OpFallback) | 1 | 2 | → 0 |
+| interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 2 | 2 | → 0 |
-| compute frontier | 18 | 86 | → 0 |
+| compute frontier | 17 | 86 | → 0 |
 
 ## Refusals by reason
 
@@ -51,7 +51,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 ## Re-scoped P7 partition
 
-Over the 21 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **2** reducible (tier 2, TODO), **1** allowlisted error rows, **18** compute-frontier gaps.
+Over the 20 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **2** reducible (tier 2, TODO), **1** allowlisted error rows, **17** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -74,7 +74,6 @@ _None._
 | 1 | fn-value-call boundary |
 | 1 | function value reaches word (Stage 3) |
 | 1 | if-branch lowering |
-| 1 | island (OpFallback span) |
 | 1 | other: fn m: branch leaves extra values (Stage 2 lowers single-result branches) |
 | 1 | residual lowering (Stage 1 limit) |
 

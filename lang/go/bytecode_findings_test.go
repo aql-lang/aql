@@ -2052,10 +2052,17 @@ func TestCaseEmptyScrutineeTrapCompiles(t *testing.T) {
 		t.Errorf("compiled=[%s] interp=[%s], want both case_error", codeOf(errC), codeOf(errI))
 	}
 
-	// NEGATIVE: a code-body scrutinee that DOES produce a value must NOT trap —
-	// it stays faithful (islanded today) and yields the real dispatch result, not
-	// a spurious case_error.
+	// POSITIVE: a VALUE-producing code-body scrutinee with a single clause +
+	// default and value blocks now compiles NATIVE (no island) — the body runs
+	// once via `do` in the one guard cond — and must NOT trap (it dispatches).
 	const ok = `case [1 add 1] [2 "two" "other"]`
+	prog2, reason2, _, cerr2 := mustNew(t).CompileCheck(ok)
+	if cerr2 != nil || prog2 == nil {
+		t.Fatalf("value scrutinee did not compile: reason=%q err=%v", reason2, cerr2)
+	}
+	if dis := prog2.Disassemble(); strings.Contains(dis, "FALLBACK") || strings.Contains(dis, "TRAP") {
+		t.Errorf("value scrutinee: expected native if-chain, no island/trap:\n%s", dis)
+	}
 	gotC, _, errC2 := mustNew(t).RunCompiled(ok)
 	gotI, errI2 := mustNew(t).Run(ok)
 	if errC2 != nil || errI2 != nil {
