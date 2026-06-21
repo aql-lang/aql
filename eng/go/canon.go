@@ -92,7 +92,7 @@ func CanonValue(v Value) string {
 			if t.Behavior == nil || t.Behavior == DefaultBehavior {
 				continue
 			}
-			if _, ok := t.Behavior.(formatDelegatesToDefault); ok {
+			if delegatesFormat(t.Behavior) {
 				continue
 			}
 			return t.Behavior.Format(v)

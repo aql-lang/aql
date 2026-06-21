@@ -7,17 +7,19 @@
 # stays a core word so basic output needs no import.
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  stream handles — `stdin`/`stdout`/`stderr` are ATOMs of the Stream
-#     type (a closed enumeration of exactly those three), not strings.
+# §1  stream handles — `stdin`/`stdout`/`stderr` are ATOMs of the
+#     StreamKind type (a closed enumeration of exactly those three, not
+#     strings). StreamKind is exported by this module — `IO.StreamKind`,
+#     not a global builtin.
 "aql:io" import end IO.stdout	stdout/q	standard-output handle is the `stdout` atom
 "aql:io" import end IO.stderr	stderr/q	standard-error handle is the `stderr` atom
-"aql:io" import end typeof IO.stdin	Stream	a stream handle's type is Stream
-"aql:io" import end IO.stdin is Stream	true	stdin inhabits the Stream type
-"aql:io" import end IO.stdout is Stream	true	stdout inhabits the Stream type
-"aql:io" import end IO.stderr is Stream	true	stderr inhabits the Stream type
-"aql:io" import end stdin/q is Stream	true	a bare `stdin` atom is admitted too
-"aql:io" import end foo/q is Stream	false	an unrelated atom is NOT a Stream
-"aql:io" import end "stdout" is Stream	false	the STRING "stdout" is not a Stream
+"aql:io" import end typeof IO.stdin	StreamKind	a stream handle's type is StreamKind
+"aql:io" import end IO.stdin is IO.StreamKind	true	stdin inhabits the StreamKind type
+"aql:io" import end IO.stdout is IO.StreamKind	true	stdout inhabits the StreamKind type
+"aql:io" import end IO.stderr is IO.StreamKind	true	stderr inhabits the StreamKind type
+"aql:io" import end stdin/q is IO.StreamKind	true	a bare `stdin` atom is admitted too
+"aql:io" import end foo/q is IO.StreamKind	false	an unrelated atom is NOT a StreamKind
+"aql:io" import end "stdout" is IO.StreamKind	false	the STRING "stdout" is not a StreamKind
 #
 # §2  trace — run a list as a traced sub-program, returning its result
 "aql:io" import end IO.trace [1 add 2 mul 3]	9	traced evaluation returns the value
@@ -37,8 +39,8 @@ IO.stdout	ERROR:undefined_word	`IO` is unbound without `import`
 "aql:io" import end  context get __sys get fs set mem true  IO.write "mem://b.txt" "hi"	'mem://b.txt'	write returns the path it wrote
 "aql:io" import end  context get __sys get fs set mem true  IO.read (IO.write "mem://a.txt" "hello")	'hello'	read back the bytes just written
 #
-# §6  writing NON-STRING data needs no options map, reading a Stream that is
-#     not stdin errors, and Stream-tagged write returns the handle — all
+# §6  writing NON-STRING data needs no options map, reading a stream that is
+#     not stdin errors, and StreamKind-tagged write returns the handle — all
 #     runtime behaviours exercised in lang/go/native/io_stream_test.go and
 #     fileio_test.go (they return Any / raise runtime-only errors, which do
 #     not belong on the static-checker spec surface).

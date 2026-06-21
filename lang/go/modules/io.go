@@ -37,6 +37,11 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 		exports.Set(n.Name, makeModuleFnDef(n, subReg))
 	}
 
+	// StreamKind — the type of the stdin/stdout/stderr handles — is a
+	// module-scoped type, not a global builtin. Export it as a type
+	// literal so `x is IO.StreamKind` works after import.
+	exports.Set("StreamKind", native.NewTypeLiteral(native.StreamKindType))
+
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
 		ID:      modID,

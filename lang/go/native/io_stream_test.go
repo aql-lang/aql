@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// The stream handles are Atoms of the Stream type — not string sentinels.
-func TestStreamHandlesAreStreamAtoms(t *testing.T) {
+// The stream handles are Atoms of the StreamKind type — not string sentinels.
+func TestStreamHandlesAreStreamKindAtoms(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 
@@ -23,33 +23,33 @@ func TestStreamHandlesAreStreamAtoms(t *testing.T) {
 		if n, _ := AsAtom(got); n != name {
 			t.Errorf("%s: atom name = %q, want %q", name, n, name)
 		}
-		if !got.Is(TStream) {
-			t.Errorf("%s: handle does not inhabit Stream", name)
+		if !got.Is(StreamKindType) {
+			t.Errorf("%s: handle does not inhabit StreamKind", name)
 		}
-		if !got.Parent.Equal(TStream) {
-			t.Errorf("%s: typeof handle = %s, want Stream", name, got.Parent)
+		if !got.Parent.Equal(StreamKindType) {
+			t.Errorf("%s: typeof handle = %s, want StreamKind", name, got.Parent)
 		}
 	}
 }
 
-// Stream admits exactly the three handles — and nothing else.
-func TestStreamTypeMembership(t *testing.T) {
-	if !newStreamAtom("stdout").Is(TStream) {
-		t.Error("stdout atom should be a Stream")
+// StreamKind admits exactly the three handles — and nothing else.
+func TestStreamKindTypeMembership(t *testing.T) {
+	if !newStreamAtom("stdout").Is(StreamKindType) {
+		t.Error("stdout atom should be a StreamKind")
 	}
 	// A bare atom of the right name is admitted too (the type IS those atoms).
-	if !NewAtom("stderr").Is(TStream) {
-		t.Error("a bare `stderr` atom should be a Stream")
+	if !NewAtom("stderr").Is(StreamKindType) {
+		t.Error("a bare `stderr` atom should be a StreamKind")
 	}
 	// Unrelated atoms and non-atoms are rejected.
-	if NewAtom("foo").Is(TStream) {
-		t.Error("`foo` atom must not be a Stream")
+	if NewAtom("foo").Is(StreamKindType) {
+		t.Error("`foo` atom must not be a StreamKind")
 	}
-	if NewString("stdout").Is(TStream) {
-		t.Error("the String \"stdout\" must not be a Stream")
+	if NewString("stdout").Is(StreamKindType) {
+		t.Error("the String \"stdout\" must not be a StreamKind")
 	}
-	if NewInteger(1).Is(TStream) {
-		t.Error("an Integer must not be a Stream")
+	if NewInteger(1).Is(StreamKindType) {
+		t.Error("an Integer must not be a StreamKind")
 	}
 }
 
@@ -115,8 +115,8 @@ func TestWriteToStdoutStream(t *testing.T) {
 	if buf.String() != "hello" {
 		t.Errorf("stdout = %q, want %q", buf.String(), "hello")
 	}
-	if len(result) != 1 || !result[0].Is(TStream) {
-		t.Fatalf("write should return the Stream handle, got %v", result)
+	if len(result) != 1 || !result[0].Is(StreamKindType) {
+		t.Fatalf("write should return the StreamKind handle, got %v", result)
 	}
 
 	// A non-string value to a stream serializes with no opts map.
@@ -142,16 +142,16 @@ func TestReadOutputStreamErrors(t *testing.T) {
 	}
 }
 
-// Passing a bare Stream type literal must not panic any IO handler.
-func TestStreamTypeLiteralNoPanic(t *testing.T) {
+// Passing a bare StreamKind type literal must not panic any IO handler.
+func TestStreamKindTypeLiteralNoPanic(t *testing.T) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			t.Fatalf("panic on Stream type literal: %v", rec)
+			t.Fatalf("panic on StreamKind type literal: %v", rec)
 		}
 	}()
-	lit := NewTypeLiteral(TStream)
+	lit := NewTypeLiteral(StreamKindType)
 	_, _ = streamSentinel(lit) // type literal → not a concrete stream atom
-	_ = lit.Is(TStream)
+	_ = lit.Is(StreamKindType)
 	_ = extractPath(lit)
 }
 

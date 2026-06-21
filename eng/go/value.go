@@ -2533,7 +2533,7 @@ func (v Value) String() string {
 			if t.Behavior == nil || t.Behavior == DefaultBehavior {
 				continue
 			}
-			if _, ok := t.Behavior.(formatDelegatesToDefault); ok {
+			if delegatesFormat(t.Behavior) {
 				continue
 			}
 			return t.Behavior.Format(v)
@@ -2549,6 +2549,27 @@ func (v Value) String() string {
 // are skipped so the walk falls through to kernelFormatDefault.
 type formatDelegatesToDefault interface {
 	formatDelegate()
+}
+
+// FormatDelegate is the EXPORTED counterpart of formatDelegatesToDefault,
+// for external (lang-layer / plugin) Behaviors that delegate Format to
+// DefaultBehavior and want canon / Value.String to fall through to the
+// kernel switch — so the value renders by its lattice family (e.g. an
+// Atom subtype as `name` / `name/q`) instead of routing through the
+// delegating Format. Unexported interface methods can only be satisfied
+// from this package, so out-of-package Behaviors need this hook.
+type FormatDelegate interface {
+	FormatDelegate()
+}
+
+// delegatesFormat reports whether b opts out of Format routing via
+// either the internal or exported marker.
+func delegatesFormat(b TypeBehavior) bool {
+	if _, ok := b.(formatDelegatesToDefault); ok {
+		return true
+	}
+	_, ok := b.(FormatDelegate)
+	return ok
 }
 
 // kernelFormatDefault renders v using the kernel's canonical switch.

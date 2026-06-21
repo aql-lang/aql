@@ -19,17 +19,20 @@ import "github.com/aql-lang/aql/eng/go"
 // exactly as the former core words did.
 //
 //	printstr  write a value's formatted form without a trailing newline
-//	read      read a file or stream (path/string/Stream; optional options map)
-//	write     write a file or stream (path/string/Stream; value; optional options map)
-//	stdin     the standard-input stream handle (a Stream atom)
-//	stdout    the standard-output stream handle (a Stream atom)
-//	stderr    the standard-error stream handle (a Stream atom)
+//	read      read a file or stream (path/string/StreamKind; optional options map)
+//	write     write a file or stream (path/string/StreamKind; value; optional options map)
+//	stdin     the standard-input stream handle (a StreamKind atom)
+//	stdout    the standard-output stream handle (a StreamKind atom)
+//	stderr    the standard-error stream handle (a StreamKind atom)
 //	trace     run a list as a sub-program with step-by-step tracing
 //	folder    create / list a filesystem folder (Path; optional options)
 //
-// The stream handles are Atoms of the Stream type (lang/go/native/io_stream.go),
-// a closed enumeration of exactly {stdin, stdout, stderr}; read/write carry
-// dedicated Stream signatures so a stream target is distinct from a file path.
+// The stream handles are Atoms of the StreamKind type
+// (lang/go/native/io_stream.go) — a closed enumeration of exactly
+// {stdin, stdout, stderr}. StreamKind is a minted (non-builtin) lattice
+// node surfaced to AQL as the module export `IO.StreamKind`; read/write
+// carry dedicated StreamKind signatures so a stream target is distinct
+// from a file path.
 var IOModuleNatives = []NativeFunc{
 	{
 		Name: "printstr",
@@ -46,11 +49,11 @@ var IOModuleNatives = []NativeFunc{
 			{Args: []*Type{TPath}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TString, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TString}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TStream, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TStream}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{StreamKindType, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{StreamKindType}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TMap, TStream}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, StreamKindType}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -67,10 +70,10 @@ var IOModuleNatives = []NativeFunc{
 			{Args: []*Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Handler: writeHandler, Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString, TAny}, Handler: writeAnyHandler, Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TStream, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{TStream}, BarrierPos: -1},
-			{Args: []*Type{TStream, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{TStream}, BarrierPos: -1},
-			{Args: []*Type{TStream, TString}, Handler: writeHandler, Returns: []*Type{TStream}, BarrierPos: -1},
-			{Args: []*Type{TStream, TAny}, Handler: writeAnyHandler, Returns: []*Type{TStream}, BarrierPos: -1},
+			{Args: []*Type{StreamKindType, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{StreamKindType}, BarrierPos: -1},
+			{Args: []*Type{StreamKindType, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{StreamKindType}, BarrierPos: -1},
+			{Args: []*Type{StreamKindType, TString}, Handler: writeHandler, Returns: []*Type{StreamKindType}, BarrierPos: -1},
+			{Args: []*Type{StreamKindType, TAny}, Handler: writeAnyHandler, Returns: []*Type{StreamKindType}, BarrierPos: -1},
 		},
 	},
 	{
@@ -78,7 +81,7 @@ var IOModuleNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: stdinHandler,
-			Returns: []*Type{TStream}, BarrierPos: -1,
+			Returns: []*Type{StreamKindType}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -86,7 +89,7 @@ var IOModuleNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: stdoutHandler,
-			Returns: []*Type{TStream}, BarrierPos: -1,
+			Returns: []*Type{StreamKindType}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -94,7 +97,7 @@ var IOModuleNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: stderrHandler,
-			Returns: []*Type{TStream}, BarrierPos: -1,
+			Returns: []*Type{StreamKindType}, BarrierPos: -1,
 		}},
 	},
 	{

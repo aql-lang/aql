@@ -58,18 +58,18 @@ func init() {
 	register(&Entry{
 		Word:        "stdin",
 		Summary:     "Push the stdin stream handle.",
-		Description: "Pushes the `stdin` atom — a value of the Stream type — for use with read. Stack-only.",
+		Description: "Pushes the `stdin` atom — a value of the StreamKind type (IO.StreamKind) — for use with read. Stack-only.",
 	})
 
 	register(&Entry{
 		Word:        "stdout",
 		Summary:     "Push the stdout stream handle.",
-		Description: "Pushes the `stdout` atom — a value of the Stream type — for use with write. Stack-only.",
+		Description: "Pushes the `stdout` atom — a value of the StreamKind type (IO.StreamKind) — for use with write. Stack-only.",
 	})
 
 	register(&Entry{
 		Word:        "stderr",
 		Summary:     "Push the stderr stream handle.",
-		Description: "Pushes the `stderr` atom — a value of the Stream type — for use with write. Stack-only.",
+		Description: "Pushes the `stderr` atom — a value of the StreamKind type (IO.StreamKind) — for use with write. Stack-only.",
 	})
 }

@@ -1,24 +1,24 @@
 package native
 
 import (
-	"fmt"
-
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// TStream is the type of the three standard-stream handles returned by
-// the IO words `stdin` / `stdout` / `stderr`. It is an Atom subtype
-// whose inhabitants are EXACTLY the three atoms `stdin`, `stdout`,
-// `stderr` — a closed enumeration the `read`/`write` signatures use to
-// tell a stream target apart from a file path. The handles are plain
-// Atoms (the language's purpose-built symbol type); TStream is the
-// refinement that admits only the three of them.
+// StreamKindType is the type of the three standard-stream handles
+// returned by the IO words `stdin` / `stdout` / `stderr`. It is an Atom
+// subtype whose inhabitants are EXACTLY the three atoms `stdin`,
+// `stdout`, `stderr` — a closed enumeration the `read`/`write`
+// signatures use to tell a stream target apart from a file path. The
+// handles are plain Atoms (the language's purpose-built symbol type);
+// StreamKindType is the refinement that admits only the three of them.
 //
-// Registered via eng.Builtin.RegisterExternalBuiltin in a var
-// initialiser so signature slices that reference TStream see a non-nil
-// pointer at slice-init time. FixedID 1009 comes from the documented
-// lang/go/native Scalar range (1000-1999).
-var TStream = registerStreamType()
+// It is NOT a builtin: it is MINTED into the lattice (OriginUserDef, no
+// FixedID, absent from the builtin name index and the FixedID snapshot)
+// and surfaced to AQL only through the `aql:io` module, as
+// `IO.StreamKind` (see modules/io.go). The stable package-level pointer
+// lets the read/write signature slices reference it at slice-init time
+// without making it globally resolvable as a bare type name.
+var StreamKindType = registerStreamKindType()
 
 // streamSentinels maps each admitted stream atom to the internal routing
 // path doRead/doWrite use to reach the host stream. The angle-bracket
@@ -30,23 +30,21 @@ var streamSentinels = map[string]string{
 	"stderr": pathStderr,
 }
 
-func registerStreamType() *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Atom/Stream", 1009, streamBehavior{})
-	if err != nil {
-		// Init-time registration error (duplicate FixedID / malformed
-		// path) — record it for DefaultRegistry to surface rather than
-		// panicking. See ADR-005 and typeinit.go.
-		recordTypeInitErr(fmt.Errorf("io_stream: register Scalar/Atom/Stream: %w", err))
-	}
-	return t
+func registerStreamKindType() *eng.Type {
+	// MintTypeWithBehavior adds the node to eng.Builtin's ID index (so
+	// canonicalization / serialization resolve it) but, unlike
+	// RegisterExternalBuiltin, assigns no FixedID and no name/path entry
+	// — it is a user-minted lattice node, reached only via the module
+	// export, never as a global builtin.
+	return eng.Builtin.MintTypeWithBehavior("StreamKind", eng.TAtom, streamBehavior{})
 }
 
 // streamBehavior admits exactly the three stream atoms. A concrete atom
 // whose name is one of the three is a Stream regardless of whether its
-// tag is the base Atom type or Stream itself; everything else (other
+// tag is the base Atom type or StreamKind itself; everything else (other
 // atoms, non-atoms) falls back to the default lattice check, so a bare
-// `Stream` type literal still answers "is this the type itself" while no
-// stray value sneaks in.
+// `StreamKind` type literal still answers "is this the type itself"
+// while no stray value sneaks in.
 type streamBehavior struct{}
 
 func (streamBehavior) Match(v Value, t *Type) bool {
@@ -60,12 +58,19 @@ func (streamBehavior) Match(v Value, t *Type) bool {
 func (streamBehavior) Equal(a, b Value) bool { return eng.DefaultBehavior.Equal(a, b) }
 func (streamBehavior) Format(v Value) string { return eng.DefaultBehavior.Format(v) }
 
-// Unify admits a concrete stream atom against the Stream type, in either
-// argument order. dispatchUnifier starts its walk at the more specific
-// denoted type, so `atom is Stream` (and `case`, return checks, typed
-// containers — every Unify-based membership test) reaches this method.
-// The concrete atom is the narrower side and wins; anything else opts
-// out so the kernel's structural dispatch runs unchanged.
+// FormatDelegate marks streamBehavior as delegating Format to the kernel
+// default, so canon / Value.String render a stream handle by its Atom
+// family (`stdout` / `stdout/q`) rather than through Format. Without it,
+// canon would route this minted (non-builtin) type's Format and drop the
+// `/q` atom suffix.
+func (streamBehavior) FormatDelegate() {}
+
+// Unify admits a concrete stream atom against the StreamKind type, in
+// either argument order. dispatchUnifier starts its walk at the more
+// specific denoted type, so `atom is IO.StreamKind` (and `case`, return
+// checks, typed containers — every Unify-based membership test) reaches
+// this method. The concrete atom is the narrower side and wins; anything
+// else opts out so the kernel's structural dispatch runs unchanged.
 func (streamBehavior) Unify(a, b Value) (Value, *eng.UnifyError) {
 	for _, v := range []Value{a, b} {
 		if name, err := v.AsConcreteAtom(); err == nil {
@@ -78,13 +83,13 @@ func (streamBehavior) Unify(a, b Value) (Value, *eng.UnifyError) {
 }
 
 // newStreamAtom returns the Atom handle for a standard stream, tagged
-// with the Stream type so its static and runtime types agree (the
+// with the StreamKind type so its static and runtime types agree (the
 // `read`/`write` Stream signatures, `typeof`, and the soundness checker
-// all see Stream). The payload is a plain AtomPayload, so every
+// all see StreamKind). The payload is a plain AtomPayload, so every
 // atom-aware path (rendering, comparison, `quote`) treats it as the
 // symbol it is.
 func newStreamAtom(name string) Value {
-	return eng.ReparentValue(eng.NewAtom(name), TStream)
+	return eng.ReparentValue(eng.NewAtom(name), StreamKindType)
 }
 
 // streamSentinel maps a stream-handle value to its internal routing
