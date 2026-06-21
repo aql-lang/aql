@@ -1,0 +1,58 @@
+# AQL Language Specification: lang-layer Node/Xml surface
+# Format: input<TAB>expected<TAB>description
+#
+# The KERNEL literal grammar (parsing, rendering, entity escaping, ${} holes,
+# the syntax negatives) lives in eng/spec/xml-literal.tsv. This file pins the
+# LANG-LAYER words over a Node/Xml value: the xml-elem / xml-text / xml-attr
+# accessors (native_xml.go), structural equality via deq, and the FlexXml
+# mutability mode (flex / node). See design/XML-LITERAL.0.md.
+#
+# Scope note: FlexXml MUTATION (set / append on a flex element) and a
+# binding-fed ${} interpolation are RUNTIME builders the bytecode compiler
+# faithfully falls back on, so they cannot be spec value rows without
+# regressing the never-raise compile-refusal ceiling — they are covered by
+# lang/go/test/xml_literal_test.go. Everything here compiles natively.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  literals — value, type, membership (exercises XML const-baking in the
+#     lang compiled census, the eng-layer twin of eng/spec/xml-literal.tsv)
+<a/>	<a/>	a self-closing literal renders back to well-formed XML
+<a x="1"><b/>hi</a>	<a x="1"><b/>hi</a>	attributes, a child element and text round-trip
+typeof <a/>	Xml	a literal is a Node/Xml value
+(<a/>) is Xml	true	Node/Xml matches the Xml slot
+(<a/>) is Map	false	Node/Xml is a dedicated type, not a Map subtype
+#
+# §2  xml-text — the concatenated text content of the whole subtree (textContent)
+xml-text <p>hi</p>	'hi'	the text of a leaf element
+xml-text <a>hello <b>world</b></a>	'hello world'	text is gathered across nested elements, in document order
+xml-text <a/>	''	an empty element has no text
+xml-text <a><b/><c/></a>	''	element-only content yields the empty string
+#
+# §3  xml-elem — the element children only (DOM children), dropping text nodes
+xml-elem <a><b/>text<c/></a>	[<b/> <c/>]	text nodes are dropped, element children kept in order
+xml-elem <p>only text</p>	[]	an element with no element children yields the empty list
+xml-elem <a/>	[]	an empty element has no element children
+#
+# §4  xml-attr — one attribute value (a String) or None
+xml-attr 'x' <a x="1" y="2"/>	'1'	a present attribute returns its value
+xml-attr 'y' <a x="1" y="2"/>	'2'	a later attribute resolves by name, not position
+xml-attr 'z' <a x="1"/>	None	a missing attribute returns None
+xml-attr 'x' <a/>	None	an element with no attributes returns None
+#
+# §5  deq — structural equality (eq is identity for compounds; deq is the deep one)
+deq (<a x="1"/>) (<a x="1"/>)	true	two distinct but structurally equal elements are deq
+deq (<a><b/></a>) (<a><b/></a>)	true	equality recurses through children
+deq (<a/>) (<b/>)	false	different tags are not equal
+deq (<a x="1"/>) (<a x="2"/>)	false	different attribute values are not equal
+deq (flex <a/>) (<a/>)	true	a FlexXml and a content-equal immutable element compare equal (flexness is a mode, not identity)
+#
+# §6  flex / node — the mutability mode and the freeze back to immutable
+typeof (flex <a/>)	FlexXml	flex on a Node/Xml yields a mutable FlexXml
+(flex <a/>) is Xml	true	FlexXml conforms to the Xml slot (it IS a Node/Xml)
+node (flex <a/>)	<a/>	node freezes a FlexXml back to an immutable Node/Xml
+typeof (node (flex <a/>))	Xml	the frozen value is a plain Node/Xml again
+#
+# §7  negatives — the accessors require a Node/Xml subject
+xml-text {a:1}	ERROR:signature	a Map is not a Node/Xml — xml-text rejects it
+xml-elem 5	ERROR:signature	a scalar is not a Node/Xml — xml-elem rejects it
+xml-attr 'x' "str"	ERROR:signature	a String subject does not match xml-attr's Xml slot

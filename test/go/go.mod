@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect

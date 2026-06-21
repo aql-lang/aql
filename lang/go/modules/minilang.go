@@ -206,6 +206,25 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TList}, nil, subReg))
 
+	// ---- kind: xp — XPath query (github.com/antchfx/xpath) -------------
+	// [src opts doc:Xml] → [List]. Run an XPath expression over the stack
+	// Node/Xml subject and return the result as a List — matched nodes for a
+	// node-set (an element as its Node/Xml value, an attribute/text node as a
+	// String), or a one-element list for a scalar count/string/boolean result.
+	// See minilang_xpath.go.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-xp",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap, native.TXml},
+			Returns:    []*native.Type{native.TList},
+			BarrierPos: -1,
+			Handler:    miniXPathHandler,
+		}},
+	})
+	exports.Set("lang_xp", wrapMiniFnDef("minilang-xp", [][]native.FnParam{
+		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TXml}),
+	}, []*native.Type{native.TList}, nil, subReg))
+
 	// ---- out-of-band: register -----------------------------------------
 	// MiniLang.register <name> <fn> installs an AQL function as the
 	// mini-language `lang_<name>`. The fn must carry the standard
