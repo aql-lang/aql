@@ -2025,6 +2025,57 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 	}
 }
 
+// getr-on-ModuleExport not_found: `MathUtil!.nope` (getr of a MISSING export)
+// raises not_found at runtime. The compile pass records a top-level not_found
+// OpTrap (moduleExportGetrReturns) and MarkUncompilable is a no-op once a trap is
+// set, so the getr's own unmaterialisable residual (which refuses even valid
+// keys) does not refuse the program — the trap truncates it.
+func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
+	const src = `"aql:math-util" import end  MathUtil!.nope`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("%q: check error %v", src, cerr)
+	}
+	if prog == nil {
+		t.Fatalf("%q: expected a trap program, refused: %s", src, reason)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+		t.Errorf("%q: expected a terminal TRAP, no island:\n%s", src, dis)
+	}
+	_, compiled, errC := mustNew(t).RunCompiled(src)
+	if !compiled {
+		t.Errorf("%q: trap program did not run compiled (fell back)", src)
+	}
+	_, errI := mustNew(t).Run(src)
+	if codeOf(errC) != "not_found" || codeOf(errI) != "not_found" {
+		t.Errorf("%q: compiled=[%s] interp=[%s], want both not_found", src, codeOf(errC), codeOf(errI))
+	}
+
+	// NEGATIVE 1: a VALID getr export must NOT trap — it compiles and produces
+	// the real value, with compiled/interp parity.
+	const okGetr = `"aql:math-util" import end  MathUtil!.sqrt 16.0`
+	if p, _, _, _ := mustNew(t).CompileCheck(okGetr); p != nil {
+		if dis := p.Disassemble(); strings.Contains(dis, "TRAP") {
+			t.Errorf("valid getr must not trap:\n%s", dis)
+		}
+	}
+	gotC, _, eC := mustNew(t).RunCompiled(okGetr)
+	gotI, eI := mustNew(t).Run(okGetr)
+	if eC != nil || eI != nil {
+		t.Fatalf("valid getr: compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("valid getr parity: compiled=%v interp=%v", gotC, gotI)
+	}
+
+	// NEGATIVE 2: `get` (not getr) of a MISSING key returns None, never traps —
+	// only getr raises not_found, so the get path stays on the shared ReturnsFn.
+	const okGet = `"aql:math-util" import end  MathUtil.nope`
+	if _, _, eGet := mustNew(t).RunCompiled(okGet); eGet != nil {
+		t.Errorf("get of a missing key must not error, got %v", eGet)
+	}
+}
+
 // Cluster 7a — a 0-net code-body case scrutinee compiles to a case_error trap.
 // `case [f 1] [...]` where f produces no value is the runtime case_error
 // ("value expression produced no value to dispatch on"); caseReturnsFn detects

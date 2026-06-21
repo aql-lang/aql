@@ -438,6 +438,17 @@ func (es *EmitState) MarkUncompilable(reason string) {
 	if es == nil || !es.Compilable {
 		return
 	}
+	if es.trapAt != 0 {
+		// A terminal top-level trap already ends the program here. Traps are
+		// recorded in execution order and only while active() (Compilable
+		// true), so any construct that marks uncompilable AFTER trapAt is set
+		// is at-or-after the trap and therefore unreachable — the interpreter
+		// raises at the trap and never reaches it. Finalize truncates to the
+		// trap and drops the residual, so its refusal is moot (e.g. `getr` of a
+		// missing ModuleExport key: the getr IS the trap, and its own
+		// operand-provenance residual must not refuse the program).
+		return
+	}
 	es.Compilable = false
 	es.Reason = reason
 }
