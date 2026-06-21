@@ -99,6 +99,11 @@ type lowerer struct {
 	variadicElse map[int]bool
 	loops        []loopCtx
 	maxDepth     int
+	// fragMulti is set by lowerFragment when the just-lowered arm left MORE than
+	// one runtime value (a multi-value branch arm). lowerArms reads it right after
+	// each lowerArm to force the merge variadic — a multi-value arm makes the
+	// branch result runtime-variable-count even when both arms net "a value".
+	fragMulti bool
 	// isFnUnit marks a lowerer driving a USER FN body unit (not the main
 	// program). A break/continue with no enclosing loop in such a unit is a
 	// cross-frame flow signal — it targets the caller's loop — so it lowers to
@@ -724,13 +729,20 @@ type seatMsgs struct {
 // reconciliation (reconcileResults). rejectVariadic refuses a variadic (loop)
 // event result: a fn body may not return one (Stage 3), though the program
 // residual may absorb it. msgs supplies the caller's refusal wording.
-func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic bool, msgs seatMsgs, pos SrcPos) string {
+func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicTail bool, msgs seatMsgs, pos SrcPos) string {
 	vi := 0
 	var tail []emitOperand
-	for _, op := range ops {
+	for i, op := range ops {
 		if op.kind == opEvent {
 			if rejectVariadic && lw.variadic[op.idx] {
-				return msgs.variadic
+				// A no-contract (`[]`-declared) fn may return a VARIADIC tail: its
+				// RET leaves whatever the body left, exactly like the program
+				// residual. Permit a variadic event in the LAST position only — a
+				// variadic with fixed values ABOVE it cannot seat (the count is
+				// runtime-variable).
+				if !(allowVariadicTail && i == len(ops)-1) {
+					return msgs.variadic
+				}
 			}
 			if len(tail) > 0 {
 				return msgs.aboveLiteral
@@ -757,9 +769,9 @@ func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic bool, msgs seat
 // This is the fn-unit caller of the shared seatResults primitive — it rejects a
 // variadic loop result (a fn body may not return one in Stage 3), the one way it
 // differs from Finalize's program-residual reconciliation.
-func (lw *lowerer) reconcileResults(ops []emitOperand, who string, pos SrcPos) string {
+func (lw *lowerer) reconcileResults(ops []emitOperand, who string, noContract bool, pos SrcPos) string {
 	extra := who + ": body leaves extra values (Stage 3 lowers in-order results)"
-	return lw.seatResults(ops, true, seatMsgs{
+	return lw.seatResults(ops, true, noContract, seatMsgs{
 		variadic:     who + ": result is a variadic loop value (Stage 3)",
 		aboveLiteral: who + ": result above a literal (Stage 3)",
 		reordered:    extra,
@@ -838,6 +850,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 // emitted its jump, so whatever its scope holds is unreachable and
 // ignored). Restores the parent scope afterwards.
 func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
+	lw.fragMulti = false
 	parent := lw.vm
 	lw.vm = nil
 	if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
@@ -851,6 +864,22 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		if len(lw.vm) != 0 {
 			return "body leaves extra values (Stage 2 lowers single-result bodies)"
 		}
+	case frag.residualN > 1:
+		// MULTI-VALUE arm: the interpreter leaves the WHOLE arm residual (verified:
+		// `if true [1 2 3] [4]` → 1 2 3; `if (n lte 0) [] [n mul 2 m (n sub 1)]`
+		// leaves n*2 then the recursive result). Every value must be EVENT-produced
+		// on the sim — the single-operand arm model recorded only the top operand,
+		// so inert consts/locals below it (`[1 2 3]`) were not captured and cannot
+		// be reconstructed; require the full residualN event slots with the top
+		// matching out, else refuse (a too-short sim is an inert-tail arm; a
+		// too-long one is the lowering-artifact a single-value expression leaves —
+		// `[({a:(get…)} get a)]`). Only a branch arm may carry it (allowVariadic);
+		// a loop body / condition needs a single value. lowerArms marks the merge
+		// variadic via fragMulti so only a variadic-absorbing position consumes it.
+		if !allowVariadic || len(lw.vm) != frag.residualN || !slotIs(lw.vm[len(lw.vm)-1], *out) {
+			return "branch leaves extra values (Stage 2 lowers single-result branches)"
+		}
+		lw.fragMulti = true
 	case out.kind == opEvent:
 		if lw.variadic[out.idx] && !allowVariadic {
 			// The fragment's result is itself a VARIADIC (0-or-1) event — a
@@ -958,6 +987,17 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 		lw.note()
 		return ""
 	}
+	if lw.es.fnRecs[uc.unit].variadic {
+		// A VARIADIC-RETURNING callee leaves a runtime-variable count: push ONE
+		// variadic sim slot (like a loop result) instead of uc.nout fixed slots.
+		// Only a variadic-absorbing position (the program residual, a no-contract
+		// RET, a parent branch merge) may consume it — layoutOperands refuses it as
+		// a fixed-arity operand, the soundness gate that keeps `m 3 add 1` a refusal.
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+		lw.variadic[ev.seq] = true
+		lw.note()
+		return ""
+	}
 	// Push one simulated slot per result the unit returns (P5 multi-result):
 	// 0 for a 0-return fn, N for a multi-return fn — idx 0..N-1 deepest-first,
 	// matching the order the VM's CALL_USER leaves the unit's residual.
@@ -1021,6 +1061,38 @@ func (lw *lowerer) lowerFallback(ev *emitEvent) string {
 // there is the body's tail call too and is marked through the same
 // recursion — otherwise the dynamic-condition path would honour the
 // O(1)-frame guarantee while the const-condition path silently lost it.
+// fragSingleResidual reports whether a STRAIGHT-LINE fragment (plain calls /
+// user calls only) leaves exactly one runtime value. It tracks net stack depth:
+// each event consumes its event-sourced operands (the inert const/local/type
+// operands are pushed-then-consumed, net 0) and pushes its nout results. A
+// fragment containing a branch / loop / fallback / trap is not straight-line —
+// return false (conservatively NOT a tail position; bailing only forgoes the
+// O(1)-frame optimisation, never correctness). Used by markTailCalls to refuse
+// tail-marking a call that has values left BELOW it (a multi-value arm).
+func fragSingleResidual(frag *EmitFragment) bool {
+	depth := 0
+	for i := range frag.events {
+		ev := &frag.events[i]
+		var ops []emitOperand
+		var nout int
+		switch ev.kind {
+		case evCall:
+			ops, nout = ev.call.ops, ev.call.nout
+		case evCallUser:
+			ops, nout = ev.uc.ops, ev.uc.nout
+		default:
+			return false
+		}
+		for _, op := range ops {
+			if op.kind == opEvent {
+				depth--
+			}
+		}
+		depth += nout
+	}
+	return depth == 1
+}
+
 func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasOut bool) {
 	if frag == nil || len(frag.events) == 0 || !hasOut || out.kind != opEvent {
 		return hasOut
@@ -1028,7 +1100,12 @@ func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasO
 	last := &frag.events[len(frag.events)-1]
 	switch last.kind {
 	case evCallUser:
-		if last.seq == out.idx {
+		if last.seq == out.idx && fragSingleResidual(frag) {
+			// Tail position requires the call's result to be the fragment's WHOLE
+			// residual — nothing left BELOW it. A multi-value arm (`[n mul 2 m (n
+			// sub 1)]`, where n*2 sits below the recursive call) is NOT tail: a
+			// frame-replacing TAIL_CALL_USER would discard the lower values. Only
+			// mark tail when the net residual is exactly the call's single result.
 			last.uc.tail = true
 			return false
 		}
@@ -1076,10 +1153,15 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 		if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, true, br.pos); reason != "" {
 			return reason
 		}
+		thenMulti := lw.fragMulti
 		if br.hasThenOut {
 			lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
-			if lw.variadic[br.thenOut.idx] {
-				lw.variadic[ev.seq] = true // taken arm was itself variadic
+			// A MULTI-VALUE taken arm (`if true [1 2 3] [4]` → 1 2 3) leaves N
+			// runtime values the single merge slot can't track, OR the arm was
+			// itself variadic — either way only the program residual / a no-contract
+			// RET may absorb the run, so mark the merge variadic.
+			if thenMulti || lw.variadic[br.thenOut.idx] {
+				lw.variadic[ev.seq] = true
 			}
 			lw.note()
 		}
@@ -1177,6 +1259,7 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 // arm may not). Shared by lowerArms, lowerBranch's const-cond inline, and the
 // non-eager arm of lowerComputedBranch.
 func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
+	lw.fragMulti = false
 	switch kind {
 	case armValue:
 		// Push the literal/local/type operand as the arm's single result
@@ -1201,6 +1284,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, true, br.pos); reason != "" {
 		return reason
 	}
+	thenMulti := lw.fragMulti
 	if !br.hasElse {
 		// 2-arg if: false path jumps straight to the merge.
 		(*lw.code)[jf].Arg = int32(len(*lw.code))
@@ -1223,11 +1307,20 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 	if reason := lw.lowerArm(br.elseArm(), br.elsVal, br.els, &br.elsOut, true, br.pos); reason != "" {
 		return reason
 	}
+	elseMulti := lw.fragMulti
 	if jend >= 0 {
 		(*lw.code)[jend].Arg = int32(len(*lw.code))
 	}
 	if br.hasThenOut || br.hasElsOut {
 		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+		// A MULTI-VALUE arm (either side leaves >1 runtime value) makes the merge
+		// runtime-variable-count even when both arms "net a value": the two arms
+		// can leave different counts (`if c [1 2] [3]`) and the interpreter leaves
+		// the whole residual. Force the merge variadic so only the program residual
+		// or a no-contract fn RET absorbs it.
+		if thenMulti || elseMulti {
+			lw.variadic[ev.seq] = true
+		}
 		// Mismatched arm value-counts: one arm nets a value, the other nets 0
 		// WITHOUT diverging (it reaches the merge with nothing) → the merge
 		// carries 0-or-1 values, a VARIADIC result only the program residual may

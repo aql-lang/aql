@@ -2550,3 +2550,69 @@ func TestPatrunFnValueStoreCompiles(t *testing.T) {
 		t.Errorf("arithmetic add: got %v want [3]", g2)
 	}
 }
+
+// Stage A — multi-value / variadic branch-result modeling (recursion.tsv:53).
+// A `[]`-declared fn whose else arm leaves a FIXED value below a runtime-variable
+// recursive tail compiles: each frame leaves n*2 below the recursive m result, so
+// `m 3` -> [6 4 2]. Verifies compiled == interpreter across the recursion depth.
+func TestStageAVariadicBranchResult(t *testing.T) {
+	const def = `def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]] `
+	for _, c := range []struct {
+		arg, want string
+	}{
+		{"3", "[6 4 2]"},
+		{"5", "[10 8 6 4 2]"},
+		{"1", "[2]"},
+		{"0", "[]"},
+	} {
+		src := def + "m " + c.arg
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("m %s did not compile: reason=%q err=%v", c.arg, reason, cerr)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("m %s: expected a native lowering, got an island", c.arg)
+		}
+		// Parity AND strict (no fallback masking a VM error).
+		got, err := mustNew(t).RunCompiledStrict(src)
+		if err != nil {
+			t.Fatalf("m %s strict compiled run: %v", c.arg, err)
+		}
+		if fmt.Sprint(got) != c.want {
+			t.Errorf("m %s: compiled %v want %s", c.arg, got, c.want)
+		}
+		gotI, _ := mustNew(t).Run(src)
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("m %s: interp %v want %s", c.arg, gotI, c.want)
+		}
+	}
+}
+
+// Stage A soundness gate — a VARIADIC fn result must never feed a fixed-arity
+// operand (the count is runtime-variable). These must REFUSE (fall back), not
+// compile an unsound program: before the gate, `f 3 add 1` diverged
+// (internal_error vs the interpreter's signature_error for f 0).
+func TestStageAVariadicSoundnessGate(t *testing.T) {
+	mustRefuse := []string{
+		// A 0-or-1 variadic fn result consumed by add.
+		`def f fn [[n:Integer] [] [if (n lte 0) [] [n mul 2]]]  f 3 add 1`,
+		// The recursive variadic result consumed by add.
+		`def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]  m 3 add 1`,
+		// A multi-value arm built from inert consts cannot be reconstructed.
+		`if true [1 2 3] [4]`,
+		// A value after the variadic recursive call inside the arm.
+		`def w fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 w (n sub 1) add 5]]]  w 3`,
+	}
+	for _, src := range mustRefuse {
+		prog, _, _, _ := mustNew(t).CompileCheck(src)
+		if prog != nil {
+			t.Errorf("expected refusal (variadic→fixed-arity is unsound), but compiled: %s", src)
+		}
+		// The interpreter is the backstop; RunCompiled falls back and matches it.
+		gc, _, ec := mustNew(t).RunCompiled(src)
+		gi, ei := mustNew(t).Run(src)
+		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {
+			t.Errorf("fallback parity: compiled=%v/%s interp=%v/%s :: %s", gc, codeOf(ec), gi, codeOf(ei), src)
+		}
+	}
+}
