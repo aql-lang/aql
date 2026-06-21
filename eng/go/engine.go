@@ -3142,7 +3142,27 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	return e.buildXmlFromTmpl(tmpl)
+	result, dynamic, err := e.buildXmlFromTmpl(tmpl)
+	if err != nil {
+		return Value{}, err
+	}
+	if dynamic {
+		// A `${expr}` hole evaluated to a NON-CONCRETE value — a carrier that
+		// exists only during static analysis (a fn param, or a Node/Xml const,
+		// which strips to a type-only carrier in record mode). The interpolated
+		// element therefore depends on runtime data and is NOT a compile-time
+		// constant: baking the check-mode tree would freeze a wrong child (a
+		// carrier renders as its type tag, e.g. "Xml") and diverge from the
+		// interpreter, which builds the real tree at run time. When recording,
+		// refuse — the VM has no XML-interpolation op, so the program falls back
+		// to the interpreter (mirrors evalInterpString). At run time there are no
+		// carriers, so this never fires and the concrete element below is returned.
+		if es := e.registry.Check.Emit; es != nil && es.active() {
+			es.MarkUncompilable("interpolated XML with a runtime-computed part")
+			return NewCarrier(TXml), nil
+		}
+	}
+	return result, nil
 }
 
 // buildXmlFromTmpl recursively evaluates an XmlTmpl into a Node/Xml value.
@@ -3152,16 +3172,25 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 // each element, a Node/Xml is one child element, any other value becomes a
 // text node). Adjacent text is merged so a `hello ${name}` run yields one
 // text node rather than two.
-func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, error) {
+//
+// The returned dynamic flag is true when any hole (an attribute part, a child
+// expression, or a nested template) evaluated to a NON-CONCRETE value — a
+// carrier seen only under static analysis. evalXmlInterp uses it to refuse
+// const-folding while recording (the InterpString contract).
+func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, error) {
+	dynamic := false
 	attr := NewOrderedMap()
 	for _, a := range t.Attr {
-		s, _, err := e.evalInterpParts(a.Parts)
+		s, dyn, err := e.evalInterpParts(a.Parts)
 		if err != nil {
-			return Value{}, err
+			return Value{}, false, err
+		}
+		if dyn {
+			dynamic = true
 		}
 		attr.Set(a.Name, NewString(s))
 		if e.registry.FlowCtrl != FlowNone {
-			return NewXmlElement(t.Tag, attr, nil), nil
+			return NewXmlElement(t.Tag, attr, nil), dynamic, nil
 		}
 	}
 
@@ -3180,11 +3209,17 @@ func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, error) {
 	}
 	// addOne adds a single evaluated value as one child node: an XML
 	// element (immutable Node/Xml OR mutable FlexXml) becomes a child
-	// element, any other value becomes a text node.
+	// element, any other value becomes a text node. A non-concrete result
+	// (a carrier under static analysis) marks the build dynamic — its
+	// ValToString render ("Xml", "dynamic(Any)") is a check-mode artefact
+	// the runtime never produces, so the element must not const-fold.
 	addOne := func(r Value) {
 		if IsXmlValue(r) {
 			cren = append(cren, r)
 			return
+		}
+		if !IsConcrete(r) {
+			dynamic = true
 		}
 		addText(ValToString(r))
 	}
@@ -3212,26 +3247,29 @@ func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, error) {
 			if c.Child == nil {
 				continue
 			}
-			child, err := e.buildXmlFromTmpl(*c.Child)
+			child, dyn, err := e.buildXmlFromTmpl(*c.Child)
 			if err != nil {
-				return Value{}, err
+				return Value{}, false, err
+			}
+			if dyn {
+				dynamic = true
 			}
 			cren = append(cren, child)
 		case XmlCrenExpr:
 			sub := New(e.registry)
 			results, err := sub.Run(c.Expr)
 			if err != nil {
-				return Value{}, err
+				return Value{}, false, err
 			}
 			for _, r := range results {
 				addChild(r)
 			}
 			if e.registry.FlowCtrl != FlowNone {
-				return NewXmlElement(t.Tag, attr, cren), nil
+				return NewXmlElement(t.Tag, attr, cren), dynamic, nil
 			}
 		}
 	}
-	return NewXmlElement(t.Tag, attr, cren), nil
+	return NewXmlElement(t.Tag, attr, cren), dynamic, nil
 }
 
 // expandParenExpr returns a ParenExpr's tokens wrapped in OpenParen …
