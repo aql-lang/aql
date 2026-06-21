@@ -168,8 +168,8 @@ func TestPredicate_MakeRecord_RejectsPredicate(t *testing.T) {
 	msg := runPredExpectErr(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def Rec refine Record [x:Pos]
 make Rec [-3]`)
-	if !strings.Contains(msg, "does not satisfy predicate") {
-		t.Errorf("got %q, want 'does not satisfy predicate'", msg)
+	if !strings.Contains(msg, "is not a member of predicate") {
+		t.Errorf("got %q, want 'is not a member of predicate'", msg)
 	}
 }
 
@@ -270,7 +270,7 @@ func TestPredicate_RecordField_RejectsOneFailing(t *testing.T) {
 	msg := runPredExpectErr(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def Point refine Record [x:Pos y:Pos]
 make Point [3 -4]`)
-	if !strings.Contains(msg, "y") || !strings.Contains(msg, "does not satisfy predicate") {
+	if !strings.Contains(msg, "y") || !strings.Contains(msg, "is not a member of predicate") {
 		t.Errorf("got %q, want failure naming field y", msg)
 	}
 }

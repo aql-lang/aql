@@ -127,20 +127,27 @@ func isPredicateFnValue(v Value) bool {
 	return len(sig.Params) == 1
 }
 
-// resolvePredicateRef returns the predicate fn body when v references
-// a predicate type via name AND the type's Behavior is the
+// resolvePredicateRef returns the predicate type's lattice NODE when v
+// references a predicate type via name AND the type's Behavior is the
 // predicateUnifier installed by InstallType. The Behavior check is
 // what distinguishes a predicate TYPE from an ordinary 1-arg fn
 // value — without it, every 1-arg fn would look like a predicate and
 // hijack standard unification (e.g. FnUndef variance checks).
 //
-// Accepts three reference shapes:
+// Returning the node (not the body) lets the unifyInner short-circuit
+// route through the node's own predicateUnifier.Unify, so a predicate
+// referenced by name/word/fn-body and one reached by lattice dispatch
+// share ONE membership verdict (no separate run-the-body path).
+//
+// Accepts these reference shapes:
 //   - Bare type literal of a named predicate type (Pos's *Type).
 //   - Word naming a predicate-typed def (`Pos` in `[:Pos]`).
 //   - Atom naming a predicate-typed def (`Pos` after quote/resolve).
-func resolvePredicateRef(v Value, r *Registry) (Value, bool) {
+//   - The predicate's FnDef body value (a record/options field
+//     constraint stored as the fn, not the type literal).
+func resolvePredicateRef(v Value, r *Registry) (*Type, bool) {
 	if r == nil {
-		return Value{}, false
+		return nil, false
 	}
 	var name string
 	switch {
@@ -177,20 +184,16 @@ func resolvePredicateRef(v Value, r *Registry) (Value, bool) {
 		}
 	}
 	if name == "" {
-		return Value{}, false
+		return nil, false
 	}
 	def := r.LookupTypeName(name)
 	if def == nil {
-		return Value{}, false
+		return nil, false
 	}
 	if _, ok := def.Behavior.(*predicateUnifier); !ok {
-		return Value{}, false
+		return nil, false
 	}
-	body, ok := r.TopTypeBody(name)
-	if !ok {
-		return Value{}, false
-	}
-	return body, true
+	return def, true
 }
 
 // disjunctHasPredicate reports whether any alternative in the
@@ -204,18 +207,17 @@ func disjunctHasPredicate(disj DisjunctInfo) bool {
 	return false
 }
 
-// runPredicateUnify evaluates a predicate fn constraint against a
-// candidate value via RunPredicate and folds the result into the
-// UnifyExplain shape.
-func runPredicateUnify(r *Registry, pred, val Value) (Value, *UnifyError) {
-	out, matched, err := r.RunPredicate(pred, val)
-	if err != nil {
-		return Value{}, &UnifyError{Reason: err.Error(), A: pred, B: val}
+// unifyResolvedPredicate routes a candidate through a resolved predicate
+// type's own predicateUnifier.Unify — the SINGLE predicate-membership
+// path, shared with lattice dispatch. The candidate is unified against
+// the node's type literal, so predicateUnifier.Unify admits it iff the
+// predicate body accepts (via the shared unifyMembership contract).
+func unifyResolvedPredicate(def *Type, candidate Value) (Value, *UnifyError) {
+	pu, ok := def.Behavior.(*predicateUnifier)
+	if !ok {
+		return Value{}, unifyFail("not a predicate type", candidate, NewTypeLiteral(def))
 	}
-	if !matched {
-		return Value{}, unifyFail("value does not satisfy predicate", pred, val)
-	}
-	return out, nil
+	return pu.Unify(candidate, NewTypeLiteral(def))
 }
 
 // unifyDisjunctR is the Registry-aware disjunct walk. Tries each
@@ -245,11 +247,11 @@ func unifyDisjunctR(disj DisjunctInfo, val Value, r *Registry) (Value, *UnifyErr
 // to know about Registry.
 func unifyInner(a, b Value) (Value, *UnifyError) {
 	if r := currentUnifyRegistry(); r != nil {
-		if pred, ok := resolvePredicateRef(a, r); ok && b.Data != nil {
-			return runPredicateUnify(r, pred, b)
+		if def, ok := resolvePredicateRef(a, r); ok && b.Data != nil {
+			return unifyResolvedPredicate(def, b)
 		}
-		if pred, ok := resolvePredicateRef(b, r); ok && a.Data != nil {
-			return runPredicateUnify(r, pred, a)
+		if def, ok := resolvePredicateRef(b, r); ok && a.Data != nil {
+			return unifyResolvedPredicate(def, a)
 		}
 		if IsDisjunct(a) {
 			disj, _ := AsDisjunct(a)
