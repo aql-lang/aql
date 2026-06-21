@@ -1,5 +1,7 @@
 package eng
 
+import "strings"
+
 // Host-Go type definition that routes through the SAME installer the AQL
 // `def Name body` word uses (InstallType — see the def handler in
 // lang/go/native/native_definition.go, which calls eng.InstallType). A
@@ -46,4 +48,30 @@ func (r *Registry) DefineType(name string, body Value) (*Type, error) {
 // disjunct rule the AQL `tor` path installs. Returns the minted *Type.
 func (r *Registry) DefineEnum(name string, alternatives ...Value) (*Type, error) {
 	return r.DefineType(name, NewDisjunct(alternatives))
+}
+
+// DefineMemberType installs `name` as the type whose inhabitants are the
+// concrete values satisfying member — a membership rule expressed as a Go
+// func, the one case DefineType's AQL-body path cannot cover. It mints
+// the node with the full MemberBehavior wiring AND binds the name (so it
+// resolves in source and exports like a `def`-installed type), then
+// returns the *Type.
+//
+// (MintMemberType is the lower primitive — mint only, no name binding —
+// for module-scoped types reached solely through an export, like
+// aql:io's StreamKind. DefineMemberType is the def-style sibling that
+// also binds the name.)
+func (r *Registry) DefineMemberType(name string, parent *Type, member func(v Value) bool) (*Type, error) {
+	if !IsCapitalisedName(name) {
+		return nil, &AqlError{
+			Code:   "type_error",
+			Detail: "type " + name + ": type names must start with a capital letter",
+		}
+	}
+	def := r.Types.MintMemberType(name, parent, member)
+	r.Defs.PushType(name, def, NewTypeLiteral(def))
+	for _, p := range strings.Split(name, "/") {
+		r.RegisterPart(p)
+	}
+	return def, nil
 }
