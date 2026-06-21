@@ -2494,3 +2494,59 @@ func TestMixedFnValueApplyCompiles(t *testing.T) {
 		}
 	}
 }
+
+// Stage (patrun) — a fn VALUE stored in a Patrun dispatch table. The patrun
+// `add` overload stashes its value arg and never invokes it on the VM tape, so
+// declaring CompileStoresFn lets a PURE fn literal ride as an inert const
+// instead of refusing "function value reaches add". A genuinely CAPTURING
+// closure still declines at isInertConst and falls back faithfully.
+func TestPatrunFnValueStoreCompiles(t *testing.T) {
+	const mk = `def api (patrun)  add {cmd:"sum"} ([m:Map] => [m.x add m.y]) api  `
+	// POSITIVE: pure stored fn compiles natively (no island) and dispatches.
+	pos := []struct{ src, want string }{
+		{mk + `def h (find {cmd:"sum" x:3 y:4} api)  h {x:3 y:4}`, "[7]"},
+		{mk, "[]"}, // the add alone (0-result mutation) compiles
+	}
+	for _, c := range pos {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: a genuinely CAPTURING closure (captures the enclosing fn param
+	// `bse`) stored in a patrun declines the const-bake (isInertConst rejects a
+	// Captured fn) and falls back — compiled == interp, no divergence.
+	capSrc := `def mk fn [[bse:Integer] [Patrun] [def p (patrun)  add {cmd:"x"} ([m:Map] => [m.v add bse]) p  p]]  def api (mk 100)  def h (find {cmd:"x" v:5} api)  h {v:5}`
+	gotC, _, eC := mustNew(t).RunCompiled(capSrc)
+	gotI, eI := mustNew(t).Run(capSrc)
+	if eC != nil || eI != nil {
+		t.Fatalf("capturing: compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[105]" {
+		t.Errorf("capturing closure: compiled=%v interp=%v want [105]", gotC, gotI)
+	}
+
+	// NEGATIVE: arithmetic add is untouched by the patrun overload's flag.
+	g2, _, _ := mustNew(t).RunCompiled(`add 1 2`)
+	if fmt.Sprint(g2) != "[3]" {
+		t.Errorf("arithmetic add: got %v want [3]", g2)
+	}
+}
