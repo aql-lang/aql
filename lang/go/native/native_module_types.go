@@ -233,6 +233,30 @@ func moduleExportGetReturns(args []Value, _ *Registry) []Value {
 	return []Value{NewCarrier(TAny)}
 }
 
+// moduleExportGetrReturns is the getr-specific check-mode ReturnsFn. It mirrors
+// moduleExportGetReturns for a resolvable export, but for a CONCRETE ModuleExport
+// with a MISSING key it records a TERMINAL not_found trap (top-level only): getr
+// raises not_found at runtime for a missing export (getrModuleExportHandler), so
+// the compiled program raises the byte-identical error here via OpTrap instead of
+// refusing downstream on the unmaterialisable Any residual. RecordTrap truncates
+// the program to the trap, dropping the residual — so the getr-on-ModuleExport
+// residual limit (which refuses even valid keys) never gets a chance to refuse
+// this row. A nested occurrence declines the trap (off the top frame) and keeps
+// the lenient Any fallback. `get` (which returns None for a missing key) stays on
+// the shared moduleExportGetReturns.
+func moduleExportGetrReturns(args []Value, r *Registry) []Value {
+	if len(args) == 2 && IsConcrete(args[1]) {
+		k := getKey(args[0])
+		if val, ok := moduleExportGet(args[1], k); ok {
+			return []Value{val}
+		}
+		r.Check.Emit.RecordTrap("not_found",
+			fmt.Sprintf("getr: export %q not found in module", k), "getr",
+			"", args[0].Pos)
+	}
+	return []Value{NewCarrier(TAny)}
+}
+
 func getModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
 		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")

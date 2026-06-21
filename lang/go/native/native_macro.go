@@ -278,6 +278,16 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			// carrier is dynamic(Any) — the documented escape-hatch
 			// modality — not strict Any, which would poison every typed
 			// consumer downstream (checker-accuracy-review.10.md A8).
+			//
+			// For the COMPILE pass the interpreter raises mini_unknown_lang here
+			// at runtime, so record a TERMINAL trap (top-level only) — the
+			// compiled program then raises the byte-identical error instead of
+			// refusing on the dynamic carrier downstream. A nested call declines
+			// the trap and keeps the lenient fallback.
+			r.Check.Emit.RecordTrap("mini_unknown_lang",
+				fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
+				`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`,
+				args[0].Pos)
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("mini_unknown_lang",
@@ -402,7 +412,14 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		if r.Check.IsActive() && !parseNamespaceBound(r) {
 			// The import may be outside the checked fragment; degrade to a
 			// dynamic value rather than a false-positive diagnostic (mirror
-			// of miniHandler).
+			// of miniHandler). For the COMPILE pass record a TERMINAL trap
+			// (top-level only) so the compiled program raises the byte-identical
+			// parse_unknown_lang the interpreter raises here; a nested call
+			// declines and keeps the lenient fallback.
+			r.Check.Emit.RecordTrap("parse_unknown_lang",
+				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
+				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`,
+				args[0].Pos)
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("parse_unknown_lang",

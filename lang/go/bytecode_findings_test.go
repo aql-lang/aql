@@ -1927,3 +1927,325 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 		t.Errorf("concrete interp: got %v want [value 5]", gotc)
 	}
 }
+
+// Completion item 1 — illegal_ref trap programs. A ref-family modifier (`/r`,
+// `/u`) applied to a NON-fn binding refused at the downstream Undefined
+// placeholder ("operand provenance"), because the checker is lenient (the
+// illegal_ref diagnostic is advisory) while the interpreter raises illegal_ref.
+// A top-level RecordTrap now compiles a terminal OpTrap raising the
+// byte-identical error, so the row produces a Program instead of refusing.
+func TestIllegalRefTrapCompiles(t *testing.T) {
+	for _, src := range []string{`def x 5  x/r`, `def x 5  x/u`} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected a trap program, refused: %s", src, reason)
+		}
+		if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected a terminal TRAP, no island:\n%s", src, dis)
+		}
+		// Parity: the compiled program raises illegal_ref, exactly like the
+		// interpreter (same taxonomy).
+		_, compiled, errC := mustNew(t).RunCompiled(src)
+		if !compiled {
+			t.Errorf("%q: trap program did not run compiled (fell back)", src)
+		}
+		_, errI := mustNew(t).Run(src)
+		if codeOf(errC) != "illegal_ref" || codeOf(errI) != "illegal_ref" {
+			t.Errorf("%q: compiled=[%s] interp=[%s], want both illegal_ref", src, codeOf(errC), codeOf(errI))
+		}
+	}
+
+	// NEGATIVE: a LEGAL ref to a real fn binding must NOT trap — it still
+	// compiles to a value-producing program (the held fn fires when grouped).
+	const ok = `def z fn [[][Integer][42]]  (z/r)`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(ok)
+	if cerr != nil || prog == nil {
+		t.Fatalf("legal /r row did not compile: reason=%q err=%v", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "TRAP") {
+		t.Errorf("a legal /r must not emit an illegal_ref TRAP:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(ok)
+	if !compiled || errC != nil {
+		t.Fatalf("legal /r compiled run: compiled=%v err=%v", compiled, errC)
+	}
+	gotI, _ := mustNew(t).Run(ok)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("legal /r parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// Completion item 1 (cont.) — expansion-time error traps for mini/parse. A core
+// `mini <kind>` / `parse <kind>` whose kind needs an import that is absent
+// degrades to a dynamic carrier under the lenient checker (the import "may be
+// outside the checked fragment"), so the row refused downstream. A top-level
+// RecordTrap in that branch now compiles a terminal OpTrap raising the
+// byte-identical *_unknown_lang, exactly as the interpreter does at the call site.
+func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
+	cases := []struct{ src, code string }{
+		{`mini re 'a'`, "mini_unknown_lang"},
+		{`+re/[a-z]+/`, "mini_unknown_lang"},
+		{`parse calc 'x'`, "parse_unknown_lang"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected a trap program, refused: %s", c.src, reason)
+		}
+		if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected a terminal TRAP, no island:\n%s", c.src, dis)
+		}
+		_, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if !compiled {
+			t.Errorf("%q: trap program did not run compiled (fell back)", c.src)
+		}
+		_, errI := mustNew(t).Run(c.src)
+		if codeOf(errC) != c.code || codeOf(errI) != c.code {
+			t.Errorf("%q: compiled=[%s] interp=[%s], want both %s", c.src, codeOf(errC), codeOf(errI), c.code)
+		}
+	}
+
+	// NEGATIVE: with the import present, a VALID kind must NOT trap — it compiles
+	// (or faithfully falls back) and produces the real value, never an
+	// *_unknown_lang error.
+	const ok = `"aql:minilang" import end  ("AbcD" mini re '[a-z]+').fst.m`
+	gotC, _, errC := mustNew(t).RunCompiled(ok)
+	gotI, errI := mustNew(t).Run(ok)
+	if errC != nil || errI != nil {
+		t.Fatalf("valid mini re: compiled err=%v interp err=%v", errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("valid mini re parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// getr-on-ModuleExport not_found: `MathUtil!.nope` (getr of a MISSING export)
+// raises not_found at runtime. The compile pass records a top-level not_found
+// OpTrap (moduleExportGetrReturns) and MarkUncompilable is a no-op once a trap is
+// set, so the getr's own unmaterialisable residual (which refuses even valid
+// keys) does not refuse the program — the trap truncates it.
+func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
+	const src = `"aql:math-util" import end  MathUtil!.nope`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("%q: check error %v", src, cerr)
+	}
+	if prog == nil {
+		t.Fatalf("%q: expected a trap program, refused: %s", src, reason)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+		t.Errorf("%q: expected a terminal TRAP, no island:\n%s", src, dis)
+	}
+	_, compiled, errC := mustNew(t).RunCompiled(src)
+	if !compiled {
+		t.Errorf("%q: trap program did not run compiled (fell back)", src)
+	}
+	_, errI := mustNew(t).Run(src)
+	if codeOf(errC) != "not_found" || codeOf(errI) != "not_found" {
+		t.Errorf("%q: compiled=[%s] interp=[%s], want both not_found", src, codeOf(errC), codeOf(errI))
+	}
+
+	// NEGATIVE 1: a VALID getr export must NOT trap — it compiles and produces
+	// the real value, with compiled/interp parity.
+	const okGetr = `"aql:math-util" import end  MathUtil!.sqrt 16.0`
+	if p, _, _, _ := mustNew(t).CompileCheck(okGetr); p != nil {
+		if dis := p.Disassemble(); strings.Contains(dis, "TRAP") {
+			t.Errorf("valid getr must not trap:\n%s", dis)
+		}
+	}
+	gotC, _, eC := mustNew(t).RunCompiled(okGetr)
+	gotI, eI := mustNew(t).Run(okGetr)
+	if eC != nil || eI != nil {
+		t.Fatalf("valid getr: compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("valid getr parity: compiled=%v interp=%v", gotC, gotI)
+	}
+
+	// NEGATIVE 2: `get` (not getr) of a MISSING key returns None, never traps —
+	// only getr raises not_found, so the get path stays on the shared ReturnsFn.
+	const okGet = `"aql:math-util" import end  MathUtil.nope`
+	if _, _, eGet := mustNew(t).RunCompiled(okGet); eGet != nil {
+		t.Errorf("get of a missing key must not error, got %v", eGet)
+	}
+}
+
+// Bare-value map-field const-fold: a bare word that is a 0-arg fn auto-fires as a
+// map value (`{a:g}` → `{a:42}`, like the parenthesised `{a:(g)}`). The bare form
+// previously fell to autoEvalMap's sub-engine eval, leaving a check-mode carrier
+// of unknown provenance that refused; it now const-folds to its concrete result
+// (identical to the interpreter's sub-engine eval) and the map bakes as a const.
+func TestBareFnMapFieldCompiles(t *testing.T) {
+	cases := []string{
+		`def g fn [[] [Integer] [42]] def m {a:g} m`,
+		`def g fn [[] [Integer] [42]] {a:g}`,
+	}
+	for _, src := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", src, reason)
+		}
+		if dis := prog.Disassemble(); strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", src, dis)
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(src)
+		gotI, eI := mustNew(t).Run(src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", src, gotC, gotI)
+		}
+	}
+
+	// NEGATIVE: a plain literal map and a bare def-bound value still compile with
+	// parity — the fold must not change their behaviour.
+	for _, src := range []string{`def m {a:5 b:"x"} m`, `def x 7 def m {a:x} m`} {
+		gotC, _, eC := mustNew(t).RunCompiled(src)
+		gotI, eI := mustNew(t).Run(src)
+		if eC != nil || eI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: compiled=%v(%v) interp=%v(%v)", src, gotC, eC, gotI, eI)
+		}
+	}
+}
+
+// Cluster-5 Gap A — chained variadic-statement-if: a 2-arg `if`'s 0-or-1 result
+// is claimed as the else of a following `if`. The variadic depth is only known at
+// run time, so the claiming if cannot drop it at a fixed offset — it uses a
+// variadic stack region (OpStackMark / OpDropToMark / OpPopMark).
+func TestChainedVariadicIfCompiles(t *testing.T) {
+	cases := []struct {
+		src  string
+		want string
+	}{
+		{`def n 0 if (n eq 0) [98] if (n eq 0) [99] add 1 2`, "[99 3]"},
+		{`def n 5 if (n eq 0) [98] if (n eq 0) [99] add 1 2`, "[3]"},
+		{`def n 5 if (n eq 0) [98] if (n eq 5) [99] add 1 2`, "[99 3]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if dis := prog.Disassemble(); strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, dis)
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
+// Cluster 7a — a 0-net code-body case scrutinee compiles to a case_error trap.
+// `case [f 1] [...]` where f produces no value is the runtime case_error
+// ("value expression produced no value to dispatch on"); caseReturnsFn detects
+// the empty residual via the RECORDING analysis and records a terminal OpTrap
+// instead of islanding. (A type-only run would mis-see the empty-body fn as
+// 1-value, so the recording residual is load-bearing.)
+func TestCaseEmptyScrutineeTrapCompiles(t *testing.T) {
+	const src = `def f fn [[x:Integer] [] []] case [f 1] [2 "two" "other"]`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("check error %v", cerr)
+	}
+	if prog == nil {
+		t.Fatalf("expected a trap program, refused: %s", reason)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+		t.Errorf("expected a terminal TRAP, no island:\n%s", dis)
+	}
+	_, compiled, errC := mustNew(t).RunCompiled(src)
+	if !compiled {
+		t.Errorf("trap program did not run compiled (fell back)")
+	}
+	_, errI := mustNew(t).Run(src)
+	if codeOf(errC) != "case_error" || codeOf(errI) != "case_error" {
+		t.Errorf("compiled=[%s] interp=[%s], want both case_error", codeOf(errC), codeOf(errI))
+	}
+
+	// POSITIVE: a VALUE-producing code-body scrutinee with a single clause +
+	// default and value blocks now compiles NATIVE (no island) — the body runs
+	// once via `do` in the one guard cond — and must NOT trap (it dispatches).
+	const ok = `case [1 add 1] [2 "two" "other"]`
+	prog2, reason2, _, cerr2 := mustNew(t).CompileCheck(ok)
+	if cerr2 != nil || prog2 == nil {
+		t.Fatalf("value scrutinee did not compile: reason=%q err=%v", reason2, cerr2)
+	}
+	if dis := prog2.Disassemble(); strings.Contains(dis, "FALLBACK") || strings.Contains(dis, "TRAP") {
+		t.Errorf("value scrutinee: expected native if-chain, no island/trap:\n%s", dis)
+	}
+	gotC, _, errC2 := mustNew(t).RunCompiled(ok)
+	gotI, errI2 := mustNew(t).Run(ok)
+	if errC2 != nil || errI2 != nil {
+		t.Fatalf("value scrutinee: compiled err=%v interp err=%v", errC2, errI2)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("value scrutinee parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// Cluster 5 (partial) — a user-fn-call result above a literal in the program
+// residual. `def add2 fn […] 1 add2 2 3` leaves residual [1, 5] (literal 1
+// below, the add2 CALL_USER result 5 on top); it refused "residual shape beyond
+// Stage 1 (call result above a literal)" because the out-of-order residual
+// promotion (forceOrder → frame local) handled only native (evCall) results,
+// never user calls (evCallUser). Now a user-call result seats to a local and
+// re-pushes in order.
+func TestUserCallResidualAboveLiteral(t *testing.T) {
+	cases := []string{
+		`def add2 fn [[x:Integer y:Integer][Integer][x add y]] 1 add2 2 3`,
+		// The word-splice spec row: vs splices 2 3, so `1 add2 vs` → residual [1, 5].
+		`def vs word [2,3] def add2 fn [[x:Integer y:Integer][Integer][x add y]] 1 add2 vs`,
+	}
+	for _, src := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%q: did not compile: reason=%q err=%v", src, reason, cerr)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected native, got an island:\n%s", src, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled run: compiled=%v err=%v", src, compiled, errC)
+		}
+		gotI, _ := mustNew(t).Run(src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", src, gotC, gotI)
+		}
+	}
+
+	// NEGATIVE: a user call whose result feeds a harness/accumulation (not a
+	// plain out-of-order residual) must NOT be promoted — the Test.run-spec
+	// harness diverged when user-call results were promoted broadly, so it stays
+	// on fallback. Assert it still falls back faithfully (compiled == interp).
+	const harness = `"aql:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
+	gotC, _, errC := mustNew(t).RunCompiled(harness)
+	gotI, errI := mustNew(t).Run(harness)
+	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("Test harness parity: compiled=%v(%v) interp=%v(%v)", gotC, errC, gotI, errI)
+	}
+}

@@ -177,6 +177,19 @@ const (
 	// the interpreter raises the canonical taxonomy.
 	OpFlowBreak
 	OpFlowContinue
+	// OpStackMark / OpDropToMark / OpPopMark implement a VARIADIC stack region for
+	// the chained variadic-statement-`if` (a 2-arg `if` whose 0-or-1 result is
+	// claimed as the else of a following `if`). The stack depth of a 0-or-1 result
+	// is only known at run time, so a fixed-offset DROP cannot remove it. OpStackMark
+	// pushes the current stack depth onto a per-run mark stack (emitted before the
+	// variadic producer's region). On the claiming if's TRUE path, OpDropToMark pops
+	// the mark and truncates the stack to it (discarding the 0-or-1 eager regardless
+	// of its count); on the FALSE path, OpPopMark discards the mark and keeps the
+	// eager as the result. The merged result is itself a 0-or-1 the program residual
+	// absorbs. Arg is unused.
+	OpStackMark
+	OpDropToMark
+	OpPopMark
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -210,6 +223,9 @@ var opcodeNames = [...]string{
 	OpCallDynamicTrailing: "CALL_DYNAMIC_TRAILING",
 	OpFlowBreak:           "FLOW_BREAK",
 	OpFlowContinue:        "FLOW_CONTINUE",
+	OpStackMark:           "STACK_MARK",
+	OpDropToMark:          "DROP_TO_MARK",
+	OpPopMark:             "POP_MARK",
 }
 
 func (o Opcode) String() string {
