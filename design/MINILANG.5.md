@@ -206,7 +206,7 @@ becoming ordinary kind atoms (no lexer involvement):
 | `tr` | transliterate (Perl `tr///`) | `subject:String` → `[String]`; `opts` flags `d`/`s`/`c` |
 | `jp` ✅ | JsonPath (github.com/ohler55/ojg) | `doc:Any` → `[List]` of matched nodes — **landed** |
 | `jq` ✅ | jq filter (github.com/itchyny/gojq) | `doc:Any` → `[List]` (the output stream) — **landed** |
-| `xp` | XPath | `doc:Any` → `[Any]` |
+| `xp` ✅ | XPath (github.com/antchfx/xpath) | `doc:Xml` → `[List]` of results (elements as Node/Xml values, attribute/text nodes as Strings, a scalar count/string/boolean as a one-element list) — **landed** |
 | `cs` | CSS selector | `doc:Any` → `[Any]` (pairs with XML.0.md) |
 | `gl` | glob | `path:String` → `[Boolean]` |
 | `sh` | POSIX shell pattern | `path:String` → `[Boolean]` |
@@ -598,7 +598,7 @@ Empirical findings the design must respect:
 | 1 | **LANDED 2026-06-12** (scoped to two kinds): native `mini` (two sigs `[Atom/q String]` / `[Atom/q String Map]`; `lang_` resolution with expansion-time `mini_unknown_lang`; auto-`end`; opts normalized to `{}`; `RunInCheckMode` so the checker steps the expansion) + `aql:minilang` with `re` (Go `regexp`, per-src compile memo) and `bf` (brainfuck — filter + generator forms, `opts.steps` budget) + `MiniLang.register` / `MiniLang.kinds` + battery `lang/spec/module-minilang.tsv`. Implementation notes: `mini` returns an `__SP` splice of the standard-call tokens (the `word` mechanism) rather than going through the macro expander — so there is no expansion cache (the `re` compile memo covers the hot cost) and `macroexpand` does not apply to `mini`; src is spliced as collected, so dynamic src works for runtime kinds. Deferred from the original Phase-1 row: `re-sub` / `re-test` / `re-all` |
 | 2 | **`m`** ✅ (Pratt maths via github.com/tabnas/expr — the rev-1 `math` kind, shipped as `m`), **`jp`** ✅ (JSONPath via github.com/ohler55/ojg), **`jq`** ✅ (jq via github.com/itchyny/gojq); remaining: `tr`, `fm`, `gl`. `jp`/`jq` take any AQL document — a Node (Map/List), Object, Array, Table or Record — converting it to generic data (Ideals project through their IdealConverter) and the matches back to AQL values; both return a List of results (a Map/Record subject needs an explicit `{}` opts, the same gotcha as `gex`) |
 | 3 | **compile hooks**: a kind may register an expansion-time compiler `(src, opts-form) → token list` that `mini` splices *instead of* the standard call — staged compilation of the DSL (parse once ever, splice precompiled carrier values, surface `src` syntax errors at expansion time with call-site spans; requires literal `src`). The standard call remains the semantic reference and the dynamic-src fallback |
-| 4 | remaining catalogue kinds (`xp`, `cs`, `ur`, `dt`, `sh`); the `+` literal shortcut — **LANDED** (§12) |
+| 4 | **`xp`** ✅ (XPath via github.com/antchfx/xpath — queries a Node/Xml document, the stack subject, now that XML is a node type; a navigable mirror tree feeds the antchfx cursor model); remaining catalogue kinds (`cs`, `ur`, `dt`, `sh`); the `+` literal shortcut — **LANDED** (§12) |
 
 ---
 

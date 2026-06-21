@@ -43,6 +43,13 @@ var hermeticExempt = map[string]string{
 	// re compile-hook splice (with a carrier users cannot construct), never by
 	// name. Covered by lang/go/test/minilang_compile_test.go.
 	"MiniLang.run-re": "internal compiled-re consumer; reached only via the compile-hook splice (minilang_compile_test.go)",
+	// lang_xp (XPath) queries a Node/Xml document whose only literal form is an
+	// inline <tag>…</tag>; the bytecode compiler cannot yet statically
+	// materialise an XML literal (it refuses "residual value not statically
+	// materialisable"), so a spec value row would push the never-raised
+	// compile-refusal ceiling over its limit. Covered by
+	// lang/go/test/minilang_xpath_test.go.
+	"MiniLang.lang_xp": "XPath over a Node/Xml literal; XML literals are not yet bytecode-materialisable, so a spec row would regress the refusal ceiling (minilang_xpath_test.go)",
 }
 
 // TestModuleExportCoverage fails when any native-module export lacks a
