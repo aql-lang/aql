@@ -400,6 +400,41 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	return append(stack[:base], results...), nil
 }
 
+// callDynamicOp routes a fn-value-call-boundary opcode to its handler, keeping
+// the VM's run loop a single case. Trailing only changes the non-callable
+// residual order (see callDynamic); mixed islands an interior-fn window.
+func (vc *vmContext) callDynamicOp(op Opcode, arg int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if op == OpCallDynamicMixed {
+		return vc.callDynamicMixed(arg, stack, curDebug, pc)
+	}
+	return vc.callDynamic(arg, op == OpCallDynamicTrailing, stack, curDebug, pc)
+}
+
+// callDynamicMixed handles the MIXED fn-value-call boundary (`3 m.f 2`): a
+// dynamic / fn value sits INTERIOR to a window of static args (some below it,
+// some above). The window of `w` stack values is the same token sequence the
+// interpreter ran, so islanding it verbatim reproduces the interpreter exactly:
+// the fn auto-applies — forward-collecting the after-args into its leading sig
+// positions and the before-args from the stack — for whatever arity it turns
+// out to have, and a non-callable value simply stays put (the island Run leaves
+// it on the stack). The leading / trailing OpCallDynamic layouts cannot express
+// this because the args straddle the fn.
+func (vc *vmContext) callDynamicMixed(w int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if w < 1 || len(stack) < w {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC_MIXED underflow")
+	}
+	base := len(stack) - w
+	window := append([]Value(nil), stack[base:]...)
+	results, err := vc.island().Run(window)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, vc.r)
+	}
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
+		return nil, err
+	}
+	return append(stack[:base], results...), nil
+}
+
 // isDelegationFnDef reports whether a Function VALUE is a trivial-delegation
 // wrapper — EVERY own sig is a `[Word(inner)]` pass-through to an inner native
 // (a module method like rand-int / MathUtil.sqrt), safely dispatched VM-native
@@ -710,10 +745,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, err
 			}
 			stack = ns
-		case OpCallDynamic, OpCallDynamicTrailing:
-			// Trailing only changes the non-callable residual order (see
-			// callDynamic); the comparison is an expression, not a branch.
-			ns, err := vc.callDynamic(int(in.Arg), in.Op == OpCallDynamicTrailing, stack, curDebug, pc)
+		case OpCallDynamic, OpCallDynamicTrailing, OpCallDynamicMixed:
+			// The fn-value-call boundary family: leading / trailing-1 (callDynamic)
+			// and interior-window (callDynamicMixed). callDynamicOp routes by opcode
+			// so run's dispatch stays a single case.
+			ns, err := vc.callDynamicOp(in.Op, int(in.Arg), stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}

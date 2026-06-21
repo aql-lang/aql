@@ -2802,6 +2802,15 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	if rot, ok := es.trailingApply(lw, residual); ok {
 		return rot, OpCallDynamicTrailing, ""
 	}
+	// MIXED boundary: a single dynamic / fn value INTERIOR to the residual with
+	// static args both below and above it (`3 m.f 2`). The producing event was
+	// promoted to a frame local (Finalize's mixedDynamicApplyShape gate), so the
+	// residual now re-pushes in source order; OpCallDynamicMixed islands the whole
+	// window verbatim. The promoted entry stays Dynamic in `residual`, so the
+	// in-order ops loop maps it to its local and the window lays out unchanged.
+	if _, ok := es.mixedDynamicApplyShape(residual); ok {
+		return residual, OpCallDynamicMixed, ""
+	}
 	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
 	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
 	// FnDefInfo). All refuse so the program falls back faithfully.
@@ -2867,6 +2876,35 @@ func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool
 		return residual, false
 	}
 	return []Value{fnv, arg}, true
+}
+
+// mixedDynamicApplyShape detects the MIXED fn-value-call boundary: EXACTLY one
+// residual entry is a dynamic / fn value, it sits STRICTLY INTERIOR (≥1 entry
+// below it AND ≥1 above it), and it is event-produced (so the producing event
+// can be promoted to a frame local and the residual re-pushed in source order).
+// Returns the interior index. `3 m.f 2` → residual [3, m.f, 2], index 1. The
+// before/after entries need not be checked here for materialisability — the ops
+// loop refuses any that cannot resolve, falling back faithfully.
+func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
+	if len(residual) < 3 {
+		return 0, false
+	}
+	dynIdx := -1
+	for i, rv := range residual {
+		if rv.Dynamic || isFnValueResidual(rv) {
+			if dynIdx != -1 {
+				return 0, false // more than one dynamic / fn value
+			}
+			dynIdx = i
+		}
+	}
+	if dynIdx <= 0 || dynIdx >= len(residual)-1 {
+		return 0, false // not strictly interior (leading / trailing are separate)
+	}
+	if pr, ok := es.producedBy[residual[dynIdx].ID]; !ok || pr.idx != 0 {
+		return 0, false // not event-produced — cannot promote to a local
+	}
+	return dynIdx, true
 }
 
 // Finalize linearises the recorded events into a Program. residual
@@ -2947,6 +2985,19 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			}
 		}
 	}
+	// MIXED fn-value-call boundary (`3 m.f 2`): the interior fn sits above a
+	// before-arg literal, so the in-order reconciliation would refuse "result
+	// above a literal". Promote EVERY residual event to a frame local so the whole
+	// window (before-args, the fn, after-args) re-pushes in source order, ready for
+	// OpCallDynamicMixed to island it. (residualHasFnOrDynamic suppressed the
+	// reorder block above; this is the one fn-value shape that DOES reorder, since
+	// the island consumes the window in source order, not the apply-on-top layout.)
+	if _, ok := es.mixedDynamicApplyShape(residual); ok {
+		forceOrder = make(map[int]bool, len(residualSeqs))
+		for _, seq := range residualSeqs {
+			forceOrder[seq] = true
+		}
+	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
 	lw.markBefore, lw.variadicElse = planVariadicClaims(es.frames[0])
 	// Seed the lowerer's frame-local counter from the unit's planned locals;
@@ -3015,7 +3066,13 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// base of the residual with its args above; apply it at run time. The
 		// trailing op additionally restores the fn-on-top order if the value
 		// turns out not to be callable (see resolveDynamicApply / callDynamic).
-		lw.emit(dynOp, len(residual)-1, lastPos)
+		// The MIXED op instead islands the WHOLE window (the fn is interior), so it
+		// takes the full residual length, not len-1.
+		arg := len(residual) - 1
+		if dynOp == OpCallDynamicMixed {
+			arg = len(residual)
+		}
+		lw.emit(dynOp, arg, lastPos)
 	}
 
 	// Lower the compiled fn units. Tail positions are marked first so

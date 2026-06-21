@@ -2436,3 +2436,61 @@ func TestSubRegistryPolyCompiles(t *testing.T) {
 		}
 	}
 }
+
+// Stage G — mixed fn-value-call boundary. A dynamic fn value INTERIOR to the
+// residual (`3 m.f 2`: forward `2` -> sig[0], stack `3` -> sig[1]) fits neither
+// the leading nor the trailing-1-arg apply layout and refused "dynamic value
+// precedes residual args". OpCallDynamicMixed islands the whole [before, fn,
+// after] window verbatim — the same token sequence the interpreter ran — so the
+// fn auto-applies with full fidelity (any arity, callable or not).
+func TestMixedFnValueApplyCompiles(t *testing.T) {
+	const fn2 = `def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])}  `
+	cases := []struct{ src, want string }{
+		{fn2 + `3 m.f 2`, "[203]"},                                          // the mixed row: a=2 (forward), b=3 (stack)
+		{fn2 + `m.f 2 3`, "[203]"},                                          // two-forward (leading) — unchanged
+		{fn2 + `10 m.f 20`, "[2010]"},                                       // a=20 (forward), b=10 (stack)
+		{`def m {f: (fn [[a:Integer][Integer][a mul 10]])}  5 m.f`, "[50]"}, // trailing-1 — unchanged
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: an INTERIOR value that is NOT callable must NOT be applied — the
+	// island leaves it in place, so the residual is byte-identical to interp.
+	// `3 m.g 2` where m.g is a plain integer: the residual stays [3, 42, 2].
+	for _, c := range []struct{ src, want string }{
+		{`def m {g: 42}  3 m.g 2`, "[3 42 2]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: non-callable interior: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
