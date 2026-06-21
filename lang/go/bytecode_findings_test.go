@@ -2249,3 +2249,63 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 		t.Errorf("Test harness parity: compiled=%v(%v) interp=%v(%v)", gotC, errC, gotI, errI)
 	}
 }
+
+// Stage H — dispatch-recovery operand order. `3 and "x"` types as the
+// disjunct Integer|String (`and`'s operand-join return), which straddles
+// `add`'s overloads, so matchSignature fails and checkModeAssumeSig
+// recovers. The strict-disjunct straddle is a sound runtime re-dispatch
+// (each runtime alternative matches one concrete overload), so the recovery
+// now records OpCallNativePoly instead of latching the program uncompilable
+// — mirroring the normal-path handling in carrierResults.
+func TestDispatchRecoveryPolyCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		{`(3 and "x") add 1`, "[x1]"}, // false guard truthy: and → "x", "x" add 1 → x1
+		{`(0 and "x") add 1`, "[1]"},  // 0 falsy: and → 0, 0 add 1 → 1
+		{`(5 and 2) add 1`, "[3]"},    // numeric path: and → 2, 2 add 1 → 3
+		{`(0 and 2) add 1`, "[1]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// OPERAND ORDER (the regression guard). The recovered call must consume
+	// its operands in the SAME order as the interpreter: `(3 and "x") add 1`
+	// is `"x" add 1` → x1 (forward arg 1 = sig[0], stack "x" = sig[1]), which
+	// is DISTINCT from the all-forward `add "x" 1` → 1x. The prior poly
+	// attempt recorded the raw tape order and produced 1x for the first — pin
+	// the distinction so the operand-order rebuild can't silently regress.
+	for _, c := range []struct{ src, want string }{
+		{`(3 and "x") add 1`, "[x1]"},
+		{`add "x" 1`, "[1x]"},
+		{`"x" add 1`, "[x1]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: order: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
