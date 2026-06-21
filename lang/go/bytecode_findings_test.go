@@ -1927,3 +1927,53 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 		t.Errorf("concrete interp: got %v want [value 5]", gotc)
 	}
 }
+
+// Completion item 1 — illegal_ref trap programs. A ref-family modifier (`/r`,
+// `/u`) applied to a NON-fn binding refused at the downstream Undefined
+// placeholder ("operand provenance"), because the checker is lenient (the
+// illegal_ref diagnostic is advisory) while the interpreter raises illegal_ref.
+// A top-level RecordTrap now compiles a terminal OpTrap raising the
+// byte-identical error, so the row produces a Program instead of refusing.
+func TestIllegalRefTrapCompiles(t *testing.T) {
+	for _, src := range []string{`def x 5  x/r`, `def x 5  x/u`} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected a trap program, refused: %s", src, reason)
+		}
+		if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: expected a terminal TRAP, no island:\n%s", src, dis)
+		}
+		// Parity: the compiled program raises illegal_ref, exactly like the
+		// interpreter (same taxonomy).
+		_, compiled, errC := mustNew(t).RunCompiled(src)
+		if !compiled {
+			t.Errorf("%q: trap program did not run compiled (fell back)", src)
+		}
+		_, errI := mustNew(t).Run(src)
+		if codeOf(errC) != "illegal_ref" || codeOf(errI) != "illegal_ref" {
+			t.Errorf("%q: compiled=[%s] interp=[%s], want both illegal_ref", src, codeOf(errC), codeOf(errI))
+		}
+	}
+
+	// NEGATIVE: a LEGAL ref to a real fn binding must NOT trap — it still
+	// compiles to a value-producing program (the held fn fires when grouped).
+	const ok = `def z fn [[][Integer][42]]  (z/r)`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(ok)
+	if cerr != nil || prog == nil {
+		t.Fatalf("legal /r row did not compile: reason=%q err=%v", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "TRAP") {
+		t.Errorf("a legal /r must not emit an illegal_ref TRAP:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(ok)
+	if !compiled || errC != nil {
+		t.Fatalf("legal /r compiled run: compiled=%v err=%v", compiled, errC)
+	}
+	gotI, _ := mustNew(t).Run(ok)
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("legal /r parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}

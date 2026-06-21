@@ -1771,6 +1771,13 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 				Row:    val.Pos.Row,
 				Col:    val.Pos.Col,
 			})
+			// Check mode is lenient (the illegal_ref diagnostic is advisory), but
+			// the interpreter raises illegal_ref here at runtime. Record a TERMINAL
+			// trap so a compiled program raises the byte-identical error in place
+			// instead of refusing on the downstream Undefined placeholder. Only a
+			// top-level trap is recordable; a nested /u keeps the placeholder path
+			// and refuses (falls back) as before.
+			e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
 			placeholder.Pos = val.Pos
 			placeholder.Undefined = true
@@ -1868,6 +1875,13 @@ func (e *Engine) stepWord(val Value) error {
 					Row:    val.Pos.Row,
 					Col:    val.Pos.Col,
 				})
+				// Check mode is lenient (the illegal_ref diagnostic is advisory), but
+				// the interpreter raises illegal_ref here at runtime. Record a TERMINAL
+				// trap so a compiled program raises the byte-identical error in place
+				// instead of refusing on the downstream Undefined placeholder. Only a
+				// top-level trap is recordable; a nested /r keeps the placeholder path
+				// and refuses (falls back) as before.
+				e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 				placeholder := NewAtom(w.Name)
 				placeholder.Pos = val.Pos
 				placeholder.Undefined = true
