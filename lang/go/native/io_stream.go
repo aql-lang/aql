@@ -16,6 +16,22 @@ var streamSentinels = map[string]string{
 	"stderr": pathStderr,
 }
 
+// isStreamAtom is the StreamKind membership rule: a concrete atom whose
+// name is one of stdin/stdout/stderr. It is the single predicate that
+// defines the type — the kernel's MemberBehavior derives Match, Unify,
+// canon rendering and `is`/dispatch agreement from it (see
+// eng.MintMemberType), so there is no hand-written TypeBehavior here.
+// Name-based, so a handle minted by one import is accepted by another's
+// StreamKind too.
+func isStreamAtom(v Value) bool {
+	name, err := v.AsConcreteAtom()
+	if err != nil {
+		return false
+	}
+	_, ok := streamSentinels[name]
+	return ok
+}
+
 // MintStreamKind mints the StreamKind type into r's type table and
 // returns the node. StreamKind is owned by the aql:io module —
 // BuildIOModule mints one per import into the module's sub-registry (see
@@ -29,7 +45,7 @@ var streamSentinels = map[string]string{
 // stdin/stdout/stderr — a closed enumeration the read/write signatures
 // use to tell a stream target apart from a file path.
 func MintStreamKind(r *Registry) *Type {
-	return r.Types.MintTypeWithBehavior("StreamKind", eng.TAtom, streamBehavior{})
+	return r.Types.MintMemberType("StreamKind", eng.TAtom, isStreamAtom)
 }
 
 // NewStreamKind mints a standalone StreamKind (into its own dynamic type
@@ -39,51 +55,7 @@ func MintStreamKind(r *Registry) *Type {
 // name-based, so a standalone StreamKind tags and admits the handles
 // exactly like a per-import one.
 func NewStreamKind() *Type {
-	return eng.NewDynamicTypeTable().MintTypeWithBehavior("StreamKind", eng.TAtom, streamBehavior{})
-}
-
-// streamBehavior admits exactly the three stream atoms. A concrete atom
-// whose name is one of the three is a StreamKind regardless of whether
-// its tag is the base Atom type or a StreamKind node; everything else
-// (other atoms, non-atoms) falls back to the default lattice check, so a
-// bare `StreamKind` type literal still answers "is this the type itself"
-// while no stray value sneaks in. Membership is name-based, so handles
-// minted by one import are accepted by another's StreamKind too.
-type streamBehavior struct{}
-
-func (streamBehavior) Match(v Value, t *Type) bool {
-	if name, err := v.AsConcreteAtom(); err == nil {
-		_, ok := streamSentinels[name]
-		return ok
-	}
-	return eng.DefaultBehavior.Match(v, t)
-}
-
-func (streamBehavior) Equal(a, b Value) bool { return eng.DefaultBehavior.Equal(a, b) }
-func (streamBehavior) Format(v Value) string { return eng.DefaultBehavior.Format(v) }
-
-// FormatDelegate marks streamBehavior as delegating Format to the kernel
-// default, so canon / Value.String render a stream handle by its Atom
-// family (`stdout` / `stdout/q`) rather than through Format. Without it,
-// canon would route this minted (non-builtin) type's Format and drop the
-// `/q` atom suffix.
-func (streamBehavior) FormatDelegate() {}
-
-// Unify admits a concrete stream atom against a StreamKind type, in
-// either argument order. dispatchUnifier starts its walk at the more
-// specific denoted type, so `atom is IO.StreamKind` (and `case`, return
-// checks, typed containers — every Unify-based membership test) reaches
-// this method. The concrete atom is the narrower side and wins; anything
-// else opts out so the kernel's structural dispatch runs unchanged.
-func (streamBehavior) Unify(a, b Value) (Value, *eng.UnifyError) {
-	for _, v := range []Value{a, b} {
-		if name, err := v.AsConcreteAtom(); err == nil {
-			if _, ok := streamSentinels[name]; ok {
-				return v, nil
-			}
-		}
-	}
-	return Value{}, eng.ErrNoUnifier
+	return eng.NewDynamicTypeTable().MintMemberType("StreamKind", eng.TAtom, isStreamAtom)
 }
 
 // newStreamAtom returns the Atom handle for a standard stream, tagged
