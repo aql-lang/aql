@@ -80,31 +80,20 @@ func constHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		return []Value{ReparentValue(v, entry.TypeDef)}, nil
 	}
 
-	node := r.Types.MintTypeWithBehavior(canon, base, constBehavior{exemplar: v})
+	// The singleton type's membership is "equals the exemplar within the
+	// exemplar's own base type" — same-base STRICT, so the cross-leaf
+	// numeric magnitude equivalence (1 cmp 1.0 → 0) does not leak into
+	// membership. This is a membership rule, so it rides the shared
+	// MemberBehavior wiring (Match / Unify / canon / `is` agreement)
+	// rather than a hand-written Behavior — the same path every host
+	// membership type uses (eng/go/membership.go). matchMembership only
+	// calls the predicate on concrete values, so a non-inhabitant (a bare
+	// literal, or a check-mode carrier already tagged with this node)
+	// defers to the lattice walk.
+	exemplar := v
+	node := r.Types.MintMemberType(canon, base, func(x Value) bool {
+		return x.Parent != nil && x.Parent.ConformsTo(exemplar.Parent) && DeepEqual(x, exemplar)
+	})
 	r.Defs.PushType(key, node, NewTypeLiteral(node))
 	return []Value{ReparentValue(v, node)}, nil
 }
-
-// constBehavior is the singleton type's Behavior: membership is
-// "carries the tag, or equals the exemplar within the exemplar's own
-// base type" — same-base STRICT, so the cross-leaf numeric magnitude
-// equivalence (1 cmp 1.0 → 0) does not leak into membership.
-type constBehavior struct {
-	exemplar Value
-}
-
-func (b constBehavior) Match(v Value, t *Type) bool {
-	if v.Parent != nil && v.Parent.ConformsTo(t) {
-		return true // already singleton-tagged (or a subtype)
-	}
-	if !IsConcrete(v) {
-		return false
-	}
-	if !v.Parent.ConformsTo(b.exemplar.Parent) {
-		return false
-	}
-	return DeepEqual(v, b.exemplar)
-}
-
-func (b constBehavior) Format(v Value) string { return DefaultBehavior.Format(v) }
-func (b constBehavior) Equal(a, c Value) bool { return DefaultBehavior.Equal(a, c) }
