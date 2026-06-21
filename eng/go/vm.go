@@ -555,29 +555,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, vmErrAt(curDebug, pc, "DROP stack underflow")
 			}
 			stack = stack[:len(stack)-1]
-		case OpStackMark:
-			// Open a variadic region: remember the current depth so a 0-or-1
-			// value produced above it can be truncated away later.
-			marks = append(marks, len(stack))
-		case OpDropToMark:
-			// Close a variadic region on the path that discards the 0-or-1 eager:
-			// pop the mark and truncate the stack back to it.
-			if len(marks) == 0 {
-				return nil, vmErrAt(curDebug, pc, "DROP_TO_MARK with no open mark")
+		case OpStackMark, OpDropToMark, OpPopMark:
+			var err error
+			if marks, stack, err = vmMark(in.Op, marks, stack, curDebug, pc); err != nil {
+				return nil, err
 			}
-			m := marks[len(marks)-1]
-			marks = marks[:len(marks)-1]
-			if m > len(stack) {
-				return nil, vmErrAt(curDebug, pc, "DROP_TO_MARK above current depth")
-			}
-			stack = stack[:m]
-		case OpPopMark:
-			// Close a variadic region on the path that KEEPS the eager: discard
-			// the mark without touching the stack.
-			if len(marks) == 0 {
-				return nil, vmErrAt(curDebug, pc, "POP_MARK with no open mark")
-			}
-			marks = marks[:len(marks)-1]
 		case OpMakeList:
 			// Assemble the top Arg values into a list (a computed list literal,
 			// `[1 add 2]`); order preserved, deepest becomes element 0.
@@ -942,6 +924,39 @@ func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
 }
 
 // vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
+// vmMark executes the variadic-region opcodes (OpStackMark / OpDropToMark /
+// OpPopMark) — a 0-or-1 (runtime-variable count) value produced above a saved
+// depth is truncated away (DropToMark) or kept (PopMark). Extracted from the
+// main run loop so its branches don't inflate that switch's cyclomatic
+// complexity. Returns the updated mark stack and operand stack.
+func vmMark(op Opcode, marks []int, stack []Value, debug []SrcPos, pc int) ([]int, []Value, error) {
+	switch op {
+	case OpStackMark:
+		// Open a variadic region: remember the current depth so a 0-or-1 value
+		// produced above it can be truncated away later.
+		return append(marks, len(stack)), stack, nil
+	case OpDropToMark:
+		// Close a region on the path that DISCARDS the 0-or-1 eager: pop the mark
+		// and truncate the stack back to it.
+		if len(marks) == 0 {
+			return marks, stack, vmErrAt(debug, pc, "DROP_TO_MARK with no open mark")
+		}
+		m := marks[len(marks)-1]
+		marks = marks[:len(marks)-1]
+		if m > len(stack) {
+			return marks, stack, vmErrAt(debug, pc, "DROP_TO_MARK above current depth")
+		}
+		return marks, stack[:m], nil
+	default: // OpPopMark
+		// Close a region on the path that KEEPS the eager: discard the mark
+		// without touching the stack.
+		if len(marks) == 0 {
+			return marks, stack, vmErrAt(debug, pc, "POP_MARK with no open mark")
+		}
+		return marks[:len(marks)-1], stack, nil
+	}
+}
+
 // case, OpReverse takes n from arg. Used to seat an N-operand call's computed
 // args (which evaluate into reverse sig order) onto the stack in sig order.
 func vmShuffle(stack []Value, op Opcode, arg int, debug []SrcPos, pc int) ([]Value, error) {
