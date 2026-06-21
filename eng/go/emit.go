@@ -129,9 +129,10 @@ type emitCall struct {
 	ops      []emitOperand
 	nout     int // number of results the call pushes (0 for a side-effect word, N for multi-result)
 	pos      SrcPos
-	poly     bool // dispatch via OpCallNativePoly (runtime MatchSignature)
-	makeList bool // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	makeMap  bool // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	poly     bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg  *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
+	makeList bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	makeMap  bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys  []string
 	mapImpl  bool // the source map's Implicit flag
 	diverges bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
@@ -1885,7 +1886,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 // OpCallNativePoly, which re-matches the word's signatures at run time (plan
 // P3). Operands resolve normally (the dynamic one is a prior event's result);
 // returns false, leaving es untouched, when one is of unknown provenance.
-func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos) bool {
+func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry) bool {
 	if !es.active() || len(outs) != 1 {
 		return false
 	}
@@ -1898,7 +1899,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos)
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true, polyReg: ownerReg}})
 	es.setProduced(outs[0], seq)
 	return true
 }

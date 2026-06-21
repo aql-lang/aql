@@ -260,8 +260,14 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	if len(stack) < n {
 		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY underflow at "+pr.Word)
 	}
+	// A MODULE poly word (`StructUtil.getpath`) re-matches over its OWN
+	// sub-registry's signatures; a core word over the main registry.
+	lookupReg := r
+	if pr.Reg != nil {
+		lookupReg = pr.Reg
+	}
 	var sigs []Signature
-	if fn := r.Lookup(pr.Word); fn != nil {
+	if fn := lookupReg.Lookup(pr.Word); fn != nil {
 		sigs = fn.Signatures
 	}
 	// Build the args in sig order (position 0 = top of stack, as OpCallNative

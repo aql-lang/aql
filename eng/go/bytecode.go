@@ -241,6 +241,12 @@ func (o Opcode) String() string {
 type PolyRef struct {
 	Word  string
 	Arity int
+	// Reg is the sub-registry whose signatures the VM re-matches a MODULE poly
+	// word over (`StructUtil.getpath` — a sub-registry word). Nil means the main
+	// registry (the common case: a core builtin like get/size/is). The pointer
+	// is the same sub-registry the check pass created on the shared registry, so
+	// it stays valid for the compiled run (RunProgram runs on that registry).
+	Reg *Registry
 }
 
 // ClosureInShape tags HOW a higher-order word must present each per-invocation

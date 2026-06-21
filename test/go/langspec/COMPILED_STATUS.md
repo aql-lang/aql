@@ -9,12 +9,12 @@ Corpus: **2869** spec value rows (**2552** compilable, 317 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2538 |
+| compiled natively (fallback-free) | 2539 |
 | compiled with an interpreter island | 0 |
-| refused (whole-program fallback) | 14 |
+| refused (whole-program fallback) | 13 |
 | static check-error (invalid in both engines) | 317 |
 
-**2538 / 2552** compilable rows produce a Program (99% — 2538 of those fully native).
+**2539 / 2552** compilable rows produce a Program (99% — 2539 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,18 +22,18 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 14 | 14 | → 0 |
+| refusals (whole-program fallback) | 13 | 13 | → 0 |
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 2 | 2 | → 0 |
-| compute frontier | 12 | 86 | → 0 |
+| compute frontier | 11 | 86 | → 0 |
 
 ## Refusals by reason
 
 | count | bucket | root cause |
 | ---: | --- | --- |
-| 4 | dynamic input | soundness |
 | 4 | operand provenance | soundness |
+| 3 | dynamic input | soundness |
 | 3 | residual lowering (Stage 1 limit) | scheduling |
 | 1 | fn-value-call boundary | soundness |
 | 1 | function value reaches word (Stage 3) | soundness |
@@ -42,14 +42,14 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 10 |
+| soundness | 9 |
 | scheduling | 3 |
 | opcode | 0 |
 | coverage | 1 |
 
 ## Re-scoped P7 partition
 
-Over the 14 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **2** reducible (tier 2, TODO), **0** allowlisted error rows, **12** compute-frontier gaps.
+Over the 13 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **2** reducible (tier 2, TODO), **0** allowlisted error rows, **11** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -66,8 +66,8 @@ _None._
 
 | count | reason |
 | ---: | --- |
-| 4 | dynamic input |
 | 4 | operand provenance |
+| 3 | dynamic input |
 | 1 | fn-value-call boundary |
 | 1 | function value reaches word (Stage 3) |
 | 1 | other: fn m: branch leaves extra values (Stage 2 lowers single-result branches) |

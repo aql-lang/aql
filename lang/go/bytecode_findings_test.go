@@ -2376,3 +2376,63 @@ func TestConditionalBranchApplyCompiles(t *testing.T) {
 		}
 	}
 }
+
+// Stage D — sub-registry poly dispatch. A module word (StructUtil.getpath)
+// with a DYNAMIC input refused at "dynamic input at getpath" because
+// tryRecordPoly's CORE-dispatch guard required a main-registry builtin, and
+// getpath lives in the struct-util sub-registry. The recorder now threads the
+// owning sub-registry (via MatchResult.Reg) and records a PolyRef carrying it;
+// callPoly re-matches over that registry's signatures. getpath/setpath are pure
+// data transforms, value-faithful under runtime re-match.
+func TestSubRegistryPolyCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		// Dynamic input (the setpath result) into getpath — the poly row.
+		{`"aql:struct-util" import end  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[7]"},
+		// Static-input baseline still compiles (a plain baked CALL_NATIVE).
+		{`"aql:struct-util" import end  StructUtil.getpath $.a.b {a:{b:1}}`, "[1]"},
+		// A dynamic miss returns None — the re-match picks the same overload.
+		{`"aql:struct-util" import end  StructUtil.getpath $.a.z (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[None]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: the poly threading must not change a CORE dynamic dispatch — a
+	// core word (size) over a dynamic receiver (no sub-registry) still
+	// re-matches over the MAIN registry (PolyRef.Reg nil), compiled == interp.
+	for _, c := range []struct{ src, want string }{
+		{`size (if true ["ab"] ["cde"])`, "[2]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: core get: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}

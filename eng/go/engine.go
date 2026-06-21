@@ -2472,7 +2472,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			return nil
 		}
 
-		results := carrierResults(e.registry, name, match.Sig, match.Args, pos)
+		results := carrierResults(e.registry, name, match.Sig, match.Args, pos, match.Reg)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 
@@ -3974,7 +3974,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		if wrapperSig != nil {
 			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
 			if trivialDelegation && sig.Handler != nil {
-				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name}
+				// The inner native lives in fnDef.Registry (the module sub-
+				// registry). Carry it on the match so the recorder can re-match a
+				// dynamic-input dispatch via OpCallNativePoly over that registry
+				// (`StructUtil.getpath` over a computed receiver), instead of
+				// refusing — the VM's callPoly resolves the word there.
+				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name, Reg: fnDef.Registry}
 				if len(positions) > 0 {
 					match.Args = make([]Value, len(positions))
 					for i, pos := range positions {
@@ -6208,7 +6213,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	for i, p := range positions {
 		args[i] = e.tape.At(p)
 	}
-	results := carrierResults(e.registry, w.Name, synth, args, pos)
+	results := carrierResults(e.registry, w.Name, synth, args, pos, nil)
 	e.spliceCheckResults(positions, results)
 	return true, nil
 }
@@ -6324,7 +6329,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// fill the rest top-down (the deepest-last ascending run reversed).
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
-		if !tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true) {
+		if !tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil) {
 			e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		}
 		e.spliceCheckResults(positions, out)
@@ -6338,7 +6343,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Row:    pos.Row,
 		Col:    pos.Col,
 	})
-	results := carrierResults(e.registry, w.Name, sig, args, pos)
+	results := carrierResults(e.registry, w.Name, sig, args, pos, nil)
 	e.spliceCheckResults(positions, results)
 	return nil
 }
