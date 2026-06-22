@@ -23,6 +23,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/install"
 	"github.com/aql-lang/aql/cmd/go/internal/login"
 	"github.com/aql-lang/aql/cmd/go/internal/lsp"
+	"github.com/aql-lang/aql/cmd/go/internal/model"
 	"github.com/aql-lang/aql/cmd/go/internal/pack"
 	"github.com/aql-lang/aql/cmd/go/internal/policy"
 	"github.com/aql-lang/aql/cmd/go/internal/prep"
@@ -125,6 +126,8 @@ func buildRegistry() *command.Registry {
 	r.Register(help.New(provide))
 	r.Register(describe.New())
 	r.Register(aqlfmt.New())
+	// Commands: model generation.
+	r.Register(model.New())
 	// Commands: project lifecycle.
 	r.Register(prep.New())
 	r.Register(pack.New())
