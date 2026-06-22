@@ -1988,7 +1988,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 // P3). Operands resolve normally (the dynamic one is a prior event's result);
 // returns false, leaving es untouched, when one is of unknown provenance.
 func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry) bool {
-	if !es.active() || len(outs) != 1 {
+	if !es.active() || len(outs) > 1 {
 		return false
 	}
 	ops := make([]emitOperand, len(args))
@@ -2000,8 +2000,12 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: 1, pos: pos, poly: true, polyReg: ownerReg}})
-	es.setProduced(outs[0], seq)
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: len(outs), pos: pos, poly: true, polyReg: ownerReg}})
+	// A 0-output poly (a side-effect word like the test framework's
+	// `test-record`) produces no stack value to register.
+	if len(outs) == 1 {
+		es.setProduced(outs[0], seq)
+	}
 	return true
 }
 

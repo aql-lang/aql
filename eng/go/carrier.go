@@ -858,7 +858,10 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // operands) still applies.
 func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool) bool {
 	es := r.Check.Emit
-	if !es.active() || sig == nil || len(outs) != 1 {
+	// 0 outputs (a side-effect word like the test framework's `test-record`) or
+	// 1 output (the common get/size/is shape). A multi-result poly is beyond
+	// this path — the residual layout would need per-result seating.
+	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
 	// matchReg is the registry whose signatures the VM re-matches over: a module

@@ -6399,7 +6399,15 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		resume := es.Suspend()
 		results := carrierResults(e.registry, w.Name, sig, args, pos, nil)
 		resume()
-		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), results, pos, false, nil, true) {
+		// Re-match over the dispatching registry: a module sub-registry word
+		// (the test framework's `test-record`, run via CallAQL in the module's
+		// sub-registry) must re-match over THAT registry at run time, not the
+		// main one, or callPoly's Lookup misses it. e.registry is the same
+		// sub-registry pointer the compiled run reaches (it lives on the module
+		// export). For a core builtin e.registry is the main registry, so
+		// PolyRef.Reg then equals the VM's own registry — the no-op the
+		// get/add path already relied on.
+		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), results, pos, false, e.registry, true) {
 			e.spliceCheckResults(positions, results)
 			return nil
 		}

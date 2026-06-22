@@ -9,12 +9,12 @@ Corpus: **2884** spec value rows (**2565** compilable, 319 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2555 |
+| compiled natively (fallback-free) | 2556 |
 | compiled with an interpreter island | 0 |
-| refused (whole-program fallback) | 10 |
+| refused (whole-program fallback) | 9 |
 | static check-error (invalid in both engines) | 319 |
 
-**2555 / 2565** compilable rows produce a Program (99% — 2555 of those fully native).
+**2556 / 2565** compilable rows produce a Program (99% — 2556 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,32 +22,32 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 10 | 10 | → 0 |
+| refusals (whole-program fallback) | 9 | 9 | → 0 |
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 1 | 1 | → 0 |
-| compute frontier | 8 | 86 | → 0 |
+| compute frontier | 7 | 86 | → 0 |
 
 ## Refusals by reason
 
 | count | bucket | root cause |
 | ---: | --- | --- |
 | 5 | operand provenance | soundness |
-| 3 | dynamic input | soundness |
+| 2 | dynamic input | soundness |
 | 1 | code-body word (NoEvalArgs) | coverage |
 | 1 | residual lowering (Stage 1 limit) | scheduling |
 
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 8 |
+| soundness | 7 |
 | scheduling | 1 |
 | opcode | 0 |
 | coverage | 1 |
 
 ## Re-scoped P7 partition
 
-Over the 10 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **1** allowlisted error rows, **8** compute-frontier gaps.
+Over the 9 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **1** allowlisted error rows, **7** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -64,5 +64,5 @@ _None._
 | count | reason |
 | ---: | --- |
 | 5 | operand provenance |
-| 3 | dynamic input |
+| 2 | dynamic input |
 

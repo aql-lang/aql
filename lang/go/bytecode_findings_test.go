@@ -2363,6 +2363,36 @@ func TestDynamicOperandRecoveryPolyCompiles(t *testing.T) {
 	}
 }
 
+// A 0-output dynamic dispatch over an Any-typed operand. A side-effect / list
+// word whose check-mode result carries NO value (`drop` over a dynamic list)
+// reaches a pure builtin matchSignature cannot bind, so it is a poly candidate
+// with zero outputs. The recorder now admits a 0-result poly (len(outs) <= 1):
+// OpCallNativePoly pops the operands, the VM runs the re-matched handler, and
+// nothing is pushed — exactly as for the interpreter. This is the dispatch
+// shape behind the test framework's `test-record` (a 7-arg, 0-output side
+// effect); the lever lands `flex.tsv:138` here.
+func TestZeroOutputDynamicPolyCompiles(t *testing.T) {
+	const src = `def l [1 2] push 3 l drop l`
+	gotC, compiled, eC := mustNew(t).RunCompiled(src)
+	gotI, eI := mustNew(t).Run(src)
+	if eC != nil || eI != nil {
+		t.Fatalf("compiled err=%v interp err=%v", eC, eI)
+	}
+	if !compiled {
+		t.Errorf("expected a compiled run (0-output poly), fell back to interpreter")
+	}
+	if fmt.Sprint(gotC) != "[[1 2]]" || fmt.Sprint(gotI) != "[[1 2]]" {
+		t.Errorf("compiled=%v interp=%v want [[1 2]]", gotC, gotI)
+	}
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("expected native compile, refused: %s (cerr=%v)", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("expected no interpreter island:\n%s", prog.Disassemble())
+	}
+}
+
 // Stage B — conditional dynamic apply in a branch. `if (n eq 0) [99]
 // MathUtil.sqrt 16`: the else arm is the module-export fn value sqrt and the
 // trailing 16 applies ONLY when the branch produced the callable. Two parts:
