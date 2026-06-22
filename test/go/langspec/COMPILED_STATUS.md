@@ -32,15 +32,15 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | count | bucket | root cause |
 | ---: | --- | --- |
-| 4 | operand provenance | soundness |
+| 5 | operand provenance | soundness |
 | 3 | dynamic input | soundness |
-| 3 | residual lowering (Stage 1 limit) | scheduling |
+| 2 | residual lowering (Stage 1 limit) | scheduling |
 
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 7 |
-| scheduling | 3 |
+| soundness | 8 |
+| scheduling | 2 |
 | opcode | 0 |
 | coverage | 0 |
 
@@ -63,7 +63,6 @@ _None._
 
 | count | reason |
 | ---: | --- |
-| 4 | operand provenance |
+| 5 | operand provenance |
 | 3 | dynamic input |
-| 1 | residual lowering (Stage 1 limit) |
 

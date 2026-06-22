@@ -636,6 +636,18 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	if !ok || !constFoldAgrees(one, two) {
 		return false
 	}
+	// A `get` that resolves to None is a MISSING key — but a module's keyspace
+	// can GROW at runtime: minilang/parselang `register` installs new exports
+	// (`parse_<name>`) AFTER the check pass folded the program. Folding the
+	// missing-key get to None bakes a stale absence: the compiled program then
+	// pushes None + leaves the call's args on the stack instead of dispatching
+	// the registered word, diverging from the interpreter (which sees the
+	// registered key). Decline the fold so the get stays dynamic and the
+	// program falls back / islands faithfully. A PRESENT key (any non-None
+	// value) folds as before; this only blocks the absent-key case.
+	if word == "get" && IsNoneShape(one) {
+		return false
+	}
 	switch {
 	case isInertConst(one):
 		outs[0] = one // ride as an inert const
