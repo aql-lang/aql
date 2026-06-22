@@ -1,72 +1,75 @@
-# §6 follow-on — compiling the test framework: the run-spec blocker, root-caused
+# §6 follow-on — compiling the test framework: run-spec blocker investigation
 
-Status: investigation, on top of the landed §5 refactor
-(`module-fn-checkstate-ownership.1.md` §5a/§5b/§5c, commits `865a84d`,
-`2816e8f`). Records what §5 unblocked and the PRECISE root cause that still
-blocks `module-test.tsv:38` (`run-spec`) — found by hands-on tracing, and it is
-NOT what the first-pass guess (element typing) assumed.
+Status: investigation on top of the landed §5 refactor (commits `865a84d`,
+`2816e8f`) and a tangential §6 refinement (`aada2c1`, see below). Records what
+§5 unblocked and what — by hands-on tracing — actually blocks `module-test.tsv:38`
+(`run-spec`). Two earlier guesses (element typing; the `Quoted` flag) were tested
+and DISPROVEN; this note states the verified facts and the precise open target.
 
 ## What §5 already unblocked (measured)
 
-`test-describe`'s closure path (`tryRecordClosure` -> the `CallableSpec`
-`BodyOut:0` body unit) now compiles a broad range of bodies that previously
-refused — for-loop tails in a `BodyOut:0` closure, value-defs of computed
-values, computed-count `for (n) [...]`, AND the dynamic subject dispatch
-(`Test.invoke`). So the closure infra, value-def-locals, computed loops and
-dynamic dispatch are NOT blockers. `run-spec` falls back faithfully; its refusal
-reason moved from the §5b leak artifact to the genuine "code-body word
-test-describe".
+`test-describe`'s closure path now compiles for-loop tails in a `BodyOut:0`
+closure, value-defs of computed values, computed-count `for (n) [...]`, AND the
+dynamic subject dispatch (`Test.invoke`). The closure infra is not the blocker;
+`run-spec` falls back faithfully.
 
-## The root cause: `quote` of a computed operand matches the WRONG sig
+## What it is NOT (each tested, then reverted)
 
-`run-spec`'s body does `def cases quote (s get "cases")` (and `def subs quote
-(...)`, `def in quote (...)`). `quote` has two signatures:
+- **NOT element typing** (the original `.2` guess). `def cs (s get "cases")
+  def c (cs 0 get) c get "k"` — a generic-Map field read, then element read,
+  then field read — COMPILES. List/map element field-access already works.
+- **NOT the `/q` type-match phase.** `quote (s get "cases")` first refused with
+  "quoted-operand word quote": the `get`-on-a-generic-Map result is a
+  non-concrete carrier that optimistically conforms to `TAtom`, so quote's
+  word-capture sig (`[TAtom]`, QuoteArgs, tried first) claimed it. Commit
+  `aada2c1` guards `positionalMatch` so a `/q` position rejects a non-concrete
+  carrier (routing it to the value sig). That guard is CORRECT and gate-clean,
+  but **tangential**: it only changed the refusal *reason*, not the outcome —
+  corpus-neutral, does not unblock `run-spec`. Kept as a small refinement, not a
+  step on the critical path.
+- **NOT the `Quoted` flag.** Hypothesis: quote sets `Quoted=true`, breaking
+  downstream `get`-matching. Tested by skipping `Quoted` in check mode — the
+  chain STILL refused. Reverted.
 
-- sig 1 `[TAtom]` with `QuoteArgs[0]` — the `quote foo` word->Atom capture;
-- sig 2 `[TAny]` with `NoEvalArgs[0]`, `RunInCheckMode`, `ReturnsFn:
-  ReturnsIdentity(0)` — `quote (value)`, which PRESERVES the operand's type.
+## What it IS (verified)
 
-`(s get "cases")` is a `get` on a generic `Map` param, so it returns an **`Any`
-carrier**. An `Any` carrier optimistically conforms to `TAtom` (the
-dynamic-modality match-everything rule), so **sig 1 is tried first and matches**
-— its `QuoteArgs` operand is not an inert const (it's computed), so
-`hasUncoveredQuoteArg && !quoteInertOK` fires:
-`MarkUncompilable("quoted-operand word quote")`. Sig 2 — the correct
-value-identity sig that would have compiled and kept the type — is never reached.
+Instrumenting `quoteAnyHandler`'s input: `quote (s get "cases")` hands the
+handler a **`None` carrier** (`parent=None data=<nil> carrier=true`). So inside
+the `quote`, the inner `(s get "cases")` evaluates to **None** in check mode —
+whereas the SAME `(s get "cases")` standalone (the noquote control above) yields
+a matchable carrier the downstream `get`s accept. The downstream `cs 0 get` /
+`c get …` then run on a None-derived carrier, match no signature, and the
+recovery emits a `no_signature` ERROR (`@…`), which `CompileCheck` refuses on.
 
-Verified (Q_DEBUG at the refusal): `QuoteArgs=map[0:true]` sig matched an
-`Any[conc=false]` operand. And the discriminating control: WITHOUT the `quote`,
-the identical Any-carrier `get` chain (`def cs (s get "cases") def c (cs 0 get)
-c get "k"`) COMPILES — the `get`s match `List`/`Map` optimistically. So:
+So the quote changes the inner expression's check-mode RESULT (matchable carrier
+-> None). The remaining unknown is the exact mechanism: quote's forward-collection
+evaluates the paren `(s get "cases")` at a point/mode where the check-mode
+`get`-on-generic-Map returns None (missing-key result) instead of the
+dynamic/typed carrier it returns when evaluated inline. The forward-collection
+phase (`engine.go` ~`1205`/`2927`/`5856`, `resolveForwardArgs`) and `get`'s
+check-mode ReturnsFn for a generic-Map receiver are the two suspects.
 
-> The lever is `quote`'s sig-matching on an `Any` carrier — NOT element typing.
-> The `.1`/earlier `.2` "needs typed list elements" guess is wrong: element
-> field-access already compiles; `quote` is the only word whose first (QuoteArgs)
-> sig optimistically claims an Any operand and then refuses it.
+### Next target
 
-## Why the naive recovery fix regresses (verified, reverted)
+Pin why `(s get "cases")` yields None when forward-collected by `quote` but a
+matchable carrier inline, and make the two agree (the inline behaviour is the
+correct one — a generic-Map field read should yield a dynamic carrier, not
+None). That is the actual §6-unblocking step. Guard tightly and watch the corpus
+(refusalCeiling / any-frontier); /q forward-collection is language-wide.
 
-Extending the non-disjunct dispatch recovery to `tryRecordPoly` for non-concrete
-args (so a `get`-on-Any records `OpCallNativePoly`) pushes `refusalCeiling` 10 ->
-23 (0 divergences): the poly result is a dynamic `Any` carrier that POISONS
-downstream typed consumers corpus-wide. Do not broaden the recovery; the fix
-belongs at `quote`.
+## Do NOT broaden the dispatch recovery (verified regression)
 
-## The fix (focused) + remaining cascade
+A tempting shortcut — record `OpCallNativePoly` in the non-disjunct recovery for
+non-concrete args, so a `get`-on-None/Any compiles — pushes `refusalCeiling`
+10 -> 23 (0 divergences): the poly result is a dynamic Any carrier that POISONS
+downstream typed consumers corpus-wide. The fix belongs upstream (the None
+production), not in the recovery.
 
-1. **`quote`'s word-capture sig must not optimistically match a non-concrete
-   `Any`/dynamic carrier** — only a genuine `Atom`/word. Then a computed-value
-   operand falls to sig 2 (`ReturnsIdentity`, `RunInCheckMode`), which preserves
-   the type and compiles. This is a `matchSignature`/`QuoteArgs` precision change:
-   a `QuoteArgs` position is a LITERAL-word capture, so it should require the
-   operand to actually be a word/Atom, not ride the Any-conforms-to-everything
-   rule. Guard it tightly — it must not break `quote foo`, the `/q` keys of
-   `get`/`set`/`def`, or other `QuoteArgs` words; pair positive (`quote (expr)`
-   compiles, type preserved) with negative (`quote foo` still captures the Atom).
-2. (then) `test-record`'s 7-arg call with `[]` + `(c get "name")` operands, and
-   the recursive `run-spec` over `subs` (`for (subs size) [..run-spec..]`) —
-   re-attempt the reverted `evCallUser` value-def-local promotion (`.0` §7) here.
-3. Land on its own branch; gate: `module-test.tsv:38` ->
-   `{total:2 passed:2 failed:0}` compiled == interpreter, 0 divergences, and
-   `TestModuleFnCheckPathGate` staying green. Watch `refusalCeiling` /
-   any-frontier for unintended shifts (the §1 quote-match change is corpus-wide).
+## After this blocker
+
+The cascade continues: `test-record`'s 7-arg call with `[]` + `(c get "name")`
+operands, and the recursive `run-spec` over `subs` (`for (subs size)
+[..run-spec..]`) — re-attempt the reverted `evCallUser` value-def-local
+promotion (`.0` §7) there. Gate: `module-test.tsv:38` ->
+`{total:2 passed:2 failed:0}` compiled == interpreter, 0 divergences,
+`TestModuleFnCheckPathGate` green.
