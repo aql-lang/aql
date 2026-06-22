@@ -1,75 +1,80 @@
-# §6 follow-on — compiling the test framework: run-spec blocker investigation
+# §6 follow-on — the run-spec "None carrier", fully root-caused
 
-Status: investigation on top of the landed §5 refactor (commits `865a84d`,
-`2816e8f`) and a tangential §6 refinement (`aada2c1`, see below). Records what
-§5 unblocked and what — by hands-on tracing — actually blocks `module-test.tsv:38`
-(`run-spec`). Two earlier guesses (element typing; the `Quoted` flag) were tested
-and DISPROVEN; this note states the verified facts and the precise open target.
+Status: investigation on top of §5 (commits `865a84d`, `2816e8f`) and a
+tangential refinement (`aada2c1`). The None-carrier mechanism behind
+`module-test.tsv:38` (`run-spec`) is now PINNED to a precise check-mode
+forward-collection bug, with a reproduction matrix. The fix is located but not
+yet landed (it lives in the kernel's most drift-prone phase — see the close).
 
-## What §5 already unblocked (measured)
+## What §5 unblocked, and the surviving blocker
 
-`test-describe`'s closure path now compiles for-loop tails in a `BodyOut:0`
-closure, value-defs of computed values, computed-count `for (n) [...]`, AND the
-dynamic subject dispatch (`Test.invoke`). The closure infra is not the blocker;
-`run-spec` falls back faithfully.
+`test-describe`'s closure compiles for-loops, value-defs, computed-count loops,
+and the dynamic `Test.invoke` subject dispatch. The surviving blocker is one
+construct: `run-spec`'s `def cases quote (s get "cases")` — `quote` of a paren
+whose inner expression is the canonical field-access dispatch `s get cases`
+(stack receiver `s` + forward `/q` key). In check mode this yields a degenerate
+**None carrier**, and the downstream `cases _i get` / `c get …` then match no
+signature -> `no_signature` ERROR -> refuse.
 
-## What it is NOT (each tested, then reverted)
+## Reproduction matrix (check mode; QH = quote's value handler dispatched)
 
-- **NOT element typing** (the original `.2` guess). `def cs (s get "cases")
-  def c (cs 0 get) c get "k"` — a generic-Map field read, then element read,
-  then field read — COMPILES. List/map element field-access already works.
-- **NOT the `/q` type-match phase.** `quote (s get "cases")` first refused with
-  "quoted-operand word quote": the `get`-on-a-generic-Map result is a
-  non-concrete carrier that optimistically conforms to `TAtom`, so quote's
-  word-capture sig (`[TAtom]`, QuoteArgs, tried first) claimed it. Commit
-  `aada2c1` guards `positionalMatch` so a `/q` position rejects a non-concrete
-  carrier (routing it to the value sig). That guard is CORRECT and gate-clean,
-  but **tangential**: it only changed the refusal *reason*, not the outcome —
-  corpus-neutral, does not unblock `run-spec`. Kept as a small refinement, not a
-  step on the critical path.
-- **NOT the `Quoted` flag.** Hypothesis: quote sets `Quoted=true`, breaking
-  downstream `get`-matching. Tested by skipping `Quoted` in check mode — the
-  chain STILL refused. Reverted.
+| body operand of quote | quote dispatches? | note |
+|---|---|---|
+| `(s)` | yes | bare param |
+| `(1 add 2)` | yes | inner dispatch all-forward (`add`, BarrierPos -1) |
+| `(s dup)` | yes | inner dispatch has no forward `/q` arg |
+| `(get "a" s)` | yes | get in PURE-FORWARD form |
+| `(s get "a")` | **NO** | get in stack-receiver + forward-key form |
+| `(s.a)` | **NO** | same (dotchain lowers to `s get a`) |
+| `("a" s get)` | **NO** | stack form |
+| `((s get "a"))` | yes (then refuses) | double paren forces inner eval first |
 
-## What it IS (verified)
+At RUNTIME every row evaluates correctly (`quote (s get "cases")` returns the
+list). The divergence is **check-mode-only**.
 
-Instrumenting `quoteAnyHandler`'s input: `quote (s get "cases")` hands the
-handler a **`None` carrier** (`parent=None data=<nil> carrier=true`). So inside
-the `quote`, the inner `(s get "cases")` evaluates to **None** in check mode —
-whereas the SAME `(s get "cases")` standalone (the noquote control above) yields
-a matchable carrier the downstream `get`s accept. The downstream `cs 0 get` /
-`c get …` then run on a None-derived carrier, match no signature, and the
-recovery emits a `no_signature` ERROR (`@…`), which `CompileCheck` refuses on.
+## Two compounding problems, both in quote's forward-collection
 
-So the quote changes the inner expression's check-mode RESULT (matchable carrier
--> None). The remaining unknown is the exact mechanism: quote's forward-collection
-evaluates the paren `(s get "cases")` at a point/mode where the check-mode
-`get`-on-generic-Map returns None (missing-key result) instead of the
-dynamic/typed carrier it returns when evaluated inline. The forward-collection
-phase (`engine.go` ~`1205`/`2927`/`5856`, `resolveForwardArgs`) and `get`'s
-check-mode ReturnsFn for a generic-Map receiver are the two suspects.
+**(A) The paren result is not delivered to quote.** When the paren's inner
+dispatch has a STACK arg (get's receiver `s`) AND a forward `/q` arg (the key),
+the nested pending-forwards — quote parked outside the paren, `get` parked inside
+— interfere in the check-mode collection, so quote never dispatches and the
+residual is a None carrier. Inner dispatches that are all-forward (`1 add 2`,
+`get "a" s`) or have no parked forward (`s dup`), and the double-paren form
+(which fully evaluates the inner paren before quote collects), all deliver fine.
+This is the plan-time vs run-time collection drift that
+`design/FORWARD-COLLECTION-PHASES.10.md` warns about, surfacing under check mode.
 
-### Next target
+**(B) Even when delivered, quote commits to its `/q` sig.** With the double
+paren, quote DOES receive the value (an Integer carrier) — but emit then refuses
+"quoted-operand word quote": forward-collection has bound the Forward marker to
+quote's word-capture sig (`[TAtom]`, QuoteArgs, the first sig), so emit sees a
+QuoteArgs sig over a computed operand. **The `positionalMatch` /q guard
+(`aada2c1`) is BYPASSED here** — the sig committed during forward-collection,
+not `positionalMatch`'s type check, is what emit reads. (So `aada2c1` is inert
+for this case; it remains a correct, gate-clean refinement but is not on the
+critical path — its commit message overstated its role.)
 
-Pin why `(s get "cases")` yields None when forward-collected by `quote` but a
-matchable carrier inline, and make the two agree (the inline behaviour is the
-correct one — a generic-Map field read should yield a dynamic carrier, not
-None). That is the actual §6-unblocking step. Guard tightly and watch the corpus
-(refusalCeiling / any-frontier); /q forward-collection is language-wide.
+## The fix (located, not yet landed)
+
+A PAREN operand of a `/q` (QuoteArgs) native is a computed value, not a literal
+word. The forward-collection of quote's paren operand must (A) let the inner
+paren fully evaluate and deliver its result to quote even when the inner dispatch
+parks a forward (parity with the double-paren and with runtime), and (B) bind the
+Forward marker to quote's VALUE sig (`[TAny]`, ReturnsIdentity), not the `/q`
+word-capture sig, for a non-word operand. Both live in the check-mode
+forward-collection path (`resolveForwardArgs` / the run-time collection loop in
+`stepLiteral`; `capturesForward` at `engine.go:1199` gates `/q` handling on
+`QuoteArgs` regardless of operand shape).
+
+This is the kernel's most drift-prone area (two coordinated phases that
+`FORWARD-COLLECTION-PHASES.10.md` documents as easy to desync), and a prior
+type-match-phase fix (`aada2c1`) was silently bypassed by the collection phase.
+It must be done with the phase doc in hand and gated hard (0 divergences, the
+fuzzer, the full corpus) — not rushed. After it, the cascade continues
+(`test-record`'s 7-arg call + recursive `run-spec` over `subs`).
 
 ## Do NOT broaden the dispatch recovery (verified regression)
 
-A tempting shortcut — record `OpCallNativePoly` in the non-disjunct recovery for
-non-concrete args, so a `get`-on-None/Any compiles — pushes `refusalCeiling`
-10 -> 23 (0 divergences): the poly result is a dynamic Any carrier that POISONS
-downstream typed consumers corpus-wide. The fix belongs upstream (the None
-production), not in the recovery.
-
-## After this blocker
-
-The cascade continues: `test-record`'s 7-arg call with `[]` + `(c get "name")`
-operands, and the recursive `run-spec` over `subs` (`for (subs size)
-[..run-spec..]`) — re-attempt the reverted `evCallUser` value-def-local
-promotion (`.0` §7) there. Gate: `module-test.tsv:38` ->
-`{total:2 passed:2 failed:0}` compiled == interpreter, 0 divergences,
-`TestModuleFnCheckPathGate` green.
+Recording `OpCallNativePoly` in the non-disjunct recovery for non-concrete args
+pushes `refusalCeiling` 10 -> 23 (the dynamic-Any poison spreads corpus-wide).
+The fix is upstream (deliver the real paren value to quote), not in the recovery.
