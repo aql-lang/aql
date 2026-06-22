@@ -150,7 +150,7 @@ func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 // implementation. This bridges the AQL file abstraction to multisource's
 // path resolution so that @"path" references in .jsonic files work.
 func MakeFileOpsResolver(ops capabilities.FileOps) multisource.Resolver {
-	return func(spec multisource.PathSpec, opts *multisource.MultiSourceOptions) multisource.Resolution {
+	return func(spec multisource.PathSpec, opts *multisource.MultiSourceOptions, _ *jsonic.Context) multisource.Resolution {
 		res := multisource.Resolution{
 			PathSpec: spec,
 		}

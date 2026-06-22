@@ -39,6 +39,7 @@ var moduleCatalog = []ModuleInfo{
 	{"parselang", "Named parsers behind the `parse` word: register a parser, parse a source into an AST."},
 	{"emitlang", "Emit data structures to strings behind the `emit` word: json, jsonic, csv, tsv, yaml, xml, toml, ini."},
 	{"parse", "Define custom parsers: ABNF grammars, declarative rules, lex matchers, and custom-type actions, registered as `parse` kinds."},
+	{"model", "Build a system model from .jsonic source (via aontu unification) and run generator actions over it: new, run, start, stop, model."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The

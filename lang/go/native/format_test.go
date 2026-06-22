@@ -542,7 +542,7 @@ func TestMakeFileOpsResolverFindsFile(t *testing.T) {
 		Full: "data.jsonic",
 		Kind: "jsonic",
 	}
-	res := resolver(spec, nil)
+	res := resolver(spec, nil, nil)
 	if !res.Found {
 		t.Fatal("expected resolver to find data.jsonic")
 	}
@@ -558,7 +558,7 @@ func TestMakeFileOpsResolverNotFound(t *testing.T) {
 		Full: "missing.jsonic",
 		Kind: "jsonic",
 	}
-	res := resolver(spec, nil)
+	res := resolver(spec, nil, nil)
 	if res.Found {
 		t.Fatal("expected resolver to NOT find missing.jsonic")
 	}
@@ -576,7 +576,7 @@ func TestMakeFileOpsResolverImplicitExt(t *testing.T) {
 	opts := &multisource.MultiSourceOptions{
 		ImplicitExt: []string{"jsonic", "json"},
 	}
-	res := resolver(spec, opts)
+	res := resolver(spec, opts, nil)
 	if !res.Found {
 		t.Fatal("expected resolver to find config via implicit .jsonic ext")
 	}
