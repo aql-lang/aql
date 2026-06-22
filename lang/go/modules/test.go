@@ -514,7 +514,17 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 					native.TString, native.TList, native.TBoolean,
 					native.TAny, native.TAny, native.TAny, native.TInteger,
 				},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					// Side-effect suppression (design/module-fn-checkstate-ownership.1.md
+					// §5c): test-record accumulates pass/fail outcomes into the run. Once
+					// a module-fn body (run-case) runs IN CHECK MODE under the parent pass
+					// (§5b), this handler fires during the compile/check pass — it must NOT
+					// mutate observable state, or the compiled path leaks pass/fail counts
+					// (the module-test:38 {passed:1 failed:1} vs {passed:2 failed:0}
+					// divergence). Skip the write when the pass suppresses side effects.
+					if r != nil && r.Check.SkipsSideEffect() {
+						return nil, nil
+					}
 					name, _ := args[0].AsConcreteString()
 					pathList, _ := native.AsList(args[1])
 					ok, _ := args[2].AsConcreteBoolean()
