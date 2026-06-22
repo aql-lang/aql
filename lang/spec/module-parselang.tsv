@@ -23,7 +23,7 @@
 "aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (ParseLang.parse_calc 'x + y' {} end) get 1	'+'	parse is pure sugar — the desugared standard call is equivalent
 #
 # §3  register / kinds / source — out-of-band exports
-"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ParseLang.kinds	[ini/q json/q jsonic/q json5/q jsonc/q csv/q toml/q yaml/q xml/q zon/q markdown/q feed/q calc/q]	the registered parser-kind atoms (the tabnas family ships built-in, calc is registered here)
+"aql:parselang" import end  "aql:string-util" import end  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ParseLang.kinds	[ini/q json/q jsonic/q json5/q jsonc/q csv/q toml/q yaml/q xml/q zon/q markdown/q feed/q aontu/q calc/q]	the registered parser-kind atoms (the tabnas family + aontu ship built-in, calc is registered here)
 "aql:parselang" import end  ParseLang.source 'x + y'	'x + y'	the source resolver passes a String through
 "aql:parselang" import end  ParseLang.source {src:'a b'}	'a b'	the source resolver unwraps {src:…}
 #
@@ -75,3 +75,26 @@ ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 # §8  syntax-error negatives — a malformed source raises parse_syntax_error
 "aql:parselang" import end  parse json '{not valid'	ERROR:parse_syntax_error	malformed JSON is a loud parse error
 "aql:parselang" import end  parse toml '= = ='	ERROR:parse_syntax_error	malformed TOML is a loud parse error
+#
+# §9  aontu — the built-in aontu parser (github.com/rjrodger/aontu), a
+#     CUE-inspired unification config dialect with no Go port, so it ships as
+#     a hand-written parser rather than via the tabnas family. It resolves the
+#     source to a Node of Maps and Lists: top-level `k:v` entries and the
+#     colon-chain `a:b:c:1` build maps, `[…]` builds lists, duplicate keys and
+#     `&` deep-merge, bare kind words (string/number/integer/…) constrain
+#     scalars, and `$`/`.` references resolve from the root / enclosing scope.
+"aql:parselang" import end  (parse aontu 'a:1 b:2') get 'b'	2	top-level key/value entries build a Map
+"aql:parselang" import end  (((parse aontu 'a:b:c:1') get 'a') get 'b') get 'c'	1	the colon-chain a:b:c:1 nests Maps
+"aql:parselang" import end  ((parse aontu 'a:[10,20,30]') get 'a') get 1	20	a [list] builds a List; elements may be comma- or space-separated
+"aql:parselang" import end  ((parse aontu 'a:{b:1} a:{c:2}') get 'a') get 'c'	2	duplicate keys deep-merge their Maps (unification)
+"aql:parselang" import end  (parse aontu 'a:number a:5') get 'a'	5	a kind word unifies with a matching scalar to yield the scalar
+"aql:parselang" import end  (parse aontu 'a:1 b:$.a') get 'b'	1	an absolute $ reference resolves from the document root
+"aql:parselang" import end  (parse aontu 'a:[10,20,30] b:$.a.1') get 'b'	20	a reference indexes into a list
+"aql:parselang" import end  (ParseLang.parse_aontu 'a:1' {} end) get 'a'	1	parse is pure sugar — the desugared standard call is equivalent
+#
+# §9  aontu negatives — conflicts, unresolved refs and incomplete kinds are loud
+"aql:parselang" import end  parse aontu 'a:1 & a:2'	ERROR:parse_syntax_error	unifying two different scalars is a conflict
+"aql:parselang" import end  parse aontu 'a:number a:"x"'	ERROR:parse_syntax_error	a kind mismatch is a conflict
+"aql:parselang" import end  parse aontu 'b:$.nope'	ERROR:parse_syntax_error	an unresolvable reference is a loud error
+"aql:parselang" import end  parse aontu 'a:number'	ERROR:parse_syntax_error	a kind with no concrete value is incomplete
+"aql:parselang" import end  parse aontu 'a:{b:1'	ERROR:parse_syntax_error	a missing close brace is a loud error
