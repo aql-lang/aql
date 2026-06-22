@@ -335,7 +335,7 @@ func checkWritableFormat(r *Registry, format string, fmtExplicit bool) error {
 	if !ok {
 		return nil // unknown format is doWrite's concern; nothing read-only to reject
 	}
-	if _, err := f.Encode(NewTypeLiteral(TNone)); IsReadOnlyFormatErr(err) {
+	if ro, ok := f.(ReadOnlyFormat); ok && ro.ReadOnly() {
 		return r.AqlErrorHint("write_error",
 			fmt.Sprintf("write: format %q is read-only", format), "write",
 			"write supports text/json/jsonic/lines/csv/tsv")

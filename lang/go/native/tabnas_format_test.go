@@ -228,6 +228,46 @@ func TestEngineWriteReadOnlyFormat(t *testing.T) {
 	}
 }
 
+// panicEncodeFormat is a read-only Format whose Encode panics. write must
+// reject an explicit {fmt:…} that resolves to it via the ReadOnly marker —
+// WITHOUT ever executing Encode (PR #169 review: validation must not run
+// arbitrary host encoders).
+type panicEncodeFormat struct{}
+
+func (panicEncodeFormat) Decode(string) ([]Value, error) { return nil, nil }
+func (panicEncodeFormat) Encode(Value) (string, error) {
+	panic("Encode must not be called during write validation")
+}
+func (panicEncodeFormat) ReadOnly() bool { return true }
+
+// TestWriteReadOnlyDoesNotInvokeEncode: an explicit read-only {fmt:…} is
+// rejected via the marker, and the format's Encode is never executed (no
+// panic), nor is the file written.
+func TestWriteReadOnlyDoesNotInvokeEncode(t *testing.T) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			t.Fatalf("write validation invoked Encode (panic: %v)", rec)
+		}
+	}()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerIOWords(r)
+	mem := capabilities.NewMem()
+	SetHostFileOps(r, mem)
+	HostFormats(r)["spy"] = panicEncodeFormat{}
+	opts := NewOrderedMap()
+	opts.Set("fmt", NewString("spy"))
+	err = runAQLError(t, r, []Value{NewWord("write"), NewString("out.spy"), NewString("x"), NewMap(opts)})
+	if err == nil || !strings.Contains(err.Error(), "read-only") {
+		t.Errorf("write {fmt:spy} err = %v, want read-only", err)
+	}
+	if _, wrote := mem.Files["out.spy"]; wrote {
+		t.Error("read-only write should not have created the file")
+	}
+}
+
 // TestFormatFromExtHostOverride: the extension map is host-overridable in
 // place, and many-to-one defaults resolve.
 func TestFormatFromExtHostOverride(t *testing.T) {

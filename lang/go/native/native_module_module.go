@@ -38,6 +38,33 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 			return ModuleDesc{}, err
 		}
 	}
+	// Overlay the parent's host-registered formats and extension mappings
+	// onto the child's own defaults so a module body's reads resolve custom
+	// host formats — and host overrides of the built-ins — exactly as the
+	// parent does. Without this, IO.read on a host-registered extension works
+	// at top level but silently decodes as text during import. Overlaying
+	// (rather than replacing the map) preserves the child's defaults when the
+	// parent merely added entries.
+	if pf := HostFormats(parent); pf != nil {
+		cf := HostFormats(modReg)
+		if cf == nil {
+			cf = map[string]Format{}
+			SetHostFormats(modReg, cf)
+		}
+		for n, f := range pf {
+			cf[n] = f
+		}
+	}
+	if pe := HostExtensions(parent); pe != nil {
+		ce := HostExtensions(modReg)
+		if ce == nil {
+			ce = DefaultExtensions()
+			SetHostExtensions(modReg, ce)
+		}
+		for ext, n := range pe {
+			ce[ext] = n
+		}
+	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.BaseFile = parent.BaseFile

@@ -217,14 +217,23 @@ func RegisterHostParser(reg *native.Registry, spec ParseLangSpec) error {
 // decodes via the format's Decode (a DecodeOpter format additionally honours
 // `parse <name> <opts> <src>`).
 func RegisterFormatParser(reg *native.Registry, name string, f native.Format, exts ...string) error {
-	if err := native.RegisterFormat(reg, name, f, exts...); err != nil {
-		return err
+	// Register the parse side FIRST: RegisterHostParser performs all the
+	// fallible validation (name shape, built-in/duplicate collision) and the
+	// parse-side install, so a rejected parser leaves `read`'s registries
+	// untouched — the bridge is atomic. We pre-check the read-side
+	// precondition (the formats capability) up front so the subsequent
+	// native.RegisterFormat cannot fail after the parser is installed.
+	if native.HostFormats(reg) == nil {
+		return fmt.Errorf("register format parser %q: formats capability not installed", name)
 	}
-	return RegisterHostParser(reg, ParseLangSpec{
+	if err := RegisterHostParser(reg, ParseLangSpec{
 		Name:    name,
 		Returns: []*native.Type{native.TAny},
 		Handler: formatParseHandler(name, f),
-	})
+	}); err != nil {
+		return err
+	}
+	return native.RegisterFormat(reg, name, f, exts...)
 }
 
 // formatParseHandler adapts a read Format into a parse handler: it decodes

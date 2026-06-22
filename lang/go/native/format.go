@@ -32,6 +32,15 @@ type DecodeOpter interface {
 	DecodeOpts(content string, opts map[string]any) ([]Value, error)
 }
 
+// ReadOnlyFormat marks a Format whose Encode is unsupported — parser-backed
+// formats are decode-only. write consults this marker (NOT by executing
+// Encode, which could run arbitrary host-side work) to reject an explicit
+// read-only {fmt:…}. TabnasFormat implements it; a host's own decode-only
+// format can too.
+type ReadOnlyFormat interface {
+	ReadOnly() bool
+}
+
 // errReadOnlyFormat is the sentinel wrapped by parser-backed formats whose
 // Encode is not supported. IsReadOnlyFormatErr detects it so write can
 // surface a clean message.
@@ -66,6 +75,10 @@ func (f *TabnasFormat) DecodeOpts(content string, opts map[string]any) ([]Value,
 func (f *TabnasFormat) Encode(Value) (string, error) {
 	return "", fmt.Errorf("format %q is %w", f.Kind.Name, errReadOnlyFormat)
 }
+
+// ReadOnly reports that the tabnas family is decode-only, letting write
+// reject an explicit {fmt:…} without invoking Encode (see ReadOnlyFormat).
+func (f *TabnasFormat) ReadOnly() bool { return true }
 
 // TextFormat handles plain text (no parsing).
 type TextFormat struct{}
