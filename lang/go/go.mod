@@ -8,7 +8,7 @@ require (
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/itchyny/gojq v0.12.19
 	github.com/ohler55/ojg v1.28.1
-	github.com/rjrodger/aontu/go v0.1.4-0.20260622151248-c74b91f166cb
+	github.com/rjrodger/aontu/go v0.1.4
 	github.com/tabnas/abnf/go v0.2.0
 	github.com/tabnas/csv/go v0.2.0
 	github.com/tabnas/expr/go v0.2.0
@@ -19,7 +19,7 @@ require (
 	github.com/tabnas/jsonc/go v0.2.0
 	github.com/tabnas/jsonic/go v0.2.0
 	github.com/tabnas/markdown/go v0.2.0
-	github.com/tabnas/multisource/go v0.3.0
+	github.com/tabnas/multisource/go v0.3.1
 	github.com/tabnas/parser/go v0.2.0
 	github.com/tabnas/toml/go v0.2.0
 	github.com/tabnas/xml/go v0.2.0

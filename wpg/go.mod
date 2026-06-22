@@ -16,7 +16,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/ohler55/ojg v1.28.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/rjrodger/aontu/go v0.1.4-0.20260622151248-c74b91f166cb // indirect
+	github.com/rjrodger/aontu/go v0.1.4 // indirect
 	github.com/tabnas/abnf/go v0.2.0 // indirect
 	github.com/tabnas/csv/go v0.2.0 // indirect
 	github.com/tabnas/directive/go v0.2.0 // indirect
@@ -29,7 +29,7 @@ require (
 	github.com/tabnas/jsonc/go v0.2.0 // indirect
 	github.com/tabnas/jsonic/go v0.2.0 // indirect
 	github.com/tabnas/markdown/go v0.2.0 // indirect
-	github.com/tabnas/multisource/go v0.3.0 // indirect
+	github.com/tabnas/multisource/go v0.3.1 // indirect
 	github.com/tabnas/parser/go v0.2.0 // indirect
 	github.com/tabnas/path/go v0.2.0 // indirect
 	github.com/tabnas/toml/go v0.2.0 // indirect
