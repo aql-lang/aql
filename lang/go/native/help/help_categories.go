@@ -66,7 +66,7 @@ var categories = []Category{
 	}},
 	{"macro", "Quotation, splicing, and macros.", []string{
 		"quote", "unquote", "splice", "word", "macro", "macroexpand", "gensym",
-		"canon", "mini", "parse",
+		"canon", "mini", "parse", "emit",
 	}},
 	{"type", "Types: introspection and construction.", []string{
 		"convert", "typeof", "inspect", "make", "refine", "class", "surface",
