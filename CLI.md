@@ -19,6 +19,7 @@ supports.
   * [`aql help`](#aql-help)
   * [`aql describe`](#aql-describe)
   * [`aql fmt`](#aql-fmt)
+  * [`aql model`](#aql-model)
 * [Project lifecycle](#project-lifecycle)
   * [`aql prep`](#aql-prep)
   * [`aql pack`](#aql-pack)
@@ -326,6 +327,31 @@ aql fmt script.aql              # rewrite this file in place
 aql fmt lib/*.aql               # rewrite several files in place
 aql fmt                         # rewrite every .aql file under the cwd
 ```
+
+### `aql model`
+
+Build a [voxgig](https://github.com/voxgig/model) model: unify a
+`.jsonic` model (CUE-style unification, via
+[aontu](https://github.com/rjrodger/aontu)) into a single JSON model and
+write it to `<base>/<name>.json`. It is the command-line twin of the
+`aql:model` language module and mirrors the `@voxgig/model` CLI. Generator
+*actions* are Go callbacks that cannot be loaded from the command line, so
+this command performs the core job — resolving the model and writing the
+JSON — with an optional watch loop.
+
+```bash
+aql model model/model.jsonic            # build -> model/model.json
+aql model --print model.jsonic          # print the unified JSON to stdout (no file written)
+aql model --dryrun model.jsonic         # resolve only; write nothing
+aql model --base build model.jsonic     # output + @"..." imports resolve from ./build
+aql model --watch model.jsonic          # rebuild on change until Ctrl-C
+```
+
+Flags: `--base` (import / output directory; default the model file's
+directory), `--watch`, `--dryrun`, `--print`, and `--config` (resolve a
+`.model-config` build — off by default). A unification conflict, an
+unresolvable reference, or a missing source file exits non-zero with the
+error on stderr.
 
 
 ## Project lifecycle

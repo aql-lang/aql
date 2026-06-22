@@ -1,12 +1,12 @@
-# aql:model vs. voxgig/struct test model — upstream aontu nested-import defect
+# aql:model vs. voxgig/struct test model — aontu nested-import defect (RESOLVED)
 
-Status: **Validation finding, June 2026.** Documents an upstream
-`github.com/rjrodger/aontu` (Go) defect that blocks `aql:model` from
-reproducing the canonical `voxgig/struct` test model. No AQL-side fix is
-possible; the defect is in the vendored aontu engine and is a parity gap
-with the canonical TypeScript implementation. Tracked here (not as an ADR)
-per the design-note convention; file upstream at
-https://github.com/rjrodger/aontu when in scope.
+Status: **Resolved, June 2026.** A `github.com/rjrodger/aontu` (Go) defect
+once blocked `aql:model` from reproducing the canonical `voxgig/struct`
+test model. Upstream aontu fixed it (tagged `v0.1.4`, with
+`github.com/tabnas/multisource` v0.3.1); after bumping the dependency,
+`aql:model` builds the model and its content matches the committed
+reference exactly (semantically / canonically). The history below is kept
+as a record of the validation. Tracked as a design note (not an ADR).
 
 ## What was validated
 
@@ -19,20 +19,40 @@ The goal was to confirm `aql:model` (which wraps the Go
 `github.com/voxgig/model` → Go aontu) can build that model and match the
 reference exactly.
 
-## Result
+## Result (after the upstream fix)
 
-`aql:model` **runs the build successfully** (`Model.run` → `ok:true`),
-exercising the full pipeline — file-path source through the `aql:io`
-FileOps capability, aontu resolution with `@"file"` imports / `&`
-defaults / `key()`, and the JSON write — but the output is **705 bytes,
-not ~390 KB**: the entire `@`-imported `struct` tree is missing; only the
-inline `primary:` tree survives. So the build does not match the
-reference.
+`aql:model` builds the model (`Model.run` → `ok:true`) and the output is
+**390,826 bytes** whose content is **canonically identical** to the
+390,606-byte reference: parsing both and re-serialising with sorted keys
+and normalised separators yields byte-for-byte equal strings. So the
+**model content matches exactly**.
 
-## Root cause (upstream Go aontu v0.1.4)
+The two files are not byte-identical *as written*, for serialisation
+reasons only — not data:
+
+1. **Key order.** voxgig/model's Go writer marshals `map[string]any` with
+   alphabetically sorted keys (`encoding/json`); the reference is in
+   TypeScript insertion order. (voxgig/model's README documents this as a
+   known, accepted cross-language difference.)
+2. **HTML escaping.** Go's `encoding/json` escapes `<`, `>`, `&` to
+   `<` / `>` / `&` by default, which the TS encoder emits
+   raw — accounting for the small size delta. Parsing normalises these
+   away, so the data is unchanged.
+
+A semantic (parse-then-compare) check is therefore the correct validation,
+and it passes.
+
+### Before the fix (historical)
+
+With aontu `v0.1.4-0.20260622151248-c74b91f166cb` (the earlier pseudo-
+version), the same build produced **705 bytes**: the entire `@`-imported
+`struct` tree was missing and only the inline `primary:` tree survived,
+because of the nested-import defect described below.
+
+## Root cause (the pre-fix Go aontu pseudo-version)
 
 A **colon-chain (nested-path) key whose value is a bare `@"file"` import**
-silently resolves to `{}` instead of loading the file. With `minor.jsonic`
+silently resolved to `{}` instead of loading the file. With `minor.jsonic`
 present in the base dir:
 
 ```
@@ -57,25 +77,22 @@ The defect reproduces identically at three layers, so it is **not** in the
 | voxgig `model.New(...).Run()` | no (223 B model) |
 | `aontu.NewWithBase(...).Generate(...)` | no (223 B) |
 
-The canonical TypeScript aontu (which generated the reference) resolves
-the nested-path import form correctly.
+The canonical TypeScript aontu (which generated the reference) resolved
+the nested-path import form correctly, which is why the reference was full
+while the Go build was truncated.
 
-## Secondary mismatch (key ordering)
-
-Independent of the import bug: the reference `test.json` is in **insertion
-order** (`id, doc, in, out`, i.e. TypeScript-generated), whereas
-voxgig/model's Go writer marshals `map[string]any` with **alphabetically
-sorted** keys (`encoding/json`). voxgig/model's own README documents this
-as a known, accepted cross-language difference. So even with the import
-bug fixed, a byte-exact match against a TS-produced reference would not
-hold — a semantic (order-independent) comparison is the meaningful check.
+**Fix:** upstream aontu corrected the nested-path import resolution
+(tagged `v0.1.4`). Bumping `github.com/rjrodger/aontu/go` to it (and the
+transitive `github.com/tabnas/multisource/go` to v0.3.1) makes the Go
+build resolve the `struct` tree in full.
 
 ## Consequences for aql:model
 
-- The `aql:model` module itself is sound: it drove a real multi-file model
-  build end-to-end on disk and on an in-memory FS (see
-  `lang/go/test/model_test.go`).
-- It cannot reproduce the `voxgig/struct` test model until the upstream
-  aontu nested-import defect is fixed. When validating model output
-  against a TS-built reference, compare **semantically** rather than
-  byte-for-byte.
+- The `aql:model` module is sound: it drives a real multi-file model build
+  end-to-end on disk and on an in-memory FS (see
+  `lang/go/test/model_test.go`), and now reproduces the `voxgig/struct`
+  test model's content exactly.
+- When validating model output against a reference produced by the
+  TypeScript implementation, compare **semantically** (parse then compare),
+  not byte-for-byte: the Go writer's sorted keys and HTML escaping are
+  serialisation-only differences.

@@ -74,16 +74,25 @@ func registerModelType() *native.Type {
 var inlineSeq atomic.Int64
 
 // modelHandle is the Go state behind a Model value: the assembled Build and
-// Watch, the registry actions call back into, action errors collected during
-// a build (CallAQL errors cannot flow through the model.Action signature, so
-// they are stashed here and merged into the result), and a mutex serialising
-// action callbacks (watch rebuilds run on a background goroutine).
+// Watch, the registry actions call back into (actionReg), action errors
+// collected during a build (CallAQL errors cannot flow through the
+// model.Action signature, so they are stashed here and merged into the
+// result), and a mutex serialising action callbacks.
+//
+// actionReg is the registry an action's CallAQL runs on. For Model.run it is
+// the live foreground registry (the build runs synchronously on the calling
+// goroutine, so that is race-free). For Model.start it is a ForkConcurrent of
+// the registry, taken on the foreground goroutine before the watch begins, so
+// the watch goroutine's rebuilds run their AQL actions on an isolated registry
+// that can never race the main interpreter — the same pattern timeout /
+// interval / await use (see eng/go/fork.go).
 type modelHandle struct {
-	build   *model.Build
-	watch   *model.Watch
-	reg     *native.Registry
-	mu      sync.Mutex
-	actErrs []error
+	build     *model.Build
+	watch     *model.Watch
+	reg       *native.Registry
+	actionReg *native.Registry
+	mu        sync.Mutex
+	actErrs   []error
 }
 
 // BuildModelModule creates the "aql:model" native module.
@@ -184,7 +193,7 @@ func modelNewHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		return nil, r.AqlError("model_bad_spec", "new: spec must be a Map", "new")
 	}
 
-	h := &modelHandle{reg: r}
+	h := &modelHandle{reg: r, actionReg: r}
 	ps, err := parseSpec(specMap, h, r)
 	if err != nil {
 		return nil, err
@@ -301,7 +310,7 @@ func buildActions(specMap native.ReadMap, h *modelHandle, r *native.Registry) (m
 		if err != nil {
 			return nil, err
 		}
-		out[name] = makeAction(h, r, fnVal, step)
+		out[name] = makeAction(h, fnVal, step)
 	}
 	return out, nil
 }
@@ -349,12 +358,13 @@ func parseStep(s string) model.Step {
 }
 
 // makeAction wraps an AQL Function as a model.Action. The callback hands the
-// unified model (as an AQL Map) to the function via r.CallAQL and reads its
-// result: a Boolean is the OK flag; a Map supplies {ok, reload}; anything
-// else (including no result) is treated as OK. A CallAQL error is stashed on
-// the handle (the model.Action signature has no error return) and surfaces in
-// the build result.
-func makeAction(h *modelHandle, r *native.Registry, fnVal native.Value, step model.Step) model.ActionDef {
+// unified model (as an AQL Map) to the function via CallAQL on h.actionReg —
+// the foreground registry for Model.run, an isolated fork for Model.start — and
+// reads its result: a Boolean is the OK flag; a Map supplies {ok, reload};
+// anything else (including no result) is treated as OK. A CallAQL error is
+// stashed on the handle (the model.Action signature has no error return) and
+// surfaces in the build result.
+func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.ActionDef {
 	var caps []native.CapturedBinding
 	if fd, ok := fnVal.Data.(native.FnDefInfo); ok {
 		caps = fd.Captured
@@ -371,7 +381,7 @@ func makeAction(h *modelHandle, r *native.Registry, fnVal native.Value, step mod
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: no matching signature (declare one param for the model Map)"))
 				return model.ActionResult{OK: false}
 			}
-			res, err := r.CallAQL(sig, []native.Value{modelVal}, caps)
+			res, err := h.actionReg.CallAQL(sig, []native.Value{modelVal}, caps)
 			if err != nil {
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: %w", err))
 				return model.ActionResult{OK: false}
@@ -415,7 +425,13 @@ func modelRunHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	if !ok {
 		return nil, r.AqlError("model_bad_handle", "run: not a Model", "run")
 	}
+	// Model.run is synchronous on this (foreground) goroutine, so actions can
+	// call back into the live registry directly — re-entrant, single-threaded,
+	// race-free (the same way each / fold / filter invoke their callbacks).
+	h.mu.Lock()
 	h.actErrs = nil
+	h.actionReg = r
+	h.mu.Unlock()
 	br := h.watch.Run(false)
 	return []native.Value{buildResultValue(br, h)}, nil
 }
@@ -425,7 +441,19 @@ func modelStartHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if !ok {
 		return nil, r.AqlError("model_bad_handle", "start: not a Model", "start")
 	}
+	// Watch rebuilds run on a background goroutine, so their AQL actions must
+	// NOT touch the foreground registry. Fork an isolated registry HERE, on the
+	// foreground goroutine (ForkConcurrent's contract: fork while the parent is
+	// not concurrently mutating), and route action callbacks to it. Outputs are
+	// SyncWriter-wrapped so concurrent prints don't interleave with the main
+	// program's. Mirrors timeout / interval (eng/go/fork.go).
+	fork := r.ForkConcurrent()
+	fork.Output = native.NewSyncWriter(r.Output)
+	fork.ErrOutput = native.NewSyncWriter(r.ErrOutput)
+	h.mu.Lock()
 	h.actErrs = nil
+	h.actionReg = fork
+	h.mu.Unlock()
 	br := h.watch.Start()
 	return []native.Value{buildResultValue(br, h)}, nil
 }
