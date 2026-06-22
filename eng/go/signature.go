@@ -437,6 +437,18 @@ func positionalMatch(values []Value, sig *Signature) bool {
 			}
 			continue
 		}
+		// A /q position captures a LITERAL word/atom. In check mode a computed
+		// operand arrives as a NON-CONCRETE carrier (an Any/dynamic value, e.g.
+		// `quote (s get k)`); such a value is not a literal word, so it must not
+		// ride the Any-conforms-to-everything rule onto a /q overload — it would
+		// claim `quote`'s word-capture sig (TAtom, QuoteArgs) and then refuse to
+		// compile, instead of falling to the value sig (TAny, ReturnsIdentity).
+		// At RUNTIME the operand is concrete (no carrier), so this is inert there
+		// and merely aligns check-mode sig selection with the runtime's (a
+		// concrete non-Atom already fails TAtom and picks the value overload).
+		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Carrier && !IsConcrete(v) {
+			return false
+		}
 		if !sigArgMatches(sig, i, v) {
 			return false
 		}
