@@ -25,7 +25,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | refusals (whole-program fallback) | 10 | 10 | → 0 |
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
-| tier 2 reducible | 2 | 2 | → 0 |
+| tier 2 reducible | 1 | 1 | → 0 |
 | compute frontier | 8 | 86 | → 0 |
 
 ## Refusals by reason
@@ -47,7 +47,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 ## Re-scoped P7 partition
 
-Over the 10 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **2** reducible (tier 2, TODO), **0** allowlisted error rows, **8** compute-frontier gaps.
+Over the 10 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **1** allowlisted error rows, **8** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -58,7 +58,6 @@ _None._
 | count | word |
 | ---: | --- |
 | 1 | Test/Assert |
-| 1 | quote |
 
 ### compute frontier by reason
 
