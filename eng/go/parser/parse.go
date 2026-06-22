@@ -88,6 +88,90 @@ func withPos(v eng.Value, pos eng.SrcPos) eng.Value {
 	return v
 }
 
+// maxParseNestingDepth bounds how deeply lists, maps, and paren groups may
+// nest in one source program. The converters below (convertTopLevelItems,
+// convertDataValue, and their mutual callees) recurse once per nesting level;
+// without a bound a pathologically deep input — e.g. `if true [` repeated
+// hundreds of thousands of times — overflows the Go stack. A stack overflow is
+// a FATAL runtime error that no recover() can catch: it crashes the whole host
+// process, defeating the interpreter/VM fallback the rest of the pipeline relies
+// on. The limit sits far above any realistic hand-written or generated program
+// yet far below the overflow point, so it turns a crash into a clean
+// evaluation_limit error. It also caps the super-linear conversion cost deep
+// nesting incurs. checkNestingDepth enforces it ITERATIVELY (its own explicit
+// stack) so the guard itself can never overflow.
+const maxParseNestingDepth = 10000
+
+// checkNestingDepth rejects a jsonic parse tree that nests deeper than
+// maxParseNestingDepth, before the recursive conversion runs. It walks the tree
+// with an explicit work stack (never recursing) and descends into every
+// container the converters descend into — paren/interp/angle groups, raw
+// slices and maps, and jsonic ListRef/MapRef carriers — so the measured depth
+// is an upper bound on the conversion's recursion depth. A container type the
+// walk does not recognise is treated as a leaf; the worst case of an omission is
+// that the guard under-protects, never that a valid program is rejected.
+func checkNestingDepth(root any, src string) error {
+	type frame struct {
+		node  any
+		depth int
+	}
+	stack := []frame{{root, 0}}
+	for len(stack) > 0 {
+		f := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if f.depth > maxParseNestingDepth {
+			return eng.MakeAqlError("evaluation_limit",
+				fmt.Sprintf("source nesting exceeds the depth limit of %d — lists, maps, and parentheses are nested too deeply", maxParseNestingDepth),
+				"", src,
+				"flatten the structure or split it across definitions; nesting this deep is almost always generated, not intended")
+		}
+		node, _ := deSite(f.node)
+		push := func(child any) { stack = append(stack, frame{child, f.depth + 1}) }
+		switch n := node.(type) {
+		case parenGroup:
+			for _, it := range n {
+				push(it)
+			}
+		case unclosedParen:
+			for _, it := range n.items {
+				push(it)
+			}
+		case interpGroup:
+			for _, it := range n {
+				push(it)
+			}
+		case iexprGroup:
+			for _, it := range n {
+				push(it)
+			}
+		case angleGroup:
+			for _, it := range n.Items {
+				push(it)
+			}
+		case []any:
+			for _, it := range n {
+				push(it)
+			}
+		case map[string]any:
+			for _, v := range n {
+				push(v)
+			}
+		case jsonic.ListRef:
+			for _, it := range n.Val {
+				push(it)
+			}
+			if n.Child != nil {
+				push(n.Child)
+			}
+		case jsonic.MapRef:
+			for _, v := range n.Val {
+				push(v)
+			}
+		}
+	}
+	return nil
+}
+
 // Parse tokenizes the AQL source string into a slice of eng.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
@@ -138,6 +222,13 @@ func Parse(src string) ([]eng.Value, error) {
 
 	if result == nil {
 		return nil, nil
+	}
+
+	// Reject pathologically deep nesting before the recursive conversion below
+	// can overflow the Go stack (an unrecoverable crash). Cheap, iterative, and
+	// runs once per parse.
+	if err := checkNestingDepth(result, src); err != nil {
+		return nil, err
 	}
 
 	// A single top-level scalar/paren/interp value arrives wrapped by the
