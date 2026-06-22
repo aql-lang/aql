@@ -97,10 +97,10 @@ func EmitKinds() []EmitKind {
 		{Name: "jsonic", Natural: nil, Encode: encodeJsonic},
 		{Name: "yaml", Natural: nil, Encode: encodeYAML},
 		{Name: "csv", Natural: []*Type{TTable}, Encode: func(v Value, opts map[string]any) (string, error) {
-			return encodeTabular(v, optSeparator(opts, ","))
+			return encodeTabular(v, optSeparator(opts, ","), "csv")
 		}},
 		{Name: "tsv", Natural: nil, Encode: func(v Value, opts map[string]any) (string, error) {
-			return encodeTabular(v, "\t")
+			return encodeTabular(v, "\t", "tsv")
 		}},
 		{Name: "toml", Natural: nil, Encode: encodeTOML},
 		{Name: "ini", Natural: nil, Encode: encodeINI},
@@ -117,6 +117,13 @@ func NaturalEmitKind(v Value) (string, bool) {
 		return "xml", true
 	}
 	if IsConcrete(v) {
+		// A concrete table from read / CSVFormat.Decode is a TList whose payload
+		// is TableData (its Parent does NOT conform to TTable), so detect the
+		// payload directly — otherwise the TList branch below would pick json and
+		// `read "x.csv" emit` would emit JSON instead of the natural CSV.
+		if _, ok := v.Data.(TableData); ok {
+			return "csv", true
+		}
 		if v.Parent.ConformsTo(TTable) {
 			return "csv", true
 		}
@@ -146,15 +153,16 @@ func NaturalEmitKind(v Value) (string, bool) {
 	return "", false
 }
 
-// emitScalarText renders a scalar leaf BYTE-FOR-BYTE the way valueToJsonic
-// did: String→%q, Float→FormatFloat(f,'f',-1,64), Integer→%d, Boolean→
-// true/false, None→null, Atom→%q, anything else→%q of its String(). This is
-// shared by json and jsonic (and reused by yaml for inline scalars).
+// emitScalarText renders a scalar leaf for json/jsonic: String→JSON-quoted,
+// Float→FormatFloat(f,'f',-1,64), Integer→%d, Boolean→true/false, None→null,
+// Atom→JSON-quoted, anything else→JSON-quoted String(). Strings go through
+// jsonQuote (not %q) so control bytes escape as \u00XX and the output is always
+// valid, parseable JSON. Shared by json and jsonic.
 func emitScalarText(v Value) string {
 	switch {
 	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
-		return fmt.Sprintf("%q", s)
+		return jsonQuote(s)
 	case v.Parent.ConformsTo(TFloat):
 		f, _ := AsFloat(v)
 		return strconv.FormatFloat(f, 'f', -1, 64)
@@ -171,10 +179,49 @@ func emitScalarText(v Value) string {
 		return "null"
 	case v.Parent.ConformsTo(TAtom):
 		a, _ := AsAtom(v)
-		return fmt.Sprintf("%q", a)
+		return jsonQuote(a)
 	default:
-		return fmt.Sprintf("%q", v.String())
+		return jsonQuote(v.String())
 	}
+}
+
+// jsonQuote renders s as a valid JSON string literal. It escapes the JSON
+// mandatory characters — quote, backslash and the C0 control range — using the
+// short forms where defined and \u00XX otherwise. Unlike fmt.Sprintf("%q", …)
+// it never emits Go-only escapes such as \x01, so the result always parses as
+// JSON. It deliberately does NOT escape <,>,& (output stays readable and, for
+// printable ASCII, byte-identical to the previous %q form, so existing golden
+// expectations are unaffected).
+func jsonQuote(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s) + 2)
+	sb.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			sb.WriteString(`\"`)
+		case '\\':
+			sb.WriteString(`\\`)
+		case '\n':
+			sb.WriteString(`\n`)
+		case '\r':
+			sb.WriteString(`\r`)
+		case '\t':
+			sb.WriteString(`\t`)
+		case '\b':
+			sb.WriteString(`\b`)
+		case '\f':
+			sb.WriteString(`\f`)
+		default:
+			if r < 0x20 {
+				sb.WriteString(fmt.Sprintf(`\u%04x`, r))
+			} else {
+				sb.WriteRune(r)
+			}
+		}
+	}
+	sb.WriteByte('"')
+	return sb.String()
 }
 
 // ---- opts helpers --------------------------------------------------------
@@ -191,16 +238,25 @@ func optBool(opts map[string]any, key string) bool {
 }
 
 // optIndent reads an indentation width from opts: {indent:N} sets N,
-// {pretty:true} implies the default. Returns (width, pretty?).
+// {pretty:true} implies the default. Returns (width, pretty?). A negative width
+// is clamped to 0 so a hostile {indent:-1} produces newline-only pretty output
+// rather than a strings.Repeat panic.
 func optIndent(opts map[string]any, def int) (int, bool) {
 	if opts != nil {
-		switch n := opts["indent"].(type) {
+		n, ok := 0, false
+		switch x := opts["indent"].(type) {
 		case int:
-			return n, true
+			n, ok = x, true
 		case int64:
-			return int(n), true
+			n, ok = int(x), true
 		case float64:
-			return int(n), true
+			n, ok = int(x), true
+		}
+		if ok {
+			if n < 0 {
+				n = 0
+			}
+			return n, true
 		}
 	}
 	if optBool(opts, "pretty") {
@@ -268,7 +324,7 @@ func jsonNode(sb *strings.Builder, v Value, indent int, pretty bool, depth int, 
 	case emitXml:
 		// XML inside json renders as its source string (the {tag,attr,children}
 		// projection is optional; the textual form round-trips for parse xml).
-		sb.WriteString(fmt.Sprintf("%q", v.String()))
+		sb.WriteString(jsonQuote(v.String()))
 	default:
 		sb.WriteString(emitScalarText(v))
 	}
@@ -311,7 +367,7 @@ func jsonKey(sb *strings.Builder, key string, bare bool) {
 		sb.WriteString(key)
 		return
 	}
-	sb.WriteString(fmt.Sprintf("%q", key))
+	sb.WriteString(jsonQuote(key))
 }
 
 // ---- yaml ----------------------------------------------------------------
@@ -477,7 +533,7 @@ func yamlNeedsQuote(s string) bool {
 // (list of maps), or a list of lists. The header comes from the Table record
 // schema or the first row's keys. The traversal walks the rows and cells via
 // classifyNode. Output reproduces the legacy encodeDelimited.
-func encodeTabular(v Value, sep string) (string, error) {
+func encodeTabular(v Value, sep, name string) (string, error) {
 	var rows []Value
 	var columns []string
 	tabular := false // a Table / Materializer carries an explicit schema
@@ -490,7 +546,7 @@ func encodeTabular(v Value, sep string) (string, error) {
 	case MaterializerPayload, ExtensionPayload:
 		qb, ok := unwrapQB(v)
 		if !ok {
-			return v.String(), nil
+			return "", emitUnsupported(name, "value is not a materializable table")
 		}
 		td, err := qb.Materialize()
 		if err != nil {
@@ -500,10 +556,11 @@ func encodeTabular(v Value, sep string) (string, error) {
 		rows = td.Rows
 		tabular = true
 	default:
-		// A list-like value (List, Array, FlexList): walk its rows.
+		// A list-like value (List, Array, FlexList): walk its rows. A non-list
+		// shape (a bare Map or scalar) cannot be represented as a table.
 		kind, entries := classifyNode(v)
 		if kind != emitList {
-			return v.String(), nil
+			return "", emitUnsupported(name, "value must be a table or a list of rows")
 		}
 		rows = make([]Value, 0, len(entries))
 		for _, e := range entries {
@@ -614,7 +671,7 @@ func encodeTOML(v Value, _ map[string]any) (string, error) {
 }
 
 // tomlTable emits the scalar/array keys of a table, then recurses into nested
-// tables under a [path] header. prefix is the dotted table path.
+// tables under a [path] header. prefix is the dotted table path (raw keys).
 func tomlTable(sb *strings.Builder, entries []walkEntry, prefix []string) error {
 	// First pass: scalar and array-of-scalar keys.
 	var nested []walkEntry
@@ -628,14 +685,18 @@ func tomlTable(sb *strings.Builder, entries []walkEntry, prefix []string) error 
 			if err != nil {
 				return err
 			}
-			sb.WriteString(e.key)
+			sb.WriteString(tomlKey(e.key))
 			sb.WriteString(" = ")
 			sb.WriteString(arr)
 			sb.WriteByte('\n')
 		default:
-			sb.WriteString(e.key)
+			sc, err := tomlScalar(e.val)
+			if err != nil {
+				return err
+			}
+			sb.WriteString(tomlKey(e.key))
 			sb.WriteString(" = ")
-			sb.WriteString(tomlScalar(e.val))
+			sb.WriteString(sc)
 			sb.WriteByte('\n')
 		}
 	}
@@ -643,15 +704,37 @@ func tomlTable(sb *strings.Builder, entries []walkEntry, prefix []string) error 
 	for _, e := range nested {
 		_, nentries := classifyNode(e.val)
 		path := append(append([]string{}, prefix...), e.key)
+		header := make([]string, len(path))
+		for i, p := range path {
+			header[i] = tomlKey(p)
+		}
 		sb.WriteByte('\n')
 		sb.WriteByte('[')
-		sb.WriteString(strings.Join(path, "."))
+		sb.WriteString(strings.Join(header, "."))
 		sb.WriteString("]\n")
 		if err := tomlTable(sb, nentries, path); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// tomlKey renders a TOML key: a bare key for TOML's bare-key charset
+// [A-Za-z0-9_-], otherwise a quoted basic-string key (JSON escaping), so keys
+// with spaces/dots/punctuation round-trip through parse toml.
+func tomlKey(s string) string {
+	if s == "" {
+		return `""`
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c == '_' || c == '-' ||
+			(c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+			(c >= '0' && c <= '9')) {
+			return jsonQuote(s)
+		}
+	}
+	return s
 }
 
 // tomlArray renders a list. A list of maps is unsupported here (would need
@@ -664,33 +747,40 @@ func tomlArray(v Value) (string, error) {
 		if ck != emitScalar {
 			return "", emitUnsupported("toml", "arrays of tables are not supported")
 		}
-		parts = append(parts, tomlScalar(e.val))
+		sc, err := tomlScalar(e.val)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, sc)
 	}
 	return "[" + strings.Join(parts, ", ") + "]", nil
 }
 
-func tomlScalar(v Value) string {
+// tomlScalar renders a scalar TOML value, or returns emit_unsupported for a
+// value TOML cannot represent (e.g. None — TOML has no null) so the type is
+// never silently corrupted to a string on round-trip.
+func tomlScalar(v Value) (string, error) {
 	switch {
 	case v.Parent.ConformsTo(TString):
 		s, _ := AsString(v)
-		return fmt.Sprintf("%q", s)
+		return jsonQuote(s), nil
 	case v.Parent.ConformsTo(TFloat):
 		f, _ := AsFloat(v)
-		return strconv.FormatFloat(f, 'f', -1, 64)
+		return strconv.FormatFloat(f, 'f', -1, 64), nil
 	case v.Parent.ConformsTo(TInteger):
 		i, _ := AsInteger(v)
-		return fmt.Sprintf("%d", i)
+		return fmt.Sprintf("%d", i), nil
 	case v.Parent.ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)
 		if b {
-			return "true"
+			return "true", nil
 		}
-		return "false"
+		return "false", nil
 	case v.Parent.ConformsTo(TAtom):
 		a, _ := AsAtom(v)
-		return fmt.Sprintf("%q", a)
+		return jsonQuote(a), nil
 	default:
-		return fmt.Sprintf("%q", v.String())
+		return "", emitUnsupported("toml", "cannot represent value: "+v.String())
 	}
 }
 

@@ -58,6 +58,12 @@ func TestEmitBuiltins(t *testing.T) {
 		{emitImp + `EmitLang.emit_json {a:1} {} end`, `'{"a":1}'`},
 		// bare variable evaluates as data, not a kind
 		{emitImp + `def m {a:1}  emit m`, `'{"a":1}'`},
+		// an opts map held in a variable is opts, not a kind attempt
+		{emitImp + `def o {pretty:true} end  emit o {a:1}`, "'{\\n  \"a\": 1\\n}'"},
+		// a negative indent is clamped to 0 rather than panicking
+		{emitImp + `emit json {indent:-1} {a:1}`, "'{\\n\"a\": 1\\n}'"},
+		// a non-bare TOML key is quoted so it round-trips
+		{emitImp + `emit toml {"a b":1}`, `'"a b" = 1'`},
 	}
 	for _, c := range cases {
 		got, err := runEmit(t, c.src)
@@ -80,8 +86,17 @@ func TestEmitNegatives(t *testing.T) {
 		{emitImp + `emit toml [1 2]`, "emit_unsupported"},
 		{emitImp + `emit xml {a:1}`, "emit_unsupported"},
 		{emitImp + `emit ini {a:{b:{c:1}}}`, "emit_unsupported"},
+		// csv/tsv require a tabular shape — a bare Map or scalar is rejected
+		{emitImp + `emit csv {a:1}`, "emit_unsupported"},
+		{emitImp + `emit csv 1`, "emit_unsupported"},
+		// toml cannot represent None (no null) — it errors, never corrupts
+		{emitImp + `emit toml {a:None}`, "emit_unsupported"},
 		{emitImp + `EmitLang.register Bad (fn [[value:Any opts:Map] [String] ["x"]])`, "emit_bad_name"},
 		{emitImp + `EmitLang.register bad (fn [[a:Integer] [Integer] [a]])`, "emit_bad_signature"},
+		// the value parameter must be Any (an emitter must accept every value)
+		{emitImp + `EmitLang.register narrow (fn [[value:Integer opts:Map] [String] ["x"]])`, "emit_bad_signature"},
+		// the return type must be String (emit is value→string)
+		{emitImp + `EmitLang.register numret (fn [[value:Any opts:Map] [Integer] [1]])`, "emit_bad_signature"},
 		{emitImp + `EmitLang.register emit_x (fn [[value:Any opts:Map] [String] ["x"]])`, "emit_bad_name"},
 		{emitImp + `EmitLang.register json (fn [[value:Any opts:Map] [String] ["x"]])`, "emit_kind_exists"},
 	}
@@ -177,5 +192,19 @@ func TestNaturalEmitKindNoPanic(t *testing.T) {
 	}
 	if name, ok := native.NaturalEmitKind(native.NewList(nil)); !ok || name != "json" {
 		t.Errorf("List natural = %q,%v; want json,true", name, ok)
+	}
+	// A table from read/CSVFormat.Decode is a TList carrying a TableData
+	// payload (its Parent does NOT conform to TTable) — its natural format must
+	// still resolve to csv, not the generic-list json.
+	fields := native.NewOrderedMap()
+	fields.Set("name", native.NewTypeLiteral(native.TString))
+	row := native.NewOrderedMap()
+	row.Set("name", native.NewString("alice"))
+	table := native.NewValueRaw(native.TList, native.TableData{
+		Record: native.RecordTypeInfo{Fields: fields},
+		Rows:   []native.Value{native.NewMap(row)},
+	})
+	if name, ok := native.NaturalEmitKind(table); !ok || name != "csv" {
+		t.Errorf("TableData natural = %q,%v; want csv,true", name, ok)
 	}
 }

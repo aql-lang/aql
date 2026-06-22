@@ -558,9 +558,12 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	leadingKind := isWord && len(args) >= 2
 	explicit := leadingKind && emitKindRegistered(r, "emit_"+kind)
 
-	// Explicit-kind attempt with an unknown kind → loud expansion-time error
-	// (mirror parse), with the check-mode dynamic-carrier fallback.
-	if leadingKind && !explicit {
+	// A leading bare word that is neither a registered kind nor a bound value is
+	// an unknown-kind typo → loud expansion-time error (mirror parse), with the
+	// check-mode dynamic-carrier fallback. A leading word that resolves to a
+	// VALUE (e.g. an options map held in a variable: `def opts {…} emit opts
+	// {a:1}`) is DATA/OPTS, not a kind, and falls through to the auto form.
+	if leadingKind && !explicit && !r.Defs.Has(kind) {
 		if r.Check.IsActive() && !emitNamespaceBound(r) {
 			r.Check.Emit.RecordTrap("emit_unknown_lang",
 				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
@@ -571,6 +574,14 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		return nil, r.AqlErrorHint("emit_unknown_lang",
 			fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
 			`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`)
+	}
+
+	// Reconstruct a /q'd leading bare word as a Word so the variable it names
+	// (used as data in `emit m`, or as the options map in `emit opts {a:1}`)
+	// evaluates at the call site rather than being spliced as a literal atom.
+	lead := args[0]
+	if isWord {
+		lead = NewWord(kind)
 	}
 
 	target := "emit_auto"
@@ -585,19 +596,14 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			data = args[1]
 		}
 	} else {
-		// Auto: opts? then data (data is last). A /q'd leading bare word is
-		// DATA — reconstruct it as a Word so a variable evaluates at the call
-		// site.
+		// Auto: `emit <opts?> <data>` — data is the last operand, opts the
+		// optional leading one (reconstructed above when it is a bare word).
 		if len(args) >= 2 {
-			opts = args[0]
+			opts = lead
 			data = args[len(args)-1]
 		} else { // len == 1: the data
 			opts = NewMap(NewOrderedMap())
-			if isWord {
-				data = NewWord(kind)
-			} else {
-				data = args[0]
-			}
+			data = lead
 		}
 	}
 

@@ -25,6 +25,8 @@
 "aql:emitlang" import end  emit json {pretty:true} {a:1}	'{\n  "a": 1\n}'	opts {pretty:true} → indented json (2-space default)
 "aql:emitlang" import end  emit json {indent:4} {a:1}	'{\n    "a": 1\n}'	opts {indent:N} → N-space indentation
 "aql:emitlang" import end  emit json {} {a:1}	'{"a":1}'	an explicit empty opts map → compact (the default)
+"aql:emitlang" import end  def o {pretty:true} end  emit o {a:1}	'{\n  "a": 1\n}'	the opts map may be a variable — a bare leading word that resolves to a value is opts, not a kind
+"aql:emitlang" import end  emit json {indent:-1} {a:1}	'{\n"a": 1\n}'	a negative indent is clamped to 0 (newline-only) — never a strings.Repeat panic
 #
 # §3  jsonic — bare identifier keys
 "aql:emitlang" import end  emit jsonic {a:1 b:"hi"}	'{a:1,b:"hi"}'	jsonic drops quotes for identifier keys
@@ -42,6 +44,7 @@
 # §6  toml / ini — map shapes
 "aql:emitlang" import end  emit toml {a:1 b:"hi"}	'a = 1\nb = "hi"'	a flat map → top-level key = value lines
 "aql:emitlang" import end  emit toml {server:{host:"x"}}	'[server]\nhost = "x"'	a nested map → a [table] header
+"aql:emitlang" import end  emit toml {"a b":1}	'"a b" = 1'	a key that is not a bare TOML key is quoted so it round-trips
 "aql:emitlang" import end  emit ini {db:{user:"a"}}	'[db]\nuser=a'	a {section:{k:v}} map → an [section] block
 "aql:emitlang" import end  emit ini {a:1 b:2}	'a=1\nb=2'	a flat map → bare key=value lines
 #
@@ -59,6 +62,9 @@ EmitLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:emitlang" import end  emit toml [1 2]	ERROR:emit_unsupported	toml cannot represent a top-level List
 "aql:emitlang" import end  emit xml {a:1}	ERROR:emit_unsupported	xml only emits an Xml element, not a Map
 "aql:emitlang" import end  emit ini {a:{b:{c:1}}}	ERROR:emit_unsupported	ini supports one level of sections, not deeper nesting
+"aql:emitlang" import end  emit csv {a:1}	ERROR:emit_unsupported	csv needs a table or list of rows — a bare Map is not tabular
+"aql:emitlang" import end  emit csv 1	ERROR:emit_unsupported	csv needs a table or list of rows — a scalar is not tabular
+"aql:emitlang" import end  emit toml {a:None}	ERROR:emit_unsupported	toml has no null — an unrepresentable scalar errors rather than corrupting the type
 "aql:emitlang" import end  EmitLang.register Bad (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_bad_name	capitalised emitter names are rejected (types)
 "aql:emitlang" import end  EmitLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:emit_bad_signature	the standard prefix [value:Any opts:Map …] is enforced
 "aql:emitlang" import end  EmitLang.register emit_x (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_bad_name	the emit_ prefix is register's job, not the caller's

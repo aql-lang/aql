@@ -349,16 +349,23 @@ func emitRegisterHandler(exports *native.OrderedMap) native.Handler {
 					"register",
 					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
 			}
-			p1 := sig.Params[1].Type
-			if p1 == nil || !p1.ConformsTo(native.TMap) {
+			p0 := sig.Params[0].Type
+			if p0 == nil || !p0.Equal(native.TAny) {
 				return nil, r.AqlErrorHint("emit_bad_signature",
-					"register: every signature must start [value:Any opts:Map …] and return a value",
+					"register: the first parameter must be value:Any so the emitter accepts every value",
 					"register",
 					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
 			}
-			if len(sig.Returns) == 0 {
+			p1 := sig.Params[1].Type
+			if p1 == nil || !p1.ConformsTo(native.TMap) {
 				return nil, r.AqlErrorHint("emit_bad_signature",
-					"register: every signature must return a value",
+					"register: every signature must start [value:Any opts:Map …] and return a String",
+					"register",
+					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
+			}
+			if len(sig.Returns) == 0 || sig.Returns[0] == nil || !sig.Returns[0].ConformsTo(native.TString) {
+				return nil, r.AqlErrorHint("emit_bad_signature",
+					"register: every signature must return a String (emit is value→string)",
 					"register",
 					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
 			}

@@ -348,9 +348,15 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 // encodeDelimited converts a table value to CSV/TSV text. It is a thin
 // adapter over the canonical walk-based tabular encoder (emit.go) — the single
 // emit code path — keeping its name and signature for the existing callers and
-// tests.
+// tests. Unlike the `emit csv` surface (which raises emit_unsupported for a
+// non-tabular shape), the legacy write/read path degrades a non-table value to
+// its display string, preserving prior behaviour.
 func encodeDelimited(v Value, sep string) (string, error) {
-	return encodeTabular(v, sep)
+	s, err := encodeTabular(v, sep, "csv")
+	if err != nil && EmitErrorCode(err) == "emit_unsupported" {
+		return v.String(), nil
+	}
+	return s, err
 }
 
 // DefaultFormats returns the built-in format registry: read's own
