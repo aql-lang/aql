@@ -901,7 +901,13 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
-	if len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" {
+	// get/getr/set carry exactly ONE QuoteArg — the inert Atom key — which bakes
+	// as a const operand; the rest of the operands resolve normally. set's
+	// receiver mutation (Store/Object/Array) and copy-return (Map/List) are
+	// faithful under runtime re-match: callPoly runs the same handler over the
+	// same concrete receiver the interpreter would. Other quoted-operand words
+	// (usurp / ref-family meta) re-step tokens and stay out.
+	if len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" {
 		return false
 	}
 	// A fn-valued operand or result means a fn-invoking / fn-returning word

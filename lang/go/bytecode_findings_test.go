@@ -2393,6 +2393,51 @@ func TestZeroOutputDynamicPolyCompiles(t *testing.T) {
 	}
 }
 
+// `set` over a dynamic receiver — a mutation / copy-return whose container is
+// statically unknown (the IO capability's `context get __sys get fs set mem
+// true`, where the fs Store is a dynamic carrier). matchSignature binds the
+// dynamic carrier, but the normal path refused "dynamic input at set"; set now
+// joins get/getr in the QuoteArgs poly exemption (its atom key bakes as an inert
+// const) so it records OpCallNativePoly. The runtime re-match runs the SAME
+// handler over the SAME concrete receiver the interpreter mutates, so the side
+// effect (Store/Object/Array mutation) and the copy-return (Map/List) are
+// faithful — verified by the differential corpus, which compares the post-
+// mutation observable result.
+func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
+	const imp = `"aql:io" import end  `
+	cases := []struct{ src, want string }{
+		// 0-output Store mutation over a dynamic context receiver, then a read of
+		// the mutated context through IO.write / IO.read.
+		{imp + `context get __sys get fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
+		{imp + `context get __sys get fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+	}
+	for _, c := range cases {
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if !compiled {
+			t.Errorf("%q: expected a compiled run (set poly), fell back", c.src)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: `set` over a CONCRETE non-container (Integer) matches no overload
+	// — a genuine type error, not a dynamic dispatch. It must refuse the poly and
+	// raise the same signature_error in both engines, never silently succeed.
+	_, _, eC := mustNew(t).RunCompiled(`5 set a 9`)
+	_, eI := mustNew(t).Run(`5 set a 9`)
+	if eC == nil || eI == nil {
+		t.Fatalf("set over Integer: expected signature error in both engines, compiled=%v interp=%v", eC, eI)
+	}
+	if !strings.Contains(eC.Error(), "signature") || !strings.Contains(eI.Error(), "signature") {
+		t.Errorf("set over Integer: expected signature_error, compiled=%v interp=%v", eC, eI)
+	}
+}
+
 // Stage B — conditional dynamic apply in a branch. `if (n eq 0) [99]
 // MathUtil.sqrt 16`: the else arm is the module-export fn value sqrt and the
 // trailing 16 applies ONLY when the branch produced the callable. Two parts:
