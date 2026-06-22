@@ -402,6 +402,10 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 }
 
 func TestFormatFromExt(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
 	tests := []struct {
 		path string
 		want string
@@ -414,10 +418,23 @@ func TestFormatFromExt(t *testing.T) {
 		{"file.unknown", ""},
 		{"file", ""},
 		{"path/to/data.CSV", "csv"},
+		// Tabnas family + many-to-one extension aliases.
+		{"file.ini", "ini"},
+		{"file.cfg", "ini"},
+		{"file.conf", "ini"},
+		{"file.yaml", "yaml"},
+		{"file.yml", "yaml"},
+		{"file.toml", "toml"},
+		{"file.xml", "xml"},
+		{"file.json5", "json5"},
+		{"file.jsonc", "jsonc"},
+		{"file.zon", "zon"},
+		{"file.md", "markdown"},
+		{"file.markdown", "markdown"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := formatFromExt(tt.path)
+			got := formatFromExt(r, tt.path)
 			if got != tt.want {
 				t.Errorf("formatFromExt(%q) = %q, want %q", tt.path, got, tt.want)
 			}

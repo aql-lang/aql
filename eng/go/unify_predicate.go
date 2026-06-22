@@ -47,105 +47,43 @@ type predicateUnifier struct {
 // inhabitant, and carriers are placeholder values whose concreteness
 // is asserted at runtime by some other path.
 func (p *predicateUnifier) Match(v Value, t *Type) bool {
-	if !IsConcrete(v) {
-		if p.prev != nil {
-			return p.prev.Match(v, t)
+	return matchMembership(v, t, p.prev, func(v Value) bool {
+		if p.registry == nil {
+			// No registry attached — fall back to the lattice walk so
+			// behaviour is no worse than before predicateUnifier existed.
+			return baseBehavior(p.prev).Match(v, t)
 		}
-		return DefaultBehavior.Match(v, t)
-	}
-	if p.registry == nil {
-		// No registry attached — fall back to lattice walk so behavior
-		// is at least no worse than before predicateUnifier existed.
-		if p.prev != nil {
-			return p.prev.Match(v, t)
+		// Gate 1: input-type compatibility (`"hello".Is(Pos)` rejects —
+		// String is not Integer).
+		if inputT := PredicateInputType(p.constraint); inputT != nil {
+			if !v.Parent.ConformsTo(inputT) {
+				return false
+			}
 		}
-		return DefaultBehavior.Match(v, t)
-	}
-	// Gate 1: input-type compatibility.
-	if inputT := PredicateInputType(p.constraint); inputT != nil {
-		if !v.Parent.ConformsTo(inputT) {
-			return false
-		}
-	}
-	// Gate 2: run the predicate.
-	_, matched, err := p.registry.RunPredicate(p.constraint, v)
-	if err != nil {
-		return false
-	}
-	return matched
+		// Gate 2: run the predicate body.
+		_, matched, err := p.registry.RunPredicate(p.constraint, v)
+		return err == nil && matched
+	})
 }
 
-func (p *predicateUnifier) Format(v Value) string {
-	if p.prev != nil {
-		return p.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
-}
+func (p *predicateUnifier) Format(v Value) string           { return baseBehavior(p.prev).Format(v) }
+func (p *predicateUnifier) Equal(a, b Value) bool           { return baseBehavior(p.prev).Equal(a, b) }
+func (p *predicateUnifier) Compare(a, b Value) (int, error) { return baseCompare(p.prev, a, b) }
 
-func (p *predicateUnifier) Equal(a, b Value) bool {
-	if p.prev != nil {
-		return p.prev.Equal(a, b)
-	}
-	return DefaultBehavior.Equal(a, b)
-}
-
-// Compare opt-out: delegate to prev (a Comparer if previously
-// installed). This lets `behave compare/q` on a predicate type still
-// work — the chain is `[behave compare wrapper] → predicateUnifier →
-// DefaultBehavior`.
-func (p *predicateUnifier) Compare(a, b Value) (int, error) {
-	if cmp, ok := p.prev.(Comparer); ok {
-		return cmp.Compare(a, b)
-	}
-	return 0, ErrNoComparer
-}
-
-// Unify is the capability slot. Two-step:
-//  1. Get a candidate from the structural narrowing rule
-//     (unifySameOrSubtype). This handles type-literal-vs-concrete and
-//     subtype-narrowing without re-entering the LCA walk.
-//  2. Run the predicate against the candidate; admit if accepted.
+// Unify runs the predicate body against a concrete operand via the shared
+// membership contract: admit the candidate when the body accepts it, fail
+// definitively when a concrete operand is present and rejected, and defer
+// a type-level pair to the structural rule. (This replaced an earlier
+// unifySameOrSubtype-first candidate step whose "narrower literal →
+// admit" branch could admit a non-member without ever running the body
+// — the same hole the Go path avoids; the two now share one rule.)
 func (p *predicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
-	if p.registry == nil {
-		return Value{}, &UnifyError{
-			Reason: fmt.Sprintf("predicate type %s has no registry attached", p.typeName),
+	return unifyMembership(a, b, "predicate "+p.typeName, func(v Value) (Value, bool, error) {
+		if p.registry == nil {
+			return Value{}, false, fmt.Errorf("predicate type %s has no registry attached", p.typeName)
 		}
-	}
-
-	// Get a candidate. unifySameOrSubtype is the right primitive: it
-	// handles the "type literal narrows to concrete" rule (Pos-literal
-	// vs 5 → 5) and the subtype-narrowing rule (Pos-value vs Integer-
-	// value → take the Pos value as narrower) without recursing back
-	// through dispatchUnifier.
-	candidate, err := unifySameOrSubtype(a, b)
-	if err != nil {
-		return Value{}, err
-	}
-
-	// Concrete-only check: the predicate is meaningful for values with
-	// Data, not bare type literals. When the candidate is a type
-	// literal (e.g. Unify(Pos-literal, Pos-literal)) just admit it —
-	// the structural rule already established compatibility.
-	if !IsConcrete(candidate) {
-		return candidate, nil
-	}
-
-	_, matched, perr := p.registry.RunPredicate(p.constraint, candidate)
-	if perr != nil {
-		return Value{}, &UnifyError{
-			Reason: fmt.Sprintf("predicate %s: %s", p.typeName, perr.Error()),
-			A:      a,
-			B:      b,
-		}
-	}
-	if !matched {
-		return Value{}, &UnifyError{
-			Reason: fmt.Sprintf("value does not satisfy predicate %s", p.typeName),
-			A:      a,
-			B:      b,
-		}
-	}
-	return candidate, nil
+		return p.registry.RunPredicate(p.constraint, v)
+	})
 }
 
 // installPredicateUnifier attaches a predicateUnifier to def, wrapping

@@ -28,29 +28,15 @@ type bareRefineUnifier struct {
 
 func (b *bareRefineUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
-		if b.prev != nil {
-			return b.prev.Match(v, t)
-		}
-		return DefaultBehavior.Match(v, t)
+		return baseBehavior(b.prev).Match(v, t)
 	}
 	// Nominal: the value's tag must be the refine type itself (or a
 	// subtype), NOT merely the base type.
 	return v.Parent.ConformsTo(t)
 }
 
-func (b *bareRefineUnifier) Format(v Value) string {
-	if b.prev != nil {
-		return b.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
-}
-
-func (b *bareRefineUnifier) Equal(a, c Value) bool {
-	if b.prev != nil {
-		return b.prev.Equal(a, c)
-	}
-	return DefaultBehavior.Equal(a, c)
-}
+func (b *bareRefineUnifier) Format(v Value) string { return baseBehavior(b.prev).Format(v) }
+func (b *bareRefineUnifier) Equal(a, c Value) bool { return baseBehavior(b.prev).Equal(a, c) }
 
 // installBareRefineUnifier attaches a bareRefineUnifier to def. Called
 // by InstallType when minting/renaming a bare-refinement prefab so the

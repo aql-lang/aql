@@ -102,7 +102,7 @@ func queryResultToValue(v any) native.Value {
 		f, _ := new(big.Float).SetInt(bi).Float64()
 		return native.NewFloat(f)
 	}
-	return tabnasAnyToValue(v)
+	return native.AnyToValue(v)
 }
 
 // miniJsonPathHandler implements `jp`: run a JSONPath query (args[0]) over the

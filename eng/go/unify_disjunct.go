@@ -28,28 +28,14 @@ type disjunctUnifier struct {
 // walk — a bare Maybe-literal is "the type itself", not an inhabitant.
 func (d *disjunctUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
-		if d.prev != nil {
-			return d.prev.Match(v, t)
-		}
-		return DefaultBehavior.Match(v, t)
+		return baseBehavior(d.prev).Match(v, t)
 	}
 	_, err := unifyDisjunct(DisjunctInfo{Alternatives: d.alternatives}, v)
 	return err == nil
 }
 
-func (d *disjunctUnifier) Format(v Value) string {
-	if d.prev != nil {
-		return d.prev.Format(v)
-	}
-	return DefaultBehavior.Format(v)
-}
-
-func (d *disjunctUnifier) Equal(a, b Value) bool {
-	if d.prev != nil {
-		return d.prev.Equal(a, b)
-	}
-	return DefaultBehavior.Equal(a, b)
-}
+func (d *disjunctUnifier) Format(v Value) string { return baseBehavior(d.prev).Format(v) }
+func (d *disjunctUnifier) Equal(a, b Value) bool { return baseBehavior(d.prev).Equal(a, b) }
 
 // installDisjunctUnifier attaches a disjunctUnifier to def, wrapping
 // any existing Behavior. Called by InstallType when minting a disjunct

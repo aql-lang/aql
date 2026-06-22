@@ -1,0 +1,27 @@
+# AQL Language Specification: the aql:parse module (custom parsers)
+# Format: input<TAB>expected<TAB>description
+#
+# aql:parse lets an AQL author DEFINE a parser and register it as a `parse`
+# kind (aql:parselang). A grammar is built from an ABNF source (Parse.abnf),
+# declarative rules (Parse.rule, shaped by the Parse.RuleSpec / Parse.AltSpec
+# Map subtypes), fixed tokens (Parse.token) and custom lex matchers
+# (Parse.matcher); semantic actions (Parse.action) attach AQL fns to grammar
+# marks so the parser can emit custom data. Parse.grammar mints the builder;
+# Parse.register finalizes it. The carrier is a shared pointer threaded
+# through each word and bound to a def. Register-only: run via `parse <name>`.
+#
+# §1  ABNF grammar + a mark action — the action's AQL value is the result
+"aql:parse" import end  "aql:parselang" import end  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  Parse.register op g  end  parse op 'inc'	7	Parse.grammar + Parse.action + Parse.abnf + Parse.register: action value is the AST
+"aql:parse" import end  "aql:parselang" import end  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [{k:'inc'}])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  Parse.register opm g  end  (parse opm 'inc').k	'inc'	an action can build a custom Map node that survives to the parse result
+#
+# §2  tokens, a declining matcher, and a declarative rule coexist with ABNF
+"aql:parse" import end  "aql:parselang" import end  def g Parse.grammar  Parse.token g '#PL' '+'  Parse.matcher g skip 1000000 ([s:String] => [None])  Parse.rule g extra {open:[{s:'#PL'}]}  Parse.action g '@op:o:INC' ([nd:Any] => [5])  Parse.abnf g 'op = "inc"' {start:'op'}  Parse.register op2 g  end  parse op2 'inc'	5	Parse.token, a declining Parse.matcher and a declarative Parse.rule build alongside the ABNF grammar
+#
+# §3  the grammar-as-Map-subtypes type exports
+"aql:parse" import end  "aql:parselang" import end  typeof Parse.AltSpec	Map	Parse.AltSpec is a Map subtype describing one grammar alternate
+"aql:parse" import end  "aql:parselang" import end  typeof Parse.RuleSpec	Map	Parse.RuleSpec is a Map subtype describing a rule's open/close alternates
+#
+# §4  loud failures (negative coverage)
+"aql:parse" import end  "aql:parselang" import end  def g Parse.grammar  Parse.abnf g '= = bad ='  Parse.register broke g	ERROR:parse_bad_grammar	a malformed ABNF grammar is a loud error at register, not a panic
+"aql:parse" import end  "aql:parselang" import end  def g Parse.grammar  Parse.action g 'noat' ([nd:Any] => [1])	ERROR:parse_bad_action	an action ref must start with '@' (a mark/phase selector)
+"aql:parse" import end  "aql:parselang" import end  def g Parse.grammar  Parse.abnf g 'x = "a"' {start:'x'}  Parse.register json g	ERROR:already registered	registering a name that collides with a built-in parse kind is refused

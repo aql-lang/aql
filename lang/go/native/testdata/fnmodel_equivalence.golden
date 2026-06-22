@@ -449,10 +449,13 @@ WORD range
 WORD reach
   [Any Node/List] barrier=2 noeval={1} returns=[Ideal/Reach]
 WORD read
+  [Node/Map Scalar/Atom/StreamKind] barrier=2 returns=[Any]
   [Node/Map Scalar/Path] barrier=2 returns=[Any]
   [Node/Map Scalar/String] barrier=2 returns=[Any]
+  [Scalar/Atom/StreamKind Node/Map] barrier=2 returns=[Any]
   [Scalar/Path Node/Map] barrier=2 returns=[Any]
   [Scalar/String Node/Map] barrier=2 returns=[Any]
+  [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Path] barrier=1 returns=[Any]
   [Scalar/String] barrier=1 returns=[Any]
 WORD rebind
@@ -544,11 +547,11 @@ WORD stack-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD stderr
-  [] barrier=0 returns=[Scalar/String]
+  [] barrier=0 returns=[Scalar/Atom/StreamKind]
 WORD stdin
-  [] barrier=0 returns=[Scalar/String]
+  [] barrier=0 returns=[Scalar/Atom/StreamKind]
 WORD stdout
-  [] barrier=0 returns=[Scalar/String]
+  [] barrier=0 returns=[Scalar/Atom/StreamKind]
 WORD sub
   [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
   [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
@@ -640,12 +643,18 @@ WORD with-decimal
 WORD word
   [Any] barrier=1 noeval={0} returns=[Any]
 WORD write
-  [Scalar/Path Scalar/String Node/Map] barrier=3
-  [Scalar/Path Any Node/Map] barrier=3
-  [Scalar/String Scalar/String Node/Map] barrier=3
-  [Scalar/String Any Node/Map] barrier=3
-  [Scalar/Path Scalar/String] barrier=2
-  [Scalar/String Scalar/String] barrier=2
+  [Scalar/Atom/StreamKind Scalar/String Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
+  [Scalar/Atom/StreamKind Any Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
+  [Scalar/Path Scalar/String Node/Map] barrier=3 returns=[Scalar/Path]
+  [Scalar/Path Any Node/Map] barrier=3 returns=[Scalar/Path]
+  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/String Any Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/Atom/StreamKind Scalar/String] barrier=2 returns=[Scalar/Atom/StreamKind]
+  [Scalar/Atom/StreamKind Any] barrier=2 returns=[Scalar/Atom/StreamKind]
+  [Scalar/Path Scalar/String] barrier=2 returns=[Scalar/Path]
+  [Scalar/Path Any] barrier=2 returns=[Scalar/Path]
+  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
+  [Scalar/String Any] barrier=2 returns=[Scalar/String]
 WORD xml-attr
   [Scalar/String Node/Xml] barrier=2 returns=[Any]
   [Scalar/Atom Node/Xml] barrier=2 quote={0} returns=[Any]

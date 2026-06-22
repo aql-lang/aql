@@ -14,6 +14,7 @@ const (
 	CapFileOps    = "engine.fileops"     // active capabilities.FileOps
 	CapMemFileOps = "engine.fileops.mem" // lazily created in-memory FileOps
 	CapFormats    = "engine.formats"     // map[string]Format read/write registry
+	CapExtensions = "engine.extensions"  // map[string]string file-ext→format-name
 	CapSQLite     = "engine.sqlite"      // *SQLiteStore
 	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
 	CapClock      = "engine.clock"       // capabilities.Clock (the time source)
@@ -122,6 +123,26 @@ func SetHostFormats(r *Registry, formats map[string]Format) {
 		return
 	}
 	_ = r.Capabilities.Set(CapFormats, formats)
+}
+
+// HostExtensions returns the file-extension→format-name map installed on
+// r, or nil if none. The map is owned by the host and may be mutated in
+// place (e.g. by RegisterFormat) to add or override extension mappings.
+// Keys are lowercase, without the leading dot.
+func HostExtensions(r *Registry) map[string]string {
+	exts, _, _ := eng.Cap[map[string]string](r, CapExtensions)
+	return exts
+}
+
+// SetHostExtensions installs the extension→format map. It shares the
+// `formats` policy scope with SetHostFormats: when formats.install=false
+// the slot is removed so read falls back to text for every extension.
+func SetHostExtensions(r *Registry, exts map[string]string) {
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("formats") {
+		_, _ = r.Capabilities.Delete(CapExtensions)
+		return
+	}
+	_ = r.Capabilities.Set(CapExtensions, exts)
 }
 
 // HostSQLite returns the SQLite store installed on r, or nil if none.

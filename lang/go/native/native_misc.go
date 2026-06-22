@@ -246,8 +246,13 @@ func init() {
 
 // ---- file I/O handlers ----
 
-// extractPath returns the path string from a String or Path value.
+// extractPath returns the routing path from a Stream handle, Path, or
+// String value. A Stream atom (stdin/stdout/stderr) resolves to its
+// internal stream sentinel so doRead/doWrite route to the host stream.
 func extractPath(v Value) string {
+	if sentinel, ok := streamSentinel(v); ok {
+		return sentinel
+	}
 	if IsPath(v) {
 		_as5, _ := AsPath(v)
 		return _as5.String()
@@ -256,8 +261,12 @@ func extractPath(v Value) string {
 	return _as6
 }
 
-// returnPath wraps the result path: if input was a Path, return Path; else String.
+// returnPath wraps the result: a Stream handle or Path returns itself;
+// a String path returns the resolved string.
 func returnPath(v Value, pathStr string) Value {
+	if _, ok := streamSentinel(v); ok {
+		return v
+	}
 	if IsPath(v) {
 		return v
 	}
@@ -266,22 +275,22 @@ func returnPath(v Value, pathStr string) Value {
 
 func readHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
-	format := formatFromExt(path)
+	format := formatFromExt(r, path)
 	if format == "" {
 		format = "text"
 	}
-	return doRead(r, path, "utf8", format, "lf")
+	return doRead(r, path, "utf8", format, "lf", nil)
 }
 
 func readOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
-	enc, format, _, nl, fmtExplicit := parseFileOpts(args[1])
+	enc, format, _, nl, fmtExplicit, parserOpts := parseFileOpts(args[1])
 	if !fmtExplicit {
-		if extFmt := formatFromExt(path); extFmt != "" {
+		if extFmt := formatFromExt(r, path); extFmt != "" {
 			format = extFmt
 		}
 	}
-	return doRead(r, path, enc, format, nl)
+	return doRead(r, path, enc, format, nl, parserOpts)
 }
 
 // Reversed handler for stack-first usage: "path" {opts} read
@@ -303,8 +312,44 @@ func writeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	content, _ := args[1].AsConcreteString()
-	enc, format, mode, nl, _ := parseFileOpts(args[2])
+	enc, format, mode, nl, fmtExplicit, _ := parseFileOpts(args[2])
+	if err := checkWritableFormat(r, format, fmtExplicit); err != nil {
+		return nil, err
+	}
 	result, err := doWrite(r, path, content, enc, format, mode, nl)
+	if err != nil {
+		return result, err
+	}
+	return []Value{returnPath(args[0], path)}, nil
+}
+
+// checkWritableFormat rejects a write whose explicit {fmt:…} resolves to a
+// read-only (parser-backed) format. Write is otherwise extension-blind —
+// only an explicit fmt triggers the check — so every existing write call
+// (no fmt, or an encodable fmt) is unaffected.
+func checkWritableFormat(r *Registry, format string, fmtExplicit bool) error {
+	if !fmtExplicit {
+		return nil
+	}
+	f, ok := HostFormats(r)[format]
+	if !ok {
+		return nil // unknown format is doWrite's concern; nothing read-only to reject
+	}
+	if ro, ok := f.(ReadOnlyFormat); ok && ro.ReadOnly() {
+		return r.AqlErrorHint("write_error",
+			fmt.Sprintf("write: format %q is read-only", format), "write",
+			"write supports text/json/jsonic/lines/csv/tsv")
+	}
+	return nil
+}
+
+// writeAnyHandler: [path/string/stream, any] -> [path/string/stream].
+// Serializes non-string data with no options map required — the value is
+// encoded as jsonic (the same default the options form upgrades to).
+func writeAnyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	path := extractPath(args[0])
+	content := valueToJsonic(args[1])
+	result, err := doWrite(r, path, content, "utf8", "jsonic", "write", "lf")
 	if err != nil {
 		return result, err
 	}
@@ -314,7 +359,10 @@ func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 // write: [path/string, any, map] -> [path/string] (for non-string data with fmt)
 func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
-	_, format, mode, nl, _ := parseFileOpts(args[2])
+	_, format, mode, nl, fmtExplicit, _ := parseFileOpts(args[2])
+	if err := checkWritableFormat(r, format, fmtExplicit); err != nil {
+		return nil, err
+	}
 	if format == "text" {
 		format = "jsonic"
 	}
@@ -324,18 +372,6 @@ func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		return result, err
 	}
 	return []Value{returnPath(args[0], path)}, nil
-}
-
-func stdinHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(pathStdin)}, nil
-}
-
-func stdoutHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(pathStdout)}, nil
-}
-
-func stderrHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewString(pathStderr)}, nil
 }
 
 // ---- help / describe handlers ----
@@ -550,7 +586,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		installExports(r, desc, nil)
 		return nil, nil
 	}
-	if isDataFile(path) {
+	if isDataFile(r, path) {
 		return loadDataFile(r, path)
 	}
 	desc, err := loadFileModule(r, path)
@@ -571,7 +607,7 @@ func loadImportForCheck(r *Registry, path string) error {
 	if isNativeModImport(path) {
 		return resolveNativeMod(r, path)
 	}
-	if isDataFile(path) {
+	if isDataFile(r, path) {
 		return nil
 	}
 	resolved := path
@@ -610,7 +646,7 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		_lst, _ := AsList(args[0])
 		return nil, installRenamedExports(r, desc, _lst.Slice())
 	}
-	if isDataFile(path) {
+	if isDataFile(r, path) {
 		return nil, r.AqlError("import_error", fmt.Sprintf("import: rename not supported for data files (%s)", path), "import")
 	}
 	desc, err := loadFileModule(r, path)
