@@ -6377,10 +6377,41 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// fill the rest top-down (the deepest-last ascending run reversed).
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
-		if !tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil) {
+		if !tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil, false) {
 			e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		}
 		e.spliceCheckResults(positions, out)
+		return nil
+	}
+	// No disjunct partition. When an operand is an Any-typed carrier — a value
+	// of statically-unknown type, e.g. `get` over a List/Map element
+	// (`(cases _i get) get "in"`) — matchSignature could not commit to an
+	// overload, but at run time the value is concrete and the SAME first-match
+	// the interpreter takes dispatches it. For a SAFE pure core builtin, record
+	// a runtime-re-matching OpCallNativePoly instead of refusing: tryRecordPoly's
+	// gates keep meta / fn-value / mutating (set) / code-body / multi-result
+	// words out, so only words whose runtime re-match is faithful poly. Results
+	// are computed with recording suspended so the program records ONLY the poly
+	// call, never a duplicate CALL_NATIVE for the same dispatch. Concrete (non-
+	// Any) operands that reach here are a genuine type error and still refuse.
+	es := e.registry.Check.Emit
+	if es.active() && anyAnyCarrier(args) {
+		resume := es.Suspend()
+		results := carrierResults(e.registry, w.Name, sig, args, pos, nil)
+		resume()
+		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), results, pos, false, nil, true) {
+			e.spliceCheckResults(positions, results)
+			return nil
+		}
+		es.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		e.registry.Check.AddDiagnostic(CheckDiagnostic{
+			Code:   "no_signature",
+			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
+			Word:   w.Name,
+			Row:    pos.Row,
+			Col:    pos.Col,
+		})
+		e.spliceCheckResults(positions, results)
 		return nil
 	}
 	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
