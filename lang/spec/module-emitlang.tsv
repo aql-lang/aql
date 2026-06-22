@@ -1,0 +1,82 @@
+# AQL Language Specification: the aql:emitlang module + the core `emit` word
+# Format: input<TAB>expected<TAB>description
+#
+# `emit <kind> <opts?> <data>` is the symmetric inverse of `parse`: it expands
+# at the call site to the STANDARD emitter call
+# `EmitLang get emit_<kind> <data> <opts> end`. The `data` is the REQUIRED LAST
+# surface arg and `opts` is the optional MIDDLE one — disambiguated by arity.
+# The kind is OPTIONAL: bare `emit <data>` routes to emit_auto, which picks the
+# value's natural format (Map/List/scalar/Error → json, Table → csv, Xml → xml).
+# Every emitter traverses the value through the canonical walk engine — one code
+# path for all formats. `EmitLang.register` installs AQL fns as emitters;
+# `EmitLang.kinds` lists them. A shape a format cannot represent raises
+# emit_unsupported; an unknown explicit kind raises emit_unknown_lang.
+# (Emit results are Strings, so the canonical expected form is single-quoted.)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  emit — auto (natural format) and explicit json
+"aql:emitlang" import end  emit {a:1 b:[2 3]}	'{"a":1,"b":[2,3]}'	bare emit auto-picks json for a Map
+"aql:emitlang" import end  emit [1 2 3]	'[1,2,3]'	a List auto-emits as a json array
+"aql:emitlang" import end  emit "hi"	'"hi"'	a scalar String auto-emits as json
+"aql:emitlang" import end  emit json {a:1 b:"hi"}	'{"a":1,"b":"hi"}'	explicit json kind
+"aql:emitlang" import end  EmitLang.emit_json {a:1} {} end	'{"a":1}'	emit is pure sugar — the desugared standard call is equivalent
+#
+# §2  opts — pretty / compact / indent
+"aql:emitlang" import end  emit json {pretty:true} {a:1}	'{\n  "a": 1\n}'	opts {pretty:true} → indented json (2-space default)
+"aql:emitlang" import end  emit json {indent:4} {a:1}	'{\n    "a": 1\n}'	opts {indent:N} → N-space indentation
+"aql:emitlang" import end  emit json {} {a:1}	'{"a":1}'	an explicit empty opts map → compact (the default)
+"aql:emitlang" import end  def o {pretty:true} end  emit o {a:1}	'{\n  "a": 1\n}'	the opts map may be a variable — a bare leading word that resolves to a value is opts, not a kind
+"aql:emitlang" import end  emit json {indent:-1} {a:1}	'{\n"a": 1\n}'	a negative indent is clamped to 0 (newline-only) — never a strings.Repeat panic
+#
+# §3  jsonic — bare identifier keys
+"aql:emitlang" import end  emit jsonic {a:1 b:"hi"}	'{a:1,b:"hi"}'	jsonic drops quotes for identifier keys
+"aql:emitlang" import end  emit jsonic {"a b":1}	'{"a b":1}'	a non-identifier key stays quoted
+#
+# §4  yaml — block style
+"aql:emitlang" import end  emit yaml {a:1}	'a: 1'	a flat map renders one key: value line
+"aql:emitlang" import end  emit yaml [1 2]	'- 1\n- 2'	a list renders `- ` items
+#
+# §5  csv / tsv — tabular, list of records
+"aql:emitlang" import end  emit csv [{a:1 b:2} {a:3 b:4}]	'a,b\n1,2\n3,4\n'	csv header from the first record's keys, then rows
+"aql:emitlang" import end  emit tsv [{a:1 b:2}]	'a\tb\n1\t2\n'	tsv uses a tab separator
+"aql:emitlang" import end  emit csv {separation:";"} [{a:1 b:2}]	'a;b\n1;2\n'	opts {separation:sep} overrides the csv separator
+#
+# §6  toml / ini — map shapes
+"aql:emitlang" import end  emit toml {a:1 b:"hi"}	'a = 1\nb = "hi"'	a flat map → top-level key = value lines
+"aql:emitlang" import end  emit toml {server:{host:"x"}}	'[server]\nhost = "x"'	a nested map → a [table] header
+"aql:emitlang" import end  emit toml {"a b":1}	'"a b" = 1'	a key that is not a bare TOML key is quoted so it round-trips
+"aql:emitlang" import end  emit ini {db:{user:"a"}}	'[db]\nuser=a'	a {section:{k:v}} map → an [section] block
+"aql:emitlang" import end  emit ini {a:1 b:2}	'a=1\nb=2'	a flat map → bare key=value lines
+#
+# §7  xml — Xml-only
+"aql:emitlang" import end  emit xml <r><c>1</c></r>	'<r><c>1</c></r>'	an Xml element round-trips to well-formed XML
+#
+# §8  out-of-band exports — kinds / register
+"aql:emitlang" import end  EmitLang.kinds	[json/q jsonic/q yaml/q csv/q tsv/q toml/q ini/q xml/q]	the registered emitter-kind atoms (the built-in family, in fixed order)
+"aql:emitlang" import end  EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]]) end  emit up {a:1}	'UP'	register installs a custom emitter; emit <name> uses it
+#
+# §9  negatives
+"aql:emitlang" import end  emit nope {a:1}	ERROR:emit_unknown_lang	unknown explicit kind: expansion-time error at the call site
+emit json {a:1}	ERROR:emit_unknown_lang	emit is core but emitters need the import (no auto-import)
+EmitLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
+"aql:emitlang" import end  emit toml [1 2]	ERROR:emit_unsupported	toml cannot represent a top-level List
+"aql:emitlang" import end  emit xml {a:1}	ERROR:emit_unsupported	xml only emits an Xml element, not a Map
+"aql:emitlang" import end  emit ini {a:{b:{c:1}}}	ERROR:emit_unsupported	ini supports one level of sections, not deeper nesting
+"aql:emitlang" import end  emit csv {a:1}	ERROR:emit_unsupported	csv needs a table or list of rows — a bare Map is not tabular
+"aql:emitlang" import end  emit csv 1	ERROR:emit_unsupported	csv needs a table or list of rows — a scalar is not tabular
+"aql:emitlang" import end  emit toml {a:None}	ERROR:emit_unsupported	toml has no null — an unrepresentable scalar errors rather than corrupting the type
+"aql:emitlang" import end  EmitLang.register Bad (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_bad_name	capitalised emitter names are rejected (types)
+"aql:emitlang" import end  EmitLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:emit_bad_signature	the standard prefix [value:Any opts:Map …] is enforced
+"aql:emitlang" import end  EmitLang.register emit_x (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_bad_name	the emit_ prefix is register's job, not the caller's
+"aql:emitlang" import end  EmitLang.register json (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_kind_exists	collision with a built-in emitter
+#
+# §10  every per-kind export covered by its qualified name (ADR-003) — the
+#      desugared standard call `EmitLang.emit_<kind> <data> <opts> end`.
+"aql:emitlang" import end  EmitLang.emit_auto {a:1} {} end	'{"a":1}'	emit_auto picks the value's natural format (json for a Map)
+"aql:emitlang" import end  EmitLang.emit_jsonic {a:1} {} end	'{a:1}'	emit_jsonic — bare identifier keys
+"aql:emitlang" import end  EmitLang.emit_yaml {a:1} {} end	'a: 1'	emit_yaml — block style
+"aql:emitlang" import end  EmitLang.emit_csv [{a:1 b:2}] {} end	'a,b\n1,2\n'	emit_csv — tabular
+"aql:emitlang" import end  EmitLang.emit_tsv [{a:1 b:2}] {} end	'a\tb\n1\t2\n'	emit_tsv — tab separated
+"aql:emitlang" import end  EmitLang.emit_toml {a:1} {} end	'a = 1'	emit_toml — key = value
+"aql:emitlang" import end  EmitLang.emit_ini {a:1} {} end	'a=1'	emit_ini — flat key=value
+"aql:emitlang" import end  EmitLang.emit_xml <r>1</r> {} end	'<r>1</r>'	emit_xml — Xml element

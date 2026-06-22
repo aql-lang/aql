@@ -5,7 +5,6 @@ import (
 	"io"
 	"math"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	jsonic "github.com/tabnas/jsonic/go"
@@ -200,51 +199,14 @@ func sortedMapKeys(m map[string]any) []string {
 	return keys
 }
 
-// valueToJsonic converts an AQL Value to a jsonic-compatible string.
+// valueToJsonic converts an AQL Value to a compact json/jsonic-compatible
+// string. It is a thin wrapper over the canonical walk-based json encoder
+// (emit.go) — the single emit code path — keeping its name and signature for
+// the existing callers/tests. Compact, double-quoted keys (the json profile),
+// byte-for-byte identical to the previous hand-rolled implementation.
 func valueToJsonic(v Value) string {
-	switch {
-	case v.Parent.ConformsTo(TString):
-		_as0, _ := AsString(v)
-		return fmt.Sprintf("%q", _as0)
-	case v.Parent.ConformsTo(TFloat):
-		_as1, _ := AsFloat(v)
-		return strconv.FormatFloat(_as1, 'f', -1, 64)
-	case v.Parent.ConformsTo(TInteger):
-		_as2, _ := AsInteger(v)
-		return fmt.Sprintf("%d", _as2)
-	case v.Parent.ConformsTo(TBoolean):
-		_as3, _ := AsBoolean(v)
-		if _as3 {
-			return "true"
-		}
-		return "false"
-	case IsNoneShape(v):
-		return "null"
-	case v.Parent.ConformsTo(TAtom):
-		_as4, _ := AsAtom(v)
-		return fmt.Sprintf("%q", _as4)
-	case v.Parent.ConformsTo(TList):
-		if elems, err := AsMutableList(v); err == nil {
-			parts := make([]string, len(elems))
-			for i, e := range elems {
-				parts[i] = valueToJsonic(e)
-			}
-			return "[" + strings.Join(parts, ",") + "]"
-		}
-		return "[]"
-	case v.Parent.ConformsTo(TMap):
-		if om, err := AsMutableMap(v); err == nil {
-			parts := make([]string, 0, om.Len())
-			for _, k := range om.Keys() {
-				val, _ := om.Get(k)
-				parts = append(parts, fmt.Sprintf("%q:%s", k, valueToJsonic(val)))
-			}
-			return "{" + strings.Join(parts, ",") + "}"
-		}
-		return "{}"
-	default:
-		return fmt.Sprintf("%q", v.String())
-	}
+	s, _ := encodeJSON(v, nil)
+	return s
 }
 
 func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]Value, error) {

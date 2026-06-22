@@ -144,6 +144,12 @@ WORD each
   [Ideal/Reach Node/List] barrier=2 returns=[Node/List]
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD emit
+  [Scalar/Atom Any Any] barrier=3 runcheck quote={0} returns=[Scalar/String]
+  [Scalar/Atom Any] barrier=2 runcheck quote={0} returns=[Scalar/String]
+  [Any Any] barrier=2 runcheck returns=[Scalar/String]
+  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Scalar/String]
+  [Any] barrier=1 runcheck returns=[Scalar/String]
 WORD enum
   [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum]
 WORD eq

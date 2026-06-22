@@ -111,6 +111,14 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		}
 	}
 
+	// aontu (github.com/rjrodger/aontu): a CUE-inspired unification config
+	// dialect with no Go port, so it ships as a hand-written parser in
+	// native (see native/aontu.go) rather than via the tabnas family. It is
+	// built in the same way — importing aql:parselang is enough.
+	if err := installHostParser(exports, subReg, aontuParserSpec()); err != nil {
+		return native.ModuleDesc{}, err
+	}
+
 	// ---- host-registered parsers --------------------------------------
 	// create=true: record the live module even with no host parsers yet,
 	// so a post-import RegisterHostParser injects directly (the loaded
@@ -417,15 +425,43 @@ func tabnasParserSpecs() []ParseLangSpec {
 	return specs
 }
 
-// builtinParserKind reports whether name is one of the built-in tabnas parser
-// kinds (json, csv, ini, …) — the names tabnasParserSpecs installs.
+// builtinParserKind reports whether name is one of the built-in parser kinds
+// (the tabnas family json/csv/ini/… plus the hand-written aontu) — the names
+// BuildParseLangModule installs before any host registration.
 func builtinParserKind(name string) bool {
+	if name == "aontu" {
+		return true
+	}
 	for _, spec := range tabnasParserSpecs() {
 		if spec.Name == name {
 			return true
 		}
 	}
 	return false
+}
+
+// aontuParserSpec is the built-in aontu parse kind. Its handler decodes the
+// resolved source via native.AontuParse and converts the generic result
+// (map[string]any / []any / scalars) to an AQL Node of Maps and Lists; a
+// decode or unification failure raises [aql/parse_syntax_error].
+func aontuParserSpec() ParseLangSpec {
+	return ParseLangSpec{
+		Name:    "aontu",
+		Returns: []*native.Type{native.TAny},
+		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			src, err := args[0].AsConcreteString() // resolved by the framework
+			if err != nil {
+				return nil, r.AqlError("parse_error", "aontu: src: "+err.Error(), "parse_aontu")
+			}
+			v, perr := native.AontuParse(src, native.OptsToMap(args[1]))
+			if perr != nil {
+				return nil, r.AqlErrorHint("parse_syntax_error",
+					native.FirstCleanLine(perr.Error()), "parse_aontu",
+					"check that the source is well-formed aontu")
+			}
+			return []native.Value{native.AnyToValue(v)}, nil
+		},
+	}
 }
 
 // tabnasParseHandler builds the parser native for one tabnas kind: it runs
