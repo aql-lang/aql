@@ -161,9 +161,11 @@ func isFilePath(path string) bool {
 }
 
 // isDataFile returns true if the path has a data file extension
-// (.json, .jsonic, .csv, .tsv).
-func isDataFile(path string) bool {
-	f := formatFromExt(path)
+// (.json, .jsonic, .csv, .tsv) — the formats `import` loads as values.
+// Parser-backed formats (ini/xml/yaml/…) are deliberately excluded: they
+// are read-only and reached via `read`, not `import`.
+func isDataFile(r *Registry, path string) bool {
+	f := formatFromExt(r, path)
 	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
 }
 
@@ -241,12 +243,12 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 // the result as an AQL value on the stack. Uses doRead so CSV/TSV files
 // get the same table + SQLite handling as the read word.
 func loadDataFile(parent *Registry, path string) ([]Value, error) {
-	format := formatFromExt(path)
+	format := formatFromExt(parent, path)
 	if format == "" {
 		return nil, parent.AqlError("import_error", fmt.Sprintf("import: unknown format for %s", path), "import")
 	}
 	resolved := resolveImportPath(parent, path)
-	result, err := doRead(parent, resolved, "utf8", format, "lf")
+	result, err := doRead(parent, resolved, "utf8", format, "lf", nil)
 	if err != nil {
 		return nil, fmt.Errorf("import: %w", err)
 	}
@@ -325,12 +327,12 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 		if !ok {
 			return fmt.Errorf("resource %q: value must be a string filename", key)
 		}
-		format := formatFromExt(filename)
+		format := formatFromExt(r, filename)
 		if format == "" {
 			return fmt.Errorf("resource %q: unsupported file format %q", key, filename)
 		}
 		filePath := filepath.Join(modDir, filename)
-		vals, err := doRead(r, filePath, "utf8", format, "lf")
+		vals, err := doRead(r, filePath, "utf8", format, "lf", nil)
 		if err != nil {
 			return fmt.Errorf("resource %q: %w", key, err)
 		}
@@ -539,7 +541,7 @@ func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 		}
 		return r.Modules.Resolver(name, r)
 	}
-	if isDataFile(ref) {
+	if isDataFile(r, ref) {
 		return ModuleDesc{}, fmt.Errorf("%q is a data file, not a module", ref)
 	}
 	if !isFilePath(ref) {

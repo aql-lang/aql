@@ -324,15 +324,15 @@ func (a *AQL) SetOutput(w io.Writer) {
 	a.registry.Output = w
 }
 
-// RegisterFormat adds or replaces a format in the format registry.
-// Formats are used by read/write words via the {fmt:"name"} option.
-func (a *AQL) RegisterFormat(name string, f Format) {
-	formats := native.HostFormats(a.registry)
-	if formats == nil {
-		formats = make(map[string]native.Format)
-		native.SetHostFormats(a.registry, formats)
+// RegisterFormat adds or replaces a format in the format registry and maps
+// any given file extensions (leading dot optional) to it. Formats are used
+// by the read/write words via the {fmt:"name"} option and, for any mapped
+// extensions, by `read` on a matching path.
+func (a *AQL) RegisterFormat(name string, f Format, exts ...string) {
+	if native.HostFormats(a.registry) == nil {
+		native.SetHostFormats(a.registry, make(map[string]native.Format))
 	}
-	formats[name] = f
+	_ = native.RegisterFormat(a.registry, name, f, exts...)
 }
 
 // Register adds a named word with one or more signatures. Any sig

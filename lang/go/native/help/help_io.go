@@ -25,12 +25,17 @@ func init() {
 
 	register(&Entry{
 		Word:    "read",
-		Summary: "Read a file and return its contents.",
-		Description: "Reads a file by path and returns its contents. The format is inferred from the " +
-			"file extension (.csv, .tsv, .json, .jsonic, .txt) or can be set via {fmt: \"...\"}. " +
-			"CSV/TSV files are loaded into SQLite-backed tables automatically.",
+		Summary: "Read a file and return its decoded contents.",
+		Description: "Reads a file by path and decodes it into structured values. The format is " +
+			"inferred from the file extension (host-overridable, many-to-one) or set via " +
+			"{fmt: \"...\"}. Built-in formats: text, lines, json, jsonic, csv, tsv, and the " +
+			"read-only parser family ini (.ini/.cfg/.conf), yaml (.yml/.yaml), toml, xml, " +
+			"json5, jsonc, zon, markdown (.md), feed (.rss/.atom). An unmapped extension " +
+			"falls back to text. CSV/TSV files are loaded into SQLite-backed tables " +
+			"automatically; extra options are forwarded to the decoder.",
 		Notes: []string{
-			"Options: enc, fmt, nl.",
+			"Options: enc, fmt, nl (plus decoder-specific keys).",
+			"Parser-backed formats are read-only — write rejects them via {fmt:…}.",
 			"Pass the stdin stream handle to read from standard input.",
 		},
 	})

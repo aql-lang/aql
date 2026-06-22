@@ -18,24 +18,51 @@ const (
 	pathStderr = "<stderr>"
 )
 
-// formatFromExt returns the format name based on the file extension.
-// Returns empty string if the extension is not recognized.
-func formatFromExt(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".csv":
-		return "csv"
-	case ".tsv":
-		return "tsv"
-	case ".json":
-		return "json"
-	case ".jsonic":
-		return "jsonic"
-	case ".txt":
-		return "text"
-	default:
+// DefaultExtensions returns the built-in file-extension→format-name map
+// (lowercase keys, no leading dot). The mapping is many-to-one — several
+// extensions may share one format (cfg/conf/ini→ini, yml/yaml→yaml) — and
+// host-overridable via SetHostExtensions / RegisterFormat. An extension
+// absent from the map decodes as plain text.
+func DefaultExtensions() map[string]string {
+	return map[string]string{
+		"csv":      "csv",
+		"tsv":      "tsv",
+		"json":     "json",
+		"jsonic":   "jsonic",
+		"txt":      "text",
+		"ini":      "ini",
+		"cfg":      "ini",
+		"conf":     "ini",
+		"cnf":      "ini",
+		"yml":      "yaml",
+		"yaml":     "yaml",
+		"toml":     "toml",
+		"xml":      "xml",
+		"json5":    "json5",
+		"jsonc":    "jsonc",
+		"zon":      "zon",
+		"md":       "markdown",
+		"markdown": "markdown",
+		"rss":      "feed",
+		"atom":     "feed",
+	}
+}
+
+// formatFromExt returns the format name for path's extension, consulting
+// the host extension registry (HostExtensions). Returns "" when the
+// extension is unmapped or no registry is installed; the caller falls back
+// to text.
+func formatFromExt(r *Registry, path string) string {
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	if ext == "" {
 		return ""
 	}
+	if m := HostExtensions(r); m != nil {
+		if f, ok := m[ext]; ok {
+			return f
+		}
+	}
+	return ""
 }
 
 // normalizeLineEndings replaces all \r\n and \r with \n.
@@ -69,9 +96,12 @@ func applyNL(content string, nl string) string {
 	}
 }
 
-// parseFileOpts extracts options from an AQL map value.
-// fmtExplicit is true if the user explicitly set the fmt option.
-func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) {
+// parseFileOpts extracts options from an AQL map value. fmtExplicit is
+// true if the user explicitly set the fmt option. parserOpts holds every
+// remaining (non-reserved) key, forwarded to an opts-aware decoder — e.g.
+// `read foo.csv {fmt:'csv' field:{separation:';'}}` yields
+// parserOpts={field:{separation:';'}}. It is nil when no extra keys exist.
+func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool, parserOpts map[string]any) {
 	enc = "utf8"
 	format = "text"
 	mode = "write"
@@ -94,6 +124,17 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool) 
 	}
 	if s, ok := MapFieldString(m, "nl"); ok {
 		nl = s
+	}
+
+	// Surface any non-reserved keys as parser options for the decoder.
+	if raw, ok := ValueToAny(opts).(map[string]any); ok {
+		delete(raw, "enc")
+		delete(raw, "fmt")
+		delete(raw, "mode")
+		delete(raw, "nl")
+		if len(raw) > 0 {
+			parserOpts = raw
+		}
 	}
 
 	return
@@ -206,7 +247,7 @@ func valueToJsonic(v Value) string {
 	}
 }
 
-func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
+func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]Value, error) {
 	var data []byte
 	var err error
 
@@ -233,7 +274,12 @@ func doRead(r *Registry, path, enc, format, nl string) ([]Value, error) {
 		return nil, r.AqlError("read_error", fmt.Sprintf("read: unknown format: %s", format), "read")
 	}
 
-	result, err := f.Decode(content)
+	var result []Value
+	if d, ok := f.(DecodeOpter); ok && len(opts) > 0 {
+		result, err = d.DecodeOpts(content, opts)
+	} else {
+		result, err = f.Decode(content)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}

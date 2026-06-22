@@ -1,29 +1,12 @@
 package modules
 
 import (
-	"encoding/json"
 	"fmt"
-	"math"
-	"regexp"
-	"sort"
 	"strings"
 	"sync"
 
 	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/native"
-	tabnascsv "github.com/tabnas/csv/go"
-	tabnasfeed "github.com/tabnas/feed/go"
-	tabnasini "github.com/tabnas/ini/go"
-	tabnasjson "github.com/tabnas/json/go"
-	tabnasjson5 "github.com/tabnas/json5/go"
-	tabnasjsonc "github.com/tabnas/jsonc/go"
-	tabnasjsonic "github.com/tabnas/jsonic/go"
-	tabnasmarkdown "github.com/tabnas/markdown/go"
-	tabnastoml "github.com/tabnas/toml/go"
-	tabnasxml "github.com/tabnas/xml/go"
-	tabnasyaml "github.com/tabnas/yaml/go"
-	tabnaszon "github.com/tabnas/zon/go"
 )
 
 // The aql:parselang module — the ParseLang namespace of named parsers
@@ -227,6 +210,52 @@ func RegisterHostParser(reg *native.Registry, spec ParseLangSpec) error {
 	return nil
 }
 
+// RegisterFormatParser registers f as a read format (reachable from `read`
+// by name and by each ext) AND as a `parse` kind of the same name (reachable
+// from `parse <name>`). It is the single-call bridge for hosts that want a
+// format available on BOTH surfaces from one definition. The parse side
+// decodes via the format's Decode (a DecodeOpter format additionally honours
+// `parse <name> <opts> <src>`).
+func RegisterFormatParser(reg *native.Registry, name string, f native.Format, exts ...string) error {
+	if err := native.RegisterFormat(reg, name, f, exts...); err != nil {
+		return err
+	}
+	return RegisterHostParser(reg, ParseLangSpec{
+		Name:    name,
+		Returns: []*native.Type{native.TAny},
+		Handler: formatParseHandler(name, f),
+	})
+}
+
+// formatParseHandler adapts a read Format into a parse handler: it decodes
+// the resolved source (forwarding opts when the format is opts-aware) and
+// returns the first decoded value.
+func formatParseHandler(name string, f native.Format) native.Handler {
+	target := "parse_" + name
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+		src, err := args[0].AsConcreteString() // resolved by the framework
+		if err != nil {
+			return nil, r.AqlError("parse_error", name+": src: "+err.Error(), target)
+		}
+		var out []native.Value
+		var perr error
+		if d, ok := f.(native.DecodeOpter); ok {
+			out, perr = d.DecodeOpts(src, native.OptsToMap(args[1]))
+		} else {
+			out, perr = f.Decode(src)
+		}
+		if perr != nil {
+			return nil, r.AqlErrorHint("parse_syntax_error",
+				name+": "+native.FirstCleanLine(perr.Error()), target,
+				"check that the source is well-formed "+name)
+		}
+		if len(out) == 0 {
+			return []native.Value{native.NewTypeLiteral(native.TNone)}, nil
+		}
+		return []native.Value{out[0]}, nil
+	}
+}
+
 // installHostParser registers a shell native that resolves the source value
 // to a String and then calls the host handler, and exports the standard
 // trivial-delegation wrapper under parse_<name>. The dispatch source slot is
@@ -358,100 +387,22 @@ func parseRegisterHandler(exports *native.OrderedMap) native.Handler {
 	}
 }
 
-// tabnasParser is the shape of a tabnas decoder: source text + the caller's
-// `parse` opts → generic Go data (map[string]any / []any / scalars), or a
-// parse error.
-type tabnasParser func(src string, opts map[string]any) (any, error)
-
 // tabnasParserSpecs returns the parser kinds backed by the tabnas parser
-// family (github.com/tabnas/*). Every kind ships built-in — importing
-// aql:parselang is enough to use `parse <kind> '<text>'`, no host
-// registration needed. They share one any→Value conversion, so a parsed map
-// becomes an AQL Map, a list an AQL List, and scalars their AQL counterparts.
+// family, built from the shared native.TabnasKinds() core (which read also
+// consumes — see lang/go/native/tabnas.go). Every kind ships built-in —
+// importing aql:parselang is enough to use `parse <kind> '<text>'`, no host
+// registration needed.
 //
-// Shapes: the JSON family (json / jsonic / json5 / jsonc) plus yaml / zon
-// yield whatever their top level denotes (Map, List or scalar); csv and
-// markdown yield a List of rows / blocks; ini / toml / xml / feed yield a Map.
-//
-// The middle `parse <kind> <opts> <source>` opts map is forwarded to the
-// jsonic-plugin kinds (json5 / jsonc / csv / xml / markdown / feed), whose
-// option model IS a generic map — e.g. `parse csv {field:{separation:';'}}`.
-// The standalone-Parse kinds (json / jsonic / yaml / toml / zon / ini) take
-// typed (not map) options upstream, so they ignore opts for now.
+// The slice order mirrors native.TabnasKinds() and is pinned by
+// ParseLang.kinds (lang/spec/module-parselang.tsv §3).
 func tabnasParserSpecs() []ParseLangSpec {
-	// jsonicPlugin adapts a tabnas jsonic plugin (json5, csv, xml, …) — which
-	// installs its grammar onto a parser instance from a map of options — into
-	// a tabnasParser, merging the caller's opts over the kind's defaults.
-	jsonicPlugin := func(defaults map[string]any, install func(*tabnasjsonic.Jsonic, map[string]any) error) tabnasParser {
-		return func(src string, opts map[string]any) (any, error) {
-			j := parser.SafeMake()
-			if err := install(j, mergeOpts(defaults, opts)); err != nil {
-				return nil, err
-			}
-			return j.Parse(src)
-		}
-	}
-	ignoreOpts := func(parse func(string) (any, error)) tabnasParser {
-		return func(src string, _ map[string]any) (any, error) { return parse(src) }
-	}
-	defs := []struct {
-		name    string
-		returns *native.Type
-		parse   tabnasParser
-	}{
-		// INI: [section] headers nest a Map; booleans decode to Booleans.
-		{"ini", native.TMap, ignoreOpts(func(s string) (any, error) { return tabnasini.Parse(s) })},
-		// JSON family — top level may be an object, array or scalar.
-		{"json", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasjson.Parse(s) })},
-		{"jsonic", native.TAny, ignoreOpts(func(s string) (any, error) { return parser.SafeParse(s) })},
-		{"json5", native.TAny, jsonicPlugin(tabnasjson5.Defaults(), tabnasjson5.Json5)},
-		{"jsonc", native.TAny, jsonicPlugin(nil, tabnasjsonc.Jsonc)},
-		// CSV: a List of rows, each row a List of field strings.
-		{"csv", native.TList, jsonicPlugin(nil, tabnascsv.Csv)},
-		{"toml", native.TMap, ignoreOpts(func(s string) (any, error) { return tabnastoml.Parse(s) })},
-		{"yaml", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnasyaml.Parse(s) })},
-		// XML: a Node/Xml element tree — the SAME value an embedded
-		// `<tag>…</tag>` literal produces, so a parsed document and a
-		// source literal are interchangeable. See design/XML-LITERAL.0.md §5.6.
-		{"xml", native.TXml, jsonicPlugin(nil, tabnasxml.Xml)},
-		{"zon", native.TAny, ignoreOpts(func(s string) (any, error) { return tabnaszon.Parse(s) })},
-		// Markdown: a List of blocks. object:false keeps rows as plain Lists
-		// (the default ordered-map record shape has no exported accessors).
-		{"markdown", native.TList, func(s string, opts map[string]any) (any, error) {
-			j := parser.SafeMake()
-			if err := j.UseDefaults(tabnasmarkdown.Markdown, tabnasmarkdown.Defaults,
-				mergeOpts(map[string]any{"object": false}, opts)); err != nil {
-				return nil, err
-			}
-			return j.Parse(s)
-		}},
-		// Feed (RSS/Atom): normalised to a Map. The plugin returns a typed
-		// AtomFeed struct, so a JSON round-trip flattens it to generic data.
-		{"feed", native.TMap, func(s string, opts map[string]any) (any, error) {
-			j := parser.SafeMake()
-			if err := tabnasfeed.Feed(j, mergeOpts(tabnasfeed.Defaults, opts)); err != nil {
-				return nil, err
-			}
-			v, err := j.Parse(s)
-			if err != nil {
-				return nil, err
-			}
-			return jsonRoundTrip(v)
-		}},
-	}
-	specs := make([]ParseLangSpec, len(defs))
-	for i, d := range defs {
-		// XML decodes to a dedicated Node/Xml value (not a generic Map) so
-		// `parse xml` and an embedded `<…>` literal yield the same shape;
-		// every other kind uses the generic any→Value conversion.
-		convert := tabnasAnyToValue
-		if d.name == "xml" {
-			convert = tabnasXmlToValue
-		}
+	kinds := native.TabnasKinds()
+	specs := make([]ParseLangSpec, len(kinds))
+	for i, k := range kinds {
 		specs[i] = ParseLangSpec{
-			Name:    d.name,
-			Returns: []*native.Type{d.returns},
-			Handler: tabnasParseHandler(d.name, d.parse, convert),
+			Name:    k.Name,
+			Returns: []*native.Type{k.Returns},
+			Handler: tabnasParseHandler(k.Name, k.Parse, k.Convert),
 		}
 	}
 	return specs
@@ -471,172 +422,20 @@ func builtinParserKind(name string) bool {
 // tabnasParseHandler builds the parser native for one tabnas kind: it runs
 // the decoder over the (already-resolved) source string and converts the
 // result to an AQL Value. A decode failure raises [aql/parse_syntax_error].
-func tabnasParseHandler(kind string, parse tabnasParser, convert func(any) native.Value) native.Handler {
+func tabnasParseHandler(kind string, parse native.TabnasParser, convert func(any) native.Value) native.Handler {
 	target := "parse_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework
 		if err != nil {
 			return nil, r.AqlError("parse_error", kind+": src: "+err.Error(), target)
 		}
-		v, perr := parse(src, optsToMap(args[1]))
+		v, perr := parse(src, native.OptsToMap(args[1]))
 		if perr != nil {
 			return nil, r.AqlErrorHint("parse_syntax_error",
-				kind+": "+firstCleanLine(perr.Error()), target,
+				kind+": "+native.FirstCleanLine(perr.Error()), target,
 				"check that the source is well-formed "+kind)
 		}
 		return []native.Value{convert(v)}, nil
-	}
-}
-
-// tabnasXmlToValue maps the tabnas XML decoder's output to a Node/Xml
-// element value, the same shape an embedded `<tag>…</tag>` literal
-// produces. The decoder yields `{name, localName, attributes, children}`
-// where children interleaves text strings and nested element maps; this
-// walks that tree into NewXmlElement(tag, attr, cren). A non-element top
-// level (defensive) falls back to the generic conversion.
-func tabnasXmlToValue(v any) native.Value {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return tabnasAnyToValue(v)
-	}
-	tag, _ := m["name"].(string)
-	attr := native.NewOrderedMap()
-	if am, ok := m["attributes"].(map[string]any); ok {
-		keys := make([]string, 0, len(am))
-		for k := range am {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys) // tabnas hands back an unordered map; sort for determinism
-		for _, k := range keys {
-			attr.Set(k, native.NewString(fmt.Sprintf("%v", am[k])))
-		}
-	}
-	var cren []native.Value
-	if ch, ok := m["children"].([]any); ok {
-		for _, c := range ch {
-			switch cc := c.(type) {
-			case string:
-				cren = append(cren, native.NewString(cc))
-			case map[string]any:
-				cren = append(cren, tabnasXmlToValue(cc))
-			default:
-				cren = append(cren, native.NewString(fmt.Sprintf("%v", cc)))
-			}
-		}
-	}
-	return native.NewXmlElement(tag, attr, cren)
-}
-
-// optsToMap converts the parser's opts argument (the middle `parse <kind>
-// <opts> <source>` map, `{}` when the caller gave none) to a generic
-// map[string]any the tabnas plugins understand. A non-Map / empty value
-// yields nil, so a kind's defaults pass through mergeOpts untouched.
-func optsToMap(v native.Value) map[string]any {
-	if !v.Parent.ConformsTo(native.TMap) || !native.IsConcrete(v) {
-		return nil
-	}
-	m, ok := native.ValueToAny(v).(map[string]any)
-	if !ok {
-		return nil
-	}
-	return m
-}
-
-// mergeOpts returns a fresh map of base overlaid with over — the caller's
-// `parse` opts win over a kind's defaults, leaving both inputs untouched.
-// Either may be nil.
-func mergeOpts(base, over map[string]any) map[string]any {
-	if len(base) == 0 && len(over) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(base)+len(over))
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range over {
-		out[k] = v
-	}
-	return out
-}
-
-// jsonRoundTrip flattens an arbitrary Go value (e.g. a typed feed struct) to
-// generic data — map[string]any / []any / scalars — via encoding/json, so the
-// shared converter can handle it uniformly.
-func jsonRoundTrip(v any) (any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var out any
-	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// ansiEscape matches the SGR colour escapes the tabnas parsers embed in their
-// diagnostics. The pattern is a compile-time constant, so MustCompile is safe.
-var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
-
-// firstCleanLine returns the first line of a parser diagnostic with colour
-// escapes stripped — the tabnas/jsonic parsers emit richly-formatted
-// multi-line errors; the AQL error keeps just the headline.
-func firstCleanLine(msg string) string {
-	msg = ansiEscape.ReplaceAllString(msg, "")
-	if i := strings.IndexByte(msg, '\n'); i >= 0 {
-		msg = msg[:i]
-	}
-	return strings.TrimSpace(msg)
-}
-
-// tabnasMapToValue converts a decoded map to an AQL Map, ordering keys
-// deterministically (the parsers hand back unordered Go maps).
-func tabnasMapToValue(m map[string]any) native.Value {
-	om := native.NewOrderedMap()
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		om.Set(k, tabnasAnyToValue(m[k]))
-	}
-	return native.NewMap(om)
-}
-
-// tabnasAnyToValue maps a single decoded value to an AQL Value. The parsers
-// emit strings, booleans, numbers, nested maps and lists; an unrecognised
-// shape degrades to its string form rather than erroring.
-func tabnasAnyToValue(v any) native.Value {
-	switch val := v.(type) {
-	case nil:
-		return native.NewTypeLiteral(native.TNone)
-	case bool:
-		return native.NewBoolean(val)
-	case string:
-		return native.NewString(val)
-	case float64:
-		// A whole-valued number stays an Integer, but ONLY when it fits in
-		// int64 — an out-of-range float (e.g. 1e20 from a JSON/YAML source)
-		// would convert implementation-dependently, so keep it a Float.
-		if val == math.Trunc(val) && val >= math.MinInt64 && val < math.MaxInt64 {
-			return native.NewInteger(int64(val))
-		}
-		return native.NewFloat(val)
-	case int:
-		return native.NewInteger(int64(val))
-	case int64:
-		return native.NewInteger(val)
-	case []any:
-		elems := make([]native.Value, len(val))
-		for i, item := range val {
-			elems[i] = tabnasAnyToValue(item)
-		}
-		return native.NewList(elems)
-	case map[string]any:
-		return tabnasMapToValue(val)
-	default:
-		return native.NewString(fmt.Sprintf("%v", val))
 	}
 }
 
