@@ -214,6 +214,28 @@ func init() {
 			`{a:1 b:5 c:3} filter [gt 2]          ;# => {b:5 c:3}  (map: keep by value)`,
 		},
 	})
+
+	register(&Entry{
+		Word:    "walk",
+		Summary: "Traverse any data structure, firing descent/ascent hooks on every node (visit-only).",
+		Description: "`walk <options> <data> <descend> [<ascend>]` visits every node — root, " +
+			"containers, and leaf scalars — of any value: lists, maps, XML, objects, arrays, " +
+			"stores, tables, and user-defined types (descended generically via the IdealConverter " +
+			"projection). `mode: \"depth\"` (default) fires descend in pre-order and ascend in " +
+			"post-order; `mode: \"breadth\"` descends level-by-level and replays ascend in reverse " +
+			"visitation order. Each hook receives a map `{key value path parent depth}`; the root " +
+			"has key=None, path=\"\", parent=None, depth=0. Paths are dot-joined keys (list/array " +
+			"indices stringified). walk is VISIT-ONLY: hooks run for side effects, their results are " +
+			"ignored, and walk returns its input unchanged — accumulate by mutating a captured " +
+			"FlexList. A hook is a lambda `(m:Any => …)` (reads `m.value`/`m.path`) or a quotation " +
+			"`[…]` (the payload map arrives on the stack). Distinct from StructUtil.walk. Assumes " +
+			"acyclic data.",
+		Examples: []string{
+			`def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc`,
+			`walk {mode: "breadth"} {a:1 b:{c:2}} (m:Any => [m.path print])  ;# print paths, level order`,
+			`walk {mode: "depth"} {a:{x:1}} (m:Any => [m.path print]) (m:Any => [m.path print])  ;# pre then post order`,
+		},
+	})
 }
 
 func init() {

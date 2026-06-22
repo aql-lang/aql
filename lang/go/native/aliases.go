@@ -403,6 +403,8 @@ var (
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
 	InvokeBody                = eng.InvokeBody
+	ConvertIdealToMap         = eng.ConvertIdealToMap
+	ConvertIdealToList        = eng.ConvertIdealToList
 	IsCompiledClosure         = eng.IsCompiledClosure
 	ClosureWantsKeyVal        = eng.ClosureWantsKeyVal
 	CloneValue                = eng.CloneValue

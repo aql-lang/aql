@@ -635,7 +635,9 @@ WORD vals
 WORD var
   [Node/List] barrier=1 runcheck noeval={0} returns=[Any]
 WORD walk
+  [Node/Map Any Any Any] barrier=4 noeval={2,3} +returnsfn
   [Type/Function Type/Function Any] barrier=3
+  [Node/Map Any Any] barrier=3 noeval={2} +returnsfn
   [Type/Function Any] barrier=2
   [Any] barrier=1
 WORD with-decimal
