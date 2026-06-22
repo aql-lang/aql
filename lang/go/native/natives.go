@@ -306,6 +306,32 @@ var Natives = []NativeFunc{
 			{Args: []*Type{TAny}, Handler: istypeHandler, BarrierPos: -1},
 		},
 	},
+
+	// ---- walk (generic, iterative, visit-only structure traversal) ----
+	// Distinct from StructUtil.walk (the recursive voxgig-struct word).
+	// The hook slots are TAny so a quotation `[...]` (passed raw via
+	// NoEvalArgs) and a lambda `(m => …)` both match; classification
+	// happens in the handler. See walk_core.go.
+	{
+		Name: "walk",
+
+		Signatures: []NativeSig{
+			{
+				Args:       []*Type{TMap, TAny, TAny, TAny},
+				NoEvalArgs: map[int]bool{2: true, 3: true},
+				Handler:    walkCoreHandler,
+				// Visit-only: walk returns its input data (arg 1) unchanged,
+				// so the result carries the data's exact provenance/type.
+				ReturnsFn: ReturnsIdentity(1), BarrierPos: -1,
+			},
+			{
+				Args:       []*Type{TMap, TAny, TAny},
+				NoEvalArgs: map[int]bool{2: true},
+				Handler:    walkCoreHandler,
+				ReturnsFn:  ReturnsIdentity(1), BarrierPos: -1,
+			},
+		},
+	},
 }
 
 // apiPatternValue returns the pattern map {kind:"api"} used by signature

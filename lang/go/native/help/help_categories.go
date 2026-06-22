@@ -77,7 +77,7 @@ var categories = []Category{
 	{"query", "Query pipelines, iteration, resources, and modules.", []string{
 		"select", "from", "where", "order", "limit", "offset", "distinct",
 		"group", "having", "join", "union", "unify", "module", "import",
-		"export", "each", "for-each", "fold", "scan", "filter",
+		"export", "each", "for-each", "fold", "scan", "filter", "walk",
 		"list", "create", "load", "update", "remove", "between", "outer", "inner",
 	}},
 	{"io", "Input and output.", []string{
