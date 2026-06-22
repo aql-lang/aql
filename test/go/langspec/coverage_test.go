@@ -43,6 +43,15 @@ var hermeticExempt = map[string]string{
 	// re compile-hook splice (with a carrier users cannot construct), never by
 	// name. Covered by lang/go/test/minilang_compile_test.go.
 	"MiniLang.run-re": "internal compiled-re consumer; reached only via the compile-hook splice (minilang_compile_test.go)",
+	// aql:model wraps github.com/voxgig/model, a build tool: model.New always
+	// uses the real OS filesystem (reads .jsonic source, writes <base>/<name>.json)
+	// and start/stop spin a background watch goroutine — none of which is a
+	// hermetic, deterministic spec surface. Covered by lang/go/test/model_test.go.
+	"Model.new":   "real-FS build tool; no hermetic spec surface (model_test.go)",
+	"Model.run":   "real-FS build (reads/writes disk); no hermetic spec surface (model_test.go)",
+	"Model.start": "background watch goroutine; not deterministic in a spec row (model_test.go)",
+	"Model.stop":  "watch lifecycle; paired with start, no hermetic spec surface (model_test.go)",
+	"Model.model": "real-FS build tool; no hermetic spec surface (model_test.go)",
 }
 
 // TestModuleExportCoverage fails when any native-module export lacks a

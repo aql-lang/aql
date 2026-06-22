@@ -48,6 +48,7 @@ require (
 	github.com/ohler55/ojg v1.28.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rjrodger/aontu/go v0.1.4-0.20260622151248-c74b91f166cb // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/tabnas/abnf/go v0.2.0 // indirect
 	github.com/tabnas/csv/go v0.2.0 // indirect
@@ -60,12 +61,14 @@ require (
 	github.com/tabnas/json5/go v0.2.0 // indirect
 	github.com/tabnas/jsonc/go v0.2.0 // indirect
 	github.com/tabnas/markdown/go v0.2.0 // indirect
-	github.com/tabnas/multisource/go v0.2.0 // indirect
+	github.com/tabnas/multisource/go v0.3.0 // indirect
 	github.com/tabnas/parser/go v0.2.0 // indirect
+	github.com/tabnas/path/go v0.2.0 // indirect
 	github.com/tabnas/toml/go v0.2.0 // indirect
 	github.com/tabnas/xml/go v0.2.0 // indirect
 	github.com/tabnas/yaml/go v0.2.0 // indirect
 	github.com/tabnas/zon/go v0.2.0 // indirect
+	github.com/voxgig/model/go v0.1.3-0.20260622172642-ee04212555c1 // indirect
 	github.com/voxgig/struct v0.1.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
