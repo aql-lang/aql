@@ -609,6 +609,11 @@ func tabnasMapToValue(m map[string]any) native.Value {
 // shape degrades to its string form rather than erroring.
 func tabnasAnyToValue(v any) native.Value {
 	switch val := v.(type) {
+	case native.Value:
+		// A node a custom-parser semantic action already built as an AQL
+		// Value (see aql:parse): pass it through untouched so user data types
+		// survive to the parse result rather than being flattened.
+		return val
 	case nil:
 		return native.NewTypeLiteral(native.TNone)
 	case bool:
