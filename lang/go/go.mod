@@ -25,6 +25,7 @@ require (
 	github.com/tabnas/xml/go v0.2.0
 	github.com/tabnas/yaml/go v0.2.0
 	github.com/tabnas/zon/go v0.2.0
+	github.com/voxgig/model/go v0.1.3-0.20260622172642-ee04212555c1
 	golang.org/x/text v0.21.0
 	modernc.org/sqlite v1.46.1
 	voxgiguniversalsdk v0.1.1

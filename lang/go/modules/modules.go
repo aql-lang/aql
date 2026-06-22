@@ -40,6 +40,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"minilang":    BuildMiniLangModule,
 	"parselang":   BuildParseLangModule,
 	"parse":       BuildParseModule,
+	"model":       BuildModelModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
