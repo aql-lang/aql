@@ -246,3 +246,50 @@ func TestParseMalformedABNF(t *testing.T) {
 		t.Errorf("error %q should be parse_bad_grammar", err.Error())
 	}
 }
+
+// TestParseDeclarativeStringRefAction pins that a declarative rule may
+// reference an action registered via Parse.action by its string ref (a:'@hit')
+// — the ref is wired into the grammar's Ref map, so Parse.register succeeds
+// rather than failing with an unresolved-ref error.
+func TestParseDeclarativeStringRefAction(t *testing.T) {
+	src := parseImports + `
+def g Parse.grammar
+Parse.action g '@hit' ([nd:Any] => [nd])
+Parse.rule g doc {open:[{s:'#TX' a:'@hit'}]}
+Parse.register srefkind g
+end`
+	if err := runParseErr(t, src); err != nil {
+		t.Fatalf("string-ref action should register without error, got %v", err)
+	}
+}
+
+// TestParseGrammarSingleUse pins the single-use contract: once a grammar is
+// registered, a second register or any further builder word on the SAME
+// grammar is a loud error (the finalized parser closes over the shared
+// builder, so reuse must not silently mutate it).
+func TestParseGrammarSingleUse(t *testing.T) {
+	base := parseImports + `
+def g Parse.grammar
+Parse.abnf g 'op = "inc" / "dec"' {start:'op'}
+Parse.register one g
+end  `
+	cases := []struct{ name, tail string }{
+		{"second register", `Parse.register two g`},
+		{"builder word after register", `Parse.abnf g 'x = "a"' {start:'x'}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := runParseErr(t, base+c.tail)
+			if err == nil {
+				t.Fatalf("%s: expected error reusing a registered grammar, got nil", c.name)
+			}
+			if !strings.Contains(err.Error(), "parse_grammar_done") {
+				t.Fatalf("%s: error %q should be parse_grammar_done", c.name, err.Error())
+			}
+		})
+	}
+	// The first registered parser still works after the rejected reuse.
+	if err := runParseErr(t, base+`parse one 'inc'`); err != nil {
+		t.Errorf("the first registered kind should still parse, got %v", err)
+	}
+}

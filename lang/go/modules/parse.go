@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -57,6 +58,13 @@ type parseGrammar struct {
 	steps    []func() error
 	matchers []pendingMatcher
 
+	// registered marks the builder as consumed by Parse.register. The carrier
+	// is a shared pointer and the registered parser handler closes over g/g.j,
+	// so the builder is SINGLE-USE: any further builder word or a second
+	// register on a consumed grammar raises rather than mutating a finalized
+	// parser. Build a fresh Parse.grammar for a second parser.
+	registered bool
+
 	// firstErr captures the first error raised by an AQL-fn callback (a
 	// matcher or action) during a parse; the parser handler surfaces it as a
 	// parse error. Callbacks never panic (ADR-005) — they record here instead.
@@ -77,6 +85,49 @@ type pendingMatcher struct {
 func (g *parseGrammar) setErr(err error) {
 	if g.firstErr == nil {
 		g.firstErr = err
+	}
+}
+
+// ensureOpen errors when the builder has already been registered (single-use).
+func (g *parseGrammar) ensureOpen(word string, r *native.Registry) error {
+	if g.registered {
+		return r.AqlErrorHint("parse_grammar_done",
+			word+": this grammar was already registered as a parse kind", word,
+			"a Parse.grammar builder is single-use — build a fresh one for another parser")
+	}
+	return nil
+}
+
+// applyMatchers installs the pending custom lex matchers onto g.j and re-sorts
+// Config.CustomMatchers by priority. The tabnas lexer assumes the slice is
+// priority-sorted as it interleaves custom matchers with the built-in
+// match/fixed/text bands, so an out-of-order matcher (a lower priority added
+// after a higher one) would otherwise run too late to claim its tokens — the
+// same reason eng/go/parser/grammar.go::addMatcher sorts after appending.
+func (g *parseGrammar) applyMatchers() {
+	cfg := g.j.Config()
+	for _, mt := range g.matchers {
+		cfg.CustomMatchers = append(cfg.CustomMatchers, &tabnas.MatcherEntry{
+			Name:     mt.name,
+			Priority: mt.prio,
+			Match:    g.wrapMatcher(mt.fn),
+		})
+	}
+	sort.SliceStable(cfg.CustomMatchers, func(i, k int) bool {
+		return cfg.CustomMatchers[i].Priority < cfg.CustomMatchers[k].Priority
+	})
+}
+
+// composeAltActions collapses a list of mark actions into one AltAction (run
+// in order); a single action passes through unchanged.
+func composeAltActions(acts []tabnasabnf.ActionFn) tabnas.AltAction {
+	if len(acts) == 1 {
+		return acts[0]
+	}
+	return func(rule *tabnas.Rule, ctx *tabnas.Context) {
+		for _, a := range acts {
+			a(rule, ctx)
+		}
 	}
 }
 
@@ -292,6 +343,9 @@ func parseAbnfHandler(args []native.Value, _ map[string]native.Value, _ []native
 	if err != nil {
 		return nil, err
 	}
+	if err := g.ensureOpen("Parse.abnf", r); err != nil {
+		return nil, err
+	}
 	src, err := args[1].AsConcreteString()
 	if err != nil {
 		return nil, r.AqlError("parse_bad_abnf", fmt.Sprintf("Parse.abnf: src: %v", err), "Parse.abnf")
@@ -320,6 +374,9 @@ func parseRuleHandler(args []native.Value, _ map[string]native.Value, _ []native
 	if err != nil {
 		return nil, err
 	}
+	if err := g.ensureOpen("Parse.rule", r); err != nil {
+		return nil, err
+	}
 	name, err := args[1].AsConcreteAtom()
 	if err != nil {
 		return nil, r.AqlError("parse_bad_rule", fmt.Sprintf("Parse.rule: name: %v", err), "Parse.rule")
@@ -343,6 +400,9 @@ func parseTokenHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if err != nil {
 		return nil, err
 	}
+	if err := g.ensureOpen("Parse.token", r); err != nil {
+		return nil, err
+	}
 	name, err := args[1].AsConcreteString()
 	if err != nil {
 		return nil, r.AqlError("parse_bad_token", fmt.Sprintf("Parse.token: name: %v", err), "Parse.token")
@@ -364,6 +424,9 @@ func parseMatcherHandler(args []native.Value, _ map[string]native.Value, _ []nat
 	if err != nil {
 		return nil, err
 	}
+	if err := g.ensureOpen("Parse.matcher", r); err != nil {
+		return nil, err
+	}
 	name, err := args[1].AsConcreteAtom()
 	if err != nil {
 		return nil, r.AqlError("parse_bad_matcher", fmt.Sprintf("Parse.matcher: name: %v", err), "Parse.matcher")
@@ -380,6 +443,9 @@ func parseMatcherHandler(args []native.Value, _ map[string]native.Value, _ []nat
 func parseActionHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	g, err := asParseGrammar(args[0], "Parse.action", r)
 	if err != nil {
+		return nil, err
+	}
+	if err := g.ensureOpen("Parse.action", r); err != nil {
 		return nil, err
 	}
 	ref, err := args[1].AsConcreteString()
@@ -408,10 +474,13 @@ func parseRegisterHandlerFor(_ *native.Registry) native.Handler {
 		if err != nil {
 			return nil, err
 		}
+		if err := g.ensureOpen("Parse.register", r); err != nil {
+			return nil, err
+		}
 
 		// Replay the deferred grammar steps (tokens, rules, ABNF installs) now
-		// that every mark action is known, then apply custom matchers LAST so a
-		// grammar install cannot drop them.
+		// that every mark action is known, then apply custom matchers LAST
+		// (priority-sorted) so a grammar install cannot drop or reorder them.
 		for _, step := range g.steps {
 			if serr := step(); serr != nil {
 				return nil, r.AqlErrorHint("parse_bad_grammar",
@@ -419,14 +488,7 @@ func parseRegisterHandlerFor(_ *native.Registry) native.Handler {
 					"Parse.register", "check the grammar is well-formed")
 			}
 		}
-		cfg := g.j.Config()
-		for _, mt := range g.matchers {
-			cfg.CustomMatchers = append(cfg.CustomMatchers, &tabnas.MatcherEntry{
-				Name:     mt.name,
-				Priority: mt.prio,
-				Match:    g.wrapMatcher(mt.fn),
-			})
-		}
+		g.applyMatchers()
 
 		spec := ParseLangSpec{
 			Name:    name,
@@ -437,6 +499,9 @@ func parseRegisterHandlerFor(_ *native.Registry) native.Handler {
 			return nil, r.AqlError("parse_register_error",
 				fmt.Sprintf("Parse.register: %v", rerr), "Parse.register")
 		}
+		// Single-use: the finalized parser closes over g/g.j; further builder
+		// words or a second register must not mutate it.
+		g.registered = true
 		return nil, nil
 	}
 }
@@ -697,6 +762,13 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 		case av.Parent.ConformsTo(native.TString) && native.IsConcrete(av):
 			s, _ := av.AsConcreteString()
 			alt.A = s
+			// A string ref (e.g. '@hit') names an action registered via
+			// Parse.action; wire it into the spec's Ref map so tabnas.Grammar
+			// can resolve it (only inline fns auto-populate Ref otherwise). An
+			// unregistered ref is left alone so tabnas raises "unresolved ref".
+			if acts, ok := g.markActions[s]; ok && len(acts) > 0 {
+				gs.Ref[s] = composeAltActions(acts)
+			}
 		}
 	}
 	return alt, nil
