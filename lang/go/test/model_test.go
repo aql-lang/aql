@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // The aql:model module is a thin AQL surface over the upstream Go
@@ -80,6 +81,42 @@ func TestModelFilePath(t *testing.T) {
 	if got := fmt.Sprintf("%v", runLast(t, a, prog)); got != "orders" {
 		t.Errorf("file path model: got %v, want orders", got)
 	}
+}
+
+// TestModelMemFS pins the core capability requirement: with an in-memory
+// FileOps installed, the model reads its source and writes <base>/<name>.json
+// entirely in memory — no disk access. The source file is seeded into the mem
+// FS, the model is built from it, and the produced JSON is read back out of
+// the same mem FS.
+func TestModelMemFS(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	mem := capabilities.NewMem()
+	mem.Files["/proj/model.jsonic"] = []byte("svc: name: 'orders'\nsvc: port: 8080")
+	a.SetFileOps(mem)
+
+	prog := modelImp + `def m (Model.new {path:'/proj/model.jsonic', base:'/proj'}) (Model.run m) get 'ok'`
+	if got := fmt.Sprintf("%v", runLast(t, a, prog)); got != "true" {
+		t.Fatalf("mem-fs run ok: got %v, want true", got)
+	}
+	// The model writer wrote the unified model to /proj/model.json in the mem FS.
+	out, ok := mem.Files["/proj/model.json"]
+	if !ok {
+		t.Fatalf("expected /proj/model.json written to the in-memory FS; files: %v", keysOf(mem.Files))
+	}
+	if !strings.Contains(string(out), "orders") || !strings.Contains(string(out), "8080") {
+		t.Errorf("written model JSON missing fields: %s", out)
+	}
+}
+
+func keysOf(m map[string][]byte) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // TestModelConflict pins that a unification conflict in the source surfaces

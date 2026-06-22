@@ -5,8 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 	model "github.com/voxgig/model/go"
 )
@@ -17,11 +20,17 @@ import (
 // system model (via aontu — see native/aontu.go) and runs generator
 // "actions" over it, once or in a rebuild-on-change watch loop.
 //
-// This module does not re-implement any of that: it constructs a real
-// *model.Model from a spec Map, drives its Run / Start / Stop pipeline, and
-// marshals the BuildResult back to AQL. Actions are AQL Functions: each is
-// wrapped in a Go callback that hands the unified model (as a Map) to the
-// function via the interpreter (r.CallAQL) and reads its result.
+// This module does not re-implement that pipeline: it assembles a model
+// Build/Watch from the library's own exported building blocks (NewBuild,
+// NewWatch, ModelProducer, LocalProducer) — exactly what model.New does
+// internally — and drives Run / Start / Stop. The one thing it changes is
+// the filesystem seam: every file read and write goes through AQL's aql:io
+// FileOps capability (native.EffectiveFileOps), so a test that installs an
+// in-memory FileOps (capabilities.NewMem, via AQL.SetFileOps) runs the whole
+// model — source reads, the <base>/<name>.json write, inline source — entirely
+// in memory, touching no disk. model.New itself cannot do this: its ModelSpec
+// exposes no FS seam (only BuildSpec does), which is why the module assembles
+// the Build directly.
 //
 // Word surface (mirrors voxgig New / Run / Start / Stop):
 //
@@ -33,29 +42,21 @@ import (
 //
 // Spec Map keys (all optional unless noted):
 //
-//	src     String   inline .jsonic source (materialised to a temp dir)
-//	path    String   .jsonic file path (one of src / path is required)
+//	src     String   inline .jsonic source (one of src / path is required)
+//	path    String   .jsonic file path (read through FileOps)
 //	base    String   base directory for @"..." imports and JSON output
 //	args    Map       build args passed through to the model
-//	dryrun  Boolean   keep writes in memory (no disk output)
+//	dryrun  Boolean   keep writes in an overlay (no FileOps writes)
 //	order   List      action names, in run order
-//	config  Boolean   resolve a .model-config build (default false)
 //	watch   Map       {mod,add,rem} filesystem events that trigger a rebuild
 //	actions Map        name -> Function, or name -> {run:Function, step:'pre'|'post'|'all'}
-//
-// Filesystem note: voxgig/model is a build tool — model.New always uses the
-// real OS filesystem (or an in-memory write buffer when dryrun is set);
-// ModelSpec exposes no filesystem seam. So `path` reads real files and the
-// model writer writes <base>/<name>.json to disk. Inline `src` is written to
-// an os temp directory. This is intentional and distinct from AQL's
-// sandboxed aql:io words.
 
 // TModel is Ideal/Model — the inert carrier wrapping a *modelHandle (the
-// live *model.Model plus the registry used to run its AQL-function actions)
-// in an ExtensionPayload the kernel never inspects. FixedID 5006 — next free
-// in the 5000–9999 kernel/language band (Module 5000, ModuleExport 5001,
-// KeyVal 5002, MiniLangCompiled 5003, Patrun 5004, ParseGrammar 5005). See
-// eng/go/CLAUDE.md "FixedID Allocation" and test/fixedid_stability_test.go.
+// assembled model Build/Watch plus the registry used to run its AQL-function
+// actions) in an ExtensionPayload the kernel never inspects. FixedID 5006 —
+// next free in the 5000–9999 kernel/language band (Module 5000, ModuleExport
+// 5001, KeyVal 5002, MiniLangCompiled 5003, Patrun 5004, ParseGrammar 5005).
+// See eng/go/CLAUDE.md "FixedID Allocation" and test/fixedid_stability_test.go.
 var TModel = registerModelType()
 
 var modelTypeInitErr error
@@ -68,16 +69,19 @@ func registerModelType() *native.Type {
 	return t
 }
 
-// modelHandle is the Go state behind a Model value: the constructed
-// *model.Model, the registry actions call back into, the temp dir holding
-// inline source (if any), action errors collected during a build (CallAQL
-// errors cannot flow through the model.Action signature, so they are stashed
-// here and merged into the result), and a mutex serialising action callbacks
-// (watch rebuilds run on a background goroutine).
+// inlineSeq names inline-source scratch directories uniquely (within the
+// active FileOps — disk for the OS backend, memory for a test backend).
+var inlineSeq atomic.Int64
+
+// modelHandle is the Go state behind a Model value: the assembled Build and
+// Watch, the registry actions call back into, action errors collected during
+// a build (CallAQL errors cannot flow through the model.Action signature, so
+// they are stashed here and merged into the result), and a mutex serialising
+// action callbacks (watch rebuilds run on a background goroutine).
 type modelHandle struct {
-	m       *model.Model
+	build   *model.Build
+	watch   *model.Watch
 	reg     *native.Registry
-	tmpDir  string
 	mu      sync.Mutex
 	actErrs []error
 }
@@ -106,11 +110,8 @@ func BuildModelModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("new", wrapMiniFnDef("model-new", [][]native.FnParam{{{Type: native.TMap}}},
 		[]*native.Type{TModel}, nil, subReg))
 
-	// Model.run <Model> -> Map
 	registerModelWord(subReg, exports, "run", modelRunHandler)
-	// Model.start <Model> -> Map
 	registerModelWord(subReg, exports, "start", modelStartHandler)
-	// Model.model <Model> -> Map
 	registerModelWord(subReg, exports, "model", modelModelHandler)
 
 	// Model.stop <Model> -> (nothing)
@@ -159,8 +160,21 @@ func asModelHandle(v native.Value) (*modelHandle, bool) {
 	return h, ok
 }
 
-// modelNewHandler builds a *model.Model from the spec Map and returns it as a
-// Model value.
+// parsedSpec is the spec Map decoded into the fields the Build assembly needs.
+type parsedSpec struct {
+	path      string
+	base      string
+	inlineSrc string
+	hasInline bool
+	args      map[string]any
+	dryrun    bool
+	order     []string
+	watch     model.WatchModes
+	actions   map[string]model.ActionDef
+}
+
+// modelNewHandler decodes the spec Map, wires a FileOps-backed model.FS, and
+// assembles the model Build/Watch.
 func modelNewHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if !native.IsConcrete(args[0]) {
 		return nil, r.AqlError("model_bad_spec", "new: spec must be a concrete Map", "new")
@@ -171,79 +185,99 @@ func modelNewHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	}
 
 	h := &modelHandle{reg: r}
-	spec, err := buildModelSpec(specMap, h, r)
+	ps, err := parseSpec(specMap, h, r)
 	if err != nil {
 		return nil, err
 	}
-	h.m = model.New(spec)
+
+	// Every file operation goes through the active aql:io FileOps so a test
+	// can run the model on an in-memory FS (capabilities.NewMem).
+	fs := &fileOpsFS{ops: native.EffectiveFileOps(r), dry: ps.dryrun, mem: map[string][]byte{}}
+
+	path, base := ps.path, ps.base
+	if ps.hasInline {
+		base = filepath.Join(os.TempDir(), fmt.Sprintf("aql-model-%d-%d", os.Getpid(), inlineSeq.Add(1)))
+		path = filepath.Join(base, "model.jsonic")
+		if mkErr := fs.MkdirAll(base, 0o755); mkErr != nil {
+			return nil, r.AqlError("model_io", "new: inline base dir: "+mkErr.Error(), "new")
+		}
+		if wErr := fs.WriteFile(path, []byte(ps.inlineSrc), 0o600); wErr != nil {
+			return nil, r.AqlError("model_io", "new: write inline source: "+wErr.Error(), "new")
+		}
+	} else if base == "" {
+		base = filepath.Dir(path)
+	}
+
+	build := model.NewBuild(model.BuildSpec{
+		Name:    "model",
+		Path:    path,
+		Base:    base,
+		Args:    ps.args,
+		Dryrun:  ps.dryrun,
+		Actions: ps.actions,
+		Order:   ps.order,
+		Idle:    model.DefaultIdle,
+		Watch:   ps.watch,
+		FS:      fs,
+		Res: []model.ProducerDef{
+			{Path: "/", Build: model.ModelProducer},
+			{Path: "/", Build: model.LocalProducer},
+		},
+	})
+	h.build = build
+	h.watch = model.NewWatch(build, "model", model.DefaultIdle)
+
 	return []native.Value{eng.NewExtension(TModel, h)}, nil
 }
 
-// buildModelSpec translates the AQL spec Map into a model.ModelSpec, wiring
-// AQL-function actions through makeAction and materialising inline source to
-// a temp directory.
-func buildModelSpec(specMap native.ReadMap, h *modelHandle, r *native.Registry) (model.ModelSpec, error) {
-	var spec model.ModelSpec
+// parseSpec decodes the spec Map, wiring AQL-function actions through
+// makeAction.
+func parseSpec(specMap native.ReadMap, h *modelHandle, r *native.Registry) (parsedSpec, error) {
+	var ps parsedSpec
 
 	path, hasPath := mapStr(specMap, "path")
 	src, hasSrc := mapStr(specMap, "src")
 	switch {
 	case hasSrc:
-		dir, err := os.MkdirTemp("", "aql-model-")
-		if err != nil {
-			return spec, r.AqlError("model_io", "new: temp dir: "+err.Error(), "new")
-		}
-		h.tmpDir = dir
-		file := filepath.Join(dir, "model.jsonic")
-		if werr := os.WriteFile(file, []byte(src), 0o600); werr != nil {
-			return spec, r.AqlError("model_io", "new: write inline source: "+werr.Error(), "new")
-		}
-		spec.Path = file
-		spec.Base = dir
+		ps.inlineSrc = src
+		ps.hasInline = true
 	case hasPath:
-		spec.Path = path
+		ps.path = path
 		if base, ok := mapStr(specMap, "base"); ok {
-			spec.Base = base
+			ps.base = base
 		}
 	default:
-		return spec, r.AqlErrorHint("model_bad_spec",
+		return ps, r.AqlErrorHint("model_bad_spec",
 			"new: spec needs a 'src' (inline) or 'path' (file) String", "new",
 			"e.g. Model.new {src:'service: name: \"orders\"'}")
 	}
 
 	if v, ok := specMap.Get("args"); ok && native.IsConcrete(v) {
 		if m, mok := native.ValueToAny(v).(map[string]any); mok {
-			spec.Args = m
+			ps.args = m
 		}
 	}
 	if b, ok := mapBool(specMap, "dryrun"); ok {
-		spec.Dryrun = b
+		ps.dryrun = b
 	}
 	if order, ok := mapStrList(specMap, "order"); ok {
-		spec.Order = order
+		ps.order = order
 	}
 	if w, ok := specMap.Get("watch"); ok && native.IsConcrete(w) {
 		if wm, werr := native.AsMap(w); werr == nil {
 			mod, _ := mapBool(wm, "mod")
 			add, _ := mapBool(wm, "add")
 			rem, _ := mapBool(wm, "rem")
-			spec.Watch = model.WatchModes{Mod: mod, Add: add, Rem: rem}
+			ps.watch = model.WatchModes{Mod: mod, Add: add, Rem: rem}
 		}
 	}
-	// Config defaults OFF: the .model-config build reads/creates files in the
-	// base dir, a surprise for a one-shot model. Opt in with config:true.
-	cfg := false
-	if b, ok := mapBool(specMap, "config"); ok {
-		cfg = b
-	}
-	spec.Config = &cfg
 
 	actions, err := buildActions(specMap, h, r)
 	if err != nil {
-		return spec, err
+		return ps, err
 	}
-	spec.Actions = actions
-	return spec, nil
+	ps.actions = actions
+	return ps, nil
 }
 
 // buildActions reads the `actions` spec field into a map of model.ActionDef,
@@ -285,7 +319,7 @@ func actionFnAndStep(name string, entry native.Value, r *native.Registry) (nativ
 			if !hasRun {
 				return native.Value{}, "", r.AqlErrorHint("model_bad_action",
 					fmt.Sprintf("new: action %q map needs a 'run' Function", name), "new",
-					"e.g. actions:{gen:{run:([m] => [...]), step:'post'}}")
+					"e.g. actions:{gen:{run:([m:Any] => [...]), step:'post'}}")
 			}
 			if _, ok := run.Data.(native.FnDefInfo); !ok {
 				return native.Value{}, "", r.AqlError("model_bad_action",
@@ -300,7 +334,7 @@ func actionFnAndStep(name string, entry native.Value, r *native.Registry) (nativ
 	}
 	return native.Value{}, "", r.AqlErrorHint("model_bad_action",
 		fmt.Sprintf("new: action %q must be a Function or {run:Function}", name), "new",
-		"e.g. actions:{summary:([m] => [m size])}")
+		"e.g. actions:{summary:([m:Any] => [m size])}")
 }
 
 func parseStep(s string) model.Step {
@@ -382,7 +416,7 @@ func modelRunHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		return nil, r.AqlError("model_bad_handle", "run: not a Model", "run")
 	}
 	h.actErrs = nil
-	br := h.m.Run()
+	br := h.watch.Run(false)
 	return []native.Value{buildResultValue(br, h)}, nil
 }
 
@@ -392,7 +426,7 @@ func modelStartHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 		return nil, r.AqlError("model_bad_handle", "start: not a Model", "start")
 	}
 	h.actErrs = nil
-	br := h.m.Start()
+	br := h.watch.Start()
 	return []native.Value{buildResultValue(br, h)}, nil
 }
 
@@ -401,7 +435,7 @@ func modelStopHandler(args []native.Value, _ map[string]native.Value, _ []native
 	if !ok {
 		return nil, r.AqlError("model_bad_handle", "stop: not a Model", "stop")
 	}
-	h.m.Stop()
+	h.watch.Stop()
 	return nil, nil
 }
 
@@ -410,13 +444,12 @@ func modelModelHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if !ok {
 		return nil, r.AqlError("model_bad_handle", "model: not a Model", "model")
 	}
-	b := h.m.Build()
-	if b == nil || b.Model == nil {
+	if h.build == nil || h.build.Model == nil {
 		return nil, r.AqlErrorHint("model_not_built",
 			"model: the model has not been built yet", "model",
 			"call Model.run (or Model.start) first")
 	}
-	return []native.Value{native.AnyToValue(b.Model)}, nil
+	return []native.Value{native.AnyToValue(h.build.Model)}, nil
 }
 
 // buildResultValue marshals a *model.BuildResult to an AQL Map, merging any
@@ -450,6 +483,90 @@ func buildResultValue(br *model.BuildResult, h *modelHandle) native.Value {
 	}
 	return native.NewMap(om)
 }
+
+// ---- FileOps-backed model.FS ---------------------------------------------
+
+// fileOpsFS adapts AQL's aql:io FileOps to the model.FS seam, so the whole
+// model pipeline (source reads, the JSON-model write, inline source) runs on
+// whatever FileOps the registry has — disk for the OS backend, memory for a
+// test backend. In dryrun mode writes are kept in an in-memory overlay (and
+// read back from it) instead of reaching the underlying FileOps, mirroring
+// voxgig/model's own dryFS.
+type fileOpsFS struct {
+	ops capabilities.FileOps
+	dry bool
+	mu  sync.Mutex
+	mem map[string][]byte
+}
+
+func (f *fileOpsFS) key(name string) string {
+	if resolved, err := f.ops.ResolvePath(name); err == nil {
+		return resolved
+	}
+	return name
+}
+
+func (f *fileOpsFS) ReadFile(name string) ([]byte, error) {
+	if f.dry {
+		f.mu.Lock()
+		data, ok := f.mem[f.key(name)]
+		f.mu.Unlock()
+		if ok {
+			out := make([]byte, len(data))
+			copy(out, data)
+			return out, nil
+		}
+	}
+	return f.ops.ReadFile(name)
+}
+
+func (f *fileOpsFS) WriteFile(name string, data []byte, _ os.FileMode) error {
+	if f.dry {
+		f.mu.Lock()
+		cp := make([]byte, len(data))
+		copy(cp, data)
+		f.mem[f.key(name)] = cp
+		f.mu.Unlock()
+		return nil
+	}
+	return f.ops.WriteFile(name, data, 0o644)
+}
+
+func (f *fileOpsFS) MkdirAll(path string, _ os.FileMode) error {
+	if f.dry {
+		return nil
+	}
+	return f.ops.MkdirAll(path, 0o755)
+}
+
+// Stat is best-effort: FileOps has no Stat, so for the OS backend it resolves
+// to a real path and os.Stat (giving the real mtime the watch loop needs),
+// and otherwise (in-memory FileOps, dryrun overlay) returns a synthetic
+// stable FileInfo when the file is readable. A non-existent file errors.
+func (f *fileOpsFS) Stat(name string) (os.FileInfo, error) {
+	if resolved, err := f.ops.ResolvePath(name); err == nil {
+		if fi, serr := os.Stat(resolved); serr == nil {
+			return fi, nil
+		}
+	}
+	if _, err := f.ReadFile(name); err != nil {
+		return nil, err
+	}
+	return synthFileInfo{name: filepath.Base(name)}, nil
+}
+
+// synthFileInfo is a minimal os.FileInfo for files that exist in a non-OS
+// FileOps (no real mtime). Its stable zero ModTime means the watch loop will
+// not detect content changes through an in-memory FS — acceptable, since the
+// in-memory backend is used by tests that build once.
+type synthFileInfo struct{ name string }
+
+func (s synthFileInfo) Name() string     { return s.name }
+func (synthFileInfo) Size() int64        { return 0 }
+func (synthFileInfo) Mode() os.FileMode  { return 0o644 }
+func (synthFileInfo) ModTime() time.Time { return time.Time{} }
+func (synthFileInfo) IsDir() bool        { return false }
+func (synthFileInfo) Sys() any           { return nil }
 
 // ---- small Map readers ----------------------------------------------------
 
