@@ -2096,7 +2096,7 @@ func TestResolveTextValueTypes(t *testing.T) {
 // --- Direct unexported function tests for defensive code paths ---
 
 func TestConvertTopLevelValueBool(t *testing.T) {
-	v, err := convertTopLevelValue(true)
+	v, err := convertTopLevelValue(true, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2104,7 +2104,7 @@ func TestConvertTopLevelValueBool(t *testing.T) {
 	if !v.Parent.ConformsTo(eng.TBoolean) || !b1 {
 		t.Errorf("expected true, got %s", v)
 	}
-	v, err = convertTopLevelValue(false)
+	v, err = convertTopLevelValue(false, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2118,7 +2118,7 @@ func TestConvertTopLevelValueNil(t *testing.T) {
 	// A nil element is an empty list slot (`[1,,2]`, `[,1]`) — a syntax
 	// error, not a fabricated `null`. (Explicit `null` arrives as the
 	// jsonic.Text "null" token, not as nil.)
-	_, err := convertTopLevelValue(nil)
+	_, err := convertTopLevelValue(nil, &parseDepth{})
 	if err == nil {
 		t.Fatal("expected an empty-element error for a nil element, got none")
 	}
@@ -2128,14 +2128,14 @@ func TestConvertTopLevelValueNil(t *testing.T) {
 }
 
 func TestConvertTopLevelValueUnsupported(t *testing.T) {
-	_, err := convertTopLevelValue(struct{}{})
+	_, err := convertTopLevelValue(struct{}{}, &parseDepth{})
 	if err == nil {
 		t.Fatal("expected error for unsupported type")
 	}
 }
 
 func TestConvertDataValueBool(t *testing.T) {
-	v, err := convertDataValue(true)
+	v, err := convertDataValue(true, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2147,7 +2147,7 @@ func TestConvertDataValueBool(t *testing.T) {
 
 func TestConvertDataValueNil(t *testing.T) {
 	// As TestConvertTopLevelValueNil, in data (map-value) context.
-	_, err := convertDataValue(nil)
+	_, err := convertDataValue(nil, &parseDepth{})
 	if err == nil {
 		t.Fatal("expected an empty-element error for a nil element, got none")
 	}
@@ -2157,7 +2157,7 @@ func TestConvertDataValueNil(t *testing.T) {
 }
 
 func TestConvertDataValueUnsupported(t *testing.T) {
-	_, err := convertDataValue(struct{}{})
+	_, err := convertDataValue(struct{}{}, &parseDepth{})
 	if err == nil {
 		t.Fatal("expected error for unsupported type")
 	}
@@ -2165,7 +2165,7 @@ func TestConvertDataValueUnsupported(t *testing.T) {
 
 func TestConvertDataValueRawMap(t *testing.T) {
 	// map[string]any without child$ key
-	v, err := convertDataValue(map[string]any{"x": float64(1)})
+	v, err := convertDataValue(map[string]any{"x": float64(1)}, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2176,7 +2176,7 @@ func TestConvertDataValueRawMap(t *testing.T) {
 
 func TestConvertDataValueRawMapWithChild(t *testing.T) {
 	// map[string]any with child$ key → typed map
-	v, err := convertDataValue(map[string]any{"child$": float64(1)})
+	v, err := convertDataValue(map[string]any{"child$": float64(1)}, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2186,7 +2186,7 @@ func TestConvertDataValueRawMapWithChild(t *testing.T) {
 }
 
 func TestConvertTopLevelValueRawMap(t *testing.T) {
-	v, err := convertTopLevelValue(map[string]any{"x": float64(1)})
+	v, err := convertTopLevelValue(map[string]any{"x": float64(1)}, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2196,7 +2196,7 @@ func TestConvertTopLevelValueRawMap(t *testing.T) {
 }
 
 func TestConvertTopLevelValueRawMapWithChild(t *testing.T) {
-	v, err := convertTopLevelValue(map[string]any{"child$": float64(1)})
+	v, err := convertTopLevelValue(map[string]any{"child$": float64(1)}, &parseDepth{})
 	if err != nil {
 		t.Fatal(err)
 	}

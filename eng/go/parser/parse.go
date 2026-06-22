@@ -98,79 +98,36 @@ func withPos(v eng.Value, pos eng.SrcPos) eng.Value {
 // on. The limit sits far above any realistic hand-written or generated program
 // yet far below the overflow point, so it turns a crash into a clean
 // evaluation_limit error. It also caps the super-linear conversion cost deep
-// nesting incurs. checkNestingDepth enforces it ITERATIVELY (its own explicit
-// stack) so the guard itself can never overflow.
+// nesting incurs.
 const maxParseNestingDepth = 10000
 
-// checkNestingDepth rejects a jsonic parse tree that nests deeper than
-// maxParseNestingDepth, before the recursive conversion runs. It walks the tree
-// with an explicit work stack (never recursing) and descends into every
-// container the converters descend into — paren/interp/angle groups, raw
-// slices and maps, and jsonic ListRef/MapRef carriers — so the measured depth
-// is an upper bound on the conversion's recursion depth. A container type the
-// walk does not recognise is treated as a leaf; the worst case of an omission is
-// that the guard under-protects, never that a valid program is rejected.
-func checkNestingDepth(root any, src string) error {
-	type frame struct {
-		node  any
-		depth int
-	}
-	stack := []frame{{root, 0}}
-	for len(stack) > 0 {
-		f := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if f.depth > maxParseNestingDepth {
-			return eng.MakeAqlError("evaluation_limit",
-				fmt.Sprintf("source nesting exceeds the depth limit of %d — lists, maps, and parentheses are nested too deeply", maxParseNestingDepth),
-				"", src,
-				"flatten the structure or split it across definitions; nesting this deep is almost always generated, not intended")
-		}
-		node, _ := deSite(f.node)
-		push := func(child any) { stack = append(stack, frame{child, f.depth + 1}) }
-		switch n := node.(type) {
-		case parenGroup:
-			for _, it := range n {
-				push(it)
-			}
-		case unclosedParen:
-			for _, it := range n.items {
-				push(it)
-			}
-		case interpGroup:
-			for _, it := range n {
-				push(it)
-			}
-		case iexprGroup:
-			for _, it := range n {
-				push(it)
-			}
-		case angleGroup:
-			for _, it := range n.Items {
-				push(it)
-			}
-		case []any:
-			for _, it := range n {
-				push(it)
-			}
-		case map[string]any:
-			for _, v := range n {
-				push(v)
-			}
-		case jsonic.ListRef:
-			for _, it := range n.Val {
-				push(it)
-			}
-			if n.Child != nil {
-				push(n.Child)
-			}
-		case jsonic.MapRef:
-			for _, v := range n.Val {
-				push(v)
-			}
-		}
+// parseDepth tracks the live container-nesting depth of the single conversion
+// walk. It is threaded through the recursive converters (not a separate
+// pre-pass — the bound is enforced IN the one pass that already builds the
+// values): each container converter calls enter on the way in and leave on the
+// way out, so cur mirrors the Go recursion depth. One *parseDepth is created
+// per Parse call, so the counter is per-parse and concurrency-safe.
+type parseDepth struct {
+	cur int
+	src string
+}
+
+// enter descends one container level, failing with a clean evaluation_limit
+// error (never a stack overflow) once nesting passes maxParseNestingDepth.
+// Pair every enter with a deferred leave.
+func (d *parseDepth) enter() error {
+	d.cur++
+	if d.cur > maxParseNestingDepth {
+		return eng.MakeAqlError("evaluation_limit",
+			fmt.Sprintf("source nesting exceeds the depth limit of %d — lists, maps, and parentheses are nested too deeply", maxParseNestingDepth),
+			"", d.src,
+			"flatten the structure or split it across definitions; nesting this deep is almost always generated, not intended")
 	}
 	return nil
 }
+
+// leave ascends one container level. Always deferred immediately after enter.
+func (d *parseDepth) leave() { d.cur-- }
 
 // Parse tokenizes the AQL source string into a slice of eng.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
@@ -224,13 +181,6 @@ func Parse(src string) ([]eng.Value, error) {
 		return nil, nil
 	}
 
-	// Reject pathologically deep nesting before the recursive conversion below
-	// can overflow the Go stack (an unrecoverable crash). Cheap, iterative, and
-	// runs once per parse.
-	if err := checkNestingDepth(result, src); err != nil {
-		return nil, err
-	}
-
 	// A single top-level scalar/paren/interp value arrives wrapped by the
 	// val-rule BC; unwrap it so the cases below see a bare jsonic node, but
 	// keep its position to stamp the single produced value. (Root containers
@@ -238,13 +188,19 @@ func Parse(src string) ([]eng.Value, error) {
 	// positions individually.)
 	result, rootPos := deSite(result)
 
+	// One depth tracker for this parse, threaded through the recursive
+	// converters so pathologically deep nesting fails with a clean
+	// evaluation_limit error instead of overflowing the Go stack — enforced
+	// inside the single conversion walk, not as a separate pre-pass.
+	d := &parseDepth{src: src}
+
 	// With ListRef and MapRef enabled, jsonic returns ListRef/MapRef for
 	// all lists and maps. ListRef.Implicit and MapRef.Implicit distinguish
 	// implicit structures from explicit ones.
 	switch val := result.(type) {
 	case jsonic.ListRef:
 		if val.Child != nil {
-			tv, err := convertTypedList(val)
+			tv, err := convertTypedList(val, d)
 			if err != nil {
 				return nil, err
 			}
@@ -252,23 +208,23 @@ func Parse(src string) ([]eng.Value, error) {
 		}
 		if !val.Implicit {
 			// Explicit list [...]  — a single list value (quotation).
-			lv, err := convertWordList(val.Val)
+			lv, err := convertWordList(val.Val, d)
 			if err != nil {
 				return nil, err
 			}
 			return []eng.Value{lv}, nil
 		}
 		// Implicit list — top-level stack values.
-		return convertTopLevel(val.Val)
+		return convertTopLevel(val.Val, d)
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
-			tv, err := convertTypedMap(val.Val)
+			tv, err := convertTypedMap(val.Val, d)
 			if err != nil {
 				return nil, err
 			}
 			return []eng.Value{tv}, nil
 		}
-		mv, err := convertMapData(val.Val, val.Implicit, val.Meta)
+		mv, err := convertMapData(val.Val, val.Implicit, d, val.Meta)
 		if err != nil {
 			return nil, err
 		}
@@ -283,11 +239,11 @@ func Parse(src string) ([]eng.Value, error) {
 
 	case parenGroup:
 		// Single paren group at top level: expand to paren markers.
-		return convertTopLevelItems([]any{val})
+		return convertTopLevelItems([]any{val}, d)
 
 	case interpGroup:
 		// Single template string at top level.
-		iv, err := convertInterpGroup(val)
+		iv, err := convertInterpGroup(val, d)
 		if err != nil {
 			return nil, err
 		}
@@ -296,7 +252,7 @@ func Parse(src string) ([]eng.Value, error) {
 	default:
 		// Single top-level scalar/word: stamp the position the root deSite
 		// recovered (convertTopLevelValue sees a bare node, so it cannot).
-		v, err := convertTopLevelValue(val)
+		v, err := convertTopLevelValue(val, d)
 		if err != nil {
 			return nil, err
 		}
@@ -330,7 +286,11 @@ func isToken(item any, tok string) bool {
 // A lone "." / "!." with no receiver still emits the bare word (and errors
 // at runtime, as before). All other items convert to engine values
 // directly.
-func convertTopLevelItems(items []any) ([]eng.Value, error) {
+func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
+	if err := d.enter(); err != nil {
+		return nil, err
+	}
+	defer d.leave()
 	// Strip sited wrappers once into a bare-node slice plus a parallel
 	// position slice. The token helpers (isToken/startsDot/isChainReceiver)
 	// then see bare jsonic nodes, while the emitted operator-marker words
@@ -384,7 +344,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 			// Build a first-class Reach node (design/REACH.10.md Phase B):
 			// receiver tokens + per-segment {op, literal-or-computed key}.
 			var recv []eng.Value
-			if err := emitPrimary(&recv, items[i], poss[i]); err != nil {
+			if err := emitPrimary(&recv, items[i], poss[i], d); err != nil {
 				return nil, err
 			}
 			var segs []eng.ReachSeg
@@ -412,7 +372,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				seg := eng.ReachSeg{Getr: getr}
 				if pg, ok := keyItem.(parenGroup); ok {
 					// Computed key: m.(expr) — store the paren's tokens.
-					inner, err := convertTopLevelItems([]any(pg))
+					inner, err := convertTopLevelItems([]any(pg), d)
 					if err != nil {
 						return nil, err
 					}
@@ -421,7 +381,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				} else {
 					// Literal key (word → atom-via-get/q, string, number).
 					var tmp []eng.Value
-					if err := emitPrimary(&tmp, keyItem, kpos); err != nil {
+					if err := emitPrimary(&tmp, keyItem, kpos, d); err != nil {
 						return nil, err
 					}
 					if len(tmp) == 1 {
@@ -489,7 +449,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		// angle group is a use-site (handled by the angleGroup case in
 		// convertTopLevelValueInner via emitPrimary below).
 		if ag, ok := items[i].(angleGroup); ok && i > 0 && isToken(items[i-1], "def") {
-			params, err := angleGenList(ag.Items, poss[i])
+			params, err := angleGenList(ag.Items, poss[i], d)
 			if err != nil {
 				return nil, err
 			}
@@ -509,7 +469,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 				for _, p := range pre {
 					values = append(values, withPos(p, poss[i]))
 				}
-				if err := emitPrimary(&values, items[i], poss[i]); err != nil {
+				if err := emitPrimary(&values, items[i], poss[i], d); err != nil {
 					return nil, err
 				}
 				for _, s := range suf {
@@ -521,7 +481,7 @@ func convertTopLevelItems(items []any) ([]eng.Value, error) {
 		}
 
 		// A value, or a paren group expanded to ( … ) markers.
-		if err := emitPrimary(&values, items[i], poss[i]); err != nil {
+		if err := emitPrimary(&values, items[i], poss[i], d); err != nil {
 			return nil, err
 		}
 	}
@@ -617,16 +577,16 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 // Step 1, design/PAREN-REPRESENTATION.9.md), the same representation data
 // context already uses. The engine evaluates it via evalParenExprResults
 // (Step 2 at the pointer, Step 3 in a forward window).
-func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos) error {
+func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos, d *parseDepth) error {
 	if pg, ok := item.(parenGroup); ok {
-		inner, err := convertTopLevelItems([]any(pg))
+		inner, err := convertTopLevelItems([]any(pg), d)
 		if err != nil {
 			return err
 		}
 		*dst = append(*dst, withPos(eng.NewParenExpr(inner), pos))
 		return nil
 	}
-	v, err := convertTopLevelValue(item)
+	v, err := convertTopLevelValue(item, d)
 	if err != nil {
 		return err
 	}
@@ -638,23 +598,23 @@ func emitPrimary(dst *[]eng.Value, item any, pos eng.SrcPos) error {
 
 // convertTopLevel converts a top-level implicit list from jsonic into
 // a slice of eng.Value using word context.
-func convertTopLevel(items []any) ([]eng.Value, error) {
-	return convertTopLevelItems(items)
+func convertTopLevel(items []any, d *parseDepth) ([]eng.Value, error) {
+	return convertTopLevelItems(items, d)
 }
 
 // convertTopLevelValue converts a single value in word context.
 // Unquoted text → word, quoted text → string. The value is stamped with
 // the source position captured by the val-rule BC (if any).
-func convertTopLevelValue(v any) (eng.Value, error) {
+func convertTopLevelValue(v any, d *parseDepth) (eng.Value, error) {
 	node, pos := deSite(v)
-	res, err := convertTopLevelValueInner(node)
+	res, err := convertTopLevelValueInner(node, d)
 	if err != nil {
 		return res, err
 	}
 	return withPos(res, pos), nil
 }
 
-func convertTopLevelValueInner(v any) (eng.Value, error) {
+func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
 		if val.Quote == "" {
@@ -663,7 +623,7 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 		return eng.NewString(val.Str), nil
 
 	case interpGroup:
-		return convertInterpGroup(val)
+		return convertInterpGroup(val, d)
 
 	case miniLitVal:
 		// `+name<delim>src<delim>` desugars to the splice `mini name 'src'`
@@ -691,9 +651,9 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
-			return convertTypedMap(val.Val)
+			return convertTypedMap(val.Val, d)
 		}
-		mv, err := convertMapData(val.Val, val.Implicit, val.Meta)
+		mv, err := convertMapData(val.Val, val.Implicit, d, val.Meta)
 		if err != nil {
 			return mv, err
 		}
@@ -708,9 +668,9 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 		// Raw map from list.pair syntax (e.g., [x:number] produces
 		// map[string]any{"x": Text("number")} inside the list).
 		if hasMapChild(val) {
-			return convertTypedMap(val)
+			return convertTypedMap(val, d)
 		}
-		mv, err := convertMapData(val, true)
+		mv, err := convertMapData(val, true, d)
 		if err != nil {
 			return mv, err
 		}
@@ -721,15 +681,15 @@ func convertTopLevelValueInner(v any) (eng.Value, error) {
 
 	case jsonic.ListRef:
 		if val.Child != nil {
-			return convertTypedList(val)
+			return convertTypedList(val, d)
 		}
-		return convertWordList(val.Val)
+		return convertWordList(val.Val, d)
 
 	case angleGroup:
 		// Use-site sugar: `Box<Integer>` → the canonical paren span
 		// `( Box of [Integer] )` (a ParenExpr, exactly what the
 		// canonical source produces in word context).
-		return angleUseSite(val)
+		return angleUseSite(val, d)
 
 	case unclosedAngle:
 		return eng.Value{}, unclosedAngleError(val)
@@ -809,8 +769,8 @@ func danglingDotError(pos eng.SrcPos) error {
 // convertWordList converts a list in word context (top-level list).
 // The resulting list is marked for auto-evaluation: its contents will
 // be executed at the end of Run unless quoted or consumed by a word.
-func convertWordList(items []any) (eng.Value, error) {
-	elems, err := convertTopLevelItems(items)
+func convertWordList(items []any, d *parseDepth) (eng.Value, error) {
+	elems, err := convertTopLevelItems(items, d)
 	if err != nil {
 		return eng.Value{}, err
 	}
@@ -823,7 +783,11 @@ func convertWordList(items []any) (eng.Value, error) {
 // [x:Integer] rather than {x:Integer}).
 // Explicit maps are marked for auto-evaluation (Eval=true).
 // The optional meta parameter receives MapRef.Meta for optional field detection.
-func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (eng.Value, error) {
+func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[string]any) (eng.Value, error) {
+	if err := d.enter(); err != nil {
+		return eng.Value{}, err
+	}
+	defer d.leave()
 	om := eng.NewOrderedMap()
 	if implicit {
 		om.Implicit = true
@@ -903,7 +867,7 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 		var child eng.Value
 		var err error
 		if _, inMap := m[key]; inMap {
-			child, err = convertDataValue(m[key])
+			child, err = convertDataValue(m[key], d)
 		} else {
 			child, err = parseWord(synth[key])
 		}
@@ -950,16 +914,16 @@ func convertMapData(m map[string]any, implicit bool, meta ...map[string]any) (en
 // convertDataValue converts a value in data context (inside maps).
 // Quoted text → strings, unquoted text → words (executable). The value is
 // stamped with the source position captured by the val-rule BC (if any).
-func convertDataValue(v any) (eng.Value, error) {
+func convertDataValue(v any, d *parseDepth) (eng.Value, error) {
 	node, pos := deSite(v)
-	res, err := convertDataValueInner(node)
+	res, err := convertDataValueInner(node, d)
 	if err != nil {
 		return res, err
 	}
 	return withPos(res, pos), nil
 }
 
-func convertDataValueInner(v any) (eng.Value, error) {
+func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 	switch val := v.(type) {
 	case jsonic.Text:
 		if val.Quote != "" {
@@ -971,7 +935,7 @@ func convertDataValueInner(v any) (eng.Value, error) {
 		return parseWord(val.Str)
 
 	case interpGroup:
-		return convertInterpGroup(val)
+		return convertInterpGroup(val, d)
 
 	case miniLitVal:
 		// `+name<delim>src<delim>` desugars to the splice `mini name 'src'`
@@ -999,21 +963,21 @@ func convertDataValueInner(v any) (eng.Value, error) {
 
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
-			return convertTypedMap(val.Val)
+			return convertTypedMap(val.Val, d)
 		}
-		return convertMapData(val.Val, val.Implicit, val.Meta)
+		return convertMapData(val.Val, val.Implicit, d, val.Meta)
 
 	case map[string]any:
 		if hasMapChild(val) {
-			return convertTypedMap(val)
+			return convertTypedMap(val, d)
 		}
-		return convertMapData(val, true)
+		return convertMapData(val, true, d)
 
 	case jsonic.ListRef:
 		if val.Child != nil {
-			return convertTypedList(val)
+			return convertTypedList(val, d)
 		}
-		return convertDataList(val.Val)
+		return convertDataList(val.Val, d)
 
 	case unclosedParen:
 		return eng.Value{}, eng.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
@@ -1021,7 +985,7 @@ func convertDataValueInner(v any) (eng.Value, error) {
 	case parenGroup:
 		// Paren group in data context: convert items in word context
 		// and wrap as a ParenExpr for inline evaluation by autoEvalMap.
-		items, err := convertTopLevelItems([]any(val))
+		items, err := convertTopLevelItems([]any(val), d)
 		if err != nil {
 			return eng.Value{}, err
 		}
@@ -1032,7 +996,7 @@ func convertDataValueInner(v any) (eng.Value, error) {
 		// `[:Box<Integer>]` child constraint, `b:Box<Integer>` typed
 		// annotations — becomes the same ParenExpr the canonical
 		// `(Box of [Integer])` produces here.
-		return angleUseSite(val)
+		return angleUseSite(val, d)
 
 	case unclosedAngle:
 		return eng.Value{}, unclosedAngleError(val)
@@ -1060,8 +1024,12 @@ func convertDataValueInner(v any) (eng.Value, error) {
 // (`[v0 :T v1]`), each element is converted in data context and
 // retained on the resulting Value's ChildTypeInfo.Elements; the
 // runtime `is` validates them against Child on demand.
-func convertTypedList(lr jsonic.ListRef) (eng.Value, error) {
-	childVal, err := convertDataValue(lr.Child)
+func convertTypedList(lr jsonic.ListRef, d *parseDepth) (eng.Value, error) {
+	if err := d.enter(); err != nil {
+		return eng.Value{}, err
+	}
+	defer d.leave()
+	childVal, err := convertDataValue(lr.Child, d)
 	if err != nil {
 		return eng.Value{}, err
 	}
@@ -1070,7 +1038,7 @@ func convertTypedList(lr jsonic.ListRef) (eng.Value, error) {
 	}
 	elems := make([]eng.Value, 0, len(lr.Val))
 	for _, item := range lr.Val {
-		ev, err := convertDataValue(item)
+		ev, err := convertDataValue(item, d)
 		if err != nil {
 			return eng.Value{}, err
 		}
@@ -1094,8 +1062,12 @@ func hasMapChild(m map[string]any) bool {
 // constraint (`{k:v :T}`), each entry is converted in data context
 // and retained on the resulting Value's ChildTypeInfo.Entries; the
 // runtime `is` validates each entry's value against Child on demand.
-func convertTypedMap(m map[string]any) (eng.Value, error) {
-	childVal, err := convertDataValue(m["child$"])
+func convertTypedMap(m map[string]any, d *parseDepth) (eng.Value, error) {
+	if err := d.enter(); err != nil {
+		return eng.Value{}, err
+	}
+	defer d.leave()
+	childVal, err := convertDataValue(m["child$"], d)
 	if err != nil {
 		return eng.Value{}, err
 	}
@@ -1113,7 +1085,7 @@ func convertTypedMap(m map[string]any) (eng.Value, error) {
 	sort.Strings(keys)
 	entries := make([]eng.ChildEntry, 0, len(keys))
 	for _, k := range keys {
-		ev, err := convertDataValue(m[k])
+		ev, err := convertDataValue(m[k], d)
 		if err != nil {
 			return eng.Value{}, err
 		}
@@ -1128,10 +1100,10 @@ func convertTypedMap(m map[string]any) (eng.Value, error) {
 // macros, quote, and Vm.parse never see an angle form (D15). Each item
 // converts in word context; nested sugar (`Box<Pair<A, B>>`) recurses
 // through the angleGroup case.
-func angleUseSite(ag angleGroup) (eng.Value, error) {
+func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
 	args := make([]eng.Value, 0, len(ag.Items))
 	for _, it := range ag.Items {
-		v, err := convertTopLevelValue(it)
+		v, err := convertTopLevelValue(it, d)
 		if err != nil {
 			return eng.Value{}, err
 		}
@@ -1156,7 +1128,7 @@ func angleUseSite(ag angleGroup) (eng.Value, error) {
 // like list elements), so entries are recognised by the grammar above:
 // a capitalised name, optionally followed by an `extends`/`=` operator
 // and its operand.
-func angleGenList(items []any, pos eng.SrcPos) (eng.Value, error) {
+func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error) {
 	entries := make([]eng.Value, 0, len(items))
 	i := 0
 	for i < len(items) {
@@ -1189,7 +1161,7 @@ func angleGenList(items []any, pos eng.SrcPos) (eng.Value, error) {
 							Row:    epos.Row, Col: epos.Col, Src: epos.Src,
 						}
 					}
-					operand, err := convertTopLevelValue(items[i+2])
+					operand, err := convertTopLevelValue(items[i+2], d)
 					if err != nil {
 						return eng.Value{}, err
 					}
@@ -1219,8 +1191,8 @@ func unclosedAngleError(ua unclosedAngle) error {
 
 // convertDataList converts a list in data context (inside maps).
 // Lists use word context and are marked for auto-evaluation.
-func convertDataList(items []any) (eng.Value, error) {
-	elems, err := convertTopLevelItems(items)
+func convertDataList(items []any, d *parseDepth) (eng.Value, error) {
+	elems, err := convertTopLevelItems(items, d)
 	if err != nil {
 		return eng.Value{}, err
 	}
@@ -1573,7 +1545,7 @@ func malformedNumberError(src string) error {
 // convertInterpGroup converts an interpGroup (produced by the interp/ielem/iexpr
 // jsonic rules) into an engine InterpString value, or a plain string if there
 // are no expression parts.
-func convertInterpGroup(grp interpGroup) (eng.Value, error) {
+func convertInterpGroup(grp interpGroup, d *parseDepth) (eng.Value, error) {
 	if len(grp) == 0 {
 		return eng.NewString(""), nil
 	}
@@ -1587,7 +1559,7 @@ func convertInterpGroup(grp interpGroup) (eng.Value, error) {
 			parts = append(parts, eng.InterpPart{Lit: v.Str})
 		case iexprGroup:
 			hasExpr = true
-			exprVals, err := convertTopLevelItems([]any(v))
+			exprVals, err := convertTopLevelItems([]any(v), d)
 			if err != nil {
 				return eng.Value{}, fmt.Errorf("interpolation expression error: %w", err)
 			}
