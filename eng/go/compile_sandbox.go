@@ -32,7 +32,7 @@ type CompileSandbox struct {
 	modSeq    int
 	builtins  map[string]bool
 	caps      map[string]any
-	check     CheckState
+	check     *CheckState
 	flow      FlowCtrl
 	pendGen   *GenSpecInfo
 	valid     bool
@@ -43,21 +43,18 @@ func (r *Registry) SnapshotForCompile() CompileSandbox {
 	if r == nil {
 		return CompileSandbox{}
 	}
-	// check and pendGen are captured by VALUE (a CheckState struct copy and a
-	// *GenSpecInfo pointer), not deep-cloned like the scopes above. That is
-	// sound because the check pass only ever REPLACES them — CompileCheck
-	// reassigns Check.Emit/FnSummaries/FnInflight and Check.Begin resets the
-	// per-pass fields, none of which mutate the snapshot's copy in place; and
-	// pendingGen is set/cleared by pointer reassignment, never by in-place
-	// mutation of the pointed-to GenSpecInfo. RestoreForCompile then puts the
-	// pre-check struct/pointer back wholesale. If a future change starts
-	// mutating a CheckState map or *pendingGen in place during the check
-	// pass, deep-clone them here instead.
+	// check is DEEP-cloned (CheckState.Clone) because Check is now a shared
+	// *CheckState: a module sub-registry can transiently point its Check at the
+	// parent pass's and mutate its maps IN PLACE during module-fn body analysis
+	// (design/module-fn-checkstate-ownership.1.md §3.2). The old by-value copy
+	// reasoning ("the check pass only ever REPLACES, never mutates in place") no
+	// longer holds, so a shallow capture would let in-place mutations survive the
+	// rollback. pendGen stays a by-pointer capture (still only reassigned).
 	s := CompileSandbox{
 		defs:    r.Defs.Clone(),
 		types:   r.Types.Clone(),
 		ctx:     r.Contexts.Snapshot(),
-		check:   r.Check,
+		check:   r.Check.Clone(),
 		flow:    r.FlowCtrl,
 		pendGen: r.pendingGen,
 		valid:   true,
@@ -98,7 +95,13 @@ func (r *Registry) RestoreForCompile(s CompileSandbox) {
 	r.Defs = s.defs
 	r.Types = s.types
 	r.Contexts.Restore(s.ctx)
-	r.Check = s.check
+	// Restore analysis state IN PLACE so a module sub-registry transiently
+	// sharing this *CheckState observes the rollback (§3.2).
+	if s.check != nil && r.Check != nil {
+		*r.Check = *s.check
+	} else {
+		r.Check = s.check
+	}
 	r.FlowCtrl = s.flow
 	r.pendingGen = s.pendGen
 	if r.Modules != nil {

@@ -34,15 +34,16 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | ---: | --- | --- |
 | 5 | operand provenance | soundness |
 | 3 | dynamic input | soundness |
-| 2 | residual lowering (Stage 1 limit) | scheduling |
+| 1 | code-body word (NoEvalArgs) | coverage |
+| 1 | residual lowering (Stage 1 limit) | scheduling |
 
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
 | soundness | 8 |
-| scheduling | 2 |
+| scheduling | 1 |
 | opcode | 0 |
-| coverage | 0 |
+| coverage | 1 |
 
 ## Re-scoped P7 partition
 

@@ -4395,6 +4395,26 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 	}
 }
 
+// shareCheckState lets a module sub-registry's fn body run IN CHECK MODE under
+// the parent compile pass. When the calling engine is in check mode and the body
+// executes in a DIFFERENT (captured module) registry, it points that registry's
+// Check at the parent's for the duration of the call, so mode, Emit recording,
+// the memo / in-flight maps and the step/budget counters are shared — while word
+// resolution still uses the module registry's own Defs/Types (untouched). It
+// returns a restore function (a no-op when no sharing applies). The shared memo
+// keys stay disjoint across the boundary via the per-registry scopeID prefix
+// (§5a), so a module fn and a parent fn of the same name cannot alias. See
+// design/module-fn-checkstate-ownership.1.md §5b.
+func (e *Engine) shareCheckState(capturedReg *Registry) func() {
+	if capturedReg == nil || e.registry == nil ||
+		capturedReg == e.registry || !e.registry.Check.IsActive() {
+		return func() {}
+	}
+	saved := capturedReg.Check
+	capturedReg.Check = e.registry.Check
+	return func() { capturedReg.Check = saved }
+}
+
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
 // (module closure), execution uses CallAQL on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
@@ -4461,7 +4481,9 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				captures = fd.Captured
 			}
 		}
+		restoreCheck := e.shareCheckState(capturedReg)
 		result, err := capturedReg.CallAQL(sig, args, captures)
+		restoreCheck()
 		if err != nil {
 			return err
 		}

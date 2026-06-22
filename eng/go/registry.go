@@ -73,9 +73,15 @@ type Registry struct {
 	builtinWords   map[string]bool   // names registered via Register (natives + host words); user def/undef must not shadow these
 
 	// Check holds all static type-checking state, bundled together
-	// so the future predicate-sandbox work (TYPE-SYSTEM-REVIEW.md
-	// §3.3) can snapshot/restore one field instead of ten.
-	Check CheckState
+	// so the predicate-sandbox / compile-sandbox work can
+	// snapshot/restore one field instead of ten. It is a POINTER so a
+	// module sub-registry can transiently share the parent compile
+	// pass's analysis state (mode/emit/memos/counters) while still
+	// resolving names in its own Defs/Types — the module-fn body
+	// compilation refactor (design/module-fn-checkstate-ownership.1.md
+	// §5b). Snapshot sites deep-clone the pointee (CheckState.Clone)
+	// and restore IN PLACE so a transient sharer observes the rollback.
+	Check *CheckState
 
 	// FlowCtrl carries the active control-flow signal (break, continue,
 	// ...). Set by the corresponding handlers; consumed by the engine's
@@ -460,7 +466,7 @@ func NewRegistry() (*Registry, error) {
 		// step" so callers who want that have an unambiguous way to
 		// express it; callers who omit the field get the default
 		// without the historical zero-as-magic overload.
-		Check: CheckState{StepBudget: -1},
+		Check: &CheckState{StepBudget: -1},
 	}
 	// Mint a process-stable scope id so fn-analysis memo keys can be
 	// namespaced per registry (parent vs module sub-registry). A

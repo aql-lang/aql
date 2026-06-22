@@ -12,6 +12,62 @@ import "strings"
 // because most mutate state (Diagnostics, DefsUsed, …); r.Check is
 // addressable so Go auto-takes &r.Check at the call site.
 
+// Clone returns a deep copy of the analysis state: scalar fields are
+// copied, the maps (FnSummaries, FnInflight, FnAnalysisCounts,
+// DefsInstalled, DefsUsed, ContextTypes) and the Diagnostics slice are
+// cloned so a sandboxed run's in-place mutation cannot bleed into the
+// snapshot (and a restore cannot bleed back). Emit is copied by pointer
+// (the recorder is shared, not snapshotted). Used by the predicate /
+// compile sandboxes, which since the Check-pointer conversion
+// (design/module-fn-checkstate-ownership.1.md §3.2) must snapshot the
+// POINTEE rather than alias it.
+func (c *CheckState) Clone() *CheckState {
+	if c == nil {
+		return nil
+	}
+	cp := *c // scalars + Emit pointer + map/slice headers
+	if c.Diagnostics != nil {
+		cp.Diagnostics = append([]CheckDiagnostic(nil), c.Diagnostics...)
+	}
+	if c.FnSummaries != nil {
+		cp.FnSummaries = make(map[string][]Value, len(c.FnSummaries))
+		for k, v := range c.FnSummaries {
+			cp.FnSummaries[k] = v
+		}
+	}
+	if c.FnInflight != nil {
+		cp.FnInflight = make(map[string]bool, len(c.FnInflight))
+		for k, v := range c.FnInflight {
+			cp.FnInflight[k] = v
+		}
+	}
+	if c.FnAnalysisCounts != nil {
+		cp.FnAnalysisCounts = make(map[string]int, len(c.FnAnalysisCounts))
+		for k, v := range c.FnAnalysisCounts {
+			cp.FnAnalysisCounts[k] = v
+		}
+	}
+	if c.DefsInstalled != nil {
+		cp.DefsInstalled = make(map[string]SrcPos, len(c.DefsInstalled))
+		for k, v := range c.DefsInstalled {
+			cp.DefsInstalled[k] = v
+		}
+	}
+	if c.DefsUsed != nil {
+		cp.DefsUsed = make(map[string]bool, len(c.DefsUsed))
+		for k, v := range c.DefsUsed {
+			cp.DefsUsed[k] = v
+		}
+	}
+	if c.ContextTypes != nil {
+		cp.ContextTypes = make(map[string]Value, len(c.ContextTypes))
+		for k, v := range c.ContextTypes {
+			cp.ContextTypes[k] = v
+		}
+	}
+	return &cp
+}
+
 // IsActive reports whether check mode is currently on. Handlers consult
 // this to short-circuit side effects during static analysis.
 func (c *CheckState) IsActive() bool {
