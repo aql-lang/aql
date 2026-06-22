@@ -28,6 +28,14 @@ func TestPositionalMatchQuoteArgRejectsNonConcreteCarrier(t *testing.T) {
 	if !positionalMatch([]Value{NewWord("foo")}, qsig) {
 		t.Error("a /q position must match a Word")
 	}
+	// A genuine ATOM carrier (a non-concrete but atom-typed value, e.g. the
+	// result of `quote name` flowing to `set (quote name) v`) MUST still match —
+	// the guard rejects only NON-atom carriers, so it must not break a real /q
+	// key carrier (regression: storage.tsv `context set (quote name) …`).
+	atomCarrier := NewCarrier(TAtom)
+	if !positionalMatch([]Value{atomCarrier}, qsig) {
+		t.Error("a /q position must match a genuine Atom carrier")
+	}
 
 	// Control: the SAME dynamic Any carrier at a NON-/q TAtom position still
 	// matches optimistically — the dynamic-modality rule is unchanged elsewhere;

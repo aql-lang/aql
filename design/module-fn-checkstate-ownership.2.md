@@ -78,3 +78,36 @@ fuzzer, the full corpus) — not rushed. After it, the cascade continues
 Recording `OpCallNativePoly` in the non-disjunct recovery for non-concrete args
 pushes `refusalCeiling` 10 -> 23 (the dynamic-Any poison spreads corpus-wide).
 The fix is upstream (deliver the real paren value to quote), not in the recovery.
+
+---
+
+## RESOLVED — the None carrier is fixed
+
+Root cause located in `e.matchSignature` (the forward/stack matcher stepWord uses
+for natives — NOT the `positionalMatch`/`MatchSignature` path `aada2c1` touched,
+which is why that guard was bypassed). For `quote (s get k)`, phase-1
+pre-evaluates the paren to a dynamic Any carrier; `e.matchSignature` then matched
+it to quote's word-capture sig (`[TAtom]`, QuoteArgs) via the
+Any-conforms-to-everything rule — in BOTH the forward scan and the stack phase
+(the pre-evaluated carrier is grabbed as a stack arg). Since the `/q` sig's
+handler is `quoteWordHandler` (not `quoteAnyHandler`), problems (A) "quote never
+dispatches" and (B) "commits to the /q sig" were the same bug.
+
+Fix: a `/q` position rejects a non-concrete carrier whose type is NOT atom-family
+(`!v.Parent.ConformsTo(TAtom)`), in the forward scan and stack phase of
+`e.matchSignature` and in `positionalMatch` (refining `aada2c1`). A genuine Atom
+carrier still matches — the narrowing that keeps `set (quote name) v`
+(`storage.tsv`) working (a regression caught by the corpus before the
+`ConformsTo(TAtom)` clause). Check-mode-only: at runtime operands are concrete,
+so the matcher is unaffected — the change merely aligns check-mode `/q` selection
+with the runtime's (a computed non-atom value picks the value overload).
+
+`quote (s get "a")` and the full `run-case` field-read chain now compile to
+byte-identical results. Gate: 0 divergences, full corpus + fuzzer green,
+COMPILED_STATUS unchanged (corpus-neutral), `quote foo` / `/q` keys preserved,
+pinned by `TestPositionalMatchQuoteArgRejectsNonConcreteCarrier`.
+
+`module-test:38` now advances past the quote blocker to the NEXT cascade step:
+"code-body word test-describe (Stage 2)" — test-describe's closure recursing into
+`run-cases` → `run-case`. That is the remaining §6 work (the recursive framework
+body), separate from this None-carrier fix.

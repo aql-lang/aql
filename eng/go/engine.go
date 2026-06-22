@@ -5956,6 +5956,23 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					break
 				}
 
+				// A /q (QuoteArgs) position captures a literal word/ATOM (the
+				// IsWord branch above handles a raw word). A non-concrete carrier
+				// whose type is NOT atom-family — a computed check-mode value such
+				// as the pre-evaluated result of `quote (s get k)` (an Any/Integer
+				// carrier) — is not an atom, so it must not fill the /q slot via
+				// the Any-conforms-to-everything rule: that would pick quote's
+				// word-capture sig ([TAtom], QuoteArgs) over its value sig ([TAny],
+				// ReturnsIdentity), refuse to compile, and (since the /q handler is
+				// quoteWordHandler) never run the value path. A genuine Atom
+				// carrier (e.g. `set (quote name) v`) DOES conform and still
+				// matches. Inert at runtime (operands are concrete there). Mirrors
+				// the stack-phase and positionalMatch /q guards. See
+				// design/module-fn-checkstate-ownership.2.md.
+				if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] && tok.Carrier && !IsConcrete(tok) && !tok.Parent.ConformsTo(TAtom) {
+					break
+				}
+
 				// Literal value: direct type check.
 				if sigArgMatches(sig, fwd, tok) || expectedType.Equal(TAny) {
 					isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
@@ -6063,6 +6080,15 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 				positions[sigIdx] = resolvedIdx[ri]
 				continue
+			}
+			// A /q position captures a literal word/atom; a NON-CONCRETE carrier
+			// (a computed check-mode value) must not fill it via the
+			// Any-conforms-to-everything rule — it belongs to a value overload.
+			// Mirrors the forward-scan and positionalMatch /q guards. Inert at
+			// runtime (operands are concrete there).
+			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Carrier && !IsConcrete(stackVal) && !stackVal.Parent.ConformsTo(TAtom) {
+				allMatch = false
+				break
 			}
 			if !sigArgMatches(sig, sigIdx, stackVal) {
 				allMatch = false

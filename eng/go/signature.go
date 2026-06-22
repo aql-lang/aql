@@ -446,7 +446,7 @@ func positionalMatch(values []Value, sig *Signature) bool {
 		// At RUNTIME the operand is concrete (no carrier), so this is inert there
 		// and merely aligns check-mode sig selection with the runtime's (a
 		// concrete non-Atom already fails TAtom and picks the value overload).
-		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Carrier && !IsConcrete(v) {
+		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Carrier && !IsConcrete(v) && !v.Parent.ConformsTo(TAtom) {
 			return false
 		}
 		if !sigArgMatches(sig, i, v) {
