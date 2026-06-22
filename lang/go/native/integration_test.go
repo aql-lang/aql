@@ -391,7 +391,7 @@ func TestEngineReadUnknownFormat(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	opts := NewOrderedMap()
-	opts.Set("fmt", NewString("yaml"))
+	opts.Set("fmt", NewString("nonesuch"))
 	err = runAQLError(t, r, []Value{NewWord("read"), NewString("test.txt"), NewMap(opts)})
 	if err == nil {
 		t.Error("expected error for unknown format")

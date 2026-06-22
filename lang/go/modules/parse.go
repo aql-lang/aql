@@ -361,7 +361,7 @@ func parseAbnfHandler(args []native.Value, _ map[string]native.Value, _ []native
 			acts = g.markActions
 		}
 		if _, ierr := tabnasabnf.Install(g.j, src, o, acts); ierr != nil {
-			return fmt.Errorf("abnf: %s", firstCleanLine(ierr.Error()))
+			return fmt.Errorf("abnf: %s", native.FirstCleanLine(ierr.Error()))
 		}
 		return nil
 	})
@@ -523,29 +523,29 @@ func (g *parseGrammar) parseHandler(kind string) native.Handler {
 		g.r = nil
 		if g.firstErr != nil {
 			return nil, r.AqlErrorHint("parse_syntax_error",
-				kind+": "+firstCleanLine(g.firstErr.Error()), target,
+				kind+": "+native.FirstCleanLine(g.firstErr.Error()), target,
 				"a grammar action/matcher raised this error")
 		}
 		if perr != nil {
 			return nil, r.AqlErrorHint("parse_syntax_error",
-				kind+": "+firstCleanLine(perr.Error()), target,
+				kind+": "+native.FirstCleanLine(perr.Error()), target,
 				"check that the source is well-formed "+kind)
 		}
-		return []native.Value{tabnasAnyToValue(out)}, nil
+		return []native.Value{native.AnyToValue(out)}, nil
 	}
 }
 
 // wrapAction wraps an AQL fn as a tabnas semantic action (an AltAction): it
 // hands the fn the rule's current node (as an AQL Value), and stores the fn's
 // returned Value back on the node — which, because nodes may now BE AQL
-// Values (see the tabnasAnyToValue pass-through), is how an action emits a
+// Values (see the native.AnyToValue pass-through), is how an action emits a
 // custom-typed value into the parse result.
 func (g *parseGrammar) wrapAction(fn native.Value) tabnas.AltAction {
 	return func(rule *tabnas.Rule, _ *tabnas.Context) {
 		if g.firstErr != nil || g.r == nil {
 			return
 		}
-		node := tabnasAnyToValue(rule.Node)
+		node := native.AnyToValue(rule.Node)
 		res, err := callParseFn(g.r, fn, []native.Value{node})
 		if err != nil {
 			g.setErr(err)

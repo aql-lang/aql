@@ -85,7 +85,7 @@ func miniMathHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		},
 	})
 	if perr != nil {
-		return nil, r.AqlErrorHint("mini_syntax_error", "m: "+firstCleanLine(perr.Error()),
+		return nil, r.AqlErrorHint("mini_syntax_error", "m: "+native.FirstCleanLine(perr.Error()),
 			"lang_m", "write a maths formula like x*y-z^2 with variables bound via opts")
 	}
 

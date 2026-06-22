@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -21,6 +22,63 @@ type Format interface {
 	Decode(content string) ([]Value, error)
 	Encode(v Value) (string, error)
 }
+
+// DecodeOpter is an optional extension of Format: a decoder that accepts
+// parser options. doRead prefers DecodeOpts when the format implements it
+// and the caller supplied options, otherwise it falls back to Decode. The
+// built-in encodable formats (text/json/csv/…) implement only Format and
+// are unaffected.
+type DecodeOpter interface {
+	DecodeOpts(content string, opts map[string]any) ([]Value, error)
+}
+
+// ReadOnlyFormat marks a Format whose Encode is unsupported — parser-backed
+// formats are decode-only. write consults this marker (NOT by executing
+// Encode, which could run arbitrary host-side work) to reject an explicit
+// read-only {fmt:…}. TabnasFormat implements it; a host's own decode-only
+// format can too.
+type ReadOnlyFormat interface {
+	ReadOnly() bool
+}
+
+// errReadOnlyFormat is the sentinel wrapped by parser-backed formats whose
+// Encode is not supported. IsReadOnlyFormatErr detects it so write can
+// surface a clean message.
+var errReadOnlyFormat = errors.New("format is read-only")
+
+// IsReadOnlyFormatErr reports whether err is (or wraps) the read-only
+// sentinel returned by a parser-backed format's Encode.
+func IsReadOnlyFormatErr(err error) bool {
+	return errors.Is(err, errReadOnlyFormat)
+}
+
+// TabnasFormat wraps one TabnasKind (see tabnas.go) as a read-only Format.
+// Decode / DecodeOpts run the tabnas decoder + converter; Encode always
+// errors with the read-only sentinel — the tabnas family is parse-only, so
+// write cannot serialise back through these formats.
+type TabnasFormat struct {
+	Kind TabnasKind
+}
+
+func (f *TabnasFormat) Decode(content string) ([]Value, error) {
+	return f.DecodeOpts(content, nil)
+}
+
+func (f *TabnasFormat) DecodeOpts(content string, opts map[string]any) ([]Value, error) {
+	v, err := f.Kind.Parse(content, opts)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %s", f.Kind.Name, FirstCleanLine(err.Error()))
+	}
+	return []Value{f.Kind.Convert(v)}, nil
+}
+
+func (f *TabnasFormat) Encode(Value) (string, error) {
+	return "", fmt.Errorf("format %q is %w", f.Kind.Name, errReadOnlyFormat)
+}
+
+// ReadOnly reports that the tabnas family is decode-only, letting write
+// reject an explicit {fmt:…} without invoking Encode (see ReadOnlyFormat).
+func (f *TabnasFormat) ReadOnly() bool { return true }
 
 // TextFormat handles plain text (no parsing).
 type TextFormat struct{}
@@ -363,9 +421,15 @@ func encodeDelimited(v Value, sep string) (string, error) {
 	return sb.String(), nil
 }
 
-// DefaultFormats returns the built-in format registry.
+// DefaultFormats returns the built-in format registry: read's own
+// encodable decoders (text/json/jsonic/lines/csv/tsv) plus the read-only
+// tabnas family folded in from TabnasKinds. The tabnas kinds whose names
+// read already owns (json/jsonic/csv) are skipped, so read keeps its
+// table-producing csv and its multisource-aware jsonic — only the formats
+// read otherwise lacks (ini/json5/jsonc/toml/yaml/xml/zon/markdown/feed)
+// are added.
 func DefaultFormats() map[string]Format {
-	return map[string]Format{
+	m := map[string]Format{
 		"text":   &TextFormat{},
 		"json":   &JSONFormat{},
 		"jsonic": &JsonicFormat{},
@@ -373,4 +437,37 @@ func DefaultFormats() map[string]Format {
 		"csv":    &CSVFormat{},
 		"tsv":    &TSVFormat{},
 	}
+	for _, k := range TabnasKinds() {
+		if _, taken := m[k.Name]; taken {
+			continue
+		}
+		m[k.Name] = &TabnasFormat{Kind: k}
+	}
+	return m
+}
+
+// RegisterFormat installs f under name on r's format registry and maps each
+// ext (leading dot optional, case-insensitive) to that format name. Once
+// registered the format is reachable from `read` by name (via the fmt
+// option) and by file extension. It pairs with the aql:parselang bridge
+// RegisterFormatParser, which additionally exposes the format as a `parse`
+// kind. Returns an error when the formats capability is not installed.
+func RegisterFormat(r *Registry, name string, f Format, exts ...string) error {
+	if name == "" {
+		return fmt.Errorf("register format: name must not be empty")
+	}
+	formats := HostFormats(r)
+	if formats == nil {
+		return fmt.Errorf("register format %q: formats capability not installed", name)
+	}
+	formats[name] = f // the map is host-owned and mutated in place (see capabilities.go)
+	em := HostExtensions(r)
+	if em == nil {
+		em = DefaultExtensions()
+		SetHostExtensions(r, em)
+	}
+	for _, e := range exts {
+		em[strings.ToLower(strings.TrimPrefix(e, "."))] = name
+	}
+	return nil
 }

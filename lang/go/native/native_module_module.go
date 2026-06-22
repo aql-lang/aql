@@ -38,6 +38,33 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 			return ModuleDesc{}, err
 		}
 	}
+	// Overlay the parent's host-registered formats and extension mappings
+	// onto the child's own defaults so a module body's reads resolve custom
+	// host formats — and host overrides of the built-ins — exactly as the
+	// parent does. Without this, IO.read on a host-registered extension works
+	// at top level but silently decodes as text during import. Overlaying
+	// (rather than replacing the map) preserves the child's defaults when the
+	// parent merely added entries.
+	if pf := HostFormats(parent); pf != nil {
+		cf := HostFormats(modReg)
+		if cf == nil {
+			cf = map[string]Format{}
+			SetHostFormats(modReg, cf)
+		}
+		for n, f := range pf {
+			cf[n] = f
+		}
+	}
+	if pe := HostExtensions(parent); pe != nil {
+		ce := HostExtensions(modReg)
+		if ce == nil {
+			ce = DefaultExtensions()
+			SetHostExtensions(modReg, ce)
+		}
+		for ext, n := range pe {
+			ce[ext] = n
+		}
+	}
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.BaseFile = parent.BaseFile
@@ -161,9 +188,11 @@ func isFilePath(path string) bool {
 }
 
 // isDataFile returns true if the path has a data file extension
-// (.json, .jsonic, .csv, .tsv).
-func isDataFile(path string) bool {
-	f := formatFromExt(path)
+// (.json, .jsonic, .csv, .tsv) — the formats `import` loads as values.
+// Parser-backed formats (ini/xml/yaml/…) are deliberately excluded: they
+// are read-only and reached via `read`, not `import`.
+func isDataFile(r *Registry, path string) bool {
+	f := formatFromExt(r, path)
 	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
 }
 
@@ -241,12 +270,12 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 // the result as an AQL value on the stack. Uses doRead so CSV/TSV files
 // get the same table + SQLite handling as the read word.
 func loadDataFile(parent *Registry, path string) ([]Value, error) {
-	format := formatFromExt(path)
+	format := formatFromExt(parent, path)
 	if format == "" {
 		return nil, parent.AqlError("import_error", fmt.Sprintf("import: unknown format for %s", path), "import")
 	}
 	resolved := resolveImportPath(parent, path)
-	result, err := doRead(parent, resolved, "utf8", format, "lf")
+	result, err := doRead(parent, resolved, "utf8", format, "lf", nil)
 	if err != nil {
 		return nil, fmt.Errorf("import: %w", err)
 	}
@@ -325,12 +354,12 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 		if !ok {
 			return fmt.Errorf("resource %q: value must be a string filename", key)
 		}
-		format := formatFromExt(filename)
+		format := formatFromExt(r, filename)
 		if format == "" {
 			return fmt.Errorf("resource %q: unsupported file format %q", key, filename)
 		}
 		filePath := filepath.Join(modDir, filename)
-		vals, err := doRead(r, filePath, "utf8", format, "lf")
+		vals, err := doRead(r, filePath, "utf8", format, "lf", nil)
 		if err != nil {
 			return fmt.Errorf("resource %q: %w", key, err)
 		}
@@ -539,7 +568,7 @@ func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 		}
 		return r.Modules.Resolver(name, r)
 	}
-	if isDataFile(ref) {
+	if isDataFile(r, ref) {
 		return ModuleDesc{}, fmt.Errorf("%q is a data file, not a module", ref)
 	}
 	if !isFilePath(ref) {

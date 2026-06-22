@@ -62,6 +62,7 @@ func DefaultRegistryWithPolicy(p policy.Policy, providers ...func(*Registry)) (*
 		jf.Resolver = MakeFileOpsResolver(ops)
 	}
 	SetHostFormats(r, formats)
+	SetHostExtensions(r, DefaultExtensions())
 
 	// Default SQLite store.
 	sqlStore, err := NewSQLiteStore()
