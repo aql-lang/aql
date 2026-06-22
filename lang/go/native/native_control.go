@@ -360,7 +360,7 @@ func if2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 }
 
 func if3ReturnsFn(args []Value, r *Registry) []Value {
-	es := &r.Check
+	es := r.Check
 	if lit, ok := LiteralCondValue(args[0]); ok {
 		branch := "else"
 		if !lit {
@@ -494,7 +494,7 @@ func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
 }
 
 func if2ReturnsFn(args []Value, r *Registry) []Value {
-	es := &r.Check
+	es := r.Check
 	if lit, ok := LiteralCondValue(args[0]); ok && !lit {
 		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:     "unreachable_branch",

@@ -67,6 +67,19 @@ Stages C–G also clear the 2 reducible rows (Test/Assert, quote-macro) and chip
 
 ## Stage A — variadic branch/return modeling (Gap A remainder)
 
+> **Superseded VM analysis — see
+> [`aql-bytecode-stageA-branch-result-modeling.0.md`](aql-bytecode-stageA-branch-result-modeling.0.md).**
+> The deep-dive validated this stage against the live tree (June 2026) and found
+> the VM side is **already done**: `OpRet` never truncates the stack
+> (`vm.go:812-849`) and `checkReturnContract` no-ops when `len(Returns)==0`
+> (`vm.go:1030-1032`), so a `[]`-declared variadic return needs **no opcode
+> change** — points 2 below ("OpRet leaves a fixed count") and the "OpRet must
+> leave all values" design bullet are stale. The load-bearing change is the
+> recorder's **single-operand arm model** (`emitBranch.thenOut/elsOut`,
+> `resolveArm` at `emit.go:922` takes only `stk[len-1]`), not the VM. Read the
+> deep-dive for the corrected, staged plan; the rest of this section is the
+> original framing.
+
 **Row.** `def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]] m 3`
 → `6 4 2`. Reason: `fn m: branch leaves extra values (Stage 2 lowers single-result
 branches)` (`lower.go:864`, `lowerFragment`).

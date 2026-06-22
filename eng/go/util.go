@@ -276,7 +276,7 @@ func CanonicalType(r *Registry, t *Type) *Type {
 type predicateSandbox struct {
 	types    *TypeTable
 	ctxStack []*StoreInstanceInfo
-	check    CheckState
+	check    *CheckState
 }
 
 func snapshotPredicateState(r *Registry) predicateSandbox {
@@ -286,7 +286,7 @@ func snapshotPredicateState(r *Registry) predicateSandbox {
 	return predicateSandbox{
 		types:    r.Types.Clone(),
 		ctxStack: r.Contexts.Snapshot(),
-		check:    r.Check,
+		check:    r.Check.Clone(),
 	}
 }
 
@@ -296,7 +296,14 @@ func restorePredicateState(r *Registry, s predicateSandbox) {
 	}
 	r.Types = s.types
 	r.Contexts.Restore(s.ctxStack)
-	r.Check = s.check
+	// Restore the analysis state IN PLACE (not by swapping the pointer) so a
+	// module sub-registry transiently sharing this *CheckState observes the
+	// rollback too (design/module-fn-checkstate-ownership.1.md §3.2).
+	if s.check != nil && r.Check != nil {
+		*r.Check = *s.check
+	} else {
+		r.Check = s.check
+	}
 }
 
 // AsConcreteString unwraps a String-typed Value into its Go string,

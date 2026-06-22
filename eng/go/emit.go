@@ -121,6 +121,16 @@ type eventFlags struct {
 	// (an arm is an fn value), so a trailing arg over it in the residual lowers
 	// to a runtime-conditional OpCallDynamic (`if c [99] MathUtil.sqrt 16`).
 	mayBeFn bool
+	// variadicResult marks an event whose result count is RUNTIME-VARIABLE — a
+	// loop, or a branch whose arms leave different / multiple counts (`if c [] [a
+	// b]`). Only a variadic-absorbing position (the program residual or a
+	// no-contract `[]`-declared fn RET) may consume it; feeding it to a
+	// fixed-arity operand refuses. A fn whose body residual is such an event is a
+	// VARIADIC-RETURNING fn (fnUnitRec.variadic), so its call sites mark the call
+	// result variadic too. Set structurally at record time (RecordBranch /
+	// RecordLoop), mirroring lowerArms' merge-variadic accounting; over-marking is
+	// sound (refuses more), under-marking is not.
+	variadicResult bool
 }
 
 type emitCall struct {
@@ -289,6 +299,15 @@ type emitEvent struct {
 type EmitFragment struct {
 	events   []emitEvent
 	startSeq int
+	// residualN is the RECORDED carrier-residual count for a branch ARM (the
+	// number of runtime values the interpreter leaves) — set by RecordBranch. The
+	// lowerer requires the lowered sim residual to match it exactly: a genuine
+	// multi-value arm (`[n mul 2 m (n sub 1)]` records 2) is accepted, while a
+	// single-value expression whose lowering happens to leave an extra sim slot
+	// (`[({a:(get…)} get a)]` records 1 but lowers to 2) is REFUSED as before —
+	// without this the extra slot would compile an unsound duplicate value. 0 ==
+	// unset (non-arm fragments: a loop body / condition expects one value).
+	residualN int
 }
 
 // EmitState is the recording side of the compile pass. Set
@@ -371,6 +390,12 @@ type fnUnitRec struct {
 	returns []*Type  // declared return types — enforced at the VM's RET
 	locals  []string // slot→name table (params then captures); debug only
 	frag    *EmitFragment
+	// variadic marks a VARIADIC-RETURNING fn: its body residual leaves a
+	// runtime-variable count (a `[]`-declared recursive accumulator, an
+	// `if c [] [a b]`). A call to it marks the call result variadic (lowerUserCall)
+	// so only the program residual or another no-contract RET absorbs it. Set at
+	// finish from the body residual's defining event (eventFlags.variadicResult).
+	variadic bool
 	// outOps are the body's residual operands in stack order (bottom→top):
 	// the values the unit leaves for its caller. Empty for a 0-result body
 	// OR a diverging body (every path tail-calls) — fragDiverges(frag)
@@ -1076,6 +1101,15 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 			}
 		}
 	}
+	// Record each body arm's true (carrier) residual count so the lowerer can
+	// distinguish a GENUINE multi-value arm from a single-value expression whose
+	// lowering leaves an extra sim artifact (see EmitFragment.residualN).
+	if ev.br.then != nil {
+		ev.br.then.residualN = len(b.ThenStk)
+	}
+	if ev.br.els != nil {
+		ev.br.els.residualN = len(b.ElsStk)
+	}
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
 	es.setProduced(b.Out, seq)
@@ -1093,6 +1127,50 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 		f.mayBeFn = true
 		es.eventInfo[seq] = f
 	}
+	if !zeroOut && es.branchVariadicResult(b) {
+		f := es.eventInfo[seq]
+		f.variadicResult = true
+		es.eventInfo[seq] = f
+	}
+}
+
+// branchVariadicResult reports whether an `if` produces a RUNTIME-VARIABLE result
+// count — the structural mirror of lowerArms' merge-variadic marking, computed at
+// record time so a fn's variadic-return-ness is known before its call sites lower.
+// Variadic when: a 2-arg if leaves 0-or-N; the two arms leave different
+// non-diverging counts (`if c [] [a]`); either arm is multi-value (`if c [a b]
+// [c]`); or either arm's own result is itself variadic (a nested variadic if).
+// Over-marking is sound (it only refuses external fixed-arity consumption); a
+// diverging arm never reaches the merge, so it does not count toward a mismatch.
+func (es *EmitState) branchVariadicResult(b BranchRecord) bool {
+	thenN, elsN := len(b.ThenStk), len(b.ElsStk)
+	if b.ConstCond != nil {
+		// Only the taken (then) arm is inlined; its result IS the branch result.
+		return thenN > 1 || es.armOutVariadic(b.ThenStk)
+	}
+	if !b.HasElse {
+		return thenN >= 1 // value on true, nothing on false → 0-or-N
+	}
+	if thenN > 1 || elsN > 1 {
+		return true
+	}
+	thenHas := thenN > 0 && !(b.Then != nil && fragDiverges(b.Then))
+	elsHas := elsN > 0 && !(b.Els != nil && fragDiverges(b.Els))
+	if thenHas != elsHas {
+		return true
+	}
+	return es.armOutVariadic(b.ThenStk) || es.armOutVariadic(b.ElsStk)
+}
+
+// armOutVariadic reports whether an arm's result value (its residual top) is
+// itself a variadic-producing event — a nested variadic if / loop the parent
+// branch propagates up to its own merge.
+func (es *EmitState) armOutVariadic(stk []Value) bool {
+	if len(stk) == 0 {
+		return false
+	}
+	pr, ok := es.producedBy[stk[len(stk)-1].ID]
+	return ok && es.eventInfo[pr.seq].variadicResult
 }
 
 // computedArmCondOK reports whether the branch condition is one the computed-arm
@@ -1351,6 +1429,14 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				ops = trimToTopResult(ops)
 			}
 			rec.outOps = ops
+			// VARIADIC-RETURNING fn: the body residual's defining (top) event leaves
+			// a runtime-variable count (a variadic branch / loop, or a call to an
+			// already-variadic fn — RecordUserCall flags that on the event). A call
+			// site marks its result variadic (lowerUserCall) so only a
+			// variadic-absorbing position consumes it.
+			if n := len(ops); n > 0 && ops[n-1].kind == opEvent && es.eventInfo[ops[n-1].idx].variadicResult {
+				rec.variadic = true
+			}
 		}
 		// Value-def locals for THIS unit (the top-level program's promotion,
 		// scoped to a fn body): a computed result referenced more than once, read
@@ -1451,6 +1537,16 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos Sr
 	}
 	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, nout: len(outs), pos: pos}})
 	es.SiteCounts[SiteMono]++
+	// A call to an ALREADY-variadic fn yields a runtime-variable count itself, so
+	// the result propagates variadic (a branch arm / body residual carrying it is
+	// variadic too). The self-recursive call records before its own fn finishes
+	// (rec.variadic not yet set) — fine: that result flows only to the body's own
+	// variadic merge, never to a fixed operand.
+	if es.fnRecs[unit].variadic {
+		f := es.eventInfo[seq]
+		f.variadicResult = true
+		es.eventInfo[seq] = f
+	}
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}
@@ -1501,6 +1597,11 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	seq := es.appendEvent(emitEvent{kind: evLoop, loop: lp})
 	es.SiteCounts[SiteMono]++
 	es.setProduced(out, seq)
+	// A loop leaves a runtime-variable count (one per-iteration value, N
+	// unknown at compile time) — variadic, like lowerLoop marks lw.variadic.
+	f := es.eventInfo[seq]
+	f.variadicResult = true
+	es.eventInfo[seq] = f
 }
 
 // RecordFallback records an interpreter-island fallback (Stage 5). span
@@ -3054,7 +3155,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		ops = append(ops, constOperand(es.intern(lit)))
 	}
-	if reason := lw.seatResults(ops, false, seatMsgs{
+	if reason := lw.seatResults(ops, false, false, seatMsgs{
 		aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
 		reordered:    "residual shape beyond Stage 1 (call results reordered)",
 		unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
@@ -3124,7 +3225,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// operands (const / local / type) are pushed as a trailing
 			// tail above the last event result. This is the fn-unit mirror
 			// of the program-residual reconciliation below.
-			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, rec.pos); reason != "" {
+			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0, rec.pos); reason != "" {
 				return nil, reason, false
 			}
 			flw.emit(OpRet, 0, rec.pos)

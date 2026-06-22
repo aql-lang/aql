@@ -636,6 +636,18 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	if !ok || !constFoldAgrees(one, two) {
 		return false
 	}
+	// A `get` that resolves to None is a MISSING key — but a module's keyspace
+	// can GROW at runtime: minilang/parselang `register` installs new exports
+	// (`parse_<name>`) AFTER the check pass folded the program. Folding the
+	// missing-key get to None bakes a stale absence: the compiled program then
+	// pushes None + leaves the call's args on the stack instead of dispatching
+	// the registered word, diverging from the interpreter (which sees the
+	// registered key). Decline the fold so the get stays dynamic and the
+	// program falls back / islands faithfully. A PRESENT key (any non-None
+	// value) folds as before; this only blocks the absent-key case.
+	if word == "get" && IsNoneShape(one) {
+		return false
+	}
 	switch {
 	case isInertConst(one):
 		outs[0] = one // ride as an inert const
@@ -2409,7 +2421,17 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// hypothesis from the cache — joining each round's result into the
 	// hypothesis until stable, up to two extra rounds. Only the final
 	// round's diagnostics are kept.
-	if r.Check.InflightBails > bailsBefore && len(result) > 0 {
+	//
+	// Skip refinement when ARMED (this body is being recorded into a compiled fn
+	// unit): each extra runOnce re-records the body into the SAME open fragment,
+	// leaving multiple residuals the lowerer cannot reconcile. Refinement only
+	// sharpens the summary TYPE precision, which a no-contract (`[]`-declared)
+	// recursive fn doesn't need — its recursive self-call already reads Any from
+	// the in-flight bail, and its return is unconstrained. So a single clean
+	// recording is both sound and sufficient. (A non-armed nested analysis is
+	// suspended by fnBodyGuard, so active() is true only for the armed compile.)
+	armed := r.Check.Emit != nil && r.Check.Emit.active()
+	if r.Check.InflightBails > bailsBefore && len(result) > 0 && !armed {
 		for round := 0; round < 2; round++ {
 			r.Check.FnSummaries[key] = result
 			r.Check.TruncateDiagnostics(diagBase)

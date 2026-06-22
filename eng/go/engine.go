@@ -4395,6 +4395,26 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 	}
 }
 
+// shareCheckState lets a module sub-registry's fn body run IN CHECK MODE under
+// the parent compile pass. When the calling engine is in check mode and the body
+// executes in a DIFFERENT (captured module) registry, it points that registry's
+// Check at the parent's for the duration of the call, so mode, Emit recording,
+// the memo / in-flight maps and the step/budget counters are shared — while word
+// resolution still uses the module registry's own Defs/Types (untouched). It
+// returns a restore function (a no-op when no sharing applies). The shared memo
+// keys stay disjoint across the boundary via the per-registry scopeID prefix
+// (§5a), so a module fn and a parent fn of the same name cannot alias. See
+// design/module-fn-checkstate-ownership.1.md §5b.
+func (e *Engine) shareCheckState(capturedReg *Registry) func() {
+	if capturedReg == nil || e.registry == nil ||
+		capturedReg == e.registry || !e.registry.Check.IsActive() {
+		return func() {}
+	}
+	saved := capturedReg.Check
+	capturedReg.Check = e.registry.Check
+	return func() { capturedReg.Check = saved }
+}
+
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
 // (module closure), execution uses CallAQL on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
@@ -4461,7 +4481,9 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				captures = fd.Captured
 			}
 		}
+		restoreCheck := e.shareCheckState(capturedReg)
 		result, err := capturedReg.CallAQL(sig, args, captures)
+		restoreCheck()
 		if err != nil {
 			return err
 		}
@@ -5934,6 +5956,23 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					break
 				}
 
+				// A /q (QuoteArgs) position captures a literal word/ATOM (the
+				// IsWord branch above handles a raw word). A non-concrete carrier
+				// whose type is NOT atom-family — a computed check-mode value such
+				// as the pre-evaluated result of `quote (s get k)` (an Any/Integer
+				// carrier) — is not an atom, so it must not fill the /q slot via
+				// the Any-conforms-to-everything rule: that would pick quote's
+				// word-capture sig ([TAtom], QuoteArgs) over its value sig ([TAny],
+				// ReturnsIdentity), refuse to compile, and (since the /q handler is
+				// quoteWordHandler) never run the value path. A genuine Atom
+				// carrier (e.g. `set (quote name) v`) DOES conform and still
+				// matches. Inert at runtime (operands are concrete there). Mirrors
+				// the stack-phase and positionalMatch /q guards. See
+				// design/module-fn-checkstate-ownership.2.md.
+				if sig.QuoteArgs != nil && sig.QuoteArgs[fwd] && tok.Carrier && !IsConcrete(tok) && !tok.Parent.ConformsTo(TAtom) {
+					break
+				}
+
 				// Literal value: direct type check.
 				if sigArgMatches(sig, fwd, tok) || expectedType.Equal(TAny) {
 					isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
@@ -6041,6 +6080,15 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 				positions[sigIdx] = resolvedIdx[ri]
 				continue
+			}
+			// A /q position captures a literal word/atom; a NON-CONCRETE carrier
+			// (a computed check-mode value) must not fill it via the
+			// Any-conforms-to-everything rule — it belongs to a value overload.
+			// Mirrors the forward-scan and positionalMatch /q guards. Inert at
+			// runtime (operands are concrete there).
+			if sig.QuoteArgs != nil && sig.QuoteArgs[sigIdx] && stackVal.Carrier && !IsConcrete(stackVal) && !stackVal.Parent.ConformsTo(TAtom) {
+				allMatch = false
+				break
 			}
 			if !sigArgMatches(sig, sigIdx, stackVal) {
 				allMatch = false
