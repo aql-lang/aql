@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/capabilities"
@@ -117,6 +118,57 @@ func keysOf(m map[string][]byte) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// TestModelWatchForkNoRace exercises the watch path: Model.start forks the
+// registry so the watch goroutine's rebuilds run their AQL actions on an
+// isolated registry, never racing the foreground interpreter. The test rewrites
+// the source (driving watch-goroutine rebuilds that run the action) while the
+// MAIN goroutine keeps executing AQL on the live registry; under `go test
+// -race` this proves the two never touch the same registry. (Without the fork,
+// the action's CallAQL would run on the foreground registry and the race
+// detector would fire.)
+func TestModelWatchForkNoRace(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "m.jsonic")
+	if err := os.WriteFile(src, []byte("n: 1"), 0o600); err != nil {
+		t.Fatalf("write src: %v", err)
+	}
+
+	// The action does a little work touching the model, so each watch-goroutine
+	// rebuild holds its registry through a real CallAQL — a wide window for the
+	// race detector to observe overlap if it ran on the foreground registry.
+	start := fmt.Sprintf("%sdef mdl (Model.new {path:'%s', base:'%s', actions:{tick:([mod:Any] => [((mod get 'n') add 1)])}}) (Model.start mdl) get 'ok'",
+		modelImp, src, dir)
+	if got := aStr(t, a, start); got != "true" {
+		t.Fatalf("start ok: %v", got)
+	}
+
+	// Background: rewrite the source a few times with gaps LONGER than the
+	// watch's idle debounce (111ms), so each change stabilises and fires a
+	// rebuild on the watch goroutine while the foreground loop below is busy.
+	go func() {
+		for i := 2; i <= 4; i++ {
+			time.Sleep(180 * time.Millisecond)
+			_ = os.WriteFile(src, []byte(fmt.Sprintf("n: %d", i)), 0o600)
+		}
+	}()
+
+	// Foreground: keep running AQL on the live registry for the whole window,
+	// concurrent with the watch goroutine's rebuilds.
+	deadline := time.Now().Add(900 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if got := aStr(t, a, "6 mul 7"); got != "42" {
+			t.Fatalf("foreground AQL corrupted during watch: got %v, want 42", got)
+		}
+	}
+	if _, err := a.Run("Model.stop mdl"); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
 }
 
 // TestModelConflict pins that a unification conflict in the source surfaces
