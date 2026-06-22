@@ -117,6 +117,66 @@ var macroNatives = []NativeFunc{
 		},
 	},
 	{
+		Name: "emit",
+		// `emit <kind> <opts?> <data>` (explicit) and `emit <opts?> <data>`
+		// (auto) — the symmetric inverse of `parse`. The call expands to the
+		// STANDARD emitter call
+		//
+		//	EmitLang get emit_<kind|auto> <data> <opts> end
+		//
+		// spliced at the call site. `data` is the required LAST surface
+		// argument; `opts` is the optional middle one (disambiguated by
+		// arity). Unlike `parse`, the kind is OPTIONAL: when the leading
+		// operand is not a bare word naming a registered emit kind, the call
+		// routes to emit_auto (the value's natural format). The data is often
+		// a bare variable word, so position 0 is /q-captured (word→atom) and
+		// reconstructed as a Word for the splice when it is data, not a kind —
+		// so a variable evaluates normally at the call site.
+		// Two sig families. The EXPLICIT-kind family declares slot 0 as TAtom
+		// with QuoteArgs{0}: when the next surface token is a bare word (the
+		// kind, or a bare-variable data word), the matcher's preferWordSig path
+		// selects these and the /q forward-quote intercept captures the word as
+		// an Atom (instead of dispatching it — exactly how `parse`'s TAtom slot
+		// works). The AUTO family declares slot 0 as TAny (no quote): it matches
+		// when the leading operand is a literal map/list/scalar (data-first,
+		// no kind). The handler then classifies an Atom slot 0 as kind-or-data.
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TAtom, TAny, TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        emitHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TString}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom, TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        emitHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TString}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        emitHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TString}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAny, TAny},
+				Handler:        emitHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TString}, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAny},
+				Handler:        emitHandler,
+				RunInCheckMode: true,
+				Returns:        []*Type{TString}, BarrierPos: -1,
+			},
+		},
+	},
+	{
 		Name: "parse",
 		// `parse <kind> <opts?> <source>` — named parsers (the sibling of
 		// `mini`; design/MINILANG.5.md + the ParseLang module). A macro in
@@ -460,6 +520,109 @@ func parseNamespaceBound(r *Registry) bool {
 // bound ParseLang namespace.
 func parseKindRegistered(r *Registry, target string) bool {
 	top, ok := r.Defs.Top("ParseLang")
+	if !ok {
+		return false
+	}
+	info, ok := asModuleExportInfo(top)
+	if !ok || info.Fields == nil {
+		return false
+	}
+	_, ok = info.Fields.Get(target)
+	return ok
+}
+
+// emitHandler expands `emit <kind> <opts?> <data>` (explicit) or `emit
+// <opts?> <data>` (auto) into the standard emitter call `EmitLang get
+// emit_<kind|auto> <data> <opts> end`, returned as an __SP splice so the
+// generated tokens re-step at the call site (the same mechanism as `parse`).
+//
+// Position 0 is /q-captured (word→atom). Classification:
+//   - leading operand is an Atom W and `emit_<W>` is registered in the bound
+//     EmitLang namespace → EXPLICIT (kind=W); the remaining operands are
+//     opts? then data.
+//   - otherwise → AUTO (emit_auto); the leading operand is data (a /q'd bare
+//     word is reconstructed as a Word so a variable evaluates) and any prior
+//     operand is opts.
+//
+// data is always the LAST operand; opts the optional middle one. data/opts are
+// spliced as collected — they may be carriers in check mode.
+func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	// Try to read the leading operand as a kind name (a /q'd bare word).
+	kind, isWord := "", false
+	if a, err := args[0].AsConcreteAtom(); err == nil {
+		kind, isWord = a, true
+	}
+
+	// A leading bare word with at least one operand after it is an EXPLICIT
+	// kind attempt; a lone leading word is a bare-variable `emit m`.
+	leadingKind := isWord && len(args) >= 2
+	explicit := leadingKind && emitKindRegistered(r, "emit_"+kind)
+
+	// Explicit-kind attempt with an unknown kind → loud expansion-time error
+	// (mirror parse), with the check-mode dynamic-carrier fallback.
+	if leadingKind && !explicit {
+		if r.Check.IsActive() && !emitNamespaceBound(r) {
+			r.Check.Emit.RecordTrap("emit_unknown_lang",
+				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
+				`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`,
+				args[0].Pos)
+			return []Value{NewDynamicCarrier(TString)}, nil
+		}
+		return nil, r.AqlErrorHint("emit_unknown_lang",
+			fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
+			`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`)
+	}
+
+	target := "emit_auto"
+	var data, opts Value
+	if explicit {
+		target = "emit_" + kind
+		if len(args) == 3 {
+			opts = args[1]
+			data = args[2]
+		} else { // len == 2
+			opts = NewMap(NewOrderedMap())
+			data = args[1]
+		}
+	} else {
+		// Auto: opts? then data (data is last). A /q'd leading bare word is
+		// DATA — reconstruct it as a Word so a variable evaluates at the call
+		// site.
+		if len(args) >= 2 {
+			opts = args[0]
+			data = args[len(args)-1]
+		} else { // len == 1: the data
+			opts = NewMap(NewOrderedMap())
+			if isWord {
+				data = NewWord(kind)
+			} else {
+				data = args[0]
+			}
+		}
+	}
+
+	toks := []Value{
+		NewWord("EmitLang"), NewWord("get"), NewWord(target),
+		data, opts, NewEnd(),
+	}
+	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// emitNamespaceBound reports whether the `EmitLang` namespace is bound to a
+// ModuleExport in the current scope.
+func emitNamespaceBound(r *Registry) bool {
+	top, ok := r.Defs.Top("EmitLang")
+	if !ok {
+		return false
+	}
+	_, ok = asModuleExportInfo(top)
+	return ok
+}
+
+// emitKindRegistered reports whether `emit_<kind>` is an export of the bound
+// EmitLang namespace.
+func emitKindRegistered(r *Registry, target string) bool {
+	top, ok := r.Defs.Top("EmitLang")
 	if !ok {
 		return false
 	}

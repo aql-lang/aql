@@ -92,4 +92,24 @@ func init() {
 			`"aql:parselang" import end  parse calc {src:'x + y'}  ;# a {src:…} source map`,
 		},
 	})
+
+	register(&Entry{
+		Word:    "emit",
+		Summary: "Emit a value to a string: emit <kind> <opts?> <data> (kind optional — defaults to the value's natural format).",
+		Description: "The symmetric inverse of `parse`: expands to the standard call " +
+			"`EmitLang get emit_<kind> <data> <opts> end` at the call site. The `data` is the " +
+			"required LAST argument and `opts` is the optional middle one. The kind is OPTIONAL — " +
+			"omit it and `emit` picks the value's natural format (Map/List/scalar/Error → json, " +
+			"Table → csv, Xml → xml). Built-in kinds: json, jsonic, yaml, csv, tsv, toml, ini, xml " +
+			"(opts {pretty:true} / {indent:N} for json/jsonic/yaml/xml; {separation:sep} for csv). " +
+			"Every emitter traverses the value through the canonical walk engine — one code path " +
+			"for all formats. Emitters live in the aql:emitlang module (import it first; " +
+			"EmitLang.kinds lists them; register your own with EmitLang.register). An unknown " +
+			"explicit kind is an expansion-time error; a shape a format cannot represent (e.g. " +
+			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported.",
+		Examples: []string{
+			`"aql:emitlang" import end  emit {a:1 b:[2 3]}            ;# => compact json (natural)`,
+			`"aql:emitlang" import end  emit json {pretty:true} {a:1} ;# => indented json`,
+		},
+	})
 }

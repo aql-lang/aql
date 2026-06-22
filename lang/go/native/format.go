@@ -111,7 +111,7 @@ func (f *JSONFormat) Decode(content string) ([]Value, error) {
 }
 
 func (f *JSONFormat) Encode(v Value) (string, error) {
-	return valueToJsonic(v), nil
+	return encodeJSON(v, nil) // canonical walk-based json encoder (emit.go)
 }
 
 // JsonicFormat handles relaxed JSON (unquoted keys, trailing commas, etc.).
@@ -190,7 +190,7 @@ func MakeFileOpsResolver(ops capabilities.FileOps) multisource.Resolver {
 }
 
 func (f *JsonicFormat) Encode(v Value) (string, error) {
-	return valueToJsonic(v), nil
+	return encodeJSON(v, nil) // compact json (jsonic file writes are valid json)
 }
 
 // LinesFormat splits/joins on newlines, producing/consuming a list of strings.
@@ -345,80 +345,12 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 
 // TableData is re-exported by aliases.go (defined in aqleng).
 
-// encodeDelimited converts a table value to CSV/TSV text.
+// encodeDelimited converts a table value to CSV/TSV text. It is a thin
+// adapter over the canonical walk-based tabular encoder (emit.go) — the single
+// emit code path — keeping its name and signature for the existing callers and
+// tests.
 func encodeDelimited(v Value, sep string) (string, error) {
-	var rows []Value
-	var columns []string
-
-	switch data := v.Data.(type) {
-	case TableData:
-		columns = data.Record.Fields.Keys()
-		rows = data.Rows
-	case MaterializerPayload, ExtensionPayload:
-		qb, ok := unwrapQB(v)
-		if !ok {
-			return v.String(), nil
-		}
-		td, err := qb.Materialize()
-		if err != nil {
-			return "", fmt.Errorf("encode: %w", err)
-		}
-		columns = td.Record.Fields.Keys()
-		rows = td.Rows
-	case ListPayload:
-		rows = data.Elems
-		if len(rows) > 0 {
-			if m, err := AsMutableMap(rows[0]); err == nil {
-				columns = m.Keys()
-			}
-		}
-	case *FlexListData:
-		rows = data.Elems
-		if len(rows) > 0 {
-			if m, err := AsMutableMap(rows[0]); err == nil {
-				columns = m.Keys()
-			}
-		}
-	default:
-		return v.String(), nil
-	}
-
-	if len(columns) == 0 {
-		return "", nil
-	}
-
-	var sb strings.Builder
-	// Header row.
-	sb.WriteString(strings.Join(columns, sep))
-	sb.WriteByte('\n')
-	// Data rows.
-	for _, row := range rows {
-		m, err := AsMutableMap(row)
-		if err != nil {
-			continue
-		}
-		parts := make([]string, len(columns))
-		for i, col := range columns {
-			val, exists := m.Get(col)
-			if !exists {
-				parts[i] = ""
-				continue
-			}
-			if val.Parent.ConformsTo(TString) {
-				s, _ := AsString(val)
-				if strings.ContainsAny(s, sep+"\"\n\r") {
-					s = "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
-				}
-				parts[i] = s
-			} else {
-				parts[i] = val.String()
-			}
-		}
-		sb.WriteString(strings.Join(parts, sep))
-		sb.WriteByte('\n')
-	}
-
-	return sb.String(), nil
+	return encodeTabular(v, sep)
 }
 
 // DefaultFormats returns the built-in format registry: read's own
