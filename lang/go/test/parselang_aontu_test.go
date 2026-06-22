@@ -9,11 +9,11 @@ import (
 )
 
 // The aontu PARSER ships built-in with aql:parselang. aontu
-// (github.com/rjrodger/aontu) is a CUE-inspired unification config dialect
-// with no Go port, so it is implemented by hand in native/aontu.go and wired
-// in as a built-in `parse` kind. Like the tabnas family, no host
-// registration is needed — importing the module is enough for
-// `parse aontu <text>` to resolve to a Node of Maps and Lists.
+// (github.com/rjrodger/aontu) is a CUE-inspired unification config dialect;
+// AontuParse wraps the upstream Go port (the repo's go/ module), wired in as
+// a built-in `parse` kind. Like the tabnas family, no host registration is
+// needed — importing the module is enough for `parse aontu <text>` to parse,
+// unify and generate a Node of Maps and Lists.
 
 const aontuImp = `"aql:parselang" import end  `
 
@@ -81,13 +81,13 @@ func TestParseLangAontuUnification(t *testing.T) {
 	if got := aStr(t, a, aontuImp+`((parse aontu 'a:{b:1} a:{c:2}') get 'a') get 'c'`); got != "2" {
 		t.Errorf("dup-key merge: got %v, want 2", got)
 	}
-	// `&` unification of two maps under a key
-	if got := aStr(t, a, aontuImp+`((parse aontu 'a:{x:1} & a:{y:2}') get 'a') get 'x'`); got != "1" {
-		t.Errorf("& merge: got %v, want 1", got)
+	// `&` unification of two maps (parenthesised so & scopes to the value)
+	if got := aStr(t, a, aontuImp+`((parse aontu 'm:({b:2} & {c:3})') get 'm') get 'c'`); got != "3" {
+		t.Errorf("& merge: got %v, want 3", got)
 	}
-	// equal scalars collapse
-	if got := aStr(t, a, aontuImp+`(parse aontu 'a:1 & a:1') get 'a'`); got != "1" {
-		t.Errorf("scalar collapse: got %v, want 1", got)
+	// equal scalars collapse under unification
+	if got := aStr(t, a, aontuImp+`(parse aontu 'v:(5 & 5)') get 'v'`); got != "5" {
+		t.Errorf("scalar collapse: got %v, want 5", got)
 	}
 }
 
@@ -122,8 +122,8 @@ func TestParseLangAontuReferences(t *testing.T) {
 	if got := aStr(t, a, aontuImp+`(parse aontu 'a:[10,20,30] b:$.a.1') get 'b'`); got != "20" {
 		t.Errorf("list-index ref: got %v, want 20", got)
 	}
-	// relative ref climbs to an enclosing scope that holds the key
-	if got := aStr(t, a, aontuImp+`((parse aontu 'a:1 b:{c:.a}') get 'b') get 'c'`); got != "1" {
+	// relative ref resolves a sibling key at the current map level
+	if got := aStr(t, a, aontuImp+`(parse aontu 'a:1 b:.a') get 'b'`); got != "1" {
 		t.Errorf("relative ref: got %v, want 1", got)
 	}
 }
@@ -162,11 +162,11 @@ func TestParseLangAontuInKinds(t *testing.T) {
 // unresolved reference, an incomplete kind, and a malformed source.
 func TestParseLangAontuErrors(t *testing.T) {
 	cases := []struct{ name, src, want string }{
-		{"scalar conflict", aontuImp + `parse aontu 'a:1 & a:2'`, "parse_syntax_error"},
+		{"scalar conflict", aontuImp + `parse aontu 'a:1 a:2'`, "parse_syntax_error"},
 		{"kind conflict", aontuImp + `parse aontu 'a:number a:"x"'`, "parse_syntax_error"},
 		{"unresolved ref", aontuImp + `parse aontu 'b:$.nope'`, "parse_syntax_error"},
 		{"incomplete kind", aontuImp + `parse aontu 'a:number'`, "parse_syntax_error"},
-		{"missing brace", aontuImp + `parse aontu 'a:{b:1'`, "parse_syntax_error"},
+		{"unresolved sibling", aontuImp + `parse aontu 'a:{x:1 y:.z}'`, "parse_syntax_error"},
 		{"file deferred", aontuImp + `parse aontu {file:'x.aontu'}`, "parse_file_unsupported"},
 		{"bad source map", aontuImp + `parse aontu {nope:1}`, "parse_bad_source"},
 	}

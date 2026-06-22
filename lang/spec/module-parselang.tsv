@@ -76,13 +76,14 @@ ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:parselang" import end  parse json '{not valid'	ERROR:parse_syntax_error	malformed JSON is a loud parse error
 "aql:parselang" import end  parse toml '= = ='	ERROR:parse_syntax_error	malformed TOML is a loud parse error
 #
-# §9  aontu — the built-in aontu parser (github.com/rjrodger/aontu), a
-#     CUE-inspired unification config dialect with no Go port, so it ships as
-#     a hand-written parser rather than via the tabnas family. It resolves the
-#     source to a Node of Maps and Lists: top-level `k:v` entries and the
-#     colon-chain `a:b:c:1` build maps, `[…]` builds lists, duplicate keys and
-#     `&` deep-merge, bare kind words (string/number/integer/…) constrain
-#     scalars, and `$`/`.` references resolve from the root / enclosing scope.
+# §9  aontu — the built-in aontu parser, the upstream Go port of
+#     github.com/rjrodger/aontu (the repo's go/ module), a CUE-inspired
+#     unification config dialect. It parses, unifies and generates the source
+#     to a Node of Maps and Lists: top-level `k:v` entries and the colon-chain
+#     `a:b:c:1` build maps, `[…]` builds lists, duplicate keys and `&`
+#     deep-merge, bare kind words (string/number/integer/boolean/top) constrain
+#     scalars, an absolute `$.a` reference resolves from the root and a relative
+#     `.k` reference resolves a sibling key at the current map level.
 "aql:parselang" import end  (parse aontu 'a:1 b:2') get 'b'	2	top-level key/value entries build a Map
 "aql:parselang" import end  (((parse aontu 'a:b:c:1') get 'a') get 'b') get 'c'	1	the colon-chain a:b:c:1 nests Maps
 "aql:parselang" import end  ((parse aontu 'a:[10,20,30]') get 'a') get 1	20	a [list] builds a List; elements may be comma- or space-separated
@@ -93,8 +94,8 @@ ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 "aql:parselang" import end  (ParseLang.parse_aontu 'a:1' {} end) get 'a'	1	parse is pure sugar — the desugared standard call is equivalent
 #
 # §9  aontu negatives — conflicts, unresolved refs and incomplete kinds are loud
-"aql:parselang" import end  parse aontu 'a:1 & a:2'	ERROR:parse_syntax_error	unifying two different scalars is a conflict
+"aql:parselang" import end  parse aontu 'a:1 a:2'	ERROR:parse_syntax_error	unifying two different scalars under one key is a conflict
 "aql:parselang" import end  parse aontu 'a:number a:"x"'	ERROR:parse_syntax_error	a kind mismatch is a conflict
 "aql:parselang" import end  parse aontu 'b:$.nope'	ERROR:parse_syntax_error	an unresolvable reference is a loud error
-"aql:parselang" import end  parse aontu 'a:number'	ERROR:parse_syntax_error	a kind with no concrete value is incomplete
-"aql:parselang" import end  parse aontu 'a:{b:1'	ERROR:parse_syntax_error	a missing close brace is a loud error
+"aql:parselang" import end  parse aontu 'a:number'	ERROR:parse_syntax_error	a kind with no concrete value cannot be generated
+"aql:parselang" import end  parse aontu 'a:{x:1 y:.z}'	ERROR:parse_syntax_error	a relative reference to a missing sibling is a loud error
