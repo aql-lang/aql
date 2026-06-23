@@ -257,6 +257,15 @@ pattern into its scalar-tag subset (→ patrun) and its `name:Type` subset (→
 ParseFnParams) is a build-time step over the clause list; neither layer is
 extended and both already exist.
 
+> **The binding layer is specific to `receive`.** Type-slot binding is a property
+> of a `receive` *clause*, not of patrun matching in general. The service-layer
+> `add` (`SERVICES.0.md` §1) deliberately does **not** bind pattern fields: an
+> `add` pattern is scalar-tag routing only, the whole request arrives as `req`,
+> and the handler destructures it by hand (`req.text`). So
+> `add {op:'create text:String} …` does not bind `text`, whereas the `receive`
+> clause `{op:'create text:String} […]` does. Same patrun routing underneath; the
+> `name:Type` binding pass is layered on only by `receive`.
+
 ### patrun routing limits (hard contract)
 
 The routing layer inherits patrun's matching constraints, which authors must
@@ -302,10 +311,12 @@ bounded by construction. Most code never needs `{select: true}`.
   authors add `after` where they need a timeout.
 - **Bounded mailbox (diverges from BEAM):** mailboxes are bounded with a
   configurable overflow policy — `'block` (backpressure, default), `'fail`
-  (raise `overload`), or `'drop` — per `SERVICES.0.md` §8.1. This is a deliberate
-  divergence from BEAM's unbounded mailbox, whose unbounded growth is its classic
-  overload/OOM failure mode. The bound is what makes the demotion of selective
-  receive coherent: with a bounded mailbox there is no unbounded save-set.
+  (raise `overload`), or `'drop` — per `SERVICES.0.md` §8.1, where capacity and
+  policy default at the `server` and may be **overridden per service**. This is a
+  deliberate divergence from BEAM's unbounded mailbox, whose unbounded growth is
+  its classic overload/OOM failure mode. The bound is what makes the demotion of
+  selective receive coherent: with a bounded mailbox there is no unbounded
+  save-set.
 
 ## 4. Language surface (new core words)
 

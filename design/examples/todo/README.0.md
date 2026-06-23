@@ -78,6 +78,8 @@ destructure off `req` by hand (`req.text`, `req.user`), whereas **processes**
 `add {op:'create text:String}` and be surprised `text` is not bound. The RFC
 should state plainly: *binding slots are a `receive` feature, not an `add`
 feature.* (This is consistent and defensible — it just needs to be said.)
+**Resolved:** `../PROCESSES.0.md` §3 and `../SERVICES.0.md` §1 now state this
+contrast explicitly in both directions.
 
 ### Gap B — patrun routing limits (top-level scalars only)
 **Verdict: never hit the limit in normal modelling — but only because we knew.**
@@ -126,7 +128,9 @@ hot path) while the todo store wants `'block` (backpressure). The RFC sets
 `overflow` as a `server` option (§8.1), forcing either a per-service mailbox
 option or a separate sub-server for `notify`. See the flagged comment in
 `app.aql`. Recommend the RFC allow per-service mailbox/overflow overrides, with
-the server value as the default.
+the server value as the default. **Resolved:** `../SERVICES.0.md` §8.1 now
+specifies a per-service override — `server [ worker (metrics {overflow: 'drop}) ]
+{…}` — with precedence per-service > server default > built-in default.
 
 ---
 

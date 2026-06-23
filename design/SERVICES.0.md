@@ -112,6 +112,15 @@ processes **one request at a time** (in-process: the caller's goroutine; served:
 the process's single goroutine — the gen_server guarantee, no locks). Reuses the
 existing `patrunAddHandler` registration shape.
 
+> **An `add` pattern routes; it does not bind.** Unlike a `receive` clause
+> (`PROCESSES.0.md` §3), where `name:Type` fields are typed binding slots parsed
+> by `ParseFnParams`, an `add` pattern is **scalar-tag routing only** — it picks
+> *which* handler runs and binds nothing. The whole request arrives as `req`, and
+> destructuring its payload (`req.text`, `req.id`) is the handler's job. So
+> `add {op:'create text:String} …` does **not** bind `text`; write
+> `add {op:'create} [ [req state] => [ … req.text … ] ]`. (Binding slots are a
+> `receive` feature, not an `add` feature — see `PROCESSES.0.md` §3.)
+
 ### `call` (core) — synchronous request → reply
 
 ```
@@ -541,6 +550,21 @@ server [ svc ] {mailbox: 1024  overflow: 'block}
     or reroutes.
   - **`'drop`** — the new message is discarded and the delivery returns; lossy,
     for best-effort/telemetry traffic (a `'drop_oldest` variant evicts the head).
+
+**Per-service override.** `mailbox`/`overflow` on the `server` set the **default**
+for its services, but a single supervised app routinely mixes policies — a lossy
+telemetry sink wants `'drop` while a worker wants `'block`. Rather than force each
+policy into its own `serve ( server [..] {..} )`, a service carries its own opts
+map where it is placed in the server, overriding the server default:
+
+```aql
+server [ worker  (metrics {mailbox: 4096  overflow: 'drop}) ]
+  {mailbox: 1024  overflow: 'block}        # server default; metrics overrides it
+```
+
+Precedence is **per-service > server default > built-in default** (`1024` /
+`'block`). This keeps one server/one supervision tree even when its services need
+different backpressure, instead of fragmenting the tree just to vary a mailbox.
 
 **`send` (async)** resolves against the policy: enqueue and return `None` if there
 is room; otherwise block / raise `overload` / drop. An optional bound on blocking
