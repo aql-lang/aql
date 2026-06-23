@@ -33,6 +33,7 @@ import {
   newBoolean,
   newFloat,
   newCarrier,
+  newDynamicCarrier,
   newForwardMarker,
   newInteger,
   newMap,
@@ -185,7 +186,11 @@ export class Engine {
       // Resolving a def is a "use" for check-mode unused-def tracking.
       this.registry.check.recordUse(name)
       if (top.isFnDef()) {
-        this.dispatchFnDef(name, top.asFnDef())
+        if (this.registry.check.isActive()) {
+          this.dispatchFnDefCheck(name, top.asFnDef())
+        } else {
+          this.dispatchFnDef(name, top.asFnDef())
+        }
         return
       }
       if (top.vType.matches(TList) && Array.isArray(top.data) && !top.quoted && top.eval) {
@@ -620,6 +625,140 @@ export class Engine {
     const replaceCount = result.prefixCount + 1 + result.forwardCount
     this.stack.splice(replaceFrom, replaceCount, ...bodyResult)
     this.pointer = replaceFrom + bodyResult.length
+  }
+
+  /**
+   * Check-mode dispatch of a user fn. Binds the (carrier) args to the
+   * matched signature's params, analyses the body in a check sub-engine
+   * so its diagnostics propagate, and produces the result carriers:
+   * declared return types when present (the body run is the proof
+   * obligation), else the body's inferred residual. A no-match assumes
+   * the first overload and emits no_signature; a recursive self-call is
+   * broken via the fnInflight guard. Mirrors AnalyseFnBody +
+   * buildFnBodyReturnsFn (Phase-2 subset — no memoised summaries or
+   * fixed-point refinement).
+   */
+  private dispatchFnDefCheck(name: string, info: FnDefInfo): void {
+    const maxParams = Math.max(0, ...info.sigs.map((s) => s.params.length))
+    this.preEvalParens(maxParams)
+
+    // Try to match an overload (largest arity first, optional-trailing).
+    let result: import('./match.ts').MatchResult | null = null
+    let chosen: import('./value.ts').FnSig | null = null
+    let usedK = 0
+    const ordered = [...info.sigs].sort((a, b) => b.params.length - a.params.length)
+    outer: for (const fsig of ordered) {
+      const total = fsig.params.length
+      const required = fsig.params.filter((p) => !p.optional).length
+      for (let k = total; k >= required; k--) {
+        const sig: Signature = {
+          args: fsig.params.slice(0, k).map((p) => p.type),
+          barrierPos: k,
+          handler: () => [],
+        }
+        const fakeEntry: FunctionEntry = {
+          name,
+          signatures: [sig],
+          declOrder: [sig],
+          forwardPrecedence: true,
+          maxForwardArgs: k,
+        }
+        const r = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
+        if (r) {
+          result = r
+          chosen = fsig
+          usedK = k
+          break outer
+        }
+      }
+    }
+
+    // Gather the consumed span + args. A clean match uses the matcher's
+    // positions; a no-match assumes the first overload, gathers adjacent
+    // operands, and emits no_signature (the param types are violated).
+    let replaceFrom: number
+    let replaceCount: number
+    let args: Value[]
+    if (result && chosen) {
+      args = result.args.slice(0, usedK)
+      replaceFrom = this.pointer - result.prefixCount
+      replaceCount = result.prefixCount + 1 + result.forwardCount
+    } else {
+      chosen = ordered[0]!
+      const n = chosen.params.length
+      const isBoundary = (v: Value): boolean =>
+        v.isWord() || v.isForward() || v.isMark() || v.isMove()
+      let fwd = 0
+      while (fwd < n && this.pointer + 1 + fwd < this.stack.length) {
+        if (isBoundary(this.stack[this.pointer + 1 + fwd]!)) break
+        fwd++
+      }
+      let stk = 0
+      while (fwd + stk < n && this.pointer - 1 - stk >= 0) {
+        if (isBoundary(this.stack[this.pointer - 1 - stk]!)) break
+        stk++
+      }
+      args = []
+      for (let i = 0; i < fwd; i++) args.push(this.stack[this.pointer + 1 + i]!)
+      for (let i = 0; i < stk; i++) args.push(this.stack[this.pointer - 1 - i]!)
+      replaceFrom = this.pointer - stk
+      replaceCount = stk + 1 + fwd
+      this.registry.check.addDiagnostic({
+        code: 'no_signature',
+        detail: `no matching signature for ${name}; assuming best-fit candidate for analysis`,
+        word: name,
+      })
+    }
+
+    const sig = chosen
+    const out = this.analyseFnBody(name, sig, args)
+    this.stack.splice(replaceFrom, replaceCount, ...out)
+    this.pointer = replaceFrom + out.length
+  }
+
+  /**
+   * Analyse one fn signature's body under carrier args and return its
+   * result carriers. Binds named params to their args (carrier-typed),
+   * runs the body in a check sub-engine so body diagnostics propagate,
+   * and returns the declared return carriers (Any → dynamic, dynamic
+   * operands contagious) when the signature declares returns, else the
+   * inferred residual. Recursive self-calls are broken via fnInflight.
+   */
+  private analyseFnBody(
+    name: string,
+    sig: import('./value.ts').FnSig,
+    args: Value[],
+  ): Value[] {
+    const declared = sig.returns
+    const contagious = args.some((a) => a.carrier && a.dynamic)
+    const declaredOut = (): Value[] =>
+      declared.map((t) => (contagious || t.equal(TAny) ? newDynamicCarrier(t) : newCarrier(t)))
+
+    const key = `${name}#${sig.params.length}`
+    if (this.registry.check.fnInflight.has(key)) {
+      // Recursion: declared returns are the induction hypothesis; an
+      // unchecked fn breaks the cycle with a dynamic Any.
+      return declared.length > 0 ? declaredOut() : [newDynamicCarrier(TAny)]
+    }
+    this.registry.check.fnInflight.add(key)
+    this.registry.check.fnBodyDepth++
+    let bodyResult: Value[]
+    const bound: string[] = []
+    try {
+      for (let i = 0; i < sig.params.length; i++) {
+        const p = sig.params[i]!
+        if (p.name !== '') {
+          this.registry.pushDef(p.name, args[i] ?? newDynamicCarrier(TAny))
+          bound.push(p.name)
+        }
+      }
+      bodyResult = new Engine(this.registry).run([...sig.body])
+    } finally {
+      for (let i = bound.length - 1; i >= 0; i--) this.registry.popDef(bound[i]!)
+      this.registry.check.fnBodyDepth--
+      this.registry.check.fnInflight.delete(key)
+    }
+    return declared.length > 0 ? declaredOut() : bodyResult
   }
 
   /**

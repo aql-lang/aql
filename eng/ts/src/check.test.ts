@@ -15,8 +15,11 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  type AqlType,
   type CheckDiagnostic,
   Engine,
+  type FnParam,
+  type FnSig,
   type NativeFunc,
   Registry,
   TAny,
@@ -32,6 +35,7 @@ import {
   Value,
   newCarrier,
   newFloat,
+  newFnDef,
   newInteger,
   newList,
   newString,
@@ -54,6 +58,7 @@ const stub = (): Value[] => []
 
 function registerCheckWords(r: Registry): void {
   const reg = (fn: NativeFunc): void => r.registerNativeFunc(fn)
+  registerFn(r)
   const numberPair = [TNumber, TNumber]
 
   reg({ name: 'addq', forwardPrecedence: true, signatures: [{ args: numberPair, handler: stub, returns: [TNumber] }] })
@@ -149,6 +154,42 @@ function registerCheckWords(r: Registry): void {
 function nameOf(v: Value): string {
   if (v.isWord()) return v.asWord().name
   return v.asAtom()
+}
+
+// registerFn adds the `fn` fixture, which builds a FnDefInfo from one or
+// more `[params][returns][body]` triples. runInCheckMode so the value is
+// constructed during check (def then binds it). Params are `name:Type`
+// words; returns are bare type literals; the body is the list elements.
+function registerFn(r: Registry): void {
+  r.registerNativeFunc({
+    name: 'fn',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        noEvalArgs: new Set([0]),
+        runInCheckMode: true,
+        handler: (args) => {
+          const elems = args[0]!.asList()
+          const sigs: FnSig[] = []
+          for (let i = 0; i + 2 < elems.length; i += 3) {
+            const params: FnParam[] = elems[i]!.asList().map((p) => {
+              const nm = p.isWord() ? p.asWord().name : ''
+              const colon = nm.indexOf(':')
+              const name = colon > 0 ? nm.slice(0, colon) : nm
+              const tName = colon > 0 ? nm.slice(colon + 1) : ''
+              const t = typeTable.get(tName) ?? TAny
+              return { name, type: t }
+            })
+            const returns: AqlType[] = elems[i + 1]!.asList().map((rt) => rt.vType)
+            const body: Value[] = elems[i + 2]!.asList()
+            sigs.push({ params, returns, body })
+          }
+          return [newFnDef({ sigs })]
+        },
+      },
+    ],
+  })
 }
 
 // ── Minimal tokenizer ───────────────────────────────────────────────────

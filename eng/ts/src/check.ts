@@ -82,6 +82,13 @@ export class CheckState {
   defsUsed = new Set<string>()
   /** Nesting depth of fn-body analysis (diagnostics tagged fnBody when > 0). */
   fnBodyDepth = 0
+  /**
+   * Keys (name#arity) of fn-body analyses currently running, so a
+   * recursive self-call breaks the cycle instead of looping. Mirrors
+   * CheckState.FnInflight (Phase-2 subset — no memoized summaries /
+   * fixed-point refinement yet).
+   */
+  fnInflight = new Set<string>()
 
   /** Whether check mode is currently on. */
   isActive(): boolean {
@@ -97,6 +104,7 @@ export class CheckState {
     this.defsInstalled = new Map()
     this.defsUsed = new Set()
     this.fnBodyDepth = 0
+    this.fnInflight = new Set()
     return () => {
       this.mode = false
     }
