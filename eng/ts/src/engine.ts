@@ -429,7 +429,8 @@ export class Engine {
     let result: import('./match.ts').MatchResult | null = null
     let chosen: import('./value.ts').FnSig | null = null
     let usedK = 0
-    outer: for (const fsig of info.sigs) {
+    const ordered = [...info.sigs].sort((a, b) => b.params.length - a.params.length)
+    outer: for (const fsig of ordered) {
       const total = fsig.params.length
       const required = fsig.params.filter((p) => !p.optional).length
       for (let k = total; k >= required; k--) {

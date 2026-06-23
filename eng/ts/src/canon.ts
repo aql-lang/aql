@@ -66,6 +66,8 @@ export function formatFloat(f: number): string {
   if (Number.isNaN(f)) return 'nan'
   if (f === Infinity) return 'inf'
   if (f === -Infinity) return '-inf'
+  // Negative zero is a distinct bit pattern (IEEE) and renders as -0.0.
+  if (f === 0 && 1 / f === -Infinity) return '-0.0'
 
   if (f !== 0) {
     const a = Math.abs(f)

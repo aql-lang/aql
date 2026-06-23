@@ -715,7 +715,13 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TList],
         noEvalArgs: new Set([0]),
-        handler: (args) => [newFnUndef(args[0]!.asList())],
+        handler: (args) => {
+          const elems = args[0]!.asList()
+          if (elems.length === 0 || elems.length % 2 !== 0) {
+            throw new AqlError('fn_invalid_spec', `fnsig: list length must be a non-zero multiple of 2`)
+          }
+          return [newFnUndef(elems)]
+        },
       },
     ],
   })
