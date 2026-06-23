@@ -206,6 +206,29 @@ export class EmitState {
   }
 
   /**
+   * Give `target` the same operand provenance as `source` so they
+   * classify identically. Used to INLINE a user fn: the fn's declared
+   * return carrier is aliased to the body's recorded residual, so the
+   * fn result threads to the body's events (the call compiles to the
+   * body's straight-line code, not a separate unit). No-op when `source`
+   * itself has no provenance — `target` then stays unresolvable and the
+   * program falls back.
+   */
+  alias(target: Value, source: Value): void {
+    const slot = this.producedBy.get(source)
+    if (slot !== undefined) {
+      this.producedBy.set(target, slot)
+      return
+    }
+    const orig = this.origByCarrier.get(source)
+    if (orig !== undefined) {
+      this.origByCarrier.set(target, orig)
+      return
+    }
+    if (source.isConcrete()) this.origByCarrier.set(target, source)
+  }
+
+  /**
    * Record a counted loop. The body fragment's residual accumulates on
    * the stack per iteration (variadic). `out` is the loop's result
    * carrier whose identity threads to the program residual.

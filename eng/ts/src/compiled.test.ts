@@ -14,6 +14,8 @@ import { strict as assert } from 'node:assert'
 import { canon } from './canon.ts'
 import {
   Engine,
+  type FnParam,
+  type FnSig,
   type Handler,
   type NativeFunc,
   type Operand,
@@ -32,6 +34,7 @@ import {
   newCarrier,
   newDynamicCarrier,
   newFloat,
+  newFnDef,
   newInteger,
   newList,
   newString,
@@ -181,6 +184,37 @@ function registerFixtures(r: Registry): void {
         noEvalArgs: new Set([1]),
         handler: (args, _ctx, _stk, r) =>
           coerceBoolean(args[0]!) ? new Engine(r).run([...args[1]!.asList()]) : [],
+      },
+    ],
+  })
+  // fn: builds a FnDefInfo from [params][returns][body] triples (params
+  // are `name:Type` words). runInCheckMode so the value is constructed
+  // during the record pass; `def` then binds it and a call inlines the
+  // body (see analyseFnBody's compile path).
+  reg({
+    name: 'fn',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        noEvalArgs: new Set([0]),
+        runInCheckMode: true,
+        handler: (args) => {
+          const elems = args[0]!.asList()
+          const sigs: FnSig[] = []
+          for (let i = 0; i + 2 < elems.length; i += 3) {
+            const params: FnParam[] = elems[i]!.asList().map((p) => {
+              const nm = p.isWord() ? p.asWord().name : ''
+              const colon = nm.indexOf(':')
+              const name = colon > 0 ? nm.slice(0, colon) : nm
+              const t = (colon > 0 ? typeTable.get(nm.slice(colon + 1)) : undefined) ?? TAny
+              return { name, type: t }
+            })
+            const returns = elems[i + 1]!.asList().map((rt) => rt.vType)
+            sigs.push({ params, returns, body: elems[i + 2]!.asList() })
+          }
+          return [newFnDef({ sigs })]
+        },
       },
     ],
   })
@@ -364,6 +398,11 @@ const COMPILED: Array<[string, true]> = [
   ['for (lengthq [1 2 3]) [i]', true], // event-valued count
   ['for 0 [i]', true], // zero iterations -> empty residual
   ['def n 3 for n [i]', true], // def-bound count
+  ['def inc fn [[n:Integer] [Integer] [addq n 1]] inc 5', true], // user fn inlined
+  ['def double fn [[n:Number] [Number] [mulq n 2]] double (addq 1 2)', true], // fn with computed arg
+  ['def add2 fn [[x:Integer y:Integer] [Integer] [addq x y]] add2 3 4', true], // two-param fn
+  ['def id fn [[n:Integer] [Integer] [n]] id 7', true], // fn returning its param
+  ['def inc fn [[n:Integer] [Integer] [addq n 1]] addq (inc 1) (inc 2)', true], // called twice
 ]
 
 const FALLBACK: string[] = [
@@ -371,6 +410,7 @@ const FALLBACK: string[] = [
   'if false [42]', // 2-arg if (no else) -> variadic, falls back
   'for 2 [dupq 1]', // loop body not single-result -> falls back
   'for 2 [i] addq 1 2', // loop not in trailing position -> falls back
+  'def f fn [[n:Integer] [Integer] [dupq n]] f 5', // fn body count != declared -> falls back
 ]
 
 describe('compiled (stage 1)', () => {

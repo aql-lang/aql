@@ -779,7 +779,22 @@ export class Engine {
       this.registry.check.fnBodyDepth--
       this.registry.check.fnInflight.delete(key)
     }
-    return declared.length > 0 ? declaredOut() : bodyResult
+    if (declared.length === 0) return bodyResult
+    const out = declaredOut()
+    // Compile path: INLINE the fn. The body already recorded its events
+    // into the trace (run above, in check mode with emit active); alias
+    // each declared-return carrier to the corresponding body residual so
+    // the fn's result threads to those events. Mismatched counts can't be
+    // inlined cleanly → refuse (fall back).
+    const emit = this.registry.check.emit
+    if (emit !== undefined) {
+      if (out.length === bodyResult.length) {
+        for (let i = 0; i < out.length; i++) emit.alias(out[i]!, bodyResult[i]!)
+      } else {
+        emit.markUncompilable(`fn ${name}: declared/body result count mismatch`)
+      }
+    }
+    return out
   }
 
   /**
