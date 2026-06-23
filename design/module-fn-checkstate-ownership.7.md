@@ -215,3 +215,47 @@ leads for clearing them (each a separate effort, NOT landed):
   current macro-bake path (data macros only) does not do.
 - **`surface.tsv:32`** — surface-shape typed dispatch at `area`; a surface/class
   dispatch compile feature.
+
+## CORRECTION (this session): module-test:38 root re-pinned
+
+The "pinned entry point" above (get-on-concrete-Map folding cascades to compile
+the harness) was VERIFIED FALSE by direct tracing. The get-fold was landed
+anyway as an independent precision win (commit "lang: fold a concrete list/map
+field read to the container value"): it moves 5 rows off the Any frontier
+(254 -> 249) and is sound, but it is **inert for module-test:38** — the refusal
+reason is byte-identical with and without it ("code-body word test-describe
+(Stage 2)").
+
+The actual blocker, traced via a temporary `MarkUncompilable` print over the
+exact row:
+
+1. The top-level `s Test.run-spec` descends into `run-spec`'s preamble body.
+2. `run-spec`'s param is `s:Map` — an ABSTRACT Map carrier (no record shape).
+   Inside the body `s` is NOT concrete, so `getNodeReturns` correctly returns
+   dynamic Any (the concrete-container fold never fires — there is no concrete
+   container, only the param carrier).
+3. The body's tail is `[ ... ] (s get "name") test-describe`. `(s get "name")`
+   is therefore Any. `test-describe`'s sig is `[String List]`, and an Any name
+   does NOT match `String`; `test-describe` is a code-body word so `tryRecordPoly`
+   refuses to poly it → "unmatched dispatch recovered at test-describe" →
+   "code-body word test-describe (Stage 2)".
+
+So module-test:38 is a **Stage-3 problem, not a get-fold problem**. The only way
+the field reads type concretely is to INLINE `run-spec` at the call site where
+`s` IS the concrete literal map (`{name:... cases:[...] subs:[]}`). Under that
+inlining, `s` is concrete, `getNodeReturns`'s new container fold fires, `(s get
+"name")` is a concrete String, `(s get "subs")` is concrete `[]` (so its
+`for (subs size)` body — the recursive `subspec run-spec` — is pruned), and
+`(s get "cases")` is a concrete list driving `run-cases`. But `run-cases` /
+`run-case` are themselves user-fn calls (`sig.FnFrame != nil` → "user fn call
+(Stage 3)"), and `run-spec` recurses into itself — so the inlining has to handle
+nested + recursive user-fn-call compilation with concrete argument propagation.
+That is the very-high-risk corpus re-baseline flagged in
+`design/aql-bytecode-next-stages.0.md` Stage C; the previous session's
+cross-registry reroute attempt (Step-3 `tryModuleFnUnit`) regressed coverage and
+was reverted. The landed get-fold is the genuine PREREQUISITE for that inlining,
+not a standalone cure.
+
+Net for this session: the get-fold precision win is landed and gated green;
+module-test:38 stays refused (faithful fallback) pending Stage-3 user-fn-call
+inlining, which is out of bounded-safe scope.
