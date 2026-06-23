@@ -435,9 +435,13 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
     }
     if (stream.i >= stream.s.length) break
 
-    if (stream.s[stream.i] === '"') {
+    // String literals. The eng/spec corpus uses single quotes (the
+    // canonical AQL form); double quotes are also accepted. The closing
+    // quote must match the opener.
+    const quote = stream.s[stream.i]
+    if (quote === '"' || quote === "'") {
       let j = stream.i + 1
-      while (j < stream.s.length && stream.s[j] !== '"') j++
+      while (j < stream.s.length && stream.s[j] !== quote) j++
       if (j >= stream.s.length) throw new Error(`unterminated string at ${stream.i}`)
       out.push(newString(stream.s.slice(stream.i + 1, j)))
       stream.i = j + 1
