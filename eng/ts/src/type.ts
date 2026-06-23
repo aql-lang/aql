@@ -251,6 +251,7 @@ export const TMark = newType('Word/__MK')
 export const TMove = newType('Word/__MV')
 export const TSplice = newType('Word/__SP')
 export const TFnDef = newType('Word/__FN')
+export const TInterpString = newType('Word/__IS')
 
 /** Back-compat alias: the decimal scalar is named Float in the lattice. */
 export const TDecimal = TFloat

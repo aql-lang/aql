@@ -35,6 +35,7 @@ export {
   TFunction,
   TIdeal,
   TInspect,
+  TInterpString,
   TInteger,
   TList,
   TMap,
@@ -79,6 +80,7 @@ export {
   newFnUndef,
   newForwardMarker,
   newInspect,
+  newInterpString,
   newInteger,
   newList,
   newMap,
@@ -92,4 +94,12 @@ export {
   newWord,
   withQuoted,
 } from './value.ts'
-export type { FnDefInfo, FnParam, ForwardMarker, MarkInfo, MoveInfo, WordInfo } from './value.ts'
+export type {
+  FnDefInfo,
+  FnParam,
+  ForwardMarker,
+  InterpSegment,
+  MarkInfo,
+  MoveInfo,
+  WordInfo,
+} from './value.ts'

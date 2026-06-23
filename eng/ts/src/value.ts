@@ -17,6 +17,7 @@ import {
   TFloat,
   TForward,
   TInspect,
+  TInterpString,
   TFunction,
   TInteger,
   TList,
@@ -261,6 +262,15 @@ export class Value {
     return this.vType.equal(TMove)
   }
 
+  isInterpString(): boolean {
+    return this.vType.equal(TInterpString)
+  }
+
+  asInterpSegments(): InterpSegment[] {
+    if (!Array.isArray(this.data)) throw new Error('AsInterp: not an interp string')
+    return this.data as InterpSegment[]
+  }
+
   asMove(): MoveInfo {
     if (this.data === null) throw new Error('AsMove: nil data')
     return this.data as MoveInfo
@@ -423,6 +433,17 @@ export class OrderedMap {
 /** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
 export function newMap(m: OrderedMap): Value {
   return new Value(TMap, m)
+}
+
+/**
+ * A segment of an interpolated string: literal text, or an expression
+ * (token list) to evaluate and stringify. Mirrors InterpPart in eng/go.
+ */
+export type InterpSegment = { lit: string } | { expr: Value[] }
+
+/** Construct an interpolated-string value (VType Word/__IS). */
+export function newInterpString(segments: InterpSegment[]): Value {
+  return new Value(TInterpString, segments)
 }
 
 /**

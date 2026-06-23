@@ -9,6 +9,7 @@
 // and module sub-engines. The TS port here is the interpreter slice
 // that the current TSV specs reach.
 import { AqlError } from './error.ts'
+import { valToString } from './make.ts'
 import { matchEntry } from './match.ts'
 import type { Registry } from './registry.ts'
 import {
@@ -117,6 +118,10 @@ export class Engine {
         this.pointer++
       } else if (val.isMove()) {
         this.stepMove(val)
+      } else if (val.isInterpString()) {
+        this.stack[this.pointer] = this.evalInterpString(val)
+        // Don't advance: re-process the resulting string as a literal
+        // so a pending forward marker can collect it.
       } else {
         this.stepLiteral()
       }
@@ -711,6 +716,25 @@ export class Engine {
    * End-of-Run pass: any TList still on the stack with eval=true and
    * !quoted gets auto-evaluated. Mirrors Go's autoEvalStack drain.
    */
+  /**
+   * Evaluate an interpolated string: literal segments append verbatim;
+   * expression segments run in a sub-engine and each residual value is
+   * stringified (ValToString) and concatenated. Mirrors
+   * eng/go's evalInterpString.
+   */
+  private evalInterpString(v: Value): Value {
+    let out = ''
+    for (const seg of v.asInterpSegments()) {
+      if ('lit' in seg) {
+        out += seg.lit
+      } else {
+        const residual = new Engine(this.registry).run([...seg.expr])
+        out += residual.map((r) => valToString(r)).join('')
+      }
+    }
+    return newString(out)
+  }
+
   private autoEvalStack(): void {
     for (let i = 0; i < this.stack.length; i++) {
       this.stack[i] = this.deepEvalData(this.stack[i]!)

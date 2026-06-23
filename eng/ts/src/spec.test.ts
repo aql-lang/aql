@@ -44,6 +44,7 @@ import {
   TWord,
   Value,
   type FnParam,
+  type InterpSegment,
   type WordInfo,
   newAtom,
   newBoolean,
@@ -54,6 +55,7 @@ import {
   newFnUndef,
   newFloat,
   newInspect,
+  newInterpString,
   newInteger,
   newList,
   newMap,
@@ -965,6 +967,16 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       continue
     }
 
+    // Backtick template string: `lit${expr}lit…`.
+    if (stream.s[stream.i] === '`') {
+      let k = stream.i + 1
+      while (k < stream.s.length && stream.s[k] !== '`') k++
+      if (k >= stream.s.length) throw new Error(`unterminated backtick at ${stream.i}`)
+      out.push(parseBacktick(stream.s.slice(stream.i + 1, k)))
+      stream.i = k + 1
+      continue
+    }
+
     let j = stream.i
     while (j < stream.s.length && stream.s[j] !== ' ' && stream.s[j] !== '\t') j++
     const tok = stream.s.slice(stream.i, j)
@@ -1015,6 +1027,32 @@ function readMap(stream: TokenStream): Value {
   }
   if (child !== undefined && m.size === 0) return newTypedMap(child)
   return newMap(m)
+}
+
+// parseBacktick splits a backtick template into literal and ${expr}
+// segments. With no interpolation it is a plain string; otherwise an
+// InterpString the engine evaluates.
+function parseBacktick(content: string): Value {
+  const segs: InterpSegment[] = []
+  let hasExpr = false
+  let i = 0
+  while (i < content.length) {
+    const dollar = content.indexOf('${', i)
+    if (dollar < 0) {
+      if (i < content.length) segs.push({ lit: content.slice(i) })
+      break
+    }
+    if (dollar > i) segs.push({ lit: content.slice(i, dollar) })
+    const close = content.indexOf('}', dollar + 2)
+    if (close < 0) throw new Error(`unterminated \${ in backtick`)
+    segs.push({ expr: tokenize(content.slice(dollar + 2, close)) })
+    hasExpr = true
+    i = close + 1
+  }
+  if (!hasExpr) {
+    return newString(segs.map((s) => ('lit' in s ? s.lit : '')).join(''))
+  }
+  return newInterpString(segs)
 }
 
 // makeListFromElems builds a list value, detecting a leading `:T`
