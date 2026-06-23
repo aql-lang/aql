@@ -23,6 +23,7 @@ import {
   TList,
   TMap,
   TMark,
+  TPath,
   TMove,
   TNone,
   TString,
@@ -373,6 +374,17 @@ const NONE_SENTINEL: unique symbol = Symbol('none')
 /** Construct the unique `none` value. */
 export function newNone(): Value {
   return new Value(TNone, NONE_SENTINEL)
+}
+
+/** Path payload: normalised segments + absolute flag. */
+export interface PathInfo {
+  segments: string[]
+  abs: boolean
+}
+
+/** Construct a path value (VType Scalar/Path). */
+export function newPath(segments: string[], abs: boolean): Value {
+  return new Value(TPath, { segments, abs } satisfies PathInfo)
 }
 
 export function newWord(name: string): Value {

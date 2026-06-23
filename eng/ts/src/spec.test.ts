@@ -21,7 +21,7 @@ import {
   pathOf,
   typeOf,
 } from './coretype.ts'
-import { makeScalarHandler } from './make.ts'
+import { makeScalarHandler, makeScalarOptsHandler } from './make.ts'
 import {
   AqlError,
   Engine,
@@ -573,6 +573,11 @@ function registerSpecWords(r: Registry): void {
     name: 'make',
     forwardPrecedence: true,
     signatures: [
+      {
+        args: [TScalar, TMap, TAny],
+        typeArgs: new Set([0]),
+        handler: (args) => makeScalarOptsHandler(args),
+      },
       {
         args: [TScalar, TAny],
         typeArgs: new Set([0]),

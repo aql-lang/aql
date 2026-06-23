@@ -7,7 +7,7 @@
 // through the current TS engine (none, type literals, scalars, atoms,
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
-import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TNone, TString } from './type.ts'
+import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TNone, TPath, TString } from './type.ts'
 import type { FnDefInfo } from './value.ts'
 import { ChildType, OrderedMap, Value } from './value.ts'
 
@@ -145,6 +145,10 @@ export function canonValue(v: Value): string {
   }
   if (v.vType.equal(TAtom)) {
     return `${v.asAtom()}/q`
+  }
+  if (v.vType.equal(TPath) && v.data !== null && typeof v.data === 'object' && 'segments' in v.data) {
+    const p = v.data as { segments: string[]; abs: boolean }
+    return (p.abs ? '/' : '') + p.segments.join('/')
   }
   if (v.data instanceof ChildType) {
     const ct = v.data
