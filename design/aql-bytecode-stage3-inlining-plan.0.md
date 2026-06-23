@@ -406,6 +406,52 @@ body-bearing fn-value dispatch unblocks the fn-body half of BOTH rows. (rand
 additionally needs the carrier-receiver→fn-carrier resolution; parselang
 additionally needs the sound dynamic-registration above.)
 
+## module-rand:38 — full root-cause trace (worktree subagent, no source changed)
+
+KEY FORK resolved with hard data (disassembly + residual instrumentation):
+- Direct `Rand.list-of [Rand.int 0 10] 3` (module-export form) **COMPILES** — via
+  `PUSH_CLOSURE` (the generator body is a closure unit re-run per iteration).
+- Target `def r (Rand.with-seed 2) r.list-of [Rand.int 0 10] 3` (carrier-receiver
+  form) **REFUSES** (`residual value of unknown provenance`, emit.go:3155).
+
+Chain (each step verified):
+1. `Rand.with-seed`'s handler doesn't run in check mode → `r` is a shapeless
+   `Map` carrier → `r get list-of` hits the `!IsConcrete(container)` guard
+   (native_storage.go:413) and returns dynamic `Any`. So `list-of` never
+   dispatches as a closure word (no `sig.Callable` on dynamic Any →
+   `tryRecordClosure` never reached); it lowers to `CALL_NATIVE_POLY get/2` +
+   `CALL_DYNAMIC`.
+2. Because `list-of` didn't consume the body as NoEvalArgs, the body
+   `[Rand.int 0 10]` is unconsumed → auto-evaluated (`autoEvalStack`); concrete
+   `Rand.int` fully dispatches, producing ONE Integer.
+3. `RecordMakeList` (emit.go:2085-2095) then **soundly REFUSES** to bake that
+   list: its element came from a stateful module word (`!IsBuiltinWord("rand-int")`).
+   Baking it would freeze ONE rng draw and replicate it instead of re-running per
+   iteration — a WRONG answer. **This refusal is correct-by-design.**
+
+So module-rand:38 has a SOUND-refusal component (like def-node-binding:54 and
+macro:45): every shortcut to compile it as written hits the freeze-gate.
+Confirmed unsound shortcuts:
+- Baking the module-word body in RecordMakeList → wrong answer (differential gate
+  catches it).
+- Const-folding/shaping `with-seed`'s return so `getNodeReturns` resolves the
+  `list-of` FnDef → unsound: each `with-seed` mints a FRESH sub-registry/RNG
+  (rand.go:51-77,132-139), so a check-time-resolved FnDef references a different
+  RNG than runtime.
+
+Isolating near-miss (verified differential-clean, `[1 1 2 2 2 0 0 2]`):
+`r.list-of [r.int 0 10] 3` COMPILES — `r.int` resolves to a DYNAMIC carrier that
+does NOT auto-apply, so `MAKE_LIST` preserves the raw body tokens and runtime
+`CALL_DYNAMIC` re-runs them. The target uses `Rand.int` (concrete, fully-applies)
+which is exactly what trips the sound freeze-gate.
+
+The ONLY correct fix: make the carrier-receiver `r.list-of` dispatch as a closure
+word like the direct path — i.e. `CALL_DYNAMIC` must carry the callee's
+NoEvalArgs/closure shape so the body compiles to `PUSH_CLOSURE` and re-runs per
+iteration over the RUNTIME receiver. That is the deep, hot-path,
+multi-session "shaped-carrier receiver + NoEvalArgs code-body dynamic dispatch"
+frontier — not a localized change.
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
