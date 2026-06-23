@@ -37,6 +37,7 @@ import {
   newNone,
   newString,
   newTypeLiteral,
+  newXml,
   OrderedMap,
   Value,
   type WordInfo,
@@ -122,6 +123,8 @@ export class Engine {
         this.stack[this.pointer] = this.evalInterpString(val)
         // Don't advance: re-process the resulting string as a literal
         // so a pending forward marker can collect it.
+      } else if (val.isXmlInterp()) {
+        this.stack[this.pointer] = newXml(this.resolveXmlTmpl(val.asXmlTmpl()))
       } else {
         this.stepLiteral()
       }
@@ -740,6 +743,48 @@ export class Engine {
       }
     }
     return newString(out)
+  }
+
+  /**
+   * Resolve an XML template's holes: attribute segments evaluate and
+   * concatenate to strings; a child hole evaluates and contributes a
+   * string (scalar), a child element (Xml), or spliced children (list).
+   */
+  private resolveXmlTmpl(t: import('./value.ts').XmlTmpl): import('./value.ts').XmlElement {
+    const evalSegs = (segs: import('./value.ts').InterpSegment[]): string =>
+      segs
+        .map((seg) =>
+          'lit' in seg
+            ? seg.lit
+            : new Engine(this.registry)
+                .run([...seg.expr])
+                .map((r) => valToString(r))
+                .join(''),
+        )
+        .join('')
+    const children: (string | import('./value.ts').XmlElement)[] = []
+    for (const c of t.children) {
+      if ('lit' in c) {
+        children.push(c.lit)
+      } else if ('elem' in c) {
+        children.push(this.resolveXmlTmpl(c.elem))
+      } else {
+        for (const r of new Engine(this.registry).run([...c.expr])) {
+          if (r.isXml()) children.push(r.data as import('./value.ts').XmlElement)
+          else if (Array.isArray(r.data)) {
+            for (const e of r.asList()) {
+              if (e.isXml()) children.push(e.data as import('./value.ts').XmlElement)
+              else children.push(valToString(e))
+            }
+          } else children.push(valToString(r))
+        }
+      }
+    }
+    return {
+      tag: t.tag,
+      attrs: t.attrs.map((a) => ({ name: a.name, value: evalSegs(a.segs) })),
+      children,
+    }
   }
 
   private autoEvalStack(): void {

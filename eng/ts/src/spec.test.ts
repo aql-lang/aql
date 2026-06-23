@@ -51,7 +51,9 @@ import {
   type FnSig,
   type InterpSegment,
   type WordInfo,
+  type XmlChildTmpl,
   type XmlElement,
+  type XmlTmpl,
   newAtom,
   newBoolean,
   newDecimal,
@@ -73,6 +75,7 @@ import {
   newTypedList,
   newTypedMap,
   newXml,
+  newXmlInterp,
   OrderedMap,
   newTypeLiteral,
   newWord,
@@ -1028,7 +1031,7 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
 
     // XML literal: `<tag …>…</tag>` or `<tag …/>`.
     if (stream.s[stream.i] === '<' && /[A-Za-z]/.test(stream.s[stream.i + 1] ?? '')) {
-      out.push(newXml(parseXmlElem(stream)))
+      out.push(parseXml(stream))
       continue
     }
 
@@ -1116,10 +1119,50 @@ function readXmlName(stream: TokenStream): string {
   return n
 }
 
-// parseXmlElem parses a single XML element starting at `<`. Static
-// subset (no ${} interpolation); attribute values must be quoted, and
-// closing tags must match. Mirrors the eng/parser xml_literal grammar.
-function parseXmlElem(stream: TokenStream): XmlElement {
+// parseXml parses an XML literal starting at `<`, producing a static
+// Xml value, or an XmlInterp template when it contains ${} holes.
+function parseXml(stream: TokenStream): Value {
+  const holes = { has: false }
+  const tmpl = parseXmlTmpl(stream, holes)
+  return holes.has ? newXmlInterp(tmpl) : newXml(tmplToStatic(tmpl))
+}
+
+function tmplToStatic(t: XmlTmpl): XmlElement {
+  return {
+    tag: t.tag,
+    attrs: t.attrs.map((a) => ({
+      name: a.name,
+      value: a.segs.map((seg) => ('lit' in seg ? seg.lit : '')).join(''),
+    })),
+    children: t.children.map((c) => ('lit' in c ? c.lit : tmplToStatic((c as { elem: XmlTmpl }).elem))),
+  }
+}
+
+// readXmlHole consumes a `${ … }` hole and returns its tokens.
+function readXmlHole(stream: TokenStream): Value[] {
+  const s = stream.s
+  stream.i += 2 // consume '${'
+  let depth = 1
+  const start = stream.i
+  while (stream.i < s.length && depth > 0) {
+    const c = s[stream.i]
+    if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) break
+    }
+    stream.i++
+  }
+  if (stream.i >= s.length) throw new Error('xml: unterminated ${ hole')
+  const inner = s.slice(start, stream.i)
+  stream.i++ // consume '}'
+  return tokenize(inner)
+}
+
+// parseXmlTmpl parses one element into a template, recording whether any
+// ${} hole appears. Attribute values must be quoted (or a bare ${});
+// closing tags must match.
+function parseXmlTmpl(stream: TokenStream, holes: { has: boolean }): XmlTmpl {
   const s = stream.s
   const skip = (): void => {
     while (stream.i < s.length && (s[stream.i] === ' ' || s[stream.i] === '\t')) stream.i++
@@ -1127,25 +1170,42 @@ function parseXmlElem(stream: TokenStream): XmlElement {
   stream.i++ // consume '<'
   const tag = readXmlName(stream)
   if (tag === '') throw new Error('xml: expected tag name')
-  const attrs: { name: string; value: string }[] = []
+  const attrs: { name: string; segs: InterpSegment[] }[] = []
   for (;;) {
     skip()
     const c = s[stream.i]
     if (c === '/' || c === '>') break
     const name = readXmlName(stream)
     if (name === '') throw new Error('xml: malformed element')
-    if (s[stream.i] !== '=' || s[stream.i + 1] !== '"') {
+    if (s[stream.i] !== '=') throw new Error('xml: attribute requires a quoted value')
+    stream.i++ // consume '='
+    const segs: InterpSegment[] = []
+    if (s[stream.i] === '"') {
+      stream.i++ // open quote
+      let lit = ''
+      while (stream.i < s.length && s[stream.i] !== '"') {
+        if (s[stream.i] === '$' && s[stream.i + 1] === '{') {
+          if (lit !== '') {
+            segs.push({ lit })
+            lit = ''
+          }
+          segs.push({ expr: readXmlHole(stream) })
+          holes.has = true
+        } else {
+          lit += s[stream.i]
+          stream.i++
+        }
+      }
+      if (stream.i >= s.length) throw new Error('xml: unterminated attribute')
+      stream.i++ // close quote
+      if (lit !== '' || segs.length === 0) segs.push({ lit })
+    } else if (s[stream.i] === '$' && s[stream.i + 1] === '{') {
+      segs.push({ expr: readXmlHole(stream) })
+      holes.has = true
+    } else {
       throw new Error('xml: attribute requires a quoted value')
     }
-    stream.i += 2 // consume ="
-    let v = ''
-    while (stream.i < s.length && s[stream.i] !== '"') {
-      v += s[stream.i]
-      stream.i++
-    }
-    if (stream.i >= s.length) throw new Error('xml: unterminated attribute')
-    stream.i++ // closing "
-    attrs.push({ name, value: v })
+    attrs.push({ name, segs })
   }
   if (s[stream.i] === '/') {
     stream.i++
@@ -1154,7 +1214,7 @@ function parseXmlElem(stream: TokenStream): XmlElement {
     return { tag, attrs, children: [] }
   }
   stream.i++ // consume '>'
-  const children: (string | XmlElement)[] = []
+  const children: XmlChildTmpl[] = []
   for (;;) {
     if (stream.i >= s.length) throw new Error('xml: unterminated element')
     if (s[stream.i] === '<' && s[stream.i + 1] === '/') {
@@ -1166,15 +1226,20 @@ function parseXmlElem(stream: TokenStream): XmlElement {
       return { tag, attrs, children }
     }
     if (s[stream.i] === '<') {
-      children.push(parseXmlElem(stream))
+      children.push({ elem: parseXmlTmpl(stream, holes) })
+      continue
+    }
+    if (s[stream.i] === '$' && s[stream.i + 1] === '{') {
+      children.push({ expr: readXmlHole(stream) })
+      holes.has = true
       continue
     }
     let t = ''
-    while (stream.i < s.length && s[stream.i] !== '<') {
+    while (stream.i < s.length && s[stream.i] !== '<' && !(s[stream.i] === '$' && s[stream.i + 1] === '{')) {
       t += s[stream.i]
       stream.i++
     }
-    children.push(t)
+    children.push({ lit: t })
   }
 }
 

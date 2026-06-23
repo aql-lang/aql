@@ -253,6 +253,7 @@ export const TSplice = newType('Word/__SP')
 export const TFnDef = newType('Word/__FN')
 export const TInterpString = newType('Word/__IS')
 export const TParenExpr = newType('Word/__PE')
+export const TXmlInterp = newType('Word/__XI')
 
 /** Back-compat alias: the decimal scalar is named Float in the lattice. */
 export const TDecimal = TFloat

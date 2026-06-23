@@ -94,6 +94,7 @@ export {
   newTypeLiteral,
   newWord,
   newXml,
+  newXmlInterp,
   withQuoted,
 } from './value.ts'
 export type {
@@ -105,5 +106,8 @@ export type {
   MarkInfo,
   MoveInfo,
   WordInfo,
+  XmlAttrTmpl,
+  XmlChildTmpl,
   XmlElement,
+  XmlTmpl,
 } from './value.ts'

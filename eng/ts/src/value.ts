@@ -32,6 +32,7 @@ import {
   TStringProper,
   TWord,
   TXml,
+  TXmlInterp,
 } from './type.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
@@ -278,6 +279,14 @@ export class Value {
     return this.vType.equal(TXml)
   }
 
+  isXmlInterp(): boolean {
+    return this.vType.equal(TXmlInterp)
+  }
+
+  asXmlTmpl(): XmlTmpl {
+    return this.data as XmlTmpl
+  }
+
   isParenExpr(): boolean {
     return this.vType.equal(TParenExpr)
   }
@@ -401,6 +410,22 @@ export interface XmlElement {
 /** Construct an XML value (VType Node/Xml). */
 export function newXml(elem: XmlElement): Value {
   return new Value(TXml, elem)
+}
+
+// XML interpolation template (pre-evaluation). Attribute values carry
+// interp segments; children are literal text, a hole expression, or a
+// nested template.
+export type XmlAttrTmpl = { name: string; segs: InterpSegment[] }
+export type XmlChildTmpl = { lit: string } | { expr: Value[] } | { elem: XmlTmpl }
+export interface XmlTmpl {
+  tag: string
+  attrs: XmlAttrTmpl[]
+  children: XmlChildTmpl[]
+}
+
+/** Construct an interpolated XML template value (VType Word/__XI). */
+export function newXmlInterp(t: XmlTmpl): Value {
+  return new Value(TXmlInterp, t)
 }
 
 /** Path payload: normalised segments + absolute flag. */
