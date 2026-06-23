@@ -222,6 +222,26 @@ path is shared). If it lands clean, `module-rand:38` clears
 (refusalCeiling 5→4) and likely helps `map-from`. Recommended NEXT row —
 but the dispatch site needs pinning before the one-line claim holds.
 
+## REJECTED shortcut (tested empirically): get-returns-concrete-FnDef
+
+Hypothesis: `r` (the `Rand.with-seed` result) is a plain Map, so
+`r get list-of` runs `getNodeReturns`, which returns `dyn`(Any) for an
+FnDef field — so list-of never dispatches and its gen body `[Rand.int 0
+10]` is left as the untracked residual. Hoped fix: return the CONCRETE
+FnDef for a (module-wrapper) FnDef field so it resolves like a module word
+and dispatches.
+
+Tested (reverted): forcing `getNodeReturns` to return `CloneValue(val)`
+for FnDef fields did NOT compile `module-rand:38` — it still refuses
+`residual value of unknown provenance`. (And `m.f 2 3` from fn-value.tsv
+compiles independently either way.) So the get-typing is NOT the blocker:
+even with the concrete FnDef in hand, list-of's dispatch records no event.
+The blocker is genuinely that the fn-VALUE dispatch (a Function value
+resolved from a map, then called) is not compiled/recorded — the same
+fn-value-dispatch feature module-test:38 needs for `test-invoke`. Do not
+re-attempt the get-typing shortcut; the work is the dispatch-recording
+feature itself.
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
