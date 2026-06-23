@@ -1,6 +1,8 @@
 # Stage-3 module-fn call-site inlining — verified implementation plan
 
-_Status: IN PROGRESS — refusals 5 -> 4 -> **3**. TWO rows DONE this effort:_
+_Status: **SOUND FLOOR REACHED** — refusals 5 -> 4 -> 3 -> **2**. All THREE
+clearable feature rows are DONE; the only 2 remaining refusals are
+correct-by-design (must NOT compile). THREE rows DONE this effort:_
 - _**module-parselang:23 DONE** — sound check-mode parser registration +
   body-bearing fn-VALUE `__pa` dispatch fix (`spliceFnValueCheckResult` →
   `buildFnBodyReturnsFn`). refusals 5 -> 4._
@@ -13,11 +15,23 @@ _Status: IN PROGRESS — refusals 5 -> 4 -> **3**. TWO rows DONE this effort:_
   4 -> 3. Pins: refusalCeiling 3, pinnedAnyFrontierRows 253,
   pinnedTypeSoundnessViolations 12 (all sound improvements, differential-clean)._
 
-_Remaining (refusals = 3): only **module-test:38** is a clearable feature row
-(call-site inlining of `run-spec` + recursion + closures + fn-value dispatch).
-**def-node-binding:54** and **macro:45** are correct-by-design refusals that must
-NOT compile (compiling them ships wrong answers — proven). So the sound floor is
-2, and module-test:38 is the last lever._
+- _**module-test:38 DONE** — the aql:test spec runner compiles FULLY NATIVE
+  (usedVM, no island), byte-identical incl. test-record side effects
+  (`{total:2 passed:2 failed:0}`). The deep blocker reduced (post-`__pa`/closure
+  machinery) to zero-count `for` PRUNING: `s get "subs"` folds to concrete `[]`,
+  `subs size` now folds to concrete `0` (new `sizeReturns`), and a `for` over a
+  concrete ≤0 count prunes its body (new `forCarrierAnalyse` /`loopIterations`),
+  so the dead recursive `run-spec` branch is never analysed. All in
+  `lang/go/native/` (size.go, native_control.go, forloop.go); zero eng/ changes.
+  refusals 3 -> 2._
+
+_Remaining (refusals = 2 — the SOUND FLOOR): **def-node-binding:54** and
+**macro:45** are correct-by-design refusals that must NOT compile (compiling them
+ships wrong answers — `[1]` not `[9]`, and "expansion too deep" — both proven by
+the interpreter). There is no clearable feature row left; refusals can only reach
+0 by deciding those 2 should compile-to-error-trap, which would change observable
+results. The bytecode compiler is now interpreter-independent for every
+soundly-compilable spec row._
 
 _This note records the code-level findings (tracing the 3 module rows to ground
 truth) the build started from._
