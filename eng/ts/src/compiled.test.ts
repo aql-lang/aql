@@ -188,6 +188,9 @@ const COMPILED: Array<[string, true]> = [
   ['addq 1 2 mulq 3', true],
   ['addq 1 (mulq 2 3)', true],
   ["concatq 'x' (concatq 'y' 'z')", true],
+  ['addq 1 (addq 2 (addq 3 4))', true], // deep right-nesting
+  ['mulq (addq 1 2) (subq 10 5)', true], // two event operands in one call
+  ['subq 10 3', true], // non-commutative arg order
 ]
 
 const FALLBACK: string[] = [
