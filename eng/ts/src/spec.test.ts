@@ -43,6 +43,7 @@ import {
   newDisjunct,
   newEnum,
   newFnDef,
+  newFnUndef,
   newFloat,
   newInteger,
   newList,
@@ -601,28 +602,41 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
-  // fn: builds a function definition value from
-  // `fn [ params ] [ returns ] [ body ]`. Each param is a single
-  // Word token of the form `name:Type` (the spec tokenizer is
-  // whitespace-only so we don't get a separate `:` token). The
-  // handler parses each param, resolves the type via the type-name
-  // table, and produces a TFunction Value the engine dispatches
-  // when the surrounding `def` binding is later invoked.
+  // fn: builds a function-definition value from a single list of
+  // triples `fn [ [params] [returns] [body] … ]`, mirroring the Go
+  // `fn` fixture (ParseFnDef). The named-triple form (params is a list
+  // of `name:Type` words) yields a callable FnDef; other forms (the
+  // flat `fn [ Integer Integer [body] ]` and multi-sig shapes) produce
+  // a Function value sufficient for typeof/is. fnsig builds a
+  // FunctionSignature value.
   reg({
     name: 'fn',
     forwardPrecedence: true,
     signatures: [
       {
-        args: [TList, TList, TList],
-        noEvalArgs: new Set([0, 1, 2]),
+        args: [TList],
+        noEvalArgs: new Set([0]),
         handler: (args) => {
-          const paramsList = args[0]!.asList()
-          const returnsList = args[1]!.asList()
-          const body = args[2]!.asList()
-          const params = paramsList.map((p) => parseFnParam(p))
-          const returns = returnsList.map((r) => parseFnReturn(r))
-          return [newFnDef({ params, returns, body })]
+          const elems = args[0]!.asList()
+          if (elems.length >= 3 && elems[0]!.vType.matches(TList) && Array.isArray(elems[0]!.data)) {
+            const params = elems[0]!.asList().map((p) => parseFnParam(p))
+            const returns = elems[1]!.asList().map((r) => parseFnReturn(r))
+            const body = elems[2]!.asList()
+            return [newFnDef({ params, returns, body })]
+          }
+          return [newFnDef({ params: [], returns: [], body: elems })]
         },
+      },
+    ],
+  })
+  reg({
+    name: 'fnsig',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        noEvalArgs: new Set([0]),
+        handler: (args) => [newFnUndef(args[0]!.asList())],
       },
     ],
   })
@@ -1076,7 +1090,10 @@ function parseFnParam(v: Value): FnParam {
 
 /** Parse one fn-return token (a bare TypeName Word). */
 function parseFnReturn(v: Value) {
-  if (!v.isWord()) throw new Error(`fn: expected return type Word`)
+  // A return slot is a type — either a resolved type literal (the
+  // tokenizer turns bare `Integer` into one) or a bare TypeName word.
+  if (v.data === null) return v.vType
+  if (!v.isWord()) throw new Error(`fn: expected return type`)
   const w = v.asWord()
   const type = typeNameTable().get(w.name)
   if (!type) throw new Error(`fn: unknown return type ${JSON.stringify(w.name)}`)

@@ -13,6 +13,7 @@ import {
   TBoolean,
   TDisjunct,
   TEnum,
+  TFnUndef,
   TFloat,
   TForward,
   TFunction,
@@ -458,6 +459,11 @@ export interface DisjunctInfo {
 /** Construct a Disjunct (union) value — VType Type/Disjunct. */
 export function newDisjunct(alternatives: Value[]): Value {
   return new Value(TDisjunct, { alternatives } satisfies DisjunctInfo)
+}
+
+/** Construct a FunctionSignature (fnsig) value — VType Type/FunctionSignature. */
+export function newFnUndef(sigs: Value[]): Value {
+  return new Value(TFnUndef, sigs)
 }
 
 /** Construct an Enum value — VType Type/Disjunct/Enum (a Disjunct subtype). */

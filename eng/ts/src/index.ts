@@ -76,6 +76,7 @@ export {
   newEnum,
   newFloat,
   newFnDef,
+  newFnUndef,
   newForwardMarker,
   newInteger,
   newList,
