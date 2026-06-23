@@ -65,6 +65,7 @@ export {
   typeNameTable,
 } from './type.ts'
 export {
+  OrderedMap,
   Value,
   newAny,
   newAtom,
@@ -75,6 +76,7 @@ export {
   newForwardMarker,
   newInteger,
   newList,
+  newMap,
   newMark,
   newMove,
   newNone,

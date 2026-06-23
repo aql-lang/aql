@@ -25,7 +25,7 @@
 
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { TWord } from './type.ts'
+import { TList, TMap, TWord } from './type.ts'
 import type { Value, WordInfo } from './value.ts'
 
 export interface MatchResult {
@@ -191,7 +191,15 @@ function tryMatch(
 }
 
 export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType): boolean {
-  return v.vType.matches(expected)
+  if (!v.vType.matches(expected)) return false
+  // Concrete-container rule (mirrors positionalMatch in eng/go): a List
+  // or Map slot is filled only by a concrete list/map (or carrier), not
+  // by a bare `List`/`Map` type literal. `do List` therefore fails to
+  // match and surfaces a signature_error.
+  if (v.data === null && (expected.matches(TList) || expected.matches(TMap))) {
+    return false
+  }
+  return true
 }
 
 function isStructuralBoundary(v: Value): boolean {

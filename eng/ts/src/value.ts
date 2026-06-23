@@ -16,6 +16,7 @@ import {
   TFunction,
   TInteger,
   TList,
+  TMap,
   TMark,
   TMove,
   TNone,
@@ -182,6 +183,17 @@ export class Value {
     return this.data as Value[]
   }
 
+  isMap(): boolean {
+    return this.vType.equal(TMap)
+  }
+
+  asMap(): OrderedMap {
+    if (this.data === null || !(this.data instanceof OrderedMap)) {
+      throw new Error('AsMap: not a map value')
+    }
+    return this.data
+  }
+
   asFnDef(): FnDefInfo {
     if (this.data === null) throw new Error('AsFnDef: nil data')
     if (typeof this.data !== 'object') {
@@ -249,6 +261,11 @@ export class Value {
     if (this.vType.matches(TList) && Array.isArray(this.data)) {
       const elems = (this.data as Value[]).map((v) => v.toString())
       return `[${elems.join(' ')}]`
+    }
+    if (this.data instanceof OrderedMap) {
+      const m = this.data
+      const parts = m.sortedKeys().map((k) => `${k}:${m.get(k)!.toString()}`)
+      return `{${parts.join(' ')}}`
     }
     return String(this.data)
   }
@@ -333,6 +350,46 @@ export function newAny(data: unknown): Value {
  */
 export function newList(elems: Value[], opts?: { eval?: boolean; quoted?: boolean }): Value {
   return new Value(TList, elems, { eval: opts?.eval, quoted: opts?.quoted })
+}
+
+/**
+ * OrderedMap preserves key insertion order. Mirrors
+ * eng/go/value.go::OrderedMap (the subset the spec reaches).
+ */
+export class OrderedMap {
+  private readonly _keys: string[] = []
+  private readonly vals = new Map<string, Value>()
+
+  set(key: string, val: Value): void {
+    if (!this.vals.has(key)) this._keys.push(key)
+    this.vals.set(key, val)
+  }
+
+  get(key: string): Value | undefined {
+    return this.vals.get(key)
+  }
+
+  has(key: string): boolean {
+    return this.vals.has(key)
+  }
+
+  keys(): string[] {
+    return [...this._keys]
+  }
+
+  /** Keys in sorted order — the canonical render order. */
+  sortedKeys(): string[] {
+    return [...this._keys].sort()
+  }
+
+  get size(): number {
+    return this._keys.length
+  }
+}
+
+/** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
+export function newMap(m: OrderedMap): Value {
+  return new Value(TMap, m)
 }
 
 /** Clone a Value with `quoted=true` (used by `quote` for lists). */

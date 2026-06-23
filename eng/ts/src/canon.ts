@@ -7,9 +7,9 @@
 // through the current TS engine (none, type literals, scalars, atoms,
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
-import { TAtom, TBoolean, TFloat, TInteger, TList, TNone, TString } from './type.ts'
+import { TAtom, TBoolean, TFloat, TInteger, TList, TMap, TNone, TString } from './type.ts'
 import type { FnDefInfo } from './value.ts'
-import { Value } from './value.ts'
+import { OrderedMap, Value } from './value.ts'
 
 /**
  * canonString renders a string payload as parseable AQL source. Plain
@@ -149,6 +149,11 @@ export function canonValue(v: Value): string {
   if (v.vType.matches(TList) && Array.isArray(v.data)) {
     const body = `[${v.asList().map(canonValue).join(' ')}]`
     return v.quoted ? `(quote ${body})` : body
+  }
+  if (v.vType.equal(TMap) && v.data instanceof OrderedMap) {
+    const m = v.data
+    const parts = m.sortedKeys().map((k) => `${k}:${canonValue(m.get(k)!)}`)
+    return `{${parts.join(' ')}}`
   }
   if (v.isFnDef()) {
     return canonFnDef(v.asFnDef())

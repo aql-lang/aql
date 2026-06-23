@@ -29,6 +29,7 @@ import {
   TNumber,
   TString,
   TList,
+  TMap,
   TWord,
   Value,
   type FnParam,
@@ -40,10 +41,12 @@ import {
   newFloat,
   newInteger,
   newList,
+  newMap,
   newMark,
   newMove,
   newNone,
   newString,
+  OrderedMap,
   newTypeLiteral,
   newWord,
   withQuoted,
@@ -492,6 +495,41 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // do — evaluate a list body in a sub-engine, or deep-evaluate the
+  // list-valued slots of a map. Mirrors registerEngSpecDo. The arg
+  // arrives unevaluated (noEvalArgs); a bare List/Map type literal fails
+  // the concrete-container match and surfaces a signature_error.
+  const doEvalMapValue = (v: Value): Value => {
+    if (v.isMap()) {
+      const src = v.asMap()
+      const out = new OrderedMap()
+      for (const k of src.keys()) out.set(k, doEvalMapValue(src.get(k)!))
+      return newMap(out)
+    }
+    if (v.vType.matches(TList) && Array.isArray(v.data)) {
+      const residual = new Engine(r).run([...v.asList()])
+      if (residual.length === 1) return residual[0]!
+      return newList(residual, { eval: false })
+    }
+    return v
+  }
+  reg({
+    name: 'do',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        noEvalArgs: new Set([0]),
+        handler: (args) => new Engine(r).run([...args[0]!.asList()]),
+      },
+      {
+        args: [TMap],
+        noEvalArgs: new Set([0]),
+        handler: (args) => [doEvalMapValue(args[0]!)],
+      },
+    ],
+  })
+
   // def: spec-subset code-body binding. Captures `def NAME body`
   // where NAME arrives as a Word token (no /q machinery in this
   // runner's tokenizer) and body is any value — typically a List
@@ -690,6 +728,12 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       continue
     }
 
+    if (stream.s[stream.i] === '{') {
+      stream.i++
+      out.push(readMap(stream))
+      continue
+    }
+
     let j = stream.i
     while (j < stream.s.length && stream.s[j] !== ' ' && stream.s[j] !== '\t') j++
     const tok = stream.s.slice(stream.i, j)
@@ -710,55 +754,89 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       return out
     }
 
-    switch (tok) {
-      case 'true':
-        out.push(newBoolean(true))
-        continue
-      case 'false':
-        out.push(newBoolean(false))
-        continue
-      case 'null':
-      case 'none':
-        out.push(newNone())
-        continue
-    }
-    if (/^-?\d+$/.test(tok)) {
-      out.push(newInteger(BigInt(tok)))
-      continue
-    }
-    if (/^-?\d+\.\d+$/.test(tok)) {
-      out.push(newDecimal(Number.parseFloat(tok)))
-      continue
-    }
-    // /-suffix modifiers — at the call site, force stack-only or
-    // forward-only dispatch (/s, /f) regardless of the sig's declared
-    // barrierPos, and produce an Atom from a bare word (/q, the short
-    // form of `(quote name)`). Modifiers stack in any order: foo/sq ≡
-    // foo/qs ≡ foo/q (q dominates; other modifiers are accepted but
-    // ignored on the resulting Atom). Mirrors parseWord in eng/parser.
-    const parsed = parseModifierSuffix(tok)
-    if (parsed.quote) {
-      out.push(newAtom(parsed.name))
-      continue
-    }
-    // A bare type-name word (Integer, List, None, Type, …) resolves to
-    // a type-literal value, mirroring the parser's TypeNameTable
-    // bare-word lookup. Modifier suffixes don't apply to type names.
-    if (parsed.name === tok) {
-      const t = typeTable.get(tok)
-      if (t !== undefined) {
-        out.push(newTypeLiteral(t))
-        continue
-      }
-    }
-    out.push(
-      newWordWithModifiers(parsed.name, parsed.forceStack, parsed.forceForward, parsed.argCount),
-    )
+    out.push(atomicValue(tok))
   }
   if (until === ']') {
     throw new Error(`tokenize: unterminated list literal '['`)
   }
   return out
+}
+
+// readMap parses a `{ key:value … }` map body. The opening `{` has
+// already been consumed. Keys run up to the `:`; the value immediately
+// following may itself be a string, list, map, or atomic token.
+function readMap(stream: TokenStream): Value {
+  const m = new OrderedMap()
+  const s = stream.s
+  for (;;) {
+    while (stream.i < s.length && (s[stream.i] === ' ' || s[stream.i] === '\t')) stream.i++
+    if (stream.i >= s.length) throw new Error(`tokenize: unterminated map literal '{'`)
+    if (s[stream.i] === '}') {
+      stream.i++
+      return newMap(m)
+    }
+    let k = stream.i
+    while (k < s.length && s[k] !== ':' && s[k] !== ' ' && s[k] !== '\t' && s[k] !== '}') k++
+    if (s[k] !== ':') throw new Error(`tokenize: map entry missing ':' at ${stream.i}`)
+    const key = s.slice(stream.i, k)
+    stream.i = k + 1 // consume ':'
+    m.set(key, readMapValue(stream))
+  }
+}
+
+// readMapValue reads the value immediately after a map key's `:`.
+function readMapValue(stream: TokenStream): Value {
+  const s = stream.s
+  const c = s[stream.i]
+  if (c === '"' || c === "'") {
+    let j = stream.i + 1
+    while (j < s.length && s[j] !== c) j++
+    if (j >= s.length) throw new Error(`unterminated string at ${stream.i}`)
+    const str = newString(s.slice(stream.i + 1, j))
+    stream.i = j + 1
+    return str
+  }
+  if (c === '[') {
+    stream.i++
+    return newList(readTokens(stream, ']'), { eval: true })
+  }
+  if (c === '{') {
+    stream.i++
+    return readMap(stream)
+  }
+  let j = stream.i
+  while (j < s.length && s[j] !== ' ' && s[j] !== '\t' && s[j] !== '}') j++
+  const tok = s.slice(stream.i, j)
+  stream.i = j
+  return atomicValue(tok)
+}
+
+// atomicValue converts one whitespace-delimited token (not a string,
+// list, or map) into a Value: booleans, none/null, numbers, bare
+// type-name → type literal, /q → atom, otherwise a word with modifiers.
+function atomicValue(tok: string): Value {
+  switch (tok) {
+    case 'true':
+      return newBoolean(true)
+    case 'false':
+      return newBoolean(false)
+    case 'null':
+    case 'none':
+      return newNone()
+  }
+  if (/^-?\d+$/.test(tok)) return newInteger(BigInt(tok))
+  if (/^-?\d+\.\d+$/.test(tok)) return newDecimal(Number.parseFloat(tok))
+  // /-suffix modifiers — /s, /f force stack/forward dispatch, /q makes
+  // an Atom, /N filters by arity. Mirrors parseWord in eng/parser.
+  const parsed = parseModifierSuffix(tok)
+  if (parsed.quote) return newAtom(parsed.name)
+  // A bare type-name word (Integer, List, None, Type, …) resolves to a
+  // type-literal value, mirroring the parser's TypeNameTable lookup.
+  if (parsed.name === tok) {
+    const t = typeTable.get(tok)
+    if (t !== undefined) return newTypeLiteral(t)
+  }
+  return newWordWithModifiers(parsed.name, parsed.forceStack, parsed.forceForward, parsed.argCount)
 }
 
 function newWordWithModifiers(
