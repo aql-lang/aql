@@ -25,13 +25,15 @@ correct-by-design (must NOT compile). THREE rows DONE this effort:_
   `lang/go/native/` (size.go, native_control.go, forloop.go); zero eng/ changes.
   refusals 3 -> 2._
 
-_Remaining (refusals = 2 — the SOUND FLOOR): **def-node-binding:54** and
-**macro:45** are correct-by-design refusals that must NOT compile (compiling them
-ships wrong answers — `[1]` not `[9]`, and "expansion too deep" — both proven by
-the interpreter). There is no clearable feature row left; refusals can only reach
-0 by deciding those 2 should compile-to-error-trap, which would change observable
-results. The bytecode compiler is now interpreter-independent for every
-soundly-compilable spec row._
+_Remaining (refusals = 2 — the current static-analysis floor): **def-node-binding:54**
+and **macro:45**. Both REFUSE conservatively and fall back faithfully (the rows
+PASS — the interpreter returns the correct `[1]` and raises "expansion too deep"
+respectively). They are NOT "must not compile": a sound compilation exists for
+each (macro:45 via a compile-to-trap; def-node-binding:54 via deferred-eval-scope
+provenance modeling). See `design/aql-bytecode-final-two-refusals.0.md` for the
+per-row decision (compile-to-trap vs keep-refusing) — reaching 0 (plan P7, delete
+the interpreter fallback) is a scoped decision, not a semantics conflict. The
+bytecode compiler is interpreter-independent for every row it compiles today._
 
 _This note records the code-level findings (tracing the 3 module rows to ground
 truth) the build started from._
