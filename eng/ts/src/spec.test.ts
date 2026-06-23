@@ -657,7 +657,15 @@ function registerSpecWords(r: Registry): void {
         handler: (args) => {
           const elems = args[0]!.asList()
           if (elems.length >= 3 && elems[0]!.vType.matches(TList) && Array.isArray(elems[0]!.data)) {
-            const params = elems[0]!.asList().map((p) => parseFnParam(p))
+            const params: FnParam[] = []
+            for (const pe of elems[0]!.asList()) {
+              // A bare `?` marks the preceding param optional.
+              if (pe.isWord() && pe.asWord().name === '?') {
+                if (params.length > 0) params[params.length - 1]!.optional = true
+                continue
+              }
+              params.push(parseFnParam(pe))
+            }
             const returns = elems[1]!.asList().map((r) => parseFnReturn(r))
             const body = elems[2]!.asList()
             return [newFnDef({ params, returns, body })]

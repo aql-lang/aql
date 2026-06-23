@@ -43,6 +43,8 @@ export interface WordInfo {
 export interface FnParam {
   name: string
   type: AqlType
+  /** Optional (`?`) params default to their type's base value when omitted. */
+  optional?: boolean
 }
 
 /**

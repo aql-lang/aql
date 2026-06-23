@@ -15,9 +15,11 @@ import {
   TAny,
   TAtom,
   TBoolean,
+  TFloat,
   TInteger,
   TList,
   TMap,
+  TNumber,
   TString,
   TWord,
   typeNameTable,
@@ -27,13 +29,27 @@ import {
   type ForwardMarker,
   type MoveInfo,
   newBoolean,
+  newFloat,
   newForwardMarker,
+  newInteger,
   newMap,
+  newNone,
+  newString,
   newTypeLiteral,
   OrderedMap,
   Value,
   type WordInfo,
 } from './value.ts'
+import type { AqlType } from './type.ts'
+
+/** Base value for an omitted optional fn param, by its declared type. */
+function baseValue(t: AqlType): Value {
+  if (t.matches(TInteger) || t.matches(TNumber)) return newInteger(0n)
+  if (t.matches(TFloat)) return newFloat(0)
+  if (t.matches(TString)) return newString('')
+  if (t.matches(TBoolean)) return newBoolean(false)
+  return newNone()
+}
 import type { FunctionEntry } from './registry.ts'
 import type { Signature } from './signature.ts'
 
@@ -398,35 +414,52 @@ export class Engine {
    * → execFnDefSig" arc) compressed into a single function.
    */
   private dispatchFnDef(name: string, info: FnDefInfo): void {
+    const total = info.params.length
+    const required = info.params.filter((p) => !p.optional).length
     // Pre-evaluate forward parens so the matcher sees concrete values.
-    this.preEvalParens(info.params.length)
+    this.preEvalParens(total)
 
-    const sig: Signature = {
-      args: info.params.map((p) => p.type),
-      barrierPos: info.params.length,
-      handler: () => [],
+    // Try arities from total down to required (optional trailing params
+    // may be omitted), taking the first that matches the available args.
+    let result: import('./match.ts').MatchResult | null = null
+    let usedK = 0
+    for (let k = total; k >= required; k--) {
+      const sig: Signature = {
+        args: info.params.slice(0, k).map((p) => p.type),
+        barrierPos: k,
+        handler: () => [],
+      }
+      const fakeEntry: FunctionEntry = {
+        name,
+        signatures: [sig],
+        forwardPrecedence: true,
+        maxForwardArgs: k,
+      }
+      const r = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
+      if (r) {
+        result = r
+        usedK = k
+        break
+      }
     }
-    const fakeEntry: FunctionEntry = {
-      name,
-      signatures: [sig],
-      forwardPrecedence: true,
-      maxForwardArgs: info.params.length,
-    }
-    const result = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
     if (!result) {
       throw new AqlError(
         'signature_error',
-        `no matching signature for ${name}\n  = expected: ${name} (${describeExpected(fakeEntry)})\n  = stack: ${this.describeStack()}`,
+        `no matching signature for ${name} (${total} params)\n  = stack: ${this.describeStack()}`,
         name,
       )
     }
 
-    // Bind each param on the def stack so the body can reference it,
-    // and push the args list for the `args` word.
-    for (let i = 0; i < info.params.length; i++) {
-      this.registry.pushDef(info.params[i]!.name, result.args[i]!)
+    // Bind each param on the def stack so the body can reference it.
+    // Provided args bind directly; omitted optional params default to
+    // their type's base value. Push the args list for the `args` word.
+    const boundArgs: Value[] = []
+    for (let i = 0; i < total; i++) {
+      const val = i < usedK ? result.args[i]! : baseValue(info.params[i]!.type)
+      this.registry.pushDef(info.params[i]!.name, val)
+      boundArgs.push(val)
     }
-    this.registry.pushArgs([...result.args])
+    this.registry.pushArgs(boundArgs)
 
     let bodyResult: Value[]
     try {
