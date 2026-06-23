@@ -280,6 +280,38 @@ the fn-value-dispatch feature, and it sits BENEATH the call-site inlining
 prerequisite for all three, and should be built first against the simplest
 shape (a fn value resolved from a concrete map, then `m.f args`).
 
+## BOUNDARY (verified): fn-value dispatch ALREADY works for the simple case
+
+Tested clean (no source changes): `def m {f:(fn [[a:Integer b:Integer]
+[Integer] [a add b]])} m.f 2 3` COMPILES, via **CALL_DYNAMIC** (so does the
+explicit `(m get f) 2 3`). So the fn-value-dispatch machinery already exists
+for: a fn value resolved from a CONCRETE map, with PLAIN (evaluated) args. The
+get returns the concrete FnDef → `resolveDynamicApply` sees a leading
+fn-typed/dynamic value with static args → OpCallDynamic → the VM applies it.
+
+The 3 module rows each need a DIFFERENT extension on top of that working base:
+
+- **module-rand:38** — TWO extensions: (i) a CARRIER receiver (`r` from
+  `Rand.with-seed` is a shapeless Map carrier, so `r get list-of` is Any, not a
+  fn carrier — needs with-seed to declare a record/shaped return typing its
+  methods as Function, so get resolves a fn-typed carrier that flows to
+  OpCallDynamic); and (ii) a NoEvalArgs CODE-BODY arg (`[Rand.int 0 10]`) —
+  plain OpCallDynamic evaluates args, but list-of's body must stay a closure.
+  So CALL_DYNAMIC must carry the callee's NoEvalArgs/closure shape.
+- **module-parselang:23** — `ParseLang.parse_calc` is a user-REGISTERED fn;
+  its call result is a List carrier and `(…) get 1` over it refuses operand
+  provenance. Needs user-fn-call recording (the call itself), then get over the
+  tracked result.
+- **module-test:38** — call-site inlining of `run-spec` (its `s` param is a
+  carrier) + closure bodies + recursion + fn-value dispatch for `test-invoke`.
+
+Recommended first implementable unit: extend the working CALL_DYNAMIC path to a
+fn value resolved from a SHAPED map carrier (no code-body), i.e. make
+`getNodeReturns`/a record-typed-map carrier yield a Function-typed carrier that
+`resolveDynamicApply` already lowers — then layer NoEvalArgs/closure carriage
+for module-rand:38. The base mechanism (OpCallDynamic) is already in the VM and
+emitter; the work is feeding it the right carriers from carrier receivers.
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
