@@ -39,6 +39,10 @@ import {
   TString,
   TList,
   TMap,
+  TArray,
+  TIdeal,
+  TNode,
+  TObject,
   TScalar,
   TType,
   TWord,
@@ -577,16 +581,63 @@ function registerSpecWords(r: Registry): void {
     name: 'make',
     forwardPrecedence: true,
     signatures: [
-      {
-        args: [TScalar, TMap, TAny],
-        typeArgs: new Set([0]),
-        handler: (args) => makeScalarOptsHandler(args),
-      },
-      {
-        args: [TScalar, TAny],
-        typeArgs: new Set([0]),
-        handler: (args) => makeScalarHandler(args),
-      },
+      { args: [TObject, TAny, TObject], handler: () => unsupportedMake('Object prototype') },
+      { args: [TScalar, TMap, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarOptsHandler(a) },
+      { args: [TAny, TAny, TMap], handler: () => unsupportedMake('with-opts') },
+      { args: [TArray, TList], typeArgs: new Set([0]), handler: () => unsupportedMake('Array') },
+      { args: [TIdeal, TMap], typeArgs: new Set([0]), handler: () => unsupportedMake('Ideal') },
+      { args: [TScalar, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarHandler(a) },
+      { args: [TAny, TAny], handler: () => unsupportedMake('generic') },
+    ],
+  })
+  // get / set — kernel-container signatures (the handlers cover the
+  // Node map/list case; their full sig list is what inspect renders).
+  // Mirrors registerEngSpecStorage.
+  const getNodeH: Handler = (args) => {
+    const key = args[0]!
+    const c = args[1]!
+    if (key.vType.matches(TInteger) && Array.isArray(c.data)) {
+      const i = Number(key.asInteger())
+      const lst = c.asList()
+      return [i >= 0 && i < lst.length ? lst[i]! : newNone()]
+    }
+    if (c.data instanceof OrderedMap) {
+      const k = key.vType.equal(TAtom) ? key.asAtom() : key.asString()
+      const v = c.asMap().get(k)
+      return [v ?? newNone()]
+    }
+    return [newNone()]
+  }
+  reg({
+    name: 'get',
+    signatures: [
+      { args: [TString, TObject], barrierPos: 1, handler: getNodeH },
+      { args: [TString, TNode], barrierPos: 1, handler: getNodeH },
+      { args: [TInteger, TArray], barrierPos: 1, handler: getNodeH },
+      { args: [TInteger, TObject], barrierPos: 1, handler: getNodeH },
+      { args: [TInteger, TNode], barrierPos: 1, handler: getNodeH },
+      { args: [TAtom, TObject], barrierPos: 1, handler: getNodeH },
+      { args: [TAtom, TNode], barrierPos: 1, handler: getNodeH },
+      { args: [TAny, TNone], barrierPos: 1, handler: () => [newNone()] },
+    ],
+  })
+  reg({
+    name: 'set',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TString, TAny, TObject], handler: () => unsupportedMake('set') },
+      { args: [TInteger, TAny, TArray], handler: () => unsupportedMake('set') },
+      { args: [TAtom, TAny, TObject], handler: () => unsupportedMake('set') },
+    ],
+  })
+  // refine — the uniform type constructor (its sig list is what inspect
+  // renders; structural construction is a follow-up).
+  reg({
+    name: 'refine',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TAny, TNode], barrierPos: 1, handler: () => unsupportedMake('refine') },
+      { args: [TAny], handler: () => unsupportedMake('refine') },
     ],
   })
 
@@ -1452,6 +1503,13 @@ function parseFnReturn(v: Value) {
   const type = typeNameTable().get(w.name)
   if (!type) throw new Error(`fn: unknown return type ${JSON.stringify(w.name)}`)
   return type
+}
+
+// unsupportedMake is the placeholder handler for make/get/set/refine
+// overloads whose construction isn't ported yet; their signatures still
+// drive inspect rendering.
+function unsupportedMake(what: string): Value[] {
+  throw new AqlError('unsupported', `make/${what}: not yet ported`)
 }
 
 // buildWordInspection renders a registered word's metadata as an
