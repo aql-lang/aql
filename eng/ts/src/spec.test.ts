@@ -63,6 +63,7 @@ import {
   newMark,
   newMove,
   newNone,
+  newParenExpr,
   newString,
   newTypedList,
   newTypedMap,
@@ -1250,8 +1251,8 @@ function readMapValue(stream: TokenStream): Value {
     return readMap(stream)
   }
   if (c === '(') {
-    // A parenthesised expression as a map value evaluates inline when
-    // the map is deep-evaluated; model it as an eval-list of its tokens.
+    // A parenthesised expression as a map value collapses to a single
+    // residual when the map is deep-evaluated (unlike a list value).
     stream.i++
     let depth = 1
     const start = stream.i
@@ -1266,7 +1267,7 @@ function readMapValue(stream: TokenStream): Value {
     }
     const inner = s.slice(start, stream.i)
     stream.i++ // consume ')'
-    return newList(tokenize(inner), { eval: true })
+    return newParenExpr(tokenize(inner))
   }
   let j = stream.i
   while (j < s.length && s[j] !== ' ' && s[j] !== '\t' && s[j] !== '}') j++

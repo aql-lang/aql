@@ -87,6 +87,7 @@ export {
   newMark,
   newMove,
   newNone,
+  newParenExpr,
   newString,
   newTypedList,
   newTypedMap,

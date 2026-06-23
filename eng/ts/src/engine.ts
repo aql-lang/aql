@@ -769,19 +769,20 @@ export class Engine {
    */
   private evalMapValue(v: Value): Value {
     if (v.data instanceof OrderedMap && v.vType.equal(TMap)) return this.deepEvalData(v)
-    // An eval-list runs its elements; a bare word runs as a one-token
-    // program (so a def resolves and an fn auto-calls). Both collapse to
-    // a single residual, or a list of residuals.
-    let program: Value[] | null = null
+    // An eval-list value evaluates to a LIST of its residuals (no
+    // collapse). A paren-expr or a bare word collapses to a single
+    // residual (a def resolves; an fn auto-calls).
     if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
-      program = [...v.asList()]
-    } else if (v.isWord()) {
-      program = [v]
+      const sub = new Engine(this.registry).run([...v.asList()]).map((e) => this.deepEvalData(e))
+      return new Value(v.vType, sub, { eval: false, quoted: false })
     }
+    let program: Value[] | null = null
+    if (v.isParenExpr()) program = v.data as Value[]
+    else if (v.isWord()) program = [v]
     if (program === null) return v
-    const sub = new Engine(this.registry).run(program).map((e) => this.deepEvalData(e))
+    const sub = new Engine(this.registry).run([...program]).map((e) => this.deepEvalData(e))
     if (sub.length === 1) return sub[0]!
-    return new Value(v.vType.matches(TList) ? v.vType : TList, sub, { eval: false, quoted: false })
+    return new Value(TList, sub, { eval: false, quoted: false })
   }
 
   private describeStack(): string {

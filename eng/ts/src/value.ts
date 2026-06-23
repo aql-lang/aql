@@ -26,6 +26,7 @@ import {
   TPath,
   TMove,
   TNone,
+  TParenExpr,
   TString,
   TStringEmpty,
   TStringProper,
@@ -272,6 +273,10 @@ export class Value {
     return this.vType.equal(TXml)
   }
 
+  isParenExpr(): boolean {
+    return this.vType.equal(TParenExpr)
+  }
+
   asInterpSegments(): InterpSegment[] {
     if (!Array.isArray(this.data)) throw new Error('AsInterp: not an interp string')
     return this.data as InterpSegment[]
@@ -473,6 +478,15 @@ export type InterpSegment = { lit: string } | { expr: Value[] }
 /** Construct an interpolated-string value (VType Word/__IS). */
 export function newInterpString(segments: InterpSegment[]): Value {
   return new Value(TInterpString, segments)
+}
+
+/**
+ * Construct a paren-expression value (VType Word/__PE) holding the
+ * tokens of a `( … )` group. In data context it evaluates and collapses
+ * to a single residual value (unlike a list, which stays a list).
+ */
+export function newParenExpr(tokens: Value[]): Value {
+  return new Value(TParenExpr, tokens)
 }
 
 /**
