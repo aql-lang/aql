@@ -58,6 +58,18 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TInteger},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
+			// Check-mode shape: a Rand instance's METHOD TABLE is static (the
+			// same wrapper FnDefs for every seed -- only the captured RNG state
+			// differs). Surface a concrete Map of those wrappers so a downstream
+			// `r get list-of` resolves the closure-bearing wrapper and dispatches
+			// the SAME closure-word path as the `Rand.list-of` module-export form
+			// (getNodeReturns -> isClosureBearingWrapper). The wrappers ride a
+			// throwaway shape-only sub-registry; the only handler the compiler
+			// can reach through them (rand-list-of) is a closure DRIVER that does
+			// not itself draw from the RNG, so the resolved shape is seed-agnostic
+			// and the runtime answer is unchanged. RNG-bound methods (int/bool/...)
+			// stay dynamic at the field read, so no seed-specific draw is baked.
+			ReturnsFn: randWithSeedReturns,
 			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				seed, err := args[0].AsConcreteInteger()
 				if err != nil {
@@ -80,6 +92,25 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 		ID:      parent.Modules.NextID(),
 		Exports: map[string]*native.OrderedMap{"Rand": exports},
 	}, nil
+}
+
+// randWithSeedReturns is the check-mode shape for `Rand.with-seed N`. The
+// handler does not run during static analysis, so the result would otherwise be
+// a shapeless Map carrier and a downstream `r get list-of` could not resolve the
+// closure-bearing wrapper. This returns a CONCRETE Map of the instance's method
+// wrappers (built from a fixed shape-only state) so the field read resolves the
+// wrapper and the dispatch records the closure-word path -- identical to the
+// `Rand.list-of` module-export form. The state here is used ONLY for its method
+// SHAPE; the sole compiler-reachable wrapper (list-of) is an RNG-independent
+// closure driver, so no seed-specific RNG behaviour is baked.
+func randWithSeedReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	instance, err := buildRandExportsForState(newRandState(0))
+	if err != nil {
+		// Fall back to the bare Map carrier on the (registration-time
+		// impossible) build error; the row simply refuses as before.
+		return []native.Value{native.NewCarrier(native.TMap)}
+	}
+	return []native.Value{native.NewMap(instance)}
 }
 
 // newRandState builds a fresh PRNG seeded with the given int64.

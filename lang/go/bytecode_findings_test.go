@@ -7,8 +7,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // Finding A / C — RunCompiled resolves a compiled-mode INTERNAL error (a VM
@@ -2869,5 +2871,80 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 	}
 	if codeOf(eI) != "parse_kind_exists" {
 		t.Errorf("double-register interp: code=%q want parse_kind_exists (err=%v)", codeOf(eI), eI)
+	}
+}
+
+func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
+	clk := capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)}
+	newClocked := func() *AQL {
+		a := mustNew(t)
+		a.SetClock(clk)
+		return a
+	}
+
+	// POSITIVE: the seeded-instance closure-word form compiles to PUSH_CLOSURE,
+	// is island-free, and is byte-identical to the interpreter across seeds.
+	for _, seed := range []int{0, 1, 2, 3, 7, 42, 99, 123} {
+		src := fmt.Sprintf(
+			`"aql:rand" import end  def r (Rand.with-seed %d)  r.list-of [Rand.int 0 10] 3`, seed)
+		prog, reason, _, cerr := newClocked().CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("seed %d: check error %v", seed, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("seed %d: expected compile, refused: %s", seed, reason)
+		}
+		dis := prog.Disassemble()
+		if !strings.Contains(dis, "PUSH_CLOSURE") {
+			t.Errorf("seed %d: expected PUSH_CLOSURE (closure-word dispatch):\n%s", seed, dis)
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("seed %d: expected no interpreter island:\n%s", seed, dis)
+		}
+		gotC, compiled, eC := newClocked().RunCompiled(src)
+		gotI, eI := newClocked().Run(src)
+		if !compiled {
+			t.Errorf("seed %d: did not run compiled", seed)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("seed %d: compiled err=%v interp err=%v", seed, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("seed %d: parity: compiled=%v interp=%v", seed, gotC, gotI)
+		}
+	}
+
+	// POSITIVE: the spec row's exact expected value at the spec clock+seed.
+	{
+		const src = `"aql:rand" import end  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3`
+		gotC, compiled, eC := newClocked().RunCompiled(src)
+		if !compiled || eC != nil {
+			t.Fatalf("row 38: compiled=%v err=%v", compiled, eC)
+		}
+		if fmt.Sprint(gotC) != "[[7 5 4]]" {
+			t.Errorf("row 38: compiled=%v want [[7 5 4]]", gotC)
+		}
+	}
+
+	// NEGATIVE: a RECEIVER-bound body (`r.int`) is seed-specific. It must NOT be
+	// baked as a closure-word const-frozen draw; it stays on the dynamic path and
+	// remains byte-identical to the interpreter at every seed.
+	for _, seed := range []int{2, 5, 42} {
+		src := fmt.Sprintf(
+			`"aql:rand" import end  def r (Rand.with-seed %d)  r.list-of [r.int 0 10] 3`, seed)
+		prog, _, _, _ := newClocked().CompileCheck(src)
+		if prog != nil && strings.Contains(prog.Disassemble(), "PUSH_CLOSURE") &&
+			!strings.Contains(prog.Disassemble(), "CALL_DYNAMIC") {
+			t.Errorf("seed %d: r.int body wrongly baked as a frozen closure draw:\n%s",
+				seed, prog.Disassemble())
+		}
+		gotC, _, eC := newClocked().RunCompiled(src)
+		gotI, eI := newClocked().Run(src)
+		if eC != nil || eI != nil {
+			t.Fatalf("seed %d (recv-bound): compiled err=%v interp err=%v", seed, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("seed %d (recv-bound): parity: compiled=%v interp=%v", seed, gotC, gotI)
+		}
 	}
 }

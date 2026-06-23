@@ -1,19 +1,26 @@
 # Stage-3 module-fn call-site inlining — verified implementation plan
 
-_Status: IN PROGRESS. **module-parselang:23 is DONE** (commit "Stage 3:
-compile module-parselang:23", refusals 5 -> 4) — its two sub-features (sound
-check-mode parser registration + the body-bearing fn-VALUE `__pa` dispatch fix
-via `spliceFnValueCheckResult` → `buildFnBodyReturnsFn`) landed gate-green and
-differential-clean. The shared `__pa` machinery now exists and is the lever for
-the remaining rows. This note records the code-level findings (tracing
-`module-test.tsv:38`, `module-rand.tsv:38`, `module-parselang.tsv:23` to ground
-truth) that the build started from._
+_Status: IN PROGRESS — refusals 5 -> 4 -> **3**. TWO rows DONE this effort:_
+- _**module-parselang:23 DONE** — sound check-mode parser registration +
+  body-bearing fn-VALUE `__pa` dispatch fix (`spliceFnValueCheckResult` →
+  `buildFnBodyReturnsFn`). refusals 5 -> 4._
+- _**module-rand:38 DONE** — carrier-receiver closure-word dispatch:
+  `Rand.with-seed`'s check-mode ReturnsFn surfaces the static method SHAPE (a
+  concrete instance Map, no rng baked) and `getNodeReturns` folds a
+  closure-bearing wrapper field so `r.list-of [body] n` lowers to `PUSH_CLOSURE`
+  (per-iteration over the runtime receiver) like the direct `Rand.list-of` form.
+  The SOUND RNG freeze-gate is never crossed (no draw is const-folded). refusals
+  4 -> 3. Pins: refusalCeiling 3, pinnedAnyFrontierRows 253,
+  pinnedTypeSoundnessViolations 12 (all sound improvements, differential-clean)._
 
-_Remaining: module-rand:38 (carrier-receiver→fn-carrier + the SOUND RNG
-freeze-gate component — see below; needs NoEvalArgs-closure carriage on the
-dynamic-dispatch boundary) and module-test:38 (call-site inlining + recursion).
-def-node-binding:54 and macro:45 are correct-by-design refusals (must NOT
-compile)._
+_Remaining (refusals = 3): only **module-test:38** is a clearable feature row
+(call-site inlining of `run-spec` + recursion + closures + fn-value dispatch).
+**def-node-binding:54** and **macro:45** are correct-by-design refusals that must
+NOT compile (compiling them ships wrong answers — proven). So the sound floor is
+2, and module-test:38 is the last lever._
+
+_This note records the code-level findings (tracing the 3 module rows to ground
+truth) the build started from._
 
 ## Why these 3 rows refuse (and the 2 that must)
 
