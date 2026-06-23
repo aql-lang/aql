@@ -107,6 +107,28 @@ function isBareTypeNode(v: Value): boolean {
 }
 
 /**
+ * isRecordShape: a non-empty concrete map whose every value is a type
+ * body (type literal or nested record shape). Mirrors
+ * core_type.go::IsRecordShape.
+ */
+function isRecordShape(v: Value): boolean {
+  if (!v.isMap()) return false
+  const m = v.asMap()
+  if (m.size === 0) return false
+  return m.keys().every((k) => {
+    const fv = m.get(k)!
+    return fv.data === null || isRecordShape(fv)
+  })
+}
+
+/** isTypeBody: a structural type value (typed container, disjunct, record shape, fn). */
+function isTypeBody(v: Value): boolean {
+  if (v.isTypedList() || v.isTypedMap() || v.isDisjunct()) return true
+  if (v.data !== null && v.vType.matches(TType)) return true
+  return isRecordShape(v)
+}
+
+/**
  * IsValueOfType reports whether v satisfies type t. Subset of
  * core_type.go::IsValueOfType:
  *   - t is the bare metatype Type: v is itself a type;
@@ -164,6 +186,23 @@ export function isValueOfType(v: Value, t: Value): boolean {
     const child = t.asChildType().child
     return v.asMap().keys().every((k) => isValueOfType(v.asMap().get(k)!, child))
   }
+  // Positional list type `[A B …]` (a concrete list of type/value
+  // elements): v must be a same-length list whose elements satisfy the
+  // corresponding template element.
+  if (Array.isArray(t.data)) {
+    const ve = listElements(v)
+    if (ve === null) return false
+    const te = t.data as Value[]
+    return ve.length === te.length && te.every((tt, i) => isValueOfType(ve[i]!, tt))
+  }
+  // Record-shape / structural map type: every key declared in t must
+  // be present in v with a conforming value (extra v keys are allowed).
+  if (t.data instanceof OrderedMap) {
+    if (!(v.data instanceof OrderedMap)) return false
+    const tm = t.asMap()
+    const vm = v.asMap()
+    return tm.keys().every((k) => vm.has(k) && isValueOfType(vm.get(k)!, tm.get(k)!))
+  }
   // Disjunct / Enum membership: v satisfies the union if it satisfies
   // any alternative (a type-literal alternative is a subtype check; a
   // concrete alternative — an enum member — is value equality).
@@ -180,7 +219,7 @@ export function isValueOfType(v: Value, t: Value): boolean {
   if (isBareTypeNode(t)) {
     if (t.vType.equal(TType)) {
       if (v.carrier) return false
-      return isBareTypeNode(v) || v.vType.matches(TType)
+      return isBareTypeNode(v) || isTypeBody(v)
     }
     return v.vType.matches(t.vType)
   }
