@@ -11,8 +11,8 @@
 #     returns the `defer` sentinel and replies later off the request's `@from`
 #     reply handle. This is the one place a handler needs the caller's identity.
 
-"aql:serve" import end
-"sessions.aql" import end          # for the shared presence-name convention
+import "aql:serve"
+import "sessions.aql"          # for the shared presence-name convention
 
 export "Notify" {
   New: New/r

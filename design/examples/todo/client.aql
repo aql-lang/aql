@@ -12,9 +12,9 @@
 #     reconcile instead (§8.2);
 #   * a correlated push subscription bridging the service and process layers.
 
-"aql:net"       import end
-"aql:serve"     import end
-"aql:time-util" import end
+import "aql:net"
+import "aql:serve"
+import "aql:time-util"
 
 # Two remote handles — same surface as the local services they front.
 def sessions ( connect {http: "http://localhost:8080/sessions"} )

@@ -7,7 +7,7 @@
 # handler whatever it is. Multiple `wrap`s nest, newest outermost, so stacking
 # `audit` over `Auth.gate` gives:  audit → gate → patrun match → handler.
 
-"aql:serve" import end
+import "aql:serve"
 
 export "Audit" {
   log: log/r

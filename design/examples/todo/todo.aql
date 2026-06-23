@@ -19,7 +19,7 @@
 # (the key position auto-quotes) and parenthesised when they hold a variable
 # (`get (user)` — cf. object.tsv `o set (k) 3`).
 
-"aql:serve" import end          # send (fire-and-forget) into the notify sink
+import "aql:serve"          # send (fire-and-forget) into the notify sink
 
 # ---------------------------------------------------------------------------
 # Constructor — a reusable service is just a module that exports a function

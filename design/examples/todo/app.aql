@@ -10,15 +10,15 @@
 # profile gets the in-process service DX but is hard-denied from spawning
 # processes or opening sockets. Running this file therefore declares intent.
 
-"aql:serve" import end          # service / server / serve / pool / wrap / reply
-"aql:net"   import end          # listen / connect
-"aql:rand"  import end          # Rand.uuid (session tokens)
+import "aql:serve"          # service / server / serve / pool / wrap / reply
+import "aql:net"          # listen / connect
+import "aql:rand"          # Rand.uuid (session tokens)
 
-"todo.aql"     import end
-"sessions.aql" import end
-"notify.aql"   import end
-"auth.aql"     import end
-"audit.aql"    import end
+import "todo.aql"
+import "sessions.aql"
+import "notify.aql"
+import "auth.aql"
+import "audit.aql"
 
 # --- the singletons ---------------------------------------------------------
 def notify   ( Notify.New {} )
