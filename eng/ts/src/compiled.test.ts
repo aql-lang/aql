@@ -18,6 +18,7 @@ import {
   type NativeFunc,
   Registry,
   TAny,
+  TAtom,
   TInteger,
   TList,
   TNumber,
@@ -109,6 +110,29 @@ function registerFixtures(r: Registry): void {
     forwardPrecedence: true,
     signatures: [{ args: [TAny], handler: (args) => [args[0]!, args[0]!], returns: [TAny, TAny] }],
   })
+  // def: check-aware name binding (runInCheckMode so it binds in the
+  // record pass). A bound computed value (e.g. `def a (addq 1 2)`) shares
+  // one carrier; referencing it twice records two event operands pointing
+  // at the same producing event — the locals-threaded lowering handles
+  // the sharing with no extra machinery.
+  reg({
+    name: 'def',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TAtom, TAny],
+        quoteArgs: new Set([0]),
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, r) => {
+          const a = args[0]!
+          const name = a.isWord() ? a.asWord().name : a.asAtom()
+          r.pushDef(name, args[1]!)
+          return []
+        },
+      },
+    ],
+  })
 }
 
 // Minimal tokenizer: words, ints, floats, single/double strings, lists,
@@ -191,6 +215,9 @@ const COMPILED: Array<[string, true]> = [
   ['addq 1 (addq 2 (addq 3 4))', true], // deep right-nesting
   ['mulq (addq 1 2) (subq 10 5)', true], // two event operands in one call
   ['subq 10 3', true], // non-commutative arg order
+  ['def x 5 addq x 1', true], // def of a literal -> const operand
+  ['def a (addq 1 2) mulq a a', true], // multiref of a computed value
+  ['def a (addq 1 2) def b (mulq a 10) subq b a', true], // chained shared bindings
 ]
 
 const FALLBACK: string[] = [
