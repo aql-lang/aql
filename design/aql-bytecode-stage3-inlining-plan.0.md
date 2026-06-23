@@ -1,9 +1,19 @@
 # Stage-3 module-fn call-site inlining — verified implementation plan
 
-_Status: PLAN. No Stage-3 code landed. This note records the
-code-level findings established by tracing `module-test.tsv:38`,
-`module-rand.tsv:38`, and `module-parselang.tsv:23` to ground truth,
-so the dedicated build starts from certainty._
+_Status: IN PROGRESS. **module-parselang:23 is DONE** (commit "Stage 3:
+compile module-parselang:23", refusals 5 -> 4) — its two sub-features (sound
+check-mode parser registration + the body-bearing fn-VALUE `__pa` dispatch fix
+via `spliceFnValueCheckResult` → `buildFnBodyReturnsFn`) landed gate-green and
+differential-clean. The shared `__pa` machinery now exists and is the lever for
+the remaining rows. This note records the code-level findings (tracing
+`module-test.tsv:38`, `module-rand.tsv:38`, `module-parselang.tsv:23` to ground
+truth) that the build started from._
+
+_Remaining: module-rand:38 (carrier-receiver→fn-carrier + the SOUND RNG
+freeze-gate component — see below; needs NoEvalArgs-closure carriage on the
+dynamic-dispatch boundary) and module-test:38 (call-site inlining + recursion).
+def-node-binding:54 and macro:45 are correct-by-design refusals (must NOT
+compile)._
 
 ## Why these 3 rows refuse (and the 2 that must)
 
