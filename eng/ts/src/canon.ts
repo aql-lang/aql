@@ -214,10 +214,13 @@ export function canonValue(v: Value): string {
 // spec subset), so this renders that one signature. Mirrors the shape
 // of eng/go/canon.go::canonFnDef for a single authored sig.
 function canonFnDef(fd: FnDefInfo): string {
-  const params = fd.params
-    .map((p) => `${p.name}:${p.type.toString()}`)
+  const sigs = fd.sigs
+    .map((s) => {
+      const params = s.params.map((p) => `${p.name}:${p.type.toString()}`).join(' ')
+      const returns = s.returns.map((r) => r.toString()).join(' ')
+      const body = s.body.map(canonValue).join(' ')
+      return `[${params}][${returns}][${body}]`
+    })
     .join(' ')
-  const returns = fd.returns.map((r) => r.toString()).join(' ')
-  const body = fd.body.map(canonValue).join(' ')
-  return `fn [[${params}][${returns}][${body}]]`
+  return `fn [${sigs}]`
 }

@@ -44,6 +44,7 @@ import {
   TWord,
   Value,
   type FnParam,
+  type FnSig,
   type InterpSegment,
   type WordInfo,
   type XmlElement,
@@ -695,21 +696,14 @@ function registerSpecWords(r: Registry): void {
         noEvalArgs: new Set([0]),
         handler: (args) => {
           const elems = args[0]!.asList()
-          if (elems.length >= 3 && elems[0]!.vType.matches(TList) && Array.isArray(elems[0]!.data)) {
-            const params: FnParam[] = []
-            for (const pe of elems[0]!.asList()) {
-              // A bare `?` marks the preceding param optional.
-              if (pe.isWord() && pe.asWord().name === '?') {
-                if (params.length > 0) params[params.length - 1]!.optional = true
-                continue
-              }
-              params.push(parseFnParam(pe))
-            }
-            const returns = elems[1]!.asList().map((r) => parseFnReturn(r))
-            const body = elems[2]!.asList()
-            return [newFnDef({ params, returns, body })]
+          if (elems.length === 0 || elems.length % 3 !== 0) {
+            throw new AqlError('fn_invalid_spec', `fn: list length must be a non-zero multiple of 3`)
           }
-          return [newFnDef({ params: [], returns: [], body: elems })]
+          const sigs: FnSig[] = []
+          for (let i = 0; i < elems.length; i += 3) {
+            sigs.push(parseFnTriple(elems[i]!, elems[i + 1]!, elems[i + 2]!))
+          }
+          return [newFnDef({ sigs })]
         },
       },
     ],
@@ -1395,6 +1389,31 @@ function parseModifierSuffix(tok: string): ModifierSuffix {
   return { name: tok.slice(0, idx), forceStack, forceForward, quote, argCount }
 }
 
+// parseFnTriple parses one [params][returns][body] triple into an
+// FnSig. The named form has a params list (`[n:Integer ?]`); the flat
+// form has bare type literals for the param/return slots.
+function parseFnTriple(p: Value, r: Value, b: Value): FnSig {
+  let params: FnParam[] = []
+  if (p.vType.matches(TList) && Array.isArray(p.data)) {
+    for (const pe of p.asList()) {
+      if (pe.isWord() && pe.asWord().name === '?') {
+        if (params.length > 0) params[params.length - 1]!.optional = true
+        continue
+      }
+      params.push(parseFnParam(pe))
+    }
+  } else {
+    // Flat form: the param slot is a bare type (unnamed param).
+    params = [{ name: '', type: parseFnReturn(p) }]
+  }
+  const returns =
+    r.vType.matches(TList) && Array.isArray(r.data)
+      ? r.asList().map((x) => parseFnReturn(x))
+      : [parseFnReturn(r)]
+  const body = b.vType.matches(TList) && Array.isArray(b.data) ? b.asList() : [b]
+  return { params, returns, body }
+}
+
 /**
  * Parse one fn-param token. The spec tokenizer produces a Word per
  * whitespace-split chunk, so a typed param like `n:Integer` arrives
@@ -1547,11 +1566,15 @@ function buildDefinedInspection(name: string, top: Value): Value {
   om.set('kind', newWord('defined'))
   if (top.isFnDef()) {
     const fd = top.asFnDef()
-    const sm = new OrderedMap()
-    sm.set('args', newList(fd.params.map((p) => newString(p.type.leaf())), { eval: false }))
+    const sigMaps = fd.sigs.map((s) => {
+      const sm = new OrderedMap()
+      sm.set('args', newList(s.params.map((p) => newString(p.type.leaf())), { eval: false }))
+      return newMap(sm)
+    })
     const empty = new OrderedMap()
     empty.set('args', newList([], { eval: false }))
-    om.set('signatures', newList([newMap(sm), newMap(empty)], { eval: false }))
+    sigMaps.push(newMap(empty))
+    om.set('signatures', newList(sigMaps, { eval: false }))
   } else {
     om.set('value', top)
     om.set('signatures', newList([], { eval: false }))

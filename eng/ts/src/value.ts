@@ -82,10 +82,15 @@ export interface ForwardMarker {
  * single-overload shape; the full Go FnDefInfo carries multiple
  * overloads (Sigs[]) plus optional Patterns / NoEvalArgs.
  */
-export interface FnDefInfo {
+/** One authored signature of a function definition. */
+export interface FnSig {
   params: FnParam[]
   returns: AqlType[]
   body: Value[]
+}
+
+export interface FnDefInfo {
+  sigs: FnSig[]
 }
 
 export class Value {

@@ -99,6 +99,7 @@ export {
 export type {
   FnDefInfo,
   FnParam,
+  FnSig,
   ForwardMarker,
   InterpSegment,
   MarkInfo,

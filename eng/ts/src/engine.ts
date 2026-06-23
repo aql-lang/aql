@@ -419,49 +419,56 @@ export class Engine {
    * → execFnDefSig" arc) compressed into a single function.
    */
   private dispatchFnDef(name: string, info: FnDefInfo): void {
-    const total = info.params.length
-    const required = info.params.filter((p) => !p.optional).length
+    const maxParams = Math.max(0, ...info.sigs.map((s) => s.params.length))
     // Pre-evaluate forward parens so the matcher sees concrete values.
-    this.preEvalParens(total)
+    this.preEvalParens(maxParams)
 
-    // Try arities from total down to required (optional trailing params
-    // may be omitted), taking the first that matches the available args.
+    // Try each overload, and within it each arity from total down to
+    // the required count (optional trailing params may be omitted).
+    // Take the first that matches the available args.
     let result: import('./match.ts').MatchResult | null = null
+    let chosen: import('./value.ts').FnSig | null = null
     let usedK = 0
-    for (let k = total; k >= required; k--) {
-      const sig: Signature = {
-        args: info.params.slice(0, k).map((p) => p.type),
-        barrierPos: k,
-        handler: () => [],
-      }
-      const fakeEntry: FunctionEntry = {
-        name,
-        signatures: [sig],
-        forwardPrecedence: true,
-        maxForwardArgs: k,
-      }
-      const r = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
-      if (r) {
-        result = r
-        usedK = k
-        break
+    outer: for (const fsig of info.sigs) {
+      const total = fsig.params.length
+      const required = fsig.params.filter((p) => !p.optional).length
+      for (let k = total; k >= required; k--) {
+        const sig: Signature = {
+          args: fsig.params.slice(0, k).map((p) => p.type),
+          barrierPos: k,
+          handler: () => [],
+        }
+        const fakeEntry: FunctionEntry = {
+          name,
+          signatures: [sig],
+          forwardPrecedence: true,
+          maxForwardArgs: k,
+        }
+        const r = matchEntry(fakeEntry, this.stack, this.pointer, this.registry)
+        if (r) {
+          result = r
+          chosen = fsig
+          usedK = k
+          break outer
+        }
       }
     }
-    if (!result) {
+    if (!result || !chosen) {
       throw new AqlError(
         'signature_error',
-        `no matching signature for ${name} (${total} params)\n  = stack: ${this.describeStack()}`,
+        `no matching signature for ${name}\n  = stack: ${this.describeStack()}`,
         name,
       )
     }
 
+    const total = chosen.params.length
     // Bind each param on the def stack so the body can reference it.
     // Provided args bind directly; omitted optional params default to
     // their type's base value. Push the args list for the `args` word.
     const boundArgs: Value[] = []
     for (let i = 0; i < total; i++) {
-      const val = i < usedK ? result.args[i]! : baseValue(info.params[i]!.type)
-      this.registry.pushDef(info.params[i]!.name, val)
+      const val = i < usedK ? result.args[i]! : baseValue(chosen.params[i]!.type)
+      this.registry.pushDef(chosen.params[i]!.name, val)
       boundArgs.push(val)
     }
     this.registry.pushArgs(boundArgs)
@@ -469,13 +476,11 @@ export class Engine {
     let bodyResult: Value[]
     try {
       const sub = new Engine(this.registry)
-      bodyResult = sub.run([...info.body])
+      bodyResult = sub.run([...chosen.body])
     } finally {
       this.registry.popArgs()
-      // Pop in reverse to keep the def stack consistent with multiple
-      // params sharing a name (rare but possible).
-      for (let i = info.params.length - 1; i >= 0; i--) {
-        this.registry.popDef(info.params[i]!.name)
+      for (let i = total - 1; i >= 0; i--) {
+        this.registry.popDef(chosen.params[i]!.name)
       }
     }
 
