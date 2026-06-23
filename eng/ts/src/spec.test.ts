@@ -977,22 +977,34 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       continue
     }
 
-    let j = stream.i
-    while (j < stream.s.length && stream.s[j] !== ' ' && stream.s[j] !== '\t') j++
-    const tok = stream.s.slice(stream.i, j)
-    stream.i = j
-
-    if (tok === '[') {
+    // Structural delimiters are always their own token, even when not
+    // whitespace-separated (`[1 2 3]`, `${{a:1}}`).
+    const ch = stream.s[stream.i]!
+    if (ch === '[') {
+      stream.i++
       out.push(makeListFromElems(readTokens(stream, ']')))
       continue
     }
-    if (tok === ']') {
+    if (ch === ']') {
       if (until !== ']') {
-        throw new Error(`tokenize: unmatched ']' at ${stream.i - 1}`)
+        throw new Error(`tokenize: unmatched ']' at ${stream.i}`)
       }
+      stream.i++
       return out
     }
+    if (ch === '(' || ch === ')') {
+      out.push(newWord(ch))
+      stream.i++
+      continue
+    }
+    if (ch === '}') {
+      throw new Error(`tokenize: unmatched '}' at ${stream.i}`)
+    }
 
+    let j = stream.i
+    while (j < stream.s.length && !isTokenBoundary(stream.s[j]!)) j++
+    const tok = stream.s.slice(stream.i, j)
+    stream.i = j
     out.push(atomicValue(tok))
   }
   if (until === ']') {
@@ -1027,6 +1039,22 @@ function readMap(stream: TokenStream): Value {
   }
   if (child !== undefined && m.size === 0) return newTypedMap(child)
   return newMap(m)
+}
+
+// A token ends at whitespace or any structural delimiter, so tight
+// forms like `[1 2 3]` and `${{a:1}}` tokenise correctly.
+function isTokenBoundary(c: string): boolean {
+  return (
+    c === ' ' ||
+    c === '\t' ||
+    c === '[' ||
+    c === ']' ||
+    c === '(' ||
+    c === ')' ||
+    c === '{' ||
+    c === '}' ||
+    c === '`'
+  )
 }
 
 // parseBacktick splits a backtick template into literal and ${expr}
