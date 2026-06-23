@@ -1,0 +1,64 @@
+# app.aql — wire the graph and run it. The "main".
+#
+# DX probe: composition is the test of an architecture. Here every piece snaps
+# together with plain values — services are values, layers are functions over
+# services, a server is a list of services, transport is one more wrapper. No
+# framework registration, no config DSL: just AQL.
+#
+# Capability note: `serve` is gated by the `process` scope and `listen` by the
+# `network` scope (§4, PERMISSIONS.10) — both already exist, so a restrictive
+# profile gets the in-process service DX but is hard-denied from spawning
+# processes or opening sockets. Running this file therefore declares intent.
+
+"aql:serve" import end          # service / server / serve / pool / wrap / reply
+"aql:net"   import end          # listen / connect
+"aql:rand"  import end          # Rand.uuid (session tokens)
+
+"todo.aql"     import end
+"sessions.aql" import end
+"notify.aql"   import end
+"auth.aql"     import end
+"audit.aql"    import end
+
+# --- the singletons ---------------------------------------------------------
+def notify   ( Notify.New {} )
+def sessions ( Sessions.New {} )
+
+# --- the todo store, sharded for multi-user scale ---------------------------
+# One `TodoStore` worker is single-threaded (the gen_server ceiling, §9.1). A
+# `pool` of N workers with consistent-hash routing by `user` gives state
+# AFFINITY — a given user's requests always land on the same worker, so its
+# bucket lives in exactly one place — while spreading users across cores. The
+# pool is itself just a `Service`, so it composes with everything below.
+def todos ( pool [ TodoStore.New {notify: notify} ]
+                 {size: 4  strategy: ('hash 'user)} )
+
+# --- cross-cutting layers (newest outermost) --------------------------------
+# Pipeline that a todo request flows through:
+#   audit  ->  session gate  ->  owner guard (clear/remove)  ->  patrun  ->  handler
+def front (
+  Audit.log
+    ( Auth.gate sessions
+        ( Auth.own-guard {op:'remove}
+            ( Auth.own-guard {op:'clear} todos ) ) ) )
+
+# --- supervise everything ---------------------------------------------------
+# `restart: 'isolated` = one-for-one: a crashed service is restarted alone,
+# the others keep serving (let-it-crash, §3). Bounded mailboxes give
+# backpressure by default (§8.1).
+#
+# DX FRICTION (see README, gap-adjacent): `overflow` is a SERVER-level option,
+# but `notify` really wants `'drop` (lossy telemetry) while the rest want
+# `'block`. The RFC's server-level granularity forces either a per-service
+# mailbox option or a separate sub-server for notify. Flagged honestly.
+def app ( server [ sessions notify front ]
+               {restart: 'isolated  mailbox: 1024  overflow: 'block} )
+
+# --- expose over HTTP transport ---------------------------------------------
+# `listen` translates wire frames <-> requests (JSON envelope first, §4). The
+# SAME service value is reachable in-process and over the wire; the transport
+# adds nothing to the handler contract.
+listen {http: {port: 8080  path: "/sessions"}} sessions
+listen {http: {port: 8080  path: "/todo"}}     front
+
+serve app          # runs every service as a supervised process; blocks
