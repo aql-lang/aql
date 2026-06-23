@@ -123,6 +123,7 @@ export class Registry {
       noEvalArgs: ns.noEvalArgs,
       fallback: ns.fallback,
       typeArgs: ns.typeArgs,
+      quoteArgs: ns.quoteArgs,
     }
   }
 

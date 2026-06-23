@@ -26,7 +26,7 @@
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
 import { TNode, TScalar, TType, TWord } from './type.ts'
-import type { Value, WordInfo } from './value.ts'
+import { newAtom, type Value, type WordInfo } from './value.ts'
 
 /**
  * isTypeArg reports whether v may fill a typeArgs slot: a bare type
@@ -175,6 +175,13 @@ function tryMatch(
     const rawTok = stack[scanIdx]
     if (!rawTok) break
     if (isStructuralBoundary(rawTok)) break
+    // A quoteArgs slot captures the raw forward Word as an Atom name.
+    if (sig.quoteArgs?.has(fwd) && rawTok.isWord()) {
+      args[fwd] = newAtom(rawTok.asWord().name)
+      fwd++
+      scanIdx++
+      continue
+    }
     const tok = resolveForwardToken(rawTok, sig.args[fwd]!, registry)
     if (!argMatches(sig, fwd, tok, sig.args[fwd]!)) {
       // Optimistic-deferral case (second pass only): a Word naming

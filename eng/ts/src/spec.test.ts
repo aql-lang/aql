@@ -650,11 +650,12 @@ function registerSpecWords(r: Registry): void {
     forwardPrecedence: true,
     signatures: [
       {
-        // Word form: the TWord slot captures the name as data (so the
-        // matcher does not dispatch a registered word like `dup`).
-        args: [TWord],
+        // Word form: the Atom quoteArgs slot captures the name as data
+        // (so the matcher does not dispatch a registered word like `dup`).
+        args: [TAtom],
+        quoteArgs: new Set([0]),
         handler: (args, _ctx, _stk, registry) => {
-          const name = args[0]!.asWord().name
+          const name = args[0]!.asAtom()
           const fn = registry.lookup(name)
           if (fn) return [buildWordInspection(name, fn)]
           const top = registry.topOfDefStack(name)
@@ -778,12 +779,10 @@ function registerSpecWords(r: Registry): void {
   })
 
   // quote: capture the next forward token as data.
-  //   sig [TWord]: convert Word→Atom (so `quote dup` yields atom(dup)
-  //                even when dup is a registered function — the TWord
-  //                slot tells shouldDeferDispatch to keep the Word
-  //                rather than dispatch it).
+  //   sig [Atom] quoteArgs: captures the upcoming Word as an Atom name
+  //                (so `quote dup` yields dup/q).
   //   sig [TAny]:  catch-all passthrough (`quote 5` → 5,
-  //                `quote [1 2]` → [1 2]).
+  //                `quote [1 2]` → (quote [1 2])).
   reg({
     name: 'quote',
     forwardPrecedence: true,
@@ -791,8 +790,9 @@ function registerSpecWords(r: Registry): void {
     // rather than auto-evaluating before the handler sees it.
     signatures: [
       {
-        args: [TWord],
-        handler: (args) => [newAtom(args[0]!.asWord().name)],
+        args: [TAtom],
+        quoteArgs: new Set([0]),
+        handler: (args) => [args[0]!],
       },
       {
         args: [TAny],
@@ -1621,7 +1621,7 @@ function buildTypeInspection(v: Value): Value {
 // defined with its param signatures plus a synthetic 0-arg fallback;
 // a plain value gets kind:defined with its rendered value.
 function buildDefinedInspection(name: string, top: Value): Value {
-  if (top.data === null || isTypeBody(top)) {
+  if (!top.isFnDef() && (top.data === null || isTypeBody(top))) {
     const insp = buildTypeInspection(top).asMap()
     const om = new OrderedMap()
     om.set('name', newString(name))

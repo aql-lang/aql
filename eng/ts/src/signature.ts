@@ -48,6 +48,12 @@ export interface Signature {
    * Mirrors NativeSig.TypeArgs in the Go matcher.
    */
   typeArgs?: Set<number>
+  /**
+   * Positions that capture the next forward Word as an Atom (the name),
+   * suppressing evaluation. Used by quote / inspect. Mirrors
+   * NativeSig.QuoteArgs.
+   */
+  quoteArgs?: Set<number>
 }
 
 export interface NativeSig {
@@ -58,6 +64,7 @@ export interface NativeSig {
   noEvalArgs?: Set<number>
   fallback?: boolean
   typeArgs?: Set<number>
+  quoteArgs?: Set<number>
 }
 
 export interface NativeFunc {
