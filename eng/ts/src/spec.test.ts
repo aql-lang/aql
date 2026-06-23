@@ -13,7 +13,7 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { canon } from './canon.ts'
-import { isValueOfType, pathOf, typeOf } from './coretype.ts'
+import { coerceBoolean, isValueOfType, pathOf, typeOf } from './coretype.ts'
 import { makeScalarHandler } from './make.ts'
 import {
   AqlError,
@@ -146,14 +146,29 @@ function registerSpecWords(r: Registry): void {
       },
     ],
   })
+  // not / and / or — Boolean sigs plus an Any-coercing fallback,
+  // mirroring registerEngSpecBoolean (CoerceBoolean).
+  const notH: Handler = (args) => [newBoolean(!coerceBoolean(args[0]!))]
+  const andH: Handler = (args) => [coerceBoolean(args[1]!) ? args[0]! : args[1]!]
+  const orH: Handler = (args) => [coerceBoolean(args[1]!) ? args[1]! : args[0]!]
   reg({
     name: 'not',
     forwardPrecedence: true,
+    signatures: [{ args: [TBoolean], handler: notH }, { args: [TAny], handler: notH }],
+  })
+  reg({
+    name: 'and',
+    forwardPrecedence: true,
     signatures: [
-      {
-        args: [TBoolean],
-        handler: (args) => [newBoolean(!args[0]!.asBoolean())],
-      },
+      { args: [TBoolean, TBoolean], handler: andH },
+      { args: [TAny, TAny], handler: andH },
+    ],
+  })
+  reg({
+    name: 'or',
+    signatures: [
+      { args: [TBoolean, TBoolean], barrierPos: 1, handler: orH },
+      { args: [TAny, TAny], barrierPos: 1, handler: orH },
     ],
   })
   reg({
@@ -916,9 +931,12 @@ function atomicValue(tok: string): Value {
       return newBoolean(true)
     case 'false':
       return newBoolean(false)
-    case 'null':
     case 'none':
       return newNone()
+    case 'null':
+      // `null` is the atom 'null' in AQL source (the parser lexes the
+      // JSON null literal as an Atom), distinct from the `none` value.
+      return newAtom('null')
   }
   if (/^-?\d+$/.test(tok)) return newInteger(BigInt(tok))
   if (/^-?\d+\.\d+$/.test(tok)) return newDecimal(Number.parseFloat(tok))

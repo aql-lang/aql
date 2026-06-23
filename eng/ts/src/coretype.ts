@@ -6,8 +6,43 @@
 // scalars/lists. The typed-list / typed-map / record-shape branches of
 // IsValueOfType (which need ChildType payloads) and the Disjunct/Enum
 // membership branches are added by their owning port increments.
-import { AqlType, TAny, TNone, TType } from './type.ts'
-import { newList, newTypeLiteral, Value } from './value.ts'
+import {
+  AqlType,
+  TAny,
+  TBoolean,
+  TInteger,
+  TList,
+  TMap,
+  TNone,
+  TNumber,
+  TString,
+  TType,
+} from './type.ts'
+import { newList, newTypeLiteral, OrderedMap, Value } from './value.ts'
+
+/**
+ * coerceBoolean reduces any value to a truthiness, mirroring
+ * eng/go/core_helpers.go::CoerceBoolean: none/empty-string/empty-
+ * container/zero are falsy; everything else is truthy.
+ */
+export function coerceBoolean(v: Value): boolean {
+  if (v.isNone()) return false
+  const t = v.vType
+  if (t.matches(TBoolean)) return v.asBoolean()
+  if (t.matches(TInteger)) return v.asInteger() !== 0n
+  if (t.matches(TNumber)) return v.asFloat() !== 0
+  if (t.equal(TList)) {
+    if (Array.isArray(v.data)) return v.data.length > 0
+    if (v.isTypedList()) return v.asChildType().elements.length > 0
+    return false
+  }
+  if (t.equal(TMap)) {
+    if (v.data instanceof OrderedMap) return v.data.size > 0
+    return false
+  }
+  if (t.matches(TString)) return v.asString().length > 0
+  return true
+}
 
 // Degenerate roots saturate under typeof (they are their own parent).
 const SATURATING_ROOTS = new Set(['Any', 'None', 'Never', 'Absent'])
@@ -77,17 +112,31 @@ function isBareTypeNode(v: Value): boolean {
  *     (v.VType conforms to t.VType);
  *   - otherwise: structural identity on the carried types (best effort).
  */
-/** Structural value equality for concrete scalars/atoms (enum members). */
+/** Structural value equality (scalars, atoms, type literals, lists, maps). */
 function valuesEqual(a: Value, b: Value): boolean {
-  if (!a.vType.equal(b.vType)) {
-    // Integer/Float/String leaves differ but the data may still be
-    // equal across String leaves (Proper vs Empty never coincide).
-    if (!(a.vType.matches(b.vType) || b.vType.matches(a.vType))) return false
+  // Bare type literals compare by their lattice node.
+  if (a.data === null || b.data === null) {
+    return a.data === null && b.data === null && a.vType.equal(b.vType)
   }
-  const ad = a.data
-  const bd = b.data
-  if (typeof ad === 'bigint' && typeof bd === 'bigint') return ad === bd
-  return ad === bd
+  // Lists (plain or typed) compare element-wise.
+  const ae = listElements(a)
+  const be = listElements(b)
+  if (ae !== null && be !== null) {
+    return ae.length === be.length && ae.every((x, i) => valuesEqual(x, be[i]!))
+  }
+  if (ae !== null || be !== null) return false
+  // Maps compare by sorted keys then values.
+  if (a.isMap() && b.isMap()) {
+    const am = a.asMap()
+    const bm = b.asMap()
+    const ak = am.sortedKeys()
+    const bk = bm.sortedKeys()
+    return ak.length === bk.length && ak.every((k, i) => k === bk[i] && valuesEqual(am.get(k)!, bm.get(k)!))
+  }
+  // Scalars / atoms: compatible leaves and equal payload.
+  if (!(a.vType.matches(b.vType) || b.vType.matches(a.vType))) return false
+  if (typeof a.data === 'bigint' && typeof b.data === 'bigint') return a.data === b.data
+  return a.data === b.data
 }
 
 /** Extract a list's elements whether it is a plain or a typed list. */
@@ -133,7 +182,8 @@ export function isValueOfType(v: Value, t: Value): boolean {
     }
     return v.vType.matches(t.vType)
   }
-  // Concrete RHS (structural type bodies) — handled by later increments;
-  // fall back to type identity so simple cases still answer.
-  return v.vType.matches(t.vType)
+  // Concrete RHS that is not a type: `is` is value equality
+  // (`5 is 6` → false, `5 is 5` → true). Structural type-body RHS
+  // (record-shape maps) is handled by a later increment.
+  return valuesEqual(v, t)
 }
