@@ -11,7 +11,7 @@ import {
   TAny,
   TAtom,
   TBoolean,
-  TDecimal,
+  TFloat,
   TForward,
   TFunction,
   TInteger,
@@ -20,6 +20,8 @@ import {
   TMove,
   TNone,
   TString,
+  TStringEmpty,
+  TStringProper,
   TWord,
 } from './type.ts'
 
@@ -123,12 +125,17 @@ export class Value {
     return this.data
   }
 
-  asDecimal(): number {
-    if (this.data === null) throw new Error('AsDecimal: nil data')
+  asFloat(): number {
+    if (this.data === null) throw new Error('AsFloat: nil data')
     if (typeof this.data !== 'number') {
-      throw new Error(`AsDecimal: not a decimal value (got ${typeof this.data})`)
+      throw new Error(`AsFloat: not a float value (got ${typeof this.data})`)
     }
     return this.data
+  }
+
+  /** Back-compat alias for asFloat. */
+  asDecimal(): number {
+    return this.asFloat()
   }
 
   asString(): string {
@@ -224,7 +231,7 @@ export class Value {
     if (this.vType.matches(TInteger)) {
       return String(this.data)
     }
-    if (this.vType.matches(TDecimal)) {
+    if (this.vType.matches(TFloat)) {
       return String(this.data)
     }
     if (this.vType.matches(TBoolean)) {
@@ -263,17 +270,21 @@ export function newInteger(n: bigint | number): Value {
   return new Value(TInteger, big)
 }
 
-export function newDecimal(f: number): Value {
-  return new Value(TDecimal, f)
+export function newFloat(f: number): Value {
+  return new Value(TFloat, f)
 }
 
+/** Back-compat alias: the decimal scalar is named Float in the lattice. */
+export const newDecimal = newFloat
+
 /**
- * Construct a string value with VType = Scalar/String. Empty vs
- * non-empty no longer affects the type — they share the kind, which
- * is what `equal(TString)` checks against.
+ * Construct a string value. The VType carries the concrete leaf so
+ * `typeof` renders the precise name: a non-empty string is
+ * Scalar/String/ProperString, an empty string is
+ * Scalar/String/EmptyString. Mirrors eng/go/value.go::NewString.
  */
 export function newString(s: string): Value {
-  return new Value(TString, s)
+  return new Value(s.length === 0 ? TStringEmpty : TStringProper, s)
 }
 
 export function newBoolean(b: boolean): Value {
