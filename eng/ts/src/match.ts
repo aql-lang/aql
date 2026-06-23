@@ -89,22 +89,18 @@ export function matchEntry(
   for (const sig of sigs) {
     const n = sig.args.length
     if (n === 0) continue
-    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, false)
+    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry)
     if (r) return r
   }
   // Optimistic pass: a forward-side Word that names a registered
   // function is accepted even when the sig wants a different type;
   // engine.shouldDeferDispatch will then defer dispatch via
   // insertForward, and stepLiteral re-type-checks the resolved value
-  // when it flows back. Only used as a fallback so we don't override
-  // a legitimate stack fill (e.g. inside a fn body where the trailing
-  // word is the OUTER caller, not an arg to the inner one).
-  for (const sig of sigs) {
-    const n = sig.args.length
-    if (n === 0) continue
-    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, true)
-    if (r) return r
-  }
+  // A bare function word in the forward window is a hard barrier: forward
+  // collection stops there and the remaining args must come from the
+  // stack (only parentheses pre-evaluate a nested call). So there is no
+  // optimistic cross-barrier deferral — `addq 1 mulq 2 3` is a
+  // signature_error, matching the eng/spec nested-forward contract.
   // 0-arg fallback: if the function declares a 0-arg sig (e.g. `args`,
   // bare keywords), match it with no consumed prefix or forward.
   for (const sig of sigs) {
@@ -156,7 +152,6 @@ function tryMatch(
   pointer: number,
   word: WordInfo | undefined,
   registry: Registry | undefined,
-  optimistic: boolean,
 ): MatchResult | null {
   // sig.barrierPos: 0 = boundary at start (all stack), N = boundary
   // at end (all forward-eligible). The Registry has already
@@ -184,24 +179,8 @@ function tryMatch(
     }
     const tok = resolveForwardToken(rawTok, sig.args[fwd]!, registry)
     if (!argMatches(sig, fwd, tok, sig.args[fwd]!)) {
-      // Optimistic-deferral case (second pass only): a Word naming
-      // a registered function may dispatch to a value of the right
-      // type. Accept the raw Word here so engine.shouldDeferDispatch
-      // defers the outer dispatch via insertForward; stepLiteral will
-      // re-type-check the resolved value at collection time. Strict
-      // pass leaves it to the regular forward-stop / stack-fallback
-      // path; this avoids stealing stack-fillable args inside fn
-      // bodies (e.g. `a b add c add` where the trailing add is the
-      // OUTER caller, not an arg to the inner add).
-      if (optimistic && rawTok.isWord() && registry) {
-        const w = rawTok.asWord() as { name: string }
-        if (registry.lookup(w.name)) {
-          args[fwd] = rawTok
-          fwd++
-          scanIdx++
-          continue
-        }
-      }
+      // A type mismatch (including a bare function-word barrier) stops
+      // forward collection; the rest must come from the stack.
       break
     }
     args[fwd] = tok
