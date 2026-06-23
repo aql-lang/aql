@@ -854,8 +854,22 @@ function registerSpecWords(r: Registry): void {
         args: [TList],
         noEvalArgs: new Set([0]),
         handler: (args) => {
-          const elems = args[0]!.asList()
-          const alts = elems.map((e) => (e.isWord() ? newAtom(e.asWord().name) : e))
+          // A typed list `[:T …]` carries a child constraint each
+          // element must satisfy; a plain list has none.
+          const list = args[0]!
+          const hasChild = list.isTypedList()
+          const child = hasChild ? list.asChildType().child : undefined
+          const elems = hasChild ? list.asChildType().elements : list.asList()
+          const alts = elems.map((e) => {
+            const v = e.isWord() ? newAtom(e.asWord().name) : e
+            if (child !== undefined && !isValueOfType(v, child)) {
+              throw new AqlError(
+                'type_error',
+                `enum: element ${v.toString()} does not satisfy ${child.vType.leaf()}`,
+              )
+            }
+            return v
+          })
           return [newEnum(alts)]
         },
       },
