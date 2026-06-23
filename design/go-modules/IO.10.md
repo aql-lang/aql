@@ -17,14 +17,14 @@ Everything that touches the **filesystem** is `aql:io`. `aql:os` is
 
 | Go `os` surface | Home |
 |---|---|
-| `Open`, `ReadFile`, `WriteFile`, `Create`, `Mkdir`, `Remove`, `Rename`, `ReadDir`, `Stat`, `Lstat`, `*os.File`, and the `exists`/`is-*` queries derived from them | **`aql:io`** |
-| `Getenv`/`LookupEnv`/`Setenv`/`Environ`, `Args`, `Hostname`, `Getpid`, `Getwd`, `UserHomeDir`, `TempDir`, `Exit` | **`aql:os`** |
+| `Open`, `ReadFile`, `WriteFile`, `Create`, `Mkdir`, `Remove`, `Rename`, `ReadDir`, `Stat`, `Lstat`, `*os.File`, the `exists`/`is-*` queries, **and the location getters `Getwd`/`UserHomeDir`/`TempDir`** | **`aql:io`** |
+| `Getenv`/`LookupEnv`/`Setenv`/`Environ`, `Args`, `Hostname`, `Getpid`, `Exit` | **`aql:os`** |
 
-`UserHomeDir`/`TempDir`/`Getwd` return path **strings** without touching
-the filesystem, so they stay in `aql:os`; the moment a path is *resolved
-against the filesystem* (stat, open, list), it is `aql:io`. One module,
-one `FileOps` capability, one `fileops` policy scope governs all
-filesystem access.
+Anything that **names or resolves a filesystem path** — including the
+location getters `cwd`/`home-dir`/`temp-dir` — is `aql:io`; `aql:os` keeps
+only the non-filesystem process/environment remainder. One module, one
+`FileOps` capability, one `fileops` policy scope governs all filesystem
+access.
 
 ## 2. Import & namespace
 
@@ -79,6 +79,22 @@ is an `AqlError`, not a silent default.
 `read`/`stat`/`list` gate on `disk.read`; `write`/`append`/`mkdir`/
 `remove`/`rename`/`copy` gate on `disk.write` (§6).
 
+## 5.1 Filesystem locations
+
+The location getters from Go `os` live here, not in `aql:os` — they name
+filesystem paths. Zero-arg (inner sigs `BarrierPos: 0`), returning a path
+String.
+
+| Go source | aql word | signature | one-line doc | refinement |
+|---|---|---|---|---|
+| `os.Getwd` | `cwd` | `→ String` | The current working directory. | `(value,error)` → value-or-error `io-cwd`; queries the process/filesystem, so gates on `disk.read`. |
+| `os.UserHomeDir` | `home-dir` | `→ String` | The current user's home directory path. | `(value,error)` → value-or-error `io-home-dir`; env-derived path string. |
+| `os.TempDir` | `temp-dir` | `→ String` | The default temp-file directory. | total; env-derived path string. |
+
+`home-dir`/`temp-dir` derive from the environment (no filesystem read);
+`cwd` queries the working directory. They return path **strings** — they
+do not read content — and pair with `aql:filepath` for manipulation.
+
 ## 6. Policy / capabilities
 
 All filesystem words use the host **`FileOps`** capability
@@ -88,9 +104,12 @@ All filesystem words use the host **`FileOps`** capability
 
 | words | `fileops` op | global cap |
 |---|---|---|
-| `exists`, `is-file`, `is-dir`, `is-symlink`, `read`, `stat`, `list` | `read` | `disk.read` |
+| `exists`, `is-file`, `is-dir`, `is-symlink`, `read`, `stat`, `list`, `cwd` | `read` | `disk.read` |
 | `write`, `append`, `copy`, `remove`, `rename` | `write` | `disk.write` |
 | `mkdir` | `mkdir` | `disk.write` |
+
+(`home-dir` / `temp-dir` are env-derived path strings and read no
+filesystem, so they are ungated — like reading a config value.)
 
 `HostPolicy(r) == nil` ⇒ ungated (the default opt-in posture); a sandbox
 installs a policy to restrict, and `install:false` makes the accessor
@@ -110,11 +129,12 @@ with `AsConcreteString`; never panic.
 ## 8. Overlap
 
 - **`aql:os`** — only the non-filesystem remainder of the Go `os` module
-  (env/args/identity/exit, §1). It produces path *strings*
-  (`cwd`/`home-dir`/`temp-dir`); `aql:io` resolves them against the
-  filesystem. No word overlap.
+  (env/args/identity/exit, §1). It names no filesystem paths at all — even
+  `cwd`/`home-dir`/`temp-dir` live here in `aql:io` (§5.1). No word
+  overlap.
 - **`aql:filepath` / `aql:path-util`** — pure path-string manipulation;
-  `aql:io` consumes the paths they build. No overlap.
+  `aql:io` produces the location strings (`cwd`/`home-dir`/`temp-dir`) and
+  consumes the paths these modules build. No word overlap.
 - **`Bytes` type** — a future `read-bytes` / `Bytes`-accepting `write`
   ([BYTES.10.md](BYTES.10.md)) is the binary path; out of scope here.
 
@@ -132,6 +152,8 @@ import "aql:io"
 "data" IO.list                                    # ["a.csv" "b.csv"]
 "out.txt" IO.stat get "size"                      # 5
 "out.txt" "arch/out.txt" IO.rename                # move
+IO.cwd                                            # "/home/user/project"
+IO.home-dir                                       # "/home/user"
 "nope.txt" IO.read                                # ERROR:io-read (operations raise)
 ```
 
@@ -153,12 +175,14 @@ Reference: `lang/go/native/io_module.go` (existing) + `io.go`
 
 - `lang/go/native/io_module.go` — add the new natives (`exists`,
   `is-file`, `is-dir`, `is-symlink`, `append`, `mkdir`, `remove`,
-  `rename`, `copy`, `list`, `stat`), each calling `EffectiveFileOps(r)`;
-  predicate handlers return `false` on any non-policy error; inner sigs
-  `BarrierPos: -1`.
+  `rename`, `copy`, `list`, `stat`; plus the §5.1 location getters `cwd`,
+  `home-dir`, `temp-dir`), each calling `EffectiveFileOps(r)`; predicate
+  handlers return `false` on any non-policy error; inner sigs
+  `BarrierPos: -1` (arg words) / `BarrierPos: 0` (the zero-arg getters).
 - `lang/go/capabilities/capabilities.go` — extend the `FileOps`
   interface + OS-backed and in-memory impls with `Stat`/`Lstat`/`Mkdir`/
-  `Remove`/`Rename`/`ReadDir` if absent.
+  `Remove`/`Rename`/`ReadDir` and `Getwd`/`UserHomeDir`/`TempDir` if
+  absent (a `Mem` impl returns scripted values for reproducible specs).
 - `lang/go/policy` — the `fileops` op→cap bindings above already exist in
   `GlobalsFor` (`read`→`disk.read`, `write`/`mkdir`→`disk.write`); no new
   scope.

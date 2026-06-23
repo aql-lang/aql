@@ -118,8 +118,9 @@ the existing whole-string utility module:
 ### Filesystem (all in `aql:io`)
 
 `aql:io` owns **all** filesystem functionality — content I/O, tree
-mutation, directory listing, `stat`, and the read-only existence/type
-predicates (`exists`/`is-file`/`is-dir`/`is-symlink`). `aql:os`
+mutation, directory listing, `stat`, the read-only existence/type
+predicates (`exists`/`is-file`/`is-dir`/`is-symlink`), and the
+location getters (`cwd`/`home-dir`/`temp-dir`). `aql:os`
 ([OS](OS.10.md)) keeps only the **non-filesystem** remainder of the Go
 `os` module (env, args, identity, exit). Both share the one `FileOps`
 capability + `fileops` policy scope.

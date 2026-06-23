@@ -16,14 +16,16 @@ termination. `aql:os` curates the **process/environment** slice of that
 surface. It is the first genuinely *side-effecting, host-fingerprinting*
 module in the curated family, so it is gated with care.
 
-**File operations are OUT of scope.** `os.Open`, `os.ReadFile`,
-`os.Create`, `os.Mkdir`, `os.Remove`, `os.Stat`, and the `*os.File`
-handle type all belong to `aql:io` (the `IO` namespace, backed by the
-`FileOps` capability — see `lang/go/native/io_module.go` and
-[`../FILE-ACCESS.10.md`](../FILE-ACCESS.10.md)). `aql:os` never reads or
-writes file *content*; it only exposes the environment/process/identity
-words below. `TempDir` and `home-dir` return path **strings** — they do
-not touch the filesystem — so they live here, not in `aql:io`.
+**All filesystem functionality is OUT of scope** — including the
+filesystem-location getters. `os.Open`, `os.ReadFile`, `os.Create`,
+`os.Mkdir`, `os.Remove`, `os.Stat`, the `*os.File` handle, **and the
+location getters `os.Getwd` (cwd), `os.UserHomeDir` (home dir), and
+`os.TempDir` (temp dir)** all belong to `aql:io` (the `IO` namespace,
+backed by the `FileOps` capability — see [`IO.10.md`](IO.10.md),
+`lang/go/native/io_module.go`, and
+[`../FILE-ACCESS.10.md`](../FILE-ACCESS.10.md)). `aql:os` exposes only the
+**environment / process / identity** words below; anything that names or
+resolves a filesystem path is `aql:io`.
 
 ## 2. Why curated
 
@@ -35,10 +37,9 @@ The raw `go:` reflection bridge would expose `os.LookupEnv` as
 - collapses `LookupEnv`'s `(value, ok)` to **value-or-None** so a missing
   variable is `None` (testable with `is None`) rather than an
   out-of-band boolean;
-- collapses the `(value, error)` returns (`cwd`, `hostname`, `home-dir`)
-  to **value-or-error** (`r.AqlError`);
-- renames to kebab idiom (`Getenv`→`getenv`, `Getpid`→`pid`,
-  `Getwd`→`cwd`, `UserHomeDir`→`home-dir`, `TempDir`→`temp-dir`);
+- collapses the `(value, error)` return (`hostname`) to
+  **value-or-error** (`r.AqlError`);
+- renames to kebab idiom (`Getenv`→`getenv`, `Getpid`→`pid`);
 - shapes `Environ` (a `[]string` of `"K=V"`) into a **Map**, and `Args`
   into a **List[String]**;
 - and, most importantly, **routes every effect through a host capability
@@ -73,14 +74,15 @@ dispatch".
 | `os.Args` | `args` | `→ List[String]` | The process command-line arguments. | `[]string` → **List[String]**. Element 0 is the program name, as in Go. |
 | `os.Hostname` | `hostname` | `→ String` | The host's network name. | `(value, error)` → value-or-error. |
 | `os.Getpid` | `pid` | `→ Integer` | This process's id. | `int` → Integer. |
-| `os.Getwd` | `cwd` | `→ String` | The current working directory. | `(value, error)` → value-or-error. |
-| `os.UserHomeDir` | `home-dir` | `→ String` | The current user's home directory path. | `(value, error)` → value-or-error. Pure string — no filesystem access. |
-| `os.TempDir` | `temp-dir` | `→ String` | The default directory for temporary files. | `string` → String. Pure string — no filesystem access. |
 | `os.Exit` | `exit` | `Integer → ` (never returns) | Terminate the host process with the given status code. | void → never-returns. **Dangerous** — terminates the whole host; off by default (§7). |
 
-Zero-arg words (`environ`, `args`, `hostname`, `pid`, `cwd`, `home-dir`,
-`temp-dir`) read nothing from the stack; their inner native sigs declare
-`BarrierPos: 0` (constant-style, like `math.pi` in `math.go`). The
+The filesystem-location getters `cwd` (`os.Getwd`), `home-dir`
+(`os.UserHomeDir`), and `temp-dir` (`os.TempDir`) live in `aql:io`, not
+here — see [`IO.10.md`](IO.10.md).
+
+Zero-arg words (`environ`, `args`, `hostname`, `pid`) read nothing from
+the stack; their inner native sigs declare `BarrierPos: 0`
+(constant-style, like `math.pi` in `math.go`). The
 arg-taking words (`getenv`, `setenv`, `unsetenv`, `exit`) declare
 `BarrierPos: -1` so both the stack form `"K" Os.getenv` and the swap
 form `Os.getenv "K"`-style dispatch resolve.
@@ -120,8 +122,6 @@ return is unwrapped into the `AqlError`. Codes:
 | `os-setenv-failed` | `setenv` | `os.Setenv` returns an error (e.g. invalid name). |
 | `os-unsetenv-failed` | `unsetenv` | `os.Unsetenv` returns an error. |
 | `os-hostname-failed` | `hostname` | `os.Hostname` returns an error. |
-| `os-cwd-failed` | `cwd` | `os.Getwd` returns an error. |
-| `os-home-dir-failed` | `home-dir` | `os.UserHomeDir` returns an error (e.g. `$HOME` unset). |
 | `os-denied` | any gated word | the host policy denies the operation (the wrapper returns the `*policy.Denied` verbatim; surface its `Code`). |
 | `os-not-installed` | any gated word | the env/process capability scope is `install:false` — the seam stub returns a `capability_not_installed`-style error, never a nil deref. |
 
@@ -141,8 +141,9 @@ a **host-provided capability seam** mirroring `FileOps`
 
 - a `capabilities.HostEnv` / `capabilities.HostProc` interface in
   `lang/go/capabilities/` (`Getenv`, `LookupEnv`, `Setenv`, `Unsetenv`,
-  `Environ`; `Args`, `Hostname`, `Pid`, `Getwd`, `UserHomeDir`,
-  `TempDir`, `Exit`) with an **OS-backed default** (delegates to `os.*`,
+  `Environ`; `Args`, `Hostname`, `Pid`, `Exit` — the location getters
+  `Getwd`/`UserHomeDir`/`TempDir` live on the `FileOps` seam used by
+  `aql:io`, not here) with an **OS-backed default** (delegates to `os.*`,
   the `OSFileOps` analogue) and an **in-memory / fake** implementation
   for specs and sandboxes (the `MemFileOps` analogue — fixed hostname,
   scripted env map, no real `Exit`);
@@ -165,8 +166,8 @@ from `policy.GlobalsFor` first). Real scope/cap names from
 | `getenv`, `environ` | `env` | `env` | on if `env` installed (read) |
 | `setenv`, `unsetenv` | `env` | `env` | **off by default** (mutating) |
 | `args` | `process` | `process` | on if `process` installed |
-| `pid`, `cwd` | `process` | `process` + `system-info` | on if installed |
-| `hostname`, `home-dir`, `temp-dir` | `process` | `system-info` | on if installed (host fingerprint) |
+| `pid` | `process` | `process` + `system-info` | on if installed |
+| `hostname` | `process` | `system-info` | on if installed (host fingerprint) |
 | `exit` | `process` | `process` | **off by default** (dangerous) |
 
 Notes for the gate:
@@ -179,11 +180,11 @@ Notes for the gate:
   vs `set`/`unset`) and the predicate args (`{"name": …}`) so a profile
   can allow reads while denying writes, just as fileops allows `read`
   while denying `write`.
-- **`process` scope + `system-info`.** `args`/`pid`/`cwd` identify the
-  process; `hostname`/`home-dir`/`temp-dir` additionally leak host
-  fingerprint, so they bind the `system-info` global cap (shared with
-  `aql:runtime`). A determinism-seeking sandbox denies/stubs them via
-  the fake `HostEnv`/`HostProc`.
+- **`process` scope + `system-info`.** `args`/`pid` identify the
+  process; `hostname` additionally leaks host fingerprint, so it binds
+  the `system-info` global cap (shared with `aql:runtime`). A
+  determinism-seeking sandbox denies/stubs them via the fake
+  `HostEnv`/`HostProc`.
 - **`exit` is the dangerous one.** It terminates the **host** process,
   not the AQL engine, so it MUST gate on `process` and be **off by
   default** in every sandbox profile. The recommended default is
@@ -199,20 +200,20 @@ Notes for the gate:
 
 ## 8. Overlap
 
-- **`aql:io` (`IO`).** Owns all file *content* I/O and the `*os.File`
-  handle (`IO.read`, `IO.write`, `IO.stdin/stdout/stderr`, the
-  `StreamKind` handle) via the `FileOps` capability. `aql:os` owns
-  environment/process/identity and returns directory **paths** as
-  strings only — it never opens or reads a file. Dividing line: if it
-  touches file content or a file descriptor, it is `aql:io`; if it is a
-  process/environment attribute, it is `aql:os`.
+- **`aql:io` (`IO`).** Owns **all** filesystem functionality — content
+  I/O, tree mutation, listing, `stat`, the existence/type predicates,
+  and the filesystem-location getters `cwd`/`home-dir`/`temp-dir` (see
+  [`IO.10.md`](IO.10.md)) — via the `FileOps` capability. `aql:os` owns
+  only environment/process/identity and never names or resolves a
+  filesystem path. Dividing line: anything filesystem (incl. a path
+  getter) is `aql:io`; a process/environment attribute is `aql:os`.
 - **`aql:runtime` (`Runtime`).** Shares the `system-info` cap and the
   "host fingerprint / determinism" concern, but reports the **Go
   runtime** (GOOS, NumCPU, …) rather than the OS process. No word
   overlap.
 - **`aql:filepath` / `aql:path-util`.** Pure path-string manipulation;
-  `aql:os` produces the path strings (`cwd`, `home-dir`, `temp-dir`)
-  those modules then manipulate. No word overlap.
+  `aql:io` produces the location strings (`cwd`/`home-dir`/`temp-dir`)
+  those modules then manipulate. `aql:os` produces none. No word overlap.
 
 ## 9. Examples (args-before form)
 
@@ -242,8 +243,10 @@ Os.args len                                     # → arg count incl. program
 
 ## 10. Open questions / out of scope
 
-- **Out of scope:** all file ops (`Open`/`ReadFile`/`Create`/`Stat`/…)
-  → `aql:io`; `os/exec` process spawning (a separate, even more
+- **Out of scope:** all filesystem functionality — file ops
+  (`Open`/`ReadFile`/`Create`/`Stat`/…) **and the location getters**
+  (`Getwd`/`UserHomeDir`/`TempDir`) — → `aql:io` ([`IO.10.md`](IO.10.md));
+  `os/exec` process spawning (a separate, even more
   dangerous capability — a future `aql:exec` with its own `process`
   gate); `os.Getenv`-style `os.Expand`; signals (`os/signal`); user/
   group lookup (`os/user`).
