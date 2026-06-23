@@ -71,6 +71,8 @@ import {
   newMark,
   newMove,
   newNone,
+  newObjectType,
+  ObjectTypeInfo,
   newParenExpr,
   newString,
   newTypedList,
@@ -646,7 +648,7 @@ function registerSpecWords(r: Registry): void {
         handler: (args) => {
           const base = args[0]!
           // refine Record [ {k:T} … ] merges the pair-maps into a
-          // record-shape map. Object refinement isn't ported yet.
+          // record-shape map.
           if (base.data === null && base.vType.leaf() === 'Record' && Array.isArray(args[1]!.data)) {
             const om = new OrderedMap()
             for (const pair of args[1]!.asList()) {
@@ -654,6 +656,16 @@ function registerSpecWords(r: Registry): void {
               for (const k of m.keys()) om.set(k, m.get(k)!)
             }
             return [newMap(om)]
+          }
+          // refine Object {field:Type …} — a fresh object type with the
+          // base Object as parent. refine Base {…} extends an existing
+          // object type, inheriting its fields. The struct name is empty
+          // until a `def Name …` binding stamps it.
+          if (base.data === null && base.vType.leaf() === 'Object' && args[1]!.isMap()) {
+            return [buildObjectType('Object', new OrderedMap(), args[1]!)]
+          }
+          if (base.data instanceof ObjectTypeInfo && args[1]!.isMap()) {
+            return [buildObjectType(base.data.path, base.data.fields, args[1]!)]
           }
           return unsupportedMake('refine')
         },
@@ -766,6 +778,12 @@ function registerSpecWords(r: Registry): void {
               registry.pushDef(bindName, value)
               return []
             }
+          }
+          // A capitalised name binding an object type stamps the struct
+          // name onto it, so `inspect Name` reports struct:Name and a
+          // child type can record `Object/Name` as its parent path.
+          if (value.data instanceof ObjectTypeInfo && value.data.name === '') {
+            value.data.name = name
           }
           registry.pushDef(name, value)
           return []
@@ -1691,6 +1709,17 @@ function buildWordInspection(
 function strList(items: string[]): Value {
   return newList(items.map((s) => newString(s)), { eval: false })
 }
+// buildObjectType assembles an object-type value from a parent path,
+// the parent's inherited fields, and a field map. Inherited fields keep
+// their order and are followed by the map's own fields.
+function buildObjectType(parentPath: string, inherited: OrderedMap, fieldMap: Value): Value {
+  const fields = new OrderedMap()
+  for (const k of inherited.keys()) fields.set(k, inherited.get(k)!)
+  const m = fieldMap.asMap()
+  for (const k of m.keys()) fields.set(k, m.get(k)!)
+  return newObjectType(new ObjectTypeInfo('', parentPath, fields))
+}
+
 function buildTypeInspection(v: Value): Value {
   const om = new OrderedMap()
   // A concrete atom is treated as a name to look up.
@@ -1731,6 +1760,20 @@ function buildTypeInspection(v: Value): Value {
       sigs.push(newMap(sm))
     }
     om.set('signatures', newList(sigs, { eval: false }))
+    return newInspect(om)
+  }
+  // Object type (refine Object {…}): kind:object with its struct name,
+  // optional parent path (omitted for a direct child of the base
+  // Object), and its fields rendered as a name→type-leaf map.
+  if (v.data instanceof ObjectTypeInfo) {
+    const info = v.data
+    om.set('type', newString('Type'))
+    om.set('struct', newString(info.name))
+    om.set('kind', newWord('object'))
+    if (info.parentPath !== 'Object') om.set('parent', newString(info.parentPath))
+    const fields = new OrderedMap()
+    for (const k of info.fields.keys()) fields.set(k, newString(info.fields.get(k)!.vType.leaf()))
+    om.set('fields', newMap(fields))
     return newInspect(om)
   }
   // Bare type literals (incl. the none value) and concrete values.

@@ -30,6 +30,7 @@ import {
   TString,
   TStringEmpty,
   TStringProper,
+  TType,
   TWord,
   TXml,
   TXmlInterp,
@@ -532,6 +533,34 @@ export class OptionsData {
 /** Construct an Options instance (`make Options {…}`). */
 export function newOptions(map: OrderedMap): Value {
   return new Value(TMap, new OptionsData(map))
+}
+
+/**
+ * An object TYPE built by `refine Object {…}` / `refine Base {…}`.
+ * `name` is empty until a `def Name …` binding stamps it. `parentPath`
+ * is the lattice path of the parent (the base `Object`, or another
+ * object type's path like `Object/Bar`). `fields` maps field name →
+ * type literal, with inherited fields first. Mirrors ObjectTypeInfo in
+ * eng/go.
+ */
+export class ObjectTypeInfo {
+  name: string
+  readonly parentPath: string
+  readonly fields: OrderedMap
+  constructor(name: string, parentPath: string, fields: OrderedMap) {
+    this.name = name
+    this.parentPath = parentPath
+    this.fields = fields
+  }
+  /** The full lattice path of this object type, once named. */
+  get path(): string {
+    return `${this.parentPath}/${this.name}`
+  }
+}
+
+/** Construct an object-type value (a Type-branch value carrying ObjectTypeInfo). */
+export function newObjectType(info: ObjectTypeInfo): Value {
+  return new Value(TType, info)
 }
 
 /**
