@@ -335,6 +335,30 @@ dispatch-recording base. The base (`OpCallDynamic`) exists and works for the
 simple `m.f 2 3` shape; each row needs a different extension to feed it. This is
 the multi-session build, partitioned by row.
 
+## module-parselang:23 ROOT CAUSE pinned + fix lead
+
+Confirmed at code level: `ParseLang.register calc (fn …)` is a HANDLER-ONLY
+native (`parselang.go` ~line 57-67: `CompileEffect: CompileStoresFn`, a
+`Handler`, NO `ReturnsFn`). In check mode native handlers do NOT run, so
+`parseRegisterHandler` never installs `parse_calc` into the export
+`OrderedMap`. Therefore `ParseLang.parse_calc …` does not resolve in check
+mode — `ParseLang get parse_calc` misses, the call collapses, and the bare
+`ParseLang` ModuleExport (empty ID, untracked) flows into the final `get 1`,
+which refuses ("operand of unknown provenance at get"). Everything else in the
+row compiles (single mark, at the final get).
+
+FIX LEAD (tractable, scoped to lang/go/modules): give `parselang-register` (and
+the mirror `minilang-register`) a check-mode `ReturnsFn` that performs the SAME
+export installation `parseRegisterHandler` does — register `parse_<name>` into
+the exports `OrderedMap` at check time from the concrete atom+fn args (both are
+statically available: the atom is QuoteArgs, the fn is a concrete Function
+literal). Then `ParseLang.parse_calc` resolves to the installed wrapper and
+dispatches like any module wrapper; the remaining step is recording that
+wrapper call so `get 1` sees a tracked List. SAFETY to verify: the export-map
+mutation is per-import-instance and idempotent with the runtime register, but
+confirm it does not leak across check passes (BeginCheckMode reset) and that the
+differential gate stays green (the row's runtime answer must be unchanged).
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
