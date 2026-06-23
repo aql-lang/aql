@@ -178,8 +178,10 @@ power.
 
 **Layering — `add` stacks, the handler receives `prior`.** Adding a handler for a
 pattern that already has one does **not** overwrite it; it **pushes** onto a stack
-for that exact pattern signature (raw patrun overwrites — the `Service` keeps the
-stack), newest outermost. A layering handler opts into the third, optional
+for that exact pattern signature (raw patrun overwrites — `patrunAddHandler` in
+`lang/go/native/native_patrun.go` replaces `m.side[sig]` on a duplicate pattern —
+so the per-pattern handler stack must live in the **`Service` layer**, not in
+patrun), newest outermost. A layering handler opts into the third, optional
 argument — the continuation **`prior`** — and chooses whether and how to invoke
 the handler it shadowed:
 
@@ -312,9 +314,12 @@ proxying across them (§6).
   AQL still lacks (only HTTP-client `fetch` exists) — later phase.
 
 Capability gating: in-process `call`/`add` need no new capability; `serve`
-(processes) is gated like `spawn`; `listen`/`connect` are gated by the
-**`network`** scope (`PERMISSIONS.10.md`) — restrictive profiles get the service
-DX but cannot open sockets.
+(processes) is gated like `spawn` (the **`process`** scope, `PROCESSES.0.md` §7);
+`listen`/`connect` are gated by the **`network`** scope — restrictive profiles get
+the service DX but cannot open sockets. Both scopes **already exist** in
+`PERMISSIONS.10.md` (`process` and `network` are defined scopes, hard-denied by the
+`sandbox`/`read-only` profiles), so gating is enforceable on day one — confirming
+they exist is a prerequisite, not new permission work.
 
 ## 5. Consolidating the existing CLI servers
 
@@ -818,7 +823,12 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
 
 - **Phase 1: in-process service.** `service`, `add`, `call`, `send`, `state`,
   `no_match`, plus `prior` layering + `wrap` middleware (§1) — all core. Pure
-  request→handler over reused patrun, state in a `Store`. No processes.
+  request→handler over reused patrun, state in a `Store`. No processes. **This is
+  the recommended first implementation slice** of the whole actors/services effort:
+  it depends only on patrun + `execFnDefLiteral` + `Store` and needs **none** of
+  the `PROCESSES.0.md` substrate (no `spawn`, mailbox, `Pid`, or `context.Context`),
+  so it is the cheapest, highest-signal way to validate the `[req state] -> reply`
+  handler contract and the `prior`/`wrap` stack before any concurrency lands.
 - **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the
