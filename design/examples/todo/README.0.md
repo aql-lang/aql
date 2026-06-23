@@ -44,12 +44,12 @@ client.aql                app.aql graph                         process layer
 connect {http} ──call──▶  listen(/todo) ─▶ Audit.log
                                           └▶ Auth.gate ──whoami──▶ sessions svc
                                              └▶ own-guard (skipped: not clear/remove)
-                                                └▶ pool ('hash 'user) ─▶ TodoStore #k
-                                                   └▶ patrun {op:'create} ─▶ handler
+                                                └▶ pool {strategy:"hash" key:"user"} ─▶ TodoStore #k
+                                                   └▶ patrun {op:"create"} ─▶ handler
                                                       ├─ mutate state.users[alice]
-                                                      └─ send {tag:'created} ─▶ Notify svc
+                                                      └─ send {tag:"created"} ─▶ Notify svc
                                                                                  └─ whereis presence:alice
-                                                                                    └─ send {op:'event} ─▶ presence proc
+                                                                                    └─ send {op:"event"} ─▶ presence proc
                                                                                                             └─ fan out to client sinks
 ```
 
@@ -70,12 +70,12 @@ whether the RFC fixes for them are ergonomic. Honest verdicts:
 **Verdict: the split reads cleanly, but the two-context rule must be taught.**
 The revised RFC says: patrun routes on **scalar tags**, `ParseFnParams` types
 and binds `name:Type` slots. In `presence.aql` this is pleasant —
-`{cmd: 'ping reply: Pid}` obviously means "route on `cmd:'ping`, bind a typed
+`{cmd: "ping" reply: Pid}` obviously means "route on `cmd:"ping"`, bind a typed
 `reply`." But note the asymmetry the app exposes: **services** (`todo.aql`)
 *cannot* use binding slots in `add` patterns — they route on scalar tags and
 destructure off `req` by hand (`req.text`, `req.user`), whereas **processes**
 (`presence.aql`) get the `name:Type` sugar in `receive`. A newcomer will try
-`add {op:'create text:String}` and be surprised `text` is not bound. The RFC
+`add {op:"create" text:String}` and be surprised `text` is not bound. The RFC
 should state plainly: *binding slots are a `receive` feature, not an `add`
 feature.* (This is consistent and defensible — it just needs to be said.)
 **Resolved:** `../PROCESSES.0.md` §3 and `../SERVICES.0.md` §1 now state this
@@ -83,9 +83,9 @@ contrast explicitly in both directions.
 
 ### Gap B — patrun routing limits (top-level scalars only)
 **Verdict: never hit the limit in normal modelling — but only because we knew.**
-Every routed field is a top-level atom (`op:'create`, `tag:'toggled`). We never
-wanted to route on a nested field. The one place it *would* have tempted us —
-authorization on `{user:{role:'admin}}` — we instead expressed as a `prior`
+Every routed field is a top-level scalar string (`op:"create"`, `tag:"toggled"`).
+We never wanted to route on a nested field. The one place it *would* have tempted
+us — authorization on `{user:{role:"admin"}}` — we instead expressed as a `prior`
 layer (`own-guard`) comparing `req.@user` to `req.user`, which is arguably
 better design anyway. So the limit nudged us toward flatter messages and
 cross-cutting guards. Worth keeping the "flatten your tags" note prominent.
@@ -93,8 +93,8 @@ cross-cutting guards. Worth keeping the "flatten your tags" note prominent.
 ### Gap C — reply correlation
 **Verdict: the correlation-tag convention works and is the right phase-1 call.**
 `client.aql` matches the `subscribe` reply with `{ok:Boolean user:String}` and
-the push with `{push:Atom user:String}`, never a bare `{}`. `presence.aql`
-answers a ping with `{tag:'pong …}`. It is mildly noisy that the caller and
+the push with `{push:String user:String}`, never a bare `{}`. `presence.aql`
+answers a ping with `{tag:"pong" …}`. It is mildly noisy that the caller and
 callee must agree on a tag by convention with no compiler help — this is
 exactly the itch the phase-2 `call`/`reply` sugar (a dedicated per-call
 channel) is meant to scratch, and the app makes that future value concrete.
@@ -129,7 +129,7 @@ hot path) while the todo store wants `'block` (backpressure). The RFC sets
 option or a separate sub-server for `notify`. See the flagged comment in
 `app.aql`. Recommend the RFC allow per-service mailbox/overflow overrides, with
 the server value as the default. **Resolved:** `../SERVICES.0.md` §8.1 now
-specifies a per-service override — `server [ worker (metrics {overflow: 'drop}) ]
+specifies a per-service override — `server [ worker (metrics {overflow: "drop"}) ]
 {…}` — with precedence per-service > server default > built-in default.
 
 ---

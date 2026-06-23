@@ -26,20 +26,20 @@ def New fn [[opts:Map] [Service] [
   # Arrives via `send` (no reply expected). If the user is offline (`whereis`
   # returns None), drop it — presence is best-effort. `send` to a dead/unknown
   # pid is silently dropped anyway (PROCESSES.0 §3), so this stays simple.
-  add {tag: 'created} [ [req state] => [ push-to req.user req  None ] ] svc
-  add {tag: 'toggled} [ [req state] => [ push-to req.user req  None ] ] svc
-  add {tag: 'removed} [ [req state] => [ push-to req.user req  None ] ] svc
-  add {tag: 'cleared} [ [req state] => [ push-to req.user req  None ] ] svc
+  add {tag: "created"} [ [req state] => [ push-to req.user req  None ] ] svc
+  add {tag: "toggled"} [ [req state] => [ push-to req.user req  None ] ] svc
+  add {tag: "removed"} [ [req state] => [ push-to req.user req  None ] ] svc
+  add {tag: "cleared"} [ [req state] => [ push-to req.user req  None ] ] svc
 
   # --- subscribe: deferred reply ---------------------------------------
   # A client asks to subscribe its sink to a user's events. We must ensure the
   # presence process is live before confirming. Return `defer`, do the work,
   # then `reply` to the caller via the reply handle on `req.@from`.
-  add {op:'subscribe} [ [req state] => [
+  add {op: "subscribe"} [ [req state] => [
       def pid ( whereis (Sessions.presence-name req.user) )
       if (none? pid)
         [ raise offline `${req.user} is not connected` ]
-        [ send {op:'subscribe  sink: req.sink} pid     # wire sink into presence
+        [ send {op: "subscribe"  sink: req.sink} pid   # wire sink into presence
           reply req.@from {ok: true  user: req.user}   # deferred reply
           defer ]                                       # sentinel: "answered out of band"
   ] ] svc
@@ -52,5 +52,5 @@ def New fn [[opts:Map] [Service] [
 def push-to fn [[user:String ev:Map] [None] [
   def pid ( whereis (Sessions.presence-name user) )
   if (none? pid) [ None ]
-    [ send (set 'op 'event ev) pid  None ]    # {op:'event tag:… id:… user:…}
+    [ send (set op "event" ev) pid  None ]    # {op:"event" tag:… id:… user:…}
 ]]

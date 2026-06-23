@@ -32,17 +32,17 @@ export "Auth" {
 # short-circuits — `prior` is never called, so the real handler never runs.
 def gate fn [[sessions:Service svc:Service] [Service] [
   wrap [ [req state prior] => [
-      def who ( call {op:'whoami  token: req.token} sessions )   # -> uid | None
+      def who ( call {op: "whoami"  token: req.token} sessions )   # -> uid | None
       if (none? who)
         [ raise unauthorized "missing or invalid session token" ]   # short-circuit
-        [ state set 'caller who                 # ambient identity for this request
-          prior (set '@user who req) ]          # run the rest with identity injected
+        [ state set caller who                  # ambient identity for this request
+          prior (set @user who req) ]           # run the rest with identity injected
   ] ] svc
 ]]
 
 # --- owner-only guard (prior layer) ----------------------------------------
 # Layer this onto a destructive pattern, e.g. on the router:
-#     own-guard {op:'clear} router
+#     own-guard {op: "clear"} router
 # It runs BEFORE the shadowed handler, asserts the caller owns the target user,
 # then delegates with `prior`. A pre-check decorator: pre-process + delegate,
 # no post-processing.

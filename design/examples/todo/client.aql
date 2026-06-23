@@ -21,15 +21,15 @@ def sessions ( connect {http: "http://localhost:8080/sessions"} )
 def todos    ( connect {http: "http://localhost:8080/todo"} )
 
 # --- log in -----------------------------------------------------------------
-def session ( call {op:'login  user: "alice"} sessions )
-def token   ( session get 'token )
+def session ( call {op: "login"  user: "alice"} sessions )
+def token   ( session get token )
 
 # --- WRITE path: create a todo ----------------------------------------------
 # A write is NOT idempotent: a blind retry could double-create. So no `retries`;
 # on an ambiguous failure (timeout/down — the request MAY have run) we reconcile
 # rather than guess. `overload` definitely never ran, so it is safe to resubmit.
 def created (
-  do [ call {op:'create  token: token  user: "alice"  text: "write the RFC"} todos
+  do [ call {op: "create"  token: token  user: "alice"  text: "write the RFC"} todos
          {timeout: (TimeUtil.seconds 5)} ]
   error [ case [
       [get code eq timeout/q]  [ reconcile-create "alice" "write the RFC" ]  # unknown
@@ -42,7 +42,7 @@ def created (
 # Reads ARE idempotent, so auto-retry is safe; degrade to a stale/empty view on
 # persistent failure rather than erroring the UI.
 def items (
-  do [ call {op:'list  token: token  user: "alice"} todos
+  do [ call {op: "list"  token: token  user: "alice"} todos
          {timeout: (TimeUtil.seconds 2)  retries: 3  idempotent: true} ]
   error [ case [
       [get code eq timeout/q]   [ [] ]                       # show empty, try later
@@ -56,14 +56,15 @@ def items (
 # (via notify's deferred-reply `subscribe`) will `send` pushes here, which we
 # drain with a correlated `receive`. The reply to `subscribe` is itself a
 # tagged map so we match it specifically, not with a stray-catching `{}` (§10).
-send {op:'subscribe  token: token  user: "alice"  sink: self} todos
+send {op: "subscribe"  token: token  user: "alice"  sink: self} todos
 receive [ {ok: Boolean user: String} [ "subscribed" ] ]   # the deferred reply
 
 # Drain one push event, or give up after 60s. `push`/`user` are typed binding
-# slots; `after` bounds the wait so we never block forever (PROCESSES.0 §3).
+# slots (Strings — push tags are scalar strings); `after` bounds the wait so we
+# never block forever (PROCESSES.0 §3).
 receive [
-  {push: Atom user: String} [ `event ${push} for ${user}` ]
-  (after 60000)             [ "no events" ]
+  {push: String user: String} [ `event ${push} for ${user}` ]
+  (after 60000)               [ "no events" ]
 ]
 
 # --- reconciliation stubs (illustrative) ------------------------------------
