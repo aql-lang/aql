@@ -157,10 +157,19 @@ mechanism — validation, auth, caching, audit, soft-delete, timestamps all laye
 **without touching the store**:
 
 ```aql
-# Stamp created/updated times on every save, then delegate to the store:
-add {role: "entity"  cmd: "save"} [ [req state prior] => [
-    def stamped ( set updated (now) req.ent )
-    prior (set ent stamped req)
+# Stamp `updated` on every save, then delegate to the store.
+# Use `wrap` (not a `prior`) so it applies to EVERY save regardless of which
+# store matched — see the caveat below.
+wrap [ [req state prior] => [
+    if (eq req.cmd "save")
+      [ prior (set ent (set updated (now) req.ent) req) ]
+      [ prior req ]
+] ] bus
+
+# Per-action layering (this store's `save` only): `prior` is right here.
+add {role: "entity"  cmd: "save"  name: "audit"} [ [req state prior] => [
+    require-immutable req.ent                # audit rows can't be edited
+    prior req
 ] ] bus
 
 # Blanket audit around every entity op (any cmd):
@@ -168,6 +177,16 @@ wrap [ [req state prior] => [ def out (prior req)  audit req out  out ] ] bus
 ```
 
 This is precisely Seneca's entity-action chaining, with no new concept.
+
+> **`prior` vs `wrap` across canon specificities (the trap).** Stores register at
+> *different* patrun specificities (a default `{role:"entity" cmd:"save"}`, a
+> base-specific `{… base:"app"}`, …). A `prior` layer added at one signature wraps
+> **only that signature's stack** — it does *not* wrap a more-specific store's
+> handler, because patrun routes that request to a different entry. So a
+> cross-cutting concern that must apply to **every** save *whichever store
+> handles it* (timestamps, audit, validation) must be a **`wrap`** (which wraps
+> whatever matched), not a `prior` at the least-specific pattern. Reserve `prior`
+> for decorating *one* store's action. (General rule: `SERVICES.0.md` §1.)
 
 ## 6. Query model — dropping Seneca's `$`-suffix
 

@@ -238,6 +238,19 @@ wrap layers (outer → inner)  →  patrun match  →  per-pattern prior stack  
 — all sharing the service's single-threaded `state`, so a caching or metrics
 layer keeps its data in `state` with no locks.
 
+**`prior` decorates one pattern signature; `wrap` decorates whatever matched.**
+This distinction bites when handlers are registered at *different* patrun
+specificities. A `prior` layer added at `{op:'save}` pushes onto the stack **for
+that exact signature only** — it does *not* wrap a more-specific handler such as
+`{op:'save kind:'audit}`, because patrun routes the audit request to a different
+stack entirely. So a cross-cutting concern that must apply **regardless of which
+specificity matched** (a blanket timestamp on every save, an audit on every op)
+must be a **`wrap`**, not a `prior` at a less-specific pattern — `wrap` runs around
+the chosen handler whatever its specificity, whereas a `prior` only layers the
+signature it was added to. Use `prior` to decorate *a specific action*; use `wrap`
+for *ambient* concerns. (This is the trap a multi-store entity layer hits — see
+`ENTITY-STORES.0.md` §5.)
+
 **Scope: local and synchronous.** `prior`/`wrap` compose handlers *within one
 service's handling of one message*; they never cross a process boundary, so they
 stay zero-cost direct calls even when the service is `serve`d. Cross-cutting that
