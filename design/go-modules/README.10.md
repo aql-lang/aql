@@ -115,6 +115,19 @@ the existing whole-string utility module:
 |---|---|---|---|
 | Unicode classification (`is-alpha`/`is-digit`/`is-space`/…) + case mapping | [STRING-UTIL](STRING-UTIL.10.md) | `aql:string-util` (`StringUtil`) | none |
 
+### Filesystem (all in `aql:io`)
+
+`aql:io` owns **all** filesystem functionality — content I/O, tree
+mutation, directory listing, `stat`, and the read-only existence/type
+predicates (`exists`/`is-file`/`is-dir`/`is-symlink`). `aql:os`
+([OS](OS.10.md)) keeps only the **non-filesystem** remainder of the Go
+`os` module (env, args, identity, exit). Both share the one `FileOps`
+capability + `fileops` policy scope.
+
+| Area | doc | home | policy gate |
+|---|---|---|---|
+| filesystem content / tree / listing / stat / existence predicates | [IO](IO.10.md) | `aql:io` (`IO`) | `fileops` (`disk.read`/`disk.write`) |
+
 ## Shared conventions (every note assumes these)
 
 These are the kernel/module rules the per-package notes do **not**
