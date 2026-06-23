@@ -75,8 +75,9 @@ order, and you never have to track what is sitting on the stack:
 
 - `f a b c` binds `a`, `b`, `c` to the first, second, third parameters.
 - Calls compose by parenthesising: `(f a b) g c`.
-- The same rule covers every word — built-ins, your own `def fn`s,
-  module words, and `import`.
+- The same rule covers built-ins, your own `def fn`s, and `import`.
+- One exception: a dotted module word (`MathUtil.min`) auto-invokes from
+  what's already on the stack, so call it args-first (`3 7 MathUtil.min`).
 
 The stack forms (`c b a f`, `10 3 sub`) remain fully equivalent and are
 there for point-free pipelines, but forward form is what you reach for
