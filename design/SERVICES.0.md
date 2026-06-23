@@ -112,6 +112,15 @@ processes **one request at a time** (in-process: the caller's goroutine; served:
 the process's single goroutine — the gen_server guarantee, no locks). Reuses the
 existing `patrunAddHandler` registration shape.
 
+> **An `add` pattern routes; it does not bind.** Unlike a `receive` clause
+> (`PROCESSES.0.md` §3), where `name:Type` fields are typed binding slots parsed
+> by `ParseFnParams`, an `add` pattern is **scalar-tag routing only** — it picks
+> *which* handler runs and binds nothing. The whole request arrives as `req`, and
+> destructuring its payload (`req.text`, `req.id`) is the handler's job. So
+> `add {op:'create text:String} …` does **not** bind `text`; write
+> `add {op:'create} [ [req state] => [ … req.text … ] ]`. (Binding slots are a
+> `receive` feature, not an `add` feature — see `PROCESSES.0.md` §3.)
+
 ### `call` (core) — synchronous request → reply
 
 ```
@@ -178,8 +187,10 @@ power.
 
 **Layering — `add` stacks, the handler receives `prior`.** Adding a handler for a
 pattern that already has one does **not** overwrite it; it **pushes** onto a stack
-for that exact pattern signature (raw patrun overwrites — the `Service` keeps the
-stack), newest outermost. A layering handler opts into the third, optional
+for that exact pattern signature (raw patrun overwrites — `patrunAddHandler` in
+`lang/go/native/native_patrun.go` replaces `m.side[sig]` on a duplicate pattern —
+so the per-pattern handler stack must live in the **`Service` layer**, not in
+patrun), newest outermost. A layering handler opts into the third, optional
 argument — the continuation **`prior`** — and chooses whether and how to invoke
 the handler it shadowed:
 
@@ -312,9 +323,12 @@ proxying across them (§6).
   AQL still lacks (only HTTP-client `fetch` exists) — later phase.
 
 Capability gating: in-process `call`/`add` need no new capability; `serve`
-(processes) is gated like `spawn`; `listen`/`connect` are gated by the
-**`network`** scope (`PERMISSIONS.10.md`) — restrictive profiles get the service
-DX but cannot open sockets.
+(processes) is gated like `spawn` (the **`process`** scope, `PROCESSES.0.md` §7);
+`listen`/`connect` are gated by the **`network`** scope — restrictive profiles get
+the service DX but cannot open sockets. Both scopes **already exist** in
+`PERMISSIONS.10.md` (`process` and `network` are defined scopes, hard-denied by the
+`sandbox`/`read-only` profiles), so gating is enforceable on day one — confirming
+they exist is a prerequisite, not new permission work.
 
 ## 5. Consolidating the existing CLI servers
 
@@ -536,6 +550,21 @@ server [ svc ] {mailbox: 1024  overflow: 'block}
     or reroutes.
   - **`'drop`** — the new message is discarded and the delivery returns; lossy,
     for best-effort/telemetry traffic (a `'drop_oldest` variant evicts the head).
+
+**Per-service override.** `mailbox`/`overflow` on the `server` set the **default**
+for its services, but a single supervised app routinely mixes policies — a lossy
+telemetry sink wants `'drop` while a worker wants `'block`. Rather than force each
+policy into its own `serve ( server [..] {..} )`, a service carries its own opts
+map where it is placed in the server, overriding the server default:
+
+```aql
+server [ worker  (metrics {mailbox: 4096  overflow: 'drop}) ]
+  {mailbox: 1024  overflow: 'block}        # server default; metrics overrides it
+```
+
+Precedence is **per-service > server default > built-in default** (`1024` /
+`'block`). This keeps one server/one supervision tree even when its services need
+different backpressure, instead of fragmenting the tree just to vary a mailbox.
 
 **`send` (async)** resolves against the policy: enqueue and return `None` if there
 is room; otherwise block / raise `overload` / drop. An optional bound on blocking
@@ -818,7 +847,12 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
 
 - **Phase 1: in-process service.** `service`, `add`, `call`, `send`, `state`,
   `no_match`, plus `prior` layering + `wrap` middleware (§1) — all core. Pure
-  request→handler over reused patrun, state in a `Store`. No processes.
+  request→handler over reused patrun, state in a `Store`. No processes. **This is
+  the recommended first implementation slice** of the whole actors/services effort:
+  it depends only on patrun + `execFnDefLiteral` + `Store` and needs **none** of
+  the `PROCESSES.0.md` substrate (no `spawn`, mailbox, `Pid`, or `context.Context`),
+  so it is the cheapest, highest-signal way to validate the `[req state] -> reply`
+  handler contract and the `prior`/`wrap` stack before any concurrency lands.
 - **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the

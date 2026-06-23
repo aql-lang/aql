@@ -1,0 +1,37 @@
+# audit.aql — an audit/trace log as ambient middleware (`wrap`).
+#
+# DX probe: this is the textbook `wrap` case (SERVICES.0 §1) — a concern that
+# applies to EVERY request regardless of which pattern matches, expressed once.
+# Contrast with a catch-all `add {} […]`, which is the *least*-specific patrun
+# entry and fires only when nothing else matches; a `wrap` decorates the chosen
+# handler whatever it is. Multiple `wrap`s nest, newest outermost, so stacking
+# `audit` over `Auth.gate` gives:  audit → gate → patrun match → handler.
+
+"aql:serve" import end
+
+export "Audit" {
+  log: log/r
+}
+
+# `log <svc>` -> Service   (same value, now audited)
+def log fn [[svc:Service] [Service] [
+  wrap [ [req state prior] => [
+      def started ( now )
+      do [
+        def out ( prior req )                       # run the rest of the pipeline
+        record {at: started  op: req.op  user: req.@user  ok: true}
+        out
+      ]
+      # An application error from a handler propagates UNCHANGED (§8) — we only
+      # observe it, tag the audit row, and re-raise (bare `raise`) so the caller
+      # still sees the original error. Same shape as the §8.2 `[ raise ]` default.
+      error [
+        record {at: started  op: req.op  user: req.@user  ok: false  err: (get code)}
+        raise
+      ]
+  ] ] svc
+]]
+
+# Illustrative sink — in a real app this would itself be a served service or a
+# stream (`aql:stream`). Kept trivial so the DX of `wrap` stays the focus.
+def record fn [[row:Map] [None] [ None ]]

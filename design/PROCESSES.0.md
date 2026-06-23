@@ -209,11 +209,13 @@ This deliberately mirrors the existing goroutine/fork patterns in
 an optional `after <ms>` body. The primary semantics are **consume-front +
 dispatch** (not selective):
 
-1. Build a patrun matcher from the clause patterns (reusing
-   `native_patrun.go`'s `coercePattern` and the `internal/patrun` trie). The
+1. Build a patrun matcher from the **scalar-tag** part of each clause pattern
+   (reusing `native_patrun.go`'s `coercePattern` and the `internal/patrun` trie —
+   see "clause matching" below for what is and is not handed to patrun). The
    matcher maps a message's scalar fields to the most-specific clause.
 2. Lock the mailbox. Take the **front** (oldest) message and match it. If it
-   matches a clause, remove it and run that clause body (on the process's own
+   matches a clause, remove it, **bind the clause's typed field slots** from the
+   message (see "clause matching"), run that clause body (on the process's own
    registry) and return its result. If it matches **no** clause, run the
    catch-all `{}` clause if present, else raise `no_match` — an unmatched message
    is *not* silently saved (that is what kept BEAM mailboxes growing).
@@ -225,6 +227,63 @@ Because patrun keys on `map[string]string`, the **message convention is the
 tagged map**: messages are maps whose discriminating fields (e.g. `cmd`) drive
 the match, just as Erlang uses tagged tuples. Non-map messages are handled via a
 catch-all clause (`{}` matches anything in patrun).
+
+### clause matching: routing vs. binding (two layers)
+
+A `receive` clause pattern is **not** raw patrun. patrun does neither type-
+matching nor field binding (`coercePattern`, `native_patrun.go`, requires every
+pattern *value* to be a **concrete Scalar** and matches by `ValToString` string-
+equality; `Find` returns the stored handle and binds nothing). The clause surface
+in §4/§10 therefore needs two cooperating layers, and the RFC pins the split
+explicitly:
+
+1. **Scalar-tag routing — patrun.** Only the clause's **concrete-Scalar** fields
+   are coerced into the patrun key/value match: `{cmd: 'inc}`, `{cmd: 'get}`,
+   `{cmd: 'stop}`. This is exactly what `coercePattern` already accepts, so the
+   routing layer reuses the existing matcher with no patrun changes. patrun picks
+   the most-specific clause by these tags alone.
+2. **Type slots + binding — `eng.ParseFnParams`.** A `name:Type` field in a clause
+   (e.g. `reply: Pid`, `n: Integer`) is **not** a patrun match value — a type
+   literal is non-concrete (`Data == nil`) and `coercePattern` would reject it. It
+   is instead a **destructuring binding slot**, handled by the same fn-param parser
+   used everywhere else in the language (`eng.ParseFnParams`, which already supports
+   `name:Type` patterns — see `lang/go/CLAUDE.md`, "Lambda Syntax"). Once patrun has
+   routed to a clause, the matched message's named fields are destructured, type-
+   checked against the slot types, and bound into the clause body's scope.
+
+In short: **patrun routes on scalar tags; ParseFnParams types and binds the
+remaining fields.** A clause may use either layer or both. Splitting the clause
+pattern into its scalar-tag subset (→ patrun) and its `name:Type` subset (→
+ParseFnParams) is a build-time step over the clause list; neither layer is
+extended and both already exist.
+
+> **The binding layer is specific to `receive`.** Type-slot binding is a property
+> of a `receive` *clause*, not of patrun matching in general. The service-layer
+> `add` (`SERVICES.0.md` §1) deliberately does **not** bind pattern fields: an
+> `add` pattern is scalar-tag routing only, the whole request arrives as `req`,
+> and the handler destructures it by hand (`req.text`). So
+> `add {op:'create text:String} …` does not bind `text`, whereas the `receive`
+> clause `{op:'create text:String} […]` does. Same patrun routing underneath; the
+> `name:Type` binding pass is layered on only by `receive`.
+
+### patrun routing limits (hard contract)
+
+The routing layer inherits patrun's matching constraints, which authors must
+treat as a hard contract:
+
+- **Top-level scalar fields only.** `coerceSubject` (`native_patrun.go`) silently
+  **drops** non-scalar subject fields, so only top-level `String`/`Integer`/
+  `Float`/`Boolean`/`Atom` tags participate in routing.
+- **No nested / list / absence matching.** Nested discrimination such as
+  `{user: {role: 'admin}}` is **not** supported by the router — a nested map is a
+  non-scalar value and is dropped. Flatten the discriminating field to a top-level
+  tag (`{user-role: 'admin}`) if it must drive the match.
+- **Non-map messages** match only via the catch-all `{}` clause (which matches
+  anything in patrun).
+
+These limits apply to the *routing* tags only; the `name:Type` binding layer can
+still destructure and bind nested fields once a clause is chosen — it just cannot
+*route* on them.
 
 ### selective receive (opt-in, bounded)
 
@@ -252,10 +311,12 @@ bounded by construction. Most code never needs `{select: true}`.
   authors add `after` where they need a timeout.
 - **Bounded mailbox (diverges from BEAM):** mailboxes are bounded with a
   configurable overflow policy — `'block` (backpressure, default), `'fail`
-  (raise `overload`), or `'drop` — per `SERVICES.0.md` §8.1. This is a deliberate
-  divergence from BEAM's unbounded mailbox, whose unbounded growth is its classic
-  overload/OOM failure mode. The bound is what makes the demotion of selective
-  receive coherent: with a bounded mailbox there is no unbounded save-set.
+  (raise `overload`), or `'drop` — per `SERVICES.0.md` §8.1, where capacity and
+  policy default at the `server` and may be **overridden per service**. This is a
+  deliberate divergence from BEAM's unbounded mailbox, whose unbounded growth is
+  its classic overload/OOM failure mode. The bound is what makes the demotion of
+  selective receive coherent: with a bounded mailbox there is no unbounded
+  save-set.
 
 ## 4. Language surface (new core words)
 
@@ -273,9 +334,15 @@ summaries and examples.
   that `<msg>` is immutable** (§6) and raises otherwise. `<pid>` may be a `Pid`
   *or* a registered name (atom/string).
 - **`receive [ {pat} [body] … (after <ms> [body]) ] -> result`** — take the front
-  mailbox message and dispatch it by patrun clause (§3); block when the mailbox is
-  empty. Returns the chosen clause's result. An optional `{select: true}` restores
-  bounded selective receive (§3) for the rare out-of-order case.
+  mailbox message and dispatch it by clause (§3). Each clause pattern is matched in
+  **two layers** — scalar-tag **routing** via patrun, then `name:Type` **binding**
+  via `eng.ParseFnParams` (§3, "clause matching") — so a clause may both route on a
+  tag (`{cmd: 'get}`) and bind a typed field (`reply: Pid`) into its body. Blocks
+  when the mailbox is empty. Returns the chosen clause's result. The optional
+  `after <ms>` clause's deadline reuses the existing `TTimeout` machinery
+  (`lang/go/native/native_misc.go`) rather than a fresh timer; `after 0` polls once
+  and otherwise fires immediately. An optional `{select: true}` restores bounded
+  selective receive (§3) for the rare out-of-order case.
 - **`register <name> <pid>`** — bind a name to a pid in the shared registry.
 - **`whereis <name> -> Pid`** — look up a registered name; `None` if absent.
 - **`unregister <name>`** — remove a name binding.
@@ -323,7 +390,11 @@ future ergonomic but is excluded now to keep the rule simple.
 ## 7. Safety & capability integration
 
 "Safe" is half the goal, so `spawn` is wired into the existing object-capability
-model (`design/PERMISSIONS.10.md`). Process creation is gated behind the
+model (`design/PERMISSIONS.10.md`). The **`process` scope already exists** in that
+design (it maps `process.spawn`/`shell.exec`, and the built-in `sandbox`/
+`read-only`/`compute` profiles already hard-deny it), so `spawn` slots in as a new
+`process.spawn`-gated word — a prerequisite to confirm before phase 1, not a new
+permission to invent. Process creation is gated behind the
 `process` hard cap (or a dedicated `concurrency` scope), so the restrictive
 built-in profiles (`sandbox`, `compute`, `read-only`) **cannot spawn
 processes**, while `trusted`/`full` can. Denials carry the usual blame chain
@@ -382,9 +453,13 @@ implementation.)
 # dispatches three message shapes (front message matched against the clauses).
 def counter-loop fn [[n:Integer] [Never] [
   receive [
-    {cmd: 'inc}            [ inc n counter-loop ]          # tail-recurse with n+1
-    {cmd: 'get reply: Pid} [ send n reply  counter-loop ]  # send count to caller, loop
-    {cmd: 'stop}           [ ]                              # fall through → process exits
+    # `cmd: 'inc` is a patrun scalar route; the clause binds nothing.
+    {cmd: 'inc}            [ inc n counter-loop ]                       # → tail-recurse with n+1
+    # `cmd: 'get` routes (patrun); `reply: Pid` is a typed binding slot
+    # (ParseFnParams, §3) — NOT a patrun match value. The reply is a tagged
+    # map so the caller can match it specifically (see below).
+    {cmd: 'get reply: Pid} [ send {tag: 'count count: n} reply  counter-loop ]
+    {cmd: 'stop}           [ ]                                          # route on cmd:'stop → process exits
   ]
 ]]
 
@@ -395,22 +470,33 @@ send {cmd: 'inc} 'counter
 send {cmd: 'inc} 'counter
 send {cmd: 'get reply: self} 'counter
 
-receive [ {} [ ] ]   # receive the reply (catch-all) -> 2
+# Match the counter's tagged reply specifically: route on `tag: 'count` (patrun),
+# bind `count: Integer` (ParseFnParams). A bare `{}` catch-all would match ANY
+# stray message, not this reply — so phase 1 ships a minimal correlation tag
+# rather than leaving replies to a catch-all (Open Q #2, decided).
+receive [ {tag: 'count count: Integer} [ count ] ]   # -> 2
 
 send {cmd: 'stop} 'counter
 ```
 
-Note the conventions in play: messages are **tagged maps** (the `cmd` field
-drives patrun matching); a process passes **`self`** so the counter can reply;
-and the loop carries state purely as a binding (`n`), never shared.
+Note the conventions in play: messages are **tagged maps** (the `cmd` field is a
+patrun scalar route, §3); a clause's `name:Type` fields (`reply: Pid`,
+`count: Integer`) are typed **binding slots**, not match values; a process passes
+**`self`** so the counter can reply; replies carry a **correlation tag**
+(`tag: 'count`) so the caller matches them specifically; and the loop carries
+state purely as a binding (`n`), never shared.
 
 ## Open questions
 
 1. **`self` at top level** — return `None`, or raise? (Leaning `None` for
    composability.)
-2. **Reply correlation** — phase 1 leaves request/reply to user convention
-   (`reply: self` + a `receive`). Should a minimal `call`/`reply` sugar land
-   now, or wait for the phase-2 `gen_server`? (Leaning: wait.)
+2. **Reply correlation** — *decided:* phase 1 ships a **minimal correlation tag**
+   convention (a fixed `tag:` route on replies, aligned with `SERVICES.0.md` §1's
+   `@from` reply handle) rather than leaving every reply to a bare `{}` catch-all
+   — a catch-all matches *any* stray message, not specifically the awaited reply
+   (§10). The full `call`/`reply` sugar (synchronous request→reply on a dedicated
+   per-call channel) still waits for the phase-2 `gen_server`; phase 1 only fixes
+   the example to correlate by tag.
 3. **`send` return value** — return the message (chains naturally) or the pid
    (Erlang's `!` returns the message)? (Leaning: the message.)
 4. **Non-map messages** — rely on the empty-pattern catch-all, or add an
