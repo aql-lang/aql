@@ -203,17 +203,24 @@ NOT pass through `carrierResults` (no `CARRES rand-list-of` line), so its
 result carrier is produced but never recorded as a closure call. The
 residual is then untraceable → refuse.
 
-**Fix (narrower than module-test's 4-feature stack): route the NoEvalArgs
-module-wrapper check-dispatch through the closure-recording path** so
-`list-of` records a `RecordClosureCall` (its `[Rand.int 0 10]` body → a
-closure unit, its result → a tracked operand). This is one fix in the
-shared module-wrapper check-dispatch (execFnDefLiteral / execFnDefSig +
-CallAQL under shareCheckState); it does NOT need call-site inlining,
-zero-count-for, or fn-value dispatch. It MUST be gated behind the full
-`make verify-bytecode` (the dispatch path is shared by every module
-wrapper). If it lands clean, `module-rand:38` clears (refusalCeiling 5→4)
-and likely helps `map-from` and similar code-body wrappers. This is the
-recommended NEXT row to attempt — start here, not at module-test:38.
+**Fix (narrower than module-test's 4-feature stack): make `list-of`'s
+dispatch RECORD a closure call** so its `[Rand.int 0 10]` body → a closure
+unit and its result → a tracked operand.
+
+CORRECTION (further tracing): `r.list-of`'s dispatch goes through NEITHER
+the `execFnDefSig`/`CallAQL` path (a `FNDEFSIG` probe never fired) NOR
+`carrierResults` (no `CARRES rand-list-of`/`list-of` line). So the result
+`N_…` (the final `List`) is produced by some OTHER path — most likely the
+Rand-instance `get`/method dispatch for `r.list-of` (where `r =
+(Rand.with-seed 2)` is a Rand instance, not the module export). That exact
+dispatch function is NOT yet pinned; pin it FIRST (instrument the Rand
+instance's method/get handling), then route it through the
+closure-recording machinery (`tryRecordClosure` / `RecordClosureCall`).
+The fix does NOT need call-site inlining, zero-count-for, or fn-value
+dispatch, and MUST be gated behind the full `make verify-bytecode` (the
+path is shared). If it lands clean, `module-rand:38` clears
+(refusalCeiling 5→4) and likely helps `map-from`. Recommended NEXT row —
+but the dispatch site needs pinning before the one-line claim holds.
 
 ## Discipline for the build
 
