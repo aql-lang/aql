@@ -119,18 +119,42 @@ def c1 1  def mk fn [[c1:Integer] [List] [[c1]]]  mk 9
   deferred-evaluated returned list binds, so it conservatively declines rather
   than risk baking the WRONG one (`[9]`).
 
-### Option A (compile correctly) — subtle, higher risk
-Model the deferred-evaluation scope: a returned list literal whose words resolve
-at post-return (module) scope, not the fn's param scope. Done correctly the
-compiled program returns `[1]`, matching. This is a genuine feature (deferred-
-eval provenance), and the failure mode of getting it wrong is a SILENT wrong
-answer (`[9]`) — so it must be driven entirely by the differential gate.
-- Risk: higher than Row 1. The whole point of the current refusal is that
-  distinguishing the two `c1` bindings is exactly what's hard; a naive
-  compilation returns `[9]`. Worth doing only with careful differential
-  coverage of the param-vs-module-binding shadowing cases.
+### Option A (compile correctly) — ATTEMPTED, blocked on a missing VM feature
+A build attempt (worktree, reverted clean) confirmed a sound compilation does NOT
+fit without a substantial new VM feature. Precise root cause:
+- **Interpreter:** splices mk's body INLINE (`eng/go/core_helpers.go:162`
+  `buildFnBodyHandler`) and runs a SINGLE end-of-run `autoEvalStack`
+  (`eng/go/engine.go:991`). The returned `[[c1]]` is auto-evaluated AFTER the
+  param frame is torn down, so `c1` resolves in MODULE scope → `[1]`.
+- **Compiler refusal is SOUND:** `AnalyseFnBody` (`eng/go/carrier.go:2308`) runs
+  the body in an ISOLATED `sub.Run` (`carrier.go:2434`) whose end-of-run
+  `autoEvalStack` fires WHILE the param `c1` is still bound, so the inner `[c1]`
+  resolves to the PARAM carrier (`Integer`) → residual `[[Integer]]` →
+  `materialise` fails on the carrier → refuse at `eng/go/emit.go:1426`. The param
+  carrier POISONS the residual, so the compiler can never bake `[9]`. (Confirmed:
+  the shadowing matrix — deeper `[[[c1]]]`, later-rebind `… mk 9 def c1 2` → `[2]`,
+  the no-module-c1 `undefined_word` case — all fall back faithfully today.)
+- **The blocker:** to compile, mk's residual must stay the RAW deferred list
+  `[[word(c1)]]` and be folded by the existing top-level deferred-list machinery
+  (`autoEvalList` → const-fold, `engine.go:3051`) — which ALREADY handles
+  module-scope deferred words correctly (`def c1 1 [[c1]] def c1 2` compiles to
+  `[[2]]`). BUT the bytecode VM has **NO deferred auto-eval**: `runProgram`
+  (`vm.go:161-217`) has no final `autoEvalStack`, `OpCallNative` (`vm.go:693-735`)
+  calls handlers on raw stack args with no `autoEvalList`, and the VM fails loudly
+  on raw Words in results (`tapeCoupled`, `vm.go:123`). So baking the raw list is
+  sound ONLY when mk's result lands at the TOP-LEVEL residual (folded at compile
+  time); the moment it is CONSUMED downstream (`mk 9 0 get`, `mk 9 size`) the VM
+  would operate on the unresolved `word(c1)` while the interpreter auto-evals the
+  consumed arg in module scope — a SILENT WRONG ANSWER. Suppressing
+  `AnalyseFnBody`'s auto-eval to keep the residual raw has corpus-wide blast
+  radius and opens exactly that hazard.
 
-### Option B (keep refusing) — zero cost, faithful
+PREREQUISITE for Option A: give the bytecode VM a deferred-auto-eval pass (both
+end-of-run AND consumed-arg `autoEvalList`, with the interpreter's module-scope
+resolution) — a substantial new VM feature, not an emit-side tweak. Matches this
+note's original "subtle, higher risk" assessment.
+
+### Option B (keep refusing) — RECOMMENDED, in place
 Leave it. The fallback returns `[1]`. Same P7 caveat.
 
 ## Determinism observation (flagged for investigation, NOT an active bug)
@@ -152,16 +176,16 @@ proves real. Do not chase it speculatively.
 
 - **`macro.tsv:45`:** **DONE** — compiled to a terminal trap (see the UPDATE
   above). refusals 2 → 1.
-- **`def-node-binding.tsv:54`:** **keep refusing (Option B)** — the LAST refusal.
-  A correct compilation needs deferred-eval-scope provenance modeling (the
-  returned list `[c1]` is evaluated post-return in MODULE scope, so `c1` = 1 not
-  the param 9); subtle, with a silent-wrong-answer failure mode (a naive compile
-  bakes `[9]`). It falls back faithfully today (returns `[1]`). Only attempt it
-  with thorough differential coverage of param-vs-module-binding shadowing; it is
-  the single thing between refusals=1 and refusals=0 (P7, delete the interpreter
-  fallback).
+- **`def-node-binding.tsv:54`:** **keep refusing (Option B)** — the LAST refusal,
+  and its refusal is PROVABLY SOUND (the param carrier poisons mk's residual, so
+  the compiler can never bake the wrong `[9]`). Compiling it requires a new VM
+  deferred-auto-eval pass (Option A above) — a substantial feature with
+  corpus-wide blast radius, not worth it for one row that already falls back
+  faithfully (`[1]`).
 
-Net (final): refusals = **1**. Every spec row produces the correct result in both
-engines. The one remaining refusal (def-node-binding:54) falls back faithfully;
-reaching 0 (and thus being able to delete the interpreter fallback) requires only
-the deferred-eval-scope provenance feature.
+Net (final): refusals = **1**, and it is a SOUND refusal that falls back
+faithfully. Every spec row produces the correct result in both engines. Reaching
+refusals=0 (the gate to delete the interpreter fallback, P7) is blocked on a
+single substantial prerequisite — a VM deferred-auto-eval pass — which is a
+deliberate future project, not a quick win. This is the natural stopping point:
+the bytecode compiler now compiles every spec row that can be compiled soundly.
