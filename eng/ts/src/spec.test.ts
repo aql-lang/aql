@@ -632,8 +632,37 @@ function registerSpecWords(r: Registry): void {
         args: [TWord, TAny],
         noEvalArgs: new Set([1]),
         handler: (args, _ctx, _stk, registry) => {
-          const w = args[0]!.asWord()
-          registry.pushDef(w.name, args[1]!)
+          const name = args[0]!.asWord().name
+          const value = args[1]!
+          // A digit-first name is a malformed number, never a name.
+          if (/^-?\d/.test(name)) {
+            throw new AqlError('invalid_numeric_literal', `invalid numeric literal: ${name}`, name)
+          }
+          // Typed binding `def x:Type v`: the name carries a `:Constraint`
+          // suffix (a simple scalar type, a value pattern, or a bound
+          // type name). The value must satisfy the constraint.
+          const colon = name.indexOf(':')
+          if (colon > 0) {
+            const bindName = name.slice(0, colon)
+            const constraintStr = name.slice(colon + 1)
+            if (constraintStr !== '' && constraintStr[0] !== '{' && constraintStr[0] !== '[') {
+              const t = typeTable.get(constraintStr)
+              const constraint =
+                t !== undefined
+                  ? newTypeLiteral(t)
+                  : (registry.topOfDefStack(constraintStr) ?? atomicValue(constraintStr))
+              if (!isValueOfType(value, constraint)) {
+                throw new AqlError(
+                  'type_error',
+                  `def ${bindName}: value ${value.toString()} does not satisfy ${constraintStr}`,
+                  bindName,
+                )
+              }
+              registry.pushDef(bindName, value)
+              return []
+            }
+          }
+          registry.pushDef(name, value)
           return []
         },
       },
