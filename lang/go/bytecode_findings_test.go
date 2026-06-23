@@ -699,8 +699,9 @@ func TestWordSpliceCompilesNative(t *testing.T) {
 // expansion is a compile-time computation, so carrierResults runs it and bakes
 // the resulting token list as a code-as-data const (a Word is admitted as a
 // const MEMBER — isInertConstMember). The compiled result is the same data list
-// the interpreter returns. A too-deep / un-bakeable expansion refuses and the
-// interpreter surfaces the identical result. Proof that macroexpand is
+// the interpreter returns. A too-deep recursive expansion at top level compiles
+// to a terminal OpTrap raising the byte-identical macroexpand_error; a nested
+// occurrence declines the trap and falls back. Proof that macroexpand is
 // reducible compiler work, not irreducible reflection.
 func TestMacroexpandCompilesNative(t *testing.T) {
 	for _, c := range []struct {
@@ -728,15 +729,108 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 		}
 	}
 
-	// A recursive (too-deep) macro errors in both engines (the compile-time
-	// expansion errors, so the row refuses and the interpreter surfaces it).
+	// A recursive (too-deep) macro at TOP LEVEL now compiles to a TERMINAL
+	// OpTrap: the macro head is captured raw as macroexpand's FormArg,
+	// macroexpand dispatches in check mode, ExpandMacroForm runs the expansion
+	// to the depth guard, and the resulting macroexpand_error is recorded as a
+	// trap (mirroring the mini/parse/emit *_unknown_lang expansion-time traps).
+	// The compiled program raises the byte-identical error the interpreter does.
 	deep := `def loopy (macro [[a] [quote [loopy unquote a]]])  macroexpand (loopy 1)`
 	a, _ := New()
-	_, _, errC := a.RunCompiled(deep)
+	prog, reason, _, cerr := a.CompileCheck(deep)
+	if cerr != nil || prog == nil {
+		t.Fatalf("too-deep macroexpand: expected compile-to-trap, refused: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if !strings.Contains(dis, "TRAP") || !strings.Contains(dis, "macroexpand_error") {
+		t.Errorf("too-deep macroexpand: expected an OpTrap for macroexpand_error, got:\n%s", dis)
+	}
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("too-deep macroexpand: expected a terminal trap, got an island:\n%s", dis)
+	}
+	// Both engines raise the IDENTICAL error (taxonomy + detail byte-match).
+	ar, _ := New()
+	_, compiled, errC := ar.RunCompiled(deep)
 	b, _ := New()
 	_, errI := b.Run(deep)
-	if (errC == nil) != (errI == nil) {
-		t.Errorf("too-deep macroexpand: error divergence compiled=%v interp=%v", errC, errI)
+	if !compiled {
+		t.Errorf("too-deep macroexpand: must run on the compiled path (the trap), not fall back")
+	}
+	if errC == nil || errI == nil {
+		t.Fatalf("too-deep macroexpand: both engines must error (compiled=%v interp=%v)", errC, errI)
+	}
+	if codeOf(errC) != "macroexpand_error" || codeOf(errC) != codeOf(errI) {
+		t.Errorf("too-deep macroexpand: code mismatch compiled=%q interp=%q", codeOf(errC), codeOf(errI))
+	}
+	if errC.Error() != errI.Error() {
+		t.Errorf("too-deep macroexpand: detail must byte-match\n  compiled=%q\n  interp  =%q", errC.Error(), errI.Error())
+	}
+
+	// Determinism: the compile-to-trap outcome must be identical every time —
+	// the recursive expansion advances the time-seeded global value-ID RNG
+	// (value.go) which feeds the provenance map; the trap must not be sensitive
+	// to it. 20 in-process CompileChecks must all yield the same single OpTrap.
+	for i := 0; i < 20; i++ {
+		d, _ := New()
+		p, _, _, _ := d.CompileCheck(deep)
+		if p == nil || p.Disassemble() != dis {
+			t.Fatalf("too-deep macroexpand: non-deterministic compile on iteration %d\n  first:\n%s\n  now:\n%s", i, dis, func() string {
+				if p == nil {
+					return "<refused>"
+				}
+				return p.Disassemble()
+			}())
+		}
+	}
+
+	// NEGATIVE — a NESTED occurrence (inside an if-branch fragment, not at the
+	// top-level unit/frame) must DECLINE the trap (RecordTrap is top-level-only)
+	// and keep the lenient fallback: the row refuses to compile and the
+	// interpreter surfaces the identical error. Confirms the trap is conditional
+	// only where it is provably reached.
+	nested := `def loopy (macro [[a] [quote [loopy unquote a]]])  if true [ macroexpand (loopy 1) ] [ 0 ]`
+	c, _ := New()
+	np, _, _, _ := c.CompileCheck(nested)
+	if np != nil {
+		t.Errorf("nested too-deep macroexpand: must refuse (top-level-only trap), but compiled:\n%s", np.Disassemble())
+	}
+	cn, _ := New()
+	_, _, nerrC := cn.RunCompiled(nested)
+	dn, _ := New()
+	_, nerrI := dn.Run(nested)
+	if nerrC == nil || nerrI == nil || nerrC.Error() != nerrI.Error() {
+		t.Errorf("nested too-deep macroexpand: error parity broken compiled=%v interp=%v", nerrC, nerrI)
+	}
+}
+
+// Dynamic-help budget isolation — the OnRegisterHook synthetic example eval
+// (native_help.go) shares the registry's check-mode StepCount, and the engine's
+// check loop short-circuits every sub-engine once BudgetTripped. A documentation
+// example that loops to the step ceiling — a RECURSIVE macro registered via
+// `def` — would otherwise burn the real program's budget and abort its later
+// statements before they are checked. IsolateBudget (the fourth hermetic channel
+// alongside IsolateEmit / TruncateDiagnostics / Defs restore) snapshots and
+// restores the counters so the synthetic eval cannot abort the program's
+// compile. This is exactly what unblocked macro.tsv:45's compile-to-trap: with
+// the leak, `macroexpand (loopy 1)` was never reached.
+func TestDynamicHelpBudgetIsolation(t *testing.T) {
+	// A recursive macro DEFINITION followed by an ordinary, statically
+	// materialisable statement: without budget isolation the def's synthetic
+	// help eval exhausts the budget and the `add` never compiles. With it, the
+	// trailing statement compiles to a plain native call.
+	const src = `def loopy (macro [[a] [quote [loopy unquote a]]])  1 add 2`
+	a, _ := New()
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("expected the trailing statement to compile despite the recursive-macro def: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "TRAP") || strings.Contains(dis, "step_budget") {
+		t.Errorf("recursive-macro def must not pollute the program's compile via the help eval:\n%s", dis)
+	}
+	out, compiled, errC := a.RunCompiled(src)
+	if !compiled || errC != nil || fmt.Sprint(out) != "[3]" {
+		t.Errorf("trailing statement: compiled=%v out=%v err=%v (want [3])", compiled, out, errC)
 	}
 }
 

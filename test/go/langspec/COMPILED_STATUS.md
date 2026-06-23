@@ -9,12 +9,12 @@ Corpus: **2943** spec value rows (**2628** compilable, 315 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2626 |
+| compiled natively (fallback-free) | 2627 |
 | compiled with an interpreter island | 0 |
-| refused (whole-program fallback) | 2 |
+| refused (whole-program fallback) | 1 |
 | static check-error (invalid in both engines) | 315 |
 
-**2626 / 2628** compilable rows produce a Program (99% — 2626 of those fully native).
+**2627 / 2628** compilable rows produce a Program (99% — 2627 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,7 +22,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 2 | 2 | → 0 |
+| refusals (whole-program fallback) | 1 | 1 | → 0 |
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 0 | 1 | → 0 |
@@ -33,19 +33,18 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | count | bucket | root cause |
 | ---: | --- | --- |
 | 1 | operand provenance | soundness |
-| 1 | residual lowering (Stage 1 limit) | scheduling |
 
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
 | soundness | 1 |
-| scheduling | 1 |
+| scheduling | 0 |
 | opcode | 0 |
 | coverage | 0 |
 
 ## Re-scoped P7 partition
 
-Over the 2 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **0** reducible (tier 2, TODO), **1** allowlisted error rows, **1** compute-frontier gaps.
+Over the 1 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **0** reducible (tier 2, TODO), **0** allowlisted error rows, **1** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 

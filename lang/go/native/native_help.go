@@ -53,9 +53,16 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		//   2. Check diagnostics — snapshot + truncate (the decision.aql false
 		//      positives from synthetic stand-in args).
 		//   3. Def-stack bindings — snapshot + restore (an example that `def`s).
+		//   4. Check-mode step budget — snapshot + restore (IsolateBudget). The
+		//      synthetic run shares the registry's StepCount; a doc example that
+		//      runs many steps — most acutely a RECURSIVE macro, which loops to
+		//      the step ceiling — would otherwise burn the real program's shared
+		//      budget and short-circuit its later statements (e.g. a subsequent
+		//      `macroexpand (recursive-macro …)` never gets reached).
 		// Real construction-time body checking is a first-class pass
 		// (checkFnBodyAtConstruction), so suppressing the eval's diagnostics is sound.
 		defer r.Check.IsolateEmit()()
+		defer r.Check.IsolateBudget()()
 		diagBase := len(r.Check.Diagnostics)
 		defer r.Check.TruncateDiagnostics(diagBase)
 		defsSnap := r.Defs.Snapshot()

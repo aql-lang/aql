@@ -160,6 +160,30 @@ func (c *CheckState) IsolateEmit() func() {
 	return func() { c.Emit = saved }
 }
 
+// IsolateBudget snapshots the check-mode step budget (StepCount +
+// BudgetTripped) for the duration of a throwaway evaluation, returning a
+// restore func. It is the budget-channel complement to IsolateEmit /
+// TruncateDiagnostics in the dynamic-help hermetic eval: the synthetic
+// example run shares the registry's CheckState, so steps it consumes count
+// against the REAL program's shared budget (StepCount is per-registry, and
+// the engine's check loop short-circuits every subsequent sub-engine once
+// BudgetTripped is set). A documentation example that runs many steps — most
+// acutely a RECURSIVE macro, which loops to the step ceiling — would then
+// exhaust the program's budget before its own later statements are reached.
+// Snapshotting and restoring the counters contains the synthetic eval fully,
+// so it can never abort the program's compile. No-op outside check mode.
+func (c *CheckState) IsolateBudget() func() {
+	if c == nil {
+		return func() {}
+	}
+	savedCount := c.StepCount
+	savedTripped := c.BudgetTripped
+	return func() {
+		c.StepCount = savedCount
+		c.BudgetTripped = savedTripped
+	}
+}
+
 // RecordDef remembers a name the user bound during a check run so
 // end-of-run analysis can flag defs that were never referenced. Names
 // starting with "_" (engine internals) are ignored.
