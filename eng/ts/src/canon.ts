@@ -180,6 +180,20 @@ export function canonValue(v: Value): string {
   if (v.isFnDef()) {
     return canonFnDef(v.asFnDef())
   }
+  // Disjunct / Enum: alternatives joined by '|' (atoms render bare,
+  // type literals as their leaf).
+  if (v.isDisjunct()) {
+    return v
+      .asDisjunct()
+      .alternatives.map((a) =>
+        a.vType.equal(TAtom) && a.data !== null
+          ? a.asAtom()
+          : a.data === null
+            ? a.vType.leaf()
+            : canonValue(a),
+      )
+      .join('|')
+  }
   return v.toString()
 }
 
