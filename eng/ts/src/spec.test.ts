@@ -1206,12 +1206,24 @@ function parseBacktick(content: string): Value {
 // makeListFromElems builds a list value, detecting a leading `:T`
 // element as a typed-list child annotation (`[:Integer 1 2 3]`).
 function makeListFromElems(elems: Value[]): Value {
-  const head = elems[0]
-  if (head !== undefined && head.isWord()) {
-    const nm = head.asWord().name
-    if (nm.startsWith(':')) {
+  // A `:T` child annotation may appear anywhere in the list. `:Name` is
+  // one token; a container child (`:[…]` / `:{…}`) tokenises as a bare
+  // `:` followed by the container element.
+  for (let i = 0; i < elems.length; i++) {
+    const e = elems[i]!
+    if (!e.isWord()) continue
+    const nm = e.asWord().name
+    if (nm === ':' && i + 1 < elems.length) {
+      const child = elems[i + 1]!
+      const rest = elems.filter((_, j) => j !== i && j !== i + 1)
+      return newTypedList(child, rest)
+    }
+    if (nm.length > 1 && nm.startsWith(':')) {
       const t = typeTable.get(nm.slice(1))
-      if (t !== undefined) return newTypedList(newTypeLiteral(t), elems.slice(1))
+      if (t !== undefined) {
+        const rest = elems.filter((_, j) => j !== i)
+        return newTypedList(newTypeLiteral(t), rest)
+      }
     }
   }
   return newList(elems, { eval: true })
