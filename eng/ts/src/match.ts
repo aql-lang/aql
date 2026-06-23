@@ -165,6 +165,7 @@ function tryMatch(
       }
       break
     }
+    if (sig.typeArgs?.has(fwd) && tok.data !== null) break
     args[fwd] = tok
     fwd++
     scanIdx++
@@ -183,6 +184,7 @@ function tryMatch(
     if (isStructuralBoundary(stackVal)) return null
     const sigIdx = fwd + j
     if (!sigTypeMatches(stackVal, sig.args[sigIdx]!)) return null
+    if (sig.typeArgs?.has(sigIdx) && stackVal.data !== null) return null
     args[sigIdx] = stackVal
   }
 

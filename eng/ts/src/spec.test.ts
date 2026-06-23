@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 import { canon } from './canon.ts'
 import { isValueOfType, pathOf, typeOf } from './coretype.ts'
+import { makeScalarHandler } from './make.ts'
 import {
   AqlError,
   Engine,
@@ -30,6 +31,7 @@ import {
   TString,
   TList,
   TMap,
+  TScalar,
   TWord,
   Value,
   type FnParam,
@@ -526,6 +528,23 @@ function registerSpecWords(r: Registry): void {
         args: [TMap],
         noEvalArgs: new Set([0]),
         handler: (args) => [doEvalMapValue(args[0]!)],
+      },
+    ],
+  })
+
+  // make — scalar coercion. The eng/spec make.tsv rows exercise the
+  // scalar targets (String/Integer/Number/Float/Boolean/Atom). The
+  // [Scalar, Any] sig with typeArgs on arg0 forces a type-literal
+  // target. Object/Array/Options overloads are added by a later
+  // increment. Mirrors registerEngSpecMake (scalar slice).
+  reg({
+    name: 'make',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TScalar, TAny],
+        typeArgs: new Set([0]),
+        handler: (args) => makeScalarHandler(args),
       },
     ],
   })

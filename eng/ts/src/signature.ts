@@ -42,6 +42,12 @@ export interface Signature {
   noEvalArgs?: Set<number>
   /** Fallback marker — true for the generic 0-arg fallback. */
   fallback?: boolean
+  /**
+   * Positions that must be filled by a bare type literal (data === null),
+   * not a concrete value — used by `make` to require a type argument.
+   * Mirrors NativeSig.TypeArgs in the Go matcher.
+   */
+  typeArgs?: Set<number>
 }
 
 export interface NativeSig {
@@ -51,6 +57,7 @@ export interface NativeSig {
   patterns?: Map<number, Value>
   noEvalArgs?: Set<number>
   fallback?: boolean
+  typeArgs?: Set<number>
 }
 
 export interface NativeFunc {

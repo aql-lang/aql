@@ -118,6 +118,7 @@ export class Registry {
       patterns: ns.patterns,
       noEvalArgs: ns.noEvalArgs,
       fallback: ns.fallback,
+      typeArgs: ns.typeArgs,
     }
   }
 
