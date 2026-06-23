@@ -64,20 +64,35 @@ package via `aql describe` (below).
 ## Calling convention
 
 Reflected words behave exactly like native-module words (see
-[NATIVE-MODULES.10.md](NATIVE-MODULES.10.md) "Calling Convention"): they are
-auto-invoking `FnDef` wrappers, arguments precede the dot expression, and
-the canonical form is forward:
+[NATIVE-MODULES.10.md](NATIVE-MODULES.10.md) "Calling Convention"): a
+`Namespace.word` dot-access is an auto-invoking `FnDef` wrapper that fires
+when it finds matching arguments **on the stack**. So arguments precede the
+dot expression — stack form (`a b Pkg.word`) and swap form (`a Pkg.word b`)
+both dispatch:
 
 ```
 "go:strings" import
-"hello world" " " Strings.split          # → ["hello" "world"]
+"hello world" " " Strings.split          # → ["hello" "world"]   (stack form)
 "  hi  " Strings.trim-space              # → "hi"
 ```
 
+> **Note on argument form.** AQL's general guidance is to prefer *forward*
+> form `f a b c` (see `eng/go/CLAUDE.md` "Signature Ordering"). Imported
+> module words are the documented exception: the dot-access desugars to a
+> `get`-chain that resolves the namespace from the stack, so the wrapper can
+> only auto-invoke on stack/swap-form arguments. Pure forward form
+> `Pkg.word a b` does **not** dispatch — the bare `Namespace` token leads
+> with nothing on the stack and errors as an undefined word (verified
+> against `aql:math-util`: `3 7 MathUtil.min` → `3`, but `MathUtil.min 3 7`
+> faults). `go:` words inherit this from the shared module machinery; the
+> args-before spelling above is the canonical form for them, exactly as for
+> `aql:` modules.
+
 A Go function's parameters map to sig positions **in declared order**
-(top-first, sig order — the one kernel convention, see `eng/go/CLAUDE.md`
-"Signature Ordering"). For a Go `func F(a A, b B) R`, the call is
-`a b Pkg.f`.
+(top-first, sig order — the one kernel convention). For a Go
+`func F(a A, b B) R`, the stack-form call is `a b Pkg.f` (`a` is sig[0], the
+stack top). Inner sigs must use `BarrierPos: -1` so the swap form also
+dispatches (see the caveat under "Resolution path").
 
 ## Host registration (the "arbitrary" surface)
 
