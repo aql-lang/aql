@@ -104,6 +104,35 @@ Mechanism confirmed on the live tree:
   as the gate in a focused follow-up. (`module-parselang:23` / `module-rand:38` are
   NOT this shape — Stage D, per §7 above.)
 
+  **ATTEMPTED + reverted (empirical finding, this session).** The "route the
+  module-fn dispatch through its registered `ReturnsFn` (so it unit-compiles via
+  `buildFnBodyReturnsFn`) instead of `CallAQL`" approach was implemented in
+  `execFnDefSig`'s `capturedReg` branch (a `tryModuleFnUnit` helper, check-mode
+  only) and MEASURED:
+  - It did **not** clear `module-test.tsv:38` — the refusal reason was unchanged
+    ("code-body word test-describe (Stage 2)"). So unit-isolation of `run-spec` is
+    NOT the binding constraint. The real blocker is one level deeper:
+    `test-describe` DECLARES a `CallableSpec`, but its `tryRecordClosure` DECLINES
+    (the closure body — the nested `Test.test` cases produced by `run-cases`/
+    `run-case`, themselves module-preamble fns — does not compile), so it falls
+    through to the generic code-body refusal. Compiling the row needs the WHOLE
+    nested harness chain (`run-spec` → `run-cases` → `run-case` → `test-test` /
+    `test-describe`) to compile as composed closure units — the "Test harness body"
+    the roadmap calls the hardest Stage-C shape, not a single dispatch reroute.
+  - It also **regressed**: refusals 9 → 10 and the dispatch-recovery bucket 3 → 4
+    (routing every check-mode module-preamble-fn dispatch through `ReturnsFn`
+    perturbs other module rows whose `CallAQL`-recorded carriers differed from the
+    `ReturnsFn` residual). Differential stayed clean (value parity held), but the
+    coverage gate caught the regression → reverted (gate-clean-or-revert).
+
+  **Revised plan for step 3:** treat it as the nested-harness closure-composition
+  problem, not a dispatch reroute. The module-preamble fns (`run-spec`/`run-cases`/
+  `run-case`) must each compile as closure units whose internal `Test.test` /
+  `test-describe` bodies compile as nested closures, with the per-frame residual
+  composed across the chain — and the reroute must be NARROWED so it does not
+  perturb the module rows that already compile via `CallAQL`. This is a dedicated
+  effort with the differential AND the coverage ceiling as joint gates.
+
 ## Discipline
 
 Land as ONE reviewed unit (never a partial diagnostic filter — `.6` §3 proved
