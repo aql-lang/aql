@@ -12,6 +12,8 @@
 import {
   CodeBuilder,
   OpCallNative,
+  OpForNext,
+  OpForSetup,
   OpJmp,
   OpJmpIfFalse,
   OpPushConst,
@@ -20,7 +22,7 @@ import {
   type Program,
   type SigRef,
 } from './bytecode.ts'
-import type { EmitState, Event, Operand } from './emit.ts'
+import type { EmitState, Event, LoopEvent, Operand } from './emit.ts'
 import type { Value } from './value.ts'
 
 /** Either a compiled Program or the first reason compilation refused. */
@@ -60,8 +62,13 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
     note()
   }
 
+  // First refusal reason hit while lowering (e.g. a loop in a position
+  // this stage does not compile). Checked after lowering.
+  let refused: string | undefined
+
   const lowerEvents = (events: readonly Event[]): void => {
     for (const ev of events) {
+      if (refused !== undefined) return
       if (ev.kind === 'call') {
         const n = ev.args.length
         // Push args in REVERSE sig order so sig[0] lands on top.
@@ -72,6 +79,13 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
         code.emit(OpStoreLocal, ev.slot)
         sp-- // result moved into a local
         continue
+      }
+      if (ev.kind === 'loop') {
+        // A loop is variadic; it only compiles as the trailing producer
+        // (handled in finalize). Anywhere else (a fragment, a non-final
+        // position) is not lowerable this stage.
+        refused = 'loop in non-trailing position not compilable (stage 5)'
+        return
       }
       // Branch: cond on top -> JmpIfFalse(else); then arm -> store to the
       // branch slot -> Jmp(end); else arm -> store to the branch slot.
@@ -92,8 +106,43 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
     }
   }
 
-  lowerEvents(emit.events)
-  for (const o of residualOps) pushOperand(o)
+  // Lower a counted loop in place: its per-iteration body residual is
+  // pushed and LEFT on the stack so the values accumulate. The result is
+  // variadic — only the program residual absorbs it.
+  const lowerLoop = (ev: LoopEvent): void => {
+    pushOperand(ev.step)
+    pushOperand(ev.end)
+    pushOperand(ev.start) // start on top
+    code.emit(OpForSetup, ev.iterSlot)
+    sp -= 3
+    const head = code.length
+    const fn = code.emit(OpForNext, 0) // exit target backpatched below
+    lowerEvents(ev.body.events)
+    pushOperand(ev.body.residual) // accumulates (not stored)
+    code.emit(OpJmp, head) // back-edge to FOR_NEXT
+    code.patch(fn, code.length) // FOR_NEXT exits here
+  }
+
+  // Trailing-loop case: the last top-level event is a loop whose result
+  // IS the program residual. Lower the prefix normally, then the loop
+  // inline (leaving its accumulated values as the residual).
+  const last = emit.events[emit.events.length - 1]
+  const trailingLoop =
+    last !== undefined &&
+    last.kind === 'loop' &&
+    residualOps.length === 1 &&
+    residualOps[0]!.kind === 'event' &&
+    residualOps[0]!.slot === last.slot
+
+  if (trailingLoop) {
+    lowerEvents(emit.events.slice(0, -1))
+    if (refused !== undefined) return { refused }
+    lowerLoop(last as LoopEvent)
+  } else {
+    lowerEvents(emit.events)
+    if (refused !== undefined) return { refused }
+    for (const o of residualOps) pushOperand(o)
+  }
 
   const { ops, args } = code.freeze()
   return {

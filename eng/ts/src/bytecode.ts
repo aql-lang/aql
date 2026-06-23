@@ -26,7 +26,9 @@ export const OpCallNative = 2 // pop sig.args.length (top = sig[0]), call handle
 export const OpStoreLocal = 3 // pop top into locals[arg]
 export const OpPushLocal = 4 // push locals[arg]
 export const OpJmpIfFalse = 5 // pop top; if coerceBoolean(v) is false, jump to abs pc `arg`
-export const OpJmp = 6 // unconditional jump to abs pc `arg` (forward only, for now)
+export const OpJmp = 6 // unconditional jump to abs pc `arg` (forward, or the loop back-edge)
+export const OpForSetup = 7 // pop start,end,step (start on top); open a loop with iterator slot `arg`
+export const OpForNext = 8 // if loop done, pop it and jump to abs pc `arg`; else bind locals[iterSlot]=cur, cur+=step
 
 /** An opcode is one of the Op* constants above. */
 export type Op = number
@@ -108,6 +110,12 @@ export function disassemble(p: Program): string {
         break
       case OpJmp:
         text = `JMP ${arg}`
+        break
+      case OpForSetup:
+        text = `FOR_SETUP ${arg}`
+        break
+      case OpForNext:
+        text = `FOR_NEXT ${arg}`
         break
       default:
         text = `OP_${op} ${arg}`

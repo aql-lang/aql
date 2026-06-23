@@ -16,6 +16,7 @@ import {
   Engine,
   type Handler,
   type NativeFunc,
+  type Operand,
   Registry,
   TAny,
   TAtom,
@@ -28,6 +29,7 @@ import {
   coerceBoolean,
   joinCarriers,
   newBoolean,
+  newCarrier,
   newDynamicCarrier,
   newFloat,
   newInteger,
@@ -182,6 +184,66 @@ function registerFixtures(r: Registry): void {
       },
     ],
   })
+  // for: counted loop, count form `for N [body]` (iterator `i` bound
+  // 0..N-1). The runtime handler iterates and ACCUMULATES each
+  // iteration's body residual; the check returnsFn mirrors AnalyseLoopBody
+  // (single-round): bind `i` to an Integer carrier, capture the body as a
+  // fragment, and record a loop event. The loop is variadic — it compiles
+  // only as the program's trailing producer (else falls back).
+  reg({
+    name: 'for',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TInteger, TList],
+        noEvalArgs: new Set([1]),
+        recordsOwnEvent: true,
+        returns: [TList],
+        handler: (args, _ctx, _stk, r) => {
+          const count = args[0]!.asInteger()
+          const body = args[1]!.asList()
+          const out: Value[] = []
+          for (let i = 0n; i < count; i++) {
+            r.pushDef('i', newInteger(i))
+            out.push(...new Engine(r).run([...body]))
+            r.popDef('i')
+          }
+          return out
+        },
+        returnsFn: (args, r) => {
+          const body = args[1]!
+          const emit = r.check.emit
+          if (emit === undefined) {
+            const iter = newCarrier(TInteger)
+            r.pushDef('i', iter)
+            new Engine(r).run([...body.asList()])
+            r.popDef('i')
+            return [newCarrier(TList)]
+          }
+          const endOp = emit.classify(args[0]!) // count == loop end
+          const iterSlot = emit.allocSlot()
+          const iter = newCarrier(TInteger)
+          emit.bindSlot(iter, iterSlot)
+          r.pushDef('i', iter)
+          emit.beginFragment()
+          const bodyRes = new Engine(r).run([...body.asList()])
+          if (bodyRes.length !== 1) emit.markUncompilable('for: body is not single-result')
+          const bodyVal = bodyRes.length === 1 ? bodyRes[0]! : newDynamicCarrier(TAny)
+          const bodyFrag = emit.endFragment(bodyVal)
+          r.popDef('i')
+          const out = newCarrier(TList)
+          const startOp: Operand = { kind: 'const', value: newInteger(0n) }
+          const stepOp: Operand = { kind: 'const', value: newInteger(1n) }
+          if (endOp !== null && bodyFrag !== null) {
+            emit.recordLoop(startOp, endOp, stepOp, iterSlot, bodyFrag, out)
+          } else {
+            emit.markUncompilable('for: count or body of unknown provenance')
+          }
+          return [out]
+        },
+      },
+    ],
+  })
   // def: check-aware name binding (runInCheckMode so it binds in the
   // record pass). A bound computed value (e.g. `def a (addq 1 2)`) shares
   // one carrier; referencing it twice records two event operands pointing
@@ -297,11 +359,18 @@ const COMPILED: Array<[string, true]> = [
   ["if true [1] ['x']", true], // divergent arm types (coarse carrier join)
   ['if (gtq 5 3) [if true [10] [20]] [30]', true], // nested if in an arm
   ['addq 100 (if (gtq 5 3) [1] [2])', true], // branch result feeds a call
+  ['for 3 [i]', true], // counted loop, iterator accumulates
+  ['for 3 [addq i 10]', true], // body computes per-iteration result
+  ['for (lengthq [1 2 3]) [i]', true], // event-valued count
+  ['for 0 [i]', true], // zero iterations -> empty residual
+  ['def n 3 for n [i]', true], // def-bound count
 ]
 
 const FALLBACK: string[] = [
   'dupq 5', // multi-result -> refused, falls back
   'if false [42]', // 2-arg if (no else) -> variadic, falls back
+  'for 2 [dupq 1]', // loop body not single-result -> falls back
+  'for 2 [i] addq 1 2', // loop not in trailing position -> falls back
 ]
 
 describe('compiled (stage 1)', () => {
@@ -337,6 +406,23 @@ describe('compiled (stage 1)', () => {
         '005  PUSH_CONST 2', // else arm: 2
         '006  STORE_LOCAL 0', // -> branch slot
         '007  PUSH_LOCAL 0', // residual: the merged result
+      ].join('\n'),
+    )
+  })
+
+  it('disassembles a counted loop to FOR_SETUP/FOR_NEXT + back-edge', () => {
+    const result = compile(freshRegistry(), tokenize('for 3 [i]'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  PUSH_CONST 0', // step = 1
+        '001  PUSH_CONST 1', // end = 3
+        '002  PUSH_CONST 2', // start = 0
+        '003  FOR_SETUP 0', // iterator slot 0
+        '004  FOR_NEXT 7', // exhausted -> exit at pc 7
+        '005  PUSH_LOCAL 0', // body: push iterator i (accumulates)
+        '006  JMP 4', // back-edge to FOR_NEXT
       ].join('\n'),
     )
   })

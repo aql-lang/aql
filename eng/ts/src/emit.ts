@@ -39,7 +39,23 @@ export interface BranchEvent {
   readonly else: Fragment
 }
 
-export type Event = CallEvent | BranchEvent
+/**
+ * A recorded counted loop. `start`/`end`/`step` are integer operands;
+ * the iterator variable is bound to `iterSlot` (a frame local) each
+ * iteration, and the body's single per-iteration residual accumulates on
+ * the operand stack (the loop is variadic).
+ */
+export interface LoopEvent {
+  readonly kind: 'loop'
+  readonly slot: number
+  readonly start: Operand
+  readonly end: Operand
+  readonly step: Operand
+  readonly iterSlot: number
+  readonly body: Fragment
+}
+
+export type Event = CallEvent | BranchEvent | LoopEvent
 
 /** A captured sub-trace (a branch arm) plus its single residual operand. */
 export interface Fragment {
@@ -176,6 +192,28 @@ export class EmitState {
     if (this.uncompilableReason !== undefined) return
     const slot = this.seq++
     this.target().push({ kind: 'branch', slot, cond, then: thenArm, else: elseArm })
+    this.producedBy.set(out, slot)
+  }
+
+  /** Allocate a fresh event/local slot (e.g. for a loop iterator variable). */
+  allocSlot(): number {
+    return this.seq++
+  }
+
+  /** Bind a value's identity to a slot (e.g. a loop iterator carrier). */
+  bindSlot(v: Value, slot: number): void {
+    this.producedBy.set(v, slot)
+  }
+
+  /**
+   * Record a counted loop. The body fragment's residual accumulates on
+   * the stack per iteration (variadic). `out` is the loop's result
+   * carrier whose identity threads to the program residual.
+   */
+  recordLoop(start: Operand, end: Operand, step: Operand, iterSlot: number, body: Fragment, out: Value): void {
+    if (this.uncompilableReason !== undefined) return
+    const slot = this.seq++
+    this.target().push({ kind: 'loop', slot, start, end, step, iterSlot, body })
     this.producedBy.set(out, slot)
   }
 }

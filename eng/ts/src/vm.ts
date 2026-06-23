@@ -14,11 +14,30 @@
 //     vm.go relies on).
 //   - Operands are the engine's own `Value` objects (a single hidden
 //     class), so the stack is a monomorphic packed array.
-import { OpCallNative, OpJmp, OpJmpIfFalse, OpPushConst, OpPushLocal, OpStoreLocal, type Program } from './bytecode.ts'
+import {
+  OpCallNative,
+  OpForNext,
+  OpForSetup,
+  OpJmp,
+  OpJmpIfFalse,
+  OpPushConst,
+  OpPushLocal,
+  OpStoreLocal,
+  type Program,
+} from './bytecode.ts'
 import { coerceBoolean } from './coretype.ts'
 import { AqlError } from './error.ts'
 import type { Registry } from './registry.ts'
-import { Value } from './value.ts'
+import { newInteger, Value } from './value.ts'
+
+/** Active counted-loop state in the VM. */
+interface VmLoop {
+  cur: bigint
+  end: bigint
+  step: bigint
+  slot: number
+  exitPC: number
+}
 
 /**
  * Execute a compiled Program against the registry and return the residual
@@ -37,6 +56,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
   const locals: Value[] = new Array<Value>(Math.max(p.numLocals, 0))
   // Per-arity scratch buffers for handler args (reused across calls).
   const scratch: Value[][] = []
+  const loops: VmLoop[] = []
 
   for (let pc = 0; pc < n; pc++) {
     const op = ops[pc]!
@@ -55,8 +75,31 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         if (!coerceBoolean(stack[--sp]!)) pc = arg - 1 // loop does pc++
         break
       case OpJmp:
-        pc = arg - 1 // loop does pc++
+        pc = arg - 1 // loop does pc++ (forward, or the loop back-edge)
         break
+      case OpForSetup: {
+        // Stack (top-down): start, end, step.
+        const start = stack[--sp]!.asInteger()
+        const end = stack[--sp]!.asInteger()
+        const step = stack[--sp]!.asInteger()
+        if (step === 0n) throw new AqlError('for_error', 'for: step cannot be zero')
+        // The matching FOR_NEXT is the next instruction; its arg is the
+        // (backpatched) loop-exit pc.
+        loops.push({ cur: start, end, step, slot: arg, exitPC: args[pc + 1]! })
+        break
+      }
+      case OpForNext: {
+        const lp = loops[loops.length - 1]!
+        const done = lp.step >= 0n ? lp.cur >= lp.end : lp.cur <= lp.end
+        if (done) {
+          loops.pop()
+          pc = arg - 1 // jump to loop exit
+        } else {
+          locals[lp.slot] = newInteger(lp.cur)
+          lp.cur += lp.step
+        }
+        break
+      }
       case OpCallNative: {
         const sr = sigs[arg]!
         const a = sr.sig.args.length
