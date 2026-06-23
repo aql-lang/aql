@@ -2242,15 +2242,103 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: a user call whose result feeds a harness/accumulation (not a
-	// plain out-of-order residual) must NOT be promoted — the Test.run-spec
-	// harness diverged when user-call results were promoted broadly, so it stays
-	// on fallback. Assert it still falls back faithfully (compiled == interp).
+	// The full Test.run-spec harness (module-test:38) now COMPILES natively
+	// (zero-count `for` pruning over `subs: []` drops the unreachable recursive
+	// branch; see TestRunSpecHarnessCompiles). Whatever the tier, the compiled
+	// run must stay byte-identical to the interpreter — pin that parity here.
 	const harness = `"aql:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
 	gotC, _, errC := mustNew(t).RunCompiled(harness)
 	gotI, errI := mustNew(t).Run(harness)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("Test harness parity: compiled=%v(%v) interp=%v(%v)", gotC, errC, gotI, errI)
+	}
+}
+
+// Zero-count `for` pruning (module-test:38). A `for` whose count operand is a
+// CONCRETE non-positive Integer never enters its body — both engines iterate
+// zero times and push zero values. The recorder now prunes it: it analyses
+// neither the body (so an unreachable branch that only type-checks for a live
+// iteration no longer poisons the program) nor records a loop. The lever that
+// clears module-test:38 — `run-spec`'s `for (subs size) [subspec run-spec]`
+// over `subs: []` recurses into `run-spec` over a carrier `subspec` that cannot
+// statically dispatch; pruning the dead branch lets the whole spec runner
+// compile (run-spec body → closure, run-cases/run-case → CALL_USER, test-invoke
+// → poly). The `size` ReturnsFn folding a concrete container to its static
+// count is the prerequisite that makes `subs size` a concrete 0.
+func TestRunSpecHarnessCompiles(t *testing.T) {
+	// POSITIVE: the full Test.run-spec harness compiles natively and is
+	// byte-identical to the interpreter — including the test-record side
+	// effects ({total:2 passed:2 failed:0}), which the compiled pass must NOT
+	// double-count.
+	const harness = `"aql:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(harness)
+	if cerr != nil || prog == nil {
+		t.Fatalf("run-spec harness did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("run-spec harness islanded:\n%s", dis)
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(harness)
+	gotI, errI := mustNew(t).Run(harness)
+	if !compiled || errC != nil || errI != nil {
+		t.Fatalf("run-spec harness run: compiled=%v errC=%v errI=%v", compiled, errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[{total:2 passed:2 failed:0}]" {
+		t.Errorf("run-spec harness parity: compiled=%v interp=%v want [{total:2 passed:2 failed:0}]", gotC, gotI)
+	}
+
+	// POSITIVE (the prune in isolation): a `for` over a statically-zero count
+	// compiles even when its body would NOT compile on its own — the body is
+	// unreachable. Here the body calls an undefined word, which would refuse a
+	// live loop; pruned, the program compiles and yields the trailing value.
+	for _, c := range []struct{ src, want string }{
+		{`for 0 [ nope-undefined ] end 7`, "[7]"},
+		{`for (-3) [ nope-undefined ] end 7`, "[7]"},
+		{`def xs [] end for (xs size) [ nope-undefined ] end 7`, "[7]"},
+		{`for [5 5] [ nope-undefined ] end 7`, "[7]"}, // empty range [start=5 end=5]
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: zero-count prune did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled || eC != nil || eI != nil {
+			t.Errorf("%q: run: compiled=%v eC=%v eI=%v", c.src, compiled, eC, eI)
+			continue
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: a LIVE loop (concretely non-zero count) is NOT pruned — its
+	// body is analysed as usual, so the per-iteration value is produced and the
+	// result matches the interpreter. The prune must not leak into live loops.
+	for _, c := range []struct{ src, want string }{
+		{`for 3 [ i ] end`, "[0 1 2]"},
+		{`def xs [9 8] end for (xs size) [ i ] end`, "[0 1]"},
+	} {
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled || eC != nil || eI != nil {
+			t.Errorf("%q: live loop run: compiled=%v eC=%v eI=%v", c.src, compiled, eC, eI)
+			continue
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: live loop compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE (soundness of the prune boundary): a live one-iteration loop
+	// whose body refuses must still REFUSE — pruning fires only for a concrete
+	// zero count, never for count 1.
+	prog2, _, _, _ := mustNew(t).CompileCheck(`for 1 [ nope-undefined ] end 7`)
+	if prog2 != nil && !strings.Contains(prog2.Disassemble(), "FALLBACK") {
+		// An undefined word in a LIVE loop body must not compile natively.
+		t.Errorf("live count-1 loop with refusing body unexpectedly compiled native:\n%s", prog2.Disassemble())
 	}
 }
 

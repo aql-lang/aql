@@ -53,6 +53,28 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 	return tokens, nil
 }
 
+// loopIterations reports how many times a `for` with the given decoded range
+// runs its body. It mirrors runForLoop's empty-span guards exactly (a
+// non-advancing or wrong-direction span runs zero times) so the static
+// zero-count pruning in forCarrierAnalyse agrees with the interpreter. A zero
+// step is treated as "non-static" (returns -1): runForLoop raises on it, so it
+// must NOT be pruned as empty.
+func loopIterations(start, end, step int64) int64 {
+	if step == 0 {
+		return -1
+	}
+	if step > 0 {
+		if start >= end {
+			return 0
+		}
+		return (end - start + step - 1) / step
+	}
+	if start <= end {
+		return 0
+	}
+	return (start - end + (-step) - 1) / (-step)
+}
+
 // parseRange parses a range specification list into start, end, step.
 //
 //	[end]              — 0 to end, step 1

@@ -692,6 +692,43 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	iter := NewCarrier(iterType)
 	es := r.Check.Emit
 
+	// Statically-zero loop pruning: a `for` whose count operand is a CONCRETE
+	// non-positive Integer never enters its body — at run time both engines
+	// iterate zero times and push zero values (`for 0 [body]` leaves the stack
+	// untouched). Its body is unreachable, so analysing it is both wasted work
+	// and a source of false refusals: a body that only type-checks (or only
+	// compiles) for a live iteration — e.g. module-test:38's `for (subs size)
+	// [subspec run-spec]` over `subs: []`, whose recursive `run-spec` over a
+	// carrier `subspec` cannot dispatch — would otherwise poison the program for
+	// a branch that never runs. Prune it: record nothing, contribute no values,
+	// and skip body analysis entirely. Faithful because the interpreter's
+	// `for 0` runs the body zero times (no side effects, no values), so the
+	// compiled form (emitting no loop at all) is observably identical.
+	//
+	// The fold only fires for a STATIC count; a carrier/computed count keeps the
+	// full analyse-and-record path below. countArg-as-list (a literal range) is
+	// pruned too when it decodes to an empty span.
+	if countArg >= 0 {
+		if cv := args[countArg]; IsConcrete(cv) {
+			zero := false
+			switch {
+			case cv.Parent.ConformsTo(TInteger):
+				if n, err := AsInteger(cv); err == nil && n <= 0 {
+					zero = true
+				}
+			case cv.Parent.ConformsTo(TList):
+				if lst, err := AsList(cv); err == nil && !lst.IsNil() {
+					if st, en, sp, perr := parseRange(lst.Slice()); perr == nil && loopIterations(st, en, sp) == 0 {
+						zero = true
+					}
+				}
+			}
+			if zero {
+				return []Value{}
+			}
+		}
+	}
+
 	// Decompose the loop bounds for recording.
 	var startV, endV, stepV Value
 	lowerable := false
