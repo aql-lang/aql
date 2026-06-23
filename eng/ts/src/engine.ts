@@ -46,8 +46,10 @@ import type { AqlType } from './type.ts'
 
 /** Base value for an omitted optional fn param, by its declared type. */
 function baseValue(t: AqlType): Value {
-  if (t.matches(TInteger) || t.matches(TNumber)) return newInteger(0n)
+  // Float is checked before the Integer/Number branch: a Float param
+  // matches TNumber too, so the order matters for its base value.
   if (t.matches(TFloat)) return newFloat(0)
+  if (t.matches(TInteger) || t.matches(TNumber)) return newInteger(0n)
   if (t.matches(TString)) return newString('')
   if (t.matches(TBoolean)) return newBoolean(false)
   return newNone()
@@ -378,6 +380,22 @@ export class Engine {
       // Internal control markers stop the forward scan — they're
       // boundaries, not data.
       if (tok.isForward() || tok.isMark() || tok.isMove()) break
+      // Interpolated literals in the forward window resolve to their
+      // concrete value before the matcher sees them, so a consumer like
+      // `typeof <p>${…}</p>` types the resulting Node/Xml, not the
+      // template marker.
+      if (tok.isXmlInterp()) {
+        this.stack[scanIdx] = newXml(this.resolveXmlTmpl(tok.asXmlTmpl()))
+        resolved++
+        scanIdx++
+        continue
+      }
+      if (tok.isInterpString()) {
+        this.stack[scanIdx] = this.evalInterpString(tok)
+        resolved++
+        scanIdx++
+        continue
+      }
       if (!tok.isWord()) {
         resolved++
         scanIdx++
