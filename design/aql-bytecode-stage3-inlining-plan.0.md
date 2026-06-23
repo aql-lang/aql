@@ -107,7 +107,37 @@ needs (1) plus typing a user-registered fn's return — both narrower than
   body's field reads concrete in feature (1).
 - Corrected the earlier (wrong) root-cause pin; this note supersedes it.
 
-## Experimentally-verified prerequisite BENEATH feature (1)
+## REFINED (deeper trace): the get-fold already advanced the concrete pass
+
+A later dispatch-level trace (`EXPDISP` at engine.go:2475 + `MARK` at
+MarkUncompilable, both reverted) corrects the picture above. Run-spec's
+body is analysed in TWO passes, and the get-fold landed this session
+already fixed the concrete one:
+
+- **Concrete pass** (the real call's args): with the get-fold,
+  `(s get "name")` folds to `ProperString` over a concrete `Map`, so
+  `test-describe` DISPATCHES (`EXPDISP test-describe ProperString/F
+  List/T`). `run-cases`/`run-case` also dispatch. The only remaining
+  blocker here is that `test-describe`'s code body (a closure) does not
+  compile via `tryRecordClosure` → `code-body word test-describe (Stage 2)`.
+- **Carrier shared-unit pass** (genArgs = carriers, core_helpers.go:377):
+  carrier `s` → `(s get "name")` = `Any` → `test-describe` cannot match
+  `[String List]` → `unmatched dispatch recovered at test-describe`, which
+  fails the shared unit and poisons the program.
+
+So the two MARKs observed (`unmatched dispatch recovered` THEN `code-body
+word`) are the carrier pass and the concrete pass respectively. The
+implication SHARPENS feature (1): the shared **carrier** unit must be
+BYPASSED for a concrete-arg call (call-site inlining), AND
+`test-describe`'s closure body must compile. The closure body captures
+concrete `s`, calls `run-cases` (now dispatching), and recurses into
+`run-spec` over `subs` — so it also needs feature (2) zero-count `for`
+pruning (subs=`[]`) and ultimately feature (4) for `test-invoke`'s
+fn-value call. Net: the get-fold moved the concrete pass from "name is
+Any, can't dispatch" to "dispatches; closure-body compilation is the next
+wall" — measurable progress toward feature (1).
+
+## Earlier prerequisite note (kept for the carrier-pass boundary)
 
 Tracing `args` into `run-spec`'s `buildFnBodyReturnsFn` (temporary
 instrumentation, reverted) shows the concrete map is ALREADY LOST before
