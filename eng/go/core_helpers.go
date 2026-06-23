@@ -557,8 +557,59 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	SortSignatures(entry.Signatures)
 	entry.MaxForwardArgs = calcMaxForwardArgs(entry.Signatures)
 	r.Defs.Push(name, NewFnDef(entry))
+	// Construction-time body check (first-class, post-binding). Replaces the
+	// dynamic-help example eval's accidental side-channel: that eval ran each fn
+	// body against SYNTHETIC example args ({a:1,b:2}), producing false positives
+	// (decision.aql), and is now hermetic. Here we analyse each AQL-bodied
+	// overload ONCE against CARRIER args (NewCarrier(param) — an abstract Map/List
+	// reads dynamic(Any)), post-binding so recursive self-refs resolve, so a fn
+	// that is DEFINED BUT NEVER CALLED still has its body statically checked
+	// (an undefined word, an in-body forward strand). Bytecode recording is
+	// suspended (a registration is not part of the program's straight line; the
+	// armed compile at first dispatch deletes this suspended summary and re-records).
+	checkFnBodyAtConstruction(r, name, entry)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
+	}
+}
+
+// checkFnBodyAtConstruction runs a static body pass for each AQL-bodied overload
+// of a freshly-installed fn, against generalised (carrier) args, so an UNCALLED
+// fn's body is still checked (a called fn is additionally checked per call site
+// via buildFnBodyReturnsFn). Check-mode only; bytecode recording suspended; the
+// fn name must already be bound (recursion). Generic and Body-less (native /
+// handler) overloads are skipped — a generic body needs per-call type bindings,
+// and a native handler has no AQL body to analyse.
+func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
+	if r == nil || !r.Check.IsActive() || fnDef.Gen != nil {
+		return
+	}
+	es := r.Check.Emit
+	for i := range fnDef.Signatures {
+		s := &fnDef.Signatures[i]
+		if s.Fallback || len(s.Body) == 0 {
+			continue
+		}
+		paramNames := make([]string, len(s.Params))
+		genArgs := make([]Value, len(s.Params))
+		for j, p := range s.Params {
+			paramNames[j] = p.Name
+			t := p.Type
+			if t == nil {
+				t = TAny
+			}
+			genArgs[j] = NewCarrier(t)
+		}
+		var declared []*Type
+		if !fnDef.Anonymous {
+			declared = append([]*Type(nil), s.Returns...)
+		}
+		// Suspend recording so the analysis is diagnostics-only (no unit recorded
+		// against the program's EmitState). nil-safe: Suspend on a nil EmitState
+		// returns a no-op restore.
+		restore := es.Suspend()
+		AnalyseFnBody(r, name, paramNames, s.Body, genArgs, fnDef.Captured, declared)
+		restore()
 	}
 }
 

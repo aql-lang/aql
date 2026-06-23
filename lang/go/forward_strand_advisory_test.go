@@ -33,16 +33,38 @@ func strandCount(t *testing.T, src string) int {
 }
 
 func TestForwardStrandAdvisory_FiresOnGotcha(t *testing.T) {
-	// add grabs the forward `3`, strands the `1`.
+	// add grabs the forward `3`, strands the `1`. The advisory fires on
+	// CONCRETE top-level operands (the real tape carries the stranded value).
 	for _, src := range []string{
 		"1 2 add 3 mul",
 		"1 2 add 3",
 		"1 2 sub 3",
-		// inside a function body: `a b add c add` strands `a`.
-		"def f fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]]\nf 1 2 3",
 	} {
 		if n := strandCount(t, src); n == 0 {
 			t.Errorf("expected a forward_strands_operand advisory for %q, got none", src)
+		}
+	}
+}
+
+// IN-BODY strands are NOT flagged — a deliberate, sound trade-off. The strand
+// scan only fires on a CONCRETE stranded operand (it skips carriers, engine.go
+// checkForwardStrandsOperand). A fn body is statically analysed against CARRIER
+// args (checkFnBodyAtConstruction / AnalyseFnBody — the §6a-A principle that an
+// abstract Map/List param reads dynamic(Any)), so a body-internal strand value is
+// a carrier and is skipped. Detecting it would require running the body with
+// concrete EXAMPLE args — exactly the dynamic-help eval that produced false
+// positives (decision.aql) and was made hermetic. So in-body strand detection is
+// intentionally dropped (the advisory is info-severity, non-gating); the
+// soundness of no-false-positives wins over a best-effort body advisory.
+func TestForwardStrandAdvisory_QuietInBody(t *testing.T) {
+	for _, src := range []string{
+		// the gotcha shape, now quiet because the body analyses with carriers:
+		"def f fn [[a:Integer b:Integer c:Integer] Integer [a b add c add]]\nf 1 2 3",
+		// and its grouped fix stays quiet too:
+		"def g fn [[a:Integer b:Integer c:Integer] Integer [(a b add) c add]]\ng 1 2 3",
+	} {
+		if n := strandCount(t, src); n != 0 {
+			t.Errorf("expected NO in-body forward_strands_operand advisory for %q, got %d", src, n)
 		}
 	}
 }

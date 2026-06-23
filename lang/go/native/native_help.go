@@ -39,9 +39,16 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		savedOut := r.Output
 		r.Output = io.Discard
 		defer func() { r.Output = savedOut }()
-		// The synthetic example evaluation is documentation, not the
-		// user's program — never record its dispatches as bytecode.
+		// The synthetic example evaluation is DOCUMENTATION, not the user's
+		// program. Make it hermetic: it must contribute NOTHING to the program's
+		// bytecode recording (Suspend) NOR to its check diagnostics — the latter
+		// would gate compilation and pollute the coverage corpus with synthetic
+		// dispatch failures against the example stand-in args (the decision.aql
+		// false positives). Real construction-time body checking is now a
+		// first-class pass (checkFnBodyAtConstruction), so dropping these is sound.
 		defer r.Check.Emit.Suspend()()
+		diagBase := len(r.Check.Diagnostics)
+		defer r.Check.TruncateDiagnostics(diagBase)
 
 		eng := NewTop(r)
 		result, err := eng.Run(vals)
