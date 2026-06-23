@@ -179,6 +179,42 @@ thread the concrete operand through to the callee's check-mode analysis
 (it sits in the hot, shared cross-registry dispatch — gate behind the
 full differential before landing). Only then can (1) fold anything.
 
+## module-rand:38 is the CLOSEST row — a different (narrower) root than module-test
+
+Deep tracing (dispatch + mark + residual-provenance, all reverted) shows
+`"aql:rand" import end def r (Rand.with-seed 2) r.list-of [Rand.int 0 10] 3`
+is NOT blocked by the inlining stack at all:
+
+- NO `MarkUncompilable` fires — the body records cleanly. `rand-with-seed`
+  and `rand-int` both reach `carrierResults` and record (`CARRES rand-int …
+  rc false` → generic CALL_NATIVE). The `[Rand.int 0 10]` generator and the
+  count compile.
+- The SOLE failure is at lowering (emit.go:3226): the program's final
+  residual — the concrete `List` returned by `list-of` — has NO `producedBy`
+  entry (`RESIDUAL-UNKNOWN rv.ID N_… nEvents 2`, and the 2 events are
+  `rand-with-seed` + `rand-int`, not `list-of`). So `list-of`'s own dispatch
+  recorded NOTHING.
+
+Root cause: `r.list-of` is a NoEvalArgs / code-body module wrapper
+(`wrapRandFnDefNoEval`, BodyPos 0, BodyOut 1). Unlike the plain wrappers
+(`rand-int`, `rand-with-seed`) which short-circuit to `execMatch` →
+`carrierResults` → record, the NoEvalArgs/code-body wrapper dispatch does
+NOT pass through `carrierResults` (no `CARRES rand-list-of` line), so its
+result carrier is produced but never recorded as a closure call. The
+residual is then untraceable → refuse.
+
+**Fix (narrower than module-test's 4-feature stack): route the NoEvalArgs
+module-wrapper check-dispatch through the closure-recording path** so
+`list-of` records a `RecordClosureCall` (its `[Rand.int 0 10]` body → a
+closure unit, its result → a tracked operand). This is one fix in the
+shared module-wrapper check-dispatch (execFnDefLiteral / execFnDefSig +
+CallAQL under shareCheckState); it does NOT need call-site inlining,
+zero-count-for, or fn-value dispatch. It MUST be gated behind the full
+`make verify-bytecode` (the dispatch path is shared by every module
+wrapper). If it lands clean, `module-rand:38` clears (refusalCeiling 5→4)
+and likely helps `map-from` and similar code-body wrappers. This is the
+recommended NEXT row to attempt — start here, not at module-test:38.
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
