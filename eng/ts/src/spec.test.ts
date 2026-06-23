@@ -281,6 +281,28 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // ── Forth-style stack manipulators (stack.tsv) ───────────────────
+  // All stack-only (barrierPos 0): args[0] is the top, args[1] the
+  // next-deeper, etc. The handler returns the splice-form replacement
+  // in source order. Mirrors registerEngSpecStack. (dup/swap/drop are
+  // registered above; the rest are added here.)
+  const stackOp = (name: string, argCount: number, fn: (a: Value[]) => Value[]): void => {
+    reg({
+      name,
+      signatures: [
+        { args: new Array<typeof TAny>(argCount).fill(TAny), barrierPos: 0, handler: (a) => fn(a) },
+      ],
+    })
+  }
+  stackOp('over', 2, (a) => [a[1]!, a[0]!, a[1]!])
+  stackOp('rot', 3, (a) => [a[1]!, a[0]!, a[2]!])
+  stackOp('nip', 2, (a) => [a[0]!])
+  stackOp('tuck', 2, (a) => [a[0]!, a[1]!, a[0]!])
+  stackOp('dup2', 2, (a) => [a[1]!, a[0]!, a[1]!, a[0]!])
+  stackOp('swap2', 4, (a) => [a[1]!, a[0]!, a[3]!, a[2]!])
+  stackOp('drop2', 2, () => [])
+  stackOp('over2', 4, (a) => [a[3]!, a[2]!, a[1]!, a[0]!, a[3]!, a[2]!])
+
   // ── q-suffixed fixtures (barrier.tsv, numbers.tsv, typeof.tsv, …) ──
   // These mirror test/go/engspec/engspec_test.go::registerSpecWords.
   // The eng/spec corpus references the q-suffixed names so they don't
