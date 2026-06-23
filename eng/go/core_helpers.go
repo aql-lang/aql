@@ -557,8 +557,67 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	SortSignatures(entry.Signatures)
 	entry.MaxForwardArgs = calcMaxForwardArgs(entry.Signatures)
 	r.Defs.Push(name, NewFnDef(entry))
+	// Construction-time body check (first-class, post-binding). Replaces the
+	// dynamic-help example eval's accidental side-channel: that eval ran each fn
+	// body against SYNTHETIC example args ({a:1,b:2}), producing false positives
+	// (decision.aql), and is now hermetic. Here we analyse each AQL-bodied
+	// overload ONCE against CARRIER args (NewCarrier(param) — an abstract Map/List
+	// reads dynamic(Any)), post-binding so recursive self-refs resolve, so a fn
+	// that is DEFINED BUT NEVER CALLED still has its body statically checked
+	// (an undefined word, an in-body forward strand). Bytecode recording is
+	// suspended (a registration is not part of the program's straight line; the
+	// armed compile at first dispatch deletes this suspended summary and re-records).
+	checkFnBodyAtConstruction(r, name, entry)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
+	}
+}
+
+// checkFnBodyAtConstruction runs a static body pass for each AQL-bodied overload
+// of a freshly-installed fn, against generalised (carrier) args, so an UNCALLED
+// fn's body is still checked (a called fn is additionally checked per call site
+// via buildFnBodyReturnsFn). Check-mode only; bytecode recording suspended; the
+// fn name must already be bound (recursion). Generic and Body-less (native /
+// handler) overloads are skipped — a generic body needs per-call type bindings,
+// and a native handler has no AQL body to analyse.
+func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
+	if r == nil || !r.Check.IsActive() || fnDef.Gen != nil {
+		return
+	}
+	for i := range fnDef.Signatures {
+		s := &fnDef.Signatures[i]
+		if s.Fallback || len(s.Body) == 0 {
+			continue
+		}
+		paramNames := make([]string, len(s.Params))
+		genArgs := make([]Value, len(s.Params))
+		for j, p := range s.Params {
+			paramNames[j] = p.Name
+			t := p.Type
+			if t == nil {
+				t = TAny
+			}
+			genArgs[j] = NewCarrier(t)
+		}
+		var declared []*Type
+		if !fnDef.Anonymous {
+			declared = append([]*Type(nil), s.Returns...)
+		}
+		// ISOLATE the analysis in a throwaway EmitState (not just Suspend): the
+		// body is analysed against the DECLARED param types, which for an abstract
+		// param (a surface like `s:Shape`) takes the surface-shape dispatch path
+		// and calls MarkUncompilable. Suspend stops recording but does NOT prevent
+		// MarkUncompilable from latching the program's EmitState.Compilable — so a
+		// construction-time check of a fn with a surface param would wrongly mark
+		// the WHOLE program uncompilable (surface.tsv:32 refused for exactly this).
+		// IsolateEmit swaps a fresh EmitState for the analysis (discarded on
+		// restore), so MarkUncompilable / recording land on the throwaway; the
+		// emitted DIAGNOSTICS (undefined_word for an uncalled body typo, the strand
+		// advisory) live on r.Check.Diagnostics and are unaffected — exactly the
+		// diagnostics-only contract this pass needs.
+		restore := r.Check.IsolateEmit()
+		AnalyseFnBody(r, name, paramNames, s.Body, genArgs, fnDef.Captured, declared)
+		restore()
 	}
 }
 

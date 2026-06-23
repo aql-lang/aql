@@ -151,14 +151,15 @@ func computeCensus() (*census, error) {
 			//
 			// This disposition is checked BEFORE tier-2, so an error row is never
 			// mis-counted as reducible compiler debt merely because its source
-			// mentions a tier-2 word. The case in point: `def loopy (macro [[a]
-			// [quote [loopy unquote a]]]) macroexpand (loopy 1)` (macro.tsv:45)
-			// expects ERROR:expansion too deep — a divergent recursive macro whose
-			// divergence is NOT statically decidable, so refuse-and-raise is the
-			// only sound behaviour (design aql-bytecode-next-stages §Stage I). Its
-			// source contains `quote`, so classify attributes tier-2 "quote", but
-			// it is a correct-error row, not a reducible TODO. Tier 1 stays first:
-			// a `Vm.run` row is genuinely interpreter-only even when it errors.
+			// mentions a tier-2 word. (Example of an ERROR row that previously
+			// refused: `mini re 'a'` with no import — the interpreter raises
+			// mini_unknown_lang; these compile to a top-level OpTrap now, but a
+			// nested occurrence still declines the trap and refuses here.) Note
+			// macro.tsv:45 (`def loopy (macro [[a] [quote [loopy unquote a]]])
+			// macroexpand (loopy 1)`, ERROR:expansion too deep) no longer reaches
+			// this branch at all: it COMPILES to a terminal macroexpand_error
+			// OpTrap (carrier.go), so it is counted as a compiled row. Tier 1 stays
+			// first: a `Vm.run` row is genuinely interpreter-only even when it errors.
 			tier, name := classify(input)
 			switch {
 			case tier == 1:

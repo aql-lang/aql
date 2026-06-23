@@ -529,7 +529,7 @@ WORD shift
   [Node/List/FlexList] barrier=1 returns=[Node/List/FlexList Any]
   [Node/List] barrier=1 returns=[Node/List Any]
 WORD size
-  [Any] barrier=1 returns=[Scalar/Number/Integer]
+  [Any] barrier=1 returns=[Scalar/Number/Integer] +returnsfn
 WORD sleep
   [Scalar/Number/Integer] barrier=1
 WORD slice

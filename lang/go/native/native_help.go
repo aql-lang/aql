@@ -39,9 +39,34 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		savedOut := r.Output
 		r.Output = io.Discard
 		defer func() { r.Output = savedOut }()
-		// The synthetic example evaluation is documentation, not the
-		// user's program — never record its dispatches as bytecode.
-		defer r.Check.Emit.Suspend()()
+		// The synthetic example evaluation is DOCUMENTATION, not the user's
+		// program, and MUST be fully hermetic — it fires from OnRegisterHook on
+		// EVERY fn registration, INCLUDING the program's own `def f fn […]` DURING
+		// compilation, so any trace it leaves contaminates that very program's
+		// compile. Three leak channels are closed:
+		//   1. EmitState (recording + interned consts + RememberOriginal) — swap in
+		//      a FRESH throwaway EmitState (IsolateEmit), not just Suspend: Suspend
+		//      keeps the SAME EmitState, so the example's consts (e.g. a generated
+		//      `['a' 'b']` sample list for a list-typed param) leaked into the
+		//      program's pool and a later operand compiled against the stale value
+		//      (a valid `def zs [1 2] end f2 zs` saw f2's arg as `['a' 'b']`).
+		//   2. Check diagnostics — snapshot + truncate (the decision.aql false
+		//      positives from synthetic stand-in args).
+		//   3. Def-stack bindings — snapshot + restore (an example that `def`s).
+		//   4. Check-mode step budget — snapshot + restore (IsolateBudget). The
+		//      synthetic run shares the registry's StepCount; a doc example that
+		//      runs many steps — most acutely a RECURSIVE macro, which loops to
+		//      the step ceiling — would otherwise burn the real program's shared
+		//      budget and short-circuit its later statements (e.g. a subsequent
+		//      `macroexpand (recursive-macro …)` never gets reached).
+		// Real construction-time body checking is a first-class pass
+		// (checkFnBodyAtConstruction), so suppressing the eval's diagnostics is sound.
+		defer r.Check.IsolateEmit()()
+		defer r.Check.IsolateBudget()()
+		diagBase := len(r.Check.Diagnostics)
+		defer r.Check.TruncateDiagnostics(diagBase)
+		defsSnap := r.Defs.Snapshot()
+		defer r.Defs.Restore(defsSnap)
 
 		eng := NewTop(r)
 		result, err := eng.Run(vals)

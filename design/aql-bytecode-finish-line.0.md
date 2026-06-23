@@ -24,6 +24,17 @@ is **re-scoped**, not literal:
 
 ## Live state
 
+> **Update (2026-06): refusalCeiling is now 6, islandCeiling 0.** The numbers in
+> the table below are the ORIGINAL baseline; the authoritative live state is
+> `test/go/langspec/COMPILED_STATUS.md` (`make status`). Current refusals (6):
+> `def-node-binding.tsv:54` (fn-body `[[c1]]` list — verified hazard),
+> `macro.tsv:45` (divergent macro — correct-error, Stage I),
+> `module-parselang.tsv:23` + `module-rand.tsv:38` + `module-test.tsv:38` (the
+> cross-registry module-body project, Stage C), and `recursion.tsv:72` (dynamic
+> scope, Stage F). Most recently `bytecode-combinations.tsv:74` (returned
+> capturing closure + per-iteration dynamic apply) landed (Stage G), 7 → 6 —
+> see `aql-bytecode-next-stages.0.md` Stage G.
+
 Measured by `go test ./test/go/langspec -run TestCompiledCoverage|TestOnlyMetaFallsBack`
 and generated into `test/go/langspec/COMPILED_STATUS.md` (`make status`).
 

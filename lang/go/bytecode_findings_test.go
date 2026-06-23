@@ -7,8 +7,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // Finding A / C — RunCompiled resolves a compiled-mode INTERNAL error (a VM
@@ -697,8 +699,9 @@ func TestWordSpliceCompilesNative(t *testing.T) {
 // expansion is a compile-time computation, so carrierResults runs it and bakes
 // the resulting token list as a code-as-data const (a Word is admitted as a
 // const MEMBER — isInertConstMember). The compiled result is the same data list
-// the interpreter returns. A too-deep / un-bakeable expansion refuses and the
-// interpreter surfaces the identical result. Proof that macroexpand is
+// the interpreter returns. A too-deep recursive expansion at top level compiles
+// to a terminal OpTrap raising the byte-identical macroexpand_error; a nested
+// occurrence declines the trap and falls back. Proof that macroexpand is
 // reducible compiler work, not irreducible reflection.
 func TestMacroexpandCompilesNative(t *testing.T) {
 	for _, c := range []struct {
@@ -726,15 +729,108 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 		}
 	}
 
-	// A recursive (too-deep) macro errors in both engines (the compile-time
-	// expansion errors, so the row refuses and the interpreter surfaces it).
+	// A recursive (too-deep) macro at TOP LEVEL now compiles to a TERMINAL
+	// OpTrap: the macro head is captured raw as macroexpand's FormArg,
+	// macroexpand dispatches in check mode, ExpandMacroForm runs the expansion
+	// to the depth guard, and the resulting macroexpand_error is recorded as a
+	// trap (mirroring the mini/parse/emit *_unknown_lang expansion-time traps).
+	// The compiled program raises the byte-identical error the interpreter does.
 	deep := `def loopy (macro [[a] [quote [loopy unquote a]]])  macroexpand (loopy 1)`
 	a, _ := New()
-	_, _, errC := a.RunCompiled(deep)
+	prog, reason, _, cerr := a.CompileCheck(deep)
+	if cerr != nil || prog == nil {
+		t.Fatalf("too-deep macroexpand: expected compile-to-trap, refused: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if !strings.Contains(dis, "TRAP") || !strings.Contains(dis, "macroexpand_error") {
+		t.Errorf("too-deep macroexpand: expected an OpTrap for macroexpand_error, got:\n%s", dis)
+	}
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("too-deep macroexpand: expected a terminal trap, got an island:\n%s", dis)
+	}
+	// Both engines raise the IDENTICAL error (taxonomy + detail byte-match).
+	ar, _ := New()
+	_, compiled, errC := ar.RunCompiled(deep)
 	b, _ := New()
 	_, errI := b.Run(deep)
-	if (errC == nil) != (errI == nil) {
-		t.Errorf("too-deep macroexpand: error divergence compiled=%v interp=%v", errC, errI)
+	if !compiled {
+		t.Errorf("too-deep macroexpand: must run on the compiled path (the trap), not fall back")
+	}
+	if errC == nil || errI == nil {
+		t.Fatalf("too-deep macroexpand: both engines must error (compiled=%v interp=%v)", errC, errI)
+	}
+	if codeOf(errC) != "macroexpand_error" || codeOf(errC) != codeOf(errI) {
+		t.Errorf("too-deep macroexpand: code mismatch compiled=%q interp=%q", codeOf(errC), codeOf(errI))
+	}
+	if errC.Error() != errI.Error() {
+		t.Errorf("too-deep macroexpand: detail must byte-match\n  compiled=%q\n  interp  =%q", errC.Error(), errI.Error())
+	}
+
+	// Determinism: the compile-to-trap outcome must be identical every time —
+	// the recursive expansion advances the time-seeded global value-ID RNG
+	// (value.go) which feeds the provenance map; the trap must not be sensitive
+	// to it. 20 in-process CompileChecks must all yield the same single OpTrap.
+	for i := 0; i < 20; i++ {
+		d, _ := New()
+		p, _, _, _ := d.CompileCheck(deep)
+		if p == nil || p.Disassemble() != dis {
+			t.Fatalf("too-deep macroexpand: non-deterministic compile on iteration %d\n  first:\n%s\n  now:\n%s", i, dis, func() string {
+				if p == nil {
+					return "<refused>"
+				}
+				return p.Disassemble()
+			}())
+		}
+	}
+
+	// NEGATIVE — a NESTED occurrence (inside an if-branch fragment, not at the
+	// top-level unit/frame) must DECLINE the trap (RecordTrap is top-level-only)
+	// and keep the lenient fallback: the row refuses to compile and the
+	// interpreter surfaces the identical error. Confirms the trap is conditional
+	// only where it is provably reached.
+	nested := `def loopy (macro [[a] [quote [loopy unquote a]]])  if true [ macroexpand (loopy 1) ] [ 0 ]`
+	c, _ := New()
+	np, _, _, _ := c.CompileCheck(nested)
+	if np != nil {
+		t.Errorf("nested too-deep macroexpand: must refuse (top-level-only trap), but compiled:\n%s", np.Disassemble())
+	}
+	cn, _ := New()
+	_, _, nerrC := cn.RunCompiled(nested)
+	dn, _ := New()
+	_, nerrI := dn.Run(nested)
+	if nerrC == nil || nerrI == nil || nerrC.Error() != nerrI.Error() {
+		t.Errorf("nested too-deep macroexpand: error parity broken compiled=%v interp=%v", nerrC, nerrI)
+	}
+}
+
+// Dynamic-help budget isolation — the OnRegisterHook synthetic example eval
+// (native_help.go) shares the registry's check-mode StepCount, and the engine's
+// check loop short-circuits every sub-engine once BudgetTripped. A documentation
+// example that loops to the step ceiling — a RECURSIVE macro registered via
+// `def` — would otherwise burn the real program's budget and abort its later
+// statements before they are checked. IsolateBudget (the fourth hermetic channel
+// alongside IsolateEmit / TruncateDiagnostics / Defs restore) snapshots and
+// restores the counters so the synthetic eval cannot abort the program's
+// compile. This is exactly what unblocked macro.tsv:45's compile-to-trap: with
+// the leak, `macroexpand (loopy 1)` was never reached.
+func TestDynamicHelpBudgetIsolation(t *testing.T) {
+	// A recursive macro DEFINITION followed by an ordinary, statically
+	// materialisable statement: without budget isolation the def's synthetic
+	// help eval exhausts the budget and the `add` never compiles. With it, the
+	// trailing statement compiles to a plain native call.
+	const src = `def loopy (macro [[a] [quote [loopy unquote a]]])  1 add 2`
+	a, _ := New()
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("expected the trailing statement to compile despite the recursive-macro def: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "TRAP") || strings.Contains(dis, "step_budget") {
+		t.Errorf("recursive-macro def must not pollute the program's compile via the help eval:\n%s", dis)
+	}
+	out, compiled, errC := a.RunCompiled(src)
+	if !compiled || errC != nil || fmt.Sprint(out) != "[3]" {
+		t.Errorf("trailing statement: compiled=%v out=%v err=%v (want [3])", compiled, out, errC)
 	}
 }
 
@@ -1548,14 +1644,16 @@ func TestFactoryApplyCompiles(t *testing.T) {
 		t.Fatalf("factory-apply parity: compiled=%v gotC=%v gotI=%v (want [11])", compiled, gotC, gotI)
 	}
 
+	// A CAPTURING factory (`[y] => [x add y]` closes over the factory's param x)
+	// now ALSO compiles natively — tryReturnedClosure threads the resolved capture
+	// before OpPushClosure. Full positive coverage (top-level + per-iteration apply)
+	// lives in TestReturnedCapturingClosureApply.
+
 	// NEGATIVE — the boundaries that must keep falling back (faithfully):
 	for _, neg := range []struct{ name, src string }{
 		// A bare closure RESULT must not compile — a VM closure prints
 		// differently from the interpreter's FnDefInfo, so it falls back.
 		{"bare closure residual", factory + `(mk2 5)`},
-		// A CAPTURING factory (`[y] => [x add y]` closes over x) is not yet
-		// compiled here; it must fall back, not silently miscompile.
-		{"capturing factory", `def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] (mk 5) 10`},
 	} {
 		gC, comp, eC := mustNew(t).RunCompiled(neg.src)
 		gI, eI := mustNew(t).Run(neg.src)
@@ -2238,15 +2336,103 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: a user call whose result feeds a harness/accumulation (not a
-	// plain out-of-order residual) must NOT be promoted — the Test.run-spec
-	// harness diverged when user-call results were promoted broadly, so it stays
-	// on fallback. Assert it still falls back faithfully (compiled == interp).
+	// The full Test.run-spec harness (module-test:38) compiles natively on this
+	// branch (zero-count `for` pruning over `subs: []` drops the unreachable
+	// recursive branch; see TestRunSpecHarnessCompiles). Whatever the tier, the
+	// compiled run must stay byte-identical to the interpreter — pin that parity.
 	const harness = `import "aql:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
 	gotC, _, errC := mustNew(t).RunCompiled(harness)
 	gotI, errI := mustNew(t).Run(harness)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("Test harness parity: compiled=%v(%v) interp=%v(%v)", gotC, errC, gotI, errI)
+	}
+}
+
+// Zero-count `for` pruning (module-test:38). A `for` whose count operand is a
+// CONCRETE non-positive Integer never enters its body — both engines iterate
+// zero times and push zero values. The recorder now prunes it: it analyses
+// neither the body (so an unreachable branch that only type-checks for a live
+// iteration no longer poisons the program) nor records a loop. The lever that
+// clears module-test:38 — `run-spec`'s `for (subs size) [subspec run-spec]`
+// over `subs: []` recurses into `run-spec` over a carrier `subspec` that cannot
+// statically dispatch; pruning the dead branch lets the whole spec runner
+// compile (run-spec body → closure, run-cases/run-case → CALL_USER, test-invoke
+// → poly). The `size` ReturnsFn folding a concrete container to its static
+// count is the prerequisite that makes `subs size` a concrete 0.
+func TestRunSpecHarnessCompiles(t *testing.T) {
+	// POSITIVE: the full Test.run-spec harness compiles natively and is
+	// byte-identical to the interpreter — including the test-record side
+	// effects ({total:2 passed:2 failed:0}), which the compiled pass must NOT
+	// double-count.
+	const harness = `"aql:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(harness)
+	if cerr != nil || prog == nil {
+		t.Fatalf("run-spec harness did not compile: reason=%q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	if strings.Contains(dis, "FALLBACK") {
+		t.Errorf("run-spec harness islanded:\n%s", dis)
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(harness)
+	gotI, errI := mustNew(t).Run(harness)
+	if !compiled || errC != nil || errI != nil {
+		t.Fatalf("run-spec harness run: compiled=%v errC=%v errI=%v", compiled, errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[{total:2 passed:2 failed:0}]" {
+		t.Errorf("run-spec harness parity: compiled=%v interp=%v want [{total:2 passed:2 failed:0}]", gotC, gotI)
+	}
+
+	// POSITIVE (the prune in isolation): a `for` over a statically-zero count
+	// compiles even when its body would NOT compile on its own — the body is
+	// unreachable. Here the body calls an undefined word, which would refuse a
+	// live loop; pruned, the program compiles and yields the trailing value.
+	for _, c := range []struct{ src, want string }{
+		{`for 0 [ nope-undefined ] end 7`, "[7]"},
+		{`for (-3) [ nope-undefined ] end 7`, "[7]"},
+		{`def xs [] end for (xs size) [ nope-undefined ] end 7`, "[7]"},
+		{`for [5 5] [ nope-undefined ] end 7`, "[7]"}, // empty range [start=5 end=5]
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: zero-count prune did not compile: reason=%q", c.src, reason)
+			continue
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled || eC != nil || eI != nil {
+			t.Errorf("%q: run: compiled=%v eC=%v eI=%v", c.src, compiled, eC, eI)
+			continue
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: a LIVE loop (concretely non-zero count) is NOT pruned — its
+	// body is analysed as usual, so the per-iteration value is produced and the
+	// result matches the interpreter. The prune must not leak into live loops.
+	for _, c := range []struct{ src, want string }{
+		{`for 3 [ i ] end`, "[0 1 2]"},
+		{`def xs [9 8] end for (xs size) [ i ] end`, "[0 1]"},
+	} {
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled || eC != nil || eI != nil {
+			t.Errorf("%q: live loop run: compiled=%v eC=%v eI=%v", c.src, compiled, eC, eI)
+			continue
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: live loop compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE (soundness of the prune boundary): a live one-iteration loop
+	// whose body refuses must still REFUSE — pruning fires only for a concrete
+	// zero count, never for count 1.
+	prog2, _, _, _ := mustNew(t).CompileCheck(`for 1 [ nope-undefined ] end 7`)
+	if prog2 != nil && !strings.Contains(prog2.Disassemble(), "FALLBACK") {
+		// An undefined word in a LIVE loop body must not compile natively.
+		t.Errorf("live count-1 loop with refusing body unexpectedly compiled native:\n%s", prog2.Disassemble())
 	}
 }
 
@@ -2741,6 +2927,206 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 		gi, ei := mustNew(t).Run(src)
 		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {
 			t.Errorf("fallback parity: compiled=%v/%s interp=%v/%s :: %s", gc, codeOf(ec), gi, codeOf(ei), src)
+		}
+	}
+}
+
+// Returned capturing closure + per-iteration dynamic apply (bytecode-combinations.tsv:74).
+// A factory fn returns a closure that captures the factory's param; the closure is
+// then applied to a trailing arg. Both the top-level immediate apply and the
+// per-iteration apply inside a `for` body must compile FULLY NATIVE (the returned
+// closure is a ClosurePayload OpCallDynamic invokes VM-natively) and match the
+// interpreter.
+func TestReturnedCapturingClosureApply(t *testing.T) {
+	positive := []struct {
+		src  string
+		want string
+	}{
+		// top-level: factory returns a closure capturing x, applied immediately.
+		{`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  (mk 5) 10`, "[15]"},
+		// per-iteration apply inside a for body — the landed row.
+		{`def mk2 fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  for 3 [(mk2 i) 10]`, "[10 11 12]"},
+		// a multi-arg trailing apply over the per-iteration closure.
+		{`def mk4 fn [[x:Integer] [Function] [([a:Integer b:Integer] => [x add a add b])]]  for 3 [(mk4 i) 10 100]`, "[110 111 112]"},
+	}
+	for _, c := range positive {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: must compile; reason=%q err=%v", c.src, reason, cerr)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: must compile native, not island:\n%s", c.src, prog.Disassemble())
+			continue
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, _ := mustNew(t).Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s", c.src, compiled, gotC, errC, gotI, c.want)
+		}
+	}
+
+	// Negative: a per-iteration body whose trailing apply arg is itself a COMPUTED
+	// (event) value is NOT the leading-fn-carrier + re-pushable-args shape — it must
+	// REFUSE (the computed arg is already on the sim; seating it would double-push),
+	// and fall back to the interpreter with full parity rather than mis-compile.
+	negative := []string{
+		`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  for 3 [(mk i) (add i 1)]`,
+	}
+	for _, src := range negative {
+		prog, _, _, _ := mustNew(t).CompileCheck(src)
+		if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: a computed apply-arg must NOT compile to a native per-iteration apply:\n%s", src, prog.Disassemble())
+		}
+		gc, _, ec := mustNew(t).RunCompiled(src)
+		gi, ei := mustNew(t).Run(src)
+		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {
+			t.Errorf("fallback parity: compiled=%v/%s interp=%v/%s :: %s", gc, codeOf(ec), gi, codeOf(ei), src)
+		}
+	}
+}
+
+// TestParseLangFnValueDispatchCompiles pins the two sub-features that let an
+// AQL-registered parser (`ParseLang.register`) compile to bytecode
+// (design/aql-bytecode-stage3-inlining-plan.0.md, module-parselang:23):
+//
+//	A. SOUND check-mode registration — the register handler installs the
+//	   parser at check time (ReturnsFn) so `ParseLang.parse_<name>` resolves
+//	   statically, AND the runtime register handler is idempotent for the
+//	   compiled path's re-run of the SAME source call (so it does not raise
+//	   parse_kind_exists). A GENUINE double-register (different source Pos)
+//	   still errors — the negative below pins it.
+//	B. body-bearing fn-VALUE dispatch — the resolved parser fn value, called
+//	   with args, lowers to a CALL_USER unit (its `__pa` tail captured INSIDE
+//	   the unit) instead of leaking `__pa` into the top-level residual.
+func TestParseLangFnValueDispatchCompiles(t *testing.T) {
+	const reg = `"aql:parselang" import end  "aql:string-util" import end  ` +
+		`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  `
+
+	// POSITIVE: the desugared standard call (row 23) and the `parse` sugar
+	// (row 16) compile, run through the VM, and match the interpreter.
+	for _, c := range []struct{ src, want string }{
+		{reg + `(ParseLang.parse_calc 'x + y' {} end) get 1`, "[+]"},
+		{reg + `(ParseLang.parse_calc 'x + y' {} end) get 0`, "[x]"},
+		{reg + `(parse calc 'x + y') get 1`, "[+]"},
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		if !strings.Contains(prog.Disassemble(), "CALL_USER") {
+			t.Errorf("%q: expected the parser body to lower to a CALL_USER unit:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE (sub-feature A soundness): a GENUINE double-register of the same
+	// kind — two distinct `register` calls in the source — must still error
+	// `parse_kind_exists` in BOTH engines. The idempotency keys on the
+	// fn-value source Pos, so two different call sites are NOT treated as one.
+	dbl := `"aql:parselang" import end  ` +
+		`ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]]) end  ` +
+		`ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]])`
+	_, _, eC := mustNew(t).RunCompiled(dbl)
+	_, eI := mustNew(t).Run(dbl)
+	if codeOf(eC) != "parse_kind_exists" {
+		t.Errorf("double-register compiled: code=%q want parse_kind_exists (err=%v)", codeOf(eC), eC)
+	}
+	if codeOf(eI) != "parse_kind_exists" {
+		t.Errorf("double-register interp: code=%q want parse_kind_exists (err=%v)", codeOf(eI), eI)
+	}
+}
+
+func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
+	clk := capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)}
+	newClocked := func() *AQL {
+		a := mustNew(t)
+		a.SetClock(clk)
+		return a
+	}
+
+	// POSITIVE: the seeded-instance closure-word form compiles to PUSH_CLOSURE,
+	// is island-free, and is byte-identical to the interpreter across seeds.
+	for _, seed := range []int{0, 1, 2, 3, 7, 42, 99, 123} {
+		src := fmt.Sprintf(
+			`"aql:rand" import end  def r (Rand.with-seed %d)  r.list-of [Rand.int 0 10] 3`, seed)
+		prog, reason, _, cerr := newClocked().CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("seed %d: check error %v", seed, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("seed %d: expected compile, refused: %s", seed, reason)
+		}
+		dis := prog.Disassemble()
+		if !strings.Contains(dis, "PUSH_CLOSURE") {
+			t.Errorf("seed %d: expected PUSH_CLOSURE (closure-word dispatch):\n%s", seed, dis)
+		}
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("seed %d: expected no interpreter island:\n%s", seed, dis)
+		}
+		gotC, compiled, eC := newClocked().RunCompiled(src)
+		gotI, eI := newClocked().Run(src)
+		if !compiled {
+			t.Errorf("seed %d: did not run compiled", seed)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("seed %d: compiled err=%v interp err=%v", seed, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("seed %d: parity: compiled=%v interp=%v", seed, gotC, gotI)
+		}
+	}
+
+	// POSITIVE: the spec row's exact expected value at the spec clock+seed.
+	{
+		const src = `"aql:rand" import end  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3`
+		gotC, compiled, eC := newClocked().RunCompiled(src)
+		if !compiled || eC != nil {
+			t.Fatalf("row 38: compiled=%v err=%v", compiled, eC)
+		}
+		if fmt.Sprint(gotC) != "[[7 5 4]]" {
+			t.Errorf("row 38: compiled=%v want [[7 5 4]]", gotC)
+		}
+	}
+
+	// NEGATIVE: a RECEIVER-bound body (`r.int`) is seed-specific. It must NOT be
+	// baked as a closure-word const-frozen draw; it stays on the dynamic path and
+	// remains byte-identical to the interpreter at every seed.
+	for _, seed := range []int{2, 5, 42} {
+		src := fmt.Sprintf(
+			`"aql:rand" import end  def r (Rand.with-seed %d)  r.list-of [r.int 0 10] 3`, seed)
+		prog, _, _, _ := newClocked().CompileCheck(src)
+		if prog != nil && strings.Contains(prog.Disassemble(), "PUSH_CLOSURE") &&
+			!strings.Contains(prog.Disassemble(), "CALL_DYNAMIC") {
+			t.Errorf("seed %d: r.int body wrongly baked as a frozen closure draw:\n%s",
+				seed, prog.Disassemble())
+		}
+		gotC, _, eC := newClocked().RunCompiled(src)
+		gotI, eI := newClocked().Run(src)
+		if eC != nil || eI != nil {
+			t.Fatalf("seed %d (recv-bound): compiled err=%v interp err=%v", seed, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("seed %d (recv-bound): parity: compiled=%v interp=%v", seed, gotC, gotI)
 		}
 	}
 }

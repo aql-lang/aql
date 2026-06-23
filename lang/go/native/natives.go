@@ -206,7 +206,7 @@ var Natives = []NativeFunc{
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: sizeHandler, BarrierPos: -1, Returns: []*Type{TInteger}},
+			{Args: []*Type{TAny}, Handler: sizeHandler, ReturnsFn: sizeReturns, BarrierPos: -1, Returns: []*Type{TInteger}},
 		},
 	},
 

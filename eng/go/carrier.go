@@ -1,6 +1,7 @@
 package eng
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 )
@@ -379,7 +380,8 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// succeeds; a too-deep / erroring expansion falls through to refuse, and the
 	// interpreter surfaces the same error.
 	if word == "macroexpand" && len(args) == 1 {
-		if toks, err := ExpandMacroForm(r, args[0]); err == nil {
+		toks, err := ExpandMacroForm(r, args[0])
+		if err == nil {
 			if lst := NewList(toks); isInertConst(lst) {
 				// Determinism guard (mirrors tryFoldModuleConst /
 				// constFoldContainerVal): ExpandMacroForm runs the macro template
@@ -397,6 +399,22 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 				if err2 == nil && constFoldAgrees(NewList(toks2), lst) {
 					return []Value{lst}
 				}
+			}
+		} else {
+			// A runaway recursive macro expands until the depth guard
+			// (macro_expand.go) raises `macroexpand_error` — the interpreter
+			// raises exactly this error at run time. Compile the byte-identical
+			// terminal trap (top-level only — RecordTrap declines a nested
+			// occurrence, which keeps the lenient fallback) so the compiled
+			// program raises it instead of refusing. Mirrors the sibling
+			// mini/parse/emit `*_unknown_lang` expansion-time traps. Any OTHER
+			// expansion error (a malformed form, a non-macro head) is not a
+			// runtime error to reproduce — it falls through to refuse, and the
+			// interpreter surfaces it.
+			var ae *AqlError
+			if errors.As(err, &ae) && ae.Code == "macroexpand_error" {
+				r.Check.Emit.RecordTrap("macroexpand_error", ae.Detail,
+					"macroexpand", ae.Hint, pos)
 			}
 		}
 	}

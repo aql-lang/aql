@@ -6,3 +6,34 @@ package native
 func sizeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewInteger(int64(SizeOf(args[0])))}, nil
 }
+
+// sizeReturns folds `size` over a CONCRETE list or map to its statically-known
+// element count — the same value SizeOf computes at run time, but available to
+// the checker so a downstream `for (xs size) [...]` sees a concrete count
+// (enabling zero-count loop pruning when the collection is statically empty —
+// module-test:38's `for (subs size)` over `subs: []`). A non-concrete receiver,
+// or a non-list/map shape whose size depends on runtime content, keeps the
+// declared Integer carrier so nothing is baked unsoundly. Strings keep the
+// carrier: their `size` is the rune count, faithful to fold, but the loop-prune
+// use only needs containers, and a static string fold has no consumer here.
+func sizeReturns(args []Value, _ *Registry) []Value {
+	carrier := []Value{NewCarrier(TInteger)}
+	if len(args) != 1 {
+		return carrier
+	}
+	v := args[0]
+	if !IsConcrete(v) {
+		return carrier
+	}
+	switch {
+	case v.Parent.ConformsTo(TList):
+		if lst, err := AsList(v); err == nil && !lst.IsNil() {
+			return []Value{NewInteger(int64(lst.Len()))}
+		}
+	case v.Parent.ConformsTo(TMap):
+		if m, err := AsMap(v); err == nil && m != nil {
+			return []Value{NewInteger(int64(m.Len()))}
+		}
+	}
+	return carrier
+}
