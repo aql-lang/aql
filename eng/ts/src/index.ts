@@ -78,6 +78,7 @@ export {
   newFnDef,
   newFnUndef,
   newForwardMarker,
+  newInspect,
   newInteger,
   newList,
   newMap,

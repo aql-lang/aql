@@ -16,6 +16,7 @@ import {
   TFnUndef,
   TFloat,
   TForward,
+  TInspect,
   TFunction,
   TInteger,
   TList,
@@ -420,6 +421,15 @@ export class OrderedMap {
 /** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
 export function newMap(m: OrderedMap): Value {
   return new Value(TMap, m)
+}
+
+/**
+ * Construct an inspection map (VType Node/Map/Inspect). Renders in
+ * insertion order with word values bare (e.g. `kind:native`), unlike a
+ * plain map which sorts keys.
+ */
+export function newInspect(m: OrderedMap): Value {
+  return new Value(TInspect, m)
 }
 
 /**

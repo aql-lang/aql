@@ -111,7 +111,7 @@ function isBareTypeNode(v: Value): boolean {
  * body (type literal or nested record shape). Mirrors
  * core_type.go::IsRecordShape.
  */
-function isRecordShape(v: Value): boolean {
+export function isRecordShape(v: Value): boolean {
   if (!v.isMap()) return false
   const m = v.asMap()
   if (m.size === 0) return false
@@ -122,7 +122,7 @@ function isRecordShape(v: Value): boolean {
 }
 
 /** isTypeBody: a structural type value (typed container, disjunct, record shape, fn). */
-function isTypeBody(v: Value): boolean {
+export function isTypeBody(v: Value): boolean {
   if (v.isTypedList() || v.isTypedMap() || v.isDisjunct()) return true
   if (v.data !== null && v.vType.matches(TType)) return true
   return isRecordShape(v)

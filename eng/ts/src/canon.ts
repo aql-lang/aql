@@ -7,7 +7,7 @@
 // through the current TS engine (none, type literals, scalars, atoms,
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
-import { TAtom, TBoolean, TFloat, TInteger, TList, TMap, TNone, TString } from './type.ts'
+import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TNone, TString } from './type.ts'
 import type { FnDefInfo } from './value.ts'
 import { ChildType, OrderedMap, Value } from './value.ts'
 
@@ -160,6 +160,17 @@ export function canonValue(v: Value): string {
   if (v.vType.equal(TMap) && v.data instanceof OrderedMap) {
     const m = v.data
     const parts = m.sortedKeys().map((k) => `${k}:${canonValue(m.get(k)!)}`)
+    return `{${parts.join(' ')}}`
+  }
+  // An inspection map renders in insertion order with bare word values
+  // (e.g. `kind:native`), unlike a plain map.
+  if (v.vType.equal(TInspect) && v.data instanceof OrderedMap) {
+    const m = v.data
+    const parts = m.keys().map((k) => {
+      const val = m.get(k)!
+      const rendered = val.isWord() ? val.asWord().name : canonValue(val)
+      return `${k}:${rendered}`
+    })
     return `{${parts.join(' ')}}`
   }
   if (v.isFnDef()) {

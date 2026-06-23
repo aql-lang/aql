@@ -692,7 +692,7 @@ export class Engine {
    * parser's eval-map / eval-list data-context semantics.
    */
   private deepEvalData(v: Value): Value {
-    if (v.data instanceof OrderedMap) {
+    if (v.data instanceof OrderedMap && v.vType.equal(TMap)) {
       const out = new OrderedMap()
       for (const k of v.asMap().keys()) out.set(k, this.evalMapValue(v.asMap().get(k)!))
       return newMap(out)
@@ -711,7 +711,7 @@ export class Engine {
    * else passes through.
    */
   private evalMapValue(v: Value): Value {
-    if (v.data instanceof OrderedMap) return this.deepEvalData(v)
+    if (v.data instanceof OrderedMap && v.vType.equal(TMap)) return this.deepEvalData(v)
     if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
       const sub = new Engine(this.registry).run([...v.asList()]).map((e) => this.deepEvalData(e))
       if (sub.length === 1) return sub[0]!

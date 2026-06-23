@@ -13,7 +13,14 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { canon } from './canon.ts'
-import { coerceBoolean, isValueOfType, pathOf, typeOf } from './coretype.ts'
+import {
+  coerceBoolean,
+  isRecordShape,
+  isTypeBody,
+  isValueOfType,
+  pathOf,
+  typeOf,
+} from './coretype.ts'
 import { makeScalarHandler } from './make.ts'
 import {
   AqlError,
@@ -33,6 +40,7 @@ import {
   TList,
   TMap,
   TScalar,
+  TType,
   TWord,
   Value,
   type FnParam,
@@ -45,6 +53,7 @@ import {
   newFnDef,
   newFnUndef,
   newFloat,
+  newInspect,
   newInteger,
   newList,
   newMap,
@@ -541,14 +550,14 @@ function registerSpecWords(r: Registry): void {
     forwardPrecedence: true,
     signatures: [
       {
-        args: [TList],
-        noEvalArgs: new Set([0]),
-        handler: (args) => new Engine(r).run([...args[0]!.asList()]),
-      },
-      {
         args: [TMap],
         noEvalArgs: new Set([0]),
         handler: (args) => [doEvalMapValue(args[0]!)],
+      },
+      {
+        args: [TList],
+        noEvalArgs: new Set([0]),
+        handler: (args) => new Engine(r).run([...args[0]!.asList()]),
       },
     ],
   })
@@ -567,6 +576,35 @@ function registerSpecWords(r: Registry): void {
         typeArgs: new Set([0]),
         handler: (args) => makeScalarHandler(args),
       },
+    ],
+  })
+
+  // inspect — render a word's signatures or a type's structure as an
+  // inspection map. Mirrors registerEngSpecInspect (buildInspection /
+  // buildTypeInspection). The word form fires when the arg is a Word
+  // naming a registered native; otherwise the type form runs.
+  reg({
+    name: 'inspect',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        // Word form: the TWord slot captures the name as data (so the
+        // matcher does not dispatch a registered word like `dup`).
+        args: [TWord],
+        handler: (args, _ctx, _stk, registry) => {
+          const name = args[0]!.asWord().name
+          const fn = registry.lookup(name)
+          if (fn) return [buildWordInspection(name, fn)]
+          const top = registry.topOfDefStack(name)
+          if (top !== undefined) return [buildDefinedInspection(name, top)]
+          const unk = new OrderedMap()
+          unk.set('name', newString(name))
+          unk.set('kind', newWord('unknown'))
+          unk.set('signatures', newList([], { eval: false }))
+          return [newInspect(unk)]
+        },
+      },
+      { args: [TAny], handler: (args) => [buildTypeInspection(args[0]!)] },
     ],
   })
 
@@ -1117,6 +1155,136 @@ function parseFnReturn(v: Value) {
   const type = typeNameTable().get(w.name)
   if (!type) throw new Error(`fn: unknown return type ${JSON.stringify(w.name)}`)
   return type
+}
+
+// buildWordInspection renders a registered word's metadata as an
+// inspection map: {name:'…' kind:native signatures:[{args:['…' …]} …]}.
+function buildWordInspection(name: string, fn: { signatures: { args: { leaf(): string }[] }[] }): Value {
+  const om = new OrderedMap()
+  om.set('name', newString(name))
+  om.set('kind', newWord('native'))
+  const sigs = fn.signatures.map((sig) => {
+    const sm = new OrderedMap()
+    sm.set('args', newList(sig.args.map((t) => newString(t.leaf())), { eval: false }))
+    return newMap(sm)
+  })
+  om.set('signatures', newList(sigs, { eval: false }))
+  return newInspect(om)
+}
+
+// buildTypeInspection renders a value's type structure as an inspection
+// map, mirroring buildTypeInspection in eng/go. Kinds: literal (bare
+// type / concrete value), record, typed_list, typed_map, disjunct,
+// function_shape, unknown (atom name lookup).
+function strList(items: string[]): Value {
+  return newList(items.map((s) => newString(s)), { eval: false })
+}
+function buildTypeInspection(v: Value): Value {
+  const om = new OrderedMap()
+  // A concrete atom is treated as a name to look up.
+  if (v.vType.equal(TAtom) && v.data !== null) {
+    om.set('name', newString(v.asAtom()))
+    om.set('kind', newWord('unknown'))
+    om.set('signatures', newList([], { eval: false }))
+    return newInspect(om)
+  }
+  // Typed list / typed map.
+  if (v.isTypedList() || v.isTypedMap()) {
+    om.set('type', newString('Type'))
+    om.set('struct', newString(v.isTypedMap() ? 'Map' : 'List'))
+    om.set('kind', newWord(v.isTypedMap() ? 'typed_map' : 'typed_list'))
+    om.set('child', newString(v.asChildType().child.vType.toString()))
+    return newInspect(om)
+  }
+  // Disjunct / Enum.
+  if (v.isDisjunct()) {
+    om.set('type', newString('Type'))
+    om.set('struct', newString(v.vType.leaf()))
+    om.set('kind', newWord('disjunct'))
+    om.set('alternatives', strList(v.asDisjunct().alternatives.map((a) => a.vType.toString())))
+    return newInspect(om)
+  }
+  // FunctionSignature (fnsig) — pairs of [params][returns]. The bare
+  // type literal renders as function_shape with no signatures.
+  if (v.vType.equal(typeTable.get('FunctionSignature')!)) {
+    om.set('type', newString('Type'))
+    om.set('struct', newString('FunctionSignature'))
+    om.set('kind', newWord('function_shape'))
+    const pairs = Array.isArray(v.data) ? (v.data as Value[]) : []
+    const sigs: Value[] = []
+    for (let i = 0; i + 1 < pairs.length; i += 2) {
+      const sm = new OrderedMap()
+      sm.set('params', strList(pairs[i]!.asList().map((p) => p.vType.leaf())))
+      sm.set('returns', strList(pairs[i + 1]!.asList().map((r) => r.vType.leaf())))
+      sigs.push(newMap(sm))
+    }
+    om.set('signatures', newList(sigs, { eval: false }))
+    return newInspect(om)
+  }
+  // Bare type literals (incl. the none value) and concrete values.
+  if (v.isNone()) {
+    om.set('type', newString('None'))
+    om.set('kind', newWord('literal'))
+    return newInspect(om)
+  }
+  if (v.data === null) {
+    om.set('type', newString('Type'))
+    om.set('struct', newString(v.vType.leaf()))
+    om.set('kind', newWord('literal'))
+    return newInspect(om)
+  }
+  // Any other type body whose VType lives under Type (e.g. a Function
+  // value) is a TYPE literal of its leaf.
+  if (v.vType.matches(TType)) {
+    om.set('type', newString('Type'))
+    om.set('struct', newString(v.vType.leaf()))
+    om.set('kind', newWord('literal'))
+    return newInspect(om)
+  }
+  // Record-shape map → a TYPE.
+  if (isRecordShape(v)) {
+    om.set('type', newString('Type'))
+    om.set('struct', newString('Map'))
+    om.set('kind', newWord('record'))
+    const fields = new OrderedMap()
+    const m = v.asMap()
+    for (const k of m.keys()) fields.set(k, newString(m.get(k)!.vType.leaf()))
+    om.set('fields', newMap(fields))
+    return newInspect(om)
+  }
+  // Any other concrete value — a literal of its own type.
+  om.set('type', newString(v.vType.leaf()))
+  om.set('kind', newWord('literal'))
+  return newInspect(om)
+}
+
+// buildDefinedInspection renders a def-bound name: a bound type body
+// gets the type inspection prefixed with name; an FnDef gets kind:
+// defined with its param signatures plus a synthetic 0-arg fallback;
+// a plain value gets kind:defined with its rendered value.
+function buildDefinedInspection(name: string, top: Value): Value {
+  if (top.data === null || isTypeBody(top)) {
+    const insp = buildTypeInspection(top).asMap()
+    const om = new OrderedMap()
+    om.set('name', newString(name))
+    for (const k of insp.keys()) om.set(k, insp.get(k)!)
+    return newInspect(om)
+  }
+  const om = new OrderedMap()
+  om.set('name', newString(name))
+  om.set('kind', newWord('defined'))
+  if (top.isFnDef()) {
+    const fd = top.asFnDef()
+    const sm = new OrderedMap()
+    sm.set('args', newList(fd.params.map((p) => newString(p.type.leaf())), { eval: false }))
+    const empty = new OrderedMap()
+    empty.set('args', newList([], { eval: false }))
+    om.set('signatures', newList([newMap(sm), newMap(empty)], { eval: false }))
+  } else {
+    om.set('value', top)
+    om.set('signatures', newList([], { eval: false }))
+  }
+  return newInspect(om)
 }
 
 // renderStack renders the residual stack as canonical AQL source via
