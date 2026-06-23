@@ -5,7 +5,7 @@
 // Native modules produce a ModuleDesc with exports, just like file-based
 // modules. The exported words are accessed via dot notation:
 //
-//	"aql:math-util" import
+//	import "aql:math-util"
 //	0.5 MathUtil.sin          # access sin via the math export
 //	3 MathUtil.min 7          # min of 3 and 7
 package modules
@@ -138,7 +138,7 @@ func InstallResolver(reg *native.Registry) {
 
 // InstallMathExports builds the math module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
-// what happens when AQL code runs "aql:math-util" import.
+// what happens when AQL code runs import "aql:math-util".
 func InstallMathExports(r *native.Registry) error {
 	desc, err := BuildMathModule(r)
 	if err != nil {
@@ -152,7 +152,7 @@ func InstallMathExports(r *native.Registry) error {
 
 // InstallArrayExports builds the array module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
-// what happens when AQL code runs "aql:array-util" import.
+// what happens when AQL code runs import "aql:array-util".
 func InstallArrayExports(r *native.Registry) error {
 	desc, err := BuildArrayModule(r)
 	if err != nil {
@@ -213,7 +213,7 @@ func InstallTestExports(r *native.Registry) error {
 }
 
 // InstallStructExports builds the struct module and installs its exports as
-// defs — the convenience equivalent of running `"aql:struct-util" import` in test
+// defs — the convenience equivalent of running `import "aql:struct-util"` in test
 // setup, so `StructUtil.merge` etc. resolve without wiring the full resolver.
 func InstallStructExports(r *native.Registry) error {
 	desc, err := BuildStructModule(r)
@@ -227,7 +227,7 @@ func InstallStructExports(r *native.Registry) error {
 }
 
 // InstallIOExports builds the io module and installs its exports as defs —
-// the convenience equivalent of running `"aql:io" import` in test setup, so
+// the convenience equivalent of running `import "aql:io"` in test setup, so
 // `IO.read` etc. resolve without wiring the full resolver.
 func InstallIOExports(r *native.Registry) error {
 	desc, err := BuildIOModule(r)
@@ -241,7 +241,7 @@ func InstallIOExports(r *native.Registry) error {
 }
 
 // InstallNetExports builds the net module and installs its exports as defs —
-// the convenience equivalent of running `"aql:net" import` in test setup, so
+// the convenience equivalent of running `import "aql:net"` in test setup, so
 // `Net.fetch` etc. resolve without wiring the full resolver.
 func InstallNetExports(r *native.Registry) error {
 	desc, err := BuildNetModule(r)

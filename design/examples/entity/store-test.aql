@@ -9,8 +9,8 @@
 #
 # `conformance <store>` mounts the store as the default and runs every scenario.
 
-"aql:entity" import end
-"aql:test"   import end          # Test.eq (illustrative assertion)
+import "aql:entity"
+import "aql:test"          # Test.eq (illustrative assertion)
 
 export "StoreTest" { conformance: conformance/r }
 

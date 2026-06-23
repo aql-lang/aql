@@ -15,7 +15,7 @@ import (
 // needed — importing the module is enough for `parse aontu <text>` to parse,
 // unify and generate a Node of Maps and Lists.
 
-const aontuImp = `"aql:parselang" import end  `
+const aontuImp = `import "aql:parselang"  `
 
 // aStr runs src and renders the single result to a string, so an Integer
 // result (returned as an int64 by lang.Run) compares cleanly against the

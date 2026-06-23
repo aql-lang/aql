@@ -13,7 +13,7 @@ import (
 // which may be a Node (Map/List), Object, Array, Table or Record. Both ship
 // built-in with aql:minilang and return a List of results.
 
-const qImp = `"aql:minilang" import end  `
+const qImp = `import "aql:minilang"  `
 
 // TestMiniQuerySubjectTypes pins that jp and jq work over every supported
 // subject shape (the document conversion path). A Map/Record subject needs an

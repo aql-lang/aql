@@ -378,7 +378,7 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   AQL itself. See **[Macros](#macros)**.
 * **`end`.** Forces the nearest waiting word to stop forward
   collection — needed only when the next token would otherwise be a
-  valid argument (e.g. `"aql:math-util" import end "foo" print`). `;`
+  valid argument (e.g. `import "aql:math-util" "foo" print`). `;`
   is a synonym.
 * **`aql check` advisories.** The checker raises non-gating advisories
   (info level) for likely mistakes that still run — notably the
@@ -872,7 +872,7 @@ Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 **`aql:math`** native module. Import to use:
 
 ```
-"aql:math-util" import end
+import "aql:math-util"
 MathUtil.abs -5                   # returns 5
 MathUtil.floor 3.7                # returns 3
 MathUtil.sqrt 16                  # returns 4.0
@@ -893,27 +893,27 @@ of the word, with the haystack as the forward arg.
 
 | Word | Description | Example |
 |------|-------------|---------|
-"aql:string-util" import end | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
-"aql:string-util" import end | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC"` returns `'abc'` |
-"aql:string-util" import end | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
-"aql:string-util" import end | `StringUtil.split` | Split string by separator (subject last) | `StringUtil.split "," "a,b"` returns `['a','b']` |
-"aql:string-util" import end | `StringUtil.contains` | Substring test (haystack last) | `StringUtil.contains "ell" "hello"` returns `true` |
-"aql:string-util" import end | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
+import "aql:string-util" | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
+import "aql:string-util" | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC"` returns `'abc'` |
+import "aql:string-util" | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
+import "aql:string-util" | `StringUtil.split` | Split string by separator (subject last) | `StringUtil.split "," "a,b"` returns `['a','b']` |
+import "aql:string-util" | `StringUtil.contains` | Substring test (haystack last) | `StringUtil.contains "ell" "hello"` returns `true` |
+import "aql:string-util" | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
 | `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
-"aql:string-util" import end | `StringUtil.replace` | Replace pattern (subject last) | `StringUtil.replace "l" "r" "hello"` returns `'herlo'` |
-"aql:string-util" import end | `StringUtil.repeat` | Repeat string (subject last) | `StringUtil.repeat 3 "ab"` returns `'ababab'` |
-"aql:string-util" import end | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
-"aql:string-util" import end | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5` returns `'hi   '` |
-"aql:string-util" import end | `StringUtil.match` | Substring match, returns a struct (subject last) | `StringUtil.match "b" "abc"` |
+import "aql:string-util" | `StringUtil.replace` | Replace pattern (subject last) | `StringUtil.replace "l" "r" "hello"` returns `'herlo'` |
+import "aql:string-util" | `StringUtil.repeat` | Repeat string (subject last) | `StringUtil.repeat 3 "ab"` returns `'ababab'` |
+import "aql:string-util" | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
+import "aql:string-util" | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5` returns `'hi   '` |
+import "aql:string-util" | `StringUtil.match` | Substring match, returns a struct (subject last) | `StringUtil.match "b" "abc"` |
 
 #### Options examples
 
 The subject string is the **last** string operand; an Options map trails it:
 
 ```
-"aql:string-util" import end StringUtil.split   ","    "a,,b"  {keepEmpty: true}            # returns ['a' '' 'b']
-"aql:string-util" import end StringUtil.contains "Ell"  "hello" {cs: "insensitive"}          # returns true
-"aql:string-util" import end StringUtil.replace "a" "b" "aaa"   {scope: "all"}               # returns 'bbb'
+import "aql:string-util" StringUtil.split   ","    "a,,b"  {keepEmpty: true}            # returns ['a' '' 'b']
+import "aql:string-util" StringUtil.contains "Ell"  "hello" {cs: "insensitive"}          # returns true
+import "aql:string-util" StringUtil.replace "a" "b" "aaa"   {scope: "all"}               # returns 'bbb'
 ```
 
 ### Boolean
@@ -1440,7 +1440,7 @@ and `flatten`/`size`. The specialised array vocabulary lives in the
 | `shed` | Drop first N | `[1,2,3,4] shed 2` returns `[3,4]` |
 | `reverse` | Reverse order | `[1,2,3] reverse` returns `[3,2,1]` |
 | `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten` returns `[1,2,3]`; `flatten -1 [1,[2,[3]]]` returns `[1,2,3]` |
-"aql:array-util" import end | `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent). Forward form `indices <needles> <haystack>` — haystack last | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
+import "aql:array-util" | `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent). Forward form `indices <needles> <haystack>` — haystack last | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
 | `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size` returns `3` |
 
 A deep flatten is `flatten -1` (the core `flatten` word with a negative
@@ -1453,7 +1453,7 @@ job, rather than one overloaded name.
 ### The `aql:array-util` module
 
 The specialised APL-style array vocabulary lives in a built-in module,
-imported with `"aql:array-util" import` and reached via the `array.` prefix.
+imported with `import "aql:array-util"` and reached via the `array.` prefix.
 This keeps the global namespace lean (mirroring how `aql:math` gates
 `sin`/`cos`/…). Per [ADR-001](ADR.md#adr-001) no name here shadows a core
 word: deep flatten stays a core overload (`flatten -1`), and the
@@ -1462,7 +1462,7 @@ than a duplicate of the string word `indexof`. `transpose` has no core
 counterpart and so appears here under its plain name.
 
 ```
-"aql:array-util" import end
+import "aql:array-util"
 iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 ```
 
@@ -1946,7 +1946,7 @@ while `aql describe [word\|module]` documents the language. In the REPL,
 
 Built-in modules ship with the binary but are not auto-loaded —
 `import aql:xxx` to enable. Each binds one capital-initial namespace
-(`"aql:math-util" import` → `MathUtil.sqrt`). The `-util` suffix marks
+(`import "aql:math-util"` → `MathUtil.sqrt`). The `-util` suffix marks
 a utility library of pure helper functions; capability / framework
 modules keep plain names.
 

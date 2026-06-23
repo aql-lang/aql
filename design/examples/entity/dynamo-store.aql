@@ -6,9 +6,9 @@
 # notes. The structure is identical to mem-store.aql; only the bodies do network
 # I/O instead of touching a local Store.
 
-"aql:serve" import end
-"aql:net"   import end          # Net.fetch (HTTP client; the only transport AQL has)
-"aql:rand"  import end
+import "aql:serve"
+import "aql:net"          # Net.fetch (HTTP client; the only transport AQL has)
+import "aql:rand"
 
 export "DynamoStore" { New: New/r }
 

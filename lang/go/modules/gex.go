@@ -23,7 +23,7 @@ import (
 // {ok ms fst lst n}), `gex` is a SELECTOR — gex's `.on`: it returns the
 // subject when it matches and filters the subject when it is a collection.
 //
-//	"aql:minilang" import end
+//	import "aql:minilang"
 //	"ax" mini gex 'a*'                 # → 'ax'   (subject matches → returned)
 //	"ax" +gex/a*/                      # → 'ax'   (the terse +literal form)
 //	"bx" +gex/a*/                      # → None   (no match)

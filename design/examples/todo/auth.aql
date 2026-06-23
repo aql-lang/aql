@@ -18,7 +18,7 @@
 # across services; layering decorates behaviour within one. Neither subsumes
 # the other.
 
-"aql:serve" import end
+import "aql:serve"
 
 export "Auth" {
   gate:      gate/r          # wrap: blanket session gate for a whole service

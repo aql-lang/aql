@@ -21,12 +21,12 @@ This design adds a typed-pipe model — PowerShell / Nushell heritage, with
 bash kept only as a *reference* for ergonomics — landing as a single
 importable native module `aql:stream`. All new words, types, and
 runtime support are scoped under that module so the global namespace
-stays clean and users opt in with `"aql:stream" import`.
+stays clean and users opt in with `import "aql:stream"`.
 
 The intended outcome: an AQL programmer can write
 
 ```aql
-"aql:stream" import
+import "aql:stream"
 
 "./events.log" stream.from-lines
     [ stream.parse-json ] stream.map
@@ -79,7 +79,7 @@ All three are reference values with deterministic finalisers (see
 ### Words
 
 All exported under `aql:stream`. Names below are the dotted form a
-user sees after `"aql:stream" import`.
+user sees after `import "aql:stream"`.
 
 **Sources**
 
@@ -166,7 +166,7 @@ place.
 Side-by-side with the bash equivalent. Bash is shown as the reference
 mental model; the AQL versions are typed end-to-end and back-pressured.
 
-Every AQL snippet assumes `"aql:stream" import` at the top. Words
+Every AQL snippet assumes `import "aql:stream"` at the top. Words
 that appear inside filter / map blocks come from elsewhere in AQL and
 are shown here for context: `contains` (string search,
 `lang/go/native/native_string.go`), `eq` (equality,
@@ -232,7 +232,7 @@ timeout 30s tail -f /var/log/events | grep DEPLOY
 ```
 
 ```aql
-"aql:time" import   # for `seconds`
+import "aql:time"   # for `seconds`
 
 "/var/log/events" stream.from-lines
     30 seconds stream.with-timeout
@@ -409,5 +409,5 @@ End-to-end checks before declaring v1 done:
    to list the new module.
 
 5. **No global-namespace leakage:** an `aql` REPL without
-   `"aql:stream" import` must not resolve `stream.map` — verified by
+   `import "aql:stream"` must not resolve `stream.map` — verified by
    a negative test.

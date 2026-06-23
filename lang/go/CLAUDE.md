@@ -60,7 +60,7 @@ Language-agnostic content stays at the top of each component:
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
 - `modules/` — loadable modules. Import binds a CamelCase namespace
-  (`"aql:math-util" import` → `MathUtil.sqrt`).
+  (`import "aql:math-util"` → `MathUtil.sqrt`).
   **Naming rule:** a `-util` id + `*Util` namespace marks a **utility
   library** (a collection of pure/domain helper functions):
   `aql:math-util` (`MathUtil`), `aql:array-util` (`ArrayUtil`),

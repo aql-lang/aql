@@ -13,8 +13,8 @@
 #      higher-level request/reply value. The README discusses when to reach for
 #      which.
 
-"aql:serve" import end
-"presence.aql" import end          # the raw-process presence actor
+import "aql:serve"
+import "presence.aql"          # the raw-process presence actor
 
 export "Sessions" {
   New:           New/r

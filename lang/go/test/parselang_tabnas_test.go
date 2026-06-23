@@ -35,7 +35,7 @@ func TestParseLangTabnasFamily(t *testing.T) {
 		{"markdown", `((parse markdown '# T\n\nhello world') get 0) get 0`, "hello world"},
 		{"feed", `(parse feed '<rss version="2.0"><channel><title>T</title></channel></rss>') get 'format'`, "atom"},
 	}
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	for _, c := range cases {
 		t.Run(c.kind, func(t *testing.T) {
 			a, err := lang.New()
@@ -52,7 +52,7 @@ func TestParseLangTabnasFamily(t *testing.T) {
 // TestParseLangTabnasDesugar proves the sugar matches the desugared standard
 // call for a representative kind from each shape family.
 func TestParseLangTabnasDesugar(t *testing.T) {
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	cases := []struct{ kind, sugar, desugared string }{
 		{"json", `(parse json '{"a":1}') get 'a'`, `(ParseLang.parse_json '{"a":1}' {} end) get 'a'`},
 		{"yaml", `(parse yaml 'b: hi') get 'b'`, `(ParseLang.parse_yaml 'b: hi' {} end) get 'b'`},
@@ -76,7 +76,7 @@ func TestParseLangTabnasDesugar(t *testing.T) {
 // map is forwarded to a jsonic-plugin kind: a custom CSV field separator
 // makes ';' split columns where the default ',' would not.
 func TestParseLangTabnasOpts(t *testing.T) {
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
@@ -102,7 +102,7 @@ func TestParseLangTabnasKinds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	res, err := a.Run(`"aql:parselang" import end  ParseLang.kinds`)
+	res, err := a.Run(`import "aql:parselang"  ParseLang.kinds`)
 	if err != nil {
 		t.Fatalf("kinds: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestParseLangTabnasKinds(t *testing.T) {
 // TestParseLangTabnasSyntaxErrors pins the loud failure: a malformed source
 // raises parse_syntax_error rather than returning a silent none.
 func TestParseLangTabnasSyntaxErrors(t *testing.T) {
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	cases := []struct{ name, src string }{
 		{"json", imp + `parse json '{not valid'`},
 		{"toml", imp + `parse toml '= = ='`},

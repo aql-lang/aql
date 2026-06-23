@@ -4,9 +4,9 @@
 # routed by canon (the Seneca store `map`, as patrun specificity), layers a
 # cross-cutting timestamp + audit, then exercises the entity ops.
 
-"aql:entity"       import end       # the bus + Entity handle ops (entity.aql)
-"mem-store.aql"    import end
-"dynamo-store.aql" import end
+import "aql:entity"       # the bus + Entity handle ops (entity.aql)
+import "mem-store.aql"
+import "dynamo-store.aql"
 
 # --- build the bus and mount stores by canon specificity --------------------
 # Default store = mem (catches every canon). Base "app" overrides to DynamoDB.

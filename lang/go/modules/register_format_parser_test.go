@@ -43,7 +43,7 @@ func TestRegisterFormatParserBothSurfaces(t *testing.T) {
 	}
 
 	// parse side: `parse up '<src>'` dispatches through the same Format.
-	tokens, err := parser.Parse(`"aql:parselang" import end  parse up 'hi'`)
+	tokens, err := parser.Parse(`import "aql:parselang"  parse up 'hi'`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestModuleBodyInheritsHostFormats(t *testing.T) {
 	mem.Files["x.uc"] = []byte("hi")
 	native.SetHostFileOps(r, mem)
 
-	src := `module [ "aql:io" import end export "R" {v: (IO.read "x.uc")} ] import end R.v`
+	src := `import module [ import "aql:io" export "R" {v: (IO.read "x.uc")} ] R.v`
 	tokens, err := parser.Parse(src)
 	if err != nil {
 		t.Fatal(err)

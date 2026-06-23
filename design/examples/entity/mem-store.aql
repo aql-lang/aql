@@ -9,8 +9,8 @@
 # NOTE: collection-word spellings (vals/keys/filter/fold/take/drop/sort) are
 # illustrative pending `aql describe`. The point is the SHAPE of a store handler.
 
-"aql:serve" import end
-"aql:rand"  import end          # Rand.uuid for id generation
+import "aql:serve"
+import "aql:rand"          # Rand.uuid for id generation
 
 export "MemStore" { New: New/r }
 

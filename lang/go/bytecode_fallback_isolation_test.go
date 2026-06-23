@@ -76,14 +76,14 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		// `MathUtil.$module.name`) now const-fold and compile, so these pair the
 		// import with a still-uncompilable operation: the import side effect must
 		// still be rolled back before the whole-program fallback re-runs.
-		`"aql:math-util" import end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		`import "aql:math-util" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
 		// aql:test import isolation: Test.test / Test.describe cases (closure
 		// path) AND the property words prop/check-prop/skip (their inert bodies
 		// bake as consts — the dot-access reach inside now an inert member) all
 		// compile, so pair the import with the predicate-fn `is` (still
 		// uncompilable — the VM cannot re-step the fn body, exactly as row 2/3)
 		// to keep the row on the fallback path and exercise the import rollback.
-		`"aql:test" import end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		`import "aql:test" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
 	}
 	for _, src := range cases {
 		ac, err := New()
@@ -149,7 +149,7 @@ func TestCompiledTraceRenders(t *testing.T) {
 	// it compiles to a CALL_NATIVE (its `[add 1 2]` arg now assembles via
 	// OpMakeList) and emits BYTE-IDENTICAL output to the interpreter. The trace
 	// side-effect must therefore survive the compiled path unchanged.
-	src := `"aql:io" import end IO.trace [add 1 2]`
+	src := `import "aql:io" IO.trace [add 1 2]`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)

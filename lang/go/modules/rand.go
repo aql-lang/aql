@@ -21,7 +21,7 @@ type randState struct {
 //
 // The top-level `rand` namespace is **non-deterministic by default**:
 // at module-build time we seed once from the host clock so a fresh
-// `"aql:rand" import` produces genuinely random values.
+// `import "aql:rand"` produces genuinely random values.
 //
 // For deterministic / reproducible sequences (property tests, demo
 // fixtures, replayable simulations) use `Rand.with-seed N` — it
@@ -30,7 +30,7 @@ type randState struct {
 // `one-of`). The instance has its own PRNG sourced from `N` and does
 // not affect the top-level rand or any other instance.
 //
-//	"aql:rand" import
+//	import "aql:rand"
 //	Rand.int 0 100              # random, [0, 100)
 //	def r (Rand.with-seed 42)   # isolated, seeded with 42
 //	r.int 0 100                 # deterministic at seed 42

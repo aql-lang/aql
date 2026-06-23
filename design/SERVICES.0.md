@@ -280,7 +280,7 @@ export "New" fn [[opts:Map] [Service] [
 ```
 
 ```aql
-"./counter.aql" import
+import "./counter.aql"
 def c ( Counter.New {start: 10} )
 call {op:"inc"} c            # → 11
 call {op:"get"} c            # → 11
@@ -290,7 +290,7 @@ call {op:"nope"} c           # raises no_match
 ## 3. A server is a collection of services (module `aql:serve`)
 
 ```
-"aql:serve" import
+import "aql:serve"
 server [services] {restart: "isolated"} -> Server     # a supervised collection
 serve <server-or-service>                            # run it
 ```
@@ -386,7 +386,7 @@ it **forwards** a request to a *target* (an upstream provider), wrapping that
 forward with authorization, transformation, and accounting. Generalize it as:
 
 ```
-"aql:serve" import
+import "aql:serve"
 proxy <target> {before: [..] after: [..]} -> Service
 ```
 
@@ -600,8 +600,8 @@ makes selective `receive` O(n). A bound turns overload into one of three *chosen
 behaviours — pace, shed, or drop — instead of an unbounded-queue death spiral.
 
 ```aql
-"aql:serve"     import
-"aql:time-util" import
+import "aql:serve"
+import "aql:time-util"
 
 # A slow worker behind a bounded, backpressured mailbox.
 def worker ( service {} )
@@ -694,9 +694,9 @@ pretend a timed-out remote mutation definitely did — or definitely did not —
 happen.
 
 ```aql
-"aql:serve"     import
-"aql:net"       import
-"aql:time-util" import
+import "aql:serve"
+import "aql:net"
+import "aql:time-util"
 
 # Reach a remote service. Its `call` obeys the same contract as a local one —
 # only the failure modes are now common, so we handle them at this call site.
@@ -777,7 +777,7 @@ service** that fronts a pool of workers and routes each request by a policy.
 **A pool is a service (`pool`, `aql:serve`).**
 
 ```
-"aql:serve" import
+import "aql:serve"
 pool [worker-spec] {size: N  strategy: "p2c"} -> Service
 ```
 
@@ -883,8 +883,8 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
 ## 12. Worked example
 
 ```aql
-"aql:serve" import
-"aql:net"   import
+import "aql:serve"
+import "aql:net"
 
 # A server = a collection of services, supervised; restart each in isolation.
 def app ( server [

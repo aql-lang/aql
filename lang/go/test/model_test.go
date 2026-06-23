@@ -18,7 +18,7 @@ import (
 // actions over it. These tests drive Model.new / run / model / actions
 // through the live module.
 
-const modelImp = `"aql:model" import end  `
+const modelImp = `import "aql:model"  `
 
 // TestModelRunInline pins the build-once path over inline source: the result
 // reports ok, and Model.model returns the unified model.

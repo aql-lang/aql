@@ -12,7 +12,7 @@ import (
 // — the stack subject, an <tag>…</tag> literal — with XPath. It ships built-in
 // with aql:minilang and returns a List of results, the same shape as jp / jq.
 
-const xpImp = `"aql:minilang" import end  `
+const xpImp = `import "aql:minilang"  `
 
 // TestMiniXPathResults pins the result projection for each XPath result kind: a
 // node-set of elements (→ Node/Xml values), text and attribute nodes (→

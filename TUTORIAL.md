@@ -60,7 +60,7 @@ aql -e '10 sub 3'
 ```
 
 (`-e` evaluates one expression and exits. Uppercasing a string needs
-the string-util module — `aql -e '"aql:string-util" import end
+the string-util module — `aql -e 'import "aql:string-util"
 StringUtil.upper "hello"'` — see [§5: Strings](#5-strings).)
 
 
@@ -197,7 +197,7 @@ module: the `aql:NAME-util` id binds the `NameUtil` namespace; see
 the [module table in §20](#20-modules--namespaces-and-imports)):
 
 ```
-aql> "aql:math-util" import end
+aql> import "aql:math-util"
 aql> MathUtil.abs -5        # returns 5
 aql> MathUtil.min 3 5       # returns 3
 aql> MathUtil.max 3 5       # returns 5
@@ -226,16 +226,16 @@ grain), so the clearest all-forward form is `WORD arg… subject` — e.g.
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> "aql:string-util" import end "hello" StringUtil.upper                 # returns 'HELLO'
-aql> "aql:string-util" import end "HELLO" StringUtil.lower                 # returns 'hello'
-aql> "aql:string-util" import end StringUtil.split "," "hello,world"       # returns ['hello' 'world'] — subject (input) LAST
-aql> "aql:string-util" import end ["a","b","c"] StringUtil.concat          # returns 'abc' — joins list elements
-aql> "aql:string-util" import end StringUtil.contains "ell" "hello"        # returns true — haystack LAST
-aql> "aql:string-util" import end StringUtil.indexof "ll" "hello"          # returns 2 — haystack LAST: `indexof needle haystack`
+aql> import "aql:string-util" "hello" StringUtil.upper                 # returns 'HELLO'
+aql> import "aql:string-util" "HELLO" StringUtil.lower                 # returns 'hello'
+aql> import "aql:string-util" StringUtil.split "," "hello,world"       # returns ['hello' 'world'] — subject (input) LAST
+aql> import "aql:string-util" ["a","b","c"] StringUtil.concat          # returns 'abc' — joins list elements
+aql> import "aql:string-util" StringUtil.contains "ell" "hello"        # returns true — haystack LAST
+aql> import "aql:string-util" StringUtil.indexof "ll" "hello"          # returns 2 — haystack LAST: `indexof needle haystack`
 aql> "hello" slice 1 3             # returns 'el'
-aql> "aql:string-util" import end StringUtil.replace "l" "r" "hello"       # returns 'herlo' — subject (input) LAST
-aql> "aql:string-util" import end "  hi  " StringUtil.trim                 # returns 'hi'
-aql> "aql:string-util" import end "hi" StringUtil.pad 5                    # returns 'hi   '
+aql> import "aql:string-util" StringUtil.replace "l" "r" "hello"       # returns 'herlo' — subject (input) LAST
+aql> import "aql:string-util" "  hi  " StringUtil.trim                 # returns 'hi'
+aql> import "aql:string-util" "hi" StringUtil.pad 5                    # returns 'hi   '
 ```
 
 Backtick template strings interpolate `${...}` expressions:
@@ -452,7 +452,7 @@ Reshaping, ordering, and grouping live in the `aql:array-util` module
 (reached via the `ArrayUtil.` prefix after importing):
 
 ```
-aql> "aql:array-util" import end
+aql> import "aql:array-util"
 aql> iota 6 ArrayUtil.reshape [2, 3]     # returns [[0 1 2] [3 4 5]]
 aql> [1, 2, 2, 3] ArrayUtil.unique       # returns [1 2 3]
 aql> [3, 1, 2] ArrayUtil.grade           # returns [1 2 0]
@@ -555,7 +555,7 @@ the end of the block. Bare-word declarations pop from the stack
 rule):
 
 ```
-aql> "aql:math-util" import end
+aql> import "aql:math-util"
 aql> 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]   # returns 5.0
 ```
 
@@ -675,7 +675,7 @@ or inspect its fields with `.`.
 in parallel and collects the results:
 
 ```
-aql> "aql:time-util" import end TimeUtil.await [[add 1 2] [add 3 4]]     # returns [3 7]
+aql> import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]]     # returns [3 7]
 ```
 
 Pick a mode via an options map — these mirror JavaScript Promise
@@ -741,7 +741,7 @@ aql> "Ada" utils.greet               # returns 'hello Ada'
 Import from a file (path must start with `./`, `../`, or `/`):
 
 ```
-aql> "./lib/utils.aql" import
+aql> import "./lib/utils.aql"
 ```
 
 Built-in native modules are imported as quoted `aql:` ids; each one
@@ -764,7 +764,7 @@ framework modules keep plain names:
 **[Reference: Built-in modules](REFERENCE.md#built-in-modules)**.)
 
 ```
-aql> "aql:math-util" import end
+aql> import "aql:math-util"
 aql> MathUtil.log 5                      # returns 1.6094379124341003
 ```
 
@@ -774,12 +774,12 @@ The trailing `end` is needed only when the token after `import`
 list), so `import` takes its path and stops with no `end`:
 
 ```
-aql> "aql:math-util" import
+aql> import "aql:math-util"
 aql> 5 MathUtil.log                      # returns 1.6094379124341003
 ```
 
 But a word (`MathUtil.…`) or a string right after `import` *would* be
-collected — `"aql:math-util" import end "foo" print` needs the `end`,
+collected — `import "aql:math-util" "foo" print` needs the `end`,
 or `import` would try to load `"foo"`. Note that in a script file a
 line break does **not** stop collection (the REPL evaluates line by
 line, a file is one program) — so in files, the robust habit is

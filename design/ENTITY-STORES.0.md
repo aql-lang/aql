@@ -109,7 +109,7 @@ next free FixedID in the 5000–9999 band (Module 5000, ModuleExport 5001, KeyVa
 `e.name` reads a data field), `Format`, and `Equal`.
 
 ```aql
-"aql:entity" import end
+import "aql:entity"
 
 # `entity "zone/base/name" <bus>` builds an empty-data handle (the make$ analog).
 def u ( entity "sys/user" bus )

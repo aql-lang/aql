@@ -191,7 +191,7 @@ extra quoting.
 
 ```bash
 aql do add 1 2                  # prints 3
-aql do '"aql:string-util" import end "hello" StringUtil.upper'  # prints HELLO
+aql do 'import "aql:string-util" "hello" StringUtil.upper'  # prints HELLO
 aql do 'iota 5 each [dup mul]'  # prints [0 1 4 9 16]
 ```
 
@@ -1008,7 +1008,7 @@ The `describe` and `help` *words* are ordinary AQL, so an argument that
 contains punctuation must be quoted: a module reference carries `:`
 (`describe "aql:type-util"`), and a dotted namespace export carries `.`
 — which is otherwise the `get` operator — so it too is quoted
-(`describe "ArrayUtil.indices"`, after `"aql:array-util" import`). The
+(`describe "ArrayUtil.indices"`, after `import "aql:array-util"`). The
 `/describe` meta-command takes its argument raw, so no quoting is needed
 there.
 

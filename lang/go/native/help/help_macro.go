@@ -72,8 +72,8 @@ func init() {
 			"MiniLang.register). An unknown kind is an expansion-time error. Note backslashes in quoted strings " +
 			"need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
-			`"aql:minilang" import end  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
-			`"aql:minilang" import end  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
+			`import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
+			`import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
 		},
 	})
 
@@ -88,8 +88,8 @@ func init() {
 			"lists them; register your own with ParseLang.register or the Go RegisterParser host API). " +
 			"An unknown kind is an expansion-time error.",
 		Examples: []string{
-			`"aql:parselang" import end  parse calc 'x + y'        ;# => the parser's AST`,
-			`"aql:parselang" import end  parse calc {src:'x + y'}  ;# a {src:…} source map`,
+			`import "aql:parselang"  parse calc 'x + y'        ;# => the parser's AST`,
+			`import "aql:parselang"  parse calc {src:'x + y'}  ;# a {src:…} source map`,
 		},
 	})
 
@@ -108,8 +108,8 @@ func init() {
 			"explicit kind is an expansion-time error; a shape a format cannot represent (e.g. " +
 			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported.",
 		Examples: []string{
-			`"aql:emitlang" import end  emit {a:1 b:[2 3]}            ;# => compact json (natural)`,
-			`"aql:emitlang" import end  emit json {pretty:true} {a:1} ;# => indented json`,
+			`import "aql:emitlang"  emit {a:1 b:[2 3]}            ;# => compact json (natural)`,
+			`import "aql:emitlang"  emit json {pretty:true} {a:1} ;# => indented json`,
 		},
 	})
 }

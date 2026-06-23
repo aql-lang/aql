@@ -17,8 +17,8 @@
 # literal keys are bare, variable keys parenthesised (set (k) v m); all strings
 # double-quoted. (Collection-word spellings are illustrative pending `aql describe`.)
 
-"aql:serve"       import end          # service / add / call / wrap
-"aql:string-util" import end          # StringUtil.split (canon parsing)
+import "aql:serve"          # service / add / call / wrap
+import "aql:string-util"          # StringUtil.split (canon parsing)
 
 export "Entity" {
   bus:    bus-new/r         # build a routing bus service
