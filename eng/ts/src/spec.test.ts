@@ -12,6 +12,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { canon } from './canon.ts'
 import {
   AqlError,
   Engine,
@@ -609,23 +610,10 @@ function parseFnReturn(v: Value) {
   return type
 }
 
+// renderStack renders the residual stack as canonical AQL source via
+// the ported Canon, matching the Go engspec runner's eng.Canon output.
 function renderStack(stack: Value[]): string {
-  return stack.map(renderValue).join(' ')
-}
-
-function renderValue(v: Value): string {
-  if (v.data === null) {
-    if (v.vType.equal(TNone)) return 'null'
-    return v.vType.toString()
-  }
-  if (v.vType.matches(TInteger)) return v.asInteger().toString()
-  if (v.vType.matches(TDecimal)) return String(v.asDecimal())
-  if (v.vType.matches(TString)) return JSON.stringify(v.asString())
-  if (v.vType.matches(TBoolean)) return String(v.asBoolean())
-  // Atoms render as `name/q` — the canonical short form (mirrors
-  // eng/canon.go::CanonValue).
-  if (v.vType.equal(TAtom)) return `${v.asAtom()}/q`
-  return v.toString()
+  return canon(stack)
 }
 
 // ── Test harness ─────────────────────────────────────────────────────────
