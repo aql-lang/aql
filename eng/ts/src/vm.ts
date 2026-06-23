@@ -20,6 +20,8 @@ import {
   OpForSetup,
   OpJmp,
   OpJmpIfFalse,
+  OpMakeList,
+  OpMakeMap,
   OpPushConst,
   OpPushLocal,
   OpStoreLocal,
@@ -28,7 +30,7 @@ import {
 import { coerceBoolean } from './coretype.ts'
 import { AqlError } from './error.ts'
 import type { Registry } from './registry.ts'
-import { newInteger, Value } from './value.ts'
+import { newInteger, newList, newMap, OrderedMap, Value } from './value.ts'
 
 /** Active counted-loop state in the VM. */
 interface VmLoop {
@@ -98,6 +100,21 @@ export function runProgram(p: Program, registry: Registry): Value[] {
           locals[lp.slot] = newInteger(lp.cur)
           lp.cur += lp.step
         }
+        break
+      }
+      case OpMakeList: {
+        const elems = stack.slice(sp - arg, sp) // deepest = element 0
+        sp -= arg
+        stack[sp++] = newList(elems, { eval: false })
+        break
+      }
+      case OpMakeMap: {
+        const keys = p.makeMaps[arg]!
+        const om = new OrderedMap()
+        const base = sp - keys.length
+        for (let i = 0; i < keys.length; i++) om.set(keys[i]!, stack[base + i]!) // keys[0] deepest
+        sp = base
+        stack[sp++] = newMap(om)
         break
       }
       case OpCallNative: {

@@ -36,6 +36,7 @@ import {
   newDynamicCarrier,
   newForwardMarker,
   newInteger,
+  newList,
   newMap,
   newNone,
   newString,
@@ -1102,15 +1103,63 @@ export class Engine {
    */
   private deepEvalData(v: Value): Value {
     if (v.data instanceof OrderedMap && v.vType.equal(TMap)) {
-      const out = new OrderedMap()
-      for (const k of v.asMap().keys()) out.set(k, this.evalMapValue(v.asMap().get(k)!))
-      return newMap(out)
+      const keys = v.asMap().keys()
+      const vals = keys.map((k) => this.evalMapValue(v.asMap().get(k)!))
+      return this.buildMap(keys, vals)
     }
     if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
-      const sub = new Engine(this.registry).run([...v.asList()])
-      return new Value(v.vType, sub.map((e) => this.deepEvalData(e)), { eval: false, quoted: false })
+      const sub = new Engine(this.registry).run([...v.asList()]).map((e) => this.deepEvalData(e))
+      return this.buildList(sub)
     }
     return v
+  }
+
+  /**
+   * Build a computed list from its evaluated elements. In compile mode
+   * (check + active EmitState) this records a makeList event and returns
+   * a provenance-bearing list carrier so the VM assembles the list via
+   * OpMakeList; otherwise it builds the concrete list directly. Falls
+   * back (markUncompilable) if an element has no operand provenance.
+   */
+  private buildList(elems: Value[]): Value {
+    const emit = this.registry.check.emit
+    if (emit !== undefined) {
+      const ops: import('./emit.ts').Operand[] = []
+      for (const e of elems) {
+        const o = emit.classify(e)
+        if (o === null) {
+          emit.markUncompilable('makeList: element of unknown provenance')
+          return newList(elems, { eval: false })
+        }
+        ops.push(o)
+      }
+      return emit.recordMakeList(ops)
+    }
+    return newList(elems, { eval: false })
+  }
+
+  /** Build a computed map; records a makeMap event in compile mode (see buildList). */
+  private buildMap(keys: string[], vals: Value[]): Value {
+    const emit = this.registry.check.emit
+    if (emit !== undefined) {
+      const ops: import('./emit.ts').Operand[] = []
+      for (const e of vals) {
+        const o = emit.classify(e)
+        if (o === null) {
+          emit.markUncompilable('makeMap: value of unknown provenance')
+          return this.rawMap(keys, vals)
+        }
+        ops.push(o)
+      }
+      return emit.recordMakeMap([...keys], ops)
+    }
+    return this.rawMap(keys, vals)
+  }
+
+  private rawMap(keys: string[], vals: Value[]): Value {
+    const out = new OrderedMap()
+    keys.forEach((k, i) => out.set(k, vals[i]!))
+    return newMap(out)
   }
 
   /**
@@ -1126,7 +1175,7 @@ export class Engine {
     // residual (a def resolves; an fn auto-calls).
     if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
       const sub = new Engine(this.registry).run([...v.asList()]).map((e) => this.deepEvalData(e))
-      return new Value(v.vType, sub, { eval: false, quoted: false })
+      return this.buildList(sub)
     }
     let program: Value[] | null = null
     if (v.isParenExpr()) program = v.data as Value[]
@@ -1134,7 +1183,7 @@ export class Engine {
     if (program === null) return v
     const sub = new Engine(this.registry).run([...program]).map((e) => this.deepEvalData(e))
     if (sub.length === 1) return sub[0]!
-    return new Value(TList, sub, { eval: false, quoted: false })
+    return this.buildList(sub)
   }
 
   private describeStack(): string {

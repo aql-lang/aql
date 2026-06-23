@@ -14,7 +14,38 @@
 // PARITY NOTE: still mono-only / concrete-operand / single-result; poly,
 // dynamic, loops, user fns, containers, and fallback islands land later.
 import type { Signature } from './signature.ts'
-import type { Value } from './value.ts'
+import { newCarrier, type Value } from './value.ts'
+import { TList, TMap } from './type.ts'
+
+/**
+ * isInert reports whether a concrete value is bakeable as a program
+ * constant: scalars/atoms/paths/booleans/none, and containers all of
+ * whose members are themselves inert. Words, parens, fn defs, carriers,
+ * and interp/xml templates are NOT inert — they are code or type-only,
+ * so a const operand must never carry them (else the VM would push an
+ * unevaluated form). Mirrors the bakeable subset of eng/go isInertConst.
+ */
+function isInert(v: Value): boolean {
+  if (v.carrier) return false
+  if (Array.isArray(v.data)) return (v.data as Value[]).every(isInert)
+  if (v.isMap()) {
+    const m = v.asMap()
+    return m.keys().every((k) => isInert(m.get(k)!))
+  }
+  if (
+    v.isWord() ||
+    v.isForward() ||
+    v.isMark() ||
+    v.isMove() ||
+    v.isParenExpr() ||
+    v.isFnDef() ||
+    v.isInterpString() ||
+    v.isXmlInterp()
+  ) {
+    return false
+  }
+  return v.data !== null
+}
 
 /** How a recorded operand is produced. */
 export type Operand =
@@ -55,7 +86,22 @@ export interface LoopEvent {
   readonly body: Fragment
 }
 
-export type Event = CallEvent | BranchEvent | LoopEvent
+/** A recorded computed list (`[addq 1 2]` → assemble from element operands). */
+export interface MakeListEvent {
+  readonly kind: 'makeList'
+  readonly slot: number
+  readonly elements: readonly Operand[]
+}
+
+/** A recorded computed map (`{a:(addq 1 2)}` → assemble from value operands). */
+export interface MakeMapEvent {
+  readonly kind: 'makeMap'
+  readonly slot: number
+  readonly keys: readonly string[]
+  readonly values: readonly Operand[]
+}
+
+export type Event = CallEvent | BranchEvent | LoopEvent | MakeListEvent | MakeMapEvent
 
 /** A captured sub-trace (a branch arm) plus its single residual operand. */
 export interface Fragment {
@@ -120,7 +166,10 @@ export class EmitState {
   classify(v: Value): Operand | null {
     const slot = this.producedBy.get(v)
     if (slot !== undefined) return { kind: 'event', slot }
-    if (v.isConcrete()) return { kind: 'const', value: v }
+    // A concrete value is a const only if it is INERT (bakeable) — a
+    // raw eval-list / word-bearing container reaching a call arg is code,
+    // not a constant, and must fall back rather than bake unevaluated.
+    if (v.isConcrete() && isInert(v)) return { kind: 'const', value: v }
     const orig = this.origByCarrier.get(v)
     if (orig !== undefined) return { kind: 'const', value: orig }
     return null
@@ -238,5 +287,29 @@ export class EmitState {
     const slot = this.seq++
     this.target().push({ kind: 'loop', slot, start, end, step, iterSlot, body })
     this.producedBy.set(out, slot)
+  }
+
+  /**
+   * Record a computed list from its element operands. Returns a list
+   * carrier whose identity threads to the assembled result.
+   */
+  recordMakeList(elements: Operand[]): Value {
+    const slot = this.seq++
+    this.target().push({ kind: 'makeList', slot, elements })
+    const out = newCarrier(TList)
+    this.producedBy.set(out, slot)
+    return out
+  }
+
+  /**
+   * Record a computed map from its key list + value operands. Returns a
+   * map carrier whose identity threads to the assembled result.
+   */
+  recordMakeMap(keys: string[], values: Operand[]): Value {
+    const slot = this.seq++
+    this.target().push({ kind: 'makeMap', slot, keys, values })
+    const out = newCarrier(TMap)
+    this.producedBy.set(out, slot)
+    return out
   }
 }

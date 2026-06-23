@@ -19,6 +19,8 @@ export {
   OpForSetup,
   OpJmp,
   OpJmpIfFalse,
+  OpMakeList,
+  OpMakeMap,
   OpPushConst,
   OpPushLocal,
   OpStoreLocal,
@@ -26,7 +28,17 @@ export {
 } from './bytecode.ts'
 export type { Op, Program, SigRef } from './bytecode.ts'
 export { EmitState } from './emit.ts'
-export type { BranchEvent, CallEvent, Event, Fragment, LoopEvent, Operand, SiteCounts } from './emit.ts'
+export type {
+  BranchEvent,
+  CallEvent,
+  Event,
+  Fragment,
+  LoopEvent,
+  MakeListEvent,
+  MakeMapEvent,
+  Operand,
+  SiteCounts,
+} from './emit.ts'
 export { finalize } from './lower.ts'
 export type { FinalizeResult } from './lower.ts'
 export { runProgram } from './vm.ts'

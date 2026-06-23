@@ -16,6 +16,8 @@ import {
   OpForSetup,
   OpJmp,
   OpJmpIfFalse,
+  OpMakeList,
+  OpMakeMap,
   OpPushConst,
   OpPushLocal,
   OpStoreLocal,
@@ -46,8 +48,10 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
   const code = new CodeBuilder()
   const consts: Value[] = []
   const sigs: SigRef[] = []
+  const makeMaps: string[][] = []
   const constIdx = (v: Value): number => consts.push(v) - 1
   const sigIdx = (word: string, sig: SigRef['sig']): number => sigs.push({ word, sig }) - 1
+  const makeMapIdx = (keys: readonly string[]): number => makeMaps.push([...keys]) - 1
 
   // Simulated operand-stack depth, tracked to size the VM stack.
   let sp = 0
@@ -86,6 +90,24 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
         // position) is not lowerable this stage.
         refused = 'loop in non-trailing position not compilable (stage 5)'
         return
+      }
+      if (ev.kind === 'makeList') {
+        for (const o of ev.elements) pushOperand(o) // forward order: element 0 deepest
+        code.emit(OpMakeList, ev.elements.length)
+        sp = sp - ev.elements.length + 1
+        note()
+        code.emit(OpStoreLocal, ev.slot)
+        sp--
+        continue
+      }
+      if (ev.kind === 'makeMap') {
+        for (const o of ev.values) pushOperand(o) // value for keys[0] deepest
+        code.emit(OpMakeMap, makeMapIdx(ev.keys))
+        sp = sp - ev.values.length + 1
+        note()
+        code.emit(OpStoreLocal, ev.slot)
+        sp--
+        continue
       }
       // Branch: cond on top -> JmpIfFalse(else); then arm -> store to the
       // branch slot -> Jmp(end); else arm -> store to the branch slot.
@@ -146,6 +168,6 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
 
   const { ops, args } = code.freeze()
   return {
-    program: { ops, args, consts, sigs, maxStack, numLocals: emit.slotCount() },
+    program: { ops, args, consts, sigs, makeMaps, maxStack, numLocals: emit.slotCount() },
   }
 }

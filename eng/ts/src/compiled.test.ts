@@ -37,8 +37,11 @@ import {
   newFnDef,
   newInteger,
   newList,
+  newMap,
+  newParenExpr,
   newString,
   newWord,
+  OrderedMap,
   compile,
   disassemble,
   runCompiled,
@@ -320,6 +323,38 @@ function tokenize(src: string): Value[] {
       out.push(readOne())
     }
   }
+  // A `( … )` group as a map value becomes a ParenExpr (collapses to a
+  // single residual when the map deep-evaluates). Flat parens only.
+  const readParenExpr = (): Value => {
+    i++ // consume '('
+    const toks: Value[] = []
+    for (;;) {
+      while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++
+      if (src[i] === ')') {
+        i++
+        break
+      }
+      toks.push(readOne())
+    }
+    return newParenExpr(toks)
+  }
+  const readMap = (): Value => {
+    const om = new OrderedMap()
+    for (;;) {
+      while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++
+      if (src[i] === '}') {
+        i++
+        break
+      }
+      let k = i
+      while (k < src.length && src[k] !== ':') k++
+      const key = src.slice(i, k)
+      i = k + 1 // consume ':'
+      while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++
+      om.set(key, src[i] === '(' ? readParenExpr() : readOne())
+    }
+    return newMap(om)
+  }
   const readOne = (): Value => {
     while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++
     const c = src[i]!
@@ -334,12 +369,16 @@ function tokenize(src: string): Value[] {
       i++
       return newList(readList(), { eval: true })
     }
+    if (c === '{') {
+      i++
+      return readMap()
+    }
     if (c === '(' || c === ')') {
       i++
       return newWord(c)
     }
     let j = i
-    while (j < src.length && !' \t[]()'.includes(src[j]!)) j++
+    while (j < src.length && !' \t[](){}'.includes(src[j]!)) j++
     const tok = src.slice(i, j)
     i = j
     if (tok === 'true' || tok === 'false') return newBoolean(tok === 'true')
@@ -403,6 +442,12 @@ const COMPILED: Array<[string, true]> = [
   ['def add2 fn [[x:Integer y:Integer] [Integer] [addq x y]] add2 3 4', true], // two-param fn
   ['def id fn [[n:Integer] [Integer] [n]] id 7', true], // fn returning its param
   ['def inc fn [[n:Integer] [Integer] [addq n 1]] addq (inc 1) (inc 2)', true], // called twice
+  ['[addq 1 2]', true], // computed list residual
+  ['[addq 1 2 mulq 3 4]', true], // multi-element computed list
+  ['[1 2 3]', true], // constant list (still compiles, as a const)
+  ['{a:(addq 1 2)}', true], // computed map
+  ['{a:(addq 1 2) b:(mulq 2 3)}', true], // multi-entry computed map
+  ['[[addq 1 2] 9]', true], // nested computed list
 ]
 
 const FALLBACK: string[] = [
@@ -411,6 +456,7 @@ const FALLBACK: string[] = [
   'for 2 [dupq 1]', // loop body not single-result -> falls back
   'for 2 [i] addq 1 2', // loop not in trailing position -> falls back
   'def f fn [[n:Integer] [Integer] [dupq n]] f 5', // fn body count != declared -> falls back
+  'lengthq [addq 1 2]', // computed-list arg (not auto-evaluated in check) -> inert guard refuses
 ]
 
 describe('compiled (stage 1)', () => {
@@ -463,6 +509,24 @@ describe('compiled (stage 1)', () => {
         '004  FOR_NEXT 7', // exhausted -> exit at pc 7
         '005  PUSH_LOCAL 0', // body: push iterator i (accumulates)
         '006  JMP 4', // back-edge to FOR_NEXT
+      ].join('\n'),
+    )
+  })
+
+  it('disassembles a computed list to body + MAKE_LIST', () => {
+    const result = compile(freshRegistry(), tokenize('[addq 1 2]'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  PUSH_CONST 0', // addq arg: 2 (reverse sig order)
+        '001  PUSH_CONST 1', // addq arg: 1
+        '002  CALL_NATIVE 0 (addq)',
+        '003  STORE_LOCAL 0', // addq result -> local 0
+        '004  PUSH_LOCAL 0', // element 0
+        '005  MAKE_LIST 1', // assemble [3]
+        '006  STORE_LOCAL 1', // list -> local 1
+        '007  PUSH_LOCAL 1', // residual
       ].join('\n'),
     )
   })
