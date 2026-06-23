@@ -1548,14 +1548,16 @@ func TestFactoryApplyCompiles(t *testing.T) {
 		t.Fatalf("factory-apply parity: compiled=%v gotC=%v gotI=%v (want [11])", compiled, gotC, gotI)
 	}
 
+	// A CAPTURING factory (`[y] => [x add y]` closes over the factory's param x)
+	// now ALSO compiles natively — tryReturnedClosure threads the resolved capture
+	// before OpPushClosure. Full positive coverage (top-level + per-iteration apply)
+	// lives in TestReturnedCapturingClosureApply.
+
 	// NEGATIVE — the boundaries that must keep falling back (faithfully):
 	for _, neg := range []struct{ name, src string }{
 		// A bare closure RESULT must not compile — a VM closure prints
 		// differently from the interpreter's FnDefInfo, so it falls back.
 		{"bare closure residual", factory + `(mk2 5)`},
-		// A CAPTURING factory (`[y] => [x add y]` closes over x) is not yet
-		// compiled here; it must fall back, not silently miscompile.
-		{"capturing factory", `def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] (mk 5) 10`},
 	} {
 		gC, comp, eC := mustNew(t).RunCompiled(neg.src)
 		gI, eI := mustNew(t).Run(neg.src)
@@ -2737,6 +2739,61 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 			t.Errorf("expected refusal (variadic→fixed-arity is unsound), but compiled: %s", src)
 		}
 		// The interpreter is the backstop; RunCompiled falls back and matches it.
+		gc, _, ec := mustNew(t).RunCompiled(src)
+		gi, ei := mustNew(t).Run(src)
+		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {
+			t.Errorf("fallback parity: compiled=%v/%s interp=%v/%s :: %s", gc, codeOf(ec), gi, codeOf(ei), src)
+		}
+	}
+}
+
+// Returned capturing closure + per-iteration dynamic apply (bytecode-combinations.tsv:74).
+// A factory fn returns a closure that captures the factory's param; the closure is
+// then applied to a trailing arg. Both the top-level immediate apply and the
+// per-iteration apply inside a `for` body must compile FULLY NATIVE (the returned
+// closure is a ClosurePayload OpCallDynamic invokes VM-natively) and match the
+// interpreter.
+func TestReturnedCapturingClosureApply(t *testing.T) {
+	positive := []struct {
+		src  string
+		want string
+	}{
+		// top-level: factory returns a closure capturing x, applied immediately.
+		{`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  (mk 5) 10`, "[15]"},
+		// per-iteration apply inside a for body — the landed row.
+		{`def mk2 fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  for 3 [(mk2 i) 10]`, "[10 11 12]"},
+		// a multi-arg trailing apply over the per-iteration closure.
+		{`def mk4 fn [[x:Integer] [Function] [([a:Integer b:Integer] => [x add a add b])]]  for 3 [(mk4 i) 10 100]`, "[110 111 112]"},
+	}
+	for _, c := range positive {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: must compile; reason=%q err=%v", c.src, reason, cerr)
+			continue
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: must compile native, not island:\n%s", c.src, prog.Disassemble())
+			continue
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, _ := mustNew(t).Run(c.src)
+		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s", c.src, compiled, gotC, errC, gotI, c.want)
+		}
+	}
+
+	// Negative: a per-iteration body whose trailing apply arg is itself a COMPUTED
+	// (event) value is NOT the leading-fn-carrier + re-pushable-args shape — it must
+	// REFUSE (the computed arg is already on the sim; seating it would double-push),
+	// and fall back to the interpreter with full parity rather than mis-compile.
+	negative := []string{
+		`def mk fn [[x:Integer] [Function] [([y:Integer] => [x add y])]]  for 3 [(mk i) (add i 1)]`,
+	}
+	for _, src := range negative {
+		prog, _, _, _ := mustNew(t).CompileCheck(src)
+		if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: a computed apply-arg must NOT compile to a native per-iteration apply:\n%s", src, prog.Disassemble())
+		}
 		gc, _, ec := mustNew(t).RunCompiled(src)
 		gi, ei := mustNew(t).Run(src)
 		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {

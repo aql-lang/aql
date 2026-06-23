@@ -9,12 +9,12 @@ Corpus: **2943** spec value rows (**2621** compilable, 322 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2614 |
+| compiled natively (fallback-free) | 2615 |
 | compiled with an interpreter island | 0 |
-| refused (whole-program fallback) | 7 |
+| refused (whole-program fallback) | 6 |
 | static check-error (invalid in both engines) | 322 |
 
-**2614 / 2621** compilable rows produce a Program (99% — 2614 of those fully native).
+**2615 / 2621** compilable rows produce a Program (99% — 2615 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,31 +22,31 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 7 | 7 | → 0 |
+| refusals (whole-program fallback) | 6 | 6 | → 0 |
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 1 | 1 | → 0 |
-| compute frontier | 5 | 86 | → 0 |
+| compute frontier | 4 | 86 | → 0 |
 
 ## Refusals by reason
 
 | count | bucket | root cause |
 | ---: | --- | --- |
-| 5 | operand provenance | soundness |
+| 4 | operand provenance | soundness |
 | 1 | code-body word (NoEvalArgs) | coverage |
 | 1 | residual lowering (Stage 1 limit) | scheduling |
 
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 5 |
+| soundness | 4 |
 | scheduling | 1 |
 | opcode | 0 |
 | coverage | 1 |
 
 ## Re-scoped P7 partition
 
-Over the 7 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **1** allowlisted error rows, **5** compute-frontier gaps.
+Over the 6 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **1** allowlisted error rows, **4** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -62,5 +62,5 @@ _None._
 
 | count | reason |
 | ---: | --- |
-| 5 | operand provenance |
+| 4 | operand provenance |
 

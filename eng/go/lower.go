@@ -874,6 +874,30 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 	if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
 		return reason
 	}
+	if len(frag.applyArgs) > 0 {
+		// Per-iteration dynamic apply (`for n [(mk2 i) 10]`): the body events left
+		// a single leading fn VALUE on the sim; push the trailing static args and
+		// apply via OpCallDynamic, netting one applied value (RecordLoop's
+		// setLoopBodyApply seated this — see EmitFragment.applyArgs). A residual
+		// that is not the sole leading fn refuses (a more complex shape than the
+		// leading-fn-carrier case this lowers).
+		if fragDiverges(frag) {
+			lw.vm = parent
+			return ""
+		}
+		if len(lw.vm) != 1 {
+			return "loop body apply: leading fn value not the sole residual"
+		}
+		for _, a := range frag.applyArgs {
+			lw.pushOperand(a, pos)
+		}
+		lw.emit(OpCallDynamic, len(frag.applyArgs), pos)
+		// OpCallDynamic pops the fn + its args and pushes one result; drop the arg
+		// slots, leaving the (former fn) slot to stand for the applied result.
+		lw.vm = lw.vm[:len(lw.vm)-len(frag.applyArgs)]
+		lw.vm = parent
+		return ""
+	}
 	switch {
 	case fragDiverges(frag):
 		// Control left via break/continue; the residual scope is
