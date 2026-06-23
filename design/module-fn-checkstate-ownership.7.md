@@ -162,6 +162,29 @@ Mechanism confirmed on the live tree:
   `def-node-binding:54`) and the same-family Stage-D rows (`module-parselang:23`,
   `module-rand:38`) sit alongside it.
 
+  **DEEPER root (traced 2026-06, second pass — the precise prerequisite):** the
+  capture binds CONCRETE (`AnalyseFnBody` line ~110 `r.Defs.Push(cb.Name, cb.Value)`,
+  `s parent=Map conc=true`), so the TOP-LEVEL gets would fold — the binding blocker
+  is actually that **`get`-on-a-concrete-Map does NOT fold to the concrete value in
+  check mode; it returns a carrier.** Proof: the recursive `for (subs size) […]`
+  count is a carrier Integer (`conc=false`, instrumented), i.e. `(s get "subs")`
+  did not fold to the concrete `[]`, so its `size` is a carrier, the loop is not
+  recognised as zero-iteration, its (unreachable) body is analysed, and the
+  recursion over an `Any` `subspec` (a get on the non-folded list) produces the
+  `test-describe` `Any`-name → "unmatched dispatch recovered". So the ROOT fix is
+  **`get`-on-concrete-Map provenance folding** (return the concrete value when the
+  map and key are statically concrete — like the existing `autoEvalMap` /
+  list-index const-folds), which cascades: `subs` → concrete `[]`, the loop folds
+  to zero iterations, the recursion vanishes, and the harness compiles. A
+  zero-iteration-`for` fold (a `for` whose count is concretely 0 elides its
+  unreachable body → empty list) is the natural SECOND step that the get-fold
+  unlocks. Both were prototyped this session: the `for`-zero fold is sound but
+  inert until the get-fold lands (the count stays a carrier without it), and the
+  get-fold is the high-blast-radius change (`get` is corpus-wide) that must be
+  landed with the differential gating every step — confirming this is the
+  dedicated module-body provenance build, with `get`-on-concrete-Map folding as its
+  pinned entry point.
+
 ## Discipline
 
 Land as ONE reviewed unit (never a partial diagnostic filter — `.6` §3 proved
