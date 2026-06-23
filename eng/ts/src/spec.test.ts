@@ -21,7 +21,7 @@ import {
   pathOf,
   typeOf,
 } from './coretype.ts'
-import { makeScalarHandler, makeScalarOptsHandler } from './make.ts'
+import { makeIdealHandler, makeScalarHandler, makeScalarOptsHandler } from './make.ts'
 import {
   AqlError,
   Engine,
@@ -588,7 +588,7 @@ function registerSpecWords(r: Registry): void {
       { args: [TScalar, TMap, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarOptsHandler(a) },
       { args: [TAny, TAny, TMap], handler: () => unsupportedMake('with-opts') },
       { args: [TArray, TList], typeArgs: new Set([0]), handler: () => unsupportedMake('Array') },
-      { args: [TIdeal, TMap], typeArgs: new Set([0]), handler: () => unsupportedMake('Ideal') },
+      { args: [TIdeal, TMap], typeArgs: new Set([0]), handler: (a) => makeIdealHandler(a) },
       { args: [TScalar, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarHandler(a) },
       { args: [TAny, TAny], handler: () => unsupportedMake('generic') },
     ],

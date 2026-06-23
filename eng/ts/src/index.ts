@@ -67,6 +67,7 @@ export {
 } from './type.ts'
 export {
   ChildType,
+  OptionsData,
   OrderedMap,
   Value,
   newAny,
@@ -87,6 +88,7 @@ export {
   newMark,
   newMove,
   newNone,
+  newOptions,
   newParenExpr,
   newString,
   newTypedList,

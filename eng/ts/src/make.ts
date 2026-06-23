@@ -20,11 +20,25 @@ import {
   newBoolean,
   newFloat,
   newInteger,
+  newOptions,
   newPath,
   newString,
   OrderedMap,
   Value,
 } from './value.ts'
+
+/**
+ * The 2-arg [Ideal, Map] make handler. Options instances are built from
+ * the source map; other Ideal kinds aren't ported yet.
+ */
+export function makeIdealHandler(args: Value[]): Value[] {
+  const target = args[0]!
+  const src = args[1]!
+  if (target.data === null && target.vType.leaf() === 'Options' && src.data instanceof OrderedMap) {
+    return [newOptions(src.data)]
+  }
+  throw new AqlError('unsupported', `make: ${target.vType.leaf()} instances not yet ported`)
+}
 
 /** Render a concrete value as its scalar text. Mirrors ValToString. */
 export function valToString(v: Value): string {

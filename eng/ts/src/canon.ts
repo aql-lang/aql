@@ -9,7 +9,7 @@
 // are added by their owning port increments.
 import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TNone, TPath, TString } from './type.ts'
 import type { FnDefInfo, XmlElement } from './value.ts'
-import { ChildType, OrderedMap, Value } from './value.ts'
+import { ChildType, OptionsData, OrderedMap, Value } from './value.ts'
 
 // canonXml renders an XML element, normalising an empty element to the
 // self-closing form (<br></br> → <br/>).
@@ -171,6 +171,11 @@ export function canonValue(v: Value): string {
   if (v.vType.matches(TList) && Array.isArray(v.data)) {
     const body = `[${v.asList().map(canonValue).join(' ')}]`
     return v.quoted ? `(quote ${body})` : body
+  }
+  if (v.data instanceof OptionsData) {
+    const m = v.data.map
+    const parts = m.sortedKeys().map((k) => `${k}:${canonValue(m.get(k)!)}`)
+    return `options{${parts.join(' ')}}`
   }
   if (v.vType.equal(TMap) && v.data instanceof OrderedMap) {
     const m = v.data

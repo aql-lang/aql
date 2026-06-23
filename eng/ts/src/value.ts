@@ -204,10 +204,15 @@ export class Value {
   }
 
   asMap(): OrderedMap {
+    if (this.data instanceof OptionsData) return this.data.map
     if (this.data === null || !(this.data instanceof OrderedMap)) {
       throw new Error('AsMap: not a map value')
     }
     return this.data
+  }
+
+  isOptions(): boolean {
+    return this.data instanceof OptionsData
   }
 
   /** True iff this is a typed list `[:T]` (ChildType payload, VType List). */
@@ -497,6 +502,22 @@ export class OrderedMap {
 /** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
 export function newMap(m: OrderedMap): Value {
   return new Value(TMap, m)
+}
+
+/**
+ * OptionsData marks an Options instance (an Ideal/Options value). It
+ * has VType Map (so typeof reports Map) but renders as `options{…}`.
+ */
+export class OptionsData {
+  readonly map: OrderedMap
+  constructor(map: OrderedMap) {
+    this.map = map
+  }
+}
+
+/** Construct an Options instance (`make Options {…}`). */
+export function newOptions(map: OrderedMap): Value {
+  return new Value(TMap, new OptionsData(map))
 }
 
 /**
