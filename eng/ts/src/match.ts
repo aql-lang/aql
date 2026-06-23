@@ -108,13 +108,16 @@ function readWordInfo(stack: readonly Value[], pointer: number): WordInfo | unde
 /**
  * Resolve a forward-side Word token against the expected sig type.
  *
- * Order matters: if the raw Word value already satisfies the slot
- * (e.g. sig expects TWord/TAny) we MUST keep the Word — handlers
- * like `def` declare TWord precisely to capture the name as data,
- * not to fall through to def-resolution. Only when the raw Word
- * fails the type check do we look up a simple-value def and try
- * again. Mirrors aqleng/go/match.go's order: TWord-matches-expected
- * branch (line ~136) runs before the TopOfDefStack branch (line ~155).
+ * A plain (non-function) def-bound word expands into the token stream
+ * wherever it stands — the `f w ≡ f (w)` equivalence (engine.go's
+ * resolveForwardArgs). So a word naming a simple-value def resolves to
+ * its value before the slot is type-checked, which is how `typeof pi`
+ * sees the integer 3 rather than the word `pi`.
+ *
+ * Exception: a TWord slot captures the raw word as data (handlers like
+ * `def`/`quote` declare TWord precisely to capture the name), so the
+ * word is kept. Function-valued defs are also kept so dispatch /
+ * forward-deferral handles them, not substitution.
  */
 function resolveForwardToken(
   tok: Value,
@@ -122,12 +125,12 @@ function resolveForwardToken(
   registry: Registry | undefined,
 ): Value {
   if (!tok.isWord()) return tok
-  if (sigTypeMatches(tok, expected)) return tok
-  if (!registry) return tok
-  const w = tok.asWord()
-  const top = registry.topOfDefStack(w.name)
-  if (!top) return tok
-  return top
+  if (expected.equal(TWord)) return tok
+  if (registry) {
+    const top = registry.topOfDefStack(tok.asWord().name)
+    if (top !== undefined && !top.isFnDef()) return top
+  }
+  return tok
 }
 
 function tryMatch(
