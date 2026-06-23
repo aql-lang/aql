@@ -43,19 +43,30 @@ def loopy (macro [[a] [quote [loopy unquote a]]])  macroexpand (loopy 1)
 - **Why it refuses:** the lenient check pass does not run the recursive
   expansion to the depth limit, so it produces a residual it cannot lower.
 
-### Option A (compile-to-trap) — viable, moderate effort
-Emit a terminal `OpTrap` that raises the byte-identical `macroexpand_error`.
-This is the SAME pattern already used for other expansion-time errors —
-`mini`/`parse` `*_unknown_lang`, `illegal_ref`, getr `not_found` (see the
-`refusalCeiling` history in compiled_coverage_test.go: "a top-level RecordTrap …
-compiles a TERMINAL OpTrap raising the byte-identical error"). The checker would
-need to detect the runaway expansion during the check pass (run macroexpand
-under the same depth guard the interpreter uses) and `RecordTrap` when it trips.
-Sound by construction — the compiled program raises the identical error, the
-differential gate stays green. Takes refusals **2 → 1**.
-- Risk: low. The trap pattern is established. The work is making the check-pass
-  macroexpand hit + report the depth limit rather than degrading to an
-  unmaterialisable residual.
+### Option A (compile-to-trap) — ATTEMPTED, has an unanticipated PREREQUISITE
+The plan was: emit a terminal `OpTrap` raising the byte-identical
+`macroexpand_error`, mirroring the sibling expansion-time traps (`mini`/`parse`
+`*_unknown_lang` in native_macro.go, `illegal_ref`, getr `not_found`). The trap
+site is right in principle — `eng/go/carrier.go` `carrierResults` runs
+`ExpandMacroForm` during the check pass, the depth guard at
+`eng/go/macro_expand.go:411-413` raises a bare `macroexpand_error`, and an `else`
+branch there could `RecordTrap` it.
+
+**A build attempt (worktree, reverted clean) found this does NOT work yet.** The
+recursive row's `macroexpand (loopy 1)` does **not reliably dispatch
+`macroexpand` under check mode** in the full corpus census: the `macroexpand`
+word and its raw-captured `(loopy 1)` paren (head = the self-recursive macro) are
+left UNCONSUMED on the residual and refuse with "residual value not statically
+materialisable" BEFORE the trap site is ever reached (instrumented: zero hits in
+`carrierResults` for this row in the gate). So a trap there never fires; coverage
+stayed at 2. The blocker is in the engine's FormArgs paren-capture of a paren
+whose head is a self-recursive macro, not in the trap pattern itself.
+
+PREREQUISITE for Option A: make `macroexpand (<recursive-macro> …)` dispatch
+deterministically under check mode (so it reaches `carrierResults` and the trap).
+That is deep engine work on recursive-macro paren capture, it risks the
+interpreter's macro dispatch path, and — see the determinism note below — it
+interacts with global mutable state. Not the "low-risk" change first assumed.
 
 ### Option B (keep refusing) — zero cost, faithful
 Leave it. The fallback already raises the exact error. The only thing lost is
@@ -92,17 +103,35 @@ answer (`[9]`) — so it must be driven entirely by the differential gate.
 ### Option B (keep refusing) — zero cost, faithful
 Leave it. The fallback returns `[1]`. Same P7 caveat.
 
-## Recommendation
+## Determinism observation (flagged for investigation, NOT an active bug)
 
-- **`macro.tsv:45`:** pursue **Option A (compile-to-trap)** if/when 0 refusals
-  (P7) is the goal — it is tractable, matches an established sound pattern, and
-  carries low risk. This is the better of the two to attempt next.
-- **`def-node-binding.tsv:54`:** **defer** (keep refusing) unless P7 is being
-  actively closed out. The fallback is faithful, and a correct compilation is
-  subtle with a silent-wrong-answer failure mode; only attempt it with thorough
-  differential coverage of deferred-eval scope shadowing.
+The Option-A attempt observed that, in ISOLATED repeated `CompileCheck` of the
+exact recursive source within one process, the FIRST call refuses while later
+calls behave differently — correlated with global mutable state advanced during
+the ~256-deep recursive expansion: the process-global, time-seeded value-ID RNG
+(`eng/go/value.go:1005-1008`) feeds `CanonValue` → the emit state's `producedBy`
+provenance map. **In the actual gate this is NOT observed** — `TestCompiled
+Coverage` deterministically reports refused=2, this row consistently refuses.
+So there is no evidence of a non-deterministic SHIPPING path; the observation is
+a probe-scenario artifact worth a look only IF Option A's prerequisite is later
+pursued (deep recursive expansion stressing the value-ID/provenance coupling). A
+deterministic, non-time-seeded value-ID scheme would be the clean fix if it ever
+proves real. Do not chase it speculatively.
 
-Net: refusals can soundly reach **1** via Row 1's trap with modest effort;
-reaching **0** additionally requires Row 2's deferred-eval-scope feature. Until
-then, both rows fall back faithfully and every spec row produces the correct
-result in both engines.
+## Recommendation (revised after the Option-A attempt)
+
+- **`macro.tsv:45`:** **keep refusing (Option B).** Option A is blocked on a
+  prerequisite that was not low-risk as first thought — recursive-macro paren
+  dispatch under check mode — which is deep engine work touching the macro path.
+  Not worth it for one error row that already falls back faithfully.
+- **`def-node-binding.tsv:54`:** **keep refusing (Option B).** Unchanged: a
+  correct compilation needs deferred-eval-scope provenance modeling, subtle with
+  a silent-wrong-answer failure mode.
+
+Net (revised): **both** remaining rows have an identified deeper prerequisite and
+both fall back faithfully today. refusalCeiling stays at **2**. Reaching P7
+(refusals 0, delete the interpreter fallback) requires two separate engine
+features (recursive-macro check-mode dispatch; deferred-eval-scope provenance) —
+each a deliberate project, not a quick trap. Until then every spec row produces
+the correct result in both engines; the only cost of the 2 refusals is that the
+interpreter fallback cannot yet be deleted.
