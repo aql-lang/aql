@@ -9,12 +9,12 @@ Corpus: **2943** spec value rows (**2621** compilable, 322 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 2615 |
+| compiled natively (fallback-free) | 2616 |
 | compiled with an interpreter island | 0 |
-| refused (whole-program fallback) | 6 |
+| refused (whole-program fallback) | 5 |
 | static check-error (invalid in both engines) | 322 |
 
-**2615 / 2621** compilable rows produce a Program (99% — 2615 of those fully native).
+**2616 / 2621** compilable rows produce a Program (99% — 2616 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,11 +22,11 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 6 | 6 | → 0 |
+| refusals (whole-program fallback) | 5 | 5 | → 0 |
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 1 | 1 | → 0 |
-| compute frontier | 4 | 86 | → 0 |
+| compute frontier | 3 | 86 | → 0 |
 
 ## Refusals by reason
 
@@ -34,20 +34,19 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | ---: | --- | --- |
 | 3 | operand provenance | soundness |
 | 1 | code-body word (NoEvalArgs) | coverage |
-| 1 | dispatch recovery (best guess) | soundness |
 | 1 | residual lowering (Stage 1 limit) | scheduling |
 
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 4 |
+| soundness | 3 |
 | scheduling | 1 |
 | opcode | 0 |
 | coverage | 1 |
 
 ## Re-scoped P7 partition
 
-Over the 6 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **1** allowlisted error rows, **4** compute-frontier gaps.
+Over the 5 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **1** allowlisted error rows, **3** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -64,5 +63,4 @@ _None._
 | count | reason |
 | ---: | --- |
 | 3 | operand provenance |
-| 1 | dispatch recovery (best guess) |
 

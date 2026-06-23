@@ -584,7 +584,6 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 	if r == nil || !r.Check.IsActive() || fnDef.Gen != nil {
 		return
 	}
-	es := r.Check.Emit
 	for i := range fnDef.Signatures {
 		s := &fnDef.Signatures[i]
 		if s.Fallback || len(s.Body) == 0 {
@@ -604,10 +603,19 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		if !fnDef.Anonymous {
 			declared = append([]*Type(nil), s.Returns...)
 		}
-		// Suspend recording so the analysis is diagnostics-only (no unit recorded
-		// against the program's EmitState). nil-safe: Suspend on a nil EmitState
-		// returns a no-op restore.
-		restore := es.Suspend()
+		// ISOLATE the analysis in a throwaway EmitState (not just Suspend): the
+		// body is analysed against the DECLARED param types, which for an abstract
+		// param (a surface like `s:Shape`) takes the surface-shape dispatch path
+		// and calls MarkUncompilable. Suspend stops recording but does NOT prevent
+		// MarkUncompilable from latching the program's EmitState.Compilable — so a
+		// construction-time check of a fn with a surface param would wrongly mark
+		// the WHOLE program uncompilable (surface.tsv:32 refused for exactly this).
+		// IsolateEmit swaps a fresh EmitState for the analysis (discarded on
+		// restore), so MarkUncompilable / recording land on the throwaway; the
+		// emitted DIAGNOSTICS (undefined_word for an uncalled body typo, the strand
+		// advisory) live on r.Check.Diagnostics and are unaffected — exactly the
+		// diagnostics-only contract this pass needs.
+		restore := r.Check.IsolateEmit()
 		AnalyseFnBody(r, name, paramNames, s.Body, genArgs, fnDef.Captured, declared)
 		restore()
 	}
