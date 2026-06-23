@@ -90,7 +90,29 @@ function valuesEqual(a: Value, b: Value): boolean {
   return ad === bd
 }
 
+/** Extract a list's elements whether it is a plain or a typed list. */
+function listElements(v: Value): Value[] | null {
+  if (Array.isArray(v.data)) return v.data as Value[]
+  if (v.isTypedList()) return v.asChildType().elements
+  return null
+}
+
 export function isValueOfType(v: Value, t: Value): boolean {
+  // Typed list `[:T]`: v must be a (plain or typed) list whose every
+  // element satisfies T.
+  if (t.isTypedList()) {
+    const elems = listElements(v)
+    if (elems === null || !v.vType.equal(t.vType)) return false
+    const child = t.asChildType().child
+    return elems.every((e) => isValueOfType(e, child))
+  }
+  // Typed map `{:T}`: v must be a concrete map whose every value
+  // satisfies T.
+  if (t.isTypedMap()) {
+    if (!v.isMap()) return false
+    const child = t.asChildType().child
+    return v.asMap().keys().every((k) => isValueOfType(v.asMap().get(k)!, child))
+  }
   // Disjunct / Enum membership: v satisfies the union if it satisfies
   // any alternative (a type-literal alternative is a subtype check; a
   // concrete alternative — an enum member — is value equality).

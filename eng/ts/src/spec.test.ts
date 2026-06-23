@@ -51,6 +51,8 @@ import {
   newMove,
   newNone,
   newString,
+  newTypedList,
+  newTypedMap,
   OrderedMap,
   newTypeLiteral,
   newWord,
@@ -818,11 +820,7 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
     stream.i = j
 
     if (tok === '[') {
-      const elems = readTokens(stream, ']')
-      // Tokenizer-built lists default to eval=true so auto-evaluation
-      // fires when they're consumed as a word arg, mirroring the Go
-      // parser's NewEvalList semantics.
-      out.push(newList(elems, { eval: true }))
+      out.push(makeListFromElems(readTokens(stream, ']')))
       continue
     }
     if (tok === ']') {
@@ -846,20 +844,40 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
 function readMap(stream: TokenStream): Value {
   const m = new OrderedMap()
   const s = stream.s
+  let child: Value | undefined
   for (;;) {
     while (stream.i < s.length && (s[stream.i] === ' ' || s[stream.i] === '\t')) stream.i++
     if (stream.i >= s.length) throw new Error(`tokenize: unterminated map literal '{'`)
     if (s[stream.i] === '}') {
       stream.i++
-      return newMap(m)
+      break
     }
     let k = stream.i
     while (k < s.length && s[k] !== ':' && s[k] !== ' ' && s[k] !== '\t' && s[k] !== '}') k++
     if (s[k] !== ':') throw new Error(`tokenize: map entry missing ':' at ${stream.i}`)
     const key = s.slice(stream.i, k)
     stream.i = k + 1 // consume ':'
-    m.set(key, readMapValue(stream))
+    const val = readMapValue(stream)
+    // An empty key (`{ :T }`) is the typed-map child annotation.
+    if (key === '') child = val
+    else m.set(key, val)
   }
+  if (child !== undefined && m.size === 0) return newTypedMap(child)
+  return newMap(m)
+}
+
+// makeListFromElems builds a list value, detecting a leading `:T`
+// element as a typed-list child annotation (`[:Integer 1 2 3]`).
+function makeListFromElems(elems: Value[]): Value {
+  const head = elems[0]
+  if (head !== undefined && head.isWord()) {
+    const nm = head.asWord().name
+    if (nm.startsWith(':')) {
+      const t = typeTable.get(nm.slice(1))
+      if (t !== undefined) return newTypedList(newTypeLiteral(t), elems.slice(1))
+    }
+  }
+  return newList(elems, { eval: true })
 }
 
 // readMapValue reads the value immediately after a map key's `:`.
@@ -876,7 +894,7 @@ function readMapValue(stream: TokenStream): Value {
   }
   if (c === '[') {
     stream.i++
-    return newList(readTokens(stream, ']'), { eval: true })
+    return makeListFromElems(readTokens(stream, ']'))
   }
   if (c === '{') {
     stream.i++

@@ -9,7 +9,7 @@
 // are added by their owning port increments.
 import { TAtom, TBoolean, TFloat, TInteger, TList, TMap, TNone, TString } from './type.ts'
 import type { FnDefInfo } from './value.ts'
-import { OrderedMap, Value } from './value.ts'
+import { ChildType, OrderedMap, Value } from './value.ts'
 
 /**
  * canonString renders a string payload as parseable AQL source. Plain
@@ -145,6 +145,13 @@ export function canonValue(v: Value): string {
   }
   if (v.vType.equal(TAtom)) {
     return `${v.asAtom()}/q`
+  }
+  if (v.data instanceof ChildType) {
+    const ct = v.data
+    const open = v.isTypedMap() ? '{' : '['
+    const close = v.isTypedMap() ? '}' : ']'
+    const parts = [`:${canonValue(ct.child)}`, ...ct.elements.map(canonValue)]
+    return `${open}${parts.join(' ')}${close}`
   }
   if (v.vType.matches(TList) && Array.isArray(v.data)) {
     const body = `[${v.asList().map(canonValue).join(' ')}]`

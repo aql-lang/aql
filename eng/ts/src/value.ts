@@ -196,6 +196,21 @@ export class Value {
     return this.data
   }
 
+  /** True iff this is a typed list `[:T]` (ChildType payload, VType List). */
+  isTypedList(): boolean {
+    return this.data instanceof ChildType && this.vType.equal(TList)
+  }
+
+  /** True iff this is a typed map `{:T}` (ChildType payload, VType Map). */
+  isTypedMap(): boolean {
+    return this.data instanceof ChildType && this.vType.equal(TMap)
+  }
+
+  asChildType(): ChildType {
+    if (!(this.data instanceof ChildType)) throw new Error('AsChildType: not a typed container')
+    return this.data
+  }
+
   /** True iff this is a Disjunct or Enum value (carries DisjunctInfo). */
   isDisjunct(): boolean {
     return this.vType.matches(TDisjunct) && this.data !== null
@@ -404,6 +419,32 @@ export class OrderedMap {
 /** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
 export function newMap(m: OrderedMap): Value {
   return new Value(TMap, m)
+}
+
+/**
+ * ChildType backs a typed list `[:T]` / typed map `{:T}` (and their
+ * concrete-with-elements forms `[:T 1 2 3]`). Mirrors the
+ * ChildTypeInfo payload in eng/go/value.go. `child` is the element/value
+ * type constraint (a type literal); `elements` carries concrete
+ * elements when present.
+ */
+export class ChildType {
+  readonly child: Value
+  readonly elements: Value[]
+  constructor(child: Value, elements: Value[] = []) {
+    this.child = child
+    this.elements = elements
+  }
+}
+
+/** Construct a typed list value (VType Node/List, ChildType payload). */
+export function newTypedList(child: Value, elements: Value[] = []): Value {
+  return new Value(TList, new ChildType(child, elements))
+}
+
+/** Construct a typed map value (VType Node/Map, ChildType payload). */
+export function newTypedMap(child: Value): Value {
+  return new Value(TMap, new ChildType(child))
 }
 
 /**

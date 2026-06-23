@@ -65,6 +65,7 @@ export {
   typeNameTable,
 } from './type.ts'
 export {
+  ChildType,
   OrderedMap,
   Value,
   newAny,
@@ -83,6 +84,8 @@ export {
   newMove,
   newNone,
   newString,
+  newTypedList,
+  newTypedMap,
   newTypeLiteral,
   newWord,
   withQuoted,
