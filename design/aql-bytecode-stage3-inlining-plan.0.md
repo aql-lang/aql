@@ -236,11 +236,20 @@ for FnDef fields did NOT compile `module-rand:38` — it still refuses
 `residual value of unknown provenance`. (And `m.f 2 3` from fn-value.tsv
 compiles independently either way.) So the get-typing is NOT the blocker:
 even with the concrete FnDef in hand, list-of's dispatch records no event.
-The blocker is genuinely that the fn-VALUE dispatch (a Function value
-resolved from a map, then called) is not compiled/recorded — the same
-fn-value-dispatch feature module-test:38 needs for `test-invoke`. Do not
-re-attempt the get-typing shortcut; the work is the dispatch-recording
-feature itself.
+
+Deeper confirmation (FDL trace, reverted): even with `getNodeReturns`
+returning the concrete list-of FnDef, `execFnDefLiteral` is called for
+`rand-with-seed` and `rand-int` but NEVER for `rand-list-of`/`list-of` —
+the concrete FnDef value sits on the check stack as DATA and never
+dispatches, so `[Rand.int 0 10]` and `3` are left unconsumed and the gen
+body list becomes the untracked residual. So module-rand:38 needs THREE
+interlocking pieces, each revealing the next: (a) get resolves the
+concrete module-wrapper FnDef, (b) that value actually DISPATCHES in
+check+emit mode (it currently does not — the fn-value-on-stack-with-args
+dispatch is not driven here), and (c) the dispatch RECORDS (closure /
+OpCallDynamic) so the result is tracked. This is the fn-value-dispatch
+feature module-test:38 also needs for `test-invoke`. Do not re-attempt the
+get-typing shortcut alone; the work is the full dispatch path.
 
 ## Discipline for the build
 
