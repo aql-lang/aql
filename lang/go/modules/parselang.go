@@ -49,6 +49,11 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		return native.ModuleDesc{}, err
 	}
 	exports := native.NewOrderedMap()
+	// registerIdents tracks the source-call identity of each AQL-registered
+	// parser so the runtime register handler is idempotent for the compiled
+	// path's double execution (check-mode ReturnsFn install + VM re-run) while
+	// a genuine user double-register still errors. See parseRegisterInstall.
+	registerIdents := map[string]string{}
 
 	// ---- out-of-band: register ----------------------------------------
 	// ParseLang.register <name> <fn> installs an AQL function as the parser
@@ -62,7 +67,11 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       parseRegisterHandler(exports),
+			Handler:       parseRegisterHandler(exports, registerIdents),
+			// Check-mode install so `ParseLang.parse_<name>` is statically
+			// resolvable; idempotent on the source-call identity so the compiled
+			// program's runtime re-run does not raise parse_kind_exists.
+			ReturnsFn: parseRegisterReturns(exports, registerIdents),
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("parselang-register", [][]native.FnParam{
@@ -363,44 +372,119 @@ func parseSourceHandler(args []native.Value, _ map[string]native.Value, _ []nati
 	return []native.Value{native.NewString(s)}, nil
 }
 
+// parseRegisterIdentity is the source-call identity of an AQL-registered
+// parser: the Pos of the fn VALUE handed to `register`. Two register calls
+// over the SAME source token (the same Row/Col/Src) share an identity; a
+// genuine second `register` of a kind — written elsewhere in the source —
+// does not. It is the key that lets the runtime register handler treat the
+// COMPILED path's double execution (the check-mode ReturnsFn install + the
+// VM's CALL re-run of the same `register`) as one registration, while a real
+// user double-register still errors. See
+// design/aql-bytecode-stage3-inlining-plan.0.md "module-parselang:23 —
+// register-ReturnsFn attempt".
+func parseRegisterIdentity(fn native.Value) string {
+	p := fn.Pos
+	return fmt.Sprintf("%d:%d:%s", p.Row, p.Col, p.Src)
+}
+
+// parseRegisterValidate runs the name + signature validation `register`
+// enforces, returning the validated key ("parse_<name>") or an error. Shared
+// by the runtime handler and the check-mode ReturnsFn so both apply the exact
+// same contract.
+func parseRegisterValidate(args []native.Value, r *native.Registry) (string, error) {
+	name, err := args[0].AsConcreteAtom()
+	if err != nil {
+		return "", r.AqlError("parse_bad_name", fmt.Sprintf("register: %v", err), "register")
+	}
+	if why := parseValidKindName(name); why != "" {
+		return "", r.AqlError("parse_bad_name", "register: "+why, "register")
+	}
+	fnDef, ok := args[1].Data.(native.FnDefInfo)
+	if !ok || len(fnDef.Signatures) == 0 {
+		return "", r.AqlError("parse_bad_signature", "register: expected a function value", "register")
+	}
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) < 2 {
+			return "", r.AqlErrorHint("parse_bad_signature",
+				"register: every signature must start [source:String opts:Map …]",
+				"register",
+				"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
+		}
+		p0 := sig.Params[0].Type
+		if p0 == nil || !(p0.ConformsTo(native.TString) || p0.Equal(native.TAny)) ||
+			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(native.TMap) {
+			return "", r.AqlErrorHint("parse_bad_signature",
+				"register: every signature must start [source:String opts:Map …]",
+				"register",
+				"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
+		}
+	}
+	return "parse_" + name, nil
+}
+
+// parseRegisterInstall validates and installs an AQL fn as parse_<name>,
+// tracking the registering source-call identity in idents. It is the single
+// install body shared by the runtime handler and the check-mode ReturnsFn.
+//
+// Collision rule (idempotent on identity): a key that is already registered
+// errors `parse_kind_exists` UNLESS the existing entry was installed by the
+// SAME source call (matching, non-empty identity) — that case is a no-op.
+// This makes the compiled path's double execution (the check-mode ReturnsFn
+// install followed by the VM re-running the identical `register` CALL) one
+// logical registration, while a genuine user double-register (a second
+// `register` of the kind, with a different fn-value Pos) still errors. A
+// built-in or host-registered parser carries no tracked identity, so
+// re-registering its kind always collides.
+func parseRegisterInstall(exports *native.OrderedMap, idents map[string]string, args []native.Value, r *native.Registry) error {
+	key, err := parseRegisterValidate(args, r)
+	if err != nil {
+		return err
+	}
+	id := parseRegisterIdentity(args[1])
+	if _, exists := exports.Get(key); exists {
+		// "::" is the zero identity (no Pos) — never treat two position-less
+		// calls as the same source call, so a genuine double-register without
+		// source positions still errors.
+		if prev, ok := idents[key]; ok && prev == id && id != "::" {
+			return nil // same source call — idempotent re-register
+		}
+		return r.AqlError("parse_kind_exists",
+			fmt.Sprintf("register: parser %q is already registered", strings.TrimPrefix(key, "parse_")), "register")
+	}
+	exports.Set(key, args[1])
+	idents[key] = id
+	return nil
+}
+
 // parseRegisterHandler validates and installs an AQL fn as parse_<name>.
 // Mirrors miniRegisterHandler; the source param may be String or Any.
-func parseRegisterHandler(exports *native.OrderedMap) native.Handler {
+func parseRegisterHandler(exports *native.OrderedMap, idents map[string]string) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		name, err := args[0].AsConcreteAtom()
-		if err != nil {
-			return nil, r.AqlError("parse_bad_name", fmt.Sprintf("register: %v", err), "register")
+		if err := parseRegisterInstall(exports, idents, args, r); err != nil {
+			return nil, err
 		}
-		if why := parseValidKindName(name); why != "" {
-			return nil, r.AqlError("parse_bad_name", "register: "+why, "register")
-		}
-		key := "parse_" + name
-		if _, exists := exports.Get(key); exists {
-			return nil, r.AqlError("parse_kind_exists",
-				fmt.Sprintf("register: parser %q is already registered", name), "register")
-		}
-		fnDef, ok := args[1].Data.(native.FnDefInfo)
-		if !ok || len(fnDef.Signatures) == 0 {
-			return nil, r.AqlError("parse_bad_signature", "register: expected a function value", "register")
-		}
-		for _, sig := range fnDef.Signatures {
-			if len(sig.Params) < 2 {
-				return nil, r.AqlErrorHint("parse_bad_signature",
-					"register: every signature must start [source:String opts:Map …]",
-					"register",
-					"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
-			}
-			p0 := sig.Params[0].Type
-			if p0 == nil || !(p0.ConformsTo(native.TString) || p0.Equal(native.TAny)) ||
-				sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(native.TMap) {
-				return nil, r.AqlErrorHint("parse_bad_signature",
-					"register: every signature must start [source:String opts:Map …]",
-					"register",
-					"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
-			}
-		}
-		exports.Set(key, args[1])
 		return nil, nil
+	}
+}
+
+// parseRegisterReturns is the check-mode counterpart of parseRegisterHandler:
+// it performs the SAME install so a dynamically-registered parser
+// (`ParseLang.register calc …`) is statically resolvable as
+// `ParseLang.parse_calc` during the check pass. The install is idempotent on
+// the registering source-call identity (parseRegisterInstall), so the runtime
+// handler re-running the identical `register` in the compiled program is a
+// no-op rather than a `parse_kind_exists` error. A non-concrete name or fn
+// value leaves the export unresolved (the downstream `get` refuses, as before).
+func parseRegisterReturns(exports *native.OrderedMap, idents map[string]string) native.ReturnsFunc {
+	return func(args []native.Value, r *native.Registry) []native.Value {
+		if len(args) < 2 || !native.IsConcrete(args[0]) {
+			return nil
+		}
+		if _, ok := args[1].Data.(native.FnDefInfo); !ok {
+			return nil
+		}
+		_ = parseRegisterInstall(exports, idents, args, r)
+		return nil
 	}
 }
 

@@ -5,21 +5,24 @@ import (
 	"testing"
 )
 
-// A parser registered via MiniLang.register / ParseLang.register is dispatched
-// later through a RUNTIME-added export key (`ParseLang.parse_<name>`,
-// `MiniLang.<name>`). The bytecode recorder const-folded the `get <name>` over
-// the module export to a missing-key None — using the check-time module
-// snapshot, BEFORE register installed the key at runtime — then dropped the
-// dispatch and left the call's args on the stack. So the compiled program used
-// to silently DIVERGE from the interpreter (which sees the registered key).
+// A parser registered via ParseLang.register is dispatched later through a
+// RUNTIME-added export key (`ParseLang.parse_<name>`). Historically the
+// bytecode recorder const-folded the `get <name>` over the module export to a
+// missing-key None — using the check-time module snapshot, BEFORE register
+// installed the key at runtime — then dropped the dispatch and left the call's
+// args on the stack, so the compiled program silently DIVERGED from the
+// interpreter. The guard required these programs to FALL BACK.
 //
-// The fix is in tryFoldModuleConst (eng/go/carrier.go): a `get` that resolves to
-// None is a MISSING key, and a module's keyspace can grow at runtime, so the
-// missing-key fold is declined — the get stays dynamic and the program falls
-// back / islands faithfully. This guards the bare-dispatch hole specifically:
-// the spec rows all have a trailing `get` that already refused, but
-// `ParseLang.parse_calc 'x + y' {}` with no get had nothing downstream to refuse
-// on — it compiled to garbage.
+// Stage 3 (design/aql-bytecode-stage3-inlining-plan.0.md, module-parselang:23)
+// makes them compile SOUNDLY instead: ParseLang.register's check-mode ReturnsFn
+// installs `parse_<name>` so the key is present at check time (the runtime
+// register handler is idempotent on the source-call identity, so the compiled
+// program's re-run does not re-error), and the resolved parser fn value
+// dispatches to a CALL_USER unit (parselang.go + execFnDefSigStackMatch's
+// check-mode fn-value path). The invariant this test guards is unchanged — the
+// compiled result must never diverge from the interpreter — but the mechanism
+// is now "compile soundly", not "fall back". Whichever path RunCompiled takes,
+// the result (value + error presence) must match the interpreter exactly.
 func TestRegisterDispatchFallsBackNotDiverges(t *testing.T) {
 	cases := []struct {
 		name string
@@ -50,16 +53,12 @@ func TestRegisterDispatchFallsBackNotDiverges(t *testing.T) {
 			want, werr := ia.Run(c.src)
 
 			ca, _ := New()
-			got, compiled, gerr := ca.RunCompiled(c.src)
+			got, _, gerr := ca.RunCompiled(c.src)
 
-			// A register-using program MUST fall back — the compiled path
-			// cannot dispatch the runtime-registered word soundly.
-			if compiled {
-				t.Fatalf("register-using program took the COMPILED path; it must fall back\n  src: %s", c.src)
-			}
-			// And the fallback must match the interpreter exactly (value + error).
+			// Whether the program compiled or fell back, its result must match
+			// the interpreter exactly (value + error presence).
 			if fmt.Sprint(want) != fmt.Sprint(got) || (werr == nil) != (gerr == nil) {
-				t.Fatalf("fallback diverged from interpreter\n  interp: %v (err=%v)\n  comp:   %v (err=%v)",
+				t.Fatalf("compiled result diverged from interpreter\n  interp: %v (err=%v)\n  comp:   %v (err=%v)",
 					want, werr, got, gerr)
 			}
 		})
