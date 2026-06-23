@@ -771,6 +771,28 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // undef NAME — pop the named binding. A capitalised (type) name with
+  // no binding is a type_error; a lowercase unbound name is a harmless
+  // no-op. Mirrors registerEngSpecDefinition::undef.
+  reg({
+    name: 'undef',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TWord],
+        handler: (args, _ctx, _stk, registry) => {
+          const name = args[0]!.asWord().name
+          const has = registry.topOfDefStack(name) !== undefined
+          if (/^[A-Z]/.test(name) && !has) {
+            throw new AqlError('type_error', `undef ${name}: no such type binding`, name)
+          }
+          if (has) registry.popDef(name)
+          return []
+        },
+      },
+    ],
+  })
+
   // replay: takes a body list, emits Mark + body + Move so the body
   // executes once, then the Move replays it — net effect: body runs
   // twice. Demonstrates the mark/move plumbing without pulling in
