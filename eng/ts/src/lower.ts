@@ -21,10 +21,12 @@ import {
   OpPushConst,
   OpPushLocal,
   OpStoreLocal,
+  OpTrap,
   type Program,
   type SigRef,
+  type TrapSpec,
 } from './bytecode.ts'
-import type { EmitState, Event, LoopEvent, Operand } from './emit.ts'
+import type { EmitState, Event, LoopEvent, Operand, TrapEvent } from './emit.ts'
 import type { Value } from './value.ts'
 
 /** Either a compiled Program or the first reason compilation refused. */
@@ -38,20 +40,34 @@ export type FinalizeResult = { program: Program } | { refused: string }
 export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeResult {
   if (emit.uncompilableReason !== undefined) return { refused: emit.uncompilableReason }
 
+  // A recorded terminal trap ends the program: keep the top-level events up
+  // to and including the trap (their side effects run first, exactly as in
+  // the interpreter) and drop everything after it plus the residual (both
+  // unreachable — the trap aborts the run). Mirrors eng/go eventsThroughSeq.
+  let topEvents: readonly Event[] = emit.events
   const residualOps: Operand[] = []
-  for (const r of residual) {
-    const o = emit.classify(r)
-    if (o === null) return { refused: 'residual value of unknown provenance' }
-    residualOps.push(o)
+  if (emit.trapSlot !== undefined) {
+    const at = emit.events.findIndex((e) => e.slot === emit.trapSlot)
+    topEvents = at >= 0 ? emit.events.slice(0, at + 1) : emit.events
+    // residualOps stays empty — the residual is unreachable.
+  } else {
+    for (const r of residual) {
+      const o = emit.classify(r)
+      if (o === null) return { refused: 'residual value of unknown provenance' }
+      residualOps.push(o)
+    }
   }
 
   const code = new CodeBuilder()
   const consts: Value[] = []
   const sigs: SigRef[] = []
   const makeMaps: string[][] = []
+  const traps: TrapSpec[] = []
   const constIdx = (v: Value): number => consts.push(v) - 1
   const sigIdx = (word: string, sig: SigRef['sig']): number => sigs.push({ word, sig }) - 1
   const makeMapIdx = (keys: readonly string[]): number => makeMaps.push([...keys]) - 1
+  const trapIdx = (ev: TrapEvent): number =>
+    traps.push({ code: ev.code, detail: ev.detail, word: ev.word }) - 1
 
   // Simulated operand-stack depth, tracked to size the VM stack.
   let sp = 0
@@ -90,6 +106,12 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
         // position) is not lowerable this stage.
         refused = 'loop in non-trailing position not compilable (stage 5)'
         return
+      }
+      if (ev.kind === 'trap') {
+        // Terminal: raise the stored AqlError. Pushes nothing, stores
+        // nothing — execution never continues past it.
+        code.emit(OpTrap, trapIdx(ev))
+        continue
       }
       if (ev.kind === 'makeList') {
         for (const o of ev.elements) pushOperand(o) // forward order: element 0 deepest
@@ -148,7 +170,7 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
   // Trailing-loop case: the last top-level event is a loop whose result
   // IS the program residual. Lower the prefix normally, then the loop
   // inline (leaving its accumulated values as the residual).
-  const last = emit.events[emit.events.length - 1]
+  const last = topEvents[topEvents.length - 1]
   const trailingLoop =
     last !== undefined &&
     last.kind === 'loop' &&
@@ -157,17 +179,17 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
     residualOps[0]!.slot === last.slot
 
   if (trailingLoop) {
-    lowerEvents(emit.events.slice(0, -1))
+    lowerEvents(topEvents.slice(0, -1))
     if (refused !== undefined) return { refused }
     lowerLoop(last as LoopEvent)
   } else {
-    lowerEvents(emit.events)
+    lowerEvents(topEvents)
     if (refused !== undefined) return { refused }
     for (const o of residualOps) pushOperand(o)
   }
 
   const { ops, args } = code.freeze()
   return {
-    program: { ops, args, consts, sigs, makeMaps, maxStack, numLocals: emit.slotCount() },
+    program: { ops, args, consts, sigs, makeMaps, traps, maxStack, numLocals: emit.slotCount() },
   }
 }

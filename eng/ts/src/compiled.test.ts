@@ -13,6 +13,7 @@ import { strict as assert } from 'node:assert'
 
 import { canon } from './canon.ts'
 import {
+  AqlError,
   Engine,
   type FnParam,
   type FnSig,
@@ -45,6 +46,7 @@ import {
   compile,
   disassemble,
   runCompiled,
+  runProgram,
   typeNameTable,
 } from './index.ts'
 
@@ -304,6 +306,33 @@ function registerFixtures(r: Registry): void {
       },
     ],
   })
+  // trapq: a CHECK-LENIENT word (the orphan-`gen` analogue) — it passes the
+  // static checker but raises at runtime. runInCheckMode so its handler runs
+  // in the record pass: there it records a TERMINAL trap (no error) so the
+  // compiled program raises the byte-identical error via OpTrap; at run time
+  // it throws. A trap inside a branch/loop fragment is conditional —
+  // recordTrap refuses and the program falls back to the interpreter.
+  reg({
+    name: 'trapq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TAny],
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, r) => {
+          if (r.check.isActive()) {
+            const emit = r.check.emit
+            if (emit !== undefined && !emit.recordTrap('trap_error', 'trapq: deliberate runtime trap', 'trapq')) {
+              emit.markUncompilable('trapq: trap in conditional context')
+            }
+            return []
+          }
+          throw new AqlError('trap_error', 'trapq: deliberate runtime trap', 'trapq')
+        },
+      },
+    ],
+  })
 }
 
 // Minimal tokenizer: words, ints, floats, single/double strings, lists,
@@ -403,6 +432,19 @@ function freshRegistry(): Registry {
   return r
 }
 
+// Run `fn`, capturing either its residual or the code of an AqlError it
+// throws — so a compiled run and an interpreter run can be compared for
+// error parity (both must error with the same code, or both succeed).
+type Outcome = { residual: Value[] } | { code: string }
+function outcome(fn: () => Value[]): Outcome {
+  try {
+    return { residual: fn() }
+  } catch (e) {
+    if (e instanceof AqlError) return { code: e.code }
+    throw e
+  }
+}
+
 // A row: input source, and whether we expect it to take the compiled
 // path (true) or fall back (false).
 const COMPILED: Array<[string, true]> = [
@@ -459,6 +501,18 @@ const FALLBACK: string[] = [
   'lengthq [addq 1 2]', // computed-list arg (not auto-evaluated in check) -> inert guard refuses
 ]
 
+// Error-parity rows: a check-lenient word compiles to a terminal OpTrap, so
+// the compiled program raises the byte-identical error the interpreter does.
+const TRAP: string[] = [
+  'trapq 5', // bare trap -> a single TRAP
+  'addq 1 2 trapq', // prefix events kept (side effects), then TRAP
+]
+
+// A trap inside a branch arm is conditional -> recordTrap refuses ->
+// markUncompilable -> falls back to the interpreter (which runs the arm and
+// throws). Both sides must error identically.
+const TRAP_FALLBACK: string[] = ['if true [trapq 5] [9]']
+
 describe('compiled (stage 1)', () => {
   for (const [input, wantCompiled] of COMPILED) {
     it(`compiles & matches: ${input}`, () => {
@@ -477,6 +531,46 @@ describe('compiled (stage 1)', () => {
       assert.equal(canon(residual), canon(interp))
     })
   }
+
+  for (const input of TRAP) {
+    it(`compiles to a trap & errors like the interpreter: ${input}`, () => {
+      const result = compile(freshRegistry(), tokenize(input))
+      assert.ok('program' in result, 'expected a compiled program (a trap)')
+      const vm = outcome(() => runProgram(result.program, freshRegistry()))
+      const interp = outcome(() => new Engine(freshRegistry()).run(tokenize(input)))
+      assert.deepEqual(vm, interp)
+      assert.deepEqual(vm, { code: 'trap_error' })
+    })
+  }
+
+  for (const input of TRAP_FALLBACK) {
+    it(`falls back on a conditional trap & errors like the interpreter: ${input}`, () => {
+      const r = freshRegistry()
+      const fb = outcome(() => {
+        const { residual, compiled } = runCompiled(r, tokenize(input))
+        assert.equal(compiled, false)
+        return residual
+      })
+      const interp = outcome(() => new Engine(freshRegistry()).run(tokenize(input)))
+      assert.deepEqual(fb, interp)
+      assert.deepEqual(fb, { code: 'trap_error' })
+    })
+  }
+
+  it('disassembles a trailing trap to prefix events + TRAP', () => {
+    const result = compile(freshRegistry(), tokenize('addq 1 2 trapq'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  PUSH_CONST 0', // addq arg: 2 (reverse sig order)
+        '001  PUSH_CONST 1', // addq arg: 1
+        '002  CALL_NATIVE 0 (addq)',
+        '003  STORE_LOCAL 0', // addq result -> local 0 (side effect kept)
+        '004  TRAP 0 (trap_error)', // terminal: raise, drop the residual
+      ].join('\n'),
+    )
+  })
 
   it('disassembles if-then-else to jump-bracketed code', () => {
     const result = compile(freshRegistry(), tokenize('if true [1] [2]'))

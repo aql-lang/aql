@@ -31,6 +31,7 @@ export const OpForSetup = 7 // pop start,end,step (start on top); open a loop wi
 export const OpForNext = 8 // if loop done, pop it and jump to abs pc `arg`; else bind locals[iterSlot]=cur, cur+=step
 export const OpMakeList = 9 // pop `arg` values; push a list (deepest = element 0)
 export const OpMakeMap = 10 // pop makeMaps[arg].length values; push a map keyed by makeMaps[arg] (value for keys[0] deepest)
+export const OpTrap = 11 // raise the AqlError described by traps[arg] and abort (terminal)
 
 /** An opcode is one of the Op* constants above. */
 export type Op = number
@@ -39,6 +40,19 @@ export type Op = number
 export interface SigRef {
   word: string
   sig: Signature
+}
+
+/**
+ * One trap: the AQL error an OpTrap raises — the taxonomy code, the detail
+ * message, and the word it is attributed to, taken verbatim from the
+ * matching runtime error so the compiled stream errors byte-identically to
+ * the interpreter. Mirrors eng/go bytecode.go::TrapSpec (Go's `hint` is
+ * dropped — the TS AqlError carries only code/detail/word).
+ */
+export interface TrapSpec {
+  code: string
+  detail: string
+  word: string
 }
 
 /** A compiled program: parallel-array code + the operand pools. */
@@ -53,6 +67,8 @@ export interface Program {
   readonly sigs: readonly SigRef[]
   /** Key lists for OpMakeMap, indexed by a MakeMap arg. */
   readonly makeMaps: readonly (readonly string[])[]
+  /** Trap specs for OpTrap, indexed by a Trap arg. */
+  readonly traps: readonly TrapSpec[]
   /** Operand-stack high-water mark — the preallocated stack capacity. */
   readonly maxStack: number
   /** Frame-local slot count — the preallocated locals capacity. */
@@ -126,6 +142,9 @@ export function disassemble(p: Program): string {
         break
       case OpMakeMap:
         text = `MAKE_MAP ${arg} {${(p.makeMaps[arg] ?? []).join(' ')}}`
+        break
+      case OpTrap:
+        text = `TRAP ${arg} (${p.traps[arg]?.code ?? '?'})`
         break
       default:
         text = `OP_${op} ${arg}`

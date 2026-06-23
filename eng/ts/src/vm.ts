@@ -25,6 +25,7 @@ import {
   OpPushConst,
   OpPushLocal,
   OpStoreLocal,
+  OpTrap,
   type Program,
 } from './bytecode.ts'
 import { coerceBoolean } from './coretype.ts'
@@ -51,6 +52,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
   const args = p.args
   const consts = p.consts
   const sigs = p.sigs
+  const traps = p.traps
   const n = ops.length
 
   const stack: Value[] = new Array<Value>(Math.max(p.maxStack, 1))
@@ -143,6 +145,12 @@ export function runProgram(p: Program, registry: Registry): Value[] {
           stack[sp++] = v
         }
         break
+      }
+      case OpTrap: {
+        // A check-mode-suppressed runtime error compiled in place: raise the
+        // byte-identical AqlError (the interpreter errors at this same point).
+        const t = traps[arg]!
+        throw new AqlError(t.code, t.detail, t.word)
       }
       default:
         throw new AqlError('internal_error', `bad opcode ${op} at pc ${pc}`)

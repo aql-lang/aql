@@ -101,7 +101,20 @@ export interface MakeMapEvent {
   readonly values: readonly Operand[]
 }
 
-export type Event = CallEvent | BranchEvent | LoopEvent | MakeListEvent | MakeMapEvent
+/**
+ * A recorded terminal trap: a check-mode-suppressed runtime error (a word
+ * that is lenient in check mode but raises at run time) compiled as an
+ * OpTrap. The program ends here — the recorder drops everything after it.
+ */
+export interface TrapEvent {
+  readonly kind: 'trap'
+  readonly slot: number
+  readonly code: string
+  readonly detail: string
+  readonly word: string
+}
+
+export type Event = CallEvent | BranchEvent | LoopEvent | MakeListEvent | MakeMapEvent | TrapEvent
 
 /** A captured sub-trace (a branch arm) plus its single residual operand. */
 export interface Fragment {
@@ -131,6 +144,8 @@ export class EmitState {
 
   /** Global monotonic event counter; each event's index == its local slot. */
   private seq = 0
+  /** Slot of a recorded TOP-LEVEL terminal trap (undefined = none). */
+  trapSlot: number | undefined
   /** Active fragment buffers (branch arms); recording targets the top one. */
   private readonly fragmentStack: Event[][] = []
   /** result-Value identity → producing event slot. */
@@ -311,5 +326,26 @@ export class EmitState {
     const out = newCarrier(TMap)
     this.producedBy.set(out, slot)
     return out
+  }
+
+  /**
+   * Record a TERMINAL trap for a check-mode-suppressed runtime error: the
+   * checker is lenient here but the interpreter errors, so the compiled
+   * program raises the byte-identical error via OpTrap instead of refusing
+   * the whole program. Only a TOP-LEVEL trap is recorded — a trap inside a
+   * branch arm / loop body / fn fragment is conditional and not modelled, so
+   * it returns false and the caller latches markUncompilable to fall back.
+   * The first trap wins (execution can reach only one). Returns true when the
+   * trap is owned here (recorded now, or already trapping). Mirrors
+   * eng/go/emit.go::RecordTrap. Finalize truncates the trace at the trap and
+   * drops the residual (everything after is unreachable).
+   */
+  recordTrap(code: string, detail: string, word: string): boolean {
+    if (this.fragmentStack.length !== 0) return false
+    if (this.trapSlot !== undefined) return true
+    const slot = this.seq++
+    this.events.push({ kind: 'trap', slot, code, detail, word })
+    this.trapSlot = slot
+    return true
   }
 }

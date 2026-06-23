@@ -24,9 +24,10 @@ export {
   OpPushConst,
   OpPushLocal,
   OpStoreLocal,
+  OpTrap,
   disassemble,
 } from './bytecode.ts'
-export type { Op, Program, SigRef } from './bytecode.ts'
+export type { Op, Program, SigRef, TrapSpec } from './bytecode.ts'
 export { EmitState } from './emit.ts'
 export type {
   BranchEvent,
@@ -38,6 +39,7 @@ export type {
   MakeMapEvent,
   Operand,
   SiteCounts,
+  TrapEvent,
 } from './emit.ts'
 export { finalize } from './lower.ts'
 export type { FinalizeResult } from './lower.ts'
