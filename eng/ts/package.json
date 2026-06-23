@@ -19,6 +19,11 @@
     "test": "node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'",
     "test:spec": "node --test --experimental-strip-types --no-warnings src/spec.test.ts"
   },
+  "dependencies": {
+    "@tabnas/jsonic": "^0.2.0",
+    "@tabnas/json": "^0.2.0",
+    "@tabnas/parser": "^0.2.0"
+  },
   "devDependencies": {
     "typescript": "^6.0.3",
     "@types/node": "^24.7.0"
