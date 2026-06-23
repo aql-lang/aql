@@ -1,0 +1,295 @@
+# `os` → `aql:os` (`Os`)
+
+> **Status: design proposal — not implemented.** This note specifies the
+> curated AQL surface for Go's `os` package. No Go code exists yet; the
+> note exists so the proposed surface — and especially its **policy
+> gating** — is auditable before any handler is written. Read
+> [`README.10.md`](README.10.md) first for the shared conventions this
+> note assumes.
+
+## 1. Package & status
+
+Go [`os`](https://pkg.go.dev/os) is the process's view of its host:
+environment variables, command-line arguments, identity (hostname, pid),
+the working directory, well-known directories (home, temp), and process
+termination. `aql:os` curates the **process/environment** slice of that
+surface. It is the first genuinely *side-effecting, host-fingerprinting*
+module in the curated family, so it is gated with care.
+
+**File operations are OUT of scope.** `os.Open`, `os.ReadFile`,
+`os.Create`, `os.Mkdir`, `os.Remove`, `os.Stat`, and the `*os.File`
+handle type all belong to `aql:io` (the `IO` namespace, backed by the
+`FileOps` capability — see `lang/go/native/io_module.go` and
+[`../FILE-ACCESS.10.md`](../FILE-ACCESS.10.md)). `aql:os` never reads or
+writes file *content*; it only exposes the environment/process/identity
+words below. `TempDir` and `home-dir` return path **strings** — they do
+not touch the filesystem — so they live here, not in `aql:io`.
+
+## 2. Why curated
+
+The raw `go:` reflection bridge would expose `os.LookupEnv` as
+`(string, bool)`, `os.Getwd` / `os.Hostname` / `os.UserHomeDir` as
+`(string, error)`, and `os.Exit(int)` as a bare void call — all with
+`Any` boundaries and Go names. The curated module:
+
+- collapses `LookupEnv`'s `(value, ok)` to **value-or-None** so a missing
+  variable is `None` (testable with `is None`) rather than an
+  out-of-band boolean;
+- collapses the `(value, error)` returns (`cwd`, `hostname`, `home-dir`)
+  to **value-or-error** (`r.AqlError`);
+- renames to kebab idiom (`Getenv`→`getenv`, `Getpid`→`pid`,
+  `Getwd`→`cwd`, `UserHomeDir`→`home-dir`, `TempDir`→`temp-dir`);
+- shapes `Environ` (a `[]string` of `"K=V"`) into a **Map**, and `Args`
+  into a **List[String]**;
+- and, most importantly, **routes every effect through a host capability
+  seam** (§7) so a sandbox can deny, fake, or scope it — instead of the
+  bridge's direct, ungated `os.*` calls.
+
+## 3. Import & namespace
+
+```
+import "aql:os"          # binds the Os namespace
+```
+
+Namespace is the plain capitalized package name, **`Os`** — no `-util`
+suffix (the `-util` convention is only for pure helper libraries and for
+avoiding builtin-type clashes; `Os` clashes with nothing). Words are
+reached args-before-dot: `"PATH" Os.getenv`.
+
+## 4. API
+
+Signatures are **top-first, sig order** (position 0 = top of stack).
+`→` separates args from result. Every word's inner native uses
+`BarrierPos: -1` so the swap form dispatches (zero-arg words note their
+`BarrierPos: 0` in §4 notes); see `README.10.md` "Argument order &
+dispatch".
+
+| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+|---|---|---|---|---|
+| `os.Getenv` / `os.LookupEnv` | `getenv` | `String → String\|None` | Value of an environment variable, or None if unset. | **Merges** `Getenv` and `LookupEnv`: refines `LookupEnv`'s `(value, ok)` to value-or-**None** so "unset" is a first-class None — distinct from the empty string `Getenv` returns for both. |
+| `os.Setenv` | `setenv` | `name:String value:String →` (nothing) | Set an environment variable for this process. | `(error)` → value-or-error; returns nothing on success. **Mutating + off by default** (§7). |
+| `os.Unsetenv` | `unsetenv` | `String →` (nothing) | Remove an environment variable. | `(error)` → value-or-error. **Mutating + off by default** (§7). |
+| `os.Environ` | `environ` | `→ Map` | All environment variables as a name→value Map. | `[]string` of `"K=V"` → **Map[String,String]** (split on the first `=`), idiomatic and key-addressable. |
+| `os.Args` | `args` | `→ List[String]` | The process command-line arguments. | `[]string` → **List[String]**. Element 0 is the program name, as in Go. |
+| `os.Hostname` | `hostname` | `→ String` | The host's network name. | `(value, error)` → value-or-error. |
+| `os.Getpid` | `pid` | `→ Integer` | This process's id. | `int` → Integer. |
+| `os.Getwd` | `cwd` | `→ String` | The current working directory. | `(value, error)` → value-or-error. |
+| `os.UserHomeDir` | `home-dir` | `→ String` | The current user's home directory path. | `(value, error)` → value-or-error. Pure string — no filesystem access. |
+| `os.TempDir` | `temp-dir` | `→ String` | The default directory for temporary files. | `string` → String. Pure string — no filesystem access. |
+| `os.Exit` | `exit` | `Integer → ` (never returns) | Terminate the host process with the given status code. | void → never-returns. **Dangerous** — terminates the whole host; off by default (§7). |
+
+Zero-arg words (`environ`, `args`, `hostname`, `pid`, `cwd`, `home-dir`,
+`temp-dir`) read nothing from the stack; their inner native sigs declare
+`BarrierPos: 0` (constant-style, like `math.pi` in `math.go`). The
+arg-taking words (`getenv`, `setenv`, `unsetenv`, `exit`) declare
+`BarrierPos: -1` so both the stack form `"K" Os.getenv` and the swap
+form `Os.getenv "K"`-style dispatch resolve.
+
+### Refinement notes
+
+- **`getenv` value-or-None.** Go forces a choice between `Getenv`
+  (empty string for both "unset" and "set-to-empty") and `LookupEnv`
+  (the `ok` disambiguates). AQL exposes **one** word that returns the
+  string when set and `None` when unset, so `"X" Os.getenv is None`
+  is the unset test and a present-but-empty var returns `""`.
+- **`environ` as a Map.** Go's `[]string{"K=V", …}` is split on the
+  first `=` into an `*OrderedMap`. A line with no `=` (rare, malformed)
+  maps the whole string to `""`.
+- **`exit` is a tail effect.** It returns no AQL value because the
+  process is gone; document it as "never returns". In a sandbox it MUST
+  be denied or stubbed (§7) — a guest must never be able to kill the
+  host.
+
+## 5. Types
+
+Scalars (`String`, `Integer`, `None`), `List[String]` (`args`), and
+`Map` (`environ`) only — all map through `eng.FromNative` /
+`eng.ToNative` (`eng/go/gobridge.go`). **No opaque external handle** is
+introduced: `aql:os` exposes no `*os.File`, `*os.Process`, or `os.FileInfo`
+(those would belong to `aql:io`). No `FixedID` from the `10000+`
+host/third-party range is needed, and no entry in
+`lang/go/test/fixedid_stability_test.go`.
+
+## 6. Errors
+
+`r.AqlError(code, detail, word)` with kebab-case codes; a Go `error`
+return is unwrapped into the `AqlError`. Codes:
+
+| code | raised by | when |
+|---|---|---|
+| `os-setenv-failed` | `setenv` | `os.Setenv` returns an error (e.g. invalid name). |
+| `os-unsetenv-failed` | `unsetenv` | `os.Unsetenv` returns an error. |
+| `os-hostname-failed` | `hostname` | `os.Hostname` returns an error. |
+| `os-cwd-failed` | `cwd` | `os.Getwd` returns an error. |
+| `os-home-dir-failed` | `home-dir` | `os.UserHomeDir` returns an error (e.g. `$HOME` unset). |
+| `os-denied` | any gated word | the host policy denies the operation (the wrapper returns the `*policy.Denied` verbatim; surface its `Code`). |
+| `os-not-installed` | any gated word | the env/process capability scope is `install:false` — the seam stub returns a `capability_not_installed`-style error, never a nil deref. |
+
+Bad-type args are guarded with `AsConcreteString` / `AsConcreteInteger`
+**before** any host call (no panics — `eng/go/CLAUDE.md` "Panic
+Prevention"). Every positive `.tsv` row pairs with an `ERROR:<substring>`
+sibling (`lang/go/CLAUDE.md` "Test discipline").
+
+## 7. Policy / capabilities (CRITICAL)
+
+`aql:os` is the policy-heavy half of this family. **None of these words
+may call `os.*` directly from the handler.** Every effect routes through
+a **host-provided capability seam** mirroring `FileOps`
+(`lang/go/capabilities/capabilities.go`) and its wiring
+(`lang/go/native/capabilities.go`, `permissioned_fileops.go`,
+`notinstalled_fileops.go`). Concretely the analogous seam:
+
+- a `capabilities.HostEnv` / `capabilities.HostProc` interface in
+  `lang/go/capabilities/` (`Getenv`, `LookupEnv`, `Setenv`, `Unsetenv`,
+  `Environ`; `Args`, `Hostname`, `Pid`, `Getwd`, `UserHomeDir`,
+  `TempDir`, `Exit`) with an **OS-backed default** (delegates to `os.*`,
+  the `OSFileOps` analogue) and an **in-memory / fake** implementation
+  for specs and sandboxes (the `MemFileOps` analogue — fixed hostname,
+  scripted env map, no real `Exit`);
+- installed via `SetHostEnv` / `SetHostProc` and retrieved via
+  `HostEnv(r)` / `HostProc(r)` (the `SetHostFileOps` / `HostFileOps`
+  pattern). When the relevant scope is `install:false`, the slot is
+  removed and the accessor returns a `notInstalled*` stub whose methods
+  return `capability_not_installed`, so handlers need no nil guard;
+- **auto-wrapped** by a `permissionedEnv` / `permissionedProc` gate
+  (the `permissionedFileOps` analogue) when `HostPolicy(r)` is non-nil,
+  so each call first consults the policy and only then delegates.
+
+The gate consults `lang/go/policy` exactly as `permissionedFileOps`
+does (`policy.Check(scope, op, args)`, which checks the bound globals
+from `policy.GlobalsFor` first). Real scope/cap names from
+`policy.KnownScopes` / `policy.GlobalOps`:
+
+| word(s) | scope (`KnownScopes`) | global cap (`GlobalOps`, via `GlobalsFor`) | default posture |
+|---|---|---|---|
+| `getenv`, `environ` | `env` | `env` | on if `env` installed (read) |
+| `setenv`, `unsetenv` | `env` | `env` | **off by default** (mutating) |
+| `args` | `process` | `process` | on if `process` installed |
+| `pid`, `cwd` | `process` | `process` + `system-info` | on if installed |
+| `hostname`, `home-dir`, `temp-dir` | `process` | `system-info` | on if installed (host fingerprint) |
+| `exit` | `process` | `process` | **off by default** (dangerous) |
+
+Notes for the gate:
+
+- **`env` scope.** `getenv`/`environ` gate as **reads**; `setenv`/
+  `unsetenv` gate as **mutations** and SHOULD be `deny` by default in
+  any sandbox profile (a guest mutating the host's process environment
+  is rarely intended). `policy.GlobalsFor` should bind `env` for both;
+  the read/write distinction is carried in the `op` (`get`/`environ`
+  vs `set`/`unset`) and the predicate args (`{"name": …}`) so a profile
+  can allow reads while denying writes, just as fileops allows `read`
+  while denying `write`.
+- **`process` scope + `system-info`.** `args`/`pid`/`cwd` identify the
+  process; `hostname`/`home-dir`/`temp-dir` additionally leak host
+  fingerprint, so they bind the `system-info` global cap (shared with
+  `aql:runtime`). A determinism-seeking sandbox denies/stubs them via
+  the fake `HostEnv`/`HostProc`.
+- **`exit` is the dangerous one.** It terminates the **host** process,
+  not the AQL engine, so it MUST gate on `process` and be **off by
+  default** in every sandbox profile. The recommended default is
+  `deny`; a host that genuinely wants guest-driven exit installs an
+  explicit allow rule. The fake implementation never calls
+  `os.Exit` — it records the code (or returns `os-denied`) so specs
+  stay in-process.
+- **No policy installed ⇒ allow-everything.** `HostPolicy(r) == nil`
+  means "no permissions configured", the default opt-in posture
+  (`capabilities.go` `HostPolicy` doc) — the OS-backed defaults run
+  ungated, matching today's fileops behaviour. Sandboxes opt *in* to
+  restriction by installing a policy.
+
+## 8. Overlap
+
+- **`aql:io` (`IO`).** Owns all file *content* I/O and the `*os.File`
+  handle (`IO.read`, `IO.write`, `IO.stdin/stdout/stderr`, the
+  `StreamKind` handle) via the `FileOps` capability. `aql:os` owns
+  environment/process/identity and returns directory **paths** as
+  strings only — it never opens or reads a file. Dividing line: if it
+  touches file content or a file descriptor, it is `aql:io`; if it is a
+  process/environment attribute, it is `aql:os`.
+- **`aql:runtime` (`Runtime`).** Shares the `system-info` cap and the
+  "host fingerprint / determinism" concern, but reports the **Go
+  runtime** (GOOS, NumCPU, …) rather than the OS process. No word
+  overlap.
+- **`aql:filepath` / `aql:path-util`.** Pure path-string manipulation;
+  `aql:os` produces the path strings (`cwd`, `home-dir`, `temp-dir`)
+  those modules then manipulate. No word overlap.
+
+## 9. Examples (args-before form)
+
+```
+import "aql:os"
+
+# read a var, defaulting when unset (value-or-None)
+"EDITOR" Os.getenv (default "vi")              # → "vi" when EDITOR unset
+
+# explicit unset test
+"PATH" Os.getenv is None                       # → false on a normal host
+
+# all vars as a Map, then pull one key
+Os.environ get "HOME"                          # → "/home/user"
+
+# process identity
+Os.pid                                          # → 4242 (Integer)
+Os.hostname                                      # → "workstation" (or os-hostname-failed)
+
+# args list — element 0 is the program name
+Os.args len                                     # → arg count incl. program
+
+# mutating + dangerous words (off by default in a sandbox)
+"FEATURE_X" "on" Os.setenv                       # name value → ; or os-denied
+1 Os.exit                                        # never returns; or os-denied
+```
+
+## 10. Open questions / out of scope
+
+- **Out of scope:** all file ops (`Open`/`ReadFile`/`Create`/`Stat`/…)
+  → `aql:io`; `os/exec` process spawning (a separate, even more
+  dangerous capability — a future `aql:exec` with its own `process`
+  gate); `os.Getenv`-style `os.Expand`; signals (`os/signal`); user/
+  group lookup (`os/user`).
+- **Open:** should `setenv`/`unsetenv` exist at all, given how rarely a
+  query-language guest should mutate the host environment? Proposal:
+  ship them but gate them off by default; a host opts in. Revisit if no
+  real use-case appears.
+- **Open:** should `exit` be omitted entirely rather than shipped-and-
+  denied? Shipping it keeps the surface complete and the denial
+  explicit/auditable; omitting it is safer-by-construction. Leaning
+  toward ship-and-deny so the policy story is uniform.
+- **Open:** `Args`/`Environ` snapshot-vs-live — these are read once per
+  call from the capability; a fake can return a fixed snapshot for
+  reproducible specs.
+
+## 11. Implementation sketch (wiring checklist — no code)
+
+Follow `io.go` (the **capability-backed** reference), not `math.go`
+(pure):
+
+1. **Seam.** Add `HostEnv`/`HostProc` interfaces + OS-backed and
+   in-memory impls to `lang/go/capabilities/capabilities.go` (mirror
+   `FileOps`/`OSFileOps`/`MemFileOps`).
+2. **Wiring.** Add `CapEnv`/`CapProc` keys, `SetHostEnv`/`HostEnv`
+   (and proc) accessors, `permissionedEnv`/`permissionedProc` gates,
+   and `notInstalledEnv`/`notInstalledProc` stubs in
+   `lang/go/native/` (mirror `capabilities.go`,
+   `permissioned_fileops.go`, `notinstalled_fileops.go`).
+3. **Policy bindings.** Extend `policy.GlobalsFor` so `env`→`env`,
+   `process`→`process`/`system-info` per §7. `env`/`process` are
+   already in `KnownScopes`; `system-info` is already in `GlobalOps`.
+4. **Module.** `BuildOsModule(parent) (native.ModuleDesc, error)` in
+   `lang/go/modules/os.go`: fresh `subReg := native.DefaultRegistry()`,
+   register the inner `OsNatives` (each handler calls `HostEnv(r)` /
+   `HostProc(r)`, **never** `os.*`), wrap each as an `FnDef` into an
+   `*OrderedMap` keyed by word, export under `"Os"`,
+   `ID: parent.Modules.NextID()`. Inner sigs: `BarrierPos: -1` for
+   arg-taking words, `BarrierPos: 0` for the zero-arg readers.
+5. Register `BuildOsModule` in the `modules` map in
+   `lang/go/modules/modules.go`.
+6. **Docs.** `lang/go/modules/docs_os.go` →
+   `registerDocs("aql:os", {…})` with a one-line summary per export
+   (`TestModuleExportDocs` enforces).
+7. **Spec.** `lang/spec/module-os.tsv` — rows lead with
+   `import "aql:os"`; every positive row gets an `ERROR:<substring>`
+   sibling (esp. `os-denied` rows exercised under a deny policy, and a
+   `Mem`-backed deterministic clock/env so `getenv`/`hostname` specs
+   are reproducible). `describe` surfaces the module live via
+   `stampExportProvenance` — no static help wiring.
