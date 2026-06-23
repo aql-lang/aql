@@ -17,6 +17,7 @@ import {
   TBoolean,
   TInteger,
   TList,
+  TMap,
   TString,
   TWord,
   typeNameTable,
@@ -27,7 +28,9 @@ import {
   type MoveInfo,
   newBoolean,
   newForwardMarker,
+  newMap,
   newTypeLiteral,
+  OrderedMap,
   Value,
   type WordInfo,
 } from './value.ts'
@@ -677,12 +680,48 @@ export class Engine {
    */
   private autoEvalStack(): void {
     for (let i = 0; i < this.stack.length; i++) {
-      const v = this.stack[i]!
-      if (!v.vType.matches(TList)) continue
-      if (!v.eval || v.quoted) continue
-      if (!v.isConcrete()) continue
-      this.stack[i] = this.autoEvalList(v)
+      this.stack[i] = this.deepEvalData(this.stack[i]!)
     }
+  }
+
+  /**
+   * Deep-evaluate a residual data value: a map resolves its values
+   * (def words, parens, eval-lists collapse to the body's single
+   * residual or a list); an eval-list runs in a sub-engine and its
+   * elements are deep-evaluated; scalars pass through. Mirrors the
+   * parser's eval-map / eval-list data-context semantics.
+   */
+  private deepEvalData(v: Value): Value {
+    if (v.data instanceof OrderedMap) {
+      const out = new OrderedMap()
+      for (const k of v.asMap().keys()) out.set(k, this.evalMapValue(v.asMap().get(k)!))
+      return newMap(out)
+    }
+    if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
+      const sub = new Engine(this.registry).run([...v.asList()])
+      return new Value(v.vType, sub.map((e) => this.deepEvalData(e)), { eval: false, quoted: false })
+    }
+    return v
+  }
+
+  /**
+   * Evaluate one map value: nested maps recurse; an eval-list (or a
+   * paren modelled as one) runs in a sub-engine and collapses to its
+   * single residual (or a list); a def-bound word resolves; everything
+   * else passes through.
+   */
+  private evalMapValue(v: Value): Value {
+    if (v.data instanceof OrderedMap) return this.deepEvalData(v)
+    if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted) {
+      const sub = new Engine(this.registry).run([...v.asList()]).map((e) => this.deepEvalData(e))
+      if (sub.length === 1) return sub[0]!
+      return new Value(v.vType, sub, { eval: false, quoted: false })
+    }
+    if (v.isWord()) {
+      const top = this.registry.topOfDefStack(v.asWord().name)
+      if (top !== undefined && !top.isFnDef()) return this.evalMapValue(top)
+    }
+    return v
   }
 
   private describeStack(): string {

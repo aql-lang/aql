@@ -940,6 +940,25 @@ function readMapValue(stream: TokenStream): Value {
     stream.i++
     return readMap(stream)
   }
+  if (c === '(') {
+    // A parenthesised expression as a map value evaluates inline when
+    // the map is deep-evaluated; model it as an eval-list of its tokens.
+    stream.i++
+    let depth = 1
+    const start = stream.i
+    while (stream.i < s.length && depth > 0) {
+      const ch = s[stream.i]
+      if (ch === '(') depth++
+      else if (ch === ')') {
+        depth--
+        if (depth === 0) break
+      }
+      stream.i++
+    }
+    const inner = s.slice(start, stream.i)
+    stream.i++ // consume ')'
+    return newList(tokenize(inner), { eval: true })
+  }
   let j = stream.i
   while (j < s.length && s[j] !== ' ' && s[j] !== '\t' && s[j] !== '}') j++
   const tok = s.slice(stream.i, j)
