@@ -137,6 +137,29 @@ func (c *CheckState) TruncateDiagnostics(n int) {
 	c.Diagnostics = c.Diagnostics[:n]
 }
 
+// IsolateEmit swaps in a FRESH EmitState (sharing the registry) for the
+// duration of a throwaway evaluation, returning a restore func. It is the
+// hermetic complement to Suspend: Suspend keeps the SAME EmitState (only
+// stopping recording), so a nested eval's interned consts and RememberOriginal
+// entries still pollute the live EmitState's pool. The dynamic-help example
+// eval fires from OnRegisterHook on EVERY fn registration — including the
+// program's own `def f fn […]` DURING compilation — so without a swap its
+// example run leaks compile-time state (e.g. a generated `['a' 'b']` sample
+// list) into the program's own EmitState, corrupting a later operand's compile.
+// Swapping to a throwaway pool, discarded on restore, contains it fully.
+func (c *CheckState) IsolateEmit() func() {
+	if c == nil {
+		return func() {}
+	}
+	saved := c.Emit
+	fresh := NewEmitState()
+	if saved != nil {
+		fresh.reg = saved.reg
+	}
+	c.Emit = fresh
+	return func() { c.Emit = saved }
+}
+
 // RecordDef remembers a name the user bound during a check run so
 // end-of-run analysis can flag defs that were never referenced. Names
 // starting with "_" (engine internals) are ignored.

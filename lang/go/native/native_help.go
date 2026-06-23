@@ -40,15 +40,26 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		r.Output = io.Discard
 		defer func() { r.Output = savedOut }()
 		// The synthetic example evaluation is DOCUMENTATION, not the user's
-		// program. Make it hermetic: it must contribute NOTHING to the program's
-		// bytecode recording (Suspend) NOR to its check diagnostics — the latter
-		// would gate compilation and pollute the coverage corpus with synthetic
-		// dispatch failures against the example stand-in args (the decision.aql
-		// false positives). Real construction-time body checking is now a
-		// first-class pass (checkFnBodyAtConstruction), so dropping these is sound.
-		defer r.Check.Emit.Suspend()()
+		// program, and MUST be fully hermetic — it fires from OnRegisterHook on
+		// EVERY fn registration, INCLUDING the program's own `def f fn […]` DURING
+		// compilation, so any trace it leaves contaminates that very program's
+		// compile. Three leak channels are closed:
+		//   1. EmitState (recording + interned consts + RememberOriginal) — swap in
+		//      a FRESH throwaway EmitState (IsolateEmit), not just Suspend: Suspend
+		//      keeps the SAME EmitState, so the example's consts (e.g. a generated
+		//      `['a' 'b']` sample list for a list-typed param) leaked into the
+		//      program's pool and a later operand compiled against the stale value
+		//      (a valid `def zs [1 2] end f2 zs` saw f2's arg as `['a' 'b']`).
+		//   2. Check diagnostics — snapshot + truncate (the decision.aql false
+		//      positives from synthetic stand-in args).
+		//   3. Def-stack bindings — snapshot + restore (an example that `def`s).
+		// Real construction-time body checking is a first-class pass
+		// (checkFnBodyAtConstruction), so suppressing the eval's diagnostics is sound.
+		defer r.Check.IsolateEmit()()
 		diagBase := len(r.Check.Diagnostics)
 		defer r.Check.TruncateDiagnostics(diagBase)
+		defsSnap := r.Defs.Snapshot()
+		defer r.Defs.Restore(defsSnap)
 
 		eng := NewTop(r)
 		result, err := eng.Run(vals)
