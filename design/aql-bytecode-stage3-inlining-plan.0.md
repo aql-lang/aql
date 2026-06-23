@@ -251,6 +251,35 @@ OpCallDynamic) so the result is tracked. This is the fn-value-dispatch
 feature module-test:38 also needs for `test-invoke`. Do not re-attempt the
 get-typing shortcut alone; the work is the full dispatch path.
 
+## SHARED ROOT (traced this session): module-fn results are CARRIERS in check mode
+
+Attempting the build (user-greenlit) traced module-rand:38 through its full
+stack and CORRECTED the earlier "closest row" claim — it is not shallow:
+
+1. `def r (Rand.with-seed 2)` — `Rand.with-seed`'s handler does NOT run in
+   check mode, so `r` is an abstract **Map carrier** (no field payload).
+2. `r get list-of` therefore hits `getNodeReturns`'s `!IsConcrete(container)`
+   guard and returns Any — the FnDef-field branch is never even reached
+   (a module-wrapper-FnDef fold there is INERT; verified, reverted).
+3. So `list-of` stays Any → never dispatches → its NoEvalArgs gen body
+   `[Rand.int 0 10]` is auto-evaluated and stranded as an untracked residual
+   (`resolveDynamicApply` would emit OpCallDynamic on the leading dynamic,
+   but the ops loop still refuses the untraced gen-list).
+
+This is the SHARED ROOT of all 3 module rows: a module-fn CALL result is an
+abstract carrier in check mode (`with-seed`→Map carrier; `parse`→Any;
+`run-spec`'s `s` param→carrier), so every downstream field/method access over
+it is Any and cannot resolve or dispatch. The fix is NOT compile-time
+evaluation (unsound for rand/side-effecting/`run-spec`): it is to **record the
+module-fn / fn-value dispatch** (OpCallDynamic-style) so the VM produces the
+real value at run time while the checker keeps a typed (non-Any) carrier with
+enough shape for downstream access. That carrier-shape + dispatch-recording is
+the fn-value-dispatch feature, and it sits BENEATH the call-site inlining
+(module-test:38) — all three rows share it. Revised ranking: there is no
+"shallowest" row; the shared dispatch-recording feature is the single
+prerequisite for all three, and should be built first against the simplest
+shape (a fn value resolved from a concrete map, then `m.f args`).
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
