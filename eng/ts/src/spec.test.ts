@@ -724,11 +724,26 @@ function registerSpecWords(r: Registry): void {
     name: 'def',
     forwardPrecedence: true,
     signatures: [
+      // Map-destructuring form `def {…} value` — its signature is part
+      // of def's canonical surface (so inspect reports it); the corpus
+      // doesn't exercise its runtime, so it falls through to a stub.
       {
-        args: [TWord, TAny],
+        args: [TMap, TAny],
+        noEvalArgs: new Set([1]),
+        handler: () => {
+          throw new AqlError('unsupported', 'def: map-destructuring binding not ported')
+        },
+      },
+      {
+        // Name-binding form. The Atom quoteArgs slot captures the name
+        // word (a constrained `NAME:[…]` word is kept intact so its
+        // constraint survives — see the matcher's quoteArgs capture).
+        args: [TAtom, TAny],
+        quoteArgs: new Set([0]),
         noEvalArgs: new Set([1]),
         handler: (args, _ctx, _stk, registry) => {
-          const nameWord = args[0]!.asWord()
+          const nameArg = args[0]!
+          const nameWord = nameArg.isWord() ? nameArg.asWord() : { name: nameArg.asAtom(), constraint: undefined }
           const name = nameWord.name
           const value = args[1]!
           // A digit-first name is a malformed number, never a name.

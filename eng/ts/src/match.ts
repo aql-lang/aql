@@ -171,8 +171,10 @@ function tryMatch(
     if (!rawTok) break
     if (isStructuralBoundary(rawTok)) break
     // A quoteArgs slot captures the raw forward Word as an Atom name.
+    // A word carrying a container type constraint (`def NAME:[…]`) is
+    // kept intact so the constraint survives to the handler.
     if (sig.quoteArgs?.has(fwd) && rawTok.isWord()) {
-      args[fwd] = newAtom(rawTok.asWord().name)
+      args[fwd] = rawTok.asWord().constraint !== undefined ? rawTok : newAtom(rawTok.asWord().name)
       fwd++
       scanIdx++
       continue
