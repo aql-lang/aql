@@ -1,4 +1,4 @@
-.PHONY: all build install test vet fmt lint vuln clean cover cover-html cover-html-open \
+.PHONY: all build install test test-ts vet fmt lint vuln clean cover cover-html cover-html-open \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
@@ -72,6 +72,17 @@ vuln:
 	  echo "==> vuln $$m"; \
 	  ( cd $$m && govulncheck ./... ); \
 	done
+
+# ---- TypeScript engine port (eng/ts) -----------------------------------
+#
+# @voxgig/aqleng mirrors the Go kernel and must stay row-for-row green on
+# the SAME eng/spec/*.tsv corpus as the Go engspec runner. Runs the
+# typechecker then the node:test suite (Node >= 24, type-stripping).
+test-ts:
+	@echo "==> typecheck eng/ts"
+	cd eng/ts && npx tsc
+	@echo "==> test eng/ts"
+	cd eng/ts && node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'
 
 # ---- compiled-coverage status surface ----------------------------------
 #
