@@ -107,6 +107,31 @@ needs (1) plus typing a user-registered fn's return — both narrower than
   body's field reads concrete in feature (1).
 - Corrected the earlier (wrong) root-cause pin; this note supersedes it.
 
+## Experimentally-verified prerequisite BENEATH feature (1)
+
+Tracing `args` into `run-spec`'s `buildFnBodyReturnsFn` (temporary
+instrumentation, reverted) shows the concrete map is ALREADY LOST before
+the body is ever compiled:
+
+```
+EXP run-spec arg 0 parent Any concrete false
+```
+
+At top level `def s {…} end (s get "name")` compiles (the map is concrete
+and the get-fold fires). But passing the same `s` through the module-fn
+dispatch boundary `s Test.run-spec` delivers arg 0 as a bare `Any`
+carrier — not even `Map`. So specialising the body unit to "concrete
+args" is inert (verified: forcing `genArgs[i]=a` when `IsConcrete(a)`
+left `module-test:38`'s refusal reason byte-identical) because the arg
+that reaches the ReturnsFn is not concrete in the first place.
+
+**Therefore feature (1) has a sub-prerequisite (1a): the module-fn /
+dot-access dispatch boundary must PRESERVE the concrete arg** (today it
+hands the callee an `Any` carrier in check+emit mode). Find where
+`Test.run-spec`'s dispatch (execFnDefLiteral → module sub-registry →
+shareCheckState) converts the concrete operand to `Any`, and thread the
+concrete value through, before call-site inlining can fold anything.
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
