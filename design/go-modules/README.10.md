@@ -38,7 +38,7 @@ today**. The packages already exposed by an existing module are out of
 scope and are NOT to be re-specified or disturbed:
 
 - `math`, `math/big` → `aql:math-util` (`MathUtil`)
-- `strings`, `regexp`, `unicode` (NFC normalize + `match`) → `aql:string-util` (`StringUtil`)
+- `strings`, `regexp`, `unicode` → `aql:string-util` (`StringUtil`) — **now expanded** with Unicode classification, see below
 - `time` (+ clock/async) → `aql:time-util` (`TimeUtil`)
 - `math/bits`, `hash/fnv` → `aql:bin-util` (`BinUtil`) — **now expanded**, see below
 - `math/rand` → `aql:rand` (`Rand`)
@@ -55,8 +55,14 @@ scope and are NOT to be re-specified or disturbed:
 > [BYTES.10.md](BYTES.10.md). This superseded and removed the earlier
 > standalone CRYPTO-*, HASH-CRC*, and ENCODING-BASE64/HEX notes.
 
-Where a new module's domain *touches* one of these (e.g. `aql:unicode`
-classification vs `string-util`'s `normalize`; `aql:csv` vs the
+> **Consolidation (deviates from strict 1:1).** All *Unicode*
+> functionality — per-string rune classification (`is-alpha`,
+> `is-digit`, `is-space`, …) and case mapping — is **folded into the
+> existing `aql:string-util` module** rather than split into a separate
+> `aql:unicode` module. See [STRING-UTIL.10.md](STRING-UTIL.10.md). This
+> superseded and removed the earlier standalone UNICODE note.
+
+Where a new module's domain *touches* one of these (e.g. `aql:csv` vs the
 `parselang`/`emitlang` CSV words), the per-package note calls out the
 overlap and the dividing line in its **Overlap** section. It does not
 move or change the existing words.
@@ -74,7 +80,6 @@ bare namespace would collide with a builtin type (`Path`, `String`,
 |---|---|---|---|---|
 | `strconv` | [STRCONV](STRCONV.10.md) | `aql:strconv` | `Strconv` | none |
 | `fmt` | [FMT](FMT.10.md) | `aql:fmt` | `Fmt` | none |
-| `unicode` | [UNICODE](UNICODE.10.md) | `aql:unicode` | `Unicode` | none |
 | `net/url` | [NET-URL](NET-URL.10.md) | `aql:url` | `Url` | none |
 | `path` | [PATH](PATH.10.md) | `aql:path-util` | `PathUtil` | none |
 | `path/filepath` | [PATH-FILEPATH](PATH-FILEPATH.10.md) | `aql:filepath` | `FilePath` | none (pure string ops) |
@@ -100,6 +105,15 @@ Not 1:1 modules — these fold into the one expanded module plus a new type:
 Covers the Go packages `crypto/{sha256,sha512,sha1,md5,hmac,rand}`,
 `hash/{crc32,crc64}`, `encoding/{hex,base32,base64,ascii85}`, a custom
 base128 codec, and `github.com/google/uuid`.
+
+### Text / Unicode (consolidated into `aql:string-util`)
+
+Not a 1:1 module — Go `unicode` per-rune classification + case folds into
+the existing whole-string utility module:
+
+| Area | doc | home | policy gate |
+|---|---|---|---|
+| Unicode classification (`is-alpha`/`is-digit`/`is-space`/…) + case mapping | [STRING-UTIL](STRING-UTIL.10.md) | `aql:string-util` (`StringUtil`) | none |
 
 ## Shared conventions (every note assumes these)
 
