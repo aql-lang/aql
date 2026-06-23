@@ -414,7 +414,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
 		// OpCallNativePoly so the VM re-matches the one concrete alternative at
 		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
-		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg) {
+		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false) {
 			r.Check.Emit.RecordPoly(word)
 		}
 		return out
@@ -499,7 +499,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	if !tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
-		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg) &&
+		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
 		r.Check.Emit.RecordCall(word, sig, args, out, pos,
@@ -856,9 +856,12 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // faithfully; only the dynamic-only gate is bypassed, every other safety gate
 // (core builtin, no meta/fn-value/code-body sig, sig identity, resolvable
 // operands) still applies.
-func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry) bool {
+func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool) bool {
 	es := r.Check.Emit
-	if !es.active() || sig == nil || len(outs) != 1 {
+	// 0 outputs (a side-effect word like the test framework's `test-record`) or
+	// 1 output (the common get/size/is shape). A multi-result poly is beyond
+	// this path — the residual layout would need per-result seating.
+	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
 	// matchReg is the registry whose signatures the VM re-matches over: a module
@@ -882,10 +885,13 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 		return false
 	}
 	// Only a genuinely dynamic dispatch (the case the checker could not
-	// commit to one overload — an island or a refusal today) OR a strict-
-	// disjunct straddle (disjunctStraddle). A fully concrete, single-overload
-	// call lowers to a faithful baked CALL_NATIVE, not poly.
-	if !disjunctStraddle && !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
+	// commit to one overload — an island or a refusal today), a strict-
+	// disjunct straddle (disjunctStraddle), or a no-signature recovery over an
+	// Any-typed operand (dynamicRecovery — matchSignature found no overload
+	// because an operand's type is statically unknown, e.g. a List/Map element).
+	// A fully concrete, single-overload call lowers to a faithful baked
+	// CALL_NATIVE, not poly.
+	if !disjunctStraddle && !dynamicRecovery && !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
 		return false
 	}
 	// Shapes the VM re-match cannot faithfully dispatch: code bodies,
@@ -895,7 +901,13 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
-	if len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" {
+	// get/getr/set carry exactly ONE QuoteArg — the inert Atom key — which bakes
+	// as a const operand; the rest of the operands resolve normally. set's
+	// receiver mutation (Store/Object/Array) and copy-return (Map/List) are
+	// faithful under runtime re-match: callPoly runs the same handler over the
+	// same concrete receiver the interpreter would. Other quoted-operand words
+	// (usurp / ref-family meta) re-step tokens and stay out.
+	if len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" {
 		return false
 	}
 	// A fn-valued operand or result means a fn-invoking / fn-returning word
@@ -1422,6 +1434,22 @@ func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
 func anyDynamicCarrier(vs []Value) bool {
 	for _, v := range vs {
 		if v.Dynamic {
+			return true
+		}
+	}
+	return false
+}
+
+// anyAnyCarrier reports whether any value is an Any-typed carrier — a value
+// whose static type is unknown (a List/Map element, an opaque module-fn
+// result). Unlike anyDynamicCarrier it does not require the Dynamic flag: a
+// strict Any carrier conforms to no concrete container/operand type, so it
+// fails matchSignature and reaches the no-signature recovery, where it is the
+// signal that the dispatch is genuinely runtime-dynamic (poly), not a concrete
+// type error.
+func anyAnyCarrier(vs []Value) bool {
+	for _, v := range vs {
+		if v.Carrier && v.Parent != nil && v.Parent.Equal(TAny) {
 			return true
 		}
 	}

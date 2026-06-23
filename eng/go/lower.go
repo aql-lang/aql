@@ -9,6 +9,13 @@ package eng
 // navigability; both halves are package eng and share no state beyond the
 // emitEvent trace and the *EmitState pools the lowerer reads.
 
+// maxLowerDepth bounds the lowerFragment recursion over nested branch / loop
+// bodies. It sits above the parser's maxParseNestingDepth so a program the
+// parser accepted is never spuriously refused here; the margin only guards an
+// event tree assembled outside the parser. Exceeding it returns a refusal
+// reason (Finalize then falls back to the interpreter), never a crash.
+const maxLowerDepth = 12000
+
 // lowerLoop lowers a counted/range for:
 //
 //	…step end start…  FOR_SETUP slot   ; pops start, end, step
@@ -99,6 +106,12 @@ type lowerer struct {
 	variadicElse map[int]bool
 	loops        []loopCtx
 	maxDepth     int
+	// depth counts live lowerFragment recursion (nested branch / loop bodies).
+	// The parser already caps source nesting (maxParseNestingDepth), so a program
+	// that reached the lowerer is shallow enough; this is defense-in-depth for an
+	// event tree built by any path other than the parser. Exceeding maxLowerDepth
+	// REFUSES compilation (a clean fallback to the interpreter), never crashes.
+	depth int
 	// fragMulti is set by lowerFragment when the just-lowered arm left MORE than
 	// one runtime value (a multi-value branch arm). lowerArms reads it right after
 	// each lowerArm to force the merge variadic — a multi-value arm makes the
@@ -850,6 +863,11 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 // emitted its jump, so whatever its scope holds is unreachable and
 // ignored). Restores the parent scope afterwards.
 func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
+	lw.depth++
+	defer func() { lw.depth-- }()
+	if lw.depth > maxLowerDepth {
+		return "fragment nesting beyond the compile depth limit"
+	}
 	lw.fragMulti = false
 	parent := lw.vm
 	lw.vm = nil

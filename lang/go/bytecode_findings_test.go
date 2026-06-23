@@ -2310,6 +2310,134 @@ func TestDispatchRecoveryPolyCompiles(t *testing.T) {
 	}
 }
 
+// Dynamic dispatch over an Any-typed operand. A value whose static type is
+// unknown — a List/Map element read with `get`, an opaque result — reaches a
+// pure core builtin (`get`, `add`, …) that matchSignature cannot bind to any
+// overload (a strict Any conforms to no concrete operand type), so it lands in
+// the no-signature recovery. Rather than refuse, the recovery records a
+// runtime-re-matching OpCallNativePoly for a SAFE pure builtin: the VM
+// re-matches over the concrete value at run time — the same first-match the
+// interpreter takes — so the compiled and interpreted results agree. This is
+// the lever for the dynamic-input frontier (e.g. the test-framework bodies'
+// `(cases _i get) get "in"`).
+func TestDynamicOperandRecoveryPolyCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		// `get` over an Any (a declared-Any fn return), keyed by a string.
+		{`def g fn [[] [Any] [{a:5}]]  (g) get "a"`, "[5]"},
+		// `get` of a MISSING key over an Any → None, faithfully.
+		{`def g fn [[] [Any] [{a:5}]]  (g) get "z"`, "[None]"},
+		// arithmetic over an Any-typed value.
+		{`def g fn [[] [Any] [10]]  (g) add 1`, "[11]"},
+	}
+	for _, c := range cases {
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if !compiled {
+			t.Errorf("%q: expected a compiled run (poly), fell back to interpreter", c.src)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: a CONCRETE operand whose type genuinely matches no overload is
+	// a real type error, NOT a dynamic dispatch — it must still refuse the poly
+	// (anyAnyCarrier gates on an Any carrier) and the interpreter raises the
+	// same signature_error. `get` over an Integer has no signature.
+	for _, src := range []string{
+		`def f fn [[n:Integer] [Any] [n get "a"]]  f 5`,
+		`5 get "a"`,
+	} {
+		_, _, eC := mustNew(t).RunCompiled(src)
+		_, eI := mustNew(t).Run(src)
+		if eC == nil || eI == nil {
+			t.Errorf("%q: expected a signature error in both engines, compiled=%v interp=%v", src, eC, eI)
+			continue
+		}
+		if !strings.Contains(eC.Error(), "signature") || !strings.Contains(eI.Error(), "signature") {
+			t.Errorf("%q: expected signature_error, compiled=%v interp=%v", src, eC, eI)
+		}
+	}
+}
+
+// A 0-output dynamic dispatch over an Any-typed operand. A side-effect / list
+// word whose check-mode result carries NO value (`drop` over a dynamic list)
+// reaches a pure builtin matchSignature cannot bind, so it is a poly candidate
+// with zero outputs. The recorder now admits a 0-result poly (len(outs) <= 1):
+// OpCallNativePoly pops the operands, the VM runs the re-matched handler, and
+// nothing is pushed — exactly as for the interpreter. This is the dispatch
+// shape behind the test framework's `test-record` (a 7-arg, 0-output side
+// effect); the lever lands `flex.tsv:138` here.
+func TestZeroOutputDynamicPolyCompiles(t *testing.T) {
+	const src = `def l [1 2] push 3 l drop l`
+	gotC, compiled, eC := mustNew(t).RunCompiled(src)
+	gotI, eI := mustNew(t).Run(src)
+	if eC != nil || eI != nil {
+		t.Fatalf("compiled err=%v interp err=%v", eC, eI)
+	}
+	if !compiled {
+		t.Errorf("expected a compiled run (0-output poly), fell back to interpreter")
+	}
+	if fmt.Sprint(gotC) != "[[1 2]]" || fmt.Sprint(gotI) != "[[1 2]]" {
+		t.Errorf("compiled=%v interp=%v want [[1 2]]", gotC, gotI)
+	}
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("expected native compile, refused: %s (cerr=%v)", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("expected no interpreter island:\n%s", prog.Disassemble())
+	}
+}
+
+// `set` over a dynamic receiver — a mutation / copy-return whose container is
+// statically unknown (the IO capability's `context get __sys get fs set mem
+// true`, where the fs Store is a dynamic carrier). matchSignature binds the
+// dynamic carrier, but the normal path refused "dynamic input at set"; set now
+// joins get/getr in the QuoteArgs poly exemption (its atom key bakes as an inert
+// const) so it records OpCallNativePoly. The runtime re-match runs the SAME
+// handler over the SAME concrete receiver the interpreter mutates, so the side
+// effect (Store/Object/Array mutation) and the copy-return (Map/List) are
+// faithful — verified by the differential corpus, which compares the post-
+// mutation observable result.
+func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
+	const imp = `"aql:io" import end  `
+	cases := []struct{ src, want string }{
+		// 0-output Store mutation over a dynamic context receiver, then a read of
+		// the mutated context through IO.write / IO.read.
+		{imp + `context get __sys get fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
+		{imp + `context get __sys get fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+	}
+	for _, c := range cases {
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if !compiled {
+			t.Errorf("%q: expected a compiled run (set poly), fell back", c.src)
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: `set` over a CONCRETE non-container (Integer) matches no overload
+	// — a genuine type error, not a dynamic dispatch. It must refuse the poly and
+	// raise the same signature_error in both engines, never silently succeed.
+	_, _, eC := mustNew(t).RunCompiled(`5 set a 9`)
+	_, eI := mustNew(t).Run(`5 set a 9`)
+	if eC == nil || eI == nil {
+		t.Fatalf("set over Integer: expected signature error in both engines, compiled=%v interp=%v", eC, eI)
+	}
+	if !strings.Contains(eC.Error(), "signature") || !strings.Contains(eI.Error(), "signature") {
+		t.Errorf("set over Integer: expected signature_error, compiled=%v interp=%v", eC, eI)
+	}
+}
+
 // Stage B — conditional dynamic apply in a branch. `if (n eq 0) [99]
 // MathUtil.sqrt 16`: the else arm is the module-export fn value sqrt and the
 // trailing 16 applies ONLY when the branch produced the callable. Two parts:

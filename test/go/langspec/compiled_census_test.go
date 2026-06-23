@@ -139,27 +139,37 @@ func computeCensus() (*census, error) {
 				continue // fully native — outside the tier partition
 			}
 			// Refused or islanded: classify into the P7 partition.
-			switch tier, name := classify(input); tier {
-			case 1:
+			//
+			// A refused/islanded row whose SPEC expects an error is a
+			// correct-error row: the checker refuses (or islands) so the
+			// interpreter raises the matching taxonomy, and the full-corpus gate
+			// confirms parity. The spec's ERROR: marker is the authoritative
+			// signal — it distinguishes these from value rows that happen to share
+			// a refusal reason (`x/r` illegal_ref vs `mini re` dynamic output both
+			// refuse "...unknown provenance"). errorRowReason stays as a secondary
+			// signal for the few error reasons that are intrinsically diagnostic.
+			//
+			// This disposition is checked BEFORE tier-2, so an error row is never
+			// mis-counted as reducible compiler debt merely because its source
+			// mentions a tier-2 word. The case in point: `def loopy (macro [[a]
+			// [quote [loopy unquote a]]]) macroexpand (loopy 1)` (macro.tsv:45)
+			// expects ERROR:expansion too deep — a divergent recursive macro whose
+			// divergence is NOT statically decidable, so refuse-and-raise is the
+			// only sound behaviour (design aql-bytecode-next-stages §Stage I). Its
+			// source contains `quote`, so classify attributes tier-2 "quote", but
+			// it is a correct-error row, not a reducible TODO. Tier 1 stays first:
+			// a `Vm.run` row is genuinely interpreter-only even when it errors.
+			tier, name := classify(input)
+			switch {
+			case tier == 1:
 				c.interp++
 				c.tier1By[name]++
-			case 2:
+			case expectErr || errorRowReason(reason):
+				c.errorRows++
+			case tier == 2:
 				c.reducible++
 				c.tier2By[name]++
 			default:
-				// A refused/islanded row whose SPEC expects an error is a
-				// correct-error row: the checker refuses (or islands) so the
-				// interpreter raises the matching taxonomy, and the full-corpus
-				// gate confirms parity. The spec's ERROR: marker is the
-				// authoritative signal — it distinguishes these from value rows
-				// that happen to share a refusal reason (`x/r` illegal_ref vs
-				// `mini re` dynamic output both refuse "...unknown provenance").
-				// errorRowReason stays as a secondary signal for the few error
-				// reasons that are intrinsically diagnostic.
-				if expectErr || errorRowReason(reason) {
-					c.errorRows++
-					continue
-				}
 				c.computeGap++
 				r := normaliseReason(reason)
 				if reason == "" {
