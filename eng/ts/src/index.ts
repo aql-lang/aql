@@ -5,10 +5,12 @@ export { cap } from './capability.ts'
 export {
   CheckState,
   carrierResults,
+  joinCarriers,
   severityFor,
   stripToCarriers,
   toCarrier,
 } from './check.ts'
+export { coerceBoolean } from './coretype.ts'
 export type { CheckDiagnostic, CheckSeverity } from './check.ts'
 export {
   CodeBuilder,
@@ -20,7 +22,7 @@ export {
 } from './bytecode.ts'
 export type { Op, Program, SigRef } from './bytecode.ts'
 export { EmitState } from './emit.ts'
-export type { CallEvent, Operand, SiteCounts } from './emit.ts'
+export type { BranchEvent, CallEvent, Event, Fragment, Operand, SiteCounts } from './emit.ts'
 export { finalize } from './lower.ts'
 export type { FinalizeResult } from './lower.ts'
 export { runProgram } from './vm.ts'

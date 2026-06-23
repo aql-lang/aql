@@ -12,8 +12,7 @@
 // budget's fixed-point machinery, disjunct partitioning, and the
 // bytecode recording pass land in later phases.
 import type { EmitState } from './emit.ts'
-import { TAny } from './type.ts'
-import type { AqlType } from './type.ts'
+import { AqlType, TAny } from './type.ts'
 import type { Signature } from './signature.ts'
 import { newCarrier, newDynamicCarrier, Value } from './value.ts'
 import type { Registry } from './registry.ts'
@@ -230,4 +229,32 @@ export function carrierResults(
     word,
   })
   return [newDynamicCarrier(TAny)]
+}
+
+/**
+ * joinCarriers merges two branch-arm result carriers into one. Mirrors
+ * the lattice-join half of eng/go/carrier.go::JoinCarriers (Phase-4
+ * subset — no disjunct construction yet): equal leaves keep the type;
+ * a subtype/supertype pair widens to the supertype; otherwise the type
+ * is the longest common lattice-path prefix (Scalar, Node, … or Any).
+ * The result is always a STRICT carrier (never dynamic) so a branch's
+ * merged result keeps stable provenance through carrierResults.
+ *
+ * The carrier type is informational for the compiler — the differential
+ * gate compares concrete VM values — so a coarse join still verifies.
+ */
+export function joinCarriers(a: Value, b: Value): Value {
+  const ta = a.vType
+  const tb = b.vType
+  if (ta.equal(tb)) return newCarrier(ta)
+  if (ta.matches(tb)) return newCarrier(tb)
+  if (tb.matches(ta)) return newCarrier(ta)
+  // Longest common prefix of the two lattice paths.
+  const common: string[] = []
+  const n = Math.min(ta.parts.length, tb.parts.length)
+  for (let i = 0; i < n; i++) {
+    if (ta.parts[i] !== tb.parts[i]) break
+    common.push(ta.parts[i]!)
+  }
+  return newCarrier(common.length > 0 ? new AqlType(common) : TAny)
 }

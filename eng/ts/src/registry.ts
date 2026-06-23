@@ -131,6 +131,7 @@ export class Registry {
       returns: ns.returns,
       returnsFn: ns.returnsFn,
       runInCheckMode: ns.runInCheckMode,
+      recordsOwnEvent: ns.recordsOwnEvent,
     }
   }
 

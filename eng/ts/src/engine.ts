@@ -279,8 +279,12 @@ export class Engine {
     if (this.registry.check.isActive() && !result.sig.runInCheckMode) {
       const out = carrierResults(this.registry, name, result.sig, result.args)
       // Bytecode recording: a clean native match is a candidate call
-      // event. Passive — does not affect `out`.
-      this.registry.check.emit?.recordCall(name, result.sig, result.args, out)
+      // event. Passive — does not affect `out`. A sig that records its
+      // own event (e.g. `if` records a branch from its returnsFn) is
+      // skipped here to avoid double-recording.
+      if (!result.sig.recordsOwnEvent) {
+        this.registry.check.emit?.recordCall(name, result.sig, result.args, out)
+      }
       const replaceFrom = this.pointer - result.prefixCount
       const replaceCount = result.prefixCount + 1 + result.forwardCount
       this.stack.splice(replaceFrom, replaceCount, ...out)

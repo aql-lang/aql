@@ -14,7 +14,8 @@
 //     vm.go relies on).
 //   - Operands are the engine's own `Value` objects (a single hidden
 //     class), so the stack is a monomorphic packed array.
-import { OpCallNative, OpPushConst, OpPushLocal, OpStoreLocal, type Program } from './bytecode.ts'
+import { OpCallNative, OpJmp, OpJmpIfFalse, OpPushConst, OpPushLocal, OpStoreLocal, type Program } from './bytecode.ts'
+import { coerceBoolean } from './coretype.ts'
 import { AqlError } from './error.ts'
 import type { Registry } from './registry.ts'
 import { Value } from './value.ts'
@@ -49,6 +50,12 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         break
       case OpStoreLocal:
         locals[arg] = stack[--sp]!
+        break
+      case OpJmpIfFalse:
+        if (!coerceBoolean(stack[--sp]!)) pc = arg - 1 // loop does pc++
+        break
+      case OpJmp:
+        pc = arg - 1 // loop does pc++
         break
       case OpCallNative: {
         const sr = sigs[arg]!

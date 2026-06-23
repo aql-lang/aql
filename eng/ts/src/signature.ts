@@ -72,6 +72,12 @@ export interface Signature {
    * analysis). Mirrors NativeSig.RunInCheckMode.
    */
   runInCheckMode?: boolean
+  /**
+   * When true, this signature's returnsFn records its own bytecode event
+   * (e.g. `if` records a branch), so the engine's generic per-dispatch
+   * recordCall is skipped to avoid double-recording.
+   */
+  recordsOwnEvent?: boolean
 }
 
 /** Computes carrier return values for a signature in check mode. */
@@ -89,6 +95,7 @@ export interface NativeSig {
   returns?: AqlType[]
   returnsFn?: ReturnsFunc
   runInCheckMode?: boolean
+  recordsOwnEvent?: boolean
 }
 
 export interface NativeFunc {

@@ -25,6 +25,8 @@ export const OpPushConst = 1 // push Consts[arg]
 export const OpCallNative = 2 // pop sig.args.length (top = sig[0]), call handler, push results
 export const OpStoreLocal = 3 // pop top into locals[arg]
 export const OpPushLocal = 4 // push locals[arg]
+export const OpJmpIfFalse = 5 // pop top; if coerceBoolean(v) is false, jump to abs pc `arg`
+export const OpJmp = 6 // unconditional jump to abs pc `arg` (forward only, for now)
 
 /** An opcode is one of the Op* constants above. */
 export type Op = number
@@ -60,9 +62,16 @@ export class CodeBuilder {
   private readonly ops: number[] = []
   private readonly args: number[] = []
 
-  emit(op: Op, arg: number): void {
+  /** Append an instruction; returns its index (for jump backpatching). */
+  emit(op: Op, arg: number): number {
     this.ops.push(op)
     this.args.push(arg)
+    return this.ops.length - 1
+  }
+
+  /** Overwrite the arg of a previously-emitted instruction (jump target). */
+  patch(index: number, arg: number): void {
+    this.args[index] = arg
   }
 
   get length(): number {
@@ -93,6 +102,12 @@ export function disassemble(p: Program): string {
         break
       case OpPushLocal:
         text = `PUSH_LOCAL ${arg}`
+        break
+      case OpJmpIfFalse:
+        text = `JMP_IF_FALSE ${arg}`
+        break
+      case OpJmp:
+        text = `JMP ${arg}`
         break
       default:
         text = `OP_${op} ${arg}`

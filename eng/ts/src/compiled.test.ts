@@ -19,17 +19,23 @@ import {
   Registry,
   TAny,
   TAtom,
+  TBoolean,
   TInteger,
   TList,
   TNumber,
   TString,
   Value,
+  coerceBoolean,
+  joinCarriers,
   newBoolean,
+  newDynamicCarrier,
   newFloat,
   newInteger,
   newList,
   newString,
   newWord,
+  compile,
+  disassemble,
   runCompiled,
   typeNameTable,
 } from './index.ts'
@@ -109,6 +115,72 @@ function registerFixtures(r: Registry): void {
     name: 'dupq',
     forwardPrecedence: true,
     signatures: [{ args: [TAny], handler: (args) => [args[0]!, args[0]!], returns: [TAny, TAny] }],
+  })
+  // gtq: a Boolean comparison (a > b), real handler + Boolean return.
+  reg({
+    name: 'gtq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TNumber, TNumber], handler: (args) => [newBoolean(toFloat(args[0]!) > toFloat(args[1]!))], returns: [TBoolean] },
+    ],
+  })
+  // if: 3-arg conditional. The runtime handler runs the chosen arm in a
+  // sub-engine (like `do`); the check returnsFn analyses BOTH arms,
+  // capturing each as a bytecode fragment, joins their result carriers,
+  // and records a branch event (recordsOwnEvent suppresses the generic
+  // recordCall). A 2-arg `if cond [then]` overload exists for the
+  // interpreter but has no returnsFn, so it falls back when compiled.
+  reg({
+    name: 'if',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TAny, TList, TList],
+        noEvalArgs: new Set([1, 2]),
+        recordsOwnEvent: true,
+        returns: [TAny],
+        handler: (args, _ctx, _stk, r) =>
+          coerceBoolean(args[0]!)
+            ? new Engine(r).run([...args[1]!.asList()])
+            : new Engine(r).run([...args[2]!.asList()]),
+        returnsFn: (args, r) => {
+          const emit = r.check.emit
+          const thenList = args[1]!
+          const elseList = args[2]!
+          if (emit === undefined) {
+            const t = new Engine(r).run([...thenList.asList()])
+            const e = new Engine(r).run([...elseList.asList()])
+            const tv = t.length === 1 ? t[0]! : newDynamicCarrier(TAny)
+            const ev = e.length === 1 ? e[0]! : newDynamicCarrier(TAny)
+            return [joinCarriers(tv, ev)]
+          }
+          const condOp = emit.classify(args[0]!)
+          emit.beginFragment()
+          const tRes = new Engine(r).run([...thenList.asList()])
+          if (tRes.length !== 1) emit.markUncompilable('if: then arm is not single-result')
+          const tVal = tRes.length === 1 ? tRes[0]! : newDynamicCarrier(TAny)
+          const tFrag = emit.endFragment(tVal)
+          emit.beginFragment()
+          const eRes = new Engine(r).run([...elseList.asList()])
+          if (eRes.length !== 1) emit.markUncompilable('if: else arm is not single-result')
+          const eVal = eRes.length === 1 ? eRes[0]! : newDynamicCarrier(TAny)
+          const eFrag = emit.endFragment(eVal)
+          const merged = joinCarriers(tVal, eVal)
+          if (condOp === null) emit.markUncompilable('if: condition of unknown provenance')
+          if (condOp !== null && tFrag !== null && eFrag !== null) {
+            emit.recordBranch(condOp, tFrag, eFrag, merged)
+          }
+          return [merged]
+        },
+      },
+      {
+        // 2-arg form (no else) — interpreter only; falls back when compiled.
+        args: [TAny, TList],
+        noEvalArgs: new Set([1]),
+        handler: (args, _ctx, _stk, r) =>
+          coerceBoolean(args[0]!) ? new Engine(r).run([...args[1]!.asList()]) : [],
+      },
+    ],
   })
   // def: check-aware name binding (runInCheckMode so it binds in the
   // record pass). A bound computed value (e.g. `def a (addq 1 2)`) shares
@@ -218,10 +290,18 @@ const COMPILED: Array<[string, true]> = [
   ['def x 5 addq x 1', true], // def of a literal -> const operand
   ['def a (addq 1 2) mulq a a', true], // multiref of a computed value
   ['def a (addq 1 2) def b (mulq a 10) subq b a', true], // chained shared bindings
+  ['if true [1] [2]', true], // literal cond, true arm
+  ['if false [1] [2]', true], // literal cond, false arm
+  ['if (gtq 5 3) [addq 1 2] [mulq 2 2]', true], // computed (event) cond
+  ['if (gtq 1 9) [addq 1 2] [mulq 2 2]', true], // computed cond, false arm
+  ["if true [1] ['x']", true], // divergent arm types (coarse carrier join)
+  ['if (gtq 5 3) [if true [10] [20]] [30]', true], // nested if in an arm
+  ['addq 100 (if (gtq 5 3) [1] [2])', true], // branch result feeds a call
 ]
 
 const FALLBACK: string[] = [
   'dupq 5', // multi-result -> refused, falls back
+  'if false [42]', // 2-arg if (no else) -> variadic, falls back
 ]
 
 describe('compiled (stage 1)', () => {
@@ -242,4 +322,22 @@ describe('compiled (stage 1)', () => {
       assert.equal(canon(residual), canon(interp))
     })
   }
+
+  it('disassembles if-then-else to jump-bracketed code', () => {
+    const result = compile(freshRegistry(), tokenize('if true [1] [2]'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  PUSH_CONST 0', // condition (true)
+        '001  JMP_IF_FALSE 5', // false -> else arm at pc 5
+        '002  PUSH_CONST 1', // then arm: 1
+        '003  STORE_LOCAL 0', // -> branch slot
+        '004  JMP 7', // skip else
+        '005  PUSH_CONST 2', // else arm: 2
+        '006  STORE_LOCAL 0', // -> branch slot
+        '007  PUSH_LOCAL 0', // residual: the merged result
+      ].join('\n'),
+    )
+  })
 })
