@@ -1461,7 +1461,13 @@ function makeListFromElems(elems: Value[]): Value {
       const t = typeTable.get(nm.slice(1))
       if (t !== undefined) {
         const rest = elems.filter((_, j) => j !== i)
-        return newTypedList(newTypeLiteral(t), rest)
+        // A bare scalar child only RETAINS sibling values when it is the
+        // first element (`[:T v0 v1]` → a concrete typed list). A child
+        // annotation that appears after a value (`[v0 :T v1]`) gives
+        // plain typed-list semantics: the values are not retained, so
+        // the result is a bare (non-concrete) typed-list carrier.
+        // Parser quirk pinned by types.tsv L758 vs nodes.tsv L93.
+        return i === 0 ? newTypedList(newTypeLiteral(t), rest) : newTypedList(newTypeLiteral(t))
       }
     }
   }

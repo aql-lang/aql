@@ -171,10 +171,15 @@ function listElements(v: Value): Value[] | null {
 }
 
 export function isValueOfType(v: Value, t: Value): boolean {
-  // Typed list `[:T]`: v must be a (plain or typed) list whose every
-  // element satisfies T.
+  // Typed list `[:T]`: v must be a CONCRETE list whose every element
+  // satisfies T. A plain list (even empty) is concrete; a typed list is
+  // concrete only when it carries retained elements — a bare typed-list
+  // carrier (`[:Integer]`, no elements) is a type, not a value, so it
+  // does not conform. Mirrors the Go IsConcrete guard.
   if (t.isTypedList()) {
-    const elems = listElements(v)
+    let elems: Value[] | null = null
+    if (Array.isArray(v.data)) elems = v.data as Value[]
+    else if (v.isTypedList() && v.asChildType().elements.length > 0) elems = v.asChildType().elements
     if (elems === null || !v.vType.equal(t.vType)) return false
     const child = t.asChildType().child
     return elems.every((e) => isValueOfType(e, child))
