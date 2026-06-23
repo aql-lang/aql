@@ -47,8 +47,10 @@ export function makePath(src: Value, absOverride: boolean | undefined): Value[] 
   let text: string
   if (Array.isArray(src.data)) {
     text = (src.data as Value[]).map((p) => valToString(p)).join('/')
-  } else {
+  } else if (src.vType.matches(TString)) {
     text = valToString(src)
+  } else {
+    throw new AqlError('type_error', `make: Path source must be a list or string, got ${src.toString()}`)
   }
   let abs = text.startsWith('/')
   const segments = text.split('/').filter((s) => s !== '')

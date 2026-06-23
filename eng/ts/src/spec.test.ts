@@ -835,6 +835,31 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // break / continue — outside a loop they bubble out as an error,
+  // mirroring registerEngSpecDefinition's flow-ctrl stubs.
+  reg({
+    name: 'break',
+    signatures: [
+      {
+        args: [],
+        handler: () => {
+          throw new AqlError('flow_error', 'break outside loop')
+        },
+      },
+    ],
+  })
+  reg({
+    name: 'continue',
+    signatures: [
+      {
+        args: [],
+        handler: () => {
+          throw new AqlError('flow_error', 'continue outside loop')
+        },
+      },
+    ],
+  })
+
   // undef NAME — pop the named binding. A capitalised (type) name with
   // no binding is a type_error; a lowercase unbound name is a harmless
   // no-op. Mirrors registerEngSpecDefinition::undef.

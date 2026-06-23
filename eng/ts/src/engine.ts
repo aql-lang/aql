@@ -171,7 +171,7 @@ export class Engine {
         this.dispatchFnDef(name, top.asFnDef())
         return
       }
-      if (top.vType.matches(TList) && top.isConcrete() && !top.quoted) {
+      if (top.vType.matches(TList) && Array.isArray(top.data) && !top.quoted) {
         // Unquoted list → code body: splice its elements at the
         // pointer so they execute inline. A quoted list (set via
         // `quote`) is data and falls through to the literal-substitute
