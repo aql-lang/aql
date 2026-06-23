@@ -1,144 +1,161 @@
-# `aql:bytes` — Go `bytes` — **NICHE / optional, recommend deferring**
+# The `Bytes` type — a first-class binary leaf
 
-> **Status: design proposal, not implemented — and flagged NICHE.** This
-> note documents the surface for completeness but recommends **not**
-> building the module yet. Read [README.10.md](README.10.md) first.
+> **Status: design proposal, not implemented.** This note specifies a new
+> AQL value type, `Bytes`, the foundation for all binary-adjacent
+> functionality. The words that construct, inspect, encode, hash, and
+> sign byte data live in the expanded `aql:bin-util` module — see
+> [BIN-UTIL.10.md](BIN-UTIL.10.md). Read [README.10.md](README.10.md)
+> first for the shared conventions.
 
-## 1. Package & status
+## 1. Why a type (not List[Integer] or String)
 
-Go [`bytes`](https://pkg.go.dev/bytes) is the `[]byte` analogue of
-`strings`: search, compare, slice, trim, and build byte slices, plus a
-`bytes.Buffer`. Nothing is implemented yet, and (see §10) the
-recommendation is to keep it that way for now.
+AQL has no binary representation today: file reads degrade to `String`
+(UTF-8), and `eng.FromNative`/`ToNative` (`eng/go/gobridge.go`) have **no
+`[]byte` case** — a Go byte slice falls through to a best-effort
+`fmt.Sprintf` string. Every binary operation (hashing, base64/hex,
+HMAC, CRC, UUID bytes, secure random) is defined over `[]byte`, so a
+coherent surface needs one shared, lossless, type-safe carrier.
 
-## 2. Why curated — and why this one is weak
+The two cheaper models were rejected:
 
-**Key design tension, up front:** AQL has **no Bytes type** in the
-lattice. Every `bytes` function is defined over `[]byte`, which has no
-direct AQL counterpart. So a curated module must first *invent* a
-representation, and then most of what it offers simply duplicates
-`String` / `string-util` words that already exist. The value over the
-raw `go:` bridge is therefore low, and the cost (a fabricated byte model
-that the rest of the language doesn't understand) is real. This note is
-candid: the right call is to **defer**.
+- **`List[Integer]`** — workable but verbose, allocation-heavy (one
+  `IntPayload` per byte), and ambiguous (any list of small ints *looks*
+  like bytes). It cannot carry a Comparer/Format that reads as binary.
+- **`String`** — composes with file reads but is lossy for non-UTF-8
+  data and conflates text with bytes.
 
-## 3. Import & namespace
+A real `Bytes` leaf makes binary **first-class and aql-native**: `x is
+Bytes` works, values render as hex, comparison is byte-lexicographic,
+and `[]byte` round-trips through the Go bridge unchanged.
 
-```
-import "aql:bytes"          # would bind the Bytes namespace
-```
+## 2. Registration
 
-`bytes` does not clash with a builtin type or existing module namespace
-(there is no `Bytes` builtin — that is precisely the problem), so no
-`-util` suffix. Words would dot-access as `Bytes.contains`, etc.
+`Bytes` is a **global external builtin**, registered in a new
+`lang/go/native/native_bytes.go`, mirroring the established external-type
+pattern used for `Time`, the fetch result, `Timeout`, and `Interval`
+(`RegisterExternalBuiltin` with a stable `FixedID`):
 
-## 4. API (proposed representation: List of Integers 0–255)
+- **FixedID** — allocate the next free value in the `lang/go/native`
+  scalar band **1000–1999** (`eng/go/CLAUDE.md` "FixedID Allocation";
+  document the exact number chosen) and pin it in
+  `lang/go/test/fixedid_stability_test.go`. (Not the 10000+ host range —
+  this is a language builtin, not a host plugin type.)
+- **No-panic init** — registration records any error via the
+  `TypeInitError` path checked at `DefaultRegistryWithPolicy`, per
+  ADR-005 (`eng/go/CLAUDE.md` "Panic Prevention" — no init-time panic).
+- Path/name: `Ideal/Bytes` (a concrete data leaf), exported so
+  `BinUtil`-built values type as `Bytes` and `x is Bytes` resolves.
 
-Proposed model: a byte sequence is a **`List` of Integers**, each in
-0–255. The boundary converts `List[Integer] ↔ []byte` (range-checking
-each element). Signatures top-first, sig order; inner sigs `BarrierPos:
--1`.
+## 3. Payload & behavior
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
-|---|---|---|---|---|
-| `Contains(b,sub) bool` | `contains` | `[List sub, List b] -> Boolean` | True if b contains sub. | `[]byte` → `List[Integer 0–255]`; subject last. |
-| `HasPrefix(b,p) bool` | `has-prefix` | `[List p, List b] -> Boolean` | True if b starts with p. | List model. |
-| `HasSuffix(b,s) bool` | `has-suffix` | `[List s, List b] -> Boolean` | True if b ends with s. | List model. |
-| `Index(b,sub) int` | `index` | `[List sub, List b] -> Integer` | First index of sub, -1 if absent. | byte index (not rune); List model. |
-| `Equal(a,b) bool` | `equal` | `[List b, List a] -> Boolean` | True if the two byte lists are identical. | duplicates list `eq`. |
-| `Repeat(b,n) []byte` | `repeat` | `[Integer n, List b] -> List` | Concatenate n copies of b. | List model; n top arg. |
-| `Join(s,sep) []byte` | `join` | `[List sep, List-of-Lists s] -> List` | Join byte lists with a separator. | List model. |
-| `Split(b,sep) [][]byte` | `split` | `[List sep, List b] -> List` | Split b on sep into a list of byte lists. | List model. |
-| `TrimSpace(b) []byte` | `trim-space` | `[List] -> List` | Strip leading/trailing ASCII whitespace bytes. | List model. |
-| `ToUpper(b) []byte` | `to-upper` | `[List] -> List` | ASCII-upper each byte. | duplicates `StringUtil.upper`. |
-| `ToLower(b) []byte` | `to-lower` | `[List] -> List` | ASCII-lower each byte. | duplicates `StringUtil.lower`. |
-| `bytes.Buffer` | (deferred) | — | — | A growable buffer would need an opaque external handle (`RegisterExternalBuiltin`, FixedID 10000+). Not worth it given the niche status — out of scope. |
+- **Payload** — `ExtensionPayload{Body: []byte}` via `eng.NewExtension`
+  (`eng/go/payload.go`), so **no kernel struct change** is required; the
+  slice is the whole state.
+- **`TypeBehavior`** (the seam external types implement):
+  - `Format` → hex, length-capped, e.g. `Bytes(5) 68656c6c6f` (short) and
+    `Bytes(1024) 0001020304…` (truncated with the length shown). The full
+    value is obtained with `BinUtil.hex-encode` / `base64-encode`.
+  - `Comparer` → byte-lexicographic (`bytes.Compare`), opening with the
+    `litVsConcreteOrder` rule so the bare `Bytes` literal sorts below every
+    concrete value (`design/TYPE-ORDERING.10.md`, `eng/go/compare.go`).
+  - `Equal` → bytewise (`bytes.Equal`). (HMAC verification uses a separate
+    *constant-time* compare — see BIN-UTIL.10.md — not this `Equal`.)
+  - `DeepCloner` → copy the backing slice (`eng/go/clone.go`) so a cloned
+    `Bytes` shares no storage with the original.
 
-Every row above has a near-identical `String` / `StringUtil` sibling
-(`StringUtil.contains`, `StringUtil.split`, `StringUtil.upper`, …)
-operating on the type AQL users actually have. The byte-list versions
-add value only for true binary data, which is exactly the case the
-lattice can't represent today.
+## 4. The value bridge (the one `eng/` change)
 
-## 5. Types
+Extend `eng/go/gobridge.go`:
 
-Proposed: `List` of Integers (0–255) for byte sequences — **no new
-type**. `bytes.Buffer` would require an opaque external handle
-(`RegisterExternalBuiltin` with a `FixedID` in the 10000+ range, plus a
-`lang/go/test/fixedid_stability_test.go` entry); deferred. The lack of a
-real Bytes leaf is the central open question (§10).
+- `FromNative([]byte)` → a `Bytes` value (wrapping the slice).
+- `ToNative(Bytes)` → the underlying `[]byte`.
+
+This is the only change outside `lang/`. It lets every wrapped Go call in
+`bin-util` (`sha256.Sum256`, `base64.DecodeString`, `uuid.New`, …) pass
+and receive bytes without per-word boilerplate, and makes `Bytes` the
+natural target for a future binary file read.
+
+## 5. Construction, inspection, conversion (words live in `bin-util`)
+
+The type ships no words of its own; the operations are concentrated in
+`aql:bin-util` (the user's explicit consolidation). The core set
+(detailed in [BIN-UTIL.10.md](BIN-UTIL.10.md)):
+
+| word | signature (top-first) | meaning |
+|---|---|---|
+| `bytes` | `[String] -> Bytes` / `[List sub] -> Bytes` | UTF-8 encode a String, or pack a List of Integers (0–255). |
+| `text` | `[Bytes] -> String` | decode UTF-8 (error `invalid-utf8`). |
+| `ints` | `[Bytes] -> List` | unpack to a List of Integers (0–255). |
+| `length` | `[Bytes] -> Integer` | byte count. |
+| `slice` | `[Integer hi, Integer lo, Bytes b] -> Bytes` | sub-slice `[lo, hi)`. |
+| `concat` | `[List of Bytes] -> Bytes` | join byte sequences. |
+| `byte-at` | `[Integer i, Bytes b] -> Integer` | the byte at index `i` (error `index-range`). |
+| `equal` | `[Bytes b, Bytes a] -> Boolean` | bytewise equality. |
+
+Words that take "data to hash/encode" accept **`String` or `Bytes`** (a
+String is UTF-8 encoded first), so the common text case stays terse.
 
 ## 6. Errors
 
 | code | raised when |
 |---|---|
-| `expected-byte-list` | an argument is not a concrete List, or an element is not an Integer in 0–255. |
+| `expected-byte` | a List element passed to `bytes` is not an Integer in 0–255. |
+| `invalid-utf8` | `text` is given bytes that are not valid UTF-8. |
+| `index-range` | `byte-at` / `slice` index is out of range. |
 
-Guard with `RequireConcreteList` and range-check each element before
-converting to `[]byte`; never panic (`eng/go/CLAUDE.md` "Panic
-Prevention").
+Guard with `RequireConcreteList` / a `Bytes` unwrap helper and
+range-check before converting; never panic (`eng/go/CLAUDE.md`).
 
 ## 7. Policy / capabilities
 
-None — pure, in-memory. (No file/network I/O; `bytes.Buffer` as an
-`io.Writer` is out of scope, so no `aql:io` capability seam is needed.)
+None — the type and its in-memory operations are pure. (The *entropy*
+words that produce `Bytes` — `random-bytes`, `uuid` — are gated; that
+gating lives with those words in BIN-UTIL.10.md, not on the type.)
 
 ## 8. Overlap
 
-**Heavy overlap with `String` / `aql:string-util`** — this is the core
-reason to defer. `contains`, `index`, `has-prefix`/`has-suffix`,
-`split`, `join`, `repeat`, `trim-space`, `to-upper`, `to-lower` all have
-String-typed equivalents (`lang/go/modules/docs_string.go`:
-`StringUtil.contains`, `StringUtil.indexof`, `StringUtil.split`,
-`StringUtil.repeat`, `StringUtil.trim`, `StringUtil.upper`,
-`StringUtil.lower`). On the List-of-Integers model, several also overlap
-core list words (`eq`, list slicing). The byte module would mostly
-re-implement existing surfaces against a fabricated representation.
+Net-new — there is no binary type today. It *complements* `String`:
+`bytes`/`text` are the explicit, lossless bridge between the two, where
+previously binary silently became a (possibly lossy) String at the I/O
+boundary.
 
-## 9. Examples (args-before form — illustrative only)
+## 9. Examples (args-before form)
 
 ```
-import "aql:bytes"
+import "aql:bin-util"
 
-[111 108] [104 101 108 108 111] Bytes.contains   # true  ("ol" in "hello" as bytes)
-[104 105] Bytes.to-upper                          # [72 73]
-[104 105] 3 Bytes.repeat                          # [104 105 104 105 104 105]
-[256] Bytes.to-upper                              # ERROR:expected-byte-list  (out of 0–255)
+"hello" BinUtil.bytes                       # Bytes(5) 68656c6c6f
+"hello" BinUtil.bytes BinUtil.length        # 5
+[104 105] BinUtil.bytes BinUtil.text        # "hi"
+"hi" BinUtil.bytes BinUtil.ints             # [104 105]
+"café" BinUtil.bytes BinUtil.length         # 5  (é is two UTF-8 bytes)
+[256] BinUtil.bytes                          # ERROR:expected-byte
 ```
 
-## 10. Open questions / out of scope — **recommend deferring the whole module**
+## 10. Open questions / out of scope
 
-- **No Bytes type in the lattice** — the blocking issue. The
-  List-of-Integers model is workable but verbose, type-unsafe (any List
-  of small ints looks like bytes), and disjoint from String. **Open
-  question / prerequisite:** add a real `Bytes` (binary) leaf to the
-  type lattice. Only then does a `bytes` module earn its keep — encode
-  String↔Bytes, hashing inputs, base64/hex sources, binary file reads
-  (`aql:io`). Until then, **defer this module**.
-- **`bytes.Buffer`** — out of scope (opaque handle not justified at
-  niche priority).
-- **`bytes.Reader` / `io.Reader` adapters** — out of scope; that is
-  `aql:io` territory if a Bytes type ever lands.
+- **Binary file I/O** — an `IO.read-bytes` (and `IO.write` accepting
+  `Bytes`) yielding/consuming `Bytes` instead of String is the natural
+  follow-on, but lives in `aql:io`; out of scope here. Cross-reference
+  once Bytes lands.
+- **Bytes literal syntax** — none proposed; construct via `BinUtil.bytes`
+  / decode words. A `0x…` literal could be added later.
+- **Mutability** — `Bytes` is treated as immutable (slice operations
+  return fresh values); the shared-pointer capture caveat
+  (`lang/go/CLAUDE.md` "Capture semantics") does not apply because no word
+  mutates in place.
 
-**Recommendation:** do not implement `aql:bytes`. Revisit only after a
-Bytes/binary type is added to the lattice; track that as the gating open
-question above.
+## 11. Implementation sketch
 
-## 11. Implementation sketch (if revived)
-
-Should a Bytes type be added and the module revived, the wiring mirrors
-the pure-module pattern in `lang/go/modules/math.go`
-(`BuildMathModule`):
-
-- `lang/go/modules/bytes.go` — `BuildBytesModule(parent
-  *native.Registry)` building an isolated sub-registry of
-  `BytesNatives` (inner sigs `BarrierPos: -1`), exported under
-  `{"Bytes": …}`; register `"bytes": BuildBytesModule` in the `modules`
-  map (`lang/go/modules/modules.go`).
-- `lang/go/modules/docs_bytes.go` — `registerDocs("aql:bytes", …)`.
-- `lang/spec/module-bytes.tsv` — rows leading with `import "aql:bytes"`,
-  each positive paired with an `ERROR:<substring>` sibling
-  (`expected-byte-list`).
-- A `bytes.Buffer` handle, if ever wanted, needs a `RegisterExternalBuiltin`
-  FixedID in the 10000+ range plus a `fixedid_stability_test.go` entry.
-- No policy wiring.
+- `eng/go/gobridge.go` — add the `[]byte` ↔ `Bytes` cases (§4).
+- `lang/go/native/native_bytes.go` — `registerBytesType()` via
+  `RegisterExternalBuiltin("Ideal/Bytes", <FixedID 1000–1999>,
+  bytesBehavior{})`; behavior implements `Format`/`Comparer`/`Equal`/
+  `DeepCloner` (§3); funnel init errors through `TypeInitError`.
+- `lang/go/test/fixedid_stability_test.go` — pin the new FixedID.
+- Construction/inspection words are added in `lang/go/modules/binary.go`
+  (see BIN-UTIL.10.md), not here.
+- Tests: a `Bytes` round-trip (`bytes`→`text`, `bytes`→`ints`), ordering
+  (`cmp`, type-literal-first), `Equal`, deep clone, and the negative
+  `expected-byte` / `invalid-utf8` / `index-range` cases (Test discipline,
+  `lang/go/CLAUDE.md`).

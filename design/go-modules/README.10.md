@@ -40,11 +40,20 @@ scope and are NOT to be re-specified or disturbed:
 - `math`, `math/big` → `aql:math-util` (`MathUtil`)
 - `strings`, `regexp`, `unicode` (NFC normalize + `match`) → `aql:string-util` (`StringUtil`)
 - `time` (+ clock/async) → `aql:time-util` (`TimeUtil`)
-- `math/bits`, `hash/fnv` → `aql:bin-util` (`BinUtil`)
+- `math/bits`, `hash/fnv` → `aql:bin-util` (`BinUtil`) — **now expanded**, see below
 - `math/rand` → `aql:rand` (`Rand`)
 - `net/http` → `aql:net` (`Net`)
 - `io`, file ops → `aql:io` (`IO`)
 - `sort` → core `sort` + `aql:array-util` (`grade`/`sortby`)
+
+> **Consolidation (deviates from strict 1:1).** All *binary-adjacent*
+> functionality — cryptographic hashes, HMAC, secure random, CRC, hex /
+> base32 / base64 / base128 / ascii85 encoding, and GUIDs — is
+> **concentrated into the existing `aql:bin-util` module** rather than
+> split into one module per Go package. It builds on a new first-class
+> [`Bytes`](BYTES.10.md) type. See [BIN-UTIL.10.md](BIN-UTIL.10.md) and
+> [BYTES.10.md](BYTES.10.md). This superseded and removed the earlier
+> standalone CRYPTO-*, HASH-CRC*, and ENCODING-BASE64/HEX notes.
 
 Where a new module's domain *touches* one of these (e.g. `aql:unicode`
 classification vs `string-util`'s `normalize`; `aql:csv` vs the
@@ -71,25 +80,26 @@ bare namespace would collide with a builtin type (`Path`, `String`,
 | `path/filepath` | [PATH-FILEPATH](PATH-FILEPATH.10.md) | `aql:filepath` | `FilePath` | none (pure string ops) |
 | `os` | [OS](OS.10.md) | `aql:os` | `Os` | `env`, `process`, `system-info` |
 | `runtime` | [RUNTIME](RUNTIME.10.md) | `aql:runtime` | `Runtime` | `system-info` |
-| `encoding/base64` | [ENCODING-BASE64](ENCODING-BASE64.10.md) | `aql:base64` | `Base64` | none |
-| `encoding/hex` | [ENCODING-HEX](ENCODING-HEX.10.md) | `aql:hex` | `Hex` | none |
 | `encoding/csv` | [ENCODING-CSV](ENCODING-CSV.10.md) | `aql:csv` | `Csv` | none |
-| `crypto/sha256` | [CRYPTO-SHA256](CRYPTO-SHA256.10.md) | `aql:sha256` | `Sha256` | none |
-| `crypto/sha512` | [CRYPTO-SHA512](CRYPTO-SHA512.10.md) | `aql:sha512` | `Sha512` | none |
-| `crypto/sha1` | [CRYPTO-SHA1](CRYPTO-SHA1.10.md) | `aql:sha1` | `Sha1` | none |
-| `crypto/md5` | [CRYPTO-MD5](CRYPTO-MD5.10.md) | `aql:md5` | `Md5` | none |
-| `crypto/hmac` | [CRYPTO-HMAC](CRYPTO-HMAC.10.md) | `aql:hmac` | `Hmac` | none |
-| `crypto/rand` | [CRYPTO-RAND](CRYPTO-RAND.10.md) | `aql:crypto-rand` | `CryptoRand` | (random source) |
-| `hash/crc32` | [HASH-CRC32](HASH-CRC32.10.md) | `aql:crc32` | `Crc32` | none |
-| `hash/crc64` | [HASH-CRC64](HASH-CRC64.10.md) | `aql:crc64` | `Crc64` | none |
 | `text/template` | [TEXT-TEMPLATE](TEXT-TEMPLATE.10.md) | `aql:template` | `Template` | none |
 | `html` | [HTML](HTML.10.md) | `aql:html` | `Html` | none |
 | `net/mail` | [NET-MAIL](NET-MAIL.10.md) | `aql:mail` | `Mail` | none |
-| `bytes` | [BYTES](BYTES.10.md) | `aql:bytes` | `Bytes` | none |
 | `math/cmplx` | [MATH-CMPLX](MATH-CMPLX.10.md) | `aql:cmplx` | `Cmplx` | none |
 
-The crypto-hash notes (`Sha256`/`Sha512`/`Sha1`/`Md5`) share a digest
-shape and stay short. `Mail`, `Bytes`, and `Cmplx` are flagged niche.
+`Mail` and `Cmplx` are flagged niche.
+
+### Binary-adjacent (consolidated into `aql:bin-util`)
+
+Not 1:1 modules — these fold into the one expanded module plus a new type:
+
+| Area | doc | home | policy gate |
+|---|---|---|---|
+| crypto hashes, HMAC, secure random, CRC, hex/base32/base64/base128/ascii85, GUIDs | [BIN-UTIL](BIN-UTIL.10.md) | `aql:bin-util` (`BinUtil`) | none, except `random`/`uuid` (entropy) |
+| first-class binary leaf type | [BYTES](BYTES.10.md) | `Bytes` type (global builtin) | none |
+
+Covers the Go packages `crypto/{sha256,sha512,sha1,md5,hmac,rand}`,
+`hash/{crc32,crc64}`, `encoding/{hex,base32,base64,ascii85}`, a custom
+base128 codec, and `github.com/google/uuid`.
 
 ## Shared conventions (every note assumes these)
 
