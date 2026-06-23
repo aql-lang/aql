@@ -70,6 +70,14 @@ export class Engine {
    * `marks map[string]bool` field on aqleng/go/engine.go's Engine.
    */
   private markIds: Set<string> = new Set()
+  /**
+   * Set by preEvalParens when a paren in the just-scanned forward
+   * window resolved to zero values — a void argument expression. A
+   * following signature-match failure blames the void instead of
+   * reporting a generic mismatch. Mirrors aqleng/go/engine.go's
+   * voidGroups tracking.
+   */
+  private lastPreEvalHadVoid = false
 
   constructor(registry: Registry) {
     this.registry = registry
@@ -203,6 +211,13 @@ export class Engine {
 
     const result = matchEntry(fn, this.stack, this.pointer, this.registry)
     if (!result) {
+      if (this.lastPreEvalHadVoid) {
+        throw new AqlError(
+          'no_value_error',
+          `argument expression produced no value for ${name}`,
+          name,
+        )
+      }
       throw new AqlError(
         'signature_error',
         `no matching signature for ${name}\n  = expected: ${name} (${describeExpected(fn)})\n  = stack: ${this.describeStack()}`,
@@ -370,6 +385,7 @@ export class Engine {
    * need to resolve — taken from FunctionEntry.maxForwardArgs.
    */
   private preEvalParens(maxFwd: number): void {
+    this.lastPreEvalHadVoid = false
     if (maxFwd <= 0) return
     let resolved = 0
     let scanIdx = this.pointer + 1
@@ -413,7 +429,14 @@ export class Engine {
         // (now-empty) slot — but since we removed (openIdx..closeIdx)
         // and inserted N values, scanIdx still points at the first
         // result (or past it if N==0).
-        if (produced <= 0) continue
+        if (produced <= 0) {
+          // A paren in the forward window that resolved to zero values
+          // is a void argument expression. Record it so a subsequent
+          // signature-match failure can blame the void rather than
+          // reporting a generic mismatch. Mirrors voidArgErrorFor.
+          this.lastPreEvalHadVoid = true
+          continue
+        }
         resolved += produced
         scanIdx += produced
         continue
