@@ -1,0 +1,26 @@
+# Check-mode dispatch + return-type propagation. Each row renders as
+# `<carrier-stack> :: <diagnostic>…` (see engcheck_test.go::renderCheck).
+# These rows are clean — they carry no diagnostics, and the residual
+# stack is the carrier type(s) the matched signatures' Returns produce.
+# tokens	expected	note
+addq 1 2	Number	Number+Number -> Number
+subq 5 2	Number	
+mulq 2 3	Number	
+addq 1 2.0	Number	mixed Integer/Float still Number
+negq 5	Number	unary
+concatq 'a' 'b'	String	String+String -> String
+lengthq [1 2 3]	Integer	List -> Integer
+firstq [1 2 3]	dynamic(Any)	element type unknown -> dynamic Any
+2 pairq 1	String	swap form (sig[1] from stack, BarrierPos 1)
+1 2 pairq	String	stack form
+tripq 1 2 3	String	3-arg
+nilq	String	0-arg word
+5	Integer	bare literal -> its carrier
+'hi'	ProperString	proper (non-empty) string carrier
+true	Boolean	
+5 is 5	Boolean	value equality returns Boolean
+typeof 5	Type	typeof yields a Type carrier
+make Integer '5'	Integer	make target type
+quote foo	Atom	quoted word -> Atom carrier
+inspect addq	Inspect	inspection map carrier
+do [addq 1 2]	dynamic(Any)	sub-program residual is dynamic
