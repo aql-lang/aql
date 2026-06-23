@@ -127,10 +127,27 @@ that reaches the ReturnsFn is not concrete in the first place.
 
 **Therefore feature (1) has a sub-prerequisite (1a): the module-fn /
 dot-access dispatch boundary must PRESERVE the concrete arg** (today it
-hands the callee an `Any` carrier in check+emit mode). Find where
-`Test.run-spec`'s dispatch (execFnDefLiteral → module sub-registry →
-shareCheckState) converts the concrete operand to `Any`, and thread the
-concrete value through, before call-site inlining can fold anything.
+hands the callee an `Any` carrier in check+emit mode).
+
+Pinpointed (instrumentation in `buildFnBodyReturnsFn`, reverted): for the
+`s Test.run-spec` call,
+
+```
+EXP run-spec param 0 type Map arg Any/conc=F
+```
+
+— the SIG PARAM is correctly typed `Map`, but the ARG VALUE delivered to
+the ReturnsFn is a bare `Any` carrier (not concrete, not even `Map`). And
+the same map read DIRECTLY (`def s {…full module-test shape…} end
+(s get "name")`) compiles — the value IS concrete until it crosses the
+module call. So the erasure is neither at def-time nor in matchSignature
+(which matched `Map`); it is in the **cross-registry module-dispatch
+arg-passing** (the path that resolves `Test.run-spec` and invokes
+run-spec's ReturnsFn — execFnDefLiteral/execFnDefSig + shareCheckState).
+That path substitutes an `Any` carrier for the concrete operand. Fix:
+thread the concrete operand through to the callee's check-mode analysis
+(it sits in the hot, shared cross-registry dispatch — gate behind the
+full differential before landing). Only then can (1) fold anything.
 
 ## Discipline for the build
 
