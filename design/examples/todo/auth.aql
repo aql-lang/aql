@@ -1,0 +1,55 @@
+# auth.aql — authentication & authorization as CROSS-CUTTING layers.
+#
+# DX probe: the headline win of the `prior`/`wrap` model (SERVICES.0 §1) is that
+# auth is added to a service WITHOUT touching a single handler body. Two axes:
+#
+#   * `wrap`  — a blanket gate that runs around EVERY request into a service
+#               (here: "every request must carry a valid session"). Newest
+#               `wrap` is outermost; it shares the service's single-threaded
+#               `state`, so the resolved identity is stashed there for the
+#               inner handlers with no locks.
+#   * `prior` — per-pattern layering for a SPECIFIC action (here: "only the
+#               owner may remove/clear another path"). Adding a handler for a
+#               pattern that already has one PUSHES onto a stack rather than
+#               overwriting; the layer opts into the `prior` continuation and
+#               decides whether/how to call the handler it shadowed.
+#
+# These compose orthogonally with supervision (§3): supervision isolates faults
+# across services; layering decorates behaviour within one. Neither subsumes
+# the other.
+
+import "aql:serve"
+
+export "Auth" {
+  gate:      gate/r          # wrap: blanket session gate for a whole service
+  own-guard: own-guard/r     # prior layer: owner-only guard for one pattern
+}
+
+# --- blanket gate (wrap) ----------------------------------------------------
+# `gate <sessions> <svc>` wraps `svc` so every dispatched request must resolve
+# to an identity via the sessions service. On success it injects `@user` into
+# the request and stashes it in state for downstream handlers; on failure it
+# short-circuits — `prior` is never called, so the real handler never runs.
+def gate fn [[sessions:Service svc:Service] [Service] [
+  wrap [ [req state prior] => [
+      def who ( call {op: "whoami"  token: req.token} sessions )   # -> uid | None
+      if (none? who)
+        [ raise unauthorized "missing or invalid session token" ]   # short-circuit
+        [ state set caller who                  # ambient identity for this request
+          prior (set @user who req) ]           # run the rest with identity injected
+  ] ] svc
+]]
+
+# --- owner-only guard (prior layer) ----------------------------------------
+# Layer this onto a destructive pattern, e.g. on the router:
+#     own-guard {op: "clear"} router
+# It runs BEFORE the shadowed handler, asserts the caller owns the target user,
+# then delegates with `prior`. A pre-check decorator: pre-process + delegate,
+# no post-processing.
+def own-guard fn [[pattern:Map svc:Service] [Service] [
+  add pattern [ [req state prior] => [
+      if (eq req.@user req.user)
+        [ prior req ]                                  # owner — proceed
+        [ raise forbidden `${req.@user} may not touch ${req.user}` ]
+  ] ] svc
+]]

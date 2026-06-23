@@ -12,7 +12,7 @@ import (
 // are bound by the named params, backed by github.com/tabnas/expr. It ships
 // built-in with aql:minilang.
 
-const mImp = `"aql:minilang" import end  `
+const mImp = `import "aql:minilang"  `
 
 // TestMiniMathEval pins the arithmetic, operator precedence/associativity, and
 // the AQL numeric coercion (integer domain vs float domain).

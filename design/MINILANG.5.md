@@ -18,7 +18,7 @@ one module, and one standard signature, with **no parser or lexer
 changes**.
 
 ```
-"aql:minilang" import end
+import "aql:minilang"
 
 "AbcD" mini re '[a-z]+'                  # → 'bc'
 mini math 'x^2 + 3*y' {x:10, y:2}        # → 106
@@ -387,8 +387,8 @@ as a kind. The function must carry the standard signature prefix —
 validated loudly at registration:
 
 ```
-"aql:minilang" import end
-"aql:string-util" import end
+import "aql:minilang"
+import "aql:string-util"
 
 # a counting minilang: src is the substring sought, subject from the stack
 MiniLang.register count (fn [
@@ -452,7 +452,7 @@ pointer-backed, so the captured value shares its state across calls,
 the standard factory-retains-state pattern from CLOSURES):
 
 ```
-"aql:minilang" import end
+import "aql:minilang"
 
 # A factory whose returned fn captures a per-kind cache. Models a kind
 # whose `src` carries an expensive "compile" step (here just `add src src`).
@@ -552,7 +552,7 @@ engine (built from this branch; source in Appendix B): a `mini` macro
 that raw-captures `kind`/`src`/`opts`, builds `lang_<kind>` from the
 kind atom at expansion time, and splices
 `MiniLang get lang_<kind> <src> <opts> end` — dispatching through a
-real `module [export "MiniLang" {…}] import` (post-F4-fix; earlier
+real `import module [export "MiniLang" {…}]` (post-F4-fix; earlier
 runs used flat `def lang_re …` stand-ins) — with standard-signature
 kinds `lang_re` (filter — subject from stack, backed by
 `StringUtil.match` literal matching) and `lang_poly` (generator —
@@ -821,20 +821,20 @@ record of the design-validation prototype.
 # Models the native mini exactly, except the F6 name-construction wart
 # (the canon strip below; native mini reads WordInfo.Name).
 
-"aql:string-util" import end
+import "aql:string-util"
 
 # --- the MiniLang module: kinds carry the STANDARD signature
 #     [src:String opts:Map ...inputs] [...outputs], exported as lang_<name>.
 #     NB: kind bodies run in MODULE scope — import dependencies here.
-module [
-  "aql:string-util" import end
+import module [
+  import "aql:string-util"
   export "MiniLang" {
     lang_re:   (fn [[src:String opts:Map subject:String] [Map]
                    [ StringUtil.match src subject ]]),
     lang_poly: (fn [[src:String opts:Map] [Integer]
                    [ ((opts.x pow 2) add (3 mul opts.y)) ]])
   }
-] import end
+]
 
 # --- the mini macro: kind atom -> MiniLang.lang_<kind>, auto-`end`.
 def mini (macro [[kind src opts] [

@@ -1,0 +1,45 @@
+# usage.aql — the developer experience: make$/.save$ over a multi-store bus.
+#
+# DX probe (illustrative, NOT executable). Wires an entity bus with two stores
+# routed by canon (the Seneca store `map`, as patrun specificity), layers a
+# cross-cutting timestamp + audit, then exercises the entity ops.
+
+import "aql:entity"       # the bus + Entity handle ops (entity.aql)
+import "mem-store.aql"
+import "dynamo-store.aql"
+
+# --- build the bus and mount stores by canon specificity --------------------
+# Default store = mem (catches every canon). Base "app" overrides to DynamoDB.
+# patrun most-specific-match makes "app/order" route to dynamo, "sys/user" to mem.
+def bus ( Entity.bus )
+Entity.mount {}              (MemStore.New    {})                bus
+Entity.mount {base: "app"}   (DynamoStore.New {table: "app"})    bus
+
+# --- cross-cutting middleware (no store changes) ----------------------------
+# A `wrap` runs around EVERY dispatch; stamp `updated` on saves, audit all ops.
+wrap [ [req state prior] => [
+    if (eq req.cmd "save")
+      [ prior (set ent (set updated (now) req.ent) req) ]   # stamp, then dispatch
+      [ prior req ]
+] ] bus
+wrap [ [req state prior] => [ def out (prior req)  audit req out  out ] ] bus
+
+# --- the make$ / .save$ analog ---------------------------------------------
+def u ( Entity.make "sys/user" bus )          # canon sys/user -> mem store
+def u ( Entity.field "name" "Alice" u )
+def u ( Entity.field "age"  30      u )
+def u ( Entity.save u )                       # insert; reply carries the new id
+def uid ( (Entity.data u) get id )
+
+def again  ( Entity.load (Entity.make "sys/user" bus) uid )      # round-trip by id
+def adults ( Entity.list (Entity.make "sys/user" bus)
+                         {active: true}                          # q (AND filter)
+                         {sort: {age: -1}  limit: 10} )          # opts (no Seneca `$`)
+Entity.remove (Entity.make "sys/user" bus) uid
+
+# --- same code, different canon -> different backend ------------------------
+# An "app/order" entity routes to DynamoDB purely by its canon; the call site is
+# identical. (This is the "assume-remote" uniform surface, SERVICES §8.)
+def o ( Entity.make "app/order" bus )
+def o ( Entity.field "total" 4200 o )
+Entity.save o                                 # -> DynamoStore (base "app")

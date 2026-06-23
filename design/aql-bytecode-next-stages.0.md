@@ -140,7 +140,7 @@ Full `verify-bytecode`; lower `refusalCeiling` 16 → 15.
 
 ## Stage B — conditional dynamic apply in a branch
 
-**Row.** `"aql:math-util" import end def n 5 if (n eq 0) [99] MathUtil.sqrt 16`
+**Row.** `import "aql:math-util" def n 5 if (n eq 0) [99] MathUtil.sqrt 16`
 → `4.0`. Reason: `if: else value of unknown provenance` (`emit.go:1004`).
 
 **Root cause.** The 3-arg if's **else** is the module-export fn value

@@ -115,7 +115,7 @@ func TestDXCheckSiblingImportDoesNotHardFail(t *testing.T) {
 	r.Check.Mode = true
 	defer func() { r.Check.Mode = false }()
 
-	toks, err := parser.Parse(`"./lib.aql" import  def x 5  x add 3`)
+	toks, err := parser.Parse(`import "./lib.aql"  def x 5  x add 3`)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

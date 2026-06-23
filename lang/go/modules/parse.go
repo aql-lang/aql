@@ -27,8 +27,8 @@ import (
 // (RegisterHostParser). The user then runs it with the ordinary `parse`
 // macro:
 //
-//	"aql:parse" import end
-//	"aql:parselang" import end
+//	import "aql:parse"
+//	import "aql:parselang"
 //	def g Parse.grammar                              # mint a builder, bind it
 //	Parse.action g '@op:o:INC' ([nd:Any] => [1])     # custom data via a mark
 //	Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}

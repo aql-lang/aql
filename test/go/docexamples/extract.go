@@ -208,8 +208,8 @@ func isSetupLine(code string, setupOpen int) bool {
 		// `import "mod"` (forward form) and the binding statements.
 		return true
 	}
-	// A module-import statement in prefix order — `"mod" import` or
-	// `"mod" import end` — whose effect (bringing `pkg.word` into scope)
+	// A module-import statement in prefix order — `import "mod"` or
+	// `import "mod"` — whose effect (bringing `pkg.word` into scope)
 	// later lines rely on. Match `import` as a whole token, not a
 	// substring (so `important` / a quoted "import" don't false-match).
 	for i, f := range strings.Fields(code) {

@@ -757,7 +757,7 @@ used by AQL code itself to spawn restricted sub-engines. The
 ### Words
 
 ```aql
-"aql:vm" import
+import "aql:vm"
 
 # Run code in the default-sandboxed sub-engine.
 "1 add 2" vm.run                          # → 3
@@ -865,7 +865,7 @@ limit field; default 8) to prevent runaway recursion.
    reporting tools: formulae from untrusted sources run in
    sub-engines.
 4. **Module loading with policy**. `import` could grow a
-   `with-policy` form: `"aql:third-party" import-with {...}` —
+   `with-policy` form: `import "aql:third-party"-with {...}` —
    the imported module runs under the specified policy.
 5. **The wasm playground (`wpg`)**. The browser playground can
    default to `sandbox` for shared sessions; users can opt up to

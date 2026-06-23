@@ -13,7 +13,7 @@ import (
 // callers can compose with `print`, error messages, or further
 // formatting. No word prints to stdout itself; the caller controls IO.
 //
-//	"aql:report" import
+//	import "aql:report"
 //	some-record Report.record print
 //	some-table  Report.table  print
 //	some-value  Report.value  print

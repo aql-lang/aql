@@ -114,7 +114,7 @@ func TestXmlFlexEndToEnd(t *testing.T) {
 // element — the same shape an embedded literal produces — so it renders
 // back to well-formed XML and is the same type. See XML-LITERAL.0.md §5.6.
 func TestXmlParseAlignment(t *testing.T) {
-	const imp = `"aql:parselang" import end  `
+	const imp = `import "aql:parselang"  `
 	cases := []struct {
 		src  string
 		want any
@@ -156,7 +156,7 @@ func TestXmlAccessors(t *testing.T) {
 		{`xml-attr 'x' <a x="1"/>`, "1"},
 		{`typeof (xml-attr 'z' <a x="1"/>)`, "None"},
 		// the words work on a parsed element too (same Node/Xml shape)
-		{`"aql:parselang" import end  xml-text (parse xml '<a>hi<b>!</b></a>')`, "hi!"},
+		{`import "aql:parselang"  xml-text (parse xml '<a>hi<b>!</b></a>')`, "hi!"},
 	}
 	for _, c := range cases {
 		a, err := lang.New()

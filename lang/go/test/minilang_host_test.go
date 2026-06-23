@@ -128,7 +128,7 @@ func TestMiniLangHostCalcOperators(t *testing.T) {
 		{"a - b", "{a:3, b:9}", -6},
 	}
 	for _, c := range cases {
-		src := `"aql:minilang" import end  mini iop '` + c.expr + `' ` + c.opts
+		src := `import "aql:minilang"  mini iop '` + c.expr + `' ` + c.opts
 		got := runLast(t, a, src)
 		if got != c.want {
 			t.Errorf("mini iop '%s' %s = %v, want %d", c.expr, c.opts, got, c.want)
@@ -140,8 +140,8 @@ func TestMiniLangHostCalcOperators(t *testing.T) {
 // standard MiniLang.lang_iop call — both forms must agree.
 func TestMiniLangHostDesugarEquivalence(t *testing.T) {
 	a := newCalcInstance(t)
-	sugar := runLast(t, a, `"aql:minilang" import end  mini iop 'x * y' {x:6, y:7}`)
-	desugared := runLast(t, a, `"aql:minilang" import end  MiniLang.lang_iop 'x * y' {x:6, y:7} end`)
+	sugar := runLast(t, a, `import "aql:minilang"  mini iop 'x * y' {x:6, y:7}`)
+	desugared := runLast(t, a, `import "aql:minilang"  MiniLang.lang_iop 'x * y' {x:6, y:7} end`)
 	if sugar != desugared {
 		t.Fatalf("sugar=%v desugared=%v: mini must desugar to the standard call", sugar, desugared)
 	}
@@ -159,7 +159,7 @@ func TestMiniLangHostRegisterAfterImport(t *testing.T) {
 		t.Fatalf("lang.New: %v", err)
 	}
 	// Import first — this builds and caches the minilang module.
-	if _, err := a.Run(`"aql:minilang" import end`); err != nil {
+	if _, err := a.Run(`import "aql:minilang"`); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 	// Register AFTER the import.
@@ -181,11 +181,11 @@ func TestMiniLangHostIsolation(t *testing.T) {
 		t.Fatalf("lang.New: %v", err)
 	}
 	// a resolves iop.
-	if got := runLast(t, a, `"aql:minilang" import end  mini iop 'x + y' {x:1, y:1}`); got != int64(2) {
+	if got := runLast(t, a, `import "aql:minilang"  mini iop 'x + y' {x:1, y:1}`); got != int64(2) {
 		t.Fatalf("instance a: got %v, want 2", got)
 	}
 	// b must NOT — unknown kind is an expansion-time error.
-	if _, err := b.Run(`"aql:minilang" import end  mini iop 'x + y' {x:1, y:1}`); err == nil {
+	if _, err := b.Run(`import "aql:minilang"  mini iop 'x + y' {x:1, y:1}`); err == nil {
 		t.Fatal("instance b: expected mini_unknown_lang, got nil error")
 	} else if !strings.Contains(err.Error(), "iop") {
 		t.Fatalf("instance b: error should name the unknown kind, got: %v", err)
@@ -202,11 +202,11 @@ func TestMiniLangHostRuntimeErrors(t *testing.T) {
 		src  string
 		want string
 	}{
-		{"unknown operator", `"aql:minilang" import end  mini iop 'x ^ y' {x:1, y:2}`, "unknown operator"},
-		{"division by zero", `"aql:minilang" import end  mini iop 'x / y' {x:1, y:0}`, "division by zero"},
-		{"modulo by zero", `"aql:minilang" import end  mini iop 'x % y' {x:1, y:0}`, "division by zero"},
-		{"undefined variable", `"aql:minilang" import end  mini iop 'x + z' {x:1, y:2}`, "undefined variable"},
-		{"malformed source", `"aql:minilang" import end  mini iop 'x +' {x:1}`, "expected"},
+		{"unknown operator", `import "aql:minilang"  mini iop 'x ^ y' {x:1, y:2}`, "unknown operator"},
+		{"division by zero", `import "aql:minilang"  mini iop 'x / y' {x:1, y:0}`, "division by zero"},
+		{"modulo by zero", `import "aql:minilang"  mini iop 'x % y' {x:1, y:0}`, "division by zero"},
+		{"undefined variable", `import "aql:minilang"  mini iop 'x + z' {x:1, y:2}`, "undefined variable"},
+		{"malformed source", `import "aql:minilang"  mini iop 'x +' {x:1}`, "expected"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -267,7 +267,7 @@ func TestMiniLangHostRegistrationContract(t *testing.T) {
 		if err := a.RegisterMiniLang(spec); err != nil {
 			t.Fatalf("pre-import register should defer the collision to build: %v", err)
 		}
-		if _, err := a.Run(`"aql:minilang" import end`); err == nil {
+		if _, err := a.Run(`import "aql:minilang"`); err == nil {
 			t.Fatal("import should fail: host kind collides with built-in re")
 		}
 	})
@@ -275,7 +275,7 @@ func TestMiniLangHostRegistrationContract(t *testing.T) {
 		// After import the built-ins are live, so the collision is caught
 		// immediately at registration.
 		a, _ := lang.New()
-		if _, err := a.Run(`"aql:minilang" import end`); err != nil {
+		if _, err := a.Run(`import "aql:minilang"`); err != nil {
 			t.Fatalf("import: %v", err)
 		}
 		spec := calcSpec()

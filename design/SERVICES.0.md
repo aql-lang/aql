@@ -63,7 +63,7 @@ how the CLI's **existing** servers fold into the same model (§5).
 A service is **pattern-matching on requests + owned state**, and the matcher is
 already core: patrun (`lang/go/native/native_patrun.go`). `add {pattern} value
 patrun` already registers most-specific-wins rules; `find {subject} patrun`
-already routes a request (`{op:'inc n:1}` matches a handler for `{op:'inc}`,
+already routes a request (`{op:"inc" n:1}` matches a handler for `{op:"inc"}`,
 extra keys are payload) — the *same* matcher `receive` uses for selective receive.
 "Match a message" means one thing everywhere.
 
@@ -111,6 +111,15 @@ value, which is exactly what `Store` is for in AQL. It is safe because a service
 processes **one request at a time** (in-process: the caller's goroutine; served:
 the process's single goroutine — the gen_server guarantee, no locks). Reuses the
 existing `patrunAddHandler` registration shape.
+
+> **An `add` pattern routes; it does not bind.** Unlike a `receive` clause
+> (`PROCESSES.0.md` §3), where `name:Type` fields are typed binding slots parsed
+> by `ParseFnParams`, an `add` pattern is **scalar-tag routing only** — it picks
+> *which* handler runs and binds nothing. The whole request arrives as `req`, and
+> destructuring its payload (`req.text`, `req.id`) is the handler's job. So
+> `add {op:"create" text:String} …` does **not** bind `text`; write
+> `add {op:"create"} [ [req state] => [ … req.text … ] ]`. (Binding slots are a
+> `receive` feature, not an `add` feature — see `PROCESSES.0.md` §3.)
 
 ### `call` (core) — synchronous request → reply
 
@@ -178,17 +187,19 @@ power.
 
 **Layering — `add` stacks, the handler receives `prior`.** Adding a handler for a
 pattern that already has one does **not** overwrite it; it **pushes** onto a stack
-for that exact pattern signature (raw patrun overwrites — the `Service` keeps the
-stack), newest outermost. A layering handler opts into the third, optional
+for that exact pattern signature (raw patrun overwrites — `patrunAddHandler` in
+`lang/go/native/native_patrun.go` replaces `m.side[sig]` on a duplicate pattern —
+so the per-pattern handler stack must live in the **`Service` layer**, not in
+patrun), newest outermost. A layering handler opts into the third, optional
 argument — the continuation **`prior`** — and chooses whether and how to invoke
 the handler it shadowed:
 
 ```aql
 # Wrap the order-submit action with auth + audit, without touching it.
-add {role:'order op:'submit} [ [req state prior] => [
-    require-role req 'clerk                 # cross-cutting: auth (may short-circuit)
+add {role:"order" op:"submit"} [ [req state prior] => [
+    require-role req "clerk"                 # cross-cutting: auth (may short-circuit)
     def result ( prior req )                # invoke the shadowed handler
-    audit 'order-submit req result          # cross-cutting: after
+    audit "order-submit" req result          # cross-cutting: after
     result
 ] ] svc
 ```
@@ -227,6 +238,19 @@ wrap layers (outer → inner)  →  patrun match  →  per-pattern prior stack  
 — all sharing the service's single-threaded `state`, so a caching or metrics
 layer keeps its data in `state` with no locks.
 
+**`prior` decorates one pattern signature; `wrap` decorates whatever matched.**
+This distinction bites when handlers are registered at *different* patrun
+specificities. A `prior` layer added at `{op:"save"}` pushes onto the stack **for
+that exact signature only** — it does *not* wrap a more-specific handler such as
+`{op:"save" kind:"audit"}`, because patrun routes the audit request to a different
+stack entirely. So a cross-cutting concern that must apply **regardless of which
+specificity matched** (a blanket timestamp on every save, an audit on every op)
+must be a **`wrap`**, not a `prior` at a less-specific pattern — `wrap` runs around
+the chosen handler whatever its specificity, whereas a `prior` only layers the
+signature it was added to. Use `prior` to decorate *a specific action*; use `wrap`
+for *ambient* concerns. (This is the trap a multi-store entity layer hits — see
+`ENTITY-STORES.0.md` §5.)
+
 **Scope: local and synchronous.** `prior`/`wrap` compose handlers *within one
 service's handling of one message*; they never cross a process boundary, so they
 stay zero-cost direct calls even when the service is `serve`d. Cross-cutting that
@@ -244,37 +268,37 @@ A reusable service is an AQL module that **exports a constructor** returning a
 ```aql
 # counter.aql — a module that exports a service constructor
 export "New" fn [[opts:Map] [Service] [
-  def svc ( service {count: (opts get 'start ? 0)} )
+  def svc ( service {count: (opts get start ? 0)} )
 
-  add {op:'inc} [ [req state] => [
-      state set 'count (inc (state get 'count))   # mutate private state
-      state get 'count                            # reply
+  add {op:"inc"} [ [req state] => [
+      state set count (inc (state get count))   # mutate private state
+      state get count                            # reply
   ] ] svc
 
-  add {op:'get} [ [req state] => [ state get 'count ] ] svc
+  add {op:"get"} [ [req state] => [ state get count ] ] svc
 ]]
 ```
 
 ```aql
-"./counter.aql" import
+import "./counter.aql"
 def c ( Counter.New {start: 10} )
-call {op:'inc} c            # → 11
-call {op:'get} c            # → 11
-call {op:'nope} c           # raises no_match
+call {op:"inc"} c            # → 11
+call {op:"get"} c            # → 11
+call {op:"nope"} c           # raises no_match
 ```
 
 ## 3. A server is a collection of services (module `aql:serve`)
 
 ```
-"aql:serve" import
-server [services] {restart: 'isolated} -> Server     # a supervised collection
+import "aql:serve"
+server [services] {restart: "isolated"} -> Server     # a supervised collection
 serve <server-or-service>                            # run it
 ```
 
 - **`server [svc …] {opts}`** builds a server: an ordered, named collection of
   services with a restart policy. Restart policies use plain names —
-  `'isolated` (restart just the failed service; OTP `one_for_one`), `'all`
-  (OTP `one_for_all`), `'cascade` (OTP `rest_for_one`) — Erlang's jargon noted
+  `"isolated"` (restart just the failed service; OTP `one_for_one`), `"all"`
+  (OTP `one_for_all`), `"cascade"` (OTP `rest_for_one`) — Erlang's jargon noted
   but not surfaced.
 - **`serve <server>`** runs it: each service becomes a `PROCESSES.0.md` process,
   supervised per policy; `serve` blocks until shutdown (matching the existing
@@ -312,9 +336,12 @@ proxying across them (§6).
   AQL still lacks (only HTTP-client `fetch` exists) — later phase.
 
 Capability gating: in-process `call`/`add` need no new capability; `serve`
-(processes) is gated like `spawn`; `listen`/`connect` are gated by the
-**`network`** scope (`PERMISSIONS.10.md`) — restrictive profiles get the service
-DX but cannot open sockets.
+(processes) is gated like `spawn` (the **`process`** scope, `PROCESSES.0.md` §7);
+`listen`/`connect` are gated by the **`network`** scope — restrictive profiles get
+the service DX but cannot open sockets. Both scopes **already exist** in
+`PERMISSIONS.10.md` (`process` and `network` are defined scopes, hard-denied by the
+`sandbox`/`read-only` profiles), so gating is enforceable on day one — confirming
+they exist is a prerequisite, not new permission work.
 
 ## 5. Consolidating the existing CLI servers
 
@@ -339,11 +366,11 @@ patterns, and (d) make services *also* writable in AQL. Mapping:
 The lifecycle surface unifies onto standard requests/state:
 
 - `Start`/`Stop` → service `serve`/shutdown (the server drives these).
-- `Status()` → `call {op:'status}` (or service `state`).
-- `Pausable.Pause/Resume` → control requests `call {op:'pause}` / `{op:'resume}`
+- `Status()` → `call {op:"status"}` (or service `state`).
+- `Pausable.Pause/Resume` → control requests `call {op:"pause"}` / `{op:"resume"}`
   that flip a service-state flag and gate handlers — the same flag the proxy
   uses for emergency revocation (§6).
-- `WithMetadata.Metadata()` → `call {op:'meta}` returning the service's map.
+- `WithMetadata.Metadata()` → `call {op:"meta"}` returning the service's map.
 - `StdioUser`/transport choice → which `listen` adapter the service is exposed
   through, not an interface bolt-on.
 
@@ -359,7 +386,7 @@ it **forwards** a request to a *target* (an upstream provider), wrapping that
 forward with authorization, transformation, and accounting. Generalize it as:
 
 ```
-"aql:serve" import
+import "aql:serve"
 proxy <target> {before: [..] after: [..]} -> Service
 ```
 
@@ -405,7 +432,7 @@ must honour, each drawn from the real proxy:
   recorded in `after` *after* the response is authorized (so accounting never
   blocks the stream), exactly as today.
 - **Emergency revocation = the unified pause control.** The proxy's "return 503,
-  brake now" (`ProxyService.Pause`) is the §5 `call {op:'pause}` control request —
+  brake now" (`ProxyService.Pause`) is the §5 `call {op:"pause"}` control request —
   open connections drain, new requests are rejected. Same mechanism as every
   pausable service.
 - **Protocol/trust versioning.** The wire envelope carries a protocol version
@@ -523,24 +550,39 @@ everywhere. (Syntax illustrative; error forms follow `lang/spec/error.tsv` —
 policy are set where the service is placed in a server:
 
 ```
-server [ svc ] {mailbox: 1024  overflow: 'block}
+server [ svc ] {mailbox: 1024  overflow: "block"}
 ```
 
-- `mailbox: N` — capacity in messages (default `1024`). `mailbox: 'unbounded` is
+- `mailbox: N` — capacity in messages (default `1024`). `mailbox: "unbounded"` is
   allowed but must be written explicitly — you opt *in* to BEAM's footgun, you
   never get it by accident.
 - `overflow:` — what a delivery does when the mailbox is full:
-  - **`'block`** (default) — the sender blocks until space frees. Backpressure
+  - **`"block"`** (default) — the sender blocks until space frees. Backpressure
     propagates to the producer, pacing it to the service's drain rate.
-  - **`'fail`** — the delivery raises **`overload`** immediately; the caller sheds
+  - **`"fail"`** — the delivery raises **`overload`** immediately; the caller sheds
     or reroutes.
-  - **`'drop`** — the new message is discarded and the delivery returns; lossy,
-    for best-effort/telemetry traffic (a `'drop_oldest` variant evicts the head).
+  - **`"drop"`** — the new message is discarded and the delivery returns; lossy,
+    for best-effort/telemetry traffic (a `"drop_oldest"` variant evicts the head).
+
+**Per-service override.** `mailbox`/`overflow` on the `server` set the **default**
+for its services, but a single supervised app routinely mixes policies — a lossy
+telemetry sink wants `"drop"` while a worker wants `"block"`. Rather than force each
+policy into its own `serve ( server [..] {..} )`, a service carries its own opts
+map where it is placed in the server, overriding the server default:
+
+```aql
+server [ worker  (metrics {mailbox: 4096  overflow: "drop"}) ]
+  {mailbox: 1024  overflow: "block"}        # server default; metrics overrides it
+```
+
+Precedence is **per-service > server default > built-in default** (`1024` /
+`"block"`). This keeps one server/one supervision tree even when its services need
+different backpressure, instead of fragmenting the tree just to vary a mailbox.
 
 **`send` (async)** resolves against the policy: enqueue and return `None` if there
 is room; otherwise block / raise `overload` / drop. An optional bound on blocking
 — `send {req} svc {within: (TimeUtil.seconds 1)}` — blocks at most that long under
-`'block`, then raises `overload`. `send` to a dead service raises `down`; `send`
+`"block"`, then raises `overload`. `send` to a dead service raises `down`; `send`
 never raises `timeout` (no reply is awaited).
 
 **`call` is self-limiting.** A `call` also enqueues (request + reply handle), so it
@@ -548,7 +590,7 @@ is bounded by the same mailbox — but because the caller blocks for the reply, 
 most `N` calls are in flight before further callers block to enqueue. So `call`
 gives backpressure *for free*; the explicit policy mainly governs `send`.
 
-**Observability.** `call {op:'status} svc` reports `{mailbox: {depth capacity
+**Observability.** `call {op:"status"} svc` reports `{mailbox: {depth capacity
 high_water dropped}}`, so overload is measurable, not silent. (The bound governs
 the inbound mailbox; the per-process save-queue used for selective `receive` in
 `PROCESSES.0.md` is separate.)
@@ -558,25 +600,25 @@ makes selective `receive` O(n). A bound turns overload into one of three *chosen
 behaviours — pace, shed, or drop — instead of an unbounded-queue death spiral.
 
 ```aql
-"aql:serve"     import
-"aql:time-util" import
+import "aql:serve"
+import "aql:time-util"
 
 # A slow worker behind a bounded, backpressured mailbox.
 def worker ( service {} )
-add {op:'job} [ [req state] => [ heavy-work req.work  None ] ] worker
+add {op:"job"} [ [req state] => [ heavy-work req.work  None ] ] worker
 
-# Default 'block paces producers: the 1025th in-flight send parks the
+# Default "block" paces producers: the 1025th in-flight send parks the
 # producer until the worker drains one — no unbounded growth.
-serve ( server [ worker ] {mailbox: 1024  overflow: 'block} )
+serve ( server [ worker ] {mailbox: 1024  overflow: "block"} )
 
 # A telemetry sink that must never block the hot path: drop on overflow.
 def metrics ( service {} )
-add {op:'metric} [ [req state] => [ record req  None ] ] metrics
-serve ( server [ metrics ] {mailbox: 4096  overflow: 'drop} )
+add {op:"metric"} [ [req state] => [ record req  None ] ] metrics
+serve ( server [ metrics ] {mailbox: 4096  overflow: "drop"} )
 
 # A front door that sheds load rather than queueing without limit:
-serve ( server [ worker ] {mailbox: 256  overflow: 'fail} )
-do [ send {op:'job  work: payload} worker ]
+serve ( server [ worker ] {mailbox: 256  overflow: "fail"} )
+do [ send {op:"job"  work: payload} worker ]
 error [ case [
     [get code eq overload/q] [ "503 busy, retry later" ]   # caller shed load
     [ raise ] ] ]                                          # re-raise anything else
@@ -596,7 +638,7 @@ delivery errors rarely (or never). The contract is defined three ways.
 call {req} svc {timeout: (TimeUtil.seconds 5)}
 ```
 
-If omitted, a profile default applies (proposed `5s`); `timeout: 'infinity` is
+If omitted, a profile default applies (proposed `5s`); `timeout: "infinity"` is
 permitted but must be written explicitly — you can never *accidentally* hang
 forever, the way an Erlang `receive` with no `after` can. One honest asymmetry:
 when the target is an **un-`serve`d inline value**, the call is a direct dispatch
@@ -614,7 +656,7 @@ each catchable via `do … error …` and dispatchable on `code`:
 | --- | --- | --- |
 | `timeout` | no reply within the deadline | **unknown** — may have run |
 | `down` | target crashed / supervisor gave up / never existed — a dead handle (ties to `PROCESSES.0.md` monitors) | **unknown** — possibly partial |
-| `overload` | mailbox full under `'fail` / timed-out `'block` (§8.1) | **no** — never enqueued |
+| `overload` | mailbox full under `"fail"` / timed-out `"block"` (§8.1) | **no** — never enqueued |
 | `transport` | remote only: connection refused/reset/closed, DNS/TLS — carries the cause | pre-send **no** / post-send **unknown** |
 
 An **application error** the handler raised (e.g. `raise bad_input "…"`) propagates
@@ -652,9 +694,9 @@ pretend a timed-out remote mutation definitely did — or definitely did not —
 happen.
 
 ```aql
-"aql:serve"     import
-"aql:net"       import
-"aql:time-util" import
+import "aql:serve"
+import "aql:net"
+import "aql:time-util"
 
 # Reach a remote service. Its `call` obeys the same contract as a local one —
 # only the failure modes are now common, so we handle them at this call site.
@@ -662,7 +704,7 @@ def billing ( connect {http: "https://billing.internal"} )
 
 # Read path — idempotent, so auto-retry is safe; degrade on failure.
 def total (
-  do [ call {op:'get-total  user: uid} billing
+  do [ call {op:"get-total"  user: uid} billing
          {timeout: (TimeUtil.seconds 2)  retries: 3  idempotent: true} ]
   error [ case [
       [get code eq timeout/q]   [ -1 ]                  # unknown → show stale
@@ -671,7 +713,7 @@ def total (
       [ raise ] ] ] )                                   # app errors propagate
 
 # Write path — NOT idempotent: never blind-retry; reconcile a timeout.
-do [ call {op:'charge  user: uid  cents: 500} billing
+do [ call {op:"charge"  user: uid  cents: 500} billing
        {timeout: (TimeUtil.seconds 5)} ]
 error [ case [
     [get code eq timeout/q]  [ enqueue-reconciliation uid ]  # unknown → verify
@@ -735,8 +777,8 @@ service** that fronts a pool of workers and routes each request by a policy.
 **A pool is a service (`pool`, `aql:serve`).**
 
 ```
-"aql:serve" import
-pool [worker-spec] {size: N  strategy: 'p2c} -> Service
+import "aql:serve"
+pool [worker-spec] {size: N  strategy: "p2c"} -> Service
 ```
 
 A `pool` is a `Service` whose handler picks a worker from its set and forwards the
@@ -746,26 +788,26 @@ service, it composes with everything — `wrap` it with cross-cutting layers (§
 `serve` it, expose it via `listen`, even pool a set of pools.
 
 **Strategies.**
-- `'round-robin` / `'random` — stateless, even spread.
-- `'least-loaded` — route to the **shallowest mailbox** (depth is observable,
+- `"round-robin"` / `"random"` — stateless, even spread.
+- `"least-loaded"` — route to the **shallowest mailbox** (depth is observable,
   §8.1) — backpressure-aware.
-- `'p2c` (power-of-two-choices) — sample two at random, route to the less loaded;
+- `"p2c"` (power-of-two-choices) — sample two at random, route to the less loaded;
   near-optimal with negligible coordination — a good default.
-- `'hash <key>` — consistent-hash by a request key for **state affinity** (a key
+- `"hash" <key>` — consistent-hash by a request key for **state affinity** (a key
   always lands on the same worker — stateful sharding); rebalances on membership
   change.
-- `'weighted` — for heterogeneous worker capacity.
+- `"weighted"` — for heterogeneous worker capacity.
 
 **Backpressure *is* the load signal.** The bounded-mailbox `overload` error (§8.1)
-doubles as the balancer's reroute trigger: a `'fail`-policy worker returning
-`overload` tells the pool to try another or shed; `'least-loaded`/`'p2c` use live
+doubles as the balancer's reroute trigger: a `"fail"`-policy worker returning
+`overload` tells the pool to try another or shed; `"least-loaded"`/`"p2c"` use live
 mailbox depth to avoid a saturated worker in the first place. Load balancing and
 backpressure are one mechanism, not two.
 
 **Same idea, two scopes:**
 - **Intra-node** — a `pool` of local worker services across cores defeats the
-  per-service single-goroutine ceiling (§9.1 #3): stateless → `'p2c`, stateful →
-  `'hash`. Works on the phase-2 process layer.
+  per-service single-goroutine ceiling (§9.1 #3): stateless → `"p2c"`, stateful →
+  `"hash"`. Works on the phase-2 process layer.
 - **Inter-node** — a **proxy whose `target` is a *set* of remote endpoints**
   (§6) *is* a load balancer / API gateway, inheriting the capability model; the
   same strategies apply, and `down`/`transport` errors (§8.2) drive failover.
@@ -774,7 +816,7 @@ backpressure are one mechanism, not two.
 
 **Still needed** (with the horizontal gaps): cross-node **membership + health** so
 an inter-node pool/proxy knows its target set and liveness, and **rebalancing**
-for `'hash` pools on node join/leave (consistent hashing keeps reshuffling
+for `"hash"` pools on node join/leave (consistent hashing keeps reshuffling
 minimal). Intra-node pools land with phase 2; inter-node balancing with transport
 + distribution.
 
@@ -800,16 +842,16 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
 - **Refactor of the Go servers** onto the shared service/transport/lifecycle core
   (§5) — mechanical but broad.
 - **Bounded mailboxes + backpressure** for `send` (§8.1) — per-service capacity +
-  `'block`/`'fail`/`'drop` overflow; depends on the `PROCESSES.0.md` mailbox.
+  `"block"`/`"fail"`/`"drop"` overflow; depends on the `PROCESSES.0.md` mailbox.
 - **Uniform-failure `call`** (§8.2) — mandatory deadline, the `timeout`/`down`/
   `overload`/`transport` delivery-error set, one fallible contract for local and
   remote, and idempotent-only retries; depends on monitors (`PROCESSES.0.md`) and
   transport.
 - **`pool` / load balancing** (§9.2) — a worker-pool service with routing
-  strategies (`'p2c`/`'least-loaded`/`'hash`/…) using mailbox depth + `overload`
+  strategies (`"p2c"`/`"least-loaded"`/`"hash"`/…) using mailbox depth + `overload`
   as the load signal; intra-node first, inter-node via a multi-target `proxy`.
 - **Cross-node membership, health & rebalancing** (§9) — for inter-node pools and
-  proxies to know their target set, liveness, and to reshuffle `'hash` routing on
+  proxies to know their target set, liveness, and to reshuffle `"hash"` routing on
   node join/leave (consistent hashing); lands with distribution.
 - **Lean / copy-on-write registry forks** (§9.1) — the #1 scalability lever;
   reduces per-process memory toward BEAM-class process density.
@@ -818,7 +860,12 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
 
 - **Phase 1: in-process service.** `service`, `add`, `call`, `send`, `state`,
   `no_match`, plus `prior` layering + `wrap` middleware (§1) — all core. Pure
-  request→handler over reused patrun, state in a `Store`. No processes.
+  request→handler over reused patrun, state in a `Store`. No processes. **This is
+  the recommended first implementation slice** of the whole actors/services effort:
+  it depends only on patrun + `execFnDefLiteral` + `Store` and needs **none** of
+  the `PROCESSES.0.md` substrate (no `spawn`, mailbox, `Pid`, or `context.Context`),
+  so it is the cheapest, highest-signal way to validate the `[req state] -> reply`
+  handler contract and the `prior`/`wrap` stack before any concurrency lands.
 - **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the
@@ -831,19 +878,19 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
   the CLI servers (§5) onto the model — vault-proxy as the proving ground. → the
   network-server goal.
 - **Later: distribution.** Location-transparent `call`/`send` across nodes;
-  cross-node membership/health + `'hash`-pool rebalancing (§9.2).
+  cross-node membership/health + `"hash"`-pool rebalancing (§9.2).
 
 ## 12. Worked example
 
 ```aql
-"aql:serve" import
-"aql:net"   import
+import "aql:serve"
+import "aql:net"
 
 # A server = a collection of services, supervised; restart each in isolation.
 def app ( server [
     ( Registry.New {dir: "./mods"} )      # an AQL-written service
     ( Counter.New  {start: 0} )
-  ] {restart: 'isolated} )
+  ] {restart: "isolated"} )
 
 # A proxy in front of an upstream, with auth + accounting interceptors.
 def gw ( proxy ( connect {http: "https://api.example.com"} ) {
@@ -872,20 +919,20 @@ serve ( server [ app gw ] )               # run everything (blocks)
 5. **Go-server refactor order** — refactor the simplest endpoint (registry) first
    to prove the shared core, then the proxy, then stdio (repl/lsp)? (Leaning yes.)
 6. **Default deadline & mailbox values** (§8) — are `timeout: 5s`, `mailbox: 1024`,
-   `overflow: 'block` the right defaults, and should they be per-profile
+   `overflow: "block"` the right defaults, and should they be per-profile
    (`PERMISSIONS.10.md`) rather than global constants? (Leaning per-profile
    defaults with per-service overrides.)
 7. **Unhandled-delivery-error strictness** (§8.2) — since all calls are uniformly
    fallible, an unhandled delivery error just propagates. Should the checker
    *optionally* warn when one is never handled anywhere up the stack, and should an
    inline hot path be allowed to opt out of the deadline entirely (`timeout:
-   'none`) for zero overhead? (Leaning: opt-in lint + an explicit inline escape.)
+   "none"`) for zero overhead? (Leaning: opt-in lint + an explicit inline escape.)
 8. **Layer ordering** (§1) — `prior`/`wrap` layers nest by add-order (newest
    outermost), which is Seneca's model but makes cross-cutting order depend on load
    order (a known Seneca footgun). Offer an explicit priority/phase (e.g. `add …
-   {phase: 'auth}`) so ordering is declared, not incidental? (Leaning: add-order
+   {phase: "auth"}`) so ordering is declared, not incidental? (Leaning: add-order
    default, optional declared priority for `wrap`.)
-9. **Default `pool` strategy & elasticity** (§9.2) — is `'p2c` the right default,
+9. **Default `pool` strategy & elasticity** (§9.2) — is `"p2c"` the right default,
    and should a `pool` auto-scale its worker `size` under sustained `overload`, or
-   stay fixed-size with shedding? (Leaning: `'p2c` default, fixed-size first,
+   stay fixed-size with shedding? (Leaning: `"p2c"` default, fixed-size first,
    elasticity later with metrics.)

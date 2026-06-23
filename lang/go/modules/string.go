@@ -9,7 +9,7 @@ import (
 // upper, lower, concat, split, trim, contains, indexof, replace, changecase,
 // normalize, repeat, pad, match, escape.
 //
-//	"aql:string-util" import
+//	import "aql:string-util"
 //	["a" "b" "c"] StringUtil.concat       # → 'abc'
 //	"a,b,c" "," StringUtil.split           # → ['a' 'b' 'c']
 //	"  hi  " StringUtil.trim               # → 'hi'
