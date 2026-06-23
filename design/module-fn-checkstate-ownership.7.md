@@ -133,6 +133,35 @@ Mechanism confirmed on the live tree:
   perturb the module rows that already compile via `CallAQL`. This is a dedicated
   effort with the differential AND the coverage ceiling as joint gates.
 
+  **DEFINITIVE root cause (traced 2026-06, `Test.run-spec` row):** the binding
+  blocker is **closure-capture provenance**, not the dispatch reroute. `run-spec`'s
+  body wraps its work in `[…] (s get "name") test-describe`. `test-describe` is a
+  code-body word, so its `[…]` body compiles as a CLOSURE that **captures `s`**.
+  The capture VALUE is concrete (`{name:"doubling" … subs:[]}`, `conc=true` — maps
+  stay concrete through `toCarrier`), BUT a closure capture is a **runtime slot**:
+  inside the closure body's compile analysis `s` reads as a `Map` **carrier**, not
+  the concrete map. So `(s get "name")` → `Any` (get on a carrier Map can't fold to
+  the value), and the recursive `for (subs size) [… subspec run-spec]` can't fold
+  `(s get "subs")` to the concrete `[]` to zero the loop count — the analysis
+  explores the recursive `run-spec` over an `Any`-typed `subspec`, whose
+  `test-describe` then gets an `Any` name → "unmatched dispatch recovered at
+  test-describe" → the closure probe fails → the outer `test-describe` falls to the
+  code-body refusal. Confirmed: capture `s parent=Map conc=true`, probe reason
+  "unmatched dispatch recovered at test-describe".
+
+  So the fix is **harness inlining / monomorphization**: a closure that captures a
+  concrete immutable value (or a module-preamble fn called with concrete args) must
+  be compiled with that value available for provenance (so `get` folds), not as a
+  shared unit reading a carrier slot. That is sound ONLY per-construction (a
+  shared unit can't bake one construction's capture), so it is genuinely the
+  monomorphization project — high blast radius (it changes how `get`-on-Map provenance
+  and closure captures interact across the whole corpus), not a bounded edit.
+  Attempting it inside this already-vast session risks the same coverage regression
+  the reroute caused; it needs its own focused effort with the differential + the
+  ceiling gating every step. The two CORRECT-by-design refusals (`macro:45`,
+  `def-node-binding:54`) and the same-family Stage-D rows (`module-parselang:23`,
+  `module-rand:38`) sit alongside it.
+
 ## Discipline
 
 Land as ONE reviewed unit (never a partial diagnostic filter — `.6` §3 proved
