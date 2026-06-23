@@ -1,10 +1,40 @@
 # The final two refusals — decision note (compile-to-trap vs keep-refusing)
 
-_Status: DISCOVERY / decision-needed. After Stage-3 cleared the three module
-feature rows, the compiled-coverage refusal count sits at **2** (down from 5
-this effort). This note records exactly what those two rows are, corrects an
-earlier overstatement about them, and lays out the options. No behaviour change
-is proposed here — that needs an explicit decision._
+_Status: macro:45 now DONE (refusals 2 → **1**); def-node-binding:54 remains.
+After Stage-3 cleared the three module feature rows (5 → 2), `macro.tsv:45` was
+landed via compile-to-trap once its true prerequisite was found (see "Row 1"
+update). This note records both rows, corrects two earlier diagnoses, and lays
+out the remaining option. The only remaining refusal is def-node-binding:54._
+
+## UPDATE — macro:45 LANDED (refusals 2 → 1)
+
+The Option-A prerequisite was found and fixed, and the trap landed (commit
+"Stage 3: compile macro:45 recursive-macroexpand to a terminal OpTrap").
+**The earlier diagnosis in this note was WRONG twice over** — recorded here so
+the mistake isn't repeated:
+- It was NOT a recursive-macro paren-capture / FormArgs problem. The
+  macro-headed paren `(loopy 1)` IS captured raw and `macroexpand` DOES dispatch.
+- The REAL blocker: the dynamic-help example generator (`native_help.go`
+  `makeDynamicEval`, fired from `OnRegisterHook` on `def loopy`) runs the
+  recursive `loopy` to the step ceiling during compile. `CheckState.StepCount` is
+  registry-SHARED and `BudgetTripped` (engine.go) short-circuits every later
+  sub-engine — so `macroexpand (loopy 1)` was never reached and the row refused
+  on a stale residual. The recursion ran via `execMacro`'s splice path, never the
+  depth-guarded `ExpandMacroForm`.
+- Fix: `CheckState.IsolateBudget()` (eng/go/check.go) — the 4th hermetic channel
+  for the help-eval (beside IsolateEmit / TruncateDiagnostics / def-snapshot),
+  snapshot+restore of StepCount/BudgetTripped around the synthetic run. This is a
+  genuine latent-bug fix: ANY doc example that runs many steps could otherwise
+  burn the real program's shared budget. Then the trap at carrier.go's
+  macroexpand branch (`RecordTrap("macroexpand_error", …)` top-level only, via
+  `errors.As`) — mirroring the mini/parse/emit `*_unknown_lang` traps.
+- Verified: compiles to a single terminal `OpTrap`, byte-identical error parity
+  (`[aql/macroexpand_error]: macroexpand: expansion too deep (recursive macro?)`),
+  DETERMINISTIC (20× in-process + fresh processes identical), full corpus
+  differential clean, whole macro suite green, refusalCeiling 2 → 1.
+
+The determinism observation noted earlier (time-seeded value-ID RNG under deep
+expansion) turned out NOT to affect the trap — the fix is deterministic.
 
 ## Why this matters
 
@@ -118,20 +148,20 @@ pursued (deep recursive expansion stressing the value-ID/provenance coupling). A
 deterministic, non-time-seeded value-ID scheme would be the clean fix if it ever
 proves real. Do not chase it speculatively.
 
-## Recommendation (revised after the Option-A attempt)
+## Recommendation (final)
 
-- **`macro.tsv:45`:** **keep refusing (Option B).** Option A is blocked on a
-  prerequisite that was not low-risk as first thought — recursive-macro paren
-  dispatch under check mode — which is deep engine work touching the macro path.
-  Not worth it for one error row that already falls back faithfully.
-- **`def-node-binding.tsv:54`:** **keep refusing (Option B).** Unchanged: a
-  correct compilation needs deferred-eval-scope provenance modeling, subtle with
-  a silent-wrong-answer failure mode.
+- **`macro.tsv:45`:** **DONE** — compiled to a terminal trap (see the UPDATE
+  above). refusals 2 → 1.
+- **`def-node-binding.tsv:54`:** **keep refusing (Option B)** — the LAST refusal.
+  A correct compilation needs deferred-eval-scope provenance modeling (the
+  returned list `[c1]` is evaluated post-return in MODULE scope, so `c1` = 1 not
+  the param 9); subtle, with a silent-wrong-answer failure mode (a naive compile
+  bakes `[9]`). It falls back faithfully today (returns `[1]`). Only attempt it
+  with thorough differential coverage of param-vs-module-binding shadowing; it is
+  the single thing between refusals=1 and refusals=0 (P7, delete the interpreter
+  fallback).
 
-Net (revised): **both** remaining rows have an identified deeper prerequisite and
-both fall back faithfully today. refusalCeiling stays at **2**. Reaching P7
-(refusals 0, delete the interpreter fallback) requires two separate engine
-features (recursive-macro check-mode dispatch; deferred-eval-scope provenance) —
-each a deliberate project, not a quick trap. Until then every spec row produces
-the correct result in both engines; the only cost of the 2 refusals is that the
-interpreter fallback cannot yet be deleted.
+Net (final): refusals = **1**. Every spec row produces the correct result in both
+engines. The one remaining refusal (def-node-binding:54) falls back faithfully;
+reaching 0 (and thus being able to delete the interpreter fallback) requires only
+the deferred-eval-scope provenance feature.

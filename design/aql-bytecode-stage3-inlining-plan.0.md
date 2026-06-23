@@ -1,8 +1,11 @@
 # Stage-3 module-fn call-site inlining — verified implementation plan
 
-_Status: **SOUND FLOOR REACHED** — refusals 5 -> 4 -> 3 -> **2**. All THREE
-clearable feature rows are DONE; the only 2 remaining refusals are
-correct-by-design (must NOT compile). THREE rows DONE this effort:_
+_Status: refusals 5 -> 4 -> 3 -> 2 -> **1**. The three module feature rows AND
+macro:45 are DONE. The ONLY remaining refusal is **def-node-binding:54** (needs
+deferred-eval-scope provenance — see design/aql-bytecode-final-two-refusals.0.md;
+falls back faithfully today). macro:45 was landed via compile-to-trap after its
+true prerequisite was found (a check-mode help-eval budget leak, NOT the macro
+path — see that note). Rows DONE this effort:_
 - _**module-parselang:23 DONE** — sound check-mode parser registration +
   body-bearing fn-VALUE `__pa` dispatch fix (`spliceFnValueCheckResult` →
   `buildFnBodyReturnsFn`). refusals 5 -> 4._
