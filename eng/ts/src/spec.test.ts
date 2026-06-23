@@ -56,6 +56,7 @@ import {
   type XmlTmpl,
   newAtom,
   newBoolean,
+  newConstrainedWord,
   newDecimal,
   newDisjunct,
   newEnum,
@@ -639,7 +640,24 @@ function registerSpecWords(r: Registry): void {
     name: 'refine',
     forwardPrecedence: true,
     signatures: [
-      { args: [TAny, TNode], barrierPos: 1, handler: () => unsupportedMake('refine') },
+      {
+        args: [TAny, TNode],
+        noEvalArgs: new Set([1]),
+        handler: (args) => {
+          const base = args[0]!
+          // refine Record [ {k:T} … ] merges the pair-maps into a
+          // record-shape map. Object refinement isn't ported yet.
+          if (base.data === null && base.vType.leaf() === 'Record' && Array.isArray(args[1]!.data)) {
+            const om = new OrderedMap()
+            for (const pair of args[1]!.asList()) {
+              const m = pair.asMap()
+              for (const k of m.keys()) om.set(k, m.get(k)!)
+            }
+            return [newMap(om)]
+          }
+          return unsupportedMake('refine')
+        },
+      },
       { args: [TAny], handler: () => unsupportedMake('refine') },
     ],
   })
@@ -698,11 +716,32 @@ function registerSpecWords(r: Registry): void {
         args: [TWord, TAny],
         noEvalArgs: new Set([1]),
         handler: (args, _ctx, _stk, registry) => {
-          const name = args[0]!.asWord().name
+          const nameWord = args[0]!.asWord()
+          const name = nameWord.name
           const value = args[1]!
           // A digit-first name is a malformed number, never a name.
           if (/^-?\d/.test(name)) {
             throw new AqlError('invalid_numeric_literal', `invalid numeric literal: ${name}`, name)
+          }
+          // Container-typed binding `def NAME:[…]` / `def NAME:{…}`: the
+          // tokenizer attached the constraint shape to the name word. The
+          // value must satisfy it, else def-time validation fails.
+          if (nameWord.constraint !== undefined) {
+            if (!isValueOfType(value, nameWord.constraint)) {
+              throw new AqlError(
+                'type_error',
+                `def ${name}: value ${value.toString()} does not satisfy ${nameWord.constraint.toString()}`,
+                name,
+              )
+            }
+            // A typed-name binding stores the value as data — a plain
+            // list binds inert (non-splicing); `word` is needed to splice.
+            const bound =
+              value.vType.matches(TList) && Array.isArray(value.data) && !value.quoted
+                ? newList(value.asList(), { eval: false })
+                : value
+            registry.pushDef(name, bound)
+            return []
           }
           // Typed binding `def x:Type v`: the name carries a `:Constraint`
           // suffix (a simple scalar type, a value pattern, or a bound
@@ -1097,6 +1136,16 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
     while (j < stream.s.length && !isTokenBoundary(stream.s[j]!)) j++
     const tok = stream.s.slice(stream.i, j)
     stream.i = j
+    // A binding name with a container constraint — `NAME:[…]` / `NAME:{…}`
+    // — tokenises as `NAME:` immediately abutting an opening bracket. The
+    // constraint shape rides along on the name word so `def` can validate.
+    if (tok.length > 1 && tok.endsWith(':') && (stream.s[stream.i] === '[' || stream.s[stream.i] === '{')) {
+      const open = stream.s[stream.i]!
+      stream.i++
+      const constraint = open === '[' ? makeListFromElems(readTokens(stream, ']')) : readMap(stream)
+      out.push(newConstrainedWord(tok.slice(0, -1), constraint))
+      continue
+    }
     out.push(atomicValue(tok))
   }
   if (until === ']') {

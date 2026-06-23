@@ -42,6 +42,12 @@ export interface WordInfo {
   argCount?: number
   forceStack?: boolean
   forceForward?: boolean
+  /**
+   * Optional type constraint on a `def NAME:CONTAINER` binding, where the
+   * constraint is a container shape (`[:T]` typed list or `{k:T …}` record
+   * shape) that the tokenizer attaches to the binding name token.
+   */
+  constraint?: Value
 }
 
 /** A typed parameter on a function definition. */
@@ -446,6 +452,14 @@ export function newPath(segments: string[], abs: boolean): Value {
 
 export function newWord(name: string): Value {
   return new Value(TWord, { name } satisfies WordInfo)
+}
+
+/**
+ * Construct a binding-name word carrying a container type constraint,
+ * used by the spec tokenizer for `def NAME:[…]` / `def NAME:{…}` forms.
+ */
+export function newConstrainedWord(name: string, constraint: Value): Value {
+  return new Value(TWord, { name, constraint } satisfies WordInfo)
 }
 
 /** Convenience for constructing an Any-typed carrier (test harness use). */

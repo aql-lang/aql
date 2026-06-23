@@ -73,6 +73,7 @@ export {
   newAny,
   newAtom,
   newBoolean,
+  newConstrainedWord,
   newDecimal,
   newDisjunct,
   newEnum,

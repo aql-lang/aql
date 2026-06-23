@@ -171,11 +171,12 @@ export class Engine {
         this.dispatchFnDef(name, top.asFnDef())
         return
       }
-      if (top.vType.matches(TList) && Array.isArray(top.data) && !top.quoted) {
-        // Unquoted list → code body: splice its elements at the
-        // pointer so they execute inline. A quoted list (set via
-        // `quote`) is data and falls through to the literal-substitute
-        // branch below. Mirrors aqleng/go/engine.go's def-sub
+      if (top.vType.matches(TList) && Array.isArray(top.data) && !top.quoted && top.eval) {
+        // Unquoted, evaluable list → code body: splice its elements at
+        // the pointer so they execute inline. A quoted list (set via
+        // `quote`) or an inert list bound via a typed-name constraint
+        // (`def xs:[:T] […]`) is data and falls through to the literal-
+        // substitute branch below. Mirrors aqleng/go/engine.go's def-sub
         // `!top.Quoted` check.
         const elems = top.asList()
         this.stack.splice(this.pointer, 1, ...elems)
