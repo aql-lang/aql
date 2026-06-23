@@ -6,7 +6,7 @@
 // scalars/lists. The typed-list / typed-map / record-shape branches of
 // IsValueOfType (which need ChildType payloads) and the Disjunct/Enum
 // membership branches are added by their owning port increments.
-import { AqlType, TAny, TType } from './type.ts'
+import { AqlType, TAny, TNone, TType } from './type.ts'
 import { newList, newTypeLiteral, Value } from './value.ts'
 
 // Degenerate roots saturate under typeof (they are their own parent).
@@ -38,6 +38,8 @@ export function parentType(t: AqlType): AqlType | null {
  * parent.
  */
 export function typeOf(v: Value): Value {
+  // The none value's type is the None type literal.
+  if (v.isNone()) return newTypeLiteral(TNone)
   if (v.data === null) {
     const p = parentType(v.vType)
     return newTypeLiteral(p ?? v.vType)

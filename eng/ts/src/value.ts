@@ -103,6 +103,11 @@ export class Value {
     this.carrier = opts?.carrier ?? false
   }
 
+  /** True iff this Value is the unique `none` value (None's sole inhabitant). */
+  isNone(): boolean {
+    return this.vType.equal(TNone) && this.data === NONE_SENTINEL
+  }
+
   /** True iff this Value is a type literal (no concrete payload). */
   isTypeLiteral(): boolean {
     return this.data === null && !this.carrier && !this.vType.equal(TNone)
@@ -218,8 +223,9 @@ export class Value {
 
   /** Stringify in a parser-style debug form: words as word(name), strings quoted, etc. */
   toString(): string {
+    if (this.isNone()) return 'none'
     if (this.data === null) {
-      if (this.vType.equal(TNone)) return 'null'
+      if (this.vType.equal(TNone)) return 'none'
       return this.vType.toString()
     }
     if (this.vType.matches(TWord)) {
@@ -297,6 +303,16 @@ export function newAtom(name: string): Value {
 
 export function newTypeLiteral(t: AqlType): Value {
   return new Value(t, null)
+}
+
+// The unique payload that marks the `none` value (None's sole
+// inhabitant), distinguishing it from the `None` type literal (which
+// has a null payload). Mirrors eng/go's noneSentinel.
+const NONE_SENTINEL: unique symbol = Symbol('none')
+
+/** Construct the unique `none` value. */
+export function newNone(): Value {
+  return new Value(TNone, NONE_SENTINEL)
 }
 
 export function newWord(name: string): Value {

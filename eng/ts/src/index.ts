@@ -77,6 +77,7 @@ export {
   newList,
   newMark,
   newMove,
+  newNone,
   newString,
   newTypeLiteral,
   newWord,

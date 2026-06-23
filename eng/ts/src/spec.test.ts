@@ -42,6 +42,7 @@ import {
   newList,
   newMark,
   newMove,
+  newNone,
   newString,
   newTypeLiteral,
   newWord,
@@ -274,7 +275,7 @@ function registerSpecWords(r: Registry): void {
         args: [TList],
         handler: (args) => {
           const lst = args[0]!.asList()
-          if (lst.length === 0) return [newTypeLiteral(TNone)]
+          if (lst.length === 0) return [newNone()]
           return [lst[0]!]
         },
       },
@@ -469,7 +470,7 @@ function registerSpecWords(r: Registry): void {
         args: [TList],
         handler: (args) => {
           const lst = args[0]!.asList()
-          return lst.length === 0 ? [newTypeLiteral(TNone)] : [lst[0]!]
+          return lst.length === 0 ? [newNone()] : [lst[0]!]
         },
       },
     ],
@@ -717,7 +718,8 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
         out.push(newBoolean(false))
         continue
       case 'null':
-        out.push(newTypeLiteral(TNone))
+      case 'none':
+        out.push(newNone())
         continue
     }
     if (/^-?\d+$/.test(tok)) {

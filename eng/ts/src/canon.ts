@@ -125,10 +125,10 @@ export function canon(stack: Value[]): string {
 
 /** canonValue renders one value as canonical AQL source. */
 export function canonValue(v: Value): string {
-  // None and type literals first.
-  if (v.vType.equal(TNone)) return 'none'
+  // The `none` value renders lowercase; a bare type literal (including
+  // the `None` type) renders as its user-facing leaf name.
+  if (v.isNone()) return 'none'
   if (v.data === null) {
-    // A bare type literal renders as its user-facing leaf name.
     return v.vType.leaf()
   }
   if (v.vType.matches(TInteger)) {
