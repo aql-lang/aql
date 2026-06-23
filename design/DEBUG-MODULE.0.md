@@ -146,11 +146,13 @@ registry's static word table, or an in-memory value.
 | `Debug.scope` | `None ~> Map` | The active scope chain: params, captures, and local defs of the enclosing fn frames. |
 
 `Debug.stack` is subtle — a word cannot normally see "the whole stack"
-because dispatch only hands it its matched args. It is implemented as an
-engine-assisted primitive (§6): the handler receives the live engine's
-residual stack via a privileged path, copies it, and pushes the copy
-back. This is the one place the module reads engine-internal state that
-no existing word exposes.
+because dispatch only hands it its matched args, and a native handler
+receives `(args, named, body, r *Registry)` but **not** the live
+`*Engine` (the registry doesn't hold one — `enterInterpRun` only bumps a
+depth counter). So this is the **one** word that needs a new engine seam;
+§6.2 specifies it (the recommended *gated-snapshot* mechanism) and weighs
+the alternatives. Every other word in the module reuses an existing
+seam.
 
 ### (E) Memory analysis — "what does this cost to hold?"
 
@@ -276,12 +278,141 @@ fields with type safety.
    supplies a no-op controller, so `aql:debug` *loads* everywhere but its
    effectful words degrade gracefully (and are policy-refusable).
 
-3. **`Debug.stack` privileged read** — a single engine-assisted native
-   that receives the live engine's residual stack. The cleanest seam is a
-   new handler variant (or a `CallableSpec`-style flag) that asks the Run
-   loop to pass a *copy* of the current stack into the handler. This is
-   the only engine-internal exposure the module adds; it is read-only
-   (the copy is pushed back, the live stack is untouched).
+3. **`Debug.stack` seam** — the single new engine-internal read. It is
+   not a body-wrapping word, so it can't use the `TraceCallback` route
+   the others do; §6.2 specifies the mechanism and the recommendation.
+
+### 6.1 Implementation mechanism, word by word
+
+The headline fact: **almost every interesting word is a new *consumer* of
+the per-step `TraceCallback` the engine already fires** — no new engine
+code. The Run loop, today, runs:
+
+```go
+// eng/go/engine.go (Run loop, per step)
+if e.trace != nil {
+    snapshot := e.tape.Snapshot()          // the WHOLE stack: resolved + pending
+    note := e.traceNote
+    e.traceNote = ""
+    e.trace(step, e.pointer, snapshot, note)
+}
+```
+
+`eng.RunTrace` (behind `IO.trace`) already proves the pattern: build a
+sub-engine, set `sub.trace`, run the body. Each debug word that *wraps a
+quoted body* is the same shape with different bookkeeping in the
+callback.
+
+**(F) Performance + (A/B) body-runners — one sub-engine, five callbacks.**
+
+```go
+// shared scaffold for Debug.trace / steps / time / bench / profile / step
+func runUnderHook(parent *native.Registry, body []native.Value,
+        hook native.TraceCallback) ([]native.Value, error) {
+    sub := native.New(parent)        // child engine; aql:vm policy-composition model
+    sub.SetTrace(hook)               // thin exported setter over Engine.trace
+    return sub.Run(append([]native.Value(nil), body...))
+}
+```
+
+| Word | Callback does | Result built from |
+|------|---------------|-------------------|
+| `Debug.steps` | `n++` | `n` (deterministic — no clock) |
+| `Debug.time` | `n++` | `EffectiveClock(r).Now()` deltas around `Run` + `n` → `Timing` |
+| `Debug.bench` | `n++` | loop the scaffold N times, reduce clock deltas → `BenchResult` |
+| `Debug.profile` | read `snapshot[pointer]`; `prof[word].{calls,steps}++` | reduce `prof` → Table of `ProfileRow` |
+| `Debug.trace` | (delegates to `eng.RunTrace` verbatim) | printed trace |
+| `Debug.step` | consult the `StepController` (below); may block | residual top-of-stack |
+
+So profiling and step-counting are *zero new engine code* — they read the
+word sitting at `snapshot[pointer]` each fire. `Debug.steps` is the
+clock-free, reproducible perf signal; `Debug.time`/`bench` add wall-clock
+via the existing `EffectiveClock` capability (a `FixedClock` freezes it
+for tests).
+
+**(B) Interactive stepping — the callback blocks.** `Debug.step` installs
+a `DebugSession`-backed hook that, at a single-step or a breakpoint,
+consults the controller and can block for input:
+
+```go
+sub.SetTrace(func(step, pointer int, stack []native.Value, _ string) {
+    if !session.shouldPause(pointer, stack) { return }   // continue: cheap path
+    rec := native.StepRecord{Step: step, Pointer: pointer,
+        Word: wordNameAt(stack, pointer), StackDepth: pointer}
+    switch session.ctl.OnStep(rec, stack) {
+    case native.StepQuit:     panic(stepQuit{})            // recovered by the wrapper → clean stop
+    case native.StepContinue: session.single = false
+    case native.StepNext:     session.single = true
+    }
+})
+```
+
+`Debug.break` is a registered **no-op native** (`debug-break`); the hook
+recognises `IsWord(stack[pointer]) && name == "debug-break"` and forces a
+pause. With no session installed the word does nothing — so it is inert
+and safe to leave in committed code. `shouldPause` returns false on the
+fast path, so an active session that is "continuing" pays only a word-name
+compare per step.
+
+**(C) Program structure — direct delegation, no host, no sub-engine.**
+These take the `r *Registry` the handler already gets and call existing
+algorithms: `Debug.parse` → `r.ParseFunc(src)` (the `Vm.parse` path);
+`Debug.disasm` → `runUnderHook` variant with `sub.SetRecorder(rec)`,
+return the StackForm ops as a list; `Debug.sig`/`body`/`explain` →
+`native.FnDefFromValue` + the `describe` formatter; `Debug.deps` →
+`native.WalkBodyWords` (the closure-capture walker).
+
+**(D) System structure — read the registry off the handler arg.**
+`Debug.words` → `r.Defs.Names()` ∪ native table; `Debug.defs` →
+`r.Defs.Names()` then `r.Defs.Top(name)` each; `Debug.types` → walk
+`r.Types`; `Debug.modules` → the Module descriptors. All pure reads of
+state the handler already holds.
+
+**(E) Memory.** `Debug.sizeof`/`shape` are a pure recursive walk of the
+`Value` graph (list elems, map entries, string/payload bytes) — in
+process, no capability. `Debug.heap`/`gc` go through the new `DebugOps`
+capability, retrieved exactly like the clock via the generic accessor:
+
+```go
+const CapDebugOps = "engine.debugops"
+func EffectiveDebugOps(r *native.Registry) (capabilities.DebugOps, bool) {
+    return eng.Cap[capabilities.DebugOps](r, CapDebugOps)   // host installs; policy wraps
+}
+```
+
+The OS impl reads `runtime.MemStats`; the wasm/sandbox impl returns
+zeroes. Policy-gated under `debug.runtime` via the existing
+`HostPolicy`/`pol.Check` plumbing — no new policy machinery, just a scope
+name (§7).
+
+### 6.2 The `Debug.stack` seam (the one new engine read)
+
+`Debug.stack` wants the live data stack *at its own call site*, but a
+native handler never receives the `*Engine`, and the registry holds no
+pointer to it. Three ways to close that, in recommended order:
+
+1. **Gated snapshot (recommended).** When — and only when — a debug
+   session is active, the Run loop publishes `e.tape.Snapshot()` to a
+   registry field each step; `Debug.stack`'s handler reads it off `r`.
+   The publish is guarded by the same `e.trace != nil`-style flag the
+   trace path uses, so a program that never debugs pays **nothing** (no
+   per-step snapshot, no allocation). This reuses the snapshot the trace
+   path already computes when a session is live, so the marginal cost is a
+   pointer store.
+2. **Body-wrapping reframe.** Drop the bare word for
+   `Debug.stack-of [body]`, which falls out of the `TraceCallback`
+   scaffold for free (no new seam) — at the cost of worse ergonomics
+   (you must wrap the surrounding code).
+3. **REPL-only.** Keep the existing `/stack` meta-command and ship no
+   word. Zero engine change, but the capability isn't programmatic.
+
+Recommendation: **option 1**. It is the only one that gives the natural
+`Debug.stack` ergonomics while keeping the non-debug path cost-free, and
+the exposure is strictly read-only (the handler copies the published
+snapshot; the live tape is never handed out or mutated). It is a small,
+well-bounded addition: one guarded field write in the Run loop plus a
+setter, mirroring how `PushArgs`/`TopArgs` already mirror per-call engine
+state onto the registry for the `args` word.
 
 ### File layout (mirrors existing modules)
 
@@ -394,10 +525,11 @@ policy refusal, no-panic, scripted stepping) in `debug_test.go`.
    is the back-compat-safe default proposed here. Do you instead want the
    canonical home moved to `aql:debug` with `IO.trace`/`Vm.parse`
    deprecated? (Affects whether this is purely additive.)
-2. **`Debug.stack` engine seam.** Exposing the live stack to a handler is
-   the one new engine-internal read. Acceptable as a read-only privileged
-   native, or would you prefer stepping be the *only* way to see the full
-   stack (keeping handlers strictly arg-scoped)?
+2. **`Debug.stack` engine seam.** §6.2 recommends the *gated-snapshot*
+   read (one guarded field write in the Run loop, cost-free when no debug
+   session is active, strictly read-only). Is that acceptable, or would
+   you prefer the body-wrapping `Debug.stack-of [body]` reframe (no engine
+   change at all) — keeping native handlers strictly arg-scoped?
 3. **CLI surface.** Should interactive stepping get a first-class
    `aql debug <file>` subcommand (a Phase-3 host follow-on), or stay
    REPL-only for now?
