@@ -1146,6 +1146,21 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       out.push(newConstrainedWord(tok.slice(0, -1), constraint))
       continue
     }
+    // `quote`/`inspect` capture the upcoming WORD lexically — the real
+    // parser hands them the source token before it becomes a boolean
+    // literal. So `true`/`false` immediately after one arrive as Words
+    // (`quote true` → true/q; `inspect true` → an unknown-word report),
+    // not the boolean value.
+    const prev = out[out.length - 1]
+    if (
+      (tok === 'true' || tok === 'false') &&
+      prev !== undefined &&
+      prev.isWord() &&
+      (prev.asWord().name === 'quote' || prev.asWord().name === 'inspect')
+    ) {
+      out.push(newWord(tok))
+      continue
+    }
     out.push(atomicValue(tok))
   }
   if (until === ']') {
