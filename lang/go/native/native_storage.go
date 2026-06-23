@@ -436,6 +436,19 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 		IsReach(val) || IsSplice(val) {
 		return dyn
 	}
+	// A concrete LIST / MAP field folds to the stored CONTAINER value, not
+	// merely its type carrier: cloned so it carries a FRESH ID (the stored
+	// value's ID is shared with the map field and would collide in the
+	// emitter's operand-provenance tracking — `def a {b:5} [a.b]`). Folding
+	// the concrete container lets a downstream `(m get "k") size` / `for`
+	// over the field see a concrete count instead of a carrier Integer, so
+	// a statically-empty collection's loop body is correctly pruned rather
+	// than analysed over Any (module-test:38). Scalars keep the type
+	// carrier — there is nothing to fold, and the ID-collision guard above
+	// is the reason we never returned the bare stored scalar.
+	if IsConcrete(val) && (val.Parent.ConformsTo(TList) || val.Parent.ConformsTo(TMap)) {
+		return []Value{CloneValue(val)}
+	}
 	return []Value{NewCarrier(val.Parent)}
 }
 
