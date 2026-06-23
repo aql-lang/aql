@@ -154,3 +154,6 @@ cmd/go/aql/aql
 
 # Build artifact occasionally produced under cmd/go (ar archive)
 cmd/go/aqlbin
+
+# Claude Code local worktree / session storage
+.claude/
