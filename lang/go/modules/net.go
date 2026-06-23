@@ -10,7 +10,7 @@ import (
 //
 // After import, the words are accessed via dot notation:
 //
-//	"aql:net" import
+//	import "aql:net"
 //	"https://example.com/data" Net.fetch                 # HTTP GET
 //	{kind:"api", spec:"…", path:"/x"} Net.prepare         # build a request
 //	{kind:"api", spec:"…", path:"/x"} Net.direct          # build and send

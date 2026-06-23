@@ -364,7 +364,7 @@ check themselves.
 - `engine`: policy with `engine.words.default = "deny"` + only
   `add` allowed → `1 add 2` works, `1 sub 2` returns
   permission-denied.
-- `modules`: policy denies `aql:math` import → `"aql:math-util" import`
+- `modules`: policy denies `aql:math` import → `import "aql:math-util"`
   fails before resolution.
 - `modules.scopes`: policy allows `aql:math` but denies `pow` →
   `pow 2 3` after import returns permission-denied; `sin 0` works.

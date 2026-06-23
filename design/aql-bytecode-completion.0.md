@@ -471,7 +471,7 @@ indirection (a named `fn` or `=>` lambda over 0-2 Integer params, an Integer bod
 over those params, CALLED through a value — `apply` with the `/r` or usurp `/ur`
 ref suffix, or stored-field dispatch `def m {f: <fnval>} m.f <args>`; the body may
 also CLOSE OVER outer `def`-local literals, exercising the FnBaselines / capture
-path) / `StringUtil.*` ops behind the (transparent) `"aql:string-util" import
+path) / `StringUtil.*` ops behind the (transparent) `import "aql:string-util"
 end` preamble (upper/lower/trim/concat/replace/repeat -> String, contains ->
 Boolean, indexof -> Integer, split -> List; computed strings flow through maps /
 comparisons / `size`, stressing the scalar-carrier-keep path), type-tracked so

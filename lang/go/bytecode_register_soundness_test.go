@@ -27,19 +27,19 @@ func TestRegisterDispatchFallsBackNotDiverges(t *testing.T) {
 	}{
 		{
 			"parselang bare dispatch (no trailing get)",
-			`"aql:parselang" import end  "aql:string-util" import end  ` +
+			`import "aql:parselang"  import "aql:string-util"  ` +
 				`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ` +
 				`ParseLang.parse_calc 'x + y' {} end`,
 		},
 		{
 			"parselang sugar + get (already a spec row)",
-			`"aql:parselang" import end  "aql:string-util" import end  ` +
+			`import "aql:parselang"  import "aql:string-util"  ` +
 				`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ` +
 				`(parse calc 'x + y') get 1`,
 		},
 		{
 			"parselang desugared + get",
-			`"aql:parselang" import end  "aql:string-util" import end  ` +
+			`import "aql:parselang"  import "aql:string-util"  ` +
 				`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ` +
 				`(ParseLang.parse_calc 'x + y' {} end) get 1`,
 		},
@@ -70,7 +70,7 @@ func TestRegisterDispatchFallsBackNotDiverges(t *testing.T) {
 // runtime-dispatched word (ParseLang.kinds) must still COMPILE — the refusal is
 // scoped to register, not to the whole module.
 func TestNonRegisterModuleWordStillCompiles(t *testing.T) {
-	src := `"aql:parselang" import end  ParseLang.kinds`
+	src := `import "aql:parselang"  ParseLang.kinds`
 	a, _ := New()
 	got, err := a.RunCompiledStrict(src)
 	if err != nil {

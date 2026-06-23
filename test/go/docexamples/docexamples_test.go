@@ -183,7 +183,7 @@ func runProgramErr(src string) (string, error) {
 		return "", err
 	}
 	// Mirror lang.New's registry wiring so module imports
-	// (`"aql:math-util" import end`) resolve as they do for a CLI user.
+	// (`import "aql:math-util"`) resolve as they do for a CLI user.
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	result, err := native.NewTop(reg).Run(values)

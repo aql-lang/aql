@@ -121,12 +121,12 @@ func TestGenFnCallBindingAlignment(t *testing.T) {
 // generic-plus-catch-all apply-op shape).
 func TestModuleWrapperSigBodyPairing(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
-		`module [
+		`import module [
 		   def Comparable surface {cmp: (fnsig [[Self Self] [Integer]])}
 		   Integer exposes Comparable
 		   def aop gen [(T extends Comparable)] fn [[rhs:T op:String lhs:T] [Boolean] ["bounded"] [rhs:Any op:String lhs:Any] [Boolean] ["catchall"]]
 		   export "M" {aop: aop/r}
-		 ] import`,
+		 ]`,
 		`[(M.aop 3 "x" 5) (M.aop {a:1} "x" 5)]`,
 	})
 	if err != nil {

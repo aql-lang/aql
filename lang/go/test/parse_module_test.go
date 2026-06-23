@@ -13,7 +13,7 @@ import (
 // kind (aql:parselang), run via the ordinary `parse` macro. These tests pin
 // each capability and its loud failures.
 
-const parseImports = `"aql:parse" import end  "aql:parselang" import end  `
+const parseImports = `import "aql:parse"  import "aql:parselang"  `
 
 // runParse runs src on a fresh instance and returns the single result, failing
 // on error.

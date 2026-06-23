@@ -3,55 +3,55 @@
 #
 # Loadable module of APL-style array utilities. Import binds the
 # `ArrayUtil` namespace, then words are called via dot-access:
-# `"aql:array-util" import end  ArrayUtil.word args`. The everyday array
+# `import "aql:array-util"  ArrayUtil.word args`. The everyday array
 # words (iota/range/take/shed/each/fold/...) stay in core; this module
 # holds the specialised shape/structure, selection/ordering,
 # membership/grouping, and neighborhood vocabulary.
 #
 # ---------------------------------------------------------------------
 # §1  shape / structure
-"aql:array-util" import end  ArrayUtil.shape [[1 2 3] [4 5 6]]	[2 3]	shape: the length along each axis (2 rows, 3 cols)
-"aql:array-util" import end  ArrayUtil.rank [[1 2 3] [4 5 6]]	2	rank: the number of axes
-"aql:array-util" import end  ArrayUtil.reshape [2 3] [1 2 3 4 5 6]	[[1 2 3] [4 5 6]]	reshape: lay flat data into the given shape
-"aql:array-util" import end  ArrayUtil.transpose [[1 2 3] [4 5 6]]	[[1 4] [2 5] [3 6]]	transpose: swap rows and columns of a rank-2 list
+import "aql:array-util"  ArrayUtil.shape [[1 2 3] [4 5 6]]	[2 3]	shape: the length along each axis (2 rows, 3 cols)
+import "aql:array-util"  ArrayUtil.rank [[1 2 3] [4 5 6]]	2	rank: the number of axes
+import "aql:array-util"  ArrayUtil.reshape [2 3] [1 2 3 4 5 6]	[[1 2 3] [4 5 6]]	reshape: lay flat data into the given shape
+import "aql:array-util"  ArrayUtil.transpose [[1 2 3] [4 5 6]]	[[1 4] [2 5] [3 6]]	transpose: swap rows and columns of a rank-2 list
 #
 # §2  selection / ordering
-"aql:array-util" import end  ArrayUtil.where [true false true false true]	[0 2 4]	where: indices of the truthy elements
-"aql:array-util" import end  ArrayUtil.grade [30 10 20]	[1 2 0]	grade: indices that would sort the list ascending
-"aql:array-util" import end  ArrayUtil.at [0 2] [10 20 30 40]	[10 30]	at: select data elements by an index list
-"aql:array-util" import end  ArrayUtil.replicate [2 0 3] [1 2 3]	[1 1 3 3 3]	replicate: repeat each element by its count
-"aql:array-util" import end  ArrayUtil.expand [true false true] [7 8]	[7 0 8]	expand: spread data into true slots, 0 into false slots
-"aql:array-util" import end  ArrayUtil.compress [true false true] [1 2 3]	[1 3]	compress: keep data where the mask is true
+import "aql:array-util"  ArrayUtil.where [true false true false true]	[0 2 4]	where: indices of the truthy elements
+import "aql:array-util"  ArrayUtil.grade [30 10 20]	[1 2 0]	grade: indices that would sort the list ascending
+import "aql:array-util"  ArrayUtil.at [0 2] [10 20 30 40]	[10 30]	at: select data elements by an index list
+import "aql:array-util"  ArrayUtil.replicate [2 0 3] [1 2 3]	[1 1 3 3 3]	replicate: repeat each element by its count
+import "aql:array-util"  ArrayUtil.expand [true false true] [7 8]	[7 0 8]	expand: spread data into true slots, 0 into false slots
+import "aql:array-util"  ArrayUtil.compress [true false true] [1 2 3]	[1 3]	compress: keep data where the mask is true
 #
 # §2b editing — copy-returning single-element edits (HAMT Level A primitives)
-"aql:array-util" import end  ArrayUtil.insert-at 1 99 [1 2 3]	[1 99 2 3]	insert-at: insert the element before index 1
-"aql:array-util" import end  ArrayUtil.insert-at 0 99 [1 2 3]	[99 1 2 3]	insert-at: index 0 prepends
-"aql:array-util" import end  ArrayUtil.insert-at 3 99 [1 2 3]	[1 2 3 99]	insert-at: index == length appends
-"aql:array-util" import end  [1 2 3] ArrayUtil.insert-at 1 99	[1 99 2 3]	insert-at: pipeline form (subject from the stack)
-"aql:array-util" import end  def xs [1 2 3] end def ys (ArrayUtil.insert-at 1 99 xs) end xs	[1 2 3]	insert-at is copy-returning — the source list is unchanged
-"aql:array-util" import end  ArrayUtil.insert-at 4 99 [1 2 3]	ERROR:index_out_of_range	insert-at: index past length is a loud error, not a silent no-op
-"aql:array-util" import end  ArrayUtil.insert-at -1 99 [1 2 3]	ERROR:index_out_of_range	insert-at: negative index is a loud error
-"aql:array-util" import end  ArrayUtil.remove-at 1 [1 2 3]	[1 3]	remove-at: drop the element at index 1
-"aql:array-util" import end  ArrayUtil.remove-at 0 [1 2 3]	[2 3]	remove-at: index 0 drops the head
-"aql:array-util" import end  [1 2 3] ArrayUtil.remove-at 2	[1 2]	remove-at: pipeline form (subject from the stack)
-"aql:array-util" import end  ArrayUtil.remove-at 3 [1 2 3]	ERROR:index_out_of_range	remove-at: index == length is a loud error
-"aql:array-util" import end  ArrayUtil.remove-at 0 []	ERROR:index_out_of_range	remove-at: any index into an empty list is a loud error
+import "aql:array-util"  ArrayUtil.insert-at 1 99 [1 2 3]	[1 99 2 3]	insert-at: insert the element before index 1
+import "aql:array-util"  ArrayUtil.insert-at 0 99 [1 2 3]	[99 1 2 3]	insert-at: index 0 prepends
+import "aql:array-util"  ArrayUtil.insert-at 3 99 [1 2 3]	[1 2 3 99]	insert-at: index == length appends
+import "aql:array-util"  [1 2 3] ArrayUtil.insert-at 1 99	[1 99 2 3]	insert-at: pipeline form (subject from the stack)
+import "aql:array-util"  def xs [1 2 3] end def ys (ArrayUtil.insert-at 1 99 xs) end xs	[1 2 3]	insert-at is copy-returning — the source list is unchanged
+import "aql:array-util"  ArrayUtil.insert-at 4 99 [1 2 3]	ERROR:index_out_of_range	insert-at: index past length is a loud error, not a silent no-op
+import "aql:array-util"  ArrayUtil.insert-at -1 99 [1 2 3]	ERROR:index_out_of_range	insert-at: negative index is a loud error
+import "aql:array-util"  ArrayUtil.remove-at 1 [1 2 3]	[1 3]	remove-at: drop the element at index 1
+import "aql:array-util"  ArrayUtil.remove-at 0 [1 2 3]	[2 3]	remove-at: index 0 drops the head
+import "aql:array-util"  [1 2 3] ArrayUtil.remove-at 2	[1 2]	remove-at: pipeline form (subject from the stack)
+import "aql:array-util"  ArrayUtil.remove-at 3 [1 2 3]	ERROR:index_out_of_range	remove-at: index == length is a loud error
+import "aql:array-util"  ArrayUtil.remove-at 0 []	ERROR:index_out_of_range	remove-at: any index into an empty list is a loud error
 #
 # §3  membership / grouping
-"aql:array-util" import end  ArrayUtil.member [1 5 3] [1 2 3]	[true false true]	member: is each needle present in the haystack
-"aql:array-util" import end  ArrayUtil.unique [1 2 2 3 3 3]	[1 2 3]	unique: distinct elements, first-seen order
-"aql:array-util" import end  ArrayUtil.indices [20 99 10] [10 20 30]	[1 -1 0]	indices: position of each needle in the haystack, -1 if absent
-"aql:array-util" import end  ArrayUtil.group [1 2 3]	{1:[0] 2:[1] 3:[2]}	group (1-arg): map each value to the indices where it occurs
-"aql:array-util" import end  ArrayUtil.group ['a' 'b' 'a'] [1 2 3]	{'a':[1 3] 'b':[2]}	group (2-arg): bucket values by their parallel key
+import "aql:array-util"  ArrayUtil.member [1 5 3] [1 2 3]	[true false true]	member: is each needle present in the haystack
+import "aql:array-util"  ArrayUtil.unique [1 2 2 3 3 3]	[1 2 3]	unique: distinct elements, first-seen order
+import "aql:array-util"  ArrayUtil.indices [20 99 10] [10 20 30]	[1 -1 0]	indices: position of each needle in the haystack, -1 if absent
+import "aql:array-util"  ArrayUtil.group [1 2 3]	{1:[0] 2:[1] 3:[2]}	group (1-arg): map each value to the indices where it occurs
+import "aql:array-util"  ArrayUtil.group ['a' 'b' 'a'] [1 2 3]	{'a':[1 3] 'b':[2]}	group (2-arg): bucket values by their parallel key
 #
 # §4  neighborhoods
-"aql:array-util" import end  ArrayUtil.window 2 [1 2 3 4]	[[1 2] [2 3] [3 4]]	window: all contiguous slices of the given width
-"aql:array-util" import end  ArrayUtil.pairs [1 2 3 4]	[[1 2] [2 3] [3 4]]	pairs: consecutive overlapping 2-tuples
+import "aql:array-util"  ArrayUtil.window 2 [1 2 3 4]	[[1 2] [2 3] [3 4]]	window: all contiguous slices of the given width
+import "aql:array-util"  ArrayUtil.pairs [1 2 3 4]	[[1 2] [2 3] [3 4]]	pairs: consecutive overlapping 2-tuples
 #
 # §5  rank polymorphism (quoted code body argument)
-"aql:array-util" import end  ArrayUtil.eachrank 0 [mul 2] [[1 2] [3 4]]	[[2 4] [6 8]]	eachrank: apply a body at cell-rank 0 (each scalar leaf)
-"aql:array-util" import end  ArrayUtil.foldaxis 0 [add] [[1 2] [3 4]]	[4 6]	foldaxis 0: reduce down each column
-"aql:array-util" import end  ArrayUtil.foldaxis 1 [add] [[1 2] [3 4]]	[3 7]	foldaxis 1: reduce along each row
+import "aql:array-util"  ArrayUtil.eachrank 0 [mul 2] [[1 2] [3 4]]	[[2 4] [6 8]]	eachrank: apply a body at cell-rank 0 (each scalar leaf)
+import "aql:array-util"  ArrayUtil.foldaxis 0 [add] [[1 2] [3 4]]	[4 6]	foldaxis 0: reduce down each column
+import "aql:array-util"  ArrayUtil.foldaxis 1 [add] [[1 2] [3 4]]	[3 7]	foldaxis 1: reduce along each row
 #
 # §6  negative — a namespace word is undefined until the module is imported
 ArrayUtil.shape [[1 2 3]]	ERROR:undefined_word	`ArrayUtil` is unbound without `import`

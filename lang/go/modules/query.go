@@ -12,7 +12,7 @@ import (
 // After import, words are accessed via dot notation, in natural SQL
 // order:
 //
-//	"aql:query" import
+//	import "aql:query"
 //	Query.select [name age]
 //	  Query.from people
 //	  Query.where [age gt 18]
@@ -133,7 +133,7 @@ func makeQueryFnDef(w qWord, subReg *native.Registry) native.Value {
 
 // InstallQueryExports builds the query module and installs its exports
 // as defs in the given registry — the test-setup convenience equivalent
-// to running `"aql:query" import`.
+// to running `import "aql:query"`.
 func InstallQueryExports(r *native.Registry) error {
 	desc, err := BuildQueryModule(r)
 	if err != nil {

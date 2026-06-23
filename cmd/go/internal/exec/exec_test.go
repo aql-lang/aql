@@ -81,7 +81,7 @@ func TestExecStringResult(t *testing.T) {
 	defer srv.Close()
 
 	var got execResponse
-	post(t, srv, "/v1/exec", execRequest{Code: `"aql:string-util" import end "hello" StringUtil.upper`}, &got)
+	post(t, srv, "/v1/exec", execRequest{Code: `import "aql:string-util" "hello" StringUtil.upper`}, &got)
 	if got.Error != "" {
 		t.Fatalf("unexpected error: %s", got.Error)
 	}

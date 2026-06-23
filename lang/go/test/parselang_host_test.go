@@ -60,7 +60,7 @@ func newCalcParserInstance(t *testing.T) *lang.AQL {
 // operator, and the operand fields — via field access on the returned node.
 func TestParseLangHostCalcAST(t *testing.T) {
 	a := newCalcParserInstance(t)
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	for _, op := range []string{"+", "-", "*", "/", "%"} {
 		got := runLast(t, a, imp+`(parse calc 'a `+op+` b').op`)
 		if got != op {
@@ -83,7 +83,7 @@ func TestParseLangHostCalcAST(t *testing.T) {
 // {src:…} agree; {file:…} is deferred; an empty / bad source map errors.
 func TestParseLangHostSourceForms(t *testing.T) {
 	a := newCalcParserInstance(t)
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	inline := runLast(t, a, imp+`(parse calc 'x + y').op`)
 	srcMap := runLast(t, a, imp+`(parse calc {src:'x + y'}).op`)
 	if inline != srcMap || inline != "+" {
@@ -115,7 +115,7 @@ func TestParseLangHostSourceForms(t *testing.T) {
 // standard ParseLang.parse_calc call.
 func TestParseLangHostDesugarEquivalence(t *testing.T) {
 	a := newCalcParserInstance(t)
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	sugar := runLast(t, a, imp+`(parse calc 'x * y').op`)
 	desugared := runLast(t, a, imp+`(ParseLang.parse_calc 'x * y' {} end).op`)
 	if sugar != desugared || sugar != "*" {
@@ -130,7 +130,7 @@ func TestParseLangHostRegisterAfterImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	if _, err := a.Run(`"aql:parselang" import end`); err != nil {
+	if _, err := a.Run(`import "aql:parselang"`); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 	if err := a.RegisterParser(calcParserSpec()); err != nil {
@@ -149,10 +149,10 @@ func TestParseLangHostIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	if got := runLast(t, a, `"aql:parselang" import end  (parse calc 'x + y').op`); got != "+" {
+	if got := runLast(t, a, `import "aql:parselang"  (parse calc 'x + y').op`); got != "+" {
 		t.Fatalf("instance a: got %v, want +", got)
 	}
-	if _, err := b.Run(`"aql:parselang" import end  parse calc 'x + y'`); err == nil {
+	if _, err := b.Run(`import "aql:parselang"  parse calc 'x + y'`); err == nil {
 		t.Fatal("instance b: expected parse_unknown_lang, got nil error")
 	} else if !strings.Contains(err.Error(), "calc") {
 		t.Fatalf("instance b: error should name the unknown parser, got: %v", err)
@@ -163,7 +163,7 @@ func TestParseLangHostIsolation(t *testing.T) {
 // runs on a FRESH instance — `Run` state persists across calls, so a shared
 // instance would leak the import into the "no import" case.
 func TestParseLangHostRuntimeErrors(t *testing.T) {
-	imp := `"aql:parselang" import end  `
+	imp := `import "aql:parselang"  `
 	cases := []struct{ name, src, want string }{
 		{"unknown operator", imp + `parse calc 'x ^ y'`, "unknown operator"},
 		{"malformed source", imp + `parse calc 'x +'`, "expected"},

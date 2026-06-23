@@ -32,7 +32,7 @@ func DescribeIndex(w io.Writer) {
 	fmt.Fprint(w, "AQL language reference — built-in words by category, and loadable modules.\n\n")
 	fmt.Fprint(w, "Words:\n")
 	help.WriteWordsByCategory(w)
-	fmt.Fprint(w, "\nModules (import with \"aql:<name>\" import):\n")
+	fmt.Fprint(w, "\nModules (load with import \"aql:<name>\"):\n")
 	help.WriteModuleCatalog(w)
 	fmt.Fprint(w, "\nDrill in:\n")
 	fmt.Fprint(w, "  describe <word>                  e.g. describe add\n")
@@ -190,7 +190,7 @@ func writeModuleDesc(w io.Writer, ref string, desc ModuleDesc) {
 	}
 
 	fmt.Fprint(w, "\n")
-	fmt.Fprintf(w, "Import with \"%s\" import, then call e.g. <export>.<word>.\n", ref)
+	fmt.Fprintf(w, "Load with import \"%s\", then call e.g. <export>.<word>.\n", ref)
 	fmt.Fprintf(w, "Describe one word with describe \"%s:<word>\".\n", ref)
 	fmt.Fprint(w, "Docs: "+help.ReferenceURL+"\n")
 }

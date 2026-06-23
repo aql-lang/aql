@@ -36,10 +36,10 @@ canon (flex {a:{b:[1]}})	'(flex {a:(flex {b:(flex [1])})})'	an entirely-flex tre
 def h (flex [1]) canon [h 2]	'[(flex [1]) 2]'	a literal-embedded live handle is visible in the rendering
 #
 # §4  round-trips: evaluating the canon string reproduces the value
-"aql:vm" import end def v (flex {a:[1]}) (Vm.run (canon v)) deq v	true	a flex tree round-trips structurally
-"aql:vm" import end def v (flex {a:[1]}) typeof (Vm.run (canon v))	FlexMap	…and stays FLEX through the round-trip
-"aql:vm" import end def s "it's \"q\" \\ ok" (Vm.run (canon s)) eq s	true	the escaped string round-trips exactly
-"aql:vm" import end (Vm.run (canon [1 {a:none} x/q])) deq [1 {a:none} x/q]	true	mixed data (none, atom) round-trips
+import "aql:vm" def v (flex {a:[1]}) (Vm.run (canon v)) deq v	true	a flex tree round-trips structurally
+import "aql:vm" def v (flex {a:[1]}) typeof (Vm.run (canon v))	FlexMap	…and stays FLEX through the round-trip
+import "aql:vm" def s "it's \"q\" \\ ok" (Vm.run (canon s)) eq s	true	the escaped string round-trips exactly
+import "aql:vm" (Vm.run (canon [1 {a:none} x/q])) deq [1 {a:none} x/q]	true	mixed data (none, atom) round-trips
 #
 # §5  totality and limits
 canon (make Array [1 2])	'Array[1 2]'	identity values render — but rebuilding from source is a FRESH container, identity does not round-trip

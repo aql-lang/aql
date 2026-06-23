@@ -60,7 +60,7 @@ def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x ge
 def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x get value]] end f (make (Box of [String]) {value:'s'})	ERROR:signature	…and REJECTS a sibling instantiation (no silent Any degrade)
 def Box gen [T] class {value:T} def g fn [[x:Box] [Integer] [1]] end g (make (Box of [String]) {value:'s'})	1	a bare-schema param admits any instantiation (family membership)
 def Box gen [T] class {value:T} def g fn [[x:Box] [Integer] [1]] end g 5	ERROR:signature	…and rejects non-members
-module [def Box gen [T] refine Record [value:T] export "Pkg" {Box: Box}] import end Pkg.Box of [Integer]	record{value:Integer}	a module exports a schema; importer-side of instantiates
+import module [def Box gen [T] refine Record [value:T] export "Pkg" {Box: Box}] Pkg.Box of [Integer]	record{value:Integer}	a module exports a schema; importer-side of instantiates
 def Box gen [T] class {value:T} def Box Integer end Box of [Integer]	ERROR:not a generic schema	a shadowing def wins resolution — the schema is no longer reachable
 def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [Integer]) {value:1})] end (xs get 0) get value	1	an instantiation as a typed-list CHILD constraint admits instances (the child paren evaluates; unify admits by Is-membership)
 def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [String]) {value:'s'})]	ERROR:does not unify	…and rejects sibling-instantiation elements

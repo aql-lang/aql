@@ -11,7 +11,7 @@
 
 AQL is **sealed at compile time**. Go reaches the language only through
 host-wired native words (`RegisterNativeFunc`) and native modules
-(`BuildXxxModule` → `ModuleDesc`, imported as `"aql:math-util" import`,
+(`BuildXxxModule` → `ModuleDesc`, imported as `import "aql:math-util"`,
 see [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md)). Every importable name is
 gated through a *static map* (`lang/go/modules/modules.go`'s `modules`).
 There is no FFI, no runtime `reflect`, no dynamic loading.
@@ -31,7 +31,7 @@ boilerplate. The host registration list is the trust boundary.
 A `go:` import sits alongside `aql:`:
 
 ```
-"go:net/url" import
+import "go:net/url"
 "https://example.com/a?b=1" Url.parse    # reflected call into url.Parse
 ```
 
@@ -52,7 +52,7 @@ namespace would clash, the import-renaming form already supported by the
 `import` word (see [IMPORTS.10.md](IMPORTS.10.md) §2) overrides it:
 
 ```
-[Strings Str] "go:strings" import
+import [Strings Str] "go:strings"
 "hello" "he" Str.has-prefix              # → true
 ```
 
@@ -71,7 +71,7 @@ dot expression — stack form (`a b Pkg.word`) and swap form (`a Pkg.word b`)
 both dispatch:
 
 ```
-"go:strings" import
+import "go:strings"
 "hello world" " " Strings.split          # → ["hello" "world"]   (stack form)
 "  hi  " Strings.trim-space              # → "hi"
 ```
@@ -115,7 +115,7 @@ a.RegisterGoPackage("strings", map[string]any{
     "HasPrefix": strings.HasPrefix,
 })
 
-a.Run(`"go:strings" import   "a,b,c" "," Strings.split`)
+a.Run(`import "go:strings"   "a,b,c" "," Strings.split`)
 ```
 
 This is deliberate: Go has no portable way to discover or load a package by
@@ -312,7 +312,7 @@ registered; behaviour is deterministic across runs.
 
 1. Host calls `a.RegisterGoPackage("<import path>", map[string]any{…})` with
    the funcs/constants to expose.
-2. AQL source runs `"go:<import path>" import`, optionally renaming the
-   namespace (`[Derived New] "go:…" import`).
+2. AQL source runs `import "go:<import path>"`, optionally renaming the
+   namespace (`import [Derived New] "go:…"`).
 3. Call the words: `arg1 arg2 Namespace.word-name`.
 4. `describe "go:<import path>"` lists what's available.

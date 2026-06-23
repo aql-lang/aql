@@ -193,7 +193,7 @@ func writeIndex(w io.Writer) {
 	helppkg.WriteWordsByCategory(w)
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Modules (import with \"aql:<name>\" import):")
+	fmt.Fprintln(w, "Modules (load with import \"aql:<name>\"):")
 	helppkg.WriteModuleCatalog(w)
 
 	fmt.Fprintln(w)
@@ -240,7 +240,7 @@ func renderModuleDesc(w io.Writer, ref string, desc native.ModuleDesc) int {
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "Import with \"%s\" import, then call e.g. <export>.<word>.\n", ref)
+	fmt.Fprintf(w, "Load with import \"%s\", then call e.g. <export>.<word>.\n", ref)
 	fmt.Fprintf(w, "Describe one word with 'aql describe %s:<word>'.\n", ref)
 	fmt.Fprintln(w, "Docs: "+helppkg.ReferenceURL)
 	return 0

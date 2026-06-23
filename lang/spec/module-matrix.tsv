@@ -3,7 +3,7 @@
 #
 # Loadable module of dense Matrix utilities. Import binds the
 # `MatrixUtil` namespace, then words are called via dot-access:
-# `"aql:matrix-util" import end  MatrixUtil.word args`. Construction
+# `import "aql:matrix-util"  MatrixUtil.word args`. Construction
 # words build a Matrix (a rank-2 Tensor); a Matrix renders in its
 # canonical shape form `Matrix(rowsXcols)`. Numeric results are Floats.
 #
@@ -14,39 +14,39 @@
 #
 # ---------------------------------------------------------------------
 # §1  construction
-"aql:matrix-util" import end  MatrixUtil.create [[1 2] [3 4]]	Matrix(2x2)	create: build a Matrix from a list of equal-length rows
-"aql:matrix-util" import end  MatrixUtil.zeros 3 2	Matrix(2x3)	zeros: an all-zero matrix (forward args are cols then rows)
-"aql:matrix-util" import end  MatrixUtil.ones 2 2	Matrix(2x2)	ones: an all-one matrix
-"aql:matrix-util" import end  MatrixUtil.fill 2 2 5	Matrix(2x2)	fill: a rowsXcols matrix of a constant value
+import "aql:matrix-util"  MatrixUtil.create [[1 2] [3 4]]	Matrix(2x2)	create: build a Matrix from a list of equal-length rows
+import "aql:matrix-util"  MatrixUtil.zeros 3 2	Matrix(2x3)	zeros: an all-zero matrix (forward args are cols then rows)
+import "aql:matrix-util"  MatrixUtil.ones 2 2	Matrix(2x2)	ones: an all-one matrix
+import "aql:matrix-util"  MatrixUtil.fill 2 2 5	Matrix(2x2)	fill: a rowsXcols matrix of a constant value
 #
 # §2  shape
-"aql:matrix-util" import end  MatrixUtil.rows (MatrixUtil.create [[1 2 3] [4 5 6]])	2	rows: number of rows
-"aql:matrix-util" import end  MatrixUtil.cols (MatrixUtil.create [[1 2 3] [4 5 6]])	3	cols: number of columns
+import "aql:matrix-util"  MatrixUtil.rows (MatrixUtil.create [[1 2 3] [4 5 6]])	2	rows: number of rows
+import "aql:matrix-util"  MatrixUtil.cols (MatrixUtil.create [[1 2 3] [4 5 6]])	3	cols: number of columns
 #
 # §3  access (matrix read from the stack; indices are forward args)
-"aql:matrix-util" import end  (MatrixUtil.create [[1 2] [3 4]]) MatrixUtil.elem 1 0	2.0	elem: a single entry — here row 0, col 1
-"aql:matrix-util" import end  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.row 1	[4.0 5.0 6.0]	row: one row as a list
-"aql:matrix-util" import end  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.col 2	[3.0 6.0]	col: one column as a list
+import "aql:matrix-util"  (MatrixUtil.create [[1 2] [3 4]]) MatrixUtil.elem 1 0	2.0	elem: a single entry — here row 0, col 1
+import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.row 1	[4.0 5.0 6.0]	row: one row as a list
+import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.col 2	[3.0 6.0]	col: one column as a list
 #
 # §4  arithmetic
-"aql:matrix-util" import end  MatrixUtil.mat-add (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[10 20] [30 40]])	Matrix(2x2)	mat-add: element-wise sum
-"aql:matrix-util" import end  MatrixUtil.mat-sub (MatrixUtil.create [[10 20] [30 40]]) (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	mat-sub: element-wise difference
-"aql:matrix-util" import end  MatrixUtil.mat-mul (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[5 6] [7 8]])	Matrix(2x2)	mat-mul: matrix product
-"aql:matrix-util" import end  MatrixUtil.mat-emul (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[5 6] [7 8]])	Matrix(2x2)	mat-emul: element-wise (Hadamard) product
-"aql:matrix-util" import end  MatrixUtil.scale 2 (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	scale: multiply every entry by a scalar
+import "aql:matrix-util"  MatrixUtil.mat-add (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[10 20] [30 40]])	Matrix(2x2)	mat-add: element-wise sum
+import "aql:matrix-util"  MatrixUtil.mat-sub (MatrixUtil.create [[10 20] [30 40]]) (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	mat-sub: element-wise difference
+import "aql:matrix-util"  MatrixUtil.mat-mul (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[5 6] [7 8]])	Matrix(2x2)	mat-mul: matrix product
+import "aql:matrix-util"  MatrixUtil.mat-emul (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[5 6] [7 8]])	Matrix(2x2)	mat-emul: element-wise (Hadamard) product
+import "aql:matrix-util"  MatrixUtil.scale 2 (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	scale: multiply every entry by a scalar
 #
 # §5  transform
-"aql:matrix-util" import end  MatrixUtil.transpose (MatrixUtil.create [[1 2 3] [4 5 6]])	Matrix(3x2)	transpose: swap rows and columns
-"aql:matrix-util" import end  MatrixUtil.values (MatrixUtil.create [[1 2] [3 4]])	[1.0 2.0 3.0 4.0]	values: the row-major flat list of entries
+import "aql:matrix-util"  MatrixUtil.transpose (MatrixUtil.create [[1 2 3] [4 5 6]])	Matrix(3x2)	transpose: swap rows and columns
+import "aql:matrix-util"  MatrixUtil.values (MatrixUtil.create [[1 2] [3 4]])	[1.0 2.0 3.0 4.0]	values: the row-major flat list of entries
 #
 # §6  aggregation
-"aql:matrix-util" import end  MatrixUtil.sum (MatrixUtil.create [[1 2] [3 4]])	10.0	sum: total of all entries
-"aql:matrix-util" import end  MatrixUtil.tr (MatrixUtil.create [[1 2] [3 4]])	5.0	tr: trace (sum of the diagonal)
-"aql:matrix-util" import end  MatrixUtil.det (MatrixUtil.create [[1 2] [3 4]])	-2.0	det: determinant
+import "aql:matrix-util"  MatrixUtil.sum (MatrixUtil.create [[1 2] [3 4]])	10.0	sum: total of all entries
+import "aql:matrix-util"  MatrixUtil.tr (MatrixUtil.create [[1 2] [3 4]])	5.0	tr: trace (sum of the diagonal)
+import "aql:matrix-util"  MatrixUtil.det (MatrixUtil.create [[1 2] [3 4]])	-2.0	det: determinant
 #
 # §7  vector
-"aql:matrix-util" import end  MatrixUtil.dot [1 2 3] [4 5 6]	32.0	dot: dot product of two equal-length vectors
+import "aql:matrix-util"  MatrixUtil.dot [1 2 3] [4 5 6]	32.0	dot: dot product of two equal-length vectors
 #
 # §8  negative
 MatrixUtil.zeros 2 2	ERROR:undefined_word	`MatrixUtil` is unbound without `import`
-"aql:matrix-util" import end  MatrixUtil.create [[1 2] [3]]	ERROR:row 1 has 1 elements	create rejects ragged rows
+import "aql:matrix-util"  MatrixUtil.create [[1 2] [3]]	ERROR:row 1 has 1 elements	create rejects ragged rows

@@ -8,7 +8,7 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-const stage5Mod = `module [def fact fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fact (n sub 1) (acc add n)]]] export "MU" {fact: fact/r}] import end `
+const stage5Mod = `import module [def fact fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fact (n sub 1) (acc add n)]]] export "MU" {fact: fact/r}] `
 
 // TestModuleRecursionGetsTCO pins the Stage-5 reality discovered by
 // tracing: module preamble fns are InstallFnDef'd in the MODULE

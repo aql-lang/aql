@@ -12,7 +12,7 @@ import (
 // github.com/tabnas/ini/go). Unlike the calc host parser, no registration is
 // needed — importing the module is enough for `parse ini <text>` to resolve.
 
-const iniImp = `"aql:parselang" import end  `
+const iniImp = `import "aql:parselang"  `
 
 // TestParseLangIniBuiltin pins the decode: top-level entries, a {src:…}
 // source, and a nested [section] whose recognised boolean decodes to a

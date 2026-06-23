@@ -58,7 +58,7 @@ func TestCheckProp_PropertyBodyCanImportNativeModule(t *testing.T) {
 	// Property body imports aql:math every iteration and uses MathUtil.sqrt;
 	// runs > 1 is the case that regressed.
 	src := `Test.check-prop "sqrt-ok" [r.int 1 10] ` +
-		`[drop "aql:math-util" import end 4.0 MathUtil.sqrt end 2.0 eq] 5 1 0`
+		`[drop import "aql:math-util" 4.0 MathUtil.sqrt end 2.0 eq] 5 1 0`
 	ok := runTestAndGetField(t, r, src, "ok")
 	b, err := ok.AsConcreteBoolean()
 	if err != nil {
