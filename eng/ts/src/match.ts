@@ -25,7 +25,7 @@
 
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { TList, TMap, TType, TWord } from './type.ts'
+import { TNode, TScalar, TType, TWord } from './type.ts'
 import type { Value, WordInfo } from './value.ts'
 
 /**
@@ -39,6 +39,22 @@ function isTypeArg(v: Value): boolean {
   if (v.isNone()) return false
   if (v.data === null) return true
   return v.vType.matches(TType)
+}
+
+/**
+ * Per-position signature match. A typeArgs slot wants a type (literal or
+ * type body) whose lattice node conforms to the expected type; an
+ * ordinary slot uses the value matcher (which rejects bare type
+ * literals at Scalar/Node slots).
+ */
+function argMatches(
+  sig: Signature,
+  idx: number,
+  v: Value,
+  expected: import('./type.ts').AqlType,
+): boolean {
+  if (sig.typeArgs?.has(idx)) return isTypeArg(v) && v.vType.matches(expected)
+  return sigTypeMatches(v, expected)
 }
 
 export interface MatchResult {
@@ -160,7 +176,7 @@ function tryMatch(
     if (!rawTok) break
     if (isStructuralBoundary(rawTok)) break
     const tok = resolveForwardToken(rawTok, sig.args[fwd]!, registry)
-    if (!sigTypeMatches(tok, sig.args[fwd]!)) {
+    if (!argMatches(sig, fwd, tok, sig.args[fwd]!)) {
       // Optimistic-deferral case (second pass only): a Word naming
       // a registered function may dispatch to a value of the right
       // type. Accept the raw Word here so engine.shouldDeferDispatch
@@ -181,7 +197,6 @@ function tryMatch(
       }
       break
     }
-    if (sig.typeArgs?.has(fwd) && !isTypeArg(tok)) break
     args[fwd] = tok
     fwd++
     scanIdx++
@@ -199,8 +214,7 @@ function tryMatch(
     if (!stackVal) return null
     if (isStructuralBoundary(stackVal)) return null
     const sigIdx = fwd + j
-    if (!sigTypeMatches(stackVal, sig.args[sigIdx]!)) return null
-    if (sig.typeArgs?.has(sigIdx) && !isTypeArg(stackVal)) return null
+    if (!argMatches(sig, sigIdx, stackVal, sig.args[sigIdx]!)) return null
     args[sigIdx] = stackVal
   }
 
@@ -210,11 +224,12 @@ function tryMatch(
 
 export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType): boolean {
   if (!v.vType.matches(expected)) return false
-  // Concrete-container rule (mirrors positionalMatch in eng/go): a List
-  // or Map slot is filled only by a concrete list/map (or carrier), not
-  // by a bare `List`/`Map` type literal. `do List` therefore fails to
-  // match and surfaces a signature_error.
-  if (v.data === null && (expected.matches(TList) || expected.matches(TMap))) {
+  // Concrete-value rule (mirrors positionalMatch in eng/go): a Scalar
+  // or Node (list/map) value slot is filled only by a concrete value
+  // (or carrier), never by a bare type literal. So `do List` and
+  // `addq Integer 1` surface signature errors, while TAny / typeArgs
+  // slots still accept type literals.
+  if (v.data === null && (expected.matches(TScalar) || expected.matches(TNode))) {
     return false
   }
   return true

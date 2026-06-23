@@ -27,6 +27,8 @@ import { newList, newTypeLiteral, OrderedMap, Value } from './value.ts'
  */
 export function coerceBoolean(v: Value): boolean {
   if (v.isNone()) return false
+  // A bare type literal (or other non-concrete value) is falsy.
+  if (v.data === null) return false
   const t = v.vType
   if (t.matches(TBoolean)) return v.asBoolean()
   if (t.matches(TInteger)) return v.asInteger() !== 0n
