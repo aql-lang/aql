@@ -15,6 +15,7 @@ export type { CheckDiagnostic, CheckSeverity } from './check.ts'
 export {
   CodeBuilder,
   OpCallNative,
+  OpFallback,
   OpForNext,
   OpForSetup,
   OpJmp,
@@ -27,12 +28,13 @@ export {
   OpTrap,
   disassemble,
 } from './bytecode.ts'
-export type { Op, Program, SigRef, TrapSpec } from './bytecode.ts'
+export type { FallbackSpan, Op, Program, SigRef, TrapSpec } from './bytecode.ts'
 export { EmitState } from './emit.ts'
 export type {
   BranchEvent,
   CallEvent,
   Event,
+  FallbackEvent,
   Fragment,
   LoopEvent,
   MakeListEvent,

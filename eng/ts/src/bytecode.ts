@@ -32,6 +32,7 @@ export const OpForNext = 8 // if loop done, pop it and jump to abs pc `arg`; els
 export const OpMakeList = 9 // pop `arg` values; push a list (deepest = element 0)
 export const OpMakeMap = 10 // pop makeMaps[arg].length values; push a map keyed by makeMaps[arg] (value for keys[0] deepest)
 export const OpTrap = 11 // raise the AqlError described by traps[arg] and abort (terminal)
+export const OpFallback = 12 // pop fallbacks[arg].nIn values, re-run the island tokens through a sub-engine, push results
 
 /** An opcode is one of the Op* constants above. */
 export type Op = number
@@ -55,6 +56,23 @@ export interface TrapSpec {
   word: string
 }
 
+/**
+ * One fallback island: a self-contained re-runnable token sequence (the
+ * word + its baked args) that the VM re-executes through a sub-engine,
+ * threading `nIn` operand-stack values in (popped top-first) and pushing
+ * the island's results back. Lets a non-compilable span run on the
+ * interpreter while the compiled code on either side keeps running.
+ * Mirrors eng/go bytecode.go::FallbackSpan (Stage 9 admits nIn ≤ 1).
+ */
+export interface FallbackSpan {
+  /** The re-runnable tokens: [word, ...baked args]. */
+  readonly tokens: readonly Value[]
+  /** Operand-stack values to pop and preload onto the island (≤ 1). */
+  readonly nIn: number
+  /** Human label for the disassembler (the word name). */
+  readonly desc: string
+}
+
 /** A compiled program: parallel-array code + the operand pools. */
 export interface Program {
   /** Dense opcodes, one byte each; parallel to `args`. */
@@ -69,6 +87,8 @@ export interface Program {
   readonly makeMaps: readonly (readonly string[])[]
   /** Trap specs for OpTrap, indexed by a Trap arg. */
   readonly traps: readonly TrapSpec[]
+  /** Fallback islands for OpFallback, indexed by a Fallback arg. */
+  readonly fallbacks: readonly FallbackSpan[]
   /** Operand-stack high-water mark — the preallocated stack capacity. */
   readonly maxStack: number
   /** Frame-local slot count — the preallocated locals capacity. */
@@ -146,6 +166,11 @@ export function disassemble(p: Program): string {
       case OpTrap:
         text = `TRAP ${arg} (${p.traps[arg]?.code ?? '?'})`
         break
+      case OpFallback: {
+        const fb = p.fallbacks[arg]
+        text = `FALLBACK ${arg} (${fb?.desc ?? '?'} nIn=${fb?.nIn ?? 0})`
+        break
+      }
       default:
         text = `OP_${op} ${arg}`
     }

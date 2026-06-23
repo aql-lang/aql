@@ -14,7 +14,7 @@
 // PARITY NOTE: still mono-only / concrete-operand / single-result; poly,
 // dynamic, loops, user fns, containers, and fallback islands land later.
 import type { Signature } from './signature.ts'
-import { newCarrier, type Value } from './value.ts'
+import { newCarrier, newWord, type Value } from './value.ts'
 import { TList, TMap } from './type.ts'
 
 /**
@@ -114,7 +114,28 @@ export interface TrapEvent {
   readonly word: string
 }
 
-export type Event = CallEvent | BranchEvent | LoopEvent | MakeListEvent | MakeMapEvent | TrapEvent
+/**
+ * A recorded interpreter island: the word + its baked args as re-runnable
+ * `tokens`, plus the threaded operand inputs `ins` (≤ 1) the VM pops and
+ * preloads onto the island. Lowered to OpFallback; re-run through a
+ * sub-engine at VM runtime while the surrounding compiled code keeps going.
+ */
+export interface FallbackEvent {
+  readonly kind: 'fallback'
+  readonly slot: number
+  readonly word: string
+  readonly tokens: readonly Value[]
+  readonly ins: readonly Operand[]
+}
+
+export type Event =
+  | CallEvent
+  | BranchEvent
+  | LoopEvent
+  | MakeListEvent
+  | MakeMapEvent
+  | TrapEvent
+  | FallbackEvent
 
 /** A captured sub-trace (a branch arm) plus its single residual operand. */
 export interface Fragment {
@@ -346,6 +367,38 @@ export class EmitState {
     const slot = this.seq++
     this.events.push({ kind: 'trap', slot, code, detail, word })
     this.trapSlot = slot
+    return true
+  }
+
+  /**
+   * Record an interpreter-island fallback for a dispatch the recorder
+   * cannot lower natively. Each arg is classified: a const (inert literal)
+   * is BAKED into the island's token sequence; an event result is THREADED
+   * (popped from the operand stack and preloaded onto the island at run
+   * time). Stage 9 admits at most one threaded input, and only when no
+   * args are baked alongside it (a baked+threaded mix needs the positional
+   * span reconstruction eng/go does for barriered words — deferred). The
+   * single result `out` threads downstream. Returns false (caller lets the
+   * refusal stand) when an arg's provenance is unknown or the shape is
+   * beyond this stage. Mirrors eng/go/emit.go::RecordFallback.
+   */
+  recordFallback(word: string, args: readonly Value[], out: readonly Value[]): boolean {
+    if (this.uncompilableReason !== undefined) return false
+    if (out.length !== 1) return false
+    const tokens: Value[] = [newWord(word)]
+    const ins: Operand[] = []
+    for (const a of args) {
+      const o = this.classify(a)
+      if (o === null) return false
+      if (o.kind === 'const') tokens.push(o.value)
+      else ins.push(o)
+    }
+    if (ins.length > 1) return false
+    if (ins.length === 1 && tokens.length > 1) return false // baked+threaded mix (deferred)
+    const slot = this.seq++
+    this.target().push({ kind: 'fallback', slot, word, tokens, ins })
+    this.producedBy.set(out[0]!, slot)
+    this.siteCounts.dynamic++
     return true
   }
 }

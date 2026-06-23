@@ -16,6 +16,7 @@
 //     class), so the stack is a monomorphic packed array.
 import {
   OpCallNative,
+  OpFallback,
   OpForNext,
   OpForSetup,
   OpJmp,
@@ -29,6 +30,7 @@ import {
   type Program,
 } from './bytecode.ts'
 import { coerceBoolean } from './coretype.ts'
+import { Engine } from './engine.ts'
 import { AqlError } from './error.ts'
 import type { Registry } from './registry.ts'
 import { newInteger, newList, newMap, OrderedMap, Value } from './value.ts'
@@ -53,6 +55,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
   const consts = p.consts
   const sigs = p.sigs
   const traps = p.traps
+  const fallbacks = p.fallbacks
   const n = ops.length
 
   const stack: Value[] = new Array<Value>(Math.max(p.maxStack, 1))
@@ -151,6 +154,27 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         // byte-identical AqlError (the interpreter errors at this same point).
         const t = traps[arg]!
         throw new AqlError(t.code, t.detail, t.word)
+      }
+      case OpFallback: {
+        // Interpreter island: pop nIn threaded values (top of stack = the
+        // island's first input), prepend them to the recorded tokens, and
+        // re-run the span through a sub-engine; push its results back. The
+        // compiled code on either side keeps running.
+        const fb = fallbacks[arg]!
+        const nIn = fb.nIn
+        const island: Value[] = []
+        for (let i = sp - nIn; i < sp; i++) island.push(stack[i]!)
+        sp -= nIn
+        for (let i = 0; i < fb.tokens.length; i++) island.push(fb.tokens[i]!)
+        const results = new Engine(registry).run(island)
+        for (let i = 0; i < results.length; i++) {
+          const v = results[i]!
+          if (v.isWord() || v.isForward() || v.isMark() || v.isMove()) {
+            throw new AqlError('internal_error', `${fb.desc}: tape-coupled island result`, fb.desc)
+          }
+          stack[sp++] = v
+        }
+        break
       }
       default:
         throw new AqlError('internal_error', `bad opcode ${op} at pc ${pc}`)

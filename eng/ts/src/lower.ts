@@ -12,6 +12,7 @@
 import {
   CodeBuilder,
   OpCallNative,
+  OpFallback,
   OpForNext,
   OpForSetup,
   OpJmp,
@@ -22,11 +23,12 @@ import {
   OpPushLocal,
   OpStoreLocal,
   OpTrap,
+  type FallbackSpan,
   type Program,
   type SigRef,
   type TrapSpec,
 } from './bytecode.ts'
-import type { EmitState, Event, LoopEvent, Operand, TrapEvent } from './emit.ts'
+import type { EmitState, Event, FallbackEvent, LoopEvent, Operand, TrapEvent } from './emit.ts'
 import type { Value } from './value.ts'
 
 /** Either a compiled Program or the first reason compilation refused. */
@@ -63,11 +65,14 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
   const sigs: SigRef[] = []
   const makeMaps: string[][] = []
   const traps: TrapSpec[] = []
+  const fallbacks: FallbackSpan[] = []
   const constIdx = (v: Value): number => consts.push(v) - 1
   const sigIdx = (word: string, sig: SigRef['sig']): number => sigs.push({ word, sig }) - 1
   const makeMapIdx = (keys: readonly string[]): number => makeMaps.push([...keys]) - 1
   const trapIdx = (ev: TrapEvent): number =>
     traps.push({ code: ev.code, detail: ev.detail, word: ev.word }) - 1
+  const fallbackIdx = (ev: FallbackEvent): number =>
+    fallbacks.push({ tokens: ev.tokens, nIn: ev.ins.length, desc: ev.word }) - 1
 
   // Simulated operand-stack depth, tracked to size the VM stack.
   let sp = 0
@@ -111,6 +116,18 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
         // Terminal: raise the stored AqlError. Pushes nothing, stores
         // nothing — execution never continues past it.
         code.emit(OpTrap, trapIdx(ev))
+        continue
+      }
+      if (ev.kind === 'fallback') {
+        // Push the threaded inputs (≤1) onto the stack top, then run the
+        // island: it pops nIn, pushes its single result. Stored to a local
+        // like a call so later events/the residual consume it.
+        for (const o of ev.ins) pushOperand(o)
+        code.emit(OpFallback, fallbackIdx(ev))
+        sp = sp - ev.ins.length + 1
+        note()
+        code.emit(OpStoreLocal, ev.slot)
+        sp--
         continue
       }
       if (ev.kind === 'makeList') {
@@ -190,6 +207,6 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
 
   const { ops, args } = code.freeze()
   return {
-    program: { ops, args, consts, sigs, makeMaps, traps, maxStack, numLocals: emit.slotCount() },
+    program: { ops, args, consts, sigs, makeMaps, traps, fallbacks, maxStack, numLocals: emit.slotCount() },
   }
 }

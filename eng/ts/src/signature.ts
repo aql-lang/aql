@@ -78,6 +78,16 @@ export interface Signature {
    * recordCall is skipped to avoid double-recording.
    */
   recordsOwnEvent?: boolean
+  /**
+   * When true, the bytecode recorder compiles this dispatch as an
+   * interpreter ISLAND (OpFallback) rather than a native call: the word +
+   * its baked args are captured as re-runnable tokens and re-executed
+   * through a sub-engine at VM runtime, with the surrounding compiled code
+   * still running. Marks a construct the recorder can't lower natively
+   * (a dynamic dispatch, a code-body higher-order word). Mirrors the
+   * CompileFallbackBody / CompileIslandPure CompileEffect flags in eng/go.
+   */
+  compileFallback?: boolean
 }
 
 /** Computes carrier return values for a signature in check mode. */
@@ -96,6 +106,7 @@ export interface NativeSig {
   returnsFn?: ReturnsFunc
   runInCheckMode?: boolean
   recordsOwnEvent?: boolean
+  compileFallback?: boolean
 }
 
 export interface NativeFunc {

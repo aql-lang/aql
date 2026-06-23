@@ -333,6 +333,26 @@ function registerFixtures(r: Registry): void {
       },
     ],
   })
+  // tripleq: a word the recorder ISLANDS instead of compiling natively
+  // (compileFallback) — the orphan higher-order / dynamic-dispatch analogue.
+  // Its real handler (n*3) runs through a sub-engine at VM time; the
+  // surrounding compiled code keeps running. Baked args ride in the island
+  // tokens; a single computed arg is threaded from the operand stack.
+  reg({
+    name: 'tripleq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TNumber],
+        compileFallback: true,
+        returns: [TNumber],
+        handler: (args) => {
+          const v = args[0]!
+          return v.vType.matches(TInteger) ? [newInteger(v.asInteger() * 3n)] : [newFloat(v.asFloat() * 3)]
+        },
+      },
+    ],
+  })
 }
 
 // Minimal tokenizer: words, ints, floats, single/double strings, lists,
@@ -490,6 +510,12 @@ const COMPILED: Array<[string, true]> = [
   ['{a:(addq 1 2)}', true], // computed map
   ['{a:(addq 1 2) b:(mulq 2 3)}', true], // multi-entry computed map
   ['[[addq 1 2] 9]', true], // nested computed list
+  ['tripleq 5', true], // fallback island, fully baked (nIn=0)
+  ['tripleq 2.5', true], // island over a float literal
+  ['addq 1 (tripleq 5)', true], // island result feeds a compiled call
+  ['tripleq (addq 1 2)', true], // compiled result threaded into an island (nIn=1)
+  ['addq (tripleq 2) (tripleq 3)', true], // two islands feeding one compiled call
+  ['def t (tripleq 4) addq t t', true], // island result bound + multiref
 ]
 
 const FALLBACK: string[] = [
@@ -603,6 +629,41 @@ describe('compiled (stage 1)', () => {
         '004  FOR_NEXT 7', // exhausted -> exit at pc 7
         '005  PUSH_LOCAL 0', // body: push iterator i (accumulates)
         '006  JMP 4', // back-edge to FOR_NEXT
+      ].join('\n'),
+    )
+  })
+
+  it('disassembles a baked island feeding a compiled call', () => {
+    const result = compile(freshRegistry(), tokenize('addq 1 (tripleq 5)'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  FALLBACK 0 (tripleq nIn=0)', // island: re-runs [tripleq 5]
+        '001  STORE_LOCAL 0', // island result -> local 0
+        '002  PUSH_LOCAL 0', // addq arg: the island result (reverse sig order)
+        '003  PUSH_CONST 0', // addq arg: 1
+        '004  CALL_NATIVE 0 (addq)',
+        '005  STORE_LOCAL 1',
+        '006  PUSH_LOCAL 1', // residual
+      ].join('\n'),
+    )
+  })
+
+  it('disassembles a compiled result threaded into an island', () => {
+    const result = compile(freshRegistry(), tokenize('tripleq (addq 1 2)'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  PUSH_CONST 0', // addq arg: 2
+        '001  PUSH_CONST 1', // addq arg: 1
+        '002  CALL_NATIVE 0 (addq)',
+        '003  STORE_LOCAL 0', // addq result -> local 0
+        '004  PUSH_LOCAL 0', // threaded island input on top of stack
+        '005  FALLBACK 0 (tripleq nIn=1)', // island pops it, pushes its result
+        '006  STORE_LOCAL 1',
+        '007  PUSH_LOCAL 1', // residual
       ].join('\n'),
     )
   })

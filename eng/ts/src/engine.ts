@@ -282,9 +282,18 @@ export class Engine {
       // Bytecode recording: a clean native match is a candidate call
       // event. Passive — does not affect `out`. A sig that records its
       // own event (e.g. `if` records a branch from its returnsFn) is
-      // skipped here to avoid double-recording.
-      if (!result.sig.recordsOwnEvent) {
-        this.registry.check.emit?.recordCall(name, result.sig, result.args, out)
+      // skipped here to avoid double-recording. A compileFallback sig is
+      // recorded as an interpreter island instead of a native call; if the
+      // island isn't recordable, the whole program falls back.
+      const emit = this.registry.check.emit
+      if (emit !== undefined && !result.sig.recordsOwnEvent) {
+        if (result.sig.compileFallback) {
+          if (!emit.recordFallback(name, result.args, out)) {
+            emit.markUncompilable(`${name}: fallback island not recordable`)
+          }
+        } else {
+          emit.recordCall(name, result.sig, result.args, out)
+        }
       }
       const replaceFrom = this.pointer - result.prefixCount
       const replaceCount = result.prefixCount + 1 + result.forwardCount
