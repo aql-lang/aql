@@ -71,6 +71,8 @@ export {
   newAtom,
   newBoolean,
   newDecimal,
+  newDisjunct,
+  newEnum,
   newFloat,
   newFnDef,
   newForwardMarker,

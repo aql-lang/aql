@@ -26,6 +26,7 @@ import {
   TBoolean,
   TDecimal,
   TInteger,
+  TNever,
   TNone,
   TNumber,
   TString,
@@ -39,6 +40,8 @@ import {
   newAtom,
   newBoolean,
   newDecimal,
+  newDisjunct,
+  newEnum,
   newFnDef,
   newFloat,
   newInteger,
@@ -683,7 +686,63 @@ function registerSpecWords(r: Registry): void {
   reg({
     name: 'pathof',
     forwardPrecedence: true,
-    signatures: [{ args: [TAny], handler: (args) => [pathOf(args[0]!)] }],
+    signatures: [{ args: [TAny], typeArgs: new Set([0]), handler: (args) => [pathOf(args[0]!)] }],
+  })
+  // tor — union (disjunct) of two type values. enum — a fixed
+  // enumeration. tand — type intersection (only its sig is inspected
+  // by the corpus, so a minimal handler suffices). Mirror
+  // registerEngSpecTypeOps + registerEngSpecTypeWords::enum.
+  const flattenAlts = (v: Value): Value[] => (v.isDisjunct() ? v.asDisjunct().alternatives : [v])
+  reg({
+    name: 'tor',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TAny, TAny],
+        barrierPos: 1,
+        handler: (args) => {
+          const alts = [...flattenAlts(args[1]!), ...flattenAlts(args[0]!)]
+          const seen = new Set<string>()
+          const out: Value[] = []
+          for (const a of alts) {
+            const k = canon([a])
+            if (!seen.has(k)) {
+              seen.add(k)
+              out.push(a)
+            }
+          }
+          if (out.length === 1) return [out[0]!]
+          return [newDisjunct(out)]
+        },
+      },
+    ],
+  })
+  reg({
+    name: 'tand',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TAny, TAny],
+        barrierPos: 1,
+        handler: (args) =>
+          canon([args[0]!]) === canon([args[1]!]) ? [args[0]!] : [newTypeLiteral(TNever)],
+      },
+    ],
+  })
+  reg({
+    name: 'enum',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        noEvalArgs: new Set([0]),
+        handler: (args) => {
+          const elems = args[0]!.asList()
+          const alts = elems.map((e) => (e.isWord() ? newAtom(e.asWord().name) : e))
+          return [newEnum(alts)]
+        },
+      },
+    ],
   })
   reg({
     name: 'is',

@@ -11,6 +11,8 @@ import {
   TAny,
   TAtom,
   TBoolean,
+  TDisjunct,
+  TEnum,
   TFloat,
   TForward,
   TFunction,
@@ -192,6 +194,18 @@ export class Value {
       throw new Error('AsMap: not a map value')
     }
     return this.data
+  }
+
+  /** True iff this is a Disjunct or Enum value (carries DisjunctInfo). */
+  isDisjunct(): boolean {
+    return this.vType.matches(TDisjunct) && this.data !== null
+  }
+
+  asDisjunct(): DisjunctInfo {
+    if (this.data === null || typeof this.data !== 'object') {
+      throw new Error('AsDisjunct: not a disjunct value')
+    }
+    return this.data as DisjunctInfo
   }
 
   asFnDef(): FnDefInfo {
@@ -390,6 +404,24 @@ export class OrderedMap {
 /** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
 export function newMap(m: OrderedMap): Value {
   return new Value(TMap, m)
+}
+
+/**
+ * DisjunctInfo holds the alternatives of a disjunction (union) type, or
+ * the members of an enum. Mirrors eng/go/value.go::DisjunctInfo.
+ */
+export interface DisjunctInfo {
+  alternatives: Value[]
+}
+
+/** Construct a Disjunct (union) value — VType Type/Disjunct. */
+export function newDisjunct(alternatives: Value[]): Value {
+  return new Value(TDisjunct, { alternatives } satisfies DisjunctInfo)
+}
+
+/** Construct an Enum value — VType Type/Disjunct/Enum (a Disjunct subtype). */
+export function newEnum(alternatives: Value[]): Value {
+  return new Value(TEnum, { alternatives } satisfies DisjunctInfo)
 }
 
 /** Clone a Value with `quoted=true` (used by `quote` for lists). */

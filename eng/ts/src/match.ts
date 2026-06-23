@@ -25,8 +25,21 @@
 
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { TList, TMap, TWord } from './type.ts'
+import { TList, TMap, TType, TWord } from './type.ts'
 import type { Value, WordInfo } from './value.ts'
+
+/**
+ * isTypeArg reports whether v may fill a typeArgs slot: a bare type
+ * literal (data===null, not the none value) or a structural type body
+ * (a value whose VType lives under Type — Function/Disjunct/Enum/…).
+ * Concrete scalars/lists/maps and the none value are rejected. Mirrors
+ * eng/go/signature.go::sigTypeMatchesAsType.
+ */
+function isTypeArg(v: Value): boolean {
+  if (v.isNone()) return false
+  if (v.data === null) return true
+  return v.vType.matches(TType)
+}
 
 export interface MatchResult {
   sig: Signature
@@ -165,7 +178,7 @@ function tryMatch(
       }
       break
     }
-    if (sig.typeArgs?.has(fwd) && tok.data !== null) break
+    if (sig.typeArgs?.has(fwd) && !isTypeArg(tok)) break
     args[fwd] = tok
     fwd++
     scanIdx++
@@ -184,7 +197,7 @@ function tryMatch(
     if (isStructuralBoundary(stackVal)) return null
     const sigIdx = fwd + j
     if (!sigTypeMatches(stackVal, sig.args[sigIdx]!)) return null
-    if (sig.typeArgs?.has(sigIdx) && stackVal.data !== null) return null
+    if (sig.typeArgs?.has(sigIdx) && !isTypeArg(stackVal)) return null
     args[sigIdx] = stackVal
   }
 

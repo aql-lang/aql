@@ -77,7 +77,33 @@ function isBareTypeNode(v: Value): boolean {
  *     (v.VType conforms to t.VType);
  *   - otherwise: structural identity on the carried types (best effort).
  */
+/** Structural value equality for concrete scalars/atoms (enum members). */
+function valuesEqual(a: Value, b: Value): boolean {
+  if (!a.vType.equal(b.vType)) {
+    // Integer/Float/String leaves differ but the data may still be
+    // equal across String leaves (Proper vs Empty never coincide).
+    if (!(a.vType.matches(b.vType) || b.vType.matches(a.vType))) return false
+  }
+  const ad = a.data
+  const bd = b.data
+  if (typeof ad === 'bigint' && typeof bd === 'bigint') return ad === bd
+  return ad === bd
+}
+
 export function isValueOfType(v: Value, t: Value): boolean {
+  // Disjunct / Enum membership: v satisfies the union if it satisfies
+  // any alternative (a type-literal alternative is a subtype check; a
+  // concrete alternative — an enum member — is value equality).
+  if (t.isDisjunct()) {
+    for (const alt of t.asDisjunct().alternatives) {
+      if (alt.data === null) {
+        if (isValueOfType(v, alt)) return true
+      } else if (valuesEqual(v, alt)) {
+        return true
+      }
+    }
+    return false
+  }
   if (isBareTypeNode(t)) {
     if (t.vType.equal(TType)) {
       if (v.carrier) return false
