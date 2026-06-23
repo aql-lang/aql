@@ -71,6 +71,39 @@ cross-registry unit compilation compiles the exposed + target rows.
    parity, 0 divergences) is the hard gate throughout; the ceiling moves are the
    deliberate, reviewed re-baseline.
 
+## Status (landed this session)
+
+Steps **1, 2, 4 LANDED** gate-clean (commit on `claude/bytecode-compiler-impl-dpwdyx`):
+the hermetic help eval + the first-class `checkFnBodyAtConstruction` pass +
+the corpus re-baseline (refusalCeiling 6 → 9, reducibleCeiling 1 → 2, documented
+rationale). `decision.aql` 39 → 0 errors. `verify-bytecode` green (differential +
+fuzz + race + aqldebug, 0 divergences); full suite green. The in-body
+forward-strand advisory was intentionally dropped (it required false-positive-prone
+concrete example args; carrier analysis can't see it) — `TestForwardStrandAdvisory_QuietInBody`
+pins the new sound contract.
+
+**Step 3 (cross-registry unit isolation) — precisely identified, NOT yet landed.**
+Mechanism confirmed on the live tree:
+- A non-trivial module wrapper (e.g. `Test.run-spec`, a real AQL body) dispatches
+  at `eng/go/engine.go:3998` → `execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)`
+  → the `capturedReg` branch (engine.go:4474) → `CallAQL` → `sub.Run(tokens)`
+  (registry.go:1169). With `shareCheckState` active, `sub.Run` records the body's
+  internal dispatches **inline into the MAIN program's EmitState frame**.
+- So `test-describe` (which DOES declare a `CallableSpec`, test.go:227-270 — it can
+  compile its body as a closure) records into the main frame, not a contained unit,
+  and its closure-dispatch refuses there → `module-test.tsv:38` refuses
+  "code-body word test-describe (Stage 2)". It is unit-isolation, not a
+  test-describe gap.
+- **Fix:** in `execFnDefSig`'s check-mode `capturedReg` branch, compile the
+  module-preamble fn body as its OWN `StartFnCompile` unit (resolving names in
+  `capturedReg`'s scope via the shared, now-active EmitState) + `RecordUserCall`,
+  mirroring `buildFnBodyReturnsFn` (core_helpers.go:367-407), instead of the bare
+  `CallAQL`. The body's internal residual (test-describe) then records into that
+  unit, not the program residual. Clears `module-test.tsv:38` + the Test/Assert
+  reducible (2 → 1). Deferred: delicate hot-path change; land with the differential
+  as the gate in a focused follow-up. (`module-parselang:23` / `module-rand:38` are
+  NOT this shape — Stage D, per §7 above.)
+
 ## Discipline
 
 Land as ONE reviewed unit (never a partial diagnostic filter — `.6` §3 proved
