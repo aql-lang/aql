@@ -442,6 +442,7 @@ export class Engine {
         const fakeEntry: FunctionEntry = {
           name,
           signatures: [sig],
+          declOrder: [sig],
           forwardPrecedence: true,
           maxForwardArgs: k,
         }

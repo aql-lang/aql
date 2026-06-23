@@ -1514,11 +1514,14 @@ function unsupportedMake(what: string): Value[] {
 
 // buildWordInspection renders a registered word's metadata as an
 // inspection map: {name:'…' kind:native signatures:[{args:['…' …]} …]}.
-function buildWordInspection(name: string, fn: { signatures: { args: { leaf(): string }[] }[] }): Value {
+function buildWordInspection(
+  name: string,
+  fn: { declOrder: { args: { leaf(): string }[] }[] },
+): Value {
   const om = new OrderedMap()
   om.set('name', newString(name))
   om.set('kind', newWord('native'))
-  const sigs = fn.signatures.map((sig) => {
+  const sigs = fn.declOrder.map((sig) => {
     const sm = new OrderedMap()
     sm.set('args', newList(sig.args.map((t) => newString(t.leaf())), { eval: false }))
     return newMap(sm)

@@ -15,6 +15,8 @@ import type { Value } from './value.ts'
 export interface FunctionEntry {
   name: string
   signatures: Signature[]
+  /** Signatures in registration order (inspect renders these). */
+  declOrder: Signature[]
   forwardPrecedence: boolean
   /** Longest forward arg count across all sigs (used by stepWord). */
   maxForwardArgs: number
@@ -89,7 +91,9 @@ export class Registry {
     const forwardPrec = fn.forwardPrecedence ?? false
     const entry = this.upsert(fn.name, forwardPrec)
     for (const ns of fn.signatures) {
-      entry.signatures.push(this.toSignature(ns, forwardPrec))
+      const sig = this.toSignature(ns, forwardPrec)
+      entry.signatures.push(sig)
+      entry.declOrder.push(sig)
     }
     sortSignatures(entry.signatures)
     entry.maxForwardArgs = computeMaxForward(entry)
@@ -98,7 +102,7 @@ export class Registry {
   private upsert(name: string, forward: boolean): FunctionEntry {
     let entry = this.functions.get(name)
     if (!entry) {
-      entry = { name, signatures: [], forwardPrecedence: forward, maxForwardArgs: 0 }
+      entry = { name, signatures: [], declOrder: [], forwardPrecedence: forward, maxForwardArgs: 0 }
       this.functions.set(name, entry)
     } else {
       entry.forwardPrecedence = entry.forwardPrecedence || forward
