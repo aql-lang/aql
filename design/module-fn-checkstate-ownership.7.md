@@ -140,3 +140,26 @@ partial suppression silently reclassifies compilation and changes observable
 behavior). `make verify-bytecode` (differential + fuzz + race + aqldebug, 0
 divergences) gates soundness; the ceilings are re-baselined with explicit
 rationale. Gate-clean-or-revert.
+
+## Exposed-row leads (for follow-up, isolated this session)
+
+The decouple exposed 4 previously-check-error rows as real refusals. Concrete
+leads for clearing them (each a separate effort, NOT landed):
+
+- **`generics-fn.tsv:43`, `generics-fn.tsv:56`** — isolated to the `end` token.
+  `def f2 fn [[xs:[:Integer]] [Integer] [xs size]]  f2 [1 2]` COMPILES, and
+  `def zs [1 2]  f2 zs` (no `end`) COMPILES, but `def zs [1 2] end  f2 zs`
+  REFUSES ("unmatched dispatch recovered at f2"). A probe at the recovery seam
+  (engine.go ~6425) showed `zs` reaching f2 as a concrete List whose ELEMENTS are
+  typed `ProperString`, not `Integer` — so the typed-list `[:Integer]` param fails
+  and recovers. So a `def`-bound integer list, when committed by `end`, loses its
+  element type in CHECK mode (a long-standing bug masked until the decouple). Root
+  cause not yet pinned (arg-element stringification vs a degraded f2 sig param);
+  high-blast-radius (matchSignature / check-mode list binding), so trace carefully
+  before touching. Differential is clean (both fall back faithfully).
+- **`macro.tsv:26`** — `defconst answer 42` expands correctly (compiled result via
+  fallback is right) but refuses "unmatched dispatch recovered at def": needs
+  macro-expand-to-EXECUTABLE (compile the expanded `def answer 42`), which the
+  current macro-bake path (data macros only) does not do.
+- **`surface.tsv:32`** — surface-shape typed dispatch at `area`; a surface/class
+  dispatch compile feature.
