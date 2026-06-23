@@ -7,6 +7,7 @@
 // stack). Those are intentionally omitted here — adding them would
 // inflate the port without helping the specs run. A full-parity
 // version would mirror them one-for-one.
+import { CheckState } from './check.ts'
 import type { NativeFunc, NativeSig, Signature } from './signature.ts'
 import { sortSignatures } from './signature.ts'
 import type { Value } from './value.ts'
@@ -33,6 +34,9 @@ export class Registry {
    * read positional args by index without naming each param.
    */
   private argsStack: Value[][] = []
+
+  /** Static type-checker state. Inactive until check.begin() is called. */
+  readonly check = new CheckState()
 
   // ── Capabilities ──────────────────────────────────────────────────────
 
@@ -124,6 +128,9 @@ export class Registry {
       fallback: ns.fallback,
       typeArgs: ns.typeArgs,
       quoteArgs: ns.quoteArgs,
+      returns: ns.returns,
+      returnsFn: ns.returnsFn,
+      runInCheckMode: ns.runInCheckMode,
     }
   }
 

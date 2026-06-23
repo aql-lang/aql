@@ -211,13 +211,17 @@ function tryMatch(
 }
 
 export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType): boolean {
+  // Check-mode gradual carrier: a dynamic carrier's type is statically
+  // unknown, so it matches any slot optimistically (the contagion then
+  // widens the result to dynamic). Mirrors NewDynamicCarrier matching.
+  if (v.carrier && v.dynamic) return true
   if (!v.vType.matches(expected)) return false
   // Concrete-value rule (mirrors positionalMatch in eng/go): a Scalar
   // or Node (list/map) value slot is filled only by a concrete value
-  // (or carrier), never by a bare type literal. So `do List` and
-  // `addq Integer 1` surface signature errors, while TAny / typeArgs
-  // slots still accept type literals.
-  if (v.data === null && (expected.matches(TScalar) || expected.matches(TNode))) {
+  // (or a check-mode carrier), never by a bare type literal. So
+  // `do List` and `addq Integer 1` surface signature errors, while a
+  // strict carrier of the right type IS a value and matches.
+  if (v.data === null && !v.carrier && (expected.matches(TScalar) || expected.matches(TNode))) {
     return false
   }
   return true

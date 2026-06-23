@@ -8,6 +8,7 @@
 // context-store push/pop, interpolated strings, parser-eval lists,
 // and module sub-engines. The TS port here is the interpreter slice
 // that the current TSV specs reach.
+import { carrierResults, stripToCarriers } from './check.ts'
 import { AqlError } from './error.ts'
 import { valToString } from './make.ts'
 import { matchEntry } from './match.ts'
@@ -31,6 +32,7 @@ import {
   type MoveInfo,
   newBoolean,
   newFloat,
+  newCarrier,
   newForwardMarker,
   newInteger,
   newMap,
@@ -88,7 +90,10 @@ export class Engine {
    * Throws AqlError on undefined word, signature mismatch, etc.
    */
   run(input: Value[]): Value[] {
-    this.stack = [...input]
+    // Check mode: strip concrete literals to type-only carriers before
+    // execution. The same dispatch/matching machinery then runs over
+    // carriers; stepWord short-circuits handlers to carrier returns.
+    this.stack = this.registry.check.isActive() ? stripToCarriers(input) : [...input]
     this.pointer = 0
 
     for (let step = 0; step < STEP_LIMIT; step++) {
@@ -201,6 +206,21 @@ export class Engine {
 
     const fn = this.registry.lookup(name)
     if (!fn) {
+      // Check mode is lenient: an undefined word becomes an Any carrier
+      // (a placeholder so analysis continues) and emits a diagnostic,
+      // rather than a hard error. Mirrors stepWord's check-mode path.
+      if (this.registry.check.isActive()) {
+        this.registry.check.addDiagnostic({
+          code: 'undefined_word',
+          detail: `undefined word: ${name}`,
+          word: name,
+        })
+        const placeholder = newCarrier(TAny)
+        placeholder.undefined = true
+        this.stack[this.pointer] = placeholder
+        this.pointer++
+        return
+      }
       throw new AqlError('undefined_word', `undefined word: ${name}`, name)
     }
 
@@ -211,6 +231,13 @@ export class Engine {
 
     const result = matchEntry(fn, this.stack, this.pointer, this.registry)
     if (!result) {
+      // Check mode: a missing signature is a soft diagnostic, not a hard
+      // error. Assume a best-fit candidate, synthesise its carrier
+      // returns, and splice them over the word + adjacent operands.
+      if (this.registry.check.isActive() && fn.signatures.length > 0) {
+        this.checkModeAssumeSig(name, fn)
+        return
+      }
       if (this.lastPreEvalHadVoid) {
         throw new AqlError(
           'no_value_error',
@@ -223,6 +250,18 @@ export class Engine {
         `no matching signature for ${name}\n  = expected: ${name} (${describeExpected(fn)})\n  = stack: ${this.describeStack()}`,
         name,
       )
+    }
+
+    // Check mode: short-circuit the handler. A matched signature whose
+    // handler must still run in check mode (def/fn/type/… — its side
+    // effects feed later analysis) falls through to normal dispatch.
+    if (this.registry.check.isActive() && !result.sig.runInCheckMode) {
+      const out = carrierResults(this.registry, name, result.sig, result.args)
+      const replaceFrom = this.pointer - result.prefixCount
+      const replaceCount = result.prefixCount + 1 + result.forwardCount
+      this.stack.splice(replaceFrom, replaceCount, ...out)
+      this.pointer = replaceFrom + out.length
+      return
     }
 
     // If the match has unresolved forward args (or any forward arg
@@ -270,6 +309,48 @@ export class Engine {
     // forward marker collect a Value-typed result via stepLiteral,
     // or just advancing past an immediate-dispatch result.
     this.pointer = replaceFrom
+  }
+
+  /**
+   * Check-mode recovery for a word whose arguments matched no
+   * signature: assume the best-fit (highest-scored) overload, gather
+   * the adjacent operands it would consume, emit a no_signature
+   * diagnostic, and splice the assumed signature's carrier returns over
+   * the word + operands so analysis continues. Mirrors
+   * eng/go/engine.go::checkModeAssumeSig (Phase-1 subset — no disjunct
+   * partition / poly recovery).
+   */
+  private checkModeAssumeSig(name: string, fn: FunctionEntry): void {
+    const sig = fn.signatures[0]!
+    const n = sig.args.length
+    const isBoundary = (v: Value): boolean =>
+      v.isWord() || v.isForward() || v.isMark() || v.isMove()
+    // Gather forward operands (after the pointer) up to the arity, then
+    // fill the rest from the stack prefix (before the pointer).
+    let fwd = 0
+    while (fwd < n && this.pointer + 1 + fwd < this.stack.length) {
+      if (isBoundary(this.stack[this.pointer + 1 + fwd]!)) break
+      fwd++
+    }
+    let stk = 0
+    while (fwd + stk < n && this.pointer - 1 - stk >= 0) {
+      if (isBoundary(this.stack[this.pointer - 1 - stk]!)) break
+      stk++
+    }
+    const args: Value[] = []
+    for (let i = 0; i < fwd; i++) args.push(this.stack[this.pointer + 1 + i]!)
+    for (let i = 0; i < stk; i++) args.push(this.stack[this.pointer - 1 - i]!)
+
+    this.registry.check.addDiagnostic({
+      code: 'no_signature',
+      detail: `no matching signature for ${name}; assuming best-fit candidate for analysis`,
+      word: name,
+    })
+    const out = carrierResults(this.registry, name, sig, args)
+    const replaceFrom = this.pointer - stk
+    const replaceCount = stk + 1 + fwd
+    this.stack.splice(replaceFrom, replaceCount, ...out)
+    this.pointer = replaceFrom + out.length
   }
 
   /**

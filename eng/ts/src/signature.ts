@@ -54,7 +54,28 @@ export interface Signature {
    * NativeSig.QuoteArgs.
    */
   quoteArgs?: Set<number>
+  /**
+   * Declared return types, used by the static checker to synthesise
+   * carrier return values when the handler is short-circuited in check
+   * mode. Mirrors NativeSig.Returns.
+   */
+  returns?: AqlType[]
+  /**
+   * Computes the carrier return values for this signature in check
+   * mode, given the (carrier-typed) args. Takes precedence over
+   * `returns`. Mirrors NativeSig.ReturnsFn / ReturnsFunc.
+   */
+  returnsFn?: ReturnsFunc
+  /**
+   * When true, the handler runs even in check mode (its side effects —
+   * bindings, type registration — are prerequisites for later
+   * analysis). Mirrors NativeSig.RunInCheckMode.
+   */
+  runInCheckMode?: boolean
 }
+
+/** Computes carrier return values for a signature in check mode. */
+export type ReturnsFunc = (args: Value[], registry: Registry) => Value[]
 
 export interface NativeSig {
   args: AqlType[]
@@ -65,6 +86,9 @@ export interface NativeSig {
   fallback?: boolean
   typeArgs?: Set<number>
   quoteArgs?: Set<number>
+  returns?: AqlType[]
+  returnsFn?: ReturnsFunc
+  runInCheckMode?: boolean
 }
 
 export interface NativeFunc {

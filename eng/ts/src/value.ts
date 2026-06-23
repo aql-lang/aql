@@ -114,17 +114,33 @@ export class Value {
   readonly eval: boolean
   readonly quoted: boolean
   readonly carrier: boolean
+  /**
+   * Check-mode gradual modality. A `dynamic` carrier is a type-only
+   * value whose type is statically unknown (Any) or arrived from an
+   * unannotated word — it matches optimistically and its contagion
+   * widens results to dynamic. Only meaningful when `carrier` is true.
+   * Mirrors Go Value.Dynamic.
+   */
+  readonly dynamic: boolean
+  /**
+   * Check-mode marker: an undefined word kept as a lenient placeholder
+   * so analysis can continue past a typo. Drained to an Any carrier at
+   * end of run. Mirrors Go Value.Undefined.
+   */
+  undefined: boolean
 
   constructor(
     vType: AqlType,
     data: unknown,
-    opts?: { eval?: boolean; quoted?: boolean; carrier?: boolean },
+    opts?: { eval?: boolean; quoted?: boolean; carrier?: boolean; dynamic?: boolean },
   ) {
     this.vType = vType
     this.data = data
     this.eval = opts?.eval ?? false
     this.quoted = opts?.quoted ?? false
     this.carrier = opts?.carrier ?? false
+    this.dynamic = opts?.dynamic ?? false
+    this.undefined = false
   }
 
   /** True iff this Value is the unique `none` value (None's sole inhabitant). */
@@ -466,6 +482,25 @@ export function newConstrainedWord(name: string, constraint: Value): Value {
 /** Convenience for constructing an Any-typed carrier (test harness use). */
 export function newAny(data: unknown): Value {
   return new Value(TAny, data)
+}
+
+/**
+ * Construct a strict check-mode carrier: a type-only value of type `t`
+ * (no concrete payload) that matches signatures as a value of that type
+ * and propagates its type through dispatch. Mirrors Go NewCarrier.
+ */
+export function newCarrier(t: AqlType): Value {
+  return new Value(t, null, { carrier: true })
+}
+
+/**
+ * Construct a gradual (dynamic) carrier — a type-only value whose type
+ * is statically unknown or arrived from an unannotated word. It matches
+ * optimistically and its contagion widens results to dynamic. Mirrors
+ * Go NewDynamicCarrier.
+ */
+export function newDynamicCarrier(t: AqlType): Value {
+  return new Value(t, null, { carrier: true, dynamic: true })
 }
 
 /**

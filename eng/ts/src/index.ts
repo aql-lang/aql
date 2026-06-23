@@ -2,6 +2,14 @@
 
 export { AqlError } from './error.ts'
 export { cap } from './capability.ts'
+export {
+  CheckState,
+  carrierResults,
+  severityFor,
+  stripToCarriers,
+  toCarrier,
+} from './check.ts'
+export type { CheckDiagnostic, CheckSeverity } from './check.ts'
 export { Engine } from './engine.ts'
 export type { FunctionEntry } from './registry.ts'
 export { Registry } from './registry.ts'
@@ -9,6 +17,7 @@ export type {
   Handler,
   NativeFunc,
   NativeSig,
+  ReturnsFunc,
   Signature,
 } from './signature.ts'
 export {
@@ -74,7 +83,9 @@ export {
   newAny,
   newAtom,
   newBoolean,
+  newCarrier,
   newConstrainedWord,
+  newDynamicCarrier,
   newDecimal,
   newDisjunct,
   newEnum,
