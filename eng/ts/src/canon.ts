@@ -8,8 +8,17 @@
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
 import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TNone, TPath, TString } from './type.ts'
-import type { FnDefInfo } from './value.ts'
+import type { FnDefInfo, XmlElement } from './value.ts'
 import { ChildType, OrderedMap, Value } from './value.ts'
+
+// canonXml renders an XML element, normalising an empty element to the
+// self-closing form (<br></br> → <br/>).
+function canonXml(e: XmlElement): string {
+  const attrs = e.attrs.map((a) => ` ${a.name}="${a.value}"`).join('')
+  if (e.children.length === 0) return `<${e.tag}${attrs}/>`
+  const body = e.children.map((c) => (typeof c === 'string' ? c : canonXml(c))).join('')
+  return `<${e.tag}${attrs}>${body}</${e.tag}>`
+}
 
 /**
  * canonString renders a string payload as parseable AQL source. Plain
@@ -176,6 +185,9 @@ export function canonValue(v: Value): string {
       return `${k}:${rendered}`
     })
     return `{${parts.join(' ')}}`
+  }
+  if (v.isXml()) {
+    return canonXml(v.data as XmlElement)
   }
   if (v.isFnDef()) {
     return canonFnDef(v.asFnDef())

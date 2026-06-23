@@ -30,6 +30,7 @@ import {
   TStringEmpty,
   TStringProper,
   TWord,
+  TXml,
 } from './type.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
@@ -267,6 +268,10 @@ export class Value {
     return this.vType.equal(TInterpString)
   }
 
+  isXml(): boolean {
+    return this.vType.equal(TXml)
+  }
+
   asInterpSegments(): InterpSegment[] {
     if (!Array.isArray(this.data)) throw new Error('AsInterp: not an interp string')
     return this.data as InterpSegment[]
@@ -374,6 +379,18 @@ const NONE_SENTINEL: unique symbol = Symbol('none')
 /** Construct the unique `none` value. */
 export function newNone(): Value {
   return new Value(TNone, NONE_SENTINEL)
+}
+
+/** XML element payload (static, post-interpolation). */
+export interface XmlElement {
+  tag: string
+  attrs: { name: string; value: string }[]
+  children: (string | XmlElement)[]
+}
+
+/** Construct an XML value (VType Node/Xml). */
+export function newXml(elem: XmlElement): Value {
+  return new Value(TXml, elem)
 }
 
 /** Path payload: normalised segments + absolute flag. */

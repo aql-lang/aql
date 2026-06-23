@@ -46,6 +46,7 @@ import {
   type FnParam,
   type InterpSegment,
   type WordInfo,
+  type XmlElement,
   newAtom,
   newBoolean,
   newDecimal,
@@ -65,6 +66,7 @@ import {
   newString,
   newTypedList,
   newTypedMap,
+  newXml,
   OrderedMap,
   newTypeLiteral,
   newWord,
@@ -972,6 +974,12 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       continue
     }
 
+    // XML literal: `<tag …>…</tag>` or `<tag …/>`.
+    if (stream.s[stream.i] === '<' && /[A-Za-z]/.test(stream.s[stream.i + 1] ?? '')) {
+      out.push(newXml(parseXmlElem(stream)))
+      continue
+    }
+
     // Backtick template string: `lit${expr}lit…`.
     if (stream.s[stream.i] === '`') {
       let k = stream.i + 1
@@ -1044,6 +1052,79 @@ function readMap(stream: TokenStream): Value {
   }
   if (child !== undefined && m.size === 0) return newTypedMap(child)
   return newMap(m)
+}
+
+// readXmlName reads an XML tag / attribute name.
+function readXmlName(stream: TokenStream): string {
+  const s = stream.s
+  let n = ''
+  while (stream.i < s.length && /[A-Za-z0-9_-]/.test(s[stream.i]!)) {
+    n += s[stream.i]
+    stream.i++
+  }
+  return n
+}
+
+// parseXmlElem parses a single XML element starting at `<`. Static
+// subset (no ${} interpolation); attribute values must be quoted, and
+// closing tags must match. Mirrors the eng/parser xml_literal grammar.
+function parseXmlElem(stream: TokenStream): XmlElement {
+  const s = stream.s
+  const skip = (): void => {
+    while (stream.i < s.length && (s[stream.i] === ' ' || s[stream.i] === '\t')) stream.i++
+  }
+  stream.i++ // consume '<'
+  const tag = readXmlName(stream)
+  if (tag === '') throw new Error('xml: expected tag name')
+  const attrs: { name: string; value: string }[] = []
+  for (;;) {
+    skip()
+    const c = s[stream.i]
+    if (c === '/' || c === '>') break
+    const name = readXmlName(stream)
+    if (name === '') throw new Error('xml: malformed element')
+    if (s[stream.i] !== '=' || s[stream.i + 1] !== '"') {
+      throw new Error('xml: attribute requires a quoted value')
+    }
+    stream.i += 2 // consume ="
+    let v = ''
+    while (stream.i < s.length && s[stream.i] !== '"') {
+      v += s[stream.i]
+      stream.i++
+    }
+    if (stream.i >= s.length) throw new Error('xml: unterminated attribute')
+    stream.i++ // closing "
+    attrs.push({ name, value: v })
+  }
+  if (s[stream.i] === '/') {
+    stream.i++
+    if (s[stream.i] !== '>') throw new Error('xml: expected >')
+    stream.i++
+    return { tag, attrs, children: [] }
+  }
+  stream.i++ // consume '>'
+  const children: (string | XmlElement)[] = []
+  for (;;) {
+    if (stream.i >= s.length) throw new Error('xml: unterminated element')
+    if (s[stream.i] === '<' && s[stream.i + 1] === '/') {
+      stream.i += 2
+      const close = readXmlName(stream)
+      if (s[stream.i] !== '>') throw new Error('xml: expected >')
+      stream.i++
+      if (close !== tag) throw new Error(`xml: mismatched closing tag </${close}> for <${tag}>`)
+      return { tag, attrs, children }
+    }
+    if (s[stream.i] === '<') {
+      children.push(parseXmlElem(stream))
+      continue
+    }
+    let t = ''
+    while (stream.i < s.length && s[stream.i] !== '<') {
+      t += s[stream.i]
+      stream.i++
+    }
+    children.push(t)
+  }
 }
 
 // A token ends at whitespace or any structural delimiter, so tight
