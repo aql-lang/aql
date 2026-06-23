@@ -94,7 +94,21 @@ export class Engine {
     // Check mode: strip concrete literals to type-only carriers before
     // execution. The same dispatch/matching machinery then runs over
     // carriers; stepWord short-circuits handlers to carrier returns.
-    this.stack = this.registry.check.isActive() ? stripToCarriers(input) : [...input]
+    if (this.registry.check.isActive()) {
+      const stripped = stripToCarriers(input)
+      // When recording bytecode, remember each stripped literal's
+      // concrete original so the compiler can materialise it as a const.
+      const emit = this.registry.check.emit
+      if (emit) {
+        for (let i = 0; i < input.length; i++) {
+          const s = stripped[i]!
+          if (s !== input[i] && s.carrier) emit.rememberStripped(s, input[i]!)
+        }
+      }
+      this.stack = stripped
+    } else {
+      this.stack = [...input]
+    }
     this.pointer = 0
 
     for (let step = 0; step < STEP_LIMIT; step++) {
@@ -264,6 +278,9 @@ export class Engine {
     // effects feed later analysis) falls through to normal dispatch.
     if (this.registry.check.isActive() && !result.sig.runInCheckMode) {
       const out = carrierResults(this.registry, name, result.sig, result.args)
+      // Bytecode recording: a clean native match is a candidate call
+      // event. Passive — does not affect `out`.
+      this.registry.check.emit?.recordCall(name, result.sig, result.args, out)
       const replaceFrom = this.pointer - result.prefixCount
       const replaceCount = result.prefixCount + 1 + result.forwardCount
       this.stack.splice(replaceFrom, replaceCount, ...out)

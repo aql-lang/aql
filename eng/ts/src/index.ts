@@ -10,6 +10,22 @@ export {
   toCarrier,
 } from './check.ts'
 export type { CheckDiagnostic, CheckSeverity } from './check.ts'
+export {
+  CodeBuilder,
+  OpCallNative,
+  OpPushConst,
+  OpPushLocal,
+  OpStoreLocal,
+  disassemble,
+} from './bytecode.ts'
+export type { Op, Program, SigRef } from './bytecode.ts'
+export { EmitState } from './emit.ts'
+export type { CallEvent, Operand, SiteCounts } from './emit.ts'
+export { finalize } from './lower.ts'
+export type { FinalizeResult } from './lower.ts'
+export { runProgram } from './vm.ts'
+export { compile, compileCheck, runCompiled } from './compile.ts'
+export type { RunCompiledResult } from './compile.ts'
 export { Engine } from './engine.ts'
 export type { FunctionEntry } from './registry.ts'
 export { Registry } from './registry.ts'

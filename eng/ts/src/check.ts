@@ -11,6 +11,7 @@
 // contagion, and the diagnostic store. Fn-body analysis, the step
 // budget's fixed-point machinery, disjunct partitioning, and the
 // bytecode recording pass land in later phases.
+import type { EmitState } from './emit.ts'
 import { TAny } from './type.ts'
 import type { AqlType } from './type.ts'
 import type { Signature } from './signature.ts'
@@ -89,6 +90,13 @@ export class CheckState {
    * fixed-point refinement yet).
    */
   fnInflight = new Set<string>()
+  /**
+   * When set, the check pass doubles as the bytecode recording pass:
+   * each native dispatch is offered to emit.recordCall. Null for a plain
+   * check. Mirrors CheckState.Emit. Recording is passive — it never
+   * changes the carriers returned.
+   */
+  emit: EmitState | undefined
 
   /** Whether check mode is currently on. */
   isActive(): boolean {
