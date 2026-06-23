@@ -182,6 +182,8 @@ export class Engine {
     //      value and let the next iteration pick it up as a literal.
     const top = this.registry.topOfDefStack(name)
     if (top !== undefined) {
+      // Resolving a def is a "use" for check-mode unused-def tracking.
+      this.registry.check.recordUse(name)
       if (top.isFnDef()) {
         this.dispatchFnDef(name, top.asFnDef())
         return

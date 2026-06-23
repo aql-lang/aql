@@ -119,6 +119,36 @@ function registerCheckWords(r: Registry): void {
   // noretq: a word with NO return annotation — dispatch over it emits
   // missing_returns and yields a dynamic(Any) carrier.
   reg({ name: 'noretq', forwardPrecedence: true, signatures: [{ args: [TInteger], handler: stub }] })
+
+  // def: the plain name-binding form, check-aware (runInCheckMode) so it
+  // binds the carrier value and records the name for unused-def
+  // analysis. The [Atom] quoteArgs slot captures the name word. Mirrors
+  // the engspec plainDef fixture's check-mode behaviour.
+  reg({
+    name: 'def',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TAtom, TAny],
+        quoteArgs: new Set([0]),
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, registry) => {
+          const name = nameOf(args[0]!)
+          registry.check.recordDef(name)
+          registry.pushDef(name, args[1]!)
+          return []
+        },
+      },
+    ],
+  })
+}
+
+// nameOf reads a binding name from the captured arg, whether it arrived
+// as an Atom or a Word (the matcher keeps constrained words intact).
+function nameOf(v: Value): string {
+  if (v.isWord()) return v.asWord().name
+  return v.asAtom()
 }
 
 // ── Minimal tokenizer ───────────────────────────────────────────────────

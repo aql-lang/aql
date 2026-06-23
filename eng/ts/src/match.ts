@@ -139,8 +139,14 @@ function resolveForwardToken(
   if (!tok.isWord()) return tok
   if (expected.equal(TWord)) return tok
   if (registry) {
-    const top = registry.topOfDefStack(tok.asWord().name)
-    if (top !== undefined && !top.isFnDef()) return top
+    const name = tok.asWord().name
+    const top = registry.topOfDefStack(name)
+    if (top !== undefined && !top.isFnDef()) {
+      // Resolving a def in the forward window is a "use" for check-mode
+      // unused-def tracking. No-op outside check mode.
+      registry.check.recordUse(name)
+      return top
+    }
   }
   return tok
 }

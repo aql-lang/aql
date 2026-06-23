@@ -426,6 +426,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
+		reg.Check.RecordDef(name, eng.SrcPos{})
 		if info, ok := args[1].Data.(eng.FnDefInfo); ok {
 			eng.InstallFnDef(reg, name, info)
 			return nil, nil
@@ -474,10 +475,11 @@ func registerEngSpecDefinition(r *eng.Registry) {
 				Returns:       []*eng.Type{}, BarrierPos: -1,
 			},
 			{
-				Args:      []*eng.Type{eng.TAtom, eng.TAny},
-				QuoteArgs: map[int]bool{0: true},
-				Handler:   plainDef,
-				Returns:   []*eng.Type{}, BarrierPos: -1,
+				Args:           []*eng.Type{eng.TAtom, eng.TAny},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        plainDef,
+				RunInCheckMode: true,
+				Returns:        []*eng.Type{}, BarrierPos: -1,
 			},
 		},
 	})
