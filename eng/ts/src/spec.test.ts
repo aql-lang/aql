@@ -569,6 +569,17 @@ function registerSpecWords(r: Registry): void {
     ],
   })
 
+  // word VALUE — wraps an (unevaluated) value as a code body. In this
+  // TS subset an unquoted list bound via def already splices its
+  // elements at the use site (Engine.stepWord path 2), so `word` is the
+  // identity that defers evaluation of its argument. Mirrors the Go
+  // `word`/__SP splice fixture for forth.tsv.
+  reg({
+    name: 'word',
+    forwardPrecedence: true,
+    signatures: [{ args: [TAny], noEvalArgs: new Set([0]), handler: (args) => [args[0]!] }],
+  })
+
   // def: spec-subset code-body binding. Captures `def NAME body`
   // where NAME arrives as a Word token (no /q machinery in this
   // runner's tokenizer) and body is any value — typically a List
