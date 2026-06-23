@@ -980,13 +980,12 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
       continue
     }
 
-    // Backtick template string: `lit${expr}lit…`.
+    // Backtick template string: `lit${expr}lit…` (holes and nested
+    // backticks balance).
     if (stream.s[stream.i] === '`') {
-      let k = stream.i + 1
-      while (k < stream.s.length && stream.s[k] !== '`') k++
-      if (k >= stream.s.length) throw new Error(`unterminated backtick at ${stream.i}`)
-      out.push(parseBacktick(stream.s.slice(stream.i + 1, k)))
-      stream.i = k + 1
+      const end = endOfBacktick(stream.s, stream.i)
+      out.push(parseBacktick(stream.s.slice(stream.i + 1, end - 1)))
+      stream.i = end
       continue
     }
 
@@ -1143,9 +1142,44 @@ function isTokenBoundary(c: string): boolean {
   )
 }
 
+// endOfBacktick returns the index just past the backtick that closes
+// the one opening at `start`, skipping over balanced ${…} holes (which
+// may themselves contain nested backticks).
+function endOfBacktick(s: string, start: number): number {
+  let i = start + 1
+  while (i < s.length) {
+    const c = s[i]
+    if (c === '`') return i + 1
+    if (c === '$' && s[i + 1] === '{') {
+      i = endOfBrace(s, i + 1)
+      continue
+    }
+    i++
+  }
+  throw new Error(`unterminated backtick at ${start}`)
+}
+
+// endOfBrace returns the index just past the `}` matching the `{` at i,
+// balancing nested braces and skipping nested backticks.
+function endOfBrace(s: string, i: number): number {
+  i++ // past '{'
+  let depth = 1
+  while (i < s.length && depth > 0) {
+    const c = s[i]
+    if (c === '{') depth++
+    else if (c === '}') depth--
+    else if (c === '`') {
+      i = endOfBacktick(s, i)
+      continue
+    }
+    i++
+  }
+  return i
+}
+
 // parseBacktick splits a backtick template into literal and ${expr}
-// segments. With no interpolation it is a plain string; otherwise an
-// InterpString the engine evaluates.
+// segments (holes balance braces/backticks). With no interpolation it
+// is a plain string; otherwise an InterpString the engine evaluates.
 function parseBacktick(content: string): Value {
   const segs: InterpSegment[] = []
   let hasExpr = false
@@ -1157,11 +1191,11 @@ function parseBacktick(content: string): Value {
       break
     }
     if (dollar > i) segs.push({ lit: content.slice(i, dollar) })
-    const close = content.indexOf('}', dollar + 2)
-    if (close < 0) throw new Error(`unterminated \${ in backtick`)
-    segs.push({ expr: tokenize(content.slice(dollar + 2, close)) })
+    const close = endOfBrace(content, dollar + 1) // index past matching }
+    if (close > content.length) throw new Error(`unterminated \${ in backtick`)
+    segs.push({ expr: tokenize(content.slice(dollar + 2, close - 1)) })
     hasExpr = true
-    i = close + 1
+    i = close
   }
   if (!hasExpr) {
     return newString(segs.map((s) => ('lit' in s ? s.lit : '')).join(''))
