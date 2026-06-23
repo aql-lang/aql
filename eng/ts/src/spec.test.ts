@@ -26,6 +26,7 @@ import {
   TDecimal,
   TInteger,
   TNone,
+  TNumber,
   TString,
   TList,
   TWord,
@@ -36,6 +37,7 @@ import {
   newBoolean,
   newDecimal,
   newFnDef,
+  newFloat,
   newInteger,
   newList,
   newMark,
@@ -274,6 +276,194 @@ function registerSpecWords(r: Registry): void {
           const lst = args[0]!.asList()
           if (lst.length === 0) return [newTypeLiteral(TNone)]
           return [lst[0]!]
+        },
+      },
+    ],
+  })
+
+  // ── q-suffixed fixtures (barrier.tsv, numbers.tsv, typeof.tsv, …) ──
+  // These mirror test/go/engspec/engspec_test.go::registerSpecWords.
+  // The eng/spec corpus references the q-suffixed names so they don't
+  // collide with any production word set.
+  const toFloat = (v: Value): number =>
+    v.vType.matches(TInteger) ? Number(v.asInteger()) : v.asFloat()
+  const numericBinary =
+    (intOp: (a: bigint, b: bigint) => bigint, floatOp: (a: number, b: number) => number): Handler =>
+    (args) => {
+      if (args[0]!.vType.matches(TInteger) && args[1]!.vType.matches(TInteger)) {
+        return [newInteger(intOp(args[0]!.asInteger(), args[1]!.asInteger()))]
+      }
+      return [newFloat(floatOp(toFloat(args[0]!), toFloat(args[1]!)))]
+    }
+  const numberPair = [TNumber, TNumber]
+
+  reg({
+    name: 'addq',
+    forwardPrecedence: true,
+    signatures: [{ args: numberPair, handler: numericBinary((a, b) => b + a, (a, b) => b + a) }],
+  })
+  reg({
+    name: 'subq',
+    forwardPrecedence: true,
+    signatures: [{ args: numberPair, handler: numericBinary((a, b) => b - a, (a, b) => b - a) }],
+  })
+  reg({
+    name: 'mulq',
+    forwardPrecedence: true,
+    signatures: [{ args: numberPair, handler: numericBinary((a, b) => b * a, (a, b) => b * a) }],
+  })
+  reg({
+    name: 'negq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TNumber],
+        barrierPos: 1,
+        handler: (args) =>
+          args[0]!.vType.matches(TInteger)
+            ? [newInteger(-args[0]!.asInteger())]
+            : [newFloat(-args[0]!.asFloat())],
+      },
+    ],
+  })
+  reg({
+    name: 'concatq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TString, TString],
+        handler: (args) => [newString(args[1]!.asString() + args[0]!.asString())],
+      },
+    ],
+  })
+  reg({
+    name: 'describeq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TInteger], handler: (args) => [newString(`int:${args[0]!.asInteger()}`)] },
+      { args: [TString], handler: (args) => [newString(`str:${args[0]!.asString()}`)] },
+    ],
+  })
+  reg({
+    name: 'tagq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TAny], handler: () => [newString('any')] },
+      { args: [TInteger], handler: () => [newString('specific')] },
+    ],
+  })
+  reg({
+    name: 'factq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TInteger], patterns: new Map([[0, newInteger(0n)]]), handler: () => [newInteger(1n)] },
+      { args: [TInteger], handler: (args) => [newInteger(args[0]!.asInteger())] },
+    ],
+  })
+  reg({
+    name: 'codeq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TInteger], patterns: new Map([[0, newInteger(99n)]]), handler: () => [newString('ninety-nine')] },
+      { args: [TInteger], handler: () => [newString('general')] },
+    ],
+  })
+  reg({
+    name: 'routeq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TString], patterns: new Map([[0, newString('admin')]]), handler: () => [newString('matched-admin')] },
+      { args: [TString], handler: () => [newString('other')] },
+    ],
+  })
+  reg({
+    name: 'tripq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TInteger, TInteger, TInteger],
+        handler: (args) =>
+          [newString(`${args[0]!.asInteger()},${args[1]!.asInteger()},${args[2]!.asInteger()}`)],
+      },
+    ],
+  })
+  reg({
+    name: 'pairq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TInteger, TInteger],
+        barrierPos: 1,
+        handler: (args) => [newString(`${args[0]!.asInteger()}:${args[1]!.asInteger()}`)],
+      },
+    ],
+  })
+  // nilq — a 0-arg word (barrier 0).
+  reg({
+    name: 'nilq',
+    signatures: [{ args: [], barrierPos: 0, handler: () => [newString('nil')] }],
+  })
+  // flexq — two forward-eligible overloads of arity 1 and 2.
+  reg({
+    name: 'flexq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TInteger], handler: (args) => [newString(`one:${args[0]!.asInteger()}`)] },
+      {
+        args: [TInteger, TInteger],
+        handler: (args) => [newString(`two:${args[0]!.asInteger()},${args[1]!.asInteger()}`)],
+      },
+    ],
+  })
+  // Fixed-arity Integer formatters with an intrinsic barrier at the
+  // numeric-suffix position; handler renders args in sig order.
+  const intArgsFmt: Handler = (args) =>
+    [newString(args.map((a) => a.asInteger().toString()).join(','))]
+  const intArity = (name: string, n: number, barrier: number): void => {
+    reg({
+      name,
+      forwardPrecedence: true,
+      signatures: [{ args: new Array<typeof TInteger>(n).fill(TInteger), barrierPos: barrier, handler: intArgsFmt }],
+    })
+  }
+  intArity('tri1q', 3, 1)
+  intArity('tri2q', 3, 2)
+  intArity('quad1q', 4, 1)
+  intArity('quadq', 4, 2)
+  intArity('quad3q', 4, 3)
+  intArity('quintq', 5, 3)
+  intArity('hexq', 6, 3)
+  intArity('septq', 7, 4)
+  reg({
+    name: 'lengthq',
+    forwardPrecedence: true,
+    signatures: [{ args: [TList], handler: (args) => [newInteger(BigInt(args[0]!.asList().length))] }],
+  })
+  reg({
+    name: 'firstq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        handler: (args) => {
+          const lst = args[0]!.asList()
+          return lst.length === 0 ? [newTypeLiteral(TNone)] : [lst[0]!]
+        },
+      },
+    ],
+  })
+  reg({
+    name: 'replayq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TList],
+        noEvalArgs: new Set([0]),
+        handler: (args) => {
+          const body = args[0]!.asList()
+          replayCounter++
+          const id = `__replayq_${replayCounter}`
+          return [newMark(id, [...body]), ...body, newMove(id)]
         },
       },
     ],
