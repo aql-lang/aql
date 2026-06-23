@@ -47,9 +47,17 @@ export function matchEntry(
   // The dispatching word lives at stack[pointer]. Its WordInfo may
   // carry /s or /f modifiers that override the sig's BarrierPos.
   const wordInfo = readWordInfo(stack, pointer)
+  // The /N modifier restricts dispatch to overloads of exactly N total
+  // args (mirrors the Go matcher's argCount filter). When set, only
+  // sigs with matching arity are considered in every pass.
+  const argCount = wordInfo?.argCount
+  const sigs =
+    argCount === undefined
+      ? fn.signatures
+      : fn.signatures.filter((s) => s.args.length === argCount)
   // Strict pass: forward stops on type mismatch, stack fills the
   // rest. Most calls bind here.
-  for (const sig of fn.signatures) {
+  for (const sig of sigs) {
     const n = sig.args.length
     if (n === 0) continue
     const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, false)
@@ -62,7 +70,7 @@ export function matchEntry(
   // when it flows back. Only used as a fallback so we don't override
   // a legitimate stack fill (e.g. inside a fn body where the trailing
   // word is the OUTER caller, not an arg to the inner one).
-  for (const sig of fn.signatures) {
+  for (const sig of sigs) {
     const n = sig.args.length
     if (n === 0) continue
     const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, true)
@@ -70,7 +78,7 @@ export function matchEntry(
   }
   // 0-arg fallback: if the function declares a 0-arg sig (e.g. `args`,
   // bare keywords), match it with no consumed prefix or forward.
-  for (const sig of fn.signatures) {
+  for (const sig of sigs) {
     if (sig.args.length === 0) {
       return { sig, args: [], forwardCount: 0, prefixCount: 0 }
     }

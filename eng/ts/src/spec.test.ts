@@ -727,7 +727,9 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
         continue
       }
     }
-    out.push(newWordWithModifiers(parsed.name, parsed.forceStack, parsed.forceForward))
+    out.push(
+      newWordWithModifiers(parsed.name, parsed.forceStack, parsed.forceForward, parsed.argCount),
+    )
   }
   if (until === ']') {
     throw new Error(`tokenize: unterminated list literal '['`)
@@ -735,11 +737,17 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
   return out
 }
 
-function newWordWithModifiers(name: string, forceStack: boolean, forceForward: boolean): Value {
-  if (!forceStack && !forceForward) return newWord(name)
+function newWordWithModifiers(
+  name: string,
+  forceStack: boolean,
+  forceForward: boolean,
+  argCount: number | undefined,
+): Value {
+  if (!forceStack && !forceForward && argCount === undefined) return newWord(name)
   const wi: WordInfo = { name }
   if (forceStack) wi.forceStack = true
   if (forceForward) wi.forceForward = true
+  if (argCount !== undefined) wi.argCount = argCount
   return new Value(TWord, wi)
 }
 
@@ -748,6 +756,7 @@ type ModifierSuffix = {
   forceStack: boolean
   forceForward: boolean
   quote: boolean
+  argCount: number | undefined
 }
 
 // parseModifierSuffix scans the trailing /-suffix on a word token.
@@ -758,13 +767,20 @@ type ModifierSuffix = {
 // malformed, the entire token is treated as a plain word.
 function parseModifierSuffix(tok: string): ModifierSuffix {
   const idx = tok.lastIndexOf('/')
-  const noop: ModifierSuffix = { name: tok, forceStack: false, forceForward: false, quote: false }
+  const noop: ModifierSuffix = {
+    name: tok,
+    forceStack: false,
+    forceForward: false,
+    quote: false,
+    argCount: undefined,
+  }
   if (idx < 0 || idx >= tok.length - 1) return noop
   const mod = tok.slice(idx + 1)
   let forceStack = false
   let forceForward = false
   let quote = false
   let seenDigits = false
+  let argCount: number | undefined
   let valid = true
   let i = 0
   while (i < mod.length) {
@@ -776,10 +792,7 @@ function parseModifierSuffix(tok: string): ModifierSuffix {
       }
       let j = i
       while (j < mod.length && mod[j]! >= '0' && mod[j]! <= '9') j++
-      // The argCount value itself is not propagated to the TS spec
-      // tokenizer's Word — the kernel test fixtures don't exercise
-      // multi-arity /N dispatch through this path — but we still must
-      // consume the digit run so subsequent letters parse correctly.
+      argCount = Number.parseInt(mod.slice(i, j), 10)
       seenDigits = true
       i = j
       continue
@@ -809,7 +822,7 @@ function parseModifierSuffix(tok: string): ModifierSuffix {
     i++
   }
   if (!valid) return noop
-  return { name: tok.slice(0, idx), forceStack, forceForward, quote }
+  return { name: tok.slice(0, idx), forceStack, forceForward, quote, argCount }
 }
 
 /**
