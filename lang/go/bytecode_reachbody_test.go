@@ -23,9 +23,9 @@ import (
 // wrongly baked as frozen data).
 func TestReachBodyInertCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
-		{`"aql:test" import end  (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"`, "[true]"},
-		{`"aql:test" import end  (Test.skip "wip" [r.int 0 9] [false] 10 1 0) get "skipped"`, "[true]"},
-		{`"aql:test" import end  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"`, "[100]"},
+		{`import "aql:test"  (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"`, "[true]"},
+		{`import "aql:test"  (Test.skip "wip" [r.int 0 9] [false] 10 1 0) get "skipped"`, "[true]"},
+		{`import "aql:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"`, "[100]"},
 		// (Rand.map-from {a:[Rand.int 0 10]} also clears via this fix — its schema
 		// map holds a Rand.int reach — but its result is a raw RNG draw that only
 		// agrees compiled-vs-interpreter under the differential gate's fixed seed,

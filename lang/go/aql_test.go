@@ -376,7 +376,7 @@ func TestSetFileOps(t *testing.T) {
 	a.SetFileOps(ops)
 
 	// read/write moved to aql:io; import once (state persists across Run).
-	if _, err = a.Run(`"aql:io" import`); err != nil {
+	if _, err = a.Run(`import "aql:io"`); err != nil {
 		t.Fatal(err)
 	}
 	// Write and read back via the mem file ops.
@@ -406,7 +406,7 @@ func TestRunDefaultBranch(t *testing.T) {
 	// Write a JSON file with a map value, then read it back.
 	// The result is a map which hits the default v.String() branch.
 	// read moved to aql:io; import once (state persists across Run).
-	if _, err = a.Run(`"aql:io" import`); err != nil {
+	if _, err = a.Run(`import "aql:io"`); err != nil {
 		t.Fatal(err)
 	}
 	ops.Files["data.json"] = []byte(`{"a":1}`)

@@ -64,7 +64,7 @@ takes a code body.
   vocabulary: `shape`, `rank`, `reshape`, `transpose`, `where`,
   `grade`, `at`, `sortby`, `replicate`, `expand`, `compress`,
   `eachrank`, `foldaxis`, `member`, `unique`, `group`, `window`,
-  `pairs`. Imported with `"aql:array" import` and reached via the
+  `pairs`. Imported with `import "aql:array"` and reached via the
   `array.` prefix. Note `eachrank`/`foldaxis` take a quoted code body
   yet still live here — being specialised (J-style rank/axis control)
   outweighs taking a body; the wrapper preserves the body via

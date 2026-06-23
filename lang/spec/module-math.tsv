@@ -2,77 +2,77 @@
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module. Import binds the `math` namespace, then words are
-# called via dot-access: `"aql:math-util" import end  MathUtil.word args`. Words
+# called via dot-access: `import "aql:math-util"  MathUtil.word args`. Words
 # operate on Numbers; results are Float for the transcendental/root
 # functions and Integer for the rounding family applied to Integers.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  sign / magnitude
-"aql:math-util" import end  MathUtil.abs -5	5	absolute value
-"aql:math-util" import end  MathUtil.sign -7	-1	sign: -1 / 0 / 1
-"aql:math-util" import end  MathUtil.negate 5	-5	arithmetic negation
+import "aql:math-util"  MathUtil.abs -5	5	absolute value
+import "aql:math-util"  MathUtil.sign -7	-1	sign: -1 / 0 / 1
+import "aql:math-util"  MathUtil.negate 5	-5	arithmetic negation
 #
 # §2  rounding family
-"aql:math-util" import end  MathUtil.ceil 2.3	3	round up
-"aql:math-util" import end  MathUtil.floor 2.7	2	round down
-"aql:math-util" import end  MathUtil.round 4.6	5	round to nearest
-"aql:math-util" import end  MathUtil.trunc 4.9	4	truncate toward zero
+import "aql:math-util"  MathUtil.ceil 2.3	3	round up
+import "aql:math-util"  MathUtil.floor 2.7	2	round down
+import "aql:math-util"  MathUtil.round 4.6	5	round to nearest
+import "aql:math-util"  MathUtil.trunc 4.9	4	truncate toward zero
 #
 # §3  roots / logs (Float results)
-"aql:math-util" import end  MathUtil.sqrt 16.0	4.0	square root
-"aql:math-util" import end  MathUtil.cbrt 27.0	3.0	cube root
-"aql:math-util" import end  MathUtil.log2 8.0	3.0	base-2 log
-"aql:math-util" import end  MathUtil.log10 1000.0	3.0	base-10 log
+import "aql:math-util"  MathUtil.sqrt 16.0	4.0	square root
+import "aql:math-util"  MathUtil.cbrt 27.0	3.0	cube root
+import "aql:math-util"  MathUtil.log2 8.0	3.0	base-2 log
+import "aql:math-util"  MathUtil.log10 1000.0	3.0	base-10 log
 #
 # §4  composition and swap form
-"aql:math-util" import end  MathUtil.sqrt 16.0 add 1.0	5.0	results compose like any value
-"aql:math-util" import end  16.0 MathUtil.sqrt	4.0	swap form also dispatches
+import "aql:math-util"  MathUtil.sqrt 16.0 add 1.0	5.0	results compose like any value
+import "aql:math-util"  16.0 MathUtil.sqrt	4.0	swap form also dispatches
 #
 # §5  IEEE-754 classifiers & ops (see design/IEEE-754-COMPLIANCE.8.md)
-"aql:math-util" import end  nan MathUtil.is-nan	true	NaN detected
-"aql:math-util" import end  5.0 MathUtil.is-nan	false	a finite Float is not NaN
-"aql:math-util" import end  inf MathUtil.is-inf	true	infinity detected
-"aql:math-util" import end  5.0 MathUtil.is-inf	false	finite is not infinite
-"aql:math-util" import end  inf MathUtil.is-finite	false	infinity is not finite
-"aql:math-util" import end  nan MathUtil.is-finite	false	NaN is not finite
-"aql:math-util" import end  5.0 MathUtil.is-finite	true	a finite Float is finite
-"aql:math-util" import end  5 MathUtil.is-finite	true	an Integer is always finite
-"aql:math-util" import end  5 MathUtil.is-nan	false	an Integer is never NaN
-"aql:math-util" import end  -3.0 MathUtil.signbit	true	negative sign bit
-"aql:math-util" import end  3.0 MathUtil.signbit	false	positive sign bit
+import "aql:math-util"  nan MathUtil.is-nan	true	NaN detected
+import "aql:math-util"  5.0 MathUtil.is-nan	false	a finite Float is not NaN
+import "aql:math-util"  inf MathUtil.is-inf	true	infinity detected
+import "aql:math-util"  5.0 MathUtil.is-inf	false	finite is not infinite
+import "aql:math-util"  inf MathUtil.is-finite	false	infinity is not finite
+import "aql:math-util"  nan MathUtil.is-finite	false	NaN is not finite
+import "aql:math-util"  5.0 MathUtil.is-finite	true	a finite Float is finite
+import "aql:math-util"  5 MathUtil.is-finite	true	an Integer is always finite
+import "aql:math-util"  5 MathUtil.is-nan	false	an Integer is never NaN
+import "aql:math-util"  -3.0 MathUtil.signbit	true	negative sign bit
+import "aql:math-util"  3.0 MathUtil.signbit	false	positive sign bit
 # remainder is the IEEE round-to-nearest remainder — distinct from `mod`.
-"aql:math-util" import end  7.0 MathUtil.remainder 3.0	1.0	7 = 2*3 + 1
-"aql:math-util" import end  5.0 MathUtil.remainder 3.0	-1.0	5 rounds to 2*3, remainder -1 (mod gives 2)
-"aql:math-util" import end  3.0 MathUtil.copysign -1.0	-3.0	magnitude of 3, sign of -1
-"aql:math-util" import end  -3.0 MathUtil.copysign 2.0	3.0	magnitude of -3, sign of +2
-"aql:math-util" import end  1.0 MathUtil.nextafter 2.0	1.0000000000000002	next representable Float toward 2
+import "aql:math-util"  7.0 MathUtil.remainder 3.0	1.0	7 = 2*3 + 1
+import "aql:math-util"  5.0 MathUtil.remainder 3.0	-1.0	5 rounds to 2*3, remainder -1 (mod gives 2)
+import "aql:math-util"  3.0 MathUtil.copysign -1.0	-3.0	magnitude of 3, sign of -1
+import "aql:math-util"  -3.0 MathUtil.copysign 2.0	3.0	magnitude of -3, sign of +2
+import "aql:math-util"  1.0 MathUtil.nextafter 2.0	1.0000000000000002	next representable Float toward 2
 # round-even ties to even (IEEE default); round ties away from zero.
-"aql:math-util" import end  2.5 MathUtil.round	3	round ties away from zero
-"aql:math-util" import end  2.5 MathUtil.round-even	2	ties-to-even: 2.5 -> 2
-"aql:math-util" import end  3.5 MathUtil.round-even	4	ties-to-even: 3.5 -> 4
+import "aql:math-util"  2.5 MathUtil.round	3	round ties away from zero
+import "aql:math-util"  2.5 MathUtil.round-even	2	ties-to-even: 2.5 -> 2
+import "aql:math-util"  3.5 MathUtil.round-even	4	ties-to-even: 3.5 -> 4
 # logb / scalb (powers of two)
-"aql:math-util" import end  8.0 MathUtil.logb	3.0	radix-2 exponent of 8
-"aql:math-util" import end  3.0 MathUtil.scalb 4	48.0	3 * 2^4
+import "aql:math-util"  8.0 MathUtil.logb	3.0	radix-2 exponent of 8
+import "aql:math-util"  3.0 MathUtil.scalb 4	48.0	3 * 2^4
 # fma: a*b + c with a single rounding (forward form)
-"aql:math-util" import end  MathUtil.fma 2.0 3.0 4.0	10.0	2*3 + 4
+import "aql:math-util"  MathUtil.fma 2.0 3.0 4.0	10.0	2*3 + 4
 # min / max ignore NaN and are order-independent (IEEE-2008 minNum/maxNum).
-"aql:math-util" import end  MathUtil.min nan 5.0	5.0	NaN ignored
-"aql:math-util" import end  MathUtil.max 5.0 nan	5.0	NaN ignored, order-independent
+import "aql:math-util"  MathUtil.min nan 5.0	5.0	NaN ignored
+import "aql:math-util"  MathUtil.max 5.0 nan	5.0	NaN ignored, order-independent
 #
 # §6  negative — a namespace word is undefined until the module is imported
 MathUtil.sqrt 16.0	ERROR:undefined_word	`math` is unbound without `import`
 #
 # §7  trigonometry (radians) — Float results
-"aql:math-util" import end  MathUtil.cos 0.0	1.0	cosine of 0
-"aql:math-util" import end  MathUtil.sin 0.0	0.0	sine of 0
-"aql:math-util" import end  MathUtil.tan 0.0	0.0	tangent of 0
-"aql:math-util" import end  MathUtil.acos 1.0	0.0	arccosine of 1
-"aql:math-util" import end  MathUtil.asin 0.0	0.0	arcsine of 0
-"aql:math-util" import end  MathUtil.atan 0.0	0.0	arctangent of 0
-"aql:math-util" import end  MathUtil.atan2 0.0 1.0	1.5707963267948966	atan2(y=1, x=0) = pi/2 (b-op-a convention)
-"aql:math-util" import end  MathUtil.hypot 3.0 4.0	5.0	sqrt(3^2 + 4^2)
+import "aql:math-util"  MathUtil.cos 0.0	1.0	cosine of 0
+import "aql:math-util"  MathUtil.sin 0.0	0.0	sine of 0
+import "aql:math-util"  MathUtil.tan 0.0	0.0	tangent of 0
+import "aql:math-util"  MathUtil.acos 1.0	0.0	arccosine of 1
+import "aql:math-util"  MathUtil.asin 0.0	0.0	arcsine of 0
+import "aql:math-util"  MathUtil.atan 0.0	0.0	arctangent of 0
+import "aql:math-util"  MathUtil.atan2 0.0 1.0	1.5707963267948966	atan2(y=1, x=0) = pi/2 (b-op-a convention)
+import "aql:math-util"  MathUtil.hypot 3.0 4.0	5.0	sqrt(3^2 + 4^2)
 #
 # §8  exponential and constants
-"aql:math-util" import end  MathUtil.exp 0.0	1.0	e^0
-"aql:math-util" import end  MathUtil.e	2.718281828459045	Euler's number
-"aql:math-util" import end  MathUtil.pi	3.141592653589793	the constant pi
+import "aql:math-util"  MathUtil.exp 0.0	1.0	e^0
+import "aql:math-util"  MathUtil.e	2.718281828459045	Euler's number
+import "aql:math-util"  MathUtil.pi	3.141592653589793	the constant pi

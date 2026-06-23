@@ -10,7 +10,7 @@ import (
 //
 // After import, the words are accessed via dot notation:
 //
-//	"aql:io" import
+//	import "aql:io"
 //	"data.csv" IO.read                 # read a file
 //	"out.txt" "hello" IO.write          # write a file
 //	IO.stdin                           # read all of stdin

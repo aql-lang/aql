@@ -16,7 +16,7 @@ import (
 // explicit `mini` call, so stack subjects, a trailing opts map, the
 // unknown-kind error, and check mode all behave the same.
 
-const miniImp = `"aql:minilang" import end  `
+const miniImp = `import "aql:minilang"  `
 
 func litRun(t *testing.T, src string) any {
 	t.Helper()

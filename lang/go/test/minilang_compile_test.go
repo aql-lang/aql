@@ -14,7 +14,7 @@ import (
 // instead of the standard call. The transducer stays the semantic reference,
 // the check-mode target, and the non-concrete-src fallback.
 
-const mcImp = `"aql:minilang" import end  `
+const mcImp = `import "aql:minilang"  `
 
 func mcRun(t *testing.T, src string) any {
 	t.Helper()
@@ -95,7 +95,7 @@ func TestMiniCompileGoHostHook(t *testing.T) {
 // register-compiled runs at the call site. `lit`'s transducer returns src; its
 // compiler uppercases at expansion via unquote.
 func TestMiniCompileAQLHook(t *testing.T) {
-	setup := mcImp + `"aql:string-util" import end  ` +
+	setup := mcImp + `import "aql:string-util"  ` +
 		`MiniLang.register lit (fn [[src:String opts:Map] [String] [src]]) end  ` +
 		`MiniLang.register-compiled lit (macro [[src opts] [ quote [ unquote (StringUtil.upper src) ] ]]) end  `
 	if got := mcRun(t, setup+`mini lit 'hello'`); got != "HELLO" {

@@ -36,7 +36,7 @@ square 4                             # returns 16
 def Point refine Record [x:Number y:Number]
 make Point [3 4]                     # returns {x:3 y:4}
 
-"aql:time-util" import end TimeUtil.await [[add 1 2] [add 3 4]]    # returns [3 7]
+import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]]    # returns [3 7]
 
 # macros: add new syntax in AQL itself (hygienic; this one expands to an `if`)
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
@@ -50,6 +50,40 @@ values on the stack between words (stack-shuffling words like `dup` and
 the stack model when you need it, and the
 **[Explanation](EXPLANATION.md)** covers how forward collection changes
 the feel of stack code.
+
+
+## Forward arguments — the primary way to write AQL
+
+AQL is concatenative, but you rarely have to think in stack terms,
+because the defining feature of the surface syntax is **forward
+arguments**: a word takes its operands from the tokens written *after*
+it, in declared order, exactly like a conventional function call.
+
+```aql
+add 1 2                              # returns 3 — the word comes first
+def square fn [[x:Number] [Number] [mul x x]]
+square 4                             # returns 16 — your own words read the same way
+import "aql:math-util"               # imports read forward, too
+3 7 MathUtil.min                     # returns 3 — module words are then in scope
+```
+
+This is the canonical, recommended form for **all new code, examples,
+and documentation** — including imports: write `import "aql:math-util"`,
+not the stack spelling. Forward form reads top-to-bottom and
+left-to-right, the written argument order matches the declared parameter
+order, and you never have to track what is sitting on the stack:
+
+- `f a b c` binds `a`, `b`, `c` to the first, second, third parameters.
+- Calls compose by parenthesising: `(f a b) g c`.
+- The same rule covers built-ins, your own `def fn`s, and `import`.
+- One exception: a dotted module word (`MathUtil.min`) auto-invokes from
+  what's already on the stack, so call it args-first (`3 7 MathUtil.min`).
+
+The stack forms (`c b a f`, `10 3 sub`) remain fully equivalent and are
+there for point-free pipelines, but forward form is what you reach for
+first. See the **[Tutorial](TUTORIAL.md)** to start writing it and the
+**[Explanation](EXPLANATION.md)** for how forward collection works
+underneath.
 
 
 ## Install

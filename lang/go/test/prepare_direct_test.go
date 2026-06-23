@@ -43,7 +43,7 @@ func newAQLWithDirectSDK(t *testing.T) *lang.AQL {
 	seedAQL(a)
 	a.SetSDK("voxgig-solardemo", makeTestSDKForDirect(t))
 	// prepare/direct moved to aql:net; import once (state persists across Run).
-	if _, err := a.Run(`"aql:net" import`); err != nil {
+	if _, err := a.Run(`import "aql:net"`); err != nil {
 		t.Fatal(err)
 	}
 	return a

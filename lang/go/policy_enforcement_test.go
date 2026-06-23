@@ -92,7 +92,7 @@ func TestModulesScopeDeniesImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run(`"aql:math-util" import`)
+	_, err = a.Run(`import "aql:math-util"`)
 	if err == nil {
 		t.Fatal("expected import to be denied")
 	}
@@ -120,7 +120,7 @@ func TestModulesScopeAllowsSpecificModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Run(`"aql:math-util" import`); err != nil {
+	if _, err := a.Run(`import "aql:math-util"`); err != nil {
 		t.Errorf("aql:math should be allowed: %v", err)
 	}
 }
@@ -140,7 +140,7 @@ func TestModulesScopeUninstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run(`"aql:math-util" import`)
+	_, err = a.Run(`import "aql:math-util"`)
 	if err == nil {
 		t.Fatal("expected import to be refused")
 	}

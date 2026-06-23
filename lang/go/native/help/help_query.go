@@ -2,7 +2,7 @@ package help
 
 func init() {
 	// SQL-style query DSL words. These live in the aql:query module and
-	// are accessed via dot notation after `"aql:query" import` — e.g.
+	// are accessed via dot notation after `import "aql:query"` — e.g.
 	// Query.from, Query.where, Query.select. They form a left-to-right
 	// pipeline in forward form: `Query.from people Query.where [age gt
 	// 18] Query.select [name age]`.
@@ -114,9 +114,9 @@ func init() {
 			"For .csv/.tsv files, loads data as a table. " +
 			"Use a list argument to rename imports (not supported for data files).",
 		Examples: []string{
-			`"aql:math-util" import end   ;# native module → math.* namespace`,
-			`"./lib.aql" import end  ;# sibling file's exports`,
-			`import [Orig Alias] "./lib.aql" end  ;# rename on import`,
+			`import "aql:math-util"   ;# native module → math.* namespace`,
+			`import "./lib.aql"  ;# sibling file's exports`,
+			`import [Orig Alias] "./lib.aql"  ;# rename on import`,
 		},
 	})
 

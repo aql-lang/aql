@@ -20,7 +20,7 @@ structure) without touching the filesystem.
 
 ## 1. Current state
 
-- **Evaluation from a string exists:** `"aql:vm" import` then
+- **Evaluation from a string exists:** `import "aql:vm"` then
   `Vm.run "1 add 2"` → `3` (plus `run-with` / `run-sandbox` /
   `run-compute` variants). So "run this source" is covered; "parse
   this text into data *without* running it" is not.
@@ -38,7 +38,7 @@ The complement of `jsonify`, in the same module so the pair is
 discoverable together:
 
 ```
-"aql:struct-util" import end
+import "aql:struct-util"
 StructUtil.parse "{a:1, b:[2,3]}"     # returns {a:1, b:[2 3]}
 StructUtil.parse "[1, 2, 3]"          # returns [1 2 3]
 ```
@@ -71,7 +71,7 @@ For tooling (formatters, linters, macro experiments) a step below
 data, without evaluating it.
 
 ```
-"aql:vm" import end
+import "aql:vm"
 Vm.parse "1 add 2"        # returns a quoted list: [1 word(add)/q 2]
 ```
 

@@ -20,10 +20,10 @@ def m {f: (fn [[a:Integer b:Integer][Integer][(a mul 100) add b]])}  3 m.f 2	203
 def m {f: ([a:Integer] => [a add 1])}  m.f 5	6	afn parity — lambdas dispatched this way already
 #
 # §2  module exports — fn values exported by inline modules call like words
-module [export "X" {f: (fn [[a:Integer][Integer][a add 1]])}] import end  X.f 5	6	a module-exported fn collects forward args
-module ["aql:string-util" import end export "X" {up: (fn [[s:String][String][StringUtil.upper s]])}] import end  X.up 'ab'	'AB'	the export body runs in MODULE scope (module-private import resolves)
+import module [export "X" {f: (fn [[a:Integer][Integer][a add 1]])}]  X.f 5	6	a module-exported fn collects forward args
+import module [import "aql:string-util" export "X" {up: (fn [[s:String][String][StringUtil.upper s]])}]  X.up 'ab'	'AB'	the export body runs in MODULE scope (module-private import resolves)
 #
 # §3  negatives — no match leaves the value as data; module scope is sealed
 def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f	fn [[a:Integer][Integer][word(a) word(add) 1]]	bare value, no args: stays data
 def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 'x'	fn [[a:Integer][Integer][word(a) word(add) 1]] 'x'	type mismatch: no dispatch — the fn stays data, 'x' strands on top
-"aql:string-util" import end  module [export "X" {up: (fn [[s:String][String][StringUtil.upper s]])}] import end  X.up 'ab'	ERROR:undefined_word	an OUTER import does not leak into the module body's scope
+import "aql:string-util"  import module [export "X" {up: (fn [[s:String][String][StringUtil.upper s]])}]  X.up 'ab'	ERROR:undefined_word	an OUTER import does not leak into the module body's scope

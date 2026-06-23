@@ -107,7 +107,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 // instead of refusing "operand shape needs reordering". `setpath recv k v`
 // with a computed receiver is the driving shape.
 func TestThreeArgComputedReceiverLowers(t *testing.T) {
-	const src = `"aql:struct-util" import end (StructUtil.setpath (object {a:1}) "b" 2) get b`
+	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) get b`
 
 	a, err := New()
 	if err != nil {
@@ -958,7 +958,7 @@ func TestMapLambdaCompilesNative(t *testing.T) {
 // + exact compiled/interpreted parity (the compiler must not change behaviour),
 // not the lazy-query rendering itself.
 func TestQueryDSLCompilesNative(t *testing.T) {
-	const imp = `"aql:query" import end  `
+	const imp = `import "aql:query"  `
 	for _, src := range []string{
 		imp + `Query.select [name age]`,
 		imp + `Query.where [age gt 1] (Query.select [name])`,
@@ -1036,8 +1036,8 @@ func TestReachLensCompilesNative(t *testing.T) {
 		{`def xs [10 20 30]  apply $.1 xs`, "[20]"},
 		{`def p {name:"ada"}  apply $!.name p`, "[ada]"},
 		{`def p {name:"ada"}  typeof (rebind $.name p)`, "[Reach]"},
-		{`"aql:struct-util" import end  StructUtil.getpath $.a.b {a:{b:7}}`, "[7]"},
-		{`"aql:struct-util" import end  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}`, "[{a:{b:99} c:2}]"},
+		{`import "aql:struct-util"  StructUtil.getpath $.a.b {a:{b:7}}`, "[7]"},
+		{`import "aql:struct-util"  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}`, "[{a:{b:99} c:2}]"},
 	} {
 		a, _ := New()
 		prog, reason, _, cerr := a.CompileCheck(c.src)
@@ -1194,16 +1194,16 @@ func TestModuleSyntheticConstFold(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`"aql:math-util" import end  MathUtil.$name`, "[MathUtil]"},
-		{`"aql:math-util" import end  typeof MathUtil.$module`, "[Module]"},
-		{`"aql:math-util" import end  MathUtil.$module is Module`, "[true]"},
-		{`"aql:math-util" import end  MathUtil.$module.name`, "[aql:math-util]"},
-		{`"aql:math-util" import end  MathUtil.$module.kind`, "[native]"},
-		{`"aql:math-util" import end  MathUtil.$module.exports`, "[['MathUtil']]"},
+		{`import "aql:math-util"  MathUtil.$name`, "[MathUtil]"},
+		{`import "aql:math-util"  typeof MathUtil.$module`, "[Module]"},
+		{`import "aql:math-util"  MathUtil.$module is Module`, "[true]"},
+		{`import "aql:math-util"  MathUtil.$module.name`, "[aql:math-util]"},
+		{`import "aql:math-util"  MathUtil.$module.kind`, "[native]"},
+		{`import "aql:math-util"  MathUtil.$module.exports`, "[['MathUtil']]"},
 		// the VALUE, not the declared type Map/List (the convert-folding bug guard)
-		{`module [export "Foo" {a:1 b:2}] import end convert Map Foo`, "[{a:1 b:2}]"},
-		{`module [export "Foo" {a:1 b:2}] import end convert List Foo`, "[[1 2]]"},
-		{`module [export "Foo" {a:1}] import end convert List Foo.$module`, "[['Foo']]"},
+		{`import module [export "Foo" {a:1 b:2}] convert Map Foo`, "[{a:1 b:2}]"},
+		{`import module [export "Foo" {a:1 b:2}] convert List Foo`, "[[1 2]]"},
+		{`import module [export "Foo" {a:1}] convert List Foo.$module`, "[['Foo']]"},
 	} {
 		a, _ := New()
 		prog, reason, _, cerr := a.CompileCheck(c.src)
@@ -2014,7 +2014,7 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 	// NEGATIVE: with the import present, a VALID kind must NOT trap — it compiles
 	// (or faithfully falls back) and produces the real value, never an
 	// *_unknown_lang error.
-	const ok = `"aql:minilang" import end  ("AbcD" mini re '[a-z]+').fst.m`
+	const ok = `import "aql:minilang"  ("AbcD" mini re '[a-z]+').fst.m`
 	gotC, _, errC := mustNew(t).RunCompiled(ok)
 	gotI, errI := mustNew(t).Run(ok)
 	if errC != nil || errI != nil {
@@ -2031,7 +2031,7 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 // set, so the getr's own unmaterialisable residual (which refuses even valid
 // keys) does not refuse the program — the trap truncates it.
 func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
-	const src = `"aql:math-util" import end  MathUtil!.nope`
+	const src = `import "aql:math-util"  MathUtil!.nope`
 	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
 	if cerr != nil {
 		t.Fatalf("%q: check error %v", src, cerr)
@@ -2053,7 +2053,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 
 	// NEGATIVE 1: a VALID getr export must NOT trap — it compiles and produces
 	// the real value, with compiled/interp parity.
-	const okGetr = `"aql:math-util" import end  MathUtil!.sqrt 16.0`
+	const okGetr = `import "aql:math-util"  MathUtil!.sqrt 16.0`
 	if p, _, _, _ := mustNew(t).CompileCheck(okGetr); p != nil {
 		if dis := p.Disassemble(); strings.Contains(dis, "TRAP") {
 			t.Errorf("valid getr must not trap:\n%s", dis)
@@ -2070,7 +2070,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 
 	// NEGATIVE 2: `get` (not getr) of a MISSING key returns None, never traps —
 	// only getr raises not_found, so the get path stays on the shared ReturnsFn.
-	const okGet = `"aql:math-util" import end  MathUtil.nope`
+	const okGet = `import "aql:math-util"  MathUtil.nope`
 	if _, _, eGet := mustNew(t).RunCompiled(okGet); eGet != nil {
 		t.Errorf("get of a missing key must not error, got %v", eGet)
 	}
@@ -2242,7 +2242,7 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 	// plain out-of-order residual) must NOT be promoted — the Test.run-spec
 	// harness diverged when user-call results were promoted broadly, so it stays
 	// on fallback. Assert it still falls back faithfully (compiled == interp).
-	const harness = `"aql:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
+	const harness = `import "aql:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
 	gotC, _, errC := mustNew(t).RunCompiled(harness)
 	gotI, errI := mustNew(t).Run(harness)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
@@ -2404,7 +2404,7 @@ func TestZeroOutputDynamicPolyCompiles(t *testing.T) {
 // faithful — verified by the differential corpus, which compares the post-
 // mutation observable result.
 func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
-	const imp = `"aql:io" import end  `
+	const imp = `import "aql:io"  `
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
@@ -2447,7 +2447,7 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 // OpCallDynamic — callDynamic applies sqrt on the else path (→ 4.0) and leaves
 // [99 16] on the then path. One compiled program is faithful on both branches.
 func TestConditionalBranchApplyCompiles(t *testing.T) {
-	const imp = `"aql:math-util" import end `
+	const imp = `import "aql:math-util" `
 	cases := []struct{ src, want string }{
 		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt 16`, "[4.0]"},          // else: sqrt 16 → 4.0
 		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 16]"},        // then: 99, 16 stays
@@ -2515,11 +2515,11 @@ func TestConditionalBranchApplyCompiles(t *testing.T) {
 func TestSubRegistryPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// Dynamic input (the setpath result) into getpath — the poly row.
-		{`"aql:struct-util" import end  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[7]"},
+		{`import "aql:struct-util"  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[7]"},
 		// Static-input baseline still compiles (a plain baked CALL_NATIVE).
-		{`"aql:struct-util" import end  StructUtil.getpath $.a.b {a:{b:1}}`, "[1]"},
+		{`import "aql:struct-util"  StructUtil.getpath $.a.b {a:{b:1}}`, "[1]"},
 		// A dynamic miss returns None — the re-match picks the same overload.
-		{`"aql:struct-util" import end  StructUtil.getpath $.a.z (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[None]"},
+		{`import "aql:struct-util"  StructUtil.getpath $.a.z (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[None]"},
 	}
 	for _, c := range cases {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)

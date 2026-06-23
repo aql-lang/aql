@@ -43,7 +43,7 @@ func Overview() string {
 	b.WriteString("  \"concat\" describe      Same as `describe concat`, by string name.\n")
 	b.WriteString("\n")
 	b.WriteString("Modules add more words; import one, then describe what it exports:\n")
-	b.WriteString("  \"aql:math-util\" import\n")
+	b.WriteString("  import \"aql:math-util\"\n")
 	b.WriteString("  0.5 MathUtil.sin              ;# call an imported word\n")
 	b.WriteString("  describe \"aql:math-util\"      ;# or describe it without importing\n")
 	b.WriteString("\n")

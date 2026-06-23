@@ -30,7 +30,7 @@ func runEmit(t *testing.T, src string) (string, error) {
 	return native.Canon(out), nil
 }
 
-const emitImp = `"aql:emitlang" import end  `
+const emitImp = `import "aql:emitlang"  `
 
 // TestEmitBuiltins pins the canonical walk-based emitters end-to-end through
 // the `emit` word: auto json, explicit kinds, opts, and the desugared form.
