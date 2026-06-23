@@ -359,6 +359,53 @@ mutation is per-import-instance and idempotent with the runtime register, but
 confirm it does not leak across check passes (BeginCheckMode reset) and that the
 differential gate stays green (the row's runtime answer must be unchanged).
 
+## module-parselang:23 — register-ReturnsFn attempt (IMPLEMENTED, tested, reverted)
+
+Implemented the fix lead: extracted `parseRegisterInstall` and added a check-mode
+`ReturnsFn` (`parseRegisterReturns`) to `parselang-register` that installs
+`parse_<name>` into the exports map during check. RESULT (probed):
+- It WORKS as intended — `parse_calc` becomes statically resolvable and the row's
+  refusal MOVES from `operand of unknown provenance at get` to
+  `context-dependent word __pa`. So the get-receiver problem is solved by it.
+- BUT it breaks the differential gate (1 mismatch, module-parselang.tsv:L26):
+  check-mode mutation of the exports map LEAKS into the shared runtime registry,
+  so the runtime `register` handler then raises `parse_kind_exists` ("already
+  registered"). Confirmed: check and run share the module-export instance.
+- AND even a sound version would NOT clear the row: the remaining `__pa` blocker
+  is the body-bearing fn-VALUE dispatch problem (below). So this change is
+  necessary-but-not-sufficient and currently gate-breaking → reverted.
+
+Two requirements to clear module-parselang:23, BOTH needed:
+1. SOUND check-mode registration of a dynamically-registered parser WITHOUT
+   leaking into runtime state. Candidate: make the runtime `register` handler
+   idempotent for a re-register of the SAME source call (compare fn `Pos`); a
+   genuine user double-register (different Pos) still errors. Or a transient /
+   check-only registration table consulted by `moduleExportGet` in check mode.
+2. The `__pa` fix — see next.
+
+## THE shared crux: body-bearing fn-VALUE dispatch (`__pa`)
+
+VERIFIED at code level this session:
+- A NAMED user fn compiles fine: `def myf (fn [[a:Integer] [Integer] [a add 1]])
+  myf 5` → `CALL_USER` unit (via `buildFnBodyReturnsFn` → `StartFnCompile`, which
+  ARMS the body so `__pa` is captured INSIDE the unit).
+- A fn VALUE with a real body, dispatched at the pointer (a module export like
+  `ParseLang.parse_calc`, or `Rand.list-of`'s wrapper), goes through
+  `execFnDefLiteral` → inline `CallAQL` analysis, whose synthesized body tail
+  contains `__pa` (pop Args/FnBaseline). That `__pa` leaks into the TOP-LEVEL
+  residual and `emit.go:1920` refuses it (`context-dependent word __pa`).
+- The machinery to fix it EXISTS: `eng/go/callable_words.go` `compileClosureBody`
+  / `tryRecordClosure` already compile a code body into its own fn unit via
+  `StartFnCompile` (used by each/fold/scan and a "fnval" factory path). The gap
+  is routing the body-bearing fn-VALUE dispatch path through that same
+  `StartFnCompile` arming instead of inline `CallAQL`.
+
+This `__pa` crux is SHARED by module-parselang:23 (parse_calc body) and
+module-rand:38 (list-of's wrapper body + its NoEvalArgs gen). Cracking
+body-bearing fn-value dispatch unblocks the fn-body half of BOTH rows. (rand
+additionally needs the carrier-receiver→fn-carrier resolution; parselang
+additionally needs the sound dynamic-registration above.)
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
