@@ -312,6 +312,29 @@ fn value resolved from a SHAPED map carrier (no code-body), i.e. make
 for module-rand:38. The base mechanism (OpCallDynamic) is already in the VM and
 emitter; the work is feeding it the right carriers from carrier receivers.
 
+## All 3 traced to DISTINCT deep blockers (mark-trail verified)
+
+Each module row was traced to its single actual MARK this session:
+
+- **module-parselang:23** — ONE mark: `operand of unknown provenance … at get`.
+  Everything before the final `get 1` compiles. But the get's RECEIVER resolves
+  to an untracked **ModuleExport** (`ParseLang` itself, empty ID), NOT the parse
+  result — because `parse_calc` is registered DYNAMICALLY (`ParseLang.register
+  calc …`) and is not a statically-tracked call in check+emit mode, so
+  `ParseLang.parse_calc …` does not record a tracked result. Blocker:
+  dynamic-word-registration tracking (a distinct hard area).
+- **module-rand:38** — carrier receiver (`with-seed`→Map carrier) + NoEvalArgs
+  code-body. The `get list-of` never reaches the FnDef branch (carrier guard).
+- **module-test:38** — call-site inlining (`s` param carrier) + closure bodies +
+  recursion + fn-value dispatch (`test-invoke`).
+
+So there is no single shared fix that clears all three, and none is bounded:
+the rows exercise three different frontiers (dynamic registration; carrier
+receiver + code-body; recursive inlining), all sitting on the fn-value/module-fn
+dispatch-recording base. The base (`OpCallDynamic`) exists and works for the
+simple `m.f 2 3` shape; each row needs a different extension to feed it. This is
+the multi-session build, partitioned by row.
+
 ## Discipline for the build
 
 Probe-first per feature (isolate, commit only on full success, fall back
