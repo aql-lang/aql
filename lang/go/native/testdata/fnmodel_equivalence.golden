@@ -602,7 +602,7 @@ WORD trim
 WORD tuck
   [Any Any] barrier=0 +returnsfn
 WORD typeof
-  [Any] barrier=1 returns=[Type]
+  [Any] barrier=1 returns=[Type] +returnsfn
 WORD undef
   [Scalar/String Type/FunctionSignature] barrier=2 runcheck
   [Scalar/Atom Type/FunctionSignature] barrier=2 runcheck quote={0}

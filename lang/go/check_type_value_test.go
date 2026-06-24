@@ -1,4 +1,4 @@
-package native_test
+package lang_test
 
 import (
 	"testing"
@@ -63,6 +63,24 @@ func TestDisjunctEnumTypeBodyCheck(t *testing.T) {
 	for _, src := range clean {
 		if n := checkErrs(t, src); n != 0 {
 			t.Errorf("type-value op should check clean: got %d errors for %q", n, src)
+		}
+	}
+}
+
+// `typeof` of a CONCRETE argument must return the precise type literal in check
+// mode (a concrete-gated ReturnsFn), so `def T (typeof v)` gets a valid type
+// body — `typeof (const 1)` is the singleton type, not the bare `Type` carrier
+// the def-type validator rejected. class.tsv regressed these.
+func TestTypeofConcreteSingletonCheck(t *testing.T) {
+	clean := []string{
+		`def One (typeof (const 1)) end 1 is One`,
+		`def One (typeof (const 1)) end 2 is One`,
+		`def One (typeof (const 1)) end 1.0 is One`,
+		`def T (typeof 5) end 7 is T`, // typeof a plain literal is a valid body too
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("typeof-of-concrete type body should check clean: got %d errors for %q", n, src)
 		}
 	}
 }
