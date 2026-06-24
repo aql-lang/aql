@@ -187,29 +187,41 @@ transitive analysis — they do not reproduce in isolation — so they need that
 focused precision pass, exactly as the two residue families above. Demoting
 severity was considered and rejected on this basis.
 
-### The emergent root: call-time fn-body re-analysis (diagnosed)
+### Call-time recursive re-analysis suppression (landed)
 
-The reason these do not reproduce in isolation is **call-time re-analysis**.
-`AnalyseFnBody` is memo-keyed on `(scope, name, arg-types, captures, body)`, so
-a fn body is analysed once per distinct call-shape and **each analysis emits its
-own diagnostics**. A body that is clean against its DECLARED param types (the
-def-time analysis) can emit `no_signature` when re-analysed under a call-shape
-whose args narrowed a param to a strict `Any` — and a recursive fn re-analyses
-itself per round of the fixed point, so a self-call passing a `get`-result
-(`trie`'s `fuzzy-go` recursing on `child = pair get 1` as `nd:Map`) drives the
-cascade. Concretely: `trie.aql`'s `fuzzy-go`/`kid-items`/`get` cluster is
-**absent** when the module is truncated before `trie-within` (head 350, the
-def-time analysis is clean) and **appears** the moment `trie-within` calls
-`fuzzy-go` (head 360). The report's Issue 5 (`branch_error` "stack desync") is
-the same mechanism — the simulated stack diverging after a call-shape recovery.
+The recursive slice of the cascade is now fixed. When a fn body is re-analysed
+under a self-call's narrowed arg shape (a different `AnalyseFnBody` memo key, so
+it does not bail), its error-level body diagnostics (`no_signature`,
+`undefined_word`, `uncalled_function`, `branch_error`) are **suppressed** — the
+outer, non-recursive analysis of the same body tokens already reports any real
+defect, while the narrowed re-run can spuriously fail dispatch. Tracked per fn
+NAME (`CheckState.FnNameInflight`), so only genuine same-fn recursion is
+suppressed, never a nested helper call (a real error in a helper, or in a
+recursive fn's own first analysis, is still reported — pinned by the two
+negative halves of `lang/go/recursive_reanalysis_test.go`).
 
-A sound fix is to emit fn-body diagnostics from the **canonical** (declared-
-types) analysis only, treating call-shape re-analyses as return-type inference
-that must not re-report body errors. That is a change to the checker's
-fixed-point/diagnostic-scoping core and ripples directly through the pinned
-`pinnedAnyFrontierRows` / `pinnedTypeSoundnessViolations` ratchets, so it is the
-focused precision pass — not a local tweak. It was scoped and deferred here
-rather than risk destabilising those accuracy gates with a half-measure.
+Effect on the clients (`aql check`): `radix.aql` 53→23, `tst.aql` 62→36,
+`burst.aml` 30→4 errors. All ratchets (`pinnedAnyFrontierRows`,
+`pinnedTypeSoundnessViolations`), the differential + property gates, and the
+full suite stay green.
+
+### The remaining root: call-site arg mismatch on a get-result (deferred)
+
+What is left after the recursion suppression is the NON-recursive slice: a
+`get`-result bound and threaded to a concrete param at a direct call site whose
+static type the checker has lost to a strict (non-gradual) `Any`. `trie.aql`'s
+`fuzzy-go`/`kid-items`/`get` cluster (≈9 errors) is the surviving example — the
+fold over `(nd kid-items)` (a user-fn result whose `StructUtil.items` element
+type is unknown) yields a `pair` whose `pair get 1` does not poly-match the
+`nd:Map` recursion slot. Threading the **dynamic** modality through
+nested-fn-result → fold-element → `get` (so the value stays gradual rather than
+collapsing to strict `Any`) is the precision work that removes it.
+
+That, and a sound version of the `set`-over-dynamic arity under a real compile
+(residual #2 above), are the focused precision pass: they touch the checker's
+gradual-modality propagation and the pinned `pinnedAnyFrontierRows` /
+`pinnedTypeSoundnessViolations` ratchets, so they belong in a dedicated change
+that moves those gates deliberately — not a local tweak.
 
 ### Client-side options until that lands
 

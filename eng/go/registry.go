@@ -281,6 +281,23 @@ type CheckState struct {
 	// a placeholder instead of looping.
 	FnInflight map[string]bool
 
+	// FnNameInflight counts, per fn NAME, how many of its body analyses
+	// are on the stack. A recursive self-call with a DIFFERENT arg shape
+	// has a different FnInflight key, so it does not bail — it re-analyses
+	// the same body tokens under the narrowed args. Those re-analyses must
+	// not RE-EMIT body diagnostics: the first (non-recursive) analysis of
+	// the same body already reports any real error, while a call-shape that
+	// narrowed a param to a strict Any can spuriously fail dispatch
+	// (the trie fuzzy-go recursion's `kid-items`/`get` cascade). When a
+	// name is already in-flight, SuppressBodyErrors is raised for the
+	// re-entry so only the canonical analysis's diagnostics stand.
+	FnNameInflight map[string]int
+
+	// SuppressBodyErrors, when > 0, drops error-level diagnostics emitted
+	// during a recursive fn-body RE-ENTRY (see FnNameInflight). Sound: the
+	// re-entry re-runs body tokens the outer analysis already checked.
+	SuppressBodyErrors int
+
 	// InflightBails counts Any-placeholder bail-outs taken by
 	// recursive calls of UNCHECKED fns (declared returns use the
 	// declaration instead and don't count). AnalyseFnBody compares

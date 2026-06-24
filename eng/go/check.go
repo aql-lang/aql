@@ -101,6 +101,8 @@ func (c *CheckState) Begin() func() {
 	c.DefsUsed = nil
 	c.ContextTypes = nil
 	c.InflightBails = 0
+	c.FnNameInflight = nil
+	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
 	c.Emit = nil
 	c.FnBodyDepth = 0
@@ -119,6 +121,17 @@ func (c *CheckState) AddDiagnostic(d CheckDiagnostic) {
 	}
 	if d.Severity == "" {
 		d.Severity = SeverityFor(d.Code)
+	}
+	// A recursive fn-body re-entry (a self-call with a different arg shape that
+	// re-runs the same body tokens) must not re-emit body errors — the outer,
+	// non-recursive analysis of the same body already reports any real defect,
+	// whereas the narrowed re-entry can spuriously fail dispatch. Drop only the
+	// emergent error-level dispatch diagnostics; warnings/info still flow.
+	if c.SuppressBodyErrors > 0 && d.Severity == SeverityError {
+		switch d.Code {
+		case "no_signature", "undefined_word", "uncalled_function", "branch_error":
+			return
+		}
 	}
 	if c.FnBodyDepth > 0 {
 		d.FnBody = true

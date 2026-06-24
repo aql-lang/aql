@@ -2466,6 +2466,26 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
 
+	// Recursive RE-ENTRY by name (a self-call with a different arg shape, which
+	// has a different FnInflight key so it did not bail above): suppress the
+	// error-level body diagnostics this re-run would emit. The outer, canonical
+	// analysis of the same body tokens already reports any real defect; a re-run
+	// whose args narrowed a param to a strict Any can spuriously fail dispatch
+	// (trie's fuzzy-go recursing on `child = pair get 1` as nd:Map → false
+	// kid-items/get/build-row no_signature). Tracked per NAME so only genuine
+	// same-fn recursion is suppressed, not nested helper calls.
+	if name != "" {
+		if r.Check.FnNameInflight == nil {
+			r.Check.FnNameInflight = map[string]int{}
+		}
+		if r.Check.FnNameInflight[name] > 0 {
+			r.Check.SuppressBodyErrors++
+			defer func() { r.Check.SuppressBodyErrors-- }()
+		}
+		r.Check.FnNameInflight[name]++
+		defer func() { r.Check.FnNameInflight[name]-- }()
+	}
+
 	// Diagnostics emitted from here down come from CALL-TIME code —
 	// tag them FnBody so an undefined_word that turns out to be a
 	// forward reference can be rescued at end of pass
