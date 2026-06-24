@@ -151,7 +151,7 @@ WORD emit
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Scalar/String]
   [Any] barrier=1 runcheck returns=[Scalar/String]
 WORD enum
-  [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum]
+  [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum] +returnsfn
 WORD eq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD error
@@ -181,7 +181,7 @@ WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1
 WORD flex
-  [Node] barrier=1 returns=[Node]
+  [Node] barrier=1 returns=[Node] +returnsfn
 WORD fn
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD fnsig
@@ -382,7 +382,7 @@ WORD neq
 WORD nip
   [Any Any] barrier=0 +returnsfn
 WORD node
-  [Node] barrier=1 returns=[Node]
+  [Node] barrier=1 returns=[Node] +returnsfn
 WORD nodify
   [Any] barrier=1
 WORD nor

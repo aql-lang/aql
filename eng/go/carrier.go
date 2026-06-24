@@ -258,6 +258,16 @@ func toCarrier(v Value) Value {
 	if _, ok := v.Data.(FnDefInfo); ok {
 		return v
 	}
+	// Keep Disjunct / Enum values concrete: their DisjunctInfo (the
+	// alternatives) IS the type definition. Stripping to a bare TDisjunct /
+	// TEnum carrier loses the alternatives, so IsDisjunct / IsTypeBody go false
+	// and `def Maybe (String tor None)` / `def Color enum […]` are wrongly
+	// rejected in check mode ("body must be a type value or literal"), and
+	// `tcmp` / `is` / `typeof` over the type lose their members (compare.tsv).
+	// Same rationale as the FnDef / Module / Reach payload preservations above.
+	if _, ok := v.Data.(DisjunctInfo); ok {
+		return v
+	}
 	// Keep MODULE instances (Ideal/Module, Ideal/ModuleExport) concrete, same
 	// rationale as FnDefInfo: stripping nulls the ExtensionPayload descriptor /
 	// exports, so `MathUtil.$module` would become an opaque carrier the

@@ -150,7 +150,8 @@ var typeNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    enumHandler,
-			Returns:    []*Type{TEnum}, BarrierPos: -1,
+			Returns:    []*Type{TEnum},
+			ReturnsFn:  enumReturns, BarrierPos: -1,
 		}},
 	},
 	{
@@ -503,6 +504,22 @@ func installIdeals(r *Registry) {
 // blue]` doesn't require quoting. When the list carries a child-type
 // constraint (`[ :T a b c]`), each element is validated against T
 // before being added.
+// enumReturns runs the (pure) enumHandler in check mode when the element list
+// is concrete, so `enum [red green blue]` produces the real Enum VALUE
+// (carrying its DisjunctInfo alternatives) rather than a bare TEnum carrier.
+// Without the alternatives the result fails IsTypeBody, so `def Color enum […]`
+// was wrongly rejected ("body must be a type value or literal, got Enum") and
+// `tcmp` / `is` over the enum lost its members (compare.tsv). A non-concrete
+// element list falls back to the bare TEnum carrier.
+func enumReturns(args []Value, _ *Registry) []Value {
+	if len(args) == 1 && IsConcrete(args[0]) {
+		if out, err := enumHandler(args, nil, nil, nil); err == nil {
+			return out
+		}
+	}
+	return []Value{NewCarrier(TEnum)}
+}
+
 func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	list := args[0]
 	if !IsConcrete(list) {

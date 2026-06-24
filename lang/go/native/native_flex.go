@@ -31,18 +31,20 @@ var flexNatives = []NativeFunc{
 		Name: "flex",
 
 		Signatures: []NativeSig{{
-			Args:    []*Type{TNode},
-			Handler: flexHandler,
-			Returns: []*Type{TNode}, BarrierPos: -1,
+			Args:      []*Type{TNode},
+			Handler:   flexHandler,
+			Returns:   []*Type{TNode},
+			ReturnsFn: flexReturns, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "node",
 
 		Signatures: []NativeSig{{
-			Args:    []*Type{TNode},
-			Handler: nodeHandler,
-			Returns: []*Type{TNode}, BarrierPos: -1,
+			Args:      []*Type{TNode},
+			Handler:   nodeHandler,
+			Returns:   []*Type{TNode},
+			ReturnsFn: nodeReturns, BarrierPos: -1,
 		}},
 	},
 	{
@@ -77,6 +79,46 @@ var flexNatives = []NativeFunc{
 			},
 		},
 	},
+}
+
+// flexReturns models the precise FLEX subtype `flex` produces from the input's
+// node family (mirroring FlexDeepCopy: Map→FlexMap, List→FlexList, Xml→FlexXml).
+// The static `Returns: [TNode]` was the supertype, so a FlexMap/FlexList
+// consumer (`set`/`append`/`push`/`sort`/`each` over the result) never matched
+// its `Flex*` sig and failed no_signature (flex.tsv). An unknown node shape
+// (a dynamic Any / bare Node receiver) stays a DYNAMIC Node so a Flex* slot
+// still matches optimistically rather than failing on a strict supertype.
+func flexReturns(args []Value, _ *Registry) []Value {
+	if len(args) != 1 || args[0].Parent == nil {
+		return []Value{NewDynamicCarrier(TNode)}
+	}
+	switch p := args[0].Parent; {
+	case p.ConformsTo(TMap):
+		return []Value{NewCarrier(TFlexMap)}
+	case p.ConformsTo(TList):
+		return []Value{NewCarrier(TFlexList)}
+	case p.ConformsTo(TXml):
+		return []Value{NewCarrier(TFlexXml)}
+	}
+	return []Value{NewDynamicCarrier(TNode)}
+}
+
+// nodeReturns is the inverse: `node` deep-copies a flex tree back to a PLAIN
+// Node, so the result's family is the input's (FlexMap→Map, FlexList→List,
+// FlexXml→Xml). Same dynamic-Node fallback for an unknown shape.
+func nodeReturns(args []Value, _ *Registry) []Value {
+	if len(args) != 1 || args[0].Parent == nil {
+		return []Value{NewDynamicCarrier(TNode)}
+	}
+	switch p := args[0].Parent; {
+	case p.ConformsTo(TMap):
+		return []Value{NewCarrier(TMap)}
+	case p.ConformsTo(TList):
+		return []Value{NewCarrier(TList)}
+	case p.ConformsTo(TXml):
+		return []Value{NewCarrier(TXml)}
+	}
+	return []Value{NewDynamicCarrier(TNode)}
 }
 
 func flexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

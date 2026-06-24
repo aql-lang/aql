@@ -203,6 +203,9 @@ func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	n, _ := args[0].AsConcreteInteger()
 	wrapped, ok := eng.ForceArityFunction(args[1], int(n))
 	if !ok {
+		if out, gradual := checkModeGradualFn(reg, args[1]); gradual {
+			return out, nil
+		}
 		detail := "force-arity requires a non-negative arity and a function value"
 		if reg != nil {
 			return nil, reg.AqlError("illegal_ref", detail, "force-arity")
@@ -240,6 +243,9 @@ func forceArityAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Reg
 func rebarrierResult(wrap func(Value) (Value, bool), v Value, word string, reg *Registry) ([]Value, error) {
 	wrapped, ok := wrap(v)
 	if !ok {
+		if out, gradual := checkModeGradualFn(reg, v); gradual {
+			return out, nil
+		}
 		detail := word + " requires a function value, got " + v.Parent.String()
 		if reg != nil {
 			return nil, reg.AqlError("illegal_ref", detail, word)
@@ -402,6 +408,9 @@ func rebindHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	wrapped, ok := eng.UsurpFunction(args[0])
 	if !ok {
+		if out, gradual := checkModeGradualFn(reg, args[0]); gradual {
+			return out, nil
+		}
 		detail := "usurp requires a function value, got " + args[0].Parent.String()
 		if reg != nil {
 			return nil, reg.AqlError("illegal_ref", detail, "usurp")
@@ -409,4 +418,29 @@ func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return nil, fmt.Errorf("%s", detail)
 	}
 	return []Value{wrapped}, nil
+}
+
+// checkModeGradualFn handles a dispatch-modifier word (usurp / stack-args /
+// forward-args / force-arity) applied to a NON-CONCRETE function-value carrier
+// in check mode. A stored fn-ref read via dot-access (`m.a` where
+// `m = {a:add/r}`) is statically dynamic(Any) — getNodeReturns deliberately
+// cannot narrow a dispatch-bearing field — but a real Function at run time.
+// Rather than the strict handler rejecting the Any carrier (a false no_signature
+// / illegal_ref, path-modifier.tsv), return a gradual Function carrier so the
+// downstream arg dispatch types optimistically. Only fires for a carrier the
+// real wrapper already declined (a concrete Function still wraps normally).
+func checkModeGradualFn(reg *Registry, v Value) ([]Value, bool) {
+	if reg == nil || !reg.Check.IsActive() || IsConcrete(v) || v.Parent == nil {
+		return nil, false
+	}
+	// Only a STATICALLY-UNKNOWN carrier (a dynamic Any from a dispatch-bearing
+	// field read like `m.a`) or an actual Function-typed carrier is plausibly a
+	// function at run time. A concrete-TYPED carrier (an Integer / String
+	// binding, e.g. `def x 5 x/u`) is provably NOT a function — let the strict
+	// handler flag it (a real illegal_ref), so the fallback never masks a
+	// genuine non-fn modifier error.
+	if (v.Dynamic && v.Parent.Equal(TAny)) || v.Parent.ConformsTo(TFunction) {
+		return []Value{NewDynamicCarrier(TFunction)}, true
+	}
+	return nil, false
 }
