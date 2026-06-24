@@ -119,6 +119,30 @@ transitive analysis):
    expression — a downstream consequence of the gradual carriers that the
    poly-record path does not yet cover for the mutating `set`.
 
+   **Root cause (diagnosed).** `set` has mixed return *arity* across its
+   overloads: the in-place mutators (Array/Object/Store/Class) return **0**
+   values; the value-returning twins (Map/List/Flex) return **1** (the updated
+   node). Over a dynamic receiver (`(nd "kids" get)` → `Any`), the checker
+   matches a 0-return overload and `carrierResults` synthesises **0** values.
+   When the result is then *consumed* — trie's `((nd "kids" get) set ch child)
+   … mk-node` — that missing value cascades into a false `undefined_word` on
+   the consumer's bound param and a `no_signature` on the consuming call (and,
+   transitively, the `kids`/`mk-node` errors in `trie.aql`). At runtime the
+   receiver is a concrete `Map`, so `set` returns 1 value and the code is
+   correct.
+
+   **Why it is not a one-line fix.** The correct static arity is
+   *runtime-receiver-dependent* (0 for an in-place container, 1 for a
+   value-returning one) and `carrierResults` cannot know whether the result
+   will be consumed. Modelling 1 value (or a 0-or-1 variadic) unconditionally
+   removes the trie false positives but **breaks** the in-place-mutation
+   compile coverage that depends on a 0-output `set` over a dynamic Store
+   receiver (`context get __sys get fs set mem true` — pinned by
+   `TestSetOverDynamicReceiverPolyCompiles`): a phantom residual then refuses
+   the poly lowering. A sound fix needs runtime-arity-aware modelling (the
+   value is consumable iff the runtime overload returns it), which is the
+   deferred precision pass — not a static result-arity tweak.
+
 ## Checker `unused_def` on reference-exported words (landed)
 
 The client check reports' largest *warning* category — the trie report's
