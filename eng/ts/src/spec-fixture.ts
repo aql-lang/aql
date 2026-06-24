@@ -733,13 +733,20 @@ function registerSpecWords(r: Registry): void {
             } else if (top === undefined) {
               // Registered word or unknown name: registry-stable, island it.
               emit.recordTokenIsland([newWord('inspect'), newWord(name)], out, 'inspect')
-            } else if (!top.carrier) {
-              // A def bound to a compile-time-known concrete value (a type /
-              // enum / sig / fn): its inspection is fixed, so bake the
-              // precomputed result as a value island.
-              emit.recordTokenIsland([buildDefinedInspection(name, top)], out, 'inspect')
             } else {
-              emit.markUncompilable('inspect: def bound to a computed value')
+              // A def bound to a compile-time-known value (a type / enum /
+              // sig / fn, or a literal recovered through its carrier): its
+              // inspection is fixed, so bake the precomputed result.
+              let concrete: import('./value.ts').Value | null = top.carrier ? null : top
+              if (concrete === null) {
+                const op = emit.classify(top)
+                if (op !== null && op.kind === 'const') concrete = op.value
+              }
+              if (concrete !== null) {
+                emit.recordTokenIsland([buildDefinedInspection(name, concrete)], out, 'inspect')
+              } else {
+                emit.markUncompilable('inspect: def bound to a computed value')
+              }
             }
           }
           return [out]
