@@ -1812,7 +1812,26 @@ func carrierOfLiteral(lit Value) Value {
 //
 // This is the primary join used when the checker needs to combine
 // two branch outcomes (e.g. `if` then/else).
+// JoinCarriers merges two arm carriers (an `if`/loop/case branch result). If
+// EITHER arm is gradual (dynamic), the merge is too — the same gradual
+// contagion a dynamic operand already spreads through a dispatch result: a
+// branch that may yield an unknown-typed value is itself optimistically typed,
+// so the merge poly-matches a concrete slot instead of a strict disjunct
+// rejecting it. Notably the "default-or-self" rebind `if (nd eq none) [Map]
+// [nd]` over a `nd:Any` (gradual) param: the merge stays dynamic(Map|…) and a
+// later `nd:Map` consumer matches, instead of a strict Disjunct(None|Map|…)
+// failing no_signature (the tst/radix node-rebuild walkers). Looser, never
+// tighter — a guard discharges the modality back to strict downstream.
 func JoinCarriers(a, b Value) Value {
+	out := joinCarriersInner(a, b)
+	if a.Dynamic || b.Dynamic {
+		out.Carrier = true
+		out.Dynamic = true
+	}
+	return out
+}
+
+func joinCarriersInner(a, b Value) Value {
 	if a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
 		out := a
 		out.Carrier = true

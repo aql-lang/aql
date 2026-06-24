@@ -262,10 +262,27 @@ Effect: **`decision.aql` 2→0, `bloom.aql` 1→0, `burst.aql` 2→0**, `radix.a
 (trie, burst, bloom, decision); cumulative error-level across all six is now
 **≈177 → ≈26**.
 
+### Branch merges stay gradual (landed) — `tst.aql` 15→0, 5/6 clean
+
+`JoinCarriers` (the `if`/loop/case arm merge) dropped the gradual modality: a
+merge of a concrete arm and a dynamic arm produced a STRICT disjunct, which a
+later concrete-typed consumer rejected. The node-rebuild walkers' "default-or-
+self" rebind `def nd (if (nd eq none) [<fresh node>] [nd])` over a `nd:Any`
+param merged a concrete `Map` (the constructor) with the gradual `nd` into a
+strict `Disjunct(None|Map|…)`, so the downstream `nd:Map` rebuild helper
+(`with-end-val`, `set-edge`) failed `no_signature`. `JoinCarriers` now keeps the
+result dynamic when either arm is dynamic (the same gradual contagion a dynamic
+operand already spreads through a dispatch result). Pinned by
+`lang/go/join_carriers_dynamic_test.go` (with a strict-union negative).
+
+Effect: **`tst.aql` 15→0**. **Five of the six client modules now check fully
+clean** (trie, tst, burst, bloom, decision); cumulative error-level across all
+six is now **≈177 → ≈11** (only `radix.aql` remains).
+
 ### What remains
 
-`radix.aql` (≈11), `tst.aql` (≈15) — the deepest node-rebuild walkers
-(`tst-insert`/`set-edge`/`mk-tnode`, `midkids`). A
+`radix.aql` (≈11) — the radix-specific node splitter (`set-edge`/`midkids`/
+`set` over a freshly-built edge map). A
 sound `set`-over-dynamic arity under a REAL compile (residual #2 above) is the
 other open precision item. These touch the checker's gradual-modality
 propagation and move the pinned `pinnedAnyFrontierRows` /
