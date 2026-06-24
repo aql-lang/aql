@@ -721,7 +721,12 @@ function registerSpecWords(r: Registry): void {
   reg({
     name: 'word',
     forwardPrecedence: true,
-    signatures: [{ args: [TAny], noEvalArgs: new Set([0]), handler: (args) => [args[0]!] }],
+    // runInCheckMode so the word-body list is produced in the record pass and
+    // bound by def; a later reference splices the body inline, which records
+    // its events (the macro is transparent to the recorder, like do/def).
+    signatures: [
+      { args: [TAny], noEvalArgs: new Set([0]), runInCheckMode: true, handler: (args) => [args[0]!] },
+    ],
   })
 
   // def: spec-subset code-body binding. Captures `def NAME body`
