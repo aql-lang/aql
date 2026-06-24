@@ -6,11 +6,14 @@
 package aql
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"runtime/debug"
 
 	"github.com/aql-lang/aql/cmd/go/internal/api"
+	"github.com/aql-lang/aql/cmd/go/internal/build"
+	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
 	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/clean"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
@@ -82,11 +85,41 @@ func versionString() string {
 // cmd/go/aql calls this so the installed binary is named `aql`
 // rather than `go`.
 func Run() {
+	// A binary produced by `aql build` (self-embedding launcher) carries an
+	// appended payload describing the program to run. When present, run it and
+	// exit before any CLI dispatch — this executable IS the program, not the
+	// aql CLI.
+	if code, embedded := runEmbedded(); embedded {
+		os.Exit(code)
+	}
+
 	// Publish the version (with VCS stamp for dev builds) to the api
 	// package so the /v1/server endpoint can report it without an
 	// import cycle.
 	api.SetSupervisorVersion(versionString())
 	os.Exit(execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+}
+
+// runEmbedded checks whether this executable has a program payload appended by
+// `aql build`. If so it runs that program and returns its exit code with
+// embedded=true; otherwise it returns embedded=false and the normal CLI runs.
+// A self-read or decode failure is reported to stderr and treated as embedded
+// (exit non-zero) so a corrupt built binary fails loudly rather than silently
+// behaving as the CLI.
+func runEmbedded() (code int, embedded bool) {
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, false
+	}
+	cfg, ok, err := buildrt.ReadEmbeddedPayload(exe)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		return 1, true
+	}
+	if !ok {
+		return 0, false
+	}
+	return buildrt.Main(cfg, os.Args[1:], os.Stdin, os.Stdout, os.Stderr), true
 }
 
 // execute resolves args[0] to a Command and runs it. If args[0]
@@ -126,6 +159,7 @@ func buildRegistry() *command.Registry {
 	r.Register(help.New(provide))
 	r.Register(describe.New())
 	r.Register(aqlfmt.New())
+	r.Register(build.New())
 	// Commands: model generation.
 	r.Register(model.New())
 	// Commands: project lifecycle.
