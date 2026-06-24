@@ -1616,6 +1616,14 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			// A per-iteration dynamic apply (`(mk2 i) 10`): the body nets one applied
 			// value, lowered via OpCallDynamic over the leading fn (body.applyArgs).
 			lp.hasBodyOut = true
+		} else if len(bodyStk) > 1 {
+			// The body nets MORE THAN ONE value per iteration (`for 2 ['e' 'f']`
+			// pushes both 'e' and 'f' each pass). The lowered loop nets exactly one
+			// value per iteration, so keeping only bodyStk[last] would silently DROP
+			// the rest — a miscompile ([e f e f] -> [f f]). Refuse and let the
+			// interpreter island run the multi-value body faithfully.
+			es.MarkUncompilable("for: body nets multiple values per iteration")
+			return
 		} else {
 			bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
 			if !ok {

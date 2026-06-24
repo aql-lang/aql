@@ -270,7 +270,10 @@ var Natives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TAny, TFlexList}, Handler: pushFlexHandler, Returns: []*Type{TFlexList}, BarrierPos: -1},
-			{Args: []*Type{TAny, TList}, Handler: pushHandler, BarrierPos: -1},
+			// Returns a List (was undeclared → Any, which widened a fold/scan
+			// accumulator to Any on the second round and then wrongly rejected the
+			// next `push` — `[] fold [push] xs`). Mirrors unshift's List overload.
+			{Args: []*Type{TAny, TList}, Handler: pushHandler, Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
