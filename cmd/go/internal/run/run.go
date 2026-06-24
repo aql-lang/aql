@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
 	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
@@ -61,7 +62,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	permsflags.Register(fs, &pf)
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql help [subcommand]\n       aql describe [word|module]\n       aql fmt [file.aql ...]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql lsp [-p <port>]\n       aql exec [-bind host:port] [-p <port>] [-r <registry>]\n       aql registry -r <folder> -p <port>\n       aql serve <svc> [flags] [+ <svc> [flags]]...\n       aql ctl [--api url] [--token tok] <op> [name]\n       aql tui [--api url] [--token tok]\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql help [subcommand]\n       aql describe [word|module]\n       aql fmt [file.aql ...]\n       aql build <prog.aql> [-o name]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql lsp [-p <port>]\n       aql exec [-bind host:port] [-p <port>] [-r <registry>]\n       aql registry -r <folder> -p <port>\n       aql serve <svc> [flags] [+ <svc> [flags]]...\n       aql ctl [--api url] [--token tok] <op> [name]\n       aql tui [--api url] [--token tok]\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
@@ -168,18 +169,21 @@ func EvalOptions(w io.Writer, source string, o lang.Options) error {
 // CompileMode selects which execution engine EvalOptionsMode drives: the
 // interpreter (the default), the best-effort bytecode compiler (silent
 // fallback), or the bytecode compiler in FORCE mode (error if uncompilable).
-type CompileMode int
+// The type and its constants live in buildrt so the standalone executable
+// produced by `aql build` can reference them without importing run; run
+// aliases them here to keep its public surface unchanged.
+type CompileMode = buildrt.CompileMode
 
 const (
 	// CompileOff runs the interpreter — the default.
-	CompileOff CompileMode = iota
+	CompileOff = buildrt.CompileOff
 	// CompileTry runs the bytecode compiler when the program is compilable and
 	// silently falls back to the interpreter otherwise (the `--compile` flag).
-	CompileTry
+	CompileTry = buildrt.CompileTry
 	// CompileForce REQUIRES the bytecode path: an uncompilable program (or a VM
 	// soundness assertion) aborts with the refusal reason rather than falling
 	// back (the `--force-compile` flag).
-	CompileForce
+	CompileForce = buildrt.CompileForce
 )
 
 // ResolveCompileMode applies the bytecode-mode rollout contract
@@ -222,30 +226,5 @@ func envEnabled(name string) bool {
 // interpreter — the flag is opt-in performance, never semantics
 // (design/aql-bytecode-plan.0.md, ground rules).
 func EvalOptionsMode(w io.Writer, source string, o lang.Options, mode CompileMode) error {
-	a, err := lang.New(o)
-	if err != nil {
-		return fmt.Errorf("init error: %s", err)
-	}
-
-	var result []any
-	switch mode {
-	case CompileForce:
-		result, err = a.RunCompiledStrict(source)
-	case CompileTry:
-		result, _, err = a.RunCompiled(source)
-	default:
-		result, err = a.Run(source)
-	}
-	if err != nil {
-		return fmt.Errorf("error: %s", err)
-	}
-
-	if len(result) > 0 {
-		parts := make([]string, len(result))
-		for i, v := range result {
-			parts[i] = fmt.Sprint(v)
-		}
-		fmt.Fprintln(w, strings.Join(parts, " "))
-	}
-	return nil
+	return buildrt.Eval(w, source, o, mode)
 }
