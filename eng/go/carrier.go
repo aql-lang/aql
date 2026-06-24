@@ -138,6 +138,21 @@ func NewElementCarrier(t *Type) Value {
 	return c
 }
 
+// ParamInputCarrier builds the check-mode carrier for a fn parameter declared of
+// type t. An EXPLICITLY-Any (or untyped) parameter binds a DYNAMIC carrier: the
+// author wrote "accepts anything", which is the gradual-dispatch intent — a body
+// word over it (`get`, `add`, a user helper) poly-matches at runtime instead of
+// failing no_signature against the strict Any top. A concrete declared type
+// stays a strict carrier so its real shape is checked normally. This is the
+// same treatment NewElementCarrier gives an untyped list element, lifted to the
+// parameter boundary (the trie/decision "unify Any with concrete params" gap).
+func ParamInputCarrier(t *Type) Value {
+	if t == nil || t.Equal(TAny) {
+		return NewDynamicCarrier(TAny)
+	}
+	return NewCarrier(t)
+}
+
 // DataListElemTypeFromValue is a package-level duplicate of
 // dataListElemType that lives in carrier.go so ReturnsFunc helpers
 // don't depend on the native_array_higher.go symbol. It reads the

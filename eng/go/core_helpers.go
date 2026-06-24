@@ -474,7 +474,18 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						continue
 					}
 				}
-				out[i] = NewCarrier(t)
+				c := NewCarrier(t)
+				// A declared `Any` return is "statically unknown", not "the Any
+				// root": a STRICT Any conforms to no typed slot, so a user fn
+				// declaring `[Any]` poisoned every typed consumer downstream with
+				// false no_signature errors (a `[Any]`-returning node lookup fed
+				// into another fn's `nd:Map` param — the trie/decision walkers).
+				// Mark it dynamic for optimistic matching, mirroring the native
+				// `[Any]`-return handling in carrierResults.
+				if t.Equal(TAny) {
+					c.Dynamic = true
+				}
+				out[i] = c
 			}
 			if fnUnit >= 0 {
 				pos := SrcPos{}
@@ -614,11 +625,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		genArgs := make([]Value, len(s.Params))
 		for j, p := range s.Params {
 			paramNames[j] = p.Name
-			t := p.Type
-			if t == nil {
-				t = TAny
-			}
-			genArgs[j] = NewCarrier(t)
+			genArgs[j] = ParamInputCarrier(p.Type)
 		}
 		var declared []*Type
 		if !fnDef.Anonymous {
