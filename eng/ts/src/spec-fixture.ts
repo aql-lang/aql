@@ -912,11 +912,24 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TAtom],
         quoteArgs: new Set([0]),
+        // quote returns the captured NAME verbatim (never resolves it), so
+        // [quote <word>] re-runs faithfully as a self-contained island.
+        recordsOwnEvent: true,
+        returnsFn: (args, registry) => {
+          const out = newDynamicCarrier(TAtom)
+          const a = args[0]!
+          const name = a.isWord() ? a.asWord().name : a.asAtom()
+          registry.check.emit?.recordTokenIsland([newWord('quote'), newWord(name)], out, 'quote')
+          return [out]
+        },
         handler: (args) => [args[0]!],
       },
       {
         args: [TAny],
         noEvalArgs: new Set([0]),
+        // The value form (quote [list] / quote {map}) is left to fall back:
+        // its island carrier flows into downstream consumers (a def then an
+        // interp string / map build) that mishandle an opaque quoted value.
         handler: (args) => {
           const v = args[0]!
           if (v.vType.matches(TList) && v.isConcrete()) {
