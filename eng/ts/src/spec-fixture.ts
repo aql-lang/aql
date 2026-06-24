@@ -1086,6 +1086,10 @@ function registerSpecWords(r: Registry): void {
     signatures: [
       {
         args: [TWord],
+        // Mutates the def stack — a compile-time effect like def, so run it in
+        // check mode (returns nothing) and a later reference resolves correctly.
+        runInCheckMode: true,
+        returns: [],
         handler: (args, _ctx, _stk, registry) => {
           const name = args[0]!.asWord().name
           const has = registry.topOfDefStack(name) !== undefined
