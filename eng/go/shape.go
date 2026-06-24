@@ -160,17 +160,3 @@ func IsListShape(s ValueShape) bool {
 	}
 	return false
 }
-
-// IsConcreteShape reports whether s is a concrete value (Data!=nil and
-// not a bare type literal / carrier / disjunct / fn-undef).
-func IsConcreteShape(s ValueShape) bool {
-	switch s {
-	case ShapeScalar, ShapeDepScalar,
-		ShapeList, ShapeTypedList, ShapeTable,
-		ShapeMap, ShapeTypedMap, ShapeRecord, ShapeOptions,
-		ShapeFnDef, ShapeFunction,
-		ShapeObjectInstance, ShapeObjectType:
-		return true
-	}
-	return false
-}

@@ -8,14 +8,12 @@ import {
   type Handler,
   type NativeFunc,
   Registry,
-  TInteger,
   TNumber,
   Value,
   compile,
   disassemble,
   newFloat,
   newInteger,
-  newString,
   newWord,
 } from './index.ts'
 

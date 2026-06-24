@@ -7,7 +7,7 @@
 // through the current TS engine (none, type literals, scalars, atoms,
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
-import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TNone, TPath, TString } from './type.ts'
+import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TPath, TString } from './type.ts'
 import type { FnDefInfo, XmlElement } from './value.ts'
 import { ChildType, OptionsData, OrderedMap, Value } from './value.ts'
 

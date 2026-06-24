@@ -325,7 +325,7 @@ function registerFixtures(r: Registry): void {
         args: [TAny],
         runInCheckMode: true,
         returns: [],
-        handler: (args, _ctx, _stk, r) => {
+        handler: (_args, _ctx, _stk, r) => {
           if (r.check.isActive()) {
             const emit = r.check.emit
             if (emit !== undefined && !emit.recordTrap('trap_error', 'trapq: deliberate runtime trap', 'trapq')) {

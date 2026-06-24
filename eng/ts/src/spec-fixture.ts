@@ -26,7 +26,6 @@ import {
   TAny,
   TAtom,
   TBoolean,
-  TDecimal,
   TInteger,
   TNever,
   TNone,

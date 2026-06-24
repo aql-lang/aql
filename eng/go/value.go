@@ -1245,12 +1245,6 @@ func NewXmlInterp(tmpl XmlTmpl) Value {
 	return NewValueRaw(TXmlInterp, XmlInterpPayload{Tmpl: tmpl})
 }
 
-// IsXmlElement reports whether v is a concrete Node/Xml element value.
-func IsXmlElement(v Value) bool {
-	_, ok := v.Data.(XmlElementPayload)
-	return ok
-}
-
 // IsXmlInterp reports whether v is an interpolated XML literal skeleton.
 func IsXmlInterp(v Value) bool {
 	return v.Parent.Equal(TXmlInterp)

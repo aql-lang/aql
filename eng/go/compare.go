@@ -105,15 +105,6 @@ func compareValuesClassified(a, b Value) (n int, viaFamily bool, err error) {
 	return res, sameType, e
 }
 
-// OrderComparable reports whether a and b may be compared by the
-// family-restricted ordering words (cmp / lt / lte / gt / gte): true
-// when they are the same type or share a same-family Comparer, false
-// when they only order via the cross-type total order (use tcmp).
-func OrderComparable(a, b Value) bool {
-	_, viaFamily, err := compareValuesClassified(a, b)
-	return err == nil && viaFamily
-}
-
 // orderedCompare runs the family-restricted comparison behind the
 // ordering words. It returns the -1/0/1 result, or an [aql/incomparable]
 // error when the pair only orders via the cross-type total order — the
