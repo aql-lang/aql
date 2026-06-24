@@ -975,8 +975,16 @@ function registerSpecWords(r: Registry): void {
           if (emit !== undefined) {
             const a = args[0]!
             const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
-            if (name !== '') emit.recordTokenIsland([newWord('quote'), newWord(name)], out, 'quote')
-            else emit.markUncompilable('quote: non-name operand')
+            if (name !== '') {
+              emit.recordTokenIsland([newWord('quote'), newWord(name)], out, 'quote')
+            } else {
+              // A non-name operand (e.g. `quote null`): bake the value itself
+              // — quote returns it verbatim.
+              const op = emit.classify(a)
+              const tok = a.isConcrete() ? a : op !== null && op.kind === 'const' ? op.value : null
+              if (tok !== null) emit.recordTokenIsland([newWord('quote'), tok], out, 'quote')
+              else emit.markUncompilable('quote: non-bakeable operand')
+            }
           }
           return [out]
         },
