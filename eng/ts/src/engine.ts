@@ -303,7 +303,11 @@ export class Engine {
       const replaceFrom = this.pointer - result.prefixCount
       const replaceCount = result.prefixCount + 1 + result.forwardCount
       this.stack.splice(replaceFrom, replaceCount, ...out)
-      this.pointer = replaceFrom + out.length
+      // Position at the first result (like value-mode dispatch), not past it,
+      // so a pending outer forward marker collects this carrier via
+      // stepLiteral — otherwise a deferred word (def whose value is a forward
+      // sub-expression, `def n make Integer 42`) never receives it.
+      this.pointer = replaceFrom
       return
     }
 
