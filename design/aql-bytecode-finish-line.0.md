@@ -24,6 +24,17 @@ is **re-scoped**, not literal:
 
 ## Live state
 
+> **Update (2026-06): refusalCeiling is now 6, islandCeiling 0.** The numbers in
+> the table below are the ORIGINAL baseline; the authoritative live state is
+> `test/go/langspec/COMPILED_STATUS.md` (`make status`). **Update (2026-06):
+> refusalCeiling is now 0 — the P7 floor.** The last two refusals landed:
+> `macro.tsv:45` (divergent macro → terminal OpTrap) and `def-node-binding.tsv:54`
+> (fn-body `[[c1]]` deferred list → a TRANSPARENT deferred-list-body fn whose raw
+> residual folds in module scope through the existing check-pass fold; no VM
+> change — see `aql-bytecode-final-two-refusals.0.md`). Every compilable spec row
+> now produces a Program (100%, 0 whole-program fallbacks, 0 islands). Deleting
+> the interpreter fallback (the rest of P7) is unblocked.
+
 Measured by `go test ./test/go/langspec -run TestCompiledCoverage|TestOnlyMetaFallsBack`
 and generated into `test/go/langspec/COMPILED_STATUS.md` (`make status`).
 

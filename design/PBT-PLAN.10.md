@@ -434,9 +434,9 @@ Expected output: every property in `decision_pbt_spec.aql` passes 100 runs at se
 REPL smoke check:
 ```bash
 cd cmd/go/aql && go run . repl
-> "aql:test" import
-> "aql:rand" import
-> "aql:report" import
+> import "aql:test"
+> import "aql:rand"
+> import "aql:report"
 > def my-prop {name:"reverse-twice" gen:[[1 10 rand.int] 5 rand.list-of] property:[reverse reverse args.0 deq] runs:50 seed:1 max-shrinks:50}
 > my-prop test.run-property
 > test.results report.table print

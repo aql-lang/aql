@@ -10,14 +10,14 @@ are accessed via dot notation.
 Use the standard `import` word with an `aql:` prefixed string:
 
 ```
-"aql:math-util" import
+import "aql:math-util"
 ```
 
 This creates a `math` def containing all the module's words. Access
 them via dot notation:
 
 ```
-"aql:math-util" import
+import "aql:math-util"
 
 -5 math.abs           # 5
 0.5 math.sin          # 0.479...
@@ -53,7 +53,7 @@ To use a module word in a forward-argument position (e.g. inside a list
 body), place args before the dot expression:
 
 ```
-"aql:math-util" import
+import "aql:math-util"
 for 5 [i 2 math.min]     # 0 1 2 2 2
 for 3 [i math.negate]     # 0 -1 -2
 ```
@@ -65,7 +65,7 @@ for 3 [i math.negate]     # 0 -1 -2
 Extended math operations beyond the built-in arithmetic (`add`, `sub`,
 `mul`, `div`, `mod`, `pow`).
 
-**Import:** `"aql:math-util" import`
+**Import:** `import "aql:math-util"`
 
 #### Unary Operations
 
@@ -131,7 +131,7 @@ String — none print directly — so callers compose with `print`,
 embed in error messages, or feed into further formatting. Useful
 beyond testing: any console-bound output of Records and Tables.
 
-**Import:** `"aql:report" import`
+**Import:** `import "aql:report"`
 
 | Word            | Description                                                |
 |-----------------|------------------------------------------------------------|
@@ -141,7 +141,7 @@ beyond testing: any console-bound output of Records and Tables.
 | `report.list`   | A List rendered one numbered element per line.             |
 
 ```
-"aql:report" import
+import "aql:report"
 {name:"alice" age:30} report.record print
 # name : alice
 # age  : 30
@@ -172,7 +172,7 @@ Test framework with two complementary surfaces:
 Results accumulate into a `TestSet` Table that `test.results`
 returns; pipe through `report.table` to print.
 
-**Import:** `"aql:test" import`
+**Import:** `import "aql:test"`
 
 **Types** (exported via `test.TestCase`, `test.TestSet`, …):
 
@@ -216,9 +216,9 @@ returns; pipe through `report.table` to print.
 | `test.invoke`     | `inputs subject test.invoke` — Go-side helper that dispatches a subject by name in the caller's registry. |
 
 ```
-"aql:test" import
-"aql:report" import
-"aql:decision" import
+import "aql:test"
+import "aql:report"
+import "aql:decision"
 
 def my-spec {
   name: "eval-cond"

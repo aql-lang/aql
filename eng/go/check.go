@@ -137,6 +137,53 @@ func (c *CheckState) TruncateDiagnostics(n int) {
 	c.Diagnostics = c.Diagnostics[:n]
 }
 
+// IsolateEmit swaps in a FRESH EmitState (sharing the registry) for the
+// duration of a throwaway evaluation, returning a restore func. It is the
+// hermetic complement to Suspend: Suspend keeps the SAME EmitState (only
+// stopping recording), so a nested eval's interned consts and RememberOriginal
+// entries still pollute the live EmitState's pool. The dynamic-help example
+// eval fires from OnRegisterHook on EVERY fn registration — including the
+// program's own `def f fn […]` DURING compilation — so without a swap its
+// example run leaks compile-time state (e.g. a generated `['a' 'b']` sample
+// list) into the program's own EmitState, corrupting a later operand's compile.
+// Swapping to a throwaway pool, discarded on restore, contains it fully.
+func (c *CheckState) IsolateEmit() func() {
+	if c == nil {
+		return func() {}
+	}
+	saved := c.Emit
+	fresh := NewEmitState()
+	if saved != nil {
+		fresh.reg = saved.reg
+	}
+	c.Emit = fresh
+	return func() { c.Emit = saved }
+}
+
+// IsolateBudget snapshots the check-mode step budget (StepCount +
+// BudgetTripped) for the duration of a throwaway evaluation, returning a
+// restore func. It is the budget-channel complement to IsolateEmit /
+// TruncateDiagnostics in the dynamic-help hermetic eval: the synthetic
+// example run shares the registry's CheckState, so steps it consumes count
+// against the REAL program's shared budget (StepCount is per-registry, and
+// the engine's check loop short-circuits every subsequent sub-engine once
+// BudgetTripped is set). A documentation example that runs many steps — most
+// acutely a RECURSIVE macro, which loops to the step ceiling — would then
+// exhaust the program's budget before its own later statements are reached.
+// Snapshotting and restoring the counters contains the synthetic eval fully,
+// so it can never abort the program's compile. No-op outside check mode.
+func (c *CheckState) IsolateBudget() func() {
+	if c == nil {
+		return func() {}
+	}
+	savedCount := c.StepCount
+	savedTripped := c.BudgetTripped
+	return func() {
+		c.StepCount = savedCount
+		c.BudgetTripped = savedTripped
+	}
+}
+
 // RecordDef remembers a name the user bound during a check run so
 // end-of-run analysis can flag defs that were never referenced. Names
 // starting with "_" (engine internals) are ignored.

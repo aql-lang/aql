@@ -190,7 +190,7 @@ The richer array vocabulary — reshaping, ordering, grouping,
 neighborhoods, indexing — lives in the `aql:array-util` module:
 
 ```
-"aql:array-util" import end
+import "aql:array-util"
 iota 6 ArrayUtil.reshape [2, 3]   # returns [[0 1 2] [3 4 5]]
 [3,1,2] ArrayUtil.grade           # returns [1 2 0] — sort indices
 [1,2,2,3] ArrayUtil.unique        # returns [1 2 3]
@@ -277,7 +277,7 @@ For controlled rounding, import the math module:
 
 <!-- aql-test: skip -->
 ```
-"aql:math-util" import end
+import "aql:math-util"
 `${3.14159 100 mul MathUtil.round 100 div}`  # returns '3.14'
 ```
 
@@ -315,7 +315,7 @@ If there is no error, the `error` word is a no-op.
 gathers the results:
 
 ```
-"aql:time-util" import end TimeUtil.await [[add 1 2] [add 3 4]]           # returns [3 7]
+import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]]           # returns [3 7]
 ```
 
 Choose a mode via an Options map; these mirror JavaScript Promise
@@ -594,7 +594,7 @@ types](REFERENCE.md#generic-types)**.
 Bare-word declarations pop from the stack:
 
 ```
-"aql:math-util" import end
+import "aql:math-util"
 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]    # returns 5.0
 ```
 
@@ -741,21 +741,21 @@ Import from a file (relative paths must start with `./`, `../`, or
 `/`):
 
 ```
-"./lib/utils.aql" import
+import "./lib/utils.aql"
 ```
 
 Import a built-in native module (registers words under a namespace
 prefix):
 
 ```
-"aql:math-util" import end
+import "aql:math-util"
 5 MathUtil.log                            # returns 1.6094379124341003
 ```
 
 Native module words are reached via the namespace prefix
 (`MathUtil.log`, `MathUtil.ceil`, …). The trailing `end` after `import`
 is **only needed when the next token could itself be a module path** —
-without it, `"aql:math-util" import "foo" print` would try to import a
+without it, `import "aql:math-util" "foo" print` would try to import a
 module named `"foo"`. You do **not** need `end` before ordinary use of
 the namespace; `import` takes its path and stops, leaving the rest to run:
 
@@ -769,7 +769,7 @@ The string-hash and char-code words live in `aql:bin`, handy for
 building bloom filters and other sketches:
 
 ```
-"aql:bin-util" import end
+import "aql:bin-util"
 "A" BinUtil.ord                           # returns 65
 65 BinUtil.chr                            # returns 'A'
 "hello" BinUtil.fnv32                     # returns 1335831723 — 32-bit FNV-1a
@@ -810,7 +810,7 @@ The native module name is `"aql:time-util"`; words register under the
 `time.` namespace prefix.
 
 ```
-"aql:time-util" import end
+import "aql:time-util"
 TimeUtil.parse "2026-01-15"               # Date value
 ```
 
@@ -821,7 +821,7 @@ Provides `Date`, `DateTime`, `Instant`, `TimeOfDay`, `Duration`,
 ## Use the built-in `aql:matrix-util` module
 
 ```
-"aql:matrix-util" import end
+import "aql:matrix-util"
 MatrixUtil.make-vector [1, 2, 3]          # Vector(3)
 ```
 
@@ -838,7 +838,7 @@ failing case.
 
 <!-- aql-test: skip -->
 ```
-"aql:test" import end
+import "aql:test"
 
 # Test.check-prop  name  [gen]  [property]  runs  seed  max-shrinks
 Test.check-prop "non-negative"
@@ -865,7 +865,7 @@ property body:
 
 <!-- aql-test: skip -->
 ```
-"aql:test" import end
+import "aql:test"
 Test.check-prop "pair-of-strings"
   [r.list-of [r.string "abc" 6] 2]    # ONE List of two strings
   [var [[pair]
@@ -884,7 +884,7 @@ work-in-progress property with `Test.skip` (a drop-in for
 
 <!-- aql-test: skip -->
 ```
-"aql:test" import end
+import "aql:test"
 Test.check-prop "ready"   [r.int 0 9] [0 gte] 10 1 0 end
 Test.skip       "flaky"   [r.int 0 9] [false] 10 1 0 end   # parked
 Test.report end print
@@ -894,7 +894,7 @@ Test.report end print
 Test.fail-count end print             # returns 0
 ```
 
-A property body may `import` a native module (e.g. `"aql:math-util" import`)
+A property body may `import` a native module (e.g. `import "aql:math-util"`)
 and use it across every run.
 
 
@@ -906,7 +906,7 @@ reported **loudly and by name**, and later cases still run:
 
 <!-- aql-test: skip -->
 ```
-"aql:test" import end
+import "aql:test"
 [ 1 1 Assert.equal ] "identity holds" Test.test end
 [ 1 2 Assert.equal ] "this one fails" Test.test end
 # FAIL this one fails — [aql/assertion_failure]: Assert.equal: expected 2, got 1
@@ -921,7 +921,7 @@ checks the result against `out`:
 
 <!-- aql-test: skip -->
 ```
-"aql:test" import end
+import "aql:test"
 def double fn [[n:Integer] [Integer] [n 2 mul]] end
 
 def s (Test.spec [
@@ -1137,7 +1137,7 @@ The classic example is two adjacent module paths:
 
 <!-- aql-test: skip -->
 ```
-"aql:math-util" import end "foo" print     # returns 'foo'
+import "aql:math-util" "foo" print     # returns 'foo'
 ```
 
 Without `end`, `import` would treat `"foo"` as a second module path and

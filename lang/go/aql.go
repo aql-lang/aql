@@ -475,7 +475,7 @@ type MiniLangSpec = modules.MiniLangSpec
 //	    Returns: []*lang.Type{lang.TInteger},
 //	    Handler: iopHandler, // parses "x + y", applies to opts.x, opts.y
 //	})
-//	a.Run(`"aql:minilang" import end  mini iop 'x + y' {x:10, y:2}`) // → 12
+//	a.Run(`import "aql:minilang"  mini iop 'x + y' {x:10, y:2}`) // → 12
 func (a *AQL) RegisterMiniLang(spec MiniLangSpec) error {
 	return modules.RegisterHostMiniLang(a.registry, spec)
 }
@@ -504,7 +504,7 @@ type ParseLangSpec = modules.ParseLangSpec
 //	    Returns: []*lang.Type{lang.TMap},
 //	    Handler: calcParseHandler, // 'x + y' → {op:'+', left:'x', right:'y'}
 //	})
-//	a.Run(`"aql:parselang" import end  parse calc 'x + y'`) // → {op:'+' …}
+//	a.Run(`import "aql:parselang"  parse calc 'x + y'`) // → {op:'+' …}
 func (a *AQL) RegisterParser(spec ParseLangSpec) error {
 	return modules.RegisterHostParser(a.registry, spec)
 }

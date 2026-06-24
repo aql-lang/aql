@@ -7,7 +7,7 @@ surface. The surface is split:
 - A small set of **core type ops** are AQL built-ins (the language's
   bedrock type vocabulary).
 - The remainder live in the **`aql:type` module**, loaded via
-  `"aql:type" import` and accessed as `type.<verb>` (e.g. `type.pick`,
+  `import "aql:type"` and accessed as `type.<verb>` (e.g. `type.pick`,
   `type.lca`). The `t`-prefix is dropped for module words because the
   `type.` qualifier already disambiguates.
 
@@ -57,7 +57,7 @@ prefix.
 
 ## `aql:type` module
 
-Loaded via `"aql:type" import`; words accessed as `type.<verb>`.
+Loaded via `import "aql:type"`; words accessed as `type.<verb>`.
 
 ### Type-set algebra
 
@@ -155,7 +155,7 @@ produce two separate types. To get the "same brand across multiple
 uses" pattern, pair with `def`:
 
 ```
-"aql:type" import
+import "aql:type"
 def UserID (type.brand Integer userid/q)
 def OrderID (type.brand Integer orderid/q)
 # UserID and OrderID are distinct types; UserID teq UserID is true.

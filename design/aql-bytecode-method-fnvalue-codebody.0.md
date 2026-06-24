@@ -14,7 +14,7 @@ mechanism, not a recording tweak. Read before attempting it.
 `lang/spec/module-rand.tsv:38`:
 
 ```
-"aql:rand" import end  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3  →  [7 5 4]
+import "aql:rand"  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3  →  [7 5 4]
 ```
 
 `r` is a seeded `Rand` instance — an `OrderedMap` of trivial-delegation FnDef

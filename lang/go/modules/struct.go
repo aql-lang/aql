@@ -11,7 +11,7 @@ import (
 //
 // After import, the words are accessed via dot notation:
 //
-//	"aql:struct-util" import
+//	import "aql:struct-util"
 //	{a:1 b:2} {b:3 c:4} StructUtil.merge      # deep merge
 //	{a:1} StructUtil.clone                    # deep copy
 //	"a.b" {a:{b:42}} StructUtil.getpath        # path read

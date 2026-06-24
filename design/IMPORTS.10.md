@@ -9,7 +9,7 @@ related `module` and `export` words.
 ### 1. Import all exports from a module descriptor
 
 ```
-module-desc import
+import module-desc
 ```
 
 Takes a module descriptor (produced by the `module` word) and installs every
@@ -21,15 +21,15 @@ def helpers [
   export Greet {greet:greet}
 ] module
 
-helpers import
+import helpers
 Greet greet .       # → 'hello'
 ```
 
 ### 2. Import with renaming from a module descriptor
 
 ```
-[from to] module-desc import            # single rename
-[[from1 to1] [from2 to2]] module-desc import  # multiple renames
+import [from to] module-desc            # single rename
+import [[from1 to1] [from2 to2]] module-desc  # multiple renames
 ```
 
 Installs only the listed exports, mapping each `from` name to a `to` name.
@@ -37,7 +37,7 @@ Installs only the listed exports, mapping each `from` name to a `to` name.
 ### 3. Import from a file
 
 ```
-"./utils.aql" import
+import "./utils.aql"
 ```
 
 File paths must start with `/`, `./`, or `../`. Bare filenames like
@@ -56,18 +56,18 @@ For data files, the content is parsed and pushed directly onto the stack:
 | `.tsv` | Loaded as a table (same as `read`) |
 
 ```aql
-"./config.aql" import       # installs exports as defs
-"./data.json" import         # pushes a map/list onto the stack
-"./config.jsonic" import     # same — pushes data value
-"./people.csv" import        # loads CSV as a table
-"./data.tsv" import          # loads TSV as a table
+import "./config.aql"       # installs exports as defs
+import "./data.json"         # pushes a map/list onto the stack
+import "./config.jsonic"     # same — pushes data value
+import "./people.csv"        # loads CSV as a table
+import "./data.tsv"          # loads TSV as a table
 ```
 
 ### 4. Import from a file with renaming
 
 ```
-[Orig Renamed] "./utils.aql" import
-[[A AA] [B BB]] "./data.aql" import
+import [Orig Renamed] "./utils.aql"
+import [[A AA] [B BB]] "./data.aql"
 ```
 
 Same as file import, but only the listed exports are installed and each is
@@ -88,7 +88,7 @@ def secret 42
 export Lib {x:1}
 
 # main session
-"./lib.aql" import
+import "./lib.aql"
 Lib x .       # → 1
 secret        # → atom 'secret', not 42
 ```
@@ -106,7 +106,7 @@ def e 2
 export Math {pi:pi, e:e}
 
 # usage
-"./math.aql" import
+import "./math.aql"
 Math pi .     # → 3
 Math e .      # → 2
 ```
@@ -116,10 +116,10 @@ Math e .      # → 2
 Data files are treated as pure data — no module execution:
 
 ```aql
-"./data.json" import          # pushes parsed map/list
+import "./data.json"          # pushes parsed map/list
 name .                         # access a field
 
-"./people.csv" import         # loads as table
+import "./people.csv"         # loads as table
 ```
 
 CSV/TSV imports use the same `doRead` path as the `read` word, so tables are

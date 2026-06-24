@@ -595,7 +595,7 @@ func TestEmitFnValueData(t *testing.T) {
 	const inc = `def f fn [[x:Integer] [Integer] [x add 1]] `
 	for _, c := range []struct{ src, want string }{
 		{inc + `f/r`, "[fn f(Integer)]"},
-		{`"aql:type-util" import end  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a]])`, "[2]"},
+		{`import "aql:type-util"  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a]])`, "[2]"},
 	} {
 		dis, r := compile(t, c.src)
 		if r != "" {
@@ -631,8 +631,8 @@ func TestEmitFnValueData(t *testing.T) {
 // the main engine, so the baked call is identical.
 func TestEmitModuleInnerNative(t *testing.T) {
 	cases := []string{
-		`"aql:struct-util" import end StructUtil.clone {a:1}`,
-		`"aql:struct-util" import end StructUtil.jsonify {a:1}`,
+		`import "aql:struct-util" StructUtil.clone {a:1}`,
+		`import "aql:struct-util" StructUtil.jsonify {a:1}`,
 	}
 	for _, src := range cases {
 		if _, r := compile(t, src); r != "" {
@@ -1304,7 +1304,7 @@ func TestEmitMacroExpansionGolden(t *testing.T) {
 // trivial-delegation dispatch records the real call, through the same
 // engine/registry the interpreter's short-circuit uses).
 func TestEmitModuleCallLowering(t *testing.T) {
-	got, reason := compile(t, `"aql:math-util" import end MathUtil.sqrt 16.0`)
+	got, reason := compile(t, `import "aql:math-util" MathUtil.sqrt 16.0`)
 	if reason != "" {
 		t.Fatalf("module call uncompilable: %s", reason)
 	}
@@ -1320,7 +1320,7 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, compiled, err := a.RunCompiled(`"aql:math-util" import end MathUtil.max 5.0 9.0`)
+	out, compiled, err := a.RunCompiled(`import "aql:math-util" MathUtil.max 5.0 9.0`)
 	if err != nil || !compiled {
 		t.Fatalf("MathUtil.max: compiled=%v err=%v", compiled, err)
 	}
@@ -1409,7 +1409,7 @@ func TestEmitMultiOverloadMonomorphises(t *testing.T) {
 // is the F4 data-get case: the dynamic `mini` result threads into a
 // `get` island and re-dispatches faithfully (Stage-6 F4 follow-on).
 func TestEmitMinilangCompiles(t *testing.T) {
-	got, reason := compile(t, `"aql:minilang" import end "a1b2c3" mini re "\\d"`)
+	got, reason := compile(t, `import "aql:minilang" "a1b2c3" mini re "\\d"`)
 	if reason != "" {
 		t.Fatalf("mini expansion uncompilable: %s", reason)
 	}
@@ -1418,7 +1418,7 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	}
 	// The dynamic-result data accessor now islands (F4); the result
 	// must match the interpreter.
-	src := `"aql:minilang" import end ("a1b2c3" mini re "\\d").n`
+	src := `import "aql:minilang" ("a1b2c3" mini re "\\d").n`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -1536,12 +1536,12 @@ func TestEmitFallbackIsland(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mout, _, merr := c.RunCompiled(`"aql:array-util" import end ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	mout, _, merr := c.RunCompiled(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if merr != nil {
 		t.Fatalf("module group: %v", merr)
 	}
 	d, _ := New()
-	iout, _ := d.Run(`"aql:array-util" import end ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	iout, _ := d.Run(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if len(mout) != len(iout) || (len(mout) == 1 && mout[0] != iout[0]) {
 		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
 	}

@@ -393,6 +393,31 @@ func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	return nil, nil
 }
 
+// isClosureBearingWrapper reports whether v is a module-method wrapper FnDef
+// whose inner native declares a CallableSpec (a code-body higher-order word
+// like Rand.list-of). Such a wrapper, surfaced concrete from a field read,
+// dispatches through execFnDefLiteral's trivial-delegation -> execMatch ->
+// carrierResults -> tryRecordClosure, lowering its NoEvalArgs body to a
+// closure unit. The shape is seed-agnostic (see getNodeReturns), so it is
+// sound to resolve from an abstract instance carrier. A plain RNG-bound
+// wrapper (rand-int) has no CallableSpec and stays dynamic.
+func isClosureBearingWrapper(v Value) bool {
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok || fd.Registry == nil || fd.Name == "" {
+		return false
+	}
+	inner := fd.Registry.Lookup(fd.Name)
+	if inner == nil {
+		return false
+	}
+	for i := range inner.Signatures {
+		if inner.Signatures[i].Callable != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // getNodeReturns narrows a field read over a CONCRETE map / record-shape
 // to the stored value's type when the key is statically known, instead of
 // the poison Any the [Key|Node] sigs otherwise declare — `{a:1 b:2}.a`
@@ -432,9 +457,42 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 	// tracking (`def a {b:5} [a.b]`). Deep nesting (`.a.b`) narrows the
 	// first hop to a Map carrier and the rest falls to dynamic(Any), which
 	// is still strictly better than the all-Any baseline.
+	// A closure-bearing module-method wrapper FnDef (`r.list-of`, where `r` is
+	// a `Rand.with-seed` instance) folds to the concrete wrapper so its dispatch
+	// records the SAME closure-word path the module-export form takes
+	// (`Rand.list-of [body] n` -> PUSH_CLOSURE). The wrapper delegates to an
+	// inner native carrying a CallableSpec; surfacing it lets execFnDefLiteral's
+	// trivial-delegation reach execMatch -> carrierResults -> tryRecordClosure, so
+	// the NoEvalArgs body lowers to a closure unit (re-run per iteration) rather
+	// than being auto-evaluated and frozen. The wrapper SHAPE (which methods
+	// exist, their sigs, NoEvalArgs, CallableSpec) is static for any instance --
+	// only the captured RNG state differs, and a closure-driver handler like
+	// rand-list-of does NOT itself draw from the RNG (the body does, against the
+	// module-export generator it names), so the resolved shape is seed-agnostic.
+	// Cloned for a fresh ID (the stored value's ID is shared with the map field
+	// and would collide in operand-provenance tracking). A NON-closure wrapper
+	// (`r.int`, RNG-bound) stays dynamic so it does not bake a seed-specific
+	// handler -- it takes the runtime CALL_DYNAMIC path instead.
+	if (val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef)) &&
+		isClosureBearingWrapper(val) {
+		return []Value{CloneValue(val)}
+	}
 	if val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef) ||
 		IsReach(val) || IsSplice(val) {
 		return dyn
+	}
+	// A concrete LIST / MAP field folds to the stored CONTAINER value, not
+	// merely its type carrier: cloned so it carries a FRESH ID (the stored
+	// value's ID is shared with the map field and would collide in the
+	// emitter's operand-provenance tracking — `def a {b:5} [a.b]`). Folding
+	// the concrete container lets a downstream `(m get "k") size` / `for`
+	// over the field see a concrete count instead of a carrier Integer, so
+	// a statically-empty collection's loop body is correctly pruned rather
+	// than analysed over Any (module-test:38). Scalars keep the type
+	// carrier — there is nothing to fold, and the ID-collision guard above
+	// is the reason we never returned the bare stored scalar.
+	if IsConcrete(val) && (val.Parent.ConformsTo(TList) || val.Parent.ConformsTo(TMap)) {
+		return []Value{CloneValue(val)}
 	}
 	return []Value{NewCarrier(val.Parent)}
 }

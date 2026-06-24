@@ -49,7 +49,7 @@ $ aql -e '"hello" upper'
 error: [aql/undefined_word]: undefined word: upper
 ```
 
-The real word is `StringUtil.upper`, behind `"aql:string-util" import
+The real word is `StringUtil.upper`, behind `import "aql:string-util"
 end`. More broadly, `aql describe` documents **159** words; **90** of
 them report `undefined word` when invoked, because `describe` lists
 module words (`abs`, `changecase`, `split`, `trim`, …) under bare names

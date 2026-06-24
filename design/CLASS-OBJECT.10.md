@@ -52,7 +52,7 @@ m get (k)                     # returns 2      — parens = computed key (JS [k]
 def m2 (m set c 3)            # returns {a:1 b:2 c:3} — NEW map (landed 2026-06-09)
 m                             # returns {a:1 b:2}     — receiver untouched
 {} set a 1 set b 2            # returns {a:1 b:2}     — copy-returning chains
-"aql:struct-util" import end
+import "aql:struct-util"
 StructUtil.items m            # returns [['a' 1] ['b' 2]]
 m size                        # returns 2
 m {a:1, b:2} deq              # returns true   — structural; eq is identity
@@ -64,7 +64,7 @@ m {a:1, b:2} deq              # returns true   — structural; eq is identity
 def xs [1 2 3]
 xs get 0                      # returns 1
 xs push 4                     # returns [1 2 3 4]   — copy-returning (current)
-"aql:array-util" import end
+import "aql:array-util"
 ArrayUtil.insert-at 1 99 xs   # returns [1 99 2 3]  — copy-returning (current)
 ArrayUtil.remove-at 0 xs      # returns [2 3]       — copy-returning (current)
 

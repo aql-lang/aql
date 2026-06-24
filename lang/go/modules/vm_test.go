@@ -19,7 +19,7 @@ func newAQL(t *testing.T, pol policy.Policy) *lang.AQL {
 
 func TestVMRunReturnsLastValue(t *testing.T) {
 	a := newAQL(t, nil)
-	out, err := a.Run(`("aql:vm" import) "1 add 2" Vm.run`)
+	out, err := a.Run(`(import "aql:vm") "1 add 2" Vm.run`)
 	if err != nil {
 		t.Fatalf("Vm.run: %s", err)
 	}
@@ -32,7 +32,7 @@ func TestVMRunDefaultSandboxBlocksWrite(t *testing.T) {
 	a := newAQL(t, nil)
 	// Default Vm.run uses sandbox. Sandbox allows importing aql:io but
 	// still denies the disk.write capability, so IO.write is blocked.
-	out, err := a.Run(`("aql:vm" import) "\"aql:io\" import end IO.write 'data' '/tmp/aql-test'" Vm.run`)
+	out, err := a.Run(`(import "aql:vm") "import \"aql:io\" IO.write 'data' '/tmp/aql-test'" Vm.run`)
 	if err == nil {
 		t.Errorf("expected sandbox denial, got %v", out)
 	}
@@ -45,7 +45,7 @@ func TestVMRunDefaultSandboxBlocksWrite(t *testing.T) {
 
 func TestVMRunSandboxAllowsCompute(t *testing.T) {
 	a := newAQL(t, nil)
-	out, err := a.Run(`("aql:vm" import) "5 mul 7" Vm.run-sandbox`)
+	out, err := a.Run(`(import "aql:vm") "5 mul 7" Vm.run-sandbox`)
 	if err != nil {
 		t.Fatalf("Vm.run-sandbox: %s", err)
 	}
@@ -56,7 +56,7 @@ func TestVMRunSandboxAllowsCompute(t *testing.T) {
 
 func TestVMRunComputeWorksForArith(t *testing.T) {
 	a := newAQL(t, nil)
-	out, err := a.Run(`("aql:vm" import) "3 add 4" Vm.run-compute`)
+	out, err := a.Run(`(import "aql:vm") "3 add 4" Vm.run-compute`)
 	if err != nil {
 		t.Fatalf("Vm.run-compute: %s", err)
 	}
@@ -73,7 +73,7 @@ func TestVMRunWithExplicitPolicy(t *testing.T) {
 	// push policy-map first, then code string. Then Vm.run-with
 	// resolves to a FnDef and auto-invokes.
 	out, err := a.Run(`
-		("aql:vm" import)
+		(import "aql:vm")
 		{ scopes: { engine: { words: { default: "allow", rules: [ { deny: ["add"] } ] } } } }
 		"1 add 2"
 		Vm.run-with
@@ -115,9 +115,9 @@ func TestVMAttenuationParentDenyWinsOnGlobal(t *testing.T) {
 	// permissive (default-allow everything) but the parent's
 	// global.disk.write deny still applies via the composed wrapper.
 	_, err = a.Run(`
-		("aql:vm" import)
+		(import "aql:vm")
 		{ scopes: { global: { words: { default: "allow" } }, fileops: { words: { default: "allow" } } } }
-		"\"aql:io\" import end 'data' IO.write '/tmp/aql-attenuation-test'"
+		"import \"aql:io\" 'data' IO.write '/tmp/aql-attenuation-test'"
 		Vm.run-with
 	`)
 	if err == nil {
@@ -160,9 +160,9 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 	// check this slipped through. With Compose, parent's deny rule
 	// is consulted on every check and the read is refused.
 	_, err = a.Run(`
-		("aql:vm" import)
+		(import "aql:vm")
 		{ scopes: { fileops: { words: { default: "allow" } } } }
-		"\"aql:io\" import end IO.read '/secret/credentials.txt'"
+		"import \"aql:io\" IO.read '/secret/credentials.txt'"
 		Vm.run-with
 	`)
 	if err == nil {
@@ -176,7 +176,7 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 func TestVMRunIsolatedFromParent(t *testing.T) {
 	a := newAQL(t, nil)
 	// def x in vm sub-engine should not leak into parent.
-	_, err := a.Run(`("aql:vm" import) "def vm-only 42" Vm.run-sandbox`)
+	_, err := a.Run(`(import "aql:vm") "def vm-only 42" Vm.run-sandbox`)
 	if err != nil {
 		t.Fatalf("Vm.run-sandbox def: %s", err)
 	}

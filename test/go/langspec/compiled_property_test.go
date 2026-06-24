@@ -555,7 +555,7 @@ func renderFnDef(form string, params []string, bodySrc string) string {
 	return "(fn [[" + psig + "][Integer][" + bodySrc + "]])"
 }
 
-// genStrProg builds a STRING-OPERATIONS program: the `"aql:string-util" import
+// genStrProg builds a STRING-OPERATIONS program: the `import "aql:string-util"
 // end` preamble (transparent — a program compiles identically with or without
 // it) followed by a string-flavoured expression from genS. Exercises the
 // `StringUtil.*` module ops and, crucially, COMPUTED strings flowing through
@@ -858,7 +858,7 @@ func render(n *gnode, scope []string) string {
 	case "ctxset":
 		return "context set '" + n.keys[0] + "' " + render(n.kids[0], scope) + " end"
 	case "strprog":
-		return `"aql:string-util" import end ` + render(n.kids[0], scope)
+		return `import "aql:string-util" ` + render(n.kids[0], scope)
 	case "strop":
 		parts := make([]string, len(n.kids))
 		for i, k := range n.kids {

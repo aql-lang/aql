@@ -235,7 +235,7 @@ ceases, any unfilled argument slots fall back to the stack, and the
 word runs with what it has:
 
 ```
-"aql:math-util" import end MathUtil.sqrt 16        # returns 4.0
+import "aql:math-util" MathUtil.sqrt 16        # returns 4.0
 ```
 
 `import` accepts optional arguments after the module id — a rename
@@ -292,7 +292,7 @@ still reach for `end` when the next token *could* legitimately be the word's
 argument — most commonly a second string path right after `import`:
 
 ```
-"aql:math-util" import end "foo" print    # without `end`, import would load "foo"
+import "aql:math-util" "foo" print    # without `end`, import would load "foo"
 ```
 
 An empty paren `()` is the empty expression: it produces no value, so it
@@ -605,7 +605,7 @@ room for growth:
 <!-- aql-test: skip -->
 ```
 # split/replace live in aql:string-util; shown unqualified here for
-# brevity (in real code: "aql:string-util" import end StringUtil.split …).
+# brevity (in real code: import "aql:string-util" StringUtil.split …).
 "hello world" split " "                              # basic
 "hello world" split " " {trim: true}                 # with options
 "aaa" "a" "b" {scope:'all, count:2} replace          # returns 'bba'

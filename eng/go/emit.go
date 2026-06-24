@@ -308,6 +308,16 @@ type EmitFragment struct {
 	// without this the extra slot would compile an unsound duplicate value. 0 ==
 	// unset (non-arm fragments: a loop body / condition expects one value).
 	residualN int
+	// applyArgs, when non-empty, marks a loop body that left a LEADING fn VALUE
+	// (a returned closure / Function carrier on the sim top after the body events)
+	// with these trailing STATIC arg operands above it — the per-iteration dynamic
+	// apply `for n [(mk2 i) 10]`. lowerFragment pushes the args and emits a single
+	// OpCallDynamic, netting one applied value per iteration (the leading-fn case
+	// resolveDynamicApply lowers for the program residual, here inside a loop body).
+	// Resolved at RecordLoop time in the enclosing scope; restricted to re-pushable
+	// operands (const / local / type) so a computed arg — already on the sim — never
+	// double-pushes (such a residual fails the sole-fn check and refuses instead).
+	applyArgs []emitOperand
 }
 
 // EmitState is the recording side of the compile pass. Set
@@ -649,18 +659,36 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 // residual resolution) falls back here when resolveOperand cannot place the
 // value. Probe-guarded so a refusal leaves the real state untouched.
 //
-// Only an ANONYMOUS, single-own-sig, capture-free FnDefInfo qualifies: a named
-// ref re-dispatches by name; an overloaded fn needs runtime MatchFnSig; a
-// CAPTURING lambda would need its captures resolved+threaded in this scope
-// (deferred); a sentinel body targets an enclosing frame. Anything else returns
-// false and the program falls back faithfully.
+// Only an ANONYMOUS, single-own-sig FnDefInfo qualifies: a named ref
+// re-dispatches by name; an overloaded fn needs runtime MatchFnSig; a sentinel
+// body targets an enclosing frame. Anything else returns false and the program
+// falls back faithfully.
+//
+// A CAPTURING lambda is admitted: the factory pattern `def mk fn [[x][Function]
+// [([y]=>[x add y])]]` returns a closure over the factory's PARAM x. Each
+// captured binding is resolved in THIS (the factory body's) scope to an operand
+// — x is the factory's frame local — and threaded as a closureCap, so the
+// lowering pushes the captured value before OpPushClosure exactly as the in-place
+// closure-dispatch path does (lower.go opClosure). A capture that cannot resolve
+// here (an unreachable enclosing binding) declines and the program falls back.
 func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool) {
 	if es == nil || es.reg == nil || v.Carrier || v.Dynamic {
 		return emitOperand{}, false
 	}
 	fd, ok := v.Data.(FnDefInfo)
-	if !ok || !fd.Anonymous || len(fd.Captured) > 0 {
+	if !ok || !fd.Anonymous {
 		return emitOperand{}, false
+	}
+	// Resolve the lambda's captures in the ENCLOSING (factory body) scope, the
+	// same operand resolution recordClosureDispatch uses for an in-place closure.
+	// A capture that does not resolve (unreachable enclosing binding) declines.
+	capOps := make([]emitOperand, len(fd.Captured))
+	for i, cb := range fd.Captured {
+		op, okCap := es.resolveOperand(cb.Value)
+		if !okCap {
+			return emitOperand{}, false
+		}
+		capOps[i] = op
 	}
 	// Exactly one own (non-fallback) signature — FirstOwnSig is otherwise not
 	// guaranteed to be the overload a runtime MatchFnSig would pick.
@@ -691,17 +719,17 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit.reg = r
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, nil, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		return emitOperand{}, false
 	}
-	return emitOperand{kind: opClosure, closureUnit: unit}, true
+	return emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
 }
 
 // OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE
@@ -1581,12 +1609,18 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	}
 	lp := &emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos}
 	if len(bodyStk) > 0 && !fragDiverges(body) {
-		bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
-		if !ok {
-			es.MarkUncompilable("for: body result of unknown provenance")
-			return
+		if es.setLoopBodyApply(body, bodyStk) {
+			// A per-iteration dynamic apply (`(mk2 i) 10`): the body nets one applied
+			// value, lowered via OpCallDynamic over the leading fn (body.applyArgs).
+			lp.hasBodyOut = true
+		} else {
+			bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
+			if !ok {
+				es.MarkUncompilable("for: body result of unknown provenance")
+				return
+			}
+			lp.bodyOut, lp.hasBodyOut = bodyOut, true
 		}
-		lp.bodyOut, lp.hasBodyOut = bodyOut, true
 	}
 	slot, ok := es.units[len(es.units)-1].localByID[iterID]
 	if !ok {
@@ -1602,6 +1636,43 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	f := es.eventInfo[seq]
 	f.variadicResult = true
 	es.eventInfo[seq] = f
+}
+
+// setLoopBodyApply detects a loop body whose residual is a LEADING fn VALUE with
+// trailing STATIC args — the per-iteration dynamic apply `for n [(mk2 i) 10]`,
+// where each iteration mk2 returns a closure that is applied to 10. It mirrors
+// resolveDynamicApply's leading-fn-carrier case, but seats the apply on the loop
+// body fragment (body.applyArgs) so lowerFragment emits the OpCallDynamic per
+// iteration. Returns true when the shape was recognised and seated.
+//
+// Soundness: bodyStk[0] must be a Function/FnDef-typed CARRIER (always callable —
+// the one inert fn shape, an `f/r` reference, is a concrete const, not a carrier)
+// produced by an event (so it lands on the sim top after the body events lower),
+// and every trailing arg must be a non-fn, non-dynamic value resolving to a
+// RE-PUSHABLE operand (const / local / type). A computed (event) arg is already
+// on the sim, so it is excluded here and the residual instead fails lowerFragment's
+// sole-fn check and refuses — never a double-push.
+func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []Value) bool {
+	if es == nil || body == nil || len(bodyStk) < 2 || !isFnTypedCarrier(bodyStk[0]) {
+		return false
+	}
+	fnOp, ok := es.resolveOperand(bodyStk[0])
+	if !ok || fnOp.kind != opEvent {
+		return false
+	}
+	applyArgs := make([]emitOperand, 0, len(bodyStk)-1)
+	for _, a := range bodyStk[1:] {
+		if a.Dynamic || isFnValueResidual(a) {
+			return false
+		}
+		op, okArg := es.resolveOperand(a)
+		if !okArg || (op.kind != opConst && op.kind != opLocal && op.kind != opType) {
+			return false
+		}
+		applyArgs = append(applyArgs, op)
+	}
+	body.applyArgs = applyArgs
+	return true
 }
 
 // RecordFallback records an interpreter-island fallback (Stage 5). span

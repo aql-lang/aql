@@ -3097,8 +3097,8 @@ available. Use a list argument to rename imports.
 *Precedence:* forward
 
 ```
-"utils.aql" import
-[Orig Renamed] "utils.aql" import
+import "utils.aql"
+import [Orig Renamed] "utils.aql"
 ```
 
 #### Chaining

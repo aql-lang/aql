@@ -15,7 +15,7 @@ import (
 )
 
 func TestSpecCompiledConcurrentRowsRaceFree(t *testing.T) {
-	const tu = `"aql:time-util" import end `
+	const tu = `import "aql:time-util" `
 	cases := []struct {
 		src  string
 		want string

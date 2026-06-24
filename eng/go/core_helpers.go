@@ -353,6 +353,27 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			genBindings = InferGenBindings(genSpec, sigParams, args)
 			genNames = InstallGenBindingMap(r, genSpec, genBindings)
 		}
+		// Deferred-list body (def-node-binding.tsv:54) — `def mk fn
+		// [[c1:Integer] [List] [[c1]]]`. The body is a single list literal that
+		// references a parameter, but a returned list NEVER closes over the param
+		// (only a `=>` lambda captures); the interpreter returns it RAW and
+		// auto-evaluates it later, in MODULE scope, against the live binding
+		// (`mk 9` → `[1]`, the module `c1`, not the arg `9`). Compiling it as a
+		// fn UNIT cannot model this: a unit's result is fixed at CALL time and
+		// cannot defer to a later module rebind. So make the fn TRANSPARENT —
+		// hand the raw deferred list back as the call's residual (no unit) and let
+		// the check pass fold it in module scope EXACTLY as a top-level
+		// `def c1 1 [[c1]]` already does: at end-of-run, at a `def`-bind, or at a
+		// downstream consumer (each resolves `c1` against the binding live at that
+		// point). The folded const is what the program bakes; no VM change. Still
+		// analyse the body first so its diagnostics propagate.
+		if raw, ok := deferredParamListResidual(bodyCopy, paramNames); ok {
+			AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
+			for i := len(genNames) - 1; i >= 0; i-- {
+				r.Defs.Pop(genNames[i])
+			}
+			return []Value{raw}
+		}
 		// Always analyse the body so diagnostics emitted by stepWord
 		// (undefined_word, no_signature, …) inside the body propagate
 		// up to the parent registry. When the fn declares an explicit
@@ -557,8 +578,67 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	SortSignatures(entry.Signatures)
 	entry.MaxForwardArgs = calcMaxForwardArgs(entry.Signatures)
 	r.Defs.Push(name, NewFnDef(entry))
+	// Construction-time body check (first-class, post-binding). Replaces the
+	// dynamic-help example eval's accidental side-channel: that eval ran each fn
+	// body against SYNTHETIC example args ({a:1,b:2}), producing false positives
+	// (decision.aql), and is now hermetic. Here we analyse each AQL-bodied
+	// overload ONCE against CARRIER args (NewCarrier(param) — an abstract Map/List
+	// reads dynamic(Any)), post-binding so recursive self-refs resolve, so a fn
+	// that is DEFINED BUT NEVER CALLED still has its body statically checked
+	// (an undefined word, an in-body forward strand). Bytecode recording is
+	// suspended (a registration is not part of the program's straight line; the
+	// armed compile at first dispatch deletes this suspended summary and re-records).
+	checkFnBodyAtConstruction(r, name, entry)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
+	}
+}
+
+// checkFnBodyAtConstruction runs a static body pass for each AQL-bodied overload
+// of a freshly-installed fn, against generalised (carrier) args, so an UNCALLED
+// fn's body is still checked (a called fn is additionally checked per call site
+// via buildFnBodyReturnsFn). Check-mode only; bytecode recording suspended; the
+// fn name must already be bound (recursion). Generic and Body-less (native /
+// handler) overloads are skipped — a generic body needs per-call type bindings,
+// and a native handler has no AQL body to analyse.
+func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
+	if r == nil || !r.Check.IsActive() || fnDef.Gen != nil {
+		return
+	}
+	for i := range fnDef.Signatures {
+		s := &fnDef.Signatures[i]
+		if s.Fallback || len(s.Body) == 0 {
+			continue
+		}
+		paramNames := make([]string, len(s.Params))
+		genArgs := make([]Value, len(s.Params))
+		for j, p := range s.Params {
+			paramNames[j] = p.Name
+			t := p.Type
+			if t == nil {
+				t = TAny
+			}
+			genArgs[j] = NewCarrier(t)
+		}
+		var declared []*Type
+		if !fnDef.Anonymous {
+			declared = append([]*Type(nil), s.Returns...)
+		}
+		// ISOLATE the analysis in a throwaway EmitState (not just Suspend): the
+		// body is analysed against the DECLARED param types, which for an abstract
+		// param (a surface like `s:Shape`) takes the surface-shape dispatch path
+		// and calls MarkUncompilable. Suspend stops recording but does NOT prevent
+		// MarkUncompilable from latching the program's EmitState.Compilable — so a
+		// construction-time check of a fn with a surface param would wrongly mark
+		// the WHOLE program uncompilable (surface.tsv:32 refused for exactly this).
+		// IsolateEmit swaps a fresh EmitState for the analysis (discarded on
+		// restore), so MarkUncompilable / recording land on the throwaway; the
+		// emitted DIAGNOSTICS (undefined_word for an uncalled body typo, the strand
+		// advisory) live on r.Check.Diagnostics and are unaffected — exactly the
+		// diagnostics-only contract this pass needs.
+		restore := r.Check.IsolateEmit()
+		AnalyseFnBody(r, name, paramNames, s.Body, genArgs, fnDef.Captured, declared)
+		restore()
 	}
 }
 

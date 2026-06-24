@@ -17,11 +17,11 @@ import (
 //	x                       # → 1
 //
 // The motivating use case is improving the SQL DX of aql:query: after
-// `"aql:query" import`, the words live under a dot namespace
+// `import "aql:query"`, the words live under a dot namespace
 // (Query.from, Query.where, …). Destructuring lifts the chosen ones to
 // bare names:
 //
-//	"aql:query" import
+//	import "aql:query"
 //	unpack [select from where] query
 //	select [name age] from people where [age gt 18]
 //

@@ -1,0 +1,58 @@
+# presence.aql — a single user's live presence, as a RAW PROCESS.
+#
+# DX probe: everything else in this app is a `service`; this file deliberately
+# drops to the PROCESSES.0 actor layer (§4, §10) to feel the difference.
+#
+# A presence process is a `receive` loop that holds its state purely as a
+# binding (`subs` — the set of client sinks subscribed to this user's events)
+# and dispatches tagged messages. There is no handler patrun, no reply value by
+# default, no supervision policy — just `spawn` + `receive`. That bareness is
+# the trade-off: you reach for a raw process when you want a long-lived loop
+# with bespoke control flow (here, a periodic liveness `after`), and you reach
+# for a `service` when you want request/reply with owned state and `prior`/
+# `wrap` layering. This actor shows: `receive` two-layer matching (§3), the
+# `after` timeout clause, `self`, tagged-reply correlation, and tail-recursion
+# as the loop.
+#
+# NOTE: the count/binding-as-state idiom mirrors PROCESSES.0 §10 verbatim.
+
+export "Presence" {
+  loop: loop/r
+}
+
+# `loop <user>` — never returns until told to stop (a process body).
+# `subs` is carried as a binding; messages mutate it only by tail-recursing
+# with a new value — nothing is shared, exactly like the §10 counter's `n`.
+def loop fn [[user:String] [Never] [
+  presence-loop user []
+]]
+
+def presence-loop fn [[user:String subs:List] [Never] [
+  receive [
+    # An event pushed from the notify sink. `tag` is a typed binding slot
+    # (ParseFnParams, §3) — a String, since event tags are scalar strings —
+    # bound into this clause's scope; `op: "event"` is the patrun scalar route.
+    # Fan it out to every subscribed client sink.
+    {op: "event" tag:String}   [ each ([s] => [ send {push: tag  user: user} s ]) subs
+                                 presence-loop user subs ]
+
+    # A client (web socket, SSE stream, …) subscribes by sending its own sink.
+    # `sink:Pid` is a typed binding slot — it is NOT a patrun match value
+    # (a type literal is non-concrete; §3 gap-A split). Add it and loop.
+    {op: "subscribe" sink:Pid} [ presence-loop user (append sink subs) ]
+
+    # Liveness probe with explicit correlation: route on `cmd: "ping"`, bind the
+    # caller's `reply:Pid`, answer with a TAGGED reply so the caller matches it
+    # specifically rather than with a stray-matching `{}` catch-all (§10, the
+    # decided correlation-tag convention).
+    {cmd: "ping" reply: Pid}   [ send {tag: "pong"  user: user} reply
+                                 presence-loop user subs ]
+
+    {cmd: "stop"}              [ ]          # route on cmd:"stop" -> loop ends, process exits
+
+    # No traffic for 30s: emit a heartbeat to self's subscribers, then keep
+    # waiting. `after` reuses the existing timeout machinery (PROCESSES.0 §4).
+    (after 30000)              [ each ([s] => [ send {push: "idle"  user: user} s ]) subs
+                                 presence-loop user subs ]
+  ]
+]]

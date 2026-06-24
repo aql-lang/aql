@@ -63,12 +63,12 @@
 0.1 eq 0d0.1	false	Float 0.1 ≠ exact BigDecimal 0d0.1 (honest, like Python)
 
 # ───────── transcendentals (apd-backed → BigDecimal; trig → Float) ─────────
-"aql:math-util" import end  MathUtil.sqrt 0d4	0d2.000000000000000000000000000000000	sqrt of a Big → BigDecimal (exact context)
-"aql:math-util" import end  MathUtil.sqrt 0d2 typeof	BigDecimal	apd-backed transcendental returns BigDecimal
-"aql:math-util" import end  MathUtil.log10 0d1000	0d3.000000000000000000000000000000000	log10 of a Big → BigDecimal
-"aql:math-util" import end  MathUtil.cbrt 0d27 typeof	BigDecimal	cbrt is apd-backed
-"aql:math-util" import end  MathUtil.sqrt 16.0	4.0	Float arg stays on the Float path (unchanged)
-"aql:math-util" import end  MathUtil.sin 0d2 typeof	Float	trig has no exact apd form → Float (lossy)
+import "aql:math-util"  MathUtil.sqrt 0d4	0d2.000000000000000000000000000000000	sqrt of a Big → BigDecimal (exact context)
+import "aql:math-util"  MathUtil.sqrt 0d2 typeof	BigDecimal	apd-backed transcendental returns BigDecimal
+import "aql:math-util"  MathUtil.log10 0d1000	0d3.000000000000000000000000000000000	log10 of a Big → BigDecimal
+import "aql:math-util"  MathUtil.cbrt 0d27 typeof	BigDecimal	cbrt is apd-backed
+import "aql:math-util"  MathUtil.sqrt 16.0	4.0	Float arg stays on the Float path (unchanged)
+import "aql:math-util"  MathUtil.sin 0d2 typeof	Float	trig has no exact apd form → Float (lossy)
 0d2 pow 0d0.5 typeof	BigDecimal	fractional pow → BigDecimal (apd Pow)
 
 # ───────── with-decimal: scoped rounding context ─────────
@@ -76,7 +76,7 @@ with-decimal {precision: 5} [0d1.0 div 0d3.0]	0d0.33333	precision override insid
 with-decimal {precision: 4 rounding: "down"} [0d2.0 div 0d3.0]	0d0.6666	rounding override (round-down truncates)
 with-decimal {precision: 4 rounding: "half-even"} [0d2.0 div 0d3.0]	0d0.6667	half-even rounds the last digit up
 with-decimal {precision: 6} [with-decimal {precision: 3} [0d1.0 div 0d3.0]]	0d0.333	nested blocks: inner override wins
-"aql:math-util" import end  with-decimal {precision: 10} [0d2 MathUtil.sqrt]	0d1.414213562	the context also threads through transcendentals
+import "aql:math-util"  with-decimal {precision: 10} [0d2 MathUtil.sqrt]	0d1.414213562	the context also threads through transcendentals
 
 # ───────── convert (explicit, exactness-preserving) ─────────
 convert BigInteger 42	0d42	Integer → BigInteger (exact)

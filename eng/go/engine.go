@@ -4132,6 +4132,23 @@ func (e *Engine) upcomingArgs(valIdx int) []Value {
 func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
 	checkMode := e.registry != nil && e.registry.Check.Mode && fnDef.Anonymous
+	// A NON-anonymous body-bearing fn VALUE reached as a CALL while the
+	// BYTECODE EMITTER is active (a `fn` literal resolved from a map / module
+	// export, e.g. `ParseLang.parse_calc 'x' {}`) is dispatched like a named
+	// user fn: through buildFnBodyReturnsFn (spliceFnValueCheckResult), which
+	// arms the body compile so the per-call `__pa` tail is captured inside its
+	// own CALL_USER unit instead of leaking into the top-level residual.
+	//
+	// Gated on an ACTIVE emit state so it only changes the COMPILE path, never
+	// the pure type-check pass: buildFnBodyReturnsFn runs AnalyseFnBody, which
+	// can emit body diagnostics under generalised carrier args that the legacy
+	// inline-splice path (execFnDefSig) did not — the check-accuracy ratchet
+	// pins that pure-check behaviour. Excludes foreign-sub-registry fns (their
+	// body must run via CallAQL in that registry — the execFnDefLiteral
+	// sub-registry branch handles them) and macros.
+	checkFnValue := e.registry != nil && e.registry.Check.Mode && !fnDef.Anonymous && !fnDef.Macro &&
+		(fnDef.Registry == nil || fnDef.Registry == e.registry) &&
+		e.registry.Check.Emit != nil && e.registry.Check.Emit.active()
 	ownSigs := fnDef.OwnSigs()
 	for i := range ownSigs {
 		sig := &ownSigs[i]
@@ -4139,6 +4156,9 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 		if nArgs == 0 {
 			if checkMode {
 				return e.spliceAnonCheckResult(valIdx, 0, sig, nil, fnDef.Captured)
+			}
+			if checkFnValue && len(sig.Body) > 0 {
+				return e.spliceFnValueCheckResult(valIdx, 0, fnDef, sig, nil)
 			}
 			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
 		}
@@ -4188,6 +4208,9 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkMode {
 					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
 				}
+				if checkFnValue && len(sig.Body) > 0 {
+					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
+				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
 		} else {
@@ -4222,6 +4245,9 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				}
 				if checkMode {
 					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
+				}
+				if checkFnValue && len(sig.Body) > 0 {
+					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
 			}
@@ -4295,7 +4321,44 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
+	e.spliceFnCheckTail(valIdx, nArgs, result)
+	return nil
+}
 
+// spliceFnValueCheckResult is the check-mode dispatch for a NON-anonymous
+// body-bearing fn VALUE (a `fn` literal resolved from a map/module export and
+// then CALLED, e.g. `ParseLang.parse_calc 'x' {}`). Unlike a NAMED user fn
+// (which dispatches through stepWord → its registered ReturnsFn) and unlike an
+// anonymous lambda (spliceAnonCheckResult, analysis-only), a called fn value
+// previously fell through to execFnDefSig, whose inline body splice leaks the
+// per-call `__pa` (Args/FnBaseline pop) token into the TOP-LEVEL residual —
+// refused by the emitter as "context-dependent word __pa". Routing through
+// buildFnBodyReturnsFn ARMS the body analysis via StartFnCompile, so the body
+// (with its `__pa` tail) is captured INSIDE its own CALL_USER unit and the
+// call site records a CALL_USER — identical to the named-fn path. See
+// design/aql-bytecode-stage3-inlining-plan.0.md "THE shared crux:
+// body-bearing fn-VALUE dispatch (__pa)".
+func (e *Engine) spliceFnValueCheckResult(valIdx, nArgs int, fnDef FnDefInfo, sig *FnSig, args []Value) error {
+	returns := buildFnBodyReturnsFn(e.registry, fnDef.Name, *sig, fnDef)
+	result := returns(args, e.registry)
+	if len(result) == 0 && len(sig.Returns) > 0 {
+		// A declared-return fn that produced no carrier (the body unit
+		// declined to compile) degrades to one carrier per declared return so
+		// downstream provenance refuses and the program falls back faithfully.
+		result = make([]Value, len(sig.Returns))
+		for i, t := range sig.Returns {
+			result[i] = NewCarrier(t)
+		}
+	}
+	e.spliceFnCheckTail(valIdx, nArgs, result)
+	return nil
+}
+
+// spliceFnCheckTail removes the consumed args + the fn-value literal from the
+// tape and splices the check-mode result carriers in their place. Shared by
+// spliceAnonCheckResult and spliceFnValueCheckResult so the two check-mode
+// fn-value paths cannot diverge in their stack discipline.
+func (e *Engine) spliceFnCheckTail(valIdx, nArgs int, result []Value) {
 	indices := e.resolvedIndicesBefore(nArgs)
 	if len(indices) == nArgs && nArgs > 0 {
 		firstArgIdx := indices[0]
@@ -4323,7 +4386,6 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 		e.tape.Splice(argStart, valIdx+1-argStart, result...)
 		e.pointer = argStart
 	}
-	return nil
 }
 
 // compileFnDef produces the compiled-dispatch view of a constructed

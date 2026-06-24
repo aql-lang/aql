@@ -140,7 +140,7 @@ Full `verify-bytecode`; lower `refusalCeiling` 16 → 15.
 
 ## Stage B — conditional dynamic apply in a branch
 
-**Row.** `"aql:math-util" import end def n 5 if (n eq 0) [99] MathUtil.sqrt 16`
+**Row.** `import "aql:math-util" def n 5 if (n eq 0) [99] MathUtil.sqrt 16`
 → `4.0`. Reason: `if: else value of unknown provenance` (`emit.go:1004`).
 
 **Root cause.** The 3-arg if's **else** is the module-export fn value
@@ -351,10 +351,40 @@ errors `undefined_word`, not a silent dynamic read.
 
 ## Stage G — closure-return / fn-value-call boundary
 
-**Rows.** `bytecode-combinations.tsv:74` (`def mk2 fn […[Function][([y]=>[x add
-y])]] for 3 [(mk2 i) 10]`), `def-node-binding.tsv:54` (`[[c1]]` fn-body list
+**Update (2026-06): `bytecode-combinations.tsv:74` LANDED (refusalCeiling 7 → 6).**
+The factory `def mk2 fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] for
+3 [(mk2 i) 10]` → `10 11 12` now compiles FULLY NATIVE (no island). Two
+coordinated pieces:
+- **Returned capturing closure.** `tryReturnedClosure` (emit.go) previously
+  declined a returned lambda with captures (`len(fd.Captured) > 0`); it now
+  resolves each capture in the FACTORY body's scope (the captured `x` is the
+  factory's frame local) to a `closureCap`, threaded before `OpPushClosure`
+  exactly as the in-place closure-dispatch path (`recordClosureDispatch`). So a
+  top-level immediate apply `(mk 5) 10` → `15` already compiled native once the
+  returned closure carried its capture (the program-residual `resolveDynamicApply`
+  leading-fn-carrier case applies it; `OpCallDynamic` invokes the
+  `ClosurePayload` VM-natively).
+- **Per-iteration dynamic apply in a loop body.** `RecordLoop.setLoopBodyApply`
+  (emit.go) detects a loop body residual that is a LEADING fn carrier (the `mk2`
+  call result) with trailing STATIC args (the const `10`) and seats the args on
+  `EmitFragment.applyArgs`; `lowerFragment` (lower.go) then pushes them and emits
+  one `OpCallDynamic` per iteration, netting the applied value — the leading-fn
+  case `resolveDynamicApply` lowers for the PROGRAM residual, now reachable inside
+  a loop body fragment. Soundness gate: the leading value must be a Function/FnDef
+  CARRIER (always callable) produced by an event, and every trailing arg must be a
+  non-fn, non-dynamic RE-PUSHABLE operand (const/local/type) — a computed arg is
+  already on the sim, so it fails the sole-fn residual check and refuses rather
+  than double-pushing. Verified 0 divergences (corpus + combinations + property
+  fuzz + `-race` + `aqldebug`). Landing test:
+  `lang/go/bytecode_findings_test.go::TestReturnedCapturingClosureApply` (positive
+  + the computed-apply-arg negative).
+
+**Remaining rows.** `def-node-binding.tsv:54` (`[[c1]]` fn-body list
 literal — VERIFIED HAZARD, reverted), `fn-value.tsv:19` (`m.f` a map-stored fn
-applied), `patrun.tsv:40` (a dispatch-table fn reaches `add`).
+applied), `patrun.tsv:40` (a dispatch-table fn reaches `add`). NOTE: `fn-value`
+and `patrun` may already be compiled by later work — re-measure against the live
+corpus (`make status`) before picking them up; the live refusal set is the source
+of truth, not this list.
 
 **Root cause.** Each is a fn VALUE whose identity/provenance the residual model
 can't track:

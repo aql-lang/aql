@@ -13,33 +13,33 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  the bound namespace is a ModuleExport, transparent for use
-"aql:math-util" import end  typeof MathUtil	ModuleExport	import binds a ModuleExport
-"aql:math-util" import end  MathUtil is ModuleExport	true	…of the Ideal/ModuleExport type
-"aql:math-util" import end  MathUtil.sqrt 16.0	4.0	transparent: exports are used as before
-"aql:math-util" import end  MathUtil.$name	'MathUtil'	$name is the export name
+import "aql:math-util"  typeof MathUtil	ModuleExport	import binds a ModuleExport
+import "aql:math-util"  MathUtil is ModuleExport	true	…of the Ideal/ModuleExport type
+import "aql:math-util"  MathUtil.sqrt 16.0	4.0	transparent: exports are used as before
+import "aql:math-util"  MathUtil.$name	'MathUtil'	$name is the export name
 #
 # §2  $module → the Module descriptor (Ideal/Module) and its fields
-"aql:math-util" import end  typeof MathUtil.$module	Module	$module is an Ideal/Module
-"aql:math-util" import end  MathUtil.$module is Module	true	…of the Module type
-"aql:math-util" import end  MathUtil.$module.name	'aql:math-util'	name is the module reference
-"aql:math-util" import end  MathUtil.$module.kind	'native'	kind: native / file / inline
-"aql:math-util" import end  MathUtil.$module.exports	['MathUtil']	exports lists the export names
+import "aql:math-util"  typeof MathUtil.$module	Module	$module is an Ideal/Module
+import "aql:math-util"  MathUtil.$module is Module	true	…of the Module type
+import "aql:math-util"  MathUtil.$module.name	'aql:math-util'	name is the module reference
+import "aql:math-util"  MathUtil.$module.kind	'native'	kind: native / file / inline
+import "aql:math-util"  MathUtil.$module.exports	['MathUtil']	exports lists the export names
 #
 # §3  the -util colliders carry their -util id
-"aql:array-util" import end  ArrayUtil.$module.name	'aql:array-util'	collider module name
-"aql:type-util" import end  TypeUtil.$module.kind	'native'	type-util is native too
+import "aql:array-util"  ArrayUtil.$module.name	'aql:array-util'	collider module name
+import "aql:type-util"  TypeUtil.$module.kind	'native'	type-util is native too
 #
-# §4  inline modules — `module […] import` binds all exports; kind="inline"
-module [export "Foo" {a:1 b:2}] import end  Foo.a	1	inline export field access
-module [export "Foo" {a:1 b:2}] import end  typeof Foo	ModuleExport	inline binds a ModuleExport
-module [export "Foo" {a:1 b:2}] import end  Foo.$module.kind	'inline'	inline kind
-module [export "A" {x:1} export "B" {y:2}] import end  A.$module.exports	['A' 'B']	exports lists every export of the module
-module [export "A" {x:1} export "B" {y:2}] import end  B.y	2	a second export is independently accessible
-module [export "A" {x:1} export "B" {y:2}] import end  A.$module is B.$module	true	all exports of a module share one Module instance
+# §4  inline modules — `import module […]` binds all exports; kind="inline"
+import module [export "Foo" {a:1 b:2}]  Foo.a	1	inline export field access
+import module [export "Foo" {a:1 b:2}]  typeof Foo	ModuleExport	inline binds a ModuleExport
+import module [export "Foo" {a:1 b:2}]  Foo.$module.kind	'inline'	inline kind
+import module [export "A" {x:1} export "B" {y:2}]  A.$module.exports	['A' 'B']	exports lists every export of the module
+import module [export "A" {x:1} export "B" {y:2}]  B.y	2	a second export is independently accessible
+import module [export "A" {x:1} export "B" {y:2}]  A.$module is B.$module	true	all exports of a module share one Module instance
 #
 # §5  rename import — $name keeps the original export name
-module [export "Foo" {a:1}] import [Foo Bar] end  Bar.a	1	renamed binding still a ModuleExport
-module [export "Foo" {a:1}] import [Foo Bar] end  Bar.$name	'Foo'	$name is the declared export name, not the alias
+import [Foo Bar] module [export "Foo" {a:1}]  Bar.a	1	renamed binding still a ModuleExport
+import [Foo Bar] module [export "Foo" {a:1}]  Bar.$name	'Foo'	$name is the declared export name, not the alias
 #
 # §6  negative — a missing export via getr (!.) errors
-"aql:math-util" import end  MathUtil!.nope	ERROR:not_found	unknown export raises not_found (the documented strict-lookup code)
+import "aql:math-util"  MathUtil!.nope	ERROR:not_found	unknown export raises not_found (the documented strict-lookup code)
