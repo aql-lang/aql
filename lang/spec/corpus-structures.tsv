@@ -1,0 +1,78 @@
+# AQL corpus: code structures, verified interpret+check+compile
+# Format: input<TAB>expected<TAB>kind
+"x" is Integer	false	structure
+'a' add 'b'	'ab'	structure
+0 scan [add] [1 2 3]	0 [1 3 6]	structure
+1 add 2	3	structure
+10 mod 3	1	structure
+2 pow 8	256	structure
+3 4 var [[a b] a add b]	7	structure
+42 is Integer	true	structure
+5 dup add	10	structure
+["a" "b" "c"] reverse	['c' 'b' 'a']	structure
+[1 2 3 4 5] shed 2	[3 4 5]	structure
+[1 2 3 4 5] slice 1 3	['2' '3']	structure
+[1 2 3 4 5] take 3	[1 2 3]	structure
+[1 2 3 4] each [dup mul]	[1 4 9 16]	structure
+[1 2 3 4] filter [0 gt]	[1 2 3 4]	structure
+[1 2 3 4] take 2	[1 2]	structure
+[1 2 3] fold [add]	6	structure
+[1 2 3] reverse	[3 2 1]	structure
+[3 1 2] sort	[1 2 3]	structure
+[5 3 8 1] sort reverse	[8 5 3 1]	structure
+[[1 2 3] [4 5]] flatten	[1 2 3 4 5]	structure
+[] fold [push] [1 2 3]	[1 2 3]	structure
+case "x" [Integer "int" String "str"]	'str'	structure
+case 2 [1 "one" 2 "two" "many"]	'two'	structure
+case 5 [Integer "int" String "str"]	'int'	structure
+convert Float 3	3.0	structure
+convert Integer "99"	99	structure
+convert String 42	'42'	structure
+def Big (Integer gt 10) end 3 is Big	false	structure
+def Big (Integer gt 10) end 42 is Big	true	structure
+def Celsius refine Float end def t:Celsius 21.5 end t	21.5	structure
+def Point class {x:Integer y:Integer} end def p (make Point {x:1 y:2}) end (p.x) add (p.y)	3	structure
+def Point class {x:Integer y:Integer} end def p (make Point {x:3 y:4}) end p.x	3	structure
+def Pos refine Integer end def n:Pos 5 end n	5	structure
+def Small (Integer lt 10) end 5 is Small	true	structure
+def Small (Integer lt 10) end 50 is Small	false	structure
+def addxy ([x:Integer y:Integer] => [x add y]) end addxy 4 5	9	structure
+def apply2 fn [[x:Integer] [Integer] [x (y:Integer => [y mul 2])]] end apply2 21	42	structure
+def dbl word [dup add] end 5 dbl	10	structure
+def describe-n fn [[n:Integer] [String] [`${n} squared is ${n mul n}`]] end describe-n 4	'4 squared is 16'	structure
+def double fn [[x:Integer] [Integer] [x mul 2]] end double 21	42	structure
+def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]] end fact 5	120	structure
+def greet fn [[name:String] [String] [`hello ${name}`]] end greet "world"	'hello world'	structure
+def inc (x:Integer => [x add 1]) end inc 41	42	structure
+def m {a:1 b:2} end m.a	1	structure
+def n:Integer 7 end n	7	structure
+def safe-div fn [[a:Integer b:Integer] [Integer] [if (b eq 0) [raise bad_input "div by zero"] [a div b]]] end do [safe-div 10 0] error [get code]	bad_input/q	structure
+def sign-of fn [[n:Integer] [String] [if (n gt 0) ["pos"] [if (n lt 0) ["neg"] ["zero"]]]] end sign-of 0	'zero'	structure
+def sum3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]] end sum3 1 2 3	6	structure
+def total (0 fold [add] [10 20 30]) end total	60	structure
+def x 5 end def y 10 end x add y	15	structure
+def x 5 end x	5	structure
+def xs [1 2 3] end xs size	3	structure
+do [1 2 add]	3	structure
+do [10 5 sub]	5	structure
+do [def x 5 raise oops/q `x is ${x}`] error [get code]	oops/q	structure
+do [raise bad_input "bad"] error [get code]	bad_input/q	structure
+false guard 42	None	structure
+if (3 gt 2) ["yes"] ["no"]	'yes'	structure
+if (3 lt 2) ["yes"] ["no"]	'no'	structure
+import "aql:math-util" end MathUtil.max 3 5	5	structure
+import "aql:math-util" end MathUtil.sqrt 16.0	4.0	structure
+import "aql:string-util" end StringUtil.split "," "a,b,c"	['a' 'b' 'c']	structure
+import "aql:string-util" end StringUtil.upper "abc"	'ABC'	structure
+import "aql:test" end Test.test "ok" [[5] [5] Assert.equal] end Test.fail-count	0	structure
+iota 5	[0 1 2 3 4]	structure
+quote [1 add 2]	(quote [1 word(add) 2])	structure
+quote add	add/q	structure
+range 2 6	[2 3 4 5]	structure
+true guard 42	42	structure
+typeof "hi"	ProperString	structure
+typeof 42	Integer	structure
+typeof [1 2 3]	List	structure
+{a:1 b:2 c:3} each [mul 10]	{a:10 b:20 c:30}	structure
+{a:1 b:2} keys	['a' 'b']	structure
+{a:1 b:2} vals	[1 2]	structure
