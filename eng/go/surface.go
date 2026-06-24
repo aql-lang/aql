@@ -133,9 +133,9 @@ func unifySurface(a, b Value) (Value, *UnifyError) {
 // unifiers: installed on the minted lattice node so every Is/Match
 // site consults it.
 type surfaceUnifier struct {
-	prev     TypeBehavior
-	info     *SurfaceInfo // shared payload — sees post-hoc `exposes` updates
-	typeName string
+	behaviorWrapper              // prev Behavior + Equal/Compare delegation
+	info            *SurfaceInfo // shared payload — sees post-hoc `exposes` updates
+	typeName        string
 }
 
 // Match walks v's declared-type parent chain against the conformance
@@ -163,8 +163,6 @@ func (s *surfaceUnifier) Format(v Value) string {
 	return baseBehavior(s.prev).Format(v)
 }
 
-func (s *surfaceUnifier) Equal(a, b Value) bool { return baseBehavior(s.prev).Equal(a, b) }
-
 // SurfaceInfoOf returns the surface payload when t (or an ancestor)
 // is a surface-minted node — i.e. carries the surfaceUnifier. Used by
 // the check-mode dispatch path (S2) to type a required operation on a
@@ -182,8 +180,8 @@ func SurfaceInfoOf(t *Type) (*SurfaceInfo, bool) {
 // existing Behavior. Called by InstallType when minting a surface type.
 func installSurfaceUnifier(def *Type, info *SurfaceInfo, name string) {
 	def.Behavior = &surfaceUnifier{
-		prev:     def.Behavior,
-		info:     info,
-		typeName: name,
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+		info:            info,
+		typeName:        name,
 	}
 }
