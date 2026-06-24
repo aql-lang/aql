@@ -205,23 +205,39 @@ Effect on the clients (`aql check`): `radix.aql` 53→23, `tst.aql` 62→36,
 `pinnedTypeSoundnessViolations`), the differential + property gates, and the
 full suite stay green.
 
-### The remaining root: call-site arg mismatch on a get-result (deferred)
+### Dynamic carrier vs the Node family (landed) — `trie.aql` now 0 errors
 
-What is left after the recursion suppression is the NON-recursive slice: a
-`get`-result bound and threaded to a concrete param at a direct call site whose
-static type the checker has lost to a strict (non-gradual) `Any`. `trie.aql`'s
-`fuzzy-go`/`kid-items`/`get` cluster (≈9 errors) is the surviving example — the
-fold over `(nd kid-items)` (a user-fn result whose `StructUtil.items` element
-type is unknown) yields a `pair` whose `pair get 1` does not poly-match the
-`nd:Map` recursion slot. Threading the **dynamic** modality through
-nested-fn-result → fold-element → `get` (so the value stays gradual rather than
-collapsing to strict `Any`) is the precision work that removes it.
+The non-recursive slice was a **matching** bug, now fixed. A gradual (dynamic)
+carrier matches a slot unless its bound is *provably disjoint*, and the
+disjointness probe reused `tand` — but `tand(List, Node)` returns `Never` even
+though `List ⊑ Node` (a container-family meet bug). So a value whose declared
+return narrowed to a dynamic `List`/`Map` carrier (a fn result derived from a
+dynamic arg) failed to match a `Node`-typed `get`/`set` receiver — `get`'s
+List/Map access goes through its `[key, Node]` overloads (there is no `List`
+receiver sig), so the dynamic List/Map receiver was rejected. This drove
+`trie.aql`'s `fuzzy-go`/`kid-items`/`get`/`build-row` cluster.
 
-That, and a sound version of the `set`-over-dynamic arity under a real compile
-(residual #2 above), are the focused precision pass: they touch the checker's
-gradual-modality propagation and the pinned `pinnedAnyFrontierRows` /
-`pinnedTypeSoundnessViolations` ratchets, so they belong in a dedicated change
-that moves those gates deliberately — not a local tweak.
+`sigTypeMatches` now checks conformance in **both directions** (`X ⊑ t` — the
+value IS a t; or `t ⊑ X` — it MIGHT be, the gradual optimism) before the `tand`
+probe, which still settles the cross-family disjoint cases (`dynamic(Integer)`
+vs `String`). Looser, never tighter — sound by the dynamic-modality discipline,
+pinned by `eng/go/dynamic_carrier_match_test.go` (with disjoint negatives) and
+`lang/go/dynamic_container_get_test.go`. All accuracy ratchets, the differential
++ property gates, and the full suite stay green.
+
+Effect: **`trie.aql` 9→0**, `radix.aql` 23→20, `tst.aql` 36→26, `burst.aql`
+4→2. The cumulative client error-level reduction across the six modules is now
+**≈177 → ≈60**.
+
+### What remains
+
+`radix.aql`/`tst.aql` (≈46 combined), `bloom.aml` (10), `decision.aql` (2). A
+sound `set`-over-dynamic arity under a REAL compile (residual #2 above) is the
+other open precision item. These touch the checker's gradual-modality
+propagation and move the pinned `pinnedAnyFrontierRows` /
+`pinnedTypeSoundnessViolations` ratchets deliberately, so they belong in
+continued precision work — each validated against those gates, as the fixes
+above were.
 
 ### Client-side options until that lands
 
