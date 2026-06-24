@@ -93,6 +93,77 @@ let replayCounter = 0
 // uppercase type words (Integer, List, …) to type literals.
 const typeTable = typeNameTable()
 
+/**
+ * Recover the concrete value a compile-mode operand will hold at run time, so
+ * a constraint can be validated statically. In compile mode a literal is
+ * stripped to a carrier and a `quote …` operand becomes a self-contained
+ * island; neither is `isConcrete()`, but both are determinable:
+ *   - a stripped literal / inert container → its const original via classify;
+ *   - a 0-input token island (`quote red`, `quote [1 2 3]`) → the value it
+ *     re-runs to, evaluated on a throwaway non-check registry (islands are
+ *     capture-free, so a fresh registry reproduces the result faithfully).
+ * Returns null when the value cannot be determined at compile time.
+ */
+function recoverConcrete(emit: import('./emit.ts').EmitState, value: Value): Value | null {
+  if (value.isConcrete()) return value
+  const op = emit.classify(value)
+  if (op !== null && op.kind === 'const') return op.value
+  const island = emit.islandTokensFor(value)
+  if (island !== null) {
+    try {
+      const tmp = new Registry()
+      registerSpecWords(tmp)
+      const out = new Engine(tmp).run([...island])
+      if (out.length === 1 && out[0]!.isConcrete()) return out[0]!
+    } catch {
+      /* fall through to null — caller refuses */
+    }
+  }
+  return null
+}
+
+/**
+ * Apply a `def`/`enum` type constraint to a value. Three modes:
+ *   - Interpret mode: throw the canonical `type_error` on violation (the
+ *     long-standing runtime behaviour).
+ *   - Compile mode (an active EmitState): validate against the recovered
+ *     concrete value. A violation lowers to a terminal `OpTrap` so the compiled
+ *     program raises the byte-identical `type_error` the interpreter would
+ *     (mirrors Go's check-lenient/run-error parity); a value the compiler
+ *     cannot determine statically refuses, falling back to the interpreter.
+ *   - Pure check mode (no EmitState): lenient — the value may be a type-only
+ *     carrier, so the constraint is never evaluated (unchanged behaviour).
+ * Returns true when the caller must ABORT the bind (the violation was handled
+ * via trap/refuse), false to proceed with the bind.
+ */
+function enforceTypeConstraint(
+  registry: Registry,
+  value: Value,
+  constraint: Value,
+  detail: string,
+  word: string,
+): boolean {
+  const emit = registry.check.emit
+  if (registry.check.isActive()) {
+    if (emit === undefined) return false // pure check mode: lenient
+    const concrete = recoverConcrete(emit, value)
+    if (concrete === null) {
+      emit.markUncompilable('def: unverifiable type constraint on a computed value')
+      return true
+    }
+    if (!isValueOfType(concrete, constraint)) {
+      if (!emit.recordTrap('type_error', detail, word)) {
+        emit.markUncompilable('def: conditional type-constraint violation')
+      }
+      return true
+    }
+    return false
+  }
+  // Interpret mode.
+  if (!isValueOfType(value, constraint)) throw new AqlError('type_error', detail, word)
+  return false
+}
+
 function registerSpecWords(r: Registry): void {
   const intHandler =
     (op: (a: bigint, b: bigint) => bigint): Handler =>
@@ -843,15 +914,19 @@ function registerSpecWords(r: Registry): void {
           // tokenizer attached the constraint shape to the name word. The
           // value must satisfy it, else def-time validation fails.
           if (nameWord.constraint !== undefined) {
-            // Skip runtime constraint validation in check mode: the value is a
-            // type-only carrier, and any genuine violation is a runtime error
-            // the interpreter raises (so a compiled value row already passed).
-            if (!registry.check.isActive() && !isValueOfType(value, nameWord.constraint)) {
-              throw new AqlError(
-                'type_error',
+            // Validate the constraint: interpret mode throws on violation,
+            // compile mode traps/refuses (see enforceTypeConstraint), pure
+            // check mode stays lenient.
+            if (
+              enforceTypeConstraint(
+                registry,
+                value,
+                nameWord.constraint,
                 `def ${name}: value ${value.toString()} does not satisfy ${nameWord.constraint.toString()}`,
                 name,
               )
+            ) {
+              return []
             }
             // A typed-name binding stores the value as data — a plain
             // list binds inert (non-splicing); `word` is needed to splice.
@@ -875,12 +950,16 @@ function registerSpecWords(r: Registry): void {
                 t !== undefined
                   ? newTypeLiteral(t)
                   : (registry.topOfDefStack(constraintStr) ?? atomicValue(constraintStr))
-              if (!registry.check.isActive() && !isValueOfType(value, constraint)) {
-                throw new AqlError(
-                  'type_error',
+              if (
+                enforceTypeConstraint(
+                  registry,
+                  value,
+                  constraint,
                   `def ${bindName}: value ${value.toString()} does not satisfy ${constraintStr}`,
                   bindName,
                 )
+              ) {
+                return []
               }
               registry.pushDef(bindName, value)
               return []
@@ -1220,12 +1299,17 @@ function registerSpecWords(r: Registry): void {
           const elems = hasChild ? list.asChildType().elements : list.asList()
           const alts = elems.map((e) => {
             const v = e.isWord() ? newAtom(e.asWord().name) : e
-            // Skip runtime element validation in check mode (carriers); a real
-            // violation is the interpreter's runtime error.
-            if (child !== undefined && !registry.check.isActive() && !isValueOfType(v, child)) {
-              throw new AqlError(
-                'type_error',
+            // Validate each element against the child constraint: interpret
+            // mode throws, compile mode traps/refuses, pure check mode is
+            // lenient (see enforceTypeConstraint). The trap is terminal, so a
+            // still-being-built enum past it is never observed at run time.
+            if (child !== undefined) {
+              enforceTypeConstraint(
+                registry,
+                v,
+                child,
                 `enum: element ${v.toString()} does not satisfy ${child.vType.leaf()}`,
+                'enum',
               )
             }
             return v
