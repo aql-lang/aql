@@ -1132,7 +1132,10 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TList],
         noEvalArgs: new Set([0]),
-        handler: (args) => {
+        // Build the enum type value in check mode so typeof/is consume it and
+        // it bakes (its alternatives are atoms/inert literals).
+        runInCheckMode: true,
+        handler: (args, _ctx, _stk, registry) => {
           // A typed list `[:T …]` carries a child constraint each
           // element must satisfy; a plain list has none.
           const list = args[0]!
@@ -1141,7 +1144,9 @@ function registerSpecWords(r: Registry): void {
           const elems = hasChild ? list.asChildType().elements : list.asList()
           const alts = elems.map((e) => {
             const v = e.isWord() ? newAtom(e.asWord().name) : e
-            if (child !== undefined && !isValueOfType(v, child)) {
+            // Skip runtime element validation in check mode (carriers); a real
+            // violation is the interpreter's runtime error.
+            if (child !== undefined && !registry.check.isActive() && !isValueOfType(v, child)) {
               throw new AqlError(
                 'type_error',
                 `enum: element ${v.toString()} does not satisfy ${child.vType.leaf()}`,

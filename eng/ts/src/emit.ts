@@ -78,11 +78,9 @@ function isInert(v: Value): boolean {
   ) {
     return false
   }
-  // A bare type literal (`Integer`, `List`) and the none value have
-  // data===null but are immutable canonical CONSTANTS — bakeable (the
-  // analogue of Go's OpPushType / a none const), unlike code/marker values
-  // filtered above. Everything else with data is an inert scalar.
-  if (v.data === null) return v.isTypeLiteral() || v.isNone()
+  // Anything surviving the filters above is inert: a scalar (data!==null) or
+  // a bare type literal (data===null — `Integer`/`None`/…), both immutable
+  // canonical constants (the analogue of Go's OpPushType).
   return true
 }
 
@@ -270,11 +268,11 @@ export class EmitState {
     // raw eval-list / word-bearing container reaching a call arg is code,
     // not a constant, and must fall back rather than bake unevaluated.
     if (v.isConcrete() && isInert(v)) return { kind: 'const', value: v }
-    // A bare type literal (`Integer`) or the none value is data===null, so
-    // not "concrete", but it is an immutable canonical CONSTANT — bake it
-    // (Go's OpPushType / a none const). Lets words taking a type operand
-    // (typeof/make/pathof) compile.
-    if (v.isTypeLiteral() || v.isNone()) return { kind: 'const', value: v }
+    // A bare type literal (data===null, not a carrier — `Integer`, `None`,
+    // `List`, …) or the none value is an immutable canonical CONSTANT — bake
+    // it (Go's OpPushType / a none const). Words/marks/etc. were filtered by
+    // isInert above and carry non-null data, so this admits only type nodes.
+    if ((!v.carrier && v.data === null) || v.isNone()) return { kind: 'const', value: v }
     // A self-contained (capture-free) fn VALUE is an immutable constant too —
     // bake it so a word consuming a fn operand (typeof/is on `( fn […] )`)
     // compiles. A fn capturing an enclosing binding isn't bakeable.
