@@ -522,16 +522,25 @@ export class EmitState {
     args: readonly Value[],
     out: readonly Value[],
     registry?: Registry,
+    noEvalArgs?: ReadonlySet<number>,
   ): boolean {
     if (this.uncompilableReason !== undefined) return false
     if (out.length !== 1) return false
     const tokens: Value[] = [newWord(word)]
     const ins: Operand[] = []
-    for (const a of args) {
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i]!
       const o = this.classify(a)
       if (o !== null) {
         if (o.kind === 'const') tokens.push(o.value)
         else ins.push(o)
+        continue
+      }
+      // A code-body arg (a noEvalArgs position) is re-run raw by the island,
+      // so bake the concrete body verbatim even though it isn't inert data
+      // (replayq's [ (1 addq 2) ] / nested body).
+      if (noEvalArgs?.has(i) && a.isConcrete()) {
+        tokens.push(a)
         continue
       }
       // A self-contained (capture-free) fn VALUE bakes into the island as a
