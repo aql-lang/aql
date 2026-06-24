@@ -219,6 +219,9 @@ export class EmitState {
   readonly siteCounts: SiteCounts = { mono: 0, poly: 0, dynamic: 0, meta: 0 }
   /** First reason the program could not be lowered; latched (kept first). */
   uncompilableReason: string | undefined
+  /** The registry this pass runs against (set by compileCheck); enables
+   * classify's lexical-capture check for bakeable fn values. */
+  registry: Registry | undefined
 
   /** Global monotonic event counter; each event's index == its local slot. */
   private seq = 0
@@ -268,6 +271,12 @@ export class EmitState {
     // (Go's OpPushType / a none const). Lets words taking a type operand
     // (typeof/make/pathof) compile.
     if (v.isTypeLiteral() || v.isNone()) return { kind: 'const', value: v }
+    // A self-contained (capture-free) fn VALUE is an immutable constant too —
+    // bake it so a word consuming a fn operand (typeof/is on `( fn […] )`)
+    // compiles. A fn capturing an enclosing binding isn't bakeable.
+    if (v.isFnDef() && v.isConcrete() && this.registry !== undefined && fnCaptureFree(v.asFnDef(), this.registry)) {
+      return { kind: 'const', value: v }
+    }
     const orig = this.origByCarrier.get(v)
     if (orig !== undefined) return { kind: 'const', value: orig }
     return null

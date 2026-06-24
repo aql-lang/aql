@@ -22,6 +22,7 @@ import type { Value } from './value.ts'
 export function compileCheck(registry: Registry, input: Value[]): FinalizeResult {
   const emit = new EmitState()
   registry.check.emit = emit
+  emit.registry = registry // enables classify's fn-value capture check
   const done = registry.check.begin()
   let residual: Value[]
   try {
