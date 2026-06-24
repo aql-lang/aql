@@ -1,10 +1,38 @@
 # The final two refusals — decision note (compile-to-trap vs keep-refusing)
 
-_Status: macro:45 now DONE (refusals 2 → **1**); def-node-binding:54 remains.
-After Stage-3 cleared the three module feature rows (5 → 2), `macro.tsv:45` was
-landed via compile-to-trap once its true prerequisite was found (see "Row 1"
-update). This note records both rows, corrects two earlier diagnoses, and lays
-out the remaining option. The only remaining refusal is def-node-binding:54._
+_Status: **BOTH DONE — refusals = 0** (the P7 floor). macro:45 landed via
+compile-to-trap (2 → 1); def-node-binding:54 now compiles via a TRANSPARENT
+deferred-list-body fn (1 → **0**) — see the "Row 2 UPDATE" below. This note
+records both rows and corrects the earlier "keep refusing" recommendation for
+Row 2: a sound compilation DID fit, without the substantial VM feature the
+earlier analysis assumed._
+
+## UPDATE — def-node-binding:54 LANDED (refusals 1 → 0)
+
+The earlier recommendation here (Option B, keep refusing — "compiling needs a VM
+deferred-auto-eval pass") was **too conservative**. The sound compilation needs
+NO VM change at all. The key the earlier analysis missed: the check pass's
+EXISTING top-level deferred-list fold already resolves a raw `[[c1]]` in module
+scope, including a later rebind (`def c1 1 [[c1]] def c1 2` already compiled to
+`PUSH_CONST [[2]]`). So the fix is to make the deferred-list-body fn TRANSPARENT
+rather than compile it as a unit:
+- `buildFnBodyReturnsFn` (core_helpers.go) detects the shape via
+  `deferredParamListResidual` and hands the RAW deferred list back as the call's
+  residual instead of compiling a fn unit (a unit's result is fixed at CALL time
+  and cannot defer to a later module rebind — the real reason a unit fails here,
+  NOT a missing VM op).
+- `tryRecordDeferredList` (carrier.go) records NOTHING for the dispatch, so the
+  raw list rides as the result (args become dead pushes, pruned at lowering)
+  instead of hitting `recordCallRefusal` ("user fn call … Stage 3").
+- The existing top-level / consumed-arg / def-bind folds then materialise the
+  const in module scope, in the SAME check pass the interpreter mirrors.
+
+Verified: `mk 9` → `[[1]]`, rebind `mk 9 def c1 2` → `[[2]]`, def-bind
+`def r (mk 9) def c1 2 r` → `[[1]]` (def forces the eval at bind time), consume
+`mk 9 0 get`/`mk 9 size` → `[1]`. The `=>`-lambda capture contrast still returns
+the param. Differential-clean (whole corpus + property fuzz + combinations +
+race + aqldebug). `refusalCeiling` 1 → 0; `TestDeferredListBodyCompiles` pins it.
+The determinism observation below is moot (no recursive expansion is involved).
 
 ## UPDATE — macro:45 LANDED (refusals 2 → 1)
 
@@ -172,20 +200,17 @@ pursued (deep recursive expansion stressing the value-ID/provenance coupling). A
 deterministic, non-time-seeded value-ID scheme would be the clean fix if it ever
 proves real. Do not chase it speculatively.
 
-## Recommendation (final)
+## Recommendation (final) — SUPERSEDED, both DONE
 
-- **`macro.tsv:45`:** **DONE** — compiled to a terminal trap (see the UPDATE
-  above). refusals 2 → 1.
-- **`def-node-binding.tsv:54`:** **keep refusing (Option B)** — the LAST refusal,
-  and its refusal is PROVABLY SOUND (the param carrier poisons mk's residual, so
-  the compiler can never bake the wrong `[9]`). Compiling it requires a new VM
-  deferred-auto-eval pass (Option A above) — a substantial feature with
-  corpus-wide blast radius, not worth it for one row that already falls back
-  faithfully (`[1]`).
+- **`macro.tsv:45`:** **DONE** — compiled to a terminal trap. refusals 2 → 1.
+- **`def-node-binding.tsv:54`:** **DONE** — compiled via a transparent
+  deferred-list-body fn (see the "Row 2 UPDATE" at the top). refusals 1 → **0**.
+  The earlier "keep refusing / needs a VM deferred-auto-eval pass" recommendation
+  was superseded: the existing check-pass deferred-list fold already does the
+  module-scope resolution, so no VM change was needed — only making the fn
+  transparent so its raw residual reaches that fold.
 
-Net (final): refusals = **1**, and it is a SOUND refusal that falls back
-faithfully. Every spec row produces the correct result in both engines. Reaching
-refusals=0 (the gate to delete the interpreter fallback, P7) is blocked on a
-single substantial prerequisite — a VM deferred-auto-eval pass — which is a
-deliberate future project, not a quick win. This is the natural stopping point:
-the bytecode compiler now compiles every spec row that can be compiled soundly.
+Net (final): refusals = **0** — the P7 floor. Every spec row produces the correct
+result in both engines, and every compilable row produces a Program (100%, 0
+whole-program fallbacks, 0 islands). Deleting the interpreter fallback (the rest
+of P7) is now unblocked; it remains a separate, deliberate follow-up.

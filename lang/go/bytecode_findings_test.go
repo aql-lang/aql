@@ -3130,3 +3130,79 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 		}
 	}
 }
+
+// TestDeferredListBodyCompiles pins the LAST compiler refusal cleared
+// (def-node-binding.tsv:54), reaching refusals = 0. A fn whose body is a single
+// deferred list literal that references a parameter — `def mk fn [[c1:Integer]
+// [List] [[c1]]]` — returns the list RAW; the interpreter auto-evaluates it LATE,
+// in MODULE scope (a returned list never closes over the param — only a `=>`
+// lambda captures), so `c1` resolves to the module binding, not the arg. The fn
+// is compiled TRANSPARENTLY: the raw deferred list rides as the call's residual
+// and the existing top-level deferred-list fold bakes it in module scope. Every
+// consumption shape must fold to the SAME value both engines produce — no fn unit,
+// no VM change.
+func TestDeferredListBodyCompiles(t *testing.T) {
+	const mk = `def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] `
+	positive := []struct{ src, want string }{
+		// Bare top-level: the deferred list folds at end-of-run, module c1 = 1.
+		{mk + `mk 9`, "[[1]]"},
+		// Rebind AFTER the bare call: the late fold sees the LATEST module binding.
+		{mk + `mk 9 def c1 2`, "[[2]]"},
+		// def-bind forces the eval at bind time (module c1 = 1), so a later rebind
+		// does not move it.
+		{mk + `def r (mk 9) def c1 2 r`, "[[1]]"},
+		// Consumed downstream: the deferred list folds in module scope at the
+		// consumer, exactly as the interpreter auto-evaluates the arg.
+		{mk + `mk 9 0 get`, "[1]"},
+		{mk + `mk 9 size`, "[1]"},
+		// Two independent calls.
+		{mk + `mk 9 mk 8`, "[[1] [1]]"},
+		// A different module binding flows through.
+		{`def c1 7 def mk fn [[c1:Integer] [List] [[c1]]] mk 9`, "[[7]]"},
+	}
+	for _, c := range positive {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("did not compile: reason=%q err=%v :: %s", reason, cerr, c.src)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("expected a native lowering, got an island: %s", c.src)
+		}
+		got, err := mustNew(t).RunCompiledStrict(c.src)
+		if err != nil {
+			t.Fatalf("strict compiled run: %v :: %s", err, c.src)
+		}
+		if fmt.Sprint(got) != c.want {
+			t.Errorf("compiled %v want %s :: %s", got, c.want, c.src)
+		}
+		gotI, _ := mustNew(t).Run(c.src)
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("interp %v want %s :: %s", gotI, c.want, c.src)
+		}
+	}
+
+	// NEGATIVE / soundness — a returned list is NOT a closure: it must resolve in
+	// MODULE scope, never the param. The `=>` lambda (which DOES capture) is the
+	// contrast and must still return the captured param. Both must match the
+	// interpreter exactly.
+	contrast := []struct{ src, want string }{
+		// `=>` captures the param: f returns the ARG 7, not a module binding.
+		{`def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f`, "[7]"},
+		// No module binding for the named param: the deferred list errors at the
+		// late module-scope eval (undefined word), exactly as the interpreter does.
+		{`def mk fn [[x:Integer] [List] [[x add 1]]] mk 5`, ""},
+	}
+	for _, c := range contrast {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if codeOf(eC) != codeOf(eI) {
+			t.Errorf("error parity: compiled=%s interp=%s :: %s", codeOf(eC), codeOf(eI), c.src)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("value parity: compiled=%v interp=%v :: %s", gotC, gotI, c.src)
+		}
+		if eC == nil && c.want != "" && fmt.Sprint(gotC) != c.want {
+			t.Errorf("compiled %v want %s :: %s", gotC, c.want, c.src)
+		}
+	}
+}

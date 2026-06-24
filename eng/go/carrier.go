@@ -516,6 +516,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	}
 	if !tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
+		!tryRecordDeferredList(r, sig, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
@@ -2493,6 +2494,87 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	result = stripZeroOutResiduals(r, result)
 	r.Check.FnSummaries[key] = result
 	return result
+}
+
+// tryRecordDeferredList makes a deferred-list-body user fn TRANSPARENT in the
+// recorder: when the dispatch result is the raw deferred list that
+// buildFnBodyReturnsFn handed back (an `Eval` list still holding raw Words — the
+// def-node-binding `[[c1]]` residual), record NOTHING for the call. The list
+// then rides as the dispatch result and folds downstream exactly as a top-level
+// `[[c1]]` literal does (the args become dead pushes, pruned at lowering). Without
+// this the user-fn dispatch would hit recordCallRefusal ("user fn call … Stage 3")
+// since no fn unit was compiled. Returns true when it claimed the dispatch.
+func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
+	es := r.Check.Emit
+	if es == nil || !es.active() || sig == nil || sig.FnFrame == nil || len(outs) != 1 {
+		return false
+	}
+	return isDeferredWordList(outs[0])
+}
+
+// isDeferredWordList reports whether v is a parser-evaluated (`Eval`, unquoted)
+// plain list that still carries a raw Word element — the unfolded def-node-binding
+// deferred residual a transparent fn body like `[[c1]]` returns.
+func isDeferredWordList(v Value) bool {
+	if !v.Eval || v.Quoted || !v.Parent.Equal(TList) || v.Data == nil ||
+		IsTypedList(v) || IsTableType(v) {
+		return false
+	}
+	lst, err := AsList(v)
+	if err != nil {
+		return false
+	}
+	for _, e := range lst.Slice() {
+		if IsWord(e) {
+			return true
+		}
+		if e.Parent.Equal(TList) && isDeferredWordList(e) {
+			return true
+		}
+	}
+	return false
+}
+
+// deferredParamListResidual reports whether a fn body is a single deferred list
+// literal that references one of the fn's parameters — the def-node-binding.tsv:54
+// shape `[[c1]]` with param `c1`. Such a body returns the list RAW; the param is
+// never captured (only `=>` lambdas close over params), so its words auto-evaluate
+// in MODULE scope at end-of-run, not the param scope AnalyseFnBody's sub-engine
+// used. Returning the raw list lets the residual fold in module scope downstream
+// (matching the interpreter) instead of refusing on a param-poisoned carrier.
+//
+// Deliberately narrow: only a lone, unquoted, parser-evaluated list body that
+// names a parameter qualifies. A body that DOESN'T reference a param already
+// folds correctly under the normal path; a multi-statement or computed body
+// keeps its existing analysis (and its faithful fallback when it can't lower).
+func deferredParamListResidual(body []Value, paramNames []string) (Value, bool) {
+	if len(body) != 1 {
+		return Value{}, false
+	}
+	v := body[0]
+	if v.Quoted || !v.Eval || !v.Parent.Equal(TList) || v.Data == nil ||
+		IsTypedList(v) || IsTableType(v) {
+		return Value{}, false
+	}
+	params := make(map[string]bool, len(paramNames))
+	for _, p := range paramNames {
+		if p != "" {
+			params[p] = true
+		}
+	}
+	if len(params) == 0 {
+		return Value{}, false
+	}
+	referencesParam := false
+	WalkBodyWords([]Value{v}, func(w WordInfo, _ Value) {
+		if params[w.Name] {
+			referencesParam = true
+		}
+	})
+	if !referencesParam {
+		return Value{}, false
+	}
+	return v, true
 }
 
 // stripZeroOutResiduals drops a body residual's 0-output statement-guard

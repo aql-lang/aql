@@ -1,9 +1,12 @@
 # Stage-3 module-fn call-site inlining — verified implementation plan
 
-_Status: refusals 5 -> 4 -> 3 -> 2 -> **1**. The three module feature rows AND
-macro:45 are DONE. The ONLY remaining refusal is **def-node-binding:54** (needs
-deferred-eval-scope provenance — see design/aql-bytecode-final-two-refusals.0.md;
-falls back faithfully today). macro:45 was landed via compile-to-trap after its
+_Status: refusals 5 -> 4 -> 3 -> 2 -> 1 -> **0** (the P7 floor). The three module
+feature rows, macro:45 AND def-node-binding:54 are all DONE.
+**def-node-binding:54** was the last: it compiles via a TRANSPARENT
+deferred-list-body fn (the raw `[[c1]]` residual rides as the call result and the
+existing check-pass deferred-list fold materialises it in module scope — NO VM
+deferred-auto-eval pass was needed; see design/aql-bytecode-final-two-refusals.0.md).
+macro:45 was landed via compile-to-trap after its
 true prerequisite was found (a check-mode help-eval budget leak, NOT the macro
 path — see that note). Rows DONE this effort:_
 - _**module-parselang:23 DONE** — sound check-mode parser registration +
