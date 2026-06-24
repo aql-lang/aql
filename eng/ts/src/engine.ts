@@ -796,7 +796,10 @@ export class Engine {
     try {
       for (let i = 0; i < sig.params.length; i++) {
         const p = sig.params[i]!
-        const v = args[i] ?? newDynamicCarrier(TAny)
+        // A missing optional param defaults to its type's base value (a
+        // concrete, bakeable default — exactly what dispatchFnDef binds at
+        // run time), so an inlined body using it still compiles.
+        const v = args[i] ?? (p.optional ? baseValue(p.type) : newDynamicCarrier(TAny))
         if (p.name !== '') {
           this.registry.pushDef(p.name, v)
           bound.push(p.name)
