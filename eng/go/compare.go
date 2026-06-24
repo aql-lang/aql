@@ -145,20 +145,32 @@ func incomparableError(op string, a, b Value) error {
 // share no common ancestor (the type tables guarantee a single root,
 // so in practice this returns at worst the root type).
 func lowestCommonAncestor(a, b *Type) *Type {
-	// Compared via Type.Equal (pointer OR canonical ID): a type
-	// literal is a by-value copy of its node, so ValueType() may hand
-	// us a copy whose address differs from the canonical node's,
-	// while ID-less ad-hoc types still match by pointer.
-	var aChain []*Type
-	for t := a; t != nil; t = t.Parent {
-		aChain = append(aChain, t)
+	// Depth-aligned walk: lift the deeper node to its sibling's depth, then
+	// climb both in lockstep until the chains meet — O(d) instead of the old
+	// O(d_a · d_b) chain-vs-chain scan. typeDepth reads the cached Type.Depth
+	// (O(1) for registered types), so the alignment is O(1) too. Compared via
+	// Type.Equal (pointer OR canonical ID): a type literal is a by-value copy
+	// of its node, so ValueType() may hand us a copy whose address differs
+	// from the canonical node's, while ID-less ad-hoc types still match by
+	// pointer.
+	if a == nil || b == nil {
+		return nil
 	}
-	for t := b; t != nil; t = t.Parent {
-		for _, at := range aChain {
-			if at.Equal(t) {
-				return t
-			}
+	da, db := typeDepth(a), typeDepth(b)
+	for da > db {
+		a = a.Parent
+		da--
+	}
+	for db > da {
+		b = b.Parent
+		db--
+	}
+	for a != nil && b != nil {
+		if a.Equal(b) {
+			return a
 		}
+		a = a.Parent
+		b = b.Parent
 	}
 	return nil
 }
