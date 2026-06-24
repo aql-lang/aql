@@ -22,6 +22,7 @@ fixed, what remains, and how to re-pin.**
 | `a0604d7` | **`fold [push]` false positive.** `push`'s `[Any List]` overload declared no `Returns`, so a fold accumulator widened to `Any` and the next `push` failed `no_signature`. | decision (`no_signature: push`), trie |
 | `a0604d7` | **`for` multi-value-body miscompile.** `for 2 ['e' 'f']` compiled to `[f f]` instead of `[e f e f]`; now islands faithfully. | (correctness, all) |
 | `fc47452` | **fold body element carrier.** A fold over a `List<Any>` (e.g. `convert List <Array>`) typed its element as a *strict* `Any`, so a body word (`add`, `BinUtil.popcount`) failed. Now uses a dynamic carrier like `each`/`filter`. | bloom-filter smoke (the `popcount` fold) |
+| *(gradual-Any)* | **explicitly-`Any` params and returns become gradual (dynamic) carriers.** A value of static type exactly `Any` (a `:Any` param, a `[Any]`-returning helper) is "type unknown", not "the Any root" — it now poly-matches a concrete slot instead of failing `no_signature`. This is the "unify Any with concrete params" wishlist item. | trie (node walkers — `get`/`find-kid`/`trie-insert`), decision |
 
 All land with the full upstream suite green (`make fmt && make vet && make
 lint && make test`), and a new verified all-words/structures corpus
@@ -61,48 +62,62 @@ All five suites now interpret, check (zero errors), and compile cleanly. The
 The unit/spec/prop suites are clean (the `push` / `convert` fixes). The smoke
 suite's residue is the **dynamic-dispatch + namespace class** (below).
 
-### trie — ⚠️ interpret green; check improved, residual dynamic-dispatch
+### trie — ⚠️ interpret green; check sharply reduced
 
-Interpreting is fully green (all 11 suites). The library's own `check` error
-counts dropped (the `push`/`convert`/`fold` fixes), but the imperative unit
-suites still report the **dynamic-dispatch class** because the trie library
-is built almost entirely on `Any`-typed node walking.
+Interpreting is fully green (all 11 suites). The gradual-`Any` change cut the
+check error counts sharply:
+
+| Suite | before | after |
+|---|---:|---:|
+| `trie_prop_test`  | — | **0** |
+| `trie_unit_test`  | 17 | **5** |
+| `trie_unit_spec`  | 25 | **5** |
+| `trie_prop_spec`  | — | 6 |
+| `burst_unit_test` | 25 | **6** |
+| `radix_unit_test` | 66 | **31** |
+| `tst_unit_test`   | 70 | ~31 |
+| `*_smoke_test`    | high | high |
+
+The residue is two narrower cases the gradual-`Any` change doesn't reach
+(emergent in the full transitive analysis, not reproducible in isolation): a
+`set` over a dynamic node and a `do {…}` map body referencing a same-named
+param (`kids`) — the trie report's "resolve `do{}` quotation params" item — plus
+the namespace-exposed-word noise the smoke suites carry at top level.
 
 ---
 
-## The remaining gap (decision smoke, trie) — root cause
+## The big lever — explicitly-`Any` dispatch (now fixed)
 
-The residual errors are all one class: **dispatch on an explicitly-`Any`-typed
-value.** A fn parameter declared `:Any` (or a value read from an untyped
-structure) becomes a *strict* `Any` carrier in check mode, and a word that
-needs a concrete receiver (`get`, `add`, a user fn like `find-kid` /
-`trie-insert` / `all` / `any`) fails `no_signature` against it — even though it
-dispatches fine at runtime. Minimal reproduction:
-
-```aql
-def g fn [[v:Any] [Any] [v get "x"]] end   g {x:1}   # interp: 1   check: no_signature: get
-```
-
-Contrast a *typed* param, which checks clean:
+The dominant class was **dispatch on an explicitly-`Any`-typed value**: a `:Any`
+param or a `[Any]`-returning helper bound a *strict* `Any` carrier, and a word
+needing a concrete receiver (`get`, `add`, a user walker like
+`find-kid`/`trie-insert`) failed `no_signature` against it — even though it
+dispatches fine at runtime.
 
 ```aql
-def f fn [[m:Map] [Any] [m get "x"]] end   f {x:1}   # interp: 1   check: clean
+def g fn [[v:Any] [Any] [v get "x"]] end   g {x:1}   # was: no_signature: get  →  now: clean
 ```
 
-This is the trie report's wishlist item **“unify `Any` with concrete params”**
-and the decision/`dx-report.md` finding. The principled fix is to bind an
-explicitly-`Any` parameter to a **dynamic (gradual)** carrier — the same
-treatment `each`/`filter`/`fold` already give untyped list elements
-(`NewElementCarrier`) — so dispatch on it poly-matches instead of failing. That
-is a deliberately-scoped, broad checker change (it touches every fn-param
-carrier construction site and the type-soundness profile), so it is **left for a
-dedicated pass** rather than bundled here, where it could destabilise the
-heavily-pinned checker.
+This is the trie report's wishlist item **“unify `Any` with concrete params”**.
+It is now fixed (the gradual-`Any` change): an explicitly-`Any` param/return
+binds a **dynamic (gradual)** carrier — the same treatment `each`/`filter`/`fold`
+give untyped list elements — so dispatch poly-matches. The full upstream suite
+(check accuracy, type soundness, differential, the new corpus) stays green.
 
-The related `undefined_word` cases (`DTable` in decision smoke; `do {…}`
-quotation params like `kids` in trie) are the same family: a name that is only
-known through a namespace-exposed export or a quotation parameter, which the
-static checker does not yet thread.
+## The remaining residue
+
+Two narrower families are left, both deferred (they need their own focused
+pass, and neither reproduces in isolation — they are emergent from the full
+transitive analysis):
+
+1. **`do {…}` quotation params and namespace-exposed words.** `undefined_word`
+   on a `do {…}` map body that references a same-named param (trie's `kids`),
+   and on a type/word only known through an export (decision's `DTable`,
+   `eval-table`/`decide` left as `uncalled_function`). The static checker does
+   not yet thread these.
+2. **`set` over a freshly-dynamic node** inside a deeply nested walker
+   expression — a downstream consequence of the gradual carriers that the
+   poly-record path does not yet cover for the mutating `set`.
 
 ### Client-side options until that lands
 
