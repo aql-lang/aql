@@ -1043,8 +1043,17 @@ export class Engine {
    * eng/go's evalInterpString.
    */
   private evalInterpString(v: Value): Value {
+    const segs = v.asInterpSegments()
+    // Bytecode recording: an interpolated EXPRESSION assembles a string from
+    // runtime values (valToString) — not modelled by the recorder, and in
+    // check mode the embedded carriers would stringify to type names. Refuse
+    // so the program falls back to the interpreter. (All-literal interp
+    // strings are just a constant and stay compilable.)
+    if (segs.some((s) => !('lit' in s))) {
+      this.registry.check.emit?.markUncompilable('interpolated string expression not compilable')
+    }
     let out = ''
-    for (const seg of v.asInterpSegments()) {
+    for (const seg of segs) {
       if ('lit' in seg) {
         out += seg.lit
       } else {
@@ -1061,6 +1070,9 @@ export class Engine {
    * string (scalar), a child element (Xml), or spliced children (list).
    */
   private resolveXmlTmpl(t: import('./value.ts').XmlTmpl): import('./value.ts').XmlElement {
+    // The recorder does not model runtime XML assembly — refuse so a program
+    // containing an XML template falls back to the interpreter.
+    this.registry.check.emit?.markUncompilable('xml template not compilable')
     const evalSegs = (segs: import('./value.ts').InterpSegment[]): string =>
       segs
         .map((seg) =>
