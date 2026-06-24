@@ -220,3 +220,74 @@ p "Test.test trivial" 'import "aql:test" end ([ 1 1 Assert.equal ] "t" Test.test
 p "do computed map"  'def f fn [[a:Integer] [Map] [ do {x:[a]} ]] (f 5) print end'
 p "map body result"  'def f fn [[a:Integer] [Map] [ {x:[a]} ]] (f 5) print end'
 ```
+
+---
+
+## Session-2 status (2026-06-24, branch `claude/aql-client-lib-issues-lev8cs`)
+
+Landed since the note above (all gated: `make verify-bytecode` + full
+`eng/go`/`lang/go` suites green, no divergence):
+
+- **L1a** — computed map literals consumed in-frame record `OpMakeMap` (paren
+  form `do {k:(expr)}` now compiles). Commit `a730e7b`.
+- **L1b-ii** — list-valued map entries (`do {k:[expr]}`) record a nested
+  `OpMakeList` inline in `autoEvalMap`. Commit `d9b41a6`. **This closes the
+  entire `do {map}` refusal class** (brief refusal class #2): bloom.aql:271 and
+  :286 (`do {n:[bf.n] …}`) now compile.
+- Ratchet `TestOnlyMetaFallsBack` fixed (soundness-frontier rows attributed to
+  the compute frontier, not tier-2). Commit `d633623`.
+
+### Live client-suite refusal map (this branch's build, 21 suites)
+
+| reason | suites | project |
+|---|---|---|
+| `code-body word each (Stage 2)` | 7 | A |
+| `check diagnostics` | 4 (radix_unit, trie_smoke, decision_smoke, tst_unit) | B |
+| `code-body word test-test` / `test-check-prop` | 3 | A |
+| `unmatched dispatch recovered at mk-node` | 2 (trie_unit_{spec,test}) | A-adjacent |
+| `unannotated or opaque word do` | 2 (bloom_smoke, bloom_unit_spec) | A (the `do [body]` form — NOT the map form, which is now compiled) |
+| `dynamic input at push` | 1 (burst_unit_test) | ? |
+| **OK** | 2 (decision_prop_test, bloom_prop_test) | — |
+
+### Precise decline points found (Project A `each`/code-body)
+
+The `each` refusal is NOT "all code bodies." Empirically:
+- `each [dup mul]` (simple), `each [var [[i] … end]]` (var-body, NO capture),
+  `each [xs swap get]` (capture, NO var), and nested `each` all **compile**.
+- The refusing shape is specifically **a `var`-body that references an
+  enclosing binding** (bloom's `iota m each [var [[i] bits bit-test i end]]`,
+  where `bits` is a fn-body local). Two distinct decline points:
+  1. **Global var-ref** (`def xs … each [var [[i] xs i get end]]`): reaches
+     `compileClosureBody` and the body analysis fails with
+     `undef: expected fn undef spec, got dynamic(Any)`
+     (`native_definition.go:487`) — the `var`-splice cleanup (`undef i`) in a
+     closure body analysed with a dynamic ref present mis-resolves the undef
+     spec. A var-splice/closure-analysis bug, not a missing feature.
+  2. **In-fn capture** (`def f fn [[xs] … [ each [var [[i] xs i get end]] ]]`):
+     declines BEFORE `compileClosureBody` runs — i.e. in `tryRecordClosure`/
+     `recordClosureDispatch` capture resolution (`callable_words.go:219-226`)
+     or the `var`-body capture walk. The capture of an enclosing local through
+     a `var`-splice body is not threaded.
+
+  Fixing **the var-splice-body closure with captures** (one capability) is the
+  "build it once" core the brief names; `each`/`fold`/`scan`/`filter` share it,
+  and `test-test`/`test-check-prop` (the framework drivers) very likely fall out
+  with it. Verify (1) and (2) as two sub-fixes of that one unit.
+
+`do [body]` (bloom.aql:310/318, `do [StructUtil.parse text] error […]`) is the
+LIST-body code form (with an `error` handler closure) — same code-body cluster,
+distinct from the now-compiled `do {map}`.
+
+### Not yet diagnosed (separate units)
+- `unmatched dispatch recovered at mk-node` — trie's `mk-node` builds a typed
+  node; the checker recovered an unmatched dispatch (a dispatch-recovery, not a
+  do-map issue). Needs its own trace.
+- `dynamic input at push` (burst_unit_test) — a dynamic operand reaches `push`.
+- **Project B** (`check diagnostics`, 4 suites) — unchanged; still the
+  hermetic-help + construction-check + corpus-rebaseline unit from
+  `module-fn-checkstate-ownership.6.md`. Higher risk; land separately.
+
+**Recommendation:** the next unit is the var-splice-body-with-captures closure
+(decline points 1 + 2 above) — highest-frequency single blocker (7 suites),
+no corpus calibration. It is genuine Stage-2 emitter work, not a leaf, so it
+warrants its own branch + full re-gate rather than being rushed.
