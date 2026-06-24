@@ -488,9 +488,20 @@ export class EmitState {
    * by re-evaluating the token. Mirrors a 0-input OpFallback.
    */
   recordValueIsland(token: Value, out: Value, desc: string): void {
+    this.recordTokenIsland([token], out, desc)
+  }
+
+  /**
+   * Record an island over an explicit, self-contained token span (no
+   * threaded inputs): the VM re-runs `tokens` through a sub-engine and the
+   * result threads to `out`. Used for a meta dispatch the recorder can't
+   * model but whose tokens reproduce it (e.g. `inspect <word>`). The caller
+   * is responsible for ensuring the tokens reference nothing run-time-bound.
+   */
+  recordTokenIsland(tokens: Value[], out: Value, desc: string): void {
     if (this.uncompilableReason !== undefined) return
     const slot = this.seq++
-    this.target().push({ kind: 'fallback', slot, word: desc, tokens: [token], ins: [] })
+    this.target().push({ kind: 'fallback', slot, word: desc, tokens, ins: [] })
     this.producedBy.set(out, slot)
     this.siteCounts.dynamic++
   }

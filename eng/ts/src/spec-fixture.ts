@@ -697,6 +697,25 @@ function registerSpecWords(r: Registry): void {
         // (so the matcher does not dispatch a registered word like `dup`).
         args: [TAtom],
         quoteArgs: new Set([0]),
+        recordsOwnEvent: true,
+        // Compile only the introspection of a REGISTERED word (its signature
+        // is fixed and live at run time): island [inspect <word>], which
+        // re-runs this form faithfully. A def's binding is compile-time only
+        // (not live in the VM), and an unknown name is meta — both refuse.
+        returnsFn: (args, registry) => {
+          const out = newDynamicCarrier(TMap)
+          const emit = registry.check.emit
+          if (emit !== undefined) {
+            const a = args[0]!
+            const name = a.isWord() ? a.asWord().name : a.asAtom()
+            if (name !== '' && registry.lookup(name) !== undefined && registry.topOfDefStack(name) === undefined) {
+              emit.recordTokenIsland([newWord('inspect'), newWord(name)], out, 'inspect')
+            } else {
+              emit.markUncompilable('inspect: introspects a binding/unknown (not compilable)')
+            }
+          }
+          return [out]
+        },
         handler: (args, _ctx, _stk, registry) => {
           const name = args[0]!.asAtom()
           const fn = registry.lookup(name)
