@@ -717,20 +717,20 @@ function registerSpecWords(r: Registry): void {
         args: [TAtom],
         quoteArgs: new Set([0]),
         recordsOwnEvent: true,
-        // Compile only the introspection of a REGISTERED word (its signature
-        // is fixed and live at run time): island [inspect <word>], which
-        // re-runs this form faithfully. A def's binding is compile-time only
-        // (not live in the VM), and an unknown name is meta — both refuse.
+        // Island [inspect <name>] when the name is NOT a def: a registered
+        // word's signatures and an unknown name's "unknown" inspection are
+        // both registry-stable, so the island re-runs faithfully. A def's
+        // binding is compile-time only (not live in the VM) — refuse it.
         returnsFn: (args, registry) => {
           const out = newDynamicCarrier(TMap)
           const emit = registry.check.emit
           if (emit !== undefined) {
             const a = args[0]!
             const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
-            if (name !== '' && registry.lookup(name) !== undefined && registry.topOfDefStack(name) === undefined) {
+            if (name !== '' && registry.topOfDefStack(name) === undefined) {
               emit.recordTokenIsland([newWord('inspect'), newWord(name)], out, 'inspect')
             } else {
-              emit.markUncompilable('inspect: introspects a binding/unknown (not compilable)')
+              emit.markUncompilable('inspect: introspects a binding (not live in the VM)')
             }
           }
           return [out]
@@ -965,8 +965,16 @@ function registerSpecWords(r: Registry): void {
           const emit = registry.check.emit
           const a = args[0]!
           if (emit !== undefined) {
-            if (a.isConcrete()) emit.recordTokenIsland([newWord('quote'), a], out, 'quote')
-            else emit.markUncompilable('quote: non-inert value operand')
+            // A raw value (eval-list/map) bakes verbatim (quote returns it
+            // unevaluated); a stripped literal / type operand bakes via its
+            // classified const original (quote 5, quote Integer).
+            let tok: import('./value.ts').Value | null = a.isConcrete() ? a : null
+            if (tok === null) {
+              const op = emit.classify(a)
+              if (op !== null && op.kind === 'const') tok = op.value
+            }
+            if (tok !== null) emit.recordTokenIsland([newWord('quote'), tok], out, 'quote')
+            else emit.markUncompilable('quote: non-bakeable value operand')
           }
           return [out]
         },
