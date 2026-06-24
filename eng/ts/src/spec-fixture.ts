@@ -707,7 +707,7 @@ function registerSpecWords(r: Registry): void {
           const emit = registry.check.emit
           if (emit !== undefined) {
             const a = args[0]!
-            const name = a.isWord() ? a.asWord().name : a.asAtom()
+            const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
             if (name !== '' && registry.lookup(name) !== undefined && registry.topOfDefStack(name) === undefined) {
               emit.recordTokenIsland([newWord('inspect'), newWord(name)], out, 'inspect')
             } else {
@@ -795,7 +795,10 @@ function registerSpecWords(r: Registry): void {
           // tokenizer attached the constraint shape to the name word. The
           // value must satisfy it, else def-time validation fails.
           if (nameWord.constraint !== undefined) {
-            if (!isValueOfType(value, nameWord.constraint)) {
+            // Skip runtime constraint validation in check mode: the value is a
+            // type-only carrier, and any genuine violation is a runtime error
+            // the interpreter raises (so a compiled value row already passed).
+            if (!registry.check.isActive() && !isValueOfType(value, nameWord.constraint)) {
               throw new AqlError(
                 'type_error',
                 `def ${name}: value ${value.toString()} does not satisfy ${nameWord.constraint.toString()}`,
@@ -824,7 +827,7 @@ function registerSpecWords(r: Registry): void {
                 t !== undefined
                   ? newTypeLiteral(t)
                   : (registry.topOfDefStack(constraintStr) ?? atomicValue(constraintStr))
-              if (!isValueOfType(value, constraint)) {
+              if (!registry.check.isActive() && !isValueOfType(value, constraint)) {
                 throw new AqlError(
                   'type_error',
                   `def ${bindName}: value ${value.toString()} does not satisfy ${constraintStr}`,
@@ -917,9 +920,13 @@ function registerSpecWords(r: Registry): void {
         recordsOwnEvent: true,
         returnsFn: (args, registry) => {
           const out = newDynamicCarrier(TAtom)
-          const a = args[0]!
-          const name = a.isWord() ? a.asWord().name : a.asAtom()
-          registry.check.emit?.recordTokenIsland([newWord('quote'), newWord(name)], out, 'quote')
+          const emit = registry.check.emit
+          if (emit !== undefined) {
+            const a = args[0]!
+            const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
+            if (name !== '') emit.recordTokenIsland([newWord('quote'), newWord(name)], out, 'quote')
+            else emit.markUncompilable('quote: non-name operand')
+          }
           return [out]
         },
         handler: (args) => [args[0]!],
