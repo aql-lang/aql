@@ -50,6 +50,10 @@ import {
   runProgram,
   typeNameTable,
 } from './index.ts'
+import {
+  registerSpecWords,
+  tokenize as specTokenize,
+} from './spec-fixture.ts'
 
 const typeTable = typeNameTable()
 
@@ -775,5 +779,62 @@ describe('compiled (stage 1)', () => {
         '007  PUSH_LOCAL 1', // residual
       ].join('\n'),
     )
+  })
+
+  it('const-folds a fully-inert list to one PUSH_CONST (not MAKE_LIST)', () => {
+    const result = compile(freshRegistry(), tokenize('[1 2 3]'))
+    assert.ok('program' in result, 'expected a compiled program')
+    // Every element is an inert const, so the whole list bakes as a single
+    // immutable constant rather than assembling element-by-element.
+    assert.equal(disassemble(result.program), '000  PUSH_CONST 0')
+  })
+
+  it('const-folds a fully-inert map to one PUSH_CONST (not MAKE_MAP)', () => {
+    const result = compile(freshRegistry(), tokenize('{a:1 b:2}'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(disassemble(result.program), '000  PUSH_CONST 0')
+  })
+
+  it('disassembles a computed map to body + MAKE_MAP', () => {
+    const result = compile(freshRegistry(), tokenize('{a:(addq 1 2)}'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  PUSH_CONST 0', // addq arg: 2 (reverse sig order)
+        '001  PUSH_CONST 1', // addq arg: 1
+        '002  CALL_NATIVE 0 (addq)',
+        '003  STORE_LOCAL 0', // addq result -> local 0
+        '004  PUSH_LOCAL 0', // map value a
+        '005  MAKE_MAP 0 {a}', // assemble {a:3}
+        '006  STORE_LOCAL 1', // map -> local 1
+        '007  PUSH_LOCAL 1', // residual
+      ].join('\n'),
+    )
+  })
+
+  // A def/enum type-constraint violation is check-lenient but raises at run
+  // time; in compile mode it lowers to a terminal OpTrap (mirrors trapq). Uses
+  // the spec registry, whose `def` supports `:Constraint` validation.
+  const specRegistry = (): Registry => {
+    const r = new Registry()
+    registerSpecWords(r)
+    return r
+  }
+
+  it('disassembles a def constraint violation to a terminal TRAP', () => {
+    const result = compile(specRegistry(), specTokenize("def x:Integer 'wrong'"))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(disassemble(result.program), '000  TRAP 0 (type_error)')
+  })
+
+  it('a compiled constraint trap errors identically to the interpreter', () => {
+    const input = "def x:Integer 'wrong'"
+    const result = compile(specRegistry(), specTokenize(input))
+    assert.ok('program' in result, 'expected a compiled program')
+    const vm = outcome(() => runProgram(result.program, specRegistry()))
+    const interp = outcome(() => new Engine(specRegistry()).run(specTokenize(input)))
+    assert.deepEqual(vm, interp)
+    assert.deepEqual(vm, { code: 'type_error' })
   })
 })
