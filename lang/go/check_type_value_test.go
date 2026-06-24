@@ -130,3 +130,33 @@ func TestStoredFnRefModifierCheck(t *testing.T) {
 		t.Errorf("usurp of a concrete non-fn value must still be flagged")
 	}
 }
+
+// A module's exports are statically DECLARED, so the checker resolves them in
+// check mode — for `import` (qualified) it already did, and now `unpack` binds
+// them UNQUALIFIED too. `unpack 'aql:mod'` / `unpack Export 'aql:mod'` gained
+// RunInCheckMode + a kept-concrete module-name string, so a later bare word
+// (`sqrt`) resolves instead of flagging undefined_word. NOT a runtime-only
+// effect — the same declared exports `import` reads. (module-struct / unpack.tsv)
+func TestUnpackModuleCheck(t *testing.T) {
+	clean := []string{
+		`unpack 'aql:math-util' sqrt 16.0`,
+		`unpack MathUtil 'aql:math-util' sqrt 16.0`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("unpack module then bare-word use: expected 0 errors, got %d for %q", n, src)
+		}
+	}
+}
+
+// A mini-language kind registered with a STATICALLY-PROVIDED fn
+// (`MiniLang.register poly (fn …)`) is now installed in check mode (an
+// idempotent ReturnsFn mirroring parselang-register), so a later
+// `mini poly …` resolves the kind instead of flagging "no mini-language is
+// registered". The registration is pure (the fn is literal) — not runtime-only.
+func TestMiniLangRegisterCheck(t *testing.T) {
+	clean := `import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}`
+	if n := checkErrs(t, clean); n != 0 {
+		t.Errorf("minilang register then use: expected 0 errors, got %d", n)
+	}
+}

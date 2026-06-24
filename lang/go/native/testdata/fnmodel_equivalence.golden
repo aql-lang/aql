@@ -614,8 +614,8 @@ WORD unpack
   [Node/Map Node/Map] barrier=2 runcheck noevalmap={0}
   [Node/List Node/Map] barrier=2 runcheck noeval={0}
   [Scalar/Atom Node/Map] barrier=2 runcheck quote={0}
-  [Scalar/Atom Scalar/String] barrier=2 quote={0}
-  [Scalar/String] barrier=1
+  [Scalar/Atom Scalar/String] barrier=2 runcheck quote={0}
+  [Scalar/String] barrier=1 runcheck
 WORD unquote
   [Any] barrier=1 returns=[Any]
 WORD unshift

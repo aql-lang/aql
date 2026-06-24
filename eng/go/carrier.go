@@ -323,6 +323,12 @@ func toCarrier(v Value) Value {
 var checkModeLiteralWords = map[string]bool{
 	"import": true,
 	"module": true,
+	// `unpack 'aql:mod'` / `unpack ExportName 'aql:mod'` resolve a module's
+	// (statically-declared) exports and bind them unqualified in check mode;
+	// the module-name string must stay concrete for the handler to resolve it.
+	// The export-name form puts the string two tokens after `unpack`, so the
+	// adjacency window below looks back/forward by two, not one.
+	"unpack": true,
 }
 
 // StripToCarriers returns a copy of in where every non-structural value
@@ -348,11 +354,18 @@ func StripToCarriers(in []Value) []Value {
 // adjacentToLiteralWord reports whether the token at index i has an
 // immediate neighbour that is a checkModeLiteralWords word.
 func adjacentToLiteralWord(in []Value, i int) bool {
-	if i > 0 && isLiteralWord(in[i-1]) {
-		return true
-	}
-	if i+1 < len(in) && isLiteralWord(in[i+1]) {
-		return true
+	// A window of two each way: `import "x"` / `"x" import` are immediate, but
+	// `unpack ExportName 'aql:mod'` places the module-name string two tokens
+	// after the literal word. Keeping a string concrete is sound regardless
+	// (it only adds precision), so the slightly wider window is harmless for
+	// the rare non-literal-word case it might also catch.
+	for d := 1; d <= 2; d++ {
+		if i-d >= 0 && isLiteralWord(in[i-d]) {
+			return true
+		}
+		if i+d < len(in) && isLiteralWord(in[i+d]) {
+			return true
+		}
 	}
 	return false
 }
