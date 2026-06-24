@@ -3126,11 +3126,16 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (string, bool, error) {
 			return "", dynamic, err
 		}
 		for _, r := range result {
-			// A non-concrete (carrier) part means the value is only known at
+			// A CHECK-MODE CARRIER part means the value is only known at
 			// runtime — flag it so the caller does not bake the carrier's render
 			// as a constant string. ValToString of a carrier yields a type tag
-			// ("dynamic(Any)"), which the runtime never produces.
-			if !IsConcrete(r) {
+			// ("dynamic(Any)"), which the runtime never produces. Test for the
+			// carrier flag specifically, NOT !IsConcrete: at run time there are
+			// no carriers, but there ARE legitimate non-concrete values — None
+			// and bare type literals (e.g. `${typeof x}`) — which stringify to
+			// real text ("None", "Integer") and must not collapse the whole
+			// interpolation to a String carrier.
+			if r.Carrier {
 				dynamic = true
 			}
 			buf.WriteString(ValToString(r))
