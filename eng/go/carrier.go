@@ -1467,8 +1467,16 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 	seen := map[string]bool{}
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
-		if len(s.Args) != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
-			return nil // a shape we don't refine — defer to contagion
+		// A different-arity overload is not a candidate for THIS call's arg
+		// count — skip it rather than bail. The original code bailed here,
+		// which disabled refinement for every word with mixed-arity overloads:
+		// `slice`'s 1/2/3-arg forms meant a dynamic-receiver slice committed to
+		// the single matched overload (`dynamic(List)` for a String-or-List
+		// receiver) instead of the `String|List` disjunct, so a String consumer
+		// of the result then failed no_signature (radix's edge splitter, where
+		// the sliced label is a get-result of unknown type).
+		if len(s.Args) != len(args) {
+			continue
 		}
 		reach := true
 		for j := range args {
@@ -1479,6 +1487,12 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 		}
 		if !reach {
 			continue
+		}
+		// A REACHABLE overload we cannot reduce to a single return type
+		// (ReturnsFn / multi- or zero-return): refining to a disjunct would
+		// omit a possible result, so defer to the plain dynamic carrier.
+		if len(s.Returns) != 1 || s.Returns[0] == nil {
+			return nil
 		}
 		if t := s.Returns[0]; !seen[t.ID] {
 			seen[t.ID] = true

@@ -291,13 +291,24 @@ default `NewCarrier(Any)` — a STRICT Any accumulator — so every `acc … get
 Effect: **`radix.aql` 11→4**. Cumulative error-level across the six modules is
 now **≈177 → ≈4** (only radix's node splitter remains).
 
+### Mixed-arity refinement over a dynamic receiver (landed) — radix 4→3
+
+`dynamicReachableReturns` BAILED whenever a word had any overload of a different
+arity, disabling result-disjunct refinement for every mixed-arity word. `slice`
+(1/2/3-arg) over a gradual receiver then committed to the single matched
+overload — `dynamic(List)` for a String-or-List value — so a String consumer of
+the slice result failed no_signature. It now SKIPS different-arity overloads and
+unions the reachable same-arity returns into a `String|List` disjunct (still
+bails only on a reachable multi-/ReturnsFn overload it cannot reduce). Pinned by
+`lang/go/slice_dynamic_test.go` (with an Integer negative). Clears radix's
+edge-split key (`{} set ((lrest slice 0 1)) …`, where the sliced label is a
+get-result of unknown type) and its `midkids` cascade.
+
 ### What remains
 
-`radix.aql` (≈4) — a stack-desync cascade (the report's Issue 5) in the
-`radix-insert` edge-splitter's def-chain (`set` over `{}` / `set-edge` get
-mis-collected operands once an upstream dispatch in the same straight line
-recovers). This is the one residue that is a check-mode operand-collection
-desync rather than a modality/match gap. A
+`radix.aql` (≈3) — `set-edge` (its body's `set` over a get-result receiver, and
+two call sites) inside the recursive `radix-insert` edge splitter: the last
+residue, a deep recursion+disjunct interaction in one walker. A
 sound `set`-over-dynamic arity under a REAL compile (residual #2 above) is the
 other open precision item. These touch the checker's gradual-modality
 propagation and move the pinned `pinnedAnyFrontierRows` /
