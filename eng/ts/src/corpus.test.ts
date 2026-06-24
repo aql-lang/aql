@@ -19,7 +19,7 @@ import { SPEC_DIR, parseSpec, registerSpecWords, renderStack, tokenize } from '.
 
 // The compiled-coverage floor: at least this many value rows must compile and
 // match the interpreter. Raise it as feature gaps close (never lower it).
-const COMPILE_FLOOR = 1373
+const COMPILE_FLOOR = 1392
 
 type RowResult =
   | { kind: 'skip' } // ERROR row, tokenize failure, or interpreter error (not a value row)

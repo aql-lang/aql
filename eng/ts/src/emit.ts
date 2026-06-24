@@ -15,7 +15,7 @@
 // dynamic, loops, user fns, containers, and fallback islands land later.
 import type { Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { newCarrier, newWord, type FnDefInfo, type Value } from './value.ts'
+import { newCarrier, newWord, OrderedMap, type FnDefInfo, type Value } from './value.ts'
 import { TList, TMap } from './type.ts'
 
 /**
@@ -58,7 +58,11 @@ function fnCaptureFree(info: FnDefInfo, registry: Registry): boolean {
 function isInert(v: Value): boolean {
   if (v.carrier) return false
   if (Array.isArray(v.data)) return (v.data as Value[]).every(isInert)
-  if (v.isMap()) {
+  // A plain data map: inert iff every value is. A typed-map TYPE literal
+  // (`{ :Integer }`) also reports isMap() but its data is a typed-map
+  // structure, not an OrderedMap — treat it as an inert canonical constant
+  // (handled by the data===null / fall-through below), never call asMap on it.
+  if (v.isMap() && v.data instanceof OrderedMap) {
     const m = v.asMap()
     return m.keys().every((k) => isInert(m.get(k)!))
   }
