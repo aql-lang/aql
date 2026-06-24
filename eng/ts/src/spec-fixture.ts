@@ -552,15 +552,31 @@ function registerSpecWords(r: Registry): void {
   // arrives unevaluated (noEvalArgs); a bare List/Map type literal fails
   // the concrete-container match and surfaces a signature_error.
   const doEvalMapValue = (v: Value): Value => {
-    if (v.isMap()) {
+    const emit = r.check.emit
+    if (v.isMap() && v.data instanceof OrderedMap) {
       const src = v.asMap()
+      const keys = src.keys()
+      const vals = keys.map((k) => doEvalMapValue(src.get(k)!))
+      if (emit !== undefined) {
+        // Compile mode: record a makeMap so the assembled map has provenance.
+        const ops = vals.map((x) => emit.classify(x))
+        if (ops.every((o) => o !== null)) return emit.recordMakeMap([...keys], ops as import('./emit.ts').Operand[])
+        emit.markUncompilable('do-map: value of unknown provenance')
+      }
       const out = new OrderedMap()
-      for (const k of src.keys()) out.set(k, doEvalMapValue(src.get(k)!))
+      keys.forEach((k, i) => out.set(k, vals[i]!))
       return newMap(out)
     }
     if (v.vType.matches(TList) && Array.isArray(v.data)) {
       const residual = new Engine(r).run([...v.asList()])
+      // A single-value residual collapses to that value (already provenance-
+      // carrying); a multi-value residual is a list — record a makeList.
       if (residual.length === 1) return residual[0]!
+      if (emit !== undefined) {
+        const ops = residual.map((x) => emit.classify(x))
+        if (ops.every((o) => o !== null)) return emit.recordMakeList(ops as import('./emit.ts').Operand[])
+        emit.markUncompilable('do-list: element of unknown provenance')
+      }
       return newList(residual, { eval: false })
     }
     return v
@@ -572,6 +588,9 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TMap],
         noEvalArgs: new Set([0]),
+        // Transparent in check mode: doEvalMapValue records makeMap/makeList
+        // so a deep-evaluated map (do { a:(1 addq 2) }) compiles.
+        runInCheckMode: true,
         handler: (args) => [doEvalMapValue(args[0]!)],
       },
       {
