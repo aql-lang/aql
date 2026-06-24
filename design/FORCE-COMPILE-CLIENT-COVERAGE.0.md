@@ -80,6 +80,49 @@ assembled-Map result that must **not** enter the const pool.
 
 ---
 
+## Progress — L1a LANDED; L1b's real blocker isolated
+
+**L1a (computed-map provenance) — landed.** `autoEvalMap` now records an
+`OpMakeMap` assembly for **any computed map literal consumed in-frame** (a
+word/fn arg), not just `make`'s construction body (the old `dataMap`-only gate).
+So a `{k:(expr)}` bound to a value-def local and returned, or read by a
+downstream word, compiles instead of refusing "body result of unknown
+provenance". Gated on in-frame **consumption** (`consumed` flag threaded from the
+arg-evaluation callers): a DEFERRED residual — a bare computed-map fn-body tail,
+auto-evaluated by `autoEvalStack` after its frame pops — must still refuse,
+because the interpreter evaluates it late (its param bindings gone) and
+compiling it in-frame would diverge. Verified: `make verify-bytecode` green
+(differential + property + race + aqldebug), full `eng/go` / `lang/go` / `cmd/go`
+suites green, neutral on the langspec census. Pinned by
+`lang/go/bytecode_computedmap_test.go` (positive: byte-identical to the
+interpreter; negative: the deferred-residual tail still refuses, no divergence).
+`COMPILABLE-SUBSET.md §3` updated.
+
+> Pre-existing note: `test/go/langspec/TestOnlyMetaFallsBack` (a tier-2 ratchet,
+> NOT part of `verify-bytecode`) fails on clean `main @ 407fedad` with identical
+> numbers with/without L1a — a stale `reducibleCeiling`, independent of this work.
+
+**L1a already compiles the PAREN form of `do {…}`.** A bonus the widening
+delivers directly: `do {n:(bf.n)}` (paren value quotations) now **compiles** —
+its values evaluate in-stream (`evalParenExprResults`), `RecordMakeMap` records
+the map, and `do`'s `Any` return over a now-resolved concrete map arg falls under
+the `dynOutNativeOK` exemption, so no output-type change to `do` is needed.
+Verified against `--force-compile`.
+
+**L1b — the real residue is the LIST quotation form.** The client libs write
+`do {n:[bf.n]}` (the **list** form — `bloom.aql:271`, `decision.aql:159`,
+`trie.aql:275`), which still refuses. A list-valued map entry is evaluated by
+`doEvalDataList` in a **sub-engine** (`New(r).Run([bf.n])`), whose result value
+carries **no parent-stream provenance**, so `RecordMakeMap` can't resolve it and
+the map stays unresolvable ("unannotated or opaque word do"). Closing this is one
+focused change — record provenance for list-valued map entries (evaluate them
+in-stream like parens, or thread the sub-engine result's event id back to the
+parent emit); it was left out here to keep L1a a clean, independently-verified
+unit. Two routes: implement it upstream, or — a **zero-upstream client option** —
+switch `do {k:[expr]}` to `do {k:(expr)}` (parens), which compiles today.
+
+---
+
 ## 3. Sequenced plan
 
 Ordered by leverage and ascending risk. Each step ends with `make

@@ -2389,7 +2389,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 					// values record as per-run OpMakeMap events rather than baking as
 					// aliasable consts (a class/refine SCHEMA body keeps folding its
 					// field defaults). Keyed on the dispatched word.
-					evaluated, err := e.autoEvalMap(match.Args[i], match.Name == "make")
+					evaluated, err := e.autoEvalMap(match.Args[i], match.Name == "make", true)
 					if err != nil {
 						return err
 					}
@@ -3038,7 +3038,7 @@ func (e *Engine) autoEvalStack() error {
 			}
 			e.tape.Set(i, result)
 		} else if val.Parent.Equal(TMap) && val.Data != nil && !IsTypedMap(val) && !IsRecordType(val) && !IsOptionsType(val) {
-			result, err := e.autoEvalMap(val, false)
+			result, err := e.autoEvalMap(val, false, false)
 			if err != nil {
 				return err
 			}
@@ -3407,7 +3407,14 @@ func (e *Engine) evalParenExprResults(items []Value) ([]Value, error) {
 //	{x:[1 add 2]} → {x:[3]}     (list evaluated, stays as list)
 //	{a:[1,2]}     → {a:[1,2]}   (literal list unchanged)
 //	{x:"hello"}   → {x:"hello"} (strings pass through unchanged)
-func (e *Engine) autoEvalMap(val Value, dataMap bool) (Value, error) {
+//
+// consumed reports whether the map is being evaluated as an in-frame CONSUMED
+// argument (a word/fn-def arg) rather than a DEFERRED residual (autoEvalStack
+// at end of run). Only a consumed map may record an OpMakeMap event: a deferred
+// residual is evaluated LATE, after its enclosing fn frame has popped, so its
+// value bindings (a fn param) are gone — recording it in-frame would diverge
+// from the interpreter (which errors / re-binds at the later time).
+func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 	m, _ := AsMutableMap(val)
 	out := NewOrderedMap()
 	if m.Implicit {
@@ -3578,7 +3585,21 @@ func (e *Engine) autoEvalMap(val Value, dataMap bool) (Value, error) {
 	// operands, matching make's per-call evaluation). It is never a deferred
 	// residual, so the late-rebinding hazard that gates plain residual lists/maps
 	// does not apply, and the top-frame restriction is unnecessary here.
-	if dataMap && e.registry.Check.IsActive() {
+	// A COMPUTED (non-inert) map literal records an OpMakeMap assembly so its
+	// result is a real per-run event the rest of the program can consume — not
+	// just make's construction body (dataMap), but ANY computed map literal,
+	// including one returned as a fn body result or bound to a value-def local
+	// (`def m {x:(a 1 add)} … m`). The const case (a fully-literal map) stays
+	// inert and bakes as a pooled const (isInertConst), so it never reaches here.
+	// OpMakeMap re-assembles a FRESH map from its operands on every run, so it is
+	// sound inside a fn body / branch arm / loop body (no freezing, never a
+	// deferred-residual late-rebind hazard) — the same property that made the
+	// dataMap case safe without a top-frame restriction. RecordMakeMap leaves es
+	// untouched and returns false when a value has no compiled home, so the map
+	// stays an unresolvable residual and the program falls back faithfully.
+	// Gated on `consumed`: a DEFERRED residual (end-of-run autoEvalStack) is
+	// evaluated after its frame pops, so recording it in-frame would diverge.
+	if consumed && e.registry.Check.IsActive() {
 		if es := e.registry.Check.Emit; es != nil && !isInertConst(res) {
 			keys := out.Keys()
 			vals := make([]Value, len(keys))
@@ -4536,7 +4557,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 					// This FnDef/module-wrapper path never dispatches the core `make`
 					// word (a core native goes through execMatch), so its map args are
 					// not construction bodies — keep the const-fold path.
-					evaluated, err := e.autoEvalMap(args[i], false)
+					evaluated, err := e.autoEvalMap(args[i], false, true)
 					if err != nil {
 						return err
 					}
