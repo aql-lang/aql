@@ -1326,6 +1326,16 @@ export class Engine {
         }
         ops.push(o)
       }
+      // Const-fold a fully-inert DATA/TYPE list: bake the concrete value as one
+      // const rather than assembling it via OpMakeList. This keeps the value's
+      // structure live (not a carrier), so a consumer that reads it — `inspect`
+      // of a def bound to a computed type — can introspect it. Mirrors Go's
+      // const-folded computed containers. A list bearing a fn-value member keeps
+      // the makeList path (a baked fn-value member dispatches dynamically when
+      // the container is later consumed).
+      if (ops.every((o) => o.kind === 'const') && !elems.some((e) => this.containsFnDef(e))) {
+        return newList(ops.map((o) => (o as { value: Value }).value), { eval: false })
+      }
       return emit.recordMakeList(ops)
     }
     return newList(elems, { eval: false })
@@ -1344,9 +1354,29 @@ export class Engine {
         }
         ops.push(o)
       }
+      // Const-fold a fully-inert DATA/TYPE map (see buildList): bake the
+      // concrete map so a consumer that reads its structure (`inspect` of a
+      // def-bound record type) keeps a live value rather than a carrier. A map
+      // bearing a fn-value keeps the makeMap path.
+      if (ops.every((o) => o.kind === 'const') && !vals.some((v) => this.containsFnDef(v))) {
+        return this.rawMap(keys, ops.map((o) => (o as { value: Value }).value))
+      }
       return emit.recordMakeMap([...keys], ops)
     }
     return this.rawMap(keys, vals)
+  }
+
+  /** Whether `v` is, or (recursively) contains, a fn-value member. Such a
+   *  container must not be const-folded: a baked fn-value dispatches
+   *  dynamically when the container is later consumed (typeof/is/length). */
+  private containsFnDef(v: Value): boolean {
+    if (v.isFnDef()) return true
+    if (Array.isArray(v.data)) return (v.data as Value[]).some((e) => this.containsFnDef(e))
+    if (v.isMap() && v.data instanceof OrderedMap) {
+      const m = v.asMap()
+      return m.keys().some((k) => this.containsFnDef(m.get(k)!))
+    }
+    return false
   }
 
   private rawMap(keys: string[], vals: Value[]): Value {

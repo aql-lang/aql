@@ -1168,6 +1168,10 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TAny, TAny],
         barrierPos: 1,
+        // Build the disjunct in check mode (like `refine`) so a consumer —
+        // `inspect` of a def bound to `A tor B` — sees the concrete type and
+        // bakes it as an inert const rather than refusing a dynamic carrier.
+        runInCheckMode: true,
         handler: (args) => {
           const alts = [...flattenAlts(args[1]!), ...flattenAlts(args[0]!)]
           const seen = new Set<string>()
