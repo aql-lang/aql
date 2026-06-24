@@ -187,6 +187,30 @@ transitive analysis — they do not reproduce in isolation — so they need that
 focused precision pass, exactly as the two residue families above. Demoting
 severity was considered and rejected on this basis.
 
+### The emergent root: call-time fn-body re-analysis (diagnosed)
+
+The reason these do not reproduce in isolation is **call-time re-analysis**.
+`AnalyseFnBody` is memo-keyed on `(scope, name, arg-types, captures, body)`, so
+a fn body is analysed once per distinct call-shape and **each analysis emits its
+own diagnostics**. A body that is clean against its DECLARED param types (the
+def-time analysis) can emit `no_signature` when re-analysed under a call-shape
+whose args narrowed a param to a strict `Any` — and a recursive fn re-analyses
+itself per round of the fixed point, so a self-call passing a `get`-result
+(`trie`'s `fuzzy-go` recursing on `child = pair get 1` as `nd:Map`) drives the
+cascade. Concretely: `trie.aql`'s `fuzzy-go`/`kid-items`/`get` cluster is
+**absent** when the module is truncated before `trie-within` (head 350, the
+def-time analysis is clean) and **appears** the moment `trie-within` calls
+`fuzzy-go` (head 360). The report's Issue 5 (`branch_error` "stack desync") is
+the same mechanism — the simulated stack diverging after a call-shape recovery.
+
+A sound fix is to emit fn-body diagnostics from the **canonical** (declared-
+types) analysis only, treating call-shape re-analyses as return-type inference
+that must not re-report body errors. That is a change to the checker's
+fixed-point/diagnostic-scoping core and ripples directly through the pinned
+`pinnedAnyFrontierRows` / `pinnedTypeSoundnessViolations` ratchets, so it is the
+focused precision pass — not a local tweak. It was scoped and deferred here
+rather than risk destabilising those accuracy gates with a half-measure.
+
 ### Client-side options until that lands
 
 1. **Keep the current pins** (`c44d994` for the bytecode-capable reference)
