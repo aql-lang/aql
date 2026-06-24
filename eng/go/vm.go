@@ -19,6 +19,7 @@ package eng
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 )
 
@@ -532,6 +533,12 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 // its CALL_USER caller within this run. Re-entrant: a body closure invoked
 // from a native handler calls run() again on a fresh stack, sharing vc's step
 // budget and island engine.
+//
+// arm per opcode; complexity grows by one with each new op (here OpInterp) and is
+// not reducible without obscuring the flat decode loop. Same documented exception
+// as the engine.go step dispatch and matchSignature (.golangci.yml).
+//
+//nolint:gocyclo // the VM instruction dispatch is inherently one big switch — one
 func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value, error) {
 	p, r := vc.p, vc.r
 	ceiling := vc.ceiling
@@ -617,6 +624,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// computed make-construction body, `make Outer {i:(make Inner …)}`).
 			var err error
 			if stack, err = vmMakeMap(p, stack, in.Arg, curDebug, pc); err != nil {
+				return nil, err
+			}
+		case OpInterp:
+			// Assemble a template string from its computed holes (`` `got ${x}` ``).
+			var err error
+			if stack, err = vmInterp(p, stack, in.Arg, curDebug, pc); err != nil {
 				return nil, err
 			}
 		case OpTrap:
@@ -1063,6 +1076,31 @@ func vmMakeMap(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]
 		om.Set(k, vals[i])
 	}
 	return append(stack[:len(stack)-n], NewMap(om)), nil
+}
+
+// vmInterp pops one operand-stack value per hole of an OpInterp template
+// (deepest popped = hole 0, source order), then interleaves the literal
+// segments with ValToString of each hole — byte-identical to the interpreter's
+// evalInterpParts — and returns the stack with the assembled string pushed.
+// Extracted from vmContext.run to keep that loop's cyclomatic complexity bounded.
+func vmInterp(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]Value, error) {
+	spec := &p.Interps[arg]
+	n := spec.NHoles
+	if len(stack) < n {
+		return nil, vmErrAt(debug, pc, "INTERP stack underflow")
+	}
+	holes := stack[len(stack)-n:]
+	var sb strings.Builder
+	hi := 0
+	for _, seg := range spec.Segs {
+		if seg.Hole {
+			sb.WriteString(ValToString(holes[hi]))
+			hi++
+		} else {
+			sb.WriteString(seg.Lit)
+		}
+	}
+	return append(stack[:len(stack)-n], NewString(sb.String())), nil
 }
 
 // vmErrAt builds an internal_error AqlError for a VM-internal soundness

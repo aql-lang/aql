@@ -52,6 +52,8 @@ def x 5 raise bad_input `oops ${x}`	ERROR:oops 5	template message with an explic
 def x 5 add "a" `v ${x}`	'v 5a'	any typed slot sees the evaluated String, not the raw template
 def x None `got ${x}`	'got None'	a None value interpolates as the string None, not a String carrier (bloom report §1)
 def x None do [ raise bad_input `got ${x}` ] error [ get code ]	bad_input/q	a None-built raise message keeps the intended code, not raise_error
+`type: ${42 typeof}`	'type: Integer'	a bare type-literal (typeof) interpolates as its type name
+`sum ${1 add 2} of ${10}`	'sum 3 of 10'	a natively-computed hole interpolates its result (compiles via OpInterp)
 # strict lookup misses raise the documented not_found code; misuse on a
 # type literal stays getr_error
 {x:1} getr y	ERROR:not_found	missing map key is not_found per the error-codes table

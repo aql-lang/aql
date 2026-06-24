@@ -1993,18 +1993,30 @@ func TestTopTakingClosureTrim(t *testing.T) {
 // CARRIER and refuses recording for such a string, so the program falls back to
 // the interpreter and builds the real value. Found via voxgig-aql/decision
 // prop suites (`  pass: ${nm}` where nm = a get over the each-element carrier).
-func TestInterpStringRuntimePartFallsBack(t *testing.T) {
-	// nm is a field read over the each-element carrier → dynamic; the interp
-	// string must NOT bake "dynamic(Any)". Compiled (with fallback) == interp.
+func TestInterpStringRuntimePartCompiles(t *testing.T) {
+	// nm is a field read over the each-element carrier → a runtime hole. It now
+	// lowers to OpInterp (the VM rebuilds the string from the popped hole at run
+	// time) rather than refusing the program. Compiled == interp, no carrier leak,
+	// and the interpolation itself is native — no string-interp island.
 	const src = `def rs [{name:"a"} {name:"b"}]
 (rs each [var [[r] def nm (r "name" get) ` + "`x ${nm}`" + ` ]])`
+	prog, reason, _, _ := mustNew(t).CompileCheck(src)
+	if prog == nil {
+		t.Fatalf("a runtime-valued interpolation must now compile via OpInterp, refused: %s", reason)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "INTERP") || strings.Contains(dis, "FALLBACK") {
+		t.Errorf("the interpolation must lower to a native INTERP (no island):\n%s", dis)
+	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
 	gotI, errI := mustNew(t).Run(src)
-	if compiled {
-		t.Errorf("a runtime-valued interpolation must refuse (no runtime string-interp op), got a compiled run")
+	if !compiled {
+		t.Errorf("the program must run compiled, fell back")
 	}
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+		t.Errorf("parity broke: compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+	}
+	if fmt.Sprint(gotI) != "[['x a' 'x b']]" {
+		t.Errorf("got %v, want [['x a' 'x b']]", gotI)
 	}
 	for _, v := range []string{fmt.Sprint(gotC), fmt.Sprint(gotI)} {
 		if strings.Contains(v, "dynamic(") {
@@ -2012,7 +2024,7 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 		}
 	}
 
-	// POSITIVE: a fully-CONCRETE interpolation still compiles and folds.
+	// POSITIVE: a fully-CONCRETE interpolation still folds to a pooled const.
 	prog, reason, _, cerr := mustNew(t).CompileCheck("def n 5\n`value ${n}`")
 	if cerr != nil {
 		t.Fatalf("concrete interp: check error %v", cerr)
@@ -2023,6 +2035,74 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 	gotc, _, _ := mustNew(t).RunCompiled("def n 5\n`value ${n}`")
 	if fmt.Sprint(gotc) != "[value 5]" {
 		t.Errorf("concrete interp: got %v want [value 5]", gotc)
+	}
+
+	// NEGATIVE: a single hole that yields a DYNAMIC, MULTI-value run cannot map to
+	// one stack slot, so OpInterp refuses and the program falls back — still with
+	// interpreter parity (no silent miscompile).
+	const multi = "`v=${1 add 2  3 add 4}`"
+	mprog, _, _, _ := mustNew(t).CompileCheck(multi)
+	if mprog != nil {
+		t.Errorf("a dynamic multi-value hole must refuse to compile")
+	}
+	mC, mcompiled, _ := mustNew(t).RunCompiled(multi)
+	mI, _ := mustNew(t).Run(multi)
+	if mcompiled {
+		t.Errorf("dynamic multi-value hole must fall back, ran compiled")
+	}
+	if fmt.Sprint(mC) != fmt.Sprint(mI) {
+		t.Errorf("fallback parity broke: compiled=%v interp=%v", mC, mI)
+	}
+}
+
+// TestInterpStringOpInterpParity exercises OpInterp across the shapes that
+// distinguish it from a const fold — multiple holes, natively-computed holes,
+// None and type-literal holes, and NESTING — asserting (a) the program compiles
+// natively (an INTERP, no island), and (b) compiled output is byte-identical to
+// the interpreter.
+func TestInterpStringOpInterpParity(t *testing.T) {
+	// wantInterp marks cases with a genuinely DYNAMIC hole (a native result, which
+	// check mode synthesises as a carrier) that must lower to OpInterp. The others
+	// have only literal / binding / const-foldable holes, so they collapse to a
+	// pooled const (optimal) — they must still compile natively and match, but
+	// without an INTERP op.
+	cases := []struct {
+		src, want  string
+		wantInterp bool
+	}{
+		{src: "`a${1}b${2}c${3}d`", want: "[a1b2c3d]"},                                                  // all literal holes → const
+		{src: "def n 3 `${n} items, total ${n mul 10}`", want: "[3 items, total 30]", wantInterp: true}, // n mul 10 carrier
+		{src: "`type: ${42 typeof}`", want: "[type: Integer]", wantInterp: true},                        // typeof carrier
+		{src: "def x None `got ${x}`", want: "[got None]"},                                              // None binding → const
+		{src: "`nested ${ `inner ${1 add 1}` }`", want: "[nested inner 2]", wantInterp: true},           // add carrier
+		{src: "def f fn [[n:Integer] [String] [ `got ${n}` ]] 7 f", want: "[got 7]", wantInterp: true},  // param hole
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Errorf("%q: check error %v", c.src, cerr)
+			continue
+		}
+		if prog == nil {
+			t.Errorf("%q: must compile, refused: %s", c.src, reason)
+			continue
+		}
+		dis := prog.Disassemble()
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: must compile natively, got an island:\n%s", c.src, dis)
+		}
+		if c.wantInterp && !strings.Contains(dis, "INTERP") {
+			t.Errorf("%q: dynamic hole must lower to INTERP:\n%s", c.src, dis)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled || errC != nil || errI != nil {
+			t.Errorf("%q: run failed compiled=%v errC=%v errI=%v", c.src, compiled, errC, errI)
+			continue
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want=%s", c.src, gotC, gotI, c.want)
+		}
 	}
 }
 
