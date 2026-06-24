@@ -17,7 +17,8 @@
   "scripts": {
     "typecheck": "tsc",
     "test": "node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'",
-    "test:spec": "node --test --experimental-strip-types --no-warnings src/spec.test.ts"
+    "test:spec": "node --test --experimental-strip-types --no-warnings src/spec.test.ts",
+    "crossdump": "node --experimental-strip-types --no-warnings src/crossdump.ts"
   },
   "dependencies": {
     "@tabnas/jsonic": "^0.2.0",

@@ -84,6 +84,17 @@ test-ts:
 	@echo "==> test eng/ts"
 	cd eng/ts && node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'
 
+# ---- cross-engine differential -----------------------------------------
+#
+# Run the shared eng/spec corpus through BOTH the Go kernel and the TS engine
+# and diff the two result streams row-by-row (Go drives; it execs the TS
+# dumper eng/ts/src/crossdump.ts). Reports agreements, error-code differences,
+# and functionality gaps; hard-fails only on a true divergence (both engines
+# produce a value but the values differ). Requires `node`.
+crossdiff:
+	@echo "==> cross-engine differential (Go kernel vs TS engine, eng/spec)"
+	cd test/go && go test ./engspec/ -run TestCrossEngineDifferential -v
+
 # ---- compiled-coverage status surface ----------------------------------
 #
 # Regenerate test/go/langspec/COMPILED_STATUS.md from the live spec corpus.
