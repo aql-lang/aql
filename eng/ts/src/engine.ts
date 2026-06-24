@@ -537,7 +537,18 @@ export class Engine {
       // `typeof <p>${…}</p>` types the resulting Node/Xml, not the
       // template marker.
       if (tok.isXmlInterp()) {
-        this.stack[scanIdx] = newXml(this.resolveXmlTmpl(tok.asXmlTmpl()))
+        // A self-contained xml template in the forward window islands here
+        // (re-runs to its element at run time) so a consumer like
+        // `typeof <p>${…}</p>` compiles — mirroring the main loop's
+        // XmlInterp branch, which preEvalParens would otherwise pre-empt.
+        const emit = this.registry.check.emit
+        if (emit !== undefined && this.xmlCaptureFree(tok.asXmlTmpl())) {
+          const out = newCarrier(TXml)
+          emit.recordValueIsland(tok, out, 'xml')
+          this.stack[scanIdx] = out
+        } else {
+          this.stack[scanIdx] = newXml(this.resolveXmlTmpl(tok.asXmlTmpl()))
+        }
         resolved++
         scanIdx++
         continue
