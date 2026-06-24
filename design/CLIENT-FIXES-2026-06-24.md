@@ -243,10 +243,29 @@ aligning the check-mode carrier with the runtime value (whose payload Parent is
 
 Effect: **`bloom.aql` 10→1**.
 
+### Body params narrowed to their declared type (landed) — 4/6 modules clean
+
+A fn body was analysed against the (gradual) ARG shapes a call threaded in, not
+its DECLARED param types. A mutual-recursion cycle (decision's `eval-pred-all`
+↔ `eval-pred`) passes a `get`-result `dynamic(Any)` into a `children:List`
+param; the body then saw `children` as `dynamic(Any)`, so `each` over it matched
+the **map-each** overload (`[TList, TMap] → [TMap]`) instead of list-each (→
+List), and the downstream `all`/`any` (`[TList]`) failed `no_signature` against
+the spurious `Map`. `buildFnBodyReturnsFn` now narrows each gradual arg whose
+bound is strictly broader than its declared param type to a dynamic carrier of
+that param type before body analysis (sound — the arg already passed the param
+match, so a disjoint arg never reaches here; precision is preserved for
+concrete/conforming args). Pinned by `lang/go/param_narrowing_test.go`.
+
+Effect: **`decision.aql` 2→0, `bloom.aql` 1→0, `burst.aql` 2→0**, `radix.aql`
+20→11, `tst.aql` 26→15. **Four of the six client modules now check fully clean**
+(trie, burst, bloom, decision); cumulative error-level across all six is now
+**≈177 → ≈26**.
+
 ### What remains
 
-`radix.aql` (≈20), `tst.aql` (≈26), `bloom.aql` (1), `decision.aql` (2,
-`all`/`any` over a forward-referenced `each`-of-user-fn result). A
+`radix.aql` (≈11), `tst.aql` (≈15) — the deepest node-rebuild walkers
+(`tst-insert`/`set-edge`/`mk-tnode`, `midkids`). A
 sound `set`-over-dynamic arity under a REAL compile (residual #2 above) is the
 other open precision item. These touch the checker's gradual-modality
 propagation and move the pinned `pinnedAnyFrontierRows` /

@@ -268,6 +268,42 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 //
 // Extracted verbatim from InstallFnDef so the same return-inference can
 // be shared with the Function-value dispatch path.
+// narrowArgsToParams returns args with each gradual (dynamic) arg whose bound
+// is strictly BROADER than its declared param type narrowed to a dynamic
+// carrier of that param type. The arg already passed the param match at the
+// call site (a disjoint arg never reaches body analysis), so narrowing its
+// gradual bound to the declared contract is sound and stays optimistic — it
+// just ensures a body word sees the param's declared shape. Without it, a
+// recursive call threading a `get`-result `dynamic(Any)` into a `ch:List` param
+// makes the body's `each` match the map-each overload (→ Map) instead of
+// list-each (→ List), so a downstream `all`/`any`/`[List]` consumer then fails
+// no_signature against the spurious Map (the decision `eval-pred-all` cycle).
+// A concrete arg, an arg already conforming to the param, or an Any/untyped
+// param is left untouched (no precision lost).
+func narrowArgsToParams(args []Value, params []FnParam) []Value {
+	var out []Value
+	for i := range args {
+		if i >= len(params) {
+			break
+		}
+		a := args[i]
+		pt := params[i].Type
+		if a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
+			pt.ConformsTo(a.Parent) && !a.Parent.ConformsTo(pt) {
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			nc := NewCarrier(pt)
+			nc.Dynamic = true
+			out[i] = nc
+		}
+	}
+	if out == nil {
+		return args
+	}
+	return out
+}
+
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -428,7 +464,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				finishFn(stkGen)
 			}
 		}
-		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
+		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, narrowArgsToParams(args, sigParams), capturesCopy, declaredReturns)
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
 		}
