@@ -1059,6 +1059,17 @@ export class Engine {
     for (let i = 0; i < args.length; i++) {
       const a = args[i]!
       if (sig.noEvalArgs?.has(i)) continue
+      // In compile mode, deep-evaluate a map arg through deepEvalData so it
+      // records a makeMap and carries provenance (typeof/is over a computed
+      // map). Gated on emit; value mode and plain checking are unchanged.
+      if (
+        this.registry.check.emit !== undefined &&
+        a.vType.matches(TMap) &&
+        a.data instanceof OrderedMap
+      ) {
+        args[i] = this.deepEvalData(a)
+        continue
+      }
       if (!a.vType.matches(TList)) continue
       if (!a.eval || a.quoted) continue
       if (!a.isConcrete()) continue
