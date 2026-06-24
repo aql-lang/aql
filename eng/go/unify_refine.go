@@ -22,7 +22,7 @@ package eng
 // Type literals (Data==nil, !Carrier) pass through to the
 // prev/DefaultBehavior walk — the type itself isn't an inhabitant.
 type bareRefineUnifier struct {
-	prev     TypeBehavior
+	behaviorWrapper
 	typeName string
 }
 
@@ -35,15 +35,12 @@ func (b *bareRefineUnifier) Match(v Value, t *Type) bool {
 	return v.Parent.ConformsTo(t)
 }
 
-func (b *bareRefineUnifier) Format(v Value) string { return baseBehavior(b.prev).Format(v) }
-func (b *bareRefineUnifier) Equal(a, c Value) bool { return baseBehavior(b.prev).Equal(a, c) }
-
 // installBareRefineUnifier attaches a bareRefineUnifier to def. Called
 // by InstallType when minting/renaming a bare-refinement prefab so the
 // nominal newtype rule governs every v.Is(def) boundary.
 func installBareRefineUnifier(def *Type, name string) {
 	def.Behavior = &bareRefineUnifier{
-		prev:     def.Behavior,
-		typeName: name,
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+		typeName:        name,
 	}
 }

@@ -1324,34 +1324,18 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 		return nil, false
 	}
 
-	// Cross product of alternatives, bounded.
-	combos := [][]Value{nil}
-	for i, a := range args {
-		var alts []Value
-		if IsDisjunct(a) && a.Carrier && !a.Dynamic {
-			for _, lit := range flattenAlternatives(a) {
-				alts = append(alts, carrierOfLiteral(lit))
-			}
-		} else {
-			alts = []Value{a}
-		}
-		if len(combos)*len(alts) > disjunctPartitionCap {
-			return nil, false
-		}
-		next := make([][]Value, 0, len(combos)*len(alts))
-		for _, c := range combos {
-			for _, alt := range alts {
-				row := make([]Value, i+1)
-				copy(row, c)
-				row[i] = alt
-				next = append(next, row)
-			}
-		}
-		combos = next
+	combos, ok := disjunctCombos(args, disjunctPartitionCap)
+	if !ok {
+		return nil, false
 	}
 
-	var joined []Value
-	matchedAny := false
+	// Per-combination transfer function: dispatch the concrete
+	// alternative tuple and gather its return-carrier row. A combo that
+	// reaches no overload is dropped with a partial_dispatch warning; a
+	// combo whose overload is unannotated declines the whole partition
+	// (the whole-disjunct fallback — missing_returns + dynamic Any —
+	// beats a partial join). Surviving rows are joined position-wise.
+	rows := make([][]Value, 0, len(combos))
 	for _, combo := range combos {
 		comboSig := firstMatchingSig(fn, combo)
 		if comboSig == nil {
@@ -1366,38 +1350,85 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 			})
 			continue
 		}
-		var rets []Value
-		if comboSig.ReturnsFn != nil {
+		switch {
+		case comboSig.ReturnsFn != nil:
 			raw := comboSig.ReturnsFn(combo, r)
-			rets = make([]Value, len(raw))
+			rets := make([]Value, len(raw))
 			for i, v := range raw {
 				rets[i] = toCarrier(v)
 			}
-		} else if comboSig.Returns != nil {
-			rets = make([]Value, len(comboSig.Returns))
+			rows = append(rows, rets)
+		case comboSig.Returns != nil:
+			rets := make([]Value, len(comboSig.Returns))
 			for i, t := range comboSig.Returns {
 				rets[i] = NewCarrier(t)
 			}
-		} else {
-			// Unannotated overload on one path: the whole-disjunct
-			// fallback (missing_returns + dynamic Any) is the better
-			// behaviour than a partial join.
+			rows = append(rows, rets)
+		default:
 			return nil, false
 		}
-		if !matchedAny {
-			joined = rets
-			matchedAny = true
-			continue
+	}
+	return joinReturnRows(rows)
+}
+
+// alternativeCarriers expands a strict disjunct carrier into one carrier
+// per flattened alternative; any other value yields itself. It is the
+// per-argument expansion the disjunct cross product enumerates.
+func alternativeCarriers(a Value) []Value {
+	if IsDisjunct(a) && a.Carrier && !a.Dynamic {
+		lits := flattenAlternatives(a)
+		out := make([]Value, 0, len(lits))
+		for _, lit := range lits {
+			out = append(out, carrierOfLiteral(lit))
 		}
+		return out
+	}
+	return []Value{a}
+}
+
+// disjunctCombos enumerates the bounded cross product of the per-argument
+// alternative expansions (alternativeCarriers) — the powerset domain a
+// union-typed argument list distributes over. Returns ok=false when the
+// product would exceed limit, so the caller widens to the whole-disjunct
+// path (wide but terminating).
+func disjunctCombos(args []Value, limit int) ([][]Value, bool) {
+	combos := [][]Value{nil}
+	for i, a := range args {
+		alts := alternativeCarriers(a)
+		if len(combos)*len(alts) > limit {
+			return nil, false
+		}
+		next := make([][]Value, 0, len(combos)*len(alts))
+		for _, c := range combos {
+			for _, alt := range alts {
+				row := make([]Value, i+1)
+				copy(row, c)
+				row[i] = alt
+				next = append(next, row)
+			}
+		}
+		combos = next
+	}
+	return combos, true
+}
+
+// joinReturnRows position-wise JoinCarriers-folds the return-carrier rows
+// gathered from each matched alternative — the abstract join at the
+// dispatch merge. ok=false when no row survived or the rows disagree on
+// return arity (the partition declines; the caller widens). A row set
+// whose members are all zero-arity yields an empty slice with ok=true.
+func joinReturnRows(rows [][]Value) ([]Value, bool) {
+	if len(rows) == 0 {
+		return nil, false
+	}
+	joined := rows[0]
+	for _, rets := range rows[1:] {
 		if len(rets) != len(joined) {
 			return nil, false
 		}
 		for i := range joined {
 			joined[i] = JoinCarriers(joined[i], rets[i])
 		}
-	}
-	if !matchedAny {
-		return nil, false
 	}
 	return joined, true
 }

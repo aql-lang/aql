@@ -17,9 +17,9 @@ package eng
 // Like predicateUnifier, this lives on the lattice node so every
 // "is v a Maybe?" path consults it.
 type disjunctUnifier struct {
-	prev         TypeBehavior // previous Behavior (delegate Format/Equal)
-	alternatives []Value      // copy of the disjunct's alternatives
-	typeName     string
+	behaviorWrapper         // prev Behavior + Format/Equal/Compare delegation
+	alternatives    []Value // copy of the disjunct's alternatives
+	typeName        string
 }
 
 // Match runs the disjunct alternatives against v via unifyDisjunct.
@@ -34,17 +34,14 @@ func (d *disjunctUnifier) Match(v Value, t *Type) bool {
 	return err == nil
 }
 
-func (d *disjunctUnifier) Format(v Value) string { return baseBehavior(d.prev).Format(v) }
-func (d *disjunctUnifier) Equal(a, b Value) bool { return baseBehavior(d.prev).Equal(a, b) }
-
 // installDisjunctUnifier attaches a disjunctUnifier to def, wrapping
 // any existing Behavior. Called by InstallType when minting a disjunct
 // type so the alternatives drive every Is/Match call site.
 func installDisjunctUnifier(def *Type, alternatives []Value, name string) {
 	def.Behavior = &disjunctUnifier{
-		prev:         def.Behavior,
-		alternatives: alternatives,
-		typeName:     name,
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+		alternatives:    alternatives,
+		typeName:        name,
 	}
 }
 

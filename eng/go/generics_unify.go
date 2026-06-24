@@ -124,27 +124,61 @@ func unifyTypeParam(lit Value, node *Type, other Value) (Value, *UnifyError) {
 	return Value{}, unifyFail("value does not satisfy the type parameter's bound", lit, other)
 }
 
+// genBinder accumulates type-parameter bindings during call-site and
+// schema inference. Both InferGenBindings and InferSchemaBindings share
+// it: an isParam gate (only declared parameters bind) and a merge that
+// tor-unions repeated evidence (design/GENERICS.10.md §9.2.2 — runtime
+// calls are never rejected for parameter inconsistency).
+type genBinder struct {
+	bindings map[string]Value
+	isParam  map[string]bool
+}
+
+func newGenBinder(params []GenParam) *genBinder {
+	b := &genBinder{bindings: map[string]Value{}, isParam: make(map[string]bool, len(params))}
+	for _, p := range params {
+		b.isParam[p.Name] = true
+	}
+	return b
+}
+
+func (b *genBinder) merge(name string, t Value) {
+	if !b.isParam[name] {
+		return
+	}
+	if prev, ok := b.bindings[name]; ok {
+		b.bindings[name] = unionType(prev, t)
+		return
+	}
+	b.bindings[name] = t
+}
+
+// paramNameOf returns the type-parameter name a constraint value
+// references: the placeholder node's name when v survived parsing as the
+// minted placeholder literal (its genParamUnifier Behavior pointer
+// survives the by-value copy), or the bare Word name when v is still a
+// raw Word naming the parameter. Empty when v references no parameter.
+// The single definition of the "placeholder-literal-or-raw-Word" idiom
+// that inferFromChildPattern and InferSchemaBindings both need.
+func paramNameOf(v Value) string {
+	if name := TypeParamName(&v); name != "" {
+		return name
+	}
+	if IsWord(v) {
+		if w, err := AsWord(v); err == nil {
+			return w.Name
+		}
+	}
+	return ""
+}
+
 // InferGenBindings walks a signature's params alongside the call args
 // and collects parameter-name → type-value bindings.
 func InferGenBindings(spec *GenSpecInfo, params []FnParam, args []Value) map[string]Value {
-	bindings := map[string]Value{}
 	if spec == nil {
-		return bindings
+		return map[string]Value{}
 	}
-	isParam := map[string]bool{}
-	for _, p := range spec.Params {
-		isParam[p.Name] = true
-	}
-	merge := func(name string, t Value) {
-		if !isParam[name] {
-			return
-		}
-		if prev, ok := bindings[name]; ok {
-			bindings[name] = unionType(prev, t)
-			return
-		}
-		bindings[name] = t
-	}
+	b := newGenBinder(spec.Params)
 	for i, p := range params {
 		if i >= len(args) {
 			break
@@ -153,17 +187,17 @@ func InferGenBindings(spec *GenSpecInfo, params []FnParam, args []Value) map[str
 		// Placeholder param slot: T binds the arg's own type.
 		if name := TypeParamName(p.Type); name != "" {
 			if arg.Parent != nil {
-				merge(name, NewTypeLiteral(arg.Parent))
+				b.merge(name, NewTypeLiteral(arg.Parent))
 			}
 			continue
 		}
 		// Typed-list/map pattern over a placeholder (`xs:[:T]`,
 		// `m:{:T}`): T binds the union of the element types.
 		if p.Pattern != nil && (IsTypedList(*p.Pattern) || IsTypedMap(*p.Pattern)) {
-			inferFromChildPattern(merge, isParam, *p.Pattern, arg)
+			inferFromChildPattern(b, *p.Pattern, arg)
 		}
 	}
-	return bindings
+	return b.bindings
 }
 
 // inferFromChildPattern handles one `[:T]` / `{:T}` param pattern
@@ -174,18 +208,13 @@ func InferGenBindings(spec *GenSpecInfo, params []FnParam, args []Value) map[str
 // type; a typed-list/map value or CARRIER (check mode strips list
 // literals to typed-list carriers) merges the child constraint
 // directly.
-func inferFromChildPattern(merge func(string, Value), isParam map[string]bool, pattern, arg Value) {
+func inferFromChildPattern(b *genBinder, pattern, arg Value) {
 	ci, err := AsChildType(pattern)
 	if err != nil {
 		return
 	}
-	name := TypeParamName(&ci.Child)
-	if name == "" && IsWord(ci.Child) {
-		if w, werr := AsWord(ci.Child); werr == nil {
-			name = w.Name
-		}
-	}
-	if name == "" || !isParam[name] {
+	name := paramNameOf(ci.Child)
+	if name == "" || !b.isParam[name] {
 		return
 	}
 	switch {
@@ -193,9 +222,9 @@ func inferFromChildPattern(merge func(string, Value), isParam map[string]bool, p
 		if aci, aerr := AsChildType(arg); aerr == nil {
 			switch {
 			case IsBareTypeNode(aci.Child):
-				merge(name, aci.Child)
+				b.merge(name, aci.Child)
 			case aci.Child.Parent != nil:
-				merge(name, NewTypeLiteral(aci.Child.Parent))
+				b.merge(name, NewTypeLiteral(aci.Child.Parent))
 			}
 		}
 	case arg.Parent != nil && arg.Parent.Equal(TList) && IsConcrete(arg):
@@ -203,7 +232,7 @@ func inferFromChildPattern(merge func(string, Value), isParam map[string]bool, p
 			for j := 0; j < lst.Len(); j++ {
 				el := lst.Get(j)
 				if el.Parent != nil {
-					merge(name, NewTypeLiteral(el.Parent))
+					b.merge(name, NewTypeLiteral(el.Parent))
 				}
 			}
 		}
@@ -211,7 +240,7 @@ func inferFromChildPattern(merge func(string, Value), isParam map[string]bool, p
 		if m, merr := AsMap(arg); merr == nil && m != nil {
 			for _, k := range m.Keys() {
 				if v, ok := m.Get(k); ok && v.Parent != nil {
-					merge(name, NewTypeLiteral(v.Parent))
+					b.merge(name, NewTypeLiteral(v.Parent))
 				}
 			}
 		}
@@ -225,31 +254,17 @@ func inferFromChildPattern(merge func(string, Value), isParam map[string]bool, p
 // union of the element types. Conflicting evidence tor-merges — same
 // contract as call-site inference for generic fns.
 func InferSchemaBindings(info *TypeSchemaInfo, body Value) map[string]Value {
-	bindings := map[string]Value{}
 	if info == nil {
-		return bindings
+		return map[string]Value{}
 	}
-	isParam := map[string]bool{}
-	for _, p := range info.Params {
-		isParam[p.Name] = true
-	}
-	merge := func(name string, t Value) {
-		if !isParam[name] {
-			return
-		}
-		if prev, ok := bindings[name]; ok {
-			bindings[name] = unionType(prev, t)
-			return
-		}
-		bindings[name] = t
-	}
+	b := newGenBinder(info.Params)
 	fields := schemaFields(info)
 	if fields == nil || body.Parent == nil || !body.Parent.Equal(TMap) || !IsConcrete(body) {
-		return bindings
+		return b.bindings
 	}
 	bm, err := AsMap(body)
 	if err != nil || bm == nil {
-		return bindings
+		return b.bindings
 	}
 	for _, fname := range fields.Keys() {
 		c, _ := fields.Get(fname)
@@ -260,23 +275,17 @@ func InferSchemaBindings(info *TypeSchemaInfo, body Value) map[string]Value {
 		// Direct placeholder constraint: the field survives schema
 		// construction as the placeholder literal (fields resolve while
 		// the gen bindings are live) or, defensively, a raw Word.
-		pname := TypeParamName(&c)
-		if pname == "" && IsWord(c) {
-			if w, werr := AsWord(c); werr == nil {
-				pname = w.Name
-			}
-		}
-		if pname != "" && isParam[pname] {
+		if pname := paramNameOf(c); pname != "" && b.isParam[pname] {
 			if v.Parent != nil {
-				merge(pname, NewTypeLiteral(v.Parent))
+				b.merge(pname, NewTypeLiteral(v.Parent))
 			}
 			continue
 		}
 		if IsTypedList(c) || IsTypedMap(c) {
-			inferFromChildPattern(merge, isParam, c, v)
+			inferFromChildPattern(b, c, v)
 		}
 	}
-	return bindings
+	return b.bindings
 }
 
 // schemaFields returns the field-constraint map of a record or class

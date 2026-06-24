@@ -20,7 +20,7 @@ package eng
 // Bare type literals (Data==nil, !Carrier) pass through to the
 // prev/DefaultBehavior walk — the type itself isn't an inhabitant.
 type depScalarUnifier struct {
-	prev     TypeBehavior
+	behaviorWrapper
 	baseType *Type
 	depInfo  DepScalarInfo
 	typeName string
@@ -47,19 +47,16 @@ func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 	return depScalarCheck(d.depInfo, v)
 }
 
-func (d *depScalarUnifier) Format(v Value) string { return baseBehavior(d.prev).Format(v) }
-func (d *depScalarUnifier) Equal(a, b Value) bool { return baseBehavior(d.prev).Equal(a, b) }
-
 // installDepScalarUnifier attaches a depScalarUnifier to def. Called
 // by InstallType when minting a DepScalar-bodied user type so the
 // constraint runs at every Is/Match call site (sig dispatch, the `is`
 // word, options/record/Make slot checks).
 func installDepScalarUnifier(def *Type, base *Type, info DepScalarInfo, name string) {
 	def.Behavior = &depScalarUnifier{
-		prev:     def.Behavior,
-		baseType: base,
-		depInfo:  info,
-		typeName: name,
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+		baseType:        base,
+		depInfo:         info,
+		typeName:        name,
 	}
 }
 
