@@ -792,16 +792,23 @@ export class Engine {
     this.registry.check.fnBodyDepth++
     let bodyResult: Value[]
     const bound: string[] = []
+    const frame: Value[] = []
     try {
       for (let i = 0; i < sig.params.length; i++) {
         const p = sig.params[i]!
+        const v = args[i] ?? newDynamicCarrier(TAny)
         if (p.name !== '') {
-          this.registry.pushDef(p.name, args[i] ?? newDynamicCarrier(TAny))
+          this.registry.pushDef(p.name, v)
           bound.push(p.name)
         }
+        frame.push(v)
       }
+      // Push the args frame so `args` inside the inlined body resolves to the
+      // param carriers (recorded as a makeList), matching the interpreter.
+      this.registry.pushArgs(frame)
       bodyResult = new Engine(this.registry).run([...sig.body])
     } finally {
+      this.registry.popArgs()
       for (let i = bound.length - 1; i >= 0; i--) this.registry.popDef(bound[i]!)
       this.registry.check.fnBodyDepth--
       this.registry.check.fnInflight.delete(key)

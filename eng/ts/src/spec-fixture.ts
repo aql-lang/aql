@@ -1021,13 +1021,24 @@ function registerSpecWords(r: Registry): void {
     signatures: [
       {
         args: [],
-        // `args` reads the current call's positional-arg frame — a
-        // context-dependent value the compiled stream does not maintain (an
-        // inlined fn body has no frame). Refuse to compile it so any program
-        // using it falls back to the interpreter. Mirrors Go marking args/__pa
-        // as a meta (uncompilable) site.
+        // `args` reads the current call's positional-arg frame. Inside an
+        // inlined fn body that frame holds the param operands (analyseFnBody
+        // pushes it), so record a makeList of them — the VM rebuilds the list
+        // with no runtime frame. Outside a frame (or with an unresolvable
+        // operand) it refuses. recordsOwnEvent so the makeList is the event.
+        recordsOwnEvent: true,
         returnsFn: (_a, r) => {
-          r.check.emit?.markUncompilable('args: context-dependent word not compilable')
+          const emit = r.check.emit
+          const frame = r.topArgs()
+          if (emit !== undefined) {
+            if (frame === undefined) {
+              emit.markUncompilable('args: no positional-arg frame')
+            } else {
+              const ops = frame.map((v) => emit.classify(v))
+              if (ops.every((o) => o !== null)) return [emit.recordMakeList(ops as import('./emit.ts').Operand[])]
+              emit.markUncompilable('args: frame operand of unknown provenance')
+            }
+          }
           return [newDynamicCarrier(TList)]
         },
         handler: (_args, _ctx, _stk, registry) => {
