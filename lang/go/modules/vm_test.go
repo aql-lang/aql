@@ -186,3 +186,108 @@ func TestVMRunIsolatedFromParent(t *testing.T) {
 		t.Error("vm-only should not leak into parent engine")
 	}
 }
+
+// ---- Vm.check ---------------------------------------------------------
+
+func TestVMCheckCleanSource(t *testing.T) {
+	a := newAQL(t, nil)
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2").ok`, "true")
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2").errors`, int64(0))
+	mustScalar(t, a, `(import "aql:vm") size (Vm.check "1 add 2").diagnostics`, int64(0))
+}
+
+func TestVMCheckReportsUndefinedWord(t *testing.T) {
+	a := newAQL(t, nil)
+	// Positive: the report flags the error and counts it.
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "totally-undefined-word").ok`, "false")
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "totally-undefined-word").errors`, int64(1))
+	// The diagnostic carries a stable code and severity.
+	mustScalar(t, a, `(import "aql:vm") ((Vm.check "totally-undefined-word").diagnostics.0).code`, "undefined_word")
+	mustScalar(t, a, `(import "aql:vm") ((Vm.check "totally-undefined-word").diagnostics.0).severity`, "error")
+}
+
+func TestVMCheckSeparatesWarningsFromErrors(t *testing.T) {
+	a := newAQL(t, nil)
+	// A non-fatal finding is a warning, not an error: ok stays true.
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2  def unused 99").ok`, "true")
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2  def unused 99").warnings`, int64(1))
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2  def unused 99").errors`, int64(0))
+}
+
+// Negative contract: a SYNTAX error is reported as data, never raised — the
+// whole point of a check word is that the caller inspects findings uniformly.
+func TestVMCheckSyntaxErrorIsDataNotRaised(t *testing.T) {
+	a := newAQL(t, nil)
+	out, err := a.Run(`(import "aql:vm") Vm.check "1 add ((("`)
+	if err != nil {
+		t.Fatalf("Vm.check must not raise on malformed source, got: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("expected a result map")
+	}
+	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add (((").ok`, "false")
+	mustScalar(t, a, `(import "aql:vm") ((Vm.check "1 add (((").diagnostics.0).code`, "parse_error")
+}
+
+// ---- Vm.compile -------------------------------------------------------
+
+func TestVMCompileCompilable(t *testing.T) {
+	a := newAQL(t, nil)
+	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add 2").ok`, "true")
+	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add 2").reason`, "")
+	// The dispatch-site census is reported for a compiled program.
+	mustScalar(t, a, `(import "aql:vm") ((Vm.compile "1 add 2").sites).mono`, int64(1))
+}
+
+// Negative contract: an UNCOMPILABLE program is refusal-as-data — ok:false
+// with the first offender named, and no Go error raised.
+func TestVMCompileRefusesAsData(t *testing.T) {
+	a := newAQL(t, nil)
+	out, err := a.Run(`(import "aql:vm") Vm.compile "(size (for 5 [i]))"`)
+	if err != nil {
+		t.Fatalf("Vm.compile must not raise on an uncompilable program, got: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("expected a result map")
+	}
+	mustScalar(t, a, `(import "aql:vm") (Vm.compile "(size (for 5 [i]))").ok`, "false")
+	// reason is non-empty: it names why the program could not be lowered.
+	reasonLen := runScalar(t, a, `(import "aql:vm") size (Vm.compile "(size (for 5 [i]))").reason`)
+	if n, _ := reasonLen.(int64); n == 0 {
+		t.Error("expected a non-empty refusal reason")
+	}
+}
+
+func TestVMCompileSyntaxErrorIsDataNotRaised(t *testing.T) {
+	a := newAQL(t, nil)
+	out, err := a.Run(`(import "aql:vm") Vm.compile "1 add ((("`)
+	if err != nil {
+		t.Fatalf("Vm.compile must not raise on malformed source, got: %v", err)
+	}
+	if len(out) == 0 {
+		t.Fatal("expected a result map")
+	}
+	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add (((").ok`, "false")
+	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add (((").reason`, "parse error")
+}
+
+// ---- helpers ----------------------------------------------------------
+
+func runScalar(t *testing.T, a *lang.AQL, src string) any {
+	t.Helper()
+	out, err := a.Run(src)
+	if err != nil {
+		t.Fatalf("run %q: %v", src, err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("run %q: expected one residual value, got %v", src, out)
+	}
+	return out[0]
+}
+
+func mustScalar(t *testing.T, a *lang.AQL, src string, want any) {
+	t.Helper()
+	if got := runScalar(t, a, src); got != want {
+		t.Errorf("run %q: got %v (%T), want %v (%T)", src, got, got, want, want)
+	}
+}
