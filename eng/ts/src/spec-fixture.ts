@@ -750,6 +750,13 @@ function registerSpecWords(r: Registry): void {
         args: [TAtom, TAny],
         quoteArgs: new Set([0]),
         noEvalArgs: new Set([1]),
+        // Bind in check mode too, so later references resolve (otherwise
+        // every `def x … x` cascades into undefined_word) — the binding is
+        // a prerequisite for analysis, exactly as in Go. The bound carrier
+        // carries the stripped-literal origin, so a compiled reference bakes
+        // the value.
+        runInCheckMode: true,
+        returns: [],
         handler: (args, _ctx, _stk, registry) => {
           const nameArg = args[0]!
           const nameWord = nameArg.isWord() ? nameArg.asWord() : { name: nameArg.asAtom(), constraint: undefined }
