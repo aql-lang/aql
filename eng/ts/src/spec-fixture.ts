@@ -890,6 +890,9 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TList],
         noEvalArgs: new Set([0]),
+        // Build the signature value in check mode so typeof/is consume it and
+        // it bakes as an inert constant (its spec list is type literals).
+        runInCheckMode: true,
         handler: (args) => {
           const elems = args[0]!.asList()
           if (elems.length === 0 || elems.length % 2 !== 0) {
