@@ -576,6 +576,12 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TList],
         noEvalArgs: new Set([0]),
+        // runInCheckMode makes `do` TRANSPARENT to the recorder: its body
+        // runs in a sub-engine that records into the shared trace, and the
+        // body residual (carriers with provenance) becomes do's result — so
+        // `do [1 addq 2]` compiles inline with no do-event, exactly like a
+        // fn body. In value mode the same handler just runs the body.
+        runInCheckMode: true,
         handler: (args) => new Engine(r).run([...args[0]!.asList()]),
       },
     ],

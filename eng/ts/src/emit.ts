@@ -74,7 +74,12 @@ function isInert(v: Value): boolean {
   ) {
     return false
   }
-  return v.data !== null
+  // A bare type literal (`Integer`, `List`) and the none value have
+  // data===null but are immutable canonical CONSTANTS — bakeable (the
+  // analogue of Go's OpPushType / a none const), unlike code/marker values
+  // filtered above. Everything else with data is an inert scalar.
+  if (v.data === null) return v.isTypeLiteral() || v.isNone()
+  return true
 }
 
 /**
@@ -255,6 +260,11 @@ export class EmitState {
     // raw eval-list / word-bearing container reaching a call arg is code,
     // not a constant, and must fall back rather than bake unevaluated.
     if (v.isConcrete() && isInert(v)) return { kind: 'const', value: v }
+    // A bare type literal (`Integer`) or the none value is data===null, so
+    // not "concrete", but it is an immutable canonical CONSTANT — bake it
+    // (Go's OpPushType / a none const). Lets words taking a type operand
+    // (typeof/make/pathof) compile.
+    if (v.isTypeLiteral() || v.isNone()) return { kind: 'const', value: v }
     const orig = this.origByCarrier.get(v)
     if (orig !== undefined) return { kind: 'const', value: orig }
     return null
