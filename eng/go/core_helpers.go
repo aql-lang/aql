@@ -353,6 +353,27 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			genBindings = InferGenBindings(genSpec, sigParams, args)
 			genNames = InstallGenBindingMap(r, genSpec, genBindings)
 		}
+		// Deferred-list body (def-node-binding.tsv:54) — `def mk fn
+		// [[c1:Integer] [List] [[c1]]]`. The body is a single list literal that
+		// references a parameter, but a returned list NEVER closes over the param
+		// (only a `=>` lambda captures); the interpreter returns it RAW and
+		// auto-evaluates it later, in MODULE scope, against the live binding
+		// (`mk 9` → `[1]`, the module `c1`, not the arg `9`). Compiling it as a
+		// fn UNIT cannot model this: a unit's result is fixed at CALL time and
+		// cannot defer to a later module rebind. So make the fn TRANSPARENT —
+		// hand the raw deferred list back as the call's residual (no unit) and let
+		// the check pass fold it in module scope EXACTLY as a top-level
+		// `def c1 1 [[c1]]` already does: at end-of-run, at a `def`-bind, or at a
+		// downstream consumer (each resolves `c1` against the binding live at that
+		// point). The folded const is what the program bakes; no VM change. Still
+		// analyse the body first so its diagnostics propagate.
+		if raw, ok := deferredParamListResidual(bodyCopy, paramNames); ok {
+			AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
+			for i := len(genNames) - 1; i >= 0; i-- {
+				r.Defs.Pop(genNames[i])
+			}
+			return []Value{raw}
+		}
 		// Always analyse the body so diagnostics emitted by stepWord
 		// (undefined_word, no_signature, …) inside the body propagate
 		// up to the parent registry. When the fn declares an explicit
