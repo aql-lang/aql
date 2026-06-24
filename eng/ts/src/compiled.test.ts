@@ -577,6 +577,7 @@ const COMPILED: Array<[string, true]> = [
   ['applyq (fn [[n:Integer] [Integer] [addq n 1]]) 5', true], // capture-free closure islanded
   ['applyq (fn [[n:Integer] [Integer] [mulq n n]]) 4', true], // multi-word closure body
   ['dupq 5', true], // multi-result call -> two outputs in two slots
+  ['lengthq [addq 1 2]', true], // computed-list arg auto-evaluated (makeList) then consumed
 ]
 
 const FALLBACK: string[] = [
@@ -584,7 +585,6 @@ const FALLBACK: string[] = [
   'for 2 [dupq 1]', // loop body not single-result -> falls back
   'for 2 [i] addq 1 2', // loop not in trailing position -> falls back
   'def f fn [[n:Integer] [Integer] [dupq n]] f 5', // fn body count != declared -> falls back
-  'lengthq [addq 1 2]', // computed-list arg (not auto-evaluated in check) -> inert guard refuses
   'def k 100 applyq (fn [[n:Integer] [Integer] [addq n k]]) 5', // closure captures k -> not bakeable -> falls back
 ]
 

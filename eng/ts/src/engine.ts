@@ -278,6 +278,11 @@ export class Engine {
     // handler must still run in check mode (def/fn/type/… — its side
     // effects feed later analysis) falls through to normal dispatch.
     if (this.registry.check.isActive() && !result.sig.runInCheckMode) {
+      // Compile mode: evaluate computed list args (recording their makeList)
+      // so they reach the recorder as values with provenance, mirroring the
+      // value-mode autoEvalArgs the short-circuit otherwise skips. Gated on
+      // emit so plain type-checking is unchanged.
+      if (this.registry.check.emit !== undefined) this.autoEvalArgs(result.args, result.sig)
       const out = carrierResults(this.registry, name, result.sig, result.args)
       // Bytecode recording: a clean native match is a candidate call
       // event. Passive — does not affect `out`. A sig that records its
@@ -1026,6 +1031,10 @@ export class Engine {
    * recursively re-evaluate when consumed by an outer caller.
    */
   private autoEvalList(list: Value): Value {
+    // In compile mode, evaluate through deepEvalData so a computed list arg
+    // records a makeList event and carries provenance (lengthq [1 addq 2]) —
+    // otherwise the evaluated list is an opaque value the recorder refuses.
+    if (this.registry.check.emit !== undefined) return this.deepEvalData(list)
     const elems = list.asList()
     const sub = new Engine(this.registry)
     const result = sub.run([...elems])
