@@ -527,6 +527,36 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 				}
 				out[0] = NewDynamicCarrierValue(NewDisjunct(alts))
 			}
+		} else if len(out) == 0 && !r.Check.Compiling {
+			// PURE-CHECK ONLY (diagnostics, not a real compile): the matched
+			// overload returns NOTHING (an in-place mutator) but the receiver is
+			// dynamic and a value-returning sibling is also reachable — `set`'s
+			// mixed-arity overloads (Array/Object/Store/Class return 0; Map/List/
+			// Flex return the updated node). The runtime receiver could be either,
+			// so committing to 0 values poisons every downstream CONSUMER of the
+			// result (trie's `(nd "kids" get) set ch child` fed to mk-node: 0 values
+			// → an unbound arg → a false undefined_word on the consumer's param +
+			// no_signature on the consuming call). Model ONE dynamic value — the
+			// optimistic gradual arity — so a consuming use type-checks. Gated to
+			// !Compiling: under a REAL compile the recorder needs a fixed, runtime-
+			// faithful arity (a 0-output Store mutation must stay 0 so its poly
+			// lowering keeps a clean residual — TestSetOverDynamicReceiverPolyCompiles),
+			// so that path is unchanged. A CONCRETE receiver reaches only its own
+			// overload, so vrets is empty and the true 0-arity stands either way.
+			if vrets := dynamicReachableValueReturns(r, word, args); len(vrets) > 0 {
+				if len(vrets) == 1 {
+					c := NewCarrier(vrets[0])
+					c.Carrier = true
+					c.Dynamic = true
+					out = []Value{c}
+				} else {
+					alts := make([]Value, len(vrets))
+					for i, t := range vrets {
+						alts[i] = NewTypeLiteral(t)
+					}
+					out = []Value{NewDynamicCarrierValue(NewDisjunct(alts))}
+				}
+			}
 		}
 	}
 	if !tryFoldStaticIndex(r, word, args, out) &&
@@ -1390,6 +1420,44 @@ func comboTypeNames(combo []Value) string {
 // common case: contagion's matched-sig return is already correct).
 // Restricted to same-arity, single-static-return sigs; any other shape
 // falls back to contagion.
+// dynamicReachableValueReturns returns the distinct 1-value return types of the
+// word's overloads that the (possibly dynamic) args can reach. Unlike
+// dynamicReachableReturns it does NOT bail on a sibling that returns 0 values —
+// it is for the MIXED-arity case: a mutator like `set` whose in-place overloads
+// (Array/Object/Store/Class) return nothing while the value-returning twins
+// (Map/List/Flex) return the updated node. A CONCRETE receiver reaches only its
+// own overload (sigTypeMatches is exact for it), so this returns nil there and
+// the true 0-arity stands; only a genuinely dynamic receiver reaches both.
+func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Type {
+	fn := r.Lookup(word)
+	if fn == nil {
+		return nil
+	}
+	var rets []*Type
+	seen := map[string]bool{}
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if len(s.Args) != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
+			continue
+		}
+		reach := true
+		for j := range args {
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if !reach {
+			continue
+		}
+		if t := s.Returns[0]; !seen[t.ID] {
+			seen[t.ID] = true
+			rets = append(rets, t)
+		}
+	}
+	return rets
+}
+
 func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 	fn := r.Lookup(word)
 	if fn == nil || len(fn.Signatures) < 2 {

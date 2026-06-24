@@ -296,6 +296,15 @@ type CheckState struct {
 	// by the compile entry points after Begin; nil for plain checks.
 	Emit *EmitState
 
+	// Compiling marks a REAL compile pass (CompileCheck / RunCompiled),
+	// whose recorded events become an executed Program. A plain `aql check`
+	// leaves it false even though fn-body analysis arms transient Emit
+	// states. Some check-only precision relaxations (modelling a runtime-
+	// arity-variable result as a consumable value) are sound for diagnostics
+	// but would feed the recorder an arity the VM cannot honour, so they are
+	// gated to !Compiling. Set by the compile entry points after Begin.
+	Compiling bool
+
 	// FnAnalysisCounts tracks distinct body analyses (memo misses)
 	// per fn name. Past FnAnalysisQuota the analyser stops re-running
 	// the body for new arg shapes — it answers from the declaration
