@@ -3571,6 +3571,27 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		} else if len(result) > 1 {
 			out.Set(resolvedKey, NewList(result))
 		}
+		// RECORDING mode: a LIST-valued entry (`{n:[expr]}` — the `do {map}` idiom,
+		// where each value is a code list left AS a list) is a COMPUTED list whose
+		// elements have provenance (their dispatches recorded above) but whose list
+		// WRAPPER was never recorded — RecordMakeList's top-frame guard refuses a
+		// fn-body list. Record the OpMakeList HERE, inline, right after this value's
+		// dispatches, so the assembly is interleaved with the per-value events in
+		// stack order (`get_n, wrap_n, get_m, wrap_m, …`) — wrapping in RecordMakeMap
+		// afterward would find the next value's result on top. Sound (and gated like
+		// the enclosing OpMakeMap) only when the map is CONSUMED in-frame: OpMakeList
+		// re-assembles from its operands per run, so it never freezes a per-call
+		// binding. recordMakeListInner declines (leaving es untouched) for an
+		// unresolvable / stateful / type-pattern element, so the map then falls back.
+		if consumed && e.registry.Check.IsActive() {
+			if es := e.registry.Check.Emit; es != nil {
+				if lv, _ := out.Get(resolvedKey); lv.Parent.Equal(TList) && !isInertConst(lv) {
+					if lp, isList := lv.Data.(ListPayload); isList {
+						es.recordMakeListInner(e.registry, lp.Elems, lv, lv.Pos)
+					}
+				}
+			}
+		}
 	}
 	res := NewMap(out)
 	// RECORDING mode: a `make` construction body whose values are COMPUTED (an

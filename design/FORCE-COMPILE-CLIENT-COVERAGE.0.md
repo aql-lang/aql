@@ -109,17 +109,27 @@ the map, and `do`'s `Any` return over a now-resolved concrete map arg falls unde
 the `dynOutNativeOK` exemption, so no output-type change to `do` is needed.
 Verified against `--force-compile`.
 
-**L1b — the real residue is the LIST quotation form.** The client libs write
-`do {n:[bf.n]}` (the **list** form — `bloom.aql:271`, `decision.aql:159`,
-`trie.aql:275`), which still refuses. A list-valued map entry is evaluated by
-`doEvalDataList` in a **sub-engine** (`New(r).Run([bf.n])`), whose result value
-carries **no parent-stream provenance**, so `RecordMakeMap` can't resolve it and
-the map stays unresolvable ("unannotated or opaque word do"). Closing this is one
-focused change — record provenance for list-valued map entries (evaluate them
-in-stream like parens, or thread the sub-engine result's event id back to the
-parent emit); it was left out here to keep L1a a clean, independently-verified
-unit. Two routes: implement it upstream, or — a **zero-upstream client option** —
-switch `do {k:[expr]}` to `do {k:(expr)}` (parens), which compiles today.
+**L1b-ii (list quotation form) — LANDED.** The client libs write `do {n:[bf.n]}`
+(the **list** form — `bloom.aql:271`, `decision.aql:159`, `trie.aql:275`). A
+list-valued map entry keeps its value AS a list (`{n:[3]}`); `do` evaluates each
+list later. The value list's elements DO carry provenance (their dispatches
+recorded during autoEvalMap), but the list WRAPPER was never recorded —
+`RecordMakeList`'s top-frame guard refuses a fn-body list. Fix: record the list
+wrapper as a nested `OpMakeList` **inline in autoEvalMap**, right after each
+value's dispatches, so the events interleave in stack order
+(`get_n, wrap_n, get_m, wrap_m, OpMakeMap`) — wrapping afterward in
+`RecordMakeMap` finds the next value's result on top of the stack and fails the
+stack-discipline check. The inner assembly (`recordMakeListInner`, extracted from
+`RecordMakeList`) skips the top-frame guard because this list is a CONSUMED
+operand of the enclosing in-frame `OpMakeMap` — `OpMakeList` re-assembles from its
+operands per run, so it never freezes a per-call binding. Gated on the same
+in-frame `consumed` flag, so a deferred-residual list still refuses. No `do`
+change needed: once the map arg resolves, `do`'s `Any` return falls under
+`dynOutNativeOK`. Verified: `make verify-bytecode` green, full `eng/go` /
+`lang/go` suites green, neutral on the langspec census; pinned by the list-form
+positive + negative rows in `lang/go/bytecode_computedmap_test.go`. The client
+`do {…}` blocker is cleared (those suites now advance to their next, unrelated
+refusal). `COMPILABLE-SUBSET.md §3` updated.
 
 ---
 

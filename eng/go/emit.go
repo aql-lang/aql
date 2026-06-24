@@ -2154,6 +2154,17 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 	if len(es.frames) != 1 {
 		return false
 	}
+	return es.recordMakeListInner(r, ins, out, pos)
+}
+
+// recordMakeListInner is the guard-free core of RecordMakeList: it resolves the
+// element operands and appends the OpMakeList event. RecordMakeList wraps it with
+// the top-frame restriction (a fn-body residual list must fall back). The other
+// caller is RecordMakeMap, for a LIST-valued map entry (`{n:[expr]}`) whose list
+// is itself a CONSUMED-in-frame operand of the enclosing OpMakeMap — there the
+// top-frame guard does NOT apply (OpMakeList re-assembles from its operands per
+// run, exactly like OpMakeMap, so it is sound in a fn body / branch / loop).
+func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool {
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
 	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and
