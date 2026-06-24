@@ -1,0 +1,11 @@
+# Check-mode def binding + def-usage tracking. A def in check mode binds
+# the carrier value (its handler runs — def is RunInCheckMode), a later
+# reference resolves to that carrier, and a def never referenced before
+# end-of-pass emits an unused_def warning.
+# tokens	expected	note
+def x 5 addq x 1	Number	x binds carrier Integer; addq x 1 -> Number
+def x 5 x	Integer	bare reference resolves to the bound carrier
+def x 5 def y 6 addq x y	Number	two bindings, both used
+def n 5 def m 6 def p 7 tripq n m p	String	three bindings feed a 3-arg word
+def a 1 def b 2 addq a b addq 3	Number	chained dispatch over bound carriers
+def x 5	:: ~unused_def	a binding never referenced warns (empty residual)

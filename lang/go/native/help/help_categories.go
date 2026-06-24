@@ -106,15 +106,6 @@ func LookupCategory(name string) (Category, bool) {
 	return Category{}, false
 }
 
-// CategoryNames returns the category names in display order.
-func CategoryNames() []string {
-	names := make([]string, len(categories))
-	for i, c := range categories {
-		names[i] = c.Name
-	}
-	return names
-}
-
 // CategoryOf returns the name of the category that contains word, or "" if the
 // word is not categorised. Used by the coverage test and by callers that want
 // to show a word's group.

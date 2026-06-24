@@ -42,7 +42,56 @@ export interface Signature {
   noEvalArgs?: Set<number>
   /** Fallback marker — true for the generic 0-arg fallback. */
   fallback?: boolean
+  /**
+   * Positions that must be filled by a bare type literal (data === null),
+   * not a concrete value — used by `make` to require a type argument.
+   * Mirrors NativeSig.TypeArgs in the Go matcher.
+   */
+  typeArgs?: Set<number>
+  /**
+   * Positions that capture the next forward Word as an Atom (the name),
+   * suppressing evaluation. Used by quote / inspect. Mirrors
+   * NativeSig.QuoteArgs.
+   */
+  quoteArgs?: Set<number>
+  /**
+   * Declared return types, used by the static checker to synthesise
+   * carrier return values when the handler is short-circuited in check
+   * mode. Mirrors NativeSig.Returns.
+   */
+  returns?: AqlType[]
+  /**
+   * Computes the carrier return values for this signature in check
+   * mode, given the (carrier-typed) args. Takes precedence over
+   * `returns`. Mirrors NativeSig.ReturnsFn / ReturnsFunc.
+   */
+  returnsFn?: ReturnsFunc
+  /**
+   * When true, the handler runs even in check mode (its side effects —
+   * bindings, type registration — are prerequisites for later
+   * analysis). Mirrors NativeSig.RunInCheckMode.
+   */
+  runInCheckMode?: boolean
+  /**
+   * When true, this signature's returnsFn records its own bytecode event
+   * (e.g. `if` records a branch), so the engine's generic per-dispatch
+   * recordCall is skipped to avoid double-recording.
+   */
+  recordsOwnEvent?: boolean
+  /**
+   * When true, the bytecode recorder compiles this dispatch as an
+   * interpreter ISLAND (OpFallback) rather than a native call: the word +
+   * its baked args are captured as re-runnable tokens and re-executed
+   * through a sub-engine at VM runtime, with the surrounding compiled code
+   * still running. Marks a construct the recorder can't lower natively
+   * (a dynamic dispatch, a code-body higher-order word). Mirrors the
+   * CompileFallbackBody / CompileIslandPure CompileEffect flags in eng/go.
+   */
+  compileFallback?: boolean
 }
+
+/** Computes carrier return values for a signature in check mode. */
+export type ReturnsFunc = (args: Value[], registry: Registry) => Value[]
 
 export interface NativeSig {
   args: AqlType[]
@@ -51,6 +100,13 @@ export interface NativeSig {
   patterns?: Map<number, Value>
   noEvalArgs?: Set<number>
   fallback?: boolean
+  typeArgs?: Set<number>
+  quoteArgs?: Set<number>
+  returns?: AqlType[]
+  returnsFn?: ReturnsFunc
+  runInCheckMode?: boolean
+  recordsOwnEvent?: boolean
+  compileFallback?: boolean
 }
 
 export interface NativeFunc {

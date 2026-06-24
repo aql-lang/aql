@@ -25,8 +25,37 @@
 
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { TWord } from './type.ts'
-import type { Value, WordInfo } from './value.ts'
+import { TNode, TScalar, TType, TWord } from './type.ts'
+import { newAtom, type Value, type WordInfo } from './value.ts'
+
+/**
+ * isTypeArg reports whether v may fill a typeArgs slot: a bare type
+ * literal (data===null, not the none value) or a structural type body
+ * (a value whose VType lives under Type — Function/Disjunct/Enum/…).
+ * Concrete scalars/lists/maps and the none value are rejected. Mirrors
+ * eng/go/signature.go::sigTypeMatchesAsType.
+ */
+function isTypeArg(v: Value): boolean {
+  if (v.isNone()) return false
+  if (v.data === null) return true
+  return v.vType.matches(TType)
+}
+
+/**
+ * Per-position signature match. A typeArgs slot wants a type (literal or
+ * type body) whose lattice node conforms to the expected type; an
+ * ordinary slot uses the value matcher (which rejects bare type
+ * literals at Scalar/Node slots).
+ */
+function argMatches(
+  sig: Signature,
+  idx: number,
+  v: Value,
+  expected: import('./type.ts').AqlType,
+): boolean {
+  if (sig.typeArgs?.has(idx)) return isTypeArg(v) && v.vType.matches(expected)
+  return sigTypeMatches(v, expected)
+}
 
 export interface MatchResult {
   sig: Signature
@@ -38,6 +67,34 @@ export interface MatchResult {
   prefixCount: number
 }
 
+/**
+ * Match N already-evaluated operands against a word's signatures, the
+ * runtime poly path (OpCallNativePoly). `window[i]` is sig position i —
+ * the operand-stack convention where the top of stack is position 0. This
+ * is the all-stack case of `tryMatch` (no forward tokens), iterating the
+ * entry's signatures in the same specificity order as dispatch so poly
+ * takes the IDENTICAL first-match the interpreter would. Mirrors
+ * eng/go/vm.go::callPoly + MatchSignature.
+ */
+export function matchValues(fn: FunctionEntry, window: readonly Value[]): MatchResult | null {
+  for (const sig of fn.signatures) {
+    const n = sig.args.length
+    if (n !== window.length) continue
+    let ok = true
+    for (let i = 0; i < n; i++) {
+      if (!argMatches(sig, i, window[i]!, sig.args[i]!)) {
+        ok = false
+        break
+      }
+    }
+    if (!ok) continue
+    const args = [...window]
+    if (!patternsOk(sig, args, 0)) continue // all-stack: forwardCount 0
+    return { sig, args, forwardCount: 0, prefixCount: n }
+  }
+  return null
+}
+
 export function matchEntry(
   fn: FunctionEntry,
   stack: readonly Value[],
@@ -47,30 +104,34 @@ export function matchEntry(
   // The dispatching word lives at stack[pointer]. Its WordInfo may
   // carry /s or /f modifiers that override the sig's BarrierPos.
   const wordInfo = readWordInfo(stack, pointer)
+  // The /N modifier restricts dispatch to overloads of exactly N total
+  // args (mirrors the Go matcher's argCount filter). When set, only
+  // sigs with matching arity are considered in every pass.
+  const argCount = wordInfo?.argCount
+  const sigs =
+    argCount === undefined
+      ? fn.signatures
+      : fn.signatures.filter((s) => s.args.length === argCount)
   // Strict pass: forward stops on type mismatch, stack fills the
   // rest. Most calls bind here.
-  for (const sig of fn.signatures) {
+  for (const sig of sigs) {
     const n = sig.args.length
     if (n === 0) continue
-    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, false)
+    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry)
     if (r) return r
   }
   // Optimistic pass: a forward-side Word that names a registered
   // function is accepted even when the sig wants a different type;
   // engine.shouldDeferDispatch will then defer dispatch via
   // insertForward, and stepLiteral re-type-checks the resolved value
-  // when it flows back. Only used as a fallback so we don't override
-  // a legitimate stack fill (e.g. inside a fn body where the trailing
-  // word is the OUTER caller, not an arg to the inner one).
-  for (const sig of fn.signatures) {
-    const n = sig.args.length
-    if (n === 0) continue
-    const r = tryMatch(sig, n, stack, pointer, wordInfo, registry, true)
-    if (r) return r
-  }
+  // A bare function word in the forward window is a hard barrier: forward
+  // collection stops there and the remaining args must come from the
+  // stack (only parentheses pre-evaluate a nested call). So there is no
+  // optimistic cross-barrier deferral — `addq 1 mulq 2 3` is a
+  // signature_error, matching the eng/spec nested-forward contract.
   // 0-arg fallback: if the function declares a 0-arg sig (e.g. `args`,
   // bare keywords), match it with no consumed prefix or forward.
-  for (const sig of fn.signatures) {
+  for (const sig of sigs) {
     if (sig.args.length === 0) {
       return { sig, args: [], forwardCount: 0, prefixCount: 0 }
     }
@@ -87,13 +148,16 @@ function readWordInfo(stack: readonly Value[], pointer: number): WordInfo | unde
 /**
  * Resolve a forward-side Word token against the expected sig type.
  *
- * Order matters: if the raw Word value already satisfies the slot
- * (e.g. sig expects TWord/TAny) we MUST keep the Word — handlers
- * like `def` declare TWord precisely to capture the name as data,
- * not to fall through to def-resolution. Only when the raw Word
- * fails the type check do we look up a simple-value def and try
- * again. Mirrors aqleng/go/match.go's order: TWord-matches-expected
- * branch (line ~136) runs before the TopOfDefStack branch (line ~155).
+ * A plain (non-function) def-bound word expands into the token stream
+ * wherever it stands — the `f w ≡ f (w)` equivalence (engine.go's
+ * resolveForwardArgs). So a word naming a simple-value def resolves to
+ * its value before the slot is type-checked, which is how `typeof pi`
+ * sees the integer 3 rather than the word `pi`.
+ *
+ * Exception: a TWord slot captures the raw word as data (handlers like
+ * `def`/`quote` declare TWord precisely to capture the name), so the
+ * word is kept. Function-valued defs are also kept so dispatch /
+ * forward-deferral handles them, not substitution.
  */
 function resolveForwardToken(
   tok: Value,
@@ -101,12 +165,18 @@ function resolveForwardToken(
   registry: Registry | undefined,
 ): Value {
   if (!tok.isWord()) return tok
-  if (sigTypeMatches(tok, expected)) return tok
-  if (!registry) return tok
-  const w = tok.asWord()
-  const top = registry.topOfDefStack(w.name)
-  if (!top) return tok
-  return top
+  if (expected.equal(TWord)) return tok
+  if (registry) {
+    const name = tok.asWord().name
+    const top = registry.topOfDefStack(name)
+    if (top !== undefined && !top.isFnDef()) {
+      // Resolving a def in the forward window is a "use" for check-mode
+      // unused-def tracking. No-op outside check mode.
+      registry.check.recordUse(name)
+      return top
+    }
+  }
+  return tok
 }
 
 function tryMatch(
@@ -116,7 +186,6 @@ function tryMatch(
   pointer: number,
   word: WordInfo | undefined,
   registry: Registry | undefined,
-  optimistic: boolean,
 ): MatchResult | null {
   // sig.barrierPos: 0 = boundary at start (all stack), N = boundary
   // at end (all forward-eligible). The Registry has already
@@ -135,26 +204,19 @@ function tryMatch(
     const rawTok = stack[scanIdx]
     if (!rawTok) break
     if (isStructuralBoundary(rawTok)) break
+    // A quoteArgs slot captures the raw forward Word as an Atom name.
+    // A word carrying a container type constraint (`def NAME:[…]`) is
+    // kept intact so the constraint survives to the handler.
+    if (sig.quoteArgs?.has(fwd) && rawTok.isWord()) {
+      args[fwd] = rawTok.asWord().constraint !== undefined ? rawTok : newAtom(rawTok.asWord().name)
+      fwd++
+      scanIdx++
+      continue
+    }
     const tok = resolveForwardToken(rawTok, sig.args[fwd]!, registry)
-    if (!sigTypeMatches(tok, sig.args[fwd]!)) {
-      // Optimistic-deferral case (second pass only): a Word naming
-      // a registered function may dispatch to a value of the right
-      // type. Accept the raw Word here so engine.shouldDeferDispatch
-      // defers the outer dispatch via insertForward; stepLiteral will
-      // re-type-check the resolved value at collection time. Strict
-      // pass leaves it to the regular forward-stop / stack-fallback
-      // path; this avoids stealing stack-fillable args inside fn
-      // bodies (e.g. `a b add c add` where the trailing add is the
-      // OUTER caller, not an arg to the inner add).
-      if (optimistic && rawTok.isWord() && registry) {
-        const w = rawTok.asWord() as { name: string }
-        if (registry.lookup(w.name)) {
-          args[fwd] = rawTok
-          fwd++
-          scanIdx++
-          continue
-        }
-      }
+    if (!argMatches(sig, fwd, tok, sig.args[fwd]!)) {
+      // A type mismatch (including a bare function-word barrier) stops
+      // forward collection; the rest must come from the stack.
       break
     }
     args[fwd] = tok
@@ -174,7 +236,7 @@ function tryMatch(
     if (!stackVal) return null
     if (isStructuralBoundary(stackVal)) return null
     const sigIdx = fwd + j
-    if (!sigTypeMatches(stackVal, sig.args[sigIdx]!)) return null
+    if (!argMatches(sig, sigIdx, stackVal, sig.args[sigIdx]!)) return null
     args[sigIdx] = stackVal
   }
 
@@ -183,7 +245,20 @@ function tryMatch(
 }
 
 export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType): boolean {
-  return v.vType.matches(expected)
+  // Check-mode gradual carrier: a dynamic carrier's type is statically
+  // unknown, so it matches any slot optimistically (the contagion then
+  // widens the result to dynamic). Mirrors NewDynamicCarrier matching.
+  if (v.carrier && v.dynamic) return true
+  if (!v.vType.matches(expected)) return false
+  // Concrete-value rule (mirrors positionalMatch in eng/go): a Scalar
+  // or Node (list/map) value slot is filled only by a concrete value
+  // (or a check-mode carrier), never by a bare type literal. So
+  // `do List` and `addq Integer 1` surface signature errors, while a
+  // strict carrier of the right type IS a value and matches.
+  if (v.data === null && !v.carrier && (expected.matches(TScalar) || expected.matches(TNode))) {
+    return false
+  }
+  return true
 }
 
 function isStructuralBoundary(v: Value): boolean {

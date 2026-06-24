@@ -1,0 +1,7 @@
+# Carrier composition through paren groups and chained dispatch, plus
+# gradual contagion: a dynamic operand widens the result to dynamic.
+# tokens	expected	note
+addq 1 (mulq 2 3)	Number	nested clean dispatch
+concatq 'x' (nilq)	String	paren group result feeds the call
+addq 1 (concatq 'a' 'b')	Number :: !no_signature	inner String violates addq's Number
+addq 1 (noretq 2)	dynamic(Number) :: ~missing_returns	dynamic operand -> dynamic result

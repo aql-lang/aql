@@ -1,0 +1,11 @@
+# Check-mode fn-body analysis. A user fn's body is analysed under the
+# carrier args (params bound carrier-typed); its diagnostics propagate,
+# and the call's result is the declared return type. A param-type
+# violation at the call site assumes the signature and emits no_signature
+# (plus any further violations the body analysis surfaces).
+# tokens	expected	note
+def greet fn [[n:Integer] [Integer] [addq n 1]] greet 3	Integer	body addq n 1 clean; declared return Integer
+def greet fn [[n:Integer] [Integer] [addq n 1]] greet 3.0	Integer :: !no_signature	Float arg violates n:Integer
+def f fn [[n:Integer] [Integer] [addq n 1]] f 'x'	Integer :: !no_signature !no_signature	String arg: param + body addq both fail
+def inc fn [[n:Integer] [Integer] [addq n 1]] inc (inc 5)	Integer	nested fn call composes
+def double fn [[n:Integer] [String] [concatq n '!']] double 3	String :: !no_signature	body concatq n '!' violates (n is Integer)

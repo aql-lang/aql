@@ -5154,7 +5154,7 @@ func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
 	if e.isTop {
 		ctrl := e.registry.FlowCtrl
 		e.registry.FlowCtrl = FlowNone
-		return nil, e.runtimeError("halt", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
+		return nil, e.runtimeError("flow_error", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
 	}
 	return e.tape.TakeAll(), nil
 }
