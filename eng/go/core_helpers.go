@@ -288,12 +288,30 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 		}
 		a := args[i]
 		pt := params[i].Type
-		if a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
-			pt.ConformsTo(a.Parent) && !a.Parent.ConformsTo(pt) {
+		switch {
+		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
+			pt.ConformsTo(a.Parent) && !a.Parent.ConformsTo(pt):
+			// A gradual arg whose bound is strictly BROADER than the declared
+			// (concrete) param type: narrow it to a dynamic carrier of that type.
 			if out == nil {
 				out = append([]Value(nil), args...)
 			}
 			nc := NewCarrier(pt)
+			nc.Dynamic = true
+			out[i] = nc
+		case !a.Dynamic && pt != nil && pt.Equal(TAny) && a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a):
+			// A STRICT Any arg bound to a declared-`Any` param. The param is
+			// gradual by declaration (ParamInputCarrier gives dynamic Any), so a
+			// body word over it must match optimistically — a strict Any conforms
+			// to no concrete slot and would cascade no_signature. The case arises
+			// when a fold accumulator that started `none` and was rebuilt into a
+			// node is threaded into a `nd:Any` insert receiver (tst/radix's
+			// `none entries [(acc … tst-insert)] fold`). Only a bare strict-Any
+			// VALUE is lifted (not a typed/structural carrier).
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			nc := NewCarrier(TAny)
 			nc.Dynamic = true
 			out[i] = nc
 		}

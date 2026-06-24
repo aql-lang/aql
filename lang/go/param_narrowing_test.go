@@ -47,4 +47,24 @@ def eval-pred fn [[pred:Map input:Map] [Boolean] [
 	if n := errCount(bad); n == 0 {
 		t.Errorf("passing a concrete Integer to a List param must still be flagged")
 	}
+
+	// A STRICT Any arg threaded into a declared-`Any` param must be analysed
+	// gradually (the param is declared Any → ParamInputCarrier gives a dynamic
+	// carrier). The fold-accumulator-as-node shape: an accumulator that started
+	// `none` and was rebuilt into a Map is threaded into a `nd:Any` insert
+	// receiver, whose body then reads it with `get`/rebuilds it. (tst/radix's
+	// `none entries [(acc … ins)] fold`.)
+	accAsNode := `
+def mk fn [[a:Any b:Any] [Map] [do {x: [a], y: [b]}]] end
+def wev fn [[fin:Any nd:Map] [Map] [(nd "x" get) (nd "y" get) mk]] end
+def ins fn [[val:Any key:String nd:Any] [Any] [
+  def nd (if (nd eq none) [ none none mk ] [nd])
+  if ((key size) eq 0) [ (nd val wev) ] [nd]
+]] end
+def from-entries fn [[entries:List] [Any] [
+  none entries [ var [[e acc] (acc (e get 0) (e get 1) ins) ] ] fold
+]] end`
+	if n := errCount(accAsNode); n != 0 {
+		t.Errorf("fold-accumulator-as-node: expected 0 errors, got %d", n)
+	}
 }
