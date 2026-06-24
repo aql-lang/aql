@@ -1035,7 +1035,8 @@ function registerSpecWords(r: Registry): void {
           const frame = r.topArgs()
           if (emit !== undefined) {
             if (frame === undefined) {
-              emit.markUncompilable('args: no positional-arg frame')
+              // No call frame (top level): args is the empty list.
+              return [emit.recordMakeList([])]
             } else {
               const ops = frame.map((v) => emit.classify(v))
               if (ops.every((o) => o !== null)) return [emit.recordMakeList(ops as import('./emit.ts').Operand[])]
