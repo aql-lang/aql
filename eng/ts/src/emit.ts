@@ -13,9 +13,39 @@
 //
 // PARITY NOTE: still mono-only / concrete-operand / single-result; poly,
 // dynamic, loops, user fns, containers, and fallback islands land later.
+import type { Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { newCarrier, newWord, type Value } from './value.ts'
+import { newCarrier, newWord, type FnDefInfo, type Value } from './value.ts'
 import { TList, TMap } from './type.ts'
+
+/**
+ * fnCaptureFree reports whether a fn VALUE is self-contained — every body
+ * word is either one of its params or not currently def-bound — so it can
+ * be baked into a fallback island and re-applied at run time. A body that
+ * references an enclosing def (a lexical capture) is NOT bakeable: the
+ * captured name isn't bound when the island re-runs, so such a closure
+ * falls back to the interpreter. The analogue of eng/go ComputeCaptures
+ * (here used only as a yes/no bakeability gate).
+ */
+function fnCaptureFree(info: FnDefInfo, registry: Registry): boolean {
+  const walk = (body: readonly Value[], params: ReadonlySet<string>): boolean => {
+    for (const v of body) {
+      if (v.isWord()) {
+        const name = v.asWord().name
+        if (!params.has(name) && registry.topOfDefStack(name) !== undefined) return false
+      } else if (Array.isArray(v.data)) {
+        // Lists and paren-expr payloads both store their tokens as data.
+        if (!walk(v.data as Value[], params)) return false
+      }
+    }
+    return true
+  }
+  for (const sig of info.sigs) {
+    const params = new Set(sig.params.map((p) => p.name))
+    if (!walk(sig.body, params)) return false
+  }
+  return true
+}
 
 /**
  * isInert reports whether a concrete value is bakeable as a program
@@ -430,16 +460,33 @@ export class EmitState {
    * refusal stand) when an arg's provenance is unknown or the shape is
    * beyond this stage. Mirrors eng/go/emit.go::RecordFallback.
    */
-  recordFallback(word: string, args: readonly Value[], out: readonly Value[]): boolean {
+  recordFallback(
+    word: string,
+    args: readonly Value[],
+    out: readonly Value[],
+    registry?: Registry,
+  ): boolean {
     if (this.uncompilableReason !== undefined) return false
     if (out.length !== 1) return false
     const tokens: Value[] = [newWord(word)]
     const ins: Operand[] = []
     for (const a of args) {
       const o = this.classify(a)
-      if (o === null) return false
-      if (o.kind === 'const') tokens.push(o.value)
-      else ins.push(o)
+      if (o !== null) {
+        if (o.kind === 'const') tokens.push(o.value)
+        else ins.push(o)
+        continue
+      }
+      // A self-contained (capture-free) fn VALUE bakes into the island as a
+      // CLOSURE: re-running [word … fnVal …] applies it exactly as the
+      // interpreter does (Go islands non-compiled callables the same way in
+      // vm.go::callDynamic). A fn capturing an enclosing def is not bakeable
+      // (its captured names aren't bound at run time) → refuse, fall back.
+      if (registry !== undefined && a.isConcrete() && a.isFnDef() && fnCaptureFree(a.asFnDef(), registry)) {
+        tokens.push(a)
+        continue
+      }
+      return false
     }
     if (ins.length > 1) return false
     if (ins.length === 1 && tokens.length > 1) return false // baked+threaded mix (deferred)

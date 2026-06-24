@@ -24,6 +24,7 @@ import {
   TAny,
   TAtom,
   TBoolean,
+  TFunction,
   TInteger,
   TList,
   TNumber,
@@ -379,6 +380,33 @@ function registerFixtures(r: Registry): void {
       { args: [TString], handler: () => [newString('str')], returns: [TString] },
     ],
   })
+  // applyq: a higher-order word that APPLIES a unary fn VALUE to an arg.
+  // The fn flows in as a runtime operand (a closure), so the recorder can't
+  // inline it; marked compileFallback, it islands — a capture-free fn bakes
+  // into the island tokens and re-applies at run time, a capture-bearing fn
+  // falls back. Mirrors a dynamic fn-value call (eng/go OpCallDynamic, whose
+  // non-compiled branch islands through a sub-engine just like this).
+  reg({
+    name: 'applyq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TFunction, TAny],
+        compileFallback: true,
+        returns: [TAny],
+        handler: (args, _ctx, _stk, r) => {
+          const sig = args[0]!.asFnDef().sigs[0]!
+          const name = sig.params[0]!.name
+          r.pushDef(name, args[1]!)
+          try {
+            return new Engine(r).run([...sig.body])
+          } finally {
+            r.popDef(name)
+          }
+        },
+      },
+    ],
+  })
 }
 
 // Minimal tokenizer: words, ints, floats, single/double strings, lists,
@@ -546,6 +574,8 @@ const COMPILED: Array<[string, true]> = [
   ["polyq (dynq 'x')", true], // poly selects the String overload at run time
   ['addq (dynq 1) 2', true], // poly chains: dynq poly, addq poly
   ['dynq 7', true], // bare dynamic result -> poly
+  ['applyq (fn [[n:Integer] [Integer] [addq n 1]]) 5', true], // capture-free closure islanded
+  ['applyq (fn [[n:Integer] [Integer] [mulq n n]]) 4', true], // multi-word closure body
 ]
 
 const FALLBACK: string[] = [
@@ -555,6 +585,7 @@ const FALLBACK: string[] = [
   'for 2 [i] addq 1 2', // loop not in trailing position -> falls back
   'def f fn [[n:Integer] [Integer] [dupq n]] f 5', // fn body count != declared -> falls back
   'lengthq [addq 1 2]', // computed-list arg (not auto-evaluated in check) -> inert guard refuses
+  'def k 100 applyq (fn [[n:Integer] [Integer] [addq n k]]) 5', // closure captures k -> not bakeable -> falls back
 ]
 
 // Error-parity rows: a check-lenient word compiles to a terminal OpTrap, so
@@ -711,6 +742,19 @@ describe('compiled (stage 1)', () => {
         '004  CALL_POLY 1 (polyq/1)', // dynamic operand -> poly
         '005  STORE_LOCAL 1',
         '006  PUSH_LOCAL 1', // residual
+      ].join('\n'),
+    )
+  })
+
+  it('disassembles a dynamic closure application to a baked island', () => {
+    const result = compile(freshRegistry(), tokenize('applyq (fn [[n:Integer] [Integer] [addq n 1]]) 5'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  FALLBACK 0 (applyq nIn=0)', // island re-runs [applyq <fn> 5]; the fn-value is baked
+        '001  STORE_LOCAL 0',
+        '002  PUSH_LOCAL 0', // residual
       ].join('\n'),
     )
   })

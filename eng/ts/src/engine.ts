@@ -288,7 +288,7 @@ export class Engine {
       const emit = this.registry.check.emit
       if (emit !== undefined && !result.sig.recordsOwnEvent) {
         if (result.sig.compileFallback) {
-          if (!emit.recordFallback(name, result.args, out)) {
+          if (!emit.recordFallback(name, result.args, out, this.registry)) {
             emit.markUncompilable(`${name}: fallback island not recordable`)
           }
         } else {
