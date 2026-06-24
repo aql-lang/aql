@@ -46,6 +46,7 @@ const (
 const (
 	wordMakeList = "[…]"
 	wordMakeMap  = "{…}"
+	wordInterp   = "`…`"
 )
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -134,18 +135,20 @@ type eventFlags struct {
 }
 
 type emitCall struct {
-	word     string
-	sig      *Signature
-	ops      []emitOperand
-	nout     int // number of results the call pushes (0 for a side-effect word, N for multi-result)
-	pos      SrcPos
-	poly     bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
-	polyReg  *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
-	makeList bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	makeMap  bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
-	mapKeys  []string
-	mapImpl  bool // the source map's Implicit flag
-	diverges bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	word       string
+	sig        *Signature
+	ops        []emitOperand
+	nout       int // number of results the call pushes (0 for a side-effect word, N for multi-result)
+	pos        SrcPos
+	poly       bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg    *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
+	makeList   bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	makeMap    bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	mapKeys    []string
+	mapImpl    bool // the source map's Implicit flag
+	interp     bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
+	interpSegs []InterpSeg
+	diverges   bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -1613,6 +1616,14 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			// A per-iteration dynamic apply (`(mk2 i) 10`): the body nets one applied
 			// value, lowered via OpCallDynamic over the leading fn (body.applyArgs).
 			lp.hasBodyOut = true
+		} else if len(bodyStk) > 1 {
+			// The body nets MORE THAN ONE value per iteration (`for 2 ['e' 'f']`
+			// pushes both 'e' and 'f' each pass). The lowered loop nets exactly one
+			// value per iteration, so keeping only bodyStk[last] would silently DROP
+			// the rest — a miscompile ([e f e f] -> [f f]). Refuse and let the
+			// interpreter island run the multi-value body faithfully.
+			es.MarkUncompilable("for: body nets multiple values per iteration")
+			return
 		} else {
 			bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
 			if !ok {
@@ -2215,6 +2226,52 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
 		word: wordMakeMap, ops: ops, nout: 1, pos: pos,
 		makeMap: true, mapKeys: append([]string(nil), keys...), mapImpl: implicit,
+	}})
+	es.setProduced(out, seq)
+	return true
+}
+
+// RecordInterp records the assembly of a template string whose holes are
+// computed — “ `got ${x}` “, “ `n=${1 add 2}` “, “ `t=${typeof x}` “ —
+// into an OpInterp dispatch. The hole expressions ran in evalInterpParts (their
+// own dispatches already recorded their events); holeVals are the per-hole
+// result values in source order, and out is the resulting String. Each hole
+// resolves like a call operand (an event result, a frame local, a bare-type
+// node, or an inert const); the literal segments ride in the Program's
+// InterpSpec, so OpInterp only pops the hole VALUES — exactly the MakeMap shape.
+//
+// Like OpMakeMap (and unlike the const-baking OpMakeList), OpInterp re-assembles
+// from its operands on every run, so it is sound inside a fn body / branch arm /
+// loop — no top-frame restriction. Returns false, leaving es untouched (the
+// caller then marks the program uncompilable and it falls back), when a hole has
+// no compiled home or did not produce exactly one value.
+func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool {
+	if !es.active() || len(holeVals) == 0 {
+		return false
+	}
+	// ops in stack order (ops[0] = top): OpInterp pops the run and reads it
+	// deepest-first as hole 0, so reverse like RecordMakeMap — ops[0] is the LAST
+	// hole (on top), ops[N-1] the first (deepest).
+	ops := make([]emitOperand, len(holeVals))
+	for k := range holeVals {
+		op, ok := es.resolveOperand(holeVals[k])
+		if !ok {
+			return false
+		}
+		ops[len(holeVals)-1-k] = op
+	}
+	segs := make([]InterpSeg, 0, len(parts))
+	for _, p := range parts {
+		if p.Expr == nil {
+			segs = append(segs, InterpSeg{Lit: p.Lit})
+		} else {
+			segs = append(segs, InterpSeg{Hole: true})
+		}
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: wordInterp, ops: ops, nout: 1, pos: pos,
+		interp: true, interpSegs: segs,
 	}})
 	es.setProduced(out, seq)
 	return true

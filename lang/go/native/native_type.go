@@ -269,10 +269,14 @@ var typeNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			// Ideal → Map / List (per-type IdealConverter; base Ideal → {} / [])
 			{
-				Args:      []*Type{TNode, TIdeal},
-				TypeArgs:  map[int]bool{0: true},
-				Handler:   convertIdealHandler,
-				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
+				Args:     []*Type{TNode, TIdeal},
+				TypeArgs: map[int]bool{0: true},
+				Handler:  convertIdealHandler,
+				// convert yields a VALUE of the target type (like make), not the
+				// target type literal — ReturnsFreshInstance mints a carrier OF
+				// arg0's type so a downstream consumer (e.g. arithmetic on a
+				// `convert Float`ed scalar) sees an inhabitant, not a bare node.
+				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
 			},
 			// Map → Object (thaw): a fresh open mutable container
 			// seeded from the map — the inverse of `convert Map o`
@@ -286,17 +290,19 @@ var typeNatives = []NativeFunc{
 				Returns: []*Type{TObject}, BarrierPos: -1,
 			},
 			{
-				Args:      []*Type{TScalar, TMap, TScalar},
-				TypeArgs:  map[int]bool{0: true},
-				Patterns:  map[int]Value{1: convertOptsPattern()},
-				Handler:   convert3Handler,
-				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
+				Args:     []*Type{TScalar, TMap, TScalar},
+				TypeArgs: map[int]bool{0: true},
+				Patterns: map[int]Value{1: convertOptsPattern()},
+				Handler:  convert3Handler,
+				// See the Ideal sig above: a VALUE of arg0's type, not the literal.
+				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
 			},
 			{
-				Args:      []*Type{TScalar, TScalar},
-				TypeArgs:  map[int]bool{0: true},
-				Handler:   convert2Handler,
-				ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
+				Args:     []*Type{TScalar, TScalar},
+				TypeArgs: map[int]bool{0: true},
+				Handler:  convert2Handler,
+				// See the Ideal sig above: a VALUE of arg0's type, not the literal.
+				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
 			},
 		},
 	},
