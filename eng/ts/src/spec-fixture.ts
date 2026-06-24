@@ -907,7 +907,7 @@ function registerSpecWords(r: Registry): void {
           const value = args[1]!
           // A digit-first name is a malformed number, never a name.
           if (/^-?\d/.test(name)) {
-            throw new AqlError('invalid_numeric_literal', `invalid numeric literal: ${name}`, name)
+            throw new AqlError('syntax_error', `invalid numeric literal: ${name}`, name)
           }
           // Container-typed binding `def NAME:[…]` / `def NAME:{…}`: the
           // tokenizer attached the constraint shape to the name word. The
@@ -1535,7 +1535,7 @@ function readXmlHole(stream: TokenStream): Value[] {
     }
     stream.i++
   }
-  if (stream.i >= s.length) throw new Error('xml: unterminated ${ hole')
+  if (stream.i >= s.length) throw new Error('xml: unterminated ${...} interpolation')
   const inner = s.slice(start, stream.i)
   stream.i++ // consume '}'
   return tokenize(inner)
@@ -1559,7 +1559,7 @@ function parseXmlTmpl(stream: TokenStream, holes: { has: boolean }): XmlTmpl {
     if (c === '/' || c === '>') break
     const name = readXmlName(stream)
     if (name === '') throw new Error('xml: malformed element')
-    if (s[stream.i] !== '=') throw new Error('xml: attribute requires a quoted value')
+    if (s[stream.i] !== '=') throw new Error(`xml: attribute "${name}" in <${tag}> must have a quoted value`)
     stream.i++ // consume '='
     const segs: InterpSegment[] = []
     if (s[stream.i] === '"') {
@@ -1585,7 +1585,7 @@ function parseXmlTmpl(stream: TokenStream, holes: { has: boolean }): XmlTmpl {
       segs.push({ expr: readXmlHole(stream) })
       holes.has = true
     } else {
-      throw new Error('xml: attribute requires a quoted value')
+      throw new Error(`xml: attribute "${name}" in <${tag}> must have a quoted value`)
     }
     attrs.push({ name, segs })
   }
@@ -1598,7 +1598,7 @@ function parseXmlTmpl(stream: TokenStream, holes: { has: boolean }): XmlTmpl {
   stream.i++ // consume '>'
   const children: XmlChildTmpl[] = []
   for (;;) {
-    if (stream.i >= s.length) throw new Error('xml: unterminated element')
+    if (stream.i >= s.length) throw new Error(`xml: unterminated element <${tag}>`)
     if (s[stream.i] === '<' && s[stream.i + 1] === '/') {
       stream.i += 2
       const close = readXmlName(stream)

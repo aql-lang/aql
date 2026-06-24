@@ -64,7 +64,11 @@ func crossKey(mode, file string, line int) string {
 func goValueResult(input string) (bool, string) {
 	values, err := parser.Parse(input)
 	if err != nil {
-		return false, "TOKENIZE:" + err.Error()
+		// A parse error that carries a taxonomy code (e.g. a malformed
+		// numeric literal → syntax_error) compares by code, so it matches the
+		// TS engine regardless of which stage rejected it; a plain parser error
+		// (xml syntax) keeps the TOKENIZE: message form.
+		return false, errTag(err, "TOKENIZE:")
 	}
 	r, err := eng.NewRegistry()
 	if err != nil {
