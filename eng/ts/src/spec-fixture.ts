@@ -674,6 +674,9 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TAny, TNode],
         noEvalArgs: new Set([1]),
+        // Build the record/object type in check mode so typeof/is/inspect
+        // consume it and it bakes as an inert type constant.
+        runInCheckMode: true,
         handler: (args) => {
           const base = args[0]!
           // refine Record [ {k:T} … ] merges the pair-maps into a
