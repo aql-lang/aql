@@ -1189,29 +1189,35 @@ export class Engine {
     segs: readonly import('./value.ts').InterpSegment[],
   ): import('./value.ts').InterpSegment[] | null {
     const emit = this.registry.check.emit!
-    const subTok = (t: unknown): Value | null => {
+    // subTok rewrites one token to the span that reproduces it inside the
+    // island (usually length 1). A captured binding becomes its const value,
+    // or — when it was produced by a 0-input token island (`def x quote [..]`)
+    // — the producer's own token span, re-run inline. null = unbakeable.
+    const subTok = (t: unknown): Value[] | null => {
       if (!(t instanceof Value)) return null
       if (t.isWord()) {
         const top = this.registry.topOfDefStack(t.asWord().name)
-        if (top === undefined) return t // native / keyword — re-dispatches in the island
+        if (top === undefined) return [t] // native / keyword — re-dispatches in the island
         const op = emit.classify(top)
-        return op !== null && op.kind === 'const' ? op.value : null // const-bound → bake; else refuse
+        if (op !== null && op.kind === 'const') return [op.value] // const-bound → bake
+        const isl = emit.islandTokensFor(top) // islanded binding → inline its producer
+        return isl !== null ? [...isl] : null
       }
       if (t.isInterpString()) {
         const sub = this.substituteInterp(t.asInterpSegments())
-        return sub === null ? null : newInterpString(sub)
+        return sub === null ? null : [newInterpString(sub)]
       }
       if (t.isXmlInterp()) return null // nested xml not islanded here
       if (Array.isArray(t.data)) {
         const elems: Value[] = []
         for (const e of t.data as unknown[]) {
           const s = subTok(e)
-          if (s === null) return null
-          elems.push(s)
+          if (s === null || s.length !== 1) return null // list element must map 1:1
+          elems.push(s[0]!)
         }
-        return new Value(t.vType, elems, { eval: t.eval, quoted: t.quoted })
+        return [new Value(t.vType, elems, { eval: t.eval, quoted: t.quoted })]
       }
-      return t
+      return [t]
     }
     const out: import('./value.ts').InterpSegment[] = []
     for (const s of segs) {
@@ -1223,7 +1229,7 @@ export class Engine {
       for (const t of s.expr) {
         const st = subTok(t)
         if (st === null) return null
-        expr.push(st)
+        expr.push(...st)
       }
       out.push({ expr })
     }

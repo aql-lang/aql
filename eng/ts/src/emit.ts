@@ -235,6 +235,11 @@ export class EmitState {
   private readonly producedBy = new Map<Value, number>()
   /** stripped-literal carrier → its concrete original (for const materialisation). */
   private readonly origByCarrier = new WeakMap<Value, Value>()
+  /** island-output carrier → the self-contained token span that reproduces it
+   *  (0-input islands only — `quote [..]`, an interp/xml island). Lets another
+   *  island that re-runs tokens (an interp string) inline the producer span in
+   *  place of a capture it cannot bake as a const. */
+  private readonly islandTokens = new WeakMap<Value, readonly Value[]>()
 
   /** Total event/local-slot count (for Program.numLocals). */
   slotCount(): number {
@@ -514,7 +519,18 @@ export class EmitState {
     const slot = this.seq++
     this.target().push({ kind: 'fallback', slot, word: desc, tokens, ins: [] })
     this.producedBy.set(out, slot)
+    this.islandTokens.set(out, tokens)
     this.siteCounts.dynamic++
+  }
+
+  /**
+   * If `v` was produced by a 0-input token island, return the self-contained
+   * token span that reproduces it (else null). A consumer that itself re-runs
+   * tokens (an interpolated-string island capturing `def x quote [..]`) can
+   * inline this span where it cannot bake `v` as a const.
+   */
+  islandTokensFor(v: Value): readonly Value[] | null {
+    return this.islandTokens.get(v) ?? null
   }
 
   recordFallback(
