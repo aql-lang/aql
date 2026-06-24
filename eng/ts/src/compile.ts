@@ -6,6 +6,7 @@
 // any source the compiler refuses.
 import { Engine } from './engine.ts'
 import { EmitState } from './emit.ts'
+import { AqlError } from './error.ts'
 import { finalize, type FinalizeResult } from './lower.ts'
 import type { Program } from './bytecode.ts'
 import type { Registry } from './registry.ts'
@@ -25,6 +26,12 @@ export function compileCheck(registry: Registry, input: Value[]): FinalizeResult
   let residual: Value[]
   try {
     residual = new Engine(registry).run(input)
+  } catch (e) {
+    // A check/record pass that throws is uncompilable — refuse so the caller
+    // falls back to the interpreter (which runs the row faithfully), never
+    // crashing runCompiled. Mirrors Go's RunCompiled always degrading to the
+    // interpreter rather than propagating a compile-time panic.
+    return { refused: `check pass threw: ${e instanceof AqlError ? e.code : (e as Error).message}` }
   } finally {
     done()
     registry.check.emit = undefined

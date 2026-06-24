@@ -470,6 +470,21 @@ export class EmitState {
    * refusal stand) when an arg's provenance is unknown or the shape is
    * beyond this stage. Mirrors eng/go/emit.go::RecordFallback.
    */
+  /**
+   * Record a single-value island: re-run `token` verbatim through a
+   * sub-engine at run time (no threaded inputs), its result threading to
+   * `out`. Used for a self-contained interpolated string / template whose
+   * assembly the recorder does not model but which is faithfully reproduced
+   * by re-evaluating the token. Mirrors a 0-input OpFallback.
+   */
+  recordValueIsland(token: Value, out: Value, desc: string): void {
+    if (this.uncompilableReason !== undefined) return
+    const slot = this.seq++
+    this.target().push({ kind: 'fallback', slot, word: desc, tokens: [token], ins: [] })
+    this.producedBy.set(out, slot)
+    this.siteCounts.dynamic++
+  }
+
   recordFallback(
     word: string,
     args: readonly Value[],

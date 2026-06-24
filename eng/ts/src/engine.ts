@@ -1045,12 +1045,19 @@ export class Engine {
   private evalInterpString(v: Value): Value {
     const segs = v.asInterpSegments()
     // Bytecode recording: an interpolated EXPRESSION assembles a string from
-    // runtime values (valToString) — not modelled by the recorder, and in
-    // check mode the embedded carriers would stringify to type names. Refuse
-    // so the program falls back to the interpreter. (All-literal interp
-    // strings are just a constant and stay compilable.)
-    if (segs.some((s) => !('lit' in s))) {
-      this.registry.check.emit?.markUncompilable('interpolated string expression not compilable')
+    // runtime values (valToString), which the recorder does not model and
+    // which in check mode would stringify embedded carriers to type names.
+    // A SELF-CONTAINED template (no embedded reference to a binding) compiles
+    // as a single-value island — re-evaluate the token verbatim at run time;
+    // one capturing a binding refuses (the binding isn't live in the island).
+    const emit = this.registry.check.emit
+    if (emit !== undefined && segs.some((s) => !('lit' in s))) {
+      if (this.interpCaptureFree(segs)) {
+        const out = newCarrier(TString)
+        emit.recordValueIsland(v, out, 'interp')
+        return out
+      }
+      emit.markUncompilable('interpolated string captures a binding')
     }
     let out = ''
     for (const seg of segs) {
@@ -1062,6 +1069,29 @@ export class Engine {
       }
     }
     return newString(out)
+  }
+
+  /**
+   * Report whether an interpolated string's expression segments reference no
+   * currently-bound name (so the whole template re-runs correctly as an
+   * island). A bare word resolving to a def-stack binding is a capture; a
+   * registered native is not.
+   */
+  private interpCaptureFree(segs: readonly import('./value.ts').InterpSegment[]): boolean {
+    const walk = (toks: readonly Value[]): boolean => {
+      for (const t of toks) {
+        if (t.isWord()) {
+          if (this.registry.topOfDefStack(t.asWord().name) !== undefined) return false
+        } else if (Array.isArray(t.data)) {
+          if (!walk(t.data as Value[])) return false
+        }
+      }
+      return true
+    }
+    for (const s of segs) {
+      if (!('lit' in s) && !walk(s.expr)) return false
+    }
+    return true
   }
 
   /**
