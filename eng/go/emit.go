@@ -910,6 +910,13 @@ func eventDivergesDeep(ev *emitEvent) bool {
 	switch ev.kind {
 	case evBreak, evContinue:
 		return true
+	case evCall:
+		// A CompileDiverges word (raise) never returns past this call — the
+		// same divergence the shallow fragDiverges recognises. Without this,
+		// an arm ending in `raise` is mis-seen as a 0-value merge contributor
+		// (a false variadic merge), so a fn whose if-chain bottoms out in
+		// `raise` reports a spurious variadic return.
+		return ev.call.diverges
 	case evCallUser:
 		return ev.uc.tail
 	case evBranch:
@@ -1185,9 +1192,15 @@ func (es *EmitState) branchVariadicResult(b BranchRecord) bool {
 	if thenN > 1 || elsN > 1 {
 		return true
 	}
-	thenHas := thenN > 0 && !(b.Then != nil && fragDiverges(b.Then))
-	elsHas := elsN > 0 && !(b.Els != nil && fragDiverges(b.Els))
-	if thenHas != elsHas {
+	thenDiv := b.Then != nil && fragDiverges(b.Then)
+	elsDiv := b.Els != nil && fragDiverges(b.Els)
+	// A diverging arm (raise / break / continue / tail) never reaches the
+	// merge, so the surviving arm's count is unconditional. A runtime-variable
+	// 0-or-1 result therefore arises only from a count MISMATCH between two
+	// NON-diverging arms (`if c [99] []`); when either arm diverges the other's
+	// fixed count governs. (Multi-value arms were rejected by thenN/elsN > 1
+	// above; a nested-variadic surviving arm is caught by armOutVariadic below.)
+	if !thenDiv && !elsDiv && (thenN > 0) != (elsN > 0) {
 		return true
 	}
 	return es.armOutVariadic(b.ThenStk) || es.armOutVariadic(b.ElsStk)

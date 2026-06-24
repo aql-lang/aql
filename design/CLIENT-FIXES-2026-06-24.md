@@ -139,9 +139,36 @@ transitive analysis):
 `OpInterp` (`1b7b9ae`) removed the interpolated-string refusal, so suites that
 previously stopped there now advance. The remaining `--force-compile` refusals
 are the test framework's **code-body words** (`each`, `test-test`, `do` at
-“Stage 2”) — the tracked emitter-coverage work (decision report §6), unchanged
-by this branch. `--compile` (silent interpreter fallback) produces correct
-output for every suite.
+“Stage 2”) — the tracked emitter-coverage work (decision report §6). `--compile`
+(silent interpreter fallback) produces correct output for every suite.
+
+### Residual emitter fix — raise-arm divergence (landed)
+
+A focused emitter false-refusal in this set is now fixed: a fn whose `if`-chain
+bottoms out in `raise` (the **`apply-op`** shape — an op-dispatch chain whose
+default branch raises) was wrongly flagged **variadic-returning**. The variadic
+accounting (`branchVariadicResult` / `eventDivergesDeep`, `eng/go/emit.go`)
+counted the `raise` arm as a 0-value merge contributor, so the `if` looked like
+a runtime-variable 0-or-1 result; every site consuming the Boolean as a
+fixed-arity operand (`Assert.equal`, `print`, `add`) then refused with
+“consumes loop results”. A diverging arm never reaches the merge, so the
+surviving arm's value is unconditional — `raise` now joins `break`/`continue`/
+tail-call in the divergence checks, matching the shallow `fragDiverges`. The
+change only **relaxes** an over-marking (a genuine `if c [n] []` 0-or-1 still
+refuses fixed-arity consumption), so it is coverage-only and sound by the
+differential + property gates.
+
+Effect on the clients: the three `apply-op-*` cases in `decision_unit_test`
+now force-compile. The remaining suite refusals are unchanged in kind — `each`
+over a `var`-block body (`var` splices onto the tape, a genuine code-body
+refusal), `do {…}` map bodies and namespace-exposed words (the deferred checker
+family — `check diagnostics`), and `test-check-prop` (the PBT framework). All
+still run correctly under `--compile`.
+
+Regression guards: `lang/spec/corpus-structures.tsv` (`classify`, an
+op-dispatch chain whose default branch raises, result consumed by `add`) and
+`lang/go/bytecode_raisediverge_test.go` (positive + the negative genuine-
+variadic that must still refuse).
 
 ---
 
