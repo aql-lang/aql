@@ -85,6 +85,24 @@ func TestTypeofConcreteSingletonCheck(t *testing.T) {
 	}
 }
 
+// An abstract carrier already TAGGED as a predicate-refine (subset) type
+// satisfies that type's param nominally — the tag is the contract guarantee
+// (a `Big`-returning fn), and the value-level predicate cannot be re-verified
+// on an abstract carrier. `def mk fn [[] [Big] [50]] use (mk)` failed because
+// the Big-returning result was predicate-checked as if abstract. A CONCRETE
+// value is still predicate-checked.
+func TestPredicateRefineReturnCheck(t *testing.T) {
+	clean := `def Big (Integer gt 10) def mk fn [[] [Big] [50]] def use fn [[n:Big] [Integer] [n]] use (mk)`
+	if n := checkErrs(t, clean); n != 0 {
+		t.Errorf("predicate-refine-returning fn into a same-type param: expected 0 errors, got %d", n)
+	}
+	// NEGATIVE: a concrete value that fails the predicate is still rejected.
+	bad := `def Big (Integer gt 10) def use fn [[n:Big] [Integer] [n]] use 5`
+	if n := checkErrs(t, bad); n == 0 {
+		t.Errorf("a concrete 5 (not > 10) for a Big param must still be flagged")
+	}
+}
+
 // A dispatch modifier (usurp / stack-args / forward-args / force-arity, the
 // `/u` `/s` `/f` `/N` desugarings) over a stored fn-ref read via dot-access
 // (`m.a` where `m = {a:add/r}`) sees a dynamic(Any) carrier — getNodeReturns
