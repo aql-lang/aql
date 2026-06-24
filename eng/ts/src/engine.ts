@@ -274,6 +274,16 @@ export class Engine {
       )
     }
 
+    // Defer FIRST (in both modes): a forward arg that is still a function
+    // Word must be dispatched before this word fires, so its result — not the
+    // raw word — fills the slot. Doing this before the check-mode short-circuit
+    // lets `typeof fnsig […]` / nested `typeof` record their operand's
+    // provenance (the marker fires via fireMarker, which records in check mode).
+    if (this.shouldDeferDispatch(result.args, result.forwardCount, result.sig)) {
+      this.beginForward(name, result, fn)
+      return
+    }
+
     // Check mode: short-circuit the handler. A matched signature whose
     // handler must still run in check mode (def/fn/type/… — its side
     // effects feed later analysis) falls through to normal dispatch.
@@ -308,18 +318,6 @@ export class Engine {
       // stepLiteral — otherwise a deferred word (def whose value is a forward
       // sub-expression, `def n make Integer 42`) never receives it.
       this.pointer = replaceFrom
-      return
-    }
-
-    // If the match has unresolved forward args (or any forward arg
-    // that is still a Word that might be a function call), defer the
-    // dispatch by replacing the function word with a ForwardMarker.
-    // The engine then steps the original forward args; their values
-    // (or, for sub-call results) flow back into the marker via
-    // stepLiteral until the marker fires. Mirrors insertForward in
-    // aqleng/go/engine.go.
-    if (this.shouldDeferDispatch(result.args, result.forwardCount, result.sig)) {
-      this.beginForward(name, result, fn)
       return
     }
 
@@ -958,6 +956,26 @@ export class Engine {
   /** Run the marker's handler with `args` and replace it with the result. */
   private fireMarker(fwdIdx: number, m: ForwardMarker, args: Value[]): void {
     this.autoEvalArgs(args, m.sig)
+    // Check mode: a DEFERRED dispatch must record like the immediate
+    // short-circuit (carrierResults + recordCall/recordFallback) — else a
+    // forward-deferred word (typeof fnsig […], nested typeof) produces a
+    // result with no provenance and the program refuses.
+    if (this.registry.check.isActive() && !m.sig.runInCheckMode) {
+      const out = carrierResults(this.registry, m.funcName, m.sig, args)
+      const emit = this.registry.check.emit
+      if (emit !== undefined && !m.sig.recordsOwnEvent) {
+        if (m.sig.compileFallback) {
+          if (!emit.recordFallback(m.funcName, args, out, this.registry)) {
+            emit.markUncompilable(`${m.funcName}: fallback island not recordable`)
+          }
+        } else {
+          emit.recordCall(m.funcName, m.sig, args, out)
+        }
+      }
+      this.stack.splice(fwdIdx, 1, ...out)
+      this.pointer = fwdIdx
+      return
+    }
     const handlerResult = m.sig.handler(args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
       throw new AqlError(
