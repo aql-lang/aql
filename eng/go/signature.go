@@ -255,6 +255,21 @@ func sigTypeMatches(v Value, t *Type) bool {
 	// operand copy so the bound flows through `tand` as an ordinary
 	// carrier.
 	if v.Dynamic {
+		// A bound that conforms to the slot (X ⊑ t — the value IS a t), or a
+		// slot that conforms to the bound (t ⊑ X — the value MIGHT be a t, the
+		// gradual optimism), matches. This direct conformance check is needed
+		// because the `tand` disjointness probe below wrongly reports two
+		// container-family carriers as disjoint when one conforms to the other
+		// (tand(List, Node) = Never even though List ⊑ Node) — so a value pulled
+		// from a fn whose declared return narrowed to a dynamic List/Map carrier
+		// failed to match a Node-typed `get`/`set` receiver (the trie walkers'
+		// `(nd kid-items)`/`build-row`-result → `get` cascade). The tand probe
+		// still handles the cross-family disjoint cases (dynamic(Integer) vs
+		// String). Looser, never tighter — a guard discharges the modality back
+		// to strict downstream.
+		if v.Parent != nil && t != nil && (v.Parent.ConformsTo(t) || t.ConformsTo(v.Parent)) {
+			return true
+		}
 		bound := v
 		bound.Dynamic = false
 		return !isNeverShape(TandValues(bound, NewCarrier(t)))
@@ -302,6 +317,17 @@ func sigTypeMatches(v Value, t *Type) bool {
 		if v.Parent.ConformsTo(TMap) && IsConcrete(v) {
 			return true
 		}
+	}
+	// An Options / Record value matches a Map- or Node-family slot. These
+	// structural keyword/field-map types are lattice-rooted under Ideal (not
+	// Map), so an `opts:Options` or record carrier does NOT ConformsTo Node —
+	// yet its VALUE is a map, so get/set/size over such a receiver must match
+	// the Map/Node slot (the bloom `opts "n" get` / decision record reads).
+	// Runtime already dispatches these (the value's payload Parent is TMap);
+	// this aligns the check-mode carrier with that.
+	if t != nil && TMap.ConformsTo(t) && v.Parent != nil &&
+		(v.Parent.ConformsTo(TOptions) || v.Parent.ConformsTo(TRecord)) {
+		return true
 	}
 	return false
 }

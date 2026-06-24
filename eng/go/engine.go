@@ -1899,6 +1899,8 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		v.Pos = val.Pos
 		e.tape.Set(e.pointer, v)
+		// (The use is recorded inside ResolveRef, covering this `/r` path, the
+		// `ref` word, and export-map reference values alike.)
 		// `/r` resolves the name to its bound value and ADVANCES the
 		// pointer, exactly like pushing a literal — it does NOT dispatch a
 		// resolved function (that is what a bare word does). The value

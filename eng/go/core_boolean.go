@@ -47,13 +47,25 @@ func TorHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 	return []Value{NewDisjunct(simplified)}, nil
 }
 
-// TorReturnsFn is the carrier-mode counterpart: joins the two input
-// carriers into one carrier whose type is their disjunct.
+// TorReturnsFn is the carrier-mode counterpart. `tor` is a type UNION, so the
+// check-mode result must mirror TorHandler's disjunct construction
+// (flatten / simplify / NewDisjunct via unionType), NOT a branch-merge
+// JoinCarriers — the latter applies subsumption / sibling-collapse / width-cap
+// and mishandles a nil-Parent None type literal (the union arm of
+// `String tor None`), producing a zero Value that halts the check-mode tape
+// (`def Maybe (String tor None) … tcmp …`, compare.tsv). Mirroring the handler
+// also keeps `(A tor B)` usable as a `def` type body in check mode exactly as
+// it is at run time.
 func TorReturnsFn(args []Value, _ *Registry) []Value {
 	if len(args) != 2 {
 		return []Value{NewCarrier(TAny)}
 	}
-	return []Value{JoinCarriers(args[1], args[0])}
+	if IsNegation(args[0]) && IsNegation(args[1]) {
+		a0, _ := AsNegation(args[0])
+		a1, _ := AsNegation(args[1])
+		return []Value{NegateType(TandValues(a1.Inner, a0.Inner))}
+	}
+	return []Value{unionType(args[1], args[0])}
 }
 
 // unionType builds the simplified disjunction of two type values

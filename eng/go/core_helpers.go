@@ -268,6 +268,70 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 //
 // Extracted verbatim from InstallFnDef so the same return-inference can
 // be shared with the Function-value dispatch path.
+// narrowArgsToParams returns args with each gradual (dynamic) arg whose bound
+// is strictly BROADER than its declared param type narrowed to a dynamic
+// carrier of that param type. The arg already passed the param match at the
+// call site (a disjoint arg never reaches body analysis), so narrowing its
+// gradual bound to the declared contract is sound and stays optimistic — it
+// just ensures a body word sees the param's declared shape. Without it, a
+// recursive call threading a `get`-result `dynamic(Any)` into a `ch:List` param
+// makes the body's `each` match the map-each overload (→ Map) instead of
+// list-each (→ List), so a downstream `all`/`any`/`[List]` consumer then fails
+// no_signature against the spurious Map (the decision `eval-pred-all` cycle).
+// A concrete arg, an arg already conforming to the param, or an Any/untyped
+// param is left untouched (no precision lost).
+func narrowArgsToParams(args []Value, params []FnParam) []Value {
+	var out []Value
+	for i := range args {
+		if i >= len(params) {
+			break
+		}
+		a := args[i]
+		pt := params[i].Type
+		switch {
+		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
+			!a.Parent.ConformsTo(pt):
+			// A gradual arg whose bound is NOT already within the declared
+			// (concrete) param type: re-bind the body's view of the param to a
+			// dynamic carrier of the DECLARED type. The annotation is the
+			// authoritative contract for body analysis — the body is written
+			// assuming the param's type, and a dynamic arg means "statically
+			// unknown, optimistically anything", so binding to dynamic(pt) keeps
+			// optimism while letting the body's typed operations match. Covers
+			// both a strictly-broader bound (`Any` → `String`) and a disjoint /
+			// sibling bound (radix's edge splitter feeds a `slice`/`add` result
+			// of unknown shape — a dynamic `List` — into `set-edge`'s
+			// `newlabel:String`; without this the body's `newlabel slice 0 1`
+			// stayed `List` and failed `set`'s String-key Map overload).
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			nc := NewCarrier(pt)
+			nc.Dynamic = true
+			out[i] = nc
+		case !a.Dynamic && pt != nil && pt.Equal(TAny) && a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a):
+			// A STRICT Any arg bound to a declared-`Any` param. The param is
+			// gradual by declaration (ParamInputCarrier gives dynamic Any), so a
+			// body word over it must match optimistically — a strict Any conforms
+			// to no concrete slot and would cascade no_signature. The case arises
+			// when a fold accumulator that started `none` and was rebuilt into a
+			// node is threaded into a `nd:Any` insert receiver (tst/radix's
+			// `none entries [(acc … tst-insert)] fold`). Only a bare strict-Any
+			// VALUE is lifted (not a typed/structural carrier).
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			nc := NewCarrier(TAny)
+			nc.Dynamic = true
+			out[i] = nc
+		}
+	}
+	if out == nil {
+		return args
+	}
+	return out
+}
+
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -397,6 +461,18 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// key, so the generalised analysis is the one that caches.
 			genArgs := make([]Value, len(args))
 			for i, a := range args {
+				if a.Parent == nil {
+					// A root-node carrier (None / Any / Never) has a nil Parent
+					// because it IS its own lattice node — it is already an
+					// abstract, constant-free generalisation, so keep it (with the
+					// Carrier flag set) rather than calling NewCarrier(nil), which
+					// would propagate a nil-typed value into the body analysis.
+					g := a
+					g.Carrier = true
+					g.Data = nil
+					genArgs[i] = g
+					continue
+				}
 				genArgs[i] = NewCarrier(a.Parent)
 			}
 			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, args, capturesCopy, bodyCopy)
@@ -428,7 +504,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				finishFn(stkGen)
 			}
 		}
-		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
+		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, narrowArgsToParams(args, sigParams), capturesCopy, declaredReturns)
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
 		}

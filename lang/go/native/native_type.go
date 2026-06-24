@@ -150,7 +150,8 @@ var typeNatives = []NativeFunc{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler:    enumHandler,
-			Returns:    []*Type{TEnum}, BarrierPos: -1,
+			Returns:    []*Type{TEnum},
+			ReturnsFn:  enumReturns, BarrierPos: -1,
 		}},
 	},
 	{
@@ -158,9 +159,10 @@ var typeNatives = []NativeFunc{
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{{
-			Args:    []*Type{TAny},
-			Handler: typeofHandler,
-			Returns: []*Type{TType}, BarrierPos: -1,
+			Args:      []*Type{TAny},
+			Handler:   typeofHandler,
+			Returns:   []*Type{TType},
+			ReturnsFn: typeofReturns, BarrierPos: -1,
 			CompileEffect: CompileReadsFn, // reads a fn value's type, never invokes it
 		}},
 	},
@@ -503,6 +505,22 @@ func installIdeals(r *Registry) {
 // blue]` doesn't require quoting. When the list carries a child-type
 // constraint (`[ :T a b c]`), each element is validated against T
 // before being added.
+// enumReturns runs the (pure) enumHandler in check mode when the element list
+// is concrete, so `enum [red green blue]` produces the real Enum VALUE
+// (carrying its DisjunctInfo alternatives) rather than a bare TEnum carrier.
+// Without the alternatives the result fails IsTypeBody, so `def Color enum […]`
+// was wrongly rejected ("body must be a type value or literal, got Enum") and
+// `tcmp` / `is` over the enum lost its members (compare.tsv). A non-concrete
+// element list falls back to the bare TEnum carrier.
+func enumReturns(args []Value, _ *Registry) []Value {
+	if len(args) == 1 && IsConcrete(args[0]) {
+		if out, err := enumHandler(args, nil, nil, nil); err == nil {
+			return out
+		}
+	}
+	return []Value{NewCarrier(TEnum)}
+}
+
 func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	list := args[0]
 	if !IsConcrete(list) {
@@ -535,6 +553,30 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 }
 
 // ---- typeof ----
+
+// typeofReturns returns the PRECISE type of a CONCRETE argument as a type
+// literal in check mode, so `def T (typeof v)` gets a valid type body and
+// `is` / `tcmp` over it are precise — `typeof (const 1)` is the singleton type
+// (its only member is 1), not the bare `Type` carrier the def-type validator
+// rejects ("body must be a type value or literal, got Type"; class.tsv). A
+// NON-concrete (carrier) argument keeps the bare Type carrier: its runtime
+// value's exact type is statically unknown, and TypeOf of a carrier yields only
+// the carrier's static Parent — no more useful than Type to the consumers that
+// matter, and gating to concrete keeps the blast radius off every runtime
+// `typeof`.
+func typeofReturns(args []Value, r *Registry) []Value {
+	// PURE-CHECK ONLY (diagnostics, not a real compile). Under a REAL compile
+	// (CompileCheck), folding `typeof <concrete>` to its precise type literal
+	// changes lowering — it makes an interpolation hole `${42 typeof}`
+	// const-foldable (it must stay an INTERP op) and can register a type-named
+	// literal that collides at a later `def` — so the compile path keeps the
+	// bare Type carrier. In pure check the refinement is what lets
+	// `def One (typeof (const 1))` get a valid singleton type body.
+	if r != nil && !r.Check.Compiling && len(args) == 1 && IsConcrete(args[0]) {
+		return []Value{TypeOf(args[0])}
+	}
+	return []Value{NewCarrier(TType)}
+}
 
 func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	// Delegate to the canonical aqleng implementation, which returns

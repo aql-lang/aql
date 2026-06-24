@@ -38,6 +38,7 @@ def Small (Integer lt 10) end 5 is Small	true	structure
 def Small (Integer lt 10) end 50 is Small	false	structure
 def addxy ([x:Integer y:Integer] => [x add y]) end addxy 4 5	9	structure
 def apply2 fn [[x:Integer] [Integer] [x (y:Integer => [y mul 2])]] end apply2 21	42	structure
+def classify fn [[n:Integer] [String] [if (n gt 0) ["+"] [if (n lt 0) ["-"] [raise bad_input "z"]]]] end (classify 7) (classify -3) add	'+-'	structure
 def dbl word [dup add] end 5 dbl	10	structure
 def describe-n fn [[n:Integer] [String] [`${n} squared is ${n mul n}`]] end describe-n 4	'4 squared is 16'	structure
 def double fn [[x:Integer] [Integer] [x mul 2]] end double 21	42	structure

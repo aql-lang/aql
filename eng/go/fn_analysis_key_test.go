@@ -83,3 +83,35 @@ func TestNewRegistryScopeIDsDistinct(t *testing.T) {
 		t.Fatalf("nil registry scope id must be 0, got %d", rnil.AnalysisScopeID())
 	}
 }
+
+// A root-node carrier (None / Any / Never) has a nil Parent because it IS its
+// own lattice node. FnAnalysisKey and the captures loop dereferenced the arg's
+// Parent unguarded, so a `none` fold-seed promoted to a dynamic carrier (tst's
+// `none entries [… tst-insert] fold`) panicked the whole check pass. Assert the
+// key builds without panicking and still discriminates the None arg.
+func TestFnAnalysisKeyNilParentArg(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("FnAnalysisKey panicked on a nil-Parent (None root) arg: %v", r)
+		}
+	}()
+	noneArm := NewDynamicCarrierValue(NewTypeLiteral(TNone)) // Parent == nil
+	if noneArm.Parent != nil {
+		t.Fatalf("test fixture invalid: expected a nil-Parent None carrier, got Parent=%v", noneArm.Parent)
+	}
+	args := []Value{noneArm, NewCarrier(TMap)}
+	caps := []CapturedBinding{{Name: "seed", Value: noneArm}}
+	body := []Value{NewWord("build")}
+
+	kNone := FnAnalysisKey(1, "ins", args, caps, body)
+	if kNone == "" {
+		t.Fatalf("FnAnalysisKey returned an empty key")
+	}
+	// The None arg must still discriminate: a Map-typed first arg yields a
+	// different key, proving the nil-Parent fallback names the type (not a
+	// blanket constant).
+	kMap := FnAnalysisKey(1, "ins", []Value{NewCarrier(TMap), NewCarrier(TMap)}, nil, body)
+	if kNone == kMap {
+		t.Fatalf("nil-Parent None arg must key distinctly from a Map arg; both %q", kNone)
+	}
+}
