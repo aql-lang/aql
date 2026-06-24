@@ -736,7 +736,13 @@ function registerSpecWords(r: Registry): void {
             const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
             const top = name === '' ? undefined : registry.topOfDefStack(name)
             if (name === '') {
-              emit.markUncompilable('inspect: non-name operand')
+              // The operand is a computed VALUE (e.g. `inspect (quote red)`),
+              // not a name. Thread it into an inspect island that re-runs the
+              // identical dispatch on the runtime value — matches by
+              // construction. Refuses if the operand has no provenance.
+              if (!emit.recordFallback('inspect', [a], [out], registry)) {
+                emit.markUncompilable('inspect: non-name operand of unknown provenance')
+              }
             } else if (top === undefined) {
               // Registered word or unknown name: registry-stable, island it.
               emit.recordTokenIsland([newWord('inspect'), newWord(name)], out, 'inspect')
