@@ -36,6 +36,7 @@ import {
   newDynamicCarrier,
   newForwardMarker,
   newInteger,
+  newInterpString,
   newList,
   newMap,
   newNone,
@@ -1083,12 +1084,17 @@ export class Engine {
     // one capturing a binding refuses (the binding isn't live in the island).
     const emit = this.registry.check.emit
     if (emit !== undefined && segs.some((s) => !('lit' in s))) {
-      if (this.interpCaptureFree(segs)) {
+      // Substitute each const-bound capture inline (def x 5 -> the 5), keep
+      // natives/keywords as-is, then island the SELF-CONTAINED result so it
+      // re-runs faithfully. A computed (non-const) capture can't be baked in,
+      // so it refuses.
+      const subbed = this.substituteInterp(segs)
+      if (subbed !== null) {
         const out = newCarrier(TString)
-        emit.recordValueIsland(v, out, 'interp')
+        emit.recordValueIsland(newInterpString(subbed), out, 'interp')
         return out
       }
-      emit.markUncompilable('interpolated string captures a binding')
+      emit.markUncompilable('interpolated string: unsubstitutable capture')
     }
     let out = ''
     for (const seg of segs) {
@@ -1103,33 +1109,55 @@ export class Engine {
   }
 
   /**
-   * Report whether an interpolated string's expression segments reference no
-   * currently-bound name (so the whole template re-runs correctly as an
-   * island). A bare word resolving to a def-stack binding is a capture; a
-   * registered native is not.
+   * Rewrite an interpolated string's expression segments so it is
+   * self-contained: a const-bound capture (def x 5 → `${x}`) is replaced by
+   * its concrete value; a native/keyword reference is kept (it re-dispatches
+   * fine in the island). Returns null if a captured binding is a computed
+   * (non-const) value that can't be baked in — the caller then refuses.
    */
-  private interpCaptureFree(segs: readonly import('./value.ts').InterpSegment[]): boolean {
-    const walk = (toks: readonly unknown[]): boolean => {
-      for (const t of toks) {
-        if (!(t instanceof Value)) continue // non-Value payload (e.g. xml/segment data)
-        if (t.isWord()) {
-          if (this.registry.topOfDefStack(t.asWord().name) !== undefined) return false
-        } else if (t.isInterpString()) {
-          // A NESTED template: walk its own expression segments (its data is
-          // segments, not a Value[], so the generic array branch would miss them).
-          for (const s of t.asInterpSegments()) if (!('lit' in s) && !walk(s.expr)) return false
-        } else if (t.isXmlInterp()) {
-          return false // nested xml template: conservatively not islandable
-        } else if (Array.isArray(t.data)) {
-          if (!walk(t.data)) return false
-        }
+  private substituteInterp(
+    segs: readonly import('./value.ts').InterpSegment[],
+  ): import('./value.ts').InterpSegment[] | null {
+    const emit = this.registry.check.emit!
+    const subTok = (t: unknown): Value | null => {
+      if (!(t instanceof Value)) return null
+      if (t.isWord()) {
+        const top = this.registry.topOfDefStack(t.asWord().name)
+        if (top === undefined) return t // native / keyword — re-dispatches in the island
+        const op = emit.classify(top)
+        return op !== null && op.kind === 'const' ? op.value : null // const-bound → bake; else refuse
       }
-      return true
+      if (t.isInterpString()) {
+        const sub = this.substituteInterp(t.asInterpSegments())
+        return sub === null ? null : newInterpString(sub)
+      }
+      if (t.isXmlInterp()) return null // nested xml not islanded here
+      if (Array.isArray(t.data)) {
+        const elems: Value[] = []
+        for (const e of t.data as unknown[]) {
+          const s = subTok(e)
+          if (s === null) return null
+          elems.push(s)
+        }
+        return new Value(t.vType, elems, { eval: t.eval, quoted: t.quoted })
+      }
+      return t
     }
+    const out: import('./value.ts').InterpSegment[] = []
     for (const s of segs) {
-      if (!('lit' in s) && !walk(s.expr)) return false
+      if ('lit' in s) {
+        out.push(s)
+        continue
+      }
+      const expr: Value[] = []
+      for (const t of s.expr) {
+        const st = subTok(t)
+        if (st === null) return null
+        expr.push(st)
+      }
+      out.push({ expr })
     }
-    return true
+    return out
   }
 
   /**
