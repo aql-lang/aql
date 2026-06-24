@@ -1497,6 +1497,16 @@ func foldAccCarrier(init Value) Value {
 	default:
 		out = NewCarrier(init.Parent)
 	}
+	// A gradual (dynamic) seed yields a gradual accumulator: a seed of
+	// statically-unknown type (`(do {…})`, a get-result threaded as the init)
+	// is "type unknown", so a body word over the accumulator must poly-match
+	// optimistically rather than fail no_signature against a strict Any. Without
+	// this, `(do {n:0}) … [acc … get] fold` typed the accumulator strict Any and
+	// every `acc … get`/`add` in the body errored (radix's common-prefix-len).
+	if init.Dynamic {
+		out.Carrier = true
+		out.Dynamic = true
+	}
 	return out
 }
 

@@ -279,10 +279,25 @@ Effect: **`tst.aql` 15→0**. **Five of the six client modules now check fully
 clean** (trie, tst, burst, bloom, decision); cumulative error-level across all
 six is now **≈177 → ≈11** (only `radix.aql` remains).
 
+### Fold accumulator inherits the seed's gradual modality (landed) — radix 11→4
+
+`foldAccCarrier` built the accumulator from the seed's TYPE but dropped the
+gradual flag: a `(do {…})` seed (whose result is dynamic Any) fell to the
+default `NewCarrier(Any)` — a STRICT Any accumulator — so every `acc … get`/
+`add` in the body errored. It now preserves the seed's dynamic modality (radix's
+`common-prefix-len`, seeded with `(do {n: …, ok: …})`). Pinned by
+`lang/go/fold_dynamic_seed_test.go`.
+
+Effect: **`radix.aql` 11→4**. Cumulative error-level across the six modules is
+now **≈177 → ≈4** (only radix's node splitter remains).
+
 ### What remains
 
-`radix.aql` (≈11) — the radix-specific node splitter (`set-edge`/`midkids`/
-`set` over a freshly-built edge map). A
+`radix.aql` (≈4) — a stack-desync cascade (the report's Issue 5) in the
+`radix-insert` edge-splitter's def-chain (`set` over `{}` / `set-edge` get
+mis-collected operands once an upstream dispatch in the same straight line
+recovers). This is the one residue that is a check-mode operand-collection
+desync rather than a modality/match gap. A
 sound `set`-over-dynamic arity under a REAL compile (residual #2 above) is the
 other open precision item. These touch the checker's gradual-modality
 propagation and move the pinned `pinnedAnyFrontierRows` /
