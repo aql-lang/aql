@@ -229,9 +229,24 @@ Effect: **`trie.aql` 9→0**, `radix.aql` 23→20, `tst.aql` 36→26, `burst.aql
 4→2. The cumulative client error-level reduction across the six modules is now
 **≈177 → ≈60**.
 
+### Options / Record value vs a Map/Node slot (landed) — `bloom.aql` 10→1
+
+`Options` and `Record` are structural keyword/field-map types but are lattice-
+rooted under `Ideal`, so an `opts:Options` carrier does **not** `ConformsTo`
+`Node` — `get`/`size` over it (whose List/Map access uses the `Node` receiver)
+failed `no_signature` even though the value is a map and the suite runs. `bloom`'s
+`opts "n" get` / `opts "p" get` were the case (and the `convert`/`mul`/`div`/
+`log` chain that consumed those results cascaded from it). `sigTypeMatches` now
+matches an Options/Record-conforming value against any Map/Node-family slot,
+aligning the check-mode carrier with the runtime value (whose payload Parent is
+`TMap`). Pinned by `lang/go/dynamic_container_get_test.go`.
+
+Effect: **`bloom.aql` 10→1**.
+
 ### What remains
 
-`radix.aql`/`tst.aql` (≈46 combined), `bloom.aml` (10), `decision.aql` (2). A
+`radix.aql` (≈20), `tst.aql` (≈26), `bloom.aql` (1), `decision.aql` (2,
+`all`/`any` over a forward-referenced `each`-of-user-fn result). A
 sound `set`-over-dynamic arity under a REAL compile (residual #2 above) is the
 other open precision item. These touch the checker's gradual-modality
 propagation and move the pinned `pinnedAnyFrontierRows` /

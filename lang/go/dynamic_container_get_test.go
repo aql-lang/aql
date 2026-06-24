@@ -45,3 +45,30 @@ func TestDynamicContainerGetChecksClean(t *testing.T) {
 		t.Errorf("get over a concrete Integer must still be flagged")
 	}
 }
+
+// An Options / Record value is a structural keyword/field map but is lattice-
+// rooted under Ideal, so it does not ConformsTo Node — yet get/size over an
+// `opts:Options` receiver (whose value IS a map) must resolve. This is the
+// bloom client's `opts "n" get` / `opts "p" get` shape, which used to report
+// no_signature for get even though the suite runs.
+func TestOptionsReceiverChecksClean(t *testing.T) {
+	errs := func(src string) int {
+		a, _ := lang.New()
+		cr, _ := a.Check(src)
+		n := 0
+		for _, d := range cr.Diagnostics {
+			if d.Severity == "error" {
+				n++
+			}
+		}
+		return n
+	}
+	for _, src := range []string{
+		`def f fn [[o:Options] [Any] [o "n" get]] end`,
+		`def f fn [[o:Options] [Integer] [o size]] end`,
+	} {
+		if n := errs(src); n != 0 {
+			t.Errorf("expected 0 errors, got %d for: %s", n, src)
+		}
+	}
+}

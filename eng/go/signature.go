@@ -318,6 +318,17 @@ func sigTypeMatches(v Value, t *Type) bool {
 			return true
 		}
 	}
+	// An Options / Record value matches a Map- or Node-family slot. These
+	// structural keyword/field-map types are lattice-rooted under Ideal (not
+	// Map), so an `opts:Options` or record carrier does NOT ConformsTo Node —
+	// yet its VALUE is a map, so get/set/size over such a receiver must match
+	// the Map/Node slot (the bloom `opts "n" get` / decision record reads).
+	// Runtime already dispatches these (the value's payload Parent is TMap);
+	// this aligns the check-mode carrier with that.
+	if t != nil && TMap.ConformsTo(t) && v.Parent != nil &&
+		(v.Parent.ConformsTo(TOptions) || v.Parent.ConformsTo(TRecord)) {
+		return true
+	}
 	return false
 }
 
