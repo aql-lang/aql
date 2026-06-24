@@ -12,6 +12,7 @@
 import {
   CodeBuilder,
   OpCallNative,
+  OpCallNativePoly,
   OpFallback,
   OpForNext,
   OpForSetup,
@@ -24,6 +25,7 @@ import {
   OpStoreLocal,
   OpTrap,
   type FallbackSpan,
+  type PolyRef,
   type Program,
   type SigRef,
   type TrapSpec,
@@ -66,8 +68,10 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
   const makeMaps: string[][] = []
   const traps: TrapSpec[] = []
   const fallbacks: FallbackSpan[] = []
+  const polyRefs: PolyRef[] = []
   const constIdx = (v: Value): number => consts.push(v) - 1
   const sigIdx = (word: string, sig: SigRef['sig']): number => sigs.push({ word, sig }) - 1
+  const polyIdx = (word: string, arity: number): number => polyRefs.push({ word, arity }) - 1
   const makeMapIdx = (keys: readonly string[]): number => makeMaps.push([...keys]) - 1
   const trapIdx = (ev: TrapEvent): number =>
     traps.push({ code: ev.code, detail: ev.detail, word: ev.word }) - 1
@@ -98,7 +102,8 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
         const n = ev.args.length
         // Push args in REVERSE sig order so sig[0] lands on top.
         for (let j = n - 1; j >= 0; j--) pushOperand(ev.args[j]!)
-        code.emit(OpCallNative, sigIdx(ev.word, ev.sig))
+        if (ev.poly) code.emit(OpCallNativePoly, polyIdx(ev.word, n))
+        else code.emit(OpCallNative, sigIdx(ev.word, ev.sig!))
         sp = sp - n + 1 // pop n args, push 1 result
         note()
         code.emit(OpStoreLocal, ev.slot)
@@ -207,6 +212,17 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
 
   const { ops, args } = code.freeze()
   return {
-    program: { ops, args, consts, sigs, makeMaps, traps, fallbacks, maxStack, numLocals: emit.slotCount() },
+    program: {
+      ops,
+      args,
+      consts,
+      sigs,
+      makeMaps,
+      traps,
+      fallbacks,
+      polyRefs,
+      maxStack,
+      numLocals: emit.slotCount(),
+    },
   }
 }

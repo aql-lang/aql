@@ -67,6 +67,34 @@ export interface MatchResult {
   prefixCount: number
 }
 
+/**
+ * Match N already-evaluated operands against a word's signatures, the
+ * runtime poly path (OpCallNativePoly). `window[i]` is sig position i —
+ * the operand-stack convention where the top of stack is position 0. This
+ * is the all-stack case of `tryMatch` (no forward tokens), iterating the
+ * entry's signatures in the same specificity order as dispatch so poly
+ * takes the IDENTICAL first-match the interpreter would. Mirrors
+ * eng/go/vm.go::callPoly + MatchSignature.
+ */
+export function matchValues(fn: FunctionEntry, window: readonly Value[]): MatchResult | null {
+  for (const sig of fn.signatures) {
+    const n = sig.args.length
+    if (n !== window.length) continue
+    let ok = true
+    for (let i = 0; i < n; i++) {
+      if (!argMatches(sig, i, window[i]!, sig.args[i]!)) {
+        ok = false
+        break
+      }
+    }
+    if (!ok) continue
+    const args = [...window]
+    if (!patternsOk(sig, args, 0)) continue // all-stack: forwardCount 0
+    return { sig, args, forwardCount: 0, prefixCount: n }
+  }
+  return null
+}
+
 export function matchEntry(
   fn: FunctionEntry,
   stack: readonly Value[],

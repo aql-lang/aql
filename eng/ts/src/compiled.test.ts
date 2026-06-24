@@ -353,6 +353,32 @@ function registerFixtures(r: Registry): void {
       },
     ],
   })
+  // dynq: identity that is DYNAMIC in check mode — its returnsFn hands back a
+  // dynamic Any carrier (the checker can't know the type), but at run time it
+  // returns its concrete arg. A dynamic result makes the consumer a poly site.
+  reg({
+    name: 'dynq',
+    forwardPrecedence: true,
+    signatures: [
+      {
+        args: [TAny],
+        returns: [TAny],
+        returnsFn: () => [newDynamicCarrier(TAny)],
+        handler: (args) => [args[0]!],
+      },
+    ],
+  })
+  // polyq: two overloads selected by operand type. With a dynamic operand the
+  // checker can't commit, so the call records poly and the VM re-matches at
+  // run time — Integer -> 'int', String -> 'str'.
+  reg({
+    name: 'polyq',
+    forwardPrecedence: true,
+    signatures: [
+      { args: [TInteger], handler: () => [newString('int')], returns: [TString] },
+      { args: [TString], handler: () => [newString('str')], returns: [TString] },
+    ],
+  })
 }
 
 // Minimal tokenizer: words, ints, floats, single/double strings, lists,
@@ -516,6 +542,10 @@ const COMPILED: Array<[string, true]> = [
   ['tripleq (addq 1 2)', true], // compiled result threaded into an island (nIn=1)
   ['addq (tripleq 2) (tripleq 3)', true], // two islands feeding one compiled call
   ['def t (tripleq 4) addq t t', true], // island result bound + multiref
+  ['polyq (dynq 5)', true], // dynamic operand -> poly; Integer overload at run time
+  ["polyq (dynq 'x')", true], // poly selects the String overload at run time
+  ['addq (dynq 1) 2', true], // poly chains: dynq poly, addq poly
+  ['dynq 7', true], // bare dynamic result -> poly
 ]
 
 const FALLBACK: string[] = [
@@ -664,6 +694,23 @@ describe('compiled (stage 1)', () => {
         '005  FALLBACK 0 (tripleq nIn=1)', // island pops it, pushes its result
         '006  STORE_LOCAL 1',
         '007  PUSH_LOCAL 1', // residual
+      ].join('\n'),
+    )
+  })
+
+  it('disassembles a dynamic-operand chain to CALL_POLY', () => {
+    const result = compile(freshRegistry(), tokenize('polyq (dynq 5)'))
+    assert.ok('program' in result, 'expected a compiled program')
+    assert.equal(
+      disassemble(result.program),
+      [
+        '000  PUSH_CONST 0', // dynq arg: 5
+        '001  CALL_POLY 0 (dynq/1)', // dynq result is dynamic -> poly
+        '002  STORE_LOCAL 0',
+        '003  PUSH_LOCAL 0', // polyq arg: dynq result
+        '004  CALL_POLY 1 (polyq/1)', // dynamic operand -> poly
+        '005  STORE_LOCAL 1',
+        '006  PUSH_LOCAL 1', // residual
       ].join('\n'),
     )
   })

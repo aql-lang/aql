@@ -16,6 +16,7 @@
 //     class), so the stack is a monomorphic packed array.
 import {
   OpCallNative,
+  OpCallNativePoly,
   OpFallback,
   OpForNext,
   OpForSetup,
@@ -32,6 +33,7 @@ import {
 import { coerceBoolean } from './coretype.ts'
 import { Engine } from './engine.ts'
 import { AqlError } from './error.ts'
+import { matchValues } from './match.ts'
 import type { Registry } from './registry.ts'
 import { newInteger, newList, newMap, OrderedMap, Value } from './value.ts'
 
@@ -56,6 +58,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
   const sigs = p.sigs
   const traps = p.traps
   const fallbacks = p.fallbacks
+  const polyRefs = p.polyRefs
   const n = ops.length
 
   const stack: Value[] = new Array<Value>(Math.max(p.maxStack, 1))
@@ -144,6 +147,39 @@ export function runProgram(p: Program, registry: Registry): Value[] {
           // can't be faithfully run off-tape — refuse to the caller.
           if (v.isWord() || v.isForward() || v.isMark() || v.isMove()) {
             throw new AqlError('internal_error', `${sr.word}: tape-coupled handler result`, sr.word)
+          }
+          stack[sp++] = v
+        }
+        break
+      }
+      case OpCallNativePoly: {
+        // Runtime dispatch: re-match the word's signatures against the
+        // concrete operands (the same first-match the interpreter takes),
+        // where a dynamic operand kept the checker from baking one overload.
+        const pr = polyRefs[arg]!
+        const a = pr.arity
+        let win = scratch[a]
+        if (win === undefined) {
+          win = new Array<Value>(a)
+          scratch[a] = win
+        }
+        // sig position 0 is the top of stack: window[i] = stack[sp-1-i].
+        for (let i = 0; i < a; i++) win[i] = stack[sp - 1 - i]!
+        const fn = registry.lookup(pr.word)
+        const mr = fn ? matchValues(fn, win) : null
+        if (mr === null) {
+          throw new AqlError('signature_error', `no matching signature for ${pr.word}`, pr.word)
+        }
+        sp -= a
+        const out = mr.sig.handler(mr.args, null, [], registry)
+        if (out instanceof Promise) {
+          throw new AqlError('unsupported', `async handlers are not supported in the VM`, pr.word)
+        }
+        const results = out as Value[]
+        for (let i = 0; i < results.length; i++) {
+          const v = results[i]!
+          if (v.isWord() || v.isForward() || v.isMark() || v.isMove()) {
+            throw new AqlError('internal_error', `${pr.word}: tape-coupled handler result`, pr.word)
           }
           stack[sp++] = v
         }

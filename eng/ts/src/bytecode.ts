@@ -33,6 +33,7 @@ export const OpMakeList = 9 // pop `arg` values; push a list (deepest = element 
 export const OpMakeMap = 10 // pop makeMaps[arg].length values; push a map keyed by makeMaps[arg] (value for keys[0] deepest)
 export const OpTrap = 11 // raise the AqlError described by traps[arg] and abort (terminal)
 export const OpFallback = 12 // pop fallbacks[arg].nIn values, re-run the island tokens through a sub-engine, push results
+export const OpCallNativePoly = 13 // pop polyRefs[arg].arity values, re-match the word's sigs at run time, call the matched handler
 
 /** An opcode is one of the Op* constants above. */
 export type Op = number
@@ -41,6 +42,18 @@ export type Op = number
 export interface SigRef {
   word: string
   sig: Signature
+}
+
+/**
+ * One runtime-dispatched native call site: the word and the operand count
+ * the checker fixed. OpCallNativePoly re-runs the matcher over the word's
+ * signatures against that many stack values — the same first-match the
+ * interpreter takes — where a dynamic operand kept the checker from
+ * committing to one overload. Mirrors eng/go bytecode.go::PolyRef.
+ */
+export interface PolyRef {
+  word: string
+  arity: number
 }
 
 /**
@@ -89,6 +102,8 @@ export interface Program {
   readonly traps: readonly TrapSpec[]
   /** Fallback islands for OpFallback, indexed by a Fallback arg. */
   readonly fallbacks: readonly FallbackSpan[]
+  /** Poly call sites for OpCallNativePoly, indexed by a CallPoly arg. */
+  readonly polyRefs: readonly PolyRef[]
   /** Operand-stack high-water mark — the preallocated stack capacity. */
   readonly maxStack: number
   /** Frame-local slot count — the preallocated locals capacity. */
@@ -169,6 +184,11 @@ export function disassemble(p: Program): string {
       case OpFallback: {
         const fb = p.fallbacks[arg]
         text = `FALLBACK ${arg} (${fb?.desc ?? '?'} nIn=${fb?.nIn ?? 0})`
+        break
+      }
+      case OpCallNativePoly: {
+        const pr = p.polyRefs[arg]
+        text = `CALL_POLY ${arg} (${pr?.word ?? '?'}/${pr?.arity ?? 0})`
         break
       }
       default:

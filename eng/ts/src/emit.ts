@@ -47,17 +47,36 @@ function isInert(v: Value): boolean {
   return v.data !== null
 }
 
+/**
+ * polyEligible reports whether a signature can be re-matched at run time
+ * by OpCallNativePoly: a plain value-dispatched native — no quoted/raw-arg
+ * capture (quoteArgs) and no list-eval suppression (noEvalArgs), since the
+ * VM only has evaluated operands on the stack at the poly site. (runInCheckMode
+ * / recordsOwnEvent / compileFallback sigs never reach recordCall.) Mirrors
+ * the eligibility guards in eng/go/carrier.go::tryRecordPoly.
+ */
+function polyEligible(sig: Signature): boolean {
+  return !(sig.quoteArgs && sig.quoteArgs.size > 0) && !(sig.noEvalArgs && sig.noEvalArgs.size > 0)
+}
+
 /** How a recorded operand is produced. */
 export type Operand =
   | { readonly kind: 'const'; readonly value: Value }
   | { readonly kind: 'event'; readonly slot: number }
 
-/** A recorded native dispatch. `slot` is its global event/local index. */
+/**
+ * A recorded native dispatch. `slot` is its global event/local index. A
+ * MONO call bakes the checker-selected `sig` (lowers to OpCallNative); a
+ * POLY call (`poly: true`, no `sig`) left the overload open because a
+ * dynamic operand/result reached the site, and re-matches at run time
+ * (lowers to OpCallNativePoly).
+ */
 export interface CallEvent {
   readonly kind: 'call'
   readonly slot: number
   readonly word: string
-  readonly sig: Signature
+  readonly sig?: Signature
+  readonly poly?: true
   readonly args: readonly Operand[]
 }
 
@@ -222,27 +241,56 @@ export class EmitState {
       this.markUncompilable(`${word}: ${out.length}-result dispatch not compilable (stage 1)`)
       return
     }
-    if (args.some((a) => a.carrier && a.dynamic)) {
-      this.markUncompilable(`${word}: dynamic operand not compilable (stage 1)`)
+    // A dynamic operand or result means the checker could not commit to one
+    // overload. Rather than refuse, record a POLY call for an eligible
+    // builtin (the VM re-matches at run time); only refuse if that declines.
+    const dynamic = args.some((a) => a.carrier && a.dynamic) || out.some((o) => o.carrier && o.dynamic)
+    if (dynamic) {
+      if (polyEligible(sig) && this.recordPolyCall(word, args, out)) return
+      this.markUncompilable(`${word}: dynamic operand/result not compilable`)
       return
     }
-    if (out.some((o) => o.carrier && o.dynamic)) {
-      this.markUncompilable(`${word}: dynamic/unannotated result not compilable`)
-      return
-    }
+    const ops = this.resolveOperands(word, args)
+    if (ops === null) return
+    const slot = this.seq++
+    this.target().push({ kind: 'call', slot, word, sig, args: ops })
+    this.producedBy.set(out[0]!, slot)
+    this.siteCounts.mono++
+  }
+
+  /** Classify each arg to an operand, latching uncompilable on a miss. */
+  private resolveOperands(word: string, args: readonly Value[]): Operand[] | null {
     const ops: Operand[] = []
     for (const a of args) {
       const o = this.classify(a)
       if (o === null) {
         this.markUncompilable(`${word}: operand of unknown provenance`)
-        return
+        return null
       }
       ops.push(o)
     }
+    return ops
+  }
+
+  /**
+   * Record a poly call: the word + its resolved operands, with no baked
+   * signature (the VM re-matches the word's overloads against the concrete
+   * operands at run time). Returns false (caller lets the refusal stand)
+   * when an operand's provenance is unknown. Mirrors
+   * eng/go/emit.go::RecordPolyCall.
+   */
+  recordPolyCall(word: string, args: readonly Value[], out: readonly Value[]): boolean {
+    const ops: Operand[] = []
+    for (const a of args) {
+      const o = this.classify(a)
+      if (o === null) return false
+      ops.push(o)
+    }
     const slot = this.seq++
-    this.target().push({ kind: 'call', slot, word, sig, args: ops })
+    this.target().push({ kind: 'call', slot, word, poly: true, args: ops })
     this.producedBy.set(out[0]!, slot)
-    this.siteCounts.mono++
+    this.siteCounts.poly++
+    return true
   }
 
   /** Begin capturing dispatches into a fresh fragment buffer (a branch arm). */
