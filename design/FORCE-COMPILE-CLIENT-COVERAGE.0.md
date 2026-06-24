@@ -93,11 +93,22 @@ mutation-safety: it is a fresh per-run instance (like the existing top-level
 case), so it must stay out of `isInertConst`. Adds the most suites — it sits
 inside `unit_spec` bodies and the `each`/`fold` transforms.
 
-**Step 2 — L1b: `do {…}` concrete-Map output.** Make `do` over a map body model
-its output as the body's concrete Map type rather than a dynamic carrier, so the
-emit.go:2004 dynamic-output gate passes (the `dynOutNativeOK` exemption is the
-template). Unblocks `bloom_smoke`, `bloom_unit_spec`, `tst_unit_test`,
-`burst_unit_test` and the `do{}` leaves inside `test-test` bodies.
+**Step 2 — L1b: `do {…}` over a map body.** Two coupled problems, both real:
+(i) `do`'s Map sig declares `Returns: [TAny]` (native_control.go:30), so its
+compiled output is a dynamic-Any carrier (emit.go:2004); (ii) `doMapHandler`
+evaluates each value code-list in a **sub-engine** (`doEvalDataList`→`New(r)`).
+At interpreter runtime the sub-engine shares the registry, so a fn param (`bf`
+in `do {n:[bf.n]}`) is visible; in the compiled path that param is a **VM frame
+slot**, not a registry binding, so a const-bake-and-rerun would look `bf` up in
+`r.Defs`, miss it, and raise `undefined_word`. **That is why the current refusal
+is sound** — and why fixing (i) alone (a Map `ReturnsFn` returning the concrete
+Map type) is **not sufficient and would be unsound on its own**: each map-value
+quotation must be lowered as a **closure with capture** (the same machinery
+`each`/`fold` bodies already use), so frame locals resolve through the VM seam,
+*and then* the output typed as a concrete Map. Do not attempt the output-type
+tweak without the closure lowering. Unblocks `bloom_smoke`, `bloom_unit_spec`,
+`tst_unit_test`, `burst_unit_test` and the `do{}` leaves inside `test-test`
+bodies.
 
 **Step 3 — re-verify the code-body words.** With L1 closed, re-run the suites:
 `test-test` / `test-check-prop` / `each`-bodies that only refused because of an
