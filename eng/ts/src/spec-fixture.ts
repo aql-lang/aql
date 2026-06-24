@@ -53,6 +53,7 @@ import {
   newBoolean,
   newConstrainedWord,
   newDecimal,
+  newDynamicCarrier,
   newDisjunct,
   newEnum,
   newFnDef,
@@ -842,6 +843,10 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TList],
         noEvalArgs: new Set([0]),
+        // Build the fn value in check mode so def binds it and a later call
+        // inlines the body (dispatchFnDefCheck/analyseFnBody), exactly as the
+        // compiled-test fn fixture does.
+        runInCheckMode: true,
         handler: (args) => {
           const elems = args[0]!.asList()
           if (elems.length === 0 || elems.length % 3 !== 0) {
@@ -920,6 +925,15 @@ function registerSpecWords(r: Registry): void {
     signatures: [
       {
         args: [],
+        // `args` reads the current call's positional-arg frame — a
+        // context-dependent value the compiled stream does not maintain (an
+        // inlined fn body has no frame). Refuse to compile it so any program
+        // using it falls back to the interpreter. Mirrors Go marking args/__pa
+        // as a meta (uncompilable) site.
+        returnsFn: (_a, r) => {
+          r.check.emit?.markUncompilable('args: context-dependent word not compilable')
+          return [newDynamicCarrier(TList)]
+        },
         handler: (_args, _ctx, _stk, registry) => {
           const top = registry.topArgs()
           return [newList(top ? [...top] : [], { eval: false })]
