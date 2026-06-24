@@ -1455,10 +1455,16 @@ func foldAccumFixedPoint(r *Registry, body Value, initAcc Value, elem *Type) (Va
 	// wrongly fails no_signature. foldAccCarrier rebuilds the typed-list / map
 	// carrier from the seed's element type; a scalar seed is unchanged.
 	acc := foldAccCarrier(initAcc)
+	// Use NewElementCarrier (not NewCarrier) for the element: an UNTYPED element
+	// (Any, e.g. the elements of `convert List <Array>` or any untyped `[List]`)
+	// becomes a DYNAMIC carrier, so a body word over it (`add`, `BinUtil.popcount`)
+	// matches optimistically instead of failing no_signature against the bare Any
+	// root — exactly how each/filter and the CallableSpec.Inputs already shape it.
+	elemCarrier := NewElementCarrier(elem)
 	diagBase := len(r.Check.Diagnostics)
 	for round := 0; ; round++ {
 		r.Check.TruncateDiagnostics(diagBase)
-		stk := analyseHigherOrderBodyVals(r, body, acc, NewCarrier(elem))
+		stk := analyseHigherOrderBodyVals(r, body, acc, elemCarrier)
 		if len(stk) == 0 {
 			return Value{}, false
 		}
