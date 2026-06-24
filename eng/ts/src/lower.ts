@@ -104,10 +104,14 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
         for (let j = n - 1; j >= 0; j--) pushOperand(ev.args[j]!)
         if (ev.poly) code.emit(OpCallNativePoly, polyIdx(ev.word, n))
         else code.emit(OpCallNative, sigIdx(ev.word, ev.sig!))
-        sp = sp - n + 1 // pop n args, push 1 result
+        sp = sp - n + ev.nout // pop n args, push nout results
         note()
-        code.emit(OpStoreLocal, ev.slot)
-        sp-- // result moved into a local
+        // Results sit results[0]..results[nout-1] (top = last); store each to
+        // its own local (slot+i), top-first, so consumers re-push by slot.
+        for (let i = ev.nout - 1; i >= 0; i--) {
+          code.emit(OpStoreLocal, ev.slot + i)
+          sp--
+        }
         continue
       }
       if (ev.kind === 'loop') {

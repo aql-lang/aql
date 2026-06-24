@@ -120,8 +120,8 @@ function registerFixtures(r: Registry): void {
       { args: [TList], handler: (args) => [newInteger(BigInt(args[0]!.asList().length))], returns: [TInteger] },
     ],
   })
-  // dupq returns TWO results — exercises the "multi-result" refusal so
-  // the input falls back to the interpreter rather than compiling.
+  // dupq returns TWO results — exercises multi-result compilation (the
+  // call's two outputs occupy two consecutive frame slots).
   reg({
     name: 'dupq',
     forwardPrecedence: true,
@@ -576,10 +576,10 @@ const COMPILED: Array<[string, true]> = [
   ['dynq 7', true], // bare dynamic result -> poly
   ['applyq (fn [[n:Integer] [Integer] [addq n 1]]) 5', true], // capture-free closure islanded
   ['applyq (fn [[n:Integer] [Integer] [mulq n n]]) 4', true], // multi-word closure body
+  ['dupq 5', true], // multi-result call -> two outputs in two slots
 ]
 
 const FALLBACK: string[] = [
-  'dupq 5', // multi-result -> refused, falls back
   'if false [42]', // 2-arg if (no else) -> variadic, falls back
   'for 2 [dupq 1]', // loop body not single-result -> falls back
   'for 2 [i] addq 1 2', // loop not in trailing position -> falls back

@@ -108,7 +108,10 @@ export type Operand =
  */
 export interface CallEvent {
   readonly kind: 'call'
+  /** Base frame slot; the call's `nout` results occupy slot..slot+nout-1. */
   readonly slot: number
+  /** Number of results the call produces (0, 1, or N). */
+  readonly nout: number
   readonly word: string
   readonly sig?: Signature
   readonly poly?: true
@@ -277,10 +280,6 @@ export class EmitState {
    */
   recordCall(word: string, sig: Signature, args: readonly Value[], out: readonly Value[]): void {
     if (this.uncompilableReason !== undefined) return
-    if (out.length !== 1) {
-      this.markUncompilable(`${word}: ${out.length}-result dispatch not compilable (stage 1)`)
-      return
-    }
     // A dynamic operand or result means the checker could not commit to one
     // overload. Rather than refuse, record a POLY call for an eligible
     // builtin (the VM re-matches at run time); only refuse if that declines.
@@ -292,10 +291,21 @@ export class EmitState {
     }
     const ops = this.resolveOperands(word, args)
     if (ops === null) return
-    const slot = this.seq++
-    this.target().push({ kind: 'call', slot, word, sig, args: ops })
-    this.producedBy.set(out[0]!, slot)
+    // A call produces `out.length` results (0, 1, or N) occupying that many
+    // consecutive frame slots from `base`; each out value threads to its own
+    // slot, so a multi-result word (dup/swap/over) and a 0-result word (drop)
+    // lower uniformly. Mirrors Go's per-result event indexing (resIdx).
+    const base = this.reserveSlots(out.length)
+    this.target().push({ kind: 'call', slot: base, nout: out.length, word, sig, args: ops })
+    for (let i = 0; i < out.length; i++) this.producedBy.set(out[i]!, base + i)
     this.siteCounts.mono++
+  }
+
+  /** Reserve `n` consecutive frame slots, returning the base slot. */
+  private reserveSlots(n: number): number {
+    const base = this.seq
+    this.seq += n
+    return base
   }
 
   /** Classify each arg to an operand, latching uncompilable on a miss. */
@@ -326,9 +336,9 @@ export class EmitState {
       if (o === null) return false
       ops.push(o)
     }
-    const slot = this.seq++
-    this.target().push({ kind: 'call', slot, word, poly: true, args: ops })
-    this.producedBy.set(out[0]!, slot)
+    const base = this.reserveSlots(out.length)
+    this.target().push({ kind: 'call', slot: base, nout: out.length, word, poly: true, args: ops })
+    for (let i = 0; i < out.length; i++) this.producedBy.set(out[i]!, base + i)
     this.siteCounts.poly++
     return true
   }
