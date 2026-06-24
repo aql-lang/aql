@@ -35,6 +35,13 @@ across the whole language surface.
 
 Measured from each repo root (so the relative `import "./*.aql"` resolves).
 
+> **FINAL (this branch):** all six client modules — `radix`, `trie`, `tst`,
+> `burst`, `decision`, `bloom` — and EVERY one of their test suites (unit /
+> spec / prop / smoke) now `aql check` with **0 errors**. The per-suite tables
+> below record the reduction history; the closing fixes are documented under
+> "Polymorphic dynamic dispatch …" near the end. The sections below are kept as
+> the historical record of how the count came down.
+
 ### bloom-filter — ✅ fully clean
 
 | Suite | interpret | check | compile |
@@ -304,17 +311,68 @@ bails only on a reachable multi-/ReturnsFn overload it cannot reduce). Pinned by
 edge-split key (`{} set ((lrest slice 0 1)) …`, where the sliced label is a
 get-result of unknown type) and its `midkids` cascade.
 
-### What remains
+### Polymorphic dynamic dispatch — receiver narrowing, return widening, param re-bind, builder merge (landed) — radix/tst node walkers 0, ALL six modules clean
 
-`radix.aql` (≈3) — `set-edge` (its body's `set` over a get-result receiver, and
-two call sites) inside the recursive `radix-insert` edge splitter: the last
-residue, a deep recursion+disjunct interaction in one walker. A
-sound `set`-over-dynamic arity under a REAL compile (residual #2 above) is the
-other open precision item. These touch the checker's gradual-modality
-propagation and move the pinned `pinnedAnyFrontierRows` /
-`pinnedTypeSoundnessViolations` ratchets deliberately, so they belong in
-continued precision work — each validated against those gates, as the fixes
-above were.
+The last residue — `radix.aql`'s recursive edge splitter and `tst.aql`'s
+node-rebuild walkers reached through their `Map`/`set`/`make` surface — closed
+with four interlocking gradual-dispatch fixes. All validated against the pinned
+ratchets (false positives **114→105**, type-soundness held at **12**), the
+differential / property / `-race` / `aqldebug` bytecode gates (`make
+verify-bytecode`), and the full suite.
+
+1. **Polymorphic-slot use does not narrow a dynamic binding.**
+   `narrowDynamicUses` tightened a dynamic carrier to whichever overload's slot
+   matched — but for a word whose arg position varies across overloads
+   (`slice`'s data arg is `String` in one 3-arg form, `List` in the other), the
+   value could legitimately dispatch to either at run time, so narrowing to one
+   is unsound. `slotIsPolymorphic` now skips the narrowing when a second
+   equally-reachable overload constrains that position differently. Pinned by the
+   existing `lang/go/slice_dynamic_test.go`; this fixed radix's `lab` being
+   wrongly narrowed to `List` after the first `slice`, which then mistyped
+   `(newlabel slice 0 1)` as a `List` key and failed `set`'s String-key Map sig.
+
+2. **A binary word over two FULLY-UNKNOWN operands widens to the gradual union
+   incl. Any.** `dynamicReachableReturns` bailed (no refinement) when a reachable
+   overload had a `ReturnsFn` (e.g. `add`'s numeric sig), so `add` of two
+   dynamic-`Any` operands committed to whichever overload matched first
+   (`Instant`, a temporal sig) — disjoint from the `String` consumer it fed
+   (radix-delete's merged label `(lab (gpair get 0) add)` → `set-edge`'s
+   `newlabel:String`). When ALL operands are dynamic-`Any`, the unknown-return
+   overload now folds in as the `Any` alternative, making the result gradual.
+   Gated to all-unknown so a partially-concrete call keeps its precise union.
+   Pinned by `lang/go/client_node_builder_test.go::TestAddTwoUnknownOperandsGradual`.
+
+3. **A dynamic arg disjoint from a declared concrete param is analysed at the
+   param's type.** `narrowArgsToParams` only re-bound a gradual arg whose bound
+   was strictly BROADER than the param; a sibling/disjoint bound (a dynamic
+   `List`/node-field fed to `mk-tnode`'s `ch:String`) passed through unchanged,
+   so the body's typed operations failed. The param annotation is the
+   authoritative contract for body analysis, so a dynamic arg is now re-bound to
+   `dynamic(paramType)` whenever its bound is not already within the param. Pinned
+   by `lang/go/param_narrowing_test.go::TestParamNarrowingDisjointDynamicArg`.
+
+4. **A None-vs-value branch merge is gradual.** The optional/builder sentinel
+   `if (nd eq none) [build-node] [nd]` merges a built node with the still-`none`
+   receiver. Reached through a gradual `:Any` param the merge was already
+   dynamic, but a DIRECT call passing a concrete `none` (tst's `TstMap.set` on an
+   empty map → `none key val tst-insert`) produced a STRICT `Disjunct(None|Map)`
+   whose None alternative made every node-rebuild `get` fail. `JoinCarrierStacks`
+   now marks a both-arms-real None-vs-value position dynamic (a PADDED/variadic
+   None — `if cond [98]` — keeps its precise shape). Pinned by
+   `lang/go/client_node_builder_test.go::{TestNoneBuilderMergeGradual,TestVariadicIfStaysPrecise}`.
+
+Plus a **panic fix** surfaced by these: a `none` fold-seed promoted to a dynamic
+carrier reaches the fn-body memo keying with a nil `Parent` (a None root node IS
+its own lattice node). `FnAnalysisKey` and the generalised-args build now guard
+the nil-Parent root via `carrierTypeName`; pinned by
+`eng/go/fn_analysis_key_test.go::TestFnAnalysisKeyNilParentArg` and
+`lang/go/client_node_builder_test.go::TestNoneDynamicCarrierNoPanic`.
+
+**Result: all six client modules (`radix`, `trie`, `tst`, `burst`, `decision`,
+`bloom`) AND every one of their test suites check with 0 errors.** The
+deliberately-tracked Any-frontier rose 255→303 (informational only — `t.Logf`,
+not a gate) as the cost of the added optimism; the GATED accuracy ratchet
+improved over the same corpus.
 
 ### Client-side options until that lands
 

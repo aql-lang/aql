@@ -433,7 +433,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	narrowDynamicUses(r, sig, args)
+	narrowDynamicUses(r, word, sig, args)
 	// Per-alternative dispatch for strict disjunct inputs
 	// (design/checker-accuracy-review.10.md A1). matchSignature tested
 	// the disjunct as a single value, so the matched sig may not be
@@ -1463,6 +1463,22 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 	if fn == nil || len(fn.Signatures) < 2 {
 		return nil
 	}
+	// All operands fully unknown (dynamic carriers bound to the Any root): the
+	// result is genuinely statically-unknown, so an unknown-return (ReturnsFn)
+	// reachable overload may safely fold in as the Any alternative below
+	// (widening the union to gradual-permissive). When SOME operand is
+	// concrete, the reachable concrete returns are a tighter, trustworthy
+	// union and an unknown-return overload must still suppress refinement — a
+	// partially-known call should not be blanket-widened to Any (that
+	// mis-narrowed trie's `child` through a `get` whose ModuleExport overload
+	// then looked reachable).
+	allUnknown := len(args) > 0
+	for _, a := range args {
+		if !a.Dynamic || a.Parent == nil || !a.Parent.Equal(TAny) {
+			allUnknown = false
+			break
+		}
+	}
 	var rets []*Type
 	seen := map[string]bool{}
 	for i := range fn.Signatures {
@@ -1489,10 +1505,28 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 			continue
 		}
 		// A REACHABLE overload we cannot reduce to a single return type
-		// (ReturnsFn / multi- or zero-return): refining to a disjunct would
-		// omit a possible result, so defer to the plain dynamic carrier.
+		// (ReturnsFn / multi- or zero-return): its result is statically
+		// unknown, so it contributes the Any alternative to the union rather
+		// than disabling refinement. The old code bailed (`return nil`) here,
+		// which left carrierResults committed to the single matched overload's
+		// return — for a word whose overloads return DISJOINT types over
+		// dynamic operands (`add` of two dynamic-Any operands matches the
+		// temporal `Instant`/`Date` overloads alongside the numeric ReturnsFn
+		// and the String concat), that commitment picked `Instant`, and a
+		// downstream String consumer then failed no_signature (radix-delete's
+		// `(lab (gpair get 0) add)` merged label fed to `set-edge`'s
+		// `newlabel:String`). Folding the unknown in as Any makes the union
+		// gradual-permissive, matching any later typed use — sound for dynamic
+		// inputs, where the modality is optimistic by construction.
 		if len(s.Returns) != 1 || s.Returns[0] == nil {
-			return nil
+			if !allUnknown {
+				return nil
+			}
+			if !seen[TAny.ID] {
+				seen[TAny.ID] = true
+				rets = append(rets, TAny)
+			}
+			continue
 		}
 		if t := s.Returns[0]; !seen[t.ID] {
 			seen[t.ID] = true
@@ -1514,7 +1548,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 // (RunCarrierBodyWithDefs) truncates these pushes, so a then-branch
 // narrowing never leaks to the else-branch. Sound — the bound only
 // tightens, never widens.
-func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
+func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 	if r == nil || sig == nil || !r.Check.IsActive() {
 		return
 	}
@@ -1532,6 +1566,19 @@ func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
 		if slot == nil {
 			continue
 		}
+		// Skip a POLYMORPHIC position: when another of the word's overloads
+		// is equally reachable for THIS call but constrains position i to a
+		// different (disjoint) type, the dynamic value could legitimately
+		// dispatch to either overload at run time, so narrowing to the single
+		// matched slot is unsound — it would wrongly reject a downstream use of
+		// the sibling shape. `slice`'s data arg is String in one 3-arg overload
+		// and List in the other; a dynamic-Any label narrowed to List by the
+		// first slice then failed every String consumer (radix's edge splitter,
+		// where the sliced label is a get-result of unknown type). Leaving the
+		// carrier un-narrowed only loosens matching, never tightens — sound.
+		if slotIsPolymorphic(r, word, args, i, slot) {
+			continue
+		}
 		bound := cur
 		bound.Dynamic, bound.DynFrom = false, ""
 		narrowed := TandValues(bound, NewCarrier(slot))
@@ -1541,8 +1588,69 @@ func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
 		if isNeverShape(narrowed) || ValuesEqual(bound, narrowed) {
 			continue
 		}
+		// A narrowed intersection that collapses to a bare ROOT node (nil
+		// Parent — None / Any / Never) must not be re-promoted to a dynamic
+		// carrier: the resulting carrier would carry a nil bound that
+		// matchSignature reads as "matches nothing", cascading false
+		// no_signature through every downstream use of the name. None in
+		// particular is the builder-pattern sentinel (a `none` accumulator that
+		// becomes a node — tst/radix's `none entries […tst-insert] fold`);
+		// tightening the binding to None breaks the node-rebuild words (get /
+		// with-lo / mk-tnode) that follow. Leaving the binding at its prior,
+		// broader dynamic bound only loosens matching — sound, never a new
+		// false positive.
+		if narrowed.Parent == nil {
+			continue
+		}
 		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
 	}
+}
+
+// slotIsPolymorphic reports whether the word has a second, equally-reachable
+// overload that constrains argument position i to a type other than
+// matchedSlot. "Reachable" means same arity, every OTHER position matches the
+// actual carrier args, and the dynamic value's bound is not provably disjoint
+// from that overload's type at i. When true, position i is polymorphic for
+// this call (e.g. slice's data arg: String vs List), so narrowing the dynamic
+// carrier to matchedSlot alone would be unsound.
+func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlot *Type) bool {
+	if word == "" {
+		return false
+	}
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return false
+	}
+	for k := range fn.Signatures {
+		s := &fn.Signatures[k]
+		if s.Fallback || len(s.Args) != len(args) || i >= len(s.Args) {
+			continue
+		}
+		st := s.Args[i]
+		if st == nil || st.Equal(matchedSlot) {
+			continue
+		}
+		reach := true
+		for j := range args {
+			if j == i {
+				// The dynamic value at i: reachable unless provably disjoint
+				// from this overload's type there.
+				if isNeverShape(TandValues(NewCarrier(args[j].Parent), NewCarrier(st))) {
+					reach = false
+					break
+				}
+				continue
+			}
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if reach {
+			return true
+		}
+	}
+	return false
 }
 
 // anyDynamicCarrier reports whether any value is a dynamic carrier — the
@@ -1845,6 +1953,15 @@ func JoinCarriers(a, b Value) Value {
 	return out
 }
 
+// isNoneArm reports whether a branch carrier is the None sentinel — the bare
+// None type node, a `none` value, or a carrier bound to None.
+func isNoneArm(v Value) bool {
+	if v.Parent != nil {
+		return v.Parent.Equal(TNone)
+	}
+	return IsNoneShape(v)
+}
+
 func joinCarriersInner(a, b Value) Value {
 	if a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
 		out := a
@@ -2018,17 +2135,38 @@ func JoinCarrierStacks(a, b []Value) []Value {
 	out := make([]Value, n)
 	for i := 0; i < n; i++ {
 		var ai, bi Value
-		if i < len(a) {
+		aReal := i < len(a)
+		bReal := i < len(b)
+		if aReal {
 			ai = a[i]
 		} else {
 			ai = NewCarrier(TNone)
 		}
-		if i < len(b) {
+		if bReal {
 			bi = b[i]
 		} else {
 			bi = NewCarrier(TNone)
 		}
-		out[i] = JoinCarriers(ai, bi)
+		joined := JoinCarriers(ai, bi)
+		// Both arms produce a REAL value at this position and exactly one is
+		// None: a None-vs-value merge is the optional / builder sentinel
+		// pattern (`if (nd eq none) [build-node] [nd]`, where the else arm
+		// hands back the still-`none` receiver) — None is "absent / not built
+		// yet" and the downstream code targets the REAL type, so the merge is
+		// gradual. Without this a DIRECT call passing a concrete `none`
+		// (tst/radix's `TstMap.set` on an empty map → `none key val
+		// tst-insert`) merged to a STRICT Disjunct(None|Map) whose None
+		// alternative made every node-rebuild `get` fail no_signature — whereas
+		// the same code reached through a gradual `:Any` param already merged
+		// dynamically (JoinCarriers' arm-dynamic rule). Gated to both-real so a
+		// PADDED None (a variadic 0-or-1 arm — `if cond [98]`) keeps its
+		// precise strict shape; only a genuine value-vs-none branch widens.
+		// Looser, never tighter; a guard discharges the modality back to strict.
+		if aReal && bReal && (isNoneArm(ai) != isNoneArm(bi)) {
+			joined.Carrier = true
+			joined.Dynamic = true
+		}
+		out[i] = joined
 	}
 	return out
 }
@@ -2375,6 +2513,19 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 // delete relies on the match) — that's why this is a named helper, not
 // two inlined loops, and why every caller passes r.AnalysisScopeID() of
 // the same registry r that AnalyseFnBody runs the body in.
+// carrierTypeName names the lattice type a carrier value denotes, for memo
+// keying. A normal carrier carries its type in Parent; a root-node carrier
+// (None / Any / Never) has a nil Parent because it IS its own lattice node, so
+// its name comes from the value itself. Never deref Parent unguarded here — a
+// `none` fold-seed promoted to a dynamic carrier reaches this path with a nil
+// Parent and would otherwise panic (tst's `map-from-entries` accumulator).
+func carrierTypeName(v Value) string {
+	if v.Parent != nil {
+		return v.Parent.String()
+	}
+	return v.String()
+}
+
 func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []CapturedBinding, body []Value) string {
 	var sb strings.Builder
 	sb.WriteString(strconv.FormatUint(scopeID, 10))
@@ -2382,7 +2533,7 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 	sb.WriteString(name)
 	sb.WriteByte('#')
 	for _, a := range args {
-		sb.WriteString(a.Parent.String())
+		sb.WriteString(carrierTypeName(a))
 		sb.WriteByte(',')
 	}
 	if len(captures) > 0 {
@@ -2390,7 +2541,7 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 		for _, cb := range captures {
 			sb.WriteString(cb.Name)
 			sb.WriteByte(':')
-			sb.WriteString(cb.Value.Parent.String())
+			sb.WriteString(carrierTypeName(cb.Value))
 			sb.WriteByte(',')
 		}
 	}

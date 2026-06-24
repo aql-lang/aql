@@ -290,9 +290,19 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 		pt := params[i].Type
 		switch {
 		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
-			pt.ConformsTo(a.Parent) && !a.Parent.ConformsTo(pt):
-			// A gradual arg whose bound is strictly BROADER than the declared
-			// (concrete) param type: narrow it to a dynamic carrier of that type.
+			!a.Parent.ConformsTo(pt):
+			// A gradual arg whose bound is NOT already within the declared
+			// (concrete) param type: re-bind the body's view of the param to a
+			// dynamic carrier of the DECLARED type. The annotation is the
+			// authoritative contract for body analysis — the body is written
+			// assuming the param's type, and a dynamic arg means "statically
+			// unknown, optimistically anything", so binding to dynamic(pt) keeps
+			// optimism while letting the body's typed operations match. Covers
+			// both a strictly-broader bound (`Any` → `String`) and a disjoint /
+			// sibling bound (radix's edge splitter feeds a `slice`/`add` result
+			// of unknown shape — a dynamic `List` — into `set-edge`'s
+			// `newlabel:String`; without this the body's `newlabel slice 0 1`
+			// stayed `List` and failed `set`'s String-key Map overload).
 			if out == nil {
 				out = append([]Value(nil), args...)
 			}
@@ -451,6 +461,18 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// key, so the generalised analysis is the one that caches.
 			genArgs := make([]Value, len(args))
 			for i, a := range args {
+				if a.Parent == nil {
+					// A root-node carrier (None / Any / Never) has a nil Parent
+					// because it IS its own lattice node — it is already an
+					// abstract, constant-free generalisation, so keep it (with the
+					// Carrier flag set) rather than calling NewCarrier(nil), which
+					// would propagate a nil-typed value into the body analysis.
+					g := a
+					g.Carrier = true
+					g.Data = nil
+					genArgs[i] = g
+					continue
+				}
 				genArgs[i] = NewCarrier(a.Parent)
 			}
 			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, args, capturesCopy, bodyCopy)
