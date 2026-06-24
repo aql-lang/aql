@@ -23,6 +23,7 @@ import {
   TMap,
   TNumber,
   TString,
+  TXml,
   TWord,
   typeNameTable,
 } from './type.ts'
@@ -156,7 +157,15 @@ export class Engine {
         // Don't advance: re-process the resulting string as a literal
         // so a pending forward marker can collect it.
       } else if (val.isXmlInterp()) {
-        this.stack[this.pointer] = newXml(this.resolveXmlTmpl(val.asXmlTmpl()))
+        const emit = this.registry.check.emit
+        if (emit !== undefined && this.xmlCaptureFree(val.asXmlTmpl())) {
+          // Self-contained xml template: island it (re-runs to the element).
+          const out = newCarrier(TXml)
+          emit.recordValueIsland(val, out, 'xml')
+          this.stack[this.pointer] = out
+        } else {
+          this.stack[this.pointer] = newXml(this.resolveXmlTmpl(val.asXmlTmpl()))
+        }
       } else {
         this.stepLiteral()
       }
@@ -1115,6 +1124,35 @@ export class Engine {
    * fine in the island). Returns null if a captured binding is a computed
    * (non-const) value that can't be baked in — the caller then refuses.
    */
+  /**
+   * Report whether an xml template references no currently-bound name (so it
+   * re-runs faithfully as an island). Walks attribute segments and child
+   * expressions; a bare word resolving to a def-stack binding is a capture.
+   */
+  private xmlCaptureFree(t: import('./value.ts').XmlTmpl): boolean {
+    const walk = (toks: readonly unknown[]): boolean => {
+      for (const x of toks) {
+        if (!(x instanceof Value)) continue
+        if (x.isWord()) {
+          if (this.registry.topOfDefStack(x.asWord().name) !== undefined) return false
+        } else if (x.isInterpString()) {
+          for (const s of x.asInterpSegments()) if (!('lit' in s) && !walk(s.expr)) return false
+        } else if (x.isXmlInterp()) {
+          if (!this.xmlCaptureFree(x.asXmlTmpl())) return false
+        } else if (Array.isArray(x.data)) {
+          if (!walk(x.data)) return false
+        }
+      }
+      return true
+    }
+    for (const a of t.attrs) for (const s of a.segs) if (!('lit' in s) && !walk(s.expr)) return false
+    for (const c of t.children) {
+      if ('expr' in c && !walk(c.expr)) return false
+      if ('elem' in c && !this.xmlCaptureFree(c.elem)) return false
+    }
+    return true
+  }
+
   private substituteInterp(
     segs: readonly import('./value.ts').InterpSegment[],
   ): import('./value.ts').InterpSegment[] | null {
