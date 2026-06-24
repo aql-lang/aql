@@ -537,6 +537,10 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TList],
         noEvalArgs: new Set([0]),
+        // replayq emits mark/move tape tokens the stack VM has no opcodes for;
+        // island it (bake the inert body, re-run through a sub-engine that
+        // handles the replay). A non-inert body (paren/nested) falls back.
+        compileFallback: true,
         handler: (args) => {
           const body = args[0]!.asList()
           replayCounter++
