@@ -119,6 +119,50 @@ transitive analysis):
    expression — a downstream consequence of the gradual carriers that the
    poly-record path does not yet cover for the mutating `set`.
 
+## Checker `unused_def` on reference-exported words (landed)
+
+The client check reports' largest *warning* category — the trie report's
+wishlist item **#1, "trace `/r` reference-exports as usages"** — is now fixed.
+A word bound into an export map by reference (`export "X" { make: impl/r }`,
+the canonical public-API form) or as a bare value (`{ Color: Color }`) was
+flagged `unused_def` precisely *because* it was public: the use-tracker counted
+only dispatch/`Lookup` uses, not a reference resolution. The fix records the use
+at the single resolution chokepoints:
+
+- `ResolveRef` (`eng/go/core_ref.go`) — covers `name/r`, the `ref` word, and
+  in-map reference values uniformly.
+- The collecting export handler's `resolveModuleExport` and the top-level
+  no-op `export` handler (`lang/go/native`) — a standalone module file
+  (`aql check trie.aql`) reaches the no-op, which now records each export-map
+  value as a use of its def in check mode.
+
+Effect on the clients (modules + suites): `unused_def` warnings fell from **133
+to 10** — `trie.aql` 31→0, `burst.aql` 32→0, `decision.aql` 14→3, `bloom.aql`
+9→1. The fix is sound by construction (a genuinely unreferenced def is still
+flagged — pinned by `lang/go/unused_def_export_test.go`'s negative half) and
+leaves the checker's error-frontier ratchet untouched. The residue is body-
+local defs reassigned/read inside a `for` body (`found`, `best-pri`, `midkids`)
+plus a const-fold ordering quirk on certain 0-arg-fn export combinations —
+both emergent (not reproducible in isolation), the same wall the families below
+hit.
+
+## Checker error-level false positives — why they stay (the Any frontier)
+
+The error-level diagnostics (`no_signature`, `undefined_word`,
+`uncalled_function`) on this generic, dynamically-dispatched code are **not** a
+severity bug to demote away. The dominant `no_signature … assuming best-fit
+candidate for analysis` is the deliberately-tracked **Any frontier**
+(`test/go/langspec/check_accuracy_test.go::pinnedAnyFrontierRows`): a dispatch
+whose operand is statically `Any` (a value pulled from `get`, an untyped node
+walked recursively). The maintained methodology *shrinks* that frontier by
+improving **precision** (flow-narrowing `get`, declaring core-word `Returns`,
+unifying `Any` with concrete params — the gradual-`Any` change above was one
+such step) while keeping it visible at **error**, not by demoting the severity
+(which would hide it). The remaining false positives are emergent from the full
+transitive analysis — they do not reproduce in isolation — so they need that
+focused precision pass, exactly as the two residue families above. Demoting
+severity was considered and rejected on this basis.
+
 ### Client-side options until that lands
 
 1. **Keep the current pins** (`c44d994` for the bytecode-capable reference)

@@ -201,6 +201,12 @@ func (c *CheckState) RecordDef(name string, pos SrcPos) {
 	delete(c.DefsUsed, name)
 }
 
+// RecordUse is the exported wrapper over recordUse for callers outside the
+// eng package — notably module export resolution (lang/native), which records
+// each reference-exported public word as a use so unused_def does not falsely
+// flag the entire public API.
+func (c *CheckState) RecordUse(name string) { c.recordUse(name) }
+
 // recordUse marks a name as referenced during check mode. Safe to call
 // unconditionally; outside check mode it is a no-op. Used by
 // Registry.Lookup and stepWord's simple-value path.
