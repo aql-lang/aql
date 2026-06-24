@@ -956,9 +956,20 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TAny],
         noEvalArgs: new Set([0]),
-        // The value form (quote [list] / quote {map}) is left to fall back:
-        // its island carrier flows into downstream consumers (a def then an
-        // interp string / map build) that mishandle an opaque quoted value.
+        // quote returns its arg RAW (never evaluated), so re-running
+        // [quote <value>] reproduces it — island it. Only an inert value is
+        // bakeable as a token; a non-inert arg (code/carrier) falls back.
+        recordsOwnEvent: true,
+        returnsFn: (args, registry) => {
+          const out = newDynamicCarrier(TAny)
+          const emit = registry.check.emit
+          const a = args[0]!
+          if (emit !== undefined) {
+            if (a.isConcrete()) emit.recordTokenIsland([newWord('quote'), a], out, 'quote')
+            else emit.markUncompilable('quote: non-inert value operand')
+          }
+          return [out]
+        },
         handler: (args) => {
           const v = args[0]!
           if (v.vType.matches(TList) && v.isConcrete()) {
