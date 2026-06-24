@@ -1078,12 +1078,19 @@ export class Engine {
    * registered native is not.
    */
   private interpCaptureFree(segs: readonly import('./value.ts').InterpSegment[]): boolean {
-    const walk = (toks: readonly Value[]): boolean => {
+    const walk = (toks: readonly unknown[]): boolean => {
       for (const t of toks) {
+        if (!(t instanceof Value)) continue // non-Value payload (e.g. xml/segment data)
         if (t.isWord()) {
           if (this.registry.topOfDefStack(t.asWord().name) !== undefined) return false
+        } else if (t.isInterpString()) {
+          // A NESTED template: walk its own expression segments (its data is
+          // segments, not a Value[], so the generic array branch would miss them).
+          for (const s of t.asInterpSegments()) if (!('lit' in s) && !walk(s.expr)) return false
+        } else if (t.isXmlInterp()) {
+          return false // nested xml template: conservatively not islandable
         } else if (Array.isArray(t.data)) {
-          if (!walk(t.data as Value[])) return false
+          if (!walk(t.data)) return false
         }
       }
       return true
