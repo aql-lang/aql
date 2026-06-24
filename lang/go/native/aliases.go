@@ -487,6 +487,7 @@ var (
 	// NewTimeout moved to lang/go/engine/native_misc.go (Step 8).
 	// NewTimezone moved to lang/go/engine/native_temporal.go (Step 8).
 	NewTop                 = eng.NewTop
+	NewEmitState           = eng.NewEmitState
 	NewType                = eng.NewType
 	NewTypeLiteral         = eng.NewTypeLiteral
 	NewBoundedType         = eng.NewBoundedType

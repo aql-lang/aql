@@ -13,20 +13,8 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 	// with a concrete FlexMap (or another FlexMap literal). A plain
 	// map is NOT a FlexMap; the supertype literal `Map` accepts flex
 	// values below via the ordinary family rule.
-	aFlexLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TFlexMap)
-	bFlexLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TFlexMap)
-	if aFlexLit || bFlexLit {
-		if aFlexLit && bFlexLit {
-			return a, nil
-		}
-		lit, other := a, b
-		if bFlexLit {
-			lit, other = b, a
-		}
-		if IsFlexMap(other) {
-			return other, nil
-		}
-		return Value{}, unifyFail("FlexMap type literal needs a concrete FlexMap", lit, other)
+	if res, handled, err := unifyFlexLiteral(a, sa, b, sb, TFlexMap, IsFlexMap, "FlexMap"); handled {
+		return res, err
 	}
 
 	// Bare Map type literal: unifies with any Map-family value except
@@ -170,16 +158,7 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 // unifyTypedMapWithConcrete unifies a child type constraint against
 // each value of a concrete map. Every value must unify.
 func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, *UnifyError) {
-	result := NewOrderedMap()
-	for _, key := range m.Keys() {
-		val, _ := m.Get(key)
-		unified, err := unifyInner(childType, val)
-		if err != nil {
-			return Value{}, err.withPath("key:" + key)
-		}
-		result.Set(key, unified)
-	}
-	return NewMap(result), nil
+	return unifyMapValues(m, func(string) Value { return childType })
 }
 
 // unifyFieldBags unifies two field-schema maps key-by-key. Both must
