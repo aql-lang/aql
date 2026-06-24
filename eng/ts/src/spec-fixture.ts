@@ -727,10 +727,19 @@ function registerSpecWords(r: Registry): void {
           if (emit !== undefined) {
             const a = args[0]!
             const name = a.isWord() ? a.asWord().name : a.data !== null ? a.asAtom() : ''
-            if (name !== '' && registry.topOfDefStack(name) === undefined) {
+            const top = name === '' ? undefined : registry.topOfDefStack(name)
+            if (name === '') {
+              emit.markUncompilable('inspect: non-name operand')
+            } else if (top === undefined) {
+              // Registered word or unknown name: registry-stable, island it.
               emit.recordTokenIsland([newWord('inspect'), newWord(name)], out, 'inspect')
+            } else if (!top.carrier) {
+              // A def bound to a compile-time-known concrete value (a type /
+              // enum / sig / fn): its inspection is fixed, so bake the
+              // precomputed result as a value island.
+              emit.recordTokenIsland([buildDefinedInspection(name, top)], out, 'inspect')
             } else {
-              emit.markUncompilable('inspect: introspects a binding (not live in the VM)')
+              emit.markUncompilable('inspect: def bound to a computed value')
             }
           }
           return [out]
