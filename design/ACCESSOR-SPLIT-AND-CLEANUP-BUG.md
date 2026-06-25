@@ -4,39 +4,15 @@ This note records the get/dot accessor split that landed this session and
 hands off the one remaining bug it surfaced — a per-call frame-cleanup
 over-pop — with a ready-to-use next-session prompt.
 
-## ✅ RESOLVED (branch `claude/dx-driven-language-improvements`)
-
-The over-pop is **fixed**, but the root cause is **NOT** the teardown over-pop
-hypothesised below — it is an **install-time over-write**. When a fn-frame
-installs a param/capture whose value is a function and whose name+signature
-**overlap** a live caller binding (the classic comparator threaded in via a
-`/r`-parked arg), `InstallDef`'s same-scope overlap-redefinition **filter**
-(`core_helpers.go`, the `FnDefsOverlap` block) DROPPED the caller's binding at
-install time, collapsing two shadow levels into one; the normal `undef` tail
-then popped the survivor to depth 0. Decisive evidence: with two function
-values whose signatures do **not** overlap the program runs fine; flipping only
-to an overlapping value crashes — so the trigger is the overlap filter, not the
-teardown. The `undef`-tail / snapshot-after-install / `teardownFrameState` are
-all correct and symmetric once install pushes a real shadow level.
-
-**Fix (smaller and safer than the "depth-precise teardown" direction below):**
-a new `InstallFrameBinding` (`core_helpers.go`) installs frame params/captures
-by **shadowing** (push a fresh DefStack level) instead of running the overlap
-filter — the filter is correct for the `def` word (same-scope redefinition) but
-wrong for a nested frame, which must stack and tear back down to the caller's
-level. The six frame-install sites (`core_helpers.go` `buildFnBodyHandler`,
-`engine.go` `execFnDefSig`, `registry.go` `CallAQL` — capture + param each) now
-call it; `InstallDef` (the `def` path) keeps the filter. No change to the
-teardown mechanisms or the capitalised-name type-retire path.
-
-Note the repro's expected value is **14**, not 13: `g(5)+g(7) = 6+8`. Regression
-tests: `lang/go/test/closures_test.go` (`TestFrameParamShadowsCollidingFunctionParam`
-positive across both install paths + `TestDefWordOverlapStillRedefines` negative
-guarding the `def` filter). The recursion-via-Function-param case (R4 in the
-client reports) is a **separate** TCO eager-teardown defect and is NOT fixed by
-this change — leave it for a dedicated session.
-
-The original handoff is kept below as the record.
+> **Note (branch `claude/dx-driven-language-improvements`):** this bug was
+> fixed independently and identically on `main` by PR #193
+> (`claude/frame-cleanup-over-pop`) — same `InstallFrameBinding` shadow
+> approach, recorded below under "RESOLVED (branch
+> `claude/frame-cleanup-over-pop-dzhf04`)". After merging `main`, this branch
+> takes that canonical fix (which also routes the macro expander) and drops
+> its own duplicate, keeping only the complementary Go-level regression tests
+> in `lang/go/test/closures_test.go`
+> (`TestFrameParamShadowsCollidingFunctionParam` + `TestDefWordOverlapStillRedefines`).
 
 ## Landed this session (branch `claude/aql-client-lib-issues-lev8cs`)
 
@@ -66,7 +42,42 @@ The original handoff is kept below as the record.
 All gated: `make test`, `verify-bytecode`, `crossdiff` (1787 rows, 0
 divergences), `test-ts` (3622), langspec census/status/coverage/accuracy.
 
-## The remaining bug — per-call cleanup over-pops a colliding param
+## RESOLVED (branch `claude/frame-cleanup-over-pop-dzhf04`)
+
+Fixed — but the actual root cause was **not** a teardown over-pop; it
+was a *shadow-destroying install*. A fn-frame param/capture whose value
+is a `Function`/`FnDef` was installed through `InstallDef`, whose
+**redefinition overlap-removal** (`core_helpers.go`, `r.Defs.Set`) drops
+any existing same-named entry with an overlapping signature. For the
+repro, installing the callee `h`'s `comp` param therefore *deleted the
+caller `t`'s `comp` binding outright* (the callee's `comp` never even
+reached depth 2 — confirmed by tracing `DefTable.Push`/`PopEntry`). The
+frame's `undef comp` tail then popped the only remaining entry, leaving
+`comp` unbound for `def b`.
+
+The fix is at the **install** site, not the teardown: a new
+`InstallFrameBinding` performs a lexical **shadow** (a plain push that
+keeps the outer entry) and is used by all per-call binding sites
+(`buildFnBodyHandler`, `execFnDefSig`, `CallAQL`, and the macro
+expander). The existing `undef`/`DefCleanup` teardown is then already
+depth-correct (`comp` reaches depth 2, `undef` pops exactly one). No
+teardown rewrite, no TCO-twin change — the eager
+`teardownFrameState`/`UninstallDef` path is unaffected because the depth
+arithmetic is now right by construction. This also fixes a latent twin:
+a fn param shadowing a same-named **module/global** fn no longer
+destroys the global (`runner (doubler/r) 5` returns the param's result,
+and the global is restored after the frame). Regression rows:
+`lang/spec/recursion.tsv` §12 (positive: shadow + restore; negative:
+the fn-valued param must not leak). Gated with `make test`,
+`verify-bytecode`, `crossdiff` (1787 rows, 0 divergences), `test-ts`
+(3622), and the recursion/closure/TCO suites — nothing regressed.
+
+The original (incorrect) diagnosis and the deferred depth-precise
+teardown plan are kept below for the historical record; that plan was
+*not* needed (and on its own would have leaked the inner binding rather
+than restoring the caller's).
+
+## The original diagnosis — per-call cleanup over-pops a colliding param
 
 **Symptom** (client report §1.1, root-caused tighter than the report):
 
@@ -74,7 +85,7 @@ divergences), `test-ts` (3622), langspec census/status/coverage/accuracy.
 def g ([x:Integer] => [x add 1])
 def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply]]
 def t fn [[comp:Function] [Integer] [ def a (5 comp/r h)  def b (7 comp/r h)  a add b ]]
-print ((g/r t))     # => error: undefined word: comp  (should be 13)
+print ((g/r t))     # => error: undefined word: comp  (was: should be 13; actual correct value is 14)
 ```
 
 **Root cause.** Each `comp/r h` call over-pops `comp` by one extra shadow

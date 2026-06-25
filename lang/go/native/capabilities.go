@@ -18,7 +18,28 @@ const (
 	CapSQLite     = "engine.sqlite"      // *SQLiteStore
 	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
 	CapClock      = "engine.clock"       // capabilities.Clock (the time source)
+	CapLogSinks   = "engine.logsinks"    // *LogSinkRegistry (aql:log fan-out sinks)
+	CapDebugOps   = "engine.debugops"    // capabilities.DebugOps (interactive stepping)
 )
+
+// EffectiveDebugOps returns the installed DebugOps capability, or (nil,
+// false) when none is installed. Debug.step uses it for an interactive
+// step controller; with no DebugOps it falls back to printing the trace.
+func EffectiveDebugOps(r *Registry) (capabilities.DebugOps, bool) {
+	if ops, ok, _ := eng.Cap[capabilities.DebugOps](r, CapDebugOps); ok && ops != nil {
+		return ops, true
+	}
+	return nil, false
+}
+
+// SetHostDebugOps installs a DebugOps capability (used by the REPL/TTY
+// host and by tests supplying a scripted controller).
+func SetHostDebugOps(r *Registry, ops capabilities.DebugOps) {
+	if r == nil || ops == nil {
+		return
+	}
+	_ = r.Capabilities.Set(CapDebugOps, ops)
+}
 
 // EffectiveClock returns the time source for the current invocation. The
 // host (or the spec runner) may install a Clock under CapClock — e.g. a
@@ -38,6 +59,31 @@ func SetHostClock(r *Registry, clk capabilities.Clock) {
 		return
 	}
 	_ = r.Capabilities.Set(CapClock, clk)
+}
+
+// HostLogSinks returns the LogSinkRegistry installed on r, or nil if
+// none has been created yet. Most callers want LogSinkRegistryFor,
+// which lazily creates and installs a default registry (console sink
+// attached) on first use — mirroring how `print` needs no host wiring.
+func HostLogSinks(r *Registry) *LogSinkRegistry {
+	lsr, _, _ := eng.Cap[*LogSinkRegistry](r, CapLogSinks)
+	return lsr
+}
+
+// SetHostLogSinks installs a LogSinkRegistry as the active sink
+// registry. When a policy uninstalls the "log" scope (install:false)
+// the slot is left empty so emission is a silent no-op — logging must
+// never crash a program. Hosts call this to pre-attach an OTel/Datadog
+// sink before the AQL program runs `import "aql:log"`.
+func SetHostLogSinks(r *Registry, lsr *LogSinkRegistry) {
+	if r == nil {
+		return
+	}
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("log") {
+		_, _ = r.Capabilities.Delete(CapLogSinks)
+		return
+	}
+	_ = r.Capabilities.Set(CapLogSinks, lsr)
 }
 
 // HostPolicy returns the policy installed on r, or nil if none. A

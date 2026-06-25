@@ -419,6 +419,7 @@ var (
 	TraceVisibleLen           = eng.TraceVisibleLen
 	TraceColorize             = eng.TraceColorize
 	RunTrace                  = eng.RunTrace
+	WalkBodyWords             = eng.WalkBodyWords
 	PadRight                  = eng.PadRight
 	DeepEqual                 = eng.DeepEqual
 	FormatForPrint            = eng.FormatForPrint

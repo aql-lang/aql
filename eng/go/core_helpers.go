@@ -12,28 +12,32 @@ import (
 // When body is a FnDefInfo value (produced by the fn word), InstallDef
 // registers typed signatures. Otherwise, body is stored directly as a
 // literal substitution.
+//
+// This is the REDEFINITION install: a fn-valued body whose signatures
+// overlap an existing binding for the SAME name drops the colliding
+// overload (so the stale one doesn't race the new one). For a per-call
+// fn-frame param/capture — which enters a NEW lexical scope and must
+// SHADOW, not replace, an outer same-named binding — use
+// InstallFrameBinding instead.
 func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
-	installDefImpl(r, name, body, false, stackOnly...)
+	installDef(r, name, body, false, stackOnly...)
 }
 
-// InstallFrameBinding installs a per-call frame binding — a fn parameter or
-// lexical capture — that must SHADOW any live same-name binding rather than
-// redefine it. It pushes a fresh DefStack level (depth+1) instead of running
-// InstallDef's same-scope overlap-redefinition filter, so a callee parameter
-// whose name and signature collide with a caller's binding (classically the
-// same comparator threaded in via a `/r`-parked Function arg) stacks on top
-// and is torn down to exactly the caller's level on frame exit. Without it the
-// overlap filter DROPS the caller's binding at install time and the undef
-// cleanup tail then over-pops the survivor to depth 0 — the per-call cleanup
-// over-pop documented in design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md (root-caused
-// at install time, not teardown). The literal/value, module-rebind, FnUndef
-// and ObjectType branches already push/shadow, so the flag only gates the
-// FnDef overlap filter.
+// InstallFrameBinding installs a per-call fn-frame binding (a named
+// param or a lexical capture). Unlike InstallDef it is a lexical
+// SHADOW: a Function/FnDef-valued binding pushes a fresh dispatch entry
+// that shadows — never removes — an outer same-named binding, so the
+// caller's binding is restored intact when the frame's teardown pops
+// this entry. InstallDef's overlap-removal models top-level
+// REDEFINITION (it must drop the colliding overload); a param entering
+// a new scope must not, or it destroys the caller's binding (e.g. a
+// fn-valued arg whose param name collides with a live caller param —
+// design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md).
 func InstallFrameBinding(r *Registry, name string, body Value) {
-	installDefImpl(r, name, body, true)
+	installDef(r, name, body, true)
 }
 
-func installDefImpl(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
+func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 
 	// FnDefInfo body (from fn word): install typed signatures.
@@ -86,25 +90,25 @@ func installDefImpl(r *Registry, name string, body Value, shadow bool, stackOnly
 		// overlapping redefinition must drop the old entry — otherwise the
 		// stale overload races the new one (equal scores, first match wins).
 		//
-		// Frame bindings (shadow) SKIP this: a callee param/capture must
-		// stack on top of a colliding caller binding (depth+1) so the undef
-		// tail pops it back to exactly the caller's level. Filtering here
-		// would instead destroy the caller's binding at install time.
-		if !shadow {
-			if stack := r.Defs.Stack(name); len(stack) > 0 {
-				filtered := stack[:0:0]
-				changed := false
-				for _, entry := range stack {
-					oldFn, ok := entry.Data.(FnDefInfo)
-					if ok && FnDefsOverlap(oldFn, fnDef) {
-						changed = true
-						continue
-					}
-					filtered = append(filtered, entry)
+		// SKIPPED for a shadowing frame-binding install: a fn param/capture
+		// that collides with an outer same-named binding must SHADOW it (a
+		// fresh entry the teardown pops to restore the outer), not drop it.
+		// Dropping the outer entry here is the per-call cleanup over-pop bug
+		// (design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md): the colliding outer
+		// param vanishes, then the frame's undef tail pops the wrong level.
+		if stack := r.Defs.Stack(name); !shadow && len(stack) > 0 {
+			filtered := stack[:0:0]
+			changed := false
+			for _, entry := range stack {
+				oldFn, ok := entry.Data.(FnDefInfo)
+				if ok && FnDefsOverlap(oldFn, fnDef) {
+					changed = true
+					continue
 				}
-				if changed {
-					r.Defs.Set(name, filtered)
-				}
+				filtered = append(filtered, entry)
+			}
+			if changed {
+				r.Defs.Set(name, filtered)
 			}
 		}
 

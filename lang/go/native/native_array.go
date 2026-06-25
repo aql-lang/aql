@@ -413,6 +413,15 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name:          "outer",
 		CompileEffect: CompileFallbackBody,
+		// outer [body] left right — the body sees (left[i], right[j]) for every
+		// pair, producing a 2D list. The body compiles to a closure unit that
+		// outerHandler drives per pair via InvokeBody; CompileFallbackBody is
+		// the fallback when the body cannot compile.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(a []Value) []Value {
+			le := DataListElemTypeFromValue(a[1])
+			re := DataListElemTypeFromValue(a[2])
+			return []Value{NewElementCarrier(le), NewElementCarrier(re)}
+		}},
 
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList, TList},
@@ -1629,8 +1638,6 @@ func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) {
 		return nil, reg.AqlError("outer_error", "outer: expected concrete lists", "outer")
 	}
-	_lst, _ := AsList(args[0])
-	bodySlice := _lst.Slice()
 	left, _ := AsList(args[1])
 	right, _ := AsList(args[2])
 
@@ -1638,13 +1645,11 @@ func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	for i := 0; i < left.Len(); i++ {
 		row := make([]Value, right.Len())
 		for j := 0; j < right.Len(); j++ {
-			input := make([]Value, len(bodySlice)+2)
-			input[0] = left.Get(i)
-			input[1] = right.Get(j)
-			copy(input[2:], bodySlice)
-
-			sub := New(reg)
-			res, err := sub.Run(input)
+			// The body sees (left[i], right[j]) on the stack. InvokeBody is the
+			// single body-running seam: under the VM it drives the compiled
+			// closure, under the interpreter it runs a fresh sub-engine — so a
+			// compiled `outer` is byte-identical to the interpreter.
+			res, err := InvokeBody(reg, args[0], []Value{left.Get(i), right.Get(j)})
 			if err != nil {
 				return nil, fmt.Errorf("outer: (%d,%d): %w", i, j, err)
 			}

@@ -67,6 +67,11 @@ func makeModuleFnDef(n native.NativeFunc, subReg *native.Registry) native.Value 
 			Body:       []native.Value{native.NewWord(n.Name)},
 			NoEvalArgs: s.NoEvalArgs,
 			BarrierPos: s.BarrierPos,
+			// Carry the inner native's check-mode ReturnsFn onto the wrapper
+			// so static analysis of a dotted module call uses it instead of
+			// the fixed Returns shape — e.g. the body-running debug words
+			// analyse their quoted body for type errors.
+			ReturnsFn: s.ReturnsFn,
 		}
 	}
 	return native.NewFnDef(native.FnDefInfo{
