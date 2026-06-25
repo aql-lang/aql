@@ -171,6 +171,16 @@ func (a *AQL) Options() Options {
 	return a.options
 }
 
+// NativeRegistry returns the live *native.Registry backing this instance.
+// Intended for tooling that needs to introspect or serve the running
+// runtime's state — notably the debug-attach server (lang/go/debugserve),
+// which wraps a registry behind authenticated HTTP introspection. Most
+// callers should use the higher-level Run/Check API instead; this is the
+// escape hatch for host-level inspection tools.
+func (a *AQL) NativeRegistry() *native.Registry {
+	return a.registry
+}
+
 // Policy returns the policy installed on this instance, or nil if
 // none was configured. Equivalent to a.Options().Policy but reads
 // the live capability slot, so it reflects any subsequent

@@ -15,6 +15,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/clean"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/ctl"
+	"github.com/aql-lang/aql/cmd/go/internal/debugcmd"
 	"github.com/aql-lang/aql/cmd/go/internal/describe"
 	"github.com/aql-lang/aql/cmd/go/internal/do"
 	"github.com/aql-lang/aql/cmd/go/internal/exec"
@@ -141,6 +142,8 @@ func buildRegistry() *command.Registry {
 	r.Register(vault.New())
 	// Commands: permission profiles.
 	r.Register(policy.New())
+	// Commands: cross-process debugging (serve introspection / attach).
+	r.Register(debugcmd.New())
 	// Commands: supervisor control plane client.
 	r.Register(ctl.New())
 	// Services: long-running input loops.

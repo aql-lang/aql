@@ -14,16 +14,21 @@ via a current-engine stack for `Debug.stack`, §6.2; the `DebugOps` /
 (`docs_debug.go`), Go tests (`debug_test.go` — incl. a headless scripted
 step controller), and an executable spec (`lang/spec/module-debug.tsv`).
 
-The remaining surfaces are the **§7 cross-process features** — a live TUI
-dashboard, **attaching** to a running `aql serve`, and a **debug channel**
-for serverless invocations authenticated with `aql:vault` capability
-tokens. These are genuinely gated on substrate that does not yet exist:
-the `Service`/`Process` actor layer (`SERVICES.0.md`/`PROCESSES.0.md`, RFC
-only) and the **TCP server AQL still lacks** (§7.6). They are sequenced as
-Phases 5–7 and cannot be built until those prerequisites land; the data
-contract, auth model (vault capabilities already exist), and renderer
-substrate (the existing `api` discovery file + bubbletea `tui`) are
-designed and ready for that work.
+The **§7 cross-process features** now have a **working host-level
+implementation** that does not wait for the AQL `Service` model: attaching
+to a running runtime and the serverless debug channel are realized on Go's
+`net/http` (`lang/go/debugserve`) with the `aql debug serve` / `aql debug
+attach` CLI — a debug server wraps a live `*native.Registry` behind
+authenticated HTTP introspection (`words`/`defs`/`heap`/`eval`) and an
+invocation-keyed event relay, with a Bearer token (static or a vault
+capability id) and a loopback-default bind. What remains is the *elegant
+unification* the design targets — routing these through a first-class AQL
+`Service`/`DebugTarget`, an AQL-level `Debug.attach` word over a `connect`
+transport, remote stepping, and a **live** (refreshing) TUI dashboard
+host. Those still want the `Service`/`Process` actor layer
+(`SERVICES.0.md`/`PROCESSES.0.md`, RFC-only) and a language-level socket
+primitive; the host-level core proves the capability and the auth model in
+the meantime (§7.2/§7.3/§7.6).
 
 This captures the design of the native module `aql:debug` (namespace
 `Debug`) that collects AQL's debugging affordances behind one import:
@@ -818,21 +823,33 @@ sequenced after them, not after Phase 4 alone:
   `Debug.discover-widgets` auto-discovery; the richer `DebugCell`/
   `WidgetMeta` typing and the service-shaped widget form arrive with the
   `Service` layer.
-- **Phase 6 — attach** (after the served-process layer, `PROCESSES.0.md`
-  + `SERVICES.0.md` Phase 2, and a `connect` transport): the
-  debug-introspection service on `aql serve`, `Debug.attach` /
-  `DebugTarget`, remote widgets/inspect, and remote stepping; vault
-  capability auth (§7.4) wired as the endpoint `proxy`. Local attach (via
-  the existing `api` discovery file) can precede remote attach (which
-  needs the still-missing TCP server, `SERVICES.0.md` §10).
-- **Phase 7 — serverless channel** (after transport + a relay service):
-  `Debug.channel` / `interrogate` / `DebugChannel`, the drop-policy emit
-  path, the poll-for-commands control leg, and producer/consumer
-  capability split. The most forward-looking slice; ships last.
+- **Phase 6 — attach.** **Host-level core shipped** (`lang/go/debugserve` +
+  `aql debug` CLI): rather than wait for the AQL `Service` model and a
+  language-level socket, the attach surface is realized directly on Go's
+  `net/http` — the substrate that already underpins the `api` service.
+  `debugserve.Server` wraps a `*native.Registry` behind authenticated HTTP
+  introspection (`/debug/words|defs|heap|eval`), `debugserve.Client`
+  attaches over HTTP, and `aql debug serve [file.aql]` / `aql debug attach
+  <words|defs|heap|eval|events>` are the user-facing front door (with a
+  `$TMPDIR/aql-debug.json` discovery file, mirroring `api`). Auth is an
+  optional Bearer token — a static token *or* a vault capability id,
+  validated as the vault proxy does (§7.4); loopback-by-default with an
+  explicit `--allow-public`. `lang.AQL.NativeRegistry()` is the one new
+  accessor it needed. **Remaining (the Service-model unification):**
+  routing through a first-class `Service`/`DebugTarget`, an AQL-level
+  `Debug.attach` word over a `connect` transport, and remote
+  widgets/stepping — these still want `SERVICES.0.md`/`PROCESSES.0.md`.
+- **Phase 7 — serverless channel.** **Host-level core shipped:** the
+  `debugserve` relay carries the out-of-band channel — a function `Emit`s
+  events keyed by invocation id (`POST /debug/emit?id=`), an interrogator
+  reads them back (`GET /debug/events?id=`, `aql debug attach events
+  <id>`), per-invocation isolated and ring-bounded. **Remaining:** the
+  drop-policy AQL-side emit wiring into `Debug.tap`/`label`, the
+  poll-for-commands live-control leg, and the producer/consumer capability
+  split — these layer on once the AQL-level transport/`Service` form lands.
 
-The auth model (vault capabilities) is reused, not built, so it adds no
-phase of its own — it is wired in at Phases 6–7 where the boundary first
-exists.
+The auth model (vault capabilities) is reused, not built — wired in at
+Phases 6–7 as the Bearer token the `debugserve` server validates.
 
 
 ## 10. Test discipline
