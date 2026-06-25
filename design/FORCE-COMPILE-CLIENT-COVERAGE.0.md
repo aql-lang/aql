@@ -332,3 +332,63 @@ in-closure, brief item 3). The var-splice fix is the prerequisite groundwork
 that makes the var-body itself lower; module-fn-in-closure-body is the layer on
 top. Live client refusal map is unchanged at the suite granularity (first-
 refusal reporting) but the underlying var-body blocker is now removed.
+
+---
+
+## Session-2 cont. — module-fn-in-closure investigation (re-scopes the remaining work)
+
+Set out to add "module-fn dispatch in a compiled closure body" (the assumed
+next blocker). **It already works** — verified compiling, byte-identical to the
+interpreter, for every shape probed:
+- a Go-native module fn in an each/var body (`MathUtil.sqrt`);
+- a cross-registry **AQL-bodied** module fn (`import module [def f … export …]`),
+  including a **recursive, void-returning, `|`-barriered** export in a var body;
+- a top-level user fn, and a 2-overload (polymorphic) user fn, in a var body;
+- the bloom `bit-test` shape (capture `bits` + user-fn call + var loop var).
+
+So the "Stage-3 / module-fn-in-closure" framing for the client `each` refusals
+is **wrong**. The actual blockers, found by reducing the real suites:
+
+1. **Mutual recursion through a closure body** (decision/trie — the dominant
+   `each` refusal). `decision.aql`'s `eval-pred-all`/`-any` are
+   `[(children each [input swap eval-pred]) all]` — the each body calls
+   `eval-pred`, which calls back into `eval-pred-all` (mutual recursion).
+   Minimal repro that refuses `code-body word each (Stage 2)`:
+   ```
+   def ev     fn [[x:Integer] [Integer] [if (x 0 gt) [(x 1 sub) evlist] [0]]]
+   def evlist fn [[x:Integer] [Integer] [([x] each [ev]) 0 get]]
+   (5 evlist)
+   ```
+   ROOT CAUSE (refined — first guess corrected by experiment). The closure-body
+   PROBE (`recordClosureDispatch`, fresh `EmitState`) fails with
+   `fn evlist: body result of unknown provenance` — NOT a recursion-depth blowup.
+   Mechanism: the probe compiles the each body `[ev]`, which calls `ev`, which
+   calls `evlist`, which the probe re-compiles from its fresh memo; `evlist`'s
+   body is `([x] each [ev]) 0 get`, whose INNER `each [ev]` cannot fully resolve
+   while `evlist` is mid-compile, so the inner each's result carries no
+   provenance, `0 get` reads an unprovenanced operand, and `evlist`'s body-result
+   provenance check (the same gate L1a touched) fails → probe refuses → outer
+   `each` refuses. So the blocker is a **provenance cascade through the recursive
+   higher-order call**, not just a missing forward-reference memo. A
+   `parentUnits` read-only-memo seed for the probe was IMPLEMENTED AND TESTED and
+   did NOT fix it (the recursion terminates, but the inner each still yields an
+   unprovenanced result) — reverted. FIX DIRECTION: the recursive higher-order
+   result needs provenance assigned BEFORE the enclosing fn's body-result check
+   even when the inner unit is still mid-compile (a forward-provenance / two-pass
+   resolution for recursive closure results). Genuinely deep; its own session.
+
+2. **`Test.check-prop` with a lambda arg** → `fn call operand of unknown
+   provenance` (a fn-VALUE operand to a module fn; Stage-3 fn-value territory).
+3. **`do [body]` list-body form** with an `error` handler (bloom.aql:310/318).
+4. **`mk-node` dispatch recovery**, **`dynamic input at push`** (burst) — each
+   needs its own trace.
+5. **Project B** (`check diagnostics`, 4 suites) — unchanged.
+
+`Test.test` (simple) and `Test.check-prop` (non-lambda) now COMPILE, so the
+`test-test`/`test-check-prop` refusals are narrower than the brief assumed —
+they ride on (1)/(2), not a generic code-body gap.
+
+**Recommendation:** the highest-leverage next unit is (1) — the probe/memo
+sharing for mutual recursion — which alone should clear the dominant `each`
+refusal across decision and trie. It is a real architectural change to the
+closure-probe seam and deserves a dedicated session.
