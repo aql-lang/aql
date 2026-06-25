@@ -148,7 +148,8 @@ finalizer story extends naturally to the concurrent case.
 
 **Verdict: feasible now.** A small number of core words (`ensure`, `bracket`, and a
 `scoped` convenience) over quotations plus the existing error path. No engine
-changes. This is the recommended first thing to actually build.
+changes. This is the recommended first thing to actually build, and is expanded into
+an implementation-ready RFC in **`design/RESOURCE-SAFETY.0.md`**.
 
 ### 3. Effect combinators over quotations: `retry` / `repeat` / `fallback` (schedules as values)
 
