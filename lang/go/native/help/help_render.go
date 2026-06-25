@@ -41,6 +41,7 @@ var moduleCatalog = []ModuleInfo{
 	{"parse", "Define custom parsers: ABNF grammars, declarative rules, lex matchers, and custom-type actions, registered as `parse` kinds."},
 	{"model", "Build a system model from .jsonic source (via aontu unification) and run generator actions over it: new, run, start, stop, model."},
 	{"log", "Structured logging: severity levels, fields, console/memory sinks, a global threshold."},
+	{"debug", "Debugging: print taps, structural/system introspection, value sizing, and performance measurement."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The

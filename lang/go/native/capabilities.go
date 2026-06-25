@@ -19,7 +19,27 @@ const (
 	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
 	CapClock      = "engine.clock"       // capabilities.Clock (the time source)
 	CapLogSinks   = "engine.logsinks"    // *LogSinkRegistry (aql:log fan-out sinks)
+	CapDebugOps   = "engine.debugops"    // capabilities.DebugOps (interactive stepping)
 )
+
+// EffectiveDebugOps returns the installed DebugOps capability, or (nil,
+// false) when none is installed. Debug.step uses it for an interactive
+// step controller; with no DebugOps it falls back to printing the trace.
+func EffectiveDebugOps(r *Registry) (capabilities.DebugOps, bool) {
+	if ops, ok, _ := eng.Cap[capabilities.DebugOps](r, CapDebugOps); ok && ops != nil {
+		return ops, true
+	}
+	return nil, false
+}
+
+// SetHostDebugOps installs a DebugOps capability (used by the REPL/TTY
+// host and by tests supplying a scripted controller).
+func SetHostDebugOps(r *Registry, ops capabilities.DebugOps) {
+	if r == nil || ops == nil {
+		return
+	}
+	_ = r.Capabilities.Set(CapDebugOps, ops)
+}
 
 // EffectiveClock returns the time source for the current invocation. The
 // host (or the spec runner) may install a Clock under CapClock — e.g. a
