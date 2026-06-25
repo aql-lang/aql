@@ -42,6 +42,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"emitlang":    BuildEmitLangModule,
 	"parse":       BuildParseModule,
 	"model":       BuildModelModule,
+	"log":         BuildLogModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -245,6 +246,20 @@ func InstallIOExports(r *native.Registry) error {
 // `Net.fetch` etc. resolve without wiring the full resolver.
 func InstallNetExports(r *native.Registry) error {
 	desc, err := BuildNetModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallLogExports builds the log module and installs its exports as defs —
+// the convenience equivalent of running `import "aql:log"` in test setup, so
+// `Log.info` etc. resolve without wiring the full resolver.
+func InstallLogExports(r *native.Registry) error {
+	desc, err := BuildLogModule(r)
 	if err != nil {
 		return err
 	}
