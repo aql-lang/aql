@@ -407,6 +407,35 @@ func TestLogSpanErrorStatus(t *testing.T) {
 	}
 }
 
+// TestLogMetrics verifies the metrics signal: a counter's add produces
+// a neutral Measurement reaching a host sink's OnMeasure hook (the OTel
+// metrics-bridge analog) and a console METRIC line.
+func TestLogMetrics(t *testing.T) {
+	reg, buf := newLogReg(t)
+	var got []native.Measurement
+	if err := native.RegisterHostLogSink(reg, native.LogSinkSpec{
+		Name:      "meter",
+		MinLevel:  native.LevelTrace,
+		OnRecord:  func(native.LogRecord) error { return nil },
+		OnMeasure: func(m native.Measurement) { got = append(got, m) },
+	}); err != nil {
+		t.Fatalf("RegisterHostLogSink: %v", err)
+	}
+	runLog(t, reg, `import "aql:log" ; def c (Log.counter "requests") ; c.add 4 {region:"eu"}`)
+	if len(got) != 1 {
+		t.Fatalf("host sink received %d measurements, want 1", len(got))
+	}
+	if got[0].Instrument != "requests" || got[0].Kind != "counter" {
+		t.Errorf("measurement = %+v, want requests/counter", got[0])
+	}
+	if native.FormatForPrint(got[0].Value) != "4" {
+		t.Errorf("value = %q, want 4", native.FormatForPrint(got[0].Value))
+	}
+	if !strings.Contains(buf.String(), "METRIC counter requests=4") {
+		t.Errorf("console metric line missing, got %q", buf.String())
+	}
+}
+
 // TestLogInstallExports checks the test-setup convenience helper binds
 // the Log namespace as a def.
 func TestLogInstallExports(t *testing.T) {

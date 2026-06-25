@@ -76,6 +76,10 @@ func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 		"log-end":          "end-span",
 		"log-current-span": "current-span",
 		"log-traces":       "traces",
+		"log-counter":      "counter",
+		"log-gauge":        "gauge",
+		"log-histogram":    "histogram",
+		"log-measurements": "measurements",
 	}
 	for _, n := range logNatives {
 		exports.Set(exportName[n.Name], makeModuleFnDef(n, subReg))

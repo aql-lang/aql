@@ -244,6 +244,12 @@ func newLogSinkRegistry() *LogSinkRegistry {
 			golog.New(r.ErrOutput, "", 0).Println(lsr.render(rec))
 			return nil
 		},
+		measure: func(r *Registry, m Measurement) {
+			if r == nil || r.ErrOutput == nil {
+				return
+			}
+			golog.New(r.ErrOutput, "", 0).Println(renderMeasurement(m))
+		},
 	}
 	// memory — capture records (Log.dump), ended spans (Log.traces), and
 	// measurements (Log.measurements) for inspection / tests.
@@ -469,6 +475,10 @@ func LogModuleNativeFuncs(lsr *LogSinkRegistry) []NativeFunc {
 		logEndNative(lsr),
 		logCurrentSpanNative(lsr),
 		logTracesNative(lsr),
+		logCounterNative(lsr),
+		logGaugeNative(lsr),
+		logHistogramNative(lsr),
+		logMeasurementsNative(lsr),
 	}
 	for _, lvl := range []struct {
 		word  string

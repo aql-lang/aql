@@ -1,29 +1,54 @@
 # `aql:log` — logging, OpenTelemetry abstraction, and provider hooks
 
-> **Status: phases 1–4 implemented; phase 5 proposed.** Phase 1
-> (traditional logging — levels, fields, threshold, console/memory/null
-> sinks, the `log` policy scope, the `LogSinkRegistry` host seam), phase 2
-> (contextual loggers — `Log.logger` / `Log.with` / `Logger.child`),
-> phase 3 (provider hooks — `RegisterHostLogSink` + `Log.register`), and
-> phase 4 (traces — `Log.span` / `Log.with-span` / `Log.end-span` /
-> `Log.current-span` / `Log.traces`, Span methods, trace-context
-> propagation, host span hooks) have landed: `lang/go/native/log_module.go`,
-> `log_logger.go`, `log_sinks.go`, `log_span.go`, `lang/go/modules/log.go`,
-> `lang/spec/module-log.tsv`, `lang/go/modules/log_test.go`. Phase 5
-> (metrics) is still a proposal. One naming note from the build:
-> `Log.end` could not be named `end` (the statement-separator token blocks
-> a `.end` dot-access), so it ships as `Log.end-span` and the Span method
-> as `finish`. This note specifies a new
+> **Status: all phases (1–5) implemented.** Phase 1 (traditional logging
+> — levels, fields, threshold, console/memory/null sinks, the `log` policy
+> scope, the `LogSinkRegistry` host seam), phase 2 (contextual loggers —
+> `Log.logger` / `Log.with` / `Logger.child`), phase 3 (provider hooks —
+> `RegisterHostLogSink` + `Log.register`), phase 4 (traces — `Log.span` /
+> `Log.with-span` / `Log.end-span` / `Log.current-span` / `Log.traces`,
+> Span methods, trace-context propagation, host span hooks), and phase 5
+> (metrics — `Log.counter` / `Log.gauge` / `Log.histogram` /
+> `Log.measurements`, instrument `add`/`record`, host OnMeasure hook) have
+> all landed: `lang/go/native/log_module.go`, `log_logger.go`,
+> `log_sinks.go`, `log_span.go`, `log_metrics.go`, `lang/go/modules/log.go`,
+> `lang/spec/module-log.tsv`, `lang/go/modules/log_test.go`. Two naming
+> notes from the build: `Log.end` could not be named `end` (the
+> statement-separator token blocks a `.end` dot-access), so it ships as
+> `Log.end-span` with the Span method `finish`; and statements that share
+> mutable logging state must be sequenced with `;` (newline is not a
+> separator), as the spec rows show. This note specifies the
 > capability module `aql:log` (namespace `Log`) that gives AQL programs
 > three layers on one surface: (1) **traditional logging** backed by Go's
 > standard `log` package, (2) a vendor-neutral **OpenTelemetry abstraction**
-> (logs, spans, and — phase 2 — metrics) that never pulls the OTel SDK into
+> (logs, spans, and metrics) that never pulls the OTel SDK into
 > the sealed runtime, and (3) **provider hooks** — a registry of named
 > *sinks* that hosts (in Go) or AQL code (via a `register` word) attach at
 > runtime, modelled on the existing parse/emit host-registration pattern.
 > Read [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md),
 > [EXTENSION-MODULES.10.md](EXTENSION-MODULES.10.md) §2, and
 > [GO-MODULES.10.md](GO-MODULES.10.md) first.
+
+## 0. Deltas from this sketch (as built)
+
+Where the shipped surface differs from the design sketch below:
+
+- **`Log.end` → `Log.end-span`; `Span.end` → `Span.finish`.** `end` is the
+  statement-separator token, so a `.end` dot-access terminates the
+  statement. The span-end words were renamed.
+- **Levels / formats / sink names are plain atoms, not a `Log.Level`
+  enum.** `Log.set-level warn/q`, `x is Log.Level` and the exported
+  `Log.LogRecord` / `Log.emit` refine-type surface (§3.1–3.2) were not
+  built; the runtime validates atom values directly (an invalid atom is a
+  runtime error the static checker cannot predict). Captured records are
+  plain Records via `Log.dump` / `Log.traces` / `Log.measurements`.
+- **Trace context propagates via a per-registry active-span stack**, not
+  the `ctx-set`/`ctx-get` context stack — simpler and equivalent for
+  single-threaded AQL (§3.5).
+- **`Log.register` registers *and* attaches** the AQL function sink (the
+  common intent); `remove-sink`/`add-sink` toggle thereafter.
+- Everything else (sinks, fan-out, the `log` policy scope, the host
+  `LogSinkSpec` seam with OnRecord/OnSpanStart/OnSpanEnd/OnMeasure,
+  determinism via `EffectiveClock`) is as described.
 
 ## 1. Motivation
 
@@ -42,7 +67,7 @@ Three needs, one module:
    human-readable console sink built on the standard library `log`
    package. Works with zero host wiring, like `print` does.
 2. **An OpenTelemetry abstraction** — a vendor-neutral in-memory shape for
-   the OTel **logs** and **traces** signals (and, phase 2, **metrics**), so
+   the OTel **logs**, **traces**, and **metrics** signals, so
    AQL code emits *records* and *spans* without naming OTel, and a host
    translates them to the OTel SDK at the boundary. The OTel SDK must stay
    a **host dependency**, never a runtime one — the AQL runtime is sealed
@@ -221,14 +246,27 @@ owns sampling — see §4.3). Current span context propagates through the
 `native/capabilities.go` + the ctx words), so records emitted inside a span
 auto-populate `trace-id`/`span-id`. No new propagation machinery.
 
-### 3.6 Metrics (phase 2)
+### 3.6 Metrics (phase 5 — implemented)
 
-Deferred to keep v1 focused. Sketch: `Log.counter name`, `Log.gauge name`,
-`Log.histogram name` return instrument handles; `Instrument.add` /
-`.record` forward measurements to sinks that implement the (optional)
-metrics half of the sink interface (§5). The neutral shape is an OTel
-`Measurement` `{instrument, kind, value, attributes, timestamp}`. Console
-sink aggregates and prints on flush; an OTel host sink maps to a `Meter`.
+`Log.counter NAME`, `Log.gauge NAME`, and `Log.histogram NAME` return
+instrument handles (the logger/span instance shape). A counter's `add`
+and a gauge/histogram's `record` method — each `[Any value]` or
+`[Any value, Map attrs]` — produce a neutral `Measurement`
+`{instrument, kind, value, attributes, timestamp}` that fans out to every
+attached sink's measure hook. The console sink prints a `METRIC` line;
+the memory sink captures measurements for `Log.measurements`; a host OTel
+sink's `OnMeasure` maps them to a `Meter`. Metrics carry no severity, so
+the global level threshold does not apply — only the `log` policy scope
+gates them.
+
+```
+import "aql:log"
+def reqs (Log.counter "requests")
+reqs.add 1 {route:"/x"}                  # a counter measurement
+def temp (Log.gauge "cpu-temp")
+temp.record 64.5
+Log.measurements                          # [{instrument,kind,value,attributes,timestamp} …]
+```
 
 ## 4. The OpenTelemetry abstraction
 
@@ -284,7 +322,7 @@ slog is swapping this adapter — the AQL programs are untouched.
 |---|---|---|
 | **Logs** | `Log.LogRecord` Record (severity #, body, attrs, timestamp, trace context) | ✅ |
 | **Traces** | `Span` object + context-stack propagation; events, status, attributes | ✅ |
-| **Metrics** | `Measurement` `{instrument,kind,value,attrs,ts}` | phase 2 (§3.6) |
+| **Metrics** | `Measurement` `{instrument,kind,value,attrs,ts}` | ✅ (phase 5, §3.6) |
 | **Baggage** | key/values on the context stack (`ctx-set`) | reuse existing |
 
 When a host OTel **trace** sink is attached it owns id generation and
@@ -311,7 +349,7 @@ type LogSinkSpec struct {
     OnRecord func(LogRecord) error   // logs handler (required)
     OnSpanStart func(*Span) (SpanToken, error) // optional traces
     OnSpanEnd   func(SpanToken, *Span) error
-    OnMeasure   func(Measurement) error          // optional metrics (phase 2)
+    OnMeasure   func(Measurement) error          // optional metrics (phase 5)
 }
 
 // Mirrors RegisterHostParser / RegisterHostEmitter exactly:
@@ -468,8 +506,7 @@ Per the test discipline (always pair positive with negative):
 
 ## 10. Open questions
 
-- **Metrics in v1 or phase 2?** Leaning phase 2 (§3.6) — logs + traces
-  cover the dominant need and keep the v1 surface small.
+- **Metrics in v1 or later?** RESOLVED — shipped as phase 5 (§3.6).
 - **`fatal` semantics.** Emit-and-`os.Exit` (classic), or emit at FATAL
   severity and *return* (let the program decide)? Lean: **emit + raise an
   AQL error** (`log_fatal`), so control flow stays in AQL and the sealed

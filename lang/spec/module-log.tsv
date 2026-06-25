@@ -72,6 +72,13 @@ import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Lo
 import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get	{region:'eu'}	Span.set-attr records an attribute; finish ends the span
 import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get	'error'	Span.record-error marks the span failed
 
+# --- metrics (phase 5) ----------------------------------------------------
+import "aql:log" ; def c (Log.counter "x") ; typeof c	Map	an instrument is a handle Map
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 1 ; c.add 2 ; Log.measurements size	2	each add records a measurement
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 3 ; Log.measurements 0 get "value" get	3	a counter records its added value
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def g (Log.gauge "temp") ; g.record 21 ; Log.measurements 0 get "kind" get	'gauge'	a gauge records gauge-kind measurements
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def h (Log.histogram "lat") ; h.record 12 {ep:"/x"} ; Log.measurements 0 get "attributes" get	{ep:'/x'}	a histogram records measurement attributes
+
 # --- negatives ------------------------------------------------------------
 import "aql:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q	ERROR:sink-exists	registering an already-taken sink name is rejected
 import "aql:log" ; def a (Log.span "a") ; def b (Log.span "b") ; Log.end-span a	ERROR:span-mismatch	ending a span that is not the active one is rejected

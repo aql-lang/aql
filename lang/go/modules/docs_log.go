@@ -27,5 +27,9 @@ func init() {
 		"end-span":     "End a started span given its handle: end-span SPAN.",
 		"current-span": "The active span handle, or None.",
 		"traces":       "Return the ended spans captured by the memory sink.",
+		"counter":      "Create a counter instrument: counter NAME (then c.add N).",
+		"gauge":        "Create a gauge instrument: gauge NAME (then g.record V).",
+		"histogram":    "Create a histogram instrument: histogram NAME (then h.record V).",
+		"measurements": "Return the measurements captured by the memory sink.",
 	})
 }
