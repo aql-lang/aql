@@ -428,3 +428,44 @@ suite-level reasons (`do [body]`, `mk-node`, `error [handler]`). Findings:
 compiler fix because the remaining blockers are genuinely deep (gradual-dispatch
 runtime path; recursive-closure-result provenance), and several apparent "small"
 refusals dissolved on inspection (isolated forms already compile).
+
+---
+
+## Session-2 cont. — gradual-dispatch scoped → root cause is Project B (precise)
+
+Scoped the "gradual-dispatch runtime path" unit. The poly path
+(`tryRecordPoly`/`OpCallNativePoly`) already exists but is gated to REGISTERED
+BUILTINS; `mk-node` is a user fn. However, reducing the REAL trie refusal
+(`set-edge` → `mk-node`, radix.aql:108) shows the blocker is NOT gradual
+dispatch — it is the **Project B construction-check artifact**, now pinned
+precisely:
+
+`CompileCheck` (the force-compile check pass, `aql.go:255`, `Check.Compiling=
+true`) emits ERROR-severity diagnostics that standalone `aql check` does NOT, so
+Finalize is gated and `--force-compile` reports the generic `check diagnostics`.
+For `set-edge` the error diagnostics are:
+- `undefined_word: undefined word: kids2` (FnBody) — `kids2` is `def`'d two lines
+  up in the SAME body, yet the later reference sees it as undefined;
+- `no_signature: no matching signature for mk-node` (the cascade from kids2→Any);
+- `undefined_word: undefined word: kids` (FnBody) — `kids` is mk-node's OWN
+  PARAM, reported undefined inside mk-node's body;
+- plus a contradictory `unused_def: def kids2 is never used` warning.
+
+So the COMPILING check pass re-analyses fn bodies WITHOUT their params/locals
+bound (the construction/dynamic-help eval), manufacturing spurious
+`undefined_word`/`no_signature` errors. Standalone `--check` binds them and is
+clean — which is why every isolated repro compiles but the assembled library
+refuses. This is the load-bearing, corpus-calibrated path
+`module-fn-checkstate-ownership.6.md` describes: the sound fix is (a) hermetic
+help/construction eval that binds the fn's own params+locals (no spurious
+undefined_word), (b) a first-class construction-check pass to keep the
+dead-fn-body coverage, (c) a reviewed corpus re-baseline. High-risk by the
+brief's own framing; not a tail-of-session land.
+
+**This unifies the remaining client blockers:** the `each` / `mk-node` /
+`unit_spec` / `*_smoke` refusals that surface as `check diagnostics`,
+`unmatched dispatch recovered`, or `no_signature` are downstream of this ONE
+construction-check binding bug. Fixing it is the highest-leverage next unit by
+far — but it is the Project B rebaseline, to be done deliberately as its own
+reviewed change with the full `verify-bytecode` + langspec-census gates and TS
+parity re-checked.
