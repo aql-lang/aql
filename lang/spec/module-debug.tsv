@@ -13,7 +13,7 @@
 # ─────────────────────────────────────────────────────────────────────
 # §1  printing — return the value (and print as a side effect)
 import "aql:debug" 42 Debug.tap	42	tap prints then returns its arg unchanged
-import "aql:debug" Debug.label 7 "answer"	7	label prints "label: value" and returns the value
+import "aql:debug" 7 "answer" Debug.label	7	the labelled tap: value on the stack, label literal, returns the value
 import "aql:debug" 5 Debug.dump	5	dump prints type + value and returns the value
 import "aql:debug" 99 Debug.assert true "ok"	99	a true assertion is a no-op (residual is the untouched 99)
 import "aql:debug" Debug.assert false "bad"	ERROR:assertion_failure	a false assertion raises
@@ -45,6 +45,7 @@ import "aql:debug" Debug.gc typeof	Map	gc forces a collection and reports deltas
 #
 # §5  performance analysis (deterministic shapes under the fixed clock)
 import "aql:debug" [1 add 2] Debug.steps typeof	Integer	steps returns the engine step count
+import "aql:debug" ["a" "b" mul] Debug.steps	ERROR:signature_error	a type error in the body is caught (at check via ReturnsFn, and at runtime)
 import "aql:debug" ([1 add 2] Debug.time) typeof	Map	time returns {result, elapsed-ms, steps}
 import "aql:debug" (Debug.bench [1 add 2] 3) typeof	Map	bench returns timing stats over n runs
 import "aql:debug" [1 add 2] Debug.trace	3	trace prints the step trace and returns the body result

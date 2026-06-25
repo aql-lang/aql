@@ -3,7 +3,7 @@ package modules
 func init() {
 	registerDocs("aql:debug", map[string]string{
 		"tap":         "Print a value (formatted), then return it unchanged — the pipeline tap `print` can't be.",
-		"label":       "Print a labelled value (`value label Debug.label`) and return the value.",
+		"label":       "The labelled tap: `<value> \"label\" Debug.label` prints \"label: value\" and returns the value.",
 		"dump":        "Print a value with its type, then return it unchanged.",
 		"assert":      "Raise assertion_failure with a message when the condition is false (`cond msg Debug.assert`).",
 		"todo":        "A typed hole: always raise not_implemented with the given message (returns Never).",
@@ -23,7 +23,7 @@ func init() {
 		"run-stepped": "Parse a source string and step it.",
 		"widget":      "Construct a dashboard widget map from a title and a sample source string.",
 		"dashboard":   "Render a one-shot snapshot of a list of widget maps to output.",
-		"words":       "Every documented built-in word name.",
+		"words":       "Every word actually dispatchable in this registry (live natives + defs).",
 		"defs":        "Current def-bound names mapped to their active top binding.",
 		"modules":     "The native modules available to import.",
 		"sizeof":      "Estimated retained byte size of a value (deep walk).",

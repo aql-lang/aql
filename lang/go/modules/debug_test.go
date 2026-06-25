@@ -118,12 +118,26 @@ func TestDebugTapComposesInPipeline(t *testing.T) {
 
 func TestDebugLabelPrintsLabelAndReturns(t *testing.T) {
 	r, buf := debugRegistry(t)
-	res := runDebug(t, r, `Debug.label 7 "answer"`)
+	res := runDebug(t, r, `7 "answer" Debug.label`)
 	if got := topInt(t, res); got != 7 {
 		t.Errorf("label must return the value: got %d, want 7", got)
 	}
-	if !strings.Contains(buf.String(), "answer:") {
-		t.Errorf("label must print the label; output = %q", buf.String())
+	if !strings.Contains(buf.String(), "answer: 7") {
+		t.Errorf("label must print 'answer: 7'; output = %q", buf.String())
+	}
+}
+
+// TestDebugLabelPipelineForm covers the intended labelled-tap use: a value
+// produced by a pipeline (on the stack) is tapped with a literal label and
+// flows through unchanged (PR #190 review — the pipeline form must work).
+func TestDebugLabelPipelineForm(t *testing.T) {
+	r, buf := debugRegistry(t)
+	res := runDebug(t, r, `(5 add 5) "sum" Debug.label`)
+	if got := topInt(t, res); got != 10 {
+		t.Errorf("labelled tap must pass the computed value through: got %d, want 10", got)
+	}
+	if !strings.Contains(buf.String(), "sum: 10") {
+		t.Errorf("label must print 'sum: 10'; output = %q", buf.String())
 	}
 }
 
@@ -480,14 +494,28 @@ func TestDebugWords(t *testing.T) {
 	if lst.Len() == 0 {
 		t.Fatal("words must be non-empty")
 	}
-	found := false
+	got := map[string]bool{}
 	for _, v := range lst.Slice() {
-		if s, _ := native.AsString(v); s == "add" {
-			found = true
+		if s, _ := native.AsString(v); s != "" {
+			got[s] = true
 		}
 	}
-	if !found {
+	if !got["add"] {
 		t.Error("words should include the core word 'add'")
+	}
+	// PR #190 review: words must reflect the LIVE registry, not the static
+	// help catalog. Words that are documented but moved to an unimported
+	// module (e.g. `trace`/`read`/`write`/`stdin` → aql:io) are NOT
+	// dispatchable here, so they must not appear — listing them would point
+	// at names that fail with undefined_word.
+	for _, moved := range []string{"trace", "read", "write", "stdin", "stdout", "stderr"} {
+		if got[moved] {
+			t.Errorf("words must not list %q — it is not registered without `import \"aql:io\"`", moved)
+		}
+	}
+	// Every listed word must actually be dispatchable (sample-check `add`).
+	if !r.IsBuiltinWord("add") {
+		t.Error("sanity: add should be a builtin in this registry")
 	}
 }
 
@@ -667,25 +695,62 @@ func TestDebugTracePrintsAndReturns(t *testing.T) {
 	}
 }
 
-func TestDebugProfile(t *testing.T) {
-	r, _ := debugRegistry(t)
-	res := runDebug(t, r, "[1 add 2 mul 3] Debug.profile")
+// profileCounts runs Debug.profile and returns word -> step count.
+func profileCounts(t *testing.T, r *native.Registry, src string) map[string]int64 {
+	t.Helper()
+	res := runDebug(t, r, src+" Debug.profile")
 	lst, err := native.AsList(res[len(res)-1])
 	if err != nil || lst.IsNil() {
 		t.Fatalf("profile must return a list: %v", err)
 	}
-	if lst.Len() == 0 {
+	out := map[string]int64{}
+	for _, row := range lst.Slice() {
+		m, _ := native.AsMap(row)
+		if m == nil {
+			t.Fatal("profile rows must be {word, steps} maps")
+		}
+		wv, ok1 := m.Get("word")
+		sv, ok2 := m.Get("steps")
+		if !ok1 || !ok2 {
+			t.Error("profile row missing 'word'/'steps'")
+			continue
+		}
+		w, _ := native.AsString(wv)
+		n, _ := native.AsInteger(sv)
+		out[w] = n
+	}
+	return out
+}
+
+func TestDebugProfile(t *testing.T) {
+	r, _ := debugRegistry(t)
+	counts := profileCounts(t, r, "[1 add 2 mul 3]")
+	if len(counts) == 0 {
 		t.Fatal("profile of a non-trivial body must have rows")
 	}
-	// Each row is a {word, steps} map.
-	first, _ := native.AsMap(lst.Get(0))
-	if first == nil {
-		t.Fatal("profile rows must be maps")
+	// Each call is counted ONCE (no forward/stack double-count).
+	if counts["add"] != 1 {
+		t.Errorf("add should be counted once, got %d", counts["add"])
 	}
-	if _, ok := first.Get("word"); !ok {
-		t.Error("profile row missing 'word'")
+	if counts["mul"] != 1 {
+		t.Errorf("mul should be counted once, got %d", counts["mul"])
 	}
-	if _, ok := first.Get("steps"); !ok {
-		t.Error("profile row missing 'steps'")
+}
+
+// TestDebugProfileAttributesModuleCalls pins the PR #190 fix: a dotted
+// module call (Math.sqrt) is attributed to the function it resolves to,
+// not just the `get` expansion a bare-word filter would see.
+func TestDebugProfileAttributesModuleCalls(t *testing.T) {
+	r, _ := debugRegistry(t)
+	if err := InstallMathExports(r); err != nil {
+		t.Fatal(err)
+	}
+	// Stamp module provenance the way a real `import` does, so the dispatch
+	// carries its module origin (the signal the profiler attributes on).
+	InstallResolver(r)
+	runDebug(t, r, `import "aql:math-util"`)
+	counts := profileCounts(t, r, "[16.0 MathUtil.sqrt]")
+	if counts["sqrt"] < 1 {
+		t.Errorf("profile must attribute the MathUtil.sqrt dispatch to 'sqrt'; got %v", counts)
 	}
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/aql-lang/aql/eng/go/stackform"
 	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/native/help"
 )
 
 // moduleNamesFn indirects the package-level Names() so the `debug-modules`
@@ -88,19 +87,25 @@ func debugNatives() []native.NativeFunc {
 			}},
 		},
 		{
-			// `value label Debug.label` — print "label: value", return value.
+			// The labelled tap: `<value> "label" Debug.label` — print
+			// "label: value" and return the value. The label is sig[0] (the
+			// top / the literal written after the word) and the value is
+			// sig[1] (deeper on the stack), so the pipeline form
+			// `(compute) "label" Debug.label` taps a value already on the
+			// stack — the whole point of a labelled tap.
 			Name: "debug-label",
 			Signatures: []native.NativeSig{{
-				Args:       []*native.Type{native.TAny, native.TString},
+				Args:       []*native.Type{native.TString, native.TAny},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					label, err := args[1].AsConcreteString()
+					label, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
-					fmt.Fprintf(r.Output, "%s: %s\n", label, native.FormatForPrint(args[0]))
-					return []native.Value{args[0]}, nil
+					value := args[1]
+					fmt.Fprintf(r.Output, "%s: %s\n", label, native.FormatForPrint(value))
+					return []native.Value{value}, nil
 				},
 			}},
 		},
@@ -236,16 +241,18 @@ func debugNatives() []native.NativeFunc {
 
 		// ── (D) System structural analysis ────────────────────────────
 		{
-			// Every documented built-in word name.
+			// Every word actually dispatchable in this registry (live
+			// natives/host words + def-bound names) — not the static help
+			// catalog, which can list words that are documented but not
+			// registered (e.g. moved to an unimported module) and would
+			// fail with undefined_word.
 			Name: "debug-words",
 			Signatures: []native.NativeSig{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					words := append([]string(nil), help.Words()...)
-					sort.Strings(words)
-					return []native.Value{stringsToList(words)}, nil
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					return []native.Value{stringsToList(r.RegisteredWordNames())}, nil
 				},
 			}},
 		},
@@ -332,6 +339,7 @@ func debugNatives() []native.NativeFunc {
 				Returns:    []*native.Type{native.TInteger},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
+				ReturnsFn:  bodyAnalysisReturns(native.TInteger),
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					_, steps, err := runCounted(r, args[0], "Debug.steps")
 					if err != nil {
@@ -349,6 +357,7 @@ func debugNatives() []native.NativeFunc {
 				Returns:    []*native.Type{native.TMap},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
+				ReturnsFn:  bodyAnalysisReturns(native.TMap),
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					clk := native.EffectiveClock(r)
 					start := clk.Now()
@@ -373,6 +382,7 @@ func debugNatives() []native.NativeFunc {
 				Returns:    []*native.Type{native.TMap},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
+				ReturnsFn:  bodyAnalysisReturns(native.TMap),
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					n, err := args[1].AsConcreteInteger()
 					if err != nil {
@@ -420,6 +430,7 @@ func debugNatives() []native.NativeFunc {
 				Returns:    []*native.Type{native.TAny},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
+				ReturnsFn:  bodyAnalysisReturns(native.TAny),
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Debug.trace")
 					if err != nil {
@@ -441,6 +452,7 @@ func debugNatives() []native.NativeFunc {
 				Returns:    []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
+				ReturnsFn:  bodyAnalysisReturns(native.TList),
 				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Debug.profile")
 					if err != nil {
@@ -448,19 +460,16 @@ func debugNatives() []native.NativeFunc {
 					}
 					counts := map[string]int{}
 					sub := native.New(r)
-					sub.SetTrace(func(_ int, pointer int, stack []native.Value, _ string) {
-						if pointer < 0 || pointer >= len(stack) {
-							return
+					// Count by the engine's DISPATCH note rather than the bare
+					// word at the pointer: that attributes a dotted module call
+					// (`Math.sqrt`, `Debug.tap`) to the function it resolves to,
+					// not just the `get` expansion a bare-word filter would see
+					// (PR #190 review). A dispatch sets exactly one note per
+					// call, so notes don't double-count.
+					sub.SetTrace(func(_ int, _ int, _ []native.Value, note string) {
+						if name, ok := dispatchedName(note); ok {
+							counts[name]++
 						}
-						v := stack[pointer]
-						if !native.IsWord(v) {
-							return
-						}
-						w, werr := native.AsWord(v)
-						if werr != nil || w.Name == "" {
-							return
-						}
-						counts[w.Name]++
 					})
 					if _, rerr := sub.Run(append([]native.Value(nil), body.Slice()...)); rerr != nil {
 						return nil, rerr
@@ -652,6 +661,26 @@ func heapMap(m *runtime.MemStats) native.Value {
 	return native.NewMap(om)
 }
 
+// bodyAnalysisReturns is the check-mode ReturnsFn for the body-running debug
+// words (steps/time/bench/trace/profile). Because the body arg is NoEval and
+// the handler is skipped in check mode, a type error inside the body would
+// otherwise never surface — `Debug.steps [1 add "x"]` would check clean. This
+// analyses the (concrete) body for its diagnostics, exactly as `do [body]`
+// does, then returns the word's fixed result carrier. A non-concrete/computed
+// body (a carrier the checker can't run statically) declines analysis and
+// just yields the fixed shape — the same escape hatch `do` uses.
+func bodyAnalysisReturns(fixed *native.Type) native.ReturnsFunc {
+	return func(args []native.Value, r *native.Registry) []native.Value {
+		if len(args) > 0 {
+			body := args[0]
+			if native.IsConcrete(body) && body.Parent != nil && body.Parent.ConformsTo(native.TList) {
+				native.RunCarrierBody(r, body)
+			}
+		}
+		return []native.Value{native.NewCarrier(fixed)}
+	}
+}
+
 // runCounted runs a quoted body (args[0]) in a fresh sub-engine with a
 // step-counting trace hook installed, returning the residual stack and
 // the number of engine steps executed. The body list must be concrete.
@@ -685,6 +714,31 @@ func stringsToList(ss []string) native.Value {
 		out[i] = native.NewString(s)
 	}
 	return native.NewList(out)
+}
+
+// dispatchedName extracts the dispatched word/function name from an engine
+// trace note, counting each call exactly once. The engine sets "stack
+// NAME(types)" at the moment a word executes and "call NAME" when a
+// module-export dispatches; both are execution-time, one per call. The
+// "forward→ NAME" note is the PLANNING phase of a forward-collected word —
+// the same word also emits "stack NAME" when it finally runs, so counting
+// "forward→" too would double-count. Other notes (collect/mark/move/for/…)
+// are not dispatches and are ignored.
+func dispatchedName(note string) (string, bool) {
+	for _, prefix := range []string{"call ", "stack "} {
+		if !strings.HasPrefix(note, prefix) {
+			continue
+		}
+		name := note[len(prefix):]
+		if i := strings.IndexByte(name, '('); i >= 0 {
+			name = name[:i]
+		}
+		name = strings.TrimSpace(name)
+		if name != "" {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // profileRows converts a per-word count map into a List of

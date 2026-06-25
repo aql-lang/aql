@@ -3987,6 +3987,14 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			wrapperSig = arityPick
 		}
 		if wrapperSig != nil {
+			// Surface a module-export dispatch in the trace so a profiler
+			// (Debug.profile) can attribute it: a dotted call like
+			// `Math.sqrt` otherwise shows only the `get` expansion, never the
+			// function it resolves to. Gated on a module origin so ordinary
+			// user-fn and bare-word traces are unaffected.
+			if fnDef.Module != "" {
+				e.traceNote = "call " + fnDef.Name
+			}
 			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
 			if trivialDelegation && sig.Handler != nil {
 				// The inner native lives in fnDef.Registry (the module sub-

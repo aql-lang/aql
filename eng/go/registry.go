@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"sync/atomic"
 )
@@ -643,6 +644,32 @@ func (r *Registry) IsBuiltinWord(name string) bool {
 		return true
 	}
 	return r != nil && r.builtinWords[name]
+}
+
+// RegisteredWordNames returns the sorted set of words that are actually
+// dispatchable in THIS registry: every name registered via Register (kernel
+// natives + host words, tracked in builtinWords) unioned with the live
+// def-bound names. Unlike the static help catalog, this never reports a
+// name that would fail with undefined_word (e.g. words documented but moved
+// to an unimported module) and never omits a host registration that lacks a
+// help entry. Used by Debug.words.
+func (r *Registry) RegisteredWordNames() []string {
+	if r == nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(r.builtinWords))
+	for name := range r.builtinWords {
+		seen[name] = true
+	}
+	for _, name := range r.Defs.Names() {
+		seen[name] = true
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // upsertFnDef finds or creates a FnDefInfo at the top of DefStacks[name]
