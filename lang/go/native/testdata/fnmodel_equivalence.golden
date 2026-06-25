@@ -7,6 +7,9 @@ WORD __folder
   [] barrier=0 returns=[Scalar/Path]
 WORD __pa
   [] barrier=0
+WORD __varundef
+  [Scalar/String] barrier=1 runcheck
+  [Scalar/Atom] barrier=1 runcheck quote={0}
 WORD add
   [Node/Map Any Ideal/Patrun] barrier=3
   [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]

@@ -1915,31 +1915,35 @@ func TestVarCompilesAsLet(t *testing.T) {
 		}
 	}
 
-	// SOUNDNESS GATE: a let body that ERRORS under check-mode analysis (here
-	// `s get a/q`, where the each-element carrier `s` is conservatively under-typed
-	// and `get` rejects it as a non-concrete map — mere imprecision, the runtime
-	// `s` is a concrete Map and the interpreter returns [1 2]) must NOT compile to
-	// an EMPTY closure (which would raise each_error "body produced no result" at
-	// the VM, diverging from the interpreter). The armed-body-error refusal in
-	// AnalyseFnBody marks the program uncompilable, so it falls back byte-identical.
-	const guarded = `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`
-	prog, _, _, cerr := mustNew(t).CompileCheck(guarded)
+	// A var-body that REACHES INTO the each element (`s get a/q`, where `s` is the
+	// element carrier) compiles to its closure unit and is byte-identical to the
+	// interpreter ([1 2]). This row previously REFUSED, but the refusal was the
+	// var-cleanup `undef s` mis-dispatching to the 2-arg `undef name fnUndefSpec`
+	// form (the dynamic-Any body residual gradually matched TFnUndef in check
+	// mode) and erroring — NOT, as once believed, a `get`-rejects-under-typed-map
+	// imprecision. With the cleanup routed through the 1-arg-only `__varundef`
+	// (native_definition.go) the body analyses cleanly and compiles. The broader
+	// armed-body-error soundness gate in AnalyseFnBody (a GENUINE check-mode body
+	// error still marks the program uncompilable) is exercised by the whole-corpus
+	// differential.
+	const reach = `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`
+	prog, _, _, cerr := mustNew(t).CompileCheck(reach)
 	if cerr != nil {
-		t.Fatalf("guarded each-var: unexpected check error %v", cerr)
+		t.Fatalf("reach each-var: unexpected check error %v", cerr)
 	}
-	if prog != nil {
-		t.Errorf("guarded each-var: a check-mode body error must refuse, got a Program:\n%s", prog.Disassemble())
+	if prog == nil {
+		t.Errorf("reach each-var: expected a compiled Program (the var cleanup no longer mis-dispatches)")
 	}
-	gotG, compiled, err := mustNew(t).RunCompiled(guarded)
+	gotG, compiled, err := mustNew(t).RunCompiled(reach)
 	if err != nil {
-		t.Fatalf("guarded each-var: %v", err)
+		t.Fatalf("reach each-var: %v", err)
 	}
-	gotGI, _ := mustNew(t).Run(guarded)
-	if compiled {
-		t.Errorf("guarded each-var: a check-mode body error must refuse, not compile")
+	gotGI, _ := mustNew(t).Run(reach)
+	if !compiled {
+		t.Errorf("reach each-var: a clean var-reach body should compile, got a fallback")
 	}
 	if fmt.Sprint(gotG) != fmt.Sprint(gotGI) || fmt.Sprint(gotG) != "[[1 2]]" {
-		t.Errorf("guarded each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
+		t.Errorf("reach each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
 	}
 }
 

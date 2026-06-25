@@ -291,3 +291,44 @@ distinct from the now-compiled `do {map}`.
 (decline points 1 + 2 above) — highest-frequency single blocker (7 suites),
 no corpus calibration. It is genuine Stage-2 emitter work, not a leaf, so it
 warrants its own branch + full re-gate rather than being rushed.
+
+---
+
+## Session-2 cont. — var-splice closure captures LANDED
+
+The Project-A "var-splice-body closure with captures" unit (the two decline
+points pinned above) is fixed by a single root-cause change, all gated
+(`make verify-bytecode` green + full `eng/go`/`lang/go` suites):
+
+**Root cause (one bug, two symptoms).** `var [[i] body]` splices to
+`def i …; body; undef i`. The cleanup `undef i` runs with the body's RESIDUAL
+still on the stack. In check mode that residual is a dynamic-Any carrier, which
+GRADUALLY matches the 2-arg `undef name fnUndefSpec` overload's `TFnUndef` slot
+— so `undef i` mis-dispatched to `undefFnHandler` and errored
+("expected fn undef spec"). That (1) refused the body, and (2) left `i` bound
+(cleanup never ran), so the next analysis pass's `ComputeCaptures` wrongly
+captured the loop variable `i` and then failed to resolve it. A concretely-typed
+residual (`i n add`) picks the 1-arg form and already compiled — the proof it
+was a dispatch-ambiguity bug, not a missing capability.
+
+**Fix.** Route the `var` cleanup through a dedicated 1-arg-only word
+`__varundef` (reusing `undefHandler`), which can never mis-match a stack
+residual — so it dispatches identically (1-arg unbind) in check and at runtime.
+No change to user-facing `undef`, no gradual-matching change. `var`-bodies that
+capture an enclosing fn local or reference a module-global now compile to their
+closure unit, byte-identical to the interpreter. Pinned by
+`lang/go/bytecode_varcapture_test.go`; `COMPILABLE-SUBSET.md` updated.
+
+A stale soundness-gate row in `TestVarCompilesAsLet` (`data each [var [[s]
+(s get a/q)]]`, asserted to REFUSE) was corrected: its refusal was THIS undef
+bug, not a `get`-under-typing imprecision as the comment claimed — it now
+compiles byte-identically. The armed-body-error refusal mechanism it guarded is
+intact and covered by the whole-corpus differential.
+
+**Does NOT yet flip the client `each` suites** — those each-bodies call MODULE
+FUNCTIONS (`s Test.run-spec`, and bloom's `bit-test`): a closure body that
+dispatches a cross-registry module FnDef is the NEXT unit (Stage-3 / module-fn-
+in-closure, brief item 3). The var-splice fix is the prerequisite groundwork
+that makes the var-body itself lower; module-fn-in-closure-body is the layer on
+top. Live client refusal map is unchanged at the suite granularity (first-
+refusal reporting) but the underlying var-body blocker is now removed.
