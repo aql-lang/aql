@@ -44,7 +44,16 @@ return-count mismatch that "compiles" a malformed unit instead of
 falling back). The real fix is to EMIT an `OpCallDynamic` inside the fn
 unit with the apply operand order (`[args, fn]`) reversed to
 `CALL_DYNAMIC`'s `[fn, args]` — Stage G proper, gated by the same
-operand-order discipline as the `(3 and "x") add 1` revert. The rest are
+operand-order discipline as the `(3 and "x") add 1` revert. **Concrete
+blocker found this pass:** `resolveDynamicApply` (the fn-value-call
+boundary) is wired ONLY into the program-residual `Finalize`
+(`emit.go:3279`), NOT into the fn-unit finish (`StartFnCompile`'s
+`finish`). And `trailingApply` requires the fn to be an event-produced
+value that is the last VM push — a fn PARAM is a frame local, not an
+event. So clearing `apply`-over-param-fn needs BOTH: route a fn unit's
+body residual through `resolveDynamicApply`, AND extend `trailingApply`
+to accept a `resolveOperand`-able (event OR local) fn. Two coordinated
+lowering changes, not a flag flip. The rest are
 Stage C (module-body compilation, a corpus-re-baseline project),
 Stage E (flex reference cells), and Stage F (dynamic scope). None is a
 single safe commit; each needs the deliberate per-stage work below.
