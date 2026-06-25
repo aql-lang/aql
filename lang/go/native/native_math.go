@@ -125,8 +125,8 @@ var mathNatives = []NativeFunc{
 			// system expresses "string-or-bust" directly rather than
 			// silently stringifying any Scalar pair. See
 			// design/WAT-AUDIT.5.md §G.
-			{Args: []*Type{TString, TScalar}, Handler: addConcatHandler, Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TScalar, TString}, Handler: addConcatHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString, TScalar}, Handler: addConcatHandler, ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
+			{Args: []*Type{TScalar, TString}, Handler: addConcatHandler, ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
 			{Args: []*Type{TDate, TCalDuration}, Handler: addDateCalHandler, Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, TClkDuration}, Handler: addDateTimeClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, TClkDuration}, Handler: addInstantClkHandler, Returns: []*Type{TInstant}, BarrierPos: -1},

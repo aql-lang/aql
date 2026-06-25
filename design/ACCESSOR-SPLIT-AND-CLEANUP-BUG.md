@@ -4,6 +4,40 @@ This note records the get/dot accessor split that landed this session and
 hands off the one remaining bug it surfaced — a per-call frame-cleanup
 over-pop — with a ready-to-use next-session prompt.
 
+## ✅ RESOLVED (branch `claude/dx-driven-language-improvements`)
+
+The over-pop is **fixed**, but the root cause is **NOT** the teardown over-pop
+hypothesised below — it is an **install-time over-write**. When a fn-frame
+installs a param/capture whose value is a function and whose name+signature
+**overlap** a live caller binding (the classic comparator threaded in via a
+`/r`-parked arg), `InstallDef`'s same-scope overlap-redefinition **filter**
+(`core_helpers.go`, the `FnDefsOverlap` block) DROPPED the caller's binding at
+install time, collapsing two shadow levels into one; the normal `undef` tail
+then popped the survivor to depth 0. Decisive evidence: with two function
+values whose signatures do **not** overlap the program runs fine; flipping only
+to an overlapping value crashes — so the trigger is the overlap filter, not the
+teardown. The `undef`-tail / snapshot-after-install / `teardownFrameState` are
+all correct and symmetric once install pushes a real shadow level.
+
+**Fix (smaller and safer than the "depth-precise teardown" direction below):**
+a new `InstallFrameBinding` (`core_helpers.go`) installs frame params/captures
+by **shadowing** (push a fresh DefStack level) instead of running the overlap
+filter — the filter is correct for the `def` word (same-scope redefinition) but
+wrong for a nested frame, which must stack and tear back down to the caller's
+level. The six frame-install sites (`core_helpers.go` `buildFnBodyHandler`,
+`engine.go` `execFnDefSig`, `registry.go` `CallAQL` — capture + param each) now
+call it; `InstallDef` (the `def` path) keeps the filter. No change to the
+teardown mechanisms or the capitalised-name type-retire path.
+
+Note the repro's expected value is **14**, not 13: `g(5)+g(7) = 6+8`. Regression
+tests: `lang/go/test/closures_test.go` (`TestFrameParamShadowsCollidingFunctionParam`
+positive across both install paths + `TestDefWordOverlapStillRedefines` negative
+guarding the `def` filter). The recursion-via-Function-param case (R4 in the
+client reports) is a **separate** TCO eager-teardown defect and is NOT fixed by
+this change — leave it for a dedicated session.
+
+The original handoff is kept below as the record.
+
 ## Landed this session (branch `claude/aql-client-lib-issues-lev8cs`)
 
 1. **`slice` element-type preservation** — `slice` no longer stringifies

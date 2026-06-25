@@ -1697,6 +1697,20 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 	return floatToValue(nv.Val), nil
 }
 
+// ConvertParsedNumber converts a jsonic parse-result element that the
+// number-Sub wrapped in a numberVal (see SafeParseData / setupNumberSub)
+// into its AQL numeric Value, preserving the int/float distinction carried
+// by the source text. Returns ok=false for any non-numberVal input so the
+// caller falls through to its default conversion. The numberVal type stays
+// unexported; this is the single public seam data-decode paths use.
+func ConvertParsedNumber(v any) (eng.Value, bool, error) {
+	if nv, ok := v.(numberVal); ok {
+		ev, err := numberValToValue(nv)
+		return ev, true, err
+	}
+	return eng.Value{}, false, nil
+}
+
 // isBigNumberLiteral reports whether src is a `0d`/`0D`-prefixed literal
 // (optional leading sign). The lexer matcher claims these as one text
 // token; parseWord routes them here.

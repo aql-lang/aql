@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/aql-lang/aql/eng/go/parser"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -142,6 +143,15 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool, 
 // jsonicToValue converts a jsonic parse result to an AQL Value.
 // This uses data context: all text becomes strings, not words.
 func jsonicToValue(v any) (Value, error) {
+	// A number-Sub-wrapped token (from parser.SafeParseData) carries its
+	// exact source text, so "42.0" stays a Float and "42" an Integer (and
+	// large integers keep full precision / raise integer_overflow). The
+	// bare float64 case below is the fallback for parsers built without
+	// the Sub (SafeParse / direct float64 callers), where the source text
+	// is already gone and a whole-valued float collapses to Integer.
+	if ev, ok, err := parser.ConvertParsedNumber(v); ok {
+		return ev, err
+	}
 	switch val := v.(type) {
 	case nil:
 		return NewTypeLiteral(TNone), nil

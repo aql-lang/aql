@@ -108,6 +108,11 @@ import "aql:struct-util" StructUtil.parse "[1, 2, 3]"	[1 2 3]	a JSON array decod
 import "aql:struct-util" StructUtil.parse '{"a": 1}'	{a:1}	strict JSON is valid jsonic
 import "aql:struct-util" StructUtil.parse "{val:'if'}"	{val:'if'}	data context — text stays a string, never a word
 import "aql:struct-util" StructUtil.parse (StructUtil.jsonify {a:1 b:[2 3]})	{a:1 b:[2 3]}	jsonify→parse round trip
+import "aql:struct-util" StructUtil.parse "2.0"	2.0	a dot-bearing number keeps Float type (was collapsing to Integer 2)
+import "aql:struct-util" StructUtil.parse "2"	2	a plain integer stays Integer
+import "aql:struct-util" StructUtil.parse "[1.0, 2]"	[1.0 2]	per-element numeric fidelity — Float and Integer preserved through parse
+import "aql:struct-util" StructUtil.parse "{x:2.0, n:3}"	{n:3 x:2.0}	Float map value preserved (matches the {x:2.0} map-literal interior)
+import "aql:struct-util" StructUtil.parse "null"	None	a top-level JSON null hydrates to the concrete none (not an empty-input error)
 import "aql:struct-util" StructUtil.parse "{a:1]"	ERROR:parse_error	malformed input raises loudly
 import "aql:struct-util" StructUtil.parse ""	ERROR:parse_error	empty input raises (never a silent none)
 #

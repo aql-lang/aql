@@ -12,7 +12,7 @@ func init() {
 		"fill":      "A rows-by-cols matrix filled with a constant value.",
 		"mat-add":   "Element-wise sum of two matrices.",
 		"mat-emul":  "Element-wise (Hadamard) product of two matrices.",
-		"mat-mul":   "Matrix product of two matrices.",
+		"mat-mul":   "Matrix product of two matrices. Non-commutative: like every binary op, the stack/swap form 'A mat-mul B' computes A·B, while the forward form 'mat-mul A B' binds operands in reverse and computes B·A.",
 		"mat-sub":   "Element-wise difference of two matrices.",
 		"ones":      "All-one matrix (forward args are cols then rows).",
 		"row":       "One row of a matrix as a list.",
