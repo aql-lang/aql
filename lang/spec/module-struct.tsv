@@ -72,15 +72,15 @@ import "aql:struct-util" StructUtil.jsonify true	'true'	a boolean
 #    keys error. jsonify carries $class on class instances and escapes
 #    user $-keys to $$ (spoof-proof round-trip).
 import "aql:struct-util"  def Point class {x:1, y:2} def p (StructUtil.reify Point {x:9}) p typeof	Point	reify from a Node constructs a typed instance
-import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) get y	2	…with schema defaults filling omitted fields
-import "aql:struct-util"  def Point class {x:1} (StructUtil.reify Point (StructUtil.jsonify (make Point {x:9}))) get x	9	full jsonify→reify round trip through JSON text
+import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) dot y	2	…with schema defaults filling omitted fields
+import "aql:struct-util"  def Point class {x:1} (StructUtil.reify Point (StructUtil.jsonify (make Point {x:9}))) dot x	9	full jsonify→reify round trip through JSON text
 import "aql:struct-util"  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) (StructUtil.reify Shape (StructUtil.jsonify (make Square {side:4.0}))) typeof	Square	union-bounded: $class selects the member
 import "aql:struct-util"  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) StructUtil.reify Shape {r:2.0}	ERROR:needs a $class	a union target without $class is a loud error
 import "aql:struct-util"  def Point class {x:1} StructUtil.reify Point {z:5}	ERROR:unknown field	an undeclared key errors (hydration is sealed construction)
 import "aql:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius} StructUtil.reify Circle '{"r": -1.5}'	ERROR:does not satisfy	predicate field types run during hydration
-import "aql:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius} (StructUtil.reify Circle '{"r": 5}') get r	5.0	schema-driven recovery: a JSON integer lands as the Float the field declares
+import "aql:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius} (StructUtil.reify Circle '{"r": 5}') dot r	5.0	schema-driven recovery: a JSON integer lands as the Float the field declares
 import "aql:struct-util"  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected
-import "aql:struct-util"  def P class {name:'x' note:none} (StructUtil.reify P (StructUtil.jsonify (make P {note:none}))) get note	none	JSON null hydrates as the CONCRETE none value (the exact jsonify→reify inverse), not the None type literal
+import "aql:struct-util"  def P class {name:'x' note:none} (StructUtil.reify P (StructUtil.jsonify (make P {note:none}))) dot note	none	JSON null hydrates as the CONCRETE none value (the exact jsonify→reify inverse), not the None type literal
 #
 # §  struct words on class / Object instances — type-preserving.
 #    clone gives a fresh instance of the same type (deq-equal,
@@ -91,12 +91,12 @@ import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.clone (make Poi
 import "aql:struct-util"  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) deq p	true	a clone is structurally equal…
 import "aql:struct-util"  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) eq p	false	…but a distinct instance (fresh field map)
 import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) typeof	Point	setpath on an instance returns a NEW instance
-import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) get x	9	…with the edit applied
-import "aql:struct-util"  def Point class {x:1} def p (make Point {}) def w (StructUtil.setpath p "x" 9) p get x	1	…and the receiver untouched
+import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) dot x	9	…with the edit applied
+import "aql:struct-util"  def Point class {x:1} def p (make Point {}) def w (StructUtil.setpath p "x" 9) p dot x	1	…and the receiver untouched
 import "aql:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "nope" 9	ERROR:unknown field	a class edit re-makes: unknown fields stay loud
 import "aql:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "x" 'hi'	ERROR:expected Integer	…and off-schema values stay loud
 import "aql:struct-util"  (StructUtil.setpath (object {a:1}) "b" 2) typeof	Object	an open Object edit stays an Object
-import "aql:struct-util"  (StructUtil.setpath (object {a:1}) "b" 2) get b	2	…and accepts new keys (open contract)
+import "aql:struct-util"  (StructUtil.setpath (object {a:1}) "b" 2) dot b	2	…and accepts new keys (open contract)
 import "aql:struct-util"  def Point class {x:1} StructUtil.walk (make Point {})	[{path:'x' value:1}]	walk sees the instance's field projection
 #
 # §  parse — jsonic/JSON text → data (the decode complement of

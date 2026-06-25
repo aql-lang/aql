@@ -32,7 +32,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 
 	// Verify initial value
 	result := runAQL(t, r, []Value{
-		instanceVal, NewWord("get"), NewWord("name"),
+		instanceVal, NewWord("dot"), NewWord("name"),
 	})
 	_as0, _ := AsString(result[0])
 	if len(result) != 1 || _as0 != "Alice" {
@@ -46,7 +46,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 
 	// Verify mutation persisted (same instance)
 	result = runAQL(t, r, []Value{
-		instanceVal, NewWord("get"), NewWord("name"),
+		instanceVal, NewWord("dot"), NewWord("name"),
 	})
 	_as1, _ := AsString(result[0])
 	if len(result) != 1 || _as1 != "Bob" {
@@ -123,7 +123,7 @@ func TestObjectSetAddsNewField(t *testing.T) {
 
 	// Read it back
 	result := runAQL(t, r, []Value{
-		instanceVal, NewWord("get"), NewWord("b"),
+		instanceVal, NewWord("dot"), NewWord("b"),
 	})
 	_as3, _ := AsInteger(result[0])
 	if len(result) != 1 || _as3 != 2 {
@@ -162,7 +162,7 @@ func TestObjectMutationSharedReference(t *testing.T) {
 
 	// Read via ref2 — should see the mutation
 	result := runAQL(t, r, []Value{
-		ref2, NewWord("get"), NewWord("v"),
+		ref2, NewWord("dot"), NewWord("v"),
 	})
 	_as4, _ := AsInteger(result[0])
 	if len(result) != 1 || _as4 != 42 {
@@ -250,7 +250,7 @@ func TestNodeMapUnchangedAfterObjectSet(t *testing.T) {
 
 	// Map value remains unchanged
 	result := runAQL(t, r, []Value{
-		mapVal, NewWord("get"), NewWord("x"),
+		mapVal, NewWord("dot"), NewWord("x"),
 	})
 	_as5, _ := AsInteger(result[0])
 	if len(result) != 1 || _as5 != 1 {
@@ -476,7 +476,7 @@ func TestStoreCOWBasic(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("k"), NewInteger(7),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("k"),
+		NewWord("context"), NewWord("dot"), NewWord("k"),
 	})
 	_as15, _ := AsInteger(result[0])
 	if len(result) != 1 || _as15 != 7 {
@@ -500,7 +500,7 @@ func TestStoreCOWDoesNotMutateOriginal(t *testing.T) {
 	e := New(r)
 	// Get the nested store, set a key on it
 	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("s"),
+		NewWord("context"), NewWord("dot"), NewWord("s"),
 		NewWord("set"), NewWord("y"), NewInteger(99),
 	})
 	if err != nil {
@@ -541,14 +541,14 @@ func TestStoreCOWParentPropagation(t *testing.T) {
 	e := New(r)
 	// context get parent → get child → set val 42
 	result, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("parent"),
-		NewWord("get"), NewWord("child"),
+		NewWord("context"), NewWord("dot"), NewWord("parent"),
+		NewWord("dot"), NewWord("child"),
 		NewWord("set"), NewWord("val"), NewInteger(42),
 		NewEnd(),
 		// Now read it back through the context
-		NewWord("context"), NewWord("get"), NewWord("parent"),
-		NewWord("get"), NewWord("child"),
-		NewWord("get"), NewWord("val"),
+		NewWord("context"), NewWord("dot"), NewWord("parent"),
+		NewWord("dot"), NewWord("child"),
+		NewWord("dot"), NewWord("val"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -581,18 +581,18 @@ func TestStoreCOWPrototypeResolution(t *testing.T) {
 	e := New(r)
 	// Set "a" to 99, then read both "a" and "b"
 	result, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("s"),
+		NewWord("context"), NewWord("dot"), NewWord("s"),
 		NewWord("set"), NewWord("a"), NewInteger(99),
 		NewEnd(),
 		// Read "a" (from COW layer)
 		NewOpenParen(),
-		NewWord("context"), NewWord("get"), NewWord("s"),
-		NewWord("get"), NewWord("a"),
+		NewWord("context"), NewWord("dot"), NewWord("s"),
+		NewWord("dot"), NewWord("a"),
 		NewCloseParen(),
 		// Read "b" (from prototype, unchanged)
 		NewOpenParen(),
-		NewWord("context"), NewWord("get"), NewWord("s"),
-		NewWord("get"), NewWord("b"),
+		NewWord("context"), NewWord("dot"), NewWord("s"),
+		NewWord("dot"), NewWord("b"),
 		NewCloseParen(),
 	})
 	if err != nil {

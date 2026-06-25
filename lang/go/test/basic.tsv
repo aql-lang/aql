@@ -69,7 +69,7 @@ lower/f "E"	'e'
 "F" lower/s	'f'
 
 # Set/Get
-context set foo 99 end context get foo	99
+context set foo 99 end context dot foo	99
 
 # Make - scalar types
 make String 9	'9'
@@ -646,18 +646,18 @@ def add5 word [add 5] end (3 add5) mul 2	16
 def add5 word [add 5] end def add5_twice word [add5 add5] 10 add5_twice	20
 
 # Dot - key extraction from maps (prefix form)
-{a:1} get a	1
-{a:1,b:2} get b	2
+{a:1} dot a	1
+{a:1,b:2} dot b	2
 
 # Dot - key extraction from maps (forward form)
-{a:1} get a	1
-{a:1,b:2} get b	2
+{a:1} dot a	1
+{a:1,b:2} dot b	2
 
 # Dot - nested map access (chained forward form)
-{a:{b:1}} get a get b	1
+{a:{b:1}} dot a dot b	1
 
 # Dot - missing key returns none
-{a:1} get b	None
+{a:1} dot b	None
 
 # Dot - null safety (none parent returns none)
 None "a" get	None
@@ -697,20 +697,20 @@ def obj {a:1} obj.b	None
 def obj {a:1} obj.b "c" get	None
 
 # Dot notation - store requires explicit get
-context set sv {x:42} end (context get sv) . x	42
+context set sv {x:42} end (context dot sv) . x	42
 
 # Dot notation - leading get (stack access)
 {a:1} .a	1
 {a:{b:2}} .a.b	2
 
 # Dotr - strict key extraction (errors on missing)
-{a:1} getr a	1
-{a:1,b:2} getr b	2
+{a:1} dotr a	1
+{a:1,b:2} dotr b	2
 [10,20,30] 1 getr	20
 {0:"zero"} 0 getr	'zero'
 
 # Dotr - missing key is an error
-{a:1} getr b	ERROR:getr: key "b" not found in map
+{a:1} dotr b	ERROR:getr: key "b" not found in map
 
 # Dotr - none parent is an error
 None "a" getr	ERROR:getr: parent is None

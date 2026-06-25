@@ -109,7 +109,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 // instead of refusing "operand shape needs reordering". `setpath recv k v`
 // with a computed receiver is the driving shape.
 func TestThreeArgComputedReceiverLowers(t *testing.T) {
-	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) get b`
+	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) dot b`
 
 	a, err := New()
 	if err != nil {
@@ -624,7 +624,7 @@ func TestArgsAccessorCompilesNative(t *testing.T) {
 		}
 		// args.N must lower to a frame-local read, not a runtime args call.
 		if strings.Contains(prog.Disassemble(), "CALL_NATIVE_POLY") && strings.Contains(c.src, "args.0 add") {
-			t.Errorf("%q: args.N did not fold to a local (poly get remains):\n%s", c.src, prog.Disassemble())
+			t.Errorf("%q: args.N did not fold to a local (poly dot remains):\n%s", c.src, prog.Disassemble())
 		}
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
@@ -928,11 +928,11 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {}) get x`, "[1]"},
-		{`def Foo refine Integer end def S class {x:(make Foo 1)} end typeof ((make S {}) get x)`, "[Foo]"},
-		{`def Foo class {y:1} end def S class {x:(make Foo {})} end (make S {}) get x`, "[Class/Foo{y:1}]"},
-		{`def Foo refine Integer end def S class {x:(make Foo 7)} end (make S {x:(make Foo 9)}) get x`, "[9]"},
-		{`def S class {x:(1 add 2)} end (make S {}) get x`, "[3]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {}) dot x`, "[1]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end typeof ((make S {}) dot x)`, "[Foo]"},
+		{`def Foo class {y:1} end def S class {x:(make Foo {})} end (make S {}) dot x`, "[Class/Foo{y:1}]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 7)} end (make S {x:(make Foo 9)}) dot x`, "[9]"},
+		{`def S class {x:(1 add 2)} end (make S {}) dot x`, "[3]"},
 		{`def m {a:(1 add 2)} m`, "[{a:3}]"}, // data map scalar default also const-folds
 	} {
 		a, _ := New()
@@ -955,7 +955,7 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 
 	// Per-instance copy isolation: make copies the baked schema default, so
 	// mutating one instance's field must not affect another's.
-	const iso = `def Foo class {n:1} end def S class {x:(make Foo {})} end def a (make S {}) def b (make S {}) (a.x set n 9) end b.x get n`
+	const iso = `def Foo class {n:1} end def S class {x:(make Foo {})} end def a (make S {}) def b (make S {}) (a.x set n 9) end b.x dot n`
 	a, _ := New()
 	gotC, compiled, _ := a.RunCompiled(iso)
 	b, _ := New()
@@ -1915,31 +1915,35 @@ func TestVarCompilesAsLet(t *testing.T) {
 		}
 	}
 
-	// SOUNDNESS GATE: a let body that ERRORS under check-mode analysis (here
-	// `s get a/q`, where the each-element carrier `s` is conservatively under-typed
-	// and `get` rejects it as a non-concrete map — mere imprecision, the runtime
-	// `s` is a concrete Map and the interpreter returns [1 2]) must NOT compile to
-	// an EMPTY closure (which would raise each_error "body produced no result" at
-	// the VM, diverging from the interpreter). The armed-body-error refusal in
-	// AnalyseFnBody marks the program uncompilable, so it falls back byte-identical.
-	const guarded = `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`
-	prog, _, _, cerr := mustNew(t).CompileCheck(guarded)
+	// A var-body that REACHES INTO the each element (`s get a/q`, where `s` is the
+	// element carrier) compiles to its closure unit and is byte-identical to the
+	// interpreter ([1 2]). This row previously REFUSED, but the refusal was the
+	// var-cleanup `undef s` mis-dispatching to the 2-arg `undef name fnUndefSpec`
+	// form (the dynamic-Any body residual gradually matched TFnUndef in check
+	// mode) and erroring — NOT, as once believed, a `get`-rejects-under-typed-map
+	// imprecision. With the cleanup routed through the 1-arg-only `__varundef`
+	// (native_definition.go) the body analyses cleanly and compiles. The broader
+	// armed-body-error soundness gate in AnalyseFnBody (a GENUINE check-mode body
+	// error still marks the program uncompilable) is exercised by the whole-corpus
+	// differential.
+	const reach = `def data [{a:1} {a:2}] (data each [var [[s] (s dot a/q)]])`
+	prog, _, _, cerr := mustNew(t).CompileCheck(reach)
 	if cerr != nil {
-		t.Fatalf("guarded each-var: unexpected check error %v", cerr)
+		t.Fatalf("reach each-var: unexpected check error %v", cerr)
 	}
-	if prog != nil {
-		t.Errorf("guarded each-var: a check-mode body error must refuse, got a Program:\n%s", prog.Disassemble())
+	if prog == nil {
+		t.Errorf("reach each-var: expected a compiled Program (the var cleanup no longer mis-dispatches)")
 	}
-	gotG, compiled, err := mustNew(t).RunCompiled(guarded)
+	gotG, compiled, err := mustNew(t).RunCompiled(reach)
 	if err != nil {
-		t.Fatalf("guarded each-var: %v", err)
+		t.Fatalf("reach each-var: %v", err)
 	}
-	gotGI, _ := mustNew(t).Run(guarded)
-	if compiled {
-		t.Errorf("guarded each-var: a check-mode body error must refuse, not compile")
+	gotGI, _ := mustNew(t).Run(reach)
+	if !compiled {
+		t.Errorf("reach each-var: a clean var-reach body should compile, got a fallback")
 	}
 	if fmt.Sprint(gotG) != fmt.Sprint(gotGI) || fmt.Sprint(gotG) != "[[1 2]]" {
-		t.Errorf("guarded each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
+		t.Errorf("reach each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
 	}
 }
 
@@ -2234,7 +2238,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 	const okGetr = `import "aql:math-util"  MathUtil!.sqrt 16.0`
 	if p, _, _, _ := mustNew(t).CompileCheck(okGetr); p != nil {
 		if dis := p.Disassemble(); strings.Contains(dis, "TRAP") {
-			t.Errorf("valid getr must not trap:\n%s", dis)
+			t.Errorf("valid dotr must not trap:\n%s", dis)
 		}
 	}
 	gotC, _, eC := mustNew(t).RunCompiled(okGetr)
@@ -2243,14 +2247,14 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 		t.Fatalf("valid getr: compiled err=%v interp err=%v", eC, eI)
 	}
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("valid getr parity: compiled=%v interp=%v", gotC, gotI)
+		t.Errorf("valid dotr parity: compiled=%v interp=%v", gotC, gotI)
 	}
 
 	// NEGATIVE 2: `get` (not getr) of a MISSING key returns None, never traps —
 	// only getr raises not_found, so the get path stays on the shared ReturnsFn.
 	const okGet = `import "aql:math-util"  MathUtil.nope`
 	if _, _, eGet := mustNew(t).RunCompiled(okGet); eGet != nil {
-		t.Errorf("get of a missing key must not error, got %v", eGet)
+		t.Errorf("dot of a missing key must not error, got %v", eGet)
 	}
 }
 
@@ -2674,8 +2678,8 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
-		{imp + `context get __sys get fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
-		{imp + `context get __sys get fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+		{imp + `context dot __sys dot fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
+		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
@@ -2701,6 +2705,49 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	}
 	if !strings.Contains(eC.Error(), "signature") || !strings.Contains(eI.Error(), "signature") {
 		t.Errorf("set over Integer: expected signature_error, compiled=%v interp=%v", eC, eI)
+	}
+}
+
+// TestSetOverDynamicReceiverConsumedCompiles is the mixed-arity gradual-dispatch
+// counterpart to the statement-position cases above: when a `set` over a DYNAMIC
+// receiver sits in PAREN-TAIL position its result is consumed (here bound by an
+// inner `def`), so the checker models the one gradual value the value-returning
+// overload yields — `def k2` binds a carrier instead of falsely reporting
+// undefined_word, and the whole fn compiles byte-identically. Previously this
+// refused under --force-compile (the gradual model was gated to pure check
+// mode); the paren-tail signal makes it sound to model under a real compile too,
+// because the single value is consumed by the group close and never collected as
+// a sibling word's extra arg.
+func TestSetOverDynamicReceiverConsumedCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		// get over a Map yields a dynamic receiver; set on it (paren-tail, bound
+		// by def k2) returns the updated map, consumed as the body result.
+		{`def f fn [[nd:Map] [Any] [ def k2 ((nd "a" get) set "x" 1) k2 ]]  ({a:{}} f)`, "[{x:1}]"},
+		// Forward-arg consumption: the set result feeds an outer word directly.
+		{`def g fn [[nd:Map] [Map] [ ((nd "a" get) set "x" 1) ]]  ({a:{}} g)`, "[{x:1}]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected a compiled program, refused: %s", c.src, reason)
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if !compiled {
+			t.Errorf("%q: expected a compiled run, fell back", c.src)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
 	}
 }
 

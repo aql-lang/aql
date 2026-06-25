@@ -1290,7 +1290,9 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 							NewOpenParen(),
 							NewWord("args"),
 							NewAtom(fmt.Sprintf("%d", presentIdx)),
-							NewWord("get"),
+							// dot, not get: the key is a literal atom index
+							// (`args.N`); get no longer accepts an atom key.
+							NewWord("dot"),
 							NewCloseParen(),
 						)
 					}

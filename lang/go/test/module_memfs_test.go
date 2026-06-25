@@ -45,8 +45,8 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 	// Enable in-memory FS via __sys.fs.mem = true.
 	eng := native.New(reg)
 	_, err = eng.Run([]native.Value{
-		native.NewWord("context"), native.NewWord("get"), native.NewWord("__sys"),
-		native.NewWord("get"), native.NewWord("fs"),
+		native.NewWord("context"), native.NewWord("dot"), native.NewWord("__sys"),
+		native.NewWord("dot"), native.NewWord("fs"),
 		native.NewWord("set"), native.NewWord("mem"), native.NewBoolean(true),
 	})
 	if err != nil {

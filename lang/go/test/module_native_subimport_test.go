@@ -46,8 +46,8 @@ func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []str
 
 	eng := native.New(reg)
 	if _, err := eng.Run([]native.Value{
-		native.NewWord("context"), native.NewWord("get"), native.NewWord("__sys"),
-		native.NewWord("get"), native.NewWord("fs"),
+		native.NewWord("context"), native.NewWord("dot"), native.NewWord("__sys"),
+		native.NewWord("dot"), native.NewWord("fs"),
 		native.NewWord("set"), native.NewWord("mem"), native.NewBoolean(true),
 	}); err != nil {
 		t.Fatalf("enable mem fs: %v", err)

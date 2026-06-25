@@ -27,15 +27,15 @@ def Mapper<T U> fnsig [[T] [U]] end (Mapper of [Integer String]) typeof	Function
 # §2  use sites — every position the canonical paren span works in
 def Box<T> class {value:T} end Box<Integer> teq (Box of [Integer])	true	a use-site is IDENTICAL to its canonical twin (one memoised node)
 def Box<T> class {value:T} def b:Box<Integer> {value:42} end b typeof	Box of [Integer]	a typed-def annotation
-def Box<T> class {value:T} end (make Box<Integer> {value:42}) get value	42	construction through make
+def Box<T> class {value:T} end (make Box<Integer> {value:42}) dot value	42	construction through make
 def Box<T> class {value:T} end (make Box<Integer> {value:1}) is Box	true	bare schema name admits any instantiation
 def Box<T> class {value:T} end (make Box<Integer> {value:1}) is Box<Integer>	true	exact instantiation membership
 def Box<T> class {value:T} end (make Box<Integer> {value:1}) is Box<Number>	false	v1 invariance holds in sugar form too
 def Box<T> class {value:T} def Outer<T> refine Record [inner:Box<T> tag:String] end Outer of [Integer]	record{inner:object<Box of [Integer]>{value:Integer} tag:String}	sugar nests inside a schema body (the field renders the embedded class body)
 def Box<T> class {value:T} def Pair<K, V> refine Record [key:K value:V] end (Box of [(Pair of [String Integer])]) teq Box<Pair<String, Integer>>	true	nested sugar (no `>>` shift problem — `>` is a standalone token)
-def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x get value]] end f (make Box<Integer> {value:7})	7	a sugared fn-param annotation dispatches
-def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x get value]] end f (make Box<String> {value:'s'})	ERROR:signature	…and rejects a sibling instantiation
-def Box<T> class {value:T} def xs:[:Box<Integer>] [(make Box<Integer> {value:1})] end (xs get 0) get value	1	a child-type constraint position
+def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x dot value]] end f (make Box<Integer> {value:7})	7	a sugared fn-param annotation dispatches
+def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x dot value]] end f (make Box<String> {value:'s'})	ERROR:signature	…and rejects a sibling instantiation
+def Box<T> class {value:T} def xs:[:Box<Integer>] [(make Box<Integer> {value:1})] end (xs get 0) dot value	1	a child-type constraint position
 def Box<T> class {value:T} def xs:[:Box<Integer>] [(make Box<String> {value:'s'})]	ERROR:does not unify	…enforced against off-type elements
 def Box<T> class {value:T} def b (make Box<Integer> {value:7}) end case b [Box<Integer> 'int-box' 'other']	'int-box'	a case clause matches the exact instantiation
 def Box<T> class {value:T} def b (make Box<String> {value:'s'}) end case b [Box<Integer> 'int-box' 'other']	'other'	…and not a sibling

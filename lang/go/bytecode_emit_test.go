@@ -538,10 +538,10 @@ func TestEmitTypedDefInstance(t *testing.T) {
 	type row struct{ src, want string }
 	for _, c := range []row{
 		{`def C class {a:1} def b:C {a:5} b typeof`, "C"},
-		{`def C class {a:1} def b:C {a:5} (b get a)`, "5"},
+		{`def C class {a:1} def b:C {a:5} (b dot a)`, "5"},
 		{`def Box gen [T] class {value:T} def b:(Box of [Integer]) {value:42} b typeof`, "Box of [Integer]"},
 		{`def Box gen [T] class {value:T} def b:Box {value:'hi'} b typeof`, "Box of [ProperString]"},
-		{`def Box<T> class {value:T} def b:Box<Integer> {value:42} (b get value)`, "42"},
+		{`def Box<T> class {value:T} def b:Box<Integer> {value:42} (b dot value)`, "42"},
 	} {
 		dis, r := compile(t, c.src)
 		if r != "" {
@@ -1343,10 +1343,10 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	// result must still match the interpreter.
 	got2, reason2 := compile(t, `def m {a:1} m.a`)
 	if reason2 != "" {
-		t.Fatalf("concrete-map get refused: %s", reason2)
+		t.Fatalf("concrete-map dot refused: %s", reason2)
 	}
 	if strings.Contains(got2, "FALLBACK") || strings.Contains(got2, "CALL_NATIVE_POLY") {
-		t.Errorf("concrete-map field get should monomorphize to CALL_NATIVE:\n%s", got2)
+		t.Errorf("concrete-map field dot should monomorphize to CALL_NATIVE:\n%s", got2)
 	}
 	b, err := New()
 	if err != nil {
@@ -1367,10 +1367,10 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	// covered by TestEmitPolySiteLowersToRuntimeMatch.
 	got3, reason3 := compile(t, `def Foo class {a:1} def o (make Foo {}) o.a`)
 	if reason3 != "" {
-		t.Fatalf("object field get refused: %s", reason3)
+		t.Fatalf("object field dot refused: %s", reason3)
 	}
 	if strings.Contains(got3, "FALLBACK") || strings.Contains(got3, "CALL_NATIVE_POLY") {
-		t.Errorf("object field get should monomorphize to CALL_NATIVE:\n%s", got3)
+		t.Errorf("object field dot should monomorphize to CALL_NATIVE:\n%s", got3)
 	}
 	c, err := New()
 	if err != nil {

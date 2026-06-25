@@ -279,7 +279,7 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	// inspect upper .name => 'upper'
 	result := runAQL(t, r, []Value{
 		NewWord("inspect"), NewWord("upper"),
-		NewWord("get"), NewWord("name"),
+		NewWord("dot"), NewWord("name"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
@@ -390,7 +390,7 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
 		NewWord("inspect"), NewWord("Qty"),
-		NewWord("get"), NewWord("kind"),
+		NewWord("dot"), NewWord("kind"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))

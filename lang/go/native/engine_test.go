@@ -1055,7 +1055,7 @@ func TestSetGetForward(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("dot"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1080,7 +1080,7 @@ func TestSetGetWithoutEnd(t *testing.T) {
 	e := New(reg)
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
-		NewWord("context"), NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("dot"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1159,7 +1159,7 @@ func TestSetOverwrite(t *testing.T) {
 		NewEnd(),
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(2),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("x"),
+		NewWord("context"), NewWord("dot"), NewWord("x"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1181,7 +1181,7 @@ func TestGetUnknownKey(t *testing.T) {
 	}
 	registerIOWords(reg)
 	e := New(reg)
-	_, err = e.Run([]Value{NewWord("context"), NewWord("get"), NewWord("missing")})
+	_, err = e.Run([]Value{NewWord("context"), NewWord("dot"), NewWord("missing")})
 	if err == nil {
 		t.Fatal("expected error for unknown key, got nil")
 	}
@@ -1272,7 +1272,7 @@ func TestEndTerminatesForwardNoRemainder(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("dot"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1314,7 +1314,7 @@ func TestSetGetStorePersistsWithinRun(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("key"), NewInteger(100),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("key"),
+		NewWord("context"), NewWord("dot"), NewWord("key"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1417,7 +1417,7 @@ func TestParenWithSet(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewWord("foo"),
 		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("dot"), NewWord("foo"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

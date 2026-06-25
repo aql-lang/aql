@@ -21,17 +21,17 @@ def conformance fn [[store:Service] [None] [
 
   # 1. SAVE assigns an id on insert.
   def saved ( Entity.save (Entity.field "name" "Alice" u) )
-  Test.eq (none? ((Entity.data saved) get id)) false        # => id present
+  Test.eq (none? ((Entity.data saved) dot id)) false        # => id present
 
-  def id ( (Entity.data saved) get id )
+  def id ( (Entity.data saved) dot id )
 
   # 2. LOAD by id round-trips the row.
   def back ( Entity.load u id )
-  Test.eq ((Entity.data back) get name) "Alice"             # => "Alice"
+  Test.eq ((Entity.data back) dot name) "Alice"             # => "Alice"
 
   # 3. SAVE with an id present UPDATES (no duplicate insert).
   def renamed ( Entity.save (Entity.field "name" "Alicia" back) )
-  Test.eq ((Entity.data (Entity.load u id)) get name) "Alicia"   # => updated in place
+  Test.eq ((Entity.data (Entity.load u id)) dot name) "Alicia"   # => updated in place
 
   # 4. LIST with an AND query returns only rows matching ALL conditions.
   Entity.save (Entity.field "name" "Bob"  (Entity.field "team" "x" u))

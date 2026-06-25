@@ -161,18 +161,35 @@ func computeCensus() (*census, error) {
 			// OpTrap (carrier.go), so it is counted as a compiled row. Tier 1 stays
 			// first: a `Vm.run` row is genuinely interpreter-only even when it errors.
 			tier, name := classify(input)
+			bucket := normaliseReason(reason)
+			// A row whose SOURCE mentions a tier-2 word but whose actual blocker is
+			// the SOUNDNESS frontier (a dynamically-fetched fn value with lost
+			// provenance) is attributed to the COMPUTE frontier, not word-specific
+			// debt. The tier-2 bucket is for rows refused by a WORD-CLASS gap the
+			// compiler does not model (rootCause "coverage": code-body higher-order
+			// words like flex's `walk`, the test harness's `test-check-prop`). usurp
+			// itself COMPILES (`add/u 1 2` → 3); the path-modifier rows `m.a/u 1 2`
+			// refuse on "operand provenance" (rootCause "soundness") — usurp of a
+			// MAP-STORED fn, the exact dynamic-fn-application frontier its non-usurp
+			// sibling `m.a 1 2` also refuses on, and which the usurp `why` explicitly
+			// excludes from its residual ("quote/codequote or a non-fn target"). They
+			// surfaced INTO this partition only because the checker false-positive
+			// fixes (15b9fb1: flex / stored-fn-ref) moved them from check-error
+			// (uncounted) to refused value rows — real debt newly visible, not a
+			// compiler regression, and it belongs to the frontier they actually hit.
+			soundnessFrontier := tier == 2 && rootCause(bucket) == "soundness"
 			switch {
 			case tier == 1:
 				c.interp++
 				c.tier1By[name]++
 			case expectErr || errorRowReason(reason):
 				c.errorRows++
-			case tier == 2:
+			case tier == 2 && !soundnessFrontier:
 				c.reducible++
 				c.tier2By[name]++
 			default:
 				c.computeGap++
-				r := normaliseReason(reason)
+				r := bucket
 				if reason == "" {
 					r = "island (OpFallback span)"
 				}

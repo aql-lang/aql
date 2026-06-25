@@ -174,7 +174,7 @@ func TestWalkDefaultModeDepth(t *testing.T) {
 func TestWalkQuotationHookForm(t *testing.T) {
 	// A quotation hook receives the payload map on the stack (no `m` name).
 	// Pull the path off the map with `get` and accumulate it.
-	got := walkPaths(t, `def acc (flex [])  walk {mode: "depth"} {a:1} [get path/q acc swap append]  drop  acc`)
+	got := walkPaths(t, `def acc (flex [])  walk {mode: "depth"} {a:1} [dot path/q acc swap append]  drop  acc`)
 	want := []string{"", "a"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("quotation-hook paths = %v, want %v", got, want)

@@ -630,13 +630,13 @@ func miniReCompile(src string, opts native.Value, _ *native.Registry) ([]native.
 	re, cerr := miniCompiledPattern(src)
 	if cerr != nil {
 		return []native.Value{
-			native.NewWord("MiniLang"), native.NewWord("get"), native.NewWord("lang_re"),
+			native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("lang_re"),
 			native.NewString(src), opts, native.NewEnd(),
 		}, nil
 	}
 	carrier := eng.NewExtension(TMiniCompiled, re)
 	return []native.Value{
-		native.NewWord("MiniLang"), native.NewWord("get"), native.NewWord("run-re"),
+		native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("run-re"),
 		carrier, opts, native.NewEnd(),
 	}, nil
 }

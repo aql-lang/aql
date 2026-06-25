@@ -29,7 +29,7 @@ def pick2 gen [T] fn [[a:T b:T] [T] [a]] end 2 1 pick2	1	stack form is mirror-eq
 def first1 gen [T] fn [[xs:[:T]] [T] [xs get 0]] end first1 [10 20 30]	10	a typed-list param dispatches on a concrete list
 def first1 gen [T] fn [[xs:[:T]] [T] [xs get 0]] end first1 ["a" "b"]	'a'	…for any element type
 def first1 gen [T] fn [[xs:[:T]] [T] [xs get 0]] end first1 [1 "x"]	1	mixed elements tor-merge into T — never rejected at runtime
-def vals1 gen [T] fn [[m:{:T}] [T] [m get a/q]] end vals1 {a:1 b:2}	1	a typed-map param dispatches on a concrete map
+def vals1 gen [T] fn [[m:{:T}] [T] [m dot a/q]] end vals1 {a:1 b:2}	1	a typed-map param dispatches on a concrete map
 #
 # §4  body-internal bindings — of [T] resolves per call
 def Box gen [T] class {value:T} def boxit gen [T] fn [[x:T] [Any] [make (Box of [T]) {value:x}]] end typeof (boxit 42)	Box of [Integer]	the call's T binding reaches a body-internal instantiation
@@ -49,10 +49,10 @@ def repeat gen [T] fn [[x:T n:Integer] [Integer] [if (n lte 0) [0] [1 add (repea
 def mka gen [T] fn [[x:T] [Function] [fn [[y:Integer] [Integer] [x add y]]]] def add5 (mka 5) end add5 3	8	an inner fn captures a generic fn's param
 #
 # §7  higher-order composition — instantiation lists through each/fold
-def Box gen [T] class {value:T} def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end xs each [get value]	[10 20]	each iterates instantiation instances precisely
-def Box gen [T] class {value:T} def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end 0 fold [get value add] xs	30	fold reduces over them
-def Box gen [T] class {value:T} def unbox gen [T] fn [[b:T] [Any] [b get value]] end [(make (Box of [Integer]) {value:1})] each [unbox]	[1]	a generic fn works as a higher-order body
-def Box gen [T] class {value:T} def sumvals gen [T] fn [[bs:[:T]] [Integer] [0 fold [get value add] bs]] def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end sumvals xs	30	a [:T] param accepts a DEF-BOUND list (the forward pattern check resolves word args)
+def Box gen [T] class {value:T} def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end xs each [dot value]	[10 20]	each iterates instantiation instances precisely
+def Box gen [T] class {value:T} def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end 0 fold [dot value add] xs	30	fold reduces over them
+def Box gen [T] class {value:T} def unbox gen [T] fn [[b:T] [Any] [b dot value]] end [(make (Box of [Integer]) {value:1})] each [unbox]	[1]	a generic fn works as a higher-order body
+def Box gen [T] class {value:T} def sumvals gen [T] fn [[bs:[:T]] [Integer] [0 fold [dot value add] bs]] def xs [(make (Box of [Integer]) {value:10}) (make (Box of [Integer]) {value:20})] end sumvals xs	30	a [:T] param accepts a DEF-BOUND list (the forward pattern check resolves word args)
 def f2 fn [[xs:[:Integer]] [Integer] [xs size]] def zs [1 2] end f2 zs	2	…the same fix for plain typed-list params (was literal-only)
 #
 # §8  hygiene — bindings never leak; loose unbound return is pinned

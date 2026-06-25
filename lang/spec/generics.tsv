@@ -56,13 +56,13 @@ def Box gen [T] class {value:T} end def b:(Box of [Integer]) {value:42} b typeof
 def Box gen [T] class {value:T} end def b:(Box of [Integer]) {value:'no'}	ERROR:expected Integer	…with the substituted field typing enforced
 def Pair gen [K V] refine Record [key:K value:V] end make (Pair of [String Integer]) {key:'a' value:1}	{key:'a' value:1}	records construct through make
 def Pair gen [K V] refine Record [key:K value:V] end make (Pair of [String Integer]) {key:1 value:1}	{key:'1' value:1}	…with record make's existing convert-to-field-type contract (strictness is the CLASS contract)
-def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x get value]] end f (make (Box of [Integer]) {value:7})	7	an instantiation-typed fn param dispatches
-def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x get value]] end f (make (Box of [String]) {value:'s'})	ERROR:signature	…and REJECTS a sibling instantiation (no silent Any degrade)
+def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x dot value]] end f (make (Box of [Integer]) {value:7})	7	an instantiation-typed fn param dispatches
+def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x dot value]] end f (make (Box of [String]) {value:'s'})	ERROR:signature	…and REJECTS a sibling instantiation (no silent Any degrade)
 def Box gen [T] class {value:T} def g fn [[x:Box] [Integer] [1]] end g (make (Box of [String]) {value:'s'})	1	a bare-schema param admits any instantiation (family membership)
 def Box gen [T] class {value:T} def g fn [[x:Box] [Integer] [1]] end g 5	ERROR:signature	…and rejects non-members
 import module [def Box gen [T] refine Record [value:T] export "Pkg" {Box: Box}] Pkg.Box of [Integer]	record{value:Integer}	a module exports a schema; importer-side of instantiates
 def Box gen [T] class {value:T} def Box Integer end Box of [Integer]	ERROR:not a generic schema	a shadowing def wins resolution — the schema is no longer reachable
-def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [Integer]) {value:1})] end (xs get 0) get value	1	an instantiation as a typed-list CHILD constraint admits instances (the child paren evaluates; unify admits by Is-membership)
+def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [Integer]) {value:1})] end (xs get 0) dot value	1	an instantiation as a typed-list CHILD constraint admits instances (the child paren evaluates; unify admits by Is-membership)
 def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [String]) {value:'s'})]	ERROR:does not unify	…and rejects sibling-instantiation elements
 def Box gen [T] class {value:T} def b (make (Box of [Integer]) {value:7}) end case b [(Box of [Integer]) 'int-box' 'other']	'int-box'	a case clause's paren pattern evaluates and matches the exact instantiation
 def Box gen [T] class {value:T} def b (make (Box of [String]) {value:'s'}) end case b [(Box of [Integer]) 'int-box' 'other']	'other'	…and not a sibling

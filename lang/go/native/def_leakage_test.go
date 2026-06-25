@@ -65,7 +65,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TString)}),
 		NewList([]Value{
 			NewWord("def"), NewWord("op"),
-			NewOpenParen(), NewWord("m"), NewWord("get"), NewWord("op"), NewCloseParen(),
+			NewOpenParen(), NewWord("m"), NewWord("dot"), NewWord("op"), NewCloseParen(),
 			NewEnd(),
 			NewWord("op"),
 		}),
@@ -94,11 +94,11 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	m2 := NewOrderedMap()
 	m2.Set("op", NewString("mul"))
 	result2 := runAQL(t, r, []Value{
-		NewMap(m2), NewWord("get"), NewWord("op"),
+		NewMap(m2), NewWord("dot"), NewWord("op"),
 	})
 	_as2, _ := AsString(result2[0])
 	if len(result2) != 1 || _as2 != "mul" {
-		t.Errorf("{op:'mul'} get op = %v, want 'mul'", result2)
+		t.Errorf("{op:'mul'} dot op = %v, want 'mul'", result2)
 	}
 }
 

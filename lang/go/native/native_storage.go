@@ -144,55 +144,19 @@ var storageNatives = []NativeFunc{
 	{
 		Name:          "get",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
-
-		Signatures: []NativeSig{
-			// [Key | Node] — covers Map, List, Options, record-shape. The
-			// atom / string key sigs narrow a concrete map FIELD read via
-			// getNodeReturns; the integer-key sig stays Any because an
-			// integer key is a LIST index (handled precisely downstream by
-			// tryFoldStaticIndex) or a stringified map key — getNodeReturns
-			// must not stringify-and-miss an integer over a list.
-			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
-			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
-			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getIntKeyReturns},
-			// [Key | Array]
-			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
-			// [Key | Object] — atom/string field reads resolve the field's
-			// declared type from the schema (getObjectReturns).
-			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
-			// [Key | ModuleExport] — transparent export access + $module/$name
-			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
-			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
-			// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
-			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
-			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
-			// [Key | Class instance] — flat field read (no prototype
-			// chain; class instances resolve every field at make). Field
-			// type resolved from the schema (getObjectReturns).
-			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-			// [Key | None] — chained-read propagation
-			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
-			// [Key | Store] — check-mode-aware ReturnsFn picks up a
-			// typed carrier from a previously-set key.
-			{
-				Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: getStoreHandler,
-				ReturnsFn: getStoreReturnsFn,
-			},
-			{
-				Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
-				ReturnsFn: getStoreReturnsFn,
-			},
-			// [Key | Node/Xml] — well-known field read: 'tag' / 'attr' /
-			// 'cren' (any other key → none). More specific than the
-			// [Key | Node] sigs above, so it wins for an XML receiver and
-			// keeps getNodeHandler off the non-map XML payload. Covers
-			// FlexXml too (it conforms to Node/Xml).
-			{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
-			{Args: []*Type{TString, TXml}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
-		},
+		// get EVALUATES its key: the bare-word-quoting atom sigs live on
+		// `dot` (the word the `.`/`!.` sugar lowers to), so `lst get i`
+		// reads the VALUE of i, not the literal field "i". A literal field
+		// name uses `dot` (`m dot a`) or a string key (`m get "a"`).
+		Signatures: stripQuoteArgs(accessorGetSignatures()),
+	},
+	{
+		Name:          "dot",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
+		// dot is `get` PLUS the bare-word-quoting atom sigs. The `.` / `!.`
+		// dot-sugar lowers to dot/dotr (lowerReach), so `m.a` ≡ `m dot a`
+		// reads the literal field "a" regardless of any binding of a.
+		Signatures: accessorGetSignatures(),
 	},
 	{
 		Name: "context",
@@ -203,6 +167,82 @@ var storageNatives = []NativeFunc{
 			Returns: []*Type{TStore}, BarrierPos: -1,
 		}},
 	},
+}
+
+// accessorGetSignatures returns the full read-accessor signature set shared
+// by `get` and `dot`. `dot` uses it verbatim (so a bare-word key is quoted
+// as a literal field, the `.`-sugar behaviour); `get` uses the
+// stripQuoteArgs variant (the same overloads with QuoteArgs cleared, so a
+// bare WORD is evaluated but an already-evaluated Atom key still matches).
+// Keeping ONE
+// source for both words prevents the two from drifting apart.
+func accessorGetSignatures() []NativeSig {
+	return []NativeSig{
+		// [Key | Node] — covers Map, List, Options, record-shape. The
+		// atom / string key sigs narrow a concrete map FIELD read via
+		// getNodeReturns; the integer-key sig stays Any because an
+		// integer key is a LIST index (handled precisely downstream by
+		// tryFoldStaticIndex) or a stringified map key — getNodeReturns
+		// must not stringify-and-miss an integer over a list.
+		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
+		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
+		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getIntKeyReturns},
+		// [Key | Array]
+		{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
+		// [Key | Object] — atom/string field reads resolve the field's
+		// declared type from the schema (getObjectReturns).
+		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+		{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+		{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+		// [Key | ModuleExport] — transparent export access + $module/$name
+		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
+		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
+		// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
+		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
+		// [Key | Class instance] — flat field read (no prototype
+		// chain; class instances resolve every field at make). Field
+		// type resolved from the schema (getObjectReturns).
+		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+		// [Key | None] — chained-read propagation
+		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
+		// [Key | Store] — check-mode-aware ReturnsFn picks up a
+		// typed carrier from a previously-set key.
+		{
+			Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: getStoreHandler,
+			ReturnsFn: getStoreReturnsFn,
+		},
+		{
+			Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
+			ReturnsFn: getStoreReturnsFn,
+		},
+		// [Key | Node/Xml] — well-known field read: 'tag' / 'attr' /
+		// 'cren' (any other key → none). More specific than the
+		// [Key | Node] sigs above, so it wins for an XML receiver and
+		// keeps getNodeHandler off the non-map XML payload. Covers
+		// FlexXml too (it conforms to Node/Xml).
+		{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TXml}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
+	}
+}
+
+// stripQuoteArgs returns sigs with the bare-word-quoting QuoteArgs flag
+// cleared — the `get`/`getr` subset that EVALUATES its key. It does NOT drop
+// the atom overloads: an already-evaluated Atom value (a variable bound to
+// `a/q`, a computed atom) still matches `{TAtom, …}` and the handler coerces
+// it, so `def k a/q  {a:1} get k` reads field "a". Only the implicit
+// quote-on-bare-word goes away — an unbound bare word stays a Word, matches
+// no overload, and errors, which is the split's intent. `dot`/`dotr` keep the
+// QuoteArgs versions (literal bare-word keys). Sigs are copied so the shared
+// accessorGetSignatures slice (used by `dot`) keeps its QuoteArgs.
+func stripQuoteArgs(sigs []NativeSig) []NativeSig {
+	out := make([]NativeSig, len(sigs))
+	for i, s := range sigs {
+		s.QuoteArgs = nil
+		out[i] = s
+	}
+	return out
 }
 
 // ---- kernel-container handlers (Node / Object / Array / None) ----
