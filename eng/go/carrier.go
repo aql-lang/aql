@@ -138,6 +138,21 @@ func NewElementCarrier(t *Type) Value {
 	return c
 }
 
+// ParamInputCarrier builds the check-mode carrier for a fn parameter declared of
+// type t. An EXPLICITLY-Any (or untyped) parameter binds a DYNAMIC carrier: the
+// author wrote "accepts anything", which is the gradual-dispatch intent — a body
+// word over it (`get`, `add`, a user helper) poly-matches at runtime instead of
+// failing no_signature against the strict Any top. A concrete declared type
+// stays a strict carrier so its real shape is checked normally. This is the
+// same treatment NewElementCarrier gives an untyped list element, lifted to the
+// parameter boundary (the trie/decision "unify Any with concrete params" gap).
+func ParamInputCarrier(t *Type) Value {
+	if t == nil || t.Equal(TAny) {
+		return NewDynamicCarrier(TAny)
+	}
+	return NewCarrier(t)
+}
+
 // DataListElemTypeFromValue is a package-level duplicate of
 // dataListElemType that lives in carrier.go so ReturnsFunc helpers
 // don't depend on the native_array_higher.go symbol. It reads the
@@ -243,6 +258,16 @@ func toCarrier(v Value) Value {
 	if _, ok := v.Data.(FnDefInfo); ok {
 		return v
 	}
+	// Keep Disjunct / Enum values concrete: their DisjunctInfo (the
+	// alternatives) IS the type definition. Stripping to a bare TDisjunct /
+	// TEnum carrier loses the alternatives, so IsDisjunct / IsTypeBody go false
+	// and `def Maybe (String tor None)` / `def Color enum […]` are wrongly
+	// rejected in check mode ("body must be a type value or literal"), and
+	// `tcmp` / `is` / `typeof` over the type lose their members (compare.tsv).
+	// Same rationale as the FnDef / Module / Reach payload preservations above.
+	if _, ok := v.Data.(DisjunctInfo); ok {
+		return v
+	}
 	// Keep MODULE instances (Ideal/Module, Ideal/ModuleExport) concrete, same
 	// rationale as FnDefInfo: stripping nulls the ExtensionPayload descriptor /
 	// exports, so `MathUtil.$module` would become an opaque carrier the
@@ -298,6 +323,12 @@ func toCarrier(v Value) Value {
 var checkModeLiteralWords = map[string]bool{
 	"import": true,
 	"module": true,
+	// `unpack 'aql:mod'` / `unpack ExportName 'aql:mod'` resolve a module's
+	// (statically-declared) exports and bind them unqualified in check mode;
+	// the module-name string must stay concrete for the handler to resolve it.
+	// The export-name form puts the string two tokens after `unpack`, so the
+	// adjacency window below looks back/forward by two, not one.
+	"unpack": true,
 }
 
 // StripToCarriers returns a copy of in where every non-structural value
@@ -323,11 +354,18 @@ func StripToCarriers(in []Value) []Value {
 // adjacentToLiteralWord reports whether the token at index i has an
 // immediate neighbour that is a checkModeLiteralWords word.
 func adjacentToLiteralWord(in []Value, i int) bool {
-	if i > 0 && isLiteralWord(in[i-1]) {
-		return true
-	}
-	if i+1 < len(in) && isLiteralWord(in[i+1]) {
-		return true
+	// A window of two each way: `import "x"` / `"x" import` are immediate, but
+	// `unpack ExportName 'aql:mod'` places the module-name string two tokens
+	// after the literal word. Keeping a string concrete is sound regardless
+	// (it only adds precision), so the slightly wider window is harmless for
+	// the rare non-literal-word case it might also catch.
+	for d := 1; d <= 2; d++ {
+		if i-d >= 0 && isLiteralWord(in[i-d]) {
+			return true
+		}
+		if i+d < len(in) && isLiteralWord(in[i+d]) {
+			return true
+		}
 	}
 	return false
 }
@@ -418,7 +456,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	narrowDynamicUses(r, sig, args)
+	narrowDynamicUses(r, word, sig, args)
 	// Per-alternative dispatch for strict disjunct inputs
 	// (design/checker-accuracy-review.10.md A1). matchSignature tested
 	// the disjunct as a single value, so the matched sig may not be
@@ -512,10 +550,41 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 				}
 				out[0] = NewDynamicCarrierValue(NewDisjunct(alts))
 			}
+		} else if len(out) == 0 && !r.Check.Compiling {
+			// PURE-CHECK ONLY (diagnostics, not a real compile): the matched
+			// overload returns NOTHING (an in-place mutator) but the receiver is
+			// dynamic and a value-returning sibling is also reachable — `set`'s
+			// mixed-arity overloads (Array/Object/Store/Class return 0; Map/List/
+			// Flex return the updated node). The runtime receiver could be either,
+			// so committing to 0 values poisons every downstream CONSUMER of the
+			// result (trie's `(nd "kids" get) set ch child` fed to mk-node: 0 values
+			// → an unbound arg → a false undefined_word on the consumer's param +
+			// no_signature on the consuming call). Model ONE dynamic value — the
+			// optimistic gradual arity — so a consuming use type-checks. Gated to
+			// !Compiling: under a REAL compile the recorder needs a fixed, runtime-
+			// faithful arity (a 0-output Store mutation must stay 0 so its poly
+			// lowering keeps a clean residual — TestSetOverDynamicReceiverPolyCompiles),
+			// so that path is unchanged. A CONCRETE receiver reaches only its own
+			// overload, so vrets is empty and the true 0-arity stands either way.
+			if vrets := dynamicReachableValueReturns(r, word, args); len(vrets) > 0 {
+				if len(vrets) == 1 {
+					c := NewCarrier(vrets[0])
+					c.Carrier = true
+					c.Dynamic = true
+					out = []Value{c}
+				} else {
+					alts := make([]Value, len(vrets))
+					for i, t := range vrets {
+						alts[i] = NewTypeLiteral(t)
+					}
+					out = []Value{NewDynamicCarrierValue(NewDisjunct(alts))}
+				}
+			}
 		}
 	}
 	if !tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
+		!tryRecordDeferredList(r, sig, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
@@ -1255,34 +1324,18 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 		return nil, false
 	}
 
-	// Cross product of alternatives, bounded.
-	combos := [][]Value{nil}
-	for i, a := range args {
-		var alts []Value
-		if IsDisjunct(a) && a.Carrier && !a.Dynamic {
-			for _, lit := range flattenAlternatives(a) {
-				alts = append(alts, carrierOfLiteral(lit))
-			}
-		} else {
-			alts = []Value{a}
-		}
-		if len(combos)*len(alts) > disjunctPartitionCap {
-			return nil, false
-		}
-		next := make([][]Value, 0, len(combos)*len(alts))
-		for _, c := range combos {
-			for _, alt := range alts {
-				row := make([]Value, i+1)
-				copy(row, c)
-				row[i] = alt
-				next = append(next, row)
-			}
-		}
-		combos = next
+	combos, ok := disjunctCombos(args, disjunctPartitionCap)
+	if !ok {
+		return nil, false
 	}
 
-	var joined []Value
-	matchedAny := false
+	// Per-combination transfer function: dispatch the concrete
+	// alternative tuple and gather its return-carrier row. A combo that
+	// reaches no overload is dropped with a partial_dispatch warning; a
+	// combo whose overload is unannotated declines the whole partition
+	// (the whole-disjunct fallback — missing_returns + dynamic Any —
+	// beats a partial join). Surviving rows are joined position-wise.
+	rows := make([][]Value, 0, len(combos))
 	for _, combo := range combos {
 		comboSig := firstMatchingSig(fn, combo)
 		if comboSig == nil {
@@ -1297,38 +1350,85 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 			})
 			continue
 		}
-		var rets []Value
-		if comboSig.ReturnsFn != nil {
+		switch {
+		case comboSig.ReturnsFn != nil:
 			raw := comboSig.ReturnsFn(combo, r)
-			rets = make([]Value, len(raw))
+			rets := make([]Value, len(raw))
 			for i, v := range raw {
 				rets[i] = toCarrier(v)
 			}
-		} else if comboSig.Returns != nil {
-			rets = make([]Value, len(comboSig.Returns))
+			rows = append(rows, rets)
+		case comboSig.Returns != nil:
+			rets := make([]Value, len(comboSig.Returns))
 			for i, t := range comboSig.Returns {
 				rets[i] = NewCarrier(t)
 			}
-		} else {
-			// Unannotated overload on one path: the whole-disjunct
-			// fallback (missing_returns + dynamic Any) is the better
-			// behaviour than a partial join.
+			rows = append(rows, rets)
+		default:
 			return nil, false
 		}
-		if !matchedAny {
-			joined = rets
-			matchedAny = true
-			continue
+	}
+	return joinReturnRows(rows)
+}
+
+// alternativeCarriers expands a strict disjunct carrier into one carrier
+// per flattened alternative; any other value yields itself. It is the
+// per-argument expansion the disjunct cross product enumerates.
+func alternativeCarriers(a Value) []Value {
+	if IsDisjunct(a) && a.Carrier && !a.Dynamic {
+		lits := flattenAlternatives(a)
+		out := make([]Value, 0, len(lits))
+		for _, lit := range lits {
+			out = append(out, carrierOfLiteral(lit))
 		}
+		return out
+	}
+	return []Value{a}
+}
+
+// disjunctCombos enumerates the bounded cross product of the per-argument
+// alternative expansions (alternativeCarriers) — the powerset domain a
+// union-typed argument list distributes over. Returns ok=false when the
+// product would exceed limit, so the caller widens to the whole-disjunct
+// path (wide but terminating).
+func disjunctCombos(args []Value, limit int) ([][]Value, bool) {
+	combos := [][]Value{nil}
+	for i, a := range args {
+		alts := alternativeCarriers(a)
+		if len(combos)*len(alts) > limit {
+			return nil, false
+		}
+		next := make([][]Value, 0, len(combos)*len(alts))
+		for _, c := range combos {
+			for _, alt := range alts {
+				row := make([]Value, i+1)
+				copy(row, c)
+				row[i] = alt
+				next = append(next, row)
+			}
+		}
+		combos = next
+	}
+	return combos, true
+}
+
+// joinReturnRows position-wise JoinCarriers-folds the return-carrier rows
+// gathered from each matched alternative — the abstract join at the
+// dispatch merge. ok=false when no row survived or the rows disagree on
+// return arity (the partition declines; the caller widens). A row set
+// whose members are all zero-arity yields an empty slice with ok=true.
+func joinReturnRows(rows [][]Value) ([]Value, bool) {
+	if len(rows) == 0 {
+		return nil, false
+	}
+	joined := rows[0]
+	for _, rets := range rows[1:] {
 		if len(rets) != len(joined) {
 			return nil, false
 		}
 		for i := range joined {
 			joined[i] = JoinCarriers(joined[i], rets[i])
 		}
-	}
-	if !matchedAny {
-		return nil, false
 	}
 	return joined, true
 }
@@ -1374,9 +1474,17 @@ func comboTypeNames(combo []Value) string {
 // common case: contagion's matched-sig return is already correct).
 // Restricted to same-arity, single-static-return sigs; any other shape
 // falls back to contagion.
-func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
+// dynamicReachableValueReturns returns the distinct 1-value return types of the
+// word's overloads that the (possibly dynamic) args can reach. Unlike
+// dynamicReachableReturns it does NOT bail on a sibling that returns 0 values —
+// it is for the MIXED-arity case: a mutator like `set` whose in-place overloads
+// (Array/Object/Store/Class) return nothing while the value-returning twins
+// (Map/List/Flex) return the updated node. A CONCRETE receiver reaches only its
+// own overload (sigTypeMatches is exact for it), so this returns nil there and
+// the true 0-arity stands; only a genuinely dynamic receiver reaches both.
+func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Type {
 	fn := r.Lookup(word)
-	if fn == nil || len(fn.Signatures) < 2 {
+	if fn == nil {
 		return nil
 	}
 	var rets []*Type
@@ -1384,7 +1492,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
 		if len(s.Args) != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
-			return nil // a shape we don't refine — defer to contagion
+			continue
 		}
 		reach := true
 		for j := range args {
@@ -1394,6 +1502,84 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 			}
 		}
 		if !reach {
+			continue
+		}
+		if t := s.Returns[0]; !seen[t.ID] {
+			seen[t.ID] = true
+			rets = append(rets, t)
+		}
+	}
+	return rets
+}
+
+func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return nil
+	}
+	// All operands fully unknown (dynamic carriers bound to the Any root): the
+	// result is genuinely statically-unknown, so an unknown-return (ReturnsFn)
+	// reachable overload may safely fold in as the Any alternative below
+	// (widening the union to gradual-permissive). When SOME operand is
+	// concrete, the reachable concrete returns are a tighter, trustworthy
+	// union and an unknown-return overload must still suppress refinement — a
+	// partially-known call should not be blanket-widened to Any (that
+	// mis-narrowed trie's `child` through a `get` whose ModuleExport overload
+	// then looked reachable).
+	allUnknown := len(args) > 0
+	for _, a := range args {
+		if !a.Dynamic || a.Parent == nil || !a.Parent.Equal(TAny) {
+			allUnknown = false
+			break
+		}
+	}
+	var rets []*Type
+	seen := map[string]bool{}
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		// A different-arity overload is not a candidate for THIS call's arg
+		// count — skip it rather than bail. The original code bailed here,
+		// which disabled refinement for every word with mixed-arity overloads:
+		// `slice`'s 1/2/3-arg forms meant a dynamic-receiver slice committed to
+		// the single matched overload (`dynamic(List)` for a String-or-List
+		// receiver) instead of the `String|List` disjunct, so a String consumer
+		// of the result then failed no_signature (radix's edge splitter, where
+		// the sliced label is a get-result of unknown type).
+		if len(s.Args) != len(args) {
+			continue
+		}
+		reach := true
+		for j := range args {
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if !reach {
+			continue
+		}
+		// A REACHABLE overload we cannot reduce to a single return type
+		// (ReturnsFn / multi- or zero-return): its result is statically
+		// unknown, so it contributes the Any alternative to the union rather
+		// than disabling refinement. The old code bailed (`return nil`) here,
+		// which left carrierResults committed to the single matched overload's
+		// return — for a word whose overloads return DISJOINT types over
+		// dynamic operands (`add` of two dynamic-Any operands matches the
+		// temporal `Instant`/`Date` overloads alongside the numeric ReturnsFn
+		// and the String concat), that commitment picked `Instant`, and a
+		// downstream String consumer then failed no_signature (radix-delete's
+		// `(lab (gpair get 0) add)` merged label fed to `set-edge`'s
+		// `newlabel:String`). Folding the unknown in as Any makes the union
+		// gradual-permissive, matching any later typed use — sound for dynamic
+		// inputs, where the modality is optimistic by construction.
+		if len(s.Returns) != 1 || s.Returns[0] == nil {
+			if !allUnknown {
+				return nil
+			}
+			if !seen[TAny.ID] {
+				seen[TAny.ID] = true
+				rets = append(rets, TAny)
+			}
 			continue
 		}
 		if t := s.Returns[0]; !seen[t.ID] {
@@ -1416,7 +1602,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 // (RunCarrierBodyWithDefs) truncates these pushes, so a then-branch
 // narrowing never leaks to the else-branch. Sound — the bound only
 // tightens, never widens.
-func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
+func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 	if r == nil || sig == nil || !r.Check.IsActive() {
 		return
 	}
@@ -1434,6 +1620,19 @@ func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
 		if slot == nil {
 			continue
 		}
+		// Skip a POLYMORPHIC position: when another of the word's overloads
+		// is equally reachable for THIS call but constrains position i to a
+		// different (disjoint) type, the dynamic value could legitimately
+		// dispatch to either overload at run time, so narrowing to the single
+		// matched slot is unsound — it would wrongly reject a downstream use of
+		// the sibling shape. `slice`'s data arg is String in one 3-arg overload
+		// and List in the other; a dynamic-Any label narrowed to List by the
+		// first slice then failed every String consumer (radix's edge splitter,
+		// where the sliced label is a get-result of unknown type). Leaving the
+		// carrier un-narrowed only loosens matching, never tightens — sound.
+		if slotIsPolymorphic(r, word, args, i, slot) {
+			continue
+		}
 		bound := cur
 		bound.Dynamic, bound.DynFrom = false, ""
 		narrowed := TandValues(bound, NewCarrier(slot))
@@ -1443,8 +1642,69 @@ func narrowDynamicUses(r *Registry, sig *Signature, args []Value) {
 		if isNeverShape(narrowed) || ValuesEqual(bound, narrowed) {
 			continue
 		}
+		// A narrowed intersection that collapses to a bare ROOT node (nil
+		// Parent — None / Any / Never) must not be re-promoted to a dynamic
+		// carrier: the resulting carrier would carry a nil bound that
+		// matchSignature reads as "matches nothing", cascading false
+		// no_signature through every downstream use of the name. None in
+		// particular is the builder-pattern sentinel (a `none` accumulator that
+		// becomes a node — tst/radix's `none entries […tst-insert] fold`);
+		// tightening the binding to None breaks the node-rebuild words (get /
+		// with-lo / mk-tnode) that follow. Leaving the binding at its prior,
+		// broader dynamic bound only loosens matching — sound, never a new
+		// false positive.
+		if narrowed.Parent == nil {
+			continue
+		}
 		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
 	}
+}
+
+// slotIsPolymorphic reports whether the word has a second, equally-reachable
+// overload that constrains argument position i to a type other than
+// matchedSlot. "Reachable" means same arity, every OTHER position matches the
+// actual carrier args, and the dynamic value's bound is not provably disjoint
+// from that overload's type at i. When true, position i is polymorphic for
+// this call (e.g. slice's data arg: String vs List), so narrowing the dynamic
+// carrier to matchedSlot alone would be unsound.
+func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlot *Type) bool {
+	if word == "" {
+		return false
+	}
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return false
+	}
+	for k := range fn.Signatures {
+		s := &fn.Signatures[k]
+		if s.Fallback || len(s.Args) != len(args) || i >= len(s.Args) {
+			continue
+		}
+		st := s.Args[i]
+		if st == nil || st.Equal(matchedSlot) {
+			continue
+		}
+		reach := true
+		for j := range args {
+			if j == i {
+				// The dynamic value at i: reachable unless provably disjoint
+				// from this overload's type there.
+				if isNeverShape(TandValues(NewCarrier(args[j].Parent), NewCarrier(st))) {
+					reach = false
+					break
+				}
+				continue
+			}
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if reach {
+			return true
+		}
+	}
+	return false
 }
 
 // anyDynamicCarrier reports whether any value is a dynamic carrier — the
@@ -1728,7 +1988,35 @@ func carrierOfLiteral(lit Value) Value {
 //
 // This is the primary join used when the checker needs to combine
 // two branch outcomes (e.g. `if` then/else).
+// JoinCarriers merges two arm carriers (an `if`/loop/case branch result). If
+// EITHER arm is gradual (dynamic), the merge is too — the same gradual
+// contagion a dynamic operand already spreads through a dispatch result: a
+// branch that may yield an unknown-typed value is itself optimistically typed,
+// so the merge poly-matches a concrete slot instead of a strict disjunct
+// rejecting it. Notably the "default-or-self" rebind `if (nd eq none) [Map]
+// [nd]` over a `nd:Any` (gradual) param: the merge stays dynamic(Map|…) and a
+// later `nd:Map` consumer matches, instead of a strict Disjunct(None|Map|…)
+// failing no_signature (the tst/radix node-rebuild walkers). Looser, never
+// tighter — a guard discharges the modality back to strict downstream.
 func JoinCarriers(a, b Value) Value {
+	out := joinCarriersInner(a, b)
+	if a.Dynamic || b.Dynamic {
+		out.Carrier = true
+		out.Dynamic = true
+	}
+	return out
+}
+
+// isNoneArm reports whether a branch carrier is the None sentinel — the bare
+// None type node, a `none` value, or a carrier bound to None.
+func isNoneArm(v Value) bool {
+	if v.Parent != nil {
+		return v.Parent.Equal(TNone)
+	}
+	return IsNoneShape(v)
+}
+
+func joinCarriersInner(a, b Value) Value {
 	if a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
 		out := a
 		out.Carrier = true
@@ -1901,17 +2189,38 @@ func JoinCarrierStacks(a, b []Value) []Value {
 	out := make([]Value, n)
 	for i := 0; i < n; i++ {
 		var ai, bi Value
-		if i < len(a) {
+		aReal := i < len(a)
+		bReal := i < len(b)
+		if aReal {
 			ai = a[i]
 		} else {
 			ai = NewCarrier(TNone)
 		}
-		if i < len(b) {
+		if bReal {
 			bi = b[i]
 		} else {
 			bi = NewCarrier(TNone)
 		}
-		out[i] = JoinCarriers(ai, bi)
+		joined := JoinCarriers(ai, bi)
+		// Both arms produce a REAL value at this position and exactly one is
+		// None: a None-vs-value merge is the optional / builder sentinel
+		// pattern (`if (nd eq none) [build-node] [nd]`, where the else arm
+		// hands back the still-`none` receiver) — None is "absent / not built
+		// yet" and the downstream code targets the REAL type, so the merge is
+		// gradual. Without this a DIRECT call passing a concrete `none`
+		// (tst/radix's `TstMap.set` on an empty map → `none key val
+		// tst-insert`) merged to a STRICT Disjunct(None|Map) whose None
+		// alternative made every node-rebuild `get` fail no_signature — whereas
+		// the same code reached through a gradual `:Any` param already merged
+		// dynamically (JoinCarriers' arm-dynamic rule). Gated to both-real so a
+		// PADDED None (a variadic 0-or-1 arm — `if cond [98]`) keeps its
+		// precise strict shape; only a genuine value-vs-none branch widens.
+		// Looser, never tighter; a guard discharges the modality back to strict.
+		if aReal && bReal && (isNoneArm(ai) != isNoneArm(bi)) {
+			joined.Carrier = true
+			joined.Dynamic = true
+		}
+		out[i] = joined
 	}
 	return out
 }
@@ -2258,6 +2567,19 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 // delete relies on the match) — that's why this is a named helper, not
 // two inlined loops, and why every caller passes r.AnalysisScopeID() of
 // the same registry r that AnalyseFnBody runs the body in.
+// carrierTypeName names the lattice type a carrier value denotes, for memo
+// keying. A normal carrier carries its type in Parent; a root-node carrier
+// (None / Any / Never) has a nil Parent because it IS its own lattice node, so
+// its name comes from the value itself. Never deref Parent unguarded here — a
+// `none` fold-seed promoted to a dynamic carrier reaches this path with a nil
+// Parent and would otherwise panic (tst's `map-from-entries` accumulator).
+func carrierTypeName(v Value) string {
+	if v.Parent != nil {
+		return v.Parent.String()
+	}
+	return v.String()
+}
+
 func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []CapturedBinding, body []Value) string {
 	var sb strings.Builder
 	sb.WriteString(strconv.FormatUint(scopeID, 10))
@@ -2265,7 +2587,7 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 	sb.WriteString(name)
 	sb.WriteByte('#')
 	for _, a := range args {
-		sb.WriteString(a.Parent.String())
+		sb.WriteString(carrierTypeName(a))
 		sb.WriteByte(',')
 	}
 	if len(captures) > 0 {
@@ -2273,7 +2595,7 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 		for _, cb := range captures {
 			sb.WriteString(cb.Name)
 			sb.WriteByte(':')
-			sb.WriteString(cb.Value.Parent.String())
+			sb.WriteString(carrierTypeName(cb.Value))
 			sb.WriteByte(',')
 		}
 	}
@@ -2381,6 +2703,26 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	}
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
+
+	// Recursive RE-ENTRY by name (a self-call with a different arg shape, which
+	// has a different FnInflight key so it did not bail above): suppress the
+	// error-level body diagnostics this re-run would emit. The outer, canonical
+	// analysis of the same body tokens already reports any real defect; a re-run
+	// whose args narrowed a param to a strict Any can spuriously fail dispatch
+	// (trie's fuzzy-go recursing on `child = pair get 1` as nd:Map → false
+	// kid-items/get/build-row no_signature). Tracked per NAME so only genuine
+	// same-fn recursion is suppressed, not nested helper calls.
+	if name != "" {
+		if r.Check.FnNameInflight == nil {
+			r.Check.FnNameInflight = map[string]int{}
+		}
+		if r.Check.FnNameInflight[name] > 0 {
+			r.Check.SuppressBodyErrors++
+			defer func() { r.Check.SuppressBodyErrors-- }()
+		}
+		r.Check.FnNameInflight[name]++
+		defer func() { r.Check.FnNameInflight[name]-- }()
+	}
 
 	// Diagnostics emitted from here down come from CALL-TIME code —
 	// tag them FnBody so an undefined_word that turns out to be a
@@ -2493,6 +2835,87 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	result = stripZeroOutResiduals(r, result)
 	r.Check.FnSummaries[key] = result
 	return result
+}
+
+// tryRecordDeferredList makes a deferred-list-body user fn TRANSPARENT in the
+// recorder: when the dispatch result is the raw deferred list that
+// buildFnBodyReturnsFn handed back (an `Eval` list still holding raw Words — the
+// def-node-binding `[[c1]]` residual), record NOTHING for the call. The list
+// then rides as the dispatch result and folds downstream exactly as a top-level
+// `[[c1]]` literal does (the args become dead pushes, pruned at lowering). Without
+// this the user-fn dispatch would hit recordCallRefusal ("user fn call … Stage 3")
+// since no fn unit was compiled. Returns true when it claimed the dispatch.
+func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
+	es := r.Check.Emit
+	if es == nil || !es.active() || sig == nil || sig.FnFrame == nil || len(outs) != 1 {
+		return false
+	}
+	return isDeferredWordList(outs[0])
+}
+
+// isDeferredWordList reports whether v is a parser-evaluated (`Eval`, unquoted)
+// plain list that still carries a raw Word element — the unfolded def-node-binding
+// deferred residual a transparent fn body like `[[c1]]` returns.
+func isDeferredWordList(v Value) bool {
+	if !v.Eval || v.Quoted || !v.Parent.Equal(TList) || v.Data == nil ||
+		IsTypedList(v) || IsTableType(v) {
+		return false
+	}
+	lst, err := AsList(v)
+	if err != nil {
+		return false
+	}
+	for _, e := range lst.Slice() {
+		if IsWord(e) {
+			return true
+		}
+		if e.Parent.Equal(TList) && isDeferredWordList(e) {
+			return true
+		}
+	}
+	return false
+}
+
+// deferredParamListResidual reports whether a fn body is a single deferred list
+// literal that references one of the fn's parameters — the def-node-binding.tsv:54
+// shape `[[c1]]` with param `c1`. Such a body returns the list RAW; the param is
+// never captured (only `=>` lambdas close over params), so its words auto-evaluate
+// in MODULE scope at end-of-run, not the param scope AnalyseFnBody's sub-engine
+// used. Returning the raw list lets the residual fold in module scope downstream
+// (matching the interpreter) instead of refusing on a param-poisoned carrier.
+//
+// Deliberately narrow: only a lone, unquoted, parser-evaluated list body that
+// names a parameter qualifies. A body that DOESN'T reference a param already
+// folds correctly under the normal path; a multi-statement or computed body
+// keeps its existing analysis (and its faithful fallback when it can't lower).
+func deferredParamListResidual(body []Value, paramNames []string) (Value, bool) {
+	if len(body) != 1 {
+		return Value{}, false
+	}
+	v := body[0]
+	if v.Quoted || !v.Eval || !v.Parent.Equal(TList) || v.Data == nil ||
+		IsTypedList(v) || IsTableType(v) {
+		return Value{}, false
+	}
+	params := make(map[string]bool, len(paramNames))
+	for _, p := range paramNames {
+		if p != "" {
+			params[p] = true
+		}
+	}
+	if len(params) == 0 {
+		return Value{}, false
+	}
+	referencesParam := false
+	WalkBodyWords([]Value{v}, func(w WordInfo, _ Value) {
+		if params[w.Name] {
+			referencesParam = true
+		}
+	})
+	if !referencesParam {
+		return Value{}, false
+	}
+	return v, true
 }
 
 // stripZeroOutResiduals drops a body residual's 0-output statement-guard

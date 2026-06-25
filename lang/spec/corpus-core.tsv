@@ -1,0 +1,149 @@
+# AQL corpus: core words (auto-generated from `aql describe` examples, verified interpret+check+compile)
+# Format: input<TAB>expected<TAB>word
+'b' gt 'a'	true	gt
+'b' gte 'a'	true	gte
+'b' lt 'a'	false	lt
+'b' lte 'a'	false	lte
+'x' is Integer	false	is
+0 fold [add] [1 2 3 4]	10	fold
+2 dup	2 2	dup
+3 2 dup2	3 2 3 2	dup2
+3 2 nip	2	nip
+3 2 over	3 2 3	over
+3 2 swap	2 3	swap
+3 2 tuck	2 3 2	tuck
+3 gt 2	true	gt
+3 gte 2	true	gte
+3 lt 2	false	lt
+3 lte 2	false	lte
+3.5 div 2	1.75	div
+3.5 mod 2	1.5	mod
+3.5 pow 2	12.25	pow
+3.5 sub 2	1.5	sub
+4 3 2 rot	3 2 4	rot
+5 4 3 2 over2	5 4 3 2 5 4	over2
+5 4 3 2 swap2	3 2 5 4	swap2
+5 is Integer	true	is
+[1 2 3] each [dup mul]	[1 4 9]	each
+[10 20 30] 0 get	10	get
+[10 20] has 1	true	has
+[] fold [push] [1 2 3]	[1 2 3]	fold
+add 'a' 'a'	'aa'	add
+add 'b' 'b'	'bb'	add
+add 2 3.5	5.5	add
+afn 2 3	fn [[:Integer][Any][2]]	afn
+all ['a','b']	true	all
+and 2 3	2	and
+and true false	false	and
+any ['a','b']	true	any
+base 2	0	base
+canon 2	'2'	canon
+case "x" [Integer "int" String "str"]	'str'	case
+case 2 [1 "one" 2 "two" "many"]	'two'	case
+case 5 [Integer [mul 10] "other"]	50	case
+case 5 [[gt 3] "big" "small"]	'big'	case
+cmp 2 3	1	cmp
+codequote 2	2	codequote
+codequote a/q	a/q	codequote
+create {a:1,b:2} {c:3,d:4}	[]	create
+create {e:5,f:6} {a:1,b:2}	[]	create
+def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc	{a:1 b:[2 3]}	walk
+def double word [dup add]  5 double	10	word
+def f fn [[x:Integer] [Integer] [mul x 2]]  3 (usurp f)	6	usurp
+def inc fn [[n:Integer] [Integer] [n add 1]]  5 inc/r apply	6	apply
+def r (patrun)  add {a:1} "A" r  add {a:1 b:1} "B" r  find {a:1 b:1} r	'B'	find
+def r (patrun)  add {a:1} "A" r  find {a:1 z:9} r	'A'	patrun
+def r (patrun)  add {a:1} "A" r  patterns r	[{pattern:{a:1} value:'A'}]	patterns
+deq 2 3	false	deq
+div 2 3.5	1.75	div
+do ['a','b']	'a' 'b'	do
+do {a:1,b:2}	{a:1 b:2}	do
+enum [a/q b/q c/q]	a|b|c	enum
+eq 2 3	false	eq
+false guard 42	None	guard
+filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]	[4 5]	filter
+filter [2 gt] [1 2 3 4]	[3 4]	filter
+flatten 1 [[1 [2]] [3]]	[1 [2] 3]	flatten
+flatten [[1 2] [3]]	[1 2 3]	flatten
+flex [1 2 3]	(flex [1 2 3])	flex
+fold [add] [1 2 3]	6	fold
+fold [add] {a:1 b:2 c:3} 0	6	fold
+gt 'a' 'b'	true	gt
+gt 2 3	true	gt
+gte 'a' 'b'	true	gte
+gte 2 3	true	gte
+if 2 3 4	3	if
+import "aql:emitlang"  emit json {pretty:true} {a:1}	'{\n  "a": 1\n}'	emit
+import "aql:emitlang"  emit {a:1 b:[2 3]}	'{"a":1,"b":[2,3]}'	emit
+import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m	'bc'	mini
+import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'	'A'	mini
+inspect 2	{type:'Integer' kind:literal}	inspect
+inspect a/q	{name:'a' kind:unknown signatures:[]}	inspect
+iota 4	[0 1 2 3]	iota
+iota 4 each [1 add]	[1 2 3 4]	each
+istype 5	false	istype
+istype Integer	true	istype
+join 'a' ['a','b']	'b'	join
+join ['c','d']	'c,d'	join
+load {a:1,b:2} {c:3,d:4}	{}	load
+load {e:5,f:6} {a:1,b:2}	{}	load
+lt 'a' 'b'	false	lt
+lt 2 3	false	lt
+lte 'a' 'b'	false	lte
+lte 2 3	false	lte
+mod 2 3.5	1.5	mod
+mul 2 3.5	7.0	mul
+neq 2 3	true	neq
+node {a:1}	{a:1}	node
+none has a	false	has
+not 2	false	not
+not true	false	not
+outer [mul] [1 2] [3 4]	[[3 4] [6 8]]	outer
+pathof Integer	[Scalar Number Integer]	pathof
+pop [1 2 3]	[1 2] 3	pop
+pow 2 3.5	12.25	pow
+push 3 [1 2]	[1 2 3]	push
+quote add	add/q	quote
+range 1 10 2	[1 3 5 7 9]	range
+range 2 6	[2 3 4 5]	range
+reach 2 ['a','b']	2.'a'.'b'	reach
+remove {a:1,b:2} {c:3,d:4}	[]	remove
+remove {e:5,f:6} {a:1,b:2}	[]	remove
+reverse [1 2 3]	[3 2 1]	reverse
+scan [add] [1 2 3]	[1 3 6]	scan
+scan [mul] [1 2 3 4]	[1 2 6 24]	scan
+shed 2 [1 2 3 4]	[3 4]	shed
+shift [1 2 3]	[2 3] 1	shift
+size "abc"	3	size
+size [1 2 3]	3	size
+slice 1 4 "hello"	'ell'	slice
+sort [3 1 2]	[1 2 3]	sort
+sub 2 3.5	1.5	sub
+take 2 [1 2 3 4]	[1 2]	take
+tall ['a','b']	Never	tall
+tany ['a','b']	'a'|'b'	tany
+tcmp 2 3	1	tcmp
+true guard 42	42	guard
+typeof (tnot Integer)	Negation	tnot
+typeof 2	Integer	typeof
+unify 2 3	'~unify-fail' false	unify
+unshift 0 [1 2]	[0 1 2]	unshift
+update {a:1,b:2} {c:3,d:4}	[]	update
+update {e:5,f:6} {a:1,b:2}	[]	update
+walk {mode: "breadth"} {a:1 b:{c:2}} (m:Any => [m.path print])	{a:1 b:{c:2}}	walk
+walk {mode: "depth"} {a:{x:1}} (m:Any => [m.path print]) (m:Any => [m.path print])	{a:{x:1}}	walk
+with-decimal {precision: 5} [0d1.0 div 0d3.0]	0d0.33333	with-decimal
+xml-attr 'x' <a x="1"/>	'1'	xml-attr
+xml-elem <a>t<b/><c/></a>	[<b/> <c/>]	xml-elem
+xml-text <a>x<b>y</b>z</a>	'xyz'	xml-text
+xor 2 3	false	xor
+xor true false	true	xor
+{a:1 b:2 c:3} keys	['a' 'b' 'c']	keys
+{a:1 b:2 c:3} scan [add]	{a:1 b:3 c:6}	scan
+{a:1 b:2 c:3} vals	[1 2 3]	vals
+{a:1 b:2} each [mul 10]	{a:10 b:20}	each
+{a:1 b:5 c:3} filter [gt 2]	{b:5 c:3}	filter
+{a:1} has b	false	has
+{a:1} set b 2	{a:1 b:2}	set
+{a:None} has a	true	has
+{k: 9} "k" get	9	get

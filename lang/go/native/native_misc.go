@@ -509,7 +509,43 @@ func referentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 // export name and map, producing no value. The real collecting handler
 // is registered per-module in RunModuleBody and shadows this one. See
 // the "export (top-level no-op)" entry above and §8.3 in the DX report.
-func exportNoopHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+//
+// In CHECK mode it does one thing before discarding: it records every export
+// value as a use of its def. A standalone module file (`aql check trie.aql`)
+// reaches this no-op, not the collecting handler — so without this, every
+// reference-exported public word (`export "X" { make: impl/r }`) is falsely
+// flagged unused_def precisely because it is public. The map arrives already
+// auto-evaluated, so `name/r` values are fn data whose name is read off the
+// FnDefInfo; a bare name resolves through ResolveRef (which also records it).
+func exportNoopHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if r == nil || !r.Check.IsActive() || len(args) < 2 || !IsConcrete(args[1]) {
+		return nil, nil
+	}
+	m, err := RequireConcreteMap(args[1], "export")
+	if err != nil {
+		return nil, nil
+	}
+	for _, key := range m.Keys() {
+		v, _ := m.Get(key)
+		if fnDef, ok := v.Data.(FnDefInfo); ok && fnDef.Name != "" {
+			r.Check.RecordUse(fnDef.Name)
+			continue
+		}
+		switch {
+		case IsWord(v):
+			w, _ := AsWord(v)
+			r.Check.RecordUse(w.Name)
+		case IsAtom(v):
+			a, _ := AsAtom(v)
+			r.Check.RecordUse(a)
+		case v.Parent.ConformsTo(TString):
+			// A bare name in an export map can survive as a String after
+			// auto-eval; treat its text as the referenced name.
+			if s, sok := AsString(v); sok == nil {
+				r.Check.RecordUse(s)
+			}
+		}
+	}
 	return nil, nil
 }
 

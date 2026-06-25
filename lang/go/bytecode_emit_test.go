@@ -377,10 +377,19 @@ func TestEmitDynOutNative(t *testing.T) {
 	if err != nil || len(got) != 2 {
 		t.Fatalf("List unify [1 2]: got %v err=%v", got, err)
 	}
-	// Negative: a DYNAMIC input keeps the dynamic-input refusal — the sig is
-	// then a guess, not a resolved match.
-	if _, r := compile(t, `def l [1 2] push 3 l unify l`); r == "" {
-		t.Error("dynamic-input unify compiled but must refuse")
+	// `push 3 l` now types as a List (push's List overload declares Returns=[List],
+	// the fold-push checker fix), so `… unify l` resolves to a real match and
+	// compiles — and compiled == interpreted. (Previously push typed as Any, so
+	// this stood as the dynamic-input refusal case; that path is still covered by
+	// the set/getpath dynamic-input emit tests below.)
+	if _, r := compile(t, `def l [1 2] push 3 l unify l`); r != "" {
+		t.Errorf("push-typed unify must compile, refused: %s", r)
+	}
+	gotP, _, errP := mustRun(t, `def l [1 2] push 3 l unify l`)
+	ai, _ := New()
+	gotI, errI := ai.Run(`def l [1 2] push 3 l unify l`)
+	if errP != nil || errI != nil || fmt.Sprint(gotP) != fmt.Sprint(gotI) {
+		t.Errorf("push-typed unify parity: compiled=%v(%v) interp=%v(%v)", gotP, errP, gotI, errI)
 	}
 }
 

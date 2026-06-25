@@ -2,6 +2,7 @@ package eng
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -100,12 +101,72 @@ func (t *Type) Root() *Type {
 // t). Comparison is by lattice identity (Equal) so a by-value
 // type-literal copy still recognises its own ancestors.
 func (t *Type) IsAncestor(ancestor *Type) bool {
+	// O(1) interval fast-path for the static builtin lattice: t descends
+	// from ancestor iff t's DFS entry falls within ancestor's [In, Out]
+	// range. Valid only when BOTH nodes are labelled (In > 0) — which is
+	// exactly the builtins labelled at table construction, whose ancestry
+	// is fixed. Minted / external / ad-hoc types (In == 0) fall through to
+	// the structural walk, which stays the single source of truth.
+	if t.In > 0 && ancestor.In > 0 {
+		return ancestor.In <= t.In && t.In <= ancestor.Out
+	}
 	for x := t; x != nil; x = x.Parent {
 		if x.Equal(ancestor) {
 			return true
 		}
 	}
 	return false
+}
+
+// depthOf returns the lattice depth a child of parent should carry: the
+// root sits at depth 1, every step down adds one. parent.Depth is set at
+// parent's own construction (builtins register parent-before-child), so
+// this is O(1); a parent with an unset Depth (ad-hoc *Type) yields the
+// walk-based length so the field still ends up consistent.
+func depthOf(parent *Type) int {
+	if parent == nil {
+		return 1
+	}
+	if parent.Depth > 0 {
+		return parent.Depth + 1
+	}
+	return typeDepth(parent) + 1
+}
+
+// labelIntervals assigns every node in the table a DFS nested-set interval
+// [In, Out] so IsAncestor can answer descendant queries in O(1) (see the
+// In/Out fields on Value and the fast-path in IsAncestor). Called once,
+// after the builtin lattice is fully wired, on the package-level Builtin
+// table only — dynamic per-registry tables never re-label, so their minted
+// types keep In == 0 and route through the walk. Children are visited in ID
+// order so the numbering is deterministic across runs.
+func (tt *TypeTable) labelIntervals() {
+	children := make(map[string][]*Type, len(tt.byID))
+	var roots []*Type
+	for _, t := range tt.byID {
+		if t.Parent == nil {
+			roots = append(roots, t)
+			continue
+		}
+		children[t.Parent.ID] = append(children[t.Parent.ID], t)
+	}
+	sort.Slice(roots, func(i, j int) bool { return roots[i].ID < roots[j].ID })
+
+	counter := 0
+	var visit func(t *Type)
+	visit = func(t *Type) {
+		counter++
+		t.In = counter
+		kids := children[t.ID]
+		sort.Slice(kids, func(i, j int) bool { return kids[i].ID < kids[j].ID })
+		for _, c := range kids {
+			visit(c)
+		}
+		t.Out = counter
+	}
+	for _, r := range roots {
+		visit(r)
+	}
 }
 
 // TypeTable is the canonical catalogue of types. Builtin is the
@@ -221,6 +282,7 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	def := &Type{
 		Name:     name,
 		Parent:   parent,
+		Depth:    depthOf(parent),
 		Origin:   OriginUserDef,
 		Behavior: DefaultBehavior,
 	}
@@ -375,6 +437,7 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 		ID:       id,
 		Name:     parts[len(parts)-1],
 		Parent:   parent,
+		Depth:    depthOf(parent),
 		FixedID:  fixedID,
 		Origin:   OriginBuiltin,
 		Behavior: behavior,
@@ -679,6 +742,9 @@ func newBuiltinTypeTable() *TypeTable {
 	for _, d := range builtinDecls {
 		tt.registerBuiltin(d)
 	}
+	// Number the fully-wired lattice so IsAncestor / ConformsTo can answer
+	// builtin-vs-builtin subtype queries in O(1) via the interval test.
+	tt.labelIntervals()
 	// Type answers membership (`v is Type`, `t:Type` params, `[Type]`
 	// returns) via typeMembershipBehavior — one question at every
 	// boundary, per the refine doctrine (the membership set strictly
@@ -718,6 +784,7 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		ID:         id,
 		Name:       parts[len(parts)-1],
 		Parent:     parent,
+		Depth:      depthOf(parent),
 		FixedID:    d.FixedID,
 		Rank:       d.Rank,
 		IsInternal: d.IsInternal,

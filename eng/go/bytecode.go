@@ -204,6 +204,16 @@ const (
 	// order (the fn sits above a before-arg literal, which the in-order
 	// reconciliation otherwise forbids).
 	OpCallDynamicMixed
+	// OpInterp assembles a template string (`` `got ${x}` ``) from its
+	// computed holes. Program.Interps[Arg] holds the ordered template — literal
+	// segments interleaved with HOLE markers. The VM pops one operand-stack value
+	// per hole (deepest popped = hole 0, source order), then walks the template:
+	// a literal segment appends verbatim, a hole appends ValToString of the next
+	// popped value — byte-identical to the interpreter's evalInterpParts. Lowers
+	// any interpolated string whose holes are runtime- or natively-computed
+	// (`${1 add 2}`, `${x}` for a fn param, `${typeof x}`); a fully literal or
+	// pure-binding-fold template stays a pooled const and never needs this.
+	OpInterp
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -241,6 +251,7 @@ var opcodeNames = [...]string{
 	OpDropToMark:          "DROP_TO_MARK",
 	OpPopMark:             "POP_MARK",
 	OpCallDynamicMixed:    "CALL_DYNAMIC_MIXED",
+	OpInterp:              "INTERP",
 }
 
 func (o Opcode) String() string {
@@ -364,6 +375,24 @@ type MakeMapSpec struct {
 	Implicit bool
 }
 
+// InterpSeg is one segment of an OpInterp template: either a literal run of
+// text (Hole false, Lit set) or a hole that consumes the next popped value
+// (Hole true). Segments are in source order.
+type InterpSeg struct {
+	Lit  string
+	Hole bool
+}
+
+// InterpSpec is the template of one OpInterp assembly: the ordered segments
+// and the hole count (= how many operand-stack values the op pops). The
+// literal text rides here rather than as stack operands, so OpInterp only
+// pops the computed hole VALUES — reusing the same operand-layout engine as a
+// call (mirrors MakeMapSpec).
+type InterpSpec struct {
+	Segs   []InterpSeg
+	NHoles int
+}
+
 // TrapSpec describes the AQL error one OpTrap raises: the taxonomy code, the
 // detail message, the word it is attributed to, and an optional hint — built
 // from the SAME strings the interpreter raises for the matching runtime error,
@@ -387,6 +416,7 @@ type Program struct {
 	PolyRefs  []PolyRef
 	Fallbacks []FallbackSpan
 	MakeMaps  []MakeMapSpec
+	Interps   []InterpSpec
 	Traps     []TrapSpec
 	Fns       []CompiledFn
 	Debug     []SrcPos // 1:1 with Code
@@ -511,6 +541,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " x%-3d ; trap %s", in.Arg, p.Traps[in.Arg].Code)
 		case OpReverse:
 			fmt.Fprintf(sb, " n%-3d ; reverse top %d", in.Arg, in.Arg)
+		case OpInterp:
+			fmt.Fprintf(sb, " i%-3d ; interpolate %d hole(s)", in.Arg, p.Interps[in.Arg].NHoles)
 		}
 		sb.WriteByte('\n')
 	}

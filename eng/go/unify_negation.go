@@ -72,7 +72,7 @@ func isPlainTypeRef(v Value) bool {
 // the minted lattice node so every "is v a NotStr?" path consults the
 // complement.
 type negationUnifier struct {
-	prev     TypeBehavior
+	behaviorWrapper
 	inner    Value
 	typeName string
 }
@@ -88,16 +88,13 @@ func (n *negationUnifier) Match(v Value, t *Type) bool {
 	return err == nil
 }
 
-func (n *negationUnifier) Format(v Value) string { return baseBehavior(n.prev).Format(v) }
-func (n *negationUnifier) Equal(a, b Value) bool { return baseBehavior(n.prev).Equal(a, b) }
-
 // installNegationUnifier attaches a negationUnifier to def, wrapping any
 // existing Behavior. Called by InstallType when minting a negation type
 // so the complement drives every Is/Match call site.
 func installNegationUnifier(def *Type, inner Value, name string) {
 	def.Behavior = &negationUnifier{
-		prev:     def.Behavior,
-		inner:    inner,
-		typeName: name,
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+		inner:           inner,
+		typeName:        name,
 	}
 }

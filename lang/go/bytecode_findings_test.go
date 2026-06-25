@@ -1993,18 +1993,30 @@ func TestTopTakingClosureTrim(t *testing.T) {
 // CARRIER and refuses recording for such a string, so the program falls back to
 // the interpreter and builds the real value. Found via voxgig-aql/decision
 // prop suites (`  pass: ${nm}` where nm = a get over the each-element carrier).
-func TestInterpStringRuntimePartFallsBack(t *testing.T) {
-	// nm is a field read over the each-element carrier → dynamic; the interp
-	// string must NOT bake "dynamic(Any)". Compiled (with fallback) == interp.
+func TestInterpStringRuntimePartCompiles(t *testing.T) {
+	// nm is a field read over the each-element carrier → a runtime hole. It now
+	// lowers to OpInterp (the VM rebuilds the string from the popped hole at run
+	// time) rather than refusing the program. Compiled == interp, no carrier leak,
+	// and the interpolation itself is native — no string-interp island.
 	const src = `def rs [{name:"a"} {name:"b"}]
 (rs each [var [[r] def nm (r "name" get) ` + "`x ${nm}`" + ` ]])`
+	prog, reason, _, _ := mustNew(t).CompileCheck(src)
+	if prog == nil {
+		t.Fatalf("a runtime-valued interpolation must now compile via OpInterp, refused: %s", reason)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "INTERP") || strings.Contains(dis, "FALLBACK") {
+		t.Errorf("the interpolation must lower to a native INTERP (no island):\n%s", dis)
+	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
 	gotI, errI := mustNew(t).Run(src)
-	if compiled {
-		t.Errorf("a runtime-valued interpolation must refuse (no runtime string-interp op), got a compiled run")
+	if !compiled {
+		t.Errorf("the program must run compiled, fell back")
 	}
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+		t.Errorf("parity broke: compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+	}
+	if fmt.Sprint(gotI) != "[['x a' 'x b']]" {
+		t.Errorf("got %v, want [['x a' 'x b']]", gotI)
 	}
 	for _, v := range []string{fmt.Sprint(gotC), fmt.Sprint(gotI)} {
 		if strings.Contains(v, "dynamic(") {
@@ -2012,7 +2024,7 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 		}
 	}
 
-	// POSITIVE: a fully-CONCRETE interpolation still compiles and folds.
+	// POSITIVE: a fully-CONCRETE interpolation still folds to a pooled const.
 	prog, reason, _, cerr := mustNew(t).CompileCheck("def n 5\n`value ${n}`")
 	if cerr != nil {
 		t.Fatalf("concrete interp: check error %v", cerr)
@@ -2023,6 +2035,74 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 	gotc, _, _ := mustNew(t).RunCompiled("def n 5\n`value ${n}`")
 	if fmt.Sprint(gotc) != "[value 5]" {
 		t.Errorf("concrete interp: got %v want [value 5]", gotc)
+	}
+
+	// NEGATIVE: a single hole that yields a DYNAMIC, MULTI-value run cannot map to
+	// one stack slot, so OpInterp refuses and the program falls back — still with
+	// interpreter parity (no silent miscompile).
+	const multi = "`v=${1 add 2  3 add 4}`"
+	mprog, _, _, _ := mustNew(t).CompileCheck(multi)
+	if mprog != nil {
+		t.Errorf("a dynamic multi-value hole must refuse to compile")
+	}
+	mC, mcompiled, _ := mustNew(t).RunCompiled(multi)
+	mI, _ := mustNew(t).Run(multi)
+	if mcompiled {
+		t.Errorf("dynamic multi-value hole must fall back, ran compiled")
+	}
+	if fmt.Sprint(mC) != fmt.Sprint(mI) {
+		t.Errorf("fallback parity broke: compiled=%v interp=%v", mC, mI)
+	}
+}
+
+// TestInterpStringOpInterpParity exercises OpInterp across the shapes that
+// distinguish it from a const fold — multiple holes, natively-computed holes,
+// None and type-literal holes, and NESTING — asserting (a) the program compiles
+// natively (an INTERP, no island), and (b) compiled output is byte-identical to
+// the interpreter.
+func TestInterpStringOpInterpParity(t *testing.T) {
+	// wantInterp marks cases with a genuinely DYNAMIC hole (a native result, which
+	// check mode synthesises as a carrier) that must lower to OpInterp. The others
+	// have only literal / binding / const-foldable holes, so they collapse to a
+	// pooled const (optimal) — they must still compile natively and match, but
+	// without an INTERP op.
+	cases := []struct {
+		src, want  string
+		wantInterp bool
+	}{
+		{src: "`a${1}b${2}c${3}d`", want: "[a1b2c3d]"},                                                  // all literal holes → const
+		{src: "def n 3 `${n} items, total ${n mul 10}`", want: "[3 items, total 30]", wantInterp: true}, // n mul 10 carrier
+		{src: "`type: ${42 typeof}`", want: "[type: Integer]", wantInterp: true},                        // typeof carrier
+		{src: "def x None `got ${x}`", want: "[got None]"},                                              // None binding → const
+		{src: "`nested ${ `inner ${1 add 1}` }`", want: "[nested inner 2]", wantInterp: true},           // add carrier
+		{src: "def f fn [[n:Integer] [String] [ `got ${n}` ]] 7 f", want: "[got 7]", wantInterp: true},  // param hole
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Errorf("%q: check error %v", c.src, cerr)
+			continue
+		}
+		if prog == nil {
+			t.Errorf("%q: must compile, refused: %s", c.src, reason)
+			continue
+		}
+		dis := prog.Disassemble()
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: must compile natively, got an island:\n%s", c.src, dis)
+		}
+		if c.wantInterp && !strings.Contains(dis, "INTERP") {
+			t.Errorf("%q: dynamic hole must lower to INTERP:\n%s", c.src, dis)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled || errC != nil || errI != nil {
+			t.Errorf("%q: run failed compiled=%v errC=%v errI=%v", c.src, compiled, errC, errI)
+			continue
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want=%s", c.src, gotC, gotI, c.want)
+		}
 	}
 }
 
@@ -3127,6 +3207,82 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 		}
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("seed %d (recv-bound): parity: compiled=%v interp=%v", seed, gotC, gotI)
+		}
+	}
+}
+
+// TestDeferredListBodyCompiles pins the LAST compiler refusal cleared
+// (def-node-binding.tsv:54), reaching refusals = 0. A fn whose body is a single
+// deferred list literal that references a parameter — `def mk fn [[c1:Integer]
+// [List] [[c1]]]` — returns the list RAW; the interpreter auto-evaluates it LATE,
+// in MODULE scope (a returned list never closes over the param — only a `=>`
+// lambda captures), so `c1` resolves to the module binding, not the arg. The fn
+// is compiled TRANSPARENTLY: the raw deferred list rides as the call's residual
+// and the existing top-level deferred-list fold bakes it in module scope. Every
+// consumption shape must fold to the SAME value both engines produce — no fn unit,
+// no VM change.
+func TestDeferredListBodyCompiles(t *testing.T) {
+	const mk = `def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] `
+	positive := []struct{ src, want string }{
+		// Bare top-level: the deferred list folds at end-of-run, module c1 = 1.
+		{mk + `mk 9`, "[[1]]"},
+		// Rebind AFTER the bare call: the late fold sees the LATEST module binding.
+		{mk + `mk 9 def c1 2`, "[[2]]"},
+		// def-bind forces the eval at bind time (module c1 = 1), so a later rebind
+		// does not move it.
+		{mk + `def r (mk 9) def c1 2 r`, "[[1]]"},
+		// Consumed downstream: the deferred list folds in module scope at the
+		// consumer, exactly as the interpreter auto-evaluates the arg.
+		{mk + `mk 9 0 get`, "[1]"},
+		{mk + `mk 9 size`, "[1]"},
+		// Two independent calls.
+		{mk + `mk 9 mk 8`, "[[1] [1]]"},
+		// A different module binding flows through.
+		{`def c1 7 def mk fn [[c1:Integer] [List] [[c1]]] mk 9`, "[[7]]"},
+	}
+	for _, c := range positive {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("did not compile: reason=%q err=%v :: %s", reason, cerr, c.src)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("expected a native lowering, got an island: %s", c.src)
+		}
+		got, err := mustNew(t).RunCompiledStrict(c.src)
+		if err != nil {
+			t.Fatalf("strict compiled run: %v :: %s", err, c.src)
+		}
+		if fmt.Sprint(got) != c.want {
+			t.Errorf("compiled %v want %s :: %s", got, c.want, c.src)
+		}
+		gotI, _ := mustNew(t).Run(c.src)
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("interp %v want %s :: %s", gotI, c.want, c.src)
+		}
+	}
+
+	// NEGATIVE / soundness — a returned list is NOT a closure: it must resolve in
+	// MODULE scope, never the param. The `=>` lambda (which DOES capture) is the
+	// contrast and must still return the captured param. Both must match the
+	// interpreter exactly.
+	contrast := []struct{ src, want string }{
+		// `=>` captures the param: f returns the ARG 7, not a module binding.
+		{`def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f`, "[7]"},
+		// No module binding for the named param: the deferred list errors at the
+		// late module-scope eval (undefined word), exactly as the interpreter does.
+		{`def mk fn [[x:Integer] [List] [[x add 1]]] mk 5`, ""},
+	}
+	for _, c := range contrast {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if codeOf(eC) != codeOf(eI) {
+			t.Errorf("error parity: compiled=%s interp=%s :: %s", codeOf(eC), codeOf(eI), c.src)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("value parity: compiled=%v interp=%v :: %s", gotC, gotI, c.src)
+		}
+		if eC == nil && c.want != "" && fmt.Sprint(gotC) != c.want {
+			t.Errorf("compiled %v want %s :: %s", gotC, c.want, c.src)
 		}
 	}
 }

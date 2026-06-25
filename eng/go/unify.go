@@ -266,114 +266,28 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 			}
 		}
 	}
-	// Bounded Type — `Type of [B]` (the /t / Type<B> surface): unifies
-	// with a TYPE value whose denoted node conforms to the bound; the
-	// type value wins (it is the narrower side). Two bounded Types
-	// unify to the narrower bound. Checked before Shape dispatch — the
-	// body's ChildTypeInfo payload would otherwise be misread by the
-	// family handlers.
-	if IsBoundedType(a) || IsBoundedType(b) {
-		return unifyBoundedType(a, b)
-	}
-
 	sa := Shape(a)
 	sb := Shape(b)
 
-	// Disjunct fold first — must come before degenerate-root checks so
-	// disjuncts containing None work (e.g. `String or None`).
-	if sa == ShapeDisjunct {
-		disj, _ := AsDisjunct(a)
-		return unifyDisjunct(disj, b)
-	}
-	if sb == ShapeDisjunct {
-		disj, _ := AsDisjunct(b)
-		return unifyDisjunct(disj, a)
-	}
-
-	// Negation fold — `tnot T` admits v iff v does not satisfy T. Placed
-	// after the disjunct fold and before the degenerate roots so a
-	// negation built over None/Never/Any still routes through here.
-	if sa == ShapeNegation {
-		neg, _ := AsNegation(a)
-		return unifyNegation(neg, b)
-	}
-	if sb == ShapeNegation {
-		neg, _ := AsNegation(b)
-		return unifyNegation(neg, a)
-	}
-
-	// Surface fold — membership in a surface is the conformance set,
-	// answered by the minted node's surfaceUnifier (explicit `exposes`
-	// declarations only). Placed with the other compound-type folds so
-	// negation (`tnot Shape`), disjunct alternatives, and tand's Unify
-	// fallback consult the same membership the `is` word and sig
-	// dispatch use. See unifySurface.
-	if IsSurfaceType(a) || IsSurfaceType(b) {
-		return unifySurface(a, b)
-	}
-
-	// Never — bottom type, only unifies with itself.
-	if sa == ShapeNever || sb == ShapeNever {
-		if sa == sb {
-			return a, nil
+	// Compound-type and degenerate-root folds, in priority order (see
+	// unifyFolds). When a side is a rule's "ruling" shape the pair routes
+	// to that rule's handler with the ruling side first; the asymmetric
+	// handlers canonicalise internally, so a both-sides or swapped match
+	// is immaterial. The TABLE ORDER is the dispatch precedence —
+	// disjunct/negation/surface before the degenerate roots (so a
+	// `String or None` disjunct folds before None's self-only rule),
+	// object-type and type-parameter folds after. Checked before the
+	// Behavior-driven LCA walk below; the bounded-type rule leads because
+	// its ChildTypeInfo payload would otherwise be misread by a family
+	// handler.
+	for i := range unifyFolds {
+		f := &unifyFolds[i]
+		if f.ruling(a, sa) {
+			return f.fold(a, b)
 		}
-		return Value{}, unifyFail("never only unifies with never", a, b)
-	}
-
-	// None — only unifies with itself.
-	if sa == ShapeNone || sb == ShapeNone {
-		if sa == sb {
-			return a, nil
+		if f.ruling(b, sb) {
+			return f.fold(b, a)
 		}
-		return Value{}, unifyFail("none only unifies with none", a, b)
-	}
-
-	// Absent — only unifies with itself. Mirrors None's rule. Absent
-	// is kernel-internal: it appears as a synthesized fill value when
-	// the map unifier encounters a missing key. A disjunct containing
-	// Absent (the `?:T` desugaring) accepts it via the Disjunct fold
-	// above; any other shape rejects it.
-	if sa == ShapeAbsent || sb == ShapeAbsent {
-		if sa == sb {
-			return a, nil
-		}
-		return Value{}, unifyFail("absent only unifies with absent", a, b)
-	}
-
-	// Any — yields the other (more specific) side.
-	if sa == ShapeAny {
-		return b, nil
-	}
-	if sb == ShapeAny {
-		return a, nil
-	}
-
-	// Object-type fold — an object/class TYPE value (an ObjectTypeInfo
-	// body: the binding of `def Circle class {…}` or a generic
-	// instantiation `Box of [Integer]`) admits values by Is-membership
-	// in its minted node, the same doctrine the surface fold applies.
-	// Without this, ObjectType-vs-instance pairs fell to
-	// unifySameOrSubtype's "same type, different literal values"
-	// failure (both sides carry the class node as their type), so a
-	// class literal in a unify position — a typed-list child
-	// constraint (`[:(Box of [Integer])]`), a `case` branch, the
-	// `unify` word — could never admit an instance.
-	if IsObjectType(a) || IsObjectType(b) {
-		return unifyObjectType(a, b)
-	}
-
-	// Type-parameter fold — a bare placeholder literal (a minted
-	// gen-param node, design/GENERICS.10.md) admits the other side by
-	// the parameter's bound, mirroring the surface fold above. Placed
-	// after the degenerate roots so Never/None/Any keep their rules,
-	// and before the family handlers so a placeholder embedded as a
-	// typed-list/map child constraint admits elements. See
-	// unifyTypeParam (generics_unify.go).
-	if n := typeParamLitNode(a); n != nil {
-		return unifyTypeParam(a, n, b)
-	}
-	if n := typeParamLitNode(b); n != nil {
-		return unifyTypeParam(b, n, a)
 	}
 
 	// Behavior-driven dispatch: walk the LCA of the two operand types
@@ -447,6 +361,69 @@ func unifyInner(a, b Value) (Value, *UnifyError) {
 	// compare, subtype relation. Handled together because they're all
 	// just "pick the narrower side if compatible".
 	return unifySameOrSubtype(a, b)
+}
+
+// unifyFold is one entry in the compound-type dispatch table consulted
+// near the top of unifyInner. ruling reports whether a side is this
+// rule's governing shape (by ValueShape, or by a payload predicate the
+// Shape enum doesn't name — bounded type, surface, type parameter);
+// fold receives the ruling side first and the other side second.
+type unifyFold struct {
+	ruling func(Value, ValueShape) bool
+	fold   func(ruling, other Value) (Value, *UnifyError)
+}
+
+// unifyFolds is the priority-ordered fold table. The order reproduces
+// the historical if-chain exactly: bounded type leads (its payload
+// must not reach a family handler), then the union/complement/surface
+// compound folds, then the degenerate roots, then the object-type and
+// type-parameter folds. Each fold's rationale lives on its handler.
+//
+// Populated in init() rather than as a var initializer: the fold
+// handlers call back into Unify → unifyInner, which reads this table,
+// so a direct var initializer trips Go's initialization-cycle check.
+// init() assigns after all package vars are set, breaking the static
+// cycle while the runtime call graph is unchanged.
+var unifyFolds []unifyFold
+
+func init() {
+	unifyFolds = []unifyFold{
+		{func(v Value, _ ValueShape) bool { return IsBoundedType(v) }, unifyBoundedType},
+		{func(_ Value, s ValueShape) bool { return s == ShapeDisjunct }, func(ruling, other Value) (Value, *UnifyError) {
+			disj, _ := AsDisjunct(ruling)
+			return unifyDisjunct(disj, other)
+		}},
+		{func(_ Value, s ValueShape) bool { return s == ShapeNegation }, func(ruling, other Value) (Value, *UnifyError) {
+			neg, _ := AsNegation(ruling)
+			return unifyNegation(neg, other)
+		}},
+		{func(v Value, _ ValueShape) bool { return IsSurfaceType(v) }, unifySurface},
+		{func(_ Value, s ValueShape) bool { return s == ShapeNever }, foldDegenRoot("never", ShapeNever)},
+		{func(_ Value, s ValueShape) bool { return s == ShapeNone }, foldDegenRoot("none", ShapeNone)},
+		{func(_ Value, s ValueShape) bool { return s == ShapeAbsent }, foldDegenRoot("absent", ShapeAbsent)},
+		{func(_ Value, s ValueShape) bool { return s == ShapeAny }, func(_, other Value) (Value, *UnifyError) {
+			// Any yields the other (more specific) side.
+			return other, nil
+		}},
+		{func(v Value, _ ValueShape) bool { return IsObjectType(v) }, unifyObjectType},
+		{func(v Value, _ ValueShape) bool { return typeParamLitNode(v) != nil }, func(ruling, other Value) (Value, *UnifyError) {
+			return unifyTypeParam(ruling, typeParamLitNode(ruling), other)
+		}},
+	}
+}
+
+// foldDegenRoot builds the self-only fold a degenerate root (Never,
+// None, Absent) uses: the pair unifies iff the other side is the same
+// root, otherwise it is a definitive mismatch. The ruling side is
+// returned on success (both-root pairs yield the first-checked side,
+// matching the prior `if sa == sb { return a }` rule).
+func foldDegenRoot(name string, root ValueShape) func(Value, Value) (Value, *UnifyError) {
+	return func(ruling, other Value) (Value, *UnifyError) {
+		if Shape(other) == root {
+			return ruling, nil
+		}
+		return Value{}, unifyFail(name+" only unifies with "+name, ruling, other)
+	}
 }
 
 // unifyObjectType admits the non-ObjectType side by Is-membership in

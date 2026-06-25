@@ -572,7 +572,7 @@ func makePath(srcVal Value, abs bool) ([]Value, error) {
 		s, _ := AsString(srcVal)
 		raw = []string{s}
 	default:
-		return nil, fmt.Errorf("make: Path source must be a list or string, got %s", srcVal.String())
+		return nil, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: Path source must be a list or string, got %s", srcVal.String())}
 	}
 
 	if len(raw) > 0 && strings.HasPrefix(raw[0], "/") {
@@ -1040,7 +1040,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
-			return Value{}, fmt.Errorf("make: cannot convert %q to float", text)
+			return Value{}, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: cannot convert %q to float", text)}
 		}
 		return NewFloat(f), nil
 
@@ -1050,7 +1050,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		if err != nil {
 			f, ferr := strconv.ParseFloat(text, 64)
 			if ferr != nil {
-				return Value{}, fmt.Errorf("make: cannot convert %q to number", text)
+				return Value{}, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: cannot convert %q to number", text)}
 			}
 			return NewInteger(int64(f)), nil
 		}
@@ -1079,7 +1079,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		return NewAtom(ValToString(src)), nil
 
 	default:
-		return Value{}, fmt.Errorf("make: unsupported target type %s", targetType)
+		return Value{}, &AqlError{Code: "unsupported", Detail: fmt.Sprintf("make: unsupported target type %s", targetType)}
 	}
 }
 

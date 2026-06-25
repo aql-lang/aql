@@ -26,3 +26,30 @@ import "aql:vm" { scopes: { engine: { words: { default: "allow" } } } } "10 sub 
 import "aql:vm" Vm.parse "1 add 2"	(quote [1 word(add) 2])	parses source to a quoted token list without running it
 import "aql:vm" size (Vm.parse "1 add 2")	3	the structure is ordinary data
 import "aql:vm" Vm.parse "1 add ((("	ERROR:parse_error	malformed source raises loudly
+#
+# ─────────────────────────────────────────────────────────────────────
+# §5  check — static type-check WITHOUT running. Returns a result map
+#     { ok errors warnings diagnostics }; findings are DATA, never raised
+#     (even a syntax error rides back as one error-severity diagnostic),
+#     so callers get one uniform shape. Runs under the parent's policy.
+import "aql:vm" (Vm.check "1 add 2").ok	true	clean source checks ok
+import "aql:vm" (Vm.check "1 add 2").errors	0	…with zero errors
+import "aql:vm" (Vm.check "totally-undefined-word").ok	false	an undefined word fails the check
+import "aql:vm" (Vm.check "totally-undefined-word").errors	1	…and is counted
+import "aql:vm" ((Vm.check "totally-undefined-word").diagnostics.0).code	'undefined_word'	each diagnostic carries a stable code
+import "aql:vm" ((Vm.check "totally-undefined-word").diagnostics.0).severity	'error'	…and a severity
+import "aql:vm" (Vm.check "1 add (((").ok	false	a syntax error is a check finding, not a raised error
+import "aql:vm" ((Vm.check "1 add (((").diagnostics.0).code	'parse_error'	…reported with the parse_error code
+import "aql:vm" (Vm.check "1 add 2  def unused 99").warnings	1	non-fatal findings count as warnings
+#
+# ─────────────────────────────────────────────────────────────────────
+# §6  compile — run the bytecode compile pass WITHOUT executing. Returns
+#     { ok reason sites }: ok = lowers to bytecode, reason = first offender
+#     when it does not, sites = the dispatch-site census. Refusal is data,
+#     not an error.
+import "aql:vm" (Vm.compile "1 add 2").ok	true	a straight-line program compiles
+import "aql:vm" (Vm.compile "1 add 2").reason	''	…with no refusal reason
+import "aql:vm" ((Vm.compile "1 add 2").sites).mono	1	the dispatch-site census reports one mono call
+import "aql:vm" (Vm.compile "(size (for 5 [i]))").ok	false	a loop-result consumer refuses
+import "aql:vm" (Vm.compile "1 add (((").ok	false	malformed source does not compile
+import "aql:vm" (Vm.compile "1 add (((").reason	'parse error'	…and says why

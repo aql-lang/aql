@@ -50,8 +50,14 @@ func rankOf(t *Type) int {
 }
 
 // typeDepth is the length of t's parent chain — its distance from the
-// lattice root. A subtype is one deeper than the type it refines.
+// lattice root. A subtype is one deeper than the type it refines. The
+// value is cached in Type.Depth at construction (builtins, MintType,
+// RegisterExternalBuiltin), so this is an O(1) field read; the walk is a
+// fallback for an ad-hoc *Type assembled without a Depth (chiefly tests).
 func typeDepth(t *Type) int {
+	if t != nil && t.Depth > 0 {
+		return t.Depth
+	}
 	d := 0
 	for ; t != nil; t = t.Parent {
 		d++

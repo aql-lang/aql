@@ -814,6 +814,12 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		mi := len(lw.p.MakeMaps)
 		lw.p.MakeMaps = append(lw.p.MakeMaps, MakeMapSpec{Keys: c.mapKeys, Implicit: c.mapImpl})
 		lw.emit(OpMakeMap, mi, c.pos)
+	} else if c.interp {
+		// Assemble the n laid-out hole operands into a template string (a computed
+		// interpolation, `` `got ${x}` ``); the literal segments ride in Interps.
+		ii := len(lw.p.Interps)
+		lw.p.Interps = append(lw.p.Interps, InterpSpec{Segs: c.interpSegs, NHoles: n})
+		lw.emit(OpInterp, ii, c.pos)
 	} else if c.poly {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.

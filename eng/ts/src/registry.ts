@@ -7,6 +7,7 @@
 // stack). Those are intentionally omitted here — adding them would
 // inflate the port without helping the specs run. A full-parity
 // version would mirror them one-for-one.
+import { CheckState } from './check.ts'
 import type { NativeFunc, NativeSig, Signature } from './signature.ts'
 import { sortSignatures } from './signature.ts'
 import type { Value } from './value.ts'
@@ -15,6 +16,8 @@ import type { Value } from './value.ts'
 export interface FunctionEntry {
   name: string
   signatures: Signature[]
+  /** Signatures in registration order (inspect renders these). */
+  declOrder: Signature[]
   forwardPrecedence: boolean
   /** Longest forward arg count across all sigs (used by stepWord). */
   maxForwardArgs: number
@@ -31,6 +34,9 @@ export class Registry {
    * read positional args by index without naming each param.
    */
   private argsStack: Value[][] = []
+
+  /** Static type-checker state. Inactive until check.begin() is called. */
+  readonly check = new CheckState()
 
   // ── Capabilities ──────────────────────────────────────────────────────
 
@@ -89,7 +95,9 @@ export class Registry {
     const forwardPrec = fn.forwardPrecedence ?? false
     const entry = this.upsert(fn.name, forwardPrec)
     for (const ns of fn.signatures) {
-      entry.signatures.push(this.toSignature(ns, forwardPrec))
+      const sig = this.toSignature(ns, forwardPrec)
+      entry.signatures.push(sig)
+      entry.declOrder.push(sig)
     }
     sortSignatures(entry.signatures)
     entry.maxForwardArgs = computeMaxForward(entry)
@@ -98,7 +106,7 @@ export class Registry {
   private upsert(name: string, forward: boolean): FunctionEntry {
     let entry = this.functions.get(name)
     if (!entry) {
-      entry = { name, signatures: [], forwardPrecedence: forward, maxForwardArgs: 0 }
+      entry = { name, signatures: [], declOrder: [], forwardPrecedence: forward, maxForwardArgs: 0 }
       this.functions.set(name, entry)
     } else {
       entry.forwardPrecedence = entry.forwardPrecedence || forward
@@ -118,6 +126,13 @@ export class Registry {
       patterns: ns.patterns,
       noEvalArgs: ns.noEvalArgs,
       fallback: ns.fallback,
+      typeArgs: ns.typeArgs,
+      quoteArgs: ns.quoteArgs,
+      returns: ns.returns,
+      returnsFn: ns.returnsFn,
+      runInCheckMode: ns.runInCheckMode,
+      recordsOwnEvent: ns.recordsOwnEvent,
+      compileFallback: ns.compileFallback,
     }
   }
 

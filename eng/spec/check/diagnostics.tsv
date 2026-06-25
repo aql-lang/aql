@@ -1,0 +1,11 @@
+# Check-mode diagnostics: a signature/type/name violation surfaces as a
+# diagnostic (rendered `!code` error, `~code` warning, `?code` info) and
+# the checker assumes a best-fit carrier so analysis can continue.
+# tokens	expected	note
+concatq 1 2	String :: !no_signature	String word given Integers
+addq 'a' 'b'	Number :: !no_signature	Number word given Strings
+lengthq 'hi'	Integer :: !no_signature	List word given a String
+tripq 1 2	String :: !no_signature	arity mismatch (3-arg word, 2 args)
+undefinedthing 1	Any Integer :: !undefined_word	unbound word -> Any carrier
+foo bar	Any Any :: !undefined_word !undefined_word	two unbound words
+noretq 5	dynamic(Any) :: ~missing_returns	no Returns annotation -> dynamic Any

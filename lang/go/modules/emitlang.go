@@ -187,32 +187,6 @@ func RegisterHostEmitter(reg *native.Registry, spec EmitLangSpec) error {
 	return nil
 }
 
-// RegisterFormatEmitter registers a Format's Encode as an `emit` kind of the
-// given name (the single-call bridge for hosts that already have a Format).
-// A read-only format (whose Encode is unsupported) is rejected up front.
-func RegisterFormatEmitter(reg *native.Registry, name string, f native.Format) error {
-	if ro, ok := f.(native.ReadOnlyFormat); ok && ro.ReadOnly() {
-		return fmt.Errorf("register format emitter %q: format is read-only", name)
-	}
-	return RegisterHostEmitter(reg, EmitLangSpec{
-		Name:    name,
-		Returns: []*native.Type{native.TString},
-		Handler: formatEmitHandler(name, f),
-	})
-}
-
-// formatEmitHandler adapts a Format's Encode into an emit handler.
-func formatEmitHandler(name string, f native.Format) native.Handler {
-	target := "emit_" + name
-	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		s, err := f.Encode(args[0])
-		if err != nil {
-			return nil, r.AqlError("emit_error", name+": "+native.FirstCleanLine(err.Error()), target)
-		}
-		return []native.Value{native.NewString(s)}, nil
-	}
-}
-
 // installHostEmitter registers a shell native that calls the host handler and
 // exports the standard trivial-delegation wrapper under emit_<name>.
 func installHostEmitter(exports *native.OrderedMap, subReg *native.Registry, spec EmitLangSpec) error {

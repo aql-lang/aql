@@ -232,6 +232,11 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// in export maps dispatch like words (lang/spec/fn-value.tsv), so the
 	// value is stored as given; `register` exists to own the CONTRACT —
 	// name and signature validation, collision checks.
+	// registerIdents tracks the source-call identity of each AQL-registered
+	// kind so the check-mode install (miniRegisterReturns) and the runtime
+	// re-run (miniRegisterHandler) of the SAME `register` call are idempotent
+	// rather than a mini_kind_exists collision — mirrors parselang-register.
+	miniRegisterIdents := map[string]string{}
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register",
 		Signatures: []native.NativeSig{{
@@ -240,7 +245,12 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       miniRegisterHandler(exports),
+			Handler:       miniRegisterHandler(exports, miniRegisterIdents),
+			// Check-mode install so a later `mini <name> …` resolves the
+			// statically-registered kind (the fn is provided literally) instead
+			// of flagging "no mini-language is registered" — the minilang twin
+			// of parselang-register's check-mode ReturnsFn.
+			ReturnsFn: miniRegisterReturns(exports, miniRegisterIdents),
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("minilang-register", [][]native.FnParam{
@@ -766,36 +776,92 @@ func miniValidKindName(name string) string {
 // miniRegisterHandler validates and installs an AQL fn as lang_<name>.
 // The handler closes over the module's export map; the stored value is
 // the raw Function, which dispatches like a word post the fn-value fix.
-func miniRegisterHandler(exports *native.OrderedMap) native.Handler {
+func miniRegisterHandler(exports *native.OrderedMap, idents map[string]string) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		name, err := args[0].AsConcreteAtom()
-		if err != nil {
-			return nil, r.AqlError("mini_bad_name", fmt.Sprintf("register: %v", err), "register")
+		if err := miniRegisterInstall(exports, idents, args, r); err != nil {
+			return nil, err
 		}
-		if why := miniValidKindName(name); why != "" {
-			return nil, r.AqlError("mini_bad_name", "register: "+why, "register")
-		}
-		key := "lang_" + name
-		if _, exists := exports.Get(key); exists {
-			return nil, r.AqlError("mini_kind_exists",
-				fmt.Sprintf("register: minilang %q is already registered", name), "register")
-		}
-		fnDef, ok := args[1].Data.(native.FnDefInfo)
-		if !ok || len(fnDef.Signatures) == 0 {
-			return nil, r.AqlError("mini_bad_signature", "register: expected a function value", "register")
-		}
-		for _, sig := range fnDef.Signatures {
-			if len(sig.Params) < 2 ||
-				sig.Params[0].Type == nil || !sig.Params[0].Type.ConformsTo(native.TString) ||
-				sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(native.TMap) {
-				return nil, r.AqlErrorHint("mini_bad_signature",
-					"register: every signature must start with the standard prefix [src:String opts:Map …]",
-					"register",
-					"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
-			}
-		}
-		exports.Set(key, args[1])
 		return nil, nil
+	}
+}
+
+// miniRegisterIdentity is the source-call identity of a registering fn value
+// (its parse position), so the check-mode install and the runtime re-run of
+// the SAME `register` call are recognised as one and don't double-register.
+func miniRegisterIdentity(fn native.Value) string {
+	p := fn.Pos
+	return fmt.Sprintf("%d:%d:%s", p.Row, p.Col, p.Src)
+}
+
+// miniRegisterInstall validates the name/signature contract and installs the
+// fn as lang_<name>, idempotently on the registering source-call identity.
+// Shared by the runtime handler and the check-mode ReturnsFn so both apply the
+// exact same contract — mirrors parseRegisterInstall.
+func miniRegisterInstall(exports *native.OrderedMap, idents map[string]string, args []native.Value, r *native.Registry) error {
+	name, err := args[0].AsConcreteAtom()
+	if err != nil {
+		return r.AqlError("mini_bad_name", fmt.Sprintf("register: %v", err), "register")
+	}
+	if why := miniValidKindName(name); why != "" {
+		return r.AqlError("mini_bad_name", "register: "+why, "register")
+	}
+	fnDef, ok := args[1].Data.(native.FnDefInfo)
+	if !ok || len(fnDef.Signatures) == 0 {
+		return r.AqlError("mini_bad_signature", "register: expected a function value", "register")
+	}
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) < 2 ||
+			sig.Params[0].Type == nil || !sig.Params[0].Type.ConformsTo(native.TString) ||
+			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(native.TMap) {
+			return r.AqlErrorHint("mini_bad_signature",
+				"register: every signature must start with the standard prefix [src:String opts:Map …]",
+				"register",
+				"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
+		}
+	}
+	key := "lang_" + name
+	id := miniRegisterIdentity(args[1])
+	if _, exists := exports.Get(key); exists {
+		// "::" is the zero identity (no Pos) — two position-less calls are never
+		// the same source call, so a genuine double-register still errors.
+		if prev, ok := idents[key]; ok && prev == id && id != "::" {
+			return nil // same source call — idempotent re-register
+		}
+		return r.AqlError("mini_kind_exists",
+			fmt.Sprintf("register: minilang %q is already registered", name), "register")
+	}
+	exports.Set(key, args[1])
+	idents[key] = id
+	return nil
+}
+
+// miniRegisterReturns is the check-mode counterpart of miniRegisterHandler: it
+// performs the SAME install so a dynamically-registered kind
+// (`MiniLang.register poly …`) is statically resolvable by a later
+// `mini poly …` during the check pass. Idempotent on the source-call identity,
+// so the compiled program's runtime re-run is a no-op rather than
+// mini_kind_exists. A non-concrete name or fn value leaves the kind
+// unregistered (the downstream `mini` degrades as before).
+func miniRegisterReturns(exports *native.OrderedMap, idents map[string]string) native.ReturnsFunc {
+	return func(args []native.Value, r *native.Registry) []native.Value {
+		// PURE-CHECK ONLY. Under a REAL compile (CompileCheck) the kind must NOT
+		// be installed here: a kind that ALSO has a `register-compiled` macro
+		// hook (module-minilang §L80) lowers `mini <name>` through the hook, and
+		// pre-installing the transducer makes the compiled path diverge from the
+		// interpreter (it ran the transducer instead of the hook). Leaving the
+		// compile pass un-installed keeps that row on its prior fallback path;
+		// pure check still installs so `mini <name>` resolves and the row clears.
+		if r == nil || r.Check.Compiling {
+			return nil
+		}
+		if len(args) < 2 || !native.IsConcrete(args[0]) {
+			return nil
+		}
+		if _, ok := args[1].Data.(native.FnDefInfo); !ok {
+			return nil
+		}
+		_ = miniRegisterInstall(exports, idents, args, r)
+		return nil
 	}
 }
 

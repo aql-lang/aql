@@ -82,21 +82,30 @@ var unpackNatives = []NativeFunc{
 			// `unpack 'aql:time-util'`: import a module and bind every word
 			// of every export namespace as a bare local — `now`, `sleep`, …
 			// usable without the `TimeUtil.` prefix.
+			//
+			// RunInCheckMode: a module's exports are statically declared, so the
+			// checker resolves them exactly as it does for `import` — binding
+			// them unqualified here lets a later bare `sqrt` type-check instead
+			// of flagging undefined_word (module unpacking is NOT a runtime-only
+			// effect; only the module-NAME string must survive carrier-stripping,
+			// see checkModeLiteralWords).
 			{
-				Args:       []*Type{TString},
-				Handler:    unpackModuleHandler,
-				Returns:    []*Type{},
-				BarrierPos: -1,
+				Args:           []*Type{TString},
+				Handler:        unpackModuleHandler,
+				Returns:        []*Type{},
+				RunInCheckMode: true,
+				BarrierPos:     -1,
 			},
 			// `unpack ExportName 'aql:mod'`: import the module and unpack only
 			// the named export namespace (for multi-export modules). The name
 			// is captured as an atom via /q.
 			{
-				Args:       []*Type{TAtom, TString},
-				QuoteArgs:  map[int]bool{0: true},
-				Handler:    unpackModuleExportHandler,
-				Returns:    []*Type{},
-				BarrierPos: -1,
+				Args:           []*Type{TAtom, TString},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        unpackModuleExportHandler,
+				Returns:        []*Type{},
+				RunInCheckMode: true,
+				BarrierPos:     -1,
 			},
 		},
 	},

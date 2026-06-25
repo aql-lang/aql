@@ -118,17 +118,6 @@ var KnownScopes = []string{
 	"clock",
 }
 
-// IsCapabilityScope returns true if scope is a host-installable
-// capability (fileops, network, sqlite, formats, env, process,
-// clock). These are the scopes that honour scope.install = false.
-func IsCapabilityScope(scope string) bool {
-	switch scope {
-	case "fileops", "network", "sqlite", "formats", "env", "process", "clock":
-		return true
-	}
-	return false
-}
-
 // WordChecker is the engine-side shim. Importing this interface
 // (rather than the full Policy) lets eng/ stay independent of
 // policy/ — the engine only needs to ask "is this word allowed?".

@@ -1899,6 +1899,8 @@ func (e *Engine) stepWord(val Value) error {
 		}
 		v.Pos = val.Pos
 		e.tape.Set(e.pointer, v)
+		// (The use is recorded inside ResolveRef, covering this `/r` path, the
+		// `ref` word, and export-map reference values alike.)
 		// `/r` resolves the name to its bound value and ADVANCES the
 		// pointer, exactly like pushing a literal — it does NOT dispatch a
 		// resolved function (that is what a bare word does). The value
@@ -3085,24 +3087,27 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 	if err != nil || parts == nil {
 		return NewString(""), nil
 	}
-	s, dynamic, err := e.evalInterpParts(parts)
+	s, dynamic, holes, holesOK, err := e.evalInterpParts(parts)
 	if err != nil {
 		return Value{}, err
 	}
 	if dynamic {
-		// A `${expr}` part evaluated to a NON-CONCRETE value — a carrier, which
-		// exists only during static analysis (a fn param, an each-element field
-		// read like `${r "name" get}`). The interpolated string therefore depends
-		// on runtime data and is NOT a compile-time constant: stringifying the
-		// carrier would bake its render ("dynamic(Any)") into the program and
-		// diverge from the interpreter (which builds the real string at run time).
-		// Return a String CARRIER (the value is unknown) and, when recording,
-		// refuse — the VM has no runtime string-interpolation op, so the program
-		// falls back to the interpreter. Mirrors how a dynamic word output refuses.
+		// A `${expr}` part evaluated to a CARRIER — its value is only known at run
+		// time (a fn param, or any native result, which check mode synthesises as a
+		// carrier). The interpolated string is therefore NOT a compile-time
+		// constant. When recording, lower it to OpInterp: the hole expressions
+		// already recorded their own dispatch events, and OpInterp pops their
+		// results and rebuilds the string at run time (byte-identical to
+		// evalInterpParts). The static result is a String carrier either way; on
+		// the rare unlowerable shape (a hole producing 0 or >1 values) refuse and
+		// fall back. Mirrors RecordMakeMap — re-assembled per run, no const bake.
+		out := NewCarrier(TString)
 		if es := e.registry.Check.Emit; es != nil && es.active() {
-			es.MarkUncompilable("interpolated string with a runtime-computed part")
+			if !holesOK || !es.RecordInterp(parts, holes, out, val.Pos) {
+				es.MarkUncompilable("interpolated string with a runtime-computed part")
+			}
 		}
-		return NewCarrier(TString), nil
+		return out, nil
 	}
 	return NewString(s), nil
 }
@@ -3112,25 +3117,46 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 // stringifying its results, and concatenating into one string. Shared by
 // evalInterpString and the XML-attribute / text evaluation in
 // evalXmlInterp.
-func (e *Engine) evalInterpParts(parts []InterpPart) (string, bool, error) {
+//
+// holes carries the per-hole single result value in source order, and holesOK
+// reports that EVERY hole produced exactly one value (and no flow-control
+// signal interrupted the walk) — the precondition evalInterpString needs to
+// lower the template to OpInterp (one operand-stack value per hole). When a
+// hole yields zero or several values, holesOK is false and holes is unused
+// (the caller refuses compilation and falls back); the string itself is still
+// built faithfully.
+func (e *Engine) evalInterpParts(parts []InterpPart) (s string, dynamic bool, holes []Value, holesOK bool, err error) {
 	var buf strings.Builder
-	dynamic := false
+	holesOK = true
 	for _, part := range parts {
 		if part.Expr == nil {
 			buf.WriteString(part.Lit)
 			continue
 		}
 		sub := New(e.registry)
-		result, err := sub.Run(part.Expr)
-		if err != nil {
-			return "", dynamic, err
+		result, runErr := sub.Run(part.Expr)
+		if runErr != nil {
+			return "", dynamic, nil, false, runErr
+		}
+		if len(result) == 1 {
+			holes = append(holes, result[0])
+		} else {
+			// A hole with 0 or >1 results cannot map to one stack slot for
+			// OpInterp; the string is still built below, but the template is
+			// not lowerable (the caller falls back).
+			holesOK = false
 		}
 		for _, r := range result {
-			// A non-concrete (carrier) part means the value is only known at
+			// A CHECK-MODE CARRIER part means the value is only known at
 			// runtime — flag it so the caller does not bake the carrier's render
 			// as a constant string. ValToString of a carrier yields a type tag
-			// ("dynamic(Any)"), which the runtime never produces.
-			if !IsConcrete(r) {
+			// ("dynamic(Any)"), which the runtime never produces. Test for the
+			// carrier flag specifically, NOT !IsConcrete: at run time there are
+			// no carriers, but there ARE legitimate non-concrete values — None
+			// and bare type literals (e.g. `${typeof x}`) — which stringify to
+			// real text ("None", "Integer") and must not collapse the whole
+			// interpolation to a String carrier.
+			if r.Carrier {
 				dynamic = true
 			}
 			buf.WriteString(ValToString(r))
@@ -3141,10 +3167,11 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (string, bool, error) {
 		// a stale flag still set and could produce observable
 		// side effects from later parts.
 		if e.registry.FlowCtrl != FlowNone {
+			holesOK = false
 			break
 		}
 	}
-	return buf.String(), dynamic, nil
+	return buf.String(), dynamic, holes, holesOK, nil
 }
 
 // evalXmlInterp evaluates an interpolated XML literal skeleton (Word/__XI)
@@ -3195,7 +3222,7 @@ func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, error) {
 	dynamic := false
 	attr := NewOrderedMap()
 	for _, a := range t.Attr {
-		s, dyn, err := e.evalInterpParts(a.Parts)
+		s, dyn, _, _, err := e.evalInterpParts(a.Parts)
 		if err != nil {
 			return Value{}, false, err
 		}
@@ -5129,7 +5156,7 @@ func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
 	if e.isTop {
 		ctrl := e.registry.FlowCtrl
 		e.registry.FlowCtrl = FlowNone
-		return nil, e.runtimeError("halt", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
+		return nil, e.runtimeError("flow_error", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
 	}
 	return e.tape.TakeAll(), nil
 }

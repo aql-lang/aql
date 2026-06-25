@@ -957,9 +957,19 @@ type Value struct {
 	// Type-lattice metadata — populated on type nodes, zero on
 	// ordinary values. A non-nil Behavior is the marker of a type
 	// node.
-	Name       string       // type-node leaf name (e.g. "ProperString")
-	FixedID    int          // >0 for builtin type nodes; 0 otherwise
-	Rank       int          // unified lattice rank — total order for CompareValues/compareTypes
+	Name    string // type-node leaf name (e.g. "ProperString")
+	FixedID int    // >0 for builtin type nodes; 0 otherwise
+	Rank    int    // unified lattice rank — total order for CompareValues/compareTypes
+	Depth   int    // parent-chain length (root = 1); 0 = unset (ad-hoc *Type). Cached for typeDepth / LCA.
+	// In/Out are the DFS nested-set interval of a type node within the
+	// STATIC builtin lattice: In is the pre-order entry number, Out the
+	// largest entry number in the node's subtree. A descendant d of an
+	// ancestor a satisfies a.In <= d.In <= a.Out, so IsAncestor is an O(1)
+	// range test instead of a parent-chain walk. Assigned once by
+	// labelIntervals at builtin-table construction; 0 = unlabelled (minted,
+	// external, or ad-hoc types), which routes IsAncestor through the walk.
+	In         int
+	Out        int
 	IsInternal bool         // Word/__XX runtime markers — not user-facing
 	Origin     OriginKind   // builtin / userdef
 	Behavior   TypeBehavior // pluggable dispatch — non-nil exactly on type nodes
@@ -1243,12 +1253,6 @@ func NewXmlElement(tag string, attr *OrderedMap, cren []Value) Value {
 // engine.go::evalXmlInterp.
 func NewXmlInterp(tmpl XmlTmpl) Value {
 	return NewValueRaw(TXmlInterp, XmlInterpPayload{Tmpl: tmpl})
-}
-
-// IsXmlElement reports whether v is a concrete Node/Xml element value.
-func IsXmlElement(v Value) bool {
-	_, ok := v.Data.(XmlElementPayload)
-	return ok
 }
 
 // IsXmlInterp reports whether v is an interpolated XML literal skeleton.

@@ -454,6 +454,11 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	// module registry so it executes in module scope (resolving module-
 	// private words) when called after import.
 	if fnDef, ok := v.Data.(FnDefInfo); ok {
+		// An exported word (the public API) IS used — record it so check mode
+		// does not falsely flag every exported impl as unused_def. The `name/r`
+		// reference form auto-evaluates to the bound fn HERE (as data), so the
+		// name was never stepped through the normal dispatch/ResolveRef use path.
+		modReg.Check.RecordUse(fnDef.Name)
 		if fnDef.Registry == nil {
 			fnDef.Registry = modReg
 			if v.Parent.Equal(TFnDef) {
@@ -477,6 +482,9 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 	} else {
 		return v
 	}
+	// A bare-name export value (`{ f: impl }`, `{ Color: Color }`) is a use of
+	// that def/type — record it so unused_def does not flag the public API.
+	modReg.Check.RecordUse(name)
 	// Resolution order: r.Types (canonical home for user-defined
 	// types post-§5.2) wins, then DefStacks (value defs and the
 	// fn-def stash). Without the r.Types check, exports of named

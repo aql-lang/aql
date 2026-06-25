@@ -1,4 +1,4 @@
-.PHONY: all build install test vet fmt lint vuln clean cover cover-html cover-html-open \
+.PHONY: all build install test test-ts vet fmt lint vuln clean cover cover-html cover-html-open \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
@@ -72,6 +72,30 @@ vuln:
 	  echo "==> vuln $$m"; \
 	  ( cd $$m && govulncheck ./... ); \
 	done
+
+# ---- TypeScript engine port (eng/ts) -----------------------------------
+#
+# @voxgig/aqleng mirrors the Go kernel and must stay row-for-row green on
+# the SAME eng/spec/*.tsv corpus as the Go engspec runner. Runs the
+# typechecker then the node:test suite (Node >= 24, type-stripping).
+test-ts:
+	@echo "==> typecheck eng/ts"
+	cd eng/ts && npx tsc
+	@echo "==> test eng/ts"
+	cd eng/ts && node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'
+
+# ---- cross-engine differential -----------------------------------------
+#
+# Run the shared corpus (eng/spec value mode + eng/spec/check check mode)
+# through BOTH the Go kernel and the TS engine and diff the two result streams
+# row-by-row. This target drives the Go half (it execs the TS dumper
+# eng/ts/src/crossdump.ts); the TS half is the mirror (eng/ts/src/crossdiff.test.ts
+# execs the Go dumper) and runs under `make test-ts`. Reports agreements,
+# error-code differences, and functionality gaps; hard-fails only on a true
+# divergence (both engines produce a value but the values differ). Requires `node`.
+crossdiff:
+	@echo "==> cross-engine differential (Go kernel vs TS engine; value + check)"
+	cd test/go && go test ./engspec/ -run TestCrossEngineDifferential -v
 
 # ---- compiled-coverage status surface ----------------------------------
 #
