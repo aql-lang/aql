@@ -45,19 +45,27 @@ func (s *Signature) TotalArgs() int {
 	return len(s.Params)
 }
 
+// usesLegacyArgs reports that this Signature was built through the
+// positional Args/Patterns constructor-convenience fields and has not
+// yet been normalized into Params (normalizeSig hasn't run). It is the
+// SINGLE definition of the "fall back to the Args mirror" condition the
+// per-position accessors share, so the predicate lives in one place
+// instead of being re-spelled at each reader.
+func (s *Signature) usesLegacyArgs() bool {
+	return len(s.Params) == 0 && len(s.Args) > 0
+}
+
 // ArgTypes returns the per-position declared types of the signature,
 // derived from Params (the unified source of arg shape). This is the
 // EXPORTED accessor external consumers (the lang help/inspect surface)
 // should use instead of the legacy Args field, so that field can later
 // be retired without a public-API break. Order is sig order (position 0
-// = top of stack).
+// = top of stack). Funnels through sigArgType / TotalArgs so the
+// Params-or-mirror fallback has one implementation.
 func (s *Signature) ArgTypes() []*Type {
-	if len(s.Params) == 0 && len(s.Args) > 0 {
-		return s.Args
-	}
-	out := make([]*Type, len(s.Params))
-	for i := range s.Params {
-		out[i] = s.Params[i].Type
+	out := make([]*Type, s.TotalArgs())
+	for i := range out {
+		out[i] = sigArgType(s, i)
 	}
 	return out
 }
@@ -68,7 +76,7 @@ func (s *Signature) ArgTypes() []*Type {
 // Args+Patterns. It then refreshes the Args/Patterns mirrors from Params
 // so introspection that reads either view stays consistent. Idempotent.
 func normalizeSig(s *Signature) {
-	if len(s.Params) == 0 && len(s.Args) > 0 {
+	if s.usesLegacyArgs() {
 		s.Params = make([]FnParam, len(s.Args))
 		for i, t := range s.Args {
 			s.Params[i] = FnParam{Type: t, Quote: s.QuoteArgs[i]}
@@ -112,7 +120,7 @@ func normalizeSig(s *Signature) {
 // a fallback for legacy/external callers that built a Signature with only
 // Args set. Callers must ensure 0 <= i < TotalArgs().
 func sigArgType(s *Signature, i int) *Type {
-	if len(s.Params) == 0 && len(s.Args) > 0 {
+	if s.usesLegacyArgs() {
 		return s.Args[i]
 	}
 	return s.Params[i].Type
