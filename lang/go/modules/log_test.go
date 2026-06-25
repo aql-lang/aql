@@ -281,6 +281,132 @@ func mustField(t *testing.T, rec native.Value, key string) native.Value {
 	return v
 }
 
+// TestLogAqlFnSink verifies an AQL function registered via Log.register
+// is invoked once per admitted record, and that the sink's minimum
+// level filters records below it. The sink prints the record body to
+// the registry Output, which the test observes.
+func TestLogAqlFnSink(t *testing.T) {
+	reg, _ := newLogReg(t)
+	var out bytes.Buffer
+	reg.Output = &out
+	runLog(t, reg, `import "aql:log" ; Log.remove-sink console/q ; Log.register (fn [[rec:Any] [] [rec "body" get print]]) tap/q warn/q ; Log.info "lo" ; Log.warn "hi"`)
+	got := out.String()
+	if strings.Contains(got, "lo") {
+		t.Errorf("INFO is below the sink's warn minimum and must not reach it, got %q", got)
+	}
+	if !strings.Contains(got, "hi") {
+		t.Errorf("WARN must reach the AQL function sink, got %q", got)
+	}
+}
+
+// TestLogHostSink verifies the provider-hook seam: a host sink
+// installed via RegisterHostLogSink before import receives every
+// admitted record — the path a real OTel/Datadog bridge takes, proved
+// here with a fake in-memory sink (no OTel dependency).
+func TestLogHostSink(t *testing.T) {
+	reg, _ := newLogReg(t)
+	var got []native.LogRecord
+	if err := native.RegisterHostLogSink(reg, native.LogSinkSpec{
+		Name:     "capture",
+		MinLevel: native.LevelTrace,
+		OnRecord: func(rec native.LogRecord) error { got = append(got, rec); return nil },
+	}); err != nil {
+		t.Fatalf("RegisterHostLogSink: %v", err)
+	}
+	runLog(t, reg, `import "aql:log" ; Log.info "hello" {k:1}`)
+	if len(got) != 1 {
+		t.Fatalf("host sink received %d records, want 1", len(got))
+	}
+	if got[0].Severity != native.LevelInfo {
+		t.Errorf("severity = %d, want %d", got[0].Severity, native.LevelInfo)
+	}
+	if native.FormatForPrint(got[0].Body) != "hello" {
+		t.Errorf("body = %q, want hello", native.FormatForPrint(got[0].Body))
+	}
+}
+
+// TestLogHostSinkValidation pins the registration guards.
+func TestLogHostSinkValidation(t *testing.T) {
+	reg, _ := newLogReg(t)
+	if err := native.RegisterHostLogSink(reg, native.LogSinkSpec{Name: "x"}); err == nil {
+		t.Error("a nil OnRecord must be rejected")
+	}
+	if err := native.RegisterHostLogSink(reg, native.LogSinkSpec{Name: "UPPER", OnRecord: func(native.LogRecord) error { return nil }}); err == nil {
+		t.Error("a non-lowercase sink name must be rejected")
+	}
+	ok := native.LogSinkSpec{Name: "good", OnRecord: func(native.LogRecord) error { return nil }}
+	if err := native.RegisterHostLogSink(reg, ok); err != nil {
+		t.Fatalf("valid spec rejected: %v", err)
+	}
+	if err := native.RegisterHostLogSink(reg, ok); err == nil {
+		t.Error("a duplicate sink name must be rejected")
+	}
+}
+
+// TestLogSpanPropagation verifies a record emitted inside a span shares
+// the span's trace-id and span-id (neutral trace-context propagation).
+func TestLogSpanPropagation(t *testing.T) {
+	reg, _ := newLogReg(t)
+	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "inside"] ; Log.dump`)
+	list, err := native.RequireConcreteList(out[0], "dump")
+	if err != nil || list.Len() != 1 {
+		t.Fatalf("want one record, got %v", out)
+	}
+	tid := native.FormatForPrint(mustField(t, list.Get(0), "trace-id"))
+	sid := native.FormatForPrint(mustField(t, list.Get(0), "span-id"))
+	if tid == "" || sid == "" {
+		t.Errorf("record inside a span should carry trace/span ids, got trace=%q span=%q", tid, sid)
+	}
+}
+
+// TestLogHostSpanSink verifies a host sink's span lifecycle hooks fire,
+// the path an OTel traces bridge takes.
+func TestLogHostSpanSink(t *testing.T) {
+	reg, _ := newLogReg(t)
+	var started, ended []native.Span
+	if err := native.RegisterHostLogSink(reg, native.LogSinkSpec{
+		Name:        "tracer",
+		MinLevel:    native.LevelTrace,
+		OnRecord:    func(native.LogRecord) error { return nil },
+		OnSpanStart: func(s native.Span) { started = append(started, s) },
+		OnSpanEnd:   func(s native.Span) { ended = append(ended, s) },
+	}); err != nil {
+		t.Fatalf("RegisterHostLogSink: %v", err)
+	}
+	runLog(t, reg, `import "aql:log" ; Log.with-span "checkout" [Log.info "x"]`)
+	if len(started) != 1 || len(ended) != 1 {
+		t.Fatalf("want one start and one end, got %d/%d", len(started), len(ended))
+	}
+	if started[0].Name != "checkout" {
+		t.Errorf("span name = %q, want checkout", started[0].Name)
+	}
+	if ended[0].TraceID == "" || ended[0].SpanID == "" {
+		t.Errorf("ended span missing ids: %+v", ended[0])
+	}
+}
+
+// TestLogSpanErrorStatus verifies with-span records a raised error as
+// the span status and still re-raises.
+func TestLogSpanErrorStatus(t *testing.T) {
+	reg, _ := newLogReg(t)
+	var ended []native.Span
+	if err := native.RegisterHostLogSink(reg, native.LogSinkSpec{
+		Name:      "tracer",
+		MinLevel:  native.LevelTrace,
+		OnRecord:  func(native.LogRecord) error { return nil },
+		OnSpanEnd: func(s native.Span) { ended = append(ended, s) },
+	}); err != nil {
+		t.Fatalf("RegisterHostLogSink: %v", err)
+	}
+	vals, _ := parser.Parse(`import "aql:log" ; Log.with-span "op" [raise "boom"]`)
+	if _, err := native.NewTop(reg).Run(vals); err == nil {
+		t.Error("with-span must re-raise the body error")
+	}
+	if len(ended) != 1 || ended[0].Status != "error" {
+		t.Fatalf("span should end with error status, got %+v", ended)
+	}
+}
+
 // TestLogInstallExports checks the test-setup convenience helper binds
 // the Log namespace as a def.
 func TestLogInstallExports(t *testing.T) {

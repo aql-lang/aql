@@ -55,7 +55,27 @@ import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ;
 import "aql:log" ; def l (Log.with "a" {x:1}) ; def c (l.child {y:2}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; c.info "m" ; Log.dump 0 get "attributes" get	{x:1 y:2}	a child logger layers more defaults over its parent's
 import "aql:log" ; def l (Log.with "a" {x:1}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.error "boom" {x:2} ; Log.dump 0 get "attributes" get	{x:2}	a call field overrides a same-named logger default
 
+# --- provider hooks (phase 3) ---------------------------------------------
+# (AQL function sinks firing per record + min-level filtering are verified in
+# modules/log_test.go::TestLogAqlFnSink, which observes the side effect without
+# a mutable-container word the compiler-coverage ratchet tracks.)
+import "aql:log" ; Log.register (fn [[rec:Any] [] []]) tap/q info/q ; Log.sinks	[console/q tap/q]	register installs and attaches an AQL function sink
+
+# --- spans / traces (phase 4) ---------------------------------------------
+import "aql:log" ; def s (Log.span "op") ; typeof s	Map	a span handle is a Map of fields and method closures
+import "aql:log" ; Log.current-span	None	there is no active span outside of one
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "x"] ; Log.traces size	1	with-span captures one ended span
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "outer" [Log.with-span "inner" [Log.info "x"]] ; Log.traces size	2	nested spans each capture
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "checkout" [Log.info "x"] ; Log.traces 0 get "name" get	'checkout'	a span carries its name
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "x"] ; Log.dump 0 get "trace-id" get "" eq	false	a record emitted inside a span is stamped with the trace id
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; Log.end-span s ; Log.traces size	1	a manually started span ends and is captured
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get	{region:'eu'}	Span.set-attr records an attribute; finish ends the span
+import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get	'error'	Span.record-error marks the span failed
+
 # --- negatives ------------------------------------------------------------
+import "aql:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q	ERROR:sink-exists	registering an already-taken sink name is rejected
+import "aql:log" ; def a (Log.span "a") ; def b (Log.span "b") ; Log.end-span a	ERROR:span-mismatch	ending a span that is not the active one is rejected
+import "aql:log" ; Log.with-span "op" [raise "boom"]	ERROR:boom	with-span re-raises a body error (after ending the span)
 Log.info "x"	ERROR:undefined_word	`Log` is unbound without import
 import "aql:log" ; Log.set-level loud/q	ERROR:unknown level	an unknown level atom is rejected
 import "aql:log" ; Log.set-format pretty/q	ERROR:unknown format	an unknown console format is rejected

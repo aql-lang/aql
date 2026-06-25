@@ -245,7 +245,8 @@ func newLogSinkRegistry() *LogSinkRegistry {
 			return nil
 		},
 	}
-	// memory — capture records for inspection / tests (Log.dump).
+	// memory — capture records (Log.dump), ended spans (Log.traces), and
+	// measurements (Log.measurements) for inspection / tests.
 	lsr.available["memory"] = &logSink{
 		name: "memory",
 		min:  LevelTrace,
@@ -254,6 +255,16 @@ func newLogSinkRegistry() *LogSinkRegistry {
 			lsr.captured = append(lsr.captured, rec)
 			lsr.mu.Unlock()
 			return nil
+		},
+		spanEnd: func(_ *Registry, sp *spanState) {
+			lsr.mu.Lock()
+			lsr.spans = append(lsr.spans, sp)
+			lsr.mu.Unlock()
+		},
+		measure: func(_ *Registry, m Measurement) {
+			lsr.mu.Lock()
+			lsr.measures = append(lsr.measures, m)
+			lsr.mu.Unlock()
 		},
 	}
 	// null — discard (benchmarking / silencing).
@@ -452,6 +463,12 @@ func LogModuleNativeFuncs(lsr *LogSinkRegistry) []NativeFunc {
 		logGenericNative(lsr),
 		logLoggerNative(lsr),
 		logWithNative(lsr),
+		logRegisterNative(lsr),
+		logSpanNative(lsr),
+		logWithSpanNative(lsr),
+		logEndNative(lsr),
+		logCurrentSpanNative(lsr),
+		logTracesNative(lsr),
 	}
 	for _, lvl := range []struct {
 		word  string
