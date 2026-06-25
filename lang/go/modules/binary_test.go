@@ -431,3 +431,68 @@ func TestBinFnv64NonNegativeAndStable(t *testing.T) {
 		seen[n] = s
 	}
 }
+
+// TestBinBase64HexRoundTrip pins the encode/decode contract: every encode is
+// inverted by its decoder, and the textual forms match RFC 4648.
+func TestBinBase64HexRoundTrip(t *testing.T) {
+	cases := []struct {
+		raw, b64, hexs string
+	}{
+		{"", "", ""},
+		{"hi", "aGk=", "6869"},
+		{"hello", "aGVsbG8=", "68656c6c6f"},
+		{"\x00\xff\x10", "AP8Q", "00ff10"},
+	}
+	for _, c := range cases {
+		gotB64 := runBin(t, append([]native.Value{native.NewString(c.raw)}, dotChain("base64-encode")...))
+		if s, _ := native.AsString(gotB64[0]); s != c.b64 {
+			t.Errorf("base64-encode %q = %q, want %q", c.raw, s, c.b64)
+		}
+		backB64 := runBin(t, append([]native.Value{native.NewString(c.b64)}, dotChain("base64-decode")...))
+		if s, _ := native.AsString(backB64[0]); s != c.raw {
+			t.Errorf("base64-decode %q = %q, want %q", c.b64, s, c.raw)
+		}
+		gotHex := runBin(t, append([]native.Value{native.NewString(c.raw)}, dotChain("hex-encode")...))
+		if s, _ := native.AsString(gotHex[0]); s != c.hexs {
+			t.Errorf("hex-encode %q = %q, want %q", c.raw, s, c.hexs)
+		}
+		backHex := runBin(t, append([]native.Value{native.NewString(c.hexs)}, dotChain("hex-decode")...))
+		if s, _ := native.AsString(backHex[0]); s != c.raw {
+			t.Errorf("hex-decode %q = %q, want %q", c.hexs, s, c.raw)
+		}
+	}
+}
+
+// TestBinDecodeErrors pins that malformed input is a reported error, never
+// silent garbage (the negative half of the codec contract).
+func TestBinDecodeErrors(t *testing.T) {
+	for _, c := range []struct{ word, bad string }{
+		{"base64-decode", "!!notbase64"},
+		{"hex-decode", "xyz"},
+		{"hex-decode", "6"}, // odd length
+	} {
+		r := binRegistry(t)
+		e := native.New(r)
+		_, err := e.Run(append([]native.Value{native.NewString(c.bad)}, dotChain(c.word)...))
+		if err == nil {
+			t.Errorf("%s %q: expected a decode error, got nil", c.word, c.bad)
+		}
+	}
+}
+
+// TestBinCodecNoPanicOnTypeLiteral feeds a bare String type literal (Data==nil)
+// to each codec word and asserts it errors rather than panicking.
+func TestBinCodecNoPanicOnTypeLiteral(t *testing.T) {
+	for _, word := range []string{"base64-encode", "base64-decode", "hex-encode", "hex-decode"} {
+		func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					t.Errorf("%s panicked on a type literal: %v", word, rec)
+				}
+			}()
+			r := binRegistry(t)
+			e := native.New(r)
+			_, _ = e.Run(append([]native.Value{native.NewTypeLiteral(native.TString)}, dotChain(word)...))
+		}()
+	}
+}

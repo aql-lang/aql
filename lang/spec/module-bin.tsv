@@ -46,3 +46,13 @@ import "aql:bin-util"  255 BinUtil.extract 0 4	15	bits [0,4) of the value
 import "aql:bin-util"  255 BinUtil.insert 0 4 0	240	replace bits [0,4) with zero
 import "aql:bin-util"  BinUtil.fnv32 'hello'	1335831723	32-bit FNV-1a string hash
 import "aql:bin-util"  BinUtil.fnv64 'hello'	2607821981565500683	64-bit FNV-1a hash (sign bit cleared)
+#
+# §11 binary-safe text encodings (base64 / hex, RFC 4648)
+import "aql:bin-util"  BinUtil.base64-encode 'hello'	'aGVsbG8='	base64 of a string (standard alphabet, padded)
+import "aql:bin-util"  BinUtil.base64-decode 'aGVsbG8='	'hello'	base64 decode round-trips back to the original
+import "aql:bin-util"  BinUtil.base64-encode (BinUtil.hex-decode '6162')	'YWI='	encode accepts decoded bytes ('ab') — composes through both codecs
+import "aql:bin-util"  BinUtil.hex-encode 'hi'	'6869'	hex of a string (lowercase)
+import "aql:bin-util"  BinUtil.hex-decode '6869'	'hi'	hex decode round-trips back to the original
+import "aql:bin-util"  BinUtil.base64-decode '!!notbase64'	ERROR:decode_error	malformed base64 is a decode_error, not silent garbage
+import "aql:bin-util"  BinUtil.hex-decode 'xyz'	ERROR:decode_error	non-hex input is a decode_error
+import "aql:bin-util"  BinUtil.hex-decode '6'	ERROR:decode_error	odd-length hex is a decode_error

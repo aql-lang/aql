@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"hash/fnv"
 	"math/bits"
@@ -81,6 +83,19 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// See §9.9 in the DX report.
 	exports.Set("fnv32", makeBinFnDef1("fnv32", subReg, native.TString, native.TInteger))
 	exports.Set("fnv64", makeBinFnDef1("fnv64", subReg, native.TString, native.TInteger))
+
+	// Binary-safe text encodings: String -> String. base64 (RFC 4648
+	// standard alphabet, padded) and hex (lowercase). `*-encode` maps the
+	// raw bytes of the input string to their textual form; `*-decode`
+	// inverts it and errors on malformed input. These are the
+	// most-universal stdlib batteries (16/20 TIOBE languages ship base64)
+	// and the canonical way to carry binary data through text channels —
+	// API tokens, content addressing, embedding bytes in JSON.
+	// See design/BATTERIES-INCLUDED-REPORT.5.md (Phase 1, encoding).
+	exports.Set("base64-encode", makeBinFnDef1("base64-encode", subReg, native.TString, native.TString))
+	exports.Set("base64-decode", makeBinFnDef1("base64-decode", subReg, native.TString, native.TString))
+	exports.Set("hex-encode", makeBinFnDef1("hex-encode", subReg, native.TString, native.TString))
+	exports.Set("hex-decode", makeBinFnDef1("hex-decode", subReg, native.TString, native.TString))
 
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
@@ -621,6 +636,84 @@ var binaryModuleNatives = []native.NativeFunc{
 				return []native.Value{native.NewInteger(int64(h.Sum64() & sign63Mask))}, nil
 			},
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
+		}},
+	},
+	// --- binary-safe text encodings (RFC 4648) ---
+	// `BinUtil.base64-encode s` → the standard-alphabet, padded base64 of
+	// the raw bytes of s.
+	{
+		Name: "base64-encode",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TString},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				s, err := args[0].AsConcreteString()
+				if err != nil {
+					return nil, err
+				}
+				return []native.Value{native.NewString(base64.StdEncoding.EncodeToString([]byte(s)))}, nil
+			},
+			Returns: []*native.Type{native.TString}, BarrierPos: -1,
+		}},
+	},
+	// `BinUtil.base64-decode s` → the bytes encoded by the standard-alphabet,
+	// padded base64 string s, as a String. Malformed input errors.
+	{
+		Name: "base64-decode",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TString},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				s, err := args[0].AsConcreteString()
+				if err != nil {
+					return nil, err
+				}
+				b, derr := base64.StdEncoding.DecodeString(s)
+				if derr != nil {
+					return nil, r.AqlError("decode_error",
+						fmt.Sprintf("BinUtil.base64-decode: invalid base64: %v", derr), "base64-decode")
+				}
+				return []native.Value{native.NewString(string(b))}, nil
+			},
+			Returns: []*native.Type{native.TString}, BarrierPos: -1,
+		}},
+	},
+	// `BinUtil.hex-encode s` → the lowercase hexadecimal of the raw bytes of s.
+	{
+		Name: "hex-encode",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TString},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				s, err := args[0].AsConcreteString()
+				if err != nil {
+					return nil, err
+				}
+				return []native.Value{native.NewString(hex.EncodeToString([]byte(s)))}, nil
+			},
+			Returns: []*native.Type{native.TString}, BarrierPos: -1,
+		}},
+	},
+	// `BinUtil.hex-decode s` → the bytes encoded by the hexadecimal string s,
+	// as a String. Odd-length or non-hex input errors.
+	{
+		Name: "hex-decode",
+
+		Signatures: []native.NativeSig{{
+			Args: []*native.Type{native.TString},
+			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				s, err := args[0].AsConcreteString()
+				if err != nil {
+					return nil, err
+				}
+				b, derr := hex.DecodeString(s)
+				if derr != nil {
+					return nil, r.AqlError("decode_error",
+						fmt.Sprintf("BinUtil.hex-decode: invalid hex: %v", derr), "hex-decode")
+				}
+				return []native.Value{native.NewString(string(b))}, nil
+			},
+			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},
 }
