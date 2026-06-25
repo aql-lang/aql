@@ -392,3 +392,39 @@ they ride on (1)/(2), not a generic code-body gap.
 sharing for mutual recursion — which alone should clear the dominant `each`
 refusal across decision and trie. It is a real architectural change to the
 closure-probe seam and deserves a dedicated session.
+
+---
+
+## Session-2 cont. — TS parity check + smaller-unit recon
+
+**TS parity: VERIFIED GREEN.** Ran the TypeScript engine port (`eng/ts`,
+@voxgig/aqleng) against my Go changes: `npx tsc` clean, full `node --test`
+suite **3622 pass / 0 fail**, and the cross-engine differential (Go kernel vs
+TS engine over the shared `eng/spec` value+check corpus) reports **0
+divergences**. My changes are parity-safe by construction: L1a/L1b-ii are
+check-mode/bytecode-only (no interpreter-result change), and the `var`→
+`__varundef` splice is lang-layer (`var` is not in the `eng/spec` kernel corpus
+the cross-engine gate runs). NB: the TS port has its OWN bytecode compiler
+(`eng/ts/src/{bytecode,compile,emit,lower}.ts`) but there is NO cross-engine
+*bytecode* parity gate — the gate is interpreter+checker over `eng/spec` — so
+the Go bytecode widenings need no TS mirror to keep the gate green. (Porting
+them to the TS compiler for forward parity is a separate, optional effort.)
+
+**Smaller-unit recon — no clean leaf found.** Probed the remaining
+suite-level reasons (`do [body]`, `mk-node`, `error [handler]`). Findings:
+- `do [body]` (incl. `error [handler]`), `mk-node`, and capturing/​raising
+  error handlers ALL compile in isolation. The suite refusals come from
+  specific COMBINATIONS in the real library bodies, not these words alone.
+- The non-trivial leaf they share is **`unmatched dispatch recovered`** (seen at
+  `mk-node` and at `raise` inside an error handler): a dispatch over GRADUAL /
+  dynamic operands that the checker can only best-guess (`no_signature; assuming
+  best-fit candidate`), which the compiler SOUNDLY refuses — it cannot statically
+  pick the overload. Clearing it means emitting a runtime polymorphic-dispatch
+  path (`CALL_NATIVE_POLY` / `OpCallDynamic`) for recovered dispatches — a real
+  feature on the soundness axis, NOT a leaf. Same class as the mutual-recursion
+  provenance blocker: the remaining client refusals are deep, not small.
+
+**Net:** this pass delivered the TS-parity verification; it did not land a new
+compiler fix because the remaining blockers are genuinely deep (gradual-dispatch
+runtime path; recursive-closure-result provenance), and several apparent "small"
+refusals dissolved on inspection (isolated forms already compile).
