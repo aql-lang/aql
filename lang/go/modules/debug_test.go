@@ -80,9 +80,9 @@ func TestDebugModuleExports(t *testing.T) {
 	}
 	want := []string{
 		"tap", "label", "dump", "assert", "todo",
-		"parse", "deps", "explain",
+		"parse", "deps", "explain", "sig", "body", "watch", "disasm",
 		"words", "defs", "modules",
-		"sizeof", "shape",
+		"sizeof", "shape", "heap", "gc",
 		"steps", "time", "bench", "trace", "profile",
 	}
 	for _, name := range want {
@@ -204,6 +204,99 @@ func TestDebugExplain(t *testing.T) {
 	}
 	if !strings.Contains(s, "add") {
 		t.Errorf("explain(add) should mention add; got %q", s)
+	}
+}
+
+func TestDebugSig(t *testing.T) {
+	r, _ := debugRegistry(t)
+	res := runDebug(t, r, `"add" Debug.sig`)
+	lst, err := native.AsList(res[len(res)-1])
+	if err != nil || lst.IsNil() {
+		t.Fatalf("sig must return a list: %v", err)
+	}
+	if lst.Len() == 0 {
+		t.Fatal("add must have at least one signature")
+	}
+	first, _ := native.AsMap(lst.Get(0))
+	if first == nil {
+		t.Fatal("each signature must be a map")
+	}
+	if _, ok := first.Get("args"); !ok {
+		t.Error("signature missing 'args'")
+	}
+	if _, ok := first.Get("returns"); !ok {
+		t.Error("signature missing 'returns'")
+	}
+}
+
+func TestDebugSigUnknownWordErrors(t *testing.T) {
+	r, _ := debugRegistry(t)
+	if err := runDebugErr(t, r, `"no-such-word-xyz" Debug.sig`); err == nil {
+		t.Error("sig of an unknown word must raise, not return Any")
+	}
+}
+
+func TestDebugBody(t *testing.T) {
+	r, _ := debugRegistry(t)
+	// A native word reports `native`.
+	res := runDebug(t, r, `"add" Debug.body`)
+	if s, _ := native.AsString(res[len(res)-1]); s == "native" {
+		// good — add is native
+	} else if a, err := native.AsAtom(res[len(res)-1]); err == nil && a == "native" {
+		// also acceptable (atom form)
+	} else {
+		t.Errorf("body of a native word should be `native`, got %v", res[len(res)-1])
+	}
+	// An AQL-defined word reports its quoted body list.
+	r2, _ := debugRegistry(t)
+	res2 := runDebug(t, r2, `def double fn [[x:Integer] [Integer] [x mul 2]]  "double" Debug.body`)
+	if lst, err := native.AsList(res2[len(res2)-1]); err != nil || lst.IsNil() {
+		t.Errorf("body of a defined word should be its quoted list, got %v", res2[len(res2)-1])
+	}
+}
+
+func TestDebugWatch(t *testing.T) {
+	r, buf := debugRegistry(t)
+	res := runDebug(t, r, `def k 42  "k" Debug.watch`)
+	if got := topInt(t, res); got != 42 {
+		t.Errorf("watch must return the binding: got %d, want 42", got)
+	}
+	if !strings.Contains(buf.String(), "k = 42") {
+		t.Errorf("watch must print the binding; output = %q", buf.String())
+	}
+}
+
+func TestDebugDisasm(t *testing.T) {
+	r, _ := debugRegistry(t)
+	res := runDebug(t, r, `[1 add 2] Debug.disasm`)
+	s, err := native.AsString(res[len(res)-1])
+	if err != nil {
+		t.Fatalf("disasm must return a String: %v", err)
+	}
+	if s == "" {
+		t.Error("disasm of a non-trivial body must be non-empty")
+	}
+}
+
+func TestDebugHeapAndGC(t *testing.T) {
+	r, _ := debugRegistry(t)
+	res := runDebug(t, r, "Debug.heap")
+	m, err := native.AsMap(res[len(res)-1])
+	if err != nil || m == nil {
+		t.Fatalf("heap must return a map: %v", err)
+	}
+	for _, key := range []string{"alloc", "total-alloc", "heap-objects", "num-gc"} {
+		if _, ok := m.Get(key); !ok {
+			t.Errorf("heap result missing key %q", key)
+		}
+	}
+	res2 := runDebug(t, r, "Debug.gc")
+	m2, err := native.AsMap(res2[len(res2)-1])
+	if err != nil || m2 == nil {
+		t.Fatalf("gc must return a map: %v", err)
+	}
+	if _, ok := m2.Get("alloc-after"); !ok {
+		t.Error("gc result missing 'alloc-after'")
 	}
 }
 

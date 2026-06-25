@@ -2,10 +2,12 @@ package modules
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 	"unsafe"
 
+	"github.com/aql-lang/aql/eng/go/stackform"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/native/help"
 )
@@ -466,7 +468,170 @@ func debugNatives() []native.NativeFunc {
 				},
 			}},
 		},
+
+		// ── (C2) Word reflection ──────────────────────────────────────
+		{
+			// The signatures of a word, as structured data.
+			Name: "debug-sig",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{native.TString},
+				Returns:    []*native.Type{native.TList},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					name, err := args[0].AsConcreteString()
+					if err != nil {
+						return nil, err
+					}
+					fn := r.Lookup(name)
+					if fn == nil {
+						return nil, r.AqlError("debug_error",
+							fmt.Sprintf("Debug.sig: no such word %q", name), "Debug.sig")
+					}
+					var sigs []native.Value
+					for _, sig := range fn.Signatures {
+						sm := native.NewOrderedMap()
+						sm.Set("args", typeLeavesToList(sig.ArgTypes()))
+						sm.Set("returns", typeLeavesToList(sig.Returns))
+						sigs = append(sigs, native.NewMap(sm))
+					}
+					return []native.Value{native.NewList(sigs)}, nil
+				},
+			}},
+		},
+		{
+			// The quoted body of an AQL-defined word; `native/q` for a host word.
+			Name: "debug-body",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{native.TString},
+				Returns:    []*native.Type{native.TAny},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					name, err := args[0].AsConcreteString()
+					if err != nil {
+						return nil, err
+					}
+					fn := r.Lookup(name)
+					if fn == nil {
+						return nil, r.AqlError("debug_error",
+							fmt.Sprintf("Debug.body: no such word %q", name), "Debug.body")
+					}
+					for _, sig := range fn.OwnSigs() {
+						if len(sig.Body) > 0 {
+							body := native.NewList(append([]native.Value(nil), sig.Body...))
+							body.Quoted = true
+							return []native.Value{body}, nil
+						}
+					}
+					return []native.Value{native.NewAtom("native")}, nil
+				},
+			}},
+		},
+		{
+			// Print a name's current binding and return it (None if unbound).
+			Name: "debug-watch",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{native.TString},
+				Returns:    []*native.Type{native.TAny},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					name, err := args[0].AsConcreteString()
+					if err != nil {
+						return nil, err
+					}
+					v, ok := r.Defs.Top(name)
+					if !ok {
+						v = native.NewNone()
+					}
+					fmt.Fprintf(r.Output, "%s = %s\n", name, native.FormatForPrint(v))
+					return []native.Value{v}, nil
+				},
+			}},
+		},
+		{
+			// Compile a quoted body to its StackForm disassembly (a String).
+			Name: "debug-disasm",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{native.TList},
+				Returns:    []*native.Type{native.TString},
+				NoEvalArgs: map[int]bool{0: true},
+				BarrierPos: -1,
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					body, err := native.RequireConcreteList(args[0], "Debug.disasm")
+					if err != nil {
+						return nil, err
+					}
+					sub, derr := native.DefaultRegistry()
+					if derr != nil {
+						return nil, derr
+					}
+					_, form, cerr := stackform.Compile(sub, append([]native.Value(nil), body.Slice()...))
+					if cerr != nil {
+						return nil, r.AqlError("debug_error",
+							fmt.Sprintf("Debug.disasm: %v", cerr), "Debug.disasm")
+					}
+					return []native.Value{native.NewString(strings.TrimRight(stackform.Pretty(form), "\n"))}, nil
+				},
+			}},
+		},
+
+		// ── (E2) Runtime memory (host) ────────────────────────────────
+		{
+			// Go-runtime heap stats as a map.
+			Name: "debug-heap",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{},
+				Returns:    []*native.Type{native.TMap},
+				BarrierPos: -1,
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					var m runtime.MemStats
+					runtime.ReadMemStats(&m)
+					return []native.Value{heapMap(&m)}, nil
+				},
+			}},
+		},
+		{
+			// Force a GC and report before/after heap deltas.
+			Name: "debug-gc",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{},
+				Returns:    []*native.Type{native.TMap},
+				BarrierPos: -1,
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					var before, after runtime.MemStats
+					runtime.ReadMemStats(&before)
+					runtime.GC()
+					runtime.ReadMemStats(&after)
+					om := native.NewOrderedMap()
+					om.Set("alloc-before", native.NewInteger(int64(before.Alloc)))
+					om.Set("alloc-after", native.NewInteger(int64(after.Alloc)))
+					om.Set("num-gc", native.NewInteger(int64(after.NumGC)))
+					return []native.Value{native.NewMap(om)}, nil
+				},
+			}},
+		},
 	}
+}
+
+// typeLeavesToList renders a slice of types as a List of their leaf names.
+func typeLeavesToList(types []*native.Type) native.Value {
+	out := make([]native.Value, 0, len(types))
+	for _, t := range types {
+		if t == nil {
+			continue
+		}
+		out = append(out, native.NewString(t.Leaf()))
+	}
+	return native.NewList(out)
+}
+
+// heapMap renders runtime.MemStats as the Debug.heap result map.
+func heapMap(m *runtime.MemStats) native.Value {
+	om := native.NewOrderedMap()
+	om.Set("alloc", native.NewInteger(int64(m.Alloc)))
+	om.Set("total-alloc", native.NewInteger(int64(m.TotalAlloc)))
+	om.Set("heap-objects", native.NewInteger(int64(m.HeapObjects)))
+	om.Set("num-gc", native.NewInteger(int64(m.NumGC)))
+	return native.NewMap(om)
 }
 
 // runCounted runs a quoted body (args[0]) in a fresh sub-engine with a
