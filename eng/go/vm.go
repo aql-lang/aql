@@ -304,7 +304,7 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	// essential: a USER fn ref (`{b:f/r}`) is NOT a 0-arg method — tryNativeFnApply
 	// would match its InstallFnDef-registered handler and call it argless,
 	// diverging. A user fn stays a value here and applies correctly at CALL_DYNAMIC.
-	if (pr.Word == "get" || pr.Word == "getr") && len(results) == 1 {
+	if (isGetWord(pr.Word) || isGetrWord(pr.Word)) && len(results) == 1 {
 		if fnDef, ok := results[0].Data.(FnDefInfo); ok && !fnDef.Anonymous && isDelegationFnDef(fnDef) {
 			if applied, done, aerr := vc.tryNativeFnApply(fnDef, nil); done {
 				if aerr != nil {

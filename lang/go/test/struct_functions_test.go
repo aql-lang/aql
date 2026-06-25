@@ -485,7 +485,7 @@ func TestWalkBeforeIdentity(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}, BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -540,7 +540,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}, BarrierPos: -1,
 		}},
 	}
 	inner := native.NewOrderedMap()
@@ -649,7 +649,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("path")}, BarrierPos: -1,
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("path")}, BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -692,7 +692,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 func TestWalkBeforeAfterIdentity(t *testing.T) {
 	// AQL: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk
 	// Both before and after return m.value (identity) — tree is preserved.
-	identityBody := []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}
+	identityBody := []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}
 	fnDef1 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
@@ -766,7 +766,7 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}, BarrierPos: -1,
+			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}, BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
@@ -818,7 +818,7 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 	//        (fn [[m:Map] [Any] [m.value]])
 	//        (fn [[m:Map] [Any] [m.value]]) walk
 	// Both callbacks are identity — nested tree preserved through full traversal.
-	identityBody := []native.Value{native.NewWord("m"), native.NewWord("get"), native.NewWord("value")}
+	identityBody := []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}
 	fnDef1 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},

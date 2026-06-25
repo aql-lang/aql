@@ -1909,7 +1909,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 	// NATIVE parity holds). Elide the resolution event; if the value
 	// instead flows somewhere data-like, downstream provenance refuses
 	// and the program falls back.
-	if (word == "get" || word == "getr") && len(outs) == 1 && IsConcrete(outs[0]) {
+	if (isGetWord(word) || isGetrWord(word)) && len(outs) == 1 && IsConcrete(outs[0]) {
 		switch outs[0].Data.(type) {
 		case FnDefInfo, ExtensionPayload:
 			return true
@@ -1971,7 +1971,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		//     clause always bakes a plain CALL_NATIVE.)
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
-	case hasUncoveredQuoteArg(sig) && word != "get" && word != "getr" && word != "set" && !quoteInertOK:
+	case hasUncoveredQuoteArg(sig) && !isGetWord(word) && !isGetrWord(word) && word != "set" && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set are exempt — plain accessors/mutators whose

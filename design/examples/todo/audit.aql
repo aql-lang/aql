@@ -26,7 +26,7 @@ def log fn [[svc:Service] [Service] [
       # observe it, tag the audit row, and re-raise (bare `raise`) so the caller
       # still sees the original error. Same shape as the §8.2 `[ raise ]` default.
       error [
-        record {at: started  op: req.op  user: req.@user  ok: false  err: (get code)}
+        record {at: started  op: req.op  user: req.@user  ok: false  err: (dot code)}
         raise
       ]
   ] ] svc

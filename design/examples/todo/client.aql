@@ -22,7 +22,7 @@ def todos    ( connect {http: "http://localhost:8080/todo"} )
 
 # --- log in -----------------------------------------------------------------
 def session ( call {op: "login"  user: "alice"} sessions )
-def token   ( session get token )
+def token   ( session dot token )
 
 # --- WRITE path: create a todo ----------------------------------------------
 # A write is NOT idempotent: a blind retry could double-create. So no `retries`;
@@ -32,9 +32,9 @@ def created (
   do [ call {op: "create"  token: token  user: "alice"  text: "write the RFC"} todos
          {timeout: (TimeUtil.seconds 5)} ]
   error [ case [
-      [get code eq timeout/q]  [ reconcile-create "alice" "write the RFC" ]  # unknown
-      [get code eq down/q]     [ reconcile-create "alice" "write the RFC" ]  # unknown
-      [get code eq overload/q] [ retry-later "alice" ]                        # never ran
+      [dot code eq timeout/q]  [ reconcile-create "alice" "write the RFC" ]  # unknown
+      [dot code eq down/q]     [ reconcile-create "alice" "write the RFC" ]  # unknown
+      [dot code eq overload/q] [ retry-later "alice" ]                        # never ran
       [ raise ] ] ] )                                                         # app error -> up
 )
 
@@ -45,9 +45,9 @@ def items (
   do [ call {op: "list"  token: token  user: "alice"} todos
          {timeout: (TimeUtil.seconds 2)  retries: 3  idempotent: true} ]
   error [ case [
-      [get code eq timeout/q]   [ [] ]                       # show empty, try later
-      [get code eq down/q]      [ [] ]
-      [get code eq transport/q] [ raise unavailable "todo service offline" ]
+      [dot code eq timeout/q]   [ [] ]                       # show empty, try later
+      [dot code eq down/q]      [ [] ]
+      [dot code eq transport/q] [ raise unavailable "todo service offline" ]
       [ raise ] ] ] )                                        # app errors propagate
 )
 

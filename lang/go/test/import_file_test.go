@@ -431,7 +431,7 @@ func TestImportJSONFileNested(t *testing.T) {
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./nested.json" get planet get name`,
+		`import "./nested.json" dot planet dot name`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1034,7 +1034,7 @@ export "Planets" {catalog:data}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "planets"`,
-		`Planets get catalog get earth get diameter`,
+		`Planets dot catalog dot earth dot diameter`,
 	})
 	if err != nil {
 		t.Fatal(err)

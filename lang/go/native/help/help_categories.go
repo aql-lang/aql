@@ -54,7 +54,7 @@ var categories = []Category{
 		"xml-elem", "xml-text", "xml-attr",
 	}},
 	{"storage", "Variables, value access, references, and lenses.", []string{
-		"set", "get", "getr", "has", "context", "keys", "vals",
+		"set", "get", "getr", "dot", "dotr", "has", "context", "keys", "vals",
 		"reach", "apply", "rebind", "ref", "referent",
 		"patrun", "find", "patterns",
 	}},

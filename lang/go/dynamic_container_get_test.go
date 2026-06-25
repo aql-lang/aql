@@ -42,7 +42,7 @@ func TestDynamicContainerGetChecksClean(t *testing.T) {
 	// NEGATIVE: a provably wrong key/receiver is still rejected — gradual
 	// looseness must not swallow a real mismatch on a CONCRETE value.
 	if n := errs(`(5 get "x")`); n == 0 {
-		t.Errorf("get over a concrete Integer must still be flagged")
+		t.Errorf("dot over a concrete Integer must still be flagged")
 	}
 }
 

@@ -84,7 +84,7 @@ Integer tcmp String	-1	type compare
 
 # --- map / record access ---
 def m {a: {b: {c: 7}}} m.a.b.c	7	nested dotted access
-{a:1 b:2} get a	1	map get
+{a:1 b:2} dot a	1	map get
 
 # --- error rows: identical taxonomy in both engines ---
 def f fn [[n:Integer] [String] [n]] f 1	ERROR:type_error	return type mismatch
@@ -97,9 +97,9 @@ gen [T]	ERROR:gen_without_constructor	orphan gen spec
 # (sound because make AND set type-check the field schema), list integer-
 # index reads narrow to the element type, and the value-selecting
 # connectives narrow to the join of their operands.
-def P class {a: 5} def p (make P {}) ((p get a) add 1)	6	Integer field read narrows -> int op compiles
-def Point class {x:1} def Point3 refine Point {z:3} def p (make Point3 {x:7}) ((p get x) add 1)	8	inherited field read narrows via AllFields
-def P class {s: "hi"} def p (make P {}) (add (p get s) "!")	'!hi'	String field read narrows
+def P class {a: 5} def p (make P {}) ((p dot a) add 1)	6	Integer field read narrows -> int op compiles
+def Point class {x:1} def Point3 refine Point {z:3} def p (make Point3 {x:7}) ((p dot x) add 1)	8	inherited field read narrows via AllFields
+def P class {s: "hi"} def p (make P {}) (add (p dot s) "!")	'!hi'	String field read narrows
 def P class {a: 0} def p (make P {}) (p set a "x")	ERROR:expected Integer	set enforces the field schema (justifies narrowing)
 def P class {a: 0} make P {a: "x"}	ERROR:expected Integer	make enforces the field schema (justifies narrowing)
 [10 20 30] get 0	10	in-range list index narrows to the element

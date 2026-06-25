@@ -93,7 +93,7 @@ var comboParity = []string{
 
 	// --- map / record access ---
 	`def m {a: {b: {c: 7}}} m.a.b.c`,
-	`{a:1 b:2} get a`,
+	`{a:1 b:2} dot a`,
 
 	// --- F4: integer-keyed get on a dynamic receiver → CALL_NATIVE_POLY
 	// (runtime sig match); atom-keyed field get stays islanded ---
@@ -120,10 +120,10 @@ var comboParity = []string{
 	// compiles too; either way value/error parity holds ---
 	`def Point class {x:1, y:2} make Point {x:9}`,
 	`def Point class {x:1} (make Point {}) typeof`,
-	`def Point class {x:1} (make Point {}) get x`,
+	`def Point class {x:1} (make Point {}) dot x`,
 	`def Point class {x:1, y:2} def p (make Point {x:9}) p.y`,
 	`def Point class {x:1} (make Point {}) is Point`,
-	`def C class {x:1 f:(fn [[][Integer][2]])} (make C {x:5}) get x`, // method field → fallback
+	`def C class {x:1 f:(fn [[][Integer][2]])} (make C {x:5}) dot x`, // method field → fallback
 
 	// --- F4: refine `make` compiles native; predicate/dependent make
 	// errors identically in both engines (parity via fallback) ---
@@ -133,7 +133,7 @@ var comboParity = []string{
 
 	// --- F4: fn-value apply sites — value + error parity via fallback
 	// (the Stage-3 dynamic-dispatch frontier, conservatively deferred) ---
-	`def m {f:(fn [[a:Integer][Integer][a mul 2]])} (m get f) 5`,
+	`def m {f:(fn [[a:Integer][Integer][a mul 2]])} (m dot f) 5`,
 
 	// --- error rows: same taxonomy in both engines ---
 	`add 1 'x'`, // type_error
@@ -214,7 +214,7 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// An ATOM-keyed field get now polys too: a data field is returned
 		// directly, a named 0-arg method result is auto-applied VM-native, and
 		// a method needing args flows to CALL_DYNAMIC (plan P3+P4).
-		{`{a:1 b:2} get a`, "native"},
+		{`{a:1 b:2} dot a`, "native"},
 		{`def m {a:{b:7}} m.a.b`, "native"},
 		// Class `make` with plain-data fields compiles (the body bakes as a
 		// const); a class with a method field must fall back.

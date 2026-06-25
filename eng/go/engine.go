@@ -3352,9 +3352,9 @@ func lowerReach(info ReachInfo) []Value {
 	out = append(out, info.Receiver...)
 	for _, seg := range info.Segments {
 		if seg.Getr {
-			out = append(out, NewWord("getr"))
+			out = append(out, NewWord("dotr"))
 		} else {
-			out = append(out, NewWord("get"))
+			out = append(out, NewWord("dot"))
 		}
 		if seg.Computed {
 			out = append(out, NewParenExpr(seg.KeyExpr))

@@ -205,7 +205,7 @@ func TestIfConditionSharesContext(t *testing.T) {
 	})
 	_as3, _ := AsString(result[0])
 	if len(result) != 1 || _as3 != "yes" {
-		t.Errorf("if [context get flag] should see parent context, got %v", result)
+		t.Errorf("if [context dot flag] should see parent context, got %v", result)
 	}
 }
 

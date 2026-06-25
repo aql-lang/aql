@@ -31,10 +31,10 @@ func TestDotNotationRegisteredWordKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
-			// Simulate dot notation: map get key
+			// Simulate dot notation: map dot key
 			// The key is a Word that names a registered function.
 			result := runAQL(t, r, []Value{
-				NewMap(m), NewWord("get"), NewWord(tt.key),
+				NewMap(m), NewWord("dot"), NewWord(tt.key),
 			})
 			if len(result) != 1 || result[0].String() != tt.want {
 				t.Errorf("{...} get %s = %v, want %s", tt.key, result, tt.want)
@@ -64,11 +64,11 @@ func TestDotNotationModuleExportShadow(t *testing.T) {
 
 	// matrix get trace — should do map lookup, not execute trace word
 	result := runAQL(t, r, []Value{
-		NewWord("Matrix"), NewWord("get"), NewWord("trace"),
+		NewWord("Matrix"), NewWord("dot"), NewWord("trace"),
 	})
 	_as0, _ := AsString(result[0])
 	if len(result) != 1 || _as0 != "my-trace-fn" {
-		t.Errorf("matrix get trace = %v, want 'my-trace-fn'", result)
+		t.Errorf("matrix dot trace = %v, want 'my-trace-fn'", result)
 	}
 }
 
@@ -86,18 +86,18 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 	m.Set("age", NewInteger(30))
 
 	result := runAQL(t, r, []Value{
-		NewMap(m), NewWord("get"), NewWord("name"),
+		NewMap(m), NewWord("dot"), NewWord("name"),
 	})
 	_as1, _ := AsString(result[0])
 	if len(result) != 1 || _as1 != "alice" {
-		t.Errorf("get name = %v, want 'alice'", result)
+		t.Errorf("dot name = %v, want 'alice'", result)
 	}
 
 	result = runAQL(t, r, []Value{
-		NewMap(m), NewWord("get"), NewWord("age"),
+		NewMap(m), NewWord("dot"), NewWord("age"),
 	})
 	_as2, _ := AsNumber(result[0])
 	if len(result) != 1 || _as2 != 30 {
-		t.Errorf("get age = %v, want 30", result)
+		t.Errorf("dot age = %v, want 30", result)
 	}
 }

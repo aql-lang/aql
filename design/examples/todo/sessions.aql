@@ -29,13 +29,13 @@ def New fn [[opts:Map] [Service] [
   # --- login: mint a session token -------------------------------------
   add {op: "login"} [ [req state] => [
       def token ( new-token )
-      state set tokens (set (token) req.user (state get tokens))
+      state set tokens (set (token) req.user (state dot tokens))
       {token: token  user: req.user}                 # reply
   ] ] svc
 
   # --- whoami: resolve a token (used by Auth.gate on every request) ----
   add {op: "whoami"} [ [req state] => [
-      (state get tokens) get (req.token)             # uid or None
+      (state dot tokens) get (req.token)             # uid or None
   ] ] svc
 
   # --- connect: bring a user "online" — spawn + register a presence proc
@@ -48,7 +48,7 @@ def New fn [[opts:Map] [Service] [
           # by us — the new process runs it. We pass the user it serves.
           def pid ( spawn [ req.user Presence.loop ] )
           register (presence-name req.user) pid       # name it for `whereis`
-          state set present (set (req.user) pid (state get present))
+          state set present (set (req.user) pid (state dot present))
           pid ]
   ] ] svc
 
@@ -57,7 +57,7 @@ def New fn [[opts:Map] [Service] [
       def pid ( whereis (presence-name req.user) )
       if (none? pid) [ None ]
         [ send {cmd: "stop"} pid                      # process exits its loop
-          state set present (del (req.user) (state get present))
+          state set present (del (req.user) (state dot present))
           None ]
   ] ] svc
 

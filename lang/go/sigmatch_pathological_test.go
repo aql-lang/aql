@@ -174,7 +174,7 @@ func TestSigMatch_LazyOrderingObservesPostWordState(t *testing.T) {
 	res := mustRun(t,
 		"context set x 1 end\n"+
 			"def f fn [[a:Integer b:Integer][Integer][99] [a:String][String][context set x 2 end a]]\n"+
-			"f \"x\" (context get x) end")
+			"f \"x\" (context dot x) end")
 	// Stack: f returned "x"; the trailing paren read x AFTER f mutated it.
 	eq(t, res, []interface{}{"x", int64(2)})
 }
@@ -184,10 +184,10 @@ func TestSigMatch_LazyOrderingObservesPostWordState(t *testing.T) {
 func TestSigMatch_ClaimedParenEvaluatedExactlyOnce(t *testing.T) {
 	res := mustRun(t,
 		"context set n 0 end\n"+
-			"def bump fn [[][Integer][context set n (add (context get n) 1) end (context get n)]]\n"+
+			"def bump fn [[][Integer][context set n (add (context dot n) 1) end (context dot n)]]\n"+
 			"def f fn [[a:Any b:Any][Any][b]]\n"+
 			"f \"z\" (bump) drop end\n"+
-			"context get n end")
+			"context dot n end")
 	// bump ran once: counter is 1.
 	eq(t, res, []interface{}{int64(1)})
 }

@@ -20,10 +20,10 @@ func TestVarBodyCaptureCompiles(t *testing.T) {
 		name, src string
 	}{
 		// Decline point 1: a var-body referencing a MODULE-GLOBAL.
-		{"global ref in var body", `def xs [10 20 30] ([0 1 2] each [var [[i] xs i get end]])`},
+		{"global ref in var body", `def xs [10 20 30] ([0 1 2] each [var [[i] xs i dot end]])`},
 		// Decline point 2: a var-body CAPTURING an enclosing fn local (the bloom shape).
-		{"capture in var body", `def f fn [[xs:List] [List] [ ([0 1 2] each [var [[i] xs i get end]]) ]] ([10 20 30] f)`},
-		{"capture, reach into element", `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`},
+		{"capture in var body", `def f fn [[xs:List] [List] [ ([0 1 2] each [var [[i] xs i dot end]]) ]] ([10 20 30] f)`},
+		{"capture, reach into element", `def data [{a:1} {a:2}] (data each [var [[s] (s dot a/q)]])`},
 	}
 	for _, c := range positives {
 		t.Run("compiles/"+c.name, func(t *testing.T) {

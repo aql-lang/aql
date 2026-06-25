@@ -1,0 +1,74 @@
+# tokens	expected	note
+# =====================================================================
+# Accessor matrix: get / getr / dot / dotr / . / !. over every container
+# =====================================================================
+# The accessor family splits the key by how it is supplied:
+#   get  / getr   EVALUATE the key (string / integer / computed value).
+#   dot  / dotr   QUOTE a bare-word key as a literal field name.
+# The . sugar lowers to dot (`m.a` ≡ `m dot a`); !. lowers to dotr.
+# get / dot are forgiving (None on miss); getr / dotr are strict (raise).
+# This file is the cross-type contract for all four words + both
+# operators; storage.tsv covers the set/get pairing in depth.
+# =====================================================================
+
+# ---- Map: get evaluates, dot quotes ----
+{a:1 b:2} get 'a'	1	get with a STRING key
+{a:1 b:2} get 'b'	2
+def k 'b' end {a:1 b:2} get k	2	get EVALUATES the key — k holds 'b'
+{a:1 b:2} get ('a')	1	get with a computed (paren) key
+{a:1 b:2} dot a	1	dot QUOTES the bare word a as the literal key
+{a:1 b:2} dot b	2
+def a 'b' end {a:1 b:2} dot a	1	dot ignores the binding of a — literal key "a"
+{a:1 b:2}.a	1	the . operator lowers to dot
+{a:1 b:2}.b	2
+{a:1} get 'missing'	None	get is forgiving — missing map key yields None
+{a:1} dot missing	None	dot is forgiving too
+{a:1 b:2} getr 'a'	1	getr — strict, present key
+{a:1 b:2} dotr a	1	dotr — strict, present literal key
+{a:1 b:2}!.a	1	the !. operator lowers to dotr
+{a:1} dotr missing	ERROR:not_found	dotr raises on a missing key
+{a:1} getr 'missing'	ERROR:not_found	getr raises on a missing key
+
+# ---- List: integer index; get evaluates the index ----
+[10 20 30] get 0	10	get with a literal integer index
+[10 20 30] get 2	30
+def i 1 end [10 20 30] get i	20	get EVALUATES i — the index is i's value
+[10 20 30] dot 1	20	dot over a list — integer index
+[10 20 30].2	30	the . operator on a list index
+[10 20 30] getr 1	20	getr — in-range index
+[10 20 30] getr 5	ERROR:out of bounds	getr raises out of bounds
+[10 20 30]!.5	ERROR:out of bounds	!. is strict too
+
+# ---- Array: integer index ----
+(make Array [10 20 30]) get 1	20	Array element by evaluated index
+(make Array [10 20 30]) dot 0	10	Array element by literal index
+
+# ---- Object / class instance: field read ----
+def P class {x:1 y:2} end (make P {}) dot x	1	dot reads field x by literal name
+def P class {x:1 y:2} end (make P {}).y	2	. operator on a class instance field
+def P class {x:1 y:2} end (make P {}) get 'x'	1	get reads field x by string name
+def P class {x:7} end def f 'x' end (make P {x:7}) get f	7	get EVALUATES f to the field name
+
+# ---- Store (context): prototype-chain lookup ----
+context set 'foo' 42 end context dot foo	42	dot quotes the bare key over a Store
+context set 'foo' 42 end def k 'foo' end context get k	42	get evaluates k to 'foo'
+context set 'foo' 42 end context get 'missing'	ERROR:unknown key	Store get is strict on a miss
+
+# ---- Error value: code / message / payload fields ----
+do [raise bad_input 'boom'] error [dot code]	bad_input/q	dot reads the error code (literal field)
+do [raise bad_input 'boom'] error [get 'message']	'boom'	get reads the message by string key
+def e (do [raise bad_input 'boom']) end e.code	bad_input/q	the . operator over an Error value
+
+# ---- None: forgiving access propagates None ----
+None get 'a'	None	get over None short-circuits to None
+None dot quote x	None	dot over None with a materialised atom key → None
+
+# ---- Chained access composes left to right ----
+{a:{b:7}} dot a dot b	7	dot chains: a then b
+{a:{b:7}}.a.b	7	the . chain lowers to dot a dot b
+def i 0 end [[1 2] [3 4]] get i	[1 2]	get-evaluated index into a nested list
+{a:{b:{c:9}}}.a.b.c	9	three-deep . chain
+
+# ---- Module export: dotted member access ----
+import "aql:math-util" end MathUtil.sqrt 16.0	4.0	. over a module export resolves the member fn
+import "aql:math-util" end MathUtil dot sqrt 16.0	4.0	dot is the explicit form of the . member access

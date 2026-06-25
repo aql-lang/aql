@@ -48,7 +48,7 @@ func TestMapFunctionAccess(t *testing.T) {
 		{`"hello" m.greet`, "'hello!'"}, // stack form
 		{`m.greet "hello"`, "'hello!'"}, // forward form
 		// Bare get works regardless of how the function is stored.
-		{`m get greet "hello"`, "'hello!'"},
+		{`m dot greet "hello"`, "'hello!'"},
 	}
 
 	for _, tt := range tests {

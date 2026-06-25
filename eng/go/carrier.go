@@ -624,7 +624,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 // element carrier so the value flowing on has the element's identity.
 func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
 	es := r.Check.Emit
-	if !es.active() || (word != "get" && word != "getr") || len(args) != 2 || len(outs) != 1 {
+	if !es.active() || (!isGetWord(word) && !isGetrWord(word)) || len(args) != 2 || len(outs) != 1 {
 		return false
 	}
 	key, recv := args[0], args[1]
@@ -750,7 +750,7 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	// registered key). Decline the fold so the get stays dynamic and the
 	// program falls back / islands faithfully. A PRESENT key (any non-None
 	// value) folds as before; this only blocks the absent-key case.
-	if word == "get" && IsNoneShape(one) {
+	if isGetWord(word) && IsNoneShape(one) {
 		return false
 	}
 	switch {
@@ -1012,7 +1012,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// faithful under runtime re-match: callPoly runs the same handler over the
 	// same concrete receiver the interpreter would. Other quoted-operand words
 	// (usurp / ref-family meta) re-step tokens and stay out.
-	if len(sig.QuoteArgs) > 0 && word != "get" && word != "getr" && word != "set" {
+	if len(sig.QuoteArgs) > 0 && !isGetWord(word) && !isGetrWord(word) && word != "set" {
 		return false
 	}
 	// A fn-valued operand or result means a fn-invoking / fn-returning word

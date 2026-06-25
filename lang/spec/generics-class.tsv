@@ -15,8 +15,8 @@
 # §1  declare + make + identity
 def Box gen [T] class {value:T} end Box	schema<Class/Box>[T]	a class schema renders with its parameter list
 def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:42}) typeof	Box of [Integer]	instances carry the instantiation as their nominal type
-def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:42}) get value	42	field reads work
-def Box gen [T] class {value:T count:0} end (make (Box of [Integer]) {value:1}) get count	0	defaults mix with parameterised fields
+def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:42}) dot value	42	field reads work
+def Box gen [T] class {value:T count:0} end (make (Box of [Integer]) {value:1}) dot count	0	defaults mix with parameterised fields
 def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is Box	true	bare schema name admits any instantiation (ancestry)
 def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is (Box of [Integer])	true	exact instantiation membership
 def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) is (Box of [String])	false	sibling instantiations are distinct classes
@@ -32,7 +32,7 @@ def Box gen [T] class {value:T} end (make (Box of [Integer]) {value:1}) eq (make
 def Box gen [T] class {value:T} end make (Box of [Integer]) {value:'no'}	ERROR:expected Integer	the substituted field type is enforced at make
 def Box gen [T] class {value:T} end def b (make (Box of [Integer]) {value:1}) b set value 'no'	ERROR:expected Integer	…and at set
 def Box gen [T] class {value:T} end def b (make (Box of [Integer]) {value:1}) b set extra 9	ERROR:sealed_field	instances stay sealed, with the canonical name in the error
-def Stack gen [T] class {items:[:T]} end (make (Stack of [Integer]) {items:[1 2]}) get items	[1 2]	a typed-list field substitutes and constructs
+def Stack gen [T] class {items:[:T]} end (make (Stack of [Integer]) {items:[1 2]}) dot items	[1 2]	a typed-list field substitutes and constructs
 def Stack gen [T] class {items:[:T]} end make (Stack of [Integer]) {items:['x']}	ERROR:incompatible	…and rejects off-type elements
 def Pos (Float gte 0.0) def G gen [(T extends Number)] class {v:T r:Pos} end make (G of [Integer]) {v:1 r:-1.0}	ERROR:does not satisfy	predicate-typed fields still run their predicate
 #

@@ -109,7 +109,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 // instead of refusing "operand shape needs reordering". `setpath recv k v`
 // with a computed receiver is the driving shape.
 func TestThreeArgComputedReceiverLowers(t *testing.T) {
-	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) get b`
+	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) dot b`
 
 	a, err := New()
 	if err != nil {
@@ -624,7 +624,7 @@ func TestArgsAccessorCompilesNative(t *testing.T) {
 		}
 		// args.N must lower to a frame-local read, not a runtime args call.
 		if strings.Contains(prog.Disassemble(), "CALL_NATIVE_POLY") && strings.Contains(c.src, "args.0 add") {
-			t.Errorf("%q: args.N did not fold to a local (poly get remains):\n%s", c.src, prog.Disassemble())
+			t.Errorf("%q: args.N did not fold to a local (poly dot remains):\n%s", c.src, prog.Disassemble())
 		}
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
@@ -928,11 +928,11 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {}) get x`, "[1]"},
-		{`def Foo refine Integer end def S class {x:(make Foo 1)} end typeof ((make S {}) get x)`, "[Foo]"},
-		{`def Foo class {y:1} end def S class {x:(make Foo {})} end (make S {}) get x`, "[Class/Foo{y:1}]"},
-		{`def Foo refine Integer end def S class {x:(make Foo 7)} end (make S {x:(make Foo 9)}) get x`, "[9]"},
-		{`def S class {x:(1 add 2)} end (make S {}) get x`, "[3]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {}) dot x`, "[1]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end typeof ((make S {}) dot x)`, "[Foo]"},
+		{`def Foo class {y:1} end def S class {x:(make Foo {})} end (make S {}) dot x`, "[Class/Foo{y:1}]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 7)} end (make S {x:(make Foo 9)}) dot x`, "[9]"},
+		{`def S class {x:(1 add 2)} end (make S {}) dot x`, "[3]"},
 		{`def m {a:(1 add 2)} m`, "[{a:3}]"}, // data map scalar default also const-folds
 	} {
 		a, _ := New()
@@ -955,7 +955,7 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 
 	// Per-instance copy isolation: make copies the baked schema default, so
 	// mutating one instance's field must not affect another's.
-	const iso = `def Foo class {n:1} end def S class {x:(make Foo {})} end def a (make S {}) def b (make S {}) (a.x set n 9) end b.x get n`
+	const iso = `def Foo class {n:1} end def S class {x:(make Foo {})} end def a (make S {}) def b (make S {}) (a.x set n 9) end b.x dot n`
 	a, _ := New()
 	gotC, compiled, _ := a.RunCompiled(iso)
 	b, _ := New()
@@ -1926,7 +1926,7 @@ func TestVarCompilesAsLet(t *testing.T) {
 	// armed-body-error soundness gate in AnalyseFnBody (a GENUINE check-mode body
 	// error still marks the program uncompilable) is exercised by the whole-corpus
 	// differential.
-	const reach = `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`
+	const reach = `def data [{a:1} {a:2}] (data each [var [[s] (s dot a/q)]])`
 	prog, _, _, cerr := mustNew(t).CompileCheck(reach)
 	if cerr != nil {
 		t.Fatalf("reach each-var: unexpected check error %v", cerr)
@@ -2238,7 +2238,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 	const okGetr = `import "aql:math-util"  MathUtil!.sqrt 16.0`
 	if p, _, _, _ := mustNew(t).CompileCheck(okGetr); p != nil {
 		if dis := p.Disassemble(); strings.Contains(dis, "TRAP") {
-			t.Errorf("valid getr must not trap:\n%s", dis)
+			t.Errorf("valid dotr must not trap:\n%s", dis)
 		}
 	}
 	gotC, _, eC := mustNew(t).RunCompiled(okGetr)
@@ -2247,14 +2247,14 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 		t.Fatalf("valid getr: compiled err=%v interp err=%v", eC, eI)
 	}
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("valid getr parity: compiled=%v interp=%v", gotC, gotI)
+		t.Errorf("valid dotr parity: compiled=%v interp=%v", gotC, gotI)
 	}
 
 	// NEGATIVE 2: `get` (not getr) of a MISSING key returns None, never traps —
 	// only getr raises not_found, so the get path stays on the shared ReturnsFn.
 	const okGet = `import "aql:math-util"  MathUtil.nope`
 	if _, _, eGet := mustNew(t).RunCompiled(okGet); eGet != nil {
-		t.Errorf("get of a missing key must not error, got %v", eGet)
+		t.Errorf("dot of a missing key must not error, got %v", eGet)
 	}
 }
 
@@ -2678,8 +2678,8 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
-		{imp + `context get __sys get fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
-		{imp + `context get __sys get fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+		{imp + `context dot __sys dot fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
+		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)

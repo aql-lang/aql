@@ -389,7 +389,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	}
 
 	toks := []Value{
-		NewWord("MiniLang"), NewWord("get"), NewWord(target),
+		NewWord("MiniLang"), NewWord("dot"), NewWord(target),
 		args[1], opts, NewEnd(),
 	}
 	return []Value{NewSplice(NewList(toks))}, nil
@@ -499,7 +499,7 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		source = args[1]
 	}
 	toks := []Value{
-		NewWord("ParseLang"), NewWord("get"), NewWord(target),
+		NewWord("ParseLang"), NewWord("dot"), NewWord(target),
 		source, opts, NewEnd(),
 	}
 	return []Value{NewSplice(NewList(toks))}, nil
@@ -608,7 +608,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	}
 
 	toks := []Value{
-		NewWord("EmitLang"), NewWord("get"), NewWord(target),
+		NewWord("EmitLang"), NewWord("dot"), NewWord(target),
 		data, opts, NewEnd(),
 	}
 	return []Value{NewSplice(NewList(toks))}, nil

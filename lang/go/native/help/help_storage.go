@@ -21,26 +21,47 @@ func init() {
 
 	register(&Entry{
 		Word:    "get",
-		Summary: "Retrieve a value from a Store, Map, List, or Object.",
+		Summary: "Retrieve a value by an EVALUATED key from a Store, Map, List, or Object.",
 		Description: "Retrieves a value by key from a Store (with prototype chain resolution), " +
-			"a Map (by string/atom key), a List (by integer index), or an Object instance (by field name). " +
-			"The . (dot) operator is an alias for get. " +
-			"Dot syntax shorthand: .fieldname is equivalent to get fieldname. " +
+			"a Map (by string key), a List (by integer index), or an Object instance (by string field name). " +
+			"get EVALUATES its key: `lst get i` reads the VALUE of i, and `m get \"a\"` reads field \"a\". " +
+			"A bare-word LITERAL key uses dot (`m dot a`) or the . shorthand (`m.a`) — get itself no longer " +
+			"quotes a bare word. " +
 			"Returns None for missing keys in Maps/Objects/Lists.",
-		// Canonical order: `receiver key get` (or the `.key` shorthand).
+		// Canonical order: `receiver key get`.
 		Examples: []string{
-			`{k: 9} "k" get         ;# => 9   — Map value by key`,
+			`{k: 9} "k" get         ;# => 9   — Map value by string key`,
 			`[10 20 30] 0 get       ;# => 10  — List element by index`,
-			`c "count" get          ;# Object field (same as c.count)`,
+			`def i 1  [10 20] get i ;# => 20  — key is the VALUE of i`,
+		},
+	})
+
+	register(&Entry{
+		Word:    "dot",
+		Summary: "Retrieve a value by a LITERAL bare-word key — the . (dot) operator.",
+		Description: "Like get, but QUOTES a bare-word key as a literal field name, so `m dot a` " +
+			"reads the field \"a\" regardless of any binding of a. The . operator is sugar for dot: " +
+			"`m.a` is `m dot a`, and chained `m.a.b` is `m dot a dot b`. Use dot (or .) for fixed " +
+			"field/key names; use get when the key is computed.",
+		Examples: []string{
+			`{k: 9} dot k           ;# => 9   — literal field k (≡ {k:9}.k)`,
+			`c dot count            ;# Object field count (same as c.count)`,
 		},
 	})
 
 	register(&Entry{
 		Word:    "getr",
-		Summary: "Strict value retrieval — errors on missing keys.",
+		Summary: "Strict value retrieval by an EVALUATED key — errors on missing keys.",
 		Description: "Like get, but returns an error when the key or index is missing, " +
 			"or the parent is None, instead of silently returning None. " +
-			"The !. operator is an alias for getr.",
+			"getr evaluates its key; the bare-word-literal form is dotr (the !. operator).",
+	})
+
+	register(&Entry{
+		Word:    "dotr",
+		Summary: "Strict value retrieval by a LITERAL bare-word key — the !. operator.",
+		Description: "Like dot, but raises an error when the key or index is missing, or the parent " +
+			"is None, instead of returning None. The !. operator is sugar for dotr: `m!.a` is `m dotr a`.",
 	})
 
 	register(&Entry{

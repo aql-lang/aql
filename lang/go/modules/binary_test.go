@@ -56,11 +56,11 @@ func runBin(t *testing.T, tokens []native.Value) []native.Value {
 }
 
 // dotChain emits the `bin.<name>` access pattern: equivalent to
-// `bin get <name>/q`.
+// `bin dot <name>` (literal-key access — dot quotes the bare name).
 func dotChain(name string) []native.Value {
 	return []native.Value{
 		native.NewWord("BinUtil"),
-		native.NewWord("get"),
+		native.NewWord("dot"),
 		native.NewAtom(name),
 	}
 }
@@ -276,7 +276,7 @@ func TestBinExtractInsert(t *testing.T) {
 	e := native.New(r)
 	out, err := e.Run([]native.Value{
 		native.NewInteger(0xabcd), native.NewWord("BinUtil"),
-		native.NewWord("get"), native.NewAtom("extract"),
+		native.NewWord("dot"), native.NewAtom("extract"),
 		native.NewInteger(4), native.NewInteger(12),
 	})
 	if err != nil {
@@ -290,7 +290,7 @@ func TestBinExtractInsert(t *testing.T) {
 	e2 := native.New(r)
 	out, err = e2.Run([]native.Value{
 		native.NewInteger(0xabcd), native.NewWord("BinUtil"),
-		native.NewWord("get"), native.NewAtom("insert"),
+		native.NewWord("dot"), native.NewAtom("insert"),
 		native.NewInteger(4), native.NewInteger(12), native.NewInteger(0),
 	})
 	if err != nil {
@@ -306,7 +306,7 @@ func TestBinSingleBitRangeError(t *testing.T) {
 	e := native.New(r)
 	_, err := e.Run([]native.Value{
 		native.NewInteger(0), native.NewWord("BinUtil"),
-		native.NewWord("get"), native.NewAtom("set"),
+		native.NewWord("dot"), native.NewAtom("set"),
 		native.NewInteger(64),
 	})
 	if err == nil {

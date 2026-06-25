@@ -18,7 +18,7 @@ func TestContextSetGetString(t *testing.T) {
 	})
 	_as0, _ := AsInteger(result[0])
 	if len(result) != 1 || _as0 != 42 {
-		t.Errorf("context get x = %v, want 42", result)
+		t.Errorf("context dot x = %v, want 42", result)
 	}
 }
 
@@ -30,11 +30,11 @@ func TestContextSetGetWordKey(t *testing.T) {
 	registerIOWords(r)
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
-		NewWord("context"), NewWord("get"), NewWord("foo"),
+		NewWord("context"), NewWord("dot"), NewWord("foo"),
 	})
 	_as1, _ := AsInteger(result[0])
 	if len(result) != 1 || _as1 != 99 {
-		t.Errorf("context get foo = %v, want 99", result)
+		t.Errorf("context dot foo = %v, want 99", result)
 	}
 }
 
@@ -51,7 +51,7 @@ func TestContextSetOverwrite(t *testing.T) {
 	})
 	_as2, _ := AsInteger(result[0])
 	if len(result) != 1 || _as2 != 2 {
-		t.Errorf("overwritten context get k = %v, want 2", result)
+		t.Errorf("overwritten context dot k = %v, want 2", result)
 	}
 }
 

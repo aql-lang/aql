@@ -17,13 +17,13 @@ raise {message: "no code"}	ERROR:raise_error	code and message are both required 
 raise 42	ERROR:no matching signature	a non-string/map operand has no raise sig
 #
 # §2  catching — one error [handler] form for native AND user errors
-do [raise "boom"] error [get message] end	'boom'	a raised error is caught like a native one
-def e (do [raise bad_input "nope"]) e get code	bad_input/q	the code is dispatchable on the caught value
+do [raise "boom"] error [dot message] end	'boom'	a raised error is caught like a native one
+def e (do [raise bad_input "nope"]) e dot code	bad_input/q	the code is dispatchable on the caught value
 def e (do [raise bad_input "nope"]) e.message	'nope'	…and the message reads via dot access
-def e (do [raise {code: bad_input/q, message: "m", got: 42}]) e get got	42	extra spec-map keys ride along for the handler
+def e (do [raise {code: bad_input/q, message: "m", got: 42}]) e dot got	42	extra spec-map keys ride along for the handler
 def e (do [raise {code: bad_input/q, message: "m", got: 42}]) convert Map e	{code:bad_input/q message:'m' got:42}	convert Map projects code, message, and payload
 def e (do [1 div 0]) convert Map e	{message:'division by zero'}	a plain Go-error stays {message:…} (no code to project)
-def e (do [raise "x"]) e get nothere	None	an unknown key reads as none, mirroring map reads
+def e (do [raise "x"]) e dot nothere	None	an unknown key reads as none, mirroring map reads
 #
 # §3  void argument expressions are blamed at the causing site
 def f fn [[x:Integer] [] []] def r (f 1)	ERROR:def_error	def of a void expression errors at the def, naming the binding
@@ -36,11 +36,11 @@ def f fn [[x:Integer] [] []] 3 add (f 1)	ERROR:no_value_error	a void group starv
 #     consumes it and the stack-value form of case dispatches on the
 #     code; or keep the Error as the case value and match it with
 #     predicates, the blocks reading its fields).
-do [raise bad_input "nope"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'rejected'	dispatch on the code atom
-do [raise io_error "disk"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'retry'	…each code takes its own clause
-do [raise weird "?"] error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'unexpected'	…unknown codes take the default
-do [raise {code: too_big/q, message: "out of range", limit: 99}] error [case [[get code eq bad_input/q] [get message] [get code eq too_big/q] [get limit] "unexpected"]]	99	predicate matches inspect the Error itself; the block reads its payload
-do [21 mul 2] error [get code case [bad_input/q "rejected" "unexpected"]]	42	a successful body skips the handler entirely (error passes the value through)
+do [raise bad_input "nope"] error [dot code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'rejected'	dispatch on the code atom
+do [raise io_error "disk"] error [dot code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'retry'	…each code takes its own clause
+do [raise weird "?"] error [dot code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]	'unexpected'	…unknown codes take the default
+do [raise {code: too_big/q, message: "out of range", limit: 99}] error [case [[dot code eq bad_input/q] [dot message] [dot code eq too_big/q] [dot limit] "unexpected"]]	99	predicate matches inspect the Error itself; the block reads its payload
+do [21 mul 2] error [dot code case [bad_input/q "rejected" "unexpected"]]	42	a successful body skips the handler entirely (error passes the value through)
 #
 # §X  template-string messages — an interpolated template in a typed
 #     argument slot evaluates to its String during collection, so
@@ -51,10 +51,10 @@ def x 5 raise (`bad: ${x}`)	ERROR:bad: 5	paren-wrapped template evaluates inside
 def x 5 raise bad_input `oops ${x}`	ERROR:oops 5	template message with an explicit code
 def x 5 add "a" `v ${x}`	'v 5a'	any typed slot sees the evaluated String, not the raw template
 def x None `got ${x}`	'got None'	a None value interpolates as the string None, not a String carrier (bloom report §1)
-def x None do [ raise bad_input `got ${x}` ] error [ get code ]	bad_input/q	a None-built raise message keeps the intended code, not raise_error
+def x None do [ raise bad_input `got ${x}` ] error [ dot code ]	bad_input/q	a None-built raise message keeps the intended code, not raise_error
 `type: ${42 typeof}`	'type: Integer'	a bare type-literal (typeof) interpolates as its type name
 `sum ${1 add 2} of ${10}`	'sum 3 of 10'	a natively-computed hole interpolates its result (compiles via OpInterp)
 # strict lookup misses raise the documented not_found code; misuse on a
 # type literal stays getr_error
-{x:1} getr y	ERROR:not_found	missing map key is not_found per the error-codes table
-do [{x:1} !. y] error [get code]	not_found/q	the code atom a handler dispatches on
+{x:1} dotr y	ERROR:not_found	missing map key is not_found per the error-codes table
+do [{x:1} !. y] error [dot code]	not_found/q	the code atom a handler dispatches on

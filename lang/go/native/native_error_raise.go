@@ -56,8 +56,19 @@ var errorNatives = []NativeFunc{
 	{
 		// get on an Error value — code/message plus any raise payload
 		// keys. Registered here (not native_storage.go) to keep the
-		// whole Error surface in one file.
+		// whole Error surface in one file. `get` EVALUATES its key (string
+		// only); the bare-word-quoting atom sig lives on `dot`.
 		Name:          "get",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
+
+		Signatures: []NativeSig{
+			{Args: []*Type{TString, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+		},
+	},
+	{
+		// dot on an Error value — the `.`-sugar target; quotes a bare-word
+		// key as a literal field name (`err.code` ≡ `err dot code`).
+		Name:          "dot",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{

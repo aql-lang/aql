@@ -85,8 +85,8 @@ func TestEffectiveFileOpsMemTrue(t *testing.T) {
 	e := New(r)
 	_, err := e.Run([]Value{
 		// Get the fs Store from __sys
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
+		NewWord("context"), NewWord("dot"), NewWord("__sys"),
+		NewWord("dot"), NewWord("fs"),
 		// Set mem = true on it
 		NewWord("set"), NewWord("mem"), NewBoolean(true),
 	})
@@ -107,8 +107,8 @@ func TestMemFileOpsReadWrite(t *testing.T) {
 	// Enable in-memory fs
 	e := New(r)
 	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
+		NewWord("context"), NewWord("dot"), NewWord("__sys"),
+		NewWord("dot"), NewWord("fs"),
 		NewWord("set"), NewWord("mem"), NewBoolean(true),
 	})
 	if err != nil {
@@ -140,8 +140,8 @@ func TestMemFileOpsPersistsAcrossRuns(t *testing.T) {
 	// Enable mem fs
 	e := New(r)
 	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
+		NewWord("context"), NewWord("dot"), NewWord("__sys"),
+		NewWord("dot"), NewWord("fs"),
 		NewWord("set"), NewWord("mem"), NewBoolean(true),
 	})
 	if err != nil {
@@ -165,8 +165,8 @@ func TestSysValStoreSetGet(t *testing.T) {
 
 	// Set a value in __sys.__val
 	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("__val"),
+		NewWord("context"), NewWord("dot"), NewWord("__sys"),
+		NewWord("dot"), NewWord("__val"),
 		NewWord("set"), NewWord("x"), NewInteger(42),
 	})
 	if err != nil {
@@ -175,9 +175,9 @@ func TestSysValStoreSetGet(t *testing.T) {
 
 	// Read it back
 	result, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("__val"),
-		NewWord("get"), NewWord("x"),
+		NewWord("context"), NewWord("dot"), NewWord("__sys"),
+		NewWord("dot"), NewWord("__val"),
+		NewWord("dot"), NewWord("x"),
 	})
 	if err != nil {
 		t.Fatalf("error getting __val.x: %v", err)

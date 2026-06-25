@@ -19,24 +19,19 @@ var accessorNatives = []NativeFunc{
 	{
 		Name:          "getr",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
-
-		Signatures: []NativeSig{
-			// [Key | Node] — key forward, container from stack
-			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
-			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
-			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
-			// [Key | Object]
-			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
-			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
-			{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
-			// [Key | ModuleExport] / [Key | Module]
-			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
-			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
-			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleInstHandler},
-			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getrModuleInstHandler},
-			// [Key | None]
-			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
-		},
+		// getr EVALUATES its key (the strict sibling of `get`); the
+		// bare-word-quoting atom sigs live on `dotr`, which the `!.` sugar
+		// lowers to. `m getr "k"` / `m getr <int>` work; a literal field
+		// name uses `dotr` (`m dotr a`).
+		Signatures: dropQuoteAtomSigs(accessorGetrSignatures()),
+	},
+	{
+		Name:          "dotr",
+		CompileEffect: CompileModuleFold | CompileIslandPure,
+		// dotr is `getr` PLUS the bare-word-quoting atom sigs — the strict
+		// (`!.`) dot-sugar target. `m!.a` ≡ `m dotr a` reads the literal
+		// field "a" and raises if absent.
+		Signatures: accessorGetrSignatures(),
 	},
 	{
 		// `has` is the Boolean presence predicate — the missing third
@@ -78,6 +73,30 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: hasNoneHandler, Returns: []*Type{TBoolean}},
 		},
 	},
+}
+
+// accessorGetrSignatures returns the full strict-read signature set shared by
+// `getr` and `dotr`. `dotr` uses it verbatim (bare-word key quoted as a
+// literal field — the `!.` sugar); `getr` uses the dropQuoteAtomSigs subset
+// (key evaluated). One source keeps the two words from drifting.
+func accessorGetrSignatures() []NativeSig {
+	return []NativeSig{
+		// [Key | Node] — key forward, container from stack
+		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
+		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
+		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
+		// [Key | Object]
+		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
+		{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
+		{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
+		// [Key | ModuleExport] / [Key | Module]
+		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
+		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
+		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleInstHandler},
+		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getrModuleInstHandler},
+		// [Key | None]
+		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
+	}
 }
 
 // ---- has handlers (the get lookups, returning presence as Boolean) ----
