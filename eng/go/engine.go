@@ -2474,7 +2474,21 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			return nil
 		}
 
-		results := carrierResults(e.registry, name, match.Sig, match.Args, pos, match.Reg)
+		// Paren-tail lookahead: is the token right after this call's consumed
+		// range a CloseParen? If so the result is the enclosing group's value
+		// (consumed), which lets carrierResults safely model the mixed-arity
+		// gradual arity under a real compile (a `set` over a dynamic receiver
+		// bound by `def`). A statement-position call (next token is a word that
+		// could collect the result) gets tailConsumed=false and the faithful
+		// 0-arity stands.
+		callEnd := e.pointer
+		for _, p := range sortedIndices {
+			if p > callEnd {
+				callEnd = p
+			}
+		}
+		tailConsumed := callEnd+1 < e.tape.Len() && IsCloseParen(e.tape.At(callEnd+1))
+		results := carrierResults(e.registry, name, match.Sig, match.Args, pos, match.Reg, tailConsumed)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 
@@ -6392,7 +6406,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	for i, p := range positions {
 		args[i] = e.tape.At(p)
 	}
-	results := carrierResults(e.registry, w.Name, synth, args, pos, nil)
+	results := carrierResults(e.registry, w.Name, synth, args, pos, nil, false)
 	e.spliceCheckResults(positions, results)
 	return true, nil
 }
@@ -6528,7 +6542,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	es := e.registry.Check.Emit
 	if es.active() && anyAnyCarrier(args) {
 		resume := es.Suspend()
-		results := carrierResults(e.registry, w.Name, sig, args, pos, nil)
+		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 		resume()
 		// Re-match over the dispatching registry: a module sub-registry word
 		// (the test framework's `test-record`, run via CallAQL in the module's
@@ -6561,7 +6575,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		Row:    pos.Row,
 		Col:    pos.Col,
 	})
-	results := carrierResults(e.registry, w.Name, sig, args, pos, nil)
+	results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 	e.spliceCheckResults(positions, results)
 	return nil
 }

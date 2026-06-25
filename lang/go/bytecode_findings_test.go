@@ -2708,6 +2708,49 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	}
 }
 
+// TestSetOverDynamicReceiverConsumedCompiles is the mixed-arity gradual-dispatch
+// counterpart to the statement-position cases above: when a `set` over a DYNAMIC
+// receiver sits in PAREN-TAIL position its result is consumed (here bound by an
+// inner `def`), so the checker models the one gradual value the value-returning
+// overload yields — `def k2` binds a carrier instead of falsely reporting
+// undefined_word, and the whole fn compiles byte-identically. Previously this
+// refused under --force-compile (the gradual model was gated to pure check
+// mode); the paren-tail signal makes it sound to model under a real compile too,
+// because the single value is consumed by the group close and never collected as
+// a sibling word's extra arg.
+func TestSetOverDynamicReceiverConsumedCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		// get over a Map yields a dynamic receiver; set on it (paren-tail, bound
+		// by def k2) returns the updated map, consumed as the body result.
+		{`def f fn [[nd:Map] [Any] [ def k2 ((nd "a" get) set "x" 1) k2 ]]  ({a:{}} f)`, "[{x:1}]"},
+		// Forward-arg consumption: the set result feeds an outer word directly.
+		{`def g fn [[nd:Map] [Map] [ ((nd "a" get) set "x" 1) ]]  ({a:{}} g)`, "[{x:1}]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected a compiled program, refused: %s", c.src, reason)
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if !compiled {
+			t.Errorf("%q: expected a compiled run, fell back", c.src)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
+	}
+}
+
 // Stage B — conditional dynamic apply in a branch. `if (n eq 0) [99]
 // MathUtil.sqrt 16`: the else arm is the module-export fn value sqrt and the
 // trailing 16 applies ONLY when the branch produced the callable. Two parts:

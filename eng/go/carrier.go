@@ -392,7 +392,16 @@ func isLiteralWord(v Value) bool {
 // args are the carrier-typed input values in signature order (same
 // args that would be passed to the runtime handler). pos carries the
 // word's source location so diagnostics can point at it.
-func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry) []Value {
+//
+// tailConsumed reports that this dispatch sits in PAREN-TAIL position —
+// the token immediately after the call is a CloseParen, so the result is
+// the group's value, consumed by whatever encloses the group (a `def`
+// binding, an outer word's arg). It gates the mixed-arity gradual-arity
+// model under a real compile (see the `len(out) == 0` branch): only a
+// consumed result may optimistically model one dynamic value, because a
+// free statement-position residual would be collected by the NEXT word
+// and corrupt its arity. The dynamic-recovery callers pass false.
+func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value {
 	// `args` inside a compiled fn body projects the frame's params (pushed by
 	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
 	// then folds to param N — a frame local — via tryFoldStaticIndex; bare
@@ -550,22 +559,31 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 				}
 				out[0] = NewDynamicCarrierValue(NewDisjunct(alts))
 			}
-		} else if len(out) == 0 && !r.Check.Compiling {
-			// PURE-CHECK ONLY (diagnostics, not a real compile): the matched
-			// overload returns NOTHING (an in-place mutator) but the receiver is
-			// dynamic and a value-returning sibling is also reachable — `set`'s
-			// mixed-arity overloads (Array/Object/Store/Class return 0; Map/List/
-			// Flex return the updated node). The runtime receiver could be either,
-			// so committing to 0 values poisons every downstream CONSUMER of the
-			// result (trie's `(nd "kids" get) set ch child` fed to mk-node: 0 values
-			// → an unbound arg → a false undefined_word on the consumer's param +
-			// no_signature on the consuming call). Model ONE dynamic value — the
-			// optimistic gradual arity — so a consuming use type-checks. Gated to
-			// !Compiling: under a REAL compile the recorder needs a fixed, runtime-
-			// faithful arity (a 0-output Store mutation must stay 0 so its poly
-			// lowering keeps a clean residual — TestSetOverDynamicReceiverPolyCompiles),
-			// so that path is unchanged. A CONCRETE receiver reaches only its own
-			// overload, so vrets is empty and the true 0-arity stands either way.
+		} else if len(out) == 0 && (!r.Check.Compiling || tailConsumed) {
+			// The matched overload returns NOTHING (an in-place mutator) but the
+			// receiver is dynamic and a value-returning sibling is also reachable —
+			// `set`'s mixed-arity overloads (Array/Object/Store/Class return 0;
+			// Map/List/Flex return the updated node). The runtime receiver could be
+			// either, so committing to 0 values poisons every downstream CONSUMER of
+			// the result (trie's `(nd "kids" get) set ch child` fed to mk-node: 0
+			// values → an unbound arg → a false undefined_word on the consumer's
+			// param + no_signature on the consuming call). Model ONE dynamic value —
+			// the optimistic gradual arity — so a consuming use type-checks.
+			//
+			// In PURE check mode this always fires (no runtime, so the model is
+			// free). Under a REAL compile it fires ONLY in paren-tail position
+			// (tailConsumed): there the single value is immediately consumed by the
+			// group close, so it can never be collected as the NEXT word's extra arg
+			// — the unsoundness that forced the original !Compiling gate (a
+			// statement-position `… set mem true  IO.write …`, where modeling 1
+			// value made write bind the phantom as a 3rd arg and underflow at run
+			// time — TestSetOverDynamicReceiverPolyCompiles). The VM's
+			// OpCallNativePoly is runtime-faithful (callPoly pushes the matched
+			// overload's ACTUAL results), so a consumed Map-set pushes the 1 value
+			// the recorder wired; a non-value receiver would already error the
+			// original program (def of 0 values), erroring alike in both engines. A
+			// CONCRETE receiver reaches only its own overload, so vrets is empty and
+			// the true 0-arity stands either way.
 			if vrets := dynamicReachableValueReturns(r, word, args); len(vrets) > 0 {
 				if len(vrets) == 1 {
 					c := NewCarrier(vrets[0])
