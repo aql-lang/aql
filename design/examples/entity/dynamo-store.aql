@@ -14,32 +14,32 @@ export "DynamoStore" { New: New/r }
 
 # `New {table region}` -> Service
 def New fn [[opts:Map] [Service] [
-  def svc ( service { table:  (opts get table)
-                      region: (opts get region ? "us-east-1") } )
+  def svc ( service { table:  (opts dot table)
+                      region: (opts dot region ? "us-east-1") } )
 
   add {role: "entity"  cmd: "save"} [ [req state] => [
-      def id  ( req.ent get id ? (Rand.uuid) )
+      def id  ( req.ent dot id ? (Rand.uuid) )
       def row ( set id (id) req.ent )
       dynamo state "DynamoDB_20120810.PutItem"
-        { TableName: (state get table)  Item: (to-attr row) }
+        { TableName: (state dot table)  Item: (to-attr row) }
       row
   ] ] svc
 
   add {role: "entity"  cmd: "load"} [ [req state] => [
       def out ( dynamo state "DynamoDB_20120810.GetItem"
-                  { TableName: (state get table)  Key: (to-attr {id: req.q.id}) } )
-      from-attr (out get Item)
+                  { TableName: (state dot table)  Key: (to-attr {id: req.q.id}) } )
+      from-attr (out dot Item)
   ] ] svc
 
   add {role: "entity"  cmd: "list"} [ [req state] => [
       # Real impl builds a FilterExpression from q and paginates the Scan.
-      def out ( dynamo state "DynamoDB_20120810.Scan" { TableName: (state get table) } )
-      map ([it:Map] => [ from-attr it ]) (out get Items)
+      def out ( dynamo state "DynamoDB_20120810.Scan" { TableName: (state dot table) } )
+      map ([it:Map] => [ from-attr it ]) (out dot Items)
   ] ] svc
 
   add {role: "entity"  cmd: "remove"} [ [req state] => [
       dynamo state "DynamoDB_20120810.DeleteItem"
-        { TableName: (state get table)  Key: (to-attr {id: req.q.id}) }
+        { TableName: (state dot table)  Key: (to-attr {id: req.q.id}) }
       None
   ] ] svc
 
@@ -56,7 +56,7 @@ def New fn [[opts:Map] [Service] [
 #      sandbox/read-only profiles hard-deny it.
 # GAP: the real seneca-dynamo-store has a documented upsert race on unique fields.
 def dynamo fn [[state:Store target:String body:Map] [Map] [
-  def url ( `https://dynamodb.${state get region}.amazonaws.com/` )
+  def url ( `https://dynamodb.${state dot region}.amazonaws.com/` )
   Net.fetch { url: url  method: "POST"
               headers: { "X-Amz-Target": target
                          "Content-Type": "application/x-amz-json-1.0" }

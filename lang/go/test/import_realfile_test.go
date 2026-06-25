@@ -176,7 +176,7 @@ func TestRealFileBareModuleImportsJsonRelative(t *testing.T) {
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "planets"`,
-		`Planets get catalog get earth get diameter`,
+		`Planets dot catalog dot earth dot diameter`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -188,7 +188,7 @@ func TestRealFileBareModuleJsonMarsField(t *testing.T) {
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "planets"`,
-		`Planets get catalog get mars get diameter`,
+		`Planets dot catalog dot mars dot diameter`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ func TestRealFileBareModuleFromSubdir(t *testing.T) {
 	dir := filepath.Join(testdataDir(t), "sub", "deep")
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "planets"`,
-		`Planets get catalog get earth get diameter`,
+		`Planets dot catalog dot earth dot diameter`,
 	})
 	if err != nil {
 		t.Fatal(err)

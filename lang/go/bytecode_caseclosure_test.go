@@ -18,12 +18,12 @@ import (
 // AND a case-in-closure over a computed scrutinee both stay parity-correct — the
 // promotion must not perturb the common single-use closure body.
 func TestCaseInClosure(t *testing.T) {
-	const clause = ` error [get code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]`
+	const clause = ` error [dot code case [bad_input/q "rejected" io_error/q "retry" "unexpected"]]`
 	pos := []struct{ src, want string }{
 		{`do [raise bad_input "nope"]` + clause, "[rejected]"},
 		{`do [raise io_error "disk"]` + clause, "[retry]"},
 		{`do [raise weird "?"]` + clause, "[unexpected]"},
-		{`do [21 mul 2] error [get code case [bad_input/q "rejected" "unexpected"]]`, "[42]"}, // success → pass-through
+		{`do [21 mul 2] error [dot code case [bad_input/q "rejected" "unexpected"]]`, "[42]"}, // success → pass-through
 		// a computed scrutinee inside an each-body closure (not via error):
 		{`[2 4] each [dup add case [4 "four" 8 "eight" "other"]]`, "[['four' 'eight']]"},
 	}

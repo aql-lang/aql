@@ -127,8 +127,8 @@ lower/1 "G"	'g'
 lower/1f "H"	'h'
 
 # === Set/Get ===
-context set foo 99 end context get foo	99
-context set bar "hello" end context get bar	'hello'
+context set foo 99 end context dot foo	99
+context set bar "hello" end context dot bar	'hello'
 
 # === Unify - identical scalars (prefix: left right unify) ===
 1 1 unify	1 true
@@ -1112,7 +1112,7 @@ def x 1 ; x:x	{x:1}
 [10,20] has 1	true
 [10,20] has 5	false
 none has a	false
-({a:None} get b) has k	false
+({a:None} dot b) has k	false
 
 # === do/error is stack-neutral (decision DX report finding 6) ===
 # The caught error is pushed for the handler to bind, but a handler
@@ -1121,7 +1121,7 @@ do [ raise "boom" ] error [ "recovered" ]	'recovered'
 def result (do [ raise "boom" ] error [ "recovered" ]) end result	'recovered'
 do [ 42 ] error [ "fallback" ]	42
 do [ raise "boom" ] error [ var [[e] e.message] ]	'boom'
-do [ raise "boom" ] error [ get code ]	user_error
+do [ raise "boom" ] error [ dot code ]	user_error
 do [raise {code: nope/q, message: "m", got: 42}] error [var [[e] e.got]]	42
 
 # === swapped arguments get a dedicated hint (finding 2) ===

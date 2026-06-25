@@ -29,7 +29,7 @@ def u ( Entity.make "sys/user" bus )          # canon sys/user -> mem store
 def u ( Entity.field "name" "Alice" u )
 def u ( Entity.field "age"  30      u )
 def u ( Entity.save u )                       # insert; reply carries the new id
-def uid ( (Entity.data u) get id )
+def uid ( (Entity.data u) dot id )
 
 def again  ( Entity.load (Entity.make "sys/user" bus) uid )      # round-trip by id
 def adults ( Entity.list (Entity.make "sys/user" bus)

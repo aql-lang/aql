@@ -47,4 +47,4 @@ case 1 Integer	ERROR:case_error	the clause list must be a list
 #
 # §5  stack-value form — the value is already on the stack
 5 case [5 "five" "other"]	'five'	`v case [clauses]` reads the value from the stack
-def e (do [raise bad_input "nope"]) do [e get code case [bad_input/q "B" "other"]]	'B'	…the natural shape inside error handlers
+def e (do [raise bad_input "nope"]) do [e dot code case [bad_input/q "B" "other"]]	'B'	…the natural shape inside error handlers

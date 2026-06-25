@@ -37,7 +37,7 @@ def New fn [[opts:Map] [Service] [
   # Private state: a map of  user -> {todos: {id -> todo}  next: Integer}.
   # `state` is a mutable `Store`, safe to mutate in place because a service
   # handles ONE request at a time (§1 — the gen_server guarantee, no locks).
-  def svc ( service {users: {}  notify: (opts get notify ? None)} )
+  def svc ( service {users: {}  notify: (opts dot notify ? None)} )
 
   # --- create ------------------------------------------------------------
   # Scalar-tag routing on `op: "create"` (patrun, §3); the payload fields
@@ -45,10 +45,10 @@ def New fn [[opts:Map] [Service] [
   # service (gap A: services route on scalar tags only, no `name:Type` slots).
   add {op: "create"} [ [req state] => [
       def bucket ( user-bucket state req.user )      # {todos next}
-      def id     ( bucket get next )
+      def id     ( bucket dot next )
       def todo   {id: id  text: req.text  done: false}
       put-bucket state req.user
-        { todos: (set (id) todo (bucket get todos))
+        { todos: (set (id) todo (bucket dot todos))
           next:  (inc id) }
       emit state req.user {tag: "created"  id: id}    # fire-and-forget event
       todo                                            # reply: the created todo
@@ -56,19 +56,19 @@ def New fn [[opts:Map] [Service] [
 
   # --- list (read path — idempotent; safe for the caller to auto-retry) ---
   add {op: "list"} [ [req state] => [
-      vals ((user-bucket state req.user) get todos)
+      vals ((user-bucket state req.user) dot todos)
   ] ] svc
 
   # --- toggle done -------------------------------------------------------
   add {op: "toggle"} [ [req state] => [
       def bucket ( user-bucket state req.user )
-      def todo   ( (bucket get todos) get (req.id) )
+      def todo   ( (bucket dot todos) get (req.id) )
       if (none? todo)
         [ raise no_such_todo `no todo ${req.id} for ${req.user}` ]
-        [ def flipped ( set done (not (todo get done)) todo )
+        [ def flipped ( set done (not (todo dot done)) todo )
           put-bucket state req.user
-            { todos: (set (req.id) flipped (bucket get todos))
-              next:  (bucket get next) }
+            { todos: (set (req.id) flipped (bucket dot todos))
+              next:  (bucket dot next) }
           emit state req.user {tag: "toggled"  id: req.id}
           flipped ]
   ] ] svc
@@ -77,8 +77,8 @@ def New fn [[opts:Map] [Service] [
   add {op: "remove"} [ [req state] => [
       def bucket ( user-bucket state req.user )
       put-bucket state req.user
-        { todos: (del (req.id) (bucket get todos))
-          next:  (bucket get next) }
+        { todos: (del (req.id) (bucket dot todos))
+          next:  (bucket dot next) }
       emit state req.user {tag: "removed"  id: req.id}
       None
   ] ] svc
@@ -100,12 +100,12 @@ def New fn [[opts:Map] [Service] [
 
 # Fetch (or lazily create) a user's bucket from the service Store.
 def user-bucket fn [[state:Store user:String] [Map] [
-  (state get users) get (user) ? {todos: {}  next: 1}
+  (state dot users) get (user) ? {todos: {}  next: 1}
 ]]
 
 # Write a user's bucket back into the Store.
 def put-bucket fn [[state:Store user:String bucket:Map] [None] [
-  state set users (set (user) bucket (state get users))
+  state set users (set (user) bucket (state dot users))
   None
 ]]
 
@@ -114,7 +114,7 @@ def put-bucket fn [[state:Store user:String bucket:Map] [None] [
 # `overflow: "drop"` mailbox (notify.aql) means a slow consumer can never stall
 # the hot path. Note the event is an immutable Map — sendable by the §6 rule.
 def emit fn [[state:Store user:String ev:Map] [None] [
-  def sink ( state get notify )
+  def sink ( state dot notify )
   if (none? sink) [ None ]
     [ send (set user user ev) sink ]   # key "user" (literal) <- the `user` var
 ]]

@@ -79,6 +79,36 @@ var definitionNatives = []NativeFunc{
 		},
 	},
 	{
+		// __varundef is the cleanup unbind the `var` splice emits — semantically
+		// ALWAYS the single-name form (`undef name`). It exists separately from
+		// `undef` precisely because `undef` is OVERLOADED with a 2-arg fn-overload
+		// form (`undef name fnUndefSpec`): the var splice runs the cleanup with the
+		// body's RESIDUAL still on the stack, and in check mode that residual is a
+		// dynamic-Any carrier which gradually matches the 2-arg form's TFnUndef
+		// slot — so `undef name` mis-dispatched to undefFnHandler and errored
+		// ("expected fn undef spec"), leaking the loop binding and refusing the
+		// closure. A dedicated 1-arg-only word can never mis-match the residual, so
+		// it dispatches identically (1-arg unbind) in check mode and at runtime —
+		// the property the compiled `each`/`fold`/… var-body closure needs. Reuses
+		// undefHandler so the unbind behaviour is byte-identical to `undef name`.
+		Name: "__varundef",
+		Signatures: []NativeSig{
+			{
+				Args:           []*Type{TString},
+				Handler:        undefHandler,
+				Returns:        []*Type{},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+			{
+				Args:           []*Type{TAtom},
+				QuoteArgs:      map[int]bool{0: true},
+				Handler:        undefHandler,
+				Returns:        []*Type{},
+				RunInCheckMode: true, BarrierPos: -1,
+			},
+		},
+	},
+	{
 		Name: "var",
 
 		// var SPLICES its body (def/body/undef tokens) onto the tape for the
@@ -554,8 +584,13 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 
 	result = append(result, body...)
 
+	// Cleanup via __varundef (not `undef`): the body residual is still on the
+	// stack here, and `undef`'s 2-arg fn-overload form would mis-match it in
+	// check mode (a dynamic-Any residual gradually satisfies TFnUndef). The
+	// dedicated 1-arg word dispatches identically in check and at runtime, which
+	// is what lets a var-body compile to a closure unit.
 	for i := len(varNames) - 1; i >= 0; i-- {
-		result = append(result, NewWord("undef"), NewWord(varNames[i]))
+		result = append(result, NewWord("__varundef"), NewWord(varNames[i]))
 	}
 
 	return result, nil

@@ -98,7 +98,7 @@ func TestDXPlainUndefinedNoDefHint(t *testing.T) {
 		t.Fatal("expected an undefined-word error")
 	}
 	if strings.Contains(err.Error(), "did you mean") {
-		t.Errorf("plain undefined word should not get the def hint:\n%s", err.Error())
+		t.Errorf("plain undefined word should not dot the def hint:\n%s", err.Error())
 	}
 }
 

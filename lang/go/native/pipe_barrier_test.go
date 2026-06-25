@@ -74,8 +74,8 @@ func TestPipeBarrierPreventsGreedyForward(t *testing.T) {
 	// Without barrier: get would forward-collect fn1 AND m2 (both match).
 	// With barrier: get collects fn1 forward, gets m1 from stack.
 	result := runAQL(t, r, []Value{
-		NewMap(m1), NewWord("get"), NewWord("fn1"),
-		NewMap(m2), NewWord("get"), NewWord("fn2"),
+		NewMap(m1), NewWord("dot"), NewWord("fn1"),
+		NewMap(m2), NewWord("dot"), NewWord("fn2"),
 	})
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d: %v", len(result), result)

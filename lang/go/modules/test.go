@@ -1229,7 +1229,7 @@ func dottedWordTokens(name string) []native.Value {
 	out := make([]native.Value, 0, 1+2*(len(parts)-1))
 	out = append(out, native.NewWord(parts[0]))
 	for _, p := range parts[1:] {
-		out = append(out, native.NewWord("get"), native.NewAtom(p))
+		out = append(out, native.NewWord("dot"), native.NewAtom(p))
 	}
 	return out
 }

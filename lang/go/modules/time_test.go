@@ -26,7 +26,7 @@ func callTimeDot(word string, stackVals ...native.Value) []native.Value {
 	input = append(input, stackVals...)
 	input = append(input,
 		native.NewOpenParen(),
-		native.NewWord("TimeUtil"), native.NewWord("get"), native.NewWord(word),
+		native.NewWord("TimeUtil"), native.NewWord("dot"), native.NewWord(word),
 		native.NewCloseParen(),
 	)
 	return input

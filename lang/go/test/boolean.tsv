@@ -402,9 +402,9 @@ None otherwise "bar"	'bar'
 # =====================================================================
 
 # A field that resolves to None gets a fallback via `otherwise`.
-def Item refine Record [name:String desc:[String tor None]] (make Item ["a" None]) get desc	None
-((make (refine Record [name:String desc:[String tor None]]) ["a" None]) get desc) otherwise "no description"	'no description'
-((make (refine Record [name:String desc:[String tor None]]) ["a" "set"]) get desc) otherwise "no description"	'set'
+def Item refine Record [name:String desc:[String tor None]] (make Item ["a" None]) dot desc	None
+((make (refine Record [name:String desc:[String tor None]]) ["a" None]) dot desc) otherwise "no description"	'no description'
+((make (refine Record [name:String desc:[String tor None]]) ["a" "set"]) dot desc) otherwise "no description"	'set'
 
 # =====================================================================
 # 18. Edge cases

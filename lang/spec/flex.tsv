@@ -65,7 +65,7 @@ make FlexList [1 2]	(flex [1 2])
 make Map (flex {a:1})	{a:1}	make Map is the inverse — back to immutable
 make List (flex [1 2])	[1 2]	
 typeof (make Map (flex {a:1}))	Map	
-typeof ((make Map (flex {a:[1]})) get a/q)	List	inverse conversion is deep — nested flex gone
+typeof ((make Map (flex {a:[1]})) dot a/q)	List	inverse conversion is deep — nested flex gone
 make FlexMap [1 2]	ERROR:make	a list is not a map — family mismatch
 make FlexList {a:1}	ERROR:make	a map is not a list
 make FlexMap 1	ERROR:make	scalars have no flex version
@@ -148,7 +148,7 @@ node (flex {a:1})	{a:1}	flex map back to immutable map
 node (flex [1 2])	[1 2]	flex list back to immutable list
 typeof (node (flex {a:1}))	Map	
 typeof (node (flex [1]))	List	
-typeof ((node (flex {a:[1]})) get a/q)	List	deep: nested flex converted too
+typeof ((node (flex {a:[1]})) dot a/q)	List	deep: nested flex converted too
 node {a:1}	{a:1}	identity on an already-plain map
 node [1 2]	[1 2]	identity on a plain list
 node 1	ERROR:signature	scalars are not nodes
@@ -209,7 +209,7 @@ List unify (flex [1 2])	(flex [1 2]) true	the List literal accepts a flex value 
 		
 (flex [10 20]) get 1	20	indexed get
 (flex {a:7}).a	7	dot access
-(flex {a:7}) get a/q	7	keyed get
+(flex {a:7}) dot a/q	7	keyed get
 size (flex [1 2 3])	3	
 sort (flex [3 1 2])	[1 2 3]	sort returns a new PLAIN list
 typeof (sort (flex [3 1 2]))	List	

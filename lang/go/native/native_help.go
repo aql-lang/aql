@@ -283,7 +283,7 @@ func inferExact(name string, sig Signature) []string {
 	// Storage
 	case "set", "context-set":
 		return nil // no return
-	case "get", "context-get":
+	case "get", "dot", "context-get":
 		return []string{"Any"}
 
 	// Definition
@@ -309,7 +309,7 @@ func inferExact(name string, sig Signature) []string {
 		return []string{"Any"}
 
 	// Accessors
-	case "getr", "!.":
+	case "getr", "dotr", "!.":
 		return []string{"Any"}
 
 	// I/O

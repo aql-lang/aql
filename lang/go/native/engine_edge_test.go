@@ -257,7 +257,7 @@ func TestEdgeUnknownWordAsSetKey(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("mykey"), NewInteger(42),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("mykey"),
+		NewWord("context"), NewWord("dot"), NewWord("mykey"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -889,7 +889,7 @@ func TestEdgeEndTerminatesGetForward(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewInteger(42), NewString("mykey"), NewWord("set"),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("mykey"), NewEnd(),
+		NewWord("context"), NewWord("dot"), NewWord("mykey"), NewEnd(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -914,8 +914,8 @@ func TestEdgeEndWithMultipleForwards(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("a"), NewInteger(99), NewEnd(),
 		NewWord("context"), NewWord("set"), NewWord("b"), NewInteger(88), NewEnd(),
-		NewOpenParen(), NewWord("context"), NewWord("get"), NewWord("a"), NewCloseParen(),
-		NewOpenParen(), NewWord("context"), NewWord("get"), NewWord("b"), NewCloseParen(),
+		NewOpenParen(), NewWord("context"), NewWord("dot"), NewWord("a"), NewCloseParen(),
+		NewOpenParen(), NewWord("context"), NewWord("dot"), NewWord("b"), NewCloseParen(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1035,7 +1035,7 @@ func TestEdgeSetThenUseValue(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(10),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("x"),
+		NewWord("context"), NewWord("dot"), NewWord("x"),
 		NewWord("add"), NewInteger(5),
 	})
 	if err != nil {
@@ -1059,7 +1059,7 @@ func TestEdgeSetComputedValue(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewWord("total"),
 		NewOpenParen(), NewInteger(3), NewWord("mul"), NewInteger(7), NewCloseParen(),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("total"),
+		NewWord("context"), NewWord("dot"), NewWord("total"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1520,7 +1520,7 @@ func TestEdgeSetGetComputedKeyAndValue(t *testing.T) {
 		NewOpenParen(), NewWord("lower"), NewString("KEY"), NewCloseParen(),
 		NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("key"),
+		NewWord("context"), NewWord("dot"), NewWord("key"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1864,7 +1864,7 @@ func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 	result, err := e1.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("key"), NewInteger(111),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("key"),
+		NewWord("context"), NewWord("dot"), NewWord("key"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on set+get: %v", err)
@@ -1876,7 +1876,7 @@ func TestEdgeStoreIsolationBetweenRegistries(t *testing.T) {
 
 	// Attempting get from reg2 should fail (different registry = different context)
 	_, err = e2.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("key"),
+		NewWord("context"), NewWord("dot"), NewWord("key"),
 	})
 	if err == nil {
 		t.Fatal("expected error: key should not exist in separate registry")
@@ -2102,7 +2102,7 @@ func TestEdgeEndOutsideParenDoesNotCrossBarrier(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewWord("a"),
 		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("a"),
+		NewWord("context"), NewWord("dot"), NewWord("a"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -2935,7 +2935,7 @@ func TestDefForthDefInteractsWithStore(t *testing.T) {
 	result, err := e.Run([]Value{
 		NewWord("context"), NewWord("set"), NewWord("x"), NewInteger(42),
 		NewEnd(),
-		NewWord("context"), NewWord("get"), NewWord("x"),
+		NewWord("context"), NewWord("dot"), NewWord("x"),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error on load-x: %v", err)
@@ -3308,7 +3308,7 @@ func TestModuleImportDotAccess(t *testing.T) {
 	// dot with "inc" gives [add 1]
 	// do [add 1] with 2 on stack should give 3
 	// Actually let's test just Foo . inc to get the value
-	result := runAQL(t, r, []Value{NewWord("Foo"), NewAtom("inc"), NewWord("get")})
+	result := runAQL(t, r, []Value{NewWord("Foo"), NewAtom("inc"), NewWord("dot")})
 	if len(result) != 1 {
 		t.Fatalf("Foo.inc: got %d results, want 1: %v", len(result), result)
 	}

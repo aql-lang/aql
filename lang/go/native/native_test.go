@@ -439,6 +439,48 @@ func TestSliceStartEndHandler(t *testing.T) {
 	}
 }
 
+// TestSlicePreservesElementTypes guards against the stringification
+// regression: slicing a value list must return elements of their
+// original type, not their String() form. The length-only tests above
+// never exercised this, which is exactly how the defect hid.
+func TestSlicePreservesElementTypes(t *testing.T) {
+	data := newList(NewInteger(3), NewInteger(1), NewInteger(2))
+	result, err := sliceStartEndHandler([]Value{NewInteger(0), NewInteger(2), data}, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_lst, _ := AsList(result[0])
+	got := _lst.Slice()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(got))
+	}
+	for i, elem := range got {
+		if !elem.Parent.ConformsTo(TInteger) {
+			t.Errorf("element %d: expected Integer, got %s (%q)", i, elem.Parent.String(), elem.String())
+		}
+	}
+	// Mixed scalar types round-trip unchanged.
+	mixed := newList(NewBoolean(true), NewString("x"), NewFloat(1.5))
+	mres, err := sliceAllHandler([]Value{mixed}, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ml, _ := AsList(mres[0])
+	ml := _ml.Slice()
+	if len(ml) != 3 || !ml[0].Parent.ConformsTo(TBoolean) ||
+		!ml[1].Parent.ConformsTo(TString) || !ml[2].Parent.ConformsTo(TFloat) {
+		t.Errorf("mixed slice did not preserve types: %v", ml)
+	}
+	// Negative/contrast: a string slice still yields a string (not a list).
+	sres, err := sliceStartEndHandler([]Value{NewInteger(1), NewInteger(3), NewString("hello")}, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sres[0].Parent.ConformsTo(TString) {
+		t.Errorf("string slice should stay a string, got %s", sres[0].Parent.String())
+	}
+}
+
 // --- validate ---
 
 func TestValidateHandler(t *testing.T) {
