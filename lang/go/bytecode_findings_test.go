@@ -1090,23 +1090,29 @@ func TestQueryDSLCompilesNative(t *testing.T) {
 		}
 	}
 
-	// SCOPING: the quote exemption is gated on a MODULE INNER native. A core
-	// quoted-operand word (here `inspect`, which quotes a bare def name) is NOT a
-	// module inner native, so it must STILL refuse — proving the exemption does
-	// not leak to the meta/accessor quoted-operand words. It falls back with
-	// faithful parity.
+	// SCOPING: `inspect` (a core quoted-operand word that quotes a bare def
+	// name) now DECLARES CompileQuoteInert, so it bakes a plain CALL_NATIVE over
+	// the inert Atom const — the same opt-in quote/codequote/raise use. The
+	// handler is a pure registry reader, so `def x 5  inspect x` compiles native
+	// and runs compiled == interpreter (the binding lookup happens at VM time
+	// against the same registry the interpreter sees). A core quoted-operand
+	// word that does NOT opt in still refuses — quoteOperandInertOK fires only
+	// for a CompileQuoteInert declarer or a module-inner sig, so the exemption
+	// does not silently leak.
 	const core = `def x 5  inspect x`
 	a, _ := New()
 	prog, reason, _, _ := a.CompileCheck(core)
-	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-		t.Errorf("%q: a core quoted-operand word must NOT compile native (reason was %q)", core, reason)
+	if prog == nil {
+		t.Errorf("%q: inspect should compile (CompileQuoteInert), refused %q", core, reason)
+	} else if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: inspect should bake a CALL_NATIVE, got an island:\n%s", core, prog.Disassemble())
 	}
 	ar, _ := New()
 	gotC, _, _ := ar.RunCompiled(core)
 	b, _ := New()
 	gotI, _ := b.Run(core)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", core, gotC, gotI)
+		t.Errorf("%q: compiled/interp parity broke: compiled=%v interp=%v", core, gotC, gotI)
 	}
 }
 
