@@ -1090,23 +1090,29 @@ func TestQueryDSLCompilesNative(t *testing.T) {
 		}
 	}
 
-	// SCOPING: the quote exemption is gated on a MODULE INNER native. A core
-	// quoted-operand word (here `inspect`, which quotes a bare def name) is NOT a
-	// module inner native, so it must STILL refuse — proving the exemption does
-	// not leak to the meta/accessor quoted-operand words. It falls back with
-	// faithful parity.
+	// SCOPING: `inspect` (a core quoted-operand word that quotes a bare def
+	// name) now DECLARES CompileQuoteInert, so it bakes a plain CALL_NATIVE over
+	// the inert Atom const — the same opt-in quote/codequote/raise use. The
+	// handler is a pure registry reader, so `def x 5  inspect x` compiles native
+	// and runs compiled == interpreter (the binding lookup happens at VM time
+	// against the same registry the interpreter sees). A core quoted-operand
+	// word that does NOT opt in still refuses — quoteOperandInertOK fires only
+	// for a CompileQuoteInert declarer or a module-inner sig, so the exemption
+	// does not silently leak.
 	const core = `def x 5  inspect x`
 	a, _ := New()
 	prog, reason, _, _ := a.CompileCheck(core)
-	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-		t.Errorf("%q: a core quoted-operand word must NOT compile native (reason was %q)", core, reason)
+	if prog == nil {
+		t.Errorf("%q: inspect should compile (CompileQuoteInert), refused %q", core, reason)
+	} else if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: inspect should bake a CALL_NATIVE, got an island:\n%s", core, prog.Disassemble())
 	}
 	ar, _ := New()
 	gotC, _, _ := ar.RunCompiled(core)
 	b, _ := New()
 	gotI, _ := b.Run(core)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", core, gotC, gotI)
+		t.Errorf("%q: compiled/interp parity broke: compiled=%v interp=%v", core, gotC, gotI)
 	}
 }
 
@@ -3331,5 +3337,134 @@ func TestDeferredListBodyCompiles(t *testing.T) {
 		if eC == nil && c.want != "" && fmt.Sprint(gotC) != c.want {
 			t.Errorf("compiled %v want %s :: %s", gotC, c.want, c.src)
 		}
+	}
+}
+
+// Quoted-operand inert words `has` / `inspect` (corpus-core.tsv) — a bare-word
+// key/name quotes to an inert Atom const, so the dispatch bakes a plain
+// CALL_NATIVE over the baked container + key (the VM runs the same pure
+// handler). Declaring CompileQuoteInert clears the "quoted-operand word"
+// refusal exactly as quote/codequote/raise/timeout already do.
+func TestQuotedOperandHasInspectCompiles(t *testing.T) {
+	pos := []struct{ src, want string }{
+		{`{a:1} has b`, "[false]"},
+		{`{a:None} has a`, "[true]"},
+		{`none has a`, "[false]"},
+		{`inspect a/q`, "[{name:'a' kind:unknown signatures:[]}]"},
+	}
+	for _, c := range pos {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: the evaluated-key overloads (no QuoteArgs) are unaffected — a
+	// String key still dispatches the same handler, compiled == interp.
+	for _, c := range []struct{ src, want string }{
+		{`{a:1} has "a"`, "[true]"},
+		{`{a:1} has "z"`, "[false]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
+// do over a MAP (corpus-core.tsv:60) is a pure value-eval whose arg is
+// auto-evaluated BEFORE the handler — unlike the NoEvalArgs LIST body it does
+// not re-enter the interpreter, so it bakes a plain CALL_NATIVE instead of an
+// OpFallback island. CompileFallbackBody moved from the word to the List sig.
+func TestDoMapCompilesNoIsland(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{`do {a:1,b:2}`, "[{a:1 b:2}]"},
+		{`do {a:(1 add 2) b:3}`, "[{a:3 b:3}]"},
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+	// NEGATIVE: the LIST (code-body) sig is unaffected by the Map-sig change —
+	// it still compiles its body and runs compiled == interp.
+	gotC, _, eC := mustNew(t).RunCompiled(`do [1 add 2]`)
+	gotI, eI := mustNew(t).Run(`do [1 add 2]`)
+	if eC != nil || eI != nil {
+		t.Fatalf("do [body]: compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[3]" {
+		t.Errorf("do [1 add 2]: compiled=%v interp=%v want [3]", gotC, gotI)
+	}
+}
+
+// outer [body] left right (corpus-core.tsv:101) — the last interpreter island.
+// `outer` is a code-body higher-order word that used to run its body via an
+// inline sub-engine and island. Routing it through the InvokeBody seam + a
+// CallableSpec compiles the `[mul]` body to a closure unit the VM drives per
+// pair, so the 2D outer product compiles fully native (islands → 0).
+func TestOuterCompilesNoIsland(t *testing.T) {
+	src := `outer [mul] [1 2] [3 4]`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("check error %v", cerr)
+	}
+	if prog == nil {
+		t.Fatalf("refused: %s", reason)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("expected no island:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, eC := mustNew(t).RunCompiled(src)
+	gotI, eI := mustNew(t).Run(src)
+	if !compiled {
+		t.Errorf("did not run compiled")
+	}
+	if eC != nil || eI != nil {
+		t.Fatalf("compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[[3 4] [6 8]]]" {
+		t.Errorf("compiled=%v interp=%v want [[[3 4] [6 8]]]", gotC, gotI)
+	}
+	// NEGATIVE: a non-concrete-list arg still errors (outer_error), not a crash.
+	_, _, eBad := mustNew(t).RunCompiled(`outer [mul] List [3 4]`)
+	_, eBadI := mustNew(t).Run(`outer [mul] List [3 4]`)
+	if (eBad == nil) != (eBadI == nil) {
+		t.Errorf("outer over a type-literal list: compiled err=%v interp err=%v (should agree)", eBad, eBadI)
 	}
 }

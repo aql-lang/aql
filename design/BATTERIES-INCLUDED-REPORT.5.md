@@ -1,5 +1,15 @@
 # Batteries Included: Standard Library Feature Analysis and AQL Recommendations
 
+> **Status note (2026-06-25):** much of this report's Phase-1/2 list has
+> since LANDED — math (`aql:math-util`), regex (`gex`), random
+> (`aql:rand`), date/time (`aql:time-util`), HTTP (`aql:net`),
+> non-crypto hashing (`BinUtil.fnv32/64`), and now base64/hex encoding
+> (`BinUtil.base64-encode/decode`, `BinUtil.hex-encode/decode`). The
+> verified current status of every item is consolidated in
+> `design/DESIGN-DX-AND-BYTECODE-STATUS-REVIEW.md` §4; the genuinely
+> remaining gaps (crypto hashing, UUID word, compression, AES/TLS, XML)
+> are the deferred-by-design tail of the phased plan below.
+
 ## Executive summary
 
 This report analyzes the standard library coverage of the top 20 TIOBE-ranked languages, identifies the features that appear most consistently across languages, and recommends a feature set for AQL. The primary goal is to **minimize third-party module dependencies** to reduce supply chain attack surface.

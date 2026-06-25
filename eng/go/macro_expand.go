@@ -122,10 +122,10 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 		bindings[p.Name] = operands[i]
 		q := operands[i]
 		q.Quoted = true
-		InstallDef(r, p.Name, q)
+		InstallFrameBinding(r, p.Name, q)
 	}
 	for _, cb := range fnDef.Captured {
-		InstallDef(r, cb.Name, cb.Value)
+		InstallFrameBinding(r, cb.Name, cb.Value)
 	}
 
 	// Run the template body → the template token list (its last result).

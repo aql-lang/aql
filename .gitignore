@@ -157,3 +157,11 @@ cmd/go/aqlbin
 
 # Claude Code local worktree / session storage
 .claude/
+
+# Test artifacts written by the aql:io IO.write corpus rows
+# (lang/spec/corpus-modules.tsv §IO) into the langspec test working
+# directory on every `make test` run. Deterministic, not source.
+/test/go/langspec/a
+/test/go/langspec/c
+/test/go/langspec/d
+/test/go/langspec/f

@@ -4691,7 +4691,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	}
 	var names []string
 	for _, cb := range captures {
-		InstallDef(e.registry, cb.Name, cb.Value)
+		InstallFrameBinding(e.registry, cb.Name, cb.Value)
 		names = append(names, cb.Name)
 	}
 
@@ -4702,7 +4702,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
-			InstallDef(e.registry, p.Name, args[i])
+			InstallFrameBinding(e.registry, p.Name, args[i])
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])
