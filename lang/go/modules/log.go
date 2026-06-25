@@ -68,6 +68,8 @@ func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 		"log-sinks":       "sinks",
 		"log-dump":        "dump",
 		"log-clear":       "clear",
+		"log-logger":      "logger",
+		"log-with":        "with",
 	}
 	for _, n := range logNatives {
 		exports.Set(exportName[n.Name], makeModuleFnDef(n, subReg))

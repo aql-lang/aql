@@ -19,5 +19,7 @@ func init() {
 		"sinks":       "List the names of the currently attached sinks.",
 		"dump":        "Return the records captured by the memory sink.",
 		"clear":       "Empty the memory sink's capture buffer.",
+		"logger":      "Create a named logger instance: logger NAME.",
+		"with":        "Create a named logger with default fields: with NAME FIELDS.",
 	})
 }

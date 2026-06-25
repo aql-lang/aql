@@ -48,6 +48,13 @@ import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info 
 import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.set-level trace/q ; Log.trace "t" ; Log.debug "d" ; Log.dump size	2	trace and debug emit once the threshold is lowered
 import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.error "e" ; Log.fatal "f" ; Log.dump size	2	error and fatal emit at the default threshold
 
+# --- contextual loggers (phase 2) -----------------------------------------
+import "aql:log" ; def l (Log.logger "http") ; typeof l	Map	a logger instance is a Map of method closures
+import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" ; Log.dump 0 get "logger" get	'http'	a logger stamps its name onto each record
+import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" {path:"/x"} ; Log.dump 0 get "attributes" get	{svc:'api' path:'/x'}	a logger merges its defaults under the call's fields
+import "aql:log" ; def l (Log.with "a" {x:1}) ; def c (l.child {y:2}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; c.info "m" ; Log.dump 0 get "attributes" get	{x:1 y:2}	a child logger layers more defaults over its parent's
+import "aql:log" ; def l (Log.with "a" {x:1}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.error "boom" {x:2} ; Log.dump 0 get "attributes" get	{x:2}	a call field overrides a same-named logger default
+
 # --- negatives ------------------------------------------------------------
 Log.info "x"	ERROR:undefined_word	`Log` is unbound without import
 import "aql:log" ; Log.set-level loud/q	ERROR:unknown level	an unknown level atom is rejected

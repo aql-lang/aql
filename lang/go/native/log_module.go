@@ -149,13 +149,52 @@ func (rec LogRecord) attributesOrEmpty() Value {
 	return NewMap(NewOrderedMap())
 }
 
-// logSink is one named destination. emit consumes a record; built-in
-// sinks never error, but the signature carries an error for the
-// host-registered sinks of phase 3.
+// spanEvent is a timestamped event recorded on a span (phase 4).
+type spanEvent struct {
+	Name       string
+	Timestamp  time.Time
+	Attributes Value
+}
+
+// spanState is the mutable state of one span (phase 4). A Span instance
+// value (an OrderedMap of method closures) shares the pointer, so
+// set-attr / add-event / record-error mutate the live span.
+type spanState struct {
+	traceID   string
+	spanID    string
+	parentID  string
+	name      string
+	attrs     *OrderedMap
+	events    []spanEvent
+	start     time.Time
+	end       time.Time
+	status    string // "" (unset/ok) | "error"
+	statusMsg string
+	ended     bool
+}
+
+// Measurement is the neutral OTel-metrics shape (phase 5): one recorded
+// value against a named instrument.
+type Measurement struct {
+	Instrument string
+	Kind       string // "counter" | "gauge" | "histogram"
+	Value      Value
+	Attributes Value
+	Timestamp  time.Time
+}
+
+// logSink is one named destination. A sink may consume records (emit),
+// span lifecycle events (spanStart/spanEnd), and measurements (measure)
+// — the latter three are optional (nil) so a logs-only sink is the
+// common case. Built-in sinks never error; the error in each signature
+// is for the host-registered sinks of phase 3.
 type logSink struct {
-	name string
-	min  LogLevel
-	emit func(r *Registry, rec LogRecord) error
+	name      string
+	min       LogLevel
+	emit      func(r *Registry, rec LogRecord) error
+	spanStart func(r *Registry, sp *spanState)
+	spanEnd   func(r *Registry, sp *spanState)
+	measure   func(r *Registry, m Measurement)
 }
 
 // LogSinkRegistry holds the per-import logging state: the global level
@@ -170,6 +209,10 @@ type LogSinkRegistry struct {
 	available map[string]*logSink
 	attached  []string
 	captured  []LogRecord
+	spanStack []*spanState  // active spans (phase 4), innermost last
+	spans     []*spanState  // ended spans captured by the memory sink (phase 4)
+	measures  []Measurement // measurements captured by the memory sink (phase 5)
+	spanSeq   uint64        // per-registry counter for deterministic span ids
 }
 
 // NewLogSinkRegistry returns a default sink registry (level INFO, text
@@ -334,6 +377,19 @@ func (lsr *LogSinkRegistry) Emit(r *Registry, rec LogRecord) {
 	}
 }
 
+// stampSpan populates a record's TraceID/SpanID from the currently
+// active span, if any. Implemented in phase 4 (spans); a no-op until a
+// span has been started.
+func (lsr *LogSinkRegistry) stampSpan(rec *LogRecord) {
+	lsr.mu.Lock()
+	defer lsr.mu.Unlock()
+	if n := len(lsr.spanStack); n > 0 {
+		sp := lsr.spanStack[n-1]
+		rec.TraceID = sp.traceID
+		rec.SpanID = sp.spanID
+	}
+}
+
 // render formats a record for the console sink per the active format.
 func (lsr *LogSinkRegistry) render(rec LogRecord) string {
 	if lsr.Format() == "json" {
@@ -394,6 +450,8 @@ func LogModuleNativeFuncs(lsr *LogSinkRegistry) []NativeFunc {
 		logDumpNative(lsr),
 		logClearNative(lsr),
 		logGenericNative(lsr),
+		logLoggerNative(lsr),
+		logWithNative(lsr),
 	}
 	for _, lvl := range []struct {
 		word  string
@@ -411,15 +469,67 @@ func LogModuleNativeFuncs(lsr *LogSinkRegistry) []NativeFunc {
 	return funcs
 }
 
-// emitRecord builds and fans out a record at the given level. attrs is
-// a concrete Map or an empty placeholder Value.
+// emitRecord builds and fans out a top-level (un-named-logger) record.
+// attrs is a concrete Map or an empty placeholder Value.
 func emitRecord(lsr *LogSinkRegistry, r *Registry, level LogLevel, body, attrs Value) {
-	lsr.Emit(r, LogRecord{
+	emitWith(lsr, r, level, body, attrs, "")
+}
+
+// emitWith builds and fans out a record carrying a logger name and the
+// current span context (if any). Used by both the top-level level words
+// (logger="") and the contextual-logger instance methods (phase 2).
+func emitWith(lsr *LogSinkRegistry, r *Registry, level LogLevel, body, attrs Value, logger string) {
+	rec := LogRecord{
 		Timestamp:  EffectiveClock(r).Now(),
 		Severity:   level,
 		Body:       body,
 		Attributes: attrs,
-	})
+		Logger:     logger,
+	}
+	lsr.stampSpan(&rec)
+	lsr.Emit(r, rec)
+}
+
+// mergeAttrs returns a fresh Map combining default attributes (lower
+// precedence) with call-supplied fields (higher precedence). Either
+// side may be an empty placeholder / non-map; the result is always a
+// concrete Map. Used by contextual loggers to layer their bound
+// defaults under each call's own fields (last-writer-wins).
+func mergeAttrs(defaults *OrderedMap, call Value) Value {
+	out := NewOrderedMap()
+	if defaults != nil {
+		for _, k := range defaults.Keys() {
+			v, _ := defaults.Get(k)
+			out.Set(k, v)
+		}
+	}
+	if IsConcrete(call) && call.Parent != nil && call.Parent.Equal(TMap) {
+		if m, err := AsMap(call); err == nil && m != nil {
+			for _, k := range m.Keys() {
+				v, _ := m.Get(k)
+				out.Set(k, v)
+			}
+		}
+	}
+	return NewMap(out)
+}
+
+// asConcreteOrderedMap returns the *OrderedMap backing a concrete Map
+// value, or nil. Used to snapshot a logger's bound default attributes.
+func asConcreteOrderedMap(v Value) *OrderedMap {
+	if !IsConcrete(v) || v.Parent == nil || !v.Parent.Equal(TMap) {
+		return nil
+	}
+	m, err := AsMap(v)
+	if err != nil || m == nil {
+		return nil
+	}
+	out := NewOrderedMap()
+	for _, k := range m.Keys() {
+		val, _ := m.Get(k)
+		out.Set(k, val)
+	}
+	return out
 }
 
 // levelNative builds one severity word (Log.info, …). The 2-arg

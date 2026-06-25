@@ -235,6 +235,52 @@ func TestLogNoPanicTypeLiterals(t *testing.T) {
 	}
 }
 
+// TestLogContextualLogger verifies a named logger stamps its name and
+// merges its bound default attributes into the console output.
+func TestLogContextualLogger(t *testing.T) {
+	reg, buf := newLogReg(t)
+	runLog(t, reg, `import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; l.warn "slow" {ms:30}`)
+	got := buf.String()
+	for _, want := range []string{"WARN", "slow", "svc=api", "ms=30"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("logger line %q missing %q", got, want)
+		}
+	}
+}
+
+// TestLogChildLoggerIndependent verifies a child logger carries the
+// parent's defaults plus its own, and does not mutate the parent's.
+func TestLogChildLoggerIndependent(t *testing.T) {
+	reg, _ := newLogReg(t)
+	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def p (Log.with "a" {region:"eu"}) ; def c (p.child {req:"1"}) ; c.info "child" ; p.info "parent" ; Log.dump`)
+	list, err := native.RequireConcreteList(out[0], "dump")
+	if err != nil || list.Len() != 2 {
+		t.Fatalf("want two records, got %v", out)
+	}
+	childAttrs := mustField(t, list.Get(0), "attributes")
+	if !strings.Contains(native.FormatForPrint(childAttrs), "req") || !strings.Contains(native.FormatForPrint(childAttrs), "region") {
+		t.Errorf("child should carry region+req, got %s", native.FormatForPrint(childAttrs))
+	}
+	parentAttrs := mustField(t, list.Get(1), "attributes")
+	if strings.Contains(native.FormatForPrint(parentAttrs), "req") {
+		t.Errorf("parent must not see the child's req field, got %s", native.FormatForPrint(parentAttrs))
+	}
+}
+
+// mustField returns record[key], failing the test if absent.
+func mustField(t *testing.T, rec native.Value, key string) native.Value {
+	t.Helper()
+	m, err := native.RequireConcreteMap(rec, "record")
+	if err != nil {
+		t.Fatalf("record not a map: %v", err)
+	}
+	v, ok := m.Get(key)
+	if !ok {
+		t.Fatalf("record missing %q", key)
+	}
+	return v
+}
+
 // TestLogInstallExports checks the test-setup convenience helper binds
 // the Log namespace as a def.
 func TestLogInstallExports(t *testing.T) {

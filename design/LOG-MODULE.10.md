@@ -1,13 +1,14 @@
 # `aql:log` — logging, OpenTelemetry abstraction, and provider hooks
 
-> **Status: phase 1 implemented; phases 2–5 proposed.** Phase 1 (the
+> **Status: phases 1–2 implemented; phases 3–5 proposed.** Phase 1 (the
 > traditional-logging layer — six severity levels, structured fields, a
 > global threshold, the console/memory/null sinks, the `log` policy scope,
-> and the `LogSinkRegistry` host seam) has landed:
-> `lang/go/native/log_module.go`, `lang/go/modules/log.go`,
-> `lang/spec/module-log.tsv`, `lang/go/modules/log_test.go`. The remaining
-> phases (contextual loggers, provider hooks, traces, metrics) are still
-> proposals. This note specifies a new
+> and the `LogSinkRegistry` host seam) and phase 2 (contextual loggers —
+> `Log.logger` / `Log.with` / `Logger.child`) have landed:
+> `lang/go/native/log_module.go`, `lang/go/native/log_logger.go`,
+> `lang/go/modules/log.go`, `lang/spec/module-log.tsv`,
+> `lang/go/modules/log_test.go`. The remaining phases (provider hooks,
+> traces, metrics) are still proposals. This note specifies a new
 > capability module `aql:log` (namespace `Log`) that gives AQL programs
 > three layers on one surface: (1) **traditional logging** backed by Go's
 > standard `log` package, (2) a vendor-neutral **OpenTelemetry abstraction**
