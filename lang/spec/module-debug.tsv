@@ -34,6 +34,7 @@ import "aql:debug" ([1 add 2] Debug.disasm) is String	true	disasm returns the St
 import "aql:debug" Debug.words typeof	List	words returns the list of built-in word names
 import "aql:debug" Debug.defs typeof	Map	defs returns the active def bindings as a map
 import "aql:debug" Debug.modules typeof	List	modules returns the importable native modules
+import "aql:debug" (Debug.stack) typeof	List	stack snapshots the current data stack as a List
 #
 # §4  memory analysis (pure; no host)
 import "aql:debug" (42 Debug.sizeof) typeof	Integer	sizeof returns an estimated byte size

@@ -698,6 +698,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	e.registry.enterInterpRun()
 	defer e.registry.exitInterpRun()
 
+	// Track this engine as the current one for on-demand stack
+	// introspection (Debug.stack). Defer-balanced like enterInterpRun.
+	e.registry.pushEngine(e)
+	defer e.registry.popEngine()
+
 	// Last-resort panic guard at the top-level engine boundary. A bug in
 	// any handler or in the step loop should surface to the user as a
 	// clean AQL error, never as a goroutine stack trace. Only the

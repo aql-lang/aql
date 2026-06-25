@@ -574,6 +574,23 @@ func debugNatives() []native.NativeFunc {
 			}},
 		},
 
+		{
+			// A snapshot of the current data stack at the call site.
+			Name: "debug-stack",
+			Signatures: []native.NativeSig{{
+				Args:       []*native.Type{},
+				Returns:    []*native.Type{native.TList},
+				BarrierPos: -1,
+				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+					snap, ok := r.CurrentStack()
+					if !ok {
+						return []native.Value{native.NewList(nil)}, nil
+					}
+					return []native.Value{native.NewList(snap)}, nil
+				},
+			}},
+		},
+
 		// ── (E2) Runtime memory (host) ────────────────────────────────
 		{
 			// Go-runtime heap stats as a map.

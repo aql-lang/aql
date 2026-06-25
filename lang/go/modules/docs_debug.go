@@ -13,6 +13,7 @@ func init() {
 		"sig":     "The signatures of a word as structured {args, returns} data.",
 		"body":    "The quoted body of an AQL-defined word; `native` for a host word.",
 		"watch":   "Print a name's current binding and return it (None if unbound).",
+		"stack":   "A snapshot of the current data stack at the call site, as a List.",
 		"disasm":  "Compile a quoted body to its StackForm disassembly (a String).",
 		"heap":    "Go-runtime heap stats: {alloc, total-alloc, heap-objects, num-gc}.",
 		"gc":      "Force a GC and report before/after heap deltas.",

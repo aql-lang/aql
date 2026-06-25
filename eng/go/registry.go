@@ -183,6 +183,18 @@ type Registry struct {
 	// concurrent run without goroutine identity. Atomic so a foreign goroutine's
 	// run is visible to the entry check.
 	interpRunDepth int32
+
+	// debugEngines is the stack of live Engines running on this registry,
+	// innermost last. Pushed/popped (defer-balanced) at each Engine.Run
+	// boundary so a 0-arg introspection word (Debug.stack) can read the
+	// CURRENT engine's data stack on demand — the only path a handler has
+	// to the live residual stack, which it is not otherwise handed. Cost is
+	// one slice append/trim per Run (not per step); reading is the only place
+	// a Snapshot is taken, so a program that never calls Debug.stack pays
+	// nothing beyond the push/pop. Not shared across forks (ForkConcurrent
+	// gives each goroutine its own registry), so a plain slice is safe — the
+	// same posture as argsStack.
+	debugEngines []*Engine
 }
 
 // enterInterpRun / exitInterpRun bracket one interpreter Engine.Run activation
@@ -199,6 +211,55 @@ func (r *Registry) exitInterpRun() {
 	if r != nil {
 		atomic.AddInt32(&r.interpRunDepth, -1)
 	}
+}
+
+// pushEngine / popEngine bracket one Engine.Run on this registry, tracking the
+// current engine for on-demand stack introspection (Debug.stack). Pair with
+// defer at the Run boundary so the stack stays balanced across every exit path.
+func (r *Registry) pushEngine(e *Engine) {
+	if r != nil {
+		r.debugEngines = append(r.debugEngines, e)
+	}
+}
+
+func (r *Registry) popEngine() {
+	if r != nil && len(r.debugEngines) > 0 {
+		r.debugEngines = r.debugEngines[:len(r.debugEngines)-1]
+	}
+}
+
+// CurrentStack returns a copy of the live data stack of the innermost
+// running engine — the values resolved to the left of its pointer. Returns
+// (nil, false) when no engine is running on this registry. This is the
+// read-only seam Debug.stack uses; the live tape is never exposed or mutated.
+func (r *Registry) CurrentStack() ([]Value, bool) {
+	if r == nil || len(r.debugEngines) == 0 {
+		return nil, false
+	}
+	e := r.debugEngines[len(r.debugEngines)-1]
+	if e == nil || e.tape == nil {
+		return nil, false
+	}
+	snap := e.tape.Snapshot()
+	end := e.pointer
+	if end < 0 {
+		end = 0
+	}
+	if end > len(snap) {
+		end = len(snap)
+	}
+	// Keep only resolved DATA values; drop the structural markers the tape
+	// carries to the left of the pointer (open parens, forwards, marks,
+	// ends) so the result is the clean data stack, not the raw tape.
+	out := make([]Value, 0, end)
+	for _, v := range snap[:end] {
+		if IsOpenParen(v) || IsCloseParen(v) || IsForward(v) ||
+			IsMark(v) || IsMove(v) || IsEnd(v) || IsWord(v) {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out, true
 }
 
 // interpRunActive reports whether an interpreter Engine.Run is currently in

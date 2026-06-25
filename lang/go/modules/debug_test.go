@@ -81,7 +81,7 @@ func TestDebugModuleExports(t *testing.T) {
 	want := []string{
 		"tap", "label", "dump", "assert", "todo",
 		"parse", "deps", "explain", "sig", "body", "watch", "disasm",
-		"words", "defs", "modules",
+		"words", "defs", "modules", "stack",
 		"sizeof", "shape", "heap", "gc",
 		"steps", "time", "bench", "trace", "profile",
 	}
@@ -332,6 +332,21 @@ func TestDebugDefs(t *testing.T) {
 	}
 	if _, ok := m.Get("my-thing"); !ok {
 		t.Error("defs should include a freshly-defined binding 'my-thing'")
+	}
+}
+
+func TestDebugStack(t *testing.T) {
+	r, _ := debugRegistry(t)
+	// The data stack below the call is captured cleanly (no markers).
+	res := runDebug(t, r, "1 2 3 size (Debug.stack)")
+	if got := topInt(t, res); got != 3 {
+		t.Errorf("stack should snapshot the 3 values below it, got %d", got)
+	}
+	// Empty stack → empty list.
+	r2, _ := debugRegistry(t)
+	res2 := runDebug(t, r2, "size (Debug.stack)")
+	if got := topInt(t, res2); got != 0 {
+		t.Errorf("empty stack should snapshot to size 0, got %d", got)
 	}
 }
 
