@@ -27,10 +27,15 @@ Source of truth: `test/go/langspec/COMPILED_STATUS.md` (regenerated this
 pass), the ratchet consts in `compiled_coverage_test.go` /
 `compiled_metafallback_test.go`, and the `make verify-bytecode` gate.
 
-**Live census (2026-06-25):** 3427 spec value rows; 3196 compilable;
-**3171 compile natively**, 2 with an interpreter island, **23 refuse**
-whole-program (fall back to the interpreter), 231 statically invalid in
-both engines. 99% of compilable rows produce a Program.
+**Live census (2026-06-25, after this pass's compiler wins):** 3435 spec
+value rows; 3204 compilable; **3185 compile natively**, **0 interpreter
+islands**, **19 refuse** whole-program, 231 statically invalid in both
+engines. 99% of compilable rows produce a Program. (This pass drove
+refusals 23 → 19 and islands 2 → 0 — see
+`aql-bytecode-next-stages.0.md`'s 2026-06-25 update for the per-row
+wins: `has`/`inspect` quoted-operand bakes, `do {map}`, and `outer` via
+`InvokeBody`. The remaining 19 are the fn-value-application + module-body
+frontier, not coverage gaps.)
 
 **The hard gates are green.** The correctness contract — *compiled
 output is byte-identical to interpreted output* — is enforced by the

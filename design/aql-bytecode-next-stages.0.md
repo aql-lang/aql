@@ -13,7 +13,43 @@ cluster onto a small number of foundational changes.
 
 ---
 
-## 0. Current state (measured, tree clean, all gates green)
+## Update (2026-06-25) — islands back to 0; quoted-operand cluster cleared
+
+A status-completion pass (branch `claude/frame-cleanup-over-pop-dzhf04`)
+re-measured against the grown live corpus and landed the safe, sound
+wins, all `verify-bytecode`-clean with per-row landing tests:
+
+- **`has` / `inspect` quoted-operand** (corpus-core.tsv ×4) →
+  `CompileQuoteInert`, baked as plain CALL_NATIVE. **refusals 23 → 19.**
+- **`do {map}`** (corpus-core.tsv:60) — moved `CompileFallbackBody` from
+  the word to the List sig; the Map sig is a pure value-eval that bakes.
+  **islands 2 → 1.**
+- **`outer`** (corpus-core.tsv:101) — routed through the `InvokeBody`
+  seam + a `CallableSpec`, compiling its body to a closure unit.
+  **islands 1 → 0** (the `islandCeiling` target, restored after corpus
+  growth re-introduced 2 islands).
+
+**Live state now: islands 0, refusals 19** (the corpus grew from the 2830
+rows below to 3435, so the absolute refusal count is higher than the
+historical 16; the ratchets are informational per `compiled_coverage_test.go`).
+
+**Confirmed about the remaining 19 (this pass):** they are the
+fn-value-application + module-body frontier, not coverage gaps. The
+largest cluster (9, path-modifier `/u /f /2` over a map-stored fn) is the
+documented hazard at `native_storage.go:489` (folding a fn-valued field
+to concrete was tried and reverted). The `apply`-over-DYNAMIC-fn rows
+(3, `comp/r apply` where `comp` is a fn param) were probed: eliding
+`apply`'s recording is **unsound** — it leaves the fn+arg uncollapsed (a
+return-count mismatch that "compiles" a malformed unit instead of
+falling back). The real fix is to EMIT an `OpCallDynamic` inside the fn
+unit with the apply operand order (`[args, fn]`) reversed to
+`CALL_DYNAMIC`'s `[fn, args]` — Stage G proper, gated by the same
+operand-order discipline as the `(3 and "x") add 1` revert. The rest are
+Stage C (module-body compilation, a corpus-re-baseline project),
+Stage E (flex reference cells), and Stage F (dynamic scope). None is a
+single safe commit; each needs the deliberate per-stage work below.
+
+## 0. Current state (historical — measured when this doc was written)
 
 | ratchet | value | target |
 | --- | ---: | --- |
