@@ -77,3 +77,17 @@ def out2 fn [[] [Integer] [def go2 fn [[n:Integer] [Integer] [if (n lte 0) [99] 
 #     entry); results must be identical whether or not its frames elide
 import module [def fac fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fac (n sub 1) (acc mul n)]]] export "MR" {fac: fac/r}] MR.fac 10 1	3628800	intra-module tail recursion through an exported preamble fn
 import module [def aod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [aev (n sub 1)]]] def aev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [aod (n sub 1)]]] export "MR" {aev: aev/r}] MR.aev 9	false	mutual tail recursion between module-preamble fns
+#
+# §12 fn-valued param/capture shadowing — a named param (or capture)
+#     whose value is a Function and whose NAME collides with a live
+#     CALLER binding must SHADOW that binding (a fresh frame entry the
+#     teardown pops to restore the caller's), never replace it. The bug
+#     (design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md): installing the fn-valued
+#     param routed through the redefinition overlap-removal, which dropped
+#     the colliding caller entry, so a reuse of the name after the call
+#     errored undefined_word. Required trigger: collision + a /r-parked fn
+#     arg + reuse after the (non-tail) call.
+def g ([x:Integer] => [x add 1]) def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply]] def t fn [[comp:Function] [Integer] [def a (5 comp/r h) def b (7 comp/r h) a add b]] (g/r t)	14	caller param comp survives the first comp/r h call so the second can reuse it
+def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/r) 5	10	an fn param shadows a same-named outer fn: the body sees the PARAM, not the outer
+def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) def _ (runner (doubler/r) 5) myfn 5	1005	the outer fn is RESTORED after the frame that shadowed it tears down (no leak)
+def callee fn [[fp:Function v:Integer] [Integer] [v fp/r apply]] def d ([x:Integer] => [x add 1]) (callee (d/r) 5) fp	ERROR:undefined_word	the fn-valued param fp does NOT leak into the caller scope after the frame exits

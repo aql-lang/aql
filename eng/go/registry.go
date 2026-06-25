@@ -1154,7 +1154,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// Install lexical captures first so params (installed below)
 	// shadow same-named captures — innermost binding wins.
 	for _, cb := range captures {
-		InstallDef(r, cb.Name, cb.Value)
+		InstallFrameBinding(r, cb.Name, cb.Value)
 		names = append(names, cb.Name)
 	}
 
@@ -1176,7 +1176,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			if arg.Parent.Equal(TList) && !arg.Quoted {
 				arg.Quoted = true
 			}
-			InstallDef(r, p.Name, arg)
+			InstallFrameBinding(r, p.Name, arg)
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])

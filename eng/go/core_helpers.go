@@ -12,7 +12,32 @@ import (
 // When body is a FnDefInfo value (produced by the fn word), InstallDef
 // registers typed signatures. Otherwise, body is stored directly as a
 // literal substitution.
+//
+// This is the REDEFINITION install: a fn-valued body whose signatures
+// overlap an existing binding for the SAME name drops the colliding
+// overload (so the stale one doesn't race the new one). For a per-call
+// fn-frame param/capture — which enters a NEW lexical scope and must
+// SHADOW, not replace, an outer same-named binding — use
+// InstallFrameBinding instead.
 func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
+	installDef(r, name, body, false, stackOnly...)
+}
+
+// InstallFrameBinding installs a per-call fn-frame binding (a named
+// param or a lexical capture). Unlike InstallDef it is a lexical
+// SHADOW: a Function/FnDef-valued binding pushes a fresh dispatch entry
+// that shadows — never removes — an outer same-named binding, so the
+// caller's binding is restored intact when the frame's teardown pops
+// this entry. InstallDef's overlap-removal models top-level
+// REDEFINITION (it must drop the colliding overload); a param entering
+// a new scope must not, or it destroys the caller's binding (e.g. a
+// fn-valued arg whose param name collides with a live caller param —
+// design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md).
+func InstallFrameBinding(r *Registry, name string, body Value) {
+	installDef(r, name, body, true)
+}
+
+func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 
 	// FnDefInfo body (from fn word): install typed signatures.
@@ -64,7 +89,14 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// the dispatch aggregate (Registry.Lookup) unions them, so an
 		// overlapping redefinition must drop the old entry — otherwise the
 		// stale overload races the new one (equal scores, first match wins).
-		if stack := r.Defs.Stack(name); len(stack) > 0 {
+		//
+		// SKIPPED for a shadowing frame-binding install: a fn param/capture
+		// that collides with an outer same-named binding must SHADOW it (a
+		// fresh entry the teardown pops to restore the outer), not drop it.
+		// Dropping the outer entry here is the per-call cleanup over-pop bug
+		// (design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md): the colliding outer
+		// param vanishes, then the frame's undef tail pops the wrong level.
+		if stack := r.Defs.Stack(name); !shadow && len(stack) > 0 {
 			filtered := stack[:0:0]
 			changed := false
 			for _, entry := range stack {
@@ -198,7 +230,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// wins). Captures are appended to `names` so the
 		// synthesized undef tail tears them down alongside params.
 		for _, cb := range fnDefCopy.Captured {
-			InstallDef(r, cb.Name, cb.Value)
+			InstallFrameBinding(r, cb.Name, cb.Value)
 			names = append(names, cb.Name)
 		}
 
@@ -211,7 +243,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 				if arg.Parent.Equal(TList) && !arg.Quoted {
 					arg.Quoted = true
 				}
-				InstallDef(r, p.Name, arg)
+				InstallFrameBinding(r, p.Name, arg)
 				names = append(names, p.Name)
 			} else {
 				// Unnamed parameter: push value back for the body to use
