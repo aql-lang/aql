@@ -263,6 +263,14 @@ WORD get
   [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Module] barrier=1 returns=[Any]
+  [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Store] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Error] barrier=2 returns=[Any]
+  [Scalar/Atom Ideal/Object] barrier=1 +returnsfn
+  [Scalar/Atom Node/Xml] barrier=1 returns=[Any]
+  [Scalar/Atom Node] barrier=1 +returnsfn
   [Any None] barrier=1 returns=[None]
 WORD getpath
   [Ideal/Reach Any] barrier=2
@@ -275,6 +283,11 @@ WORD getr
   [Scalar/String Node] barrier=1
   [Scalar/Number/Integer Ideal/Object] barrier=1
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Module] barrier=1
+  [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Object] barrier=1
+  [Scalar/Atom Node] barrier=1
   [Any None] barrier=1
 WORD gt
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]

@@ -15,6 +15,9 @@
 {a:1 b:2} get 'a'	1	get with a STRING key
 {a:1 b:2} get 'b'	2
 def k 'b' end {a:1 b:2} get k	2	get EVALUATES the key — k holds 'b'
+def k a/q end {a:1 b:2} get k	1	get accepts an already-evaluated ATOM key (k holds the atom a)
+def k b/q end {a:1 b:2} getr k	2	getr accepts an evaluated atom key too
+def k a/q end ({a:1} get k) add 9	10	the evaluated-atom read composes
 {a:1 b:2} get ('a')	1	get with a computed (paren) key
 {a:1 b:2} dot a	1	dot QUOTES the bare word a as the literal key
 {a:1 b:2} dot b	2

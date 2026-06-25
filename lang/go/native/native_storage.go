@@ -148,7 +148,7 @@ var storageNatives = []NativeFunc{
 		// `dot` (the word the `.`/`!.` sugar lowers to), so `lst get i`
 		// reads the VALUE of i, not the literal field "i". A literal field
 		// name uses `dot` (`m dot a`) or a string key (`m get "a"`).
-		Signatures: dropQuoteAtomSigs(accessorGetSignatures()),
+		Signatures: stripQuoteArgs(accessorGetSignatures()),
 	},
 	{
 		Name:          "dot",
@@ -172,7 +172,9 @@ var storageNatives = []NativeFunc{
 // accessorGetSignatures returns the full read-accessor signature set shared
 // by `get` and `dot`. `dot` uses it verbatim (so a bare-word key is quoted
 // as a literal field, the `.`-sugar behaviour); `get` uses the
-// dropQuoteAtomSigs subset (so a bare-word key is evaluated). Keeping ONE
+// stripQuoteArgs variant (the same overloads with QuoteArgs cleared, so a
+// bare WORD is evaluated but an already-evaluated Atom key still matches).
+// Keeping ONE
 // source for both words prevents the two from drifting apart.
 func accessorGetSignatures() []NativeSig {
 	return []NativeSig{
@@ -225,17 +227,20 @@ func accessorGetSignatures() []NativeSig {
 	}
 }
 
-// dropQuoteAtomSigs returns sigs with every bare-word-quoting (QuoteArgs)
-// entry removed — the `get`/`getr` subset that EVALUATES its key. Used so
-// `get` shares accessorGetSignatures with `dot` but without the atom-quote
-// overloads.
-func dropQuoteAtomSigs(sigs []NativeSig) []NativeSig {
-	out := make([]NativeSig, 0, len(sigs))
-	for _, s := range sigs {
-		if len(s.QuoteArgs) > 0 {
-			continue
-		}
-		out = append(out, s)
+// stripQuoteArgs returns sigs with the bare-word-quoting QuoteArgs flag
+// cleared — the `get`/`getr` subset that EVALUATES its key. It does NOT drop
+// the atom overloads: an already-evaluated Atom value (a variable bound to
+// `a/q`, a computed atom) still matches `{TAtom, …}` and the handler coerces
+// it, so `def k a/q  {a:1} get k` reads field "a". Only the implicit
+// quote-on-bare-word goes away — an unbound bare word stays a Word, matches
+// no overload, and errors, which is the split's intent. `dot`/`dotr` keep the
+// QuoteArgs versions (literal bare-word keys). Sigs are copied so the shared
+// accessorGetSignatures slice (used by `dot`) keeps its QuoteArgs.
+func stripQuoteArgs(sigs []NativeSig) []NativeSig {
+	out := make([]NativeSig, len(sigs))
+	for i, s := range sigs {
+		s.QuoteArgs = nil
+		out[i] = s
 	}
 	return out
 }

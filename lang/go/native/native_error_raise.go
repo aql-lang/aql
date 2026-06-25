@@ -56,13 +56,17 @@ var errorNatives = []NativeFunc{
 	{
 		// get on an Error value — code/message plus any raise payload
 		// keys. Registered here (not native_storage.go) to keep the
-		// whole Error surface in one file. `get` EVALUATES its key (string
-		// only); the bare-word-quoting atom sig lives on `dot`.
+		// whole Error surface in one file. `get` EVALUATES its key: the
+		// String AND Atom overloads accept an already-evaluated key (a
+		// string, or a variable bound to `code/q`), but NEITHER quotes a
+		// bare word — the bare-word-quoting (QuoteArgs) variant lives on
+		// `dot`. Mirrors the get/dot split in native_storage.go.
 		Name:          "get",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TString, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{

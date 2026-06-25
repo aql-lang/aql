@@ -23,7 +23,7 @@ var accessorNatives = []NativeFunc{
 		// bare-word-quoting atom sigs live on `dotr`, which the `!.` sugar
 		// lowers to. `m getr "k"` / `m getr <int>` work; a literal field
 		// name uses `dotr` (`m dotr a`).
-		Signatures: dropQuoteAtomSigs(accessorGetrSignatures()),
+		Signatures: stripQuoteArgs(accessorGetrSignatures()),
 	},
 	{
 		Name:          "dotr",
@@ -77,8 +77,9 @@ var accessorNatives = []NativeFunc{
 
 // accessorGetrSignatures returns the full strict-read signature set shared by
 // `getr` and `dotr`. `dotr` uses it verbatim (bare-word key quoted as a
-// literal field — the `!.` sugar); `getr` uses the dropQuoteAtomSigs subset
-// (key evaluated). One source keeps the two words from drifting.
+// literal field — the `!.` sugar); `getr` uses the stripQuoteArgs variant
+// (same overloads, QuoteArgs cleared: an evaluated Atom key still matches; a
+// bare WORD is evaluated). One source keeps the two words from drifting.
 func accessorGetrSignatures() []NativeSig {
 	return []NativeSig{
 		// [Key | Node] — key forward, container from stack
