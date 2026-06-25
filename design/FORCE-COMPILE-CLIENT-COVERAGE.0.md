@@ -469,3 +469,44 @@ construction-check binding bug. Fixing it is the highest-leverage next unit by
 far — but it is the Project B rebaseline, to be done deliberately as its own
 reviewed change with the full `verify-bytecode` + langspec-census gates and TS
 parity re-checked.
+
+---
+
+## Session-2 cont. — Project B drilled to a MINIMAL root cause (set mixed-arity)
+
+Took on the Project B construction-check unit and reduced the trie/decision
+`check diagnostics` blocker all the way to a one-line repro:
+
+```
+def f fn [[nd:Map] [Any] [ def k2 ((nd "a" get) set "x" 1) k2 ]] ({a:{}} f)
+```
+`CompileCheck` reports `undefined_word: k2` — `k2` is `def`'d on the same line.
+
+ISOLATION (all measured via `CompileCheck`):
+- `def k2 (nd "a" get) k2` (get-carrier) → binds fine, 0 errors.
+- `def k2 ((nd "a" get) size) k2` (get→size carrier) → binds fine.
+- `def k2 ({} set "x" 1) k2` (set on a CONCRETE map) → binds fine.
+- `def k2 ((nd "a" get) set "x" 1) k2` (set on a DYNAMIC carrier) → **k2 undefined**.
+
+ROOT CAUSE: `set`'s overloads have **mixed return arities**
+(`native_storage.go`): Array/Object/Store mutate → `Returns: []` (0 values);
+Map copy-returns → `Returns: [TMap]` (1 value). The receiver `(nd "a" get)` is a
+get-over-Map → **Any** carrier, so the checker cannot pick the overload; the
+gradual/recovery dispatch resolves to a **0-return** (mutating) shape, so
+`def k2 (…)` has no value to bind → `k2` is never bound → `undefined_word`. At
+RUNTIME the receiver is a concrete Map, `set` takes the 1-return copy overload,
+`k2` binds — so the check pass diverges from the interpreter, and the cascade of
+spurious `undefined_word`/`no_signature` is what gates Finalize and produces the
+client suites' `check diagnostics` / `unmatched dispatch recovered`.
+
+This is the precise, minimal entry point for the Project B work — far tighter
+than the "monomorphization" framing in `.7`: it is **mixed-arity gradual
+dispatch** (a dynamic receiver whose candidate overloads disagree on RESULT
+COUNT). The sound fix is for the checker to treat a value-position dispatch over
+a dynamic receiver as yielding a (gradual Any) VALUE when ANY candidate overload
+returns one — so `def` binds a carrier rather than nothing — and to thread that
+through `recordPoly` for the compiled path. It is checker-precision in the
+corpus-calibrated zone (every diagnostic shift reclassifies langspec rows), so
+it lands as the reviewed Project-B unit with `verify-bytecode` + the langspec
+census + TS parity as joint gates. NOT a tail-of-session land; pinned here so the
+fix starts from the exact mechanism, not a re-investigation.
