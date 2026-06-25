@@ -368,7 +368,7 @@ func TestLogHostSpanSink(t *testing.T) {
 		Name:        "tracer",
 		MinLevel:    native.LevelTrace,
 		OnRecord:    func(native.LogRecord) error { return nil },
-		OnSpanStart: func(s native.Span) { started = append(started, s) },
+		OnSpanStart: func(s native.Span) native.SpanContext { started = append(started, s); return native.SpanContext{} },
 		OnSpanEnd:   func(s native.Span) { ended = append(ended, s) },
 	}); err != nil {
 		t.Fatalf("RegisterHostLogSink: %v", err)
@@ -433,6 +433,109 @@ func TestLogMetrics(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "METRIC counter requests=4") {
 		t.Errorf("console metric line missing, got %q", buf.String())
+	}
+}
+
+// TestLogHostOwnsTraceIds verifies a host span sink can return the real
+// trace/span ids it minted, and the module restamps the span and the
+// records emitted inside it with those ids.
+func TestLogHostOwnsTraceIds(t *testing.T) {
+	reg, _ := newLogReg(t)
+	if err := native.RegisterHostLogSink(reg, native.LogSinkSpec{
+		Name:     "otel",
+		MinLevel: native.LevelTrace,
+		OnRecord: func(native.LogRecord) error { return nil },
+		OnSpanStart: func(native.Span) native.SpanContext {
+			return native.SpanContext{TraceID: "HOSTTRACE", SpanID: "HOSTSPAN"}
+		},
+	}); err != nil {
+		t.Fatalf("RegisterHostLogSink: %v", err)
+	}
+	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.with-span "op" [Log.info "x"] ; Log.dump`)
+	list, _ := native.RequireConcreteList(out[0], "dump")
+	if list.Len() != 1 {
+		t.Fatalf("want one record, got %v", out)
+	}
+	if got := native.FormatForPrint(mustField(t, list.Get(0), "trace-id")); got != "HOSTTRACE" {
+		t.Errorf("record trace-id = %q, want the host-owned HOSTTRACE", got)
+	}
+}
+
+// TestLogEndedSpanFrozen verifies a finished span rejects mutation, so
+// captured trace history cannot be rewritten after the fact.
+func TestLogEndedSpanFrozen(t *testing.T) {
+	reg, _ := newLogReg(t)
+	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.finish ; s.set-attr leaked/q "yes" ; Log.traces 0 get "attributes" get`)
+	if got := native.FormatForPrint(out[0]); got != "{}" {
+		t.Errorf("ended-span attributes = %q, want {} (post-finish mutation must be rejected)", got)
+	}
+}
+
+// TestLogClearAllBuffers verifies Log.clear empties records, spans, AND
+// measurements together.
+func TestLogClearAllBuffers(t *testing.T) {
+	reg, _ := newLogReg(t)
+	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "r" ; Log.with-span "s" [Log.info "x"] ; def c (Log.counter "n") ; c.add 1 ; Log.clear ; [(Log.dump size) (Log.traces size) (Log.measurements size)]`)
+	if got := native.FormatForPrint(out[0]); got != "[0, 0, 0]" {
+		t.Errorf("after clear, [records spans measurements] sizes = %q, want [0, 0, 0]", got)
+	}
+}
+
+// TestLogEnabledReflectsGates verifies Log.enabled accounts for policy
+// and attached sinks, not just the global threshold.
+func TestLogEnabledReflectsGates(t *testing.T) {
+	reg, _ := newLogReg(t)
+	// At/above threshold with a sink attached → enabled.
+	out := runLog(t, reg, `import "aql:log" ; Log.enabled info/q`)
+	if native.FormatForPrint(out[0]) != "true" {
+		t.Errorf("info should be enabled by default, got %v", native.FormatForPrint(out[0]))
+	}
+	// All sinks detached → not enabled even at/above threshold.
+	out2 := runLog(t, reg, `import "aql:log" ; Log.remove-sink console/q ; Log.enabled info/q`)
+	if native.FormatForPrint(out2[0]) != "false" {
+		t.Errorf("with no attached sink, enabled should be false, got %v", native.FormatForPrint(out2[0]))
+	}
+}
+
+// TestLogConsoleCorrelation verifies the console output carries logger
+// and trace/span correlation fields in both formats.
+func TestLogConsoleCorrelation(t *testing.T) {
+	reg, buf := newLogReg(t)
+	runLog(t, reg, `import "aql:log" ; Log.set-format json/q ; def l (Log.logger "http") ; Log.with-span "op" [l.info "x"]`)
+	got := buf.String()
+	for _, want := range []string{`"logger":"http"`, `"trace-id":`, `"span-id":`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("json console line %q missing %q", got, want)
+		}
+	}
+}
+
+// TestLogCheckModeWalksSpanBody verifies aql check analyses a with-span
+// body — an undefined word inside it is flagged statically, not only at
+// runtime.
+func TestLogCheckModeWalksSpanBody(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	InstallResolver(reg)
+	vals, err := parser.Parse(`import "aql:log" ; Log.with-span "op" [definitely-not-a-word]`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	done := reg.Check.Begin()
+	_, _ = native.NewTop(reg).Run(vals)
+	diags := reg.Check.Diagnostics
+	done()
+	found := false
+	for _, d := range diags {
+		if strings.Contains(d.Detail, "definitely-not-a-word") || d.Code == "undefined_word" || d.Word == "definitely-not-a-word" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("check mode should flag the undefined word inside the with-span body; diags=%v", diags)
 	}
 }
 

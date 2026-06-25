@@ -189,10 +189,12 @@ type Measurement struct {
 // common case. Built-in sinks never error; the error in each signature
 // is for the host-registered sinks of phase 3.
 type logSink struct {
-	name      string
-	min       LogLevel
-	emit      func(r *Registry, rec LogRecord) error
-	spanStart func(r *Registry, sp *spanState)
+	name string
+	min  LogLevel
+	emit func(r *Registry, rec LogRecord) error
+	// spanStart may return a host-owned SpanContext to restamp the span's
+	// ids; a zero value keeps the local ids.
+	spanStart func(r *Registry, sp *spanState) SpanContext
 	spanEnd   func(r *Registry, sp *spanState)
 	measure   func(r *Registry, m Measurement)
 }
@@ -357,11 +359,42 @@ func (lsr *LogSinkRegistry) Captured() []LogRecord {
 	return append([]LogRecord(nil), lsr.captured...)
 }
 
-// ClearCaptured empties the memory sink's buffer.
+// ClearCaptured empties every memory-sink buffer — records, ended
+// spans, and measurements — so `Log.clear` restores full test
+// isolation rather than leaving Log.traces / Log.measurements stale.
 func (lsr *LogSinkRegistry) ClearCaptured() {
 	lsr.mu.Lock()
 	lsr.captured = nil
+	lsr.spans = nil
+	lsr.measures = nil
 	lsr.mu.Unlock()
+}
+
+// anyAttachedAdmits reports whether at least one attached sink would
+// accept a record at the given level (its per-sink minimum is met).
+func (lsr *LogSinkRegistry) anyAttachedAdmits(level LogLevel) bool {
+	lsr.mu.Lock()
+	defer lsr.mu.Unlock()
+	for _, n := range lsr.attached {
+		if s := lsr.available[n]; s != nil && level >= s.min {
+			return true
+		}
+	}
+	return false
+}
+
+// policyAllowsEmit reports whether the log policy scope permits
+// telemetry egress for r. A nil policy (the default posture) allows
+// everything. Shared by record emission, span lifecycle notification,
+// and measurement recording so all three telemetry paths gate
+// identically (a sandbox that denies log:emit blocks records, spans,
+// AND metrics — not just records).
+func policyAllowsEmit(r *Registry, args policy.Args) bool {
+	pol := HostPolicy(r)
+	if pol == nil {
+		return true
+	}
+	return pol.Check("log", "emit", args) == nil
 }
 
 // Emit fans a record out to every attached sink whose threshold admits
@@ -370,10 +403,8 @@ func (lsr *LogSinkRegistry) ClearCaptured() {
 // silently — logging must never abort the program. A record below the
 // global level is dropped before fan-out.
 func (lsr *LogSinkRegistry) Emit(r *Registry, rec LogRecord) {
-	if pol := HostPolicy(r); pol != nil {
-		if pol.Check("log", "emit", policy.Args{"level": rec.Severity.Name()}) != nil {
-			return
-		}
+	if !policyAllowsEmit(r, policy.Args{"level": rec.Severity.Name()}) {
+		return
 	}
 	lsr.mu.Lock()
 	if rec.Severity < lsr.level {
@@ -427,6 +458,17 @@ func renderText(rec LogRecord) string {
 			out += " " + k + "=" + FormatForPrint(v)
 		}
 	}
+	// Correlation context — logger name and trace/span ids — so a text
+	// line can be tied back to its logger and trace.
+	if rec.Logger != "" {
+		out += " logger=" + rec.Logger
+	}
+	if rec.TraceID != "" {
+		out += " trace-id=" + rec.TraceID
+	}
+	if rec.SpanID != "" {
+		out += " span-id=" + rec.SpanID
+	}
 	return out
 }
 
@@ -441,6 +483,18 @@ func renderJSON(rec LogRecord) string {
 	}
 	if attrs, ok := eng.ToNative(rec.attributesOrEmpty()).(map[string]any); ok && len(attrs) > 0 {
 		obj["attributes"] = attrs
+	}
+	// Correlation fields log shippers need to join a record to its logger
+	// and trace; included only when present so root/loggerless records
+	// stay clean.
+	if rec.Logger != "" {
+		obj["logger"] = rec.Logger
+	}
+	if rec.TraceID != "" {
+		obj["trace-id"] = rec.TraceID
+	}
+	if rec.SpanID != "" {
+		obj["span-id"] = rec.SpanID
 	}
 	bs, err := json.Marshal(obj)
 	if err != nil {
@@ -684,7 +738,16 @@ func logEnabledNative(lsr *LogSinkRegistry) NativeFunc {
 				if err != nil {
 					return nil, err
 				}
-				return []Value{NewBoolean(lvl >= lsr.Level())}, nil
+				// Mirror every gate Emit applies, so a true result is a
+				// real promise that a record would be emitted: the global
+				// threshold, the log policy, AND at least one attached sink
+				// whose per-sink minimum admits the level. Otherwise the
+				// advertised cheap guard would green-light building
+				// expensive fields for records Emit then drops.
+				ok := lvl >= lsr.Level() &&
+					policyAllowsEmit(r, policy.Args{"level": lvl.Name()}) &&
+					lsr.anyAttachedAdmits(lvl)
+				return []Value{NewBoolean(ok)}, nil
 			},
 		}},
 	}

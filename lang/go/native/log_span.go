@@ -2,6 +2,8 @@ package native
 
 import (
 	"fmt"
+
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // log_span.go — phase 4 of aql:log: the OpenTelemetry *traces* signal.
@@ -44,18 +46,48 @@ func (lsr *LogSinkRegistry) startSpan(r *Registry, name string, attrs *OrderedMa
 		st.traceID = fmt.Sprintf("%032x", seq)
 	}
 	lsr.spanStack = append(lsr.spanStack, st)
-	sinks := lsr.attachedSinksLocked()
+	// Gate span egress on the same log:emit policy as records and
+	// measurements: when telemetry is denied, the span is tracked
+	// internally (so propagation/bookkeeping stay consistent) but no sink
+	// hook fires — a preattached host trace sink cannot exfiltrate span
+	// names/attributes a sandbox forbade.
+	var sinks []*logSink
+	if policyAllowsEmit(r, policy.Args{"span": name}) {
+		sinks = lsr.attachedSinksLocked()
+	}
 	lsr.mu.Unlock()
+	// A host sink that owns tracing may return the real trace/span ids it
+	// minted; the first non-empty context wins and restamps the span, so
+	// records emitted inside it (and child spans) correlate with the
+	// host's exported trace rather than the local deterministic ids.
+	var host SpanContext
 	for _, s := range sinks {
-		if s.spanStart != nil {
-			s.spanStart(r, st)
+		if s.spanStart == nil {
+			continue
 		}
+		ctx := s.spanStart(r, st)
+		if host.TraceID == "" && host.SpanID == "" && (ctx.TraceID != "" || ctx.SpanID != "") {
+			host = ctx
+		}
+	}
+	if host.TraceID != "" || host.SpanID != "" {
+		lsr.mu.Lock()
+		if host.TraceID != "" {
+			st.traceID = host.TraceID
+		}
+		if host.SpanID != "" {
+			st.spanID = host.SpanID
+		}
+		lsr.mu.Unlock()
 	}
 	return st
 }
 
-// endSpan finalises a span (idempotent), pops it if it is the active
-// top, and notifies span-end hooks.
+// endSpan finalises a span (idempotent), removes it from the active
+// stack wherever it sits, and notifies span-end hooks. Removing a
+// non-top span (an out-of-order `s.finish`) rather than only popping the
+// top prevents an already-ended span from resurfacing as
+// Log.current-span and stamping stale ids onto later records.
 func (lsr *LogSinkRegistry) endSpan(r *Registry, st *spanState) {
 	lsr.mu.Lock()
 	if st.ended {
@@ -64,10 +96,16 @@ func (lsr *LogSinkRegistry) endSpan(r *Registry, st *spanState) {
 	}
 	st.ended = true
 	st.end = EffectiveClock(r).Now()
-	if n := len(lsr.spanStack); n > 0 && lsr.spanStack[n-1] == st {
-		lsr.spanStack = lsr.spanStack[:n-1]
+	for i := len(lsr.spanStack) - 1; i >= 0; i-- {
+		if lsr.spanStack[i] == st {
+			lsr.spanStack = append(lsr.spanStack[:i], lsr.spanStack[i+1:]...)
+			break
+		}
 	}
-	sinks := lsr.attachedSinksLocked()
+	var sinks []*logSink
+	if policyAllowsEmit(r, policy.Args{"span": st.name}) {
+		sinks = lsr.attachedSinksLocked()
+	}
 	lsr.mu.Unlock()
 	for _, s := range sinks {
 		if s.spanEnd != nil {
@@ -175,7 +213,9 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 						return nil, r.AqlError("log_error", "attribute key must be an atom", "Span.set-attr")
 					}
 					lsr.mu.Lock()
-					st.attrs.Set(key, args[1])
+					if !st.ended { // an ended span is frozen — its captured history is immutable
+						st.attrs.Set(key, args[1])
+					}
 					lsr.mu.Unlock()
 					return nil, nil
 				},
@@ -210,8 +250,10 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 				BarrierPos: -1,
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					lsr.mu.Lock()
-					st.status = "error"
-					st.statusMsg = FormatForPrint(args[0])
+					if !st.ended { // an ended span is frozen
+						st.status = "error"
+						st.statusMsg = FormatForPrint(args[0])
+					}
 					lsr.mu.Unlock()
 					return nil, nil
 				},
@@ -241,7 +283,9 @@ func spanAddEvent(lsr *LogSinkRegistry, r *Registry, st *spanState, name, attrs 
 		return nil, r.AqlError("log_error", "event name must be a string", "Span.add-event")
 	}
 	lsr.mu.Lock()
-	st.events = append(st.events, spanEvent{Name: n, Timestamp: EffectiveClock(r).Now(), Attributes: attrs})
+	if !st.ended { // an ended span is frozen
+		st.events = append(st.events, spanEvent{Name: n, Timestamp: EffectiveClock(r).Now(), Attributes: attrs})
+	}
 	lsr.mu.Unlock()
 	return nil, nil
 }
@@ -290,6 +334,26 @@ func logSpanNative(lsr *LogSinkRegistry) NativeFunc {
 	}
 }
 
+// withSpanReturnsFn is the check-mode shape for Log.with-span: it walks
+// the BODY through the static analyser (like `do`'s ReturnsFn) so
+// `aql check` catches undefined words / type errors inside a span body
+// instead of only failing at runtime. The result is the body's top
+// residual, matching the runtime (with-span returns the body's last
+// value). args[1] is the body (args[0] is the span name).
+func withSpanReturnsFn(args []Value, r *Registry) []Value {
+	body := args[1]
+	// A computed body the checker can't run statically gets a bounded
+	// gradual dynamic(Any), same hatch `do` uses.
+	if !(IsConcrete(body) && body.Parent.ConformsTo(TList)) {
+		return []Value{NewDynamicCarrier(TAny)}
+	}
+	stk := RunCarrierBody(r, body)
+	if len(stk) == 0 {
+		return []Value{NewCarrier(TAny)}
+	}
+	return []Value{stk[len(stk)-1]}
+}
+
 // logWithSpanNative is `Log.with-span NAME BODY` — run BODY inside a
 // span, record a raised error, end the span, and re-raise on error.
 func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
@@ -300,6 +364,7 @@ func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 			Returns:    []*Type{TAny},
 			NoEvalArgs: map[int]bool{1: true},
 			BarrierPos: -1,
+			ReturnsFn:  withSpanReturnsFn,
 			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {

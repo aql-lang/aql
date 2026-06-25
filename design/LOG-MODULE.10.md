@@ -46,6 +46,21 @@ Where the shipped surface differs from the design sketch below:
   single-threaded AQL (§3.5).
 - **`Log.register` registers *and* attaches** the AQL function sink (the
   common intent); `remove-sink`/`add-sink` toggle thereafter.
+- **Host-owned trace ids** ship via `OnSpanStart func(Span) SpanContext`
+  (the §4 sketch's `SpanToken`/error shape simplified to a returned
+  `SpanContext{TraceID,SpanID}`): when a host trace sink returns non-empty
+  ids, the module restamps the span and the records emitted inside it
+  (§4.3). Host span sinks also see span **events** (`Span.Events`).
+- **Span lifecycle is gated by the `log:emit` policy** exactly like
+  records and metrics — a sandbox that denies `log:emit` blocks span
+  egress too. A finished span is **frozen** (post-`finish` mutation is
+  rejected) and removed from the active stack wherever it sits, and
+  `Log.clear` empties the record, span, AND measurement buffers.
+  `Log.enabled` reflects all of Emit's gates (threshold + policy +
+  attached-sink minimums), and a default registry created on import is
+  installed on the host registry so a late `RegisterHostLogSink` reaches
+  it. The console renderer carries the logger/trace/span correlation
+  fields. (These are the PR #191 review hardenings.)
 - Everything else (sinks, fan-out, the `log` policy scope, the host
   `LogSinkSpec` seam with OnRecord/OnSpanStart/OnSpanEnd/OnMeasure,
   determinism via `EffectiveClock`) is as described.

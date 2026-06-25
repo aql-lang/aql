@@ -9,43 +9,82 @@ import (
 
 // Span is a host-facing, read-only view of a span, passed to a host
 // sink's OnSpanStart / OnSpanEnd (phase 4). It exposes the W3C trace
-// context, the span name and attributes, the status, and the start/end
-// times — everything an OTel/Datadog bridge needs to translate the span
-// without reaching into the engine's internal state.
+// context, the span name and attributes, the events, the status, and
+// the start/end times — everything an OTel/Datadog bridge needs to
+// translate the span without reaching into the engine's internal state.
 type Span struct {
 	TraceID       string
 	SpanID        string
 	ParentID      string
 	Name          string
 	Attributes    map[string]any
+	Events        []SpanEvent
 	Status        string // "" (ok) | "error"
 	StatusMessage string
 	StartUnixNano int64
 	EndUnixNano   int64
 }
 
+// SpanEvent is a host-facing view of a timestamped span event, so a
+// host OTel/Datadog sink can export events added by AQL code via
+// Span.add-event.
+type SpanEvent struct {
+	Name       string
+	Attributes map[string]any
+	UnixNano   int64
+}
+
+// SpanContext is what a host OnSpanStart hook may return to take
+// ownership of trace identity: when the host owns tracing (e.g. an OTel
+// SDK with its own sampler), it returns the real trace/span ids it
+// minted, and the module restamps the span — and every record emitted
+// inside it — with those ids so AQL logs correlate with the host's
+// exported trace. A zero value (both empty) keeps the module's local,
+// deterministic ids.
+type SpanContext struct {
+	TraceID string
+	SpanID  string
+}
+
 // newSpanView projects internal span state into the host-facing view.
 func newSpanView(sp *spanState) Span {
-	var attrs map[string]any
-	if sp.attrs != nil {
-		if m, ok := eng.ToNative(NewMap(sp.attrs)).(map[string]any); ok {
-			attrs = m
-		}
-	}
 	v := Span{
 		TraceID:       sp.traceID,
 		SpanID:        sp.spanID,
 		ParentID:      sp.parentID,
 		Name:          sp.name,
-		Attributes:    attrs,
+		Attributes:    omToNative(sp.attrs),
 		Status:        sp.status,
 		StatusMessage: sp.statusMsg,
 		StartUnixNano: sp.start.UnixNano(),
+	}
+	for _, e := range sp.events {
+		v.Events = append(v.Events, SpanEvent{
+			Name:       e.Name,
+			Attributes: valToNativeMap(e.Attributes),
+			UnixNano:   e.Timestamp.UnixNano(),
+		})
 	}
 	if !sp.end.IsZero() {
 		v.EndUnixNano = sp.end.UnixNano()
 	}
 	return v
+}
+
+// omToNative converts an *OrderedMap to a Go map for the host view.
+func omToNative(m *OrderedMap) map[string]any {
+	if m == nil {
+		return nil
+	}
+	return valToNativeMap(NewMap(m))
+}
+
+// valToNativeMap converts a Map Value to a Go map, or nil.
+func valToNativeMap(v Value) map[string]any {
+	if m, ok := eng.ToNative(v).(map[string]any); ok {
+		return m
+	}
+	return nil
 }
 
 // log_sinks.go — phase 3 of aql:log: provider hooks. A sink is a named
@@ -70,10 +109,13 @@ func newSpanView(sp *spanState) Span {
 // leaves them nil. Name is a lowercase, unprefixed kind atom; MinLevel
 // drops records below it before the handler runs.
 type LogSinkSpec struct {
-	Name        string
-	MinLevel    LogLevel
-	OnRecord    func(LogRecord) error
-	OnSpanStart func(Span)
+	Name     string
+	MinLevel LogLevel
+	OnRecord func(LogRecord) error
+	// OnSpanStart may return a SpanContext to take ownership of trace
+	// identity (host-owned tracing); a zero value keeps the module's
+	// local ids. Return the zero value if you only observe spans.
+	OnSpanStart func(Span) SpanContext
 	OnSpanEnd   func(Span)
 	OnMeasure   func(Measurement)
 }
@@ -136,7 +178,7 @@ func (lsr *LogSinkRegistry) RegisterSink(spec LogSinkSpec) error {
 		emit: func(_ *Registry, rec LogRecord) error { return spec.OnRecord(rec) },
 	}
 	if spec.OnSpanStart != nil {
-		s.spanStart = func(_ *Registry, sp *spanState) { spec.OnSpanStart(newSpanView(sp)) }
+		s.spanStart = func(_ *Registry, sp *spanState) SpanContext { return spec.OnSpanStart(newSpanView(sp)) }
 	}
 	if spec.OnSpanEnd != nil {
 		s.spanEnd = func(_ *Registry, sp *spanState) { spec.OnSpanEnd(newSpanView(sp)) }

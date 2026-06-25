@@ -36,10 +36,14 @@ func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// aql:rand state pattern). A host may pre-install one via
 	// SetHostLogSinks(parent, …) before `import "aql:log"` runs — e.g. to
 	// attach an OTel sink — and we honour it; otherwise a default
-	// (console attached) is created.
+	// (console attached) is created AND installed on the parent, so a host
+	// that calls RegisterHostLogSink AFTER importing reaches this same
+	// registry (HostLogSinks would otherwise return nil and the late sink
+	// would land on a second registry the imported Log.* words never use).
 	lsr := native.HostLogSinks(parent)
 	if lsr == nil {
 		lsr = native.NewLogSinkRegistry()
+		native.SetHostLogSinks(parent, lsr)
 	}
 	logNatives := native.LogModuleNativeFuncs(lsr)
 	for _, n := range logNatives {
