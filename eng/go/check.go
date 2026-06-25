@@ -101,6 +101,8 @@ func (c *CheckState) Begin() func() {
 	c.DefsUsed = nil
 	c.ContextTypes = nil
 	c.InflightBails = 0
+	c.FnNameInflight = nil
+	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
 	c.Emit = nil
 	c.FnBodyDepth = 0
@@ -119,6 +121,17 @@ func (c *CheckState) AddDiagnostic(d CheckDiagnostic) {
 	}
 	if d.Severity == "" {
 		d.Severity = SeverityFor(d.Code)
+	}
+	// A recursive fn-body re-entry (a self-call with a different arg shape that
+	// re-runs the same body tokens) must not re-emit body errors — the outer,
+	// non-recursive analysis of the same body already reports any real defect,
+	// whereas the narrowed re-entry can spuriously fail dispatch. Drop only the
+	// emergent error-level dispatch diagnostics; warnings/info still flow.
+	if c.SuppressBodyErrors > 0 && d.Severity == SeverityError {
+		switch d.Code {
+		case "no_signature", "undefined_word", "uncalled_function", "branch_error":
+			return
+		}
 	}
 	if c.FnBodyDepth > 0 {
 		d.FnBody = true
@@ -200,6 +213,12 @@ func (c *CheckState) RecordDef(name string, pos SrcPos) {
 	// so only uses AFTER this install count.
 	delete(c.DefsUsed, name)
 }
+
+// RecordUse is the exported wrapper over recordUse for callers outside the
+// eng package — notably module export resolution (lang/native), which records
+// each reference-exported public word as a use so unused_def does not falsely
+// flag the entire public API.
+func (c *CheckState) RecordUse(name string) { c.recordUse(name) }
 
 // recordUse marks a name as referenced during check mode. Safe to call
 // unconditionally; outside check mode it is a no-op. Used by

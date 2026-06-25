@@ -42,8 +42,8 @@ var inspectNatives = []NativeFunc{
 			// /q captures the upcoming Word as an Atom; the same sig
 			// also matches an explicit Atom on the stack (per
 			// signature.go §1.5 — Atom/q subsumes Atom).
-			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn},
-			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn}, // reads a fn value, never invokes
+			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn | CompileQuoteInert}, // bare-word inspect (`inspect foo/q`) bakes the inert Atom const + CALL_NATIVE
+			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn},                                                        // reads a fn value, never invokes
 		},
 	},
 

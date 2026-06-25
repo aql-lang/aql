@@ -29,7 +29,7 @@ func TestDynamicContextGetGradualMatch(t *testing.T) {
 	}
 	for _, d := range res.Diagnostics {
 		if d.Code == "no_signature" {
-			t.Fatalf("dynamic(Any) from context get should match the Number slot; got no_signature: %+v", res.Diagnostics)
+			t.Fatalf("dynamic(Any) from context dot should match the Number slot; got no_signature: %+v", res.Diagnostics)
 		}
 	}
 	// The result is itself dynamic (contagion): the modality flows through
@@ -105,7 +105,7 @@ func TestDynamicContagionFlows(t *testing.T) {
 		t.Fatalf("check: %v", err)
 	}
 	if hasDiag(res.Diagnostics, "no_signature") {
-		t.Fatalf("dynamic should flow through get and match add; got no_signature: %+v", res.Diagnostics)
+		t.Fatalf("dynamic should flow through dot and match add; got no_signature: %+v", res.Diagnostics)
 	}
 }
 

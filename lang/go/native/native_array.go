@@ -349,7 +349,7 @@ var allArrayNatives = []NativeFunc{
 		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
 			elem := DataListElemTypeFromValue(a[1])
 			if len(a) >= 3 {
-				return []Value{NewCarrier(a[2].Parent), NewElementCarrier(elem)}
+				return []Value{foldAccCarrier(a[2]), NewElementCarrier(elem)}
 			}
 			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}
 		}},
@@ -413,6 +413,15 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name:          "outer",
 		CompileEffect: CompileFallbackBody,
+		// outer [body] left right — the body sees (left[i], right[j]) for every
+		// pair, producing a 2D list. The body compiles to a closure unit that
+		// outerHandler drives per pair via InvokeBody; CompileFallbackBody is
+		// the fallback when the body cannot compile.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(a []Value) []Value {
+			le := DataListElemTypeFromValue(a[1])
+			re := DataListElemTypeFromValue(a[2])
+			return []Value{NewElementCarrier(le), NewElementCarrier(re)}
+		}},
 
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList, TList},
@@ -1448,14 +1457,23 @@ func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value 
 // round's diagnostics are kept. Returns the stabilised accumulator
 // carrier, or ok=false when the body is not analysable.
 func foldAccumFixedPoint(r *Registry, body Value, initAcc Value, elem *Type) (Value, bool) {
-	acc := initAcc
-	if !acc.Carrier {
-		acc = NewCarrier(acc.Parent)
-	}
+	// Normalise the seed to a container-faithful carrier. A List/Map SUBTYPE seed
+	// (`[]` / `[9]`) reaches here either concrete or already stripped to a carrier
+	// whose Data==nil — both drop the load-bearing ChildTypeInfo, so a body word
+	// needing a concrete container (`push`/`set`/`append`, declared [Any List])
+	// wrongly fails no_signature. foldAccCarrier rebuilds the typed-list / map
+	// carrier from the seed's element type; a scalar seed is unchanged.
+	acc := foldAccCarrier(initAcc)
+	// Use NewElementCarrier (not NewCarrier) for the element: an UNTYPED element
+	// (Any, e.g. the elements of `convert List <Array>` or any untyped `[List]`)
+	// becomes a DYNAMIC carrier, so a body word over it (`add`, `BinUtil.popcount`)
+	// matches optimistically instead of failing no_signature against the bare Any
+	// root — exactly how each/filter and the CallableSpec.Inputs already shape it.
+	elemCarrier := NewElementCarrier(elem)
 	diagBase := len(r.Check.Diagnostics)
 	for round := 0; ; round++ {
 		r.Check.TruncateDiagnostics(diagBase)
-		stk := analyseHigherOrderBodyVals(r, body, acc, NewCarrier(elem))
+		stk := analyseHigherOrderBodyVals(r, body, acc, elemCarrier)
 		if len(stk) == 0 {
 			return Value{}, false
 		}
@@ -1468,6 +1486,38 @@ func foldAccumFixedPoint(r *Registry, body Value, initAcc Value, elem *Type) (Va
 }
 
 // ---- fold ----
+
+// foldAccCarrier builds the check-mode accumulator carrier from fold's seed.
+// A bare NewCarrier(init.Parent) is wrong for a LIST or MAP seed: when the
+// seed's type is a List/Map SUBTYPE (a typed or empty list, e.g. `[]` / `[9]`),
+// NewCarrier attaches the load-bearing ChildTypeInfo only for the exact TList /
+// TMap nodes, so the carrier has Data==nil and fails a body word that needs a
+// concrete container (`push`/`set`/`append` declare [Any List]). Preserve the
+// container shape: a typed-list carrier for a list seed (keeping the element
+// type), an Any-mapped carrier for a map seed, and the plain Parent carrier for
+// a scalar seed (`0 fold [add]`, unchanged).
+func foldAccCarrier(init Value) Value {
+	var out Value
+	switch {
+	case init.Parent.ConformsTo(TList):
+		out = NewCarrierTypedList(DataListElemTypeFromValue(init))
+	case init.Parent.ConformsTo(TMap):
+		out = NewCarrier(TMap)
+	default:
+		out = NewCarrier(init.Parent)
+	}
+	// A gradual (dynamic) seed yields a gradual accumulator: a seed of
+	// statically-unknown type (`(do {…})`, a get-result threaded as the init)
+	// is "type unknown", so a body word over the accumulator must poly-match
+	// optimistically rather than fail no_signature against a strict Any. Without
+	// this, `(do {n:0}) … [acc … get] fold` typed the accumulator strict Any and
+	// every `acc … get`/`add` in the body errored (radix's common-prefix-len).
+	if init.Dynamic {
+		out.Carrier = true
+		out.Dynamic = true
+	}
+	return out
+}
 
 func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	// Sig is [TList, TList, TAny]: args[0]=body, args[1]=data, args[2]=init.
@@ -1588,8 +1638,6 @@ func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) {
 		return nil, reg.AqlError("outer_error", "outer: expected concrete lists", "outer")
 	}
-	_lst, _ := AsList(args[0])
-	bodySlice := _lst.Slice()
 	left, _ := AsList(args[1])
 	right, _ := AsList(args[2])
 
@@ -1597,13 +1645,11 @@ func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	for i := 0; i < left.Len(); i++ {
 		row := make([]Value, right.Len())
 		for j := 0; j < right.Len(); j++ {
-			input := make([]Value, len(bodySlice)+2)
-			input[0] = left.Get(i)
-			input[1] = right.Get(j)
-			copy(input[2:], bodySlice)
-
-			sub := New(reg)
-			res, err := sub.Run(input)
+			// The body sees (left[i], right[j]) on the stack. InvokeBody is the
+			// single body-running seam: under the VM it drives the compiled
+			// closure, under the interpreter it runs a fresh sub-engine — so a
+			// compiled `outer` is byte-identical to the interpreter.
+			res, err := InvokeBody(reg, args[0], []Value{left.Get(i), right.Get(j)})
 			if err != nil {
 				return nil, fmt.Errorf("outer: (%d,%d): %w", i, j, err)
 			}

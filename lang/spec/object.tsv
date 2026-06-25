@@ -131,8 +131,8 @@ def o (make Object {a:1}) end o.a	1	make Object is the long form of the sugar
 def o object {a:1} end def k 'dyn' end o set (k) 3 end o get (k)	3	computed keys write and read
 def o object {a:1} end o set z 99 end o size	2	any key writes — Objects are open (no sealing) — and size counts all fields
 def o object {a:1} end def al o end al set a 9 end o.a	9	bindings share the container (mutable column aliasing)
-def o object {a:1} end (convert Map o) get a	1	freeze: convert Map projects the fields to an immutable Map
-(convert Object {x:1}) get x	1	thaw: convert Object seeds a fresh mutable container from a Map
+def o object {a:1} end (convert Map o) dot a	1	freeze: convert Map projects the fields to an immutable Map
+(convert Object {x:1}) dot x	1	thaw: convert Object seeds a fresh mutable container from a Map
 def o object {a:1} end o is Object	true	a plain Object is an Object…
 def o object {a:1} end o is Class	false	…and not a class instance
 object 5	ERROR:signature_error	the seed must be a map

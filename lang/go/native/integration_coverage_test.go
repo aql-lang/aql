@@ -1392,7 +1392,7 @@ func TestIntegContextGetMissing(t *testing.T) {
 		NewWord("context"), NewWord("get"), NewString("nonexistent"),
 	})
 	if err == nil {
-		t.Error("expected error for get on non-existent key")
+		t.Error("expected error for dot on non-existent key")
 	}
 }
 
@@ -1402,11 +1402,11 @@ func TestIntegContextSetWithWord(t *testing.T) {
 	// set wkey 99 context get wkey context
 	result := runAQL(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("wkey"), NewInteger(99),
-		NewWord("context"), NewWord("get"), NewWord("wkey"),
+		NewWord("context"), NewWord("dot"), NewWord("wkey"),
 	})
 	_as43, _ := AsInteger(result[0])
 	if len(result) != 1 || _as43 != 99 {
-		t.Errorf("context set/get with word key = %v, want 99", result)
+		t.Errorf("context set/dot with word key = %v, want 99", result)
 	}
 }
 

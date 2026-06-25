@@ -279,7 +279,7 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	// inspect upper .name => 'upper'
 	result := runAQL(t, r, []Value{
 		NewWord("inspect"), NewWord("upper"),
-		NewWord("get"), NewWord("name"),
+		NewWord("dot"), NewWord("name"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
@@ -390,7 +390,7 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
 		NewWord("inspect"), NewWord("Qty"),
-		NewWord("get"), NewWord("kind"),
+		NewWord("dot"), NewWord("kind"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
@@ -1164,6 +1164,66 @@ func TestInterpStringMultipleExprs(t *testing.T) {
 	got, _ := AsString(result[0])
 	if got != "1 and 2" {
 		t.Errorf("expected '1 and 2', got %q", got)
+	}
+}
+
+// TestInterpStringNone pins the regression where a None value interpolated
+// into a template literal collapsed the whole string to a "String" carrier
+// (voxgig-aql/bloom-filter backend report §1). None is non-concrete yet is a
+// legitimate runtime value: it must stringify to "None", not flag the part as
+// a dynamic (check-mode-carrier) frontier. `def x None  \`got ${x}\“.
+func TestInterpStringNone(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerIOWords(r)
+	result := runAQL(t, r, []Value{
+		NewTypeLiteral(TNone), NewWord("def"), NewWord("x"), NewEnd(),
+		NewInterpString([]InterpPart{
+			{Lit: "got "},
+			{Expr: []Value{NewWord("x")}},
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	// Positive: the real string is produced.
+	got, _ := AsString(result[0])
+	if got != "got None" {
+		t.Errorf("expected 'got None', got %q", got)
+	}
+	// Negative: the result must be a concrete String, NOT a non-concrete
+	// carrier — the bug returned NewCarrier(TString), which rendered "String".
+	if !IsConcrete(result[0]) {
+		t.Errorf("expected a concrete String value, got non-concrete %v", result[0])
+	}
+}
+
+// TestInterpStringTypeLiteral pins the sibling case: a bare type literal (the
+// result of `typeof`) is also non-concrete but a legitimate runtime value, so
+// it must render its type name rather than collapse to a "String" carrier.
+func TestInterpStringTypeLiteral(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerIOWords(r)
+	result := runAQL(t, r, []Value{
+		NewInterpString([]InterpPart{
+			{Lit: "type: "},
+			{Expr: []Value{NewInteger(42), NewWord("typeof")}},
+		}),
+	})
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result))
+	}
+	got, _ := AsString(result[0])
+	if got != "type: Integer" {
+		t.Errorf("expected 'type: Integer', got %q", got)
+	}
+	if !IsConcrete(result[0]) {
+		t.Errorf("expected a concrete String value, got non-concrete %v", result[0])
 	}
 }
 

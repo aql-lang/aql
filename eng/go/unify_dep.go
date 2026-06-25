@@ -20,7 +20,7 @@ package eng
 // Bare type literals (Data==nil, !Carrier) pass through to the
 // prev/DefaultBehavior walk — the type itself isn't an inhabitant.
 type depScalarUnifier struct {
-	prev     TypeBehavior
+	behaviorWrapper
 	baseType *Type
 	depInfo  DepScalarInfo
 	typeName string
@@ -30,14 +30,22 @@ func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(d.prev).Match(v, t)
 	}
+	// An abstract CARRIER already tagged as t (the predicate type) or a subtype
+	// satisfies t nominally: the tag is the checker's record that the value was
+	// produced under t's contract (a `Big`-returning fn, a `Big` param/def), so
+	// the predicate is already guaranteed — and a value-level predicate cannot
+	// be re-verified on an abstract carrier anyway, so depScalarCheck below
+	// would conservatively (and wrongly) reject it. `def mk fn [[] [Big] [50]]
+	// use (mk)` failed exactly here. A CONCRETE value (Data present) still runs
+	// the predicate check, so a plain `5` is correctly refused for `Big`.
+	if v.Carrier && !IsConcrete(v) && v.Parent != nil && t != nil && v.Parent.ConformsTo(t) {
+		return true
+	}
 	if !v.Parent.ConformsTo(d.baseType) {
 		return false
 	}
 	return depScalarCheck(d.depInfo, v)
 }
-
-func (d *depScalarUnifier) Format(v Value) string { return baseBehavior(d.prev).Format(v) }
-func (d *depScalarUnifier) Equal(a, b Value) bool { return baseBehavior(d.prev).Equal(a, b) }
 
 // installDepScalarUnifier attaches a depScalarUnifier to def. Called
 // by InstallType when minting a DepScalar-bodied user type so the
@@ -45,10 +53,10 @@ func (d *depScalarUnifier) Equal(a, b Value) bool { return baseBehavior(d.prev).
 // word, options/record/Make slot checks).
 func installDepScalarUnifier(def *Type, base *Type, info DepScalarInfo, name string) {
 	def.Behavior = &depScalarUnifier{
-		prev:     def.Behavior,
-		baseType: base,
-		depInfo:  info,
-		typeName: name,
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+		baseType:        base,
+		depInfo:         info,
+		typeName:        name,
 	}
 }
 

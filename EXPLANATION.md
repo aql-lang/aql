@@ -691,7 +691,7 @@ by `do`, `for`, `each`, `await`) inherit from the parent's store.
 
 ```
 context set x 42
-context get x                     # returns 42
+context dot x                     # returns 42
 ```
 
 This is functionally JavaScript-style prototype inheritance: child

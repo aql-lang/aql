@@ -20,6 +20,7 @@ supports.
   * [`aql describe`](#aql-describe)
   * [`aql fmt`](#aql-fmt)
   * [`aql model`](#aql-model)
+  * [`aql build`](#aql-build)
 * [Project lifecycle](#project-lifecycle)
   * [`aql prep`](#aql-prep)
   * [`aql pack`](#aql-pack)
@@ -352,6 +353,51 @@ directory), `--watch`, `--dryrun`, `--print`, and `--config` (resolve a
 `.model-config` build — off by default). A unification conflict, an
 unresolvable reference, or a missing source file exits non-zero with the
 error on stderr.
+
+
+### `aql build`
+
+Compile an AQL program into a **standalone native executable** — a single
+file that runs the program without needing the source or a separate `aql`
+install. The produced binary runs through the full interpreter, so it
+executes *any* program, and prints the residual stack exactly as `aql run`
+would.
+
+```bash
+aql build prog.aql                  # -> ./prog  (default name = basename)
+aql build prog.aql -o tool          # -> ./tool
+./prog                              # runs the baked-in program
+```
+
+There are two build mechanisms:
+
+| Mechanism | How | Tradeoffs |
+|-----------|-----|-----------|
+| **Self-embedding launcher** (default) | Copies the running `aql` binary and appends the program as a payload; at startup the copy detects the payload and runs it. | No Go toolchain or network needed; works from a stock `aql`. Binary is ≈ the size of `aql` (it bundles the whole runtime) and targets the host OS/arch only. |
+| **Native** (`--native`) | Generates a tiny Go `main` that embeds the program and runs `go build`. | Smaller, dead-code-eliminated binary; cross-compiles via `GOOS`/`GOARCH`. Requires the Go toolchain **and** the aql source/module graph — set `AQL_SRC` to a repo checkout, or run from within the `cmd/go` module. |
+
+**File imports are bundled.** A program that imports other `.aql` files
+(`import "./lib.aql"`) is fully self-contained: every transitively-imported
+file is embedded and resolved from an in-memory file system at run time, so
+the binary works even when the source files are gone. Built-in `aql:`
+modules (`import "aql:math-util"`, …) are already part of the runtime and
+need no bundling. An import that is neither an `aql:` module nor an explicit
+`.aql`/`.lang` file path is rejected at build time.
+
+Flags:
+
+| Flag | Meaning |
+|------|---------|
+| `-o <path>` | Output binary path. Default: source basename without `.aql` (`prog.aql` → `prog`). |
+| `--native` | Use the Go-toolchain path instead of the self-embedding launcher. |
+| `--keep` | (native) Retain the generated temp build directory and print its path. |
+| `--compile` / `--force-compile` | Bake the experimental bytecode compile-mode into the binary (see [Bytecode compilation](#bytecode-compilation)). `--force-compile` makes the produced binary abort on uncompilable input. |
+| `-r <registry>` | Registry path baked into the binary. |
+| `-s <seed>` | Random seed baked into the binary. |
+| `--options <jsonic>` | Engine [`--options`](#--options--engine-options-as-jsonic) baked in (validated at build time). |
+
+A missing source file, an unbundlable import, or (for `--native`) a failed
+`go build` exits non-zero with the error on stderr.
 
 
 ## Project lifecycle

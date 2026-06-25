@@ -343,6 +343,23 @@ type CheckState struct {
 	// a placeholder instead of looping.
 	FnInflight map[string]bool
 
+	// FnNameInflight counts, per fn NAME, how many of its body analyses
+	// are on the stack. A recursive self-call with a DIFFERENT arg shape
+	// has a different FnInflight key, so it does not bail — it re-analyses
+	// the same body tokens under the narrowed args. Those re-analyses must
+	// not RE-EMIT body diagnostics: the first (non-recursive) analysis of
+	// the same body already reports any real error, while a call-shape that
+	// narrowed a param to a strict Any can spuriously fail dispatch
+	// (the trie fuzzy-go recursion's `kid-items`/`get` cascade). When a
+	// name is already in-flight, SuppressBodyErrors is raised for the
+	// re-entry so only the canonical analysis's diagnostics stand.
+	FnNameInflight map[string]int
+
+	// SuppressBodyErrors, when > 0, drops error-level diagnostics emitted
+	// during a recursive fn-body RE-ENTRY (see FnNameInflight). Sound: the
+	// re-entry re-runs body tokens the outer analysis already checked.
+	SuppressBodyErrors int
+
 	// InflightBails counts Any-placeholder bail-outs taken by
 	// recursive calls of UNCHECKED fns (declared returns use the
 	// declaration instead and don't count). AnalyseFnBody compares
@@ -357,6 +374,15 @@ type CheckState struct {
 	// and EmitState.Finalize linearises the trace into a Program. Set
 	// by the compile entry points after Begin; nil for plain checks.
 	Emit *EmitState
+
+	// Compiling marks a REAL compile pass (CompileCheck / RunCompiled),
+	// whose recorded events become an executed Program. A plain `aql check`
+	// leaves it false even though fn-body analysis arms transient Emit
+	// states. Some check-only precision relaxations (modelling a runtime-
+	// arity-variable result as a consumable value) are sound for diagnostics
+	// but would feed the recorder an arity the VM cannot honour, so they are
+	// gated to !Compiling. Set by the compile entry points after Begin.
+	Compiling bool
 
 	// FnAnalysisCounts tracks distinct body analyses (memo misses)
 	// per fn name. Past FnAnalysisQuota the analyser stops re-running
@@ -1216,7 +1242,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// Install lexical captures first so params (installed below)
 	// shadow same-named captures — innermost binding wins.
 	for _, cb := range captures {
-		InstallDef(r, cb.Name, cb.Value)
+		InstallFrameBinding(r, cb.Name, cb.Value)
 		names = append(names, cb.Name)
 	}
 
@@ -1238,7 +1264,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			if arg.Parent.Equal(TList) && !arg.Quoted {
 				arg.Quoted = true
 			}
-			InstallDef(r, p.Name, arg)
+			InstallFrameBinding(r, p.Name, arg)
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])

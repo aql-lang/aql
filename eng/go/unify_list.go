@@ -15,20 +15,8 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 	// with a concrete FlexList (or another FlexList literal). A plain
 	// list is NOT a FlexList; the supertype literal `List` accepts
 	// flex values below via the ordinary family rule.
-	aFlexLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TFlexList)
-	bFlexLit := sb == ShapeTypeLiteral && denotedType(b).Equal(TFlexList)
-	if aFlexLit || bFlexLit {
-		if aFlexLit && bFlexLit {
-			return a, nil
-		}
-		lit, other := a, b
-		if bFlexLit {
-			lit, other = b, a
-		}
-		if IsFlexList(other) {
-			return other, nil
-		}
-		return Value{}, unifyFail("FlexList type literal needs a concrete FlexList", lit, other)
+	if res, handled, err := unifyFlexLiteral(a, sa, b, sb, TFlexList, IsFlexList, "FlexList"); handled {
+		return res, err
 	}
 
 	// If one side is the bare List type literal (`List`), it unifies
@@ -109,13 +97,9 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 		return Value{}, unifyFail(
 			fmt.Sprintf("list length mismatch: %d vs %d", len(aElems), len(bElems)), a, b)
 	}
-	result := make([]Value, len(aElems))
-	for i := range aElems {
-		unified, err := unifyInner(aElems[i], bElems[i])
-		if err != nil {
-			return Value{}, err.withPath(fmt.Sprintf("[%d]", i))
-		}
-		result[i] = unified
+	result, err := unifyZip(len(aElems), sliceAt(aElems), sliceAt(bElems))
+	if err != nil {
+		return Value{}, err
 	}
 	return NewList(result), nil
 }
@@ -123,13 +107,9 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 // unifyTypedListWithConcrete unifies a child type constraint against
 // each element of a concrete list. Every element must unify.
 func unifyTypedListWithConcrete(childType Value, elems []Value) (Value, *UnifyError) {
-	result := make([]Value, len(elems))
-	for i, elem := range elems {
-		unified, err := unifyInner(childType, elem)
-		if err != nil {
-			return Value{}, err.withPath(fmt.Sprintf("[%d]", i))
-		}
-		result[i] = unified
+	result, err := unifyZip(len(elems), constAt(childType), sliceAt(elems))
+	if err != nil {
+		return Value{}, err
 	}
 	return NewList(result), nil
 }

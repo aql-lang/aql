@@ -271,6 +271,7 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	a.registry.Source = src
 	defer a.registry.Check.Begin()()
 	a.registry.Check.Emit = eng.NewEmitState()
+	a.registry.Check.Compiling = true
 	// Fn-body analyses must run (and record) under THIS emit pass —
 	// a summary cached by an earlier plain Check on the same instance
 	// would skip the body and leave its compiled unit empty.

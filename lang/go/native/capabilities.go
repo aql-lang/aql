@@ -18,6 +18,7 @@ const (
 	CapSQLite     = "engine.sqlite"      // *SQLiteStore
 	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
 	CapClock      = "engine.clock"       // capabilities.Clock (the time source)
+	CapLogSinks   = "engine.logsinks"    // *LogSinkRegistry (aql:log fan-out sinks)
 	CapDebugOps   = "engine.debugops"    // capabilities.DebugOps (interactive stepping)
 )
 
@@ -58,6 +59,31 @@ func SetHostClock(r *Registry, clk capabilities.Clock) {
 		return
 	}
 	_ = r.Capabilities.Set(CapClock, clk)
+}
+
+// HostLogSinks returns the LogSinkRegistry installed on r, or nil if
+// none has been created yet. Most callers want LogSinkRegistryFor,
+// which lazily creates and installs a default registry (console sink
+// attached) on first use — mirroring how `print` needs no host wiring.
+func HostLogSinks(r *Registry) *LogSinkRegistry {
+	lsr, _, _ := eng.Cap[*LogSinkRegistry](r, CapLogSinks)
+	return lsr
+}
+
+// SetHostLogSinks installs a LogSinkRegistry as the active sink
+// registry. When a policy uninstalls the "log" scope (install:false)
+// the slot is left empty so emission is a silent no-op — logging must
+// never crash a program. Hosts call this to pre-attach an OTel/Datadog
+// sink before the AQL program runs `import "aql:log"`.
+func SetHostLogSinks(r *Registry, lsr *LogSinkRegistry) {
+	if r == nil {
+		return
+	}
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("log") {
+		_, _ = r.Capabilities.Delete(CapLogSinks)
+		return
+	}
+	_ = r.Capabilities.Set(CapLogSinks, lsr)
 }
 
 // HostPolicy returns the policy installed on r, or nil if none. A

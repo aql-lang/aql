@@ -9,8 +9,7 @@ package native
 // independently testable.
 var controlNatives = []NativeFunc{
 	{
-		Name:          "do",
-		CompileEffect: CompileFallbackBody,
+		Name: "do",
 		// do [body] — runs the body with no inputs and returns its single residual
 		// value (a multi-value body nets != 1 and refuses to the island).
 		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(_ []Value) []Value {
@@ -23,6 +22,11 @@ var controlNatives = []NativeFunc{
 				NoEvalArgs: map[int]bool{0: true},
 				Handler:    doListHandler,
 				ReturnsFn:  doListReturnsFn, BarrierPos: -1,
+				// Only the LIST (code-body) sig islands — its NoEvalArgs body
+				// re-enters the interpreter. The Map sig is a pure value eval
+				// whose arg auto-evaluates BEFORE the handler, so it bakes a
+				// plain CALL_NATIVE (do {a:1 b:2} no longer islands).
+				CompileEffect: CompileFallbackBody,
 			},
 			{
 				Args:    []*Type{TMap},

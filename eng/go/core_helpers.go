@@ -12,7 +12,32 @@ import (
 // When body is a FnDefInfo value (produced by the fn word), InstallDef
 // registers typed signatures. Otherwise, body is stored directly as a
 // literal substitution.
+//
+// This is the REDEFINITION install: a fn-valued body whose signatures
+// overlap an existing binding for the SAME name drops the colliding
+// overload (so the stale one doesn't race the new one). For a per-call
+// fn-frame param/capture — which enters a NEW lexical scope and must
+// SHADOW, not replace, an outer same-named binding — use
+// InstallFrameBinding instead.
 func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
+	installDef(r, name, body, false, stackOnly...)
+}
+
+// InstallFrameBinding installs a per-call fn-frame binding (a named
+// param or a lexical capture). Unlike InstallDef it is a lexical
+// SHADOW: a Function/FnDef-valued binding pushes a fresh dispatch entry
+// that shadows — never removes — an outer same-named binding, so the
+// caller's binding is restored intact when the frame's teardown pops
+// this entry. InstallDef's overlap-removal models top-level
+// REDEFINITION (it must drop the colliding overload); a param entering
+// a new scope must not, or it destroys the caller's binding (e.g. a
+// fn-valued arg whose param name collides with a live caller param —
+// design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md).
+func InstallFrameBinding(r *Registry, name string, body Value) {
+	installDef(r, name, body, true)
+}
+
+func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 
 	// FnDefInfo body (from fn word): install typed signatures.
@@ -64,7 +89,14 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 		// the dispatch aggregate (Registry.Lookup) unions them, so an
 		// overlapping redefinition must drop the old entry — otherwise the
 		// stale overload races the new one (equal scores, first match wins).
-		if stack := r.Defs.Stack(name); len(stack) > 0 {
+		//
+		// SKIPPED for a shadowing frame-binding install: a fn param/capture
+		// that collides with an outer same-named binding must SHADOW it (a
+		// fresh entry the teardown pops to restore the outer), not drop it.
+		// Dropping the outer entry here is the per-call cleanup over-pop bug
+		// (design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md): the colliding outer
+		// param vanishes, then the frame's undef tail pops the wrong level.
+		if stack := r.Defs.Stack(name); !shadow && len(stack) > 0 {
 			filtered := stack[:0:0]
 			changed := false
 			for _, entry := range stack {
@@ -198,7 +230,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// wins). Captures are appended to `names` so the
 		// synthesized undef tail tears them down alongside params.
 		for _, cb := range fnDefCopy.Captured {
-			InstallDef(r, cb.Name, cb.Value)
+			InstallFrameBinding(r, cb.Name, cb.Value)
 			names = append(names, cb.Name)
 		}
 
@@ -211,7 +243,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 				if arg.Parent.Equal(TList) && !arg.Quoted {
 					arg.Quoted = true
 				}
-				InstallDef(r, p.Name, arg)
+				InstallFrameBinding(r, p.Name, arg)
 				names = append(names, p.Name)
 			} else {
 				// Unnamed parameter: push value back for the body to use
@@ -268,6 +300,70 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 //
 // Extracted verbatim from InstallFnDef so the same return-inference can
 // be shared with the Function-value dispatch path.
+// narrowArgsToParams returns args with each gradual (dynamic) arg whose bound
+// is strictly BROADER than its declared param type narrowed to a dynamic
+// carrier of that param type. The arg already passed the param match at the
+// call site (a disjoint arg never reaches body analysis), so narrowing its
+// gradual bound to the declared contract is sound and stays optimistic — it
+// just ensures a body word sees the param's declared shape. Without it, a
+// recursive call threading a `get`-result `dynamic(Any)` into a `ch:List` param
+// makes the body's `each` match the map-each overload (→ Map) instead of
+// list-each (→ List), so a downstream `all`/`any`/`[List]` consumer then fails
+// no_signature against the spurious Map (the decision `eval-pred-all` cycle).
+// A concrete arg, an arg already conforming to the param, or an Any/untyped
+// param is left untouched (no precision lost).
+func narrowArgsToParams(args []Value, params []FnParam) []Value {
+	var out []Value
+	for i := range args {
+		if i >= len(params) {
+			break
+		}
+		a := args[i]
+		pt := params[i].Type
+		switch {
+		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
+			!a.Parent.ConformsTo(pt):
+			// A gradual arg whose bound is NOT already within the declared
+			// (concrete) param type: re-bind the body's view of the param to a
+			// dynamic carrier of the DECLARED type. The annotation is the
+			// authoritative contract for body analysis — the body is written
+			// assuming the param's type, and a dynamic arg means "statically
+			// unknown, optimistically anything", so binding to dynamic(pt) keeps
+			// optimism while letting the body's typed operations match. Covers
+			// both a strictly-broader bound (`Any` → `String`) and a disjoint /
+			// sibling bound (radix's edge splitter feeds a `slice`/`add` result
+			// of unknown shape — a dynamic `List` — into `set-edge`'s
+			// `newlabel:String`; without this the body's `newlabel slice 0 1`
+			// stayed `List` and failed `set`'s String-key Map overload).
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			nc := NewCarrier(pt)
+			nc.Dynamic = true
+			out[i] = nc
+		case !a.Dynamic && pt != nil && pt.Equal(TAny) && a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a):
+			// A STRICT Any arg bound to a declared-`Any` param. The param is
+			// gradual by declaration (ParamInputCarrier gives dynamic Any), so a
+			// body word over it must match optimistically — a strict Any conforms
+			// to no concrete slot and would cascade no_signature. The case arises
+			// when a fold accumulator that started `none` and was rebuilt into a
+			// node is threaded into a `nd:Any` insert receiver (tst/radix's
+			// `none entries [(acc … tst-insert)] fold`). Only a bare strict-Any
+			// VALUE is lifted (not a typed/structural carrier).
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			nc := NewCarrier(TAny)
+			nc.Dynamic = true
+			out[i] = nc
+		}
+	}
+	if out == nil {
+		return args
+	}
+	return out
+}
+
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -353,6 +449,27 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			genBindings = InferGenBindings(genSpec, sigParams, args)
 			genNames = InstallGenBindingMap(r, genSpec, genBindings)
 		}
+		// Deferred-list body (def-node-binding.tsv:54) — `def mk fn
+		// [[c1:Integer] [List] [[c1]]]`. The body is a single list literal that
+		// references a parameter, but a returned list NEVER closes over the param
+		// (only a `=>` lambda captures); the interpreter returns it RAW and
+		// auto-evaluates it later, in MODULE scope, against the live binding
+		// (`mk 9` → `[1]`, the module `c1`, not the arg `9`). Compiling it as a
+		// fn UNIT cannot model this: a unit's result is fixed at CALL time and
+		// cannot defer to a later module rebind. So make the fn TRANSPARENT —
+		// hand the raw deferred list back as the call's residual (no unit) and let
+		// the check pass fold it in module scope EXACTLY as a top-level
+		// `def c1 1 [[c1]]` already does: at end-of-run, at a `def`-bind, or at a
+		// downstream consumer (each resolves `c1` against the binding live at that
+		// point). The folded const is what the program bakes; no VM change. Still
+		// analyse the body first so its diagnostics propagate.
+		if raw, ok := deferredParamListResidual(bodyCopy, paramNames); ok {
+			AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
+			for i := len(genNames) - 1; i >= 0; i-- {
+				r.Defs.Pop(genNames[i])
+			}
+			return []Value{raw}
+		}
 		// Always analyse the body so diagnostics emitted by stepWord
 		// (undefined_word, no_signature, …) inside the body propagate
 		// up to the parent registry. When the fn declares an explicit
@@ -376,6 +493,18 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// key, so the generalised analysis is the one that caches.
 			genArgs := make([]Value, len(args))
 			for i, a := range args {
+				if a.Parent == nil {
+					// A root-node carrier (None / Any / Never) has a nil Parent
+					// because it IS its own lattice node — it is already an
+					// abstract, constant-free generalisation, so keep it (with the
+					// Carrier flag set) rather than calling NewCarrier(nil), which
+					// would propagate a nil-typed value into the body analysis.
+					g := a
+					g.Carrier = true
+					g.Data = nil
+					genArgs[i] = g
+					continue
+				}
 				genArgs[i] = NewCarrier(a.Parent)
 			}
 			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, args, capturesCopy, bodyCopy)
@@ -407,7 +536,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				finishFn(stkGen)
 			}
 		}
-		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
+		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, narrowArgsToParams(args, sigParams), capturesCopy, declaredReturns)
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
 		}
@@ -453,7 +582,18 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						continue
 					}
 				}
-				out[i] = NewCarrier(t)
+				c := NewCarrier(t)
+				// A declared `Any` return is "statically unknown", not "the Any
+				// root": a STRICT Any conforms to no typed slot, so a user fn
+				// declaring `[Any]` poisoned every typed consumer downstream with
+				// false no_signature errors (a `[Any]`-returning node lookup fed
+				// into another fn's `nd:Map` param — the trie/decision walkers).
+				// Mark it dynamic for optimistic matching, mirroring the native
+				// `[Any]`-return handling in carrierResults.
+				if t.Equal(TAny) {
+					c.Dynamic = true
+				}
+				out[i] = c
 			}
 			if fnUnit >= 0 {
 				pos := SrcPos{}
@@ -593,11 +733,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		genArgs := make([]Value, len(s.Params))
 		for j, p := range s.Params {
 			paramNames[j] = p.Name
-			t := p.Type
-			if t == nil {
-				t = TAny
-			}
-			genArgs[j] = NewCarrier(t)
+			genArgs[j] = ParamInputCarrier(p.Type)
 		}
 		var declared []*Type
 		if !fnDef.Anonymous {
@@ -1186,7 +1322,9 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 							NewOpenParen(),
 							NewWord("args"),
 							NewAtom(fmt.Sprintf("%d", presentIdx)),
-							NewWord("get"),
+							// dot, not get: the key is a literal atom index
+							// (`args.N`); get no longer accepts an atom key.
+							NewWord("dot"),
 							NewCloseParen(),
 						)
 					}

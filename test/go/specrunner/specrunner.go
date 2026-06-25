@@ -111,6 +111,91 @@ func RunFile(t *testing.T, path string, run Run) {
 	}
 }
 
+// RenderRun executes one spec row's input and returns an already-rendered
+// result string (e.g. the check-mode carrier stack + diagnostics). As with
+// Run, a non-nil error signals that the row errored — matched against an
+// `ERROR:<text>` expected column.
+type RenderRun func(input string) (string, error)
+
+// RunDirRendered is RunDir for runners that render their own result
+// string rather than producing an eng.Value stack compared via Canon.
+func RunDirRendered(t *testing.T, dir string, run RenderRun) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	ran := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tsv") {
+			continue
+		}
+		ran++
+		t.Run(strings.TrimSuffix(e.Name(), ".tsv"), func(t *testing.T) {
+			RunFileRendered(t, filepath.Join(dir, e.Name()), run)
+		})
+	}
+	if ran == 0 {
+		t.Errorf("no .tsv specs found under %s", dir)
+	}
+}
+
+// RunFileRendered runs every data row of a single `.tsv` file against a
+// RenderRun, comparing the rendered string to the expected column.
+func RunFileRendered(t *testing.T, path string, run RenderRun) {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		raw := scanner.Text()
+		line := strings.TrimRight(raw, " \t")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			t.Errorf("%s:L%d: malformed row, want at least input<TAB>expected, got %q", path, lineNum, line)
+			continue
+		}
+		input := strings.TrimSpace(parts[0])
+		expected := strings.TrimSpace(parts[1])
+
+		name := fmt.Sprintf("L%d_%s", lineNum, sanitiseSpecName(input))
+		t.Run(name, func(t *testing.T) {
+			got, runErr := run(input)
+
+			if strings.HasPrefix(expected, "ERROR:") {
+				want := expected[len("ERROR:"):]
+				if runErr == nil {
+					t.Fatalf("expected error containing %q, got result %q", want, got)
+				}
+				if want != "" && !strings.Contains(runErr.Error(), want) {
+					t.Errorf("error %q does not contain %q", runErr.Error(), want)
+				}
+				return
+			}
+
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
+			if got != expected {
+				t.Errorf("got %q, want %q", got, expected)
+			}
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scanner error in %s: %v", path, err)
+	}
+}
+
 func sanitiseSpecName(s string) string {
 	s = strings.ReplaceAll(s, " ", "_")
 	if len(s) > 40 {

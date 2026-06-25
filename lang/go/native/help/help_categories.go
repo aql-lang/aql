@@ -54,7 +54,7 @@ var categories = []Category{
 		"xml-elem", "xml-text", "xml-attr",
 	}},
 	{"storage", "Variables, value access, references, and lenses.", []string{
-		"set", "get", "getr", "has", "context", "keys", "vals",
+		"set", "get", "getr", "dot", "dotr", "has", "context", "keys", "vals",
 		"reach", "apply", "rebind", "ref", "referent",
 		"patrun", "find", "patterns",
 	}},
@@ -104,15 +104,6 @@ func LookupCategory(name string) (Category, bool) {
 		}
 	}
 	return Category{}, false
-}
-
-// CategoryNames returns the category names in display order.
-func CategoryNames() []string {
-	names := make([]string, len(categories))
-	for i, c := range categories {
-		names[i] = c.Name
-	}
-	return names
 }
 
 // CategoryOf returns the name of the category that contains word, or "" if the

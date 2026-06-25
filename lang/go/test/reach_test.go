@@ -114,7 +114,7 @@ func TestReachApplyAndRebind(t *testing.T) {
 	}
 	// getr strictness survives apply: a missing strict key errors.
 	if _, err := runNativeSteps(t, nil, []string{`def p {a: 1}`, `apply $!.missing p`}); err == nil {
-		t.Error("apply $!.missing p should error (getr strict), got nil")
+		t.Error("apply $!.missing p should error (dotr strict), got nil")
 	}
 	// rebind returns an inert bound lens, not the value.
 	res, err = runNativeSteps(t, nil, []string{`def p {name: "ada"}`, `rebind $.name p`})

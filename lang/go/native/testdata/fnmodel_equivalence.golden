@@ -7,6 +7,9 @@ WORD __folder
   [] barrier=0 returns=[Scalar/Path]
 WORD __pa
   [] barrier=0
+WORD __varundef
+  [Scalar/String] barrier=1 runcheck
+  [Scalar/Atom] barrier=1 runcheck quote={0}
 WORD add
   [Node/Map Any Ideal/Patrun] barrier=3
   [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
@@ -131,6 +134,41 @@ WORD div
 WORD do
   [Node/Map] barrier=1 returns=[Any]
   [Node/List] barrier=1 noeval={0} +returnsfn
+WORD dot
+  [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
+  [Scalar/String Ideal/Module] barrier=1 returns=[Any]
+  [Scalar/String Ideal/Class] barrier=1 +returnsfn
+  [Scalar/String Ideal/Store] barrier=1 +returnsfn
+  [Scalar/String Ideal/Error] barrier=2 returns=[Any]
+  [Scalar/String Ideal/Object] barrier=1 +returnsfn
+  [Scalar/String Node/Xml] barrier=1 returns=[Any]
+  [Scalar/String Node] barrier=1 +returnsfn
+  [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Node] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Error] barrier=2 quote={0} returns=[Any]
+  [Scalar/Atom Ideal/Object] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Node/Xml] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Node] barrier=1 quote={0} +returnsfn
+  [Any None] barrier=1 returns=[None]
+WORD dotr
+  [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
+  [Scalar/String Ideal/Module] barrier=1
+  [Scalar/String Ideal/Class] barrier=1 +returnsfn
+  [Scalar/String Ideal/Object] barrier=1
+  [Scalar/String Node] barrier=1
+  [Scalar/Number/Integer Ideal/Object] barrier=1
+  [Scalar/Number/Integer Node] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Module] barrier=1 quote={0}
+  [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Object] barrier=1 quote={0}
+  [Scalar/Atom Node] barrier=1 quote={0}
+  [Any None] barrier=1
 WORD drop
   [Any] barrier=0
 WORD drop2
@@ -151,7 +189,7 @@ WORD emit
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Scalar/String]
   [Any] barrier=1 runcheck returns=[Scalar/String]
 WORD enum
-  [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum]
+  [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum] +returnsfn
 WORD eq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD error
@@ -181,7 +219,7 @@ WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2
   [Node/List] barrier=1
 WORD flex
-  [Node] barrier=1 returns=[Node]
+  [Node] barrier=1 returns=[Node] +returnsfn
 WORD fn
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD fnsig
@@ -225,14 +263,14 @@ WORD get
   [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
-  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
-  [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Any]
-  [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn
-  [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
-  [Scalar/Atom Ideal/Error] barrier=2 quote={0} returns=[Any]
-  [Scalar/Atom Ideal/Object] barrier=1 quote={0} +returnsfn
-  [Scalar/Atom Node/Xml] barrier=1 quote={0} returns=[Any]
-  [Scalar/Atom Node] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Module] barrier=1 returns=[Any]
+  [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Store] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Error] barrier=2 returns=[Any]
+  [Scalar/Atom Ideal/Object] barrier=1 +returnsfn
+  [Scalar/Atom Node/Xml] barrier=1 returns=[Any]
+  [Scalar/Atom Node] barrier=1 +returnsfn
   [Any None] barrier=1 returns=[None]
 WORD getpath
   [Ideal/Reach Any] barrier=2
@@ -240,14 +278,16 @@ WORD getpath
 WORD getr
   [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1
+  [Scalar/String Ideal/Class] barrier=1 +returnsfn
   [Scalar/String Ideal/Object] barrier=1
   [Scalar/String Node] barrier=1
   [Scalar/Number/Integer Ideal/Object] barrier=1
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
-  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
-  [Scalar/Atom Ideal/Module] barrier=1 quote={0}
-  [Scalar/Atom Ideal/Object] barrier=1 quote={0}
-  [Scalar/Atom Node] barrier=1 quote={0}
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Module] barrier=1
+  [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Object] barrier=1
+  [Scalar/Atom Node] barrier=1
   [Any None] barrier=1
 WORD gt
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
@@ -382,7 +422,7 @@ WORD neq
 WORD nip
   [Any Any] barrier=0 +returnsfn
 WORD node
-  [Node] barrier=1 returns=[Node]
+  [Node] barrier=1 returns=[Node] +returnsfn
 WORD nodify
   [Any] barrier=1
 WORD nor
@@ -441,7 +481,7 @@ WORD printstr
   [Any] barrier=1
 WORD push
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
-  [Any Node/List] barrier=2
+  [Any Node/List] barrier=2 returns=[Node/List]
 WORD quote
   [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
   [Any] barrier=1 runcheck noeval={0} +returnsfn
@@ -602,7 +642,7 @@ WORD trim
 WORD tuck
   [Any Any] barrier=0 +returnsfn
 WORD typeof
-  [Any] barrier=1 returns=[Type]
+  [Any] barrier=1 returns=[Type] +returnsfn
 WORD undef
   [Scalar/String Type/FunctionSignature] barrier=2 runcheck
   [Scalar/Atom Type/FunctionSignature] barrier=2 runcheck quote={0}
@@ -614,8 +654,8 @@ WORD unpack
   [Node/Map Node/Map] barrier=2 runcheck noevalmap={0}
   [Node/List Node/Map] barrier=2 runcheck noeval={0}
   [Scalar/Atom Node/Map] barrier=2 runcheck quote={0}
-  [Scalar/Atom Scalar/String] barrier=2 quote={0}
-  [Scalar/String] barrier=1
+  [Scalar/Atom Scalar/String] barrier=2 runcheck quote={0}
+  [Scalar/String] barrier=1 runcheck
 WORD unquote
   [Any] barrier=1 returns=[Any]
 WORD unshift

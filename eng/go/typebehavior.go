@@ -150,3 +150,27 @@ func (defaultBehavior) Format(v Value) string {
 func (defaultBehavior) Equal(a, b Value) bool {
 	return valuesEqualDefault(a, b)
 }
+
+// behaviorWrapper is the shared embed for the kernel Behaviors that wrap
+// a previous Behavior and override only Match (and sometimes Format or
+// Unify), delegating Format / Equal / Compare to the wrapped Behavior.
+// Every membership/constraint Behavior — predicateUnifier,
+// depScalarUnifier, disjunctUnifier, negationUnifier, bareRefineUnifier,
+// surfaceUnifier, schemaUnifier, genParamUnifier — embeds it so the
+// delegation boilerplate lives once instead of being copied per struct.
+//
+// Compare delegates via baseCompare, so a wrapper over a Comparer keeps
+// that capability while a wrapper over DefaultBehavior opts out
+// (ErrNoComparer) and the Comparer walk continues up the lattice — the
+// behaviour predicateUnifier already relied on. The embed deliberately
+// does NOT supply Match (every wrapper has its own membership rule) or
+// Unify (only the wrappers reached by dispatchUnifier's Unifier walk
+// define one; supplying it here would make every wrapper a Unifier and
+// reroute lattice dispatch).
+type behaviorWrapper struct {
+	prev TypeBehavior
+}
+
+func (w behaviorWrapper) Format(v Value) string           { return baseBehavior(w.prev).Format(v) }
+func (w behaviorWrapper) Equal(a, b Value) bool           { return baseBehavior(w.prev).Equal(a, b) }
+func (w behaviorWrapper) Compare(a, b Value) (int, error) { return baseCompare(w.prev, a, b) }

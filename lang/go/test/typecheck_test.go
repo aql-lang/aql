@@ -1213,7 +1213,7 @@ func TestCheckInlineModule(t *testing.T) {
 	// name bound by `import` inside a paren sub-expression (it does for
 	// `def`-bound names — see TestCheck* for maps). Bare `get` keeps the
 	// access at top level where the import binding is visible.
-	res, err := a.Check(`import module [export "X" {v:42}]  X get v`)
+	res, err := a.Check(`import module [export "X" {v:42}]  X dot v`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -1750,12 +1750,12 @@ func TestCheckIndexOutOfRange(t *testing.T) {
 	// Positive: every one of these is a guaranteed runtime failure, so
 	// it must be flagged.
 	flagged := []struct{ name, src string }{
-		{"getr past end", "[10 20] 5 getr"},
-		{"getr at length boundary", "[10 20] 2 getr"},
-		{"getr negative", "[10 20] -1 getr"},
-		{"getr on iota-computed length", "(iota 3) 5 getr"},
-		{"getr on empty list", "[] 0 getr"},
-		{"getr on bound concrete list", "def xs [10 20] end  xs 5 getr"},
+		{"dotr past end", "[10 20] 5 getr"},
+		{"dotr at length boundary", "[10 20] 2 getr"},
+		{"dotr negative", "[10 20] -1 getr"},
+		{"dotr on iota-computed length", "(iota 3) 5 getr"},
+		{"dotr on empty list", "[] 0 getr"},
+		{"dotr on bound concrete list", "def xs [10 20] end  xs 5 getr"},
 		{"at index past end", `import "aql:array-util" end  [10 20] [0 5] ArrayUtil.at`},
 	}
 	for _, tc := range flagged {
@@ -1770,8 +1770,8 @@ func TestCheckIndexOutOfRange(t *testing.T) {
 	// Negative: in-bounds, unknown-length, or non-list — must NOT be
 	// flagged. A false positive here would be worse than a missed one.
 	silent := []struct{ name, src string }{
-		{"getr first element", "[10 20] 0 getr"},
-		{"getr last valid", "[10 20] 1 getr"},
+		{"dotr first element", "[10 20] 0 getr"},
+		{"dotr last valid", "[10 20] 1 getr"},
 		{"unknown-length carrier", "([10 20] reverse) 5 getr"},
 		{"map container, not a list", "{a:1} 5 getr"},
 		{"at all in bounds", `import "aql:array-util" end  [10 20] [0 1] ArrayUtil.at`},

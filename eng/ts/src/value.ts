@@ -11,16 +11,29 @@ import {
   TAny,
   TAtom,
   TBoolean,
-  TDecimal,
+  TDisjunct,
+  TEnum,
+  TFnUndef,
+  TFloat,
   TForward,
+  TInspect,
+  TInterpString,
   TFunction,
   TInteger,
   TList,
+  TMap,
   TMark,
+  TPath,
   TMove,
   TNone,
+  TParenExpr,
   TString,
+  TStringEmpty,
+  TStringProper,
+  TType,
   TWord,
+  TXml,
+  TXmlInterp,
 } from './type.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
@@ -30,12 +43,20 @@ export interface WordInfo {
   argCount?: number
   forceStack?: boolean
   forceForward?: boolean
+  /**
+   * Optional type constraint on a `def NAME:CONTAINER` binding, where the
+   * constraint is a container shape (`[:T]` typed list or `{k:T …}` record
+   * shape) that the tokenizer attaches to the binding name token.
+   */
+  constraint?: Value
 }
 
 /** A typed parameter on a function definition. */
 export interface FnParam {
   name: string
   type: AqlType
+  /** Optional (`?`) params default to their type's base value when omitted. */
+  optional?: boolean
 }
 
 /**
@@ -69,10 +90,15 @@ export interface ForwardMarker {
  * single-overload shape; the full Go FnDefInfo carries multiple
  * overloads (Sigs[]) plus optional Patterns / NoEvalArgs.
  */
-export interface FnDefInfo {
+/** One authored signature of a function definition. */
+export interface FnSig {
   params: FnParam[]
   returns: AqlType[]
   body: Value[]
+}
+
+export interface FnDefInfo {
+  sigs: FnSig[]
 }
 
 export class Value {
@@ -88,17 +114,38 @@ export class Value {
   readonly eval: boolean
   readonly quoted: boolean
   readonly carrier: boolean
+  /**
+   * Check-mode gradual modality. A `dynamic` carrier is a type-only
+   * value whose type is statically unknown (Any) or arrived from an
+   * unannotated word — it matches optimistically and its contagion
+   * widens results to dynamic. Only meaningful when `carrier` is true.
+   * Mirrors Go Value.Dynamic.
+   */
+  readonly dynamic: boolean
+  /**
+   * Check-mode marker: an undefined word kept as a lenient placeholder
+   * so analysis can continue past a typo. Drained to an Any carrier at
+   * end of run. Mirrors Go Value.Undefined.
+   */
+  undefined: boolean
 
   constructor(
     vType: AqlType,
     data: unknown,
-    opts?: { eval?: boolean; quoted?: boolean; carrier?: boolean },
+    opts?: { eval?: boolean; quoted?: boolean; carrier?: boolean; dynamic?: boolean },
   ) {
     this.vType = vType
     this.data = data
     this.eval = opts?.eval ?? false
     this.quoted = opts?.quoted ?? false
     this.carrier = opts?.carrier ?? false
+    this.dynamic = opts?.dynamic ?? false
+    this.undefined = false
+  }
+
+  /** True iff this Value is the unique `none` value (None's sole inhabitant). */
+  isNone(): boolean {
+    return this.vType.equal(TNone) && this.data === NONE_SENTINEL
   }
 
   /** True iff this Value is a type literal (no concrete payload). */
@@ -123,12 +170,17 @@ export class Value {
     return this.data
   }
 
-  asDecimal(): number {
-    if (this.data === null) throw new Error('AsDecimal: nil data')
+  asFloat(): number {
+    if (this.data === null) throw new Error('AsFloat: nil data')
     if (typeof this.data !== 'number') {
-      throw new Error(`AsDecimal: not a decimal value (got ${typeof this.data})`)
+      throw new Error(`AsFloat: not a float value (got ${typeof this.data})`)
     }
     return this.data
+  }
+
+  /** Back-compat alias for asFloat. */
+  asDecimal(): number {
+    return this.asFloat()
   }
 
   asString(): string {
@@ -170,6 +222,49 @@ export class Value {
     return this.data as Value[]
   }
 
+  isMap(): boolean {
+    return this.vType.equal(TMap)
+  }
+
+  asMap(): OrderedMap {
+    if (this.data instanceof OptionsData) return this.data.map
+    if (this.data === null || !(this.data instanceof OrderedMap)) {
+      throw new Error('AsMap: not a map value')
+    }
+    return this.data
+  }
+
+  isOptions(): boolean {
+    return this.data instanceof OptionsData
+  }
+
+  /** True iff this is a typed list `[:T]` (ChildType payload, VType List). */
+  isTypedList(): boolean {
+    return this.data instanceof ChildType && this.vType.equal(TList)
+  }
+
+  /** True iff this is a typed map `{:T}` (ChildType payload, VType Map). */
+  isTypedMap(): boolean {
+    return this.data instanceof ChildType && this.vType.equal(TMap)
+  }
+
+  asChildType(): ChildType {
+    if (!(this.data instanceof ChildType)) throw new Error('AsChildType: not a typed container')
+    return this.data
+  }
+
+  /** True iff this is a Disjunct or Enum value (carries DisjunctInfo). */
+  isDisjunct(): boolean {
+    return this.vType.matches(TDisjunct) && this.data !== null
+  }
+
+  asDisjunct(): DisjunctInfo {
+    if (this.data === null || typeof this.data !== 'object') {
+      throw new Error('AsDisjunct: not a disjunct value')
+    }
+    return this.data as DisjunctInfo
+  }
+
   asFnDef(): FnDefInfo {
     if (this.data === null) throw new Error('AsFnDef: nil data')
     if (typeof this.data !== 'object') {
@@ -204,6 +299,31 @@ export class Value {
     return this.vType.equal(TMove)
   }
 
+  isInterpString(): boolean {
+    return this.vType.equal(TInterpString)
+  }
+
+  isXml(): boolean {
+    return this.vType.equal(TXml)
+  }
+
+  isXmlInterp(): boolean {
+    return this.vType.equal(TXmlInterp)
+  }
+
+  asXmlTmpl(): XmlTmpl {
+    return this.data as XmlTmpl
+  }
+
+  isParenExpr(): boolean {
+    return this.vType.equal(TParenExpr)
+  }
+
+  asInterpSegments(): InterpSegment[] {
+    if (!Array.isArray(this.data)) throw new Error('AsInterp: not an interp string')
+    return this.data as InterpSegment[]
+  }
+
   asMove(): MoveInfo {
     if (this.data === null) throw new Error('AsMove: nil data')
     return this.data as MoveInfo
@@ -211,8 +331,9 @@ export class Value {
 
   /** Stringify in a parser-style debug form: words as word(name), strings quoted, etc. */
   toString(): string {
+    if (this.isNone()) return 'none'
     if (this.data === null) {
-      if (this.vType.equal(TNone)) return 'null'
+      if (this.vType.equal(TNone)) return 'none'
       return this.vType.toString()
     }
     if (this.vType.matches(TWord)) {
@@ -224,7 +345,7 @@ export class Value {
     if (this.vType.matches(TInteger)) {
       return String(this.data)
     }
-    if (this.vType.matches(TDecimal)) {
+    if (this.vType.matches(TFloat)) {
       return String(this.data)
     }
     if (this.vType.matches(TBoolean)) {
@@ -236,6 +357,11 @@ export class Value {
     if (this.vType.matches(TList) && Array.isArray(this.data)) {
       const elems = (this.data as Value[]).map((v) => v.toString())
       return `[${elems.join(' ')}]`
+    }
+    if (this.data instanceof OrderedMap) {
+      const m = this.data
+      const parts = m.sortedKeys().map((k) => `${k}:${m.get(k)!.toString()}`)
+      return `{${parts.join(' ')}}`
     }
     return String(this.data)
   }
@@ -263,17 +389,21 @@ export function newInteger(n: bigint | number): Value {
   return new Value(TInteger, big)
 }
 
-export function newDecimal(f: number): Value {
-  return new Value(TDecimal, f)
+export function newFloat(f: number): Value {
+  return new Value(TFloat, f)
 }
 
+/** Back-compat alias: the decimal scalar is named Float in the lattice. */
+export const newDecimal = newFloat
+
 /**
- * Construct a string value with VType = Scalar/String. Empty vs
- * non-empty no longer affects the type — they share the kind, which
- * is what `equal(TString)` checks against.
+ * Construct a string value. The VType carries the concrete leaf so
+ * `typeof` renders the precise name: a non-empty string is
+ * Scalar/String/ProperString, an empty string is
+ * Scalar/String/EmptyString. Mirrors eng/go/value.go::NewString.
  */
 export function newString(s: string): Value {
-  return new Value(TString, s)
+  return new Value(s.length === 0 ? TStringEmpty : TStringProper, s)
 }
 
 export function newBoolean(b: boolean): Value {
@@ -288,13 +418,89 @@ export function newTypeLiteral(t: AqlType): Value {
   return new Value(t, null)
 }
 
+// The unique payload that marks the `none` value (None's sole
+// inhabitant), distinguishing it from the `None` type literal (which
+// has a null payload). Mirrors eng/go's noneSentinel.
+const NONE_SENTINEL: unique symbol = Symbol('none')
+
+/** Construct the unique `none` value. */
+export function newNone(): Value {
+  return new Value(TNone, NONE_SENTINEL)
+}
+
+/** XML element payload (static, post-interpolation). */
+export interface XmlElement {
+  tag: string
+  attrs: { name: string; value: string }[]
+  children: (string | XmlElement)[]
+}
+
+/** Construct an XML value (VType Node/Xml). */
+export function newXml(elem: XmlElement): Value {
+  return new Value(TXml, elem)
+}
+
+// XML interpolation template (pre-evaluation). Attribute values carry
+// interp segments; children are literal text, a hole expression, or a
+// nested template.
+export type XmlAttrTmpl = { name: string; segs: InterpSegment[] }
+export type XmlChildTmpl = { lit: string } | { expr: Value[] } | { elem: XmlTmpl }
+export interface XmlTmpl {
+  tag: string
+  attrs: XmlAttrTmpl[]
+  children: XmlChildTmpl[]
+}
+
+/** Construct an interpolated XML template value (VType Word/__XI). */
+export function newXmlInterp(t: XmlTmpl): Value {
+  return new Value(TXmlInterp, t)
+}
+
+/** Path payload: normalised segments + absolute flag. */
+export interface PathInfo {
+  segments: string[]
+  abs: boolean
+}
+
+/** Construct a path value (VType Scalar/Path). */
+export function newPath(segments: string[], abs: boolean): Value {
+  return new Value(TPath, { segments, abs } satisfies PathInfo)
+}
+
 export function newWord(name: string): Value {
   return new Value(TWord, { name } satisfies WordInfo)
+}
+
+/**
+ * Construct a binding-name word carrying a container type constraint,
+ * used by the spec tokenizer for `def NAME:[…]` / `def NAME:{…}` forms.
+ */
+export function newConstrainedWord(name: string, constraint: Value): Value {
+  return new Value(TWord, { name, constraint } satisfies WordInfo)
 }
 
 /** Convenience for constructing an Any-typed carrier (test harness use). */
 export function newAny(data: unknown): Value {
   return new Value(TAny, data)
+}
+
+/**
+ * Construct a strict check-mode carrier: a type-only value of type `t`
+ * (no concrete payload) that matches signatures as a value of that type
+ * and propagates its type through dispatch. Mirrors Go NewCarrier.
+ */
+export function newCarrier(t: AqlType): Value {
+  return new Value(t, null, { carrier: true })
+}
+
+/**
+ * Construct a gradual (dynamic) carrier — a type-only value whose type
+ * is statically unknown or arrived from an unannotated word. It matches
+ * optimistically and its contagion widens results to dynamic. Mirrors
+ * Go NewDynamicCarrier.
+ */
+export function newDynamicCarrier(t: AqlType): Value {
+  return new Value(t, null, { carrier: true, dynamic: true })
 }
 
 /**
@@ -306,6 +512,168 @@ export function newAny(data: unknown): Value {
  */
 export function newList(elems: Value[], opts?: { eval?: boolean; quoted?: boolean }): Value {
   return new Value(TList, elems, { eval: opts?.eval, quoted: opts?.quoted })
+}
+
+/**
+ * OrderedMap preserves key insertion order. Mirrors
+ * eng/go/value.go::OrderedMap (the subset the spec reaches).
+ */
+export class OrderedMap {
+  private readonly _keys: string[] = []
+  private readonly vals = new Map<string, Value>()
+
+  set(key: string, val: Value): void {
+    if (!this.vals.has(key)) this._keys.push(key)
+    this.vals.set(key, val)
+  }
+
+  get(key: string): Value | undefined {
+    return this.vals.get(key)
+  }
+
+  has(key: string): boolean {
+    return this.vals.has(key)
+  }
+
+  keys(): string[] {
+    return [...this._keys]
+  }
+
+  /** Keys in sorted order — the canonical render order. */
+  sortedKeys(): string[] {
+    return [...this._keys].sort()
+  }
+
+  get size(): number {
+    return this._keys.length
+  }
+}
+
+/** Construct a map value with VType = Node/Map wrapping an OrderedMap. */
+export function newMap(m: OrderedMap): Value {
+  return new Value(TMap, m)
+}
+
+/**
+ * OptionsData marks an Options instance (an Ideal/Options value). It
+ * has VType Map (so typeof reports Map) but renders as `options{…}`.
+ */
+export class OptionsData {
+  readonly map: OrderedMap
+  constructor(map: OrderedMap) {
+    this.map = map
+  }
+}
+
+/** Construct an Options instance (`make Options {…}`). */
+export function newOptions(map: OrderedMap): Value {
+  return new Value(TMap, new OptionsData(map))
+}
+
+/**
+ * An object TYPE built by `refine Object {…}` / `refine Base {…}`.
+ * `name` is empty until a `def Name …` binding stamps it. `parentPath`
+ * is the lattice path of the parent (the base `Object`, or another
+ * object type's path like `Object/Bar`). `fields` maps field name →
+ * type literal, with inherited fields first. Mirrors ObjectTypeInfo in
+ * eng/go.
+ */
+export class ObjectTypeInfo {
+  name: string
+  readonly parentPath: string
+  readonly fields: OrderedMap
+  constructor(name: string, parentPath: string, fields: OrderedMap) {
+    this.name = name
+    this.parentPath = parentPath
+    this.fields = fields
+  }
+  /** The full lattice path of this object type, once named. */
+  get path(): string {
+    return `${this.parentPath}/${this.name}`
+  }
+}
+
+/** Construct an object-type value (a Type-branch value carrying ObjectTypeInfo). */
+export function newObjectType(info: ObjectTypeInfo): Value {
+  return new Value(TType, info)
+}
+
+/**
+ * A segment of an interpolated string: literal text, or an expression
+ * (token list) to evaluate and stringify. Mirrors InterpPart in eng/go.
+ */
+export type InterpSegment = { lit: string } | { expr: Value[] }
+
+/** Construct an interpolated-string value (VType Word/__IS). */
+export function newInterpString(segments: InterpSegment[]): Value {
+  return new Value(TInterpString, segments)
+}
+
+/**
+ * Construct a paren-expression value (VType Word/__PE) holding the
+ * tokens of a `( … )` group. In data context it evaluates and collapses
+ * to a single residual value (unlike a list, which stays a list).
+ */
+export function newParenExpr(tokens: Value[]): Value {
+  return new Value(TParenExpr, tokens)
+}
+
+/**
+ * Construct an inspection map (VType Node/Map/Inspect). Renders in
+ * insertion order with word values bare (e.g. `kind:native`), unlike a
+ * plain map which sorts keys.
+ */
+export function newInspect(m: OrderedMap): Value {
+  return new Value(TInspect, m)
+}
+
+/**
+ * ChildType backs a typed list `[:T]` / typed map `{:T}` (and their
+ * concrete-with-elements forms `[:T 1 2 3]`). Mirrors the
+ * ChildTypeInfo payload in eng/go/value.go. `child` is the element/value
+ * type constraint (a type literal); `elements` carries concrete
+ * elements when present.
+ */
+export class ChildType {
+  readonly child: Value
+  readonly elements: Value[]
+  constructor(child: Value, elements: Value[] = []) {
+    this.child = child
+    this.elements = elements
+  }
+}
+
+/** Construct a typed list value (VType Node/List, ChildType payload). */
+export function newTypedList(child: Value, elements: Value[] = []): Value {
+  return new Value(TList, new ChildType(child, elements))
+}
+
+/** Construct a typed map value (VType Node/Map, ChildType payload). */
+export function newTypedMap(child: Value): Value {
+  return new Value(TMap, new ChildType(child))
+}
+
+/**
+ * DisjunctInfo holds the alternatives of a disjunction (union) type, or
+ * the members of an enum. Mirrors eng/go/value.go::DisjunctInfo.
+ */
+export interface DisjunctInfo {
+  alternatives: Value[]
+}
+
+/** Construct a Disjunct (union) value — VType Type/Disjunct. */
+export function newDisjunct(alternatives: Value[]): Value {
+  return new Value(TDisjunct, { alternatives } satisfies DisjunctInfo)
+}
+
+/** Construct a FunctionSignature (fnsig) value — VType Type/FunctionSignature. */
+export function newFnUndef(sigs: Value[]): Value {
+  return new Value(TFnUndef, sigs)
+}
+
+/** Construct an Enum value — VType Type/Disjunct/Enum (a Disjunct subtype). */
+export function newEnum(alternatives: Value[]): Value {
+  return new Value(TEnum, { alternatives } satisfies DisjunctInfo)
 }
 
 /** Clone a Value with `quoted=true` (used by `quote` for lists). */

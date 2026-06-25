@@ -230,7 +230,7 @@ func (r *Registry) SuspendPendingGen() func() {
 //     the parameter's BOUND (`extends C` = Is-membership in C, D7);
 //     an unconstrained parameter admits anything (extends Any).
 type genParamUnifier struct {
-	prev  TypeBehavior
+	behaviorWrapper
 	param GenParam
 }
 
@@ -257,8 +257,6 @@ func (g *genParamUnifier) Format(v Value) string {
 	}
 	return baseBehavior(g.prev).Format(v)
 }
-
-func (g *genParamUnifier) Equal(a, b Value) bool { return baseBehavior(g.prev).Equal(a, b) }
 
 // boundNode extracts the lattice node a bound value denotes, when it
 // denotes one directly: a bare type literal IS its node; an object
@@ -290,7 +288,7 @@ func MintTypeParam(r *Registry, p GenParam) *Type {
 		}
 	}
 	node := r.Types.MintType(p.Name, parent)
-	node.Behavior = &genParamUnifier{prev: node.Behavior, param: p}
+	node.Behavior = &genParamUnifier{behaviorWrapper: behaviorWrapper{prev: node.Behavior}, param: p}
 	return node
 }
 
@@ -341,7 +339,7 @@ func TypeParamName(t *Type) string {
 // "any instantiation of Box"). The Behavior exists for rendering and
 // schema-node detection.
 type schemaUnifier struct {
-	prev TypeBehavior
+	behaviorWrapper
 	info *TypeSchemaInfo
 }
 
@@ -358,12 +356,10 @@ func (s *schemaUnifier) Format(v Value) string {
 	return baseBehavior(s.prev).Format(v)
 }
 
-func (s *schemaUnifier) Equal(a, b Value) bool { return baseBehavior(s.prev).Equal(a, b) }
-
 // InstallSchemaUnifier attaches a schemaUnifier to a minted schema
 // node. Called by InstallType's TypeSchema branch.
 func InstallSchemaUnifier(def *Type, info *TypeSchemaInfo) {
-	def.Behavior = &schemaUnifier{prev: def.Behavior, info: info}
+	def.Behavior = &schemaUnifier{behaviorWrapper: behaviorWrapper{prev: def.Behavior}, info: info}
 }
 
 // SchemaInfoOf returns the schema payload when t is a minted schema

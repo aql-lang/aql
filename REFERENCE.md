@@ -510,7 +510,7 @@ absence the **engine** produced, and lowercase `none` marks the
 value your **source** wrote:
 
 ```
-{a:1} get b                   # returns None — engine-produced absence
+{a:1} dot b                   # returns None — engine-produced absence
 {a:none}                      # returns {a:none} — source-written value
 def P refine Record [name:String nick:(String tor none)]
 make P {name:"Bob"}           # returns {name:'Bob' nick:None}
@@ -523,8 +523,8 @@ raises, `has` answers whether the key is **bound** at all):
 
 ```
 {a:None} has a                # returns true  — present, value is none
-{a:None} get a                # returns None  — indistinguishable from…
-{a:1}    get b                # returns None  — …an absent key
+{a:None} dot a                # returns None  — indistinguishable from…
+{a:1}    dot b                # returns None  — …an absent key
 {a:1}    has b                # returns false
 none     has a                # returns false — total: composes in conditions
 ```
@@ -609,7 +609,7 @@ as-is, so deliberate sharing stays available:
 def Point class {x:Float y:0.0}     # x required, y defaults to 0.0
 def p (make Point {x:1.0})
 p.x                                  # returns 1.0 — dot access reads fields
-p get y                              # returns 0.0
+p dot y                              # returns 0.0
 describe Point                       # prints the schema view
 ```
 
@@ -679,7 +679,7 @@ returns) and raises `surface_unsatisfied` listing every gap:
 ```
 def Shape surface {area: (fnsig [[Self] [Float]])}
 def Circle class {r:1.0}
-def area fn [[c:Circle] [Float] [(c get r) mul 6.28]]
+def area fn [[c:Circle] [Float] [(c dot r) mul 6.28]]
 Circle exposes Shape
 def total fn [[s:Shape] [Float] [area s]]
 total (make Circle {r:2.0})   # 12.56
@@ -1642,25 +1642,28 @@ word — `size` subsumes it.
 >
 > | JavaScript | AQL | meaning |
 > |------------|-----|---------|
-> | `xs.i`     | `xs get i` or `xs.i` | literal key/index named `i` |
-> | `xs[i]`    | `xs get (i)`         | computed — the **value** of `i` |
+> | `xs.i`     | `xs dot i` or `xs.i` | literal key/index named `i` |
+> | `xs[i]`    | `xs get i`           | computed — the **value** of `i` |
 >
 > ```
 > def xs [10 20 30]
 > def i 1
-> xs get i          # returns None — literal key "i", absent (like xs.i)
-> xs get (i)        # returns 20   — i evaluates to 1 (like xs[i])
+> xs dot i          # returns None — literal key "i", absent (like xs.i)
+> xs get i          # returns 20   — i evaluates to 1 (like xs[i])
 > xs get 1          # returns 20   — literal index
 > ```
 >
-> This is why a bare word index never resolves a same-named variable, and
-> why an *undefined* bare key still returns `None` rather than raising
-> `undefined word` — exactly as `xs.i` reads a missing property as
-> `undefined` in JS. Reach for parens whenever the key/index is computed.
+> `dot` (and its `.` sugar) QUOTES a bare word as a literal key, so a
+> same-named variable is ignored and an *undefined* bare key still reads
+> `None` rather than raising — exactly as `xs.i` reads a missing property as
+> `undefined` in JS. `get` EVALUATES its key, so `get i` uses the value of
+> `i`; a bare word `get` needs that word to be bound or it is an
+> `undefined word`. Reach for `get` (or `dot (…)`-with-a-paren) whenever the
+> key/index is computed.
 
 **Dotted access binds tightly.** A `.`/`!.` chain groups to a single
 `( … )` so it binds to its immediate receiver, not to a surrounding call:
-`size m.x` means `size (m.x)`, and `a.b.c` is `( a get b get c )`. Two
+`size m.x` means `size (m.x)`, and `a.b.c` is `( a dot b dot c )`. Two
 consequences:
 
 - **Access the result of a call** by parenthesising the call:
@@ -1956,7 +1959,7 @@ modules keep plain names.
 | `aql:array-util` | `ArrayUtil` | Specialised APL-style array vocabulary (see above). |
 | `aql:string-util` | `StringUtil` | String words — `upper`, `split`, `indexof` (haystack-last), `replace`, … all subject-last. |
 | `aql:struct-util` | `StructUtil` | voxgig-struct data words — `clone`, `getpath`, `setpath`, `merge`, `walk`, `transform`, `jsonify`, … |
-| `aql:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`. |
+| `aql:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`, and `base64`/`hex` `-encode`/`-decode`. |
 | `aql:logic-util` | `LogicUtil` | Derived boolean connectives — `nand`, `nor`, `xnor`, `iff`, `implies`. |
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
@@ -2027,7 +2030,7 @@ on the code with `case`:
 ```
 def attempt fn [[x:Integer] [Any] [
   do [risky x] error [
-    get code
+    dot code
     case [
       bad_input/q  "rejected: bad input"
       too_big/q    "rejected: too large"
@@ -2037,8 +2040,8 @@ def attempt fn [[x:Integer] [Any] [
 ]]
 ```
 
-A match may also be a predicate over the whole Error (`[get code eq
-bad_input/q] [get message]`), with the matched block reading the
+A match may also be a predicate over the whole Error (`[dot code eq
+bad_input/q] [dot message]`), with the matched block reading the
 error's fields — the value is on the stack for both, exactly like
 the `error` handler itself.
 

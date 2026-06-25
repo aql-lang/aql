@@ -14,8 +14,8 @@ func setupMemFSForIO(t *testing.T, r *Registry) *capabilities.MemFileOps {
 	}
 	e := New(r)
 	_, err := e.Run([]Value{
-		NewWord("context"), NewWord("get"), NewWord("__sys"),
-		NewWord("get"), NewWord("fs"),
+		NewWord("context"), NewWord("dot"), NewWord("__sys"),
+		NewWord("dot"), NewWord("fs"),
 		NewWord("set"), NewWord("mem"), NewBoolean(true),
 	})
 	if err != nil {

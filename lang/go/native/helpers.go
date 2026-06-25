@@ -6,8 +6,17 @@ import (
 
 // valueToSliceArg converts a Value into the interface{} expected by
 // voxgigstruct.Slice: strings flow through unchanged, lists become
-// []interface{} with element-wise conversion, anything else falls back
-// to its String() form. Used by stringSliceNative in natives.go.
+// []interface{} whose elements are the original Values boxed verbatim,
+// anything else falls back to its String() form. Used by
+// stringSliceNative in natives.go.
+//
+// List elements are boxed (not recursively converted to Go natives)
+// because Slice only reorders/sub-ranges top-level elements and never
+// introspects them; boxing preserves every element type (Integer,
+// Float, Map, nested List, …) across the round trip — previously the
+// non-string/non-list fallback stringified scalar elements, so a sliced
+// integer list came back as strings. sliceResultItem unboxes via its
+// Value case.
 func valueToSliceArg(v Value) interface{} {
 	if v.Parent.ConformsTo(TString) {
 		_as3, _ := AsString(v)
@@ -17,7 +26,7 @@ func valueToSliceArg(v Value) interface{} {
 		list, _ := AsList(v)
 		result := make([]interface{}, list.Len())
 		for i, elem := range list.Slice() {
-			result[i] = valueToSliceArg(elem)
+			result[i] = elem
 		}
 		return result
 	}
@@ -52,6 +61,10 @@ func sliceResult(result interface{}) ([]Value, error) {
 // into an Value, recursing into nested []interface{} slices.
 func sliceResultItem(item interface{}) (Value, error) {
 	switch v := item.(type) {
+	case Value:
+		// List elements are boxed verbatim by valueToSliceArg; unbox
+		// them unchanged to preserve their original type.
+		return v, nil
 	case string:
 		return NewString(v), nil
 	case int:

@@ -13,15 +13,15 @@
 #
 # ---------------------------------------------------------------------
 # §1  definition + construction (paren-free def, defaults, dot reads)
-def Point class {x:1, y:2} (make Point {}) get x	1	paren-free def + make; omitted field takes its default
-def Point class {x:1, y:2} (make Point {x:9}) get x	9	provided value overrides the default
+def Point class {x:1, y:2} (make Point {}) dot x	1	paren-free def + make; omitted field takes its default
+def Point class {x:1, y:2} (make Point {x:9}) dot x	9	provided value overrides the default
 def Point class {x:1, y:2} def p (make Point {x:9}) p.y	2	dot access reads an instance field (literal key)
 def Point class {x:1} (make Point {}) typeof	Point	typeof an instance is the class name
 def Point class {x:1} (make Point {}) is Point	true	an instance is its class
 def Point class {x:1} (make Point {}) is Object	false	a class instance is NOT an Object — classes root under Ideal/Class
 #
 # §2  required vs defaulted fields (type = required, value = default)
-def User class {name:String, age:0} (make User {name:'ann'}) get age	0	typed field provided, valued field defaults
+def User class {name:String, age:0} (make User {name:'ann'}) dot age	0	typed field provided, valued field defaults
 def User class {name:String, age:0} make User {}	ERROR:missing field	a typed field is REQUIRED — omitting it is a loud error
 def Point class {x:1} make Point {z:5}	ERROR:unknown field	an undeclared key at make is a loud error
 #
@@ -30,8 +30,8 @@ def Point class {x:1} def p (make Point {}) p set x 7 end p.x	7	declared-field s
 def Point class {x:1} def p (make Point {}) p set z 9	ERROR:sealed_field	an undeclared field write is a loud sealed_field error
 #
 # §4  subclassing via refine — flat inherited defaults, sealed across the chain
-def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) get x	1	inherited default resolves flat into the instance
-def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {x:7}) get z	3	own default alongside provided inherited field
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) dot x	1	inherited default resolves flat into the instance
+def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {x:7}) dot z	3	own default alongside provided inherited field
 def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) is Point	true	an instance of the subclass is the parent class (nominal chain)
 def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) is Point3	true	…and is its own class
 def Point class {x:1} def Point3 refine Point {z:3} (make Point3 {}) set w 1	ERROR:sealed_field	sealing covers the whole inherited field set
@@ -44,7 +44,7 @@ class Map	ERROR:signature_error	a bare Map type literal is not a concrete schema
 def Point class {x:1} make Point {x:'hi'}	ERROR:expected Integer	a defaulted field rejects values outside the default's own type
 def Point class {x:1} make Point {x:2.5}	ERROR:expected Integer	no silent Float→Integer truncation — loud type error
 def User class {name:String} make User {name:42}	ERROR:expected String	a typed field rejects non-conforming values (no conversion)
-def Radius (Float gte 0.0) def Circle class {r:Radius} (make Circle {r:2.0}) get r	2.0	a predicate-typed field runs its predicate at make and accepts
+def Radius (Float gte 0.0) def Circle class {r:Radius} (make Circle {r:2.0}) dot r	2.0	a predicate-typed field runs its predicate at make and accepts
 def Radius (Float gte 0.0) def Circle class {r:Radius} make Circle {r:-1.0}	ERROR:does not satisfy	…and rejects a violating value loudly
 def Radius (Float gte 0.0) def Circle class {r:Radius} def c (make Circle {r:1.0}) c set r -5.0	ERROR:type_error	write-time enforcement matches construction (predicate runs at set)
 def Radius (Float gte 0.0) def Circle class {r:Radius} def c (make Circle {r:1.0}) c set r 3.0 end c.r	3.0	a conforming write succeeds
@@ -76,13 +76,13 @@ refine Object {v:0}	ERROR:refine_error	…also without def
 def Foo refine Integer end (make Foo 1) is Foo	true	make on a newtype tags the value
 def Foo refine Integer end (make Foo 1) typeof	Foo	…and typeof shows the refinement
 def Foo refine Integer end (make Foo "42") is Foo	true	make casts to the base first (String → Integer), then tags
-def Foo refine Integer end def S class {x:(make Foo 1)} end (typeof ((make S {}) get x))	Foo	a tagged default declares the field type AND fills when omitted
+def Foo refine Integer end def S class {x:(make Foo 1)} end (typeof ((make S {}) dot x))	Foo	a tagged default declares the field type AND fills when omitted
 def Foo refine Integer end def S class {x:(make Foo 1)} end make S {x:7}	ERROR:expected Foo	a bare Integer is not a Foo — newtype strictness extends to fields
-def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {x:(make Foo 7)}) get x	7	a properly-tagged value is accepted
+def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {x:(make Foo 7)}) dot x	7	a properly-tagged value is accepted
 #
 # §10  const — singleton types: a field that can only ever hold one value
-def S class {kind:(const 'point'), x:1} end (make S {}) get kind	'point'	a const member's default is forced — the only inhabitant fills in
-def S class {kind:(const 'point'), x:1} end (make S {kind:'point', x:2}) get x	2	providing the exact inhabitant is accepted
+def S class {kind:(const 'point'), x:1} end (make S {}) dot kind	'point'	a const member's default is forced — the only inhabitant fills in
+def S class {kind:(const 'point'), x:1} end (make S {kind:'point', x:2}) dot x	2	providing the exact inhabitant is accepted
 def S class {kind:(const 'point')} end make S {kind:'other'}	ERROR:expected 'point'	any other value is a loud type error at make
 def S class {kind:(const 'point')} end def s (make S {}) end s set kind 'other'	ERROR:type_error	…and at instance set
 def S class {kind:(const 'point')} end def s (make S {}) end s set kind 'point' end s.kind	'point'	re-writing the inhabitant succeeds
@@ -99,7 +99,7 @@ const nan	ERROR:const_error	NaN cannot pin a value (not equal to itself)
 #      instances keep their identity: reads, typed writes, and typeof
 #      keep working against the retired node.
 def Point class {x:1} def p (make Point {x:5}) undef Point end p typeof	Point	a live instance keeps its type identity after undef
-def Point class {x:1} def p (make Point {x:5}) undef Point end p get x	5	…and its fields stay readable
+def Point class {x:1} def p (make Point {x:5}) undef Point end p dot x	5	…and its fields stay readable
 def Point class {x:1} def p (make Point {x:5}) undef Point end p set x 9 end p.x	9	…and typed writes still run the schema check
 def Point class {x:1} def p (make Point {x:5}) undef Point end p set x 'hi'	ERROR:expected Integer	…which still rejects off-schema values
 def Point class {x:1} def p (make Point {}) undef Point end make Point {}	ERROR:undefined word	the NAME is gone — construction is a loud error

@@ -200,8 +200,8 @@ func enableMemFS(t *testing.T, reg *native.Registry) {
 	t.Helper()
 	eng := native.New(reg)
 	_, err := eng.Run([]native.Value{
-		native.NewWord("context"), native.NewWord("get"), native.NewWord("__sys"),
-		native.NewWord("get"), native.NewWord("fs"),
+		native.NewWord("context"), native.NewWord("dot"), native.NewWord("__sys"),
+		native.NewWord("dot"), native.NewWord("fs"),
 		native.NewWord("set"), native.NewWord("mem"), native.NewBoolean(true),
 	})
 	if err != nil {

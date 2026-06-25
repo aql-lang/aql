@@ -109,7 +109,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 // instead of refusing "operand shape needs reordering". `setpath recv k v`
 // with a computed receiver is the driving shape.
 func TestThreeArgComputedReceiverLowers(t *testing.T) {
-	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) get b`
+	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) dot b`
 
 	a, err := New()
 	if err != nil {
@@ -624,7 +624,7 @@ func TestArgsAccessorCompilesNative(t *testing.T) {
 		}
 		// args.N must lower to a frame-local read, not a runtime args call.
 		if strings.Contains(prog.Disassemble(), "CALL_NATIVE_POLY") && strings.Contains(c.src, "args.0 add") {
-			t.Errorf("%q: args.N did not fold to a local (poly get remains):\n%s", c.src, prog.Disassemble())
+			t.Errorf("%q: args.N did not fold to a local (poly dot remains):\n%s", c.src, prog.Disassemble())
 		}
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
@@ -928,11 +928,11 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {}) get x`, "[1]"},
-		{`def Foo refine Integer end def S class {x:(make Foo 1)} end typeof ((make S {}) get x)`, "[Foo]"},
-		{`def Foo class {y:1} end def S class {x:(make Foo {})} end (make S {}) get x`, "[Class/Foo{y:1}]"},
-		{`def Foo refine Integer end def S class {x:(make Foo 7)} end (make S {x:(make Foo 9)}) get x`, "[9]"},
-		{`def S class {x:(1 add 2)} end (make S {}) get x`, "[3]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end (make S {}) dot x`, "[1]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 1)} end typeof ((make S {}) dot x)`, "[Foo]"},
+		{`def Foo class {y:1} end def S class {x:(make Foo {})} end (make S {}) dot x`, "[Class/Foo{y:1}]"},
+		{`def Foo refine Integer end def S class {x:(make Foo 7)} end (make S {x:(make Foo 9)}) dot x`, "[9]"},
+		{`def S class {x:(1 add 2)} end (make S {}) dot x`, "[3]"},
 		{`def m {a:(1 add 2)} m`, "[{a:3}]"}, // data map scalar default also const-folds
 	} {
 		a, _ := New()
@@ -955,7 +955,7 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 
 	// Per-instance copy isolation: make copies the baked schema default, so
 	// mutating one instance's field must not affect another's.
-	const iso = `def Foo class {n:1} end def S class {x:(make Foo {})} end def a (make S {}) def b (make S {}) (a.x set n 9) end b.x get n`
+	const iso = `def Foo class {n:1} end def S class {x:(make Foo {})} end def a (make S {}) def b (make S {}) (a.x set n 9) end b.x dot n`
 	a, _ := New()
 	gotC, compiled, _ := a.RunCompiled(iso)
 	b, _ := New()
@@ -1090,23 +1090,29 @@ func TestQueryDSLCompilesNative(t *testing.T) {
 		}
 	}
 
-	// SCOPING: the quote exemption is gated on a MODULE INNER native. A core
-	// quoted-operand word (here `inspect`, which quotes a bare def name) is NOT a
-	// module inner native, so it must STILL refuse — proving the exemption does
-	// not leak to the meta/accessor quoted-operand words. It falls back with
-	// faithful parity.
+	// SCOPING: `inspect` (a core quoted-operand word that quotes a bare def
+	// name) now DECLARES CompileQuoteInert, so it bakes a plain CALL_NATIVE over
+	// the inert Atom const — the same opt-in quote/codequote/raise use. The
+	// handler is a pure registry reader, so `def x 5  inspect x` compiles native
+	// and runs compiled == interpreter (the binding lookup happens at VM time
+	// against the same registry the interpreter sees). A core quoted-operand
+	// word that does NOT opt in still refuses — quoteOperandInertOK fires only
+	// for a CompileQuoteInert declarer or a module-inner sig, so the exemption
+	// does not silently leak.
 	const core = `def x 5  inspect x`
 	a, _ := New()
 	prog, reason, _, _ := a.CompileCheck(core)
-	if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-		t.Errorf("%q: a core quoted-operand word must NOT compile native (reason was %q)", core, reason)
+	if prog == nil {
+		t.Errorf("%q: inspect should compile (CompileQuoteInert), refused %q", core, reason)
+	} else if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("%q: inspect should bake a CALL_NATIVE, got an island:\n%s", core, prog.Disassemble())
 	}
 	ar, _ := New()
 	gotC, _, _ := ar.RunCompiled(core)
 	b, _ := New()
 	gotI, _ := b.Run(core)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: fallback parity broke: compiled=%v interp=%v", core, gotC, gotI)
+		t.Errorf("%q: compiled/interp parity broke: compiled=%v interp=%v", core, gotC, gotI)
 	}
 }
 
@@ -1915,31 +1921,35 @@ func TestVarCompilesAsLet(t *testing.T) {
 		}
 	}
 
-	// SOUNDNESS GATE: a let body that ERRORS under check-mode analysis (here
-	// `s get a/q`, where the each-element carrier `s` is conservatively under-typed
-	// and `get` rejects it as a non-concrete map — mere imprecision, the runtime
-	// `s` is a concrete Map and the interpreter returns [1 2]) must NOT compile to
-	// an EMPTY closure (which would raise each_error "body produced no result" at
-	// the VM, diverging from the interpreter). The armed-body-error refusal in
-	// AnalyseFnBody marks the program uncompilable, so it falls back byte-identical.
-	const guarded = `def data [{a:1} {a:2}] (data each [var [[s] (s get a/q)]])`
-	prog, _, _, cerr := mustNew(t).CompileCheck(guarded)
+	// A var-body that REACHES INTO the each element (`s get a/q`, where `s` is the
+	// element carrier) compiles to its closure unit and is byte-identical to the
+	// interpreter ([1 2]). This row previously REFUSED, but the refusal was the
+	// var-cleanup `undef s` mis-dispatching to the 2-arg `undef name fnUndefSpec`
+	// form (the dynamic-Any body residual gradually matched TFnUndef in check
+	// mode) and erroring — NOT, as once believed, a `get`-rejects-under-typed-map
+	// imprecision. With the cleanup routed through the 1-arg-only `__varundef`
+	// (native_definition.go) the body analyses cleanly and compiles. The broader
+	// armed-body-error soundness gate in AnalyseFnBody (a GENUINE check-mode body
+	// error still marks the program uncompilable) is exercised by the whole-corpus
+	// differential.
+	const reach = `def data [{a:1} {a:2}] (data each [var [[s] (s dot a/q)]])`
+	prog, _, _, cerr := mustNew(t).CompileCheck(reach)
 	if cerr != nil {
-		t.Fatalf("guarded each-var: unexpected check error %v", cerr)
+		t.Fatalf("reach each-var: unexpected check error %v", cerr)
 	}
-	if prog != nil {
-		t.Errorf("guarded each-var: a check-mode body error must refuse, got a Program:\n%s", prog.Disassemble())
+	if prog == nil {
+		t.Errorf("reach each-var: expected a compiled Program (the var cleanup no longer mis-dispatches)")
 	}
-	gotG, compiled, err := mustNew(t).RunCompiled(guarded)
+	gotG, compiled, err := mustNew(t).RunCompiled(reach)
 	if err != nil {
-		t.Fatalf("guarded each-var: %v", err)
+		t.Fatalf("reach each-var: %v", err)
 	}
-	gotGI, _ := mustNew(t).Run(guarded)
-	if compiled {
-		t.Errorf("guarded each-var: a check-mode body error must refuse, not compile")
+	gotGI, _ := mustNew(t).Run(reach)
+	if !compiled {
+		t.Errorf("reach each-var: a clean var-reach body should compile, got a fallback")
 	}
 	if fmt.Sprint(gotG) != fmt.Sprint(gotGI) || fmt.Sprint(gotG) != "[[1 2]]" {
-		t.Errorf("guarded each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
+		t.Errorf("reach each-var: compiled=%v interp=%v want [[1 2]]", gotG, gotGI)
 	}
 }
 
@@ -1993,18 +2003,30 @@ func TestTopTakingClosureTrim(t *testing.T) {
 // CARRIER and refuses recording for such a string, so the program falls back to
 // the interpreter and builds the real value. Found via voxgig-aql/decision
 // prop suites (`  pass: ${nm}` where nm = a get over the each-element carrier).
-func TestInterpStringRuntimePartFallsBack(t *testing.T) {
-	// nm is a field read over the each-element carrier → dynamic; the interp
-	// string must NOT bake "dynamic(Any)". Compiled (with fallback) == interp.
+func TestInterpStringRuntimePartCompiles(t *testing.T) {
+	// nm is a field read over the each-element carrier → a runtime hole. It now
+	// lowers to OpInterp (the VM rebuilds the string from the popped hole at run
+	// time) rather than refusing the program. Compiled == interp, no carrier leak,
+	// and the interpolation itself is native — no string-interp island.
 	const src = `def rs [{name:"a"} {name:"b"}]
 (rs each [var [[r] def nm (r "name" get) ` + "`x ${nm}`" + ` ]])`
+	prog, reason, _, _ := mustNew(t).CompileCheck(src)
+	if prog == nil {
+		t.Fatalf("a runtime-valued interpolation must now compile via OpInterp, refused: %s", reason)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "INTERP") || strings.Contains(dis, "FALLBACK") {
+		t.Errorf("the interpolation must lower to a native INTERP (no island):\n%s", dis)
+	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
 	gotI, errI := mustNew(t).Run(src)
-	if compiled {
-		t.Errorf("a runtime-valued interpolation must refuse (no runtime string-interp op), got a compiled run")
+	if !compiled {
+		t.Errorf("the program must run compiled, fell back")
 	}
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+		t.Errorf("parity broke: compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+	}
+	if fmt.Sprint(gotI) != "[['x a' 'x b']]" {
+		t.Errorf("got %v, want [['x a' 'x b']]", gotI)
 	}
 	for _, v := range []string{fmt.Sprint(gotC), fmt.Sprint(gotI)} {
 		if strings.Contains(v, "dynamic(") {
@@ -2012,7 +2034,7 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 		}
 	}
 
-	// POSITIVE: a fully-CONCRETE interpolation still compiles and folds.
+	// POSITIVE: a fully-CONCRETE interpolation still folds to a pooled const.
 	prog, reason, _, cerr := mustNew(t).CompileCheck("def n 5\n`value ${n}`")
 	if cerr != nil {
 		t.Fatalf("concrete interp: check error %v", cerr)
@@ -2023,6 +2045,74 @@ func TestInterpStringRuntimePartFallsBack(t *testing.T) {
 	gotc, _, _ := mustNew(t).RunCompiled("def n 5\n`value ${n}`")
 	if fmt.Sprint(gotc) != "[value 5]" {
 		t.Errorf("concrete interp: got %v want [value 5]", gotc)
+	}
+
+	// NEGATIVE: a single hole that yields a DYNAMIC, MULTI-value run cannot map to
+	// one stack slot, so OpInterp refuses and the program falls back — still with
+	// interpreter parity (no silent miscompile).
+	const multi = "`v=${1 add 2  3 add 4}`"
+	mprog, _, _, _ := mustNew(t).CompileCheck(multi)
+	if mprog != nil {
+		t.Errorf("a dynamic multi-value hole must refuse to compile")
+	}
+	mC, mcompiled, _ := mustNew(t).RunCompiled(multi)
+	mI, _ := mustNew(t).Run(multi)
+	if mcompiled {
+		t.Errorf("dynamic multi-value hole must fall back, ran compiled")
+	}
+	if fmt.Sprint(mC) != fmt.Sprint(mI) {
+		t.Errorf("fallback parity broke: compiled=%v interp=%v", mC, mI)
+	}
+}
+
+// TestInterpStringOpInterpParity exercises OpInterp across the shapes that
+// distinguish it from a const fold — multiple holes, natively-computed holes,
+// None and type-literal holes, and NESTING — asserting (a) the program compiles
+// natively (an INTERP, no island), and (b) compiled output is byte-identical to
+// the interpreter.
+func TestInterpStringOpInterpParity(t *testing.T) {
+	// wantInterp marks cases with a genuinely DYNAMIC hole (a native result, which
+	// check mode synthesises as a carrier) that must lower to OpInterp. The others
+	// have only literal / binding / const-foldable holes, so they collapse to a
+	// pooled const (optimal) — they must still compile natively and match, but
+	// without an INTERP op.
+	cases := []struct {
+		src, want  string
+		wantInterp bool
+	}{
+		{src: "`a${1}b${2}c${3}d`", want: "[a1b2c3d]"},                                                  // all literal holes → const
+		{src: "def n 3 `${n} items, total ${n mul 10}`", want: "[3 items, total 30]", wantInterp: true}, // n mul 10 carrier
+		{src: "`type: ${42 typeof}`", want: "[type: Integer]", wantInterp: true},                        // typeof carrier
+		{src: "def x None `got ${x}`", want: "[got None]"},                                              // None binding → const
+		{src: "`nested ${ `inner ${1 add 1}` }`", want: "[nested inner 2]", wantInterp: true},           // add carrier
+		{src: "def f fn [[n:Integer] [String] [ `got ${n}` ]] 7 f", want: "[got 7]", wantInterp: true},  // param hole
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Errorf("%q: check error %v", c.src, cerr)
+			continue
+		}
+		if prog == nil {
+			t.Errorf("%q: must compile, refused: %s", c.src, reason)
+			continue
+		}
+		dis := prog.Disassemble()
+		if strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%q: must compile natively, got an island:\n%s", c.src, dis)
+		}
+		if c.wantInterp && !strings.Contains(dis, "INTERP") {
+			t.Errorf("%q: dynamic hole must lower to INTERP:\n%s", c.src, dis)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled || errC != nil || errI != nil {
+			t.Errorf("%q: run failed compiled=%v errC=%v errI=%v", c.src, compiled, errC, errI)
+			continue
+		}
+		if fmt.Sprint(gotC) != c.want || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want=%s", c.src, gotC, gotI, c.want)
+		}
 	}
 }
 
@@ -2154,7 +2244,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 	const okGetr = `import "aql:math-util"  MathUtil!.sqrt 16.0`
 	if p, _, _, _ := mustNew(t).CompileCheck(okGetr); p != nil {
 		if dis := p.Disassemble(); strings.Contains(dis, "TRAP") {
-			t.Errorf("valid getr must not trap:\n%s", dis)
+			t.Errorf("valid dotr must not trap:\n%s", dis)
 		}
 	}
 	gotC, _, eC := mustNew(t).RunCompiled(okGetr)
@@ -2163,14 +2253,14 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 		t.Fatalf("valid getr: compiled err=%v interp err=%v", eC, eI)
 	}
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("valid getr parity: compiled=%v interp=%v", gotC, gotI)
+		t.Errorf("valid dotr parity: compiled=%v interp=%v", gotC, gotI)
 	}
 
 	// NEGATIVE 2: `get` (not getr) of a MISSING key returns None, never traps —
 	// only getr raises not_found, so the get path stays on the shared ReturnsFn.
 	const okGet = `import "aql:math-util"  MathUtil.nope`
 	if _, _, eGet := mustNew(t).RunCompiled(okGet); eGet != nil {
-		t.Errorf("get of a missing key must not error, got %v", eGet)
+		t.Errorf("dot of a missing key must not error, got %v", eGet)
 	}
 }
 
@@ -2594,8 +2684,8 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
-		{imp + `context get __sys get fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
-		{imp + `context get __sys get fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+		{imp + `context dot __sys dot fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
+		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
@@ -2621,6 +2711,49 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	}
 	if !strings.Contains(eC.Error(), "signature") || !strings.Contains(eI.Error(), "signature") {
 		t.Errorf("set over Integer: expected signature_error, compiled=%v interp=%v", eC, eI)
+	}
+}
+
+// TestSetOverDynamicReceiverConsumedCompiles is the mixed-arity gradual-dispatch
+// counterpart to the statement-position cases above: when a `set` over a DYNAMIC
+// receiver sits in PAREN-TAIL position its result is consumed (here bound by an
+// inner `def`), so the checker models the one gradual value the value-returning
+// overload yields — `def k2` binds a carrier instead of falsely reporting
+// undefined_word, and the whole fn compiles byte-identically. Previously this
+// refused under --force-compile (the gradual model was gated to pure check
+// mode); the paren-tail signal makes it sound to model under a real compile too,
+// because the single value is consumed by the group close and never collected as
+// a sibling word's extra arg.
+func TestSetOverDynamicReceiverConsumedCompiles(t *testing.T) {
+	cases := []struct{ src, want string }{
+		// get over a Map yields a dynamic receiver; set on it (paren-tail, bound
+		// by def k2) returns the updated map, consumed as the body result.
+		{`def f fn [[nd:Map] [Any] [ def k2 ((nd "a" get) set "x" 1) k2 ]]  ({a:{}} f)`, "[{x:1}]"},
+		// Forward-arg consumption: the set result feeds an outer word directly.
+		{`def g fn [[nd:Map] [Map] [ ((nd "a" get) set "x" 1) ]]  ({a:{}} g)`, "[{x:1}]"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected a compiled program, refused: %s", c.src, reason)
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if !compiled {
+			t.Errorf("%q: expected a compiled run, fell back", c.src)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: parity: compiled=%v interp=%v", c.src, gotC, gotI)
+		}
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: interp=%v want %s", c.src, gotI, c.want)
+		}
 	}
 }
 
@@ -3128,5 +3261,210 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("seed %d (recv-bound): parity: compiled=%v interp=%v", seed, gotC, gotI)
 		}
+	}
+}
+
+// TestDeferredListBodyCompiles pins the LAST compiler refusal cleared
+// (def-node-binding.tsv:54), reaching refusals = 0. A fn whose body is a single
+// deferred list literal that references a parameter — `def mk fn [[c1:Integer]
+// [List] [[c1]]]` — returns the list RAW; the interpreter auto-evaluates it LATE,
+// in MODULE scope (a returned list never closes over the param — only a `=>`
+// lambda captures), so `c1` resolves to the module binding, not the arg. The fn
+// is compiled TRANSPARENTLY: the raw deferred list rides as the call's residual
+// and the existing top-level deferred-list fold bakes it in module scope. Every
+// consumption shape must fold to the SAME value both engines produce — no fn unit,
+// no VM change.
+func TestDeferredListBodyCompiles(t *testing.T) {
+	const mk = `def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] `
+	positive := []struct{ src, want string }{
+		// Bare top-level: the deferred list folds at end-of-run, module c1 = 1.
+		{mk + `mk 9`, "[[1]]"},
+		// Rebind AFTER the bare call: the late fold sees the LATEST module binding.
+		{mk + `mk 9 def c1 2`, "[[2]]"},
+		// def-bind forces the eval at bind time (module c1 = 1), so a later rebind
+		// does not move it.
+		{mk + `def r (mk 9) def c1 2 r`, "[[1]]"},
+		// Consumed downstream: the deferred list folds in module scope at the
+		// consumer, exactly as the interpreter auto-evaluates the arg.
+		{mk + `mk 9 0 get`, "[1]"},
+		{mk + `mk 9 size`, "[1]"},
+		// Two independent calls.
+		{mk + `mk 9 mk 8`, "[[1] [1]]"},
+		// A different module binding flows through.
+		{`def c1 7 def mk fn [[c1:Integer] [List] [[c1]]] mk 9`, "[[7]]"},
+	}
+	for _, c := range positive {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("did not compile: reason=%q err=%v :: %s", reason, cerr, c.src)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("expected a native lowering, got an island: %s", c.src)
+		}
+		got, err := mustNew(t).RunCompiledStrict(c.src)
+		if err != nil {
+			t.Fatalf("strict compiled run: %v :: %s", err, c.src)
+		}
+		if fmt.Sprint(got) != c.want {
+			t.Errorf("compiled %v want %s :: %s", got, c.want, c.src)
+		}
+		gotI, _ := mustNew(t).Run(c.src)
+		if fmt.Sprint(gotI) != c.want {
+			t.Errorf("interp %v want %s :: %s", gotI, c.want, c.src)
+		}
+	}
+
+	// NEGATIVE / soundness — a returned list is NOT a closure: it must resolve in
+	// MODULE scope, never the param. The `=>` lambda (which DOES capture) is the
+	// contrast and must still return the captured param. Both must match the
+	// interpreter exactly.
+	contrast := []struct{ src, want string }{
+		// `=>` captures the param: f returns the ARG 7, not a module binding.
+		{`def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f`, "[7]"},
+		// No module binding for the named param: the deferred list errors at the
+		// late module-scope eval (undefined word), exactly as the interpreter does.
+		{`def mk fn [[x:Integer] [List] [[x add 1]]] mk 5`, ""},
+	}
+	for _, c := range contrast {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if codeOf(eC) != codeOf(eI) {
+			t.Errorf("error parity: compiled=%s interp=%s :: %s", codeOf(eC), codeOf(eI), c.src)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("value parity: compiled=%v interp=%v :: %s", gotC, gotI, c.src)
+		}
+		if eC == nil && c.want != "" && fmt.Sprint(gotC) != c.want {
+			t.Errorf("compiled %v want %s :: %s", gotC, c.want, c.src)
+		}
+	}
+}
+
+// Quoted-operand inert words `has` / `inspect` (corpus-core.tsv) — a bare-word
+// key/name quotes to an inert Atom const, so the dispatch bakes a plain
+// CALL_NATIVE over the baked container + key (the VM runs the same pure
+// handler). Declaring CompileQuoteInert clears the "quoted-operand word"
+// refusal exactly as quote/codequote/raise/timeout already do.
+func TestQuotedOperandHasInspectCompiles(t *testing.T) {
+	pos := []struct{ src, want string }{
+		{`{a:1} has b`, "[false]"},
+		{`{a:None} has a`, "[true]"},
+		{`none has a`, "[false]"},
+		{`inspect a/q`, "[{name:'a' kind:unknown signatures:[]}]"},
+	}
+	for _, c := range pos {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: the evaluated-key overloads (no QuoteArgs) are unaffected — a
+	// String key still dispatches the same handler, compiled == interp.
+	for _, c := range []struct{ src, want string }{
+		{`{a:1} has "a"`, "[true]"},
+		{`{a:1} has "z"`, "[false]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
+
+// do over a MAP (corpus-core.tsv:60) is a pure value-eval whose arg is
+// auto-evaluated BEFORE the handler — unlike the NoEvalArgs LIST body it does
+// not re-enter the interpreter, so it bakes a plain CALL_NATIVE instead of an
+// OpFallback island. CompileFallbackBody moved from the word to the List sig.
+func TestDoMapCompilesNoIsland(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{`do {a:1,b:2}`, "[{a:1 b:2}]"},
+		{`do {a:(1 add 2) b:3}`, "[{a:3 b:3}]"},
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+	// NEGATIVE: the LIST (code-body) sig is unaffected by the Map-sig change —
+	// it still compiles its body and runs compiled == interp.
+	gotC, _, eC := mustNew(t).RunCompiled(`do [1 add 2]`)
+	gotI, eI := mustNew(t).Run(`do [1 add 2]`)
+	if eC != nil || eI != nil {
+		t.Fatalf("do [body]: compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[3]" {
+		t.Errorf("do [1 add 2]: compiled=%v interp=%v want [3]", gotC, gotI)
+	}
+}
+
+// outer [body] left right (corpus-core.tsv:101) — the last interpreter island.
+// `outer` is a code-body higher-order word that used to run its body via an
+// inline sub-engine and island. Routing it through the InvokeBody seam + a
+// CallableSpec compiles the `[mul]` body to a closure unit the VM drives per
+// pair, so the 2D outer product compiles fully native (islands → 0).
+func TestOuterCompilesNoIsland(t *testing.T) {
+	src := `outer [mul] [1 2] [3 4]`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("check error %v", cerr)
+	}
+	if prog == nil {
+		t.Fatalf("refused: %s", reason)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("expected no island:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, eC := mustNew(t).RunCompiled(src)
+	gotI, eI := mustNew(t).Run(src)
+	if !compiled {
+		t.Errorf("did not run compiled")
+	}
+	if eC != nil || eI != nil {
+		t.Fatalf("compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[[3 4] [6 8]]]" {
+		t.Errorf("compiled=%v interp=%v want [[[3 4] [6 8]]]", gotC, gotI)
+	}
+	// NEGATIVE: a non-concrete-list arg still errors (outer_error), not a crash.
+	_, _, eBad := mustNew(t).RunCompiled(`outer [mul] List [3 4]`)
+	_, eBadI := mustNew(t).Run(`outer [mul] List [3 4]`)
+	if (eBad == nil) != (eBadI == nil) {
+		t.Errorf("outer over a type-literal list: compiled err=%v interp err=%v (should agree)", eBad, eBadI)
 	}
 }

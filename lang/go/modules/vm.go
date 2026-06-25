@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/policy"
@@ -24,6 +25,9 @@ func init() {
 //	Vm.run-with     code policy-map  # explicit policy as data
 //	Vm.run-sandbox  code             # built-in 'sandbox' profile
 //	Vm.run-compute  code             # built-in 'compute' profile
+//	Vm.parse        code             # → quoted token list (no run)
+//	Vm.check        code             # → { ok errors warnings diagnostics }
+//	Vm.compile      code             # → { ok reason sites }
 //
 // Each handler:
 //
@@ -60,6 +64,8 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("run-sandbox", makeRunFnDef("vm-run-sandbox", subReg))
 	exports.Set("run-compute", makeRunFnDef("vm-run-compute", subReg))
 	exports.Set("parse", makeRunFnDef("vm-parse", subReg))
+	exports.Set("check", makeRunFnDef("vm-check", subReg))
+	exports.Set("compile", makeRunFnDef("vm-compile", subReg))
 
 	modID := parent.Modules.NextID()
 	return native.ModuleDesc{
@@ -179,6 +185,55 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 				BarrierPos: -1,
 			}},
 		},
+		{
+			// vm-check — static type-check WITHOUT running. Returns a result
+			// map { ok, errors, warnings, diagnostics } describing what the
+			// checker found; it never raises for ill-typed or malformed input
+			// (a syntax error rides back as one error-severity diagnostic), so
+			// callers get one uniform shape to inspect.
+			Name: "vm-check",
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TString},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					code, err := args[0].AsConcreteString()
+					if err != nil {
+						return nil, err
+					}
+					res, err := checkInSubEngine(parent, code)
+					if err != nil {
+						return nil, err
+					}
+					return []native.Value{res}, nil
+				},
+				Returns:    []*native.Type{native.TMap},
+				BarrierPos: -1,
+			}},
+		},
+		{
+			// vm-compile — run the bytecode compile pass WITHOUT executing.
+			// Returns a result map { ok, reason, sites }: ok reports whether
+			// the source lowers to bytecode, reason names the first offender
+			// when it does not, and sites is the dispatch-site census (mono /
+			// poly / dynamic / meta). Like vm-check it never raises for
+			// uncompilable or malformed input — refusal is data, not an error.
+			Name: "vm-compile",
+			Signatures: []native.NativeSig{{
+				Args: []*native.Type{native.TString},
+				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					code, err := args[0].AsConcreteString()
+					if err != nil {
+						return nil, err
+					}
+					res, err := compileInSubEngine(parent, code)
+					if err != nil {
+						return nil, err
+					}
+					return []native.Value{res}, nil
+				},
+				Returns:    []*native.Type{native.TMap},
+				BarrierPos: -1,
+			}},
+		},
 	}
 }
 
@@ -200,19 +255,10 @@ func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]n
 	if parentPol := native.HostPolicy(parent); parentPol != nil {
 		effective = policy.Compose(parentPol, pol)
 	}
-	subReg, err := native.DefaultRegistryWithPolicy(effective)
+	subReg, err := newSubEngineRegistry(parent, effective)
 	if err != nil {
-		return nil, fmt.Errorf("vm: init sub-engine: %w", err)
+		return nil, err
 	}
-	subReg.SetParseFunc(parent.ParseFunc)
-	// Indirect through resolveFn (initialised in init()) so the
-	// package-level modules map can reference BuildVMModule without
-	// creating an initialisation cycle through Resolve.
-	if resolveFn != nil {
-		subReg.Modules.Resolver = resolveFn
-	}
-	native.EnableDynamicHelp(subReg)
-	subReg.MarkReady()
 
 	tokens, err := parent.ParseFunc(src)
 	if err != nil {
@@ -230,6 +276,199 @@ func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]n
 	}
 	// Return the last value as the result on the parent stack.
 	return []native.Value{stack[len(stack)-1]}, nil
+}
+
+// newSubEngineRegistry constructs a fresh sub-engine registry under pol,
+// wired with the parent's parser, module resolver, and dynamic help, then
+// marked ready. Shared by run / check / compile so the three stay
+// configured identically — only what they DO with the registry differs.
+func newSubEngineRegistry(parent *native.Registry, pol policy.Policy) (*native.Registry, error) {
+	subReg, err := native.DefaultRegistryWithPolicy(pol)
+	if err != nil {
+		return nil, fmt.Errorf("vm: init sub-engine: %w", err)
+	}
+	subReg.SetParseFunc(parent.ParseFunc)
+	// Indirect through resolveFn (initialised in init()) so the
+	// package-level modules map can reference BuildVMModule without
+	// creating an initialisation cycle through Resolve.
+	if resolveFn != nil {
+		subReg.Modules.Resolver = resolveFn
+	}
+	native.EnableDynamicHelp(subReg)
+	subReg.MarkReady()
+	return subReg, nil
+}
+
+// checkInSubEngine runs src through the static type-checker in a fresh
+// sub-engine WITHOUT executing it, and returns a result map
+// { ok, errors, warnings, diagnostics }. Diagnostics are reported as data
+// rather than raised, so an ill-typed or malformed program yields a
+// well-formed result the caller can inspect.
+//
+// The check runs under the PARENT's effective policy (not the sandbox
+// profile Vm.run defaults to): the useful question is "does this check out
+// under MY capabilities", and it stays safe because the sub-engine can
+// never exceed the parent's policy and check mode suppresses every
+// side-effecting handler anyway (only def/import/type/macro run for real).
+func checkInSubEngine(parent *native.Registry, src string) (native.Value, error) {
+	subReg, err := newSubEngineRegistry(parent, native.HostPolicy(parent))
+	if err != nil {
+		return native.Value{}, err
+	}
+	tokens, perr := parent.ParseFunc(src)
+	if perr != nil {
+		// A syntax error is itself a check finding, not a raised error:
+		// surface it as one error-severity diagnostic so callers get the
+		// same shape they get for a type error.
+		return checkResultValue(false, []native.CheckDiagnostic{{
+			Code: "parse_error", Detail: perr.Error(), Severity: native.SeverityError,
+		}}), nil
+	}
+	subReg.Source = src
+	defer subReg.Check.Begin()()
+	eng := native.NewTop(subReg)
+	eng.SetSource(src)
+	_, runErr := eng.Run(tokens)
+	subReg.RescueForwardRefDiagnostics()
+	subReg.Check.EmitUnusedDefDiagnostics()
+
+	diags := subReg.Check.Diagnostics
+	// A hard check error that left no diagnostic still reports ok:false with
+	// a synthesized entry so the result is never silently empty.
+	if runErr != nil && len(diags) == 0 {
+		diags = []native.CheckDiagnostic{{
+			Code: "check_error", Detail: runErr.Error(), Severity: native.SeverityError,
+		}}
+	}
+	ok := runErr == nil
+	for _, d := range diags {
+		if d.Severity == native.SeverityError {
+			ok = false
+		}
+	}
+	return checkResultValue(ok, diags), nil
+}
+
+// compileInSubEngine runs the bytecode compile pass over src in a fresh
+// sub-engine WITHOUT executing it, and returns a result map
+// { ok, reason, sites }. It mirrors lang.(*AQL).CompileCheck's refusal
+// ladder but reports the outcome as data instead of a (Program, reason)
+// pair — refusal is never an error here. Policy handling matches
+// checkInSubEngine.
+func compileInSubEngine(parent *native.Registry, src string) (native.Value, error) {
+	subReg, err := newSubEngineRegistry(parent, native.HostPolicy(parent))
+	if err != nil {
+		return native.Value{}, err
+	}
+	tokens, perr := parent.ParseFunc(src)
+	if perr != nil {
+		return compileResultValue(false, "parse error", nil), nil
+	}
+	subReg.Source = src
+	defer subReg.Check.Begin()()
+	subReg.Check.Emit = native.NewEmitState()
+	// Fn-body analyses must record under THIS emit pass; a summary cached by
+	// an earlier plain check on the shared registry would leave its compiled
+	// unit empty (see CompileCheck).
+	subReg.Check.FnSummaries = nil
+	subReg.Check.FnInflight = nil
+
+	eng := native.NewTop(subReg)
+	eng.SetSource(src)
+	residual, runErr := eng.Run(tokens)
+	subReg.RescueForwardRefDiagnostics()
+	subReg.Check.EmitUnusedDefDiagnostics()
+
+	sites := map[string]int{}
+	if es := subReg.Check.Emit; es != nil {
+		for k, v := range es.SiteCounts {
+			sites[k] = v
+		}
+	}
+
+	switch {
+	case runErr != nil:
+		return compileResultValue(false, "check error", sites), nil
+	case hasCheckError(subReg.Check.Diagnostics):
+		return compileResultValue(false, "check diagnostics", sites), nil
+	case subReg.Check.SuppressedRuntimeError:
+		return compileResultValue(false,
+			"check-mode suppressed a runtime error (uncompilable)", sites), nil
+	}
+	_, reason, ok := subReg.Check.Emit.Finalize(residual)
+	if !ok {
+		return compileResultValue(false, reason, sites), nil
+	}
+	return compileResultValue(true, "", sites), nil
+}
+
+// hasCheckError reports whether any diagnostic is error-severity.
+func hasCheckError(diags []native.CheckDiagnostic) bool {
+	for _, d := range diags {
+		if d.Severity == native.SeverityError {
+			return true
+		}
+	}
+	return false
+}
+
+// checkResultValue builds the { ok, errors, warnings, diagnostics } map
+// Vm.check returns. Each diagnostic is a map
+// { code, detail, word, row, col, severity }.
+func checkResultValue(ok bool, diags []native.CheckDiagnostic) native.Value {
+	errors, warnings := 0, 0
+	list := make([]native.Value, 0, len(diags))
+	for _, d := range diags {
+		switch d.Severity {
+		case native.SeverityError:
+			errors++
+		case native.SeverityWarning:
+			warnings++
+		}
+		dm := native.NewOrderedMap()
+		dm.Set("code", native.NewString(d.Code))
+		dm.Set("detail", native.NewString(d.Detail))
+		dm.Set("word", native.NewString(d.Word))
+		dm.Set("row", native.NewInteger(int64(d.Row)))
+		dm.Set("col", native.NewInteger(int64(d.Col)))
+		dm.Set("severity", native.NewString(severityString(d.Severity)))
+		list = append(list, native.NewMap(dm))
+	}
+	m := native.NewOrderedMap()
+	m.Set("ok", native.NewBoolean(ok))
+	m.Set("errors", native.NewInteger(int64(errors)))
+	m.Set("warnings", native.NewInteger(int64(warnings)))
+	m.Set("diagnostics", native.NewList(list))
+	return native.NewMap(m)
+}
+
+// compileResultValue builds the { ok, reason, sites } map Vm.compile
+// returns. sites is rendered with its keys sorted for deterministic output.
+func compileResultValue(ok bool, reason string, sites map[string]int) native.Value {
+	keys := make([]string, 0, len(sites))
+	for k := range sites {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	sm := native.NewOrderedMap()
+	for _, k := range keys {
+		sm.Set(k, native.NewInteger(int64(sites[k])))
+	}
+	m := native.NewOrderedMap()
+	m.Set("ok", native.NewBoolean(ok))
+	m.Set("reason", native.NewString(reason))
+	m.Set("sites", native.NewMap(sm))
+	return native.NewMap(m)
+}
+
+// severityString renders a CheckSeverity for the result map, mapping the
+// empty (unset) severity to "info" — the same default lang.CheckSummary
+// applies when tallying.
+func severityString(s native.CheckSeverity) string {
+	if s == "" {
+		return "info"
+	}
+	return string(s)
 }
 
 // policyFromMapValue converts an AQL Map value (as received in a

@@ -61,7 +61,7 @@ context set 'n' 7 end context get 'n' add 3	10	get-result chains into arithmetic
 		
 # Missing key on a Store raises an error.		
 context get 'missing'	ERROR:unknown key	Store get is strict; missing keys are an error
-context get quote nope	ERROR:unknown key	
+context dot quote nope	ERROR:unknown key	
 		
 # ====================================================================		
 # 2. Object-instance set		
@@ -85,7 +85,7 @@ def Foo (class { a:Integer }) def f make Foo { a:5 } set 'a' 99 f f .a	99
 		
 None get 'a'	None	None passes through string-key access
 None get 0	None	None passes through integer-key access
-None get quote x	None	
+None dot quote x	None	
 		
 # ====================================================================		
 # 4. Map / List read summary		

@@ -88,7 +88,7 @@ func TestOptionalKey_IsRejectsExtraKey(t *testing.T) {
 }
 
 func TestOptionalKey_FnArgAdmitsAbsent(t *testing.T) {
-	got := runOne(t, `def f fn [[m:{x?:1,y:Integer}] [Any] [m get y]]
+	got := runOne(t, `def f fn [[m:{x?:1,y:Integer}] [Any] [m dot y]]
 f {y:2}`)
 	if len(got) != 1 || got[0] != int64(2) {
 		t.Errorf("expected f {y:2} to succeed and return 2, got %v", got)
@@ -96,7 +96,7 @@ f {y:2}`)
 }
 
 func TestOptionalKey_FnArgAdmitsExplicitNone(t *testing.T) {
-	got := runOne(t, `def f fn [[m:{x?:1,y:Integer}] [Any] [m get y]]
+	got := runOne(t, `def f fn [[m:{x?:1,y:Integer}] [Any] [m dot y]]
 f {x:None,y:2}`)
 	if len(got) != 1 || got[0] != int64(2) {
 		t.Errorf("expected f {x:None,y:2} to succeed, got %v", got)
@@ -104,7 +104,7 @@ f {x:None,y:2}`)
 }
 
 func TestOptionalKey_FnArgAdmitsExplicitConcrete(t *testing.T) {
-	got := runOne(t, `def f fn [[m:{x?:1,y:Integer}] [Any] [m get y]]
+	got := runOne(t, `def f fn [[m:{x?:1,y:Integer}] [Any] [m dot y]]
 f {x:1,y:2}`)
 	if len(got) != 1 || got[0] != int64(2) {
 		t.Errorf("expected f {x:1,y:2} to succeed, got %v", got)

@@ -377,10 +377,19 @@ func TestEmitDynOutNative(t *testing.T) {
 	if err != nil || len(got) != 2 {
 		t.Fatalf("List unify [1 2]: got %v err=%v", got, err)
 	}
-	// Negative: a DYNAMIC input keeps the dynamic-input refusal — the sig is
-	// then a guess, not a resolved match.
-	if _, r := compile(t, `def l [1 2] push 3 l unify l`); r == "" {
-		t.Error("dynamic-input unify compiled but must refuse")
+	// `push 3 l` now types as a List (push's List overload declares Returns=[List],
+	// the fold-push checker fix), so `… unify l` resolves to a real match and
+	// compiles — and compiled == interpreted. (Previously push typed as Any, so
+	// this stood as the dynamic-input refusal case; that path is still covered by
+	// the set/getpath dynamic-input emit tests below.)
+	if _, r := compile(t, `def l [1 2] push 3 l unify l`); r != "" {
+		t.Errorf("push-typed unify must compile, refused: %s", r)
+	}
+	gotP, _, errP := mustRun(t, `def l [1 2] push 3 l unify l`)
+	ai, _ := New()
+	gotI, errI := ai.Run(`def l [1 2] push 3 l unify l`)
+	if errP != nil || errI != nil || fmt.Sprint(gotP) != fmt.Sprint(gotI) {
+		t.Errorf("push-typed unify parity: compiled=%v(%v) interp=%v(%v)", gotP, errP, gotI, errI)
 	}
 }
 
@@ -529,10 +538,10 @@ func TestEmitTypedDefInstance(t *testing.T) {
 	type row struct{ src, want string }
 	for _, c := range []row{
 		{`def C class {a:1} def b:C {a:5} b typeof`, "C"},
-		{`def C class {a:1} def b:C {a:5} (b get a)`, "5"},
+		{`def C class {a:1} def b:C {a:5} (b dot a)`, "5"},
 		{`def Box gen [T] class {value:T} def b:(Box of [Integer]) {value:42} b typeof`, "Box of [Integer]"},
 		{`def Box gen [T] class {value:T} def b:Box {value:'hi'} b typeof`, "Box of [ProperString]"},
-		{`def Box<T> class {value:T} def b:Box<Integer> {value:42} (b get value)`, "42"},
+		{`def Box<T> class {value:T} def b:Box<Integer> {value:42} (b dot value)`, "42"},
 	} {
 		dis, r := compile(t, c.src)
 		if r != "" {
@@ -1334,10 +1343,10 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	// result must still match the interpreter.
 	got2, reason2 := compile(t, `def m {a:1} m.a`)
 	if reason2 != "" {
-		t.Fatalf("concrete-map get refused: %s", reason2)
+		t.Fatalf("concrete-map dot refused: %s", reason2)
 	}
 	if strings.Contains(got2, "FALLBACK") || strings.Contains(got2, "CALL_NATIVE_POLY") {
-		t.Errorf("concrete-map field get should monomorphize to CALL_NATIVE:\n%s", got2)
+		t.Errorf("concrete-map field dot should monomorphize to CALL_NATIVE:\n%s", got2)
 	}
 	b, err := New()
 	if err != nil {
@@ -1358,10 +1367,10 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	// covered by TestEmitPolySiteLowersToRuntimeMatch.
 	got3, reason3 := compile(t, `def Foo class {a:1} def o (make Foo {}) o.a`)
 	if reason3 != "" {
-		t.Fatalf("object field get refused: %s", reason3)
+		t.Fatalf("object field dot refused: %s", reason3)
 	}
 	if strings.Contains(got3, "FALLBACK") || strings.Contains(got3, "CALL_NATIVE_POLY") {
-		t.Errorf("object field get should monomorphize to CALL_NATIVE:\n%s", got3)
+		t.Errorf("object field dot should monomorphize to CALL_NATIVE:\n%s", got3)
 	}
 	c, err := New()
 	if err != nil {

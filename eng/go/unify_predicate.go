@@ -22,10 +22,10 @@ import "fmt"
 // (predicate type, registry); fresh registries get fresh Unifiers
 // installed by InstallType at type-declaration time.
 type predicateUnifier struct {
-	prev       TypeBehavior // previous Behavior (delegate Match/Format/Equal)
-	registry   *Registry
-	constraint Value // the predicate fn body
-	typeName   string
+	behaviorWrapper // prev Behavior + Format/Equal/Compare delegation
+	registry        *Registry
+	constraint      Value // the predicate fn body
+	typeName        string
 }
 
 // Match runs the predicate against v. The result of `v.Is(Pos)` —
@@ -66,10 +66,6 @@ func (p *predicateUnifier) Match(v Value, t *Type) bool {
 	})
 }
 
-func (p *predicateUnifier) Format(v Value) string           { return baseBehavior(p.prev).Format(v) }
-func (p *predicateUnifier) Equal(a, b Value) bool           { return baseBehavior(p.prev).Equal(a, b) }
-func (p *predicateUnifier) Compare(a, b Value) (int, error) { return baseCompare(p.prev, a, b) }
-
 // Unify runs the predicate body against a concrete operand via the shared
 // membership contract: admit the candidate when the body accepts it, fail
 // definitively when a concrete operand is present and rejected, and defer
@@ -91,9 +87,9 @@ func (p *predicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
 // type so the constraint runs at every Unify call site.
 func installPredicateUnifier(def *Type, constraint Value, r *Registry, name string) {
 	def.Behavior = &predicateUnifier{
-		prev:       def.Behavior,
-		registry:   r,
-		constraint: constraint,
-		typeName:   name,
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+		registry:        r,
+		constraint:      constraint,
+		typeName:        name,
 	}
 }

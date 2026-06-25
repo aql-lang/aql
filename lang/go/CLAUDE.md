@@ -264,14 +264,27 @@ Key conversion functions in `parse.go`:
 - `convertDataValue()` / `convertMapData()` — data context (atoms, not strings)
 - `convertWordList()` / `convertDataList()` — lists (word context, Eval=true)
 - Dotted access — there is no parse-time "expansion" pass. `.` is lexed
-  as a separate token (`#DT` in `eng/go/parser/grammar.go`) and converted
-  to `eng.NewWord("get")` during top-level conversion in
-  `convertTopLevelItems` (parse.go around line 173); `!` followed by `.`
-  becomes `getr`. Chained access `m.a.b` becomes the token sequence
-  `m get a get b` and composes at runtime because each `get` produces
-  the receiver for the next.
+  as a separate token (`#DT` in `eng/go/parser/grammar.go`); the parser
+  builds a `Reach` value that `lowerReach` (`eng/go/engine.go`) lowers to a
+  `dot` / `dotr` token chain (`!` before `.` selects `dotr`). Chained access
+  `m.a.b` becomes the token sequence `m dot a dot b` and composes at runtime
+  because each `dot` produces the receiver for the next.
+  - **`dot` / `dotr` vs `get` / `getr` (CRITICAL).** The accessor family
+    splits by how the key is supplied: `dot` / `dotr` (the `.` / `!.`
+    sugar targets) **quote** a bare-word key as a literal field name
+    (`m.a` ≡ `m dot a` reads field `"a"`), while `get` / `getr`
+    **evaluate** the key (`lst get i` reads the *value* of `i`;
+    `m get "a"` uses the string). `get` / `getr` therefore carry NO
+    QuoteArgs atom sigs — a bare-word `get` with an unbound name is an
+    `undefined_word` error. Both pairs share one signature set
+    (`accessorGetSignatures` / `accessorGetrSignatures` in
+    `native_storage.go` / `native_accessor.go`); `get` / `getr` use the
+    `dropQuoteAtomSigs` subset. Every compiler/checker/VM fold site that
+    special-cases the family routes through `isGetWord` / `isGetrWord`
+    (`eng/go/get_words.go`) so `dot` folds identically to `get` (no
+    compiled-coverage loss for dot-access).
 - A `/` modifier on a paren / dotted-path result applies to the WHOLE
-  group, not the last key: `a.b/m` parses as `(a get b)/m`.
+  group, not the last key: `a.b/m` parses as `(a dot b)/m`.
   `convertTopLevelItems` strips the modifier off the final key (or a
   standalone `/mod` token after the group) and places result-level
   tokens around the group. `/u /s /f /N` desugar to the higher-order
@@ -702,9 +715,10 @@ module's exports share one **`Ideal/Module`** descriptor
 
 - `NewModuleExport(name, fields, module)` — `name` (→ `.$name`), an
   `*OrderedMap` of the raw exports, and the owning Module. A
-  ModuleExport is **transparent**: `get`/`getr` (`native_module_types.go`)
-  return the raw export for a plain key (so `MathUtil.sqrt 16.0` dispatches
-  unchanged) and the synthetic value for `$module` / `$name`.
+  ModuleExport is **transparent**: `get`/`getr` and their literal-key twins
+  `dot`/`dotr` (`native_module_types.go`) return the raw export for a plain
+  key (so `MathUtil.sqrt 16.0`, which lowers to `MathUtil dot sqrt`,
+  dispatches unchanged) and the synthetic value for `$module` / `$name`.
 - `NewModuleInstance(moduleInfo{ID,Kind,File,Folder,Exports})` — the
   descriptor. `name`/`kind`/`file`/`folder`/`exports` are read via `get`.
 - Instances are backed by `ExtensionPayload` (lang-layer; no eng payload

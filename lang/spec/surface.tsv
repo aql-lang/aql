@@ -20,7 +20,7 @@ surface {area: 1.0}	ERROR:must be an fnsig shape	operations must be fnsig shapes
 surface [1 2]	ERROR:no matching signature	the schema must be a map (a list has no surface sig)
 #
 # §2  exposes — explicit conformance, checked loudly
-def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [(c get r) mul 2.0]] Circle exposes Shape end (make Circle {r:3.0}) is Shape	true	a checked exposer's instances are members
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [(c dot r) mul 2.0]] Circle exposes Shape end (make Circle {r:3.0}) is Shape	true	a checked exposer's instances are members
 def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} end (make Circle {}) is Shape	false	no exposes, no membership — even with the schema in reach
 def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} Circle exposes Shape	ERROR:no such word	a missing operation is a loud gap (name listed)
 def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [String] ['big']] Circle exposes Shape	ERROR:no signature satisfies	a wrong return type is a loud gap
@@ -29,7 +29,7 @@ def Shape surface {area: (fnsig [[Self] [Float]])} 5 exposes Shape	ERROR:must be
 def Circle class {r:1.0} Circle exposes Integer	ERROR:must be a surface	the right side must be a surface
 #
 # §3  membership — dispatch, subclasses, refined scalars
-def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [(c get r) mul 2.0]] Circle exposes Shape def total fn [[s:Shape] [Float] [area s]] end total (make Circle {r:4.0})	8.0	a surface-typed param dispatches on membership
+def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [(c dot r) mul 2.0]] Circle exposes Shape def total fn [[s:Shape] [Float] [area s]] end total (make Circle {r:4.0})	8.0	a surface-typed param dispatches on membership
 def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [1.0]] Circle exposes Shape def Disc refine Circle {} end (make Disc {r:1.0}) is Shape	true	subclass instances of an exposer conform
 def Shape surface {area: (fnsig [[Self] [Float]])} def Pos refine Integer def area fn [[p:Pos] [Float] [1.0]] Pos exposes Shape def x:Pos 5 end x is Shape	true	a refined scalar can expose a surface
 def Shape surface {area: (fnsig [[Self] [Float]])} def Pos refine Integer def area fn [[p:Pos] [Float] [1.0]] Pos exposes Shape end 5 is Shape	false	…and the bare base value does not conform (newtypes stay nominal)

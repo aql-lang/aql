@@ -139,7 +139,7 @@ func TestIndependentInstances(t *testing.T) {
 	}
 
 	// Store and retrieve in a within a single Run.
-	result, err := a.Run("context set x 42 end context get x")
+	result, err := a.Run("context set x 42 end context dot x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestIndependentInstances(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = b.Run("context get x")
+	_, err = b.Run("context dot x")
 	if err == nil {
 		t.Fatal("expected error: b should not have key x")
 	}
@@ -164,7 +164,7 @@ func TestStatePersistsWithinRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := a.Run("context set counter 10 end context get counter")
+	result, err := a.Run("context set counter 10 end context dot counter")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestManyIndependentInstances(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := a.Run("context set idx " + itoa(i) + " end context get idx")
+		result, err := a.Run("context set idx " + itoa(i) + " end context dot idx")
 		if err != nil {
 			t.Fatalf("instance %d: %v", i, err)
 		}
@@ -237,7 +237,7 @@ func TestMultilineMixed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := "context set x 10 end\ncontext set y 20 end\n(context get x)\n(context get y)\nadd"
+	src := "context set x 10 end\ncontext set y 20 end\n(context dot x)\n(context dot y)\nadd"
 	result, err := a.Run(src)
 	if err != nil {
 		t.Fatal(err)
@@ -283,8 +283,8 @@ func TestMultilineScript(t *testing.T) {
 	script := `
 		context set width 10 end
 		context set height 5 end
-		(context get width)
-		(context get height)
+		(context dot width)
+		(context dot height)
 		mul
 	`
 	result, err := a.Run(script)
@@ -306,8 +306,8 @@ func TestMultilineWithComments(t *testing.T) {
 		context set x 7 end
 		context set y 3 end
 		# compute
-		(context get x)
-		(context get y)
+		(context dot x)
+		(context dot y)
 		add
 		# result should be 10
 	`

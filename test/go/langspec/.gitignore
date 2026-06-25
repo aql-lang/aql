@@ -1,0 +1,7 @@
+# Transient scratch files written by spec rows / example programs that run
+# with this directory as their working directory (e.g. a row that writes a
+# file to a bare relative path). These are tiny test outputs, never source:
+# every real file here is a *.go test or COMPILED_STATUS.md, so ignoring
+# single-character filenames is safe and keeps `git status` (and the
+# stop-hook clean-tree check) quiet after a test run.
+/?

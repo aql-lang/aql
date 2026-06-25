@@ -64,12 +64,6 @@ var exampleResults = map[string]string{}
 // via the API). Checked after the static map.
 var dynamicExampleResults = map[string]string{}
 
-// SetExampleResults replaces the pre-computed example results map.
-// Called by the generated file or by test code.
-func SetExampleResults(m map[string]string) {
-	exampleResults = m
-}
-
 // GenerateDynamicExamples computes and stores example results for a word
 // using the provided eval function. Called when new functions are
 // registered after initial startup.
