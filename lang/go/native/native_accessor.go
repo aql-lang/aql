@@ -89,6 +89,12 @@ func accessorGetrSignatures() []NativeSig {
 		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
 		{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 		{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
+		// [Key | Class instance] — strict field read (mirrors get's TClass
+		// sigs; getrObjectHandler resolves the flat instance via
+		// AsObjectInstance and raises on a missing field). Field type
+		// narrows from the schema via getObjectReturns, as get does.
+		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
+		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
 		// [Key | ModuleExport] / [Key | Module]
 		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},

@@ -48,6 +48,11 @@ def P class {x:1 y:2} end (make P {}) dot x	1	dot reads field x by literal name
 def P class {x:1 y:2} end (make P {}).y	2	. operator on a class instance field
 def P class {x:1 y:2} end (make P {}) get 'x'	1	get reads field x by string name
 def P class {x:7} end def f 'x' end (make P {x:7}) get f	7	get EVALUATES f to the field name
+def P class {x:1 y:2} end (make P {}) dotr x	1	dotr — strict field read on a class instance
+def P class {x:1 y:2} end (make P {})!.y	2	!. is strict over a class instance
+def P class {x:1} end (make P {}) getr 'x'	1	getr — strict field read by string key
+def P class {x:1} end (make P {}) dotr zzz	ERROR:not_found	dotr raises on a missing class field
+def Pt class {x:1} end def Pt3 refine Pt {z:3} end (make Pt3 {}) dotr x	1	dotr resolves an inherited field
 
 # ---- Store (context): prototype-chain lookup ----
 context set 'foo' 42 end context dot foo	42	dot quotes the bare key over a Store
