@@ -46,6 +46,7 @@ func BuildDebugModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 
 	natives := append(debugNatives(), stepNatives()...)
+	natives = append(natives, dashboardNatives()...)
 	for _, n := range natives {
 		subReg.RegisterNativeFunc(n)
 	}

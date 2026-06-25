@@ -805,12 +805,19 @@ later phase blocks an earlier one. Phases 5–7 are the §7
 remote surfaces; each **depends on prior RFCs landing** and so is
 sequenced after them, not after Phase 4 alone:
 
-- **Phase 5 — local dashboard + widgets** (after `aql:serve`'s in-process
-  `Service` layer, `SERVICES.0.md` Phase 1): the `DebugCell`/`WidgetMeta`/
-  `DebugWidget` contract, `Debug.dashboard` / `widget` / `discover-widgets`,
-  the built-in widgets, and the bubbletea host generalised from the
-  services table to a widget grid. **In-process only** — no transport
-  needed, so it lands as soon as services exist.
+- **Phase 5 — local dashboard + widgets.** **In-process core shipped:**
+  `Debug.widget TITLE SAMPLE-SOURCE` builds a lightweight `{title, sample}`
+  widget map (the open-Q6 "lighter contract that ships before services"
+  answer — a `String` sample source sidesteps map-literal auto-eval), and
+  `Debug.dashboard [widgets]` renders a one-shot SNAPSHOT of every widget
+  to output, surviving a bad panel. Widgets are plain data, so any module
+  contributes them by exporting a function returning a list of widget maps
+  (`Debug.dashboard SomeModule.widgets`) — the extensibility goal, met
+  without the `Service` layer. **Remaining:** the live-refreshing bubbletea
+  TUI host (a cmd/go render loop polling widgets on a tick) and
+  `Debug.discover-widgets` auto-discovery; the richer `DebugCell`/
+  `WidgetMeta` typing and the service-shaped widget form arrive with the
+  `Service` layer.
 - **Phase 6 — attach** (after the served-process layer, `PROCESSES.0.md`
   + `SERVICES.0.md` Phase 2, and a `connect` transport): the
   debug-introspection service on `aql serve`, `Debug.attach` /

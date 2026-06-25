@@ -85,6 +85,7 @@ func TestDebugModuleExports(t *testing.T) {
 		"sizeof", "shape", "heap", "gc",
 		"steps", "time", "bench", "trace", "profile",
 		"step", "break", "break-when", "run-stepped",
+		"widget", "dashboard",
 	}
 	for _, name := range want {
 		if _, ok := exp.Get(name); !ok {
@@ -422,6 +423,48 @@ func TestDebugRunStepped(t *testing.T) {
 	res := runDebug(t, r, `"10 add 5" Debug.run-stepped`)
 	if got := topInt(t, res); got != 15 {
 		t.Errorf("run-stepped must parse+run the source (15), got %d", got)
+	}
+}
+
+// ── (§7.1) Dashboard ─────────────────────────────────────────────────
+
+func TestDebugWidgetAndDashboard(t *testing.T) {
+	r, buf := debugRegistry(t)
+	// A widget is a plain {title, sample} map; the dashboard renders each
+	// widget's sample result under its title. Widgets compose as data, so a
+	// module can contribute them by exporting such maps.
+	src := `def w1 (Debug.widget "Sum" "1 add 2")
+	        def w2 (Debug.widget "Twice" "21 mul 2")
+	        [w1 w2] Debug.dashboard`
+	res := runDebug(t, r, src)
+	out, err := native.AsString(res[len(res)-1])
+	if err != nil {
+		t.Fatalf("dashboard must return the rendered String: %v", err)
+	}
+	for _, want := range []string{"Sum", "3", "Twice", "42"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dashboard render missing %q; got:\n%s", want, out)
+		}
+	}
+	// It also prints the snapshot to the host output.
+	if !strings.Contains(buf.String(), "Sum") {
+		t.Errorf("dashboard must print to output; output = %q", buf.String())
+	}
+}
+
+func TestDebugDashboardSurvivesBadWidget(t *testing.T) {
+	r, _ := debugRegistry(t)
+	// One malformed sample must not abort the whole snapshot.
+	src := `def bad (Debug.widget "Bad" "1 add (((")
+	        def good (Debug.widget "Good" "40 add 2")
+	        [bad good] Debug.dashboard`
+	res := runDebug(t, r, src)
+	out, _ := native.AsString(res[len(res)-1])
+	if !strings.Contains(out, "42") {
+		t.Errorf("a bad widget must not take down the good one; got:\n%s", out)
+	}
+	if !strings.Contains(out, "error") && !strings.Contains(out, "parse") {
+		t.Errorf("the bad widget should render an inline error; got:\n%s", out)
 	}
 }
 

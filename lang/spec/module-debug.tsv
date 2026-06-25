@@ -54,6 +54,10 @@ import "aql:debug" [1 add 2] Debug.step	3	step runs the body; with no controller
 import "aql:debug" Debug.break 41 add 1	42	break is a no-op without an attached controller
 import "aql:debug" Debug.break-when false 7	7	break-when false never pauses
 import "aql:debug" "10 add 5" Debug.run-stepped	15	run-stepped parses then steps the source
+#
+# §7.1 dashboard (in-process snapshot; widgets are plain {title, sample} maps)
+import "aql:debug" (Debug.widget "Sum" "1 add 2") typeof	Map	widget builds a {title, sample} map
+import "aql:debug" ([] Debug.dashboard) is String	true	dashboard renders a snapshot (empty widget list) to a String
 import "aql:debug" (Debug.profile [1 add 2]) typeof	List	profile returns a per-word step-count table
 #
 # §6  not imported — the namespace is undefined without import

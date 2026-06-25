@@ -21,6 +21,8 @@ func init() {
 		"break":       "A breakpoint: pause when a controller is attached; else a no-op.",
 		"break-when":  "A conditional breakpoint: pause only when the condition is true.",
 		"run-stepped": "Parse a source string and step it.",
+		"widget":      "Construct a dashboard widget map from a title and a sample source string.",
+		"dashboard":   "Render a one-shot snapshot of a list of widget maps to output.",
 		"words":       "Every documented built-in word name.",
 		"defs":        "Current def-bound names mapped to their active top binding.",
 		"modules":     "The native modules available to import.",
