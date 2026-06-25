@@ -3386,3 +3386,43 @@ func TestQuotedOperandHasInspectCompiles(t *testing.T) {
 		}
 	}
 }
+
+// do over a MAP (corpus-core.tsv:60) is a pure value-eval whose arg is
+// auto-evaluated BEFORE the handler — unlike the NoEvalArgs LIST body it does
+// not re-enter the interpreter, so it bakes a plain CALL_NATIVE instead of an
+// OpFallback island. CompileFallbackBody moved from the word to the List sig.
+func TestDoMapCompilesNoIsland(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{`do {a:1,b:2}`, "[{a:1 b:2}]"},
+		{`do {a:(1 add 2) b:3}`, "[{a:3 b:3}]"},
+	} {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+	// NEGATIVE: the LIST (code-body) sig is unaffected by the Map-sig change —
+	// it still compiles its body and runs compiled == interp.
+	gotC, _, eC := mustNew(t).RunCompiled(`do [1 add 2]`)
+	gotI, eI := mustNew(t).Run(`do [1 add 2]`)
+	if eC != nil || eI != nil {
+		t.Fatalf("do [body]: compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[3]" {
+		t.Errorf("do [1 add 2]: compiled=%v interp=%v want [3]", gotC, gotI)
+	}
+}
