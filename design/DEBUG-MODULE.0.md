@@ -1,14 +1,24 @@
 # aql:debug — a debugging & introspection module
 
-Status: **proposal** (discovery note, not yet built). This captures the
-design of a new native module `aql:debug` (namespace `Debug`) that
-collects AQL's debugging affordances behind one import: simple printing,
-interactive stepping, and structural / memory / performance analysis of
-both a program and the running system — extending out to a **live TUI
-dashboard** of runtime state (extensible with widgets contributed by other
-modules), **attaching** to a running `aql serve`, and a **debug channel**
-for interrogating ephemeral serverless invocations, all authenticated with
-`aql:vault` capability tokens (§7).
+Status: **partially implemented.** The in-process surfaces — printing
+taps, structural/system introspection, value sizing, and performance
+measurement (the Phase 1–4 word set, §9) — are **built and shipping** in
+`lang/go/modules/debug.go`, with the one engine seam they need
+(`Engine.SetTrace`, §6.1), docs (`docs_debug.go`), Go tests
+(`debug_test.go`), and an executable spec (`lang/spec/module-debug.tsv`).
+The remaining surfaces are still design-only: **interactive stepping**
+(§3 B — needs the host `DebugOps` controller, Phase 3) and the §7 remote
+features — a **live TUI dashboard** of runtime state (extensible with
+widgets contributed by other modules), **attaching** to a running
+`aql serve`, and a **debug channel** for interrogating ephemeral
+serverless invocations authenticated with `aql:vault` capability tokens —
+which are gated on the unbuilt Service/Process layer (§7.6) and sequenced
+as Phases 5–7.
+
+This captures the design of the native module `aql:debug` (namespace
+`Debug`) that collects AQL's debugging affordances behind one import:
+simple printing, interactive stepping, and structural / memory /
+performance analysis of both a program and the running system.
 
 Per `lang/go/CLAUDE.md` this is a *framework / capability* module, so the
 id stays plain (`aql:debug`, not `-util`) and the namespace is `Debug`.
@@ -756,6 +766,17 @@ value-per-effort:
 - **Phase 2 — tracing + profiling** (drives the existing `TraceCallback`
   harder): `trace` (re-export), `profile`, `disasm` (needs the
   `Recorder`/StackForm wired through a sub-engine).
+
+> **Shipped (Phases 1–2 + the pure parts of 4).** `lang/go/modules/debug.go`
+> implements `tap`, `label`, `dump`, `assert`, `todo`, `parse`, `deps`,
+> `explain`, `words`, `defs`, `modules`, `sizeof`, `shape`, `steps`,
+> `time`, `bench`, `trace`, `profile` — driven by the new `Engine.SetTrace`
+> seam (§6.1). Deferred within these phases (no blocker, just not yet
+> built): `watch`, `sig`, `body`, `disasm` (need signature/recorder
+> formatting), `stack` (needs the §6.2 engine seam), `types`/`scope`, and
+> the `heap`/`gc` runtime words (need the `DebugOps` capability). `Debug.words`
+> currently lists the documented built-in words via `help.Words()`;
+> `Debug.modules` lists the importable native modules.
 - **Phase 3 — interactive stepping** (`DebugSession` + `StepController` +
   `DebugOps`): `step`, `break`, `break-when`, `run-stepped`, plus a
   scripted controller for tests. The TTY/REPL controller and a possible

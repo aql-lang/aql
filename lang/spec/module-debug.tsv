@@ -1,0 +1,46 @@
+# AQL Language Specification: the aql:debug module
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable debugging module. Import binds the `Debug` namespace:
+# `import "aql:debug"  value Debug.tap`. The printing words (tap/label/
+# dump/trace) write to the host output as a side effect AND return a value,
+# so these rows pin the returned value (the printed text is verified in the
+# Go tests, where output is captured). The perf words run under the spec's
+# fixed clock, so elapsed timings are deterministic; here we pin the result
+# SHAPE (typeof) and leave exact step counts to the Go tests. Exact-value
+# and no-panic behaviour is in lang/go/modules/debug_test.go.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  printing — return the value (and print as a side effect)
+import "aql:debug" 42 Debug.tap	42	tap prints then returns its arg unchanged
+import "aql:debug" Debug.label 7 "answer"	7	label prints "label: value" and returns the value
+import "aql:debug" 5 Debug.dump	5	dump prints type + value and returns the value
+import "aql:debug" 99 Debug.assert true "ok"	99	a true assertion is a no-op (residual is the untouched 99)
+import "aql:debug" Debug.assert false "bad"	ERROR:assertion_failure	a false assertion raises
+import "aql:debug" "todo later" Debug.todo	ERROR:not_implemented	todo is a typed hole that always raises
+#
+# §2  structural analysis
+import "aql:debug" size (Debug.parse "1 add 2")	3	parse returns the token list (3 tokens) without running it
+import "aql:debug" Debug.parse "1 add ((("	ERROR:parse_error	malformed source raises loudly
+import "aql:debug" size ([1 add 2 mul 3] Debug.deps)	2	deps returns the distinct referenced words (add, mul)
+import "aql:debug" (Debug.explain "add") is String	true	explain returns the describe text as a String
+#
+# §3  system introspection
+import "aql:debug" Debug.words typeof	List	words returns the list of built-in word names
+import "aql:debug" Debug.defs typeof	Map	defs returns the active def bindings as a map
+import "aql:debug" Debug.modules typeof	List	modules returns the importable native modules
+#
+# §4  memory analysis (pure; no host)
+import "aql:debug" (42 Debug.sizeof) typeof	Integer	sizeof returns an estimated byte size
+import "aql:debug" (Debug.shape [1 2 [3]]) typeof	Map	shape returns a structural census map
+import "aql:debug" (Debug.shape Map) typeof	Map	shape on a bare type literal does not panic
+#
+# §5  performance analysis (deterministic shapes under the fixed clock)
+import "aql:debug" [1 add 2] Debug.steps typeof	Integer	steps returns the engine step count
+import "aql:debug" ([1 add 2] Debug.time) typeof	Map	time returns {result, elapsed-ms, steps}
+import "aql:debug" (Debug.bench [1 add 2] 3) typeof	Map	bench returns timing stats over n runs
+import "aql:debug" [1 add 2] Debug.trace	3	trace prints the step trace and returns the body result
+import "aql:debug" (Debug.profile [1 add 2]) typeof	List	profile returns a per-word step-count table
+#
+# §6  not imported — the namespace is undefined without import
+Debug.tap 1	ERROR:undefined_word	`Debug` is undefined without `import`

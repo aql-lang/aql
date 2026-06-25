@@ -98,6 +98,16 @@ type Recorder interface {
 // for the semantics of each callback.
 func (e *Engine) SetRecorder(r Recorder) { e.recorder = r }
 
+// SetTrace installs a TraceCallback on this engine. Pass nil to clear.
+// The callback fires once before every step of Run() with the step
+// index, the pointer position, a snapshot of the tape, and the
+// pending trace note. This is the seam debug tooling builds on to
+// count steps, profile per-word cost, or drive interactive stepping
+// (see design/DEBUG-MODULE.0.md §6.1); the existing RunTrace uses the
+// same field internally. The cost is paid only when a callback is
+// installed — a normal Run leaves e.trace nil and never snapshots.
+func (e *Engine) SetTrace(t TraceCallback) { e.trace = t }
+
 // Default step limits for the Run loop. Exposed as named constants so
 // every Engine constructor names them explicitly — there is no
 // "zero means default" sentinel on `stepLimit`; the field is always
