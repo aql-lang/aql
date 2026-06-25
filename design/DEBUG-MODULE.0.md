@@ -4,7 +4,11 @@ Status: **proposal** (discovery note, not yet built). This captures the
 design of a new native module `aql:debug` (namespace `Debug`) that
 collects AQL's debugging affordances behind one import: simple printing,
 interactive stepping, and structural / memory / performance analysis of
-both a program and the running system.
+both a program and the running system — extending out to a **live TUI
+dashboard** of runtime state (extensible with widgets contributed by other
+modules), **attaching** to a running `aql serve`, and a **debug channel**
+for interrogating ephemeral serverless invocations, all authenticated with
+`aql:vault` capability tokens (§7).
 
 Per `lang/go/CLAUDE.md` this is a *framework / capability* module, so the
 id stays plain (`aql:debug`, not `-util`) and the namespace is `Debug`.
@@ -117,7 +121,7 @@ the next action (step / continue / step-over / inspect / quit).
 Non-interactive hosts (CI, wasm playground, tests) supply a *scripted*
 controller — a pre-recorded list of actions — so stepping is testable
 without a TTY. The REPL supplies a line-reading controller; a future
-`aql debug <file>` CLI subcommand (out of scope here, noted in §8) would
+`aql debug <file>` CLI subcommand (out of scope here, noted in §9) would
 supply a richer one.
 
 ### (C) Program structural analysis — "what is this code/word made of?"
@@ -383,7 +387,7 @@ func EffectiveDebugOps(r *native.Registry) (capabilities.DebugOps, bool) {
 The OS impl reads `runtime.MemStats`; the wasm/sandbox impl returns
 zeroes. Policy-gated under `debug.runtime` via the existing
 `HostPolicy`/`pol.Check` plumbing — no new policy machinery, just a scope
-name (§7).
+name (§8).
 
 ### 6.2 The `Debug.stack` seam (the one new engine read)
 
@@ -442,7 +446,267 @@ type ever need to be wire-stable, draw from the reserved
 `5000-9999` band per `eng/go/CLAUDE.md`.
 
 
-## 7. Policy & safety
+## 7. Live dashboard, remote attach & the serverless debug channel
+
+Surfaces (A)–(F) debug a program you are *running yourself*. This section
+adds the three surfaces for debugging a system that is **already running**
+— a live TUI dashboard of runtime state, attaching to a long-lived
+process, and interrogating ephemeral serverless invocations — and the
+authentication that makes them safe. All three reuse infrastructure AQL
+already has rather than inventing transports: the `api` service + its
+discovery file, the bubbletea `tui` client, the `Service`/`call` model
+(`SERVICES.0.md`), and the vault capability-token broker.
+
+### 7.0 The unifying idea: a debug source is a `Service`
+
+Everything here rests on one decision. **A unit of debuggable state is a
+`Service`** (`SERVICES.0.md` §1) that answers two requests:
+
+- `call {op:"meta"}` → a `WidgetMeta` (title, kind, refresh hint, layout).
+- `call {op:"sample"}` → a `DebugCell` (the current data to render).
+
+That single decision buys all three features at once, because `call`
+obeys the **uniform "assume-remote" contract** (`SERVICES.0.md` §8): the
+*same* `call {op:"sample"} src` works whether `src` is an in-process value,
+a process in a running `aql serve` reached over a socket, or a serverless
+invocation reached through a relay. The dashboard is just a client that
+lays out a set of these services and polls each on a tick — exactly what
+`cmd/go/internal/tui` already does against the `api` service today. Attach
+and serverless differ only in **how the `Service` handle is obtained and
+authenticated**, not in the protocol.
+
+So the data model is wire-uniform and render-agnostic:
+
+| Type | Shape | Notes |
+|------|-------|-------|
+| `DebugCell` | `refine Record [kind:String data:Any]` | `kind ∈ {"text","table","record","gauge","sparkline","log"}`; `data` is plain immutable values so it crosses a transport unchanged (`PROCESSES.0.md` `not_sendable` is satisfied — no `Store`/`Array`/`Object` in a cell). |
+| `WidgetMeta` | `refine Record [id:String title:String kind:String refresh-ms:Integer span:Integer]` | layout + cadence hints; `span` is grid columns. |
+| `DebugWidget` | a `Service` (or a constructor returning one) answering `{op:"meta"}` / `{op:"sample"}` | the contributable unit (§7.1). |
+
+The Go TUI host renders a `DebugCell` by `kind`; the AQL side only ever
+produces **data**, never terminal escapes — which is precisely why the
+same cell renders locally and streams back from a remote/serverless
+target.
+
+### 7.1 Live runtime dashboard (`Debug.dashboard`) — extensible via module widgets
+
+```
+Debug.dashboard [widgets] {refresh-ms:500 …} -> None     # AQL entry: run a TUI
+aql debug top [--attach <target>]                        # CLI entry (Phase 3)
+```
+
+`Debug.dashboard` takes a list of `DebugWidget`s, hands them to the
+bubbletea host (the existing `cmd/go/internal/tui` model, generalised
+from "a table of services" to "a grid of widget cells"), and polls each
+widget's `{op:"sample"}` on its `refresh-ms`. The host owns layout,
+input, and rendering; AQL owns the widget set and the sampled data.
+
+**Extensibility — widgets are contributed by other modules.** A widget is
+just a `Service`-shaped value a module **exports**, so any module adds
+dashboard content with no change to `aql:debug`. Discovery is two-tier:
+
+1. **Explicit (always works):** the caller passes the widget list —
+   `Debug.dashboard [ (Debug.heap-widget) (Serve.supervision-widget app)
+   (Net.traffic-widget) my-widget ]`.
+2. **Registry (zero-config):** a module advertises widgets by exporting a
+   conventionally-named provider, `debug-widgets -> [DebugWidget]`.
+   `Debug.discover-widgets` scans the imported modules' exports for that
+   provider (the same export-walk `stampExportProvenance` already does in
+   `modules.go`) and returns every contributed widget, so
+   `Debug.dashboard Debug.discover-widgets` shows everything the loaded
+   modules offer.
+
+Built-in widgets shipped by `aql:debug` are thin wrappers over §3's
+words: `stack`, `defs`, `heap`/`gc` (gauge), `profile` (table),
+`steps`/`time` (sparkline of a sampled body), `processes` (§7.2),
+`log` (a ring buffer the `Debug.tap`/`label` words can feed). Other
+core modules are the obvious first contributors:
+
+| Module | Widget | Cell |
+|--------|--------|------|
+| `aql:serve` | supervision tree — services, states, restart counts, mailbox depth/high-water (`SERVICES.0.md` §8.1) | `table` |
+| `aql:net` | in-flight HTTP requests, status histogram, latency | `table` + `sparkline` |
+| `aql:rand` | active seeded instances (for reproducibility audits) | `record` |
+| user module | anything: queue depths, cache hit-rate, domain metrics | any `kind` |
+
+A user module exports a widget the same way it exports a service
+(`SERVICES.0.md` §2):
+
+```aql
+# metrics.aql — contribute a dashboard widget
+export "debug-widgets" fn [[] [List] [
+  [ ( Debug.widget {
+        id: "cache" title: "Cache hit-rate" kind: "gauge" refresh-ms: 1000
+        sample: [ [req state] => [ Debug.cell "gauge" (cache-hit-ratio) ] ]
+      } ) ]
+]]
+```
+
+`Debug.widget {meta… sample:[handler]}` is sugar that builds the
+`Service` (an `add {op:"meta"}` returning the meta, an `add {op:"sample"}`
+running the handler), so widget authors never touch the service words
+directly unless they want `wrap`/`prior` layering (auth, caching) on a
+widget — which they get for free because a widget *is* a service.
+
+### 7.2 Attaching to a running process (`Debug.attach`)
+
+A long-lived `aql serve` (or any program that opted into a debug
+endpoint) exposes its processes/services as debug sources. Attaching is
+**obtaining authenticated `Service` handles to them from outside**.
+
+```
+Debug.attach {target} {token:…} -> DebugTarget      # connect to a running runtime
+aql debug attach <target>                            # CLI: opens the dashboard attached
+```
+
+- **Target resolution** mirrors the existing `tui`/`api` story: a **local**
+  attach reads the `$TMPDIR/aql-api.json` discovery file (`{url, token,
+  pid}`, mode 0600) the `api` service already writes (`cmd/go/internal/api`);
+  a **remote** attach takes an explicit `{http: "https://host:port"}` and a
+  token. No new discovery mechanism.
+- **The debug endpoint is a service, not a new server.** Per
+  `SERVICES.0.md` §5 the `api` service "introspects its own server"; the
+  debug endpoint is the same idea extended with read-only introspection
+  ops: `{op:"processes"}` (list `Pid`s, names, mailbox depth, state —
+  `PROCESSES.0.md` §3), `{op:"inspect" pid:…}` (a process's bindings /
+  current word / step count via §3's `Debug.*`), `{op:"sample" widget:…}`
+  (drive a remote widget), and the **guarded** `{op:"step" pid:…}` that
+  installs the §6.1 `DebugSession` hook *on that process's engine* and
+  streams `StepRecord`s back. Because a served process is a single
+  goroutine consuming its mailbox, a step request is just another message;
+  it pauses that one process without touching its siblings.
+- **`DebugTarget`** is a handle whose `processes`/`inspect`/`widgets`
+  resolve to remote `Service` calls under the uniform contract — so
+  `Debug.dashboard (Debug.attach {…}).widgets` renders a **remote**
+  runtime with the identical code path as a local one. Attaching the
+  stepper (`aql debug attach --step <pid>`) is the remote form of §3(B).
+
+Attach is strictly **read-only by default**; stepping/pausing a remote
+process requires an elevated scope on the presented token (§7.4), because
+pausing a production process is a privileged, observable act.
+
+### 7.3 The serverless debug channel
+
+Serverless invocations break the attach model: they are **ephemeral**
+(gone before you can connect), **cold/scaled-to-zero**, and usually
+**cannot accept an inbound socket**. You cannot attach *to* them — so the
+channel inverts direction: the invocation **publishes** to, and **polls**
+from, an out-of-band **debug relay**, keyed by an invocation id.
+
+```
+# inside the function (one line, gated + no-op when no channel configured)
+Debug.channel {invocation: id  relay: "…"  token: …}    -> DebugChannel
+# from the interrogator
+Debug.interrogate {relay:"…" invocation: id  token: …}  -> DebugTarget
+```
+
+Two cooperating flows over the same relay (which is itself an
+`aql:serve` service — a `proxy`-shaped broker, `SERVICES.0.md` §6):
+
+1. **Emit (always cheap).** When a channel is configured, `Debug.tap` /
+   `label` / `assert` / `profile` and any widget `sample` **also** publish
+   their `DebugCell`/event to the relay tagged with the invocation id, as
+   fire-and-forget `send` with `overflow:"drop"` (`SERVICES.0.md` §8.1) so
+   debugging **never** adds latency or backpressure to the hot path. With
+   no channel configured the emit compiles to nothing — zero serverless
+   overhead by default.
+2. **Interrogate (on-demand).** `Debug.interrogate` subscribes to the
+   relay for that invocation id and receives the event stream
+   (post-hoc, like distributed tracing) **and** — for a still-running
+   invocation that opted into a control channel — can issue
+   `{op:"inspect"}` / `{op:"step"}` requests that the function picks up by
+   **polling** the relay between steps (the function pulls commands; the
+   relay never pushes into a sandbox that can't be reached). This is the
+   `gen_server`-deferred-reply shape (`SERVICES.0.md` §1 `@from`/`defer`):
+   the relay holds the interrogator's request until the function's next
+   poll answers it.
+
+The relay decouples the two lifetimes: a function can emit and vanish; an
+interrogator can connect before, during, or after, addressing by
+invocation id. For live stepping, a thin synchronous wrapper
+(`aql debug invoke …`) holds the invocation open against the relay so a
+human can step a single cold start — opt-in, since it defeats the
+scale-to-zero economics. Aggregating many invocations (one relay, many
+ids) is the natural extension and is where the dashboard's `log`/`table`
+widgets point in serverless mode.
+
+### 7.4 Authentication via `aql:vault` (the trust boundary)
+
+Attach and the serverless channel cross trust boundaries — a debug
+endpoint that exposes process bindings, lets you pause a production
+process, or streams a function's internal state is a **high-value
+target**. Authentication is therefore not a static `--token` but the
+**vault capability-token model** already proven by the credential proxy
+(`cmd/go/internal/vault/proxy.go`, `proxy_security_test.go`).
+
+- **Capability tokens, not passwords.** `aql vault` mints a scoped,
+  revocable capability for debug access:
+  `aql vault grant debug --target <id> --scope debug.attach --expires 1h
+  --budget 500`. The holder presents `Authorization: Bearer
+  <capability-id>`; the endpoint validates exactly as the proxy does today
+  — hashed token → alias binding → **revoked / expired / method / budget /
+  host-policy** checks. The real session/keys never leave the broker; the
+  token is a least-privilege handle, not a secret.
+- **Scopes map to debug power (least privilege).** `debug.observe`
+  (read-only widgets/metrics) < `debug.inspect` (process bindings, step
+  records) < `debug.control` (pause/resume, install a remote stepper). A
+  dashboard-only operator gets `debug.observe`; pausing a production
+  process needs `debug.control`. These compose with the engine policy
+  scopes of §8 — the token scopes gate *remote* access, the policy scopes
+  gate what the *endpoint* is even willing to do.
+- **The endpoint is a vault-style `proxy` (`SERVICES.0.md` §6).** Its
+  `before` interceptors do capability auth + scope check; the `target` is
+  the local introspection service; `after` records audit + decrements the
+  budget. Denials carry the proxy's blame chain and **never leak state**
+  in the error. Emergency revocation is the unified `call {op:"pause"}`
+  control — a leaked debug token is killed centrally at the broker.
+- **Protocol versioning + transport hygiene, reused.** The debug wire
+  envelope carries `X-AQL-Debug-Protocol` (mirroring
+  `X-AQL-Vault-Protocol`); a stale agent fails loud. Local endpoints bind
+  loopback by default and require an explicit `--allow-public` to expose,
+  exactly like the proxy. For the serverless relay, **both** legs
+  authenticate: the function presents a *producer* capability (emit-only,
+  scoped to its own invocation id) and the interrogator a *consumer*
+  capability — so a compromised function cannot read another's channel and
+  an interrogator cannot inject into the function beyond its granted scope.
+
+The net: one auth model (vault capabilities) secures the dashboard, the
+attach endpoint, and the serverless relay, with scopes giving
+read-only-by-default and audited, revocable, time/budget-bounded access to
+the privileged operations.
+
+### 7.5 New module-owned types (this section)
+
+| Type | Shape |
+|------|-------|
+| `DebugCell` | `refine Record [kind:String data:Any]` |
+| `WidgetMeta` | `refine Record [id:String title:String kind:String refresh-ms:Integer span:Integer]` |
+| `DebugWidget` | a `Service` answering `{op:"meta"}` / `{op:"sample"}` |
+| `DebugTarget` | handle to an attached runtime; `.processes` / `.inspect` / `.widgets` → remote `Service` calls |
+| `DebugChannel` | a configured serverless emit/poll channel bound to an invocation id |
+
+These depend on the `Service` type (`SERVICES.0.md`) and the process layer
+(`PROCESSES.0.md`), so §7 as a whole is **gated on those RFCs landing** —
+called out in phasing (§9) and the gap below.
+
+### 7.6 Dependency honesty
+
+§7 is the most forward-looking part of this design and rests on
+not-yet-built substrate. Concretely it needs: the `Service`/`call` model
+and the served-process layer (both RFC-only today —
+`SERVICES.0.md`/`PROCESSES.0.md`); a debug-introspection service on
+`aql serve`; the bubbletea host generalised from the services table to a
+widget grid; a `connect`/transport for remote `call` (the **TCP server
+AQL still lacks** — `SERVICES.0.md` §10); and a relay service for the
+serverless channel. What it does **not** need to invent: the auth model
+(vault capabilities exist), the discovery/transport bones (the `api`
+service + discovery file exist), the renderer (the `tui` model exists),
+or the data contract (it is plain immutable `DebugCell`s). The phasing in
+§9 sequences §7 strictly after the in-process surfaces and the
+process/service layer it builds on.
+
+
+## 8. Policy & safety
 
 A new policy scope **`debug`** governs the effectful surfaces:
 
@@ -452,6 +716,16 @@ A new policy scope **`debug`** governs the effectful surfaces:
 | `debug.step` | `Debug.step` / `break*` / `run-stepped` (blocks for input) |
 | `debug.introspect` | `Debug.words` / `defs` / `modules` / `types` / `stack` / `scope` (reads registry) |
 | `debug.runtime` | `Debug.heap` / `gc` (reads Go runtime) |
+| `debug.serve` | exposing a debug endpoint on `aql serve` (§7.2): the local introspection service is *installable* only with this scope |
+| `debug.remote` | `Debug.attach` / `dashboard --attach` / `interrogate` (outbound — opening a debug connection to another runtime/relay) |
+
+The **remote** scopes (`debug.serve`, `debug.remote`) gate the
+*engine/host* side — whether a runtime will host or originate a debug
+connection at all. They are distinct from, and composed with, the
+**vault capability scopes** of §7.4 (`debug.observe`/`inspect`/`control`),
+which gate what a *presented token* is allowed to do once connected. Both
+must pass: the policy scope says "this process may participate in remote
+debugging"; the token scope says "this caller may perform this operation."
 
 The **pure** words (`Debug.parse`, `disasm`, `sig`, `body`, `deps`,
 `explain`, `sizeof`, `shape`, `steps`, `time`, `bench`, `assert`, `todo`)
@@ -468,7 +742,7 @@ Default profiles: `sandbox` denies `debug.runtime` and `debug.step`
 no new policy machinery, just a new scope name.
 
 
-## 8. Phasing
+## 9. Phasing
 
 The surfaces have very different build costs; ship in order of
 value-per-effort:
@@ -488,11 +762,35 @@ value-per-effort:
   `aql debug <file>` CLI subcommand are the host-side follow-on.
 - **Phase 4 — runtime memory** (`DebugOps.MemStats`): `heap`, `gc`.
 
-Each phase is independently shippable and independently useful; nothing
-in a later phase blocks an earlier one.
+Phases 1–4 are the in-process module and are independently shippable —
+nothing in a later phase blocks an earlier one. Phases 5–7 are the §7
+remote surfaces; each **depends on prior RFCs landing** and so is
+sequenced after them, not after Phase 4 alone:
+
+- **Phase 5 — local dashboard + widgets** (after `aql:serve`'s in-process
+  `Service` layer, `SERVICES.0.md` Phase 1): the `DebugCell`/`WidgetMeta`/
+  `DebugWidget` contract, `Debug.dashboard` / `widget` / `discover-widgets`,
+  the built-in widgets, and the bubbletea host generalised from the
+  services table to a widget grid. **In-process only** — no transport
+  needed, so it lands as soon as services exist.
+- **Phase 6 — attach** (after the served-process layer, `PROCESSES.0.md`
+  + `SERVICES.0.md` Phase 2, and a `connect` transport): the
+  debug-introspection service on `aql serve`, `Debug.attach` /
+  `DebugTarget`, remote widgets/inspect, and remote stepping; vault
+  capability auth (§7.4) wired as the endpoint `proxy`. Local attach (via
+  the existing `api` discovery file) can precede remote attach (which
+  needs the still-missing TCP server, `SERVICES.0.md` §10).
+- **Phase 7 — serverless channel** (after transport + a relay service):
+  `Debug.channel` / `interrogate` / `DebugChannel`, the drop-policy emit
+  path, the poll-for-commands control leg, and producer/consumer
+  capability split. The most forward-looking slice; ships last.
+
+The auth model (vault capabilities) is reused, not built, so it adds no
+phase of its own — it is wired in at Phases 6–7 where the boundary first
+exists.
 
 
-## 9. Test discipline
+## 10. Test discipline
 
 Per `lang/go/CLAUDE.md`, every behaviour gets a paired negative test:
 
@@ -513,12 +811,22 @@ Per `lang/go/CLAUDE.md`, every behaviour gets a paired negative test:
 - `Debug.step` is exercised with the `scriptedController` so the
   interactive path is covered headlessly; assert that `Debug.break`
   with **no active session** is a pure no-op (production safety).
+- §7 (remote) discipline: a `DebugCell` must contain **only immutable**
+  values — pair a positive render row with a negative one asserting a cell
+  carrying a `Store`/`Array`/`Object` is refused at the transport boundary
+  (`PROCESSES.0.md` `not_sendable`). Auth: assert an **expired / revoked /
+  out-of-scope** capability token is rejected and that the error **leaks no
+  state** (mirror `proxy_security_test.go`); assert `debug.observe` cannot
+  reach a `{op:"step"}`/`{op:"pause"}` op. The serverless emit path must be
+  a **no-op when no channel is configured** (zero overhead) and **never
+  block** the hot path under `overflow:"drop"`.
 
 Spec rows live in `lang/spec/debug.tsv`; Go-level tests (host capture,
-policy refusal, no-panic, scripted stepping) in `debug_test.go`.
+policy refusal, no-panic, scripted stepping, capability rejection) in
+`debug_test.go`.
 
 
-## 10. Open questions for the maintainer
+## 11. Open questions for the maintainer
 
 1. **Re-export vs relocate.** `Debug.trace` and `Debug.parse` duplicate
    `IO.trace` / `Vm.parse`. Re-export (keep both, `Debug.*` is an alias)
@@ -533,9 +841,31 @@ policy refusal, no-panic, scripted stepping) in `debug_test.go`.
 3. **CLI surface.** Should interactive stepping get a first-class
    `aql debug <file>` subcommand (a Phase-3 host follow-on), or stay
    REPL-only for now?
-4. **Scope granularity.** Is a single `debug` scope with four ops
-   (§7) the right shape, or should `debug.runtime` be folded into the
-   existing host/runtime gating instead of living under `debug`?
+4. **Scope granularity.** Is the `debug` scope with six ops
+   (§8, incl. the two remote ops) the right shape, or should `debug.runtime`
+   fold into the existing host/runtime gating and the remote ops into the
+   existing `network`/`process` scopes instead of living under `debug`?
+5. **Widget discovery convention.** Is a conventional
+   `export "debug-widgets"` provider (§7.1) the right zero-config
+   mechanism, or should widgets register through an explicit
+   `Debug.register-widget` call (no magic export name) — trading
+   discoverability for explicitness?
+6. **Widget = full `Service`, or a lighter record?** Modelling a widget as
+   a `Service` (§7.0) buys `wrap`/`prior` + location-transparency for free
+   but couples `aql:debug`'s dashboard to the (unbuilt) service layer. Is a
+   lighter `{meta sample}` record contract worth defining for a Phase-5
+   in-process dashboard that ships *before* services, with an upgrade path
+   to the service form?
+7. **Serverless control channel — poll vs hold-open.** §7.3 makes live
+   stepping of an invocation opt-in (a synchronous wrapper holds it open,
+   defeating scale-to-zero). Is post-hoc event streaming (always cheap)
+   sufficient for the serverless story, with live stepping deferred — or is
+   interactive cold-start stepping a day-one requirement?
+8. **Where do debug capability tokens live in vault?** Should
+   `aql vault grant debug` be a first-class vault verb with its own
+   audit/scope surface, or a thin convention over the existing
+   capability-token machinery (`proxy.go`) with `debug.*` aliases? (Leaning
+   thin convention — reuse, don't fork.)
 
 No ADR entry is proposed — per repo policy this stays a `design/` note
 until a maintainer says otherwise.
