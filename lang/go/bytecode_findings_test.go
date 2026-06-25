@@ -3333,3 +3333,56 @@ func TestDeferredListBodyCompiles(t *testing.T) {
 		}
 	}
 }
+
+// Quoted-operand inert words `has` / `inspect` (corpus-core.tsv) — a bare-word
+// key/name quotes to an inert Atom const, so the dispatch bakes a plain
+// CALL_NATIVE over the baked container + key (the VM runs the same pure
+// handler). Declaring CompileQuoteInert clears the "quoted-operand word"
+// refusal exactly as quote/codequote/raise/timeout already do.
+func TestQuotedOperandHasInspectCompiles(t *testing.T) {
+	pos := []struct{ src, want string }{
+		{`{a:1} has b`, "[false]"},
+		{`{a:None} has a`, "[true]"},
+		{`none has a`, "[false]"},
+		{`inspect a/q`, "[{name:'a' kind:unknown signatures:[]}]"},
+	}
+	for _, c := range pos {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%q: check error %v", c.src, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%q: expected native compile, refused: %s", c.src, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%q: expected no island:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%q: did not run compiled", c.src)
+		}
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+
+	// NEGATIVE: the evaluated-key overloads (no QuoteArgs) are unaffected — a
+	// String key still dispatches the same handler, compiled == interp.
+	for _, c := range []struct{ src, want string }{
+		{`{a:1} has "a"`, "[true]"},
+		{`{a:1} has "z"`, "[false]"},
+	} {
+		gotC, _, eC := mustNew(t).RunCompiled(c.src)
+		gotI, eI := mustNew(t).Run(c.src)
+		if eC != nil || eI != nil {
+			t.Fatalf("%q: compiled err=%v interp err=%v", c.src, eC, eI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%q: compiled=%v interp=%v want %s", c.src, gotC, gotI, c.want)
+		}
+	}
+}
