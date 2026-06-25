@@ -1959,7 +1959,7 @@ modules keep plain names.
 | `aql:array-util` | `ArrayUtil` | Specialised APL-style array vocabulary (see above). |
 | `aql:string-util` | `StringUtil` | String words — `upper`, `split`, `indexof` (haystack-last), `replace`, … all subject-last. |
 | `aql:struct-util` | `StructUtil` | voxgig-struct data words — `clone`, `getpath`, `setpath`, `merge`, `walk`, `transform`, `jsonify`, … |
-| `aql:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`. |
+| `aql:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`, and `base64`/`hex` `-encode`/`-decode`. |
 | `aql:logic-util` | `LogicUtil` | Derived boolean connectives — `nand`, `nor`, `xnor`, `iff`, `implies`. |
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |

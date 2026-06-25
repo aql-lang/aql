@@ -116,6 +116,7 @@ var KnownScopes = []string{
 	"env",
 	"process",
 	"clock",
+	"log",
 }
 
 // WordChecker is the engine-side shim. Importing this interface

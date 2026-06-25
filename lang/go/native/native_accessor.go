@@ -47,8 +47,12 @@ var accessorNatives = []NativeFunc{
 		//	{a:1}    has b       → false  (absent)
 		//	[10,20]  has 1       → true
 		//	none     has a       → false
-		Name:          "has",
-		CompileEffect: CompileModuleFold,
+		Name: "has",
+		// CompileModuleFold: a pure presence reader. CompileQuoteInert: the
+		// bare-word key overloads (`{a:1} has b`, `none has a`) quote the key
+		// as an inert Atom const, so the dispatch bakes a plain CALL_NATIVE
+		// over the baked container + key — the VM runs the same pure handler.
+		CompileEffect: CompileModuleFold | CompileQuoteInert,
 
 		Signatures: []NativeSig{
 			// [Key | Node] — Map, List, Options, record-shape

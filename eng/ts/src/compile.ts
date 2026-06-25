@@ -57,10 +57,12 @@ export interface RunCompiledResult {
  * source either way.
  */
 export function runCompiled(registry: Registry, input: Value[]): RunCompiledResult {
+  const snapshot = registry.snapshot()
   const result = compileCheck(registry, input)
   if ('program' in result) {
     return { residual: runProgram(result.program, registry), compiled: true }
   }
+  registry.restore(snapshot)
   return { residual: new Engine(registry).run([...input]), compiled: false, reason: result.refused }
 }
 
