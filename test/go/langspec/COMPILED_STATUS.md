@@ -9,12 +9,12 @@ Corpus: **3435** spec value rows (**3204** compilable, 231 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 3184 |
-| compiled with an interpreter island | 1 |
+| compiled natively (fallback-free) | 3185 |
+| compiled with an interpreter island | 0 |
 | refused (whole-program fallback) | 19 |
 | static check-error (invalid in both engines) | 231 |
 
-**3185 / 3204** compilable rows produce a Program (99% — 3184 of those fully native).
+**3185 / 3204** compilable rows produce a Program (99% — 3185 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -23,10 +23,10 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
 | refusals (whole-program fallback) | 19 | 0 | → 0 |
-| interpreter islands (OpFallback) | 1 | 0 | → 0 |
+| interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 2 | 2 | → 0 |
-| compute frontier | 18 | 86 | → 0 |
+| compute frontier | 17 | 86 | → 0 |
 
 ## Refusals by reason
 
@@ -48,7 +48,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 ## Re-scoped P7 partition
 
-Over the 20 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **2** reducible (tier 2, TODO), **0** allowlisted error rows, **18** compute-frontier gaps.
+Over the 19 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **2** reducible (tier 2, TODO), **0** allowlisted error rows, **17** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -69,5 +69,4 @@ _None._
 | 3 | function-valued operand (Stage 3) |
 | 3 | other: unconsumed fn-value carrier in residual (closure render) |
 | 2 | function value reaches word (Stage 3) |
-| 1 | island (OpFallback span) |
 

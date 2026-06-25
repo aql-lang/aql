@@ -3426,3 +3426,39 @@ func TestDoMapCompilesNoIsland(t *testing.T) {
 		t.Errorf("do [1 add 2]: compiled=%v interp=%v want [3]", gotC, gotI)
 	}
 }
+
+// outer [body] left right (corpus-core.tsv:101) — the last interpreter island.
+// `outer` is a code-body higher-order word that used to run its body via an
+// inline sub-engine and island. Routing it through the InvokeBody seam + a
+// CallableSpec compiles the `[mul]` body to a closure unit the VM drives per
+// pair, so the 2D outer product compiles fully native (islands → 0).
+func TestOuterCompilesNoIsland(t *testing.T) {
+	src := `outer [mul] [1 2] [3 4]`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("check error %v", cerr)
+	}
+	if prog == nil {
+		t.Fatalf("refused: %s", reason)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("expected no island:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, eC := mustNew(t).RunCompiled(src)
+	gotI, eI := mustNew(t).Run(src)
+	if !compiled {
+		t.Errorf("did not run compiled")
+	}
+	if eC != nil || eI != nil {
+		t.Fatalf("compiled err=%v interp err=%v", eC, eI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[[3 4] [6 8]]]" {
+		t.Errorf("compiled=%v interp=%v want [[[3 4] [6 8]]]", gotC, gotI)
+	}
+	// NEGATIVE: a non-concrete-list arg still errors (outer_error), not a crash.
+	_, _, eBad := mustNew(t).RunCompiled(`outer [mul] List [3 4]`)
+	_, eBadI := mustNew(t).Run(`outer [mul] List [3 4]`)
+	if (eBad == nil) != (eBadI == nil) {
+		t.Errorf("outer over a type-literal list: compiled err=%v interp err=%v (should agree)", eBad, eBadI)
+	}
+}
