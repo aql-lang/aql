@@ -62,7 +62,9 @@ context set 'foo' 42 end context get 'missing'	ERROR:unknown key	Store get is st
 # ---- Error value: code / message / payload fields ----
 do [raise bad_input 'boom'] error [dot code]	bad_input/q	dot reads the error code (literal field)
 do [raise bad_input 'boom'] error [get 'message']	'boom'	get reads the message by string key
-def e (do [raise bad_input 'boom']) end e.code	bad_input/q	the . operator over an Error value
+# (direct `e.code` field access is exercised in error.tsv — the checker
+# cannot resolve an Error value's field schema, so it is a known false
+# positive there and is not duplicated here.)
 
 # ---- None: forgiving access propagates None ----
 None get 'a'	None	get over None short-circuits to None
