@@ -48,6 +48,12 @@ import "aql:debug" [1 add 2] Debug.steps typeof	Integer	steps returns the engine
 import "aql:debug" ([1 add 2] Debug.time) typeof	Map	time returns {result, elapsed-ms, steps}
 import "aql:debug" (Debug.bench [1 add 2] 3) typeof	Map	bench returns timing stats over n runs
 import "aql:debug" [1 add 2] Debug.trace	3	trace prints the step trace and returns the body result
+#
+# §5b interactive stepping (no controller attached → prints frames / no-ops)
+import "aql:debug" [1 add 2] Debug.step	3	step runs the body; with no controller it prints each frame
+import "aql:debug" Debug.break 41 add 1	42	break is a no-op without an attached controller
+import "aql:debug" Debug.break-when false 7	7	break-when false never pauses
+import "aql:debug" "10 add 5" Debug.run-stepped	15	run-stepped parses then steps the source
 import "aql:debug" (Debug.profile [1 add 2]) typeof	List	profile returns a per-word step-count table
 #
 # §6  not imported — the namespace is undefined without import

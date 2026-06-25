@@ -1,19 +1,29 @@
 # aql:debug — a debugging & introspection module
 
-Status: **partially implemented.** The in-process surfaces — printing
-taps, structural/system introspection, value sizing, and performance
-measurement (the Phase 1–4 word set, §9) — are **built and shipping** in
-`lang/go/modules/debug.go`, with the one engine seam they need
-(`Engine.SetTrace`, §6.1), docs (`docs_debug.go`), Go tests
-(`debug_test.go`), and an executable spec (`lang/spec/module-debug.tsv`).
-The remaining surfaces are still design-only: **interactive stepping**
-(§3 B — needs the host `DebugOps` controller, Phase 3) and the §7 remote
-features — a **live TUI dashboard** of runtime state (extensible with
-widgets contributed by other modules), **attaching** to a running
-`aql serve`, and a **debug channel** for interrogating ephemeral
-serverless invocations authenticated with `aql:vault` capability tokens —
-which are gated on the unbuilt Service/Process layer (§7.6) and sequenced
-as Phases 5–7.
+Status: **implemented through Phase 3 (every in-process surface).** Built
+and shipping in `lang/go/modules/debug.go` + `debug_step.go`: all of
+printing, structural/system introspection, value sizing, performance
+measurement, **and interactive stepping** — 27 words: `tap`, `label`,
+`dump`, `assert`, `todo`, `parse`, `deps`, `explain`, `sig`, `body`,
+`watch`, `stack`, `disasm`, `words`, `defs`, `modules`, `sizeof`, `shape`,
+`heap`, `gc`, `steps`, `time`, `bench`, `trace`, `profile`, `step`,
+`break`, `break-when`, `run-stepped`. Backed by three small engine seams
+(`Engine.SetTrace` for the step/profile hook, §6.1; `Registry.CurrentStack`
+via a current-engine stack for `Debug.stack`, §6.2; the `DebugOps` /
+`StepController` host capability for stepping, §6 / §7.4-style), with docs
+(`docs_debug.go`), Go tests (`debug_test.go` — incl. a headless scripted
+step controller), and an executable spec (`lang/spec/module-debug.tsv`).
+
+The remaining surfaces are the **§7 cross-process features** — a live TUI
+dashboard, **attaching** to a running `aql serve`, and a **debug channel**
+for serverless invocations authenticated with `aql:vault` capability
+tokens. These are genuinely gated on substrate that does not yet exist:
+the `Service`/`Process` actor layer (`SERVICES.0.md`/`PROCESSES.0.md`, RFC
+only) and the **TCP server AQL still lacks** (§7.6). They are sequenced as
+Phases 5–7 and cannot be built until those prerequisites land; the data
+contract, auth model (vault capabilities already exist), and renderer
+substrate (the existing `api` discovery file + bubbletea `tui`) are
+designed and ready for that work.
 
 This captures the design of the native module `aql:debug` (namespace
 `Debug`) that collects AQL's debugging affordances behind one import:
@@ -22,9 +32,6 @@ performance analysis of both a program and the running system.
 
 Per `lang/go/CLAUDE.md` this is a *framework / capability* module, so the
 id stays plain (`aql:debug`, not `-util`) and the namespace is `Debug`.
-Nothing here is built yet — the file exists so the surface, the engine
-seams it needs, the policy story, and the phasing are agreed before code
-lands.
 
 
 ## 1. Why a module (and why not core)
@@ -767,24 +774,34 @@ value-per-effort:
   harder): `trace` (re-export), `profile`, `disasm` (needs the
   `Recorder`/StackForm wired through a sub-engine).
 
-> **Shipped (Phases 1–2 + the pure parts of 4).** `lang/go/modules/debug.go`
-> implements `tap`, `label`, `dump`, `assert`, `todo`, `parse`, `deps`,
-> `explain`, `words`, `defs`, `modules`, `sizeof`, `shape`, `steps`,
-> `time`, `bench`, `trace`, `profile` — driven by the new `Engine.SetTrace`
-> seam (§6.1). Deferred within these phases (no blocker, just not yet
-> built): `watch`, `sig`, `body`, `disasm` (need signature/recorder
-> formatting), `stack` (needs the §6.2 engine seam), `types`/`scope`, and
-> the `heap`/`gc` runtime words (need the `DebugOps` capability). `Debug.words`
-> currently lists the documented built-in words via `help.Words()`;
-> `Debug.modules` lists the importable native modules.
-- **Phase 3 — interactive stepping** (`DebugSession` + `StepController` +
-  `DebugOps`): `step`, `break`, `break-when`, `run-stepped`, plus a
-  scripted controller for tests. The TTY/REPL controller and a possible
-  `aql debug <file>` CLI subcommand are the host-side follow-on.
+- **Phase 3 — interactive stepping** (`StepController` + `DebugOps`):
+  `step`, `break`, `break-when`, `run-stepped`, plus a scripted controller
+  for tests. The TTY/REPL controller and a possible `aql debug <file>` CLI
+  subcommand are the host-side follow-on.
 - **Phase 4 — runtime memory** (`DebugOps.MemStats`): `heap`, `gc`.
 
-Phases 1–4 are the in-process module and are independently shippable —
-nothing in a later phase blocks an earlier one. Phases 5–7 are the §7
+> **Shipped — all of Phases 1–4 (every in-process word).**
+> `lang/go/modules/debug.go` + `debug_step.go` implement the full 27-word
+> surface: `tap`, `label`, `dump`, `watch`, `assert`, `todo`, `parse`,
+> `deps`, `explain`, `sig`, `body`, `disasm`, `words`, `defs`, `modules`,
+> `stack`, `sizeof`, `shape`, `heap`, `gc`, `steps`, `time`, `bench`,
+> `trace`, `profile`, `step`, `break`, `break-when`, `run-stepped`. Three
+> engine seams back them: `Engine.SetTrace` (step/profile hook, §6.1),
+> `Registry.CurrentStack` via a defer-balanced current-engine stack
+> (`Debug.stack`, §6.2 — the "current engine" variant, chosen for
+> zero hot-loop cost), and the `DebugOps`/`StepController` host capability
+> (stepping; a `scriptedController` exercises it headlessly in tests).
+> Deltas from the design as written: `stack` filters tape markers to a
+> clean data stack; `watch` takes a `String` name (not `Atom/q`) to avoid
+> the dotted-quote complexity; `disasm` returns the StackForm pretty-print
+> as a String; `types`/`scope` are folded into `words`/`defs`/`sig` and
+> not shipped as separate words; interactive `step` uses the `DebugOps`
+> controller (a scripted controller in tests, a TTY one in the REPL host),
+> and `StepQuit` *detaches* rather than preempting (no mid-Run interruption
+> seam, and control-flow panics are forbidden).
+
+Phases 1–4 are the in-process module and are all shipped — nothing in a
+later phase blocks an earlier one. Phases 5–7 are the §7
 remote surfaces; each **depends on prior RFCs landing** and so is
 sequenced after them, not after Phase 4 alone:
 

@@ -84,6 +84,7 @@ func TestDebugModuleExports(t *testing.T) {
 		"words", "defs", "modules", "stack",
 		"sizeof", "shape", "heap", "gc",
 		"steps", "time", "bench", "trace", "profile",
+		"step", "break", "break-when", "run-stepped",
 	}
 	for _, name := range want {
 		if _, ok := exp.Get(name); !ok {
@@ -297,6 +298,130 @@ func TestDebugHeapAndGC(t *testing.T) {
 	}
 	if _, ok := m2.Get("alloc-after"); !ok {
 		t.Error("gc result missing 'alloc-after'")
+	}
+}
+
+// ── (B) Interactive stepping ─────────────────────────────────────────
+
+// scriptedController drives stepping headlessly: it records every frame it
+// is shown and returns a pre-baked action per call (the last action repeats).
+type scriptedController struct {
+	actions []capabilities.StepAction
+	frames  []capabilities.StepFrame
+	calls   int
+}
+
+func (c *scriptedController) OnStep(f capabilities.StepFrame) capabilities.StepAction {
+	c.frames = append(c.frames, f)
+	a := capabilities.StepContinue
+	if c.calls < len(c.actions) {
+		a = c.actions[c.calls]
+	} else if len(c.actions) > 0 {
+		a = c.actions[len(c.actions)-1]
+	}
+	c.calls++
+	return a
+}
+
+func (c *scriptedController) Controller() capabilities.StepController { return c }
+
+func TestDebugStepDrivesController(t *testing.T) {
+	r, _ := debugRegistry(t)
+	// StepInto on every step → the controller is consulted at each engine step.
+	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepInto}}
+	native.SetHostDebugOps(r, ctl)
+	res := runDebug(t, r, "[1 add 2] Debug.step")
+	if got := topInt(t, res); got != 3 {
+		t.Errorf("step must return the body result 3, got %d", got)
+	}
+	if ctl.calls == 0 {
+		t.Fatal("the controller must be consulted at least once")
+	}
+	// The body `1 add 2` takes several engine steps; single-step visits each.
+	if ctl.calls < 3 {
+		t.Errorf("single-step should consult the controller per step; got %d calls", ctl.calls)
+	}
+}
+
+func TestDebugStepQuitDetaches(t *testing.T) {
+	r, _ := debugRegistry(t)
+	// Quit on the first frame: no more pauses, but the body still completes.
+	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepQuit}}
+	native.SetHostDebugOps(r, ctl)
+	res := runDebug(t, r, "[1 add 2] Debug.step")
+	if got := topInt(t, res); got != 3 {
+		t.Errorf("after quit/detach the body still finishes (3), got %d", got)
+	}
+	if ctl.calls != 1 {
+		t.Errorf("quit must stop further pauses; got %d controller calls", ctl.calls)
+	}
+}
+
+func TestDebugStepNoControllerPrintsTrace(t *testing.T) {
+	r, buf := debugRegistry(t)
+	// With no DebugOps installed, step falls back to printing each frame.
+	res := runDebug(t, r, "[1 add 2] Debug.step")
+	if got := topInt(t, res); got != 3 {
+		t.Errorf("step (no controller) must still return 3, got %d", got)
+	}
+	if !strings.Contains(buf.String(), "[") {
+		t.Errorf("step with no controller should print frames; output = %q", buf.String())
+	}
+}
+
+func TestDebugBreakPausesWithController(t *testing.T) {
+	r, _ := debugRegistry(t)
+	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepContinue}}
+	native.SetHostDebugOps(r, ctl)
+	// A bare Debug.break in ordinary execution pauses once (the controller
+	// is consulted) and then resumes; the program result is unaffected.
+	res := runDebug(t, r, "Debug.break 41 add 1")
+	if got := topInt(t, res); got != 42 {
+		t.Errorf("break must not change the result; got %d, want 42", got)
+	}
+	if ctl.calls != 1 {
+		t.Errorf("a single break should pause exactly once; got %d", ctl.calls)
+	}
+	if len(ctl.frames) == 1 && !ctl.frames[0].AtBreak {
+		t.Error("the break frame must be flagged AtBreak")
+	}
+}
+
+func TestDebugBreakIsNoOpWithoutController(t *testing.T) {
+	r, _ := debugRegistry(t)
+	// No DebugOps → break is inert (production-safe), result unchanged.
+	res := runDebug(t, r, "Debug.break 41 add 1")
+	if got := topInt(t, res); got != 42 {
+		t.Errorf("break with no controller must be a pure no-op; got %d", got)
+	}
+}
+
+func TestDebugBreakWhenConditional(t *testing.T) {
+	// break-when false → never pauses.
+	r, _ := debugRegistry(t)
+	ctlF := &scriptedController{actions: []capabilities.StepAction{capabilities.StepContinue}}
+	native.SetHostDebugOps(r, ctlF)
+	runDebug(t, r, "Debug.break-when false")
+	if ctlF.calls != 0 {
+		t.Errorf("break-when false must not pause; got %d calls", ctlF.calls)
+	}
+	// break-when true → pauses once.
+	r2, _ := debugRegistry(t)
+	ctlT := &scriptedController{actions: []capabilities.StepAction{capabilities.StepContinue}}
+	native.SetHostDebugOps(r2, ctlT)
+	runDebug(t, r2, "Debug.break-when true")
+	if ctlT.calls != 1 {
+		t.Errorf("break-when true must pause once; got %d calls", ctlT.calls)
+	}
+}
+
+func TestDebugRunStepped(t *testing.T) {
+	r, _ := debugRegistry(t)
+	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepContinue}}
+	native.SetHostDebugOps(r, ctl)
+	res := runDebug(t, r, `"10 add 5" Debug.run-stepped`)
+	if got := topInt(t, res); got != 15 {
+		t.Errorf("run-stepped must parse+run the source (15), got %d", got)
 	}
 }
 

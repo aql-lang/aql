@@ -33,6 +33,45 @@ type FixedClock struct{ T time.Time }
 
 func (c FixedClock) Now() time.Time { return c.T }
 
+// StepAction is what a StepController decides to do at a paused step.
+type StepAction int
+
+const (
+	// StepInto runs the next single step, then pauses again.
+	StepInto StepAction = iota
+	// StepContinue resumes until the next breakpoint (or completion).
+	StepContinue
+	// StepQuit abandons the stepped run.
+	StepQuit
+)
+
+// StepFrame is the rendered state handed to a StepController at a pause.
+// It carries only stdlib types so this package stays engine-agnostic — the
+// stack is pre-rendered to strings by the caller.
+type StepFrame struct {
+	Step    int      // 0-based step index
+	Pointer int      // index of the value about to execute
+	Stack   []string // the tape, rendered, one entry per slot
+	AtBreak bool     // true when paused on a Debug.break marker
+}
+
+// StepController is the host capability that drives interactive stepping
+// (Debug.step). At each pause the engine renders the frame and calls
+// OnStep; the returned StepAction decides what happens next. A TTY host
+// reads a keypress; a test supplies a scripted list of actions; a
+// non-interactive host returns StepContinue to run straight through.
+type StepController interface {
+	OnStep(frame StepFrame) StepAction
+}
+
+// DebugOps is the host capability backing the effectful parts of
+// aql:debug that the in-process module cannot supply itself: the
+// interactive step controller (and, in future, runtime hooks). Absent a
+// DebugOps, Debug.step falls back to printing the trace.
+type DebugOps interface {
+	Controller() StepController
+}
+
 // FileOps defines the file operations that AQL's read/write words use.
 // The default implementation delegates to the os package.
 // Replace with a custom implementation for testing or sandboxing.
