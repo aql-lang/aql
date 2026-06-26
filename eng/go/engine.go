@@ -6653,17 +6653,28 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		e.spliceCheckResults(positions, results)
 		return nil
 	}
-	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile
-	// pass (!Compiling), where it is the genuine static report of an unmatched
-	// dispatch. On a compile pass (CompileCheck / RunCompiled set Compiling) the
-	// MarkUncompilable above already refuses and Finalize surfaces THIS reason,
-	// so the diagnostic would only mask it as the generic "check diagnostics"
-	// (aql.go:297) — the gate that made decision_smoke / tst_unit refuse "check
-	// diagnostics" while `aql check` reported zero errors. Gate on Check.Compiling,
-	// NOT Emit==nil or es.active(): a plain check ARMS a fresh Emit per fn body
-	// (IsolateEmit) AND the compile latch can fire under a SUSPENDED re-dispatch
-	// (es.active() false) — only Compiling cleanly separates the two.
+	// A no-signature dispatch reached here UNDER A SUSPENDED outer recovery
+	// (es.suspended > 0) is being ANALYSED to read an enclosing dispatch's result
+	// type — carrierResults suspends recording and re-runs the body purely to
+	// inspect its residual — NOT compiled. Its real compile decision happens on
+	// the non-suspended recording pass (or it is subsumed by the enclosing poly's
+	// runtime re-match). MarkUncompilable here PREMATURELY latches the whole
+	// program refusal: the trie find-kid `(nd "kids" get) get (ch)` shape refuses
+	// because the inner get's result-type probe analyses the outer get against a
+	// transient String-carrier alternative. Skip the latch (and its diagnostic)
+	// under suspend; still splice the analysis result so the enclosing probe
+	// reads a residual.
+	if es == nil || es.suspended == 0 {
+		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+	}
+	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile pass
+	// (!Compiling), where it is the genuine static report of an unmatched dispatch.
+	// This gate is INDEPENDENT of the suspend skip above: a plain check reports a
+	// genuine unmatched dispatch even when it is reached under a suspended
+	// sub-probe (the over-suppression that dropping it inside the suspend branch
+	// caused), while a compile pass never adds it (Finalize surfaces the
+	// MarkUncompilable reason; a diagnostic would only mask it as the generic
+	// "check diagnostics", aql.go:297).
 	if !e.registry.Check.Compiling {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
