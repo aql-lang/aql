@@ -2513,7 +2513,19 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 		return noop
 	}
 	for _, c := range clauses {
-		r.Defs.Push(c.Name, NewCarrier(c.Type))
+		narrowed := NewCarrier(c.Type)
+		// is-narrowing is a static-only refinement: at runtime the binding is
+		// UNCHANGED, so the narrowed carrier must keep the source's value ID — its
+		// provenance (param slot / producing event). NewCarrier mints a FRESH ID
+		// with no producedBy/localByID entry, so resolveOperand fails ("fn call
+		// operand of unknown provenance") when the narrowed value feeds a user
+		// call — the stats as-summary `if (x is List) [build x] [x]` shape. The
+		// slot already holds the right runtime value because it IS the same
+		// binding, so no value-passing half is needed (unlike a closure capture).
+		if cur, ok := r.Defs.Top(c.Name); ok {
+			narrowed.ID = cur.ID
+		}
+		r.Defs.Push(c.Name, narrowed)
 	}
 	return func() {
 		for _, c := range clauses {
@@ -2574,6 +2586,12 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 			// has no positive representation for the exact difference).
 			continue
 		}
+		// Preserve the source binding's value ID (see ApplyGuardNarrowing): the
+		// else-branch value is the SAME runtime binding, statically refined to the
+		// complement type, so it must resolve to cur's provenance. Set AFTER the
+		// ValuesEqual(narrowed, cur) check above so the "did not refine" early-out
+		// (which can compare by ID) is unaffected.
+		narrowed.ID = cur.ID
 		r.Defs.Push(c.Name, narrowed)
 		pushed = append(pushed, applied{name: c.Name})
 	}
