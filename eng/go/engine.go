@@ -6633,7 +6633,38 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			e.spliceCheckResults(positions, results)
 			return nil
 		}
+		// On a REAL compile pass (Compiling) the MarkUncompilable already refuses
+		// and Finalize surfaces THIS reason, so an error-severity no_signature
+		// diagnostic here would only mask it as the generic "check diagnostics"
+		// (aql.go:297). On a plain check pass this branch is still reachable —
+		// IsolateEmit arms a fresh ACTIVE Emit while analysing each fn body — and
+		// there the diagnostic IS the genuine static report, so gate it on
+		// !Compiling, matching the fall-through path below.
 		es.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		if !e.registry.Check.Compiling {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "no_signature",
+				Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
+				Word:   w.Name,
+				Row:    pos.Row,
+				Col:    pos.Col,
+			})
+		}
+		e.spliceCheckResults(positions, results)
+		return nil
+	}
+	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile
+	// pass (!Compiling), where it is the genuine static report of an unmatched
+	// dispatch. On a compile pass (CompileCheck / RunCompiled set Compiling) the
+	// MarkUncompilable above already refuses and Finalize surfaces THIS reason,
+	// so the diagnostic would only mask it as the generic "check diagnostics"
+	// (aql.go:297) — the gate that made decision_smoke / tst_unit refuse "check
+	// diagnostics" while `aql check` reported zero errors. Gate on Check.Compiling,
+	// NOT Emit==nil or es.active(): a plain check ARMS a fresh Emit per fn body
+	// (IsolateEmit) AND the compile latch can fire under a SUSPENDED re-dispatch
+	// (es.active() false) — only Compiling cleanly separates the two.
+	if !e.registry.Check.Compiling {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
 			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
@@ -6641,17 +6672,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			Row:    pos.Row,
 			Col:    pos.Col,
 		})
-		e.spliceCheckResults(positions, results)
-		return nil
 	}
-	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-	e.registry.Check.AddDiagnostic(CheckDiagnostic{
-		Code:   "no_signature",
-		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
-		Word:   w.Name,
-		Row:    pos.Row,
-		Col:    pos.Col,
-	})
 	results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 	e.spliceCheckResults(positions, results)
 	return nil

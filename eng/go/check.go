@@ -106,6 +106,11 @@ func (c *CheckState) Begin() func() {
 	c.FnAnalysisCounts = nil
 	c.Emit = nil
 	c.FnBodyDepth = 0
+	// Compiling marks a REAL compile pass; the compile entry points
+	// (CompileCheck / RunCompiled) set it true AFTER this Begin. Reset it here so
+	// it is a proper per-pass flag — a later plain check on a reused registry
+	// must not inherit a prior compile's true.
+	c.Compiling = false
 	return func() {
 		c.Mode = false
 	}
