@@ -196,9 +196,13 @@ func main() {
 	frontier := flag.Bool("frontier", false, "frontier mode: write minimal failing prefixes split into -check-out and -compile-out")
 	in := flag.String("in", "", "input full-matrix .tsv path (extraction / frontier mode)")
 	passing := flag.String("passing", "", "passing-subset .tsv path (frontier mode)")
-	checkOut := flag.String("check-out", "", "output path for type-check-fail prefixes (frontier mode)")
-	compileOut := flag.String("compile-out", "", "output path for compile-fail prefixes (frontier mode)")
-	runtimeOut := flag.String("runtime-out", "", "output path for runtime-fail prefixes (frontier mode)")
+	checkOut := flag.String("check-out", "", "output path for type-check-fail prefixes (frontier / extend5 mode)")
+	compileOut := flag.String("compile-out", "", "output path for compile-fail prefixes (frontier / extend5 mode)")
+	runtimeOut := flag.String("runtime-out", "", "output path for runtime-fail prefixes (frontier / extend5 mode)")
+	extend5 := flag.Bool("extend5", false, "extend5 mode: append one atom to every length-4 passing row and split the length-5 results")
+	len123 := flag.String("len123", "", "length-1..3 passing-subset path (extend5 mode, used to isolate the length-4 passing rows)")
+	passOut := flag.String("pass-out", "", "output path for the length-5 passing combinations (extend5 mode)")
+	mismatchOut := flag.String("mismatch-out", "", "optional output path for compiler/interpreter mismatches (extend5 mode)")
 	flag.Parse()
 
 	if *frontier {
@@ -207,6 +211,15 @@ func main() {
 			os.Exit(2)
 		}
 		extractFrontier(*in, *passing, *checkOut, *compileOut, *runtimeOut, *max)
+		return
+	}
+
+	if *extend5 {
+		if *passing == "" || *len123 == "" || *passOut == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
+			fmt.Fprintln(os.Stderr, "specgen -extend5 requires -passing, -len123, -pass-out, -check-out, -compile-out and -runtime-out")
+			os.Exit(2)
+		}
+		extendFive(*passing, *len123, *passOut, *checkOut, *compileOut, *runtimeOut, *mismatchOut)
 		return
 	}
 
@@ -699,5 +712,310 @@ func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
 	}
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# %d prefixes.\n", n)
+	fmt.Fprintf(w, "#\n")
+}
+
+// ---- extend5: the length-5 layer -----------------------------------------
+//
+// extendFive takes every LENGTH-4 PASSING row as a prefix, appends each
+// alphabet atom once (so the prefix becomes a 5-part combination), and
+// splits the results into the same four buckets — passing, type-check
+// fail, compile fail, runtime fail.
+//
+// Why only the length-4 passing rows? A length-5 combination carries NEW
+// information (not already cataloged at length <=4) only if its length-4
+// prefix passes: if that prefix already failed, the length-5 failure is
+// captured by a shorter minimal failing prefix that is already in the
+// length-1..4 files. So extending the length-4 passing rows by one atom
+// yields exactly the deduplicated length-5 layer — every length-5
+// combination whose failure (or success) is not already explained by a
+// shorter prefix. Each fail row here is therefore itself a length-5
+// minimal failing prefix.
+
+type fiveClass int
+
+const (
+	fivePass fiveClass = iota
+	fiveCheck
+	fiveCompile
+	fiveRuntime
+	fiveMismatch // compiled result diverges from the interpreter — a compiler bug, reported separately
+)
+
+// firstErrorCode returns the code of the first error-severity diagnostic.
+func firstErrorCode(res lang.CheckResult) string {
+	for _, d := range res.Diagnostics {
+		if d.Severity == lang.SeverityError {
+			if d.Code != "" {
+				return d.Code
+			}
+			return "error"
+		}
+	}
+	return "error"
+}
+
+func hasErrorDiag(res lang.CheckResult) bool {
+	for _, d := range res.Diagnostics {
+		if d.Severity == lang.SeverityError {
+			return true
+		}
+	}
+	return false
+}
+
+// freshDivergence re-runs one program on a FRESH lang instance (no shared
+// state — the gold standard the langspec differential gate uses) and
+// reports whether the bytecode compiler genuinely disagrees with the
+// interpreter: one errors where the other doesn't, or they return
+// different values. Returns ("", false) when they agree (or the program
+// does not compile in isolation), so a reused-instance artifact can never
+// be mistaken for a compiler bug.
+func freshDivergence(s string) (string, bool) {
+	a, err := lang.New()
+	if err != nil {
+		return "", false
+	}
+	a.SetClock(specClock)
+	gotI, errI := a.Run(s)
+	gotC, wasC, errC := a.RunCompiled(s)
+	if !wasC {
+		return "", false
+	}
+	if (errC != nil) != (errI != nil) {
+		return sanitizeNote(fmt.Sprintf("error-divergence interpreted-errored=%v compiled-errored=%v", errI != nil, errC != nil)), true
+	}
+	if errC != nil {
+		return "", false // both errored → they agree
+	}
+	if renderAny(gotC) != renderAny(gotI) {
+		return sanitizeNote(fmt.Sprintf("interpreted=[%s] compiled=[%s]", renderAny(gotI), renderAny(gotC))), true
+	}
+	return "", false
+}
+
+func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, runtimeOut, mismatchOut string) {
+	passingRows, err := readDataRows(passingPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -extend5: %v\n", err)
+		os.Exit(1)
+	}
+	short, err := readInputSet(len123PassingPath) // length-1..3 passing
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -extend5: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Length-4 passing roots = full passing minus the length-1..3 passing.
+	var roots []string
+	for _, r := range passingRows {
+		if !short[r.input] {
+			roots = append(roots, r.input)
+		}
+	}
+	// Candidates: each root extended by one atom, in deterministic order.
+	cands := make([]string, 0, len(roots)*len(alphabet))
+	for _, root := range roots {
+		for _, a := range alphabet {
+			cands = append(cands, root+" "+a)
+		}
+	}
+
+	classes := make([]fiveClass, len(cands))
+	notes := make([]string, len(cands))
+	expects := make([]string, len(cands))
+	var idx int64 = -1
+	var nPass, nCheck, nCompile, nRuntime, nMismatch int64
+
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			la, e := lang.New()
+			if e != nil {
+				fmt.Fprintf(os.Stderr, "specgen -extend5: lang.New: %v\n", e)
+				os.Exit(1)
+			}
+			la.SetClock(specClock)
+			// A reused native registry produces the canonical (eng.Canon)
+			// value for passing rows — same recipe as the full matrix.
+			reg, e2 := native.DefaultRegistry()
+			if e2 != nil {
+				fmt.Fprintf(os.Stderr, "specgen -extend5: registry: %v\n", e2)
+				os.Exit(1)
+			}
+			specrunner.RegisterQFixtures(reg)
+			reg.SetParseFunc(parser.Parse)
+			modules.InstallResolver(reg)
+			native.SetHostClock(reg, specClock)
+			canonOf := func(s string) string {
+				values, perr := parser.Parse(s)
+				if perr != nil {
+					return ""
+				}
+				out, rerr := native.NewTop(reg).Run(values)
+				if rerr != nil {
+					return ""
+				}
+				return eng.Canon(out)
+			}
+
+			for {
+				k := int(atomic.AddInt64(&idx, 1))
+				if k >= len(cands) {
+					return
+				}
+				s := cands[k]
+				prog, reason, res, cerr := la.CompileCheck(s)
+				switch {
+				case cerr != nil:
+					classes[k], notes[k] = fiveCheck, sanitizeNote(reason)
+					atomic.AddInt64(&nCheck, 1)
+				case hasErrorDiag(res):
+					classes[k], notes[k] = fiveCheck, firstErrorCode(res)
+					atomic.AddInt64(&nCheck, 1)
+				case prog == nil:
+					classes[k], notes[k] = fiveCompile, sanitizeNote(reason)
+					atomic.AddInt64(&nCompile, 1)
+				default:
+					gotI, errI := la.Run(s)
+					if errI != nil {
+						classes[k], notes[k] = fiveRuntime, strings.TrimPrefix(errorClass(errI), "ERROR:")
+						atomic.AddInt64(&nRuntime, 1)
+						continue
+					}
+					gotC, wasC, errC := la.RunCompiled(s)
+					if !wasC || errC != nil || renderAny(gotC) != renderAny(gotI) {
+						// Divergence on the reused instance — re-verify on a
+						// FRESH lang (matching the langspec differential gate)
+						// to rule out a reused-instance artifact. Only a
+						// divergence that survives a fresh, isolated run is a
+						// genuine compiler bug; otherwise the candidate passes.
+						if note, real := freshDivergence(s); real {
+							classes[k], notes[k] = fiveMismatch, note
+							atomic.AddInt64(&nMismatch, 1)
+							continue
+						}
+					}
+					classes[k], expects[k] = fivePass, canonOf(s)
+					atomic.AddInt64(&nPass, 1)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	nP := writeLen5Pass(passOut, cands, classes, expects)
+	nC := writeLen5Fail(checkOut, "type-check", "check-fail", cands, classes, notes, fiveCheck)
+	nK := writeLen5Fail(compileOut, "compile", "compile-refused", cands, classes, notes, fiveCompile)
+	nR := writeLen5Fail(runtimeOut, "runtime", "runtime-fail", cands, classes, notes, fiveRuntime)
+	nM := 0
+	if mismatchOut != "" {
+		nM = writeLen5Fail(mismatchOut, "mismatch", "compiler-mismatch", cands, classes, notes, fiveMismatch)
+	}
+
+	fmt.Fprintf(os.Stderr, "specgen -extend5: %d length-4 passing roots × %d atoms = %d length-5 combinations\n",
+		len(roots), len(alphabet), len(cands))
+	fmt.Fprintf(os.Stderr, "specgen -extend5: passing=%d  type-check-fail=%d  compile-fail=%d  runtime-fail=%d  compiler-mismatch=%d\n",
+		nPass, nCheck, nCompile, nRuntime, nMismatch)
+	fmt.Fprintf(os.Stderr, "specgen -extend5: wrote %d / %d / %d / %d (+%d mismatch) rows\n", nP, nC, nK, nR, nM)
+	if nMismatch > 0 {
+		fmt.Fprintf(os.Stderr, "specgen -extend5: NOTE %d fresh-verified compiler/interpreter divergences (see mismatch file)\n", nMismatch)
+	}
+}
+
+// writeLen5Pass writes the passing length-5 combinations as
+// input<TAB>expected<TAB>note.
+func writeLen5Pass(path string, cands []string, classes []fiveClass, expects []string) int {
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -extend5: create %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	defer w.Flush()
+
+	n := 0
+	for _, cl := range classes {
+		if cl == fivePass {
+			n++
+		}
+	}
+	writeLen5Header(w, "passing", n)
+	for k, cl := range classes {
+		if cl == fivePass {
+			fmt.Fprintf(w, "%s\t%s\tinterpret+check+compile\n", cands[k], expects[k])
+		}
+	}
+	return n
+}
+
+// writeLen5Fail writes the length-5 minimal failing prefixes of one class
+// as prefix<TAB>note.
+func writeLen5Fail(path, kind, tag string, cands []string, classes []fiveClass, notes []string, want fiveClass) int {
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -extend5: create %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	defer w.Flush()
+
+	n := 0
+	for _, cl := range classes {
+		if cl == want {
+			n++
+		}
+	}
+	writeLen5Header(w, kind, n)
+	for k, cl := range classes {
+		if cl == want {
+			fmt.Fprintf(w, "%s\t%s: %s\n", cands[k], tag, notes[k])
+		}
+	}
+	return n
+}
+
+// writeLen5Header emits the leading comment block of a length-5 file.
+func writeLen5Header(w *bufio.Writer, kind string, n int) {
+	fmt.Fprintf(w, "# AQL Language Specification: Length-5 Layer — %s (GENERATED)\n", strings.ToUpper(kind))
+	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extend5 mode).\n")
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# Every LENGTH-4 PASSING row, extended by one atom into a 5-part\n")
+	fmt.Fprintf(w, "# combination, then split by outcome. Only length-4 passing rows are\n")
+	fmt.Fprintf(w, "# extended: a length-5 combination whose length-4 prefix already failed\n")
+	fmt.Fprintf(w, "# is captured by a shorter minimal failing prefix in the length-1..4\n")
+	fmt.Fprintf(w, "# files, so this layer is the deduplicated set of genuinely new length-5\n")
+	fmt.Fprintf(w, "# outcomes. Each fail row is itself a length-5 minimal failing prefix.\n")
+	fmt.Fprintf(w, "#\n")
+	switch kind {
+	case "passing":
+		fmt.Fprintf(w, "# Format: input<TAB>expected<TAB>note. These clear interpret + check +\n")
+		fmt.Fprintf(w, "# compile; `expected` is the canonical eng.Canon result.\n")
+	case "type-check":
+		fmt.Fprintf(w, "# Format: prefix<TAB>note. The type checker rejects these; the compiler,\n")
+		fmt.Fprintf(w, "# which runs the checker first, refuses them too.\n")
+	case "runtime":
+		fmt.Fprintf(w, "# Format: prefix<TAB>note. These check clean AND compile, yet error at\n")
+		fmt.Fprintf(w, "# run (note = the runtime error class).\n")
+	case "mismatch":
+		fmt.Fprintf(w, "# Format: prefix<TAB>note. COMPILER/INTERPRETER DIVERGENCES: these check\n")
+		fmt.Fprintf(w, "# clean and compile, but the bytecode result differs from the interpreter\n")
+		fmt.Fprintf(w, "# (re-verified on a fresh, isolated instance). The note shows both\n")
+		fmt.Fprintf(w, "# results. These are candidate compiler bugs, NOT part of the four-way\n")
+		fmt.Fprintf(w, "# split — surfaced by the length-5 differential sweep.\n")
+	default:
+		fmt.Fprintf(w, "# Format: prefix<TAB>note. These check clean but the compiler will not\n")
+		fmt.Fprintf(w, "# lower them (note = the refusal reason).\n")
+	}
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# %d rows.\n", n)
 	fmt.Fprintf(w, "#\n")
 }

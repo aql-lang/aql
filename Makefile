@@ -72,6 +72,14 @@ spec-gen:
 	  -check-out ./specgen/syntax-matrix-len123-fail-check.tsv \
 	  -compile-out ./specgen/syntax-matrix-len123-fail-compile.tsv \
 	  -runtime-out ./specgen/syntax-matrix-len123-fail-runtime.tsv
+	cd test/go && go run ./specgen -extend5 \
+	  -passing ./specgen/syntax-matrix-passing.tsv \
+	  -len123 ./specgen/syntax-matrix-len123-passing.tsv \
+	  -pass-out ./specgen/syntax-matrix-len5-passing.tsv \
+	  -check-out ./specgen/syntax-matrix-len5-fail-check.tsv \
+	  -compile-out ./specgen/syntax-matrix-len5-fail-compile.tsv \
+	  -runtime-out ./specgen/syntax-matrix-len5-fail-runtime.tsv \
+	  -mismatch-out ./specgen/syntax-matrix-len5-compiler-mismatch.tsv
 
 # ---- per-module fan-out -------------------------------------------------
 

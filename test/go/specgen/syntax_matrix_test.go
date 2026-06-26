@@ -514,6 +514,52 @@ func verifyFailFrontier(t *testing.T, set frontierSet) {
 	}
 }
 
+// TestSyntaxMatrixLen5Mismatch keeps the length-5 compiler-mismatch file
+// honest: every row it records must STILL reproduce a genuine
+// compiler/interpreter divergence on a fresh, isolated lang instance
+// (via freshDivergence — the same fresh-run check the extender uses).
+// These are real compiler bugs the length-5 differential sweep surfaced
+// (e.g. `and X false not Y`, where the compiler coerces `and`'s result to
+// a boolean instead of preserving the falsy operand). If the file is
+// empty — the compiler fixed and the layer regenerated — the test passes
+// trivially. The file is small (tens of rows), so this stays cheap.
+func TestSyntaxMatrixLen5Mismatch(t *testing.T) {
+	const path = "syntax-matrix-len5-compiler-mismatch.tsv"
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", path, err)
+	}
+	defer f.Close()
+
+	var inputs []string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), " \t")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			t.Fatalf("%s: malformed row %q", path, line)
+		}
+		inputs = append(inputs, strings.TrimSpace(parts[0]))
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
+	}
+
+	var stillDiverges int
+	for _, in := range inputs {
+		if _, real := freshDivergence(in); real {
+			stillDiverges++
+		} else {
+			t.Errorf("%q: recorded as a compiler mismatch but no longer diverges — regenerate the length-5 layer", in)
+		}
+	}
+	t.Logf("len5 compiler-mismatch: %d/%d rows still diverge (compiler bugs)", stillDiverges, len(inputs))
+}
+
 // TestSyntaxMatrixPassing re-verifies each curated passing subset (the
 // full length-1..4 file and the len123 length-1..3 file): every row must
 // clear ALL THREE pipelines — interpret to the recorded value, type-check
