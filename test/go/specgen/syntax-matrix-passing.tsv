@@ -15,7 +15,7 @@
 # the full matrix. Every row here is a trusted, three-way-agreed program;
 # syntax_matrix_test.go re-verifies the invariant on each one.
 #
-# 27712 combinations pass (137560 in the length window).
+# 27746 combinations pass (137560 in the length window).
 #
 0	0	interpret+check+compile
 1	1	interpret+check+compile
@@ -26785,6 +26785,7 @@ and 0 'x' true	0 true	interpret+check+compile
 and 0 'x' false	0 false	interpret+check+compile
 and 0 'x' none	0 none	interpret+check+compile
 and 0 'x' [1 2]	0 [1 2]	interpret+check+compile
+and 0 'x' dup	0 0	interpret+check+compile
 and 0 'x' drop		interpret+check+compile
 and 0 'x' not	true	interpret+check+compile
 and 0 'x' size	0	interpret+check+compile
@@ -26796,6 +26797,7 @@ and 0 true true	0 true	interpret+check+compile
 and 0 true false	0 false	interpret+check+compile
 and 0 true none	0 none	interpret+check+compile
 and 0 true [1 2]	0 [1 2]	interpret+check+compile
+and 0 true dup	0 0	interpret+check+compile
 and 0 true drop		interpret+check+compile
 and 0 true not	true	interpret+check+compile
 and 0 true size	0	interpret+check+compile
@@ -26807,6 +26809,7 @@ and 0 false true	false true	interpret+check+compile
 and 0 false false	false false	interpret+check+compile
 and 0 false none	false none	interpret+check+compile
 and 0 false [1 2]	false [1 2]	interpret+check+compile
+and 0 false dup	false false	interpret+check+compile
 and 0 false drop		interpret+check+compile
 and 0 false not	true	interpret+check+compile
 and 0 false size	0	interpret+check+compile
@@ -26829,6 +26832,7 @@ and 0 [1 2] true	0 true	interpret+check+compile
 and 0 [1 2] false	0 false	interpret+check+compile
 and 0 [1 2] none	0 none	interpret+check+compile
 and 0 [1 2] [1 2]	0 [1 2]	interpret+check+compile
+and 0 [1 2] dup	0 0	interpret+check+compile
 and 0 [1 2] drop		interpret+check+compile
 and 0 [1 2] not	true	interpret+check+compile
 and 0 [1 2] size	0	interpret+check+compile
@@ -26892,6 +26896,7 @@ and 1 'x' true	1 true	interpret+check+compile
 and 1 'x' false	1 false	interpret+check+compile
 and 1 'x' none	1 none	interpret+check+compile
 and 1 'x' [1 2]	1 [1 2]	interpret+check+compile
+and 1 'x' dup	1 1	interpret+check+compile
 and 1 'x' drop		interpret+check+compile
 and 1 'x' not	false	interpret+check+compile
 and 1 'x' size	1	interpret+check+compile
@@ -26903,6 +26908,7 @@ and 1 true true	1 true	interpret+check+compile
 and 1 true false	1 false	interpret+check+compile
 and 1 true none	1 none	interpret+check+compile
 and 1 true [1 2]	1 [1 2]	interpret+check+compile
+and 1 true dup	1 1	interpret+check+compile
 and 1 true drop		interpret+check+compile
 and 1 true not	false	interpret+check+compile
 and 1 true size	1	interpret+check+compile
@@ -26914,6 +26920,7 @@ and 1 false true	false true	interpret+check+compile
 and 1 false false	false false	interpret+check+compile
 and 1 false none	false none	interpret+check+compile
 and 1 false [1 2]	false [1 2]	interpret+check+compile
+and 1 false dup	false false	interpret+check+compile
 and 1 false drop		interpret+check+compile
 and 1 false not	true	interpret+check+compile
 and 1 false size	0	interpret+check+compile
@@ -26936,6 +26943,7 @@ and 1 [1 2] true	1 true	interpret+check+compile
 and 1 [1 2] false	1 false	interpret+check+compile
 and 1 [1 2] none	1 none	interpret+check+compile
 and 1 [1 2] [1 2]	1 [1 2]	interpret+check+compile
+and 1 [1 2] dup	1 1	interpret+check+compile
 and 1 [1 2] drop		interpret+check+compile
 and 1 [1 2] not	false	interpret+check+compile
 and 1 [1 2] size	1	interpret+check+compile
@@ -26999,6 +27007,7 @@ and 2.5 'x' true	2.5 true	interpret+check+compile
 and 2.5 'x' false	2.5 false	interpret+check+compile
 and 2.5 'x' none	2.5 none	interpret+check+compile
 and 2.5 'x' [1 2]	2.5 [1 2]	interpret+check+compile
+and 2.5 'x' dup	2.5 2.5	interpret+check+compile
 and 2.5 'x' drop		interpret+check+compile
 and 2.5 'x' not	false	interpret+check+compile
 and 2.5 'x' size	2	interpret+check+compile
@@ -27010,6 +27019,7 @@ and 2.5 true true	2.5 true	interpret+check+compile
 and 2.5 true false	2.5 false	interpret+check+compile
 and 2.5 true none	2.5 none	interpret+check+compile
 and 2.5 true [1 2]	2.5 [1 2]	interpret+check+compile
+and 2.5 true dup	2.5 2.5	interpret+check+compile
 and 2.5 true drop		interpret+check+compile
 and 2.5 true not	false	interpret+check+compile
 and 2.5 true size	2	interpret+check+compile
@@ -27021,6 +27031,7 @@ and 2.5 false true	false true	interpret+check+compile
 and 2.5 false false	false false	interpret+check+compile
 and 2.5 false none	false none	interpret+check+compile
 and 2.5 false [1 2]	false [1 2]	interpret+check+compile
+and 2.5 false dup	false false	interpret+check+compile
 and 2.5 false drop		interpret+check+compile
 and 2.5 false not	true	interpret+check+compile
 and 2.5 false size	0	interpret+check+compile
@@ -27043,6 +27054,7 @@ and 2.5 [1 2] true	2.5 true	interpret+check+compile
 and 2.5 [1 2] false	2.5 false	interpret+check+compile
 and 2.5 [1 2] none	2.5 none	interpret+check+compile
 and 2.5 [1 2] [1 2]	2.5 [1 2]	interpret+check+compile
+and 2.5 [1 2] dup	2.5 2.5	interpret+check+compile
 and 2.5 [1 2] drop		interpret+check+compile
 and 2.5 [1 2] not	false	interpret+check+compile
 and 2.5 [1 2] size	2	interpret+check+compile
@@ -27070,6 +27082,7 @@ and 'x' 0 true	0 true	interpret+check+compile
 and 'x' 0 false	0 false	interpret+check+compile
 and 'x' 0 none	0 none	interpret+check+compile
 and 'x' 0 [1 2]	0 [1 2]	interpret+check+compile
+and 'x' 0 dup	0 0	interpret+check+compile
 and 'x' 0 drop		interpret+check+compile
 and 'x' 0 not	true	interpret+check+compile
 and 'x' 0 size	0	interpret+check+compile
@@ -27081,6 +27094,7 @@ and 'x' 1 true	'x' true	interpret+check+compile
 and 'x' 1 false	'x' false	interpret+check+compile
 and 'x' 1 none	'x' none	interpret+check+compile
 and 'x' 1 [1 2]	'x' [1 2]	interpret+check+compile
+and 'x' 1 dup	'x' 'x'	interpret+check+compile
 and 'x' 1 drop		interpret+check+compile
 and 'x' 1 not	false	interpret+check+compile
 and 'x' 1 size	1	interpret+check+compile
@@ -27092,6 +27106,7 @@ and 'x' 2.5 true	'x' true	interpret+check+compile
 and 'x' 2.5 false	'x' false	interpret+check+compile
 and 'x' 2.5 none	'x' none	interpret+check+compile
 and 'x' 2.5 [1 2]	'x' [1 2]	interpret+check+compile
+and 'x' 2.5 dup	'x' 'x'	interpret+check+compile
 and 'x' 2.5 drop		interpret+check+compile
 and 'x' 2.5 not	false	interpret+check+compile
 and 'x' 2.5 size	1	interpret+check+compile
@@ -27115,6 +27130,7 @@ and 'x' true true	'x' true	interpret+check+compile
 and 'x' true false	'x' false	interpret+check+compile
 and 'x' true none	'x' none	interpret+check+compile
 and 'x' true [1 2]	'x' [1 2]	interpret+check+compile
+and 'x' true dup	'x' 'x'	interpret+check+compile
 and 'x' true drop		interpret+check+compile
 and 'x' true not	false	interpret+check+compile
 and 'x' true size	1	interpret+check+compile
@@ -27126,6 +27142,7 @@ and 'x' false true	false true	interpret+check+compile
 and 'x' false false	false false	interpret+check+compile
 and 'x' false none	false none	interpret+check+compile
 and 'x' false [1 2]	false [1 2]	interpret+check+compile
+and 'x' false dup	false false	interpret+check+compile
 and 'x' false drop		interpret+check+compile
 and 'x' false not	true	interpret+check+compile
 and 'x' false size	0	interpret+check+compile
@@ -27148,6 +27165,7 @@ and 'x' [1 2] true	'x' true	interpret+check+compile
 and 'x' [1 2] false	'x' false	interpret+check+compile
 and 'x' [1 2] none	'x' none	interpret+check+compile
 and 'x' [1 2] [1 2]	'x' [1 2]	interpret+check+compile
+and 'x' [1 2] dup	'x' 'x'	interpret+check+compile
 and 'x' [1 2] drop		interpret+check+compile
 and 'x' [1 2] not	false	interpret+check+compile
 and 'x' [1 2] size	1	interpret+check+compile
@@ -27175,6 +27193,7 @@ and true 0 true	0 true	interpret+check+compile
 and true 0 false	0 false	interpret+check+compile
 and true 0 none	0 none	interpret+check+compile
 and true 0 [1 2]	0 [1 2]	interpret+check+compile
+and true 0 dup	0 0	interpret+check+compile
 and true 0 drop		interpret+check+compile
 and true 0 not	true	interpret+check+compile
 and true 0 size	0	interpret+check+compile
@@ -27186,6 +27205,7 @@ and true 1 true	true true	interpret+check+compile
 and true 1 false	true false	interpret+check+compile
 and true 1 none	true none	interpret+check+compile
 and true 1 [1 2]	true [1 2]	interpret+check+compile
+and true 1 dup	true true	interpret+check+compile
 and true 1 drop		interpret+check+compile
 and true 1 not	false	interpret+check+compile
 and true 1 size	1	interpret+check+compile
@@ -27197,6 +27217,7 @@ and true 2.5 true	true true	interpret+check+compile
 and true 2.5 false	true false	interpret+check+compile
 and true 2.5 none	true none	interpret+check+compile
 and true 2.5 [1 2]	true [1 2]	interpret+check+compile
+and true 2.5 dup	true true	interpret+check+compile
 and true 2.5 drop		interpret+check+compile
 and true 2.5 not	false	interpret+check+compile
 and true 2.5 size	1	interpret+check+compile
@@ -27208,6 +27229,7 @@ and true 'x' true	true true	interpret+check+compile
 and true 'x' false	true false	interpret+check+compile
 and true 'x' none	true none	interpret+check+compile
 and true 'x' [1 2]	true [1 2]	interpret+check+compile
+and true 'x' dup	true true	interpret+check+compile
 and true 'x' drop		interpret+check+compile
 and true 'x' not	false	interpret+check+compile
 and true 'x' size	1	interpret+check+compile
@@ -27254,6 +27276,7 @@ and true [1 2] true	true true	interpret+check+compile
 and true [1 2] false	true false	interpret+check+compile
 and true [1 2] none	true none	interpret+check+compile
 and true [1 2] [1 2]	true [1 2]	interpret+check+compile
+and true [1 2] dup	true true	interpret+check+compile
 and true [1 2] drop		interpret+check+compile
 and true [1 2] not	false	interpret+check+compile
 and true [1 2] size	1	interpret+check+compile
@@ -27281,6 +27304,7 @@ and false 0 true	0 true	interpret+check+compile
 and false 0 false	0 false	interpret+check+compile
 and false 0 none	0 none	interpret+check+compile
 and false 0 [1 2]	0 [1 2]	interpret+check+compile
+and false 0 dup	0 0	interpret+check+compile
 and false 0 drop		interpret+check+compile
 and false 0 not	true	interpret+check+compile
 and false 0 size	0	interpret+check+compile
@@ -27292,6 +27316,7 @@ and false 1 true	false true	interpret+check+compile
 and false 1 false	false false	interpret+check+compile
 and false 1 none	false none	interpret+check+compile
 and false 1 [1 2]	false [1 2]	interpret+check+compile
+and false 1 dup	false false	interpret+check+compile
 and false 1 drop		interpret+check+compile
 and false 1 not	true	interpret+check+compile
 and false 1 size	0	interpret+check+compile
@@ -27303,6 +27328,7 @@ and false 2.5 true	false true	interpret+check+compile
 and false 2.5 false	false false	interpret+check+compile
 and false 2.5 none	false none	interpret+check+compile
 and false 2.5 [1 2]	false [1 2]	interpret+check+compile
+and false 2.5 dup	false false	interpret+check+compile
 and false 2.5 drop		interpret+check+compile
 and false 2.5 not	true	interpret+check+compile
 and false 2.5 size	0	interpret+check+compile
@@ -27314,6 +27340,7 @@ and false 'x' true	false true	interpret+check+compile
 and false 'x' false	false false	interpret+check+compile
 and false 'x' none	false none	interpret+check+compile
 and false 'x' [1 2]	false [1 2]	interpret+check+compile
+and false 'x' dup	false false	interpret+check+compile
 and false 'x' drop		interpret+check+compile
 and false 'x' not	true	interpret+check+compile
 and false 'x' size	0	interpret+check+compile
@@ -27360,6 +27387,7 @@ and false [1 2] true	false true	interpret+check+compile
 and false [1 2] false	false false	interpret+check+compile
 and false [1 2] none	false none	interpret+check+compile
 and false [1 2] [1 2]	false [1 2]	interpret+check+compile
+and false [1 2] dup	false false	interpret+check+compile
 and false [1 2] drop		interpret+check+compile
 and false [1 2] not	true	interpret+check+compile
 and false [1 2] size	0	interpret+check+compile
@@ -27492,6 +27520,7 @@ and [1 2] 0 true	0 true	interpret+check+compile
 and [1 2] 0 false	0 false	interpret+check+compile
 and [1 2] 0 none	0 none	interpret+check+compile
 and [1 2] 0 [1 2]	0 [1 2]	interpret+check+compile
+and [1 2] 0 dup	0 0	interpret+check+compile
 and [1 2] 0 drop		interpret+check+compile
 and [1 2] 0 not	true	interpret+check+compile
 and [1 2] 0 size	0	interpret+check+compile
@@ -27503,6 +27532,7 @@ and [1 2] 1 true	[1 2] true	interpret+check+compile
 and [1 2] 1 false	[1 2] false	interpret+check+compile
 and [1 2] 1 none	[1 2] none	interpret+check+compile
 and [1 2] 1 [1 2]	[1 2] [1 2]	interpret+check+compile
+and [1 2] 1 dup	[1 2] [1 2]	interpret+check+compile
 and [1 2] 1 drop		interpret+check+compile
 and [1 2] 1 not	false	interpret+check+compile
 and [1 2] 1 size	2	interpret+check+compile
@@ -27514,6 +27544,7 @@ and [1 2] 2.5 true	[1 2] true	interpret+check+compile
 and [1 2] 2.5 false	[1 2] false	interpret+check+compile
 and [1 2] 2.5 none	[1 2] none	interpret+check+compile
 and [1 2] 2.5 [1 2]	[1 2] [1 2]	interpret+check+compile
+and [1 2] 2.5 dup	[1 2] [1 2]	interpret+check+compile
 and [1 2] 2.5 drop		interpret+check+compile
 and [1 2] 2.5 not	false	interpret+check+compile
 and [1 2] 2.5 size	2	interpret+check+compile
@@ -27525,6 +27556,7 @@ and [1 2] 'x' true	[1 2] true	interpret+check+compile
 and [1 2] 'x' false	[1 2] false	interpret+check+compile
 and [1 2] 'x' none	[1 2] none	interpret+check+compile
 and [1 2] 'x' [1 2]	[1 2] [1 2]	interpret+check+compile
+and [1 2] 'x' dup	[1 2] [1 2]	interpret+check+compile
 and [1 2] 'x' drop		interpret+check+compile
 and [1 2] 'x' not	false	interpret+check+compile
 and [1 2] 'x' size	2	interpret+check+compile
@@ -27536,6 +27568,7 @@ and [1 2] true true	[1 2] true	interpret+check+compile
 and [1 2] true false	[1 2] false	interpret+check+compile
 and [1 2] true none	[1 2] none	interpret+check+compile
 and [1 2] true [1 2]	[1 2] [1 2]	interpret+check+compile
+and [1 2] true dup	[1 2] [1 2]	interpret+check+compile
 and [1 2] true drop		interpret+check+compile
 and [1 2] true not	false	interpret+check+compile
 and [1 2] true size	2	interpret+check+compile
@@ -27547,6 +27580,7 @@ and [1 2] false true	false true	interpret+check+compile
 and [1 2] false false	false false	interpret+check+compile
 and [1 2] false none	false none	interpret+check+compile
 and [1 2] false [1 2]	false [1 2]	interpret+check+compile
+and [1 2] false dup	false false	interpret+check+compile
 and [1 2] false drop		interpret+check+compile
 and [1 2] false not	true	interpret+check+compile
 and [1 2] false size	0	interpret+check+compile

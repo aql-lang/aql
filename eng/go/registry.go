@@ -490,6 +490,7 @@ const (
 var checkCodeSeverity = map[string]CheckSeverity{
 	"no_signature":          SeverityError,
 	"undefined_word":        SeverityError,
+	"incomparable":          SeverityError,
 	"fn_body_error":         SeverityError,
 	"branch_error":          SeverityError,
 	"type_error":            SeverityError,

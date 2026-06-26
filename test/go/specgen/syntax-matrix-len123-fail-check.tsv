@@ -16,7 +16,7 @@
 # (lang.(*AQL).CompileCheck), every prefix here is also refused by the
 # compiler — none is ever lowered to bytecode.
 #
-# 547 prefixes.
+# 581 prefixes.
 #
 dup	check-fail: no_signature	matrix:ERROR:signature_error
 drop	check-fail: no_signature	matrix:ERROR:signature_error
@@ -87,18 +87,22 @@ none swap	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] swap	check-fail: no_signature	matrix:ERROR:signature_error
 0 'x' sub	check-fail: no_signature	matrix:ERROR:signature_error
 0 'x' mul	check-fail: no_signature	matrix:ERROR:signature_error
+0 'x' lt	check-fail: incomparable	matrix:ERROR:incomparable
 0 true add	check-fail: no_signature	matrix:ERROR:signature_error
 0 true sub	check-fail: no_signature	matrix:ERROR:signature_error
 0 true mul	check-fail: no_signature	matrix:ERROR:signature_error
+0 true lt	check-fail: incomparable	matrix:ERROR:incomparable
 0 false add	check-fail: no_signature	matrix:ERROR:signature_error
 0 false sub	check-fail: no_signature	matrix:ERROR:signature_error
 0 false mul	check-fail: no_signature	matrix:ERROR:signature_error
+0 false lt	check-fail: incomparable	matrix:ERROR:incomparable
 0 none add	check-fail: no_signature	matrix:ERROR:signature_error
 0 none sub	check-fail: no_signature	matrix:ERROR:signature_error
 0 none mul	check-fail: no_signature	matrix:ERROR:signature_error
 0 [1 2] add	check-fail: no_signature	matrix:ERROR:signature_error
 0 [1 2] sub	check-fail: no_signature	matrix:ERROR:signature_error
 0 [1 2] mul	check-fail: no_signature	matrix:ERROR:signature_error
+0 [1 2] lt	check-fail: incomparable	matrix:ERROR:incomparable
 0 drop dup	check-fail: no_signature	matrix:ERROR:signature_error
 0 drop drop	check-fail: no_signature	matrix:ERROR:signature_error
 0 drop not	check-fail: no_signature	matrix:ERROR:signature_error
@@ -126,18 +130,22 @@ none swap	check-fail: no_signature	matrix:ERROR:signature_error
 0 size swap	check-fail: no_signature	matrix:ERROR:signature_error
 1 'x' sub	check-fail: no_signature	matrix:ERROR:signature_error
 1 'x' mul	check-fail: no_signature	matrix:ERROR:signature_error
+1 'x' lt	check-fail: incomparable	matrix:ERROR:incomparable
 1 true add	check-fail: no_signature	matrix:ERROR:signature_error
 1 true sub	check-fail: no_signature	matrix:ERROR:signature_error
 1 true mul	check-fail: no_signature	matrix:ERROR:signature_error
+1 true lt	check-fail: incomparable	matrix:ERROR:incomparable
 1 false add	check-fail: no_signature	matrix:ERROR:signature_error
 1 false sub	check-fail: no_signature	matrix:ERROR:signature_error
 1 false mul	check-fail: no_signature	matrix:ERROR:signature_error
+1 false lt	check-fail: incomparable	matrix:ERROR:incomparable
 1 none add	check-fail: no_signature	matrix:ERROR:signature_error
 1 none sub	check-fail: no_signature	matrix:ERROR:signature_error
 1 none mul	check-fail: no_signature	matrix:ERROR:signature_error
 1 [1 2] add	check-fail: no_signature	matrix:ERROR:signature_error
 1 [1 2] sub	check-fail: no_signature	matrix:ERROR:signature_error
 1 [1 2] mul	check-fail: no_signature	matrix:ERROR:signature_error
+1 [1 2] lt	check-fail: incomparable	matrix:ERROR:incomparable
 1 drop dup	check-fail: no_signature	matrix:ERROR:signature_error
 1 drop drop	check-fail: no_signature	matrix:ERROR:signature_error
 1 drop not	check-fail: no_signature	matrix:ERROR:signature_error
@@ -165,18 +173,22 @@ none swap	check-fail: no_signature	matrix:ERROR:signature_error
 1 size swap	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 'x' sub	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 'x' mul	check-fail: no_signature	matrix:ERROR:signature_error
+2.5 'x' lt	check-fail: incomparable	matrix:ERROR:incomparable
 2.5 true add	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 true sub	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 true mul	check-fail: no_signature	matrix:ERROR:signature_error
+2.5 true lt	check-fail: incomparable	matrix:ERROR:incomparable
 2.5 false add	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 false sub	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 false mul	check-fail: no_signature	matrix:ERROR:signature_error
+2.5 false lt	check-fail: incomparable	matrix:ERROR:incomparable
 2.5 none add	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 none sub	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 none mul	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 [1 2] add	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 [1 2] sub	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 [1 2] mul	check-fail: no_signature	matrix:ERROR:signature_error
+2.5 [1 2] lt	check-fail: incomparable	matrix:ERROR:incomparable
 2.5 drop dup	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 drop drop	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 drop not	check-fail: no_signature	matrix:ERROR:signature_error
@@ -204,22 +216,28 @@ none swap	check-fail: no_signature	matrix:ERROR:signature_error
 2.5 size swap	check-fail: no_signature	matrix:ERROR:signature_error
 'x' 0 sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' 0 mul	check-fail: no_signature	matrix:ERROR:signature_error
+'x' 0 lt	check-fail: incomparable	matrix:ERROR:incomparable
 'x' 1 sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' 1 mul	check-fail: no_signature	matrix:ERROR:signature_error
+'x' 1 lt	check-fail: incomparable	matrix:ERROR:incomparable
 'x' 2.5 sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' 2.5 mul	check-fail: no_signature	matrix:ERROR:signature_error
+'x' 2.5 lt	check-fail: incomparable	matrix:ERROR:incomparable
 'x' 'x' sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' 'x' mul	check-fail: no_signature	matrix:ERROR:signature_error
 'x' true sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' true mul	check-fail: no_signature	matrix:ERROR:signature_error
+'x' true lt	check-fail: incomparable	matrix:ERROR:incomparable
 'x' false sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' false mul	check-fail: no_signature	matrix:ERROR:signature_error
+'x' false lt	check-fail: incomparable	matrix:ERROR:incomparable
 'x' none add	check-fail: no_signature	matrix:ERROR:signature_error
 'x' none sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' none mul	check-fail: no_signature	matrix:ERROR:signature_error
 'x' [1 2] add	check-fail: no_signature	matrix:ERROR:signature_error
 'x' [1 2] sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' [1 2] mul	check-fail: no_signature	matrix:ERROR:signature_error
+'x' [1 2] lt	check-fail: incomparable	matrix:ERROR:incomparable
 'x' dup sub	check-fail: no_signature	matrix:ERROR:signature_error
 'x' dup mul	check-fail: no_signature	matrix:ERROR:signature_error
 'x' drop dup	check-fail: no_signature	matrix:ERROR:signature_error
@@ -250,14 +268,18 @@ none swap	check-fail: no_signature	matrix:ERROR:signature_error
 true 0 add	check-fail: no_signature	matrix:ERROR:signature_error
 true 0 sub	check-fail: no_signature	matrix:ERROR:signature_error
 true 0 mul	check-fail: no_signature	matrix:ERROR:signature_error
+true 0 lt	check-fail: incomparable	matrix:ERROR:incomparable
 true 1 add	check-fail: no_signature	matrix:ERROR:signature_error
 true 1 sub	check-fail: no_signature	matrix:ERROR:signature_error
 true 1 mul	check-fail: no_signature	matrix:ERROR:signature_error
+true 1 lt	check-fail: incomparable	matrix:ERROR:incomparable
 true 2.5 add	check-fail: no_signature	matrix:ERROR:signature_error
 true 2.5 sub	check-fail: no_signature	matrix:ERROR:signature_error
 true 2.5 mul	check-fail: no_signature	matrix:ERROR:signature_error
+true 2.5 lt	check-fail: incomparable	matrix:ERROR:incomparable
 true 'x' sub	check-fail: no_signature	matrix:ERROR:signature_error
 true 'x' mul	check-fail: no_signature	matrix:ERROR:signature_error
+true 'x' lt	check-fail: incomparable	matrix:ERROR:incomparable
 true true add	check-fail: no_signature	matrix:ERROR:signature_error
 true true sub	check-fail: no_signature	matrix:ERROR:signature_error
 true true mul	check-fail: no_signature	matrix:ERROR:signature_error
@@ -270,6 +292,7 @@ true none mul	check-fail: no_signature	matrix:ERROR:signature_error
 true [1 2] add	check-fail: no_signature	matrix:ERROR:signature_error
 true [1 2] sub	check-fail: no_signature	matrix:ERROR:signature_error
 true [1 2] mul	check-fail: no_signature	matrix:ERROR:signature_error
+true [1 2] lt	check-fail: incomparable	matrix:ERROR:incomparable
 true dup add	check-fail: no_signature	matrix:ERROR:signature_error
 true dup sub	check-fail: no_signature	matrix:ERROR:signature_error
 true dup mul	check-fail: no_signature	matrix:ERROR:signature_error
@@ -301,14 +324,18 @@ true size swap	check-fail: no_signature	matrix:ERROR:signature_error
 false 0 add	check-fail: no_signature	matrix:ERROR:signature_error
 false 0 sub	check-fail: no_signature	matrix:ERROR:signature_error
 false 0 mul	check-fail: no_signature	matrix:ERROR:signature_error
+false 0 lt	check-fail: incomparable	matrix:ERROR:incomparable
 false 1 add	check-fail: no_signature	matrix:ERROR:signature_error
 false 1 sub	check-fail: no_signature	matrix:ERROR:signature_error
 false 1 mul	check-fail: no_signature	matrix:ERROR:signature_error
+false 1 lt	check-fail: incomparable	matrix:ERROR:incomparable
 false 2.5 add	check-fail: no_signature	matrix:ERROR:signature_error
 false 2.5 sub	check-fail: no_signature	matrix:ERROR:signature_error
 false 2.5 mul	check-fail: no_signature	matrix:ERROR:signature_error
+false 2.5 lt	check-fail: incomparable	matrix:ERROR:incomparable
 false 'x' sub	check-fail: no_signature	matrix:ERROR:signature_error
 false 'x' mul	check-fail: no_signature	matrix:ERROR:signature_error
+false 'x' lt	check-fail: incomparable	matrix:ERROR:incomparable
 false true add	check-fail: no_signature	matrix:ERROR:signature_error
 false true sub	check-fail: no_signature	matrix:ERROR:signature_error
 false true mul	check-fail: no_signature	matrix:ERROR:signature_error
@@ -321,6 +348,7 @@ false none mul	check-fail: no_signature	matrix:ERROR:signature_error
 false [1 2] add	check-fail: no_signature	matrix:ERROR:signature_error
 false [1 2] sub	check-fail: no_signature	matrix:ERROR:signature_error
 false [1 2] mul	check-fail: no_signature	matrix:ERROR:signature_error
+false [1 2] lt	check-fail: incomparable	matrix:ERROR:incomparable
 false dup add	check-fail: no_signature	matrix:ERROR:signature_error
 false dup sub	check-fail: no_signature	matrix:ERROR:signature_error
 false dup mul	check-fail: no_signature	matrix:ERROR:signature_error
@@ -404,21 +432,27 @@ none size swap	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 0 add	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 0 sub	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 0 mul	check-fail: no_signature	matrix:ERROR:signature_error
+[1 2] 0 lt	check-fail: incomparable	matrix:ERROR:incomparable
 [1 2] 1 add	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 1 sub	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 1 mul	check-fail: no_signature	matrix:ERROR:signature_error
+[1 2] 1 lt	check-fail: incomparable	matrix:ERROR:incomparable
 [1 2] 2.5 add	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 2.5 sub	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 2.5 mul	check-fail: no_signature	matrix:ERROR:signature_error
+[1 2] 2.5 lt	check-fail: incomparable	matrix:ERROR:incomparable
 [1 2] 'x' add	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 'x' sub	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] 'x' mul	check-fail: no_signature	matrix:ERROR:signature_error
+[1 2] 'x' lt	check-fail: incomparable	matrix:ERROR:incomparable
 [1 2] true add	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] true sub	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] true mul	check-fail: no_signature	matrix:ERROR:signature_error
+[1 2] true lt	check-fail: incomparable	matrix:ERROR:incomparable
 [1 2] false add	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] false sub	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] false mul	check-fail: no_signature	matrix:ERROR:signature_error
+[1 2] false lt	check-fail: incomparable	matrix:ERROR:incomparable
 [1 2] none add	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] none sub	check-fail: no_signature	matrix:ERROR:signature_error
 [1 2] none mul	check-fail: no_signature	matrix:ERROR:signature_error

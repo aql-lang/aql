@@ -65,41 +65,50 @@ type frontierSet struct {
 }
 
 var (
-	// fullSet — the length-1..4 separation. Counts measured at 27712 /
-	// 9031 / 3436 / 936; floors pinned just below as headroom.
+	// fullSet — the length-1..4 separation. Counts measured at 27746 /
+	// 9671 / 3294 / 404 (after the ordering/connective check-mode
+	// soundness fix: concrete cross-family ordering rows moved
+	// runtime→check, and-disjunct downstream-typed rows likewise, and a
+	// handful of `and X false …` rows moved compile→passing); floors
+	// pinned just below as headroom.
 	fullSet = frontierSet{
 		label:       "full(len1-4)",
 		passing:     "syntax-matrix-passing.tsv",
 		failCheck:   "syntax-matrix-fail-check.tsv",
 		failCompile: "syntax-matrix-fail-compile.tsv",
 		failRuntime: "syntax-matrix-fail-runtime.tsv",
-		minPassing:  27000, minCheck: 9000, minCompile: 3400, minRuntime: 900,
+		minPassing:  27000, minCheck: 9000, minCompile: 3200, minRuntime: 380,
 		sample: 0, // every row — the full set is small enough
 	}
 	// len123Set — the same separation over length-1..3 combinations only.
-	// Counts measured at 1992 / 547 / 120 / 48; floors pinned just below.
+	// Counts measured at 1992 / 581 / 120 / 14 (the ordering soundness fix
+	// moved the cross-family ordering rows runtime→check); floors pinned
+	// just below.
 	len123Set = frontierSet{
 		label:       "len123",
 		passing:     "syntax-matrix-len123-passing.tsv",
 		failCheck:   "syntax-matrix-len123-fail-check.tsv",
 		failCompile: "syntax-matrix-len123-fail-compile.tsv",
 		failRuntime: "syntax-matrix-len123-fail-runtime.tsv",
-		minPassing:  1900, minCheck: 540, minCompile: 115, minRuntime: 45,
+		minPassing:  1900, minCheck: 560, minCompile: 115, minRuntime: 12,
 		sample: 0, // every row
 	}
 	// len5Set — the length-5 layer (length-4 passing rows × one atom).
-	// Counts measured at 323465 / 85038 / 65603 / 14574 (after the `and`
-	// gradual-split compiler fix moved the 84 former mismatches plus 60
-	// coincidentally-correct rows into compile-fail); floors pinned below.
-	// Sampled by default (these files are large); SPECGEN_FULL=1 forces
-	// exhaustive verification.
+	// Counts measured at 324700 / 96250 / 60392 / 7984 (after the
+	// ordering/connective check-mode soundness fix: concrete cross-family
+	// ordering and and-disjunct downstream-typed rows moved
+	// runtime→check, and `and X false not Y` rows moved compile→passing
+	// once the concrete-fold removed the mixed gradual carrier);
+	// compiler-mismatch stays 0. Floors pinned below. Sampled by default
+	// (these files are large); SPECGEN_FULL=1 forces exhaustive
+	// verification.
 	len5Set = frontierSet{
 		label:       "len5",
 		passing:     "syntax-matrix-len5-passing.tsv",
 		failCheck:   "syntax-matrix-len5-fail-check.tsv",
 		failCompile: "syntax-matrix-len5-fail-compile.tsv",
 		failRuntime: "syntax-matrix-len5-fail-runtime.tsv",
-		minPassing:  320000, minCheck: 84000, minCompile: 65000, minRuntime: 14000,
+		minPassing:  324000, minCheck: 96000, minCompile: 60000, minRuntime: 7900,
 		sample: 12000,
 	}
 	frontierSets = []frontierSet{fullSet, len123Set, len5Set}

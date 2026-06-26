@@ -16,42 +16,14 @@
 # values of incomparable types). The note gives the runtime error class;
 # the interpreter and compiler agree on it (it is not a compiler bug).
 #
-# 48 prefixes.
+# 14 prefixes.
 #
-0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
@@ -59,10 +31,4 @@ none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-[1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-[1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-[1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-[1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-[1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
-[1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
 [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable

@@ -120,6 +120,37 @@ func orderedCompare(op string, a, b Value) (int, error) {
 	return n, nil
 }
 
+// OrderingReturnsFn builds the check-mode ReturnsFn for the family-
+// restricted ordering words (lt / gt / lte / gte / cmp). When BOTH
+// operands are concrete it runs the (pure) handler to detect a
+// cross-family pair statically — Integer vs String can never be ordered,
+// for any values — and emits an [aql/incomparable] error diagnostic, so
+// the mismatch is caught at check time instead of slipping through as a
+// runtime error. With any non-concrete operand the runtime family is
+// unknown, so nothing is flagged. The result carrier (Boolean for the
+// predicates, Integer for cmp) is returned either way so analysis
+// continues.
+func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
+	return func(args []Value, r *Registry) []Value {
+		if r != nil && len(args) == 2 && IsConcrete(args[0]) && IsConcrete(args[1]) {
+			if _, err := handler(args, nil, nil, r); err != nil {
+				var ae *AqlError
+				if errors.As(err, &ae) && ae.Code == "incomparable" {
+					pos := args[0].Pos
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:     "incomparable",
+						Detail:   ae.Detail,
+						Severity: SeverityError,
+						Row:      pos.Row,
+						Col:      pos.Col,
+					})
+				}
+			}
+		}
+		return []Value{NewCarrier(result)}
+	}
+}
+
 // incomparableError is the [aql/incomparable] error the restricted
 // ordering words raise for cross-family operands.
 func incomparableError(op string, a, b Value) error {
