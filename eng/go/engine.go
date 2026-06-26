@@ -2256,46 +2256,11 @@ func (e *Engine) stepWord(val Value) error {
 		}
 	}
 
-	// Check-mode advisory: the forward-greediness gotcha. When a word
-	// forward-collects an argument AND also takes a stack argument (a
-	// swap-form dispatch) while a SIBLING operand — a value of the same
-	// type the word just consumed — remains unconsumed on the stack below
-	// it, the author likely meant the stacked operands to be consumed
-	// together (the `1 2 add 3 mul → 5` surprise: `add` grabs the forward
-	// `3` and strands the `1`). Advisory only (info severity), emitted in
-	// check mode, never gating. See design/FORWARD-STRAND-ADVISORY.10.md.
-	if e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0 {
-		e.checkForwardStrandsOperand(w, sig, positions, val.Pos)
-		// Mixed-form advisory (ERRORS.8.md §6.2, VOXGIG T9.4): a call
-		// of three or more args that takes operand(s) from a PRECEDING
-		// expression while also forward-collecting binds differently
-		// from the all-forward reading — `(cond) if [a] [b]` is the
-		// reported shape — and the divergence is silent. Two-arg mixed
-		// calls are the documented swap form (`10 sub 3`) and stay
-		// clean. Advisory only (info severity), never gating.
-		//
-		// Gated on the DEEPEST stack-bound slot being Any-typed: the
-		// genuine footgun (`(cond) if [a] [b]`, if3's all-`Any`
-		// {Any,Any,Any} sig) lands the stacked value in an untyped slot
-		// where a misbind is silent, whereas the documented receiver-first
-		// idiom (`xs set 0 v`, `s slice j e` — collection/receiver declared
-		// as the concretely-typed LAST slot) lands it in a typed slot and is
-		// correct by construction. Without this, the advisory over-fired on
-		// every receiver-first call (~190 false info across the voxgig-aql
-		// libraries, which the docs already say to ignore). Same Any-slot
-		// discriminator checkForwardStrandsOperand uses.
-		if sig.TotalArgs() >= 3 && mixedFormStackSlotAny(e, sig, positions) {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
-				Code: "mixed_form_call",
-				Detail: w.Name + " takes " + strconv.Itoa(stkCount) + " argument(s) from the stack while forward-collecting " +
-					strconv.Itoa(fwdCount) + " — the mixed form binds differently from the all-forward form; " +
-					"prefer " + w.Name + " arg1 arg2 … or group explicitly",
-				Word: w.Name,
-				Row:  val.Pos.Row,
-				Col:  val.Pos.Col,
-			})
-		}
-	}
+	// Check-mode forward-greediness advisories (forward-strand + mixed-form).
+	// Extracted from stepWord to keep this hot dispatch path under the
+	// cyclomatic-complexity gate; diagnostics only — no effect on execution
+	// or dispatch. See design/FORWARD-STRAND-ADVISORY.10.md.
+	e.checkMixedFormAdvisories(w, sig, positions, val.Pos, fwdCount, stkCount)
 
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
@@ -2313,6 +2278,38 @@ func (e *Engine) stepWord(val Value) error {
 	}
 	e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	return e.execMatch(match)
+}
+
+// checkMixedFormAdvisories emits the two check-mode forward-greediness
+// advisories when a word forward-collects an argument AND also takes a stack
+// argument (a swap-form dispatch): the forward-strand advisory (the
+// `1 2 add 3 mul → 5` surprise — `add` grabs the forward `3` and strands the
+// `1`) and the mixed-form-call advisory (a 3+-arg call taking operand(s) from a
+// PRECEDING expression while forward-collecting binds differently from the
+// all-forward reading — `(cond) if [a] [b]`). Both are advisory only (info
+// severity), emitted in check mode, never gating. The mixed-form arm fires only
+// when the deepest stack-bound slot is Any-typed (the genuine footgun, if3's
+// {Any,Any,Any}); a concretely-typed receiver-first idiom (`xs set 0 v`,
+// `s slice j e`) binds correctly and stays quiet — without that gate the
+// advisory over-fired ~190 false info across the voxgig-aql libraries. Extracted
+// from stepWord so the hot dispatch path stays under the cyclomatic-complexity
+// gate. See design/FORWARD-STRAND-ADVISORY.10.md, ERRORS.8.md §6.2.
+func (e *Engine) checkMixedFormAdvisories(w WordInfo, sig *Signature, positions []int, pos SrcPos, fwdCount, stkCount int) {
+	if !(e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0) {
+		return
+	}
+	e.checkForwardStrandsOperand(w, sig, positions, pos)
+	if sig.TotalArgs() >= 3 && mixedFormStackSlotAny(e, sig, positions) {
+		e.registry.Check.AddDiagnostic(CheckDiagnostic{
+			Code: "mixed_form_call",
+			Detail: w.Name + " takes " + strconv.Itoa(stkCount) + " argument(s) from the stack while forward-collecting " +
+				strconv.Itoa(fwdCount) + " — the mixed form binds differently from the all-forward form; " +
+				"prefer " + w.Name + " arg1 arg2 … or group explicitly",
+			Word: w.Name,
+			Row:  pos.Row,
+			Col:  pos.Col,
+		})
+	}
 }
 
 // mixedFormStackSlotAny reports whether the deepest stack-bound sig slot of a
@@ -4266,16 +4263,6 @@ func trivialDelegationTarget(sig *FnSig) (string, bool) {
 		return "", false
 	}
 	return w.Name, true
-}
-
-// argTypeList renders a comma-separated list of the values' lattice
-// types, for the uncalled_function diagnostic's "arguments: …" detail.
-func argTypeList(vals []Value) string {
-	parts := make([]string, len(vals))
-	for i, v := range vals {
-		parts[i] = v.Parent.String()
-	}
-	return strings.Join(parts, ", ")
 }
 
 // upcomingArgs returns the value/literal tokens that follow valIdx up to
