@@ -1045,13 +1045,28 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// reach here; only at the top level — where no consumer can exist
 	// anymore — does the residue become an error, with the original
 	// call-site span. The same bug check mode names uncalled_function.
-	if e.isTop && !e.registry.Check.IsActive() {
+	if e.isTop {
 		for i := 0; i < e.tape.Len(); i++ {
 			v := e.tape.At(i)
 			if v.FailedDispatch && (v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction)) {
 				name := ""
 				if info, ok := v.Data.(FnDefInfo); ok {
 					name = info.Name
+				}
+				if e.registry.Check.IsActive() {
+					// Check-mode equivalent: a FailedDispatch fn value still on
+					// the stack at the top-level drain was never consumed (a
+					// following higher-order word would have taken it). Flag it
+					// now — the genuine wrong-order namespace-call footgun — as
+					// the diagnostic, not a hard error.
+					e.registry.Check.AddDiagnostic(CheckDiagnostic{
+						Code:   "uncalled_function",
+						Detail: "call to '" + name + "' matched no signature and was left on the stack as data",
+						Word:   name,
+						Row:    v.Pos.Row,
+						Col:    v.Pos.Col,
+					})
+					continue
 				}
 				return nil, makeAqlErrorAt("uncalled_function",
 					"call to '"+name+"' matched no signature and was left on the stack as data",
@@ -4433,31 +4448,30 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 		valIdx < e.tape.Len() && !e.tape.At(valIdx).Quoted {
 		candidates := append(append([]Value{}, resolved...), e.upcomingArgs(valIdx)...)
 		if len(candidates) > 0 {
-			if e.registry.Check.IsActive() {
-				pos := e.tape.At(valIdx).Pos
-				e.registry.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "uncalled_function",
-					Detail: "call to '" + fnDef.Name + "' matched no signature and was left on the stack as data (arguments: " + argTypeList(candidates) + ")",
-					Word:   fnDef.Name,
-					Row:    pos.Row,
-					Col:    pos.Col,
-				})
-			} else {
-				fv := e.tape.At(valIdx)
-				fv.FailedDispatch = true
-				// Borrow a span from the nearest argument when the
-				// FnDef value itself carries none, so the end-of-run
-				// report can point somewhere real.
-				if fv.Pos.Row == 0 {
-					for _, c := range candidates {
-						if c.Pos.Row > 0 {
-							fv.Pos = c.Pos
-							break
-						}
+			// Mark the value FailedDispatch and DEFER the diagnostic to the
+			// end-of-run drain — in check mode too, not just at runtime. A
+			// FailedDispatch fn value that a FOLLOWING higher-order word
+			// consumes is NOT a bug: the documented `(Sort.by-number
+			// Sort.reverse)` comparator composition leaves by-number as data
+			// for reverse to take. Emitting eagerly here flagged that as a
+			// false uncalled_function; deferring lets the drain flag only a
+			// value that survives UNCONSUMED — exactly the runtime contract,
+			// preserving the wrong-order true-positive while clearing the
+			// composition FP.
+			fv := e.tape.At(valIdx)
+			fv.FailedDispatch = true
+			// Borrow a span from the nearest argument when the FnDef value
+			// itself carries none, so the end-of-run report can point
+			// somewhere real.
+			if fv.Pos.Row == 0 {
+				for _, c := range candidates {
+					if c.Pos.Row > 0 {
+						fv.Pos = c.Pos
+						break
 					}
 				}
-				e.tape.Set(valIdx, fv)
 			}
+			e.tape.Set(valIdx, fv)
 		}
 	}
 
