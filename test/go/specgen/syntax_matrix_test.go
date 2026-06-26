@@ -1,5 +1,17 @@
+//go:build specgen
+
 package main
 
+// This runner carries the `specgen` build tag so the heavy matrix-replay
+// tests are EXCLUDED from the normal unit-test run (`make test` /
+// `go test ./...`, which compile this package but find no test files).
+// They re-execute the interpreter, checker, and compiler over tens of
+// thousands of generated rows (~7 min sampled, ~24 min with
+// SPECGEN_FULL=1) — a regression corpus, not a fast unit test. Run them
+// explicitly with `make spec-test` (or `go test -tags specgen
+// ./specgen/`). The generator (main.go) stays UNtagged so `make
+// spec-gen` and `go run ./specgen` keep working without the tag.
+//
 // Self-contained runner for the generated syntax-combination matrix
 // (syntax-matrix.tsv, produced by this package's generator). It pins the
 // three deterministic trust properties the matrix exists to defend —

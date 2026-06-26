@@ -1,5 +1,5 @@
 .PHONY: all build install test test-ts vet fmt lint vuln clean cover cover-html cover-html-open \
-        spec-gen \
+        spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
@@ -80,6 +80,16 @@ spec-gen:
 	  -compile-out ./specgen/syntax-matrix-len5-fail-compile.tsv \
 	  -runtime-out ./specgen/syntax-matrix-len5-fail-runtime.tsv \
 	  -mismatch-out ./specgen/syntax-matrix-len5-compiler-mismatch.tsv
+
+# spec-test runs the generated-matrix replay suite. It is gated behind the
+# `specgen` build tag so it is EXCLUDED from `make test` (the matrix-replay
+# tests re-execute the interpreter/checker/compiler over tens of thousands
+# of rows — ~7 min sampled — which is too slow for the normal unit run).
+# Set SPECGEN_FULL=1 to verify every row of every file exhaustively
+# (~24 min); the default samples the large length-5 buckets. A longer test
+# timeout is supplied because the exhaustive mode exceeds the 10-min default.
+spec-test:
+	cd test/go && go test -tags specgen -timeout 40m ./specgen/
 
 # ---- per-module fan-out -------------------------------------------------
 
