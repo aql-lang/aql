@@ -3499,7 +3499,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// boundary needs no rewrite here (it stays a plain CALL_USER).
 			// Generic instantiations stay out of tail marking too — the
 			// interpreter's HasGen exclusion, mirrored (plan Stage 4).
-			if !markTailCalls(rec.frag, &rec.outOps[0], true) {
+			if !es.markTailCalls(rec.frag, &rec.outOps[0], true, rec.returns) {
 				// Every path tail-called: the body diverges (a trailing
 				// all-arms-tail branch isn't caught by fragDiverges, so
 				// track it here) and emits no reachable RET.

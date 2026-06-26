@@ -1251,19 +1251,55 @@ func fragSingleResidual(frag *EmitFragment) bool {
 	return depth == 1
 }
 
-func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasOut bool) {
+// tailCompatibleReturns reports whether a tail call to calleeUnit is sound w.r.t.
+// the CALLER's declared return types. A TAIL_CALL_USER REPLACES the caller's
+// frame, so the callee's RET returns straight to the caller's caller, BYPASSING
+// the caller's return-type check (checkReturnContract at RET). That is sound only
+// if the callee's result already satisfies the caller's contract — i.e. each
+// callee return type conforms to the caller's. A caller with no contract (empty)
+// is trivially safe; a count mismatch falls back to a regular CALL_USER so the
+// caller's RET check runs (which the interpreter runs too). Without this a
+// `[Map]`-declared fn tail-calling a `[Integer]`-returning one returned the
+// Integer UNCAUGHT — a compile==interpret violation (the interpreter raises
+// type_error). A caller declaring `[Any]` (or self/compatible recursion) stays a
+// tail call: the check it bypasses is vacuous / already implied by the callee.
+func (es *EmitState) tailCompatibleReturns(calleeUnit int, callerReturns []*Type) bool {
+	if len(callerReturns) == 0 {
+		return true
+	}
+	if calleeUnit < 0 || calleeUnit >= len(es.fnRecs) {
+		return false
+	}
+	callee := es.fnRecs[calleeUnit].returns
+	if len(callee) != len(callerReturns) {
+		return false
+	}
+	for i, exp := range callerReturns {
+		if exp == nil || exp.Equal(TAny) {
+			continue
+		}
+		if callee[i] == nil || !callee[i].ConformsTo(exp) {
+			return false
+		}
+	}
+	return true
+}
+
+func (es *EmitState) markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool, callerReturns []*Type) (stillHasOut bool) {
 	if frag == nil || len(frag.events) == 0 || !hasOut || out.kind != opEvent {
 		return hasOut
 	}
 	last := &frag.events[len(frag.events)-1]
 	switch last.kind {
 	case evCallUser:
-		if last.seq == out.idx && fragSingleResidual(frag) {
+		if last.seq == out.idx && fragSingleResidual(frag) && es.tailCompatibleReturns(last.uc.unit, callerReturns) {
 			// Tail position requires the call's result to be the fragment's WHOLE
 			// residual — nothing left BELOW it. A multi-value arm (`[n mul 2 m (n
 			// sub 1)]`, where n*2 sits below the recursive call) is NOT tail: a
 			// frame-replacing TAIL_CALL_USER would discard the lower values. Only
-			// mark tail when the net residual is exactly the call's single result.
+			// mark tail when the net residual is exactly the call's single result
+			// AND the callee's returns satisfy the caller's (else the tail call
+			// would bypass the caller's return-type check — see tailCompatibleReturns).
 			last.uc.tail = true
 			return false
 		}
@@ -1278,7 +1314,7 @@ func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasO
 			// tail-diverges, the whole branch does (lowerBranch's const-cond
 			// path then emits no merge slot, matching hasThenOut=false).
 			if last.br.hasThenOut {
-				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
+				last.br.hasThenOut = es.markTailCalls(last.br.then, &last.br.thenOut, true, callerReturns)
 				if !last.br.hasThenOut {
 					return false
 				}
@@ -1287,10 +1323,10 @@ func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasO
 		}
 		if last.br.hasElse {
 			if last.br.hasThenOut {
-				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
+				last.br.hasThenOut = es.markTailCalls(last.br.then, &last.br.thenOut, true, callerReturns)
 			}
 			if last.br.hasElsOut {
-				last.br.hasElsOut = markTailCalls(last.br.els, &last.br.elsOut, true)
+				last.br.hasElsOut = es.markTailCalls(last.br.els, &last.br.elsOut, true, callerReturns)
 			}
 			// The branch still merges normally for non-tail arms; if
 			// EVERY arm tail-calls, control never reaches the merge —
