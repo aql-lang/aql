@@ -306,3 +306,37 @@ sub-hazards are exactly the silent-miscompile class the differential can't see.
 4. **Stage F / I tiering**: classify dynamic-scope (`recursion:72`) and
    divergent-macro (`macro:45`) as permanent tier-1 interpreter-only, or keep
    chasing — needed before Stage J can assert tiers 2+3 at 0.
+
+---
+
+## 7. Progress log
+
+Steps 0–3 (the sound, low-risk wins) landed, gate-clean
+(`make fmt/vet/lint/test` + `make verify-bytecode` + the off-corpus
+`RunCompiledStrict` regressions, all green). Voxgig sweep: **11 → 13 PASS**
+(test-file compiles 3 → 5: `sort_prop_test`, `trie_prop_test` flipped).
+
+- **Prereqs cleared** (pre-existing branch debt, found by the gate, fixed
+  separately): a data race in `ForkConcurrent` (the Debug.stack `debugEngines`
+  seam was not isolated per concurrent `await` fork — `808a8992`); two
+  golangci-lint failures in `engine.go` (`ba57652a`).
+- **Step 0** — leaf-1 in-tree fix committed (`d5d3a890`).
+- **Step 1** — leaf-5 part 1 unmask (`62a6f7c3`). Subtler than planned: the
+  discriminator is `Check.Compiling` (reset per-pass in `Begin`), NOT
+  `Emit==nil`/`es.active()` — plain check arms a fresh `Emit` per fn body
+  (`IsolateEmit`) and the latch fires under a suspended re-dispatch. The
+  `make test` gate caught the first (over-suppressing) attempt via 6 checker
+  tests, exactly the over-suppression risk the leaf-5 verdict flagged.
+- **Step 2** — leaf-2 STATS carrier-ID preservation (`fc166326`). Clean
+  read-side fix; flips 0 alone (the 3 files carry other chain leaves).
+- **Step 3** — leaf-6 module-scope check-prop interp-string (`faad5c2f`). First
+  file-flip (+2). The naive admission miscompiled a nested too-deep
+  `macroexpand` (a standalone ParenExpr is not bakeable data); fixed by mirroring
+  `isInertConst` at the top level and admitting InterpString only in member
+  recursion. The fn-scope frame-local hazard the verdict warned about is guarded
+  by keeping `isInertConst` strict + gating the admission on `len(es.units)==1`.
+
+**Remaining** (the harder, higher-risk work — §4 steps 4–9): leaf-1 part 1
+over-capture refinement, leaf-3 fragment-level value-def promotion, leaf-2 BLOOM
+list-element gate, then **Stage D** (leaf 4 + leaf 5 part 2 — difficulty 5, where
+the bulk of the 26 remaining files flip), and leaf-1 part 2 / Stage G comparator.
