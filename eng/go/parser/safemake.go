@@ -38,6 +38,25 @@ func SafeParse(src string) (any, error) {
 	return SafeMake().Parse(src)
 }
 
+// SafeParseData parses src like SafeParse but ATTACHES the number-Sub
+// callback (setupNumberSub), so numeric tokens come back wrapped in a
+// numberVal carrying their exact source text. This preserves the
+// integer/float distinction (and exact large-integer precision) the way the
+// AQL-source parser does — "42.0" stays a Float, "42" an Integer, an
+// out-of-range integer raises [aql/integer_overflow] — instead of the bare
+// float64 collapse a default parser produces (where "42.0" silently becomes
+// Integer 42). Use this for data-decode paths that must round-trip numeric
+// types faithfully, notably StructUtil.parse. Callers convert the wrapped
+// numbers via ConvertParsedNumber. Construction is serialized under the
+// shared lock; the parse itself runs concurrently, as in SafeParse.
+func SafeParseData(src string) (any, error) {
+	jsonicMakeMu.Lock()
+	j := jsonic.Make()
+	jsonicMakeMu.Unlock()
+	setupNumberSub(j)
+	return j.Parse(src)
+}
+
 // GuardMake runs an arbitrary jsonic-parser constructor (e.g.
 // multisource.MakeJsonic, which the parser package cannot import directly)
 // under the shared construction lock and returns its result.

@@ -1934,6 +1934,30 @@ func ReturnsNumericBinary() ReturnsFunc {
 	}
 }
 
+// ReturnsAddConcat types the result of add's string-concat overloads
+// ([TString TScalar] / [TScalar TString]). Those overloads commit whenever an
+// operand fills the String slot — but a GRADUAL (dynamic) operand fills it
+// OPTIMISTICALLY: it MIGHT be a String, yet at run time it could be a Number,
+// in which case the interpreter takes the NUMERIC overload instead. A definite
+// [String] return for that case wrongly rejects a downstream numeric use — the
+// sort.aql `msd-go` false positive, where `lo add (Array-get-result)` (Integer
+// + a dynamic get) was typed String and then failed the recursive `lo:Integer`
+// param. So: return String only when an operand is PROVABLY String (a concrete
+// or non-gradual String-typed value); otherwise the result is String-or-Number,
+// i.e. a gradual Scalar, which matches a later numeric OR string use and a guard
+// discharges back to strict. Runtime concat (addConcatHandler) is unchanged —
+// this governs check-mode result typing only.
+func ReturnsAddConcat() ReturnsFunc {
+	return func(args []Value, _ *Registry) []Value {
+		for _, a := range args {
+			if !a.Dynamic && a.Parent != nil && a.Parent.ConformsTo(TString) {
+				return []Value{NewCarrier(TString)}
+			}
+		}
+		return []Value{NewDynamicCarrier(TScalar)}
+	}
+}
+
 // CommonAncestorType returns the longest common prefix of two type
 // paths, as a new Type. For example, given Number/Integer/42 and
 // Number/Integer/99, returns Number/Integer. Returns TAny if there is

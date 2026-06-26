@@ -513,6 +513,7 @@ var (
 	ReturnsIdentity        = eng.ReturnsIdentity
 	ReturnsListElemAt      = eng.ReturnsListElemAt
 	ReturnsNumericBinary   = eng.ReturnsNumericBinary
+	ReturnsAddConcat       = eng.ReturnsAddConcat
 	ReturnsPreserveListAt  = eng.ReturnsPreserveListAt
 	ReturnsStatic          = eng.ReturnsStatic
 	CheckListIndex         = eng.CheckListIndex

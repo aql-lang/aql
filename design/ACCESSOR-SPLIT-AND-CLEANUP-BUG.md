@@ -4,6 +4,16 @@ This note records the get/dot accessor split that landed this session and
 hands off the one remaining bug it surfaced — a per-call frame-cleanup
 over-pop — with a ready-to-use next-session prompt.
 
+> **Note (branch `claude/dx-driven-language-improvements`):** this bug was
+> fixed independently and identically on `main` by PR #193
+> (`claude/frame-cleanup-over-pop`) — same `InstallFrameBinding` shadow
+> approach, recorded below under "RESOLVED (branch
+> `claude/frame-cleanup-over-pop-dzhf04`)". After merging `main`, this branch
+> takes that canonical fix (which also routes the macro expander) and drops
+> its own duplicate, keeping only the complementary Go-level regression tests
+> in `lang/go/test/closures_test.go`
+> (`TestFrameParamShadowsCollidingFunctionParam` + `TestDefWordOverlapStillRedefines`).
+
 ## Landed this session (branch `claude/aql-client-lib-issues-lev8cs`)
 
 1. **`slice` element-type preservation** — `slice` no longer stringifies

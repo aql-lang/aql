@@ -390,3 +390,62 @@ func TestClosureArgsStaysDynamic(t *testing.T) {
 		t.Errorf("args inside captured fn = %s, want empty (its own call args, not outer's)", out[0].String())
 	}
 }
+
+// L — Frame param shadows a colliding caller binding (per-call cleanup
+// over-pop fix). A callee whose Function parameter name collides with the
+// caller's same-named parameter — the classic comparator threaded through a
+// `/r`-parked arg — must SHADOW the caller's binding (push depth+1) and tear
+// back down to exactly the caller's level on frame exit, not destroy it at
+// install time. Pre-fix, installing the callee's `comp` ran the same-scope
+// overlap-redefinition filter, which DROPPED the caller's `comp`; the undef
+// cleanup tail then over-popped the survivor to depth 0, so the SECOND
+// `comp/r h` errored `undefined word: comp`. See
+// design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md and InstallFrameBinding.
+func TestFrameParamShadowsCollidingFunctionParam(t *testing.T) {
+	// buildFnBodyHandler path: a named-param fn (h) invoked via a helper,
+	// whose Function param `comp` collides with caller t's `comp`, reused twice.
+	out, err := runNativeSteps(t, nil, []string{
+		`def g ([x:Integer] => [x add 1])`,
+		`def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply]]`,
+		`def t fn [[comp:Function] [Integer] [ def a (5 comp/r h)  def b (7 comp/r h)  a add b ]]`,
+		`g/r t`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := intResult(t, out); got != 14 {
+		t.Errorf("g/r t → %d, want 14 (g(5)+g(7)=6+8); pre-fix errored `undefined word: comp` on the 2nd use", got)
+	}
+
+	// Direct comp/r apply (execFnDefSig path) reusing the colliding param twice
+	// in one frame.
+	out, err = runNativeSteps(t, nil, []string{
+		`def g ([x:Integer] => [x add 1])`,
+		`def t fn [[comp:Function] [Integer] [ (5 comp/r apply) add (7 comp/r apply) ]]`,
+		`g/r t`,
+	})
+	if err != nil {
+		t.Fatalf("run (apply path): %v", err)
+	}
+	if got := intResult(t, out); got != 14 {
+		t.Errorf("apply path g/r t → %d, want 14", got)
+	}
+}
+
+// M — The def-word overlap-redefinition filter is unaffected by the frame-
+// binding shadow change: redefining a fn at the SAME scope still REPLACES the
+// overlapping overload (it does not stack/union with the old one). Guards that
+// InstallFrameBinding's shadow flag only gates frame installs, not `def`.
+func TestDefWordOverlapStillRedefines(t *testing.T) {
+	out, err := runNativeSteps(t, nil, []string{
+		`def f fn [[x:Integer] [Integer] [x]]`,
+		`def f fn [[x:Integer] [Integer] [x add 100]]`,
+		`5 f`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := intResult(t, out); got != 105 {
+		t.Errorf("redefined f, 5 f → %d, want 105 (overlapping redefinition must replace, not race the old overload)", got)
+	}
+}

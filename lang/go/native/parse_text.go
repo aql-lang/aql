@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aql-lang/aql/eng/go/parser"
 )
@@ -21,14 +22,21 @@ func parseTextHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return nil, r.AqlError("parse_error",
 			fmt.Sprintf("parse: argument must be a string, got %s", args[0].String()), "parse")
 	}
-	result, perr := parser.SafeParse(text)
+	// Empty input is "no value to decode" and raises (never a silent none).
+	// Gate on the raw text BEFORE parsing: jsonic returns a Go nil for BOTH
+	// empty input AND a valid top-level `null`, so a post-parse nil check
+	// would wrongly reject `null` — which must hydrate to the concrete none
+	// (jsonicToValue maps nil → None, matching how `{a: null}` decodes).
+	if strings.TrimSpace(text) == "" {
+		return nil, r.AqlError("parse_error",
+			"parse: input is empty (no value to decode)", "parse")
+	}
+	// SafeParseData (not SafeParse) so number tokens preserve their
+	// int/float distinction: "42.0" decodes to Float, "42" to Integer.
+	result, perr := parser.SafeParseData(text)
 	if perr != nil {
 		return nil, r.AqlError("parse_error",
 			fmt.Sprintf("parse: invalid jsonic/JSON: %v", perr), "parse")
-	}
-	if result == nil {
-		return nil, r.AqlError("parse_error",
-			"parse: input is empty (no value to decode)", "parse")
 	}
 	v, cerr := jsonicToValue(result)
 	if cerr != nil {

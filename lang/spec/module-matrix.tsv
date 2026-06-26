@@ -32,6 +32,8 @@ import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.col 2
 import "aql:matrix-util"  MatrixUtil.mat-add (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[10 20] [30 40]])	Matrix(2x2)	mat-add: element-wise sum
 import "aql:matrix-util"  MatrixUtil.mat-sub (MatrixUtil.create [[10 20] [30 40]]) (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	mat-sub: element-wise difference
 import "aql:matrix-util"  MatrixUtil.mat-mul (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[5 6] [7 8]])	Matrix(2x2)	mat-mul: matrix product
+import "aql:matrix-util"  MatrixUtil.mat-mul (MatrixUtil.create [[1 2 3] [4 5 6]]) (MatrixUtil.create [[1 0] [0 1] [1 1]])	Matrix(3x3)	mat-mul forward form is B·A (operand-order pin: A is 2x3, B is 3x2, so B·A is 3x3 — a square spec row cannot catch a reversal)
+import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) (MatrixUtil.create [[1 0] [0 1] [1 1]]) MatrixUtil.mat-mul	Matrix(2x2)	mat-mul stack/swap form is A·B (the mirror of the forward row above; A·B is 2x2)
 import "aql:matrix-util"  MatrixUtil.mat-emul (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[5 6] [7 8]])	Matrix(2x2)	mat-emul: element-wise (Hadamard) product
 import "aql:matrix-util"  MatrixUtil.scale 2 (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	scale: multiply every entry by a scalar
 #
