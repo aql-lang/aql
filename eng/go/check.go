@@ -208,10 +208,21 @@ func (c *CheckState) RecordDef(name string, pos SrcPos) {
 		c.DefsInstalled = map[string]SrcPos{}
 	}
 	c.DefsInstalled[name] = pos
-	// Any prior "use" count for this name was against an older
-	// (now-shadowed) def or against a lookup during def setup — reset
-	// so only uses AFTER this install count.
-	delete(c.DefsUsed, name)
+	// "Ever-used during the run" semantics: a use recorded against this name
+	// at ANY point counts. The tracker is flat (name-keyed, no scope id), so
+	// resetting the use on every rebind produced false unused_def warnings
+	// wherever a name is legitimately read and then re-bound — loop-carried
+	// flags re-bound each iteration (decision's found/best-pri/done) and a
+	// name reused as an independent local across sibling quotations where only
+	// one reads it (sort's var-destructure counters). The one use the reset
+	// was really protecting against — a fn's construction-time self-reference,
+	// which must NOT count as a use — is now suppressed precisely at its
+	// source (checkFnBodyAtConstruction snapshots/restores this name's use
+	// flag), so dropping the blanket reset keeps uncalled-fn detection
+	// (TestCheckUnusedDefFn) while clearing the read-then-rebind FPs. The only
+	// residual is a benign FN: a genuinely dead VALUE rebind
+	// (`def x 1  x print  def x 2`) is no longer flagged — acceptable, and in
+	// line with the tracker's already-documented forward-ref FN.
 }
 
 // RecordUse is the exported wrapper over recordUse for callers outside the
