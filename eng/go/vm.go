@@ -798,6 +798,15 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				nl[i] = stack[len(stack)-1-i]
 			}
 			stack = stack[:len(stack)-fn.NParams]
+			// Param-type guard — the compiled mirror of the interpreter's
+			// runtime sig match. A gradual (Dynamic) arg optimistically matched a
+			// concrete param at check time, but the runtime value may not match;
+			// without this a laundered List bound to an `m:Map` param silently runs
+			// the body. nl[i] is param i (the body's slot i); Params[i] is its
+			// declared type. Raises the same signature_error the interpreter raises.
+			if err := checkParamContract(r, fn, nl); err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
 			if in.Op == OpCallUser {
 				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack)})
 				vc.frameDepth++ // balanced by the matching RET below
@@ -1038,6 +1047,38 @@ func vmShuffle(stack []Value, op Opcode, arg int, debug []SrcPos, pc int) ([]Val
 // The re-entrant closure / fn-root RET (no frame) runs on a fresh stack and only
 // the underflow is a count error there (a surplus is the higher-order caller's
 // domain) — preserving the prior closure behaviour. Returns nil when satisfied.
+// checkParamContract enforces the declared PARAM types at CALL_USER entry — the
+// compiled mirror of the interpreter's runtime signature match (and the symmetric
+// twin of checkReturnContract at RET). Each param local nl[i] must satisfy
+// Params[i] via v.Is(exp), the SAME membership the param boundary asks. A nil /
+// Any param is a guaranteed pass (a closure's [Any] input, or a fn declaring an
+// Any param). Multi-overload gradual calls never compile, so the single chosen
+// overload's guard mirrors the interpreter exactly. On mismatch it raises the
+// byte-identical signature_error the interpreter raises for an unmatched dispatch.
+func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
+	for i, pt := range fn.Params {
+		if pt == nil || i >= len(locals) {
+			continue
+		}
+		// Use sigTypeMatches — the interpreter's RUNTIME param match — NOT v.Is.
+		// v.Is is a strict SUBSET: it rejects a concrete map at an `Options` slot
+		// (Options roots under Ideal, TMap ⋢ TOptions), which the interpreter's
+		// sigTypeMatches accepts (signature.go's Options/Record special-cases). A
+		// v.Is guard therefore OVER-RAISES on Options / structural params — a
+		// regression. sigTypeMatches subsumes v.Is and folds in those special
+		// cases, the Any root, and (inert at run time) gradual optimism, so it
+		// matches the interpreter exactly for a concrete runtime value. A
+		// constraint carried in FnParam.Pattern (inline disjunct / predicate /
+		// bounded / structural) is NOT threaded into Params and so is not enforced
+		// here — see design/PARAM-GUARD-SKIP-MISCOMPILE.0.md; this guard catches the
+		// plain-type laundering (the reported bug) without over-raising.
+		if !sigTypeMatches(locals[i], pt) {
+			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+		}
+	}
+	return nil
+}
+
 func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase int, hasFrame bool) error {
 	rets := fn.Returns
 	if len(rets) == 0 {

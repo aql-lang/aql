@@ -453,6 +453,16 @@ type CompiledFn struct {
 	// bare refine stays nominal, and builtins are unchanged. Empty for a
 	// fn with no declared return (no check runs).
 	Returns []*Type
+	// Params are the declared PARAM types (param slots 0..len(Params)-1, which
+	// align with the leading param locals; captures, if any, follow and are NOT
+	// listed). Enforced at CALL_USER entry against the incoming arg the same way
+	// Returns is enforced at RET — via v.Is(exp). This guards the gradual-Any
+	// boundary: a value of static type exactly Any optimistically matches a
+	// concrete param at check time, but the runtime value may not match; the
+	// interpreter runtime-matches it, so the compiled OpCallUser must too, else a
+	// laundered List bound to an `m:Map` param silently runs the body. A nil
+	// entry (a closure's [Any] input) is a guaranteed-pass, like Returns=[Any].
+	Params []*Type
 	// LocalNames maps a frame local slot to its source name (params in
 	// slots 0..NParams-1, then captures), for a debugger / disassembler.
 	// Body-local iterator slots have no name (empty string). Purely

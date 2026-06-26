@@ -89,11 +89,35 @@ matching-value class (the harness shape must keep compiling), plus an adversaria
 sweep — a guard that raises where the interpreter succeeds is a NEW divergence the
 corpus won't catch.
 
-## Status
+## Status — IMPLEMENTED for plain types (one residual)
 
-Root-caused and the fix path validated (the conservative refusal proved the
-diagnosis and bounded the over-refusal). The runtime-guard implementation is a
-soundness-critical VM change deferred to a focused effort rather than rushed.
-This is the highest-priority compiler-soundness item — a live `compile==interpret`
-violation — above the advisory voxgig leaves.
+The runtime param guard LANDED: `CompiledFn.Params` (threaded from `sigParams`
+via `SetUnitParamTypes`) is enforced at `OpCallUser` entry by `checkParamContract`
+(`vm.go`), raising the byte-identical `signature_error` the interpreter raises.
+The reported `List`→`m:Map` laundering (and the whole PLAIN-type class) is fixed:
+compiled and interpreter both raise `[aql/signature_error]`.
+
+An adversarial sweep (~137 programs, 4 families) verified two things and found
+one residual:
+
+- **No over-raise** — the guard uses `sigTypeMatches`, NOT `v.Is`. `v.Is` is a
+  strict subset that rejects a concrete map at an `Options` slot (`TMap ⋢
+  TOptions`); the interpreter's `sigTypeMatches` accepts it (signature.go's
+  Options/Record special-cases). The first cut used `v.Is` and OVER-RAISED on
+  every `Options` / optional-`Options` param (a regression); switching to
+  `sigTypeMatches` fixes it. Captures align correctly (the guard checks only the
+  leading `len(Params)` param slots, never a capture slot).
+- **Residual UNDER-CATCH** (a known limitation, NOT a regression — same class as
+  the original bug): a constraint carried in `FnParam.Pattern` rather than
+  `.Type` — an INLINE disjunct (`x:(Integer tor String)` → `Type=TAny`), an
+  inline predicate/DepScalar (`b:(Integer gt 10)` → `Type=TInteger`), a bounded
+  `T/t`, or a structural map/list pattern — is not threaded into `Params`, so a
+  value laundered past such a param still compiles where the interpreter raises.
+  NAMED user types (`def Maybe …; x:Maybe`) are fine: they resolve to a minted
+  lattice node whose Behavior `v.Is`/`sigTypeMatches` both honor. To close the
+  residual: thread `FnParam.Pattern` into `CompiledFn` alongside `Params` and run
+  the same pattern Unify the interpreter does (engine.go:4342-4360) in
+  `checkParamContract`. A separate pre-existing **return**-contract under-catch
+  (a nested-def `[Map]`-declared fn returning an Integer compiles the wrong
+  value) surfaced too — that is the `OpRet` guard's gap, not this param guard.
 ```

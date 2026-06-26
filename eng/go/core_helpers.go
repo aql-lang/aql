@@ -526,6 +526,18 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if !okFn {
 				fnUnit = -1
 			}
+			if fnUnit >= 0 {
+				// Record the declared PARAM types so the VM enforces them at
+				// CALL_USER entry (the gradual-Any param-guard, mirroring the RET
+				// return-check). A gradual (Dynamic) arg optimistically matched a
+				// concrete param at check time; the compiled call must re-check the
+				// runtime value, or a laundered mismatch silently runs the body.
+				pts := make([]*Type, len(sigParams))
+				for i := range sigParams {
+					pts[i] = sigParams[i].Type
+				}
+				es.SetUnitParamTypes(fnUnit, pts)
+			}
 			if finishFn != nil {
 				// A fresh compilation must RECORD the body — drop any
 				// summary cached by a suspended analysis (the install-
