@@ -675,7 +675,16 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		return typeOperand(es.internType(v)), true
 	}
 	lit, ok := es.materialise(v)
-	if !ok || !isInertConst(lit) {
+	if !ok {
+		return emitOperand{}, false
+	}
+	// At MODULE scope a NoEvalArgs body that is inert except for InterpStrings
+	// (interpBodyInert) bakes as code-as-data and is re-interpreted against the
+	// registry — sound where there is no enclosing VM frame to shadow (see
+	// noEvalBodiesInertScoped). isInertConst stays strict so this admission never
+	// reaches a compiled fn frame: there the body refuses at the Stage-2 gate
+	// before resolveOperand, so the operand never gets here.
+	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
 		return emitOperand{}, false
 	}
 	return constOperand(es.intern(lit)), true
@@ -1976,7 +1985,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !noEvalBodiesInert(sig, args)):
+	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !es.noEvalBodiesInertScoped(sig, args)):
 		// A code-body word is refused when:
 		//   - its body is not inert data; OR
 		//   - it SPLICES the body onto the tape (CompileExecutesBody, e.g. `var`):
@@ -2406,6 +2415,111 @@ func noEvalBodiesInert(sig *Signature, args []Value) bool {
 		}
 	}
 	return true
+}
+
+// noEvalBodiesInertScoped is noEvalBodiesInert plus a MODULE-SCOPE allowance for
+// InterpString-bearing bodies. A re-interpreting NoEvalArgs handler (the
+// property harness's test-check-prop, Callable==nil) bakes its body as data and
+// re-runs it in a sub-engine against the registry; an InterpString `${name}`
+// there resolves against the registry exactly as the interpreter does — SOUND
+// only when there is no enclosing compiled fn frame (len(es.units)==1). Inside a
+// fn frame a `${frame-local}` would resolve against the registry instead of the
+// VM slot and diverge (`def f fn [[pfx] … check-prop … `${pfx}` …]`), so there
+// the strict isInertConst path keeps the body refused → sound interpreter
+// fallback. (The same fn-frame hazard already exists for a bare-Word/paren
+// member; this widening deliberately does NOT extend it — it admits InterpString
+// only where every name resolves through the registry.)
+func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool {
+	moduleScope := len(es.units) == 1
+	for i := range args {
+		if !sig.NoEvalArgs[i] {
+			continue
+		}
+		inert := isInertConst(args[i])
+		if !inert && moduleScope {
+			inert = interpBodyInert(args[i])
+		}
+		if !inert {
+			return false
+		}
+		if bodyHasSentinel(args[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// interpBodyInert is isInertConst widened so a NESTED InterpString counts as
+// inert. Its TOP-LEVEL semantics match isInertConst EXACTLY — a standalone
+// ParenExpr / Word / InterpString is NOT bakeable data (a standalone ParenExpr
+// is deferred code; baking `(loopy 1)` would wrongly let a nested too-deep
+// macroexpand compile) — so only a List/Map at the top recurses through the
+// InterpString-admitting member check; everything else defers to isInertConst.
+// Only noEvalBodiesInertScoped (and resolveOperand) call this, and only at
+// MODULE scope — an InterpString must NEVER bake inside a compiled fn frame.
+func interpBodyInert(v Value) bool {
+	switch v.Data.(type) {
+	case ListPayload, MapPayload:
+		return interpMemberInert(v)
+	default:
+		return isInertConst(v)
+	}
+}
+
+// interpMemberInert is isInertConstMember widened to admit an InterpString whose
+// hole expressions are themselves inert members — immutable code-as-data the VM
+// pushes verbatim and a re-interpreting handler runs against the registry.
+// Container members (List/Map/ParenExpr) recurse HERE so a nested InterpString
+// at any depth is reached; every other leaf defers to the strict
+// isInertConstMember so leaf soundness (mutable-instance exclusion, canonical
+// type pointers) stays single-sourced.
+func interpMemberInert(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return false
+	}
+	if IsInterpString(v) {
+		parts, err := AsInterpString(v)
+		if err != nil {
+			return false
+		}
+		for _, p := range parts {
+			for _, tk := range p.Expr {
+				if !interpMemberInert(tk) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if !interpMemberInert(e) {
+				return false
+			}
+		}
+		return true
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !interpMemberInert(mv) {
+				return false
+			}
+		}
+		return true
+	case ParenExprPayload:
+		for _, tk := range d.Toks {
+			if !interpMemberInert(tk) {
+				return false
+			}
+		}
+		return true
+	default:
+		return isInertConstMember(v)
+	}
 }
 
 // execBodyRefsNames reports whether a body-EXECUTING word's (sig.Callable != nil)
