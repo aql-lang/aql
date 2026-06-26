@@ -29,43 +29,24 @@ func (c *CheckState) Clone() *CheckState {
 	if c.Diagnostics != nil {
 		cp.Diagnostics = append([]CheckDiagnostic(nil), c.Diagnostics...)
 	}
-	if c.FnSummaries != nil {
-		cp.FnSummaries = make(map[string][]Value, len(c.FnSummaries))
-		for k, v := range c.FnSummaries {
-			cp.FnSummaries[k] = v
-		}
-	}
-	if c.FnInflight != nil {
-		cp.FnInflight = make(map[string]bool, len(c.FnInflight))
-		for k, v := range c.FnInflight {
-			cp.FnInflight[k] = v
-		}
-	}
-	if c.FnAnalysisCounts != nil {
-		cp.FnAnalysisCounts = make(map[string]int, len(c.FnAnalysisCounts))
-		for k, v := range c.FnAnalysisCounts {
-			cp.FnAnalysisCounts[k] = v
-		}
-	}
-	if c.DefsInstalled != nil {
-		cp.DefsInstalled = make(map[string]SrcPos, len(c.DefsInstalled))
-		for k, v := range c.DefsInstalled {
-			cp.DefsInstalled[k] = v
-		}
-	}
-	if c.DefsUsed != nil {
-		cp.DefsUsed = make(map[string]bool, len(c.DefsUsed))
-		for k, v := range c.DefsUsed {
-			cp.DefsUsed[k] = v
-		}
-	}
-	if c.ContextTypes != nil {
-		cp.ContextTypes = make(map[string]Value, len(c.ContextTypes))
-		for k, v := range c.ContextTypes {
-			cp.ContextTypes[k] = v
-		}
-	}
+	cp.FnSummaries = cloneMap(c.FnSummaries)
+	cp.FnInflight = cloneMap(c.FnInflight)
+	cp.FnAnalysisCounts = cloneMap(c.FnAnalysisCounts)
+	cp.DefsInstalled = cloneMap(c.DefsInstalled)
+	cp.DefsUsed = cloneMap(c.DefsUsed)
+	cp.ContextTypes = cloneMap(c.ContextTypes)
 	return &cp
+}
+
+func cloneMap[K comparable, V any](m map[K]V) map[K]V {
+	if m == nil {
+		return nil
+	}
+	cp := make(map[K]V, len(m))
+	for k, v := range m {
+		cp[k] = v
+	}
+	return cp
 }
 
 // IsActive reports whether check mode is currently on. Handlers consult

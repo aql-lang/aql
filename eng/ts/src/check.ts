@@ -97,6 +97,36 @@ export class CheckState {
    */
   emit: EmitState | undefined
 
+  /** Deep copy the mutable analysis state for speculative passes. */
+  clone(): CheckState {
+    const cp = new CheckState()
+    cp.mode = this.mode
+    cp.diagnostics = this.diagnostics.map((d) => ({ ...d }))
+    cp.stepCount = this.stepCount
+    cp.stepBudget = this.stepBudget
+    cp.budgetTripped = this.budgetTripped
+    cp.defsInstalled = new Map(this.defsInstalled)
+    cp.defsUsed = new Set(this.defsUsed)
+    cp.fnBodyDepth = this.fnBodyDepth
+    cp.fnInflight = new Set(this.fnInflight)
+    cp.emit = this.emit
+    return cp
+  }
+
+  /** Restore this object in place from a clone. */
+  restoreFrom(snapshot: CheckState): void {
+    this.mode = snapshot.mode
+    this.diagnostics = snapshot.diagnostics.map((d) => ({ ...d }))
+    this.stepCount = snapshot.stepCount
+    this.stepBudget = snapshot.stepBudget
+    this.budgetTripped = snapshot.budgetTripped
+    this.defsInstalled = new Map(snapshot.defsInstalled)
+    this.defsUsed = new Set(snapshot.defsUsed)
+    this.fnBodyDepth = snapshot.fnBodyDepth
+    this.fnInflight = new Set(snapshot.fnInflight)
+    this.emit = snapshot.emit
+  }
+
   /** Whether check mode is currently on. */
   isActive(): boolean {
     return this.mode
