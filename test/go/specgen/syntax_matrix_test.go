@@ -43,7 +43,16 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
-const matrixPath = "syntax-matrix.tsv"
+const (
+	matrixPath  = "syntax-matrix.tsv"
+	passingPath = "syntax-matrix-passing.tsv"
+)
+
+// minPassingRows floors the passing subset so a regression that empties
+// it (or that shrinks the interpret/check/compile intersection) can't
+// pass vacuously. Measured at 27712 over the length-4 matrix; pinned
+// below the live count as headroom.
+const minPassingRows = 27000
 
 // minCompiledRows is the floor for the compiler-parity gate: at least
 // this many non-error rows must take the bytecode-compiled path, or the
@@ -62,13 +71,16 @@ type matrixRow struct {
 	n        int    // element count (1..4), parsed from the note column
 }
 
-// readMatrix parses the generated tsv into data rows, skipping the
-// comment/blank header lines.
-func readMatrix(t *testing.T) []matrixRow {
+// readMatrix parses the full matrix file into data rows.
+func readMatrix(t *testing.T) []matrixRow { return readRows(t, matrixPath) }
+
+// readRows parses a generated tsv (full matrix or passing subset) into
+// data rows, skipping the comment/blank header lines.
+func readRows(t *testing.T, path string) []matrixRow {
 	t.Helper()
-	f, err := os.Open(matrixPath)
+	f, err := os.Open(path)
 	if err != nil {
-		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", matrixPath, err)
+		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", path, err)
 	}
 	defer f.Close()
 
@@ -85,7 +97,7 @@ func readMatrix(t *testing.T) []matrixRow {
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) < 2 {
-			t.Fatalf("%s:L%d: malformed row %q", matrixPath, n, line)
+			t.Fatalf("%s:L%d: malformed row %q", path, n, line)
 		}
 		// The note column ("N-elem …") leads with the element count; default
 		// 0 (treated as "short", always fully covered) if absent.
@@ -98,10 +110,10 @@ func readMatrix(t *testing.T) []matrixRow {
 		rows = append(rows, matrixRow{line: n, input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1]), n: elems})
 	}
 	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan %s: %v", matrixPath, err)
+		t.Fatalf("scan %s: %v", path, err)
 	}
 	if len(rows) == 0 {
-		t.Fatalf("%s has no data rows", matrixPath)
+		t.Fatalf("%s has no data rows", path)
 	}
 	return rows
 }
@@ -342,10 +354,72 @@ func checkWith(sink *failSink, a *lang.AQL, input string) (fp string) {
 	return fmt.Sprintf("errors=%d warnings=%d [%s]", res.Summary.Errors, res.Summary.Warnings, strings.Join(res.Stack, " "))
 }
 
-func renderAny(vs []any) string {
-	parts := make([]string, len(vs))
-	for i, v := range vs {
-		parts[i] = fmt.Sprint(v)
+// TestSyntaxMatrixPassing re-verifies the curated passing subset
+// (syntax-matrix-passing.tsv): every row must clear ALL THREE pipelines —
+// interpret to the recorded value, type-check with zero errors, and
+// compile to a result identical to the interpreter's. This is the
+// invariant the extractor (specgen -extract) builds the file on; the test
+// is its guard, so the file can't silently drift out of agreement with
+// the engine. None of these rows is an error row (an error row can never
+// pass interpret), and the count is floored so the subset can't collapse
+// to empty unnoticed.
+func TestSyntaxMatrixPassing(t *testing.T) {
+	rows := readRows(t, passingPath)
+	var verified int64
+	sink := &failSink{t: t, max: 50}
+	forEachRow(rows, func(r matrixRow) {
+		if strings.HasPrefix(r.expected, "ERROR:") {
+			sink.fail("L%d %q: error row present in the passing subset", r.line, r.input)
+			return
+		}
+		// 1. interpret → recorded canonical value (the frozen result).
+		out, err := run(r.input)
+		if err != nil {
+			sink.fail("L%d %q: passing row failed to interpret: %v", r.line, r.input, err)
+			return
+		}
+		if got := eng.Canon(out); got != r.expected {
+			sink.fail("L%d %q: interpreter gave %q, passing row records %q", r.line, r.input, got, r.expected)
+			return
+		}
+		// 2. check → zero error-severity diagnostics.
+		a, err := lang.New()
+		if err != nil {
+			sink.fail("lang.New: %v", err)
+			return
+		}
+		a.SetClock(specClock)
+		res, errChk := a.Check(r.input)
+		if errChk != nil {
+			sink.fail("L%d %q: passing row failed to check: %v", r.line, r.input, errChk)
+			return
+		}
+		if res.Summary.Errors != 0 {
+			sink.fail("L%d %q: passing row has %d checker error(s)", r.line, r.input, res.Summary.Errors)
+			return
+		}
+		// 3. compile → accepted AND identical to the interpreter.
+		gotC, wasCompiled, errC := a.RunCompiled(r.input)
+		if !wasCompiled {
+			sink.fail("L%d %q: passing row did not compile", r.line, r.input)
+			return
+		}
+		gotI, errI := a.Run(r.input)
+		if errC != nil || errI != nil {
+			sink.fail("L%d %q: run error compiled=%v interpreted=%v", r.line, r.input, errC, errI)
+			return
+		}
+		if renderAny(gotC) != renderAny(gotI) {
+			sink.fail("L%d %q: compiled=%q interpreted=%q", r.line, r.input, renderAny(gotC), renderAny(gotI))
+			return
+		}
+		atomic.AddInt64(&verified, 1)
+	})
+	sink.report()
+	t.Logf("passing subset: %d/%d rows verified through interpret+check+compile, %d failures",
+		verified, len(rows), sink.total())
+	if verified < minPassingRows {
+		t.Errorf("only %d passing rows verified (floor %d) — the passing subset shrank or the extractor regressed",
+			verified, minPassingRows)
 	}
-	return strings.Join(parts, " ")
 }

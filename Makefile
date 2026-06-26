@@ -44,16 +44,23 @@ install:
 
 # ---- generated syntax-combination spec ---------------------------------
 #
-# Regenerate test/go/specgen/syntax-matrix.tsv — the exhaustive matrix of
-# every AQL token sequence up to length 3 over a fixed alphabet, with the
-# canonical interpreter result (or stable error class) for each. The
-# committed file is the frozen contract its sibling syntax_matrix_test.go
-# checks the interpreter, compiler, and checker against; rerun this after
-# any deliberate change to the alphabet or to evaluation semantics, then
+# Regenerate the two committed spec files under test/go/specgen/:
+#   syntax-matrix.tsv          — the exhaustive matrix of every AQL token
+#                                sequence up to length 4 over a fixed
+#                                alphabet, with the canonical interpreter
+#                                result (or stable error class) for each.
+#   syntax-matrix-passing.tsv  — the subset of those rows that pass all
+#                                three pipelines (interpret + check +
+#                                compile), derived from the full matrix.
+#
+# They are the frozen contract their sibling syntax_matrix_test.go checks
+# the interpreter, compiler, and checker against; rerun this after any
+# deliberate change to the alphabet or to evaluation semantics, then
 # review the diff.
 
 spec-gen:
 	cd test/go && go run ./specgen -max 4 -out ./specgen/syntax-matrix.tsv
+	cd test/go && go run ./specgen -extract -in ./specgen/syntax-matrix.tsv -out ./specgen/syntax-matrix-passing.tsv
 
 # ---- per-module fan-out -------------------------------------------------
 

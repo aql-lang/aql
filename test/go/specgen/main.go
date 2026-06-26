@@ -38,14 +38,23 @@
 // same canonical rendering (eng.Canon), same frozen instant, so a row
 // this tool writes is a row the runner reproduces exactly.
 //
+// A second mode derives the PASSING SUBSET — the rows that clear all
+// three pipelines (interpret to a value, type-check clean, and compile to
+// a result identical to the interpreter) — into its own file. That is the
+// curated "golden" set a consumer can trust to run, check, and compile.
+//
 // Usage:
 //
-//	go run ./specgen [-max N] [-out path]
+//	go run ./specgen [-max N] [-out path]                     # generate the full matrix
+//	go run ./specgen -extract -in full.tsv -out passing.tsv   # derive the passing subset
 //
-//	-max  maximum sequence length to enumerate (default 4)
-//	-out  output file; empty writes to stdout (default empty)
+//	-max      maximum sequence length to enumerate (default 4)
+//	-out      output file; empty writes to stdout (default empty)
+//	-extract  extraction mode: read -in (a full matrix) and write the passing subset to -out
+//	-in       input full-matrix path (extraction mode)
 //
-// The Makefile target `spec-gen` regenerates test/go/specgen/syntax-matrix.tsv.
+// The Makefile target `spec-gen` regenerates both
+// test/go/specgen/syntax-matrix.tsv and syntax-matrix-passing.tsv.
 package main
 
 import (
@@ -53,11 +62,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/eng/go/parser"
+	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
@@ -172,7 +185,18 @@ func sequences(max int, emit func(src string, n int)) {
 func main() {
 	max := flag.Int("max", 4, "maximum sequence length to enumerate")
 	out := flag.String("out", "", "output .tsv path; empty writes to stdout")
+	extract := flag.Bool("extract", false, "extraction mode: read -in and write the passing subset to -out")
+	in := flag.String("in", "", "input full-matrix .tsv path (extraction mode)")
 	flag.Parse()
+
+	if *extract {
+		if *in == "" || *out == "" {
+			fmt.Fprintln(os.Stderr, "specgen -extract requires both -in and -out")
+			os.Exit(2)
+		}
+		extractPassing(*in, *out)
+		return
+	}
 
 	w := bufio.NewWriter(os.Stdout)
 	if *out != "" {
@@ -236,5 +260,161 @@ func writeHeader(w *bufio.Writer, max int) {
 	fmt.Fprintf(w, "# it accepts, and the type checker is deterministic — all without drift.\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# Alphabet (%d atoms): %s\n", len(alphabet), strings.Join(alphabet, " "))
+	fmt.Fprintf(w, "#\n")
+}
+
+// dataRow is one parsed data row of a generated matrix file.
+type dataRow struct {
+	input    string
+	expected string
+}
+
+// readDataRows parses the data rows (input, expected) of a generated
+// matrix .tsv, skipping comment and blank lines.
+func readDataRows(path string) ([]dataRow, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var rows []dataRow
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), " \t")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("malformed row %q in %s", line, path)
+		}
+		rows = append(rows, dataRow{input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1])})
+	}
+	return rows, sc.Err()
+}
+
+// extractPassing reads the full matrix at inPath and writes, to outPath,
+// only the rows that pass interpret + check + compile — the curated
+// "golden" subset every downstream consumer can trust to run, type-check
+// clean, and compile to an identical result. Work is fanned across
+// NumCPU workers (each with its own reused checker/compiler instances);
+// output preserves the input order, so the file is deterministic.
+func extractPassing(inPath, outPath string) {
+	rows, err := readDataRows(inPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -extract: %v\n", err)
+		os.Exit(1)
+	}
+
+	pass := make([]bool, len(rows))
+	var next int64 = -1
+	var checked, kept int64
+
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ai, err1 := lang.New()
+			ac, err2 := lang.New()
+			if err1 != nil || err2 != nil {
+				fmt.Fprintf(os.Stderr, "specgen -extract: lang.New: %v %v\n", err1, err2)
+				os.Exit(1)
+			}
+			ai.SetClock(specClock)
+			ac.SetClock(specClock)
+			for {
+				idx := int(atomic.AddInt64(&next, 1))
+				if idx >= len(rows) {
+					return
+				}
+				r := rows[idx]
+				if strings.HasPrefix(r.expected, "ERROR:") {
+					continue // error rows are never "passing"
+				}
+				atomic.AddInt64(&checked, 1)
+
+				// 1. interpret → a value (no runtime error)
+				gotI, errI := ai.Run(r.input)
+				if errI != nil {
+					continue
+				}
+				// 2. check → zero error-severity diagnostics
+				res, errChk := ai.Check(r.input)
+				if errChk != nil || res.Summary.Errors != 0 {
+					continue
+				}
+				// 3. compile → accepted AND result matches the interpreter
+				gotC, wasCompiled, errC := ac.RunCompiled(r.input)
+				if !wasCompiled || errC != nil {
+					continue
+				}
+				if renderAny(gotC) != renderAny(gotI) {
+					continue
+				}
+				pass[idx] = true
+				atomic.AddInt64(&kept, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	f, err := os.Create(outPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -extract: create %s: %v\n", outPath, err)
+		os.Exit(1)
+	}
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	defer w.Flush()
+
+	writePassingHeader(w, len(rows), int(kept))
+	for i, r := range rows {
+		if pass[i] {
+			fmt.Fprintf(w, "%s\t%s\tinterpret+check+compile\n", r.input, r.expected)
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "specgen -extract: %d/%d non-error rows pass interpret+check+compile (%d total rows scanned)\n",
+		kept, checked, len(rows))
+}
+
+// renderAny renders a compiled/interpreted result stack ([]any) to a
+// stable string for the compiler-parity comparison. Shared with
+// syntax_matrix_test.go's gates.
+func renderAny(vs []any) string {
+	parts := make([]string, len(vs))
+	for i, v := range vs {
+		parts[i] = fmt.Sprint(v)
+	}
+	return strings.Join(parts, " ")
+}
+
+// writePassingHeader emits the leading comment block of the passing
+// subset file.
+func writePassingHeader(w *bufio.Writer, scanned, kept int) {
+	fmt.Fprintf(w, "# AQL Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)\n")
+	fmt.Fprintf(w, "# Format: input<TAB>expected<TAB>note\n")
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate from the full matrix with:\n")
+	fmt.Fprintf(w, "#   cd test/go && go run ./specgen -extract -in ./specgen/syntax-matrix.tsv -out ./specgen/syntax-matrix-passing.tsv\n")
+	fmt.Fprintf(w, "# (or `make spec-gen`, which regenerates both files).\n")
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# The subset of syntax-matrix.tsv rows that clear ALL THREE pipelines:\n")
+	fmt.Fprintf(w, "#   1. interpret — the program runs and leaves a value (no runtime error);\n")
+	fmt.Fprintf(w, "#   2. check     — the type checker reports zero error-severity diagnostics;\n")
+	fmt.Fprintf(w, "#   3. compile   — the bytecode compiler accepts it AND its result is\n")
+	fmt.Fprintf(w, "#                  identical to the interpreter's.\n")
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# `expected` is the canonical eng.Canon value carried over verbatim from\n")
+	fmt.Fprintf(w, "# the full matrix. Every row here is a trusted, three-way-agreed program;\n")
+	fmt.Fprintf(w, "# syntax_matrix_test.go re-verifies the invariant on each one.\n")
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# %d of the full matrix's rows pass (%d scanned).\n", kept, scanned)
 	fmt.Fprintf(w, "#\n")
 }
