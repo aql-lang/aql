@@ -336,7 +336,25 @@ Steps 0–3 (the sound, low-risk wins) landed, gate-clean
   recursion. The fn-scope frame-local hazard the verdict warned about is guarded
   by keeping `isInertConst` strict + gating the admission on `len(es.units)==1`.
 
-**Remaining** (the harder, higher-risk work — §4 steps 4–9): leaf-1 part 1
-over-capture refinement, leaf-3 fragment-level value-def promotion, leaf-2 BLOOM
-list-element gate, then **Stage D** (leaf 4 + leaf 5 part 2 — difficulty 5, where
-the bulk of the 26 remaining files flip), and leaf-1 part 2 / Stage G comparator.
+- **Leaf 3** — fragment-level value-def promotion (`8635e255`). Deeper than
+  rated: the promotion decision had to flatten unit + inline-fragment events, and
+  three branch/loop-modeling constraints each caught by an existing test the
+  first cut regressed — exclude the fragment RESULT event (arm-result + tail
+  call), gate fragRef on !fragInternal (tail-call ARG), recurse only into
+  single-result fragments (residualN<=1, the variadic arm). bloom-count compiles;
+  flips 0 alone.
+- **Stage D, 1/4** — poly-recover get/getr over a union (Disjunct) receiver
+  (`d8eb3d39`). Widened the no-signature recovery discriminator (anyDisjunctCarrier)
+  so a union receiver records OpCallNativePoly (runtime re-match) like the Any
+  case; concrete non-container receivers still refuse. tst_unit advances past
+  `get`; flips 0 yet (the trie files hit the suspend hazard).
+
+**Remaining** (each a focused effort like the above): **Stage D 2/4** nested-get
+under a SUSPENDED re-dispatch (a control-flow rework — es.active() short-circuits
+the recovery; the trie find-kid `(nd "kids" get) get (ch)` latch); **Stage D 3/4**
+set/push fn-body list-literal provenance (the autoEvalList e.isTop gate, with the
+`[y y]`-over-def-local miscompile hazard); **Stage D 4/4** raise over a dynamic
+operand (divergence-aware branch modeling, CompileDiverges); then leaf-1 part 1
+over-capture, leaf-2 BLOOM list-element gate, and leaf-1 part 2 / Stage G
+comparator. Stage D is where the bulk of the 26 remaining files flip, as the
+masking chains collapse.
