@@ -1752,6 +1752,26 @@ func anyAnyCarrier(vs []Value) bool {
 	return false
 }
 
+// anyDisjunctCarrier reports whether any value is a UNION (Disjunct) carrier — a
+// receiver whose static type is a union of alternatives (`Map | Any` from an
+// if-branch join, the trie/tst node-vs-none shape). Like an Any carrier it
+// conforms to no single concrete overload, so matchSignature cannot commit and
+// the dispatch reaches the no-signature recovery — but at run time it holds ONE
+// concrete alternative, and the SAME first-match the interpreter takes
+// dispatches it. So a poly-safe word (get/getr) over a union receiver records a
+// runtime-re-matching OpCallNativePoly instead of refusing; a runtime member
+// that matches no overload routes to the sound OpFallback island. (A bare
+// disjunct carrier carries no DisjunctInfo payload, so IsDisjunct is false here —
+// the carrier's Parent IS the union type, which is what we test.)
+func anyDisjunctCarrier(vs []Value) bool {
+	for _, v := range vs {
+		if v.Carrier && v.Parent != nil && v.Parent.ConformsTo(TDisjunct) {
+			return true
+		}
+	}
+	return false
+}
+
 // ReturnsIdentity is a ReturnsFunc helper that returns its inputs
 // unchanged (as carriers). Use for stack operations that preserve
 // their inputs — dup, swap, over, rot, etc. — where the output types

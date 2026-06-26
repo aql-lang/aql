@@ -5,61 +5,41 @@ import (
 	"testing"
 )
 
-// TestUnmaskNoSigRefusalReason pins Leaf-5 Part 1: on the COMPILE pass an
-// unmatched dispatch over a dynamic / Disjunct receiver must surface its
-// SPECIFIC refusal reason ("unmatched dispatch recovered at <w>"), not be masked
-// as the generic "check diagnostics".
-//
-// checkModeAssumeSig used to MarkUncompilable AND emit an error-severity
-// no_signature diagnostic. The MarkUncompilable already refuses (Finalize
-// surfaces its reason), so the diagnostic was redundant on the compile pass and
-// spurious: it tripped CompileCheck's diagnostic gate (aql.go:297) so the
-// program refused as "check diagnostics", masking the real reason — while a
-// plain `aql check` of the SAME program reports zero errors (the fn body is
-// analysed once at its def site, not re-entered per call). The fix gates the
-// diagnostic on Emit==nil (plain check), NOT es.active(): the get latch happens
-// inside a SUSPENDED carrier re-dispatch where es.active() is false yet the
-// program is still being compiled.
-//
-// Step 1 flips no files — it only makes the refusal reason honest — so the
-// programs below MUST still refuse (prog==nil).
-func TestUnmaskNoSigRefusalReason(t *testing.T) {
-	cases := []struct{ name, src, wantWord string }{
-		{
-			// get over a Disjunct(Map|...) receiver bound by an if-union: the
-			// minimized tst_unit shape. The inner get latches under a suspended
-			// re-dispatch, the case the Emit==nil (not es.active()) gate fixes.
-			"get over disjunct receiver",
-			`def pluck fn [[nd:Any] [Any] [(nd "ch" get)]] ` +
-				`def insert fn [[x:Any] [Any] [ def nd (if (x eq none) [{ch:1}] [x]) (nd pluck) ]] ` +
-				`(none insert)`,
-			"get",
-		},
+// TestUnmaskNoSigCheckVsCompile pins the resolution of the check-vs-compile wart
+// Leaf-5 Part 1 targeted: a get over a union (Disjunct) receiver bound by an
+// if-branch (the tst_unit shape) is CLEAN under a plain `aql check` (the fn body
+// is analysed once at its def site, not re-entered per call). It used to refuse
+// force-compile as the GENERIC "check diagnostics" — a checkModeAssumeSig
+// no_signature ERROR diagnostic, spuriously added on the compile pass, tripped
+// CompileCheck's diagnostic gate (aql.go:297) and masked the real reason. Two
+// fixes converge here: Part 1 gates that diagnostic on !Check.Compiling so it is
+// never spuriously added on the compile pass, and the Stage-D poly widening
+// makes this shape COMPILE outright. So now: plain check clean AND it compiles
+// AND the reason is never the masked "check diagnostics". (A still-refusing
+// dynamic dispatch — the decision_smoke `raise`, the trie find-kid suspended
+// `get` — surfaces its specific "unmatched dispatch recovered at <w>" reason in
+// the voxgig force-compile sweep; the plain-check half is pinned by
+// TestNoSigStillReportedInPlainCheck below.)
+func TestUnmaskNoSigCheckVsCompile(t *testing.T) {
+	const src = `def pluck fn [[nd:Any] [Any] [(nd "ch" get)]] ` +
+		`def insert fn [[x:Any] [Any] [ def nd (if (x eq none) [{ch:1}] [x]) (nd pluck) ]] ` +
+		`(none insert)`
+	// Plain check is clean — no error diagnostics.
+	a, _ := New()
+	cr, _ := a.Check(src)
+	for _, d := range cr.Diagnostics {
+		if d.Severity == SeverityError {
+			t.Errorf("plain check should be clean, got error: %s %s", d.Code, d.Detail)
+		}
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			a, _ := New()
-			prog, reason, _, _ := a.CompileCheck(c.src)
-			if prog != nil {
-				t.Fatalf("expected refusal (Step 1 flips no files), but it compiled")
-			}
-			if strings.Contains(reason, "check diagnostics") {
-				t.Errorf("reason still masked as %q — want the specific %q",
-					reason, "unmatched dispatch recovered at "+c.wantWord)
-			}
-			if want := "unmatched dispatch recovered at " + c.wantWord; !strings.Contains(reason, want) {
-				t.Errorf("reason = %q, want it to contain %q", reason, want)
-			}
-			// The SAME program is clean under a plain `aql check` — that
-			// check-vs-compile divergence is exactly the wart being removed.
-			b, _ := New()
-			cr, _ := b.Check(c.src)
-			for _, d := range cr.Diagnostics {
-				if d.Severity == SeverityError {
-					t.Errorf("plain check should be clean, got error: %s %s", d.Code, d.Detail)
-				}
-			}
-		})
+	// CompileCheck no longer masks as "check diagnostics" — it now compiles.
+	b, _ := New()
+	prog, reason, _, _ := b.CompileCheck(src)
+	if strings.Contains(reason, "check diagnostics") {
+		t.Errorf("compile reason masked as %q (the wart Part 1 removes)", reason)
+	}
+	if prog == nil {
+		t.Errorf("expected compile (Stage-D get-over-union widening), refused: %q", reason)
 	}
 }
 

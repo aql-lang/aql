@@ -6617,7 +6617,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// call, never a duplicate CALL_NATIVE for the same dispatch. Concrete (non-
 	// Any) operands that reach here are a genuine type error and still refuse.
 	es := e.registry.Check.Emit
-	if es.active() && anyAnyCarrier(args) {
+	if es.active() && (anyAnyCarrier(args) || anyDisjunctCarrier(args)) {
 		resume := es.Suspend()
 		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 		resume()
