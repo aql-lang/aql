@@ -1,21 +1,21 @@
 # AQL Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)
 # Format: input<TAB>expected<TAB>note
 #
-# DO NOT EDIT BY HAND. Regenerate from the full matrix with:
-#   cd test/go && go run ./specgen -extract -in ./specgen/syntax-matrix.tsv -out ./specgen/syntax-matrix-passing.tsv
-# (or `make spec-gen`, which regenerates both files).
+# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extract mode).
 #
-# The subset of syntax-matrix.tsv rows that clear ALL THREE pipelines:
+# The subset of the combinations that clear ALL THREE pipelines:
 #   1. interpret — the program runs and leaves a value (no runtime error);
 #   2. check     — the type checker reports zero error-severity diagnostics;
 #   3. compile   — the bytecode compiler accepts it AND its result is
 #                  identical to the interpreter's.
 #
+# Scope: combinations of length 1..4 only.
+#
 # `expected` is the canonical eng.Canon value carried over verbatim from
 # the full matrix. Every row here is a trusted, three-way-agreed program;
 # syntax_matrix_test.go re-verifies the invariant on each one.
 #
-# 27712 of the full matrix's rows pass (137560 scanned).
+# 27712 combinations pass (137560 in the length window).
 #
 0	0	interpret+check+compile
 1	1	interpret+check+compile

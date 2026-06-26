@@ -1,19 +1,15 @@
 # AQL Language Specification: Minimal Failing Prefixes — TYPE-CHECK FAILURES (GENERATED)
 # Format: prefix<TAB>note (note = `check-fail: <detail>` + the full-matrix result)
 #
-# DO NOT EDIT BY HAND. Regenerate from the matrix + passing subset with:
-#   cd test/go && go run ./specgen -frontier -in ./specgen/syntax-matrix.tsv \
-#     -passing ./specgen/syntax-matrix-passing.tsv \
-#     -check-out ./specgen/syntax-matrix-fail-check.tsv \
-#     -compile-out ./specgen/syntax-matrix-fail-compile.tsv \
-#     -runtime-out ./specgen/syntax-matrix-fail-runtime.tsv
-# (or `make spec-gen`, which regenerates every derived file).
+# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).
 #
 # A MINIMAL FAILING PREFIX is a sequence that fails while its immediate
 # prefix passes — the exact atom at which a passing program first breaks.
-# Every non-passing matrix row truncates to one of these (the trailing
-# atoms after the break are discarded), so this is the deduped catalogue
-# of distinct failure points.
+# Every non-passing combination truncates to one of these (the trailing
+# atoms after the break are discarded) and DUPLICATES ARE REMOVED, so this
+# is the deduped catalogue of distinct failure points.
+#
+# Scope: prefixes drawn from combinations of length 1..4.
 #
 # These prefixes FAIL THE TYPE CHECKER: `aql check` reports at least one
 # error-severity diagnostic. Because the compiler runs the checker first

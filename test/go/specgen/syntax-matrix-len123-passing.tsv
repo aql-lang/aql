@@ -1,0 +1,2011 @@
+# AQL Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)
+# Format: input<TAB>expected<TAB>note
+#
+# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extract mode).
+#
+# The subset of the combinations that clear ALL THREE pipelines:
+#   1. interpret — the program runs and leaves a value (no runtime error);
+#   2. check     — the type checker reports zero error-severity diagnostics;
+#   3. compile   — the bytecode compiler accepts it AND its result is
+#                  identical to the interpreter's.
+#
+# Scope: combinations of length 1..3 only.
+#
+# `expected` is the canonical eng.Canon value carried over verbatim from
+# the full matrix. Every row here is a trusted, three-way-agreed program;
+# syntax_matrix_test.go re-verifies the invariant on each one.
+#
+# 1992 combinations pass (7239 in the length window).
+#
+0	0	interpret+check+compile
+1	1	interpret+check+compile
+2.5	2.5	interpret+check+compile
+'x'	'x'	interpret+check+compile
+true	true	interpret+check+compile
+false	false	interpret+check+compile
+none	none	interpret+check+compile
+[1 2]	[1 2]	interpret+check+compile
+0 0	0 0	interpret+check+compile
+0 1	0 1	interpret+check+compile
+0 2.5	0 2.5	interpret+check+compile
+0 'x'	0 'x'	interpret+check+compile
+0 true	0 true	interpret+check+compile
+0 false	0 false	interpret+check+compile
+0 none	0 none	interpret+check+compile
+0 [1 2]	0 [1 2]	interpret+check+compile
+0 dup	0 0	interpret+check+compile
+0 drop		interpret+check+compile
+0 not	true	interpret+check+compile
+0 size	0	interpret+check+compile
+1 0	1 0	interpret+check+compile
+1 1	1 1	interpret+check+compile
+1 2.5	1 2.5	interpret+check+compile
+1 'x'	1 'x'	interpret+check+compile
+1 true	1 true	interpret+check+compile
+1 false	1 false	interpret+check+compile
+1 none	1 none	interpret+check+compile
+1 [1 2]	1 [1 2]	interpret+check+compile
+1 dup	1 1	interpret+check+compile
+1 drop		interpret+check+compile
+1 not	false	interpret+check+compile
+1 size	1	interpret+check+compile
+2.5 0	2.5 0	interpret+check+compile
+2.5 1	2.5 1	interpret+check+compile
+2.5 2.5	2.5 2.5	interpret+check+compile
+2.5 'x'	2.5 'x'	interpret+check+compile
+2.5 true	2.5 true	interpret+check+compile
+2.5 false	2.5 false	interpret+check+compile
+2.5 none	2.5 none	interpret+check+compile
+2.5 [1 2]	2.5 [1 2]	interpret+check+compile
+2.5 dup	2.5 2.5	interpret+check+compile
+2.5 drop		interpret+check+compile
+2.5 not	false	interpret+check+compile
+2.5 size	2	interpret+check+compile
+'x' 0	'x' 0	interpret+check+compile
+'x' 1	'x' 1	interpret+check+compile
+'x' 2.5	'x' 2.5	interpret+check+compile
+'x' 'x'	'x' 'x'	interpret+check+compile
+'x' true	'x' true	interpret+check+compile
+'x' false	'x' false	interpret+check+compile
+'x' none	'x' none	interpret+check+compile
+'x' [1 2]	'x' [1 2]	interpret+check+compile
+'x' dup	'x' 'x'	interpret+check+compile
+'x' drop		interpret+check+compile
+'x' not	false	interpret+check+compile
+'x' size	1	interpret+check+compile
+true 0	true 0	interpret+check+compile
+true 1	true 1	interpret+check+compile
+true 2.5	true 2.5	interpret+check+compile
+true 'x'	true 'x'	interpret+check+compile
+true true	true true	interpret+check+compile
+true false	true false	interpret+check+compile
+true none	true none	interpret+check+compile
+true [1 2]	true [1 2]	interpret+check+compile
+true dup	true true	interpret+check+compile
+true drop		interpret+check+compile
+true not	false	interpret+check+compile
+true size	1	interpret+check+compile
+false 0	false 0	interpret+check+compile
+false 1	false 1	interpret+check+compile
+false 2.5	false 2.5	interpret+check+compile
+false 'x'	false 'x'	interpret+check+compile
+false true	false true	interpret+check+compile
+false false	false false	interpret+check+compile
+false none	false none	interpret+check+compile
+false [1 2]	false [1 2]	interpret+check+compile
+false dup	false false	interpret+check+compile
+false drop		interpret+check+compile
+false not	true	interpret+check+compile
+false size	0	interpret+check+compile
+none 0	none 0	interpret+check+compile
+none 1	none 1	interpret+check+compile
+none 2.5	none 2.5	interpret+check+compile
+none 'x'	none 'x'	interpret+check+compile
+none true	none true	interpret+check+compile
+none false	none false	interpret+check+compile
+none none	none none	interpret+check+compile
+none [1 2]	none [1 2]	interpret+check+compile
+none dup	none none	interpret+check+compile
+none drop		interpret+check+compile
+none not	true	interpret+check+compile
+none size	0	interpret+check+compile
+[1 2] 0	[1 2] 0	interpret+check+compile
+[1 2] 1	[1 2] 1	interpret+check+compile
+[1 2] 2.5	[1 2] 2.5	interpret+check+compile
+[1 2] 'x'	[1 2] 'x'	interpret+check+compile
+[1 2] true	[1 2] true	interpret+check+compile
+[1 2] false	[1 2] false	interpret+check+compile
+[1 2] none	[1 2] none	interpret+check+compile
+[1 2] [1 2]	[1 2] [1 2]	interpret+check+compile
+[1 2] dup	[1 2] [1 2]	interpret+check+compile
+[1 2] drop		interpret+check+compile
+[1 2] not	false	interpret+check+compile
+[1 2] size	2	interpret+check+compile
+not 0	true	interpret+check+compile
+not 1	false	interpret+check+compile
+not 2.5	false	interpret+check+compile
+not 'x'	false	interpret+check+compile
+not true	false	interpret+check+compile
+not false	true	interpret+check+compile
+not none	true	interpret+check+compile
+not [1 2]	false	interpret+check+compile
+size 0	0	interpret+check+compile
+size 1	1	interpret+check+compile
+size 2.5	2	interpret+check+compile
+size 'x'	1	interpret+check+compile
+size true	1	interpret+check+compile
+size false	0	interpret+check+compile
+size none	0	interpret+check+compile
+size [1 2]	2	interpret+check+compile
+0 0 0	0 0 0	interpret+check+compile
+0 0 1	0 0 1	interpret+check+compile
+0 0 2.5	0 0 2.5	interpret+check+compile
+0 0 'x'	0 0 'x'	interpret+check+compile
+0 0 true	0 0 true	interpret+check+compile
+0 0 false	0 0 false	interpret+check+compile
+0 0 none	0 0 none	interpret+check+compile
+0 0 [1 2]	0 0 [1 2]	interpret+check+compile
+0 0 drop	0	interpret+check+compile
+0 0 not	0 true	interpret+check+compile
+0 0 size	0 0	interpret+check+compile
+0 0 add	0	interpret+check+compile
+0 0 sub	0	interpret+check+compile
+0 0 mul	0	interpret+check+compile
+0 0 eq	true	interpret+check+compile
+0 0 lt	false	interpret+check+compile
+0 0 and	0	interpret+check+compile
+0 0 swap	0 0	interpret+check+compile
+0 1 0	0 1 0	interpret+check+compile
+0 1 1	0 1 1	interpret+check+compile
+0 1 2.5	0 1 2.5	interpret+check+compile
+0 1 'x'	0 1 'x'	interpret+check+compile
+0 1 true	0 1 true	interpret+check+compile
+0 1 false	0 1 false	interpret+check+compile
+0 1 none	0 1 none	interpret+check+compile
+0 1 [1 2]	0 1 [1 2]	interpret+check+compile
+0 1 drop	0	interpret+check+compile
+0 1 not	0 false	interpret+check+compile
+0 1 size	0 1	interpret+check+compile
+0 1 add	1	interpret+check+compile
+0 1 sub	-1	interpret+check+compile
+0 1 mul	0	interpret+check+compile
+0 1 eq	false	interpret+check+compile
+0 1 lt	true	interpret+check+compile
+0 1 and	0	interpret+check+compile
+0 1 swap	1 0	interpret+check+compile
+0 2.5 0	0 2.5 0	interpret+check+compile
+0 2.5 1	0 2.5 1	interpret+check+compile
+0 2.5 2.5	0 2.5 2.5	interpret+check+compile
+0 2.5 'x'	0 2.5 'x'	interpret+check+compile
+0 2.5 true	0 2.5 true	interpret+check+compile
+0 2.5 false	0 2.5 false	interpret+check+compile
+0 2.5 none	0 2.5 none	interpret+check+compile
+0 2.5 [1 2]	0 2.5 [1 2]	interpret+check+compile
+0 2.5 drop	0	interpret+check+compile
+0 2.5 not	0 false	interpret+check+compile
+0 2.5 size	0 2	interpret+check+compile
+0 2.5 add	2.5	interpret+check+compile
+0 2.5 sub	-2.5	interpret+check+compile
+0 2.5 mul	0.0	interpret+check+compile
+0 2.5 eq	false	interpret+check+compile
+0 2.5 lt	true	interpret+check+compile
+0 2.5 and	0	interpret+check+compile
+0 2.5 swap	2.5 0	interpret+check+compile
+0 'x' 0	0 'x' 0	interpret+check+compile
+0 'x' 1	0 'x' 1	interpret+check+compile
+0 'x' 2.5	0 'x' 2.5	interpret+check+compile
+0 'x' 'x'	0 'x' 'x'	interpret+check+compile
+0 'x' true	0 'x' true	interpret+check+compile
+0 'x' false	0 'x' false	interpret+check+compile
+0 'x' none	0 'x' none	interpret+check+compile
+0 'x' [1 2]	0 'x' [1 2]	interpret+check+compile
+0 'x' drop	0	interpret+check+compile
+0 'x' not	0 false	interpret+check+compile
+0 'x' size	0 1	interpret+check+compile
+0 'x' add	'0x'	interpret+check+compile
+0 'x' eq	false	interpret+check+compile
+0 'x' and	0	interpret+check+compile
+0 'x' swap	'x' 0	interpret+check+compile
+0 true 0	0 true 0	interpret+check+compile
+0 true 1	0 true 1	interpret+check+compile
+0 true 2.5	0 true 2.5	interpret+check+compile
+0 true 'x'	0 true 'x'	interpret+check+compile
+0 true true	0 true true	interpret+check+compile
+0 true false	0 true false	interpret+check+compile
+0 true none	0 true none	interpret+check+compile
+0 true [1 2]	0 true [1 2]	interpret+check+compile
+0 true drop	0	interpret+check+compile
+0 true not	0 false	interpret+check+compile
+0 true size	0 1	interpret+check+compile
+0 true eq	false	interpret+check+compile
+0 true and	0	interpret+check+compile
+0 true swap	true 0	interpret+check+compile
+0 false 0	0 false 0	interpret+check+compile
+0 false 1	0 false 1	interpret+check+compile
+0 false 2.5	0 false 2.5	interpret+check+compile
+0 false 'x'	0 false 'x'	interpret+check+compile
+0 false true	0 false true	interpret+check+compile
+0 false false	0 false false	interpret+check+compile
+0 false none	0 false none	interpret+check+compile
+0 false [1 2]	0 false [1 2]	interpret+check+compile
+0 false drop	0	interpret+check+compile
+0 false not	0 true	interpret+check+compile
+0 false size	0 0	interpret+check+compile
+0 false eq	false	interpret+check+compile
+0 false and	0	interpret+check+compile
+0 false swap	false 0	interpret+check+compile
+0 none 0	0 none 0	interpret+check+compile
+0 none 1	0 none 1	interpret+check+compile
+0 none 2.5	0 none 2.5	interpret+check+compile
+0 none 'x'	0 none 'x'	interpret+check+compile
+0 none true	0 none true	interpret+check+compile
+0 none false	0 none false	interpret+check+compile
+0 none none	0 none none	interpret+check+compile
+0 none [1 2]	0 none [1 2]	interpret+check+compile
+0 none drop	0	interpret+check+compile
+0 none not	0 true	interpret+check+compile
+0 none size	0 0	interpret+check+compile
+0 none eq	false	interpret+check+compile
+0 none and	0	interpret+check+compile
+0 none swap	none 0	interpret+check+compile
+0 [1 2] 0	0 [1 2] 0	interpret+check+compile
+0 [1 2] 1	0 [1 2] 1	interpret+check+compile
+0 [1 2] 2.5	0 [1 2] 2.5	interpret+check+compile
+0 [1 2] 'x'	0 [1 2] 'x'	interpret+check+compile
+0 [1 2] true	0 [1 2] true	interpret+check+compile
+0 [1 2] false	0 [1 2] false	interpret+check+compile
+0 [1 2] none	0 [1 2] none	interpret+check+compile
+0 [1 2] [1 2]	0 [1 2] [1 2]	interpret+check+compile
+0 [1 2] drop	0	interpret+check+compile
+0 [1 2] not	0 false	interpret+check+compile
+0 [1 2] size	0 2	interpret+check+compile
+0 [1 2] eq	false	interpret+check+compile
+0 [1 2] and	0	interpret+check+compile
+0 [1 2] swap	[1 2] 0	interpret+check+compile
+0 dup 0	0 0 0	interpret+check+compile
+0 dup 1	0 0 1	interpret+check+compile
+0 dup 2.5	0 0 2.5	interpret+check+compile
+0 dup 'x'	0 0 'x'	interpret+check+compile
+0 dup true	0 0 true	interpret+check+compile
+0 dup false	0 0 false	interpret+check+compile
+0 dup none	0 0 none	interpret+check+compile
+0 dup [1 2]	0 0 [1 2]	interpret+check+compile
+0 dup dup	0 0 0	interpret+check+compile
+0 dup drop	0	interpret+check+compile
+0 dup not	0 true	interpret+check+compile
+0 dup size	0 0	interpret+check+compile
+0 dup add	0	interpret+check+compile
+0 dup sub	0	interpret+check+compile
+0 dup mul	0	interpret+check+compile
+0 dup eq	true	interpret+check+compile
+0 dup lt	false	interpret+check+compile
+0 dup and	0	interpret+check+compile
+0 dup swap	0 0	interpret+check+compile
+0 drop 0	0	interpret+check+compile
+0 drop 1	1	interpret+check+compile
+0 drop 2.5	2.5	interpret+check+compile
+0 drop 'x'	'x'	interpret+check+compile
+0 drop true	true	interpret+check+compile
+0 drop false	false	interpret+check+compile
+0 drop none	none	interpret+check+compile
+0 drop [1 2]	[1 2]	interpret+check+compile
+0 not 0	0 true	interpret+check+compile
+0 not 1	0 false	interpret+check+compile
+0 not 2.5	0 false	interpret+check+compile
+0 not 'x'	0 false	interpret+check+compile
+0 not true	0 false	interpret+check+compile
+0 not false	0 true	interpret+check+compile
+0 not none	0 true	interpret+check+compile
+0 not [1 2]	0 false	interpret+check+compile
+0 size 0	0 0	interpret+check+compile
+0 size 1	0 1	interpret+check+compile
+0 size 2.5	0 2	interpret+check+compile
+0 size 'x'	0 1	interpret+check+compile
+0 size true	0 1	interpret+check+compile
+0 size false	0 0	interpret+check+compile
+0 size none	0 0	interpret+check+compile
+0 size [1 2]	0 2	interpret+check+compile
+0 add 0	0	interpret+check+compile
+0 add 1	1	interpret+check+compile
+0 add 2.5	2.5	interpret+check+compile
+0 add 'x'	'0x'	interpret+check+compile
+0 sub 0	0	interpret+check+compile
+0 sub 1	-1	interpret+check+compile
+0 sub 2.5	-2.5	interpret+check+compile
+0 mul 0	0	interpret+check+compile
+0 mul 1	0	interpret+check+compile
+0 mul 2.5	0.0	interpret+check+compile
+0 eq 0	true	interpret+check+compile
+0 eq 1	false	interpret+check+compile
+0 eq 2.5	false	interpret+check+compile
+0 eq 'x'	false	interpret+check+compile
+0 eq true	false	interpret+check+compile
+0 eq false	false	interpret+check+compile
+0 eq none	false	interpret+check+compile
+0 eq [1 2]	false	interpret+check+compile
+0 lt 0	false	interpret+check+compile
+0 lt 1	true	interpret+check+compile
+0 lt 2.5	true	interpret+check+compile
+0 and 0	0	interpret+check+compile
+0 and 1	0	interpret+check+compile
+0 and 2.5	0	interpret+check+compile
+0 and 'x'	0	interpret+check+compile
+0 and true	0	interpret+check+compile
+0 and false	0	interpret+check+compile
+0 and none	0	interpret+check+compile
+0 and [1 2]	0	interpret+check+compile
+1 0 0	1 0 0	interpret+check+compile
+1 0 1	1 0 1	interpret+check+compile
+1 0 2.5	1 0 2.5	interpret+check+compile
+1 0 'x'	1 0 'x'	interpret+check+compile
+1 0 true	1 0 true	interpret+check+compile
+1 0 false	1 0 false	interpret+check+compile
+1 0 none	1 0 none	interpret+check+compile
+1 0 [1 2]	1 0 [1 2]	interpret+check+compile
+1 0 drop	1	interpret+check+compile
+1 0 not	1 true	interpret+check+compile
+1 0 size	1 0	interpret+check+compile
+1 0 add	1	interpret+check+compile
+1 0 sub	1	interpret+check+compile
+1 0 mul	0	interpret+check+compile
+1 0 eq	false	interpret+check+compile
+1 0 lt	false	interpret+check+compile
+1 0 and	0	interpret+check+compile
+1 0 swap	0 1	interpret+check+compile
+1 1 0	1 1 0	interpret+check+compile
+1 1 1	1 1 1	interpret+check+compile
+1 1 2.5	1 1 2.5	interpret+check+compile
+1 1 'x'	1 1 'x'	interpret+check+compile
+1 1 true	1 1 true	interpret+check+compile
+1 1 false	1 1 false	interpret+check+compile
+1 1 none	1 1 none	interpret+check+compile
+1 1 [1 2]	1 1 [1 2]	interpret+check+compile
+1 1 drop	1	interpret+check+compile
+1 1 not	1 false	interpret+check+compile
+1 1 size	1 1	interpret+check+compile
+1 1 add	2	interpret+check+compile
+1 1 sub	0	interpret+check+compile
+1 1 mul	1	interpret+check+compile
+1 1 eq	true	interpret+check+compile
+1 1 lt	false	interpret+check+compile
+1 1 and	1	interpret+check+compile
+1 1 swap	1 1	interpret+check+compile
+1 2.5 0	1 2.5 0	interpret+check+compile
+1 2.5 1	1 2.5 1	interpret+check+compile
+1 2.5 2.5	1 2.5 2.5	interpret+check+compile
+1 2.5 'x'	1 2.5 'x'	interpret+check+compile
+1 2.5 true	1 2.5 true	interpret+check+compile
+1 2.5 false	1 2.5 false	interpret+check+compile
+1 2.5 none	1 2.5 none	interpret+check+compile
+1 2.5 [1 2]	1 2.5 [1 2]	interpret+check+compile
+1 2.5 drop	1	interpret+check+compile
+1 2.5 not	1 false	interpret+check+compile
+1 2.5 size	1 2	interpret+check+compile
+1 2.5 add	3.5	interpret+check+compile
+1 2.5 sub	-1.5	interpret+check+compile
+1 2.5 mul	2.5	interpret+check+compile
+1 2.5 eq	false	interpret+check+compile
+1 2.5 lt	true	interpret+check+compile
+1 2.5 and	2.5	interpret+check+compile
+1 2.5 swap	2.5 1	interpret+check+compile
+1 'x' 0	1 'x' 0	interpret+check+compile
+1 'x' 1	1 'x' 1	interpret+check+compile
+1 'x' 2.5	1 'x' 2.5	interpret+check+compile
+1 'x' 'x'	1 'x' 'x'	interpret+check+compile
+1 'x' true	1 'x' true	interpret+check+compile
+1 'x' false	1 'x' false	interpret+check+compile
+1 'x' none	1 'x' none	interpret+check+compile
+1 'x' [1 2]	1 'x' [1 2]	interpret+check+compile
+1 'x' drop	1	interpret+check+compile
+1 'x' not	1 false	interpret+check+compile
+1 'x' size	1 1	interpret+check+compile
+1 'x' add	'1x'	interpret+check+compile
+1 'x' eq	false	interpret+check+compile
+1 'x' and	'x'	interpret+check+compile
+1 'x' swap	'x' 1	interpret+check+compile
+1 true 0	1 true 0	interpret+check+compile
+1 true 1	1 true 1	interpret+check+compile
+1 true 2.5	1 true 2.5	interpret+check+compile
+1 true 'x'	1 true 'x'	interpret+check+compile
+1 true true	1 true true	interpret+check+compile
+1 true false	1 true false	interpret+check+compile
+1 true none	1 true none	interpret+check+compile
+1 true [1 2]	1 true [1 2]	interpret+check+compile
+1 true drop	1	interpret+check+compile
+1 true not	1 false	interpret+check+compile
+1 true size	1 1	interpret+check+compile
+1 true eq	false	interpret+check+compile
+1 true and	true	interpret+check+compile
+1 true swap	true 1	interpret+check+compile
+1 false 0	1 false 0	interpret+check+compile
+1 false 1	1 false 1	interpret+check+compile
+1 false 2.5	1 false 2.5	interpret+check+compile
+1 false 'x'	1 false 'x'	interpret+check+compile
+1 false true	1 false true	interpret+check+compile
+1 false false	1 false false	interpret+check+compile
+1 false none	1 false none	interpret+check+compile
+1 false [1 2]	1 false [1 2]	interpret+check+compile
+1 false drop	1	interpret+check+compile
+1 false not	1 true	interpret+check+compile
+1 false size	1 0	interpret+check+compile
+1 false eq	false	interpret+check+compile
+1 false and	false	interpret+check+compile
+1 false swap	false 1	interpret+check+compile
+1 none 0	1 none 0	interpret+check+compile
+1 none 1	1 none 1	interpret+check+compile
+1 none 2.5	1 none 2.5	interpret+check+compile
+1 none 'x'	1 none 'x'	interpret+check+compile
+1 none true	1 none true	interpret+check+compile
+1 none false	1 none false	interpret+check+compile
+1 none none	1 none none	interpret+check+compile
+1 none [1 2]	1 none [1 2]	interpret+check+compile
+1 none drop	1	interpret+check+compile
+1 none not	1 true	interpret+check+compile
+1 none size	1 0	interpret+check+compile
+1 none eq	false	interpret+check+compile
+1 none and	none	interpret+check+compile
+1 none swap	none 1	interpret+check+compile
+1 [1 2] 0	1 [1 2] 0	interpret+check+compile
+1 [1 2] 1	1 [1 2] 1	interpret+check+compile
+1 [1 2] 2.5	1 [1 2] 2.5	interpret+check+compile
+1 [1 2] 'x'	1 [1 2] 'x'	interpret+check+compile
+1 [1 2] true	1 [1 2] true	interpret+check+compile
+1 [1 2] false	1 [1 2] false	interpret+check+compile
+1 [1 2] none	1 [1 2] none	interpret+check+compile
+1 [1 2] [1 2]	1 [1 2] [1 2]	interpret+check+compile
+1 [1 2] drop	1	interpret+check+compile
+1 [1 2] not	1 false	interpret+check+compile
+1 [1 2] size	1 2	interpret+check+compile
+1 [1 2] eq	false	interpret+check+compile
+1 [1 2] and	[1 2]	interpret+check+compile
+1 [1 2] swap	[1 2] 1	interpret+check+compile
+1 dup 0	1 1 0	interpret+check+compile
+1 dup 1	1 1 1	interpret+check+compile
+1 dup 2.5	1 1 2.5	interpret+check+compile
+1 dup 'x'	1 1 'x'	interpret+check+compile
+1 dup true	1 1 true	interpret+check+compile
+1 dup false	1 1 false	interpret+check+compile
+1 dup none	1 1 none	interpret+check+compile
+1 dup [1 2]	1 1 [1 2]	interpret+check+compile
+1 dup dup	1 1 1	interpret+check+compile
+1 dup drop	1	interpret+check+compile
+1 dup not	1 false	interpret+check+compile
+1 dup size	1 1	interpret+check+compile
+1 dup add	2	interpret+check+compile
+1 dup sub	0	interpret+check+compile
+1 dup mul	1	interpret+check+compile
+1 dup eq	true	interpret+check+compile
+1 dup lt	false	interpret+check+compile
+1 dup and	1	interpret+check+compile
+1 dup swap	1 1	interpret+check+compile
+1 drop 0	0	interpret+check+compile
+1 drop 1	1	interpret+check+compile
+1 drop 2.5	2.5	interpret+check+compile
+1 drop 'x'	'x'	interpret+check+compile
+1 drop true	true	interpret+check+compile
+1 drop false	false	interpret+check+compile
+1 drop none	none	interpret+check+compile
+1 drop [1 2]	[1 2]	interpret+check+compile
+1 not 0	1 true	interpret+check+compile
+1 not 1	1 false	interpret+check+compile
+1 not 2.5	1 false	interpret+check+compile
+1 not 'x'	1 false	interpret+check+compile
+1 not true	1 false	interpret+check+compile
+1 not false	1 true	interpret+check+compile
+1 not none	1 true	interpret+check+compile
+1 not [1 2]	1 false	interpret+check+compile
+1 size 0	1 0	interpret+check+compile
+1 size 1	1 1	interpret+check+compile
+1 size 2.5	1 2	interpret+check+compile
+1 size 'x'	1 1	interpret+check+compile
+1 size true	1 1	interpret+check+compile
+1 size false	1 0	interpret+check+compile
+1 size none	1 0	interpret+check+compile
+1 size [1 2]	1 2	interpret+check+compile
+1 add 0	1	interpret+check+compile
+1 add 1	2	interpret+check+compile
+1 add 2.5	3.5	interpret+check+compile
+1 add 'x'	'1x'	interpret+check+compile
+1 sub 0	1	interpret+check+compile
+1 sub 1	0	interpret+check+compile
+1 sub 2.5	-1.5	interpret+check+compile
+1 mul 0	0	interpret+check+compile
+1 mul 1	1	interpret+check+compile
+1 mul 2.5	2.5	interpret+check+compile
+1 eq 0	false	interpret+check+compile
+1 eq 1	true	interpret+check+compile
+1 eq 2.5	false	interpret+check+compile
+1 eq 'x'	false	interpret+check+compile
+1 eq true	false	interpret+check+compile
+1 eq false	false	interpret+check+compile
+1 eq none	false	interpret+check+compile
+1 eq [1 2]	false	interpret+check+compile
+1 lt 0	false	interpret+check+compile
+1 lt 1	false	interpret+check+compile
+1 lt 2.5	true	interpret+check+compile
+1 and 0	0	interpret+check+compile
+1 and 1	1	interpret+check+compile
+1 and 2.5	2.5	interpret+check+compile
+1 and 'x'	'x'	interpret+check+compile
+1 and true	true	interpret+check+compile
+1 and false	false	interpret+check+compile
+1 and none	none	interpret+check+compile
+1 and [1 2]	[1 2]	interpret+check+compile
+2.5 0 0	2.5 0 0	interpret+check+compile
+2.5 0 1	2.5 0 1	interpret+check+compile
+2.5 0 2.5	2.5 0 2.5	interpret+check+compile
+2.5 0 'x'	2.5 0 'x'	interpret+check+compile
+2.5 0 true	2.5 0 true	interpret+check+compile
+2.5 0 false	2.5 0 false	interpret+check+compile
+2.5 0 none	2.5 0 none	interpret+check+compile
+2.5 0 [1 2]	2.5 0 [1 2]	interpret+check+compile
+2.5 0 drop	2.5	interpret+check+compile
+2.5 0 not	2.5 true	interpret+check+compile
+2.5 0 size	2.5 0	interpret+check+compile
+2.5 0 add	2.5	interpret+check+compile
+2.5 0 sub	2.5	interpret+check+compile
+2.5 0 mul	0.0	interpret+check+compile
+2.5 0 eq	false	interpret+check+compile
+2.5 0 lt	false	interpret+check+compile
+2.5 0 and	0	interpret+check+compile
+2.5 0 swap	0 2.5	interpret+check+compile
+2.5 1 0	2.5 1 0	interpret+check+compile
+2.5 1 1	2.5 1 1	interpret+check+compile
+2.5 1 2.5	2.5 1 2.5	interpret+check+compile
+2.5 1 'x'	2.5 1 'x'	interpret+check+compile
+2.5 1 true	2.5 1 true	interpret+check+compile
+2.5 1 false	2.5 1 false	interpret+check+compile
+2.5 1 none	2.5 1 none	interpret+check+compile
+2.5 1 [1 2]	2.5 1 [1 2]	interpret+check+compile
+2.5 1 drop	2.5	interpret+check+compile
+2.5 1 not	2.5 false	interpret+check+compile
+2.5 1 size	2.5 1	interpret+check+compile
+2.5 1 add	3.5	interpret+check+compile
+2.5 1 sub	1.5	interpret+check+compile
+2.5 1 mul	2.5	interpret+check+compile
+2.5 1 eq	false	interpret+check+compile
+2.5 1 lt	false	interpret+check+compile
+2.5 1 and	1	interpret+check+compile
+2.5 1 swap	1 2.5	interpret+check+compile
+2.5 2.5 0	2.5 2.5 0	interpret+check+compile
+2.5 2.5 1	2.5 2.5 1	interpret+check+compile
+2.5 2.5 2.5	2.5 2.5 2.5	interpret+check+compile
+2.5 2.5 'x'	2.5 2.5 'x'	interpret+check+compile
+2.5 2.5 true	2.5 2.5 true	interpret+check+compile
+2.5 2.5 false	2.5 2.5 false	interpret+check+compile
+2.5 2.5 none	2.5 2.5 none	interpret+check+compile
+2.5 2.5 [1 2]	2.5 2.5 [1 2]	interpret+check+compile
+2.5 2.5 drop	2.5	interpret+check+compile
+2.5 2.5 not	2.5 false	interpret+check+compile
+2.5 2.5 size	2.5 2	interpret+check+compile
+2.5 2.5 add	5.0	interpret+check+compile
+2.5 2.5 sub	0.0	interpret+check+compile
+2.5 2.5 mul	6.25	interpret+check+compile
+2.5 2.5 eq	true	interpret+check+compile
+2.5 2.5 lt	false	interpret+check+compile
+2.5 2.5 and	2.5	interpret+check+compile
+2.5 2.5 swap	2.5 2.5	interpret+check+compile
+2.5 'x' 0	2.5 'x' 0	interpret+check+compile
+2.5 'x' 1	2.5 'x' 1	interpret+check+compile
+2.5 'x' 2.5	2.5 'x' 2.5	interpret+check+compile
+2.5 'x' 'x'	2.5 'x' 'x'	interpret+check+compile
+2.5 'x' true	2.5 'x' true	interpret+check+compile
+2.5 'x' false	2.5 'x' false	interpret+check+compile
+2.5 'x' none	2.5 'x' none	interpret+check+compile
+2.5 'x' [1 2]	2.5 'x' [1 2]	interpret+check+compile
+2.5 'x' drop	2.5	interpret+check+compile
+2.5 'x' not	2.5 false	interpret+check+compile
+2.5 'x' size	2.5 1	interpret+check+compile
+2.5 'x' add	'2.5x'	interpret+check+compile
+2.5 'x' eq	false	interpret+check+compile
+2.5 'x' and	'x'	interpret+check+compile
+2.5 'x' swap	'x' 2.5	interpret+check+compile
+2.5 true 0	2.5 true 0	interpret+check+compile
+2.5 true 1	2.5 true 1	interpret+check+compile
+2.5 true 2.5	2.5 true 2.5	interpret+check+compile
+2.5 true 'x'	2.5 true 'x'	interpret+check+compile
+2.5 true true	2.5 true true	interpret+check+compile
+2.5 true false	2.5 true false	interpret+check+compile
+2.5 true none	2.5 true none	interpret+check+compile
+2.5 true [1 2]	2.5 true [1 2]	interpret+check+compile
+2.5 true drop	2.5	interpret+check+compile
+2.5 true not	2.5 false	interpret+check+compile
+2.5 true size	2.5 1	interpret+check+compile
+2.5 true eq	false	interpret+check+compile
+2.5 true and	true	interpret+check+compile
+2.5 true swap	true 2.5	interpret+check+compile
+2.5 false 0	2.5 false 0	interpret+check+compile
+2.5 false 1	2.5 false 1	interpret+check+compile
+2.5 false 2.5	2.5 false 2.5	interpret+check+compile
+2.5 false 'x'	2.5 false 'x'	interpret+check+compile
+2.5 false true	2.5 false true	interpret+check+compile
+2.5 false false	2.5 false false	interpret+check+compile
+2.5 false none	2.5 false none	interpret+check+compile
+2.5 false [1 2]	2.5 false [1 2]	interpret+check+compile
+2.5 false drop	2.5	interpret+check+compile
+2.5 false not	2.5 true	interpret+check+compile
+2.5 false size	2.5 0	interpret+check+compile
+2.5 false eq	false	interpret+check+compile
+2.5 false and	false	interpret+check+compile
+2.5 false swap	false 2.5	interpret+check+compile
+2.5 none 0	2.5 none 0	interpret+check+compile
+2.5 none 1	2.5 none 1	interpret+check+compile
+2.5 none 2.5	2.5 none 2.5	interpret+check+compile
+2.5 none 'x'	2.5 none 'x'	interpret+check+compile
+2.5 none true	2.5 none true	interpret+check+compile
+2.5 none false	2.5 none false	interpret+check+compile
+2.5 none none	2.5 none none	interpret+check+compile
+2.5 none [1 2]	2.5 none [1 2]	interpret+check+compile
+2.5 none drop	2.5	interpret+check+compile
+2.5 none not	2.5 true	interpret+check+compile
+2.5 none size	2.5 0	interpret+check+compile
+2.5 none eq	false	interpret+check+compile
+2.5 none and	none	interpret+check+compile
+2.5 none swap	none 2.5	interpret+check+compile
+2.5 [1 2] 0	2.5 [1 2] 0	interpret+check+compile
+2.5 [1 2] 1	2.5 [1 2] 1	interpret+check+compile
+2.5 [1 2] 2.5	2.5 [1 2] 2.5	interpret+check+compile
+2.5 [1 2] 'x'	2.5 [1 2] 'x'	interpret+check+compile
+2.5 [1 2] true	2.5 [1 2] true	interpret+check+compile
+2.5 [1 2] false	2.5 [1 2] false	interpret+check+compile
+2.5 [1 2] none	2.5 [1 2] none	interpret+check+compile
+2.5 [1 2] [1 2]	2.5 [1 2] [1 2]	interpret+check+compile
+2.5 [1 2] drop	2.5	interpret+check+compile
+2.5 [1 2] not	2.5 false	interpret+check+compile
+2.5 [1 2] size	2.5 2	interpret+check+compile
+2.5 [1 2] eq	false	interpret+check+compile
+2.5 [1 2] and	[1 2]	interpret+check+compile
+2.5 [1 2] swap	[1 2] 2.5	interpret+check+compile
+2.5 dup 0	2.5 2.5 0	interpret+check+compile
+2.5 dup 1	2.5 2.5 1	interpret+check+compile
+2.5 dup 2.5	2.5 2.5 2.5	interpret+check+compile
+2.5 dup 'x'	2.5 2.5 'x'	interpret+check+compile
+2.5 dup true	2.5 2.5 true	interpret+check+compile
+2.5 dup false	2.5 2.5 false	interpret+check+compile
+2.5 dup none	2.5 2.5 none	interpret+check+compile
+2.5 dup [1 2]	2.5 2.5 [1 2]	interpret+check+compile
+2.5 dup dup	2.5 2.5 2.5	interpret+check+compile
+2.5 dup drop	2.5	interpret+check+compile
+2.5 dup not	2.5 false	interpret+check+compile
+2.5 dup size	2.5 2	interpret+check+compile
+2.5 dup add	5.0	interpret+check+compile
+2.5 dup sub	0.0	interpret+check+compile
+2.5 dup mul	6.25	interpret+check+compile
+2.5 dup eq	true	interpret+check+compile
+2.5 dup lt	false	interpret+check+compile
+2.5 dup and	2.5	interpret+check+compile
+2.5 dup swap	2.5 2.5	interpret+check+compile
+2.5 drop 0	0	interpret+check+compile
+2.5 drop 1	1	interpret+check+compile
+2.5 drop 2.5	2.5	interpret+check+compile
+2.5 drop 'x'	'x'	interpret+check+compile
+2.5 drop true	true	interpret+check+compile
+2.5 drop false	false	interpret+check+compile
+2.5 drop none	none	interpret+check+compile
+2.5 drop [1 2]	[1 2]	interpret+check+compile
+2.5 not 0	2.5 true	interpret+check+compile
+2.5 not 1	2.5 false	interpret+check+compile
+2.5 not 2.5	2.5 false	interpret+check+compile
+2.5 not 'x'	2.5 false	interpret+check+compile
+2.5 not true	2.5 false	interpret+check+compile
+2.5 not false	2.5 true	interpret+check+compile
+2.5 not none	2.5 true	interpret+check+compile
+2.5 not [1 2]	2.5 false	interpret+check+compile
+2.5 size 0	2.5 0	interpret+check+compile
+2.5 size 1	2.5 1	interpret+check+compile
+2.5 size 2.5	2.5 2	interpret+check+compile
+2.5 size 'x'	2.5 1	interpret+check+compile
+2.5 size true	2.5 1	interpret+check+compile
+2.5 size false	2.5 0	interpret+check+compile
+2.5 size none	2.5 0	interpret+check+compile
+2.5 size [1 2]	2.5 2	interpret+check+compile
+2.5 add 0	2.5	interpret+check+compile
+2.5 add 1	3.5	interpret+check+compile
+2.5 add 2.5	5.0	interpret+check+compile
+2.5 add 'x'	'2.5x'	interpret+check+compile
+2.5 sub 0	2.5	interpret+check+compile
+2.5 sub 1	1.5	interpret+check+compile
+2.5 sub 2.5	0.0	interpret+check+compile
+2.5 mul 0	0.0	interpret+check+compile
+2.5 mul 1	2.5	interpret+check+compile
+2.5 mul 2.5	6.25	interpret+check+compile
+2.5 eq 0	false	interpret+check+compile
+2.5 eq 1	false	interpret+check+compile
+2.5 eq 2.5	true	interpret+check+compile
+2.5 eq 'x'	false	interpret+check+compile
+2.5 eq true	false	interpret+check+compile
+2.5 eq false	false	interpret+check+compile
+2.5 eq none	false	interpret+check+compile
+2.5 eq [1 2]	false	interpret+check+compile
+2.5 lt 0	false	interpret+check+compile
+2.5 lt 1	false	interpret+check+compile
+2.5 lt 2.5	false	interpret+check+compile
+2.5 and 0	0	interpret+check+compile
+2.5 and 1	1	interpret+check+compile
+2.5 and 2.5	2.5	interpret+check+compile
+2.5 and 'x'	'x'	interpret+check+compile
+2.5 and true	true	interpret+check+compile
+2.5 and false	false	interpret+check+compile
+2.5 and none	none	interpret+check+compile
+2.5 and [1 2]	[1 2]	interpret+check+compile
+'x' 0 0	'x' 0 0	interpret+check+compile
+'x' 0 1	'x' 0 1	interpret+check+compile
+'x' 0 2.5	'x' 0 2.5	interpret+check+compile
+'x' 0 'x'	'x' 0 'x'	interpret+check+compile
+'x' 0 true	'x' 0 true	interpret+check+compile
+'x' 0 false	'x' 0 false	interpret+check+compile
+'x' 0 none	'x' 0 none	interpret+check+compile
+'x' 0 [1 2]	'x' 0 [1 2]	interpret+check+compile
+'x' 0 drop	'x'	interpret+check+compile
+'x' 0 not	'x' true	interpret+check+compile
+'x' 0 size	'x' 0	interpret+check+compile
+'x' 0 add	'x0'	interpret+check+compile
+'x' 0 eq	false	interpret+check+compile
+'x' 0 and	0	interpret+check+compile
+'x' 0 swap	0 'x'	interpret+check+compile
+'x' 1 0	'x' 1 0	interpret+check+compile
+'x' 1 1	'x' 1 1	interpret+check+compile
+'x' 1 2.5	'x' 1 2.5	interpret+check+compile
+'x' 1 'x'	'x' 1 'x'	interpret+check+compile
+'x' 1 true	'x' 1 true	interpret+check+compile
+'x' 1 false	'x' 1 false	interpret+check+compile
+'x' 1 none	'x' 1 none	interpret+check+compile
+'x' 1 [1 2]	'x' 1 [1 2]	interpret+check+compile
+'x' 1 drop	'x'	interpret+check+compile
+'x' 1 not	'x' false	interpret+check+compile
+'x' 1 size	'x' 1	interpret+check+compile
+'x' 1 add	'x1'	interpret+check+compile
+'x' 1 eq	false	interpret+check+compile
+'x' 1 and	1	interpret+check+compile
+'x' 1 swap	1 'x'	interpret+check+compile
+'x' 2.5 0	'x' 2.5 0	interpret+check+compile
+'x' 2.5 1	'x' 2.5 1	interpret+check+compile
+'x' 2.5 2.5	'x' 2.5 2.5	interpret+check+compile
+'x' 2.5 'x'	'x' 2.5 'x'	interpret+check+compile
+'x' 2.5 true	'x' 2.5 true	interpret+check+compile
+'x' 2.5 false	'x' 2.5 false	interpret+check+compile
+'x' 2.5 none	'x' 2.5 none	interpret+check+compile
+'x' 2.5 [1 2]	'x' 2.5 [1 2]	interpret+check+compile
+'x' 2.5 drop	'x'	interpret+check+compile
+'x' 2.5 not	'x' false	interpret+check+compile
+'x' 2.5 size	'x' 2	interpret+check+compile
+'x' 2.5 add	'x2.5'	interpret+check+compile
+'x' 2.5 eq	false	interpret+check+compile
+'x' 2.5 and	2.5	interpret+check+compile
+'x' 2.5 swap	2.5 'x'	interpret+check+compile
+'x' 'x' 0	'x' 'x' 0	interpret+check+compile
+'x' 'x' 1	'x' 'x' 1	interpret+check+compile
+'x' 'x' 2.5	'x' 'x' 2.5	interpret+check+compile
+'x' 'x' 'x'	'x' 'x' 'x'	interpret+check+compile
+'x' 'x' true	'x' 'x' true	interpret+check+compile
+'x' 'x' false	'x' 'x' false	interpret+check+compile
+'x' 'x' none	'x' 'x' none	interpret+check+compile
+'x' 'x' [1 2]	'x' 'x' [1 2]	interpret+check+compile
+'x' 'x' drop	'x'	interpret+check+compile
+'x' 'x' not	'x' false	interpret+check+compile
+'x' 'x' size	'x' 1	interpret+check+compile
+'x' 'x' add	'xx'	interpret+check+compile
+'x' 'x' eq	true	interpret+check+compile
+'x' 'x' lt	false	interpret+check+compile
+'x' 'x' and	'x'	interpret+check+compile
+'x' 'x' swap	'x' 'x'	interpret+check+compile
+'x' true 0	'x' true 0	interpret+check+compile
+'x' true 1	'x' true 1	interpret+check+compile
+'x' true 2.5	'x' true 2.5	interpret+check+compile
+'x' true 'x'	'x' true 'x'	interpret+check+compile
+'x' true true	'x' true true	interpret+check+compile
+'x' true false	'x' true false	interpret+check+compile
+'x' true none	'x' true none	interpret+check+compile
+'x' true [1 2]	'x' true [1 2]	interpret+check+compile
+'x' true drop	'x'	interpret+check+compile
+'x' true not	'x' false	interpret+check+compile
+'x' true size	'x' 1	interpret+check+compile
+'x' true add	'xtrue'	interpret+check+compile
+'x' true eq	false	interpret+check+compile
+'x' true and	true	interpret+check+compile
+'x' true swap	true 'x'	interpret+check+compile
+'x' false 0	'x' false 0	interpret+check+compile
+'x' false 1	'x' false 1	interpret+check+compile
+'x' false 2.5	'x' false 2.5	interpret+check+compile
+'x' false 'x'	'x' false 'x'	interpret+check+compile
+'x' false true	'x' false true	interpret+check+compile
+'x' false false	'x' false false	interpret+check+compile
+'x' false none	'x' false none	interpret+check+compile
+'x' false [1 2]	'x' false [1 2]	interpret+check+compile
+'x' false drop	'x'	interpret+check+compile
+'x' false not	'x' true	interpret+check+compile
+'x' false size	'x' 0	interpret+check+compile
+'x' false add	'xfalse'	interpret+check+compile
+'x' false eq	false	interpret+check+compile
+'x' false and	false	interpret+check+compile
+'x' false swap	false 'x'	interpret+check+compile
+'x' none 0	'x' none 0	interpret+check+compile
+'x' none 1	'x' none 1	interpret+check+compile
+'x' none 2.5	'x' none 2.5	interpret+check+compile
+'x' none 'x'	'x' none 'x'	interpret+check+compile
+'x' none true	'x' none true	interpret+check+compile
+'x' none false	'x' none false	interpret+check+compile
+'x' none none	'x' none none	interpret+check+compile
+'x' none [1 2]	'x' none [1 2]	interpret+check+compile
+'x' none drop	'x'	interpret+check+compile
+'x' none not	'x' true	interpret+check+compile
+'x' none size	'x' 0	interpret+check+compile
+'x' none eq	false	interpret+check+compile
+'x' none and	none	interpret+check+compile
+'x' none swap	none 'x'	interpret+check+compile
+'x' [1 2] 0	'x' [1 2] 0	interpret+check+compile
+'x' [1 2] 1	'x' [1 2] 1	interpret+check+compile
+'x' [1 2] 2.5	'x' [1 2] 2.5	interpret+check+compile
+'x' [1 2] 'x'	'x' [1 2] 'x'	interpret+check+compile
+'x' [1 2] true	'x' [1 2] true	interpret+check+compile
+'x' [1 2] false	'x' [1 2] false	interpret+check+compile
+'x' [1 2] none	'x' [1 2] none	interpret+check+compile
+'x' [1 2] [1 2]	'x' [1 2] [1 2]	interpret+check+compile
+'x' [1 2] drop	'x'	interpret+check+compile
+'x' [1 2] not	'x' false	interpret+check+compile
+'x' [1 2] size	'x' 2	interpret+check+compile
+'x' [1 2] eq	false	interpret+check+compile
+'x' [1 2] and	[1 2]	interpret+check+compile
+'x' [1 2] swap	[1 2] 'x'	interpret+check+compile
+'x' dup 0	'x' 'x' 0	interpret+check+compile
+'x' dup 1	'x' 'x' 1	interpret+check+compile
+'x' dup 2.5	'x' 'x' 2.5	interpret+check+compile
+'x' dup 'x'	'x' 'x' 'x'	interpret+check+compile
+'x' dup true	'x' 'x' true	interpret+check+compile
+'x' dup false	'x' 'x' false	interpret+check+compile
+'x' dup none	'x' 'x' none	interpret+check+compile
+'x' dup [1 2]	'x' 'x' [1 2]	interpret+check+compile
+'x' dup dup	'x' 'x' 'x'	interpret+check+compile
+'x' dup drop	'x'	interpret+check+compile
+'x' dup not	'x' false	interpret+check+compile
+'x' dup size	'x' 1	interpret+check+compile
+'x' dup add	'xx'	interpret+check+compile
+'x' dup eq	true	interpret+check+compile
+'x' dup lt	false	interpret+check+compile
+'x' dup and	'x'	interpret+check+compile
+'x' dup swap	'x' 'x'	interpret+check+compile
+'x' drop 0	0	interpret+check+compile
+'x' drop 1	1	interpret+check+compile
+'x' drop 2.5	2.5	interpret+check+compile
+'x' drop 'x'	'x'	interpret+check+compile
+'x' drop true	true	interpret+check+compile
+'x' drop false	false	interpret+check+compile
+'x' drop none	none	interpret+check+compile
+'x' drop [1 2]	[1 2]	interpret+check+compile
+'x' not 0	'x' true	interpret+check+compile
+'x' not 1	'x' false	interpret+check+compile
+'x' not 2.5	'x' false	interpret+check+compile
+'x' not 'x'	'x' false	interpret+check+compile
+'x' not true	'x' false	interpret+check+compile
+'x' not false	'x' true	interpret+check+compile
+'x' not none	'x' true	interpret+check+compile
+'x' not [1 2]	'x' false	interpret+check+compile
+'x' size 0	'x' 0	interpret+check+compile
+'x' size 1	'x' 1	interpret+check+compile
+'x' size 2.5	'x' 2	interpret+check+compile
+'x' size 'x'	'x' 1	interpret+check+compile
+'x' size true	'x' 1	interpret+check+compile
+'x' size false	'x' 0	interpret+check+compile
+'x' size none	'x' 0	interpret+check+compile
+'x' size [1 2]	'x' 2	interpret+check+compile
+'x' add 0	'x0'	interpret+check+compile
+'x' add 1	'x1'	interpret+check+compile
+'x' add 2.5	'x2.5'	interpret+check+compile
+'x' add 'x'	'xx'	interpret+check+compile
+'x' add true	'xtrue'	interpret+check+compile
+'x' add false	'xfalse'	interpret+check+compile
+'x' eq 0	false	interpret+check+compile
+'x' eq 1	false	interpret+check+compile
+'x' eq 2.5	false	interpret+check+compile
+'x' eq 'x'	true	interpret+check+compile
+'x' eq true	false	interpret+check+compile
+'x' eq false	false	interpret+check+compile
+'x' eq none	false	interpret+check+compile
+'x' eq [1 2]	false	interpret+check+compile
+'x' lt 'x'	false	interpret+check+compile
+'x' and 0	0	interpret+check+compile
+'x' and 1	1	interpret+check+compile
+'x' and 2.5	2.5	interpret+check+compile
+'x' and 'x'	'x'	interpret+check+compile
+'x' and true	true	interpret+check+compile
+'x' and false	false	interpret+check+compile
+'x' and none	none	interpret+check+compile
+'x' and [1 2]	[1 2]	interpret+check+compile
+true 0 0	true 0 0	interpret+check+compile
+true 0 1	true 0 1	interpret+check+compile
+true 0 2.5	true 0 2.5	interpret+check+compile
+true 0 'x'	true 0 'x'	interpret+check+compile
+true 0 true	true 0 true	interpret+check+compile
+true 0 false	true 0 false	interpret+check+compile
+true 0 none	true 0 none	interpret+check+compile
+true 0 [1 2]	true 0 [1 2]	interpret+check+compile
+true 0 drop	true	interpret+check+compile
+true 0 not	true true	interpret+check+compile
+true 0 size	true 0	interpret+check+compile
+true 0 eq	false	interpret+check+compile
+true 0 and	0	interpret+check+compile
+true 0 swap	0 true	interpret+check+compile
+true 1 0	true 1 0	interpret+check+compile
+true 1 1	true 1 1	interpret+check+compile
+true 1 2.5	true 1 2.5	interpret+check+compile
+true 1 'x'	true 1 'x'	interpret+check+compile
+true 1 true	true 1 true	interpret+check+compile
+true 1 false	true 1 false	interpret+check+compile
+true 1 none	true 1 none	interpret+check+compile
+true 1 [1 2]	true 1 [1 2]	interpret+check+compile
+true 1 drop	true	interpret+check+compile
+true 1 not	true false	interpret+check+compile
+true 1 size	true 1	interpret+check+compile
+true 1 eq	false	interpret+check+compile
+true 1 and	1	interpret+check+compile
+true 1 swap	1 true	interpret+check+compile
+true 2.5 0	true 2.5 0	interpret+check+compile
+true 2.5 1	true 2.5 1	interpret+check+compile
+true 2.5 2.5	true 2.5 2.5	interpret+check+compile
+true 2.5 'x'	true 2.5 'x'	interpret+check+compile
+true 2.5 true	true 2.5 true	interpret+check+compile
+true 2.5 false	true 2.5 false	interpret+check+compile
+true 2.5 none	true 2.5 none	interpret+check+compile
+true 2.5 [1 2]	true 2.5 [1 2]	interpret+check+compile
+true 2.5 drop	true	interpret+check+compile
+true 2.5 not	true false	interpret+check+compile
+true 2.5 size	true 2	interpret+check+compile
+true 2.5 eq	false	interpret+check+compile
+true 2.5 and	2.5	interpret+check+compile
+true 2.5 swap	2.5 true	interpret+check+compile
+true 'x' 0	true 'x' 0	interpret+check+compile
+true 'x' 1	true 'x' 1	interpret+check+compile
+true 'x' 2.5	true 'x' 2.5	interpret+check+compile
+true 'x' 'x'	true 'x' 'x'	interpret+check+compile
+true 'x' true	true 'x' true	interpret+check+compile
+true 'x' false	true 'x' false	interpret+check+compile
+true 'x' none	true 'x' none	interpret+check+compile
+true 'x' [1 2]	true 'x' [1 2]	interpret+check+compile
+true 'x' drop	true	interpret+check+compile
+true 'x' not	true false	interpret+check+compile
+true 'x' size	true 1	interpret+check+compile
+true 'x' add	'truex'	interpret+check+compile
+true 'x' eq	false	interpret+check+compile
+true 'x' and	'x'	interpret+check+compile
+true 'x' swap	'x' true	interpret+check+compile
+true true 0	true true 0	interpret+check+compile
+true true 1	true true 1	interpret+check+compile
+true true 2.5	true true 2.5	interpret+check+compile
+true true 'x'	true true 'x'	interpret+check+compile
+true true true	true true true	interpret+check+compile
+true true false	true true false	interpret+check+compile
+true true none	true true none	interpret+check+compile
+true true [1 2]	true true [1 2]	interpret+check+compile
+true true drop	true	interpret+check+compile
+true true not	true false	interpret+check+compile
+true true size	true 1	interpret+check+compile
+true true eq	true	interpret+check+compile
+true true lt	false	interpret+check+compile
+true true and	true	interpret+check+compile
+true true swap	true true	interpret+check+compile
+true false 0	true false 0	interpret+check+compile
+true false 1	true false 1	interpret+check+compile
+true false 2.5	true false 2.5	interpret+check+compile
+true false 'x'	true false 'x'	interpret+check+compile
+true false true	true false true	interpret+check+compile
+true false false	true false false	interpret+check+compile
+true false none	true false none	interpret+check+compile
+true false [1 2]	true false [1 2]	interpret+check+compile
+true false drop	true	interpret+check+compile
+true false not	true true	interpret+check+compile
+true false size	true 0	interpret+check+compile
+true false eq	false	interpret+check+compile
+true false lt	false	interpret+check+compile
+true false and	false	interpret+check+compile
+true false swap	false true	interpret+check+compile
+true none 0	true none 0	interpret+check+compile
+true none 1	true none 1	interpret+check+compile
+true none 2.5	true none 2.5	interpret+check+compile
+true none 'x'	true none 'x'	interpret+check+compile
+true none true	true none true	interpret+check+compile
+true none false	true none false	interpret+check+compile
+true none none	true none none	interpret+check+compile
+true none [1 2]	true none [1 2]	interpret+check+compile
+true none drop	true	interpret+check+compile
+true none not	true true	interpret+check+compile
+true none size	true 0	interpret+check+compile
+true none eq	false	interpret+check+compile
+true none and	none	interpret+check+compile
+true none swap	none true	interpret+check+compile
+true [1 2] 0	true [1 2] 0	interpret+check+compile
+true [1 2] 1	true [1 2] 1	interpret+check+compile
+true [1 2] 2.5	true [1 2] 2.5	interpret+check+compile
+true [1 2] 'x'	true [1 2] 'x'	interpret+check+compile
+true [1 2] true	true [1 2] true	interpret+check+compile
+true [1 2] false	true [1 2] false	interpret+check+compile
+true [1 2] none	true [1 2] none	interpret+check+compile
+true [1 2] [1 2]	true [1 2] [1 2]	interpret+check+compile
+true [1 2] drop	true	interpret+check+compile
+true [1 2] not	true false	interpret+check+compile
+true [1 2] size	true 2	interpret+check+compile
+true [1 2] eq	false	interpret+check+compile
+true [1 2] and	[1 2]	interpret+check+compile
+true [1 2] swap	[1 2] true	interpret+check+compile
+true dup 0	true true 0	interpret+check+compile
+true dup 1	true true 1	interpret+check+compile
+true dup 2.5	true true 2.5	interpret+check+compile
+true dup 'x'	true true 'x'	interpret+check+compile
+true dup true	true true true	interpret+check+compile
+true dup false	true true false	interpret+check+compile
+true dup none	true true none	interpret+check+compile
+true dup [1 2]	true true [1 2]	interpret+check+compile
+true dup dup	true true true	interpret+check+compile
+true dup drop	true	interpret+check+compile
+true dup not	true false	interpret+check+compile
+true dup size	true 1	interpret+check+compile
+true dup eq	true	interpret+check+compile
+true dup lt	false	interpret+check+compile
+true dup and	true	interpret+check+compile
+true dup swap	true true	interpret+check+compile
+true drop 0	0	interpret+check+compile
+true drop 1	1	interpret+check+compile
+true drop 2.5	2.5	interpret+check+compile
+true drop 'x'	'x'	interpret+check+compile
+true drop true	true	interpret+check+compile
+true drop false	false	interpret+check+compile
+true drop none	none	interpret+check+compile
+true drop [1 2]	[1 2]	interpret+check+compile
+true not 0	false 0	interpret+check+compile
+true not 1	false 1	interpret+check+compile
+true not 2.5	false 2.5	interpret+check+compile
+true not 'x'	false 'x'	interpret+check+compile
+true not true	true false	interpret+check+compile
+true not false	true true	interpret+check+compile
+true not none	false none	interpret+check+compile
+true not [1 2]	false [1 2]	interpret+check+compile
+true not dup	false false	interpret+check+compile
+true not drop		interpret+check+compile
+true not not	true	interpret+check+compile
+true not size	0	interpret+check+compile
+true size 0	true 0	interpret+check+compile
+true size 1	true 1	interpret+check+compile
+true size 2.5	true 2	interpret+check+compile
+true size 'x'	true 1	interpret+check+compile
+true size true	true 1	interpret+check+compile
+true size false	true 0	interpret+check+compile
+true size none	true 0	interpret+check+compile
+true size [1 2]	true 2	interpret+check+compile
+true add 'x'	'truex'	interpret+check+compile
+true eq 0	false	interpret+check+compile
+true eq 1	false	interpret+check+compile
+true eq 2.5	false	interpret+check+compile
+true eq 'x'	false	interpret+check+compile
+true eq true	true	interpret+check+compile
+true eq false	false	interpret+check+compile
+true eq none	false	interpret+check+compile
+true eq [1 2]	false	interpret+check+compile
+true lt true	false	interpret+check+compile
+true lt false	false	interpret+check+compile
+true and 0	0	interpret+check+compile
+true and 1	1	interpret+check+compile
+true and 2.5	2.5	interpret+check+compile
+true and 'x'	'x'	interpret+check+compile
+true and true	true	interpret+check+compile
+true and false	false	interpret+check+compile
+true and none	none	interpret+check+compile
+true and [1 2]	[1 2]	interpret+check+compile
+false 0 0	false 0 0	interpret+check+compile
+false 0 1	false 0 1	interpret+check+compile
+false 0 2.5	false 0 2.5	interpret+check+compile
+false 0 'x'	false 0 'x'	interpret+check+compile
+false 0 true	false 0 true	interpret+check+compile
+false 0 false	false 0 false	interpret+check+compile
+false 0 none	false 0 none	interpret+check+compile
+false 0 [1 2]	false 0 [1 2]	interpret+check+compile
+false 0 drop	false	interpret+check+compile
+false 0 not	false true	interpret+check+compile
+false 0 size	false 0	interpret+check+compile
+false 0 eq	false	interpret+check+compile
+false 0 and	false	interpret+check+compile
+false 0 swap	0 false	interpret+check+compile
+false 1 0	false 1 0	interpret+check+compile
+false 1 1	false 1 1	interpret+check+compile
+false 1 2.5	false 1 2.5	interpret+check+compile
+false 1 'x'	false 1 'x'	interpret+check+compile
+false 1 true	false 1 true	interpret+check+compile
+false 1 false	false 1 false	interpret+check+compile
+false 1 none	false 1 none	interpret+check+compile
+false 1 [1 2]	false 1 [1 2]	interpret+check+compile
+false 1 drop	false	interpret+check+compile
+false 1 not	false false	interpret+check+compile
+false 1 size	false 1	interpret+check+compile
+false 1 eq	false	interpret+check+compile
+false 1 and	false	interpret+check+compile
+false 1 swap	1 false	interpret+check+compile
+false 2.5 0	false 2.5 0	interpret+check+compile
+false 2.5 1	false 2.5 1	interpret+check+compile
+false 2.5 2.5	false 2.5 2.5	interpret+check+compile
+false 2.5 'x'	false 2.5 'x'	interpret+check+compile
+false 2.5 true	false 2.5 true	interpret+check+compile
+false 2.5 false	false 2.5 false	interpret+check+compile
+false 2.5 none	false 2.5 none	interpret+check+compile
+false 2.5 [1 2]	false 2.5 [1 2]	interpret+check+compile
+false 2.5 drop	false	interpret+check+compile
+false 2.5 not	false false	interpret+check+compile
+false 2.5 size	false 2	interpret+check+compile
+false 2.5 eq	false	interpret+check+compile
+false 2.5 and	false	interpret+check+compile
+false 2.5 swap	2.5 false	interpret+check+compile
+false 'x' 0	false 'x' 0	interpret+check+compile
+false 'x' 1	false 'x' 1	interpret+check+compile
+false 'x' 2.5	false 'x' 2.5	interpret+check+compile
+false 'x' 'x'	false 'x' 'x'	interpret+check+compile
+false 'x' true	false 'x' true	interpret+check+compile
+false 'x' false	false 'x' false	interpret+check+compile
+false 'x' none	false 'x' none	interpret+check+compile
+false 'x' [1 2]	false 'x' [1 2]	interpret+check+compile
+false 'x' drop	false	interpret+check+compile
+false 'x' not	false false	interpret+check+compile
+false 'x' size	false 1	interpret+check+compile
+false 'x' add	'falsex'	interpret+check+compile
+false 'x' eq	false	interpret+check+compile
+false 'x' and	false	interpret+check+compile
+false 'x' swap	'x' false	interpret+check+compile
+false true 0	false true 0	interpret+check+compile
+false true 1	false true 1	interpret+check+compile
+false true 2.5	false true 2.5	interpret+check+compile
+false true 'x'	false true 'x'	interpret+check+compile
+false true true	false true true	interpret+check+compile
+false true false	false true false	interpret+check+compile
+false true none	false true none	interpret+check+compile
+false true [1 2]	false true [1 2]	interpret+check+compile
+false true drop	false	interpret+check+compile
+false true not	false false	interpret+check+compile
+false true size	false 1	interpret+check+compile
+false true eq	false	interpret+check+compile
+false true lt	true	interpret+check+compile
+false true and	false	interpret+check+compile
+false true swap	true false	interpret+check+compile
+false false 0	false false 0	interpret+check+compile
+false false 1	false false 1	interpret+check+compile
+false false 2.5	false false 2.5	interpret+check+compile
+false false 'x'	false false 'x'	interpret+check+compile
+false false true	false false true	interpret+check+compile
+false false false	false false false	interpret+check+compile
+false false none	false false none	interpret+check+compile
+false false [1 2]	false false [1 2]	interpret+check+compile
+false false drop	false	interpret+check+compile
+false false not	false true	interpret+check+compile
+false false size	false 0	interpret+check+compile
+false false eq	true	interpret+check+compile
+false false lt	false	interpret+check+compile
+false false and	false	interpret+check+compile
+false false swap	false false	interpret+check+compile
+false none 0	false none 0	interpret+check+compile
+false none 1	false none 1	interpret+check+compile
+false none 2.5	false none 2.5	interpret+check+compile
+false none 'x'	false none 'x'	interpret+check+compile
+false none true	false none true	interpret+check+compile
+false none false	false none false	interpret+check+compile
+false none none	false none none	interpret+check+compile
+false none [1 2]	false none [1 2]	interpret+check+compile
+false none drop	false	interpret+check+compile
+false none not	false true	interpret+check+compile
+false none size	false 0	interpret+check+compile
+false none eq	false	interpret+check+compile
+false none and	false	interpret+check+compile
+false none swap	none false	interpret+check+compile
+false [1 2] 0	false [1 2] 0	interpret+check+compile
+false [1 2] 1	false [1 2] 1	interpret+check+compile
+false [1 2] 2.5	false [1 2] 2.5	interpret+check+compile
+false [1 2] 'x'	false [1 2] 'x'	interpret+check+compile
+false [1 2] true	false [1 2] true	interpret+check+compile
+false [1 2] false	false [1 2] false	interpret+check+compile
+false [1 2] none	false [1 2] none	interpret+check+compile
+false [1 2] [1 2]	false [1 2] [1 2]	interpret+check+compile
+false [1 2] drop	false	interpret+check+compile
+false [1 2] not	false false	interpret+check+compile
+false [1 2] size	false 2	interpret+check+compile
+false [1 2] eq	false	interpret+check+compile
+false [1 2] and	false	interpret+check+compile
+false [1 2] swap	[1 2] false	interpret+check+compile
+false dup 0	false false 0	interpret+check+compile
+false dup 1	false false 1	interpret+check+compile
+false dup 2.5	false false 2.5	interpret+check+compile
+false dup 'x'	false false 'x'	interpret+check+compile
+false dup true	false false true	interpret+check+compile
+false dup false	false false false	interpret+check+compile
+false dup none	false false none	interpret+check+compile
+false dup [1 2]	false false [1 2]	interpret+check+compile
+false dup dup	false false false	interpret+check+compile
+false dup drop	false	interpret+check+compile
+false dup not	false true	interpret+check+compile
+false dup size	false 0	interpret+check+compile
+false dup eq	true	interpret+check+compile
+false dup lt	false	interpret+check+compile
+false dup and	false	interpret+check+compile
+false dup swap	false false	interpret+check+compile
+false drop 0	0	interpret+check+compile
+false drop 1	1	interpret+check+compile
+false drop 2.5	2.5	interpret+check+compile
+false drop 'x'	'x'	interpret+check+compile
+false drop true	true	interpret+check+compile
+false drop false	false	interpret+check+compile
+false drop none	none	interpret+check+compile
+false drop [1 2]	[1 2]	interpret+check+compile
+false not 0	true 0	interpret+check+compile
+false not 1	true 1	interpret+check+compile
+false not 2.5	true 2.5	interpret+check+compile
+false not 'x'	true 'x'	interpret+check+compile
+false not true	false false	interpret+check+compile
+false not false	false true	interpret+check+compile
+false not none	true none	interpret+check+compile
+false not [1 2]	true [1 2]	interpret+check+compile
+false not dup	true true	interpret+check+compile
+false not drop		interpret+check+compile
+false not not	false	interpret+check+compile
+false not size	1	interpret+check+compile
+false size 0	false 0	interpret+check+compile
+false size 1	false 1	interpret+check+compile
+false size 2.5	false 2	interpret+check+compile
+false size 'x'	false 1	interpret+check+compile
+false size true	false 1	interpret+check+compile
+false size false	false 0	interpret+check+compile
+false size none	false 0	interpret+check+compile
+false size [1 2]	false 2	interpret+check+compile
+false add 'x'	'falsex'	interpret+check+compile
+false eq 0	false	interpret+check+compile
+false eq 1	false	interpret+check+compile
+false eq 2.5	false	interpret+check+compile
+false eq 'x'	false	interpret+check+compile
+false eq true	false	interpret+check+compile
+false eq false	true	interpret+check+compile
+false eq none	false	interpret+check+compile
+false eq [1 2]	false	interpret+check+compile
+false lt true	true	interpret+check+compile
+false lt false	false	interpret+check+compile
+false and 0	false	interpret+check+compile
+false and 1	false	interpret+check+compile
+false and 2.5	false	interpret+check+compile
+false and 'x'	false	interpret+check+compile
+false and true	false	interpret+check+compile
+false and false	false	interpret+check+compile
+false and none	false	interpret+check+compile
+false and [1 2]	false	interpret+check+compile
+none 0 0	none 0 0	interpret+check+compile
+none 0 1	none 0 1	interpret+check+compile
+none 0 2.5	none 0 2.5	interpret+check+compile
+none 0 'x'	none 0 'x'	interpret+check+compile
+none 0 true	none 0 true	interpret+check+compile
+none 0 false	none 0 false	interpret+check+compile
+none 0 none	none 0 none	interpret+check+compile
+none 0 [1 2]	none 0 [1 2]	interpret+check+compile
+none 0 drop	none	interpret+check+compile
+none 0 not	none true	interpret+check+compile
+none 0 size	none 0	interpret+check+compile
+none 0 eq	false	interpret+check+compile
+none 0 and	none	interpret+check+compile
+none 0 swap	0 none	interpret+check+compile
+none 1 0	none 1 0	interpret+check+compile
+none 1 1	none 1 1	interpret+check+compile
+none 1 2.5	none 1 2.5	interpret+check+compile
+none 1 'x'	none 1 'x'	interpret+check+compile
+none 1 true	none 1 true	interpret+check+compile
+none 1 false	none 1 false	interpret+check+compile
+none 1 none	none 1 none	interpret+check+compile
+none 1 [1 2]	none 1 [1 2]	interpret+check+compile
+none 1 drop	none	interpret+check+compile
+none 1 not	none false	interpret+check+compile
+none 1 size	none 1	interpret+check+compile
+none 1 eq	false	interpret+check+compile
+none 1 and	none	interpret+check+compile
+none 1 swap	1 none	interpret+check+compile
+none 2.5 0	none 2.5 0	interpret+check+compile
+none 2.5 1	none 2.5 1	interpret+check+compile
+none 2.5 2.5	none 2.5 2.5	interpret+check+compile
+none 2.5 'x'	none 2.5 'x'	interpret+check+compile
+none 2.5 true	none 2.5 true	interpret+check+compile
+none 2.5 false	none 2.5 false	interpret+check+compile
+none 2.5 none	none 2.5 none	interpret+check+compile
+none 2.5 [1 2]	none 2.5 [1 2]	interpret+check+compile
+none 2.5 drop	none	interpret+check+compile
+none 2.5 not	none false	interpret+check+compile
+none 2.5 size	none 2	interpret+check+compile
+none 2.5 eq	false	interpret+check+compile
+none 2.5 and	none	interpret+check+compile
+none 2.5 swap	2.5 none	interpret+check+compile
+none 'x' 0	none 'x' 0	interpret+check+compile
+none 'x' 1	none 'x' 1	interpret+check+compile
+none 'x' 2.5	none 'x' 2.5	interpret+check+compile
+none 'x' 'x'	none 'x' 'x'	interpret+check+compile
+none 'x' true	none 'x' true	interpret+check+compile
+none 'x' false	none 'x' false	interpret+check+compile
+none 'x' none	none 'x' none	interpret+check+compile
+none 'x' [1 2]	none 'x' [1 2]	interpret+check+compile
+none 'x' drop	none	interpret+check+compile
+none 'x' not	none false	interpret+check+compile
+none 'x' size	none 1	interpret+check+compile
+none 'x' eq	false	interpret+check+compile
+none 'x' and	none	interpret+check+compile
+none 'x' swap	'x' none	interpret+check+compile
+none true 0	none true 0	interpret+check+compile
+none true 1	none true 1	interpret+check+compile
+none true 2.5	none true 2.5	interpret+check+compile
+none true 'x'	none true 'x'	interpret+check+compile
+none true true	none true true	interpret+check+compile
+none true false	none true false	interpret+check+compile
+none true none	none true none	interpret+check+compile
+none true [1 2]	none true [1 2]	interpret+check+compile
+none true drop	none	interpret+check+compile
+none true not	none false	interpret+check+compile
+none true size	none 1	interpret+check+compile
+none true eq	false	interpret+check+compile
+none true and	none	interpret+check+compile
+none true swap	true none	interpret+check+compile
+none false 0	none false 0	interpret+check+compile
+none false 1	none false 1	interpret+check+compile
+none false 2.5	none false 2.5	interpret+check+compile
+none false 'x'	none false 'x'	interpret+check+compile
+none false true	none false true	interpret+check+compile
+none false false	none false false	interpret+check+compile
+none false none	none false none	interpret+check+compile
+none false [1 2]	none false [1 2]	interpret+check+compile
+none false drop	none	interpret+check+compile
+none false not	none true	interpret+check+compile
+none false size	none 0	interpret+check+compile
+none false eq	false	interpret+check+compile
+none false and	none	interpret+check+compile
+none false swap	false none	interpret+check+compile
+none none 0	none none 0	interpret+check+compile
+none none 1	none none 1	interpret+check+compile
+none none 2.5	none none 2.5	interpret+check+compile
+none none 'x'	none none 'x'	interpret+check+compile
+none none true	none none true	interpret+check+compile
+none none false	none none false	interpret+check+compile
+none none none	none none none	interpret+check+compile
+none none [1 2]	none none [1 2]	interpret+check+compile
+none none drop	none	interpret+check+compile
+none none not	none true	interpret+check+compile
+none none size	none 0	interpret+check+compile
+none none eq	true	interpret+check+compile
+none none lt	false	interpret+check+compile
+none none and	none	interpret+check+compile
+none none swap	none none	interpret+check+compile
+none [1 2] 0	none [1 2] 0	interpret+check+compile
+none [1 2] 1	none [1 2] 1	interpret+check+compile
+none [1 2] 2.5	none [1 2] 2.5	interpret+check+compile
+none [1 2] 'x'	none [1 2] 'x'	interpret+check+compile
+none [1 2] true	none [1 2] true	interpret+check+compile
+none [1 2] false	none [1 2] false	interpret+check+compile
+none [1 2] none	none [1 2] none	interpret+check+compile
+none [1 2] [1 2]	none [1 2] [1 2]	interpret+check+compile
+none [1 2] drop	none	interpret+check+compile
+none [1 2] not	none false	interpret+check+compile
+none [1 2] size	none 2	interpret+check+compile
+none [1 2] eq	false	interpret+check+compile
+none [1 2] and	none	interpret+check+compile
+none [1 2] swap	[1 2] none	interpret+check+compile
+none dup 0	none none 0	interpret+check+compile
+none dup 1	none none 1	interpret+check+compile
+none dup 2.5	none none 2.5	interpret+check+compile
+none dup 'x'	none none 'x'	interpret+check+compile
+none dup true	none none true	interpret+check+compile
+none dup false	none none false	interpret+check+compile
+none dup none	none none none	interpret+check+compile
+none dup [1 2]	none none [1 2]	interpret+check+compile
+none dup dup	none none none	interpret+check+compile
+none dup drop	none	interpret+check+compile
+none dup not	none true	interpret+check+compile
+none dup size	none 0	interpret+check+compile
+none dup eq	true	interpret+check+compile
+none dup lt	false	interpret+check+compile
+none dup and	none	interpret+check+compile
+none dup swap	none none	interpret+check+compile
+none drop 0	0	interpret+check+compile
+none drop 1	1	interpret+check+compile
+none drop 2.5	2.5	interpret+check+compile
+none drop 'x'	'x'	interpret+check+compile
+none drop true	true	interpret+check+compile
+none drop false	false	interpret+check+compile
+none drop none	none	interpret+check+compile
+none drop [1 2]	[1 2]	interpret+check+compile
+none not 0	none true	interpret+check+compile
+none not 1	none false	interpret+check+compile
+none not 2.5	none false	interpret+check+compile
+none not 'x'	none false	interpret+check+compile
+none not true	none false	interpret+check+compile
+none not false	none true	interpret+check+compile
+none not none	none true	interpret+check+compile
+none not [1 2]	none false	interpret+check+compile
+none size 0	none 0	interpret+check+compile
+none size 1	none 1	interpret+check+compile
+none size 2.5	none 2	interpret+check+compile
+none size 'x'	none 1	interpret+check+compile
+none size true	none 1	interpret+check+compile
+none size false	none 0	interpret+check+compile
+none size none	none 0	interpret+check+compile
+none size [1 2]	none 2	interpret+check+compile
+none eq 0	false	interpret+check+compile
+none eq 1	false	interpret+check+compile
+none eq 2.5	false	interpret+check+compile
+none eq 'x'	false	interpret+check+compile
+none eq true	false	interpret+check+compile
+none eq false	false	interpret+check+compile
+none eq none	true	interpret+check+compile
+none eq [1 2]	false	interpret+check+compile
+none lt none	false	interpret+check+compile
+none and 0	none	interpret+check+compile
+none and 1	none	interpret+check+compile
+none and 2.5	none	interpret+check+compile
+none and 'x'	none	interpret+check+compile
+none and true	none	interpret+check+compile
+none and false	none	interpret+check+compile
+none and none	none	interpret+check+compile
+none and [1 2]	none	interpret+check+compile
+[1 2] 0 0	[1 2] 0 0	interpret+check+compile
+[1 2] 0 1	[1 2] 0 1	interpret+check+compile
+[1 2] 0 2.5	[1 2] 0 2.5	interpret+check+compile
+[1 2] 0 'x'	[1 2] 0 'x'	interpret+check+compile
+[1 2] 0 true	[1 2] 0 true	interpret+check+compile
+[1 2] 0 false	[1 2] 0 false	interpret+check+compile
+[1 2] 0 none	[1 2] 0 none	interpret+check+compile
+[1 2] 0 [1 2]	[1 2] 0 [1 2]	interpret+check+compile
+[1 2] 0 drop	[1 2]	interpret+check+compile
+[1 2] 0 not	[1 2] true	interpret+check+compile
+[1 2] 0 size	[1 2] 0	interpret+check+compile
+[1 2] 0 eq	false	interpret+check+compile
+[1 2] 0 and	0	interpret+check+compile
+[1 2] 0 swap	0 [1 2]	interpret+check+compile
+[1 2] 1 0	[1 2] 1 0	interpret+check+compile
+[1 2] 1 1	[1 2] 1 1	interpret+check+compile
+[1 2] 1 2.5	[1 2] 1 2.5	interpret+check+compile
+[1 2] 1 'x'	[1 2] 1 'x'	interpret+check+compile
+[1 2] 1 true	[1 2] 1 true	interpret+check+compile
+[1 2] 1 false	[1 2] 1 false	interpret+check+compile
+[1 2] 1 none	[1 2] 1 none	interpret+check+compile
+[1 2] 1 [1 2]	[1 2] 1 [1 2]	interpret+check+compile
+[1 2] 1 drop	[1 2]	interpret+check+compile
+[1 2] 1 not	[1 2] false	interpret+check+compile
+[1 2] 1 size	[1 2] 1	interpret+check+compile
+[1 2] 1 eq	false	interpret+check+compile
+[1 2] 1 and	1	interpret+check+compile
+[1 2] 1 swap	1 [1 2]	interpret+check+compile
+[1 2] 2.5 0	[1 2] 2.5 0	interpret+check+compile
+[1 2] 2.5 1	[1 2] 2.5 1	interpret+check+compile
+[1 2] 2.5 2.5	[1 2] 2.5 2.5	interpret+check+compile
+[1 2] 2.5 'x'	[1 2] 2.5 'x'	interpret+check+compile
+[1 2] 2.5 true	[1 2] 2.5 true	interpret+check+compile
+[1 2] 2.5 false	[1 2] 2.5 false	interpret+check+compile
+[1 2] 2.5 none	[1 2] 2.5 none	interpret+check+compile
+[1 2] 2.5 [1 2]	[1 2] 2.5 [1 2]	interpret+check+compile
+[1 2] 2.5 drop	[1 2]	interpret+check+compile
+[1 2] 2.5 not	[1 2] false	interpret+check+compile
+[1 2] 2.5 size	[1 2] 2	interpret+check+compile
+[1 2] 2.5 eq	false	interpret+check+compile
+[1 2] 2.5 and	2.5	interpret+check+compile
+[1 2] 2.5 swap	2.5 [1 2]	interpret+check+compile
+[1 2] 'x' 0	[1 2] 'x' 0	interpret+check+compile
+[1 2] 'x' 1	[1 2] 'x' 1	interpret+check+compile
+[1 2] 'x' 2.5	[1 2] 'x' 2.5	interpret+check+compile
+[1 2] 'x' 'x'	[1 2] 'x' 'x'	interpret+check+compile
+[1 2] 'x' true	[1 2] 'x' true	interpret+check+compile
+[1 2] 'x' false	[1 2] 'x' false	interpret+check+compile
+[1 2] 'x' none	[1 2] 'x' none	interpret+check+compile
+[1 2] 'x' [1 2]	[1 2] 'x' [1 2]	interpret+check+compile
+[1 2] 'x' drop	[1 2]	interpret+check+compile
+[1 2] 'x' not	[1 2] false	interpret+check+compile
+[1 2] 'x' size	[1 2] 1	interpret+check+compile
+[1 2] 'x' eq	false	interpret+check+compile
+[1 2] 'x' and	'x'	interpret+check+compile
+[1 2] 'x' swap	'x' [1 2]	interpret+check+compile
+[1 2] true 0	[1 2] true 0	interpret+check+compile
+[1 2] true 1	[1 2] true 1	interpret+check+compile
+[1 2] true 2.5	[1 2] true 2.5	interpret+check+compile
+[1 2] true 'x'	[1 2] true 'x'	interpret+check+compile
+[1 2] true true	[1 2] true true	interpret+check+compile
+[1 2] true false	[1 2] true false	interpret+check+compile
+[1 2] true none	[1 2] true none	interpret+check+compile
+[1 2] true [1 2]	[1 2] true [1 2]	interpret+check+compile
+[1 2] true drop	[1 2]	interpret+check+compile
+[1 2] true not	[1 2] false	interpret+check+compile
+[1 2] true size	[1 2] 1	interpret+check+compile
+[1 2] true eq	false	interpret+check+compile
+[1 2] true and	true	interpret+check+compile
+[1 2] true swap	true [1 2]	interpret+check+compile
+[1 2] false 0	[1 2] false 0	interpret+check+compile
+[1 2] false 1	[1 2] false 1	interpret+check+compile
+[1 2] false 2.5	[1 2] false 2.5	interpret+check+compile
+[1 2] false 'x'	[1 2] false 'x'	interpret+check+compile
+[1 2] false true	[1 2] false true	interpret+check+compile
+[1 2] false false	[1 2] false false	interpret+check+compile
+[1 2] false none	[1 2] false none	interpret+check+compile
+[1 2] false [1 2]	[1 2] false [1 2]	interpret+check+compile
+[1 2] false drop	[1 2]	interpret+check+compile
+[1 2] false not	[1 2] true	interpret+check+compile
+[1 2] false size	[1 2] 0	interpret+check+compile
+[1 2] false eq	false	interpret+check+compile
+[1 2] false and	false	interpret+check+compile
+[1 2] false swap	false [1 2]	interpret+check+compile
+[1 2] none 0	[1 2] none 0	interpret+check+compile
+[1 2] none 1	[1 2] none 1	interpret+check+compile
+[1 2] none 2.5	[1 2] none 2.5	interpret+check+compile
+[1 2] none 'x'	[1 2] none 'x'	interpret+check+compile
+[1 2] none true	[1 2] none true	interpret+check+compile
+[1 2] none false	[1 2] none false	interpret+check+compile
+[1 2] none none	[1 2] none none	interpret+check+compile
+[1 2] none [1 2]	[1 2] none [1 2]	interpret+check+compile
+[1 2] none drop	[1 2]	interpret+check+compile
+[1 2] none not	[1 2] true	interpret+check+compile
+[1 2] none size	[1 2] 0	interpret+check+compile
+[1 2] none eq	false	interpret+check+compile
+[1 2] none and	none	interpret+check+compile
+[1 2] none swap	none [1 2]	interpret+check+compile
+[1 2] [1 2] 0	[1 2] [1 2] 0	interpret+check+compile
+[1 2] [1 2] 1	[1 2] [1 2] 1	interpret+check+compile
+[1 2] [1 2] 2.5	[1 2] [1 2] 2.5	interpret+check+compile
+[1 2] [1 2] 'x'	[1 2] [1 2] 'x'	interpret+check+compile
+[1 2] [1 2] true	[1 2] [1 2] true	interpret+check+compile
+[1 2] [1 2] false	[1 2] [1 2] false	interpret+check+compile
+[1 2] [1 2] none	[1 2] [1 2] none	interpret+check+compile
+[1 2] [1 2] [1 2]	[1 2] [1 2] [1 2]	interpret+check+compile
+[1 2] [1 2] drop	[1 2]	interpret+check+compile
+[1 2] [1 2] not	[1 2] false	interpret+check+compile
+[1 2] [1 2] size	[1 2] 2	interpret+check+compile
+[1 2] [1 2] eq	false	interpret+check+compile
+[1 2] [1 2] lt	false	interpret+check+compile
+[1 2] [1 2] and	[1 2]	interpret+check+compile
+[1 2] [1 2] swap	[1 2] [1 2]	interpret+check+compile
+[1 2] dup 0	[1 2] [1 2] 0	interpret+check+compile
+[1 2] dup 1	[1 2] [1 2] 1	interpret+check+compile
+[1 2] dup 2.5	[1 2] [1 2] 2.5	interpret+check+compile
+[1 2] dup 'x'	[1 2] [1 2] 'x'	interpret+check+compile
+[1 2] dup true	[1 2] [1 2] true	interpret+check+compile
+[1 2] dup false	[1 2] [1 2] false	interpret+check+compile
+[1 2] dup none	[1 2] [1 2] none	interpret+check+compile
+[1 2] dup [1 2]	[1 2] [1 2] [1 2]	interpret+check+compile
+[1 2] dup dup	[1 2] [1 2] [1 2]	interpret+check+compile
+[1 2] dup drop	[1 2]	interpret+check+compile
+[1 2] dup not	[1 2] false	interpret+check+compile
+[1 2] dup size	[1 2] 2	interpret+check+compile
+[1 2] dup eq	true	interpret+check+compile
+[1 2] dup lt	false	interpret+check+compile
+[1 2] dup and	[1 2]	interpret+check+compile
+[1 2] dup swap	[1 2] [1 2]	interpret+check+compile
+[1 2] drop 0	0	interpret+check+compile
+[1 2] drop 1	1	interpret+check+compile
+[1 2] drop 2.5	2.5	interpret+check+compile
+[1 2] drop 'x'	'x'	interpret+check+compile
+[1 2] drop true	true	interpret+check+compile
+[1 2] drop false	false	interpret+check+compile
+[1 2] drop none	none	interpret+check+compile
+[1 2] drop [1 2]	[1 2]	interpret+check+compile
+[1 2] not 0	[1 2] true	interpret+check+compile
+[1 2] not 1	[1 2] false	interpret+check+compile
+[1 2] not 2.5	[1 2] false	interpret+check+compile
+[1 2] not 'x'	[1 2] false	interpret+check+compile
+[1 2] not true	[1 2] false	interpret+check+compile
+[1 2] not false	[1 2] true	interpret+check+compile
+[1 2] not none	[1 2] true	interpret+check+compile
+[1 2] not [1 2]	[1 2] false	interpret+check+compile
+[1 2] size 0	[1 2] 0	interpret+check+compile
+[1 2] size 1	[1 2] 1	interpret+check+compile
+[1 2] size 2.5	[1 2] 2	interpret+check+compile
+[1 2] size 'x'	[1 2] 1	interpret+check+compile
+[1 2] size true	[1 2] 1	interpret+check+compile
+[1 2] size false	[1 2] 0	interpret+check+compile
+[1 2] size none	[1 2] 0	interpret+check+compile
+[1 2] size [1 2]	[1 2] 2	interpret+check+compile
+[1 2] eq 0	false	interpret+check+compile
+[1 2] eq 1	false	interpret+check+compile
+[1 2] eq 2.5	false	interpret+check+compile
+[1 2] eq 'x'	false	interpret+check+compile
+[1 2] eq true	false	interpret+check+compile
+[1 2] eq false	false	interpret+check+compile
+[1 2] eq none	false	interpret+check+compile
+[1 2] eq [1 2]	false	interpret+check+compile
+[1 2] lt [1 2]	false	interpret+check+compile
+[1 2] and 0	0	interpret+check+compile
+[1 2] and 1	1	interpret+check+compile
+[1 2] and 2.5	2.5	interpret+check+compile
+[1 2] and 'x'	'x'	interpret+check+compile
+[1 2] and true	true	interpret+check+compile
+[1 2] and false	false	interpret+check+compile
+[1 2] and none	none	interpret+check+compile
+[1 2] and [1 2]	[1 2]	interpret+check+compile
+not 0 0	true 0	interpret+check+compile
+not 0 1	true 1	interpret+check+compile
+not 0 2.5	true 2.5	interpret+check+compile
+not 0 'x'	true 'x'	interpret+check+compile
+not 0 true	true true	interpret+check+compile
+not 0 false	true false	interpret+check+compile
+not 0 none	true none	interpret+check+compile
+not 0 [1 2]	true [1 2]	interpret+check+compile
+not 0 dup	true true	interpret+check+compile
+not 0 drop		interpret+check+compile
+not 0 not	false	interpret+check+compile
+not 0 size	1	interpret+check+compile
+not 1 0	false 0	interpret+check+compile
+not 1 1	false 1	interpret+check+compile
+not 1 2.5	false 2.5	interpret+check+compile
+not 1 'x'	false 'x'	interpret+check+compile
+not 1 true	false true	interpret+check+compile
+not 1 false	false false	interpret+check+compile
+not 1 none	false none	interpret+check+compile
+not 1 [1 2]	false [1 2]	interpret+check+compile
+not 1 dup	false false	interpret+check+compile
+not 1 drop		interpret+check+compile
+not 1 not	true	interpret+check+compile
+not 1 size	0	interpret+check+compile
+not 2.5 0	false 0	interpret+check+compile
+not 2.5 1	false 1	interpret+check+compile
+not 2.5 2.5	false 2.5	interpret+check+compile
+not 2.5 'x'	false 'x'	interpret+check+compile
+not 2.5 true	false true	interpret+check+compile
+not 2.5 false	false false	interpret+check+compile
+not 2.5 none	false none	interpret+check+compile
+not 2.5 [1 2]	false [1 2]	interpret+check+compile
+not 2.5 dup	false false	interpret+check+compile
+not 2.5 drop		interpret+check+compile
+not 2.5 not	true	interpret+check+compile
+not 2.5 size	0	interpret+check+compile
+not 'x' 0	false 0	interpret+check+compile
+not 'x' 1	false 1	interpret+check+compile
+not 'x' 2.5	false 2.5	interpret+check+compile
+not 'x' 'x'	false 'x'	interpret+check+compile
+not 'x' true	false true	interpret+check+compile
+not 'x' false	false false	interpret+check+compile
+not 'x' none	false none	interpret+check+compile
+not 'x' [1 2]	false [1 2]	interpret+check+compile
+not 'x' dup	false false	interpret+check+compile
+not 'x' drop		interpret+check+compile
+not 'x' not	true	interpret+check+compile
+not 'x' size	0	interpret+check+compile
+not true 0	false 0	interpret+check+compile
+not true 1	false 1	interpret+check+compile
+not true 2.5	false 2.5	interpret+check+compile
+not true 'x'	false 'x'	interpret+check+compile
+not true true	false true	interpret+check+compile
+not true false	false false	interpret+check+compile
+not true none	false none	interpret+check+compile
+not true [1 2]	false [1 2]	interpret+check+compile
+not true dup	false false	interpret+check+compile
+not true drop		interpret+check+compile
+not true not	true	interpret+check+compile
+not true size	0	interpret+check+compile
+not false 0	true 0	interpret+check+compile
+not false 1	true 1	interpret+check+compile
+not false 2.5	true 2.5	interpret+check+compile
+not false 'x'	true 'x'	interpret+check+compile
+not false true	true true	interpret+check+compile
+not false false	true false	interpret+check+compile
+not false none	true none	interpret+check+compile
+not false [1 2]	true [1 2]	interpret+check+compile
+not false dup	true true	interpret+check+compile
+not false drop		interpret+check+compile
+not false not	false	interpret+check+compile
+not false size	1	interpret+check+compile
+not none 0	true 0	interpret+check+compile
+not none 1	true 1	interpret+check+compile
+not none 2.5	true 2.5	interpret+check+compile
+not none 'x'	true 'x'	interpret+check+compile
+not none true	true true	interpret+check+compile
+not none false	true false	interpret+check+compile
+not none none	true none	interpret+check+compile
+not none [1 2]	true [1 2]	interpret+check+compile
+not none dup	true true	interpret+check+compile
+not none drop		interpret+check+compile
+not none not	false	interpret+check+compile
+not none size	1	interpret+check+compile
+not [1 2] 0	false 0	interpret+check+compile
+not [1 2] 1	false 1	interpret+check+compile
+not [1 2] 2.5	false 2.5	interpret+check+compile
+not [1 2] 'x'	false 'x'	interpret+check+compile
+not [1 2] true	false true	interpret+check+compile
+not [1 2] false	false false	interpret+check+compile
+not [1 2] none	false none	interpret+check+compile
+not [1 2] [1 2]	false [1 2]	interpret+check+compile
+not [1 2] dup	false false	interpret+check+compile
+not [1 2] drop		interpret+check+compile
+not [1 2] not	true	interpret+check+compile
+not [1 2] size	0	interpret+check+compile
+not not 0	false	interpret+check+compile
+not not 1	true	interpret+check+compile
+not not 2.5	true	interpret+check+compile
+not not 'x'	true	interpret+check+compile
+not not true	true	interpret+check+compile
+not not false	false	interpret+check+compile
+not not none	false	interpret+check+compile
+not not [1 2]	true	interpret+check+compile
+not size 0	true	interpret+check+compile
+not size 1	false	interpret+check+compile
+not size 2.5	false	interpret+check+compile
+not size 'x'	false	interpret+check+compile
+not size true	false	interpret+check+compile
+not size false	true	interpret+check+compile
+not size none	true	interpret+check+compile
+not size [1 2]	false	interpret+check+compile
+size 0 0	0 0	interpret+check+compile
+size 0 1	0 1	interpret+check+compile
+size 0 2.5	0 2.5	interpret+check+compile
+size 0 'x'	0 'x'	interpret+check+compile
+size 0 true	0 true	interpret+check+compile
+size 0 false	0 false	interpret+check+compile
+size 0 none	0 none	interpret+check+compile
+size 0 [1 2]	0 [1 2]	interpret+check+compile
+size 0 dup	0 0	interpret+check+compile
+size 0 drop		interpret+check+compile
+size 0 not	true	interpret+check+compile
+size 0 size	0	interpret+check+compile
+size 1 0	1 0	interpret+check+compile
+size 1 1	1 1	interpret+check+compile
+size 1 2.5	1 2.5	interpret+check+compile
+size 1 'x'	1 'x'	interpret+check+compile
+size 1 true	1 true	interpret+check+compile
+size 1 false	1 false	interpret+check+compile
+size 1 none	1 none	interpret+check+compile
+size 1 [1 2]	1 [1 2]	interpret+check+compile
+size 1 dup	1 1	interpret+check+compile
+size 1 drop		interpret+check+compile
+size 1 not	false	interpret+check+compile
+size 1 size	1	interpret+check+compile
+size 2.5 0	2 0	interpret+check+compile
+size 2.5 1	2 1	interpret+check+compile
+size 2.5 2.5	2 2.5	interpret+check+compile
+size 2.5 'x'	2 'x'	interpret+check+compile
+size 2.5 true	2 true	interpret+check+compile
+size 2.5 false	2 false	interpret+check+compile
+size 2.5 none	2 none	interpret+check+compile
+size 2.5 [1 2]	2 [1 2]	interpret+check+compile
+size 2.5 dup	2 2	interpret+check+compile
+size 2.5 drop		interpret+check+compile
+size 2.5 not	false	interpret+check+compile
+size 2.5 size	2	interpret+check+compile
+size 'x' 0	1 0	interpret+check+compile
+size 'x' 1	1 1	interpret+check+compile
+size 'x' 2.5	1 2.5	interpret+check+compile
+size 'x' 'x'	1 'x'	interpret+check+compile
+size 'x' true	1 true	interpret+check+compile
+size 'x' false	1 false	interpret+check+compile
+size 'x' none	1 none	interpret+check+compile
+size 'x' [1 2]	1 [1 2]	interpret+check+compile
+size 'x' dup	1 1	interpret+check+compile
+size 'x' drop		interpret+check+compile
+size 'x' not	false	interpret+check+compile
+size 'x' size	1	interpret+check+compile
+size true 0	1 0	interpret+check+compile
+size true 1	1 1	interpret+check+compile
+size true 2.5	1 2.5	interpret+check+compile
+size true 'x'	1 'x'	interpret+check+compile
+size true true	1 true	interpret+check+compile
+size true false	1 false	interpret+check+compile
+size true none	1 none	interpret+check+compile
+size true [1 2]	1 [1 2]	interpret+check+compile
+size true dup	1 1	interpret+check+compile
+size true drop		interpret+check+compile
+size true not	false	interpret+check+compile
+size true size	1	interpret+check+compile
+size false 0	0 0	interpret+check+compile
+size false 1	0 1	interpret+check+compile
+size false 2.5	0 2.5	interpret+check+compile
+size false 'x'	0 'x'	interpret+check+compile
+size false true	0 true	interpret+check+compile
+size false false	0 false	interpret+check+compile
+size false none	0 none	interpret+check+compile
+size false [1 2]	0 [1 2]	interpret+check+compile
+size false dup	0 0	interpret+check+compile
+size false drop		interpret+check+compile
+size false not	true	interpret+check+compile
+size false size	0	interpret+check+compile
+size none 0	0 0	interpret+check+compile
+size none 1	0 1	interpret+check+compile
+size none 2.5	0 2.5	interpret+check+compile
+size none 'x'	0 'x'	interpret+check+compile
+size none true	0 true	interpret+check+compile
+size none false	0 false	interpret+check+compile
+size none none	0 none	interpret+check+compile
+size none [1 2]	0 [1 2]	interpret+check+compile
+size none dup	0 0	interpret+check+compile
+size none drop		interpret+check+compile
+size none not	true	interpret+check+compile
+size none size	0	interpret+check+compile
+size [1 2] 0	2 0	interpret+check+compile
+size [1 2] 1	2 1	interpret+check+compile
+size [1 2] 2.5	2 2.5	interpret+check+compile
+size [1 2] 'x'	2 'x'	interpret+check+compile
+size [1 2] true	2 true	interpret+check+compile
+size [1 2] false	2 false	interpret+check+compile
+size [1 2] none	2 none	interpret+check+compile
+size [1 2] [1 2]	2 [1 2]	interpret+check+compile
+size [1 2] dup	2 2	interpret+check+compile
+size [1 2] drop		interpret+check+compile
+size [1 2] not	false	interpret+check+compile
+size [1 2] size	2	interpret+check+compile
+size not 0	1	interpret+check+compile
+size not 1	0	interpret+check+compile
+size not 2.5	0	interpret+check+compile
+size not 'x'	0	interpret+check+compile
+size not true	0	interpret+check+compile
+size not false	1	interpret+check+compile
+size not none	1	interpret+check+compile
+size not [1 2]	0	interpret+check+compile
+size size 0	0	interpret+check+compile
+size size 1	1	interpret+check+compile
+size size 2.5	2	interpret+check+compile
+size size 'x'	1	interpret+check+compile
+size size true	1	interpret+check+compile
+size size false	0	interpret+check+compile
+size size none	0	interpret+check+compile
+size size [1 2]	2	interpret+check+compile
+add 0 0	0	interpret+check+compile
+add 0 1	1	interpret+check+compile
+add 0 2.5	2.5	interpret+check+compile
+add 0 'x'	'x0'	interpret+check+compile
+add 1 0	1	interpret+check+compile
+add 1 1	2	interpret+check+compile
+add 1 2.5	3.5	interpret+check+compile
+add 1 'x'	'x1'	interpret+check+compile
+add 2.5 0	2.5	interpret+check+compile
+add 2.5 1	3.5	interpret+check+compile
+add 2.5 2.5	5.0	interpret+check+compile
+add 2.5 'x'	'x2.5'	interpret+check+compile
+add 'x' 0	'0x'	interpret+check+compile
+add 'x' 1	'1x'	interpret+check+compile
+add 'x' 2.5	'2.5x'	interpret+check+compile
+add 'x' 'x'	'xx'	interpret+check+compile
+add 'x' true	'truex'	interpret+check+compile
+add 'x' false	'falsex'	interpret+check+compile
+add true 'x'	'xtrue'	interpret+check+compile
+add false 'x'	'xfalse'	interpret+check+compile
+sub 0 0	0	interpret+check+compile
+sub 0 1	1	interpret+check+compile
+sub 0 2.5	2.5	interpret+check+compile
+sub 1 0	-1	interpret+check+compile
+sub 1 1	0	interpret+check+compile
+sub 1 2.5	1.5	interpret+check+compile
+sub 2.5 0	-2.5	interpret+check+compile
+sub 2.5 1	-1.5	interpret+check+compile
+sub 2.5 2.5	0.0	interpret+check+compile
+mul 0 0	0	interpret+check+compile
+mul 0 1	0	interpret+check+compile
+mul 0 2.5	0.0	interpret+check+compile
+mul 1 0	0	interpret+check+compile
+mul 1 1	1	interpret+check+compile
+mul 1 2.5	2.5	interpret+check+compile
+mul 2.5 0	0.0	interpret+check+compile
+mul 2.5 1	2.5	interpret+check+compile
+mul 2.5 2.5	6.25	interpret+check+compile
+eq 0 0	true	interpret+check+compile
+eq 0 1	false	interpret+check+compile
+eq 0 2.5	false	interpret+check+compile
+eq 0 'x'	false	interpret+check+compile
+eq 0 true	false	interpret+check+compile
+eq 0 false	false	interpret+check+compile
+eq 0 none	false	interpret+check+compile
+eq 0 [1 2]	false	interpret+check+compile
+eq 1 0	false	interpret+check+compile
+eq 1 1	true	interpret+check+compile
+eq 1 2.5	false	interpret+check+compile
+eq 1 'x'	false	interpret+check+compile
+eq 1 true	false	interpret+check+compile
+eq 1 false	false	interpret+check+compile
+eq 1 none	false	interpret+check+compile
+eq 1 [1 2]	false	interpret+check+compile
+eq 2.5 0	false	interpret+check+compile
+eq 2.5 1	false	interpret+check+compile
+eq 2.5 2.5	true	interpret+check+compile
+eq 2.5 'x'	false	interpret+check+compile
+eq 2.5 true	false	interpret+check+compile
+eq 2.5 false	false	interpret+check+compile
+eq 2.5 none	false	interpret+check+compile
+eq 2.5 [1 2]	false	interpret+check+compile
+eq 'x' 0	false	interpret+check+compile
+eq 'x' 1	false	interpret+check+compile
+eq 'x' 2.5	false	interpret+check+compile
+eq 'x' 'x'	true	interpret+check+compile
+eq 'x' true	false	interpret+check+compile
+eq 'x' false	false	interpret+check+compile
+eq 'x' none	false	interpret+check+compile
+eq 'x' [1 2]	false	interpret+check+compile
+eq true 0	false	interpret+check+compile
+eq true 1	false	interpret+check+compile
+eq true 2.5	false	interpret+check+compile
+eq true 'x'	false	interpret+check+compile
+eq true true	true	interpret+check+compile
+eq true false	false	interpret+check+compile
+eq true none	false	interpret+check+compile
+eq true [1 2]	false	interpret+check+compile
+eq false 0	false	interpret+check+compile
+eq false 1	false	interpret+check+compile
+eq false 2.5	false	interpret+check+compile
+eq false 'x'	false	interpret+check+compile
+eq false true	false	interpret+check+compile
+eq false false	true	interpret+check+compile
+eq false none	false	interpret+check+compile
+eq false [1 2]	false	interpret+check+compile
+eq none 0	false	interpret+check+compile
+eq none 1	false	interpret+check+compile
+eq none 2.5	false	interpret+check+compile
+eq none 'x'	false	interpret+check+compile
+eq none true	false	interpret+check+compile
+eq none false	false	interpret+check+compile
+eq none none	true	interpret+check+compile
+eq none [1 2]	false	interpret+check+compile
+eq [1 2] 0	false	interpret+check+compile
+eq [1 2] 1	false	interpret+check+compile
+eq [1 2] 2.5	false	interpret+check+compile
+eq [1 2] 'x'	false	interpret+check+compile
+eq [1 2] true	false	interpret+check+compile
+eq [1 2] false	false	interpret+check+compile
+eq [1 2] none	false	interpret+check+compile
+eq [1 2] [1 2]	false	interpret+check+compile
+lt 0 0	false	interpret+check+compile
+lt 0 1	false	interpret+check+compile
+lt 0 2.5	false	interpret+check+compile
+lt 1 0	true	interpret+check+compile
+lt 1 1	false	interpret+check+compile
+lt 1 2.5	false	interpret+check+compile
+lt 2.5 0	true	interpret+check+compile
+lt 2.5 1	true	interpret+check+compile
+lt 2.5 2.5	false	interpret+check+compile
+lt 'x' 'x'	false	interpret+check+compile
+lt none none	false	interpret+check+compile
+lt [1 2] [1 2]	false	interpret+check+compile
+and 0 0	0	interpret+check+compile
+and 0 1	0	interpret+check+compile
+and 0 2.5	0	interpret+check+compile
+and 0 'x'	0	interpret+check+compile
+and 0 true	0	interpret+check+compile
+and 0 false	false	interpret+check+compile
+and 0 none	none	interpret+check+compile
+and 0 [1 2]	0	interpret+check+compile
+and 1 0	0	interpret+check+compile
+and 1 1	1	interpret+check+compile
+and 1 2.5	1	interpret+check+compile
+and 1 'x'	1	interpret+check+compile
+and 1 true	1	interpret+check+compile
+and 1 false	false	interpret+check+compile
+and 1 none	none	interpret+check+compile
+and 1 [1 2]	1	interpret+check+compile
+and 2.5 0	0	interpret+check+compile
+and 2.5 1	2.5	interpret+check+compile
+and 2.5 2.5	2.5	interpret+check+compile
+and 2.5 'x'	2.5	interpret+check+compile
+and 2.5 true	2.5	interpret+check+compile
+and 2.5 false	false	interpret+check+compile
+and 2.5 none	none	interpret+check+compile
+and 2.5 [1 2]	2.5	interpret+check+compile
+and 'x' 0	0	interpret+check+compile
+and 'x' 1	'x'	interpret+check+compile
+and 'x' 2.5	'x'	interpret+check+compile
+and 'x' 'x'	'x'	interpret+check+compile
+and 'x' true	'x'	interpret+check+compile
+and 'x' false	false	interpret+check+compile
+and 'x' none	none	interpret+check+compile
+and 'x' [1 2]	'x'	interpret+check+compile
+and true 0	0	interpret+check+compile
+and true 1	true	interpret+check+compile
+and true 2.5	true	interpret+check+compile
+and true 'x'	true	interpret+check+compile
+and true true	true	interpret+check+compile
+and true false	false	interpret+check+compile
+and true none	none	interpret+check+compile
+and true [1 2]	true	interpret+check+compile
+and false 0	0	interpret+check+compile
+and false 1	false	interpret+check+compile
+and false 2.5	false	interpret+check+compile
+and false 'x'	false	interpret+check+compile
+and false true	false	interpret+check+compile
+and false false	false	interpret+check+compile
+and false none	none	interpret+check+compile
+and false [1 2]	false	interpret+check+compile
+and none 0	0	interpret+check+compile
+and none 1	none	interpret+check+compile
+and none 2.5	none	interpret+check+compile
+and none 'x'	none	interpret+check+compile
+and none true	none	interpret+check+compile
+and none false	false	interpret+check+compile
+and none none	none	interpret+check+compile
+and none [1 2]	none	interpret+check+compile
+and [1 2] 0	0	interpret+check+compile
+and [1 2] 1	[1 2]	interpret+check+compile
+and [1 2] 2.5	[1 2]	interpret+check+compile
+and [1 2] 'x'	[1 2]	interpret+check+compile
+and [1 2] true	[1 2]	interpret+check+compile
+and [1 2] false	false	interpret+check+compile
+and [1 2] none	none	interpret+check+compile
+and [1 2] [1 2]	[1 2]	interpret+check+compile

@@ -43,29 +43,42 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
-const (
-	matrixPath      = "syntax-matrix.tsv"
-	passingPath     = "syntax-matrix-passing.tsv"
-	failCheckPath   = "syntax-matrix-fail-check.tsv"
-	failCompilePath = "syntax-matrix-fail-compile.tsv"
-	failRuntimePath = "syntax-matrix-fail-runtime.tsv"
-)
+const matrixPath = "syntax-matrix.tsv"
 
-// Floors for the three minimal-failing-prefix files, so a regression that
-// empties or mislabels them can't pass vacuously. Measured at 9031
-// type-check, 3436 compile and 936 runtime fails over the length-4
-// matrix; pinned below the live counts as headroom.
-const (
-	minCheckFailRows   = 9000
-	minCompileFailRows = 3400
-	minRuntimeFailRows = 900
-)
+// frontierSet groups the four derived files for one length window — the
+// passing subset plus the three minimal-failing-prefix buckets — with the
+// floors that keep each from silently collapsing. The full set spans the
+// whole length-4 matrix; the len123 set is the same separation restricted
+// to combinations of length 1..3.
+type frontierSet struct {
+	label                                        string
+	passing, failCheck, failCompile, failRuntime string
+	minPassing, minCheck, minCompile, minRuntime int
+}
 
-// minPassingRows floors the passing subset so a regression that empties
-// it (or that shrinks the interpret/check/compile intersection) can't
-// pass vacuously. Measured at 27712 over the length-4 matrix; pinned
-// below the live count as headroom.
-const minPassingRows = 27000
+var (
+	// fullSet — the length-1..4 separation. Counts measured at 27712 /
+	// 9031 / 3436 / 936; floors pinned just below as headroom.
+	fullSet = frontierSet{
+		label:       "full(len1-4)",
+		passing:     "syntax-matrix-passing.tsv",
+		failCheck:   "syntax-matrix-fail-check.tsv",
+		failCompile: "syntax-matrix-fail-compile.tsv",
+		failRuntime: "syntax-matrix-fail-runtime.tsv",
+		minPassing:  27000, minCheck: 9000, minCompile: 3400, minRuntime: 900,
+	}
+	// len123Set — the same separation over length-1..3 combinations only.
+	// Counts measured at 1992 / 547 / 120 / 48; floors pinned just below.
+	len123Set = frontierSet{
+		label:       "len123",
+		passing:     "syntax-matrix-len123-passing.tsv",
+		failCheck:   "syntax-matrix-len123-fail-check.tsv",
+		failCompile: "syntax-matrix-len123-fail-compile.tsv",
+		failRuntime: "syntax-matrix-len123-fail-runtime.tsv",
+		minPassing:  1900, minCheck: 540, minCompile: 115, minRuntime: 45,
+	}
+	frontierSets = []frontierSet{fullSet, len123Set}
+)
 
 // minCompiledRows is the floor for the compiler-parity gate: at least
 // this many non-error rows must take the bytecode-compiled path, or the
@@ -378,28 +391,35 @@ func hasCheckError(res lang.CheckResult) bool {
 	return false
 }
 
-// TestSyntaxMatrixFailFrontier re-verifies the two minimal-failing-prefix
-// files and, with them, the "compiler runs the checker first" contract.
+// TestSyntaxMatrixFailFrontier re-verifies the three minimal-failing-
+// prefix files of every frontier set (the full length-1..4 separation and
+// the len123 length-1..3 separation) and, with them, the "compiler runs
+// the checker first" contract.
 //
-//   - Every row of syntax-matrix-fail-check.tsv must be REJECTED BY THE
-//     CHECKER (a parse/run error or an error-severity diagnostic) AND the
-//     compiler must emit NO Program for it. The second clause is the
-//     contract: a program the checker rejects is never lowered to
-//     bytecode, because CompileCheck runs the checker first and refuses on
-//     any error diagnostic. Any check-rejected prefix that still produced
-//     a Program would be a violation.
-//   - Every row of syntax-matrix-fail-compile.tsv must PASS THE CHECKER
-//     (no error diagnostic) yet still produce NO Program — a genuine
-//     compile-stage refusal, disjoint from the check-fail set.
-//   - Every row of syntax-matrix-fail-runtime.tsv must PASS THE CHECKER
-//     AND COMPILE to a Program, yet ERROR when interpreted — a runtime
-//     fault the static stages cannot see, disjoint from both other sets.
+//   - Every fail-check row must be REJECTED BY THE CHECKER (a parse/run
+//     error or an error-severity diagnostic) AND the compiler must emit NO
+//     Program for it. The second clause is the contract: a program the
+//     checker rejects is never lowered to bytecode, because CompileCheck
+//     runs the checker first and refuses on any error diagnostic. Any
+//     check-rejected prefix that still produced a Program is a violation.
+//   - Every fail-compile row must PASS THE CHECKER (no error diagnostic)
+//     yet still produce NO Program — a genuine compile-stage refusal,
+//     disjoint from the check-fail set.
+//   - Every fail-runtime row must PASS THE CHECKER AND COMPILE to a
+//     Program, yet ERROR when interpreted — a runtime fault the static
+//     stages cannot see, disjoint from both other sets.
 //
 // Counts are floored so no file can silently collapse.
 func TestSyntaxMatrixFailFrontier(t *testing.T) {
-	checkRows := readRows(t, failCheckPath)
-	compileRows := readRows(t, failCompilePath)
-	runtimeRows := readRows(t, failRuntimePath)
+	for _, set := range frontierSets {
+		t.Run(set.label, func(t *testing.T) { verifyFailFrontier(t, set) })
+	}
+}
+
+func verifyFailFrontier(t *testing.T, set frontierSet) {
+	checkRows := readRows(t, set.failCheck)
+	compileRows := readRows(t, set.failCompile)
+	runtimeRows := readRows(t, set.failRuntime)
 
 	// fail-check: checker rejects, and the compiler emits no Program.
 	var checkVerified, compiledDespiteReject int64
@@ -483,28 +503,34 @@ func TestSyntaxMatrixFailFrontier(t *testing.T) {
 	if compiledDespiteReject != 0 {
 		t.Errorf("%d check-rejected prefixes still compiled — the compiler did NOT run the checker first", compiledDespiteReject)
 	}
-	if checkVerified < minCheckFailRows {
-		t.Errorf("only %d type-check-fail prefixes verified (floor %d)", checkVerified, minCheckFailRows)
+	if checkVerified < int64(set.minCheck) {
+		t.Errorf("only %d type-check-fail prefixes verified (floor %d)", checkVerified, set.minCheck)
 	}
-	if compileVerified < minCompileFailRows {
-		t.Errorf("only %d compile-fail prefixes verified (floor %d)", compileVerified, minCompileFailRows)
+	if compileVerified < int64(set.minCompile) {
+		t.Errorf("only %d compile-fail prefixes verified (floor %d)", compileVerified, set.minCompile)
 	}
-	if runtimeVerified < minRuntimeFailRows {
-		t.Errorf("only %d runtime-fail prefixes verified (floor %d)", runtimeVerified, minRuntimeFailRows)
+	if runtimeVerified < int64(set.minRuntime) {
+		t.Errorf("only %d runtime-fail prefixes verified (floor %d)", runtimeVerified, set.minRuntime)
 	}
 }
 
-// TestSyntaxMatrixPassing re-verifies the curated passing subset
-// (syntax-matrix-passing.tsv): every row must clear ALL THREE pipelines —
-// interpret to the recorded value, type-check with zero errors, and
-// compile to a result identical to the interpreter's. This is the
-// invariant the extractor (specgen -extract) builds the file on; the test
-// is its guard, so the file can't silently drift out of agreement with
-// the engine. None of these rows is an error row (an error row can never
-// pass interpret), and the count is floored so the subset can't collapse
-// to empty unnoticed.
+// TestSyntaxMatrixPassing re-verifies each curated passing subset (the
+// full length-1..4 file and the len123 length-1..3 file): every row must
+// clear ALL THREE pipelines — interpret to the recorded value, type-check
+// with zero errors, and compile to a result identical to the
+// interpreter's. This is the invariant the extractor (specgen -extract)
+// builds the files on; the test is their guard, so they can't silently
+// drift out of agreement with the engine. None of these rows is an error
+// row (an error row can never pass interpret), and each count is floored
+// so the subset can't collapse to empty unnoticed.
 func TestSyntaxMatrixPassing(t *testing.T) {
-	rows := readRows(t, passingPath)
+	for _, set := range frontierSets {
+		t.Run(set.label, func(t *testing.T) { verifyPassing(t, set.passing, set.minPassing) })
+	}
+}
+
+func verifyPassing(t *testing.T, path string, floor int) {
+	rows := readRows(t, path)
 	var verified int64
 	sink := &failSink{t: t, max: 50}
 	forEachRow(rows, func(r matrixRow) {
@@ -556,10 +582,10 @@ func TestSyntaxMatrixPassing(t *testing.T) {
 		atomic.AddInt64(&verified, 1)
 	})
 	sink.report()
-	t.Logf("passing subset: %d/%d rows verified through interpret+check+compile, %d failures",
-		verified, len(rows), sink.total())
-	if verified < minPassingRows {
+	t.Logf("passing subset %s: %d/%d rows verified through interpret+check+compile, %d failures",
+		path, verified, len(rows), sink.total())
+	if verified < int64(floor) {
 		t.Errorf("only %d passing rows verified (floor %d) — the passing subset shrank or the extractor regressed",
-			verified, minPassingRows)
+			verified, floor)
 	}
 }

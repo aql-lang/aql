@@ -215,7 +215,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "specgen -extract requires both -in and -out")
 			os.Exit(2)
 		}
-		extractPassing(*in, *out)
+		extractPassing(*in, *out, *max)
 		return
 	}
 
@@ -288,10 +288,11 @@ func writeHeader(w *bufio.Writer, max int) {
 type dataRow struct {
 	input    string
 	expected string
+	n        int // element count (1..4), parsed from the "N-elem …" note; 0 if absent
 }
 
-// readDataRows parses the data rows (input, expected) of a generated
-// matrix .tsv, skipping comment and blank lines.
+// readDataRows parses the data rows (input, expected, element count) of a
+// generated matrix .tsv, skipping comment and blank lines.
 func readDataRows(path string) ([]dataRow, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -310,7 +311,13 @@ func readDataRows(path string) ([]dataRow, error) {
 		if len(parts) < 2 {
 			return nil, fmt.Errorf("malformed row %q in %s", line, path)
 		}
-		rows = append(rows, dataRow{input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1])})
+		n := 0
+		if len(parts) >= 3 {
+			if note := strings.TrimSpace(parts[2]); len(note) > 0 && note[0] >= '1' && note[0] <= '9' {
+				n = int(note[0] - '0')
+			}
+		}
+		rows = append(rows, dataRow{input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1]), n: n})
 	}
 	return rows, sc.Err()
 }
@@ -318,10 +325,12 @@ func readDataRows(path string) ([]dataRow, error) {
 // extractPassing reads the full matrix at inPath and writes, to outPath,
 // only the rows that pass interpret + check + compile — the curated
 // "golden" subset every downstream consumer can trust to run, type-check
-// clean, and compile to an identical result. Work is fanned across
-// NumCPU workers (each with its own reused checker/compiler instances);
-// output preserves the input order, so the file is deterministic.
-func extractPassing(inPath, outPath string) {
+// clean, and compile to an identical result. When maxLen > 0 only rows of
+// that element count or shorter are considered (so a length-3 subset can
+// be cut from the length-4 matrix). Work is fanned across NumCPU workers
+// (each with its own reused checker/compiler instances); output preserves
+// the input order, so the file is deterministic.
+func extractPassing(inPath, outPath string, maxLen int) {
 	rows, err := readDataRows(inPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extract: %v\n", err)
@@ -330,7 +339,7 @@ func extractPassing(inPath, outPath string) {
 
 	pass := make([]bool, len(rows))
 	var next int64 = -1
-	var checked, kept int64
+	var checked, kept, scanned int64
 
 	workers := runtime.NumCPU()
 	if workers < 1 {
@@ -355,6 +364,10 @@ func extractPassing(inPath, outPath string) {
 					return
 				}
 				r := rows[idx]
+				if maxLen > 0 && r.n > maxLen {
+					continue // out of the requested length window
+				}
+				atomic.AddInt64(&scanned, 1)
 				if strings.HasPrefix(r.expected, "ERROR:") {
 					continue // error rows are never "passing"
 				}
@@ -394,15 +407,15 @@ func extractPassing(inPath, outPath string) {
 	w := bufio.NewWriter(f)
 	defer w.Flush()
 
-	writePassingHeader(w, len(rows), int(kept))
+	writePassingHeader(w, int(scanned), int(kept), maxLen)
 	for i, r := range rows {
 		if pass[i] {
 			fmt.Fprintf(w, "%s\t%s\tinterpret+check+compile\n", r.input, r.expected)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "specgen -extract: %d/%d non-error rows pass interpret+check+compile (%d total rows scanned)\n",
-		kept, checked, len(rows))
+	fmt.Fprintf(os.Stderr, "specgen -extract: %d/%d non-error rows pass interpret+check+compile (%d rows in length window)\n",
+		kept, checked, scanned)
 }
 
 // renderAny renders a compiled/interpreted result stack ([]any) to a
@@ -417,26 +430,28 @@ func renderAny(vs []any) string {
 }
 
 // writePassingHeader emits the leading comment block of the passing
-// subset file.
-func writePassingHeader(w *bufio.Writer, scanned, kept int) {
+// subset file. maxLen is the length window (0 = the whole matrix).
+func writePassingHeader(w *bufio.Writer, scanned, kept, maxLen int) {
 	fmt.Fprintf(w, "# AQL Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)\n")
 	fmt.Fprintf(w, "# Format: input<TAB>expected<TAB>note\n")
 	fmt.Fprintf(w, "#\n")
-	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate from the full matrix with:\n")
-	fmt.Fprintf(w, "#   cd test/go && go run ./specgen -extract -in ./specgen/syntax-matrix.tsv -out ./specgen/syntax-matrix-passing.tsv\n")
-	fmt.Fprintf(w, "# (or `make spec-gen`, which regenerates both files).\n")
+	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extract mode).\n")
 	fmt.Fprintf(w, "#\n")
-	fmt.Fprintf(w, "# The subset of syntax-matrix.tsv rows that clear ALL THREE pipelines:\n")
+	fmt.Fprintf(w, "# The subset of the combinations that clear ALL THREE pipelines:\n")
 	fmt.Fprintf(w, "#   1. interpret — the program runs and leaves a value (no runtime error);\n")
 	fmt.Fprintf(w, "#   2. check     — the type checker reports zero error-severity diagnostics;\n")
 	fmt.Fprintf(w, "#   3. compile   — the bytecode compiler accepts it AND its result is\n")
 	fmt.Fprintf(w, "#                  identical to the interpreter's.\n")
 	fmt.Fprintf(w, "#\n")
+	if maxLen > 0 {
+		fmt.Fprintf(w, "# Scope: combinations of length 1..%d only.\n", maxLen)
+		fmt.Fprintf(w, "#\n")
+	}
 	fmt.Fprintf(w, "# `expected` is the canonical eng.Canon value carried over verbatim from\n")
 	fmt.Fprintf(w, "# the full matrix. Every row here is a trusted, three-way-agreed program;\n")
 	fmt.Fprintf(w, "# syntax_matrix_test.go re-verifies the invariant on each one.\n")
 	fmt.Fprintf(w, "#\n")
-	fmt.Fprintf(w, "# %d of the full matrix's rows pass (%d scanned).\n", kept, scanned)
+	fmt.Fprintf(w, "# %d combinations pass (%d in the length window).\n", kept, scanned)
 	fmt.Fprintf(w, "#\n")
 }
 
@@ -609,9 +624,9 @@ func extractFrontier(fullPath, passingPath, checkOut, compileOut, runtimeOut str
 	wg.Wait()
 
 	// 3. Write the three files in input order.
-	nCheck := writeFrontierFile(checkOut, "type-check", "check-fail", cands, classes, notes, expected, classCheck)
-	nCompile := writeFrontierFile(compileOut, "compile", "compile-refused", cands, classes, notes, expected, classCompile)
-	nRuntime := writeFrontierFile(runtimeOut, "runtime", "runtime-fail", cands, classes, notes, expected, classRuntime)
+	nCheck := writeFrontierFile(checkOut, "type-check", "check-fail", cands, classes, notes, expected, classCheck, max)
+	nCompile := writeFrontierFile(compileOut, "compile", "compile-refused", cands, classes, notes, expected, classCompile, max)
+	nRuntime := writeFrontierFile(runtimeOut, "runtime", "runtime-fail", cands, classes, notes, expected, classRuntime, max)
 
 	fmt.Fprintf(os.Stderr, "specgen -frontier: %d minimal failing prefixes — %d type-check, %d compile, %d runtime\n",
 		len(cands), nCheck, nCompile, nRuntime)
@@ -622,7 +637,7 @@ func extractFrontier(fullPath, passingPath, checkOut, compileOut, runtimeOut str
 // writeFrontierFile writes the candidates of one class to path as
 // `input<TAB>note` rows (note = the failure detail plus what the full
 // matrix records the prefix evaluates to), and returns the count.
-func writeFrontierFile(path, kind, tag string, cands []string, classes []frontierClass, notes []string, expected map[string]string, want frontierClass) int {
+func writeFrontierFile(path, kind, tag string, cands []string, classes []frontierClass, notes []string, expected map[string]string, want frontierClass, maxLen int) int {
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: create %s: %v\n", path, err)
@@ -638,7 +653,7 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 			n++
 		}
 	}
-	writeFrontierHeader(w, kind, tag, n)
+	writeFrontierHeader(w, kind, tag, n, maxLen)
 	for k, cl := range classes {
 		if cl != want {
 			continue
@@ -649,24 +664,23 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 }
 
 // writeFrontierHeader emits the leading comment block of a frontier file.
-func writeFrontierHeader(w *bufio.Writer, kind, tag string, n int) {
+// maxLen is the length window the prefixes were drawn from.
+func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
 	fmt.Fprintf(w, "# AQL Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
 	fmt.Fprintf(w, "# Format: prefix<TAB>note (note = `%s: <detail>` + the full-matrix result)\n", tag)
 	fmt.Fprintf(w, "#\n")
-	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate from the matrix + passing subset with:\n")
-	fmt.Fprintf(w, "#   cd test/go && go run ./specgen -frontier -in ./specgen/syntax-matrix.tsv \\\n")
-	fmt.Fprintf(w, "#     -passing ./specgen/syntax-matrix-passing.tsv \\\n")
-	fmt.Fprintf(w, "#     -check-out ./specgen/syntax-matrix-fail-check.tsv \\\n")
-	fmt.Fprintf(w, "#     -compile-out ./specgen/syntax-matrix-fail-compile.tsv \\\n")
-	fmt.Fprintf(w, "#     -runtime-out ./specgen/syntax-matrix-fail-runtime.tsv\n")
-	fmt.Fprintf(w, "# (or `make spec-gen`, which regenerates every derived file).\n")
+	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# A MINIMAL FAILING PREFIX is a sequence that fails while its immediate\n")
 	fmt.Fprintf(w, "# prefix passes — the exact atom at which a passing program first breaks.\n")
-	fmt.Fprintf(w, "# Every non-passing matrix row truncates to one of these (the trailing\n")
-	fmt.Fprintf(w, "# atoms after the break are discarded), so this is the deduped catalogue\n")
-	fmt.Fprintf(w, "# of distinct failure points.\n")
+	fmt.Fprintf(w, "# Every non-passing combination truncates to one of these (the trailing\n")
+	fmt.Fprintf(w, "# atoms after the break are discarded) and DUPLICATES ARE REMOVED, so this\n")
+	fmt.Fprintf(w, "# is the deduped catalogue of distinct failure points.\n")
 	fmt.Fprintf(w, "#\n")
+	if maxLen > 0 {
+		fmt.Fprintf(w, "# Scope: prefixes drawn from combinations of length 1..%d.\n", maxLen)
+		fmt.Fprintf(w, "#\n")
+	}
 	switch kind {
 	case "type-check":
 		fmt.Fprintf(w, "# These prefixes FAIL THE TYPE CHECKER: `aql check` reports at least one\n")
