@@ -45,6 +45,12 @@ func (r *Registry) ForkConcurrent() *Registry {
 	fork.Contexts.Push(r.Contexts.Top())
 	fork.Args = NewArgsStack()
 	fork.FnBaselines = nil
+	// debugEngines is the per-run live-engine stack (the Debug.stack seam). A
+	// fork is an independent execution context, so it must start with its OWN
+	// empty stack — without this reset the shallow copy aliases the parent's
+	// backing array and concurrent forks (parallel `await` branches) race on
+	// the shared append (registry.go::pushEngine).
+	fork.debugEngines = nil
 	fork.FlowCtrl = FlowNone
 	fork.pendingGen = nil
 	fork.macroCache = nil
