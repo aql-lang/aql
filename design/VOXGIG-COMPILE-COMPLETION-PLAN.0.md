@@ -349,12 +349,34 @@ Steps 0–3 (the sound, low-risk wins) landed, gate-clean
   case; concrete non-container receivers still refuse. tst_unit advances past
   `get`; flips 0 yet (the trie files hit the suspend hazard).
 
-**Remaining** (each a focused effort like the above): **Stage D 2/4** nested-get
-under a SUSPENDED re-dispatch (a control-flow rework — es.active() short-circuits
-the recovery; the trie find-kid `(nd "kids" get) get (ch)` latch); **Stage D 3/4**
-set/push fn-body list-literal provenance (the autoEvalList e.isTop gate, with the
+- **Stage D, 2/4** — don't latch a refusal under a suspended re-dispatch
+  (`6e3c089e`). The trie inner-get no longer prematurely MarkUncompilable's the
+  program; trie advances `get` → `find-kid` (a user-fn-over-dynamic leaf).
+  Soundness verified by a 413-program adversarial sweep + a structural proof
+  (under suspend zero ops are recorded). Flips 0 alone.
+- **Real miscompile FIXED** (off-plan, found by the 2/4 adversarial sweep) —
+  runtime param-type guard at CALL_USER (`7c728648`, `1f28b9b7`). A gradual-Any
+  value laundered into a concrete user-fn param ran the body unchecked
+  (`compile==interpret` VIOLATION); now guarded via `CompiledFn.Params` +
+  `sigTypeMatches`, mirroring OpRet's return-check. Higher value than the
+  advisory leaves — a live soundness violation. One documented residual
+  (inline-`Pattern` params). Verified by a second adversarial sweep that caught
+  (and drove the fix of) an `Options`-param over-raise regression.
+
+**Remaining** (each a focused effort): **Stage D 3/4** set/push fn-body
+list-literal provenance (the autoEvalList `e.isTop` gate, with the
 `[y y]`-over-def-local miscompile hazard); **Stage D 4/4** raise over a dynamic
-operand (divergence-aware branch modeling, CompileDiverges); then leaf-1 part 1
-over-capture, leaf-2 BLOOM list-element gate, and leaf-1 part 2 / Stage G
-comparator. Stage D is where the bulk of the 26 remaining files flip, as the
-masking chains collapse.
+operand (divergence-aware branch modeling, CompileDiverges); the trie `find-kid`
+user-fn-over-dynamic leaf; closing the inline-`Pattern` param-guard residual; then
+leaf-1 part 1, leaf-2 BLOOM, leaf-1 part 2 / Stage G comparator. Stage D is where
+the bulk of the 26 files flip, as the masking chains collapse.
+
+## 8. Methodology note — adversarial workflows earned their keep
+
+The compile==interpret differential is structurally BLIND to off-corpus shapes
+(the voxgig tries, laundered params). This session, hand-written `RunCompiledStrict`
+regressions + adversarial-sweep workflows caught what the differential could not:
+a real pre-existing miscompile (param-guard-skip), a regression the param guard's
+first cut introduced (the `Options` over-raise), and confirmed the suspend-skip
+sound across 413 programs. Treat the differential as necessary-not-sufficient;
+gate every dynamic-dispatch / VM change with off-corpus adversarial coverage.
