@@ -26,7 +26,7 @@
 //
 // It is deliberately NOT dropped into lang/spec/: that directory's
 // suites carry curated, corpus-keyed accuracy ratchets (checker false-
-// positive pins, compiled-refusal ceilings) that an exhaustive 7k-row
+// positive pins, compiled-refusal ceilings) that an exhaustive ~137k-row
 // matrix would swamp with pin churn rather than signal. The existing
 // generated parity fixture (bytecode-combinations.tsv) is special-cased
 // out of those same ratchets for exactly this reason; a dedicated
@@ -42,7 +42,7 @@
 //
 //	go run ./specgen [-max N] [-out path]
 //
-//	-max  maximum sequence length to enumerate (default 3)
+//	-max  maximum sequence length to enumerate (default 4)
 //	-out  output file; empty writes to stdout (default empty)
 //
 // The Makefile target `spec-gen` regenerates test/go/specgen/syntax-matrix.tsv.
@@ -65,12 +65,13 @@ import (
 )
 
 // alphabet is the fixed, ordered set of syntax atoms the enumeration
-// ranges over. Each entry is ONE syntactic element; "up to 3 elements"
-// means every sequence of 1, 2, or 3 of these joined by spaces. The set
-// is deliberately small and representative rather than exhaustive over
-// the whole vocabulary — the cross product grows as len(alphabet)^3, so
-// the goal is to cover every value family and every operator arity with
-// the fewest atoms, not to list every word.
+// ranges over. Each entry is ONE syntactic element; "up to N elements"
+// means every sequence of 1..N of these joined by spaces (N defaults to
+// 4). The set is deliberately small and representative rather than
+// exhaustive over the whole vocabulary — the cross product grows as
+// len(alphabet)^N (19^4 ≈ 130k rows at N=4), so the goal is to cover
+// every value family and every operator arity with the fewest atoms,
+// not to list every word.
 //
 // Only core words present in the default production registry are used
 // (verified: module-only words like abs/min/concat resolve to
@@ -169,7 +170,7 @@ func sequences(max int, emit func(src string, n int)) {
 }
 
 func main() {
-	max := flag.Int("max", 3, "maximum sequence length to enumerate")
+	max := flag.Int("max", 4, "maximum sequence length to enumerate")
 	out := flag.String("out", "", "output .tsv path; empty writes to stdout")
 	flag.Parse()
 

@@ -33,7 +33,10 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -45,17 +48,18 @@ const matrixPath = "syntax-matrix.tsv"
 // minCompiledRows is the floor for the compiler-parity gate: at least
 // this many non-error rows must take the bytecode-compiled path, or the
 // parity assertion is vacuous (a compiler that refused everything would
-// pass with zero comparisons). Measured at 1992 over the current
-// alphabet; pinned a little below the live count as headroom against
+// pass with zero comparisons). Measured at 27712 over the length-4
+// matrix; pinned a little below the live count as headroom against
 // incidental jitter. RAISE it when the compilable subset widens; only
 // lower it with a documented reason.
-const minCompiledRows = 1800
+const minCompiledRows = 27000
 
 // matrixRow is one parsed data row of the matrix.
 type matrixRow struct {
 	line     int
 	input    string
 	expected string // canonical value, or "ERROR:<class>"
+	n        int    // element count (1..4), parsed from the note column
 }
 
 // readMatrix parses the generated tsv into data rows, skipping the
@@ -83,7 +87,15 @@ func readMatrix(t *testing.T) []matrixRow {
 		if len(parts) < 2 {
 			t.Fatalf("%s:L%d: malformed row %q", matrixPath, n, line)
 		}
-		rows = append(rows, matrixRow{line: n, input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1])})
+		// The note column ("N-elem …") leads with the element count; default
+		// 0 (treated as "short", always fully covered) if absent.
+		elems := 0
+		if len(parts) >= 3 {
+			if note := strings.TrimSpace(parts[2]); len(note) > 0 && note[0] >= '1' && note[0] <= '9' {
+				elems = int(note[0] - '0')
+			}
+		}
+		rows = append(rows, matrixRow{line: n, input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1]), n: elems})
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("scan %s: %v", matrixPath, err)
@@ -98,12 +110,69 @@ func readMatrix(t *testing.T) []matrixRow {
 // (errorClass), and frozen clock (specClock) are reused verbatim from
 // main.go, so a generated row reproduces here byte-for-byte.
 
+// The matrix grows as len(alphabet)^maxLen, so at length 4 it is ~137k
+// rows. Each gate therefore fans its rows across NumCPU workers (every
+// row builds an isolated lang/registry instance with no shared mutable
+// state — the same concurrency the langspec suite's
+// TestSpecCompiledConcurrentRowsRaceFree relies on). Workers report via
+// failSink (goroutine-safe t.Errorf, capped to avoid flooding output on
+// a systemic regression); they must never call t.Fatalf / t.FailNow.
+
+// failSink funnels worker-goroutine failures to t.Errorf, capping the
+// number actually printed while counting them all.
+type failSink struct {
+	t   *testing.T
+	n   int64
+	max int64
+}
+
+func (s *failSink) fail(format string, args ...any) {
+	if atomic.AddInt64(&s.n, 1) <= s.max {
+		s.t.Errorf(format, args...)
+	}
+}
+
+func (s *failSink) total() int64 { return atomic.LoadInt64(&s.n) }
+
+// report logs the failure tally and notes any suppressed-from-print
+// overflow so the count is never silently hidden.
+func (s *failSink) report() {
+	if n := s.total(); n > s.max {
+		s.t.Errorf("%d failures total; %d shown above, %d suppressed", n, s.max, n-s.max)
+	}
+}
+
+// forEachRow runs work on every row across NumCPU worker goroutines.
+func forEachRow(rows []matrixRow, work func(r matrixRow)) {
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
+	}
+	ch := make(chan matrixRow, workers*2)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for r := range ch {
+				work(r)
+			}
+		}()
+	}
+	for _, r := range rows {
+		ch <- r
+	}
+	close(ch)
+	wg.Wait()
+}
+
 // TestSyntaxMatrixInterpreter re-evaluates every row and asserts the
 // interpreter reproduces the recorded expectation exactly — the frozen
 // deterministic snapshot.
 func TestSyntaxMatrixInterpreter(t *testing.T) {
 	rows := readMatrix(t)
-	for _, r := range rows {
+	sink := &failSink{t: t, max: 50}
+	forEachRow(rows, func(r matrixRow) {
 		out, err := run(r.input)
 		var got string
 		if err != nil {
@@ -112,98 +181,160 @@ func TestSyntaxMatrixInterpreter(t *testing.T) {
 			got = eng.Canon(out)
 		}
 		if got != r.expected {
-			t.Errorf("L%d %q: interpreter gave %q, spec records %q", r.line, r.input, got, r.expected)
+			sink.fail("L%d %q: interpreter gave %q, spec records %q", r.line, r.input, got, r.expected)
 		}
-	}
-	t.Logf("interpreter: %d rows reproduced", len(rows))
+	})
+	sink.report()
+	t.Logf("interpreter: %d rows, %d mismatches", len(rows), sink.total())
 }
 
 // TestSyntaxMatrixCompilerParity asserts the bytecode compiler agrees
 // with the interpreter on every non-error row it accepts.
 func TestSyntaxMatrixCompilerParity(t *testing.T) {
 	rows := readMatrix(t)
-	var compiled, errorRows int
-	for _, r := range rows {
+	var compiled, errorRows int64
+	sink := &failSink{t: t, max: 50}
+	forEachRow(rows, func(r matrixRow) {
 		if strings.HasPrefix(r.expected, "ERROR:") {
-			errorRows++
-			continue
+			atomic.AddInt64(&errorRows, 1)
+			return
 		}
 
 		ac, err := lang.New()
 		if err != nil {
-			t.Fatalf("lang.New: %v", err)
+			sink.fail("lang.New: %v", err)
+			return
 		}
 		ac.SetClock(specClock)
 		gotC, wasCompiled, errC := ac.RunCompiled(r.input)
 		if !wasCompiled {
-			continue // outside the compilable subset — interpreter fallback covers it
+			return // outside the compilable subset — interpreter fallback covers it
 		}
-		compiled++
+		atomic.AddInt64(&compiled, 1)
 
 		ai, err := lang.New()
 		if err != nil {
-			t.Fatalf("lang.New: %v", err)
+			sink.fail("lang.New: %v", err)
+			return
 		}
 		ai.SetClock(specClock)
 		gotI, errI := ai.Run(r.input)
 
 		if (errC != nil) != (errI != nil) {
-			t.Errorf("L%d %q: error divergence compiled=%v interpreted=%v", r.line, r.input, errC, errI)
-			continue
+			sink.fail("L%d %q: error divergence compiled=%v interpreted=%v", r.line, r.input, errC, errI)
+			return
 		}
 		if errC != nil {
-			continue
+			return
 		}
 		if renderAny(gotC) != renderAny(gotI) {
-			t.Errorf("L%d %q: compiled=%q interpreted=%q", r.line, r.input, renderAny(gotC), renderAny(gotI))
+			sink.fail("L%d %q: compiled=%q interpreted=%q", r.line, r.input, renderAny(gotC), renderAny(gotI))
 		}
-	}
-	t.Logf("compiler parity: %d rows compiled (%d error rows skipped), 0 mismatches", compiled, errorRows)
+	})
+	sink.report()
+	t.Logf("compiler parity: %d rows compiled (%d error rows skipped), %d mismatches", compiled, errorRows, sink.total())
 	if compiled < minCompiledRows {
 		t.Errorf("only %d rows took the compiled path (floor %d) — the compiler regressed to refusing the matrix",
 			compiled, minCompiledRows)
 	}
 }
 
-// TestSyntaxMatrixCheckerDeterministic asserts the type checker is
-// deterministic (identical result on repeated runs) and never panics,
-// over every row. It does not gate on accuracy — the curated false-
-// positive / soundness ratchets live in the langspec suite — only on the
-// trust property this matrix is responsible for: determinism.
+// Checker-gate sampling. The checker is the costliest path (~1.7ms per
+// Check even with instance reuse), so at length 4 an exhaustive
+// twice-over-everything pass is ~7min — too slow for `make test`. The
+// gate is therefore scoped to what each stride controls:
+//
+//   - longNoPanicStride: length-4 rows get the no-panic + classification
+//     check on every Nth row; length<=3 rows (all 3-grams and shorter)
+//     are ALWAYS checked. So no-panic coverage is exhaustive through
+//     length 3 and a 1/8 sample at length 4 — and the length-4 space is
+//     already covered exhaustively by the interpreter and compiler gates,
+//     which is where row-specific result bugs would surface anyway.
+//   - determinismStride: among the rows it checks, the gate re-runs a
+//     ~1/64 sample a second time and compares. Determinism is a global
+//     property, not per-row, so a sparse but diverse sample suffices; on
+//     a reused instance the re-run also asserts check idempotency (state
+//     accumulation would diverge on the second pass).
+const (
+	longNoPanicStride = 8
+	determinismStride = 64
+)
+
+// TestSyntaxMatrixCheckerDeterministic asserts the type checker never
+// panics and is deterministic, over the sampled scope described above.
+// It does not gate on accuracy — the curated false-positive / soundness
+// ratchets live in the langspec suite — only on the trust properties
+// this matrix is responsible for: no-crash and determinism.
+//
+// Because the alphabet contains NO state-mutating word (no
+// def/set/import/macro/var — every atom is a literal, a stack shuffle,
+// or a pure operator), a check leaves the registry untouched, so each
+// worker reuses ONE checker instance across all its rows (this is what
+// makes the gate affordable; the determinism re-run guards the reuse).
 func TestSyntaxMatrixCheckerDeterministic(t *testing.T) {
 	rows := readMatrix(t)
-	var clean, flagged int
-	for _, r := range rows {
-		a, b := checkOnce(t, r.input), checkOnce(t, r.input)
-		if a != b {
-			t.Errorf("L%d %q: checker non-deterministic:\n  run1=%s\n  run2=%s", r.line, r.input, a, b)
-		}
-		if strings.HasPrefix(a, "errors=0 ") {
-			clean++
-		} else {
-			flagged++
-		}
+	var checked, clean, flagged, sampled int64
+	sink := &failSink{t: t, max: 50}
+
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
 	}
-	t.Logf("checker determinism: %d rows clean, %d flagged, 0 non-deterministic", clean, flagged)
+	ch := make(chan matrixRow, workers*2)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a, err := lang.New()
+			if err != nil {
+				sink.fail("lang.New: %v", err)
+				return
+			}
+			a.SetClock(specClock)
+			for r := range ch {
+				if r.n >= 4 && r.line%longNoPanicStride != 0 {
+					continue // length-4 no-panic coverage is sampled
+				}
+				atomic.AddInt64(&checked, 1)
+				fa := checkWith(sink, a, r.input) // no-panic + classify
+				if strings.HasPrefix(fa, "errors=0 ") {
+					atomic.AddInt64(&clean, 1)
+				} else {
+					atomic.AddInt64(&flagged, 1)
+				}
+				if r.line%determinismStride == 0 {
+					atomic.AddInt64(&sampled, 1)
+					if fb := checkWith(sink, a, r.input); fa != fb {
+						sink.fail("L%d %q: checker non-deterministic:\n  run1=%s\n  run2=%s", r.line, r.input, fa, fb)
+					}
+				}
+			}
+		}()
+	}
+	for _, r := range rows {
+		ch <- r
+	}
+	close(ch)
+	wg.Wait()
+
+	sink.report()
+	t.Logf("checker: %d/%d rows checked (%d clean, %d flagged), %d determinism-sampled, %d failures",
+		checked, len(rows), clean, flagged, sampled, sink.total())
 }
 
-// checkOnce runs one row through the checker and renders a stable
-// fingerprint (error count + residual stack types) used to compare two
-// runs for determinism. A panic is recovered into a sentinel so the
-// no-panic property is asserted as a normal test failure, never a crash.
-func checkOnce(t *testing.T, input string) (fp string) {
-	t.Helper()
+// checkWith runs one row through the supplied checker instance and
+// renders a stable fingerprint (error count + residual stack types) used
+// to compare two runs for determinism. A panic is recovered into a
+// sentinel so the no-panic property is asserted as a normal test
+// failure, never a crash.
+func checkWith(sink *failSink, a *lang.AQL, input string) (fp string) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			t.Errorf("checker PANICKED on %q: %v", input, rec)
+			sink.fail("checker PANICKED on %q: %v", input, rec)
 			fp = fmt.Sprintf("PANIC:%v", rec)
 		}
 	}()
-	a, err := lang.New()
-	if err != nil {
-		t.Fatalf("lang.New: %v", err)
-	}
-	a.SetClock(specClock)
 	res, err := a.Check(input)
 	if err != nil {
 		return "parse-or-run-error:" + errorClass(err)

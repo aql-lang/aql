@@ -53,7 +53,7 @@ install:
 # review the diff.
 
 spec-gen:
-	cd test/go && go run ./specgen -max 3 -out ./specgen/syntax-matrix.tsv
+	cd test/go && go run ./specgen -max 4 -out ./specgen/syntax-matrix.tsv
 
 # ---- per-module fan-out -------------------------------------------------
 
