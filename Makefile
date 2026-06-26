@@ -1,4 +1,5 @@
 .PHONY: all build install test test-ts vet fmt lint vuln clean cover cover-html cover-html-open \
+        spec-gen \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
@@ -40,6 +41,19 @@ build:
 
 install:
 	$(MAKE) -C cmd/go install
+
+# ---- generated syntax-combination spec ---------------------------------
+#
+# Regenerate test/go/specgen/syntax-matrix.tsv — the exhaustive matrix of
+# every AQL token sequence up to length 3 over a fixed alphabet, with the
+# canonical interpreter result (or stable error class) for each. The
+# committed file is the frozen contract its sibling syntax_matrix_test.go
+# checks the interpreter, compiler, and checker against; rerun this after
+# any deliberate change to the alphabet or to evaluation semantics, then
+# review the diff.
+
+spec-gen:
+	cd test/go && go run ./specgen -max 3 -out ./specgen/syntax-matrix.tsv
 
 # ---- per-module fan-out -------------------------------------------------
 
