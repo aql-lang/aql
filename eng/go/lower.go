@@ -490,6 +490,68 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 	}
 }
 
+// collectPromotableEvents flattens a unit's top-level events together with every
+// event nested in an inline branch arm / loop body, depth-first — so the
+// value-def promotion decision can run over a def-chain inside an `if` arm or
+// `for` body, not just the top level. Without this such a chain's computed
+// producers sit interleaved on the closed fragment's simulated stack and a later
+// binary op refuses "operands of <op> not adjacent on top". (Ref-counting via
+// forEachFragmentOperand and rewriting via rewritePromotedRefs already recurse
+// into fragments; only the promotion decision did not.)
+func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool) {
+	var out []*emitEvent
+	fragInternal := map[int]bool{}
+	var walk func(evs []emitEvent, inFrag bool)
+	walk = func(evs []emitEvent, inFrag bool) {
+		for i := range evs {
+			out = append(out, &evs[i])
+			if inFrag {
+				fragInternal[evs[i].seq] = true
+			}
+			for _, frag := range childFragments(&evs[i]) {
+				// Only recurse into a SINGLE-result fragment (a single-value branch
+				// arm residualN==1, or a loop body / condition residualN==0). A
+				// MULTI-value arm (residualN>1, e.g. `[n mul 2 m (n sub 1)]`) leaves
+				// several residual values on the sim stack, and promotion / dead-drop
+				// would wrongly store or drop one of them ("branch leaves extra
+				// values") — leave those untouched.
+				if frag != nil && frag.residualN <= 1 {
+					walk(frag.events, true)
+				}
+			}
+		}
+	}
+	walk(events, false)
+	return out, fragInternal
+}
+
+// fragmentResultSeqs collects the event seqs that ARE a fragment's residual —
+// the value an `if` arm / list-condition / loop body leaves on the simulated
+// stack for its enclosing branch/loop (thenOut / elsOut / condOut / bodyOut).
+// These must NOT be promoted to a frame local: the arm-result lowering
+// (lowerFragment) requires the residual on the sim stack, and a tail call in an
+// arm must stay terminal for OpTailCallUser detection. Only fragment-INTERNAL
+// intermediates (the def-chain feeding the result) are promotable.
+func fragmentResultSeqs(allEvents []*emitEvent) map[int]bool {
+	res := map[int]bool{}
+	mark := func(op emitOperand) {
+		if op.kind == opEvent {
+			res[op.idx] = true
+		}
+	}
+	for _, ev := range allEvents {
+		switch ev.kind {
+		case evBranch:
+			mark(ev.br.thenOut)
+			mark(ev.br.elsOut)
+			mark(ev.br.condOut)
+		case evLoop:
+			mark(ev.loop.bodyOut)
+		}
+	}
+	return res
+}
+
 // planValueDefLocals decides which of a unit's top-level computed results are
 // referenced more than once and so must be promoted to a frame local (the
 // carrier-identity item's value-def locals). A single VM-stack copy of a
@@ -531,8 +593,16 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	}
 	var promoted map[int]int
 	var dead map[int]bool
-	for i := range events {
-		ev := &events[i]
+	allEvents, fragInternal := collectPromotableEvents(events)
+	fragResult := fragmentResultSeqs(allEvents)
+	for _, ev := range allEvents {
+		// A fragment's residual event (an `if` arm / loop body result) must stay on
+		// the simulated stack for the arm-result lowering, and a terminal tail call
+		// must stay terminal — never promote one. Only fragment-INTERNAL
+		// intermediates (the def-chain feeding the result) are promotable here.
+		if fragResult[ev.seq] {
+			continue
+		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
 		// promoted to a frame local: its result stores once and re-pushes per
 		// reference. (Without evCallUser, a user-call result above a literal in the
@@ -582,16 +652,21 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] >= 2 || es.eventInfo[ev.seq].valueDef || fragRef[ev.seq] || forceOrder[ev.seq]:
+		case refs[ev.seq] >= 2 || es.eventInfo[ev.seq].valueDef || (fragRef[ev.seq] && !fragInternal[ev.seq]) || forceOrder[ev.seq]:
 			// Promote to a frame slot (store now, re-push per reference) when the
 			// result is referenced more than once, OR it is a NAMED value-def
-			// (`def x (expr)`, marked via MarkValueDef), OR it is read from INSIDE a
-			// branch/loop fragment (fragRef): a binding may be consumed in any order,
-			// not just stack order — `def a (make…) def b (make…) a.x … b.x` reads a
-			// (produced first, now deeper) before b — and a cross-floor fragment read
-			// cannot reach the parent stack at all. The single-consume simulated
-			// stack seats neither; a frame local re-pushes freely from any scope. The
-			// extra STORE/PUSH for an in-order single use is harmless.
+			// (`def x (expr)`, marked via MarkValueDef), OR it is a UNIT-level producer
+			// read from INSIDE a branch/loop fragment (fragRef && !fragInternal): a
+			// binding may be consumed in any order, not just stack order — `def a
+			// (make…) def b (make…) a.x … b.x` reads a (produced first, now deeper)
+			// before b — and a cross-floor fragment read cannot reach the parent stack
+			// at all. The single-consume simulated stack seats neither; a frame local
+			// re-pushes freely from any scope. The fragRef trigger is gated on
+			// !fragInternal: a producer INSIDE the fragment (its own intermediate) is
+			// reachable on the fragment's local sim stack, and force-promoting it via
+			// fragRef wrongly stored a tail call's argument and broke OpTailCallUser
+			// detection — so a fragment-internal value promotes only via valueDef /
+			// refs>=2. The extra STORE/PUSH for an in-order single use is harmless.
 			if promoted == nil {
 				promoted = map[int]int{}
 			}
