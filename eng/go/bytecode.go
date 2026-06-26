@@ -463,6 +463,15 @@ type CompiledFn struct {
 	// laundered List bound to an `m:Map` param silently runs the body. A nil
 	// entry (a closure's [Any] input) is a guaranteed-pass, like Returns=[Any].
 	Params []*Type
+	// ParamPatterns are the per-param structural/value patterns (FnParam.Pattern):
+	// an inline disjunct (`x:(Integer tor String)`), inline predicate
+	// (`b:(Integer gt 10)`), bounded (`x:Map/t`), or map/list shape — the
+	// constraint that rides in Pattern, NOT Type (Type is left a loose root for
+	// these). Checked at CALL_USER alongside Params via the SAME OpenUnifyMap /
+	// Unify the interpreter's dispatch runs, so a value laundered past such a
+	// param raises the same signature_error rather than running the body. Nil
+	// where the param has no pattern.
+	ParamPatterns []*Value
 	// LocalNames maps a frame local slot to its source name (params in
 	// slots 0..NParams-1, then captures), for a debugger / disassembler.
 	// Body-local iterator slots have no name (empty string). Purely

@@ -1076,6 +1076,26 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
 		}
 	}
+	// An inline disjunct / predicate / bounded / structural param carries its
+	// real constraint in ParamPatterns (its Type is a loose root sigTypeMatches
+	// passes), so check it the SAME way the interpreter's dispatch does
+	// (engine.go: OpenUnifyMap for a concrete map pattern, else Unify).
+	for i, pp := range fn.ParamPatterns {
+		if pp == nil || i >= len(locals) {
+			continue
+		}
+		pat := *pp
+		v := locals[i]
+		ok := false
+		if pat.Parent.Equal(TMap) && v.Parent.Equal(TMap) && pat.Data != nil && v.Data != nil && !IsOptionsType(pat) {
+			ok = OpenUnifyMap(pat, v)
+		} else {
+			_, ok = Unify(v, pat)
+		}
+		if !ok {
+			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+		}
+	}
 	return nil
 }
 

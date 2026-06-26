@@ -407,14 +407,15 @@ type emitUnit struct {
 // OUT of tail marking, mirroring the interpreter's HasGen exclusion
 // from frame elision (plan Stage 4).
 type fnUnitRec struct {
-	name       string
-	nParams    int
-	caps       []CapturedBinding
-	generic    bool
-	returns    []*Type  // declared return types — enforced at the VM's RET
-	paramTypes []*Type  // declared PARAM types — enforced at the VM's CALL_USER entry
-	locals     []string // slot→name table (params then captures); debug only
-	frag       *EmitFragment
+	name          string
+	nParams       int
+	caps          []CapturedBinding
+	generic       bool
+	returns       []*Type  // declared return types — enforced at the VM's RET
+	paramTypes    []*Type  // declared PARAM types — enforced at the VM's CALL_USER entry
+	paramPatterns []*Value // per-param structural/value patterns — also enforced at CALL_USER
+	locals        []string // slot→name table (params then captures); debug only
+	frag          *EmitFragment
 	// variadic marks a VARIADIC-RETURNING fn: its body residual leaves a
 	// runtime-variable count (a `[]`-declared recursive accumulator, an
 	// `if c [] [a b]`). A call to it marks the call result variadic (lowerUserCall)
@@ -1598,11 +1599,12 @@ func trimToTopResult(ops []emitOperand) []emitOperand {
 // the VM enforces them at CALL_USER entry (the gradual-Any param-guard, mirroring
 // the RET return-check). Set from the matched sig at the dispatch site, where the
 // param types are known; a memoised unit is harmlessly re-set with the same types.
-func (es *EmitState) SetUnitParamTypes(unit int, paramTypes []*Type) {
+func (es *EmitState) SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value) {
 	if unit < 0 || unit >= len(es.fnRecs) {
 		return
 	}
 	es.fnRecs[unit].paramTypes = paramTypes
+	es.fnRecs[unit].paramPatterns = paramPatterns
 }
 
 func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos) {
@@ -3514,7 +3516,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false

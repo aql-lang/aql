@@ -533,10 +533,12 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// concrete param at check time; the compiled call must re-check the
 				// runtime value, or a laundered mismatch silently runs the body.
 				pts := make([]*Type, len(sigParams))
+				pats := make([]*Value, len(sigParams))
 				for i := range sigParams {
 					pts[i] = sigParams[i].Type
+					pats[i] = sigParams[i].Pattern
 				}
-				es.SetUnitParamTypes(fnUnit, pts)
+				es.SetUnitParamTypes(fnUnit, pts, pats)
 			}
 			if finishFn != nil {
 				// A fresh compilation must RECORD the body — drop any

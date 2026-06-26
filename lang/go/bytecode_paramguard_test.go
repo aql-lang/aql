@@ -25,6 +25,12 @@ func TestGradualArgParamGuard(t *testing.T) {
 		{"List laundered into m:Map", `def id fn [[x:Any] [Any] [x]] def f fn [[m:Map] [Integer] [m size]] f (id [10 20 30])`},
 		{"Integer laundered into s:String", `def id fn [[x:Any] [Any] [x]] def f fn [[s:String] [Integer] [s size]] f (id 99)`},
 		{"List laundered into m:Map via 0-arg [Any] fn", `def g fn [[] [Any] [[1 2 3]]] def f fn [[m:Map] [Integer] [m size]] f (g)`},
+		// FnParam.Pattern constraints — the inline-disjunct / inline-predicate
+		// residual the param-guard adversarial sweep flagged, closed by also
+		// threading + checking ParamPatterns (OpenUnifyMap / Unify, the interpreter's
+		// dispatch check).
+		{"inline disjunct non-member laundered", `def id fn [[y:Any] [Any] [y]] def f fn [[x:(Integer tor String)] [Integer] [42]] def v (id true) (v f)`},
+		{"inline predicate out-of-range laundered", `def id fn [[y:Any] [Any] [y]] def f fn [[b:(Integer gt 10)] [Integer] [99]] def v (id 5) (v f)`},
 	}
 	for _, c := range laundered {
 		t.Run("guarded/"+c.name, func(t *testing.T) {
@@ -60,6 +66,10 @@ func TestGradualArgParamGuard(t *testing.T) {
 		{"Options param + map", `def f fn [[o:Options] [Integer] [o size]] (f {a:1 b:2})`, "[2]"},
 		{"optional Options param", `def f fn [[a:Integer o?:Options] [Integer] [a]] (f 7 {a:1 b:2})`, "[7]"},
 		{"Options laundered through id", `def id fn [[x:Any] [Any] [x]] def f fn [[o:Options] [Integer] [o size]] f (id {a:1 b:2})`, "[2]"},
+		// Inline-Pattern MEMBERS must compile+run (the pattern check must not over-raise).
+		{"inline disjunct member (Integer)", `def f fn [[x:(Integer tor String)] [Integer] [7]] (f 3)`, "[7]"},
+		{"inline disjunct member (String)", `def f fn [[x:(Integer tor String)] [Integer] [7]] (f "hi")`, "[7]"},
+		{"inline predicate in-range", `def f fn [[b:(Integer gt 10)] [Integer] [b]] (f 20)`, "[20]"},
 	}
 	for _, c := range typed {
 		t.Run("compiles/"+c.name, func(t *testing.T) {
