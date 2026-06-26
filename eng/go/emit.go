@@ -382,6 +382,17 @@ type EmitState struct {
 type emitUnit struct {
 	localByID map[string]int
 	numLocals int
+	// capID marks the value IDs that are this unit's CAPTURES (enclosing-scope
+	// values bound into trailing slots). A capture's value may ALSO carry a
+	// producedBy entry from the ENCLOSING unit (a computed `def a (h add 1)`
+	// snapshotted into the closure) — that event lives in the parent and is
+	// unreachable here, so the body must resolve the reference to its own
+	// capture SLOT, not the parent event. resolveOperand consults this to
+	// override its usual events-first precedence for captured IDs. Pairs with
+	// the parent-side promotion of the captured computed def to a frame local
+	// (forEachOperand / promoteOperand closureCaps handling), which makes the
+	// closureCaps operand a re-pushable LOCAL so the captured VALUE is correct.
+	capID map[string]bool
 }
 
 // fnUnitRec is one compiled fn body awaiting (or holding) its
@@ -624,6 +635,21 @@ func (es *EmitState) MarkValueDef(v Value) {
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RememberOriginal saved).
 func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
+	// A CAPTURE of the CURRENT unit overrides events-first: the captured value
+	// may carry a producedBy entry from the ENCLOSING unit (a computed
+	// `def a (h add 1)` snapshotted into a closure), but that event lives in the
+	// parent frame and is unreachable from inside the body — the reference must
+	// resolve to this unit's own capture SLOT. Without this the each/scan/…$body
+	// reference resolved to the parent event and refused "branch reads enclosing
+	// computation". A param capture has no producedBy entry, so this only changes
+	// the computed-capture case. (The captured VALUE is carried correctly by the
+	// parent-side promotion of the computed def — see forEachOperand /
+	// promoteOperand closureCaps handling.)
+	if cur := es.units[len(es.units)-1]; cur != nil && cur.capID[v.ID] {
+		if slot, ok := cur.localByID[v.ID]; ok {
+			return localOperand(slot), true
+		}
+	}
 	// Events first, locals second: a join can REUSE a local's value ID
 	// for its result (JoinCarriers keeps the then-side ID when types
 	// agree), and the event is then the value's stack-discipline truth
@@ -1396,7 +1422,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}}
 	es.units = append(es.units, u)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
@@ -1407,6 +1433,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	// ID. Registered after params, locals nParams…nParams+nCaps-1.
 	for _, cb := range captures {
 		es.RegisterLocal(cb.Value.ID)
+		u.capID[cb.Value.ID] = true
 	}
 	resume := es.beginFragment()
 	es.fnArm = true

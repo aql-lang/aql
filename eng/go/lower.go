@@ -339,25 +339,39 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 // range and body out. A callback (rather than a returned slice) keeps the hot
 // planning loops — the scopeFloor guard and planValueDefLocals — allocation-free.
 func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
+	// visit surfaces an operand AND, for a closure operand, its lexical
+	// captures — enclosing-scope operands carried in closureCaps. Surfacing them
+	// makes a def used ONLY as a closure capture REFERENCE-COUNTED (so
+	// planValueDefLocals promotes a captured computed def to a frame local rather
+	// than leaving it an un-re-pushable event), and lets the scopeFloor guard see
+	// a cross-floor capture. Captures are flat operands (no nested closures).
+	visit := func(op emitOperand) {
+		fn(op)
+		if op.kind == opClosure {
+			for _, c := range op.closureCaps {
+				fn(c)
+			}
+		}
+	}
 	switch ev.kind {
 	case evCall:
 		for _, op := range ev.call.ops {
-			fn(op)
+			visit(op)
 		}
 	case evLoop:
-		fn(ev.loop.start)
-		fn(ev.loop.end)
-		fn(ev.loop.step)
-		fn(ev.loop.bodyOut)
+		visit(ev.loop.start)
+		visit(ev.loop.end)
+		visit(ev.loop.step)
+		visit(ev.loop.bodyOut)
 	case evBreak, evContinue, evTrap:
 		// no operands
 	case evCallUser:
 		for _, op := range ev.uc.ops {
-			fn(op)
+			visit(op)
 		}
 	case evFallback:
 		for _, op := range ev.fb.ins {
-			fn(op)
+			visit(op)
 		}
 	default: // evBranch
 		// thenVal / elsVal are the value-arm operands — meaningful only when
@@ -368,12 +382,12 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		// complete so a computed-arm event is REFERENCE-COUNTED — otherwise
 		// planValueDefLocals sees it as zero-referenced, marks it dead, and the
 		// lowerer drops the value the computed-branch lowering needs on the stack.
-		fn(ev.br.cond)
-		fn(ev.br.condOut)
-		fn(ev.br.thenOut)
-		fn(ev.br.elsOut)
-		fn(ev.br.thenVal)
-		fn(ev.br.elsVal)
+		visit(ev.br.cond)
+		visit(ev.br.condOut)
+		visit(ev.br.thenOut)
+		visit(ev.br.elsOut)
+		visit(ev.br.thenVal)
+		visit(ev.br.elsVal)
 	}
 }
 
@@ -385,6 +399,17 @@ func promoteOperand(op *emitOperand, promoted map[int]int) {
 	if op.kind == opEvent && op.resIdx == 0 {
 		if slot, ok := promoted[op.idx]; ok {
 			*op = localOperand(slot)
+		}
+		return
+	}
+	// A closure operand carries its lexical captures as enclosing-scope operands.
+	// A captured computed def promoted to a frame local must have its closureCaps
+	// entry rewritten to the local push too, so OpPushClosure captures the right
+	// VALUE (re-pushed from the frame slot) rather than a stale/unreachable event
+	// operand — the value-passing half of the each/scan/…$body computed-capture fix.
+	if op.kind == opClosure {
+		for i := range op.closureCaps {
+			promoteOperand(&op.closureCaps[i], promoted)
 		}
 	}
 }
