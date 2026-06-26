@@ -64,7 +64,8 @@ spec-gen:
 	cd test/go && go run ./specgen -frontier -in ./specgen/syntax-matrix.tsv \
 	  -passing ./specgen/syntax-matrix-passing.tsv \
 	  -check-out ./specgen/syntax-matrix-fail-check.tsv \
-	  -compile-out ./specgen/syntax-matrix-fail-compile.tsv
+	  -compile-out ./specgen/syntax-matrix-fail-compile.tsv \
+	  -runtime-out ./specgen/syntax-matrix-fail-runtime.tsv
 
 # ---- per-module fan-out -------------------------------------------------
 

@@ -198,14 +198,15 @@ func main() {
 	passing := flag.String("passing", "", "passing-subset .tsv path (frontier mode)")
 	checkOut := flag.String("check-out", "", "output path for type-check-fail prefixes (frontier mode)")
 	compileOut := flag.String("compile-out", "", "output path for compile-fail prefixes (frontier mode)")
+	runtimeOut := flag.String("runtime-out", "", "output path for runtime-fail prefixes (frontier mode)")
 	flag.Parse()
 
 	if *frontier {
-		if *in == "" || *passing == "" || *checkOut == "" || *compileOut == "" {
-			fmt.Fprintln(os.Stderr, "specgen -frontier requires -in, -passing, -check-out and -compile-out")
+		if *in == "" || *passing == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
+			fmt.Fprintln(os.Stderr, "specgen -frontier requires -in, -passing, -check-out, -compile-out and -runtime-out")
 			os.Exit(2)
 		}
-		extractFrontier(*in, *passing, *checkOut, *compileOut, *max)
+		extractFrontier(*in, *passing, *checkOut, *compileOut, *runtimeOut, *max)
 		return
 	}
 
@@ -473,7 +474,18 @@ func classifyFrontier(a *lang.AQL, src string) (frontierClass, string, bool) {
 	if !compiled {
 		return classCompile, sanitizeNote(reason), compiled // checker clean, Stage-1 could not lower it
 	}
-	return classRuntime, "", compiled // compiled, but not a passing program (runtime error / mismatch)
+	// Checker clean AND it compiled, yet it is not a passing program — run
+	// it to capture why: almost always a runtime error the static checker
+	// cannot predict (e.g. `incomparable`), occasionally a value the
+	// passing-extractor rejected.
+	if _, errRun := a.Run(src); errRun != nil {
+		detail := strings.TrimPrefix(errorClass(errRun), "ERROR:")
+		if detail == "" {
+			detail = "error"
+		}
+		return classRuntime, detail, compiled
+	}
+	return classRuntime, "non-passing-value", compiled
 }
 
 // sanitizeNote makes a reason string safe for a single TSV note column.
@@ -524,14 +536,14 @@ func readExpectedMap(path string) (map[string]string, error) {
 //
 // Each prefix is then classified by the stage it fails at and written to
 // the matching file: -check-out for type-check failures (the checker
-// rejects it) and -compile-out for compile failures (the checker passes
-// but the bytecode compiler will not lower it). A prefix that checks
-// clean AND compiles yet still isn't a passing program is a runtime-only
-// failure — it belongs to neither file and is reported separately.
+// rejects it), -compile-out for compile failures (the checker passes but
+// the bytecode compiler will not lower it), and -runtime-out for runtime
+// failures (the checker passes AND it compiles, yet it errors at run — a
+// fault the static stages cannot predict).
 //
 // As it goes it verifies the "compiler runs the checker first" contract:
 // no prefix that the checker rejects is ever emitted as a Program.
-func extractFrontier(fullPath, passingPath, checkOut, compileOut string, max int) {
+func extractFrontier(fullPath, passingPath, checkOut, compileOut, runtimeOut string, max int) {
 	passing, err := readInputSet(passingPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: %v\n", err)
@@ -596,31 +608,15 @@ func extractFrontier(fullPath, passingPath, checkOut, compileOut string, max int
 	}
 	wg.Wait()
 
-	// 3. Write the two files in input order; tally the runtime residue.
+	// 3. Write the three files in input order.
 	nCheck := writeFrontierFile(checkOut, "type-check", "check-fail", cands, classes, notes, expected, classCheck)
 	nCompile := writeFrontierFile(compileOut, "compile", "compile-refused", cands, classes, notes, expected, classCompile)
+	nRuntime := writeFrontierFile(runtimeOut, "runtime", "runtime-fail", cands, classes, notes, expected, classRuntime)
 
-	var nRuntime int
-	var runtimeEx []string
-	for k, cl := range classes {
-		if cl == classRuntime {
-			nRuntime++
-			if len(runtimeEx) < 8 {
-				runtimeEx = append(runtimeEx, fmt.Sprintf("%s → %s", cands[k], expected[cands[k]]))
-			}
-		}
-	}
-
-	fmt.Fprintf(os.Stderr, "specgen -frontier: %d minimal failing prefixes — %d type-check, %d compile, %d runtime-only\n",
+	fmt.Fprintf(os.Stderr, "specgen -frontier: %d minimal failing prefixes — %d type-check, %d compile, %d runtime\n",
 		len(cands), nCheck, nCompile, nRuntime)
 	fmt.Fprintf(os.Stderr, "specgen -frontier: checker-runs-first check: %d prefixes rejected by the checker were ALSO emitted as a Program (want 0)\n",
 		checkFirstViolations)
-	if nRuntime > 0 {
-		fmt.Fprintf(os.Stderr, "specgen -frontier: %d runtime-only prefixes (check clean + compile OK, but error at run) — in NEITHER file; e.g.:\n", nRuntime)
-		for _, ex := range runtimeEx {
-			fmt.Fprintf(os.Stderr, "    %s\n", ex)
-		}
-	}
 }
 
 // writeFrontierFile writes the candidates of one class to path as
@@ -661,7 +657,8 @@ func writeFrontierHeader(w *bufio.Writer, kind, tag string, n int) {
 	fmt.Fprintf(w, "#   cd test/go && go run ./specgen -frontier -in ./specgen/syntax-matrix.tsv \\\n")
 	fmt.Fprintf(w, "#     -passing ./specgen/syntax-matrix-passing.tsv \\\n")
 	fmt.Fprintf(w, "#     -check-out ./specgen/syntax-matrix-fail-check.tsv \\\n")
-	fmt.Fprintf(w, "#     -compile-out ./specgen/syntax-matrix-fail-compile.tsv\n")
+	fmt.Fprintf(w, "#     -compile-out ./specgen/syntax-matrix-fail-compile.tsv \\\n")
+	fmt.Fprintf(w, "#     -runtime-out ./specgen/syntax-matrix-fail-runtime.tsv\n")
 	fmt.Fprintf(w, "# (or `make spec-gen`, which regenerates every derived file).\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# A MINIMAL FAILING PREFIX is a sequence that fails while its immediate\n")
@@ -676,6 +673,11 @@ func writeFrontierHeader(w *bufio.Writer, kind, tag string, n int) {
 		fmt.Fprintf(w, "# error-severity diagnostic. Because the compiler runs the checker first\n")
 		fmt.Fprintf(w, "# (lang.(*AQL).CompileCheck), every prefix here is also refused by the\n")
 		fmt.Fprintf(w, "# compiler — none is ever lowered to bytecode.\n")
+	case "runtime":
+		fmt.Fprintf(w, "# These prefixes PASS THE TYPE CHECKER and COMPILE to bytecode, yet they\n")
+		fmt.Fprintf(w, "# ERROR AT RUN — a fault the static stages cannot predict (e.g. comparing\n")
+		fmt.Fprintf(w, "# values of incomparable types). The note gives the runtime error class;\n")
+		fmt.Fprintf(w, "# the interpreter and compiler agree on it (it is not a compiler bug).\n")
 	default:
 		fmt.Fprintf(w, "# These prefixes PASS THE TYPE CHECKER but the bytecode compiler will not\n")
 		fmt.Fprintf(w, "# lower them (CompileCheck returns no Program); the note gives the first\n")

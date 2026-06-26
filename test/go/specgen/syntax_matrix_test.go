@@ -48,15 +48,17 @@ const (
 	passingPath     = "syntax-matrix-passing.tsv"
 	failCheckPath   = "syntax-matrix-fail-check.tsv"
 	failCompilePath = "syntax-matrix-fail-compile.tsv"
+	failRuntimePath = "syntax-matrix-fail-runtime.tsv"
 )
 
-// Floors for the two minimal-failing-prefix files, so a regression that
+// Floors for the three minimal-failing-prefix files, so a regression that
 // empties or mislabels them can't pass vacuously. Measured at 9031
-// type-check and 3436 compile fails over the length-4 matrix; pinned
-// below the live counts as headroom.
+// type-check, 3436 compile and 936 runtime fails over the length-4
+// matrix; pinned below the live counts as headroom.
 const (
 	minCheckFailRows   = 9000
 	minCompileFailRows = 3400
+	minRuntimeFailRows = 900
 )
 
 // minPassingRows floors the passing subset so a regression that empties
@@ -389,11 +391,15 @@ func hasCheckError(res lang.CheckResult) bool {
 //   - Every row of syntax-matrix-fail-compile.tsv must PASS THE CHECKER
 //     (no error diagnostic) yet still produce NO Program — a genuine
 //     compile-stage refusal, disjoint from the check-fail set.
+//   - Every row of syntax-matrix-fail-runtime.tsv must PASS THE CHECKER
+//     AND COMPILE to a Program, yet ERROR when interpreted — a runtime
+//     fault the static stages cannot see, disjoint from both other sets.
 //
-// Counts are floored so neither file can silently collapse.
+// Counts are floored so no file can silently collapse.
 func TestSyntaxMatrixFailFrontier(t *testing.T) {
 	checkRows := readRows(t, failCheckPath)
 	compileRows := readRows(t, failCompilePath)
+	runtimeRows := readRows(t, failRuntimePath)
 
 	// fail-check: checker rejects, and the compiler emits no Program.
 	var checkVerified, compiledDespiteReject int64
@@ -442,9 +448,37 @@ func TestSyntaxMatrixFailFrontier(t *testing.T) {
 	})
 	psink.report()
 
+	// fail-runtime: checker clean AND compiles, yet errors when interpreted.
+	var runtimeVerified int64
+	rsink := &failSink{t: t, max: 50}
+	forEachRow(runtimeRows, func(r matrixRow) {
+		a, err := lang.New()
+		if err != nil {
+			rsink.fail("lang.New: %v", err)
+			return
+		}
+		a.SetClock(specClock)
+		prog, _, res, errc := a.CompileCheck(r.input)
+		if errc != nil || hasCheckError(res) {
+			rsink.fail("L%d %q: in fail-runtime but the checker rejected it (belongs in fail-check)", r.line, r.input)
+			return
+		}
+		if prog == nil {
+			rsink.fail("L%d %q: in fail-runtime but it did NOT compile (belongs in fail-compile)", r.line, r.input)
+			return
+		}
+		if _, errRun := a.Run(r.input); errRun == nil {
+			rsink.fail("L%d %q: in fail-runtime but it ran without error", r.line, r.input)
+			return
+		}
+		atomic.AddInt64(&runtimeVerified, 1)
+	})
+	rsink.report()
+
 	t.Logf("fail-check: %d/%d verified (checker rejects + compiler refuses); checker-runs-first violations: %d",
 		checkVerified, len(checkRows), compiledDespiteReject)
 	t.Logf("fail-compile: %d/%d verified (checker clean + compiler refuses)", compileVerified, len(compileRows))
+	t.Logf("fail-runtime: %d/%d verified (checker clean + compiles + errors at run)", runtimeVerified, len(runtimeRows))
 
 	if compiledDespiteReject != 0 {
 		t.Errorf("%d check-rejected prefixes still compiled — the compiler did NOT run the checker first", compiledDespiteReject)
@@ -454,6 +488,9 @@ func TestSyntaxMatrixFailFrontier(t *testing.T) {
 	}
 	if compileVerified < minCompileFailRows {
 		t.Errorf("only %d compile-fail prefixes verified (floor %d)", compileVerified, minCompileFailRows)
+	}
+	if runtimeVerified < minRuntimeFailRows {
+		t.Errorf("only %d runtime-fail prefixes verified (floor %d)", runtimeVerified, minRuntimeFailRows)
 	}
 }
 

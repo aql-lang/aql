@@ -1,0 +1,960 @@
+# AQL Language Specification: Minimal Failing Prefixes — RUNTIME FAILURES (GENERATED)
+# Format: prefix<TAB>note (note = `runtime-fail: <detail>` + the full-matrix result)
+#
+# DO NOT EDIT BY HAND. Regenerate from the matrix + passing subset with:
+#   cd test/go && go run ./specgen -frontier -in ./specgen/syntax-matrix.tsv \
+#     -passing ./specgen/syntax-matrix-passing.tsv \
+#     -check-out ./specgen/syntax-matrix-fail-check.tsv \
+#     -compile-out ./specgen/syntax-matrix-fail-compile.tsv \
+#     -runtime-out ./specgen/syntax-matrix-fail-runtime.tsv
+# (or `make spec-gen`, which regenerates every derived file).
+#
+# A MINIMAL FAILING PREFIX is a sequence that fails while its immediate
+# prefix passes — the exact atom at which a passing program first breaks.
+# Every non-passing matrix row truncates to one of these (the trailing
+# atoms after the break are discarded), so this is the deduped catalogue
+# of distinct failure points.
+#
+# These prefixes PASS THE TYPE CHECKER and COMPILE to bytecode, yet they
+# ERROR AT RUN — a fault the static stages cannot predict (e.g. comparing
+# values of incomparable types). The note gives the runtime error class;
+# the interpreter and compiler agree on it (it is not a compiler bug).
+#
+# 936 prefixes.
+#
+0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 0 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 1 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 2.5 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 'x' swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 true swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 false swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 none swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 [1 2] swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 dup lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 0 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 0 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 0 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 1 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 1 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 1 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 2.5 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 2.5 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+0 lt 2.5 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 0 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 1 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 2.5 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 'x' swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 true swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 false swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 none swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 [1 2] swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 dup lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 0 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 0 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 0 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 1 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 1 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 1 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 2.5 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 2.5 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+1 lt 2.5 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 0 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 1 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 2.5 lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 'x' swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 true swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 false swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 none swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 [1 2] swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 dup lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 0 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 0 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 0 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 1 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 1 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 1 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 2.5 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 2.5 none	runtime-fail: incomparable	matrix:ERROR:incomparable
+2.5 lt 2.5 [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 0 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 1 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 2.5 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' 'x' lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' true swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' false swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' none swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' [1 2] swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' dup lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' size [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' lt 'x' 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' lt 'x' 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' lt 'x' 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' lt 'x' none	runtime-fail: incomparable	matrix:ERROR:incomparable
+'x' lt 'x' [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 0 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 1 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 2.5 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true 'x' swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+true true lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+true false lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true none swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true [1 2] swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+true dup lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+true not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true size [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt true 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt true 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt true 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt true 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt true none	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt true [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt false 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt false 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt false 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt false 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt false none	runtime-fail: incomparable	matrix:ERROR:incomparable
+true lt false [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 0 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 1 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 2.5 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false 'x' swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+false true lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+false false lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false none swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false [1 2] swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+false dup lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+false not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false size [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt true 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt true 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt true 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt true 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt true none	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt true [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt false 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt false 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt false 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt false 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt false none	runtime-fail: incomparable	matrix:ERROR:incomparable
+false lt false [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 0 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 1 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 2.5 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none 'x' swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none true swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none false swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+none none lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none [1 2] swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+none dup lt [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none size [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+none lt none 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+none lt none 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+none lt none 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+none lt none 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+none lt none true	runtime-fail: incomparable	matrix:ERROR:incomparable
+none lt none false	runtime-fail: incomparable	matrix:ERROR:incomparable
+none lt none [1 2]	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 0 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 1 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 2.5 swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] 'x' swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] true swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false not lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] false swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] none swap lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] [1 2] lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup lt 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup lt 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup lt 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup lt 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup lt true	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup lt false	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] dup lt none	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] not [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] size [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] lt [1 2] 0	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] lt [1 2] 1	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] lt [1 2] 2.5	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] lt [1 2] 'x'	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] lt [1 2] true	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] lt [1 2] false	runtime-fail: incomparable	matrix:ERROR:incomparable
+[1 2] lt [1 2] none	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 0 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 0 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 0 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 1 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 1 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 1 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 2.5 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 2.5 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 2.5 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 'x' 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 'x' 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 'x' 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 'x' 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not true 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not true 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not true 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not false 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not false 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not false 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not none 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not none 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not none 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not none none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not [1 2] 0 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not [1 2] 1 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not [1 2] 2.5 lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+not [1 2] [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 0 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 0 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 0 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 0 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 0 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 1 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 1 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 1 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 1 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 1 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 2.5 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 2.5 true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 2.5 false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 2.5 none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 2.5 [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 'x' 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 'x' true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 'x' false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 'x' none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size 'x' [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size true 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size true true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size true false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size true none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size true [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size false 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size false true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size false false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size false none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size false [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size none 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size none true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size none false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size none none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size none [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size [1 2] 'x' lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size [1 2] true lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size [1 2] false lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size [1 2] none lt	runtime-fail: incomparable	matrix:ERROR:incomparable
+size [1 2] [1 2] lt	runtime-fail: incomparable	matrix:ERROR:incomparable
