@@ -49,11 +49,19 @@ const matrixPath = "syntax-matrix.tsv"
 // passing subset plus the three minimal-failing-prefix buckets — with the
 // floors that keep each from silently collapsing. The full set spans the
 // whole length-4 matrix; the len123 set is the same separation restricted
-// to combinations of length 1..3.
+// to combinations of length 1..3; the len5 set is the length-5 layer
+// (each length-4 passing row extended by one atom).
+//
+// `sample` caps how many rows of EACH file the disposition tests re-run
+// through the engine (0 = every row). The huge len5 files are sampled by
+// default — a deterministic 1-in-k slice, enough to catch any systematic
+// classification regression — while the floors still gate the FULL row
+// counts. Set SPECGEN_FULL=1 to verify every row of every file.
 type frontierSet struct {
 	label                                        string
 	passing, failCheck, failCompile, failRuntime string
 	minPassing, minCheck, minCompile, minRuntime int
+	sample                                       int
 }
 
 var (
@@ -66,6 +74,7 @@ var (
 		failCompile: "syntax-matrix-fail-compile.tsv",
 		failRuntime: "syntax-matrix-fail-runtime.tsv",
 		minPassing:  27000, minCheck: 9000, minCompile: 3400, minRuntime: 900,
+		sample: 0, // every row — the full set is small enough
 	}
 	// len123Set — the same separation over length-1..3 combinations only.
 	// Counts measured at 1992 / 547 / 120 / 48; floors pinned just below.
@@ -76,9 +85,46 @@ var (
 		failCompile: "syntax-matrix-len123-fail-compile.tsv",
 		failRuntime: "syntax-matrix-len123-fail-runtime.tsv",
 		minPassing:  1900, minCheck: 540, minCompile: 115, minRuntime: 45,
+		sample: 0, // every row
 	}
-	frontierSets = []frontierSet{fullSet, len123Set}
+	// len5Set — the length-5 layer (length-4 passing rows × one atom).
+	// Counts measured at 323525 / 85038 / 65459 / 14574; floors pinned
+	// below. Sampled by default (these files are large); SPECGEN_FULL=1
+	// forces exhaustive verification.
+	len5Set = frontierSet{
+		label:       "len5",
+		passing:     "syntax-matrix-len5-passing.tsv",
+		failCheck:   "syntax-matrix-len5-fail-check.tsv",
+		failCompile: "syntax-matrix-len5-fail-compile.tsv",
+		failRuntime: "syntax-matrix-len5-fail-runtime.tsv",
+		minPassing:  320000, minCheck: 84000, minCompile: 65000, minRuntime: 14000,
+		sample: 12000,
+	}
+	frontierSets = []frontierSet{fullSet, len123Set, len5Set}
 )
+
+// fullMode reports whether SPECGEN_FULL=1 was set, forcing the disposition
+// tests to verify every row rather than a sample.
+func fullMode() bool { return os.Getenv("SPECGEN_FULL") == "1" }
+
+// sampleRows returns a deterministic subset of rows of at most cap entries
+// (every k-th row), or all rows when cap<=0, the set already fits, or
+// fullMode is on. Sampling bounds the engine work for the huge len5 files
+// while still exercising a representative spread of each.
+func sampleRows(rows []matrixRow, cap int) []matrixRow {
+	if cap <= 0 || len(rows) <= cap || fullMode() {
+		return rows
+	}
+	stride := len(rows) / cap
+	if stride < 1 {
+		stride = 1
+	}
+	out := make([]matrixRow, 0, cap+1)
+	for i := 0; i < len(rows); i += stride {
+		out = append(out, rows[i])
+	}
+	return out
+}
 
 // minCompiledRows is the floor for the compiler-parity gate: at least
 // this many non-error rows must take the bytecode-compiled path, or the
@@ -421,6 +467,13 @@ func verifyFailFrontier(t *testing.T, set frontierSet) {
 	compileRows := readRows(t, set.failCompile)
 	runtimeRows := readRows(t, set.failRuntime)
 
+	// Floors gate the FULL row counts; disposition is re-derived on a
+	// sample (every row unless the file is huge — see frontierSet.sample).
+	checkN, compileN, runtimeN := len(checkRows), len(compileRows), len(runtimeRows)
+	checkRows = sampleRows(checkRows, set.sample)
+	compileRows = sampleRows(compileRows, set.sample)
+	runtimeRows = sampleRows(runtimeRows, set.sample)
+
 	// fail-check: checker rejects, and the compiler emits no Program.
 	var checkVerified, compiledDespiteReject int64
 	csink := &failSink{t: t, max: 50}
@@ -495,23 +548,128 @@ func verifyFailFrontier(t *testing.T, set frontierSet) {
 	})
 	rsink.report()
 
-	t.Logf("fail-check: %d/%d verified (checker rejects + compiler refuses); checker-runs-first violations: %d",
-		checkVerified, len(checkRows), compiledDespiteReject)
-	t.Logf("fail-compile: %d/%d verified (checker clean + compiler refuses)", compileVerified, len(compileRows))
-	t.Logf("fail-runtime: %d/%d verified (checker clean + compiles + errors at run)", runtimeVerified, len(runtimeRows))
+	t.Logf("fail-check: %d/%d sampled rows verified (file has %d); checker-runs-first violations: %d",
+		checkVerified, len(checkRows), checkN, compiledDespiteReject)
+	t.Logf("fail-compile: %d/%d sampled rows verified (file has %d)", compileVerified, len(compileRows), compileN)
+	t.Logf("fail-runtime: %d/%d sampled rows verified (file has %d)", runtimeVerified, len(runtimeRows), runtimeN)
 
 	if compiledDespiteReject != 0 {
 		t.Errorf("%d check-rejected prefixes still compiled — the compiler did NOT run the checker first", compiledDespiteReject)
 	}
-	if checkVerified < int64(set.minCheck) {
-		t.Errorf("only %d type-check-fail prefixes verified (floor %d)", checkVerified, set.minCheck)
+	// Floors are on the FULL file row counts, so a shrunk file is caught
+	// even though disposition is only re-derived on a sample.
+	if checkN < set.minCheck {
+		t.Errorf("%s fail-check has %d rows (floor %d) — the file shrank", set.label, checkN, set.minCheck)
 	}
-	if compileVerified < int64(set.minCompile) {
-		t.Errorf("only %d compile-fail prefixes verified (floor %d)", compileVerified, set.minCompile)
+	if compileN < set.minCompile {
+		t.Errorf("%s fail-compile has %d rows (floor %d) — the file shrank", set.label, compileN, set.minCompile)
 	}
-	if runtimeVerified < int64(set.minRuntime) {
-		t.Errorf("only %d runtime-fail prefixes verified (floor %d)", runtimeVerified, set.minRuntime)
+	if runtimeN < set.minRuntime {
+		t.Errorf("%s fail-runtime has %d rows (floor %d) — the file shrank", set.label, runtimeN, set.minRuntime)
 	}
+}
+
+const len5MismatchPath = "syntax-matrix-len5-compiler-mismatch.tsv"
+
+// readInputsTolerant reads just the input (first) column of a generated
+// tsv, tolerating an empty file (unlike readRows, which fatals on zero
+// data rows — the mismatch file legitimately empties once the compiler
+// bug is fixed).
+func readInputsTolerant(t *testing.T, path string) []string {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", path, err)
+	}
+	defer f.Close()
+	var out []string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), " \t")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		out = append(out, strings.TrimSpace(strings.SplitN(line, "\t", 2)[0]))
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
+	}
+	return out
+}
+
+// TestSyntaxMatrixFileStructure is the cheap (no-engine) structural guard
+// over EVERY generated tsv: it catches composition regressions that the
+// disposition tests (which sample the huge files) could miss.
+//
+//   - No file contains a duplicate input — the dedup the whole effort is
+//     built on.
+//   - Within each length window the buckets are pairwise DISJOINT: no
+//     combination is filed under two dispositions.
+//   - The length-5 layer's five buckets (passing + 3 fails + mismatch)
+//     PARTITION the candidate set exactly — their counts sum to
+//     (#length-4 passing rows) × (#alphabet atoms), with nothing dropped
+//     or double-counted.
+func TestSyntaxMatrixFileStructure(t *testing.T) {
+	files := []string{
+		matrixPath,
+		fullSet.passing, fullSet.failCheck, fullSet.failCompile, fullSet.failRuntime,
+		len123Set.passing, len123Set.failCheck, len123Set.failCompile, len123Set.failRuntime,
+		len5Set.passing, len5Set.failCheck, len5Set.failCompile, len5Set.failRuntime,
+		len5MismatchPath,
+	}
+	inputs := make(map[string][]string, len(files))
+	for _, f := range files {
+		in := readInputsTolerant(t, f)
+		inputs[f] = in
+		seen := make(map[string]struct{}, len(in))
+		dups := 0
+		for _, s := range in {
+			if _, ok := seen[s]; ok {
+				dups++
+			} else {
+				seen[s] = struct{}{}
+			}
+		}
+		if dups != 0 {
+			t.Errorf("%s: %d duplicate input(s) — dedup regressed", f, dups)
+		}
+	}
+
+	disjoint := func(label string, files ...string) {
+		owner := map[string]string{}
+		for _, f := range files {
+			for _, s := range inputs[f] {
+				if prev, ok := owner[s]; ok {
+					t.Errorf("%s: %q is filed in BOTH %s and %s", label, s, prev, f)
+				} else {
+					owner[s] = f
+				}
+			}
+		}
+	}
+	disjoint("full", fullSet.passing, fullSet.failCheck, fullSet.failCompile, fullSet.failRuntime)
+	disjoint("len123", len123Set.passing, len123Set.failCheck, len123Set.failCompile, len123Set.failRuntime)
+
+	len5Files := []string{len5Set.passing, len5Set.failCheck, len5Set.failCompile, len5Set.failRuntime, len5MismatchPath}
+	disjoint("len5", len5Files...)
+
+	// The length-5 layer is a true partition of the candidate set:
+	// (#length-4 passing rows) × (#alphabet atoms). Compute the expected
+	// total from the live file sizes so this stays correct if the passing
+	// set changes.
+	len4Passing := len(inputs[fullSet.passing]) - len(inputs[len123Set.passing])
+	want := len4Passing * len(alphabet)
+	sum := 0
+	for _, f := range len5Files {
+		sum += len(inputs[f])
+	}
+	if sum != want {
+		t.Errorf("len5 buckets sum to %d, want %d (= %d length-4 passing × %d atoms) — the partition is incomplete or overlapping",
+			sum, want, len4Passing, len(alphabet))
+	}
+	t.Logf("structure OK: %d files, no dup inputs, buckets disjoint, len5 partition %d = %d×%d",
+		len(files), sum, len4Passing, len(alphabet))
 }
 
 // TestSyntaxMatrixLen5Mismatch keeps the length-5 compiler-mismatch file
@@ -524,7 +682,7 @@ func verifyFailFrontier(t *testing.T, set frontierSet) {
 // empty — the compiler fixed and the layer regenerated — the test passes
 // trivially. The file is small (tens of rows), so this stays cheap.
 func TestSyntaxMatrixLen5Mismatch(t *testing.T) {
-	const path = "syntax-matrix-len5-compiler-mismatch.tsv"
+	const path = len5MismatchPath
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", path, err)
@@ -571,12 +729,14 @@ func TestSyntaxMatrixLen5Mismatch(t *testing.T) {
 // so the subset can't collapse to empty unnoticed.
 func TestSyntaxMatrixPassing(t *testing.T) {
 	for _, set := range frontierSets {
-		t.Run(set.label, func(t *testing.T) { verifyPassing(t, set.passing, set.minPassing) })
+		t.Run(set.label, func(t *testing.T) { verifyPassing(t, set) })
 	}
 }
 
-func verifyPassing(t *testing.T, path string, floor int) {
-	rows := readRows(t, path)
+func verifyPassing(t *testing.T, set frontierSet) {
+	rows := readRows(t, set.passing)
+	total := len(rows)
+	rows = sampleRows(rows, set.sample) // floor gates the full count; disposition on a sample
 	var verified int64
 	sink := &failSink{t: t, max: 50}
 	forEachRow(rows, func(r matrixRow) {
@@ -628,10 +788,10 @@ func verifyPassing(t *testing.T, path string, floor int) {
 		atomic.AddInt64(&verified, 1)
 	})
 	sink.report()
-	t.Logf("passing subset %s: %d/%d rows verified through interpret+check+compile, %d failures",
-		path, verified, len(rows), sink.total())
-	if verified < int64(floor) {
-		t.Errorf("only %d passing rows verified (floor %d) — the passing subset shrank or the extractor regressed",
-			verified, floor)
+	t.Logf("passing subset %s: %d/%d sampled rows verified through interpret+check+compile (file has %d), %d failures",
+		set.label, verified, len(rows), total, sink.total())
+	if total < set.minPassing {
+		t.Errorf("%s passing has %d rows (floor %d) — the subset shrank or the extractor regressed",
+			set.label, total, set.minPassing)
 	}
 }
