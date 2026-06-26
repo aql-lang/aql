@@ -63,6 +63,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -206,11 +207,11 @@ func main() {
 	flag.Parse()
 
 	if *frontier {
-		if *in == "" || *passing == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
-			fmt.Fprintln(os.Stderr, "specgen -frontier requires -in, -passing, -check-out, -compile-out and -runtime-out")
+		if *passing == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
+			fmt.Fprintln(os.Stderr, "specgen -frontier requires -passing, -check-out, -compile-out and -runtime-out")
 			os.Exit(2)
 		}
-		extractFrontier(*in, *passing, *checkOut, *compileOut, *runtimeOut, *max)
+		extractFrontier(*passing, *checkOut, *compileOut, *runtimeOut, *max)
 		return
 	}
 
@@ -304,35 +305,100 @@ type dataRow struct {
 	n        int // element count (1..4), parsed from the "N-elem …" note; 0 if absent
 }
 
-// readDataRows parses the data rows (input, expected, element count) of a
-// generated matrix .tsv, skipping comment and blank lines.
-func readDataRows(path string) ([]dataRow, error) {
+// frontCodeMarker is the header directive that flags a file's data rows as
+// FRONT-CODED. A front-coded data row is `reuse<TAB>suffix[<TAB>extra]`,
+// where reuse is the count of leading BYTES the row's input shares with the
+// previous data row's input; the full input is prevInput[:reuse]+suffix.
+// Because the derived files are emitted in trie-DFS order (siblings of a
+// shared prefix are adjacent), most rows reuse ~80% of the prior input, so
+// this elides the bulk of the repeated prefix while keeping the file plain
+// text, one row per line, and the trailing field (golden value / failure
+// detail) greppable. Plain files (no marker) are read verbatim.
+const frontCodeMarker = "# format: front-coded"
+
+// frontCode returns the byte-level front coding of cur against prev: the
+// number of shared leading bytes, and cur with that prefix removed.
+// Reconstruct with prev[:reuse]+suffix.
+func frontCode(prev, cur string) (int, string) {
+	m := 0
+	for m < len(prev) && m < len(cur) && prev[m] == cur[m] {
+		m++
+	}
+	return m, cur[m:]
+}
+
+// forEachDataRow invokes fn for every data row of a generated matrix file,
+// skipping comment/blank lines and transparently decoding the front-coded
+// format (detected by frontCodeMarker among the header comments). For a
+// PLAIN file fn receives (input, expected, note); for a FRONT-CODED file
+// note is "" and expected is the row's trailing field (the golden value or
+// failure detail), absent → "". line is the 1-based source line number.
+func forEachDataRow(path string, fn func(input, expected, note string, line int)) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer f.Close()
-	var rows []dataRow
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	frontCoded := false
+	prev := ""
+	line := 0
 	for sc.Scan() {
-		line := strings.TrimRight(sc.Text(), " \t")
-		if line == "" || strings.HasPrefix(line, "#") {
+		line++
+		raw := strings.TrimRight(sc.Text(), " \t")
+		if raw == "" {
 			continue
 		}
-		parts := strings.Split(line, "\t")
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("malformed row %q in %s", line, path)
-		}
-		n := 0
-		if len(parts) >= 3 {
-			if note := strings.TrimSpace(parts[2]); len(note) > 0 && note[0] >= '1' && note[0] <= '9' {
-				n = int(note[0] - '0')
+		if strings.HasPrefix(raw, "#") {
+			if strings.TrimSpace(raw) == frontCodeMarker {
+				frontCoded = true
 			}
+			continue
 		}
-		rows = append(rows, dataRow{input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1]), n: n})
+		parts := strings.Split(raw, "\t")
+		if frontCoded {
+			if len(parts) < 2 {
+				return fmt.Errorf("malformed front-coded row %q in %s:%d", raw, path, line)
+			}
+			reuse, errc := strconv.Atoi(strings.TrimSpace(parts[0]))
+			if errc != nil || reuse < 0 || reuse > len(prev) {
+				return fmt.Errorf("bad reuse count %q in %s:%d", parts[0], path, line)
+			}
+			input := prev[:reuse] + parts[1] // suffix kept verbatim (no trim — it may lead with a space)
+			prev = input
+			extra := ""
+			if len(parts) >= 3 {
+				extra = strings.TrimSpace(parts[2])
+			}
+			fn(strings.TrimSpace(input), extra, "", line)
+			continue
+		}
+		if len(parts) < 2 {
+			return fmt.Errorf("malformed row %q in %s:%d", raw, path, line)
+		}
+		note := ""
+		if len(parts) >= 3 {
+			note = strings.TrimSpace(parts[2])
+		}
+		fn(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), note, line)
 	}
-	return rows, sc.Err()
+	return sc.Err()
+}
+
+// readDataRows parses the data rows (input, expected, element count) of a
+// generated matrix .tsv, transparently decoding the front-coded format.
+func readDataRows(path string) ([]dataRow, error) {
+	var rows []dataRow
+	err := forEachDataRow(path, func(input, expected, note string, _ int) {
+		n := 0
+		if len(note) > 0 && note[0] >= '1' && note[0] <= '9' {
+			n = int(note[0] - '0')
+		}
+		rows = append(rows, dataRow{input: input, expected: expected, n: n})
+	})
+	return rows, err
 }
 
 // extractPassing reads the full matrix at inPath and writes, to outPath,
@@ -421,9 +487,12 @@ func extractPassing(inPath, outPath string, maxLen int) {
 	defer w.Flush()
 
 	writePassingHeader(w, int(scanned), int(kept), maxLen)
+	prev := ""
 	for i, r := range rows {
 		if pass[i] {
-			fmt.Fprintf(w, "%s\t%s\tinterpret+check+compile\n", r.input, r.expected)
+			reuse, suffix := frontCode(prev, r.input)
+			fmt.Fprintf(w, "%d\t%s\t%s\n", reuse, suffix, r.expected)
+			prev = r.input
 		}
 	}
 
@@ -446,7 +515,12 @@ func renderAny(vs []any) string {
 // subset file. maxLen is the length window (0 = the whole matrix).
 func writePassingHeader(w *bufio.Writer, scanned, kept, maxLen int) {
 	fmt.Fprintf(w, "# AQL Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)\n")
-	fmt.Fprintf(w, "# Format: input<TAB>expected<TAB>note\n")
+	fmt.Fprintf(w, "%s\n", frontCodeMarker)
+	fmt.Fprintf(w, "# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>expected,\n")
+	fmt.Fprintf(w, "# where reuse = the count of leading bytes the input shares with the\n")
+	fmt.Fprintf(w, "# previous row's input and the full input = prevInput[:reuse]+suffix.\n")
+	fmt.Fprintf(w, "# The note column is constant (interpret+check+compile) and so is hoisted\n")
+	fmt.Fprintf(w, "# out of every row into this header.\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extract mode).\n")
 	fmt.Fprintf(w, "#\n")
@@ -540,21 +614,6 @@ func readInputSet(path string) (map[string]bool, error) {
 	return m, nil
 }
 
-// readExpectedMap reads a generated matrix file into an input→expected
-// lookup (used to annotate a failing prefix with what the full matrix
-// records it evaluates to).
-func readExpectedMap(path string) (map[string]string, error) {
-	rows, err := readDataRows(path)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[string]string, len(rows))
-	for _, r := range rows {
-		m[r.input] = r.expected
-	}
-	return m, nil
-}
-
 // extractFrontier finds the minimal failing prefixes of the matrix — the
 // sequences that FAIL while their immediate prefix PASSES, i.e. the exact
 // point at which a passing program first breaks when one more atom is
@@ -571,13 +630,8 @@ func readExpectedMap(path string) (map[string]string, error) {
 //
 // As it goes it verifies the "compiler runs the checker first" contract:
 // no prefix that the checker rejects is ever emitted as a Program.
-func extractFrontier(fullPath, passingPath, checkOut, compileOut, runtimeOut string, max int) {
+func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max int) {
 	passing, err := readInputSet(passingPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "specgen -frontier: %v\n", err)
-		os.Exit(1)
-	}
-	expected, err := readExpectedMap(fullPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: %v\n", err)
 		os.Exit(1)
@@ -637,9 +691,9 @@ func extractFrontier(fullPath, passingPath, checkOut, compileOut, runtimeOut str
 	wg.Wait()
 
 	// 3. Write the three files in input order.
-	nCheck := writeFrontierFile(checkOut, "type-check", "check-fail", cands, classes, notes, expected, classCheck, max)
-	nCompile := writeFrontierFile(compileOut, "compile", "compile-refused", cands, classes, notes, expected, classCompile, max)
-	nRuntime := writeFrontierFile(runtimeOut, "runtime", "runtime-fail", cands, classes, notes, expected, classRuntime, max)
+	nCheck := writeFrontierFile(checkOut, "type-check", "check-fail", cands, classes, notes, classCheck, max)
+	nCompile := writeFrontierFile(compileOut, "compile", "compile-refused", cands, classes, notes, classCompile, max)
+	nRuntime := writeFrontierFile(runtimeOut, "runtime", "runtime-fail", cands, classes, notes, classRuntime, max)
 
 	fmt.Fprintf(os.Stderr, "specgen -frontier: %d minimal failing prefixes — %d type-check, %d compile, %d runtime\n",
 		len(cands), nCheck, nCompile, nRuntime)
@@ -647,10 +701,11 @@ func extractFrontier(fullPath, passingPath, checkOut, compileOut, runtimeOut str
 		checkFirstViolations)
 }
 
-// writeFrontierFile writes the candidates of one class to path as
-// `input<TAB>note` rows (note = the failure detail plus what the full
-// matrix records the prefix evaluates to), and returns the count.
-func writeFrontierFile(path, kind, tag string, cands []string, classes []frontierClass, notes []string, expected map[string]string, want frontierClass, maxLen int) int {
+// writeFrontierFile writes the candidates of one class to path in
+// FRONT-CODED form (reuse<TAB>suffix<TAB>detail, detail = the failure
+// reason; the constant `<tag>:` disposition prefix is hoisted to the
+// header), and returns the count.
+func writeFrontierFile(path, kind, tag string, cands []string, classes []frontierClass, notes []string, want frontierClass, maxLen int) int {
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: create %s: %v\n", path, err)
@@ -667,11 +722,14 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 		}
 	}
 	writeFrontierHeader(w, kind, tag, n, maxLen)
+	prev := ""
 	for k, cl := range classes {
 		if cl != want {
 			continue
 		}
-		fmt.Fprintf(w, "%s\t%s: %s\tmatrix:%s\n", cands[k], tag, notes[k], expected[cands[k]])
+		reuse, suffix := frontCode(prev, cands[k])
+		fmt.Fprintf(w, "%d\t%s\t%s\n", reuse, suffix, notes[k])
+		prev = cands[k]
 	}
 	return n
 }
@@ -680,7 +738,12 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 // maxLen is the length window the prefixes were drawn from.
 func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
 	fmt.Fprintf(w, "# AQL Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
-	fmt.Fprintf(w, "# Format: prefix<TAB>note (note = `%s: <detail>` + the full-matrix result)\n", tag)
+	fmt.Fprintf(w, "%s\n", frontCodeMarker)
+	fmt.Fprintf(w, "# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>detail, where\n")
+	fmt.Fprintf(w, "# reuse = the count of leading bytes the prefix shares with the previous\n")
+	fmt.Fprintf(w, "# row's prefix and the full prefix = prevPrefix[:reuse]+suffix. detail is\n")
+	fmt.Fprintf(w, "# the failure reason; the constant `%s:` disposition prefix (and the\n", tag)
+	fmt.Fprintf(w, "# documentary full-matrix result) are hoisted out of every row.\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).\n")
 	fmt.Fprintf(w, "#\n")
@@ -911,12 +974,12 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 	wg.Wait()
 
 	nP := writeLen5Pass(passOut, cands, classes, expects)
-	nC := writeLen5Fail(checkOut, "type-check", "check-fail", cands, classes, notes, fiveCheck)
-	nK := writeLen5Fail(compileOut, "compile", "compile-refused", cands, classes, notes, fiveCompile)
-	nR := writeLen5Fail(runtimeOut, "runtime", "runtime-fail", cands, classes, notes, fiveRuntime)
+	nC := writeLen5Fail(checkOut, "type-check", cands, classes, notes, fiveCheck)
+	nK := writeLen5Fail(compileOut, "compile", cands, classes, notes, fiveCompile)
+	nR := writeLen5Fail(runtimeOut, "runtime", cands, classes, notes, fiveRuntime)
 	nM := 0
 	if mismatchOut != "" {
-		nM = writeLen5Fail(mismatchOut, "mismatch", "compiler-mismatch", cands, classes, notes, fiveMismatch)
+		nM = writeLen5Fail(mismatchOut, "mismatch", cands, classes, notes, fiveMismatch)
 	}
 
 	fmt.Fprintf(os.Stderr, "specgen -extend5: %d length-4 passing roots × %d atoms = %d length-5 combinations\n",
@@ -948,17 +1011,21 @@ func writeLen5Pass(path string, cands []string, classes []fiveClass, expects []s
 		}
 	}
 	writeLen5Header(w, "passing", n)
+	prev := ""
 	for k, cl := range classes {
 		if cl == fivePass {
-			fmt.Fprintf(w, "%s\t%s\tinterpret+check+compile\n", cands[k], expects[k])
+			reuse, suffix := frontCode(prev, cands[k])
+			fmt.Fprintf(w, "%d\t%s\t%s\n", reuse, suffix, expects[k])
+			prev = cands[k]
 		}
 	}
 	return n
 }
 
 // writeLen5Fail writes the length-5 minimal failing prefixes of one class
-// as prefix<TAB>note.
-func writeLen5Fail(path, kind, tag string, cands []string, classes []fiveClass, notes []string, want fiveClass) int {
+// in FRONT-CODED form (reuse<TAB>suffix<TAB>detail). The disposition is
+// implied by the file itself, so it is not stored per row.
+func writeLen5Fail(path, kind string, cands []string, classes []fiveClass, notes []string, want fiveClass) int {
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: create %s: %v\n", path, err)
@@ -975,9 +1042,12 @@ func writeLen5Fail(path, kind, tag string, cands []string, classes []fiveClass, 
 		}
 	}
 	writeLen5Header(w, kind, n)
+	prev := ""
 	for k, cl := range classes {
 		if cl == want {
-			fmt.Fprintf(w, "%s\t%s: %s\n", cands[k], tag, notes[k])
+			reuse, suffix := frontCode(prev, cands[k])
+			fmt.Fprintf(w, "%d\t%s\t%s\n", reuse, suffix, notes[k])
+			prev = cands[k]
 		}
 	}
 	return n
@@ -986,6 +1056,7 @@ func writeLen5Fail(path, kind, tag string, cands []string, classes []fiveClass, 
 // writeLen5Header emits the leading comment block of a length-5 file.
 func writeLen5Header(w *bufio.Writer, kind string, n int) {
 	fmt.Fprintf(w, "# AQL Language Specification: Length-5 Layer — %s (GENERATED)\n", strings.ToUpper(kind))
+	fmt.Fprintf(w, "%s\n", frontCodeMarker)
 	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extend5 mode).\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# Every LENGTH-4 PASSING row, extended by one atom into a 5-part\n")
@@ -995,25 +1066,27 @@ func writeLen5Header(w *bufio.Writer, kind string, n int) {
 	fmt.Fprintf(w, "# files, so this layer is the deduplicated set of genuinely new length-5\n")
 	fmt.Fprintf(w, "# outcomes. Each fail row is itself a length-5 minimal failing prefix.\n")
 	fmt.Fprintf(w, "#\n")
+	// Front-coded rows: reuse<TAB>suffix<TAB>extra, full input =
+	// prevInput[:reuse]+suffix (see frontCodeMarker).
 	switch kind {
 	case "passing":
-		fmt.Fprintf(w, "# Format: input<TAB>expected<TAB>note. These clear interpret + check +\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = expected. These clear interpret + check +\n")
 		fmt.Fprintf(w, "# compile; `expected` is the canonical eng.Canon result.\n")
 	case "type-check":
-		fmt.Fprintf(w, "# Format: prefix<TAB>note. The type checker rejects these; the compiler,\n")
-		fmt.Fprintf(w, "# which runs the checker first, refuses them too.\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. The type checker rejects these;\n")
+		fmt.Fprintf(w, "# the compiler, which runs the checker first, refuses them too.\n")
 	case "runtime":
-		fmt.Fprintf(w, "# Format: prefix<TAB>note. These check clean AND compile, yet error at\n")
-		fmt.Fprintf(w, "# run (note = the runtime error class).\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. These check clean AND compile, yet\n")
+		fmt.Fprintf(w, "# error at run (detail = the runtime error class).\n")
 	case "mismatch":
-		fmt.Fprintf(w, "# Format: prefix<TAB>note. COMPILER/INTERPRETER DIVERGENCES: these check\n")
-		fmt.Fprintf(w, "# clean and compile, but the bytecode result differs from the interpreter\n")
-		fmt.Fprintf(w, "# (re-verified on a fresh, isolated instance). The note shows both\n")
-		fmt.Fprintf(w, "# results. These are candidate compiler bugs, NOT part of the four-way\n")
-		fmt.Fprintf(w, "# split — surfaced by the length-5 differential sweep.\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. COMPILER/INTERPRETER DIVERGENCES:\n")
+		fmt.Fprintf(w, "# these check clean and compile, but the bytecode result differs from the\n")
+		fmt.Fprintf(w, "# interpreter (re-verified on a fresh, isolated instance). detail shows\n")
+		fmt.Fprintf(w, "# both results. These are candidate compiler bugs, NOT part of the\n")
+		fmt.Fprintf(w, "# four-way split — surfaced by the length-5 differential sweep.\n")
 	default:
-		fmt.Fprintf(w, "# Format: prefix<TAB>note. These check clean but the compiler will not\n")
-		fmt.Fprintf(w, "# lower them (note = the refusal reason).\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. These check clean but the compiler\n")
+		fmt.Fprintf(w, "# will not lower them (detail = the refusal reason).\n")
 	}
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# %d rows.\n", n)

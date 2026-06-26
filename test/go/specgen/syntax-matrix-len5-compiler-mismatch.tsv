@@ -1,4 +1,5 @@
 # AQL Language Specification: Length-5 Layer — MISMATCH (GENERATED)
+# format: front-coded
 # DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extend5 mode).
 #
 # Every LENGTH-4 PASSING row, extended by one atom into a 5-part
@@ -8,11 +9,11 @@
 # files, so this layer is the deduplicated set of genuinely new length-5
 # outcomes. Each fail row is itself a length-5 minimal failing prefix.
 #
-# Format: prefix<TAB>note. COMPILER/INTERPRETER DIVERGENCES: these check
-# clean and compile, but the bytecode result differs from the interpreter
-# (re-verified on a fresh, isolated instance). The note shows both
-# results. These are candidate compiler bugs, NOT part of the four-way
-# split — surfaced by the length-5 differential sweep.
+# Format: FRONT-CODED, extra = detail. COMPILER/INTERPRETER DIVERGENCES:
+# these check clean and compile, but the bytecode result differs from the
+# interpreter (re-verified on a fresh, isolated instance). detail shows
+# both results. These are candidate compiler bugs, NOT part of the
+# four-way split — surfaced by the length-5 differential sweep.
 #
 # 0 rows.
 #

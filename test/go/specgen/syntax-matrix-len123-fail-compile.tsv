@@ -1,5 +1,10 @@
 # AQL Language Specification: Minimal Failing Prefixes — COMPILE FAILURES (GENERATED)
-# Format: prefix<TAB>note (note = `compile-refused: <detail>` + the full-matrix result)
+# format: front-coded
+# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>detail, where
+# reuse = the count of leading bytes the prefix shares with the previous
+# row's prefix and the full prefix = prevPrefix[:reuse]+suffix. detail is
+# the failure reason; the constant `compile-refused:` disposition prefix (and the
+# documentary full-matrix result) are hoisted out of every row.
 #
 # DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).
 #
@@ -17,123 +22,123 @@
 #
 # 120 prefixes.
 #
-0 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 0 0
-0 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 1 1
-0 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 2.5 2.5
-0 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 'x' 'x'
-0 true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 true true
-0 false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 false false
-0 none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 none none
-0 [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:0 [1 2] [1 2]
-0 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:0 false
-0 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:0
-0 not not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:0 false
-0 not size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:0 0
-0 size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:0 0
-0 size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:0
-0 size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:0 false
-0 size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:0 0
-1 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 0 0
-1 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 1 1
-1 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 2.5 2.5
-1 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 'x' 'x'
-1 true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 true true
-1 false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 false false
-1 none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 none none
-1 [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:1 [1 2] [1 2]
-1 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:1 false
-1 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:1
-1 not not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:1 false
-1 not size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:1 0
-1 size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:1 0
-1 size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:1
-1 size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:1 false
-1 size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:1 0
-2.5 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 0 0
-2.5 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 1 1
-2.5 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 2.5 2.5
-2.5 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 'x' 'x'
-2.5 true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 true true
-2.5 false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 false false
-2.5 none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 none none
-2.5 [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:2.5 [1 2] [1 2]
-2.5 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:2.5 false
-2.5 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:2.5
-2.5 not not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:2.5 false
-2.5 not size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:2.5 0
-2.5 size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:2.5 0
-2.5 size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:2.5
-2.5 size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:2.5 false
-2.5 size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:2.5 0
-'x' 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' 0 0
-'x' 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' 1 1
-'x' 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' 2.5 2.5
-'x' 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' 'x' 'x'
-'x' true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' true true
-'x' false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' false false
-'x' none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' none none
-'x' [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:'x' [1 2] [1 2]
-'x' not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:'x' false
-'x' not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:'x'
-'x' not not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:'x' false
-'x' not size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:'x' 0
-'x' size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:'x' 0
-'x' size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:'x'
-'x' size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:'x' false
-'x' size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:'x' 0
-true 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true 0 0
-true 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true 1 1
-true 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true 2.5 2.5
-true 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true 'x' 'x'
-true true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true true true
-true false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true false false
-true none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true none none
-true [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:true [1 2] [1 2]
-true size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:true 0
-true size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:true
-true size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:true false
-true size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:true 0
-false 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false 0 0
-false 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false 1 1
-false 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false 2.5 2.5
-false 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false 'x' 'x'
-false true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false true true
-false false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false false false
-false none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false none none
-false [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:false [1 2] [1 2]
-false size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:false 0
-false size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:false
-false size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:false false
-false size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:false 0
-none 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none 0 0
-none 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none 1 1
-none 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none 2.5 2.5
-none 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none 'x' 'x'
-none true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none true true
-none false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none false false
-none none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none none none
-none [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:none [1 2] [1 2]
-none not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:none false
-none not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:none
-none not not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:none false
-none not size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:none 0
-none size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:none 0
-none size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:none
-none size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:none false
-none size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:none 0
-[1 2] 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] 0 0
-[1 2] 1 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] 1 1
-[1 2] 2.5 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] 2.5 2.5
-[1 2] 'x' dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] 'x' 'x'
-[1 2] true dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] true true
-[1 2] false dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] false false
-[1 2] none dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] none none
-[1 2] [1 2] dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)	matrix:[1 2] [1 2] [1 2]
-[1 2] not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:[1 2] false
-[1 2] not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:[1 2]
-[1 2] not not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:[1 2] false
-[1 2] not size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:[1 2] 0
-[1 2] size dup	compile-refused: operand of unknown provenance or not statically materialisable at dup	matrix:[1 2] 0
-[1 2] size drop	compile-refused: operand of unknown provenance or not statically materialisable at drop	matrix:[1 2]
-[1 2] size not	compile-refused: operand of unknown provenance or not statically materialisable at not	matrix:[1 2] false
-[1 2] size size	compile-refused: operand of unknown provenance or not statically materialisable at size	matrix:[1 2] 0
+0	0 0 dup	residual shape beyond Stage 1 (call result above a literal)
+2	1 dup	residual shape beyond Stage 1 (call result above a literal)
+2	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+2	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+2	true dup	residual shape beyond Stage 1 (call result above a literal)
+2	false dup	residual shape beyond Stage 1 (call result above a literal)
+2	none dup	residual shape beyond Stage 1 (call result above a literal)
+2	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+2	not dup	operand of unknown provenance or not statically materialisable at dup
+7	rop	operand of unknown provenance or not statically materialisable at drop
+6	not	operand of unknown provenance or not statically materialisable at not
+6	size	operand of unknown provenance or not statically materialisable at size
+2	size dup	operand of unknown provenance or not statically materialisable at dup
+8	rop	operand of unknown provenance or not statically materialisable at drop
+7	not	operand of unknown provenance or not statically materialisable at not
+7	size	operand of unknown provenance or not statically materialisable at size
+0	1 0 dup	residual shape beyond Stage 1 (call result above a literal)
+2	1 dup	residual shape beyond Stage 1 (call result above a literal)
+2	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+2	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+2	true dup	residual shape beyond Stage 1 (call result above a literal)
+2	false dup	residual shape beyond Stage 1 (call result above a literal)
+2	none dup	residual shape beyond Stage 1 (call result above a literal)
+2	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+2	not dup	operand of unknown provenance or not statically materialisable at dup
+7	rop	operand of unknown provenance or not statically materialisable at drop
+6	not	operand of unknown provenance or not statically materialisable at not
+6	size	operand of unknown provenance or not statically materialisable at size
+2	size dup	operand of unknown provenance or not statically materialisable at dup
+8	rop	operand of unknown provenance or not statically materialisable at drop
+7	not	operand of unknown provenance or not statically materialisable at not
+7	size	operand of unknown provenance or not statically materialisable at size
+0	2.5 0 dup	residual shape beyond Stage 1 (call result above a literal)
+4	1 dup	residual shape beyond Stage 1 (call result above a literal)
+4	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+4	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+4	true dup	residual shape beyond Stage 1 (call result above a literal)
+4	false dup	residual shape beyond Stage 1 (call result above a literal)
+4	none dup	residual shape beyond Stage 1 (call result above a literal)
+4	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+4	not dup	operand of unknown provenance or not statically materialisable at dup
+9	rop	operand of unknown provenance or not statically materialisable at drop
+8	not	operand of unknown provenance or not statically materialisable at not
+8	size	operand of unknown provenance or not statically materialisable at size
+4	size dup	operand of unknown provenance or not statically materialisable at dup
+10	rop	operand of unknown provenance or not statically materialisable at drop
+9	not	operand of unknown provenance or not statically materialisable at not
+9	size	operand of unknown provenance or not statically materialisable at size
+0	'x' 0 dup	residual shape beyond Stage 1 (call result above a literal)
+4	1 dup	residual shape beyond Stage 1 (call result above a literal)
+4	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+4	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+4	true dup	residual shape beyond Stage 1 (call result above a literal)
+4	false dup	residual shape beyond Stage 1 (call result above a literal)
+4	none dup	residual shape beyond Stage 1 (call result above a literal)
+4	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+4	not dup	operand of unknown provenance or not statically materialisable at dup
+9	rop	operand of unknown provenance or not statically materialisable at drop
+8	not	operand of unknown provenance or not statically materialisable at not
+8	size	operand of unknown provenance or not statically materialisable at size
+4	size dup	operand of unknown provenance or not statically materialisable at dup
+10	rop	operand of unknown provenance or not statically materialisable at drop
+9	not	operand of unknown provenance or not statically materialisable at not
+9	size	operand of unknown provenance or not statically materialisable at size
+0	true 0 dup	residual shape beyond Stage 1 (call result above a literal)
+5	1 dup	residual shape beyond Stage 1 (call result above a literal)
+5	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+5	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+5	true dup	residual shape beyond Stage 1 (call result above a literal)
+5	false dup	residual shape beyond Stage 1 (call result above a literal)
+5	none dup	residual shape beyond Stage 1 (call result above a literal)
+5	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+5	size dup	operand of unknown provenance or not statically materialisable at dup
+11	rop	operand of unknown provenance or not statically materialisable at drop
+10	not	operand of unknown provenance or not statically materialisable at not
+10	size	operand of unknown provenance or not statically materialisable at size
+0	false 0 dup	residual shape beyond Stage 1 (call result above a literal)
+6	1 dup	residual shape beyond Stage 1 (call result above a literal)
+6	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+6	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+6	true dup	residual shape beyond Stage 1 (call result above a literal)
+6	false dup	residual shape beyond Stage 1 (call result above a literal)
+6	none dup	residual shape beyond Stage 1 (call result above a literal)
+6	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+6	size dup	operand of unknown provenance or not statically materialisable at dup
+12	rop	operand of unknown provenance or not statically materialisable at drop
+11	not	operand of unknown provenance or not statically materialisable at not
+11	size	operand of unknown provenance or not statically materialisable at size
+0	none 0 dup	residual shape beyond Stage 1 (call result above a literal)
+5	1 dup	residual shape beyond Stage 1 (call result above a literal)
+5	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+5	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+5	true dup	residual shape beyond Stage 1 (call result above a literal)
+5	false dup	residual shape beyond Stage 1 (call result above a literal)
+5	none dup	residual shape beyond Stage 1 (call result above a literal)
+5	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+5	not dup	operand of unknown provenance or not statically materialisable at dup
+10	rop	operand of unknown provenance or not statically materialisable at drop
+9	not	operand of unknown provenance or not statically materialisable at not
+9	size	operand of unknown provenance or not statically materialisable at size
+5	size dup	operand of unknown provenance or not statically materialisable at dup
+11	rop	operand of unknown provenance or not statically materialisable at drop
+10	not	operand of unknown provenance or not statically materialisable at not
+10	size	operand of unknown provenance or not statically materialisable at size
+0	[1 2] 0 dup	residual shape beyond Stage 1 (call result above a literal)
+6	1 dup	residual shape beyond Stage 1 (call result above a literal)
+6	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
+6	'x' dup	residual shape beyond Stage 1 (call result above a literal)
+6	true dup	residual shape beyond Stage 1 (call result above a literal)
+6	false dup	residual shape beyond Stage 1 (call result above a literal)
+6	none dup	residual shape beyond Stage 1 (call result above a literal)
+6	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
+6	not dup	operand of unknown provenance or not statically materialisable at dup
+11	rop	operand of unknown provenance or not statically materialisable at drop
+10	not	operand of unknown provenance or not statically materialisable at not
+10	size	operand of unknown provenance or not statically materialisable at size
+6	size dup	operand of unknown provenance or not statically materialisable at dup
+12	rop	operand of unknown provenance or not statically materialisable at drop
+11	not	operand of unknown provenance or not statically materialisable at not
+11	size	operand of unknown provenance or not statically materialisable at size

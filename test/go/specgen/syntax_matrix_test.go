@@ -42,7 +42,6 @@ package main
 // an interpreter-correctness failure on the next regeneration).
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"runtime"
@@ -169,43 +168,25 @@ type matrixRow struct {
 // readMatrix parses the full matrix file into data rows.
 func readMatrix(t *testing.T) []matrixRow { return readRows(t, matrixPath) }
 
-// readRows parses a generated tsv (full matrix or passing subset) into
-// data rows, skipping the comment/blank header lines.
+// readRows parses a generated tsv (full matrix or a front-coded derived
+// subset) into data rows, skipping the comment/blank header lines. Both
+// formats are decoded by forEachDataRow (shared with the generator): the
+// plain base matrix yields a note column (its "N-elem …" lead gives the
+// element count), while the front-coded subsets carry no note (n = 0).
 func readRows(t *testing.T, path string) []matrixRow {
 	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", path, err)
-	}
-	defer f.Close()
-
 	var rows []matrixRow
-	scanner := bufio.NewScanner(f)
-	// Rows can be long once the alphabet grows; lift the default 64K line cap.
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	n := 0
-	for scanner.Scan() {
-		n++
-		line := strings.TrimRight(scanner.Text(), " \t")
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) < 2 {
-			t.Fatalf("%s:L%d: malformed row %q", path, n, line)
-		}
+	err := forEachDataRow(path, func(input, expected, note string, line int) {
 		// The note column ("N-elem …") leads with the element count; default
 		// 0 (treated as "short", always fully covered) if absent.
 		elems := 0
-		if len(parts) >= 3 {
-			if note := strings.TrimSpace(parts[2]); len(note) > 0 && note[0] >= '1' && note[0] <= '9' {
-				elems = int(note[0] - '0')
-			}
+		if len(note) > 0 && note[0] >= '1' && note[0] <= '9' {
+			elems = int(note[0] - '0')
 		}
-		rows = append(rows, matrixRow{line: n, input: strings.TrimSpace(parts[0]), expected: strings.TrimSpace(parts[1]), n: elems})
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan %s: %v", path, err)
+		rows = append(rows, matrixRow{line: line, input: input, expected: expected, n: elems})
+	})
+	if err != nil {
+		t.Fatalf("read %s: %v (regenerate with `make spec-gen`)", path, err)
 	}
 	if len(rows) == 0 {
 		t.Fatalf("%s has no data rows", path)
@@ -600,23 +581,12 @@ const len5MismatchPath = "syntax-matrix-len5-compiler-mismatch.tsv"
 // bug is fixed).
 func readInputsTolerant(t *testing.T, path string) []string {
 	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", path, err)
-	}
-	defer f.Close()
 	var out []string
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		line := strings.TrimRight(sc.Text(), " \t")
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		out = append(out, strings.TrimSpace(strings.SplitN(line, "\t", 2)[0]))
-	}
-	if err := sc.Err(); err != nil {
-		t.Fatalf("scan %s: %v", path, err)
+	err := forEachDataRow(path, func(input, expected, note string, line int) {
+		out = append(out, input)
+	})
+	if err != nil {
+		t.Fatalf("read %s: %v (regenerate with `make spec-gen`)", path, err)
 	}
 	return out
 }
@@ -706,29 +676,7 @@ func TestSyntaxMatrixFileStructure(t *testing.T) {
 // trivially. The file is small (tens of rows), so this stays cheap.
 func TestSyntaxMatrixLen5Mismatch(t *testing.T) {
 	const path = len5MismatchPath
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open %s: %v (regenerate with `make spec-gen`)", path, err)
-	}
-	defer f.Close()
-
-	var inputs []string
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		line := strings.TrimRight(sc.Text(), " \t")
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) < 2 {
-			t.Fatalf("%s: malformed row %q", path, line)
-		}
-		inputs = append(inputs, strings.TrimSpace(parts[0]))
-	}
-	if err := sc.Err(); err != nil {
-		t.Fatalf("scan %s: %v", path, err)
-	}
+	inputs := readInputsTolerant(t, path)
 
 	var stillDiverges int
 	for _, in := range inputs {
