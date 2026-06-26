@@ -98,6 +98,16 @@ type Recorder interface {
 // for the semantics of each callback.
 func (e *Engine) SetRecorder(r Recorder) { e.recorder = r }
 
+// SetTrace installs a TraceCallback on this engine. Pass nil to clear.
+// The callback fires once before every step of Run() with the step
+// index, the pointer position, a snapshot of the tape, and the
+// pending trace note. This is the seam debug tooling builds on to
+// count steps, profile per-word cost, or drive interactive stepping
+// (see design/DEBUG-MODULE.0.md §6.1); the existing RunTrace uses the
+// same field internally. The cost is paid only when a callback is
+// installed — a normal Run leaves e.trace nil and never snapshots.
+func (e *Engine) SetTrace(t TraceCallback) { e.trace = t }
+
 // Default step limits for the Run loop. Exposed as named constants so
 // every Engine constructor names them explicitly — there is no
 // "zero means default" sentinel on `stepLimit`; the field is always
@@ -687,6 +697,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// Balanced on every exit path, including panic unwind.
 	e.registry.enterInterpRun()
 	defer e.registry.exitInterpRun()
+
+	// Track this engine as the current one for on-demand stack
+	// introspection (Debug.stack). Defer-balanced like enterInterpRun.
+	e.registry.pushEngine(e)
+	defer e.registry.popEngine()
 
 	// Last-resort panic guard at the top-level engine boundary. A bug in
 	// any handler or in the step loop should surface to the user as a
@@ -4055,6 +4070,14 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			wrapperSig = arityPick
 		}
 		if wrapperSig != nil {
+			// Surface a module-export dispatch in the trace so a profiler
+			// (Debug.profile) can attribute it: a dotted call like
+			// `Math.sqrt` otherwise shows only the `get` expansion, never the
+			// function it resolves to. Gated on a module origin so ordinary
+			// user-fn and bare-word traces are unaffected.
+			if fnDef.Module != "" {
+				e.traceNote = "call " + fnDef.Name
+			}
 			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
 			if trivialDelegation && sig.Handler != nil {
 				// The inner native lives in fnDef.Registry (the module sub-

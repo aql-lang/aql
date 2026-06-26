@@ -43,6 +43,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"parse":       BuildParseModule,
 	"model":       BuildModelModule,
 	"log":         BuildLogModule,
+	"debug":       BuildDebugModule,
 }
 
 // Resolve resolves a native module name and returns a ModuleDesc.
@@ -260,6 +261,20 @@ func InstallNetExports(r *native.Registry) error {
 // `Log.info` etc. resolve without wiring the full resolver.
 func InstallLogExports(r *native.Registry) error {
 	desc, err := BuildLogModule(r)
+	if err != nil {
+		return err
+	}
+	for name, exportMap := range desc.Exports {
+		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	return nil
+}
+
+// InstallDebugExports builds the debug module and installs its exports as
+// defs — the convenience equivalent of running `import "aql:debug"` in test
+// setup, so `Debug.tap` etc. resolve without wiring the full resolver.
+func InstallDebugExports(r *native.Registry) error {
+	desc, err := BuildDebugModule(r)
 	if err != nil {
 		return err
 	}
