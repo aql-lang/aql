@@ -30,6 +30,14 @@ func TestComputedMapInFnBodyCompiles(t *testing.T) {
 		{"do single list-valued entry", `def f fn [[a:Integer] [Map] [ do {n:[a add 1]} ]] (f 5)`},
 		{"do multi list-valued entries", `def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:[bf "m" get]} ]] ({n:1 m:2} f)`},
 		{"do mixed list and paren values", `def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:(bf "m" get)} ]] ({n:1 m:2} f)`},
+		// A user-CALL result bound to a value-def and referenced MORE THAN ONCE —
+		// here `mv` feeds both a later call (`mv g`) AND a map slot — must promote
+		// to a frame local (store once, re-push per use), matching `def`'s
+		// evaluate-once semantics. Without that promotion `mv` stayed loose on the
+		// single-consume stack and the later call could not seat its operand
+		// ("fn arg result is not on top"), the blocker across the bloom/stats unit
+		// suites (`def m-val (derive-m …)` read by both derive-k and make-bits).
+		{"multi-ref user-call value-def into map", `def g fn [[x:Integer] [Integer] [x add 1]]  def f fn [[x:Integer] [Map] [ def mv (x g)  do {a:(mv add 0), b:(mv g)} ]] (5 f)`},
 	}
 	for _, c := range positives {
 		t.Run("compiles/"+c.name, func(t *testing.T) {

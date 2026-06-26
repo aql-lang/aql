@@ -526,13 +526,23 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		if nout != 1 {
 			continue
 		}
-		// A user-fn call (evCallUser) is promoted ONLY to fix an out-of-order
-		// residual (forceOrder) — a user-call result above a literal,
-		// `1 add2 2 3` → [1, 5]. The other promotion triggers (refs>=2 / valueDef /
-		// fragRef / the dead-result drop) stay NATIVE-only: a user call may feed a
-		// harness/accumulation the residual ref count does not capture (Test.run-spec),
-		// where storing-once or dropping its result diverges.
-		promoteUser := isUser && forceOrder[ev.seq]
+		// A user-fn call (evCallUser) is promoted to fix an out-of-order residual
+		// (forceOrder) — a user-call result above a literal, `1 add2 2 3` → [1, 5]
+		// — OR when its result is referenced MORE THAN ONCE (refs>=2). A value
+		// consumed by several uses cannot be seated from the single-consume stack
+		// (the stack copy is gone after the first pop); it must be stored once and
+		// re-pushed per use, which exactly matches the interpreter's def-evaluates-
+		// once semantics (`def mv (x g)` runs g once, reads mv N times). Without
+		// this a multi-referenced user-call value-def (`def m-val (derive-m …)`
+		// read by both derive-k AND make-bits in Bloom.make) was left loose on the
+		// stack, and a later call could not seat its operand on top — the
+		// `fn arg result is not on top` refusal across the bloom/stats unit suites.
+		// The remaining triggers (valueDef alone / fragRef / dead-result drop) stay
+		// NATIVE-only: a SINGLE-use user call may feed a harness/accumulation the
+		// residual ref count does not capture (Test.run-spec), where storing-once
+		// or dropping its result diverges — but a refs>=2 value genuinely has
+		// several consumers, so re-push is required and sound.
+		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2)
 		switch {
 		case isUser && !promoteUser:
 			// leave the user-call result on the simulated stack (Stage-3 layout)
