@@ -11,7 +11,7 @@
 # Format: prefix<TAB>note. These check clean but the compiler will not
 # lower them (note = the refusal reason).
 #
-# 65459 rows.
+# 65603 rows.
 #
 0 0 0 0 dup	compile-refused: residual shape beyond Stage 1 (call result above a literal)
 0 0 0 0 swap	compile-refused: residual shape beyond Stage 1 (call result above a literal)
@@ -64122,6 +64122,12 @@ and 0 true 'x' swap	compile-refused: polymorphic dispatch at swap
 and 0 true true swap	compile-refused: polymorphic dispatch at swap
 and 0 true false swap	compile-refused: polymorphic dispatch at swap
 and 0 true none swap	compile-refused: polymorphic dispatch at swap
+and 0 true not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 true not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 true not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 true not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 true not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 true not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 0 true not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 0 true not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 0 true not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64145,6 +64151,12 @@ and 0 false 'x' swap	compile-refused: polymorphic dispatch at swap
 and 0 false true swap	compile-refused: polymorphic dispatch at swap
 and 0 false false swap	compile-refused: polymorphic dispatch at swap
 and 0 false none swap	compile-refused: polymorphic dispatch at swap
+and 0 false not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 false not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 false not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 false not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 false not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 0 false not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 0 false not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 0 false not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 0 false not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64269,6 +64281,12 @@ and 1 true 'x' swap	compile-refused: polymorphic dispatch at swap
 and 1 true true swap	compile-refused: polymorphic dispatch at swap
 and 1 true false swap	compile-refused: polymorphic dispatch at swap
 and 1 true none swap	compile-refused: polymorphic dispatch at swap
+and 1 true not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 true not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 true not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 true not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 true not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 true not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 1 true not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 1 true not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 1 true not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64292,6 +64310,12 @@ and 1 false 'x' swap	compile-refused: polymorphic dispatch at swap
 and 1 false true swap	compile-refused: polymorphic dispatch at swap
 and 1 false false swap	compile-refused: polymorphic dispatch at swap
 and 1 false none swap	compile-refused: polymorphic dispatch at swap
+and 1 false not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 false not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 false not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 false not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 false not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 1 false not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 1 false not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 1 false not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 1 false not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64416,6 +64440,12 @@ and 2.5 true 'x' swap	compile-refused: polymorphic dispatch at swap
 and 2.5 true true swap	compile-refused: polymorphic dispatch at swap
 and 2.5 true false swap	compile-refused: polymorphic dispatch at swap
 and 2.5 true none swap	compile-refused: polymorphic dispatch at swap
+and 2.5 true not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 true not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 true not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 true not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 true not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 true not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 2.5 true not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 2.5 true not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 2.5 true not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64439,6 +64469,12 @@ and 2.5 false 'x' swap	compile-refused: polymorphic dispatch at swap
 and 2.5 false true swap	compile-refused: polymorphic dispatch at swap
 and 2.5 false false swap	compile-refused: polymorphic dispatch at swap
 and 2.5 false none swap	compile-refused: polymorphic dispatch at swap
+and 2.5 false not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 false not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 false not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 false not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 false not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 2.5 false not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 2.5 false not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 2.5 false not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 2.5 false not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64593,6 +64629,12 @@ and 'x' true 'x' swap	compile-refused: polymorphic dispatch at swap
 and 'x' true true swap	compile-refused: polymorphic dispatch at swap
 and 'x' true false swap	compile-refused: polymorphic dispatch at swap
 and 'x' true none swap	compile-refused: polymorphic dispatch at swap
+and 'x' true not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' true not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' true not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' true not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' true not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' true not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 'x' true not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 'x' true not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 'x' true not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64616,6 +64658,12 @@ and 'x' false 'x' swap	compile-refused: polymorphic dispatch at swap
 and 'x' false true swap	compile-refused: polymorphic dispatch at swap
 and 'x' false false swap	compile-refused: polymorphic dispatch at swap
 and 'x' false none swap	compile-refused: polymorphic dispatch at swap
+and 'x' false not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' false not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' false not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' false not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' false not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and 'x' false not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and 'x' false not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and 'x' false not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and 'x' false not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64701,6 +64749,12 @@ and true 0 'x' swap	compile-refused: polymorphic dispatch at swap
 and true 0 true swap	compile-refused: polymorphic dispatch at swap
 and true 0 false swap	compile-refused: polymorphic dispatch at swap
 and true 0 none swap	compile-refused: polymorphic dispatch at swap
+and true 0 not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 0 not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 0 not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 0 not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 0 not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 0 not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and true 0 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and true 0 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and true 0 not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64724,6 +64778,12 @@ and true 1 'x' swap	compile-refused: polymorphic dispatch at swap
 and true 1 true swap	compile-refused: polymorphic dispatch at swap
 and true 1 false swap	compile-refused: polymorphic dispatch at swap
 and true 1 none swap	compile-refused: polymorphic dispatch at swap
+and true 1 not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 1 not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 1 not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 1 not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 1 not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 1 not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and true 1 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and true 1 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and true 1 not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64747,6 +64807,12 @@ and true 2.5 'x' swap	compile-refused: polymorphic dispatch at swap
 and true 2.5 true swap	compile-refused: polymorphic dispatch at swap
 and true 2.5 false swap	compile-refused: polymorphic dispatch at swap
 and true 2.5 none swap	compile-refused: polymorphic dispatch at swap
+and true 2.5 not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 2.5 not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 2.5 not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 2.5 not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 2.5 not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 2.5 not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and true 2.5 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and true 2.5 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and true 2.5 not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64770,6 +64836,12 @@ and true 'x' 'x' swap	compile-refused: polymorphic dispatch at swap
 and true 'x' true swap	compile-refused: polymorphic dispatch at swap
 and true 'x' false swap	compile-refused: polymorphic dispatch at swap
 and true 'x' none swap	compile-refused: polymorphic dispatch at swap
+and true 'x' not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 'x' not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 'x' not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 'x' not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 'x' not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true 'x' not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and true 'x' not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and true 'x' not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and true 'x' not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64801,6 +64873,12 @@ and true none 'x' swap	compile-refused: polymorphic dispatch at swap
 and true none true swap	compile-refused: polymorphic dispatch at swap
 and true none false swap	compile-refused: polymorphic dispatch at swap
 and true none none swap	compile-refused: polymorphic dispatch at swap
+and true none not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true none not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true none not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true none not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true none not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true none not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and true none not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and true none not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and true none not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64824,6 +64902,12 @@ and true [1 2] 'x' swap	compile-refused: polymorphic dispatch at swap
 and true [1 2] true swap	compile-refused: polymorphic dispatch at swap
 and true [1 2] false swap	compile-refused: polymorphic dispatch at swap
 and true [1 2] none swap	compile-refused: polymorphic dispatch at swap
+and true [1 2] not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true [1 2] not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true [1 2] not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true [1 2] not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true [1 2] not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and true [1 2] not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and true [1 2] not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and true [1 2] not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and true [1 2] not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64855,6 +64939,12 @@ and false 0 'x' swap	compile-refused: polymorphic dispatch at swap
 and false 0 true swap	compile-refused: polymorphic dispatch at swap
 and false 0 false swap	compile-refused: polymorphic dispatch at swap
 and false 0 none swap	compile-refused: polymorphic dispatch at swap
+and false 0 not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 0 not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 0 not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 0 not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 0 not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 0 not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and false 0 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and false 0 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and false 0 not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64878,6 +64968,12 @@ and false 1 'x' swap	compile-refused: polymorphic dispatch at swap
 and false 1 true swap	compile-refused: polymorphic dispatch at swap
 and false 1 false swap	compile-refused: polymorphic dispatch at swap
 and false 1 none swap	compile-refused: polymorphic dispatch at swap
+and false 1 not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 1 not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 1 not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 1 not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 1 not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 1 not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and false 1 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and false 1 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and false 1 not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64901,6 +64997,12 @@ and false 2.5 'x' swap	compile-refused: polymorphic dispatch at swap
 and false 2.5 true swap	compile-refused: polymorphic dispatch at swap
 and false 2.5 false swap	compile-refused: polymorphic dispatch at swap
 and false 2.5 none swap	compile-refused: polymorphic dispatch at swap
+and false 2.5 not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 2.5 not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 2.5 not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 2.5 not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 2.5 not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 2.5 not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and false 2.5 not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and false 2.5 not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and false 2.5 not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64924,6 +65026,12 @@ and false 'x' 'x' swap	compile-refused: polymorphic dispatch at swap
 and false 'x' true swap	compile-refused: polymorphic dispatch at swap
 and false 'x' false swap	compile-refused: polymorphic dispatch at swap
 and false 'x' none swap	compile-refused: polymorphic dispatch at swap
+and false 'x' not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 'x' not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 'x' not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 'x' not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 'x' not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false 'x' not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and false 'x' not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and false 'x' not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and false 'x' not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64955,6 +65063,12 @@ and false none 'x' swap	compile-refused: polymorphic dispatch at swap
 and false none true swap	compile-refused: polymorphic dispatch at swap
 and false none false swap	compile-refused: polymorphic dispatch at swap
 and false none none swap	compile-refused: polymorphic dispatch at swap
+and false none not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false none not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false none not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false none not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false none not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false none not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and false none not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and false none not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and false none not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -64978,6 +65092,12 @@ and false [1 2] 'x' swap	compile-refused: polymorphic dispatch at swap
 and false [1 2] true swap	compile-refused: polymorphic dispatch at swap
 and false [1 2] false swap	compile-refused: polymorphic dispatch at swap
 and false [1 2] none swap	compile-refused: polymorphic dispatch at swap
+and false [1 2] not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false [1 2] not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false [1 2] not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false [1 2] not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false [1 2] not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and false [1 2] not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and false [1 2] not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and false [1 2] not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and false [1 2] not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -65101,6 +65221,12 @@ and none true 'x' swap	compile-refused: polymorphic dispatch at swap
 and none true true swap	compile-refused: polymorphic dispatch at swap
 and none true false swap	compile-refused: polymorphic dispatch at swap
 and none true none swap	compile-refused: polymorphic dispatch at swap
+and none true not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none true not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none true not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none true not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none true not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none true not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and none true not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and none true not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and none true not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -65124,6 +65250,12 @@ and none false 'x' swap	compile-refused: polymorphic dispatch at swap
 and none false true swap	compile-refused: polymorphic dispatch at swap
 and none false false swap	compile-refused: polymorphic dispatch at swap
 and none false none swap	compile-refused: polymorphic dispatch at swap
+and none false not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none false not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none false not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none false not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none false not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and none false not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and none false not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and none false not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and none false not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -65286,6 +65418,12 @@ and [1 2] true 'x' swap	compile-refused: polymorphic dispatch at swap
 and [1 2] true true swap	compile-refused: polymorphic dispatch at swap
 and [1 2] true false swap	compile-refused: polymorphic dispatch at swap
 and [1 2] true none swap	compile-refused: polymorphic dispatch at swap
+and [1 2] true not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] true not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] true not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] true not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] true not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] true not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and [1 2] true not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and [1 2] true not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and [1 2] true not not	compile-refused: operand of unknown provenance or not statically materialisable at not
@@ -65309,6 +65447,12 @@ and [1 2] false 'x' swap	compile-refused: polymorphic dispatch at swap
 and [1 2] false true swap	compile-refused: polymorphic dispatch at swap
 and [1 2] false false swap	compile-refused: polymorphic dispatch at swap
 and [1 2] false none swap	compile-refused: polymorphic dispatch at swap
+and [1 2] false not 0	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] false not 1	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] false not 2.5	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] false not 'x'	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] false not none	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
+and [1 2] false not [1 2]	compile-refused: forward/stack split depends on a gradual operand (uncompilable)
 and [1 2] false not dup	compile-refused: operand of unknown provenance or not statically materialisable at dup
 and [1 2] false not drop	compile-refused: operand of unknown provenance or not statically materialisable at drop
 and [1 2] false not not	compile-refused: operand of unknown provenance or not statically materialisable at not

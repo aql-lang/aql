@@ -88,9 +88,11 @@ var (
 		sample: 0, // every row
 	}
 	// len5Set — the length-5 layer (length-4 passing rows × one atom).
-	// Counts measured at 323525 / 85038 / 65459 / 14574; floors pinned
-	// below. Sampled by default (these files are large); SPECGEN_FULL=1
-	// forces exhaustive verification.
+	// Counts measured at 323465 / 85038 / 65603 / 14574 (after the `and`
+	// gradual-split compiler fix moved the 84 former mismatches plus 60
+	// coincidentally-correct rows into compile-fail); floors pinned below.
+	// Sampled by default (these files are large); SPECGEN_FULL=1 forces
+	// exhaustive verification.
 	len5Set = frontierSet{
 		label:       "len5",
 		passing:     "syntax-matrix-len5-passing.tsv",

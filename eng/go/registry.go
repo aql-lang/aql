@@ -420,6 +420,20 @@ type CheckState struct {
 	// the program is therefore uncompilable and must fall back.
 	SuppressedRuntimeError bool
 
+	// AmbiguousGradualSplit is set when matchSignature's forward/stack
+	// split for a dispatch depended on whether a GENUINELY MIXED gradual
+	// carrier (a Disjunct with some alternatives conforming to a more-
+	// specific overload's slot and some not — e.g. `and 0 false` typed
+	// Disjunct(Integer,Boolean)) matched that overload. At runtime the
+	// concrete value resolves the split one way; the check pass picked the
+	// other (a less-specific overload that forward-collects instead of
+	// grabbing the carrier from the stack). The two splits produce
+	// different result stacks, so the bytecode compiler reads this after
+	// the check pass and refuses — the program is uncompilable and must
+	// fall back to the interpreter. Dispatch itself is unchanged; this is
+	// a compile-time advisory only.
+	AmbiguousGradualSplit bool
+
 	// DefsInstalled records the names (and source positions) that
 	// the user's program defined during a check run via the def
 	// word. Populated by RecordCheckDef; consulted at end of run
