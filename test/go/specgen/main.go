@@ -151,11 +151,11 @@ func errorClass(err error) string {
 	return "ERROR:"
 }
 
-// sequences yields every alphabet sequence of length 1..max, in a fully
-// deterministic order: shorter sequences first, then odometer order over
-// alphabet indices (last position varies fastest). The callback receives
-// the joined source string and the element count.
-func sequences(max int, emit func(src string, n int)) {
+// eachSeq yields every alphabet sequence of length 1..max as a token
+// slice, in a fully deterministic order: shorter sequences first, then
+// odometer order over alphabet indices (last position varies fastest).
+// The slice is reused between calls — copy it if you need to retain it.
+func eachSeq(max int, emit func(toks []string)) {
 	for n := 1; n <= max; n++ {
 		idx := make([]int, n)
 		for {
@@ -163,7 +163,7 @@ func sequences(max int, emit func(src string, n int)) {
 			for i, a := range idx {
 				toks[i] = alphabet[a]
 			}
-			emit(strings.Join(toks, " "), n)
+			emit(toks)
 
 			// odometer increment over base-len(alphabet) digits.
 			pos := n - 1
@@ -182,12 +182,32 @@ func sequences(max int, emit func(src string, n int)) {
 	}
 }
 
+// sequences yields every alphabet sequence of length 1..max as a joined
+// source string plus its element count — the form the full-matrix
+// generator writes.
+func sequences(max int, emit func(src string, n int)) {
+	eachSeq(max, func(toks []string) { emit(strings.Join(toks, " "), len(toks)) })
+}
+
 func main() {
 	max := flag.Int("max", 4, "maximum sequence length to enumerate")
 	out := flag.String("out", "", "output .tsv path; empty writes to stdout")
 	extract := flag.Bool("extract", false, "extraction mode: read -in and write the passing subset to -out")
-	in := flag.String("in", "", "input full-matrix .tsv path (extraction mode)")
+	frontier := flag.Bool("frontier", false, "frontier mode: write minimal failing prefixes split into -check-out and -compile-out")
+	in := flag.String("in", "", "input full-matrix .tsv path (extraction / frontier mode)")
+	passing := flag.String("passing", "", "passing-subset .tsv path (frontier mode)")
+	checkOut := flag.String("check-out", "", "output path for type-check-fail prefixes (frontier mode)")
+	compileOut := flag.String("compile-out", "", "output path for compile-fail prefixes (frontier mode)")
 	flag.Parse()
+
+	if *frontier {
+		if *in == "" || *passing == "" || *checkOut == "" || *compileOut == "" {
+			fmt.Fprintln(os.Stderr, "specgen -frontier requires -in, -passing, -check-out and -compile-out")
+			os.Exit(2)
+		}
+		extractFrontier(*in, *passing, *checkOut, *compileOut, *max)
+		return
+	}
 
 	if *extract {
 		if *in == "" || *out == "" {
@@ -416,5 +436,252 @@ func writePassingHeader(w *bufio.Writer, scanned, kept int) {
 	fmt.Fprintf(w, "# syntax_matrix_test.go re-verifies the invariant on each one.\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# %d of the full matrix's rows pass (%d scanned).\n", kept, scanned)
+	fmt.Fprintf(w, "#\n")
+}
+
+// frontierClass is the stage at which a minimal failing prefix fails.
+type frontierClass int
+
+const (
+	classCheck   frontierClass = iota // the type checker reports an error (compiler refuses)
+	classCompile                      // checker clean, but the compiler will not compile it
+	classRuntime                      // checker clean and it compiles, yet it is not a passing program
+)
+
+// classifyFrontier runs one prefix through CompileCheck on a reused
+// instance and returns the stage it fails at, a short detail (the check
+// error code, or the compiler's refusal reason), and whether the compiler
+// emitted a Program. CompileCheck runs the checker BEFORE any lowering
+// and returns a nil Program on any error-severity diagnostic — so a
+// check-stage failure can never also be `compiled`. The caller asserts
+// that (the "checker runs first" confirmation) on the returned bool.
+func classifyFrontier(a *lang.AQL, src string) (frontierClass, string, bool) {
+	prog, reason, res, err := a.CompileCheck(src)
+	compiled := prog != nil
+	if err != nil {
+		return classCheck, sanitizeNote(reason), compiled // parse error / check run error
+	}
+	for _, d := range res.Diagnostics {
+		if d.Severity == lang.SeverityError {
+			code := d.Code
+			if code == "" {
+				code = "error"
+			}
+			return classCheck, code, compiled
+		}
+	}
+	if !compiled {
+		return classCompile, sanitizeNote(reason), compiled // checker clean, Stage-1 could not lower it
+	}
+	return classRuntime, "", compiled // compiled, but not a passing program (runtime error / mismatch)
+}
+
+// sanitizeNote makes a reason string safe for a single TSV note column.
+func sanitizeNote(s string) string {
+	s = strings.ReplaceAll(s, "\t", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	if s == "" {
+		return "uncompilable"
+	}
+	return s
+}
+
+// readInputSet reads a generated matrix file into a set of its input
+// strings (used as the "passing" membership oracle).
+func readInputSet(path string) (map[string]bool, error) {
+	rows, err := readDataRows(path)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		m[r.input] = true
+	}
+	return m, nil
+}
+
+// readExpectedMap reads a generated matrix file into an input→expected
+// lookup (used to annotate a failing prefix with what the full matrix
+// records it evaluates to).
+func readExpectedMap(path string) (map[string]string, error) {
+	rows, err := readDataRows(path)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]string, len(rows))
+	for _, r := range rows {
+		m[r.input] = r.expected
+	}
+	return m, nil
+}
+
+// extractFrontier finds the minimal failing prefixes of the matrix — the
+// sequences that FAIL while their immediate prefix PASSES, i.e. the exact
+// point at which a passing program first breaks when one more atom is
+// appended. Every non-passing ("remaining") row truncates to exactly one
+// such prefix (its first break point; the tokens after it are discarded),
+// so this set is the deduped catalogue of distinct failure points.
+//
+// Each prefix is then classified by the stage it fails at and written to
+// the matching file: -check-out for type-check failures (the checker
+// rejects it) and -compile-out for compile failures (the checker passes
+// but the bytecode compiler will not lower it). A prefix that checks
+// clean AND compiles yet still isn't a passing program is a runtime-only
+// failure — it belongs to neither file and is reported separately.
+//
+// As it goes it verifies the "compiler runs the checker first" contract:
+// no prefix that the checker rejects is ever emitted as a Program.
+func extractFrontier(fullPath, passingPath, checkOut, compileOut string, max int) {
+	passing, err := readInputSet(passingPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -frontier: %v\n", err)
+		os.Exit(1)
+	}
+	expected, err := readExpectedMap(fullPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -frontier: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 1. Collect the frontier: fails, immediate prefix passes.
+	var cands []string
+	eachSeq(max, func(toks []string) {
+		s := strings.Join(toks, " ")
+		if passing[s] {
+			return
+		}
+		prefixOK := len(toks) == 1 // the empty prefix trivially "passes"
+		if len(toks) > 1 {
+			prefixOK = passing[strings.Join(toks[:len(toks)-1], " ")]
+		}
+		if prefixOK {
+			cands = append(cands, s)
+		}
+	})
+
+	// 2. Classify in parallel (each worker reuses one compiler instance —
+	//    safe because the alphabet has no state-mutating word).
+	classes := make([]frontierClass, len(cands))
+	notes := make([]string, len(cands))
+	var checkFirstViolations int64
+	var idx int64 = -1
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a, e := lang.New()
+			if e != nil {
+				fmt.Fprintf(os.Stderr, "specgen -frontier: lang.New: %v\n", e)
+				os.Exit(1)
+			}
+			a.SetClock(specClock)
+			for {
+				k := int(atomic.AddInt64(&idx, 1))
+				if k >= len(cands) {
+					return
+				}
+				cl, detail, compiled := classifyFrontier(a, cands[k])
+				classes[k] = cl
+				notes[k] = detail
+				if cl == classCheck && compiled {
+					atomic.AddInt64(&checkFirstViolations, 1) // checker rejected it yet a Program was emitted
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	// 3. Write the two files in input order; tally the runtime residue.
+	nCheck := writeFrontierFile(checkOut, "type-check", "check-fail", cands, classes, notes, expected, classCheck)
+	nCompile := writeFrontierFile(compileOut, "compile", "compile-refused", cands, classes, notes, expected, classCompile)
+
+	var nRuntime int
+	var runtimeEx []string
+	for k, cl := range classes {
+		if cl == classRuntime {
+			nRuntime++
+			if len(runtimeEx) < 8 {
+				runtimeEx = append(runtimeEx, fmt.Sprintf("%s → %s", cands[k], expected[cands[k]]))
+			}
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "specgen -frontier: %d minimal failing prefixes — %d type-check, %d compile, %d runtime-only\n",
+		len(cands), nCheck, nCompile, nRuntime)
+	fmt.Fprintf(os.Stderr, "specgen -frontier: checker-runs-first check: %d prefixes rejected by the checker were ALSO emitted as a Program (want 0)\n",
+		checkFirstViolations)
+	if nRuntime > 0 {
+		fmt.Fprintf(os.Stderr, "specgen -frontier: %d runtime-only prefixes (check clean + compile OK, but error at run) — in NEITHER file; e.g.:\n", nRuntime)
+		for _, ex := range runtimeEx {
+			fmt.Fprintf(os.Stderr, "    %s\n", ex)
+		}
+	}
+}
+
+// writeFrontierFile writes the candidates of one class to path as
+// `input<TAB>note` rows (note = the failure detail plus what the full
+// matrix records the prefix evaluates to), and returns the count.
+func writeFrontierFile(path, kind, tag string, cands []string, classes []frontierClass, notes []string, expected map[string]string, want frontierClass) int {
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -frontier: create %s: %v\n", path, err)
+		os.Exit(1)
+	}
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	defer w.Flush()
+
+	n := 0
+	for _, cl := range classes {
+		if cl == want {
+			n++
+		}
+	}
+	writeFrontierHeader(w, kind, tag, n)
+	for k, cl := range classes {
+		if cl != want {
+			continue
+		}
+		fmt.Fprintf(w, "%s\t%s: %s\tmatrix:%s\n", cands[k], tag, notes[k], expected[cands[k]])
+	}
+	return n
+}
+
+// writeFrontierHeader emits the leading comment block of a frontier file.
+func writeFrontierHeader(w *bufio.Writer, kind, tag string, n int) {
+	fmt.Fprintf(w, "# AQL Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
+	fmt.Fprintf(w, "# Format: prefix<TAB>note (note = `%s: <detail>` + the full-matrix result)\n", tag)
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate from the matrix + passing subset with:\n")
+	fmt.Fprintf(w, "#   cd test/go && go run ./specgen -frontier -in ./specgen/syntax-matrix.tsv \\\n")
+	fmt.Fprintf(w, "#     -passing ./specgen/syntax-matrix-passing.tsv \\\n")
+	fmt.Fprintf(w, "#     -check-out ./specgen/syntax-matrix-fail-check.tsv \\\n")
+	fmt.Fprintf(w, "#     -compile-out ./specgen/syntax-matrix-fail-compile.tsv\n")
+	fmt.Fprintf(w, "# (or `make spec-gen`, which regenerates every derived file).\n")
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# A MINIMAL FAILING PREFIX is a sequence that fails while its immediate\n")
+	fmt.Fprintf(w, "# prefix passes — the exact atom at which a passing program first breaks.\n")
+	fmt.Fprintf(w, "# Every non-passing matrix row truncates to one of these (the trailing\n")
+	fmt.Fprintf(w, "# atoms after the break are discarded), so this is the deduped catalogue\n")
+	fmt.Fprintf(w, "# of distinct failure points.\n")
+	fmt.Fprintf(w, "#\n")
+	switch kind {
+	case "type-check":
+		fmt.Fprintf(w, "# These prefixes FAIL THE TYPE CHECKER: `aql check` reports at least one\n")
+		fmt.Fprintf(w, "# error-severity diagnostic. Because the compiler runs the checker first\n")
+		fmt.Fprintf(w, "# (lang.(*AQL).CompileCheck), every prefix here is also refused by the\n")
+		fmt.Fprintf(w, "# compiler — none is ever lowered to bytecode.\n")
+	default:
+		fmt.Fprintf(w, "# These prefixes PASS THE TYPE CHECKER but the bytecode compiler will not\n")
+		fmt.Fprintf(w, "# lower them (CompileCheck returns no Program); the note gives the first\n")
+		fmt.Fprintf(w, "# offender / refusal reason. They run correctly via the interpreter.\n")
+	}
+	fmt.Fprintf(w, "#\n")
+	fmt.Fprintf(w, "# %d prefixes.\n", n)
 	fmt.Fprintf(w, "#\n")
 }

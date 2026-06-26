@@ -61,6 +61,10 @@ install:
 spec-gen:
 	cd test/go && go run ./specgen -max 4 -out ./specgen/syntax-matrix.tsv
 	cd test/go && go run ./specgen -extract -in ./specgen/syntax-matrix.tsv -out ./specgen/syntax-matrix-passing.tsv
+	cd test/go && go run ./specgen -frontier -in ./specgen/syntax-matrix.tsv \
+	  -passing ./specgen/syntax-matrix-passing.tsv \
+	  -check-out ./specgen/syntax-matrix-fail-check.tsv \
+	  -compile-out ./specgen/syntax-matrix-fail-compile.tsv
 
 # ---- per-module fan-out -------------------------------------------------
 

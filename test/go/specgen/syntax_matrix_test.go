@@ -44,8 +44,19 @@ import (
 )
 
 const (
-	matrixPath  = "syntax-matrix.tsv"
-	passingPath = "syntax-matrix-passing.tsv"
+	matrixPath      = "syntax-matrix.tsv"
+	passingPath     = "syntax-matrix-passing.tsv"
+	failCheckPath   = "syntax-matrix-fail-check.tsv"
+	failCompilePath = "syntax-matrix-fail-compile.tsv"
+)
+
+// Floors for the two minimal-failing-prefix files, so a regression that
+// empties or mislabels them can't pass vacuously. Measured at 9031
+// type-check and 3436 compile fails over the length-4 matrix; pinned
+// below the live counts as headroom.
+const (
+	minCheckFailRows   = 9000
+	minCompileFailRows = 3400
 )
 
 // minPassingRows floors the passing subset so a regression that empties
@@ -352,6 +363,98 @@ func checkWith(sink *failSink, a *lang.AQL, input string) (fp string) {
 		return "parse-or-run-error:" + errorClass(err)
 	}
 	return fmt.Sprintf("errors=%d warnings=%d [%s]", res.Summary.Errors, res.Summary.Warnings, strings.Join(res.Stack, " "))
+}
+
+// hasCheckError reports whether a CompileCheck/Check result carries any
+// error-severity diagnostic (the checker rejected the program).
+func hasCheckError(res lang.CheckResult) bool {
+	for _, d := range res.Diagnostics {
+		if d.Severity == lang.SeverityError {
+			return true
+		}
+	}
+	return false
+}
+
+// TestSyntaxMatrixFailFrontier re-verifies the two minimal-failing-prefix
+// files and, with them, the "compiler runs the checker first" contract.
+//
+//   - Every row of syntax-matrix-fail-check.tsv must be REJECTED BY THE
+//     CHECKER (a parse/run error or an error-severity diagnostic) AND the
+//     compiler must emit NO Program for it. The second clause is the
+//     contract: a program the checker rejects is never lowered to
+//     bytecode, because CompileCheck runs the checker first and refuses on
+//     any error diagnostic. Any check-rejected prefix that still produced
+//     a Program would be a violation.
+//   - Every row of syntax-matrix-fail-compile.tsv must PASS THE CHECKER
+//     (no error diagnostic) yet still produce NO Program — a genuine
+//     compile-stage refusal, disjoint from the check-fail set.
+//
+// Counts are floored so neither file can silently collapse.
+func TestSyntaxMatrixFailFrontier(t *testing.T) {
+	checkRows := readRows(t, failCheckPath)
+	compileRows := readRows(t, failCompilePath)
+
+	// fail-check: checker rejects, and the compiler emits no Program.
+	var checkVerified, compiledDespiteReject int64
+	csink := &failSink{t: t, max: 50}
+	forEachRow(checkRows, func(r matrixRow) {
+		a, err := lang.New()
+		if err != nil {
+			csink.fail("lang.New: %v", err)
+			return
+		}
+		a.SetClock(specClock)
+		prog, _, res, errc := a.CompileCheck(r.input)
+		if errc == nil && !hasCheckError(res) {
+			csink.fail("L%d %q: in fail-check but the checker did NOT reject it", r.line, r.input)
+			return
+		}
+		if prog != nil {
+			atomic.AddInt64(&compiledDespiteReject, 1)
+			csink.fail("L%d %q: checker rejected it yet a Program was emitted — compiler did not run the checker first", r.line, r.input)
+			return
+		}
+		atomic.AddInt64(&checkVerified, 1)
+	})
+	csink.report()
+
+	// fail-compile: checker clean, but the compiler still emits no Program.
+	var compileVerified int64
+	psink := &failSink{t: t, max: 50}
+	forEachRow(compileRows, func(r matrixRow) {
+		a, err := lang.New()
+		if err != nil {
+			psink.fail("lang.New: %v", err)
+			return
+		}
+		a.SetClock(specClock)
+		prog, _, res, errc := a.CompileCheck(r.input)
+		if errc != nil || hasCheckError(res) {
+			psink.fail("L%d %q: in fail-compile but the checker rejected it (belongs in fail-check)", r.line, r.input)
+			return
+		}
+		if prog != nil {
+			psink.fail("L%d %q: in fail-compile but it DID compile to a Program", r.line, r.input)
+			return
+		}
+		atomic.AddInt64(&compileVerified, 1)
+	})
+	psink.report()
+
+	t.Logf("fail-check: %d/%d verified (checker rejects + compiler refuses); checker-runs-first violations: %d",
+		checkVerified, len(checkRows), compiledDespiteReject)
+	t.Logf("fail-compile: %d/%d verified (checker clean + compiler refuses)", compileVerified, len(compileRows))
+
+	if compiledDespiteReject != 0 {
+		t.Errorf("%d check-rejected prefixes still compiled — the compiler did NOT run the checker first", compiledDespiteReject)
+	}
+	if checkVerified < minCheckFailRows {
+		t.Errorf("only %d type-check-fail prefixes verified (floor %d)", checkVerified, minCheckFailRows)
+	}
+	if compileVerified < minCompileFailRows {
+		t.Errorf("only %d compile-fail prefixes verified (floor %d)", compileVerified, minCompileFailRows)
+	}
 }
 
 // TestSyntaxMatrixPassing re-verifies the curated passing subset
