@@ -6749,7 +6749,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// there the diagnostic IS the genuine static report, so gate it on
 		// !Compiling, matching the fall-through path below.
 		es.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-		if !e.registry.Check.Compiling {
+		if !e.registry.Check.Compiling && bestMatch < 0 {
 			e.registry.Check.AddDiagnostic(CheckDiagnostic{
 				Code:   "no_signature",
 				Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
@@ -6783,7 +6783,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// caused), while a compile pass never adds it (Finalize surfaces the
 	// MarkUncompilable reason; a diagnostic would only mask it as the generic
 	// "check diagnostics", aql.go:297).
-	if !e.registry.Check.Compiling {
+	if !e.registry.Check.Compiling && bestMatch < 0 {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
 			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
