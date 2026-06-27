@@ -23,21 +23,6 @@
 # values of incomparable types). The note gives the runtime error class;
 # the interpreter and compiler agree on it (it is not a compiler bug).
 #
-# 14 prefixes.
+# 0 prefixes.
 #
-# detail 0: incomparable
 #
-0	0 none lt	0
-0	1 none lt	0
-0	2.5 none lt	0
-0	'x' none lt	0
-0	true none lt	0
-0	false none lt	0
-0	none 0 lt	0
-5	1 lt	0
-5	2.5 lt	0
-5	'x' lt	0
-5	true lt	0
-5	false lt	0
-5	[1 2] lt	0
-0	[1 2] none lt	0

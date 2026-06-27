@@ -23,7 +23,7 @@
 # (lang.(*AQL).CompileCheck), every prefix here is also refused by the
 # compiler — none is ever lowered to bytecode.
 #
-# 9671 prefixes.
+# 10015 prefixes.
 #
 # detail 0: no_signature
 # detail 1: incomparable
@@ -109,6 +109,7 @@
 2	none add	0
 7	sub	0
 7	mul	0
+7	lt	1
 2	[1 2] add	0
 8	sub	0
 8	mul	0
@@ -152,6 +153,7 @@
 2	none add	0
 7	sub	0
 7	mul	0
+7	lt	1
 2	[1 2] add	0
 8	sub	0
 8	mul	0
@@ -195,6 +197,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -244,6 +247,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -299,6 +303,7 @@
 5	none add	0
 10	sub	0
 10	mul	0
+10	lt	1
 5	[1 2] add	0
 11	sub	0
 11	mul	0
@@ -355,6 +360,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -390,27 +396,34 @@
 0	none 0 add	0
 7	sub	0
 7	mul	0
+7	lt	1
 5	1 add	0
 7	sub	0
 7	mul	0
+7	lt	1
 5	2.5 add	0
 9	sub	0
 9	mul	0
+9	lt	1
 5	'x' add	0
 9	sub	0
 9	mul	0
+9	lt	1
 5	true add	0
 10	sub	0
 10	mul	0
+10	lt	1
 5	false add	0
 11	sub	0
 11	mul	0
+11	lt	1
 5	none add	0
 10	sub	0
 10	mul	0
 5	[1 2] add	0
 11	sub	0
 11	mul	0
+11	lt	1
 5	dup add	0
 9	sub	0
 9	mul	0
@@ -466,6 +479,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -623,6 +637,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -668,6 +683,7 @@
 4	lt 'x'	1
 7	true	1
 7	false	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -699,6 +715,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -744,6 +761,7 @@
 4	lt 'x'	1
 7	true	1
 7	false	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -775,6 +793,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -820,6 +839,7 @@
 6	lt 'x'	1
 9	true	1
 9	false	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -857,11 +877,14 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
 12	lt	1
-6	drop add	0
+6	dup sub	0
+10	mul	0
+7	rop add	0
 11	sub	0
 11	mul	0
 11	eq	0
@@ -924,11 +947,15 @@
 7	none add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	[1 2] add	0
 13	sub	0
 13	mul	0
 13	lt	1
-7	drop add	0
+7	dup add	0
+11	sub	0
+11	mul	0
+8	rop add	0
 12	sub	0
 12	mul	0
 12	eq	0
@@ -986,11 +1013,15 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
 14	lt	1
-8	drop add	0
+8	dup add	0
+12	sub	0
+12	mul	0
+9	rop add	0
 13	sub	0
 13	mul	0
 13	eq	0
@@ -1027,28 +1058,38 @@
 2	none 0 add	0
 9	sub	0
 9	mul	0
+9	lt	1
 7	1 add	0
 9	sub	0
 9	mul	0
+9	lt	1
 7	2.5 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 7	'x' add	0
 11	sub	0
 11	mul	0
+11	lt	1
 7	true add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	false add	0
 13	sub	0
 13	mul	0
+13	lt	1
 7	none add	0
 12	sub	0
 12	mul	0
 7	[1 2] add	0
 13	sub	0
 13	mul	0
-7	drop add	0
+13	lt	1
+7	dup add	0
+11	sub	0
+11	mul	0
+8	rop add	0
 12	sub	0
 12	mul	0
 12	eq	0
@@ -1058,9 +1099,11 @@
 7	not add	0
 11	sub	0
 11	mul	0
+11	lt	1
 7	size add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	eq dup	0
 10	add	0
 10	sub	0
@@ -1080,6 +1123,7 @@
 7	swap add	0
 12	sub	0
 12	mul	0
+12	lt	1
 2	[1 2] 0 add	0
 10	sub	0
 10	mul	0
@@ -1107,10 +1151,14 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
-8	drop add	0
+8	dup add	0
+12	sub	0
+12	mul	0
+9	rop add	0
 13	sub	0
 13	mul	0
 13	eq	0
@@ -1159,6 +1207,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -1204,6 +1253,7 @@
 6	lt 'x'	1
 9	true	1
 9	false	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -1436,6 +1486,7 @@
 11	and	0
 11	swap	0
 2	lt 0 'x'	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -1446,6 +1497,7 @@
 7	and	0
 7	swap	0
 5	1 'x'	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -1456,6 +1508,7 @@
 7	and	0
 7	swap	0
 5	2.5 'x'	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -1543,6 +1596,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -1588,6 +1642,7 @@
 4	lt 'x'	1
 7	true	1
 7	false	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -1619,6 +1674,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -1664,6 +1720,7 @@
 4	lt 'x'	1
 7	true	1
 7	false	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -1695,6 +1752,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -1740,6 +1798,7 @@
 6	lt 'x'	1
 9	true	1
 9	false	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -1777,11 +1836,14 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
 12	lt	1
-6	drop add	0
+6	dup sub	0
+10	mul	0
+7	rop add	0
 11	sub	0
 11	mul	0
 11	eq	0
@@ -1844,11 +1906,15 @@
 7	none add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	[1 2] add	0
 13	sub	0
 13	mul	0
 13	lt	1
-7	drop add	0
+7	dup add	0
+11	sub	0
+11	mul	0
+8	rop add	0
 12	sub	0
 12	mul	0
 12	eq	0
@@ -1906,11 +1972,15 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
 14	lt	1
-8	drop add	0
+8	dup add	0
+12	sub	0
+12	mul	0
+9	rop add	0
 13	sub	0
 13	mul	0
 13	eq	0
@@ -1947,28 +2017,38 @@
 2	none 0 add	0
 9	sub	0
 9	mul	0
+9	lt	1
 7	1 add	0
 9	sub	0
 9	mul	0
+9	lt	1
 7	2.5 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 7	'x' add	0
 11	sub	0
 11	mul	0
+11	lt	1
 7	true add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	false add	0
 13	sub	0
 13	mul	0
+13	lt	1
 7	none add	0
 12	sub	0
 12	mul	0
 7	[1 2] add	0
 13	sub	0
 13	mul	0
-7	drop add	0
+13	lt	1
+7	dup add	0
+11	sub	0
+11	mul	0
+8	rop add	0
 12	sub	0
 12	mul	0
 12	eq	0
@@ -1978,9 +2058,11 @@
 7	not add	0
 11	sub	0
 11	mul	0
+11	lt	1
 7	size add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	eq dup	0
 10	add	0
 10	sub	0
@@ -2000,6 +2082,7 @@
 7	swap add	0
 12	sub	0
 12	mul	0
+12	lt	1
 2	[1 2] 0 add	0
 10	sub	0
 10	mul	0
@@ -2027,10 +2110,14 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
-8	drop add	0
+8	dup add	0
+12	sub	0
+12	mul	0
+9	rop add	0
 13	sub	0
 13	mul	0
 13	eq	0
@@ -2079,6 +2166,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -2124,6 +2212,7 @@
 6	lt 'x'	1
 9	true	1
 9	false	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -2356,6 +2445,7 @@
 11	and	0
 11	swap	0
 2	lt 0 'x'	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -2366,6 +2456,7 @@
 7	and	0
 7	swap	0
 5	1 'x'	1
+7	none	1
 7	[1 2]	1
 7	dup	0
 7	add	0
@@ -2376,6 +2467,7 @@
 7	and	0
 7	swap	0
 5	2.5 'x'	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -2463,6 +2555,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -2508,6 +2601,7 @@
 6	lt 'x'	1
 9	true	1
 9	false	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -2539,6 +2633,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -2584,6 +2679,7 @@
 6	lt 'x'	1
 9	true	1
 9	false	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -2615,6 +2711,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -2660,6 +2757,7 @@
 8	lt 'x'	1
 11	true	1
 11	false	1
+11	none	1
 11	[1 2]	1
 11	dup	0
 11	add	0
@@ -2697,11 +2795,14 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
 14	lt	1
-8	drop add	0
+8	dup sub	0
+12	mul	0
+9	rop add	0
 13	sub	0
 13	mul	0
 13	eq	0
@@ -2764,11 +2865,15 @@
 9	none add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	[1 2] add	0
 15	sub	0
 15	mul	0
 15	lt	1
-9	drop add	0
+9	dup add	0
+13	sub	0
+13	mul	0
+10	rop add	0
 14	sub	0
 14	mul	0
 14	eq	0
@@ -2826,11 +2931,15 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
 16	lt	1
-10	drop add	0
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -2867,28 +2976,38 @@
 4	none 0 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 9	1 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 9	2.5 add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	'x' add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	true add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	false add	0
 15	sub	0
 15	mul	0
+15	lt	1
 9	none add	0
 14	sub	0
 14	mul	0
 9	[1 2] add	0
 15	sub	0
 15	mul	0
-9	drop add	0
+15	lt	1
+9	dup add	0
+13	sub	0
+13	mul	0
+10	rop add	0
 14	sub	0
 14	mul	0
 14	eq	0
@@ -2898,9 +3017,11 @@
 9	not add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	size add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	eq dup	0
 12	add	0
 12	sub	0
@@ -2920,6 +3041,7 @@
 9	swap add	0
 14	sub	0
 14	mul	0
+14	lt	1
 4	[1 2] 0 add	0
 12	sub	0
 12	mul	0
@@ -2947,10 +3069,14 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
-10	drop add	0
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -2999,6 +3125,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -3044,6 +3171,7 @@
 8	lt 'x'	1
 11	true	1
 11	false	1
+11	none	1
 11	[1 2]	1
 11	dup	0
 11	add	0
@@ -3276,6 +3404,7 @@
 13	and	0
 13	swap	0
 4	lt 0 'x'	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -3286,6 +3415,7 @@
 9	and	0
 9	swap	0
 7	1 'x'	1
+9	none	1
 9	[1 2]	1
 9	dup	0
 9	add	0
@@ -3296,6 +3426,7 @@
 9	and	0
 9	swap	0
 7	2.5 'x'	1
+11	none	1
 11	[1 2]	1
 11	dup	0
 11	add	0
@@ -3383,6 +3514,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -3440,6 +3572,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -3497,6 +3630,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -3560,11 +3694,14 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
 14	lt	1
-8	drop add	0
+8	dup sub	0
+12	mul	0
+9	rop add	0
 13	sub	0
 13	mul	0
 13	eq	0
@@ -3597,6 +3734,7 @@
 11	2.5	1
 11	true	1
 11	false	1
+11	none	1
 11	[1 2]	1
 11	dup	0
 11	add	0
@@ -3640,11 +3778,15 @@
 9	none add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	[1 2] add	0
 15	sub	0
 15	mul	0
 15	lt	1
-9	drop add	0
+9	dup add	0
+13	sub	0
+13	mul	0
+10	rop add	0
 14	sub	0
 14	mul	0
 14	eq	0
@@ -3706,11 +3848,15 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
 16	lt	1
-10	drop add	0
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -3751,28 +3897,38 @@
 4	none 0 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 9	1 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 9	2.5 add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	'x' add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	true add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	false add	0
 15	sub	0
 15	mul	0
+15	lt	1
 9	none add	0
 14	sub	0
 14	mul	0
 9	[1 2] add	0
 15	sub	0
 15	mul	0
-9	drop add	0
+15	lt	1
+9	dup add	0
+13	sub	0
+13	mul	0
+10	rop add	0
 14	sub	0
 14	mul	0
 14	eq	0
@@ -3782,9 +3938,11 @@
 9	not add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	size add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	eq dup	0
 12	add	0
 12	sub	0
@@ -3804,6 +3962,7 @@
 9	swap add	0
 14	sub	0
 14	mul	0
+14	lt	1
 4	[1 2] 0 add	0
 12	sub	0
 12	mul	0
@@ -3831,10 +3990,14 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
-10	drop add	0
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -3889,6 +4052,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -3928,6 +4092,7 @@
 11	2.5	1
 11	true	1
 11	false	1
+11	none	1
 11	[1 2]	1
 11	dup	0
 11	add	0
@@ -4145,6 +4310,7 @@
 4	lt 'x' 0	1
 11	1	1
 11	2.5	1
+11	none	1
 11	[1 2]	1
 11	dup	0
 11	add	0
@@ -4232,6 +4398,7 @@
 7	none add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	[1 2] add	0
 13	sub	0
 13	mul	0
@@ -4285,6 +4452,7 @@
 7	none add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	[1 2] add	0
 13	sub	0
 13	mul	0
@@ -4338,6 +4506,7 @@
 9	none add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	[1 2] add	0
 15	sub	0
 15	mul	0
@@ -4397,11 +4566,14 @@
 9	none add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	[1 2] add	0
 15	sub	0
 15	mul	0
 15	lt	1
-9	drop add	0
+9	dup sub	0
+13	mul	0
+10	rop add	0
 14	sub	0
 14	mul	0
 14	eq	0
@@ -4464,11 +4636,15 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
 16	lt	1
-10	drop add	0
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -4494,6 +4670,7 @@
 13	1	1
 13	2.5	1
 13	'x'	1
+13	none	1
 13	[1 2]	1
 13	dup	0
 13	add	0
@@ -4537,11 +4714,15 @@
 11	none add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	[1 2] add	0
 17	sub	0
 17	mul	0
 17	lt	1
-11	drop add	0
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -4567,6 +4748,7 @@
 14	1	1
 14	2.5	1
 14	'x'	1
+14	none	1
 14	[1 2]	1
 14	dup	0
 14	add	0
@@ -4589,28 +4771,38 @@
 5	none 0 add	0
 12	sub	0
 12	mul	0
+12	lt	1
 10	1 add	0
 12	sub	0
 12	mul	0
+12	lt	1
 10	2.5 add	0
 14	sub	0
 14	mul	0
+14	lt	1
 10	'x' add	0
 14	sub	0
 14	mul	0
+14	lt	1
 10	true add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	false add	0
 16	sub	0
 16	mul	0
+16	lt	1
 10	none add	0
 15	sub	0
 15	mul	0
 10	[1 2] add	0
 16	sub	0
 16	mul	0
-10	drop add	0
+16	lt	1
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -4620,9 +4812,11 @@
 10	not add	0
 14	sub	0
 14	mul	0
+14	lt	1
 10	size add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	eq dup	0
 13	add	0
 13	sub	0
@@ -4642,6 +4836,7 @@
 10	swap add	0
 15	sub	0
 15	mul	0
+15	lt	1
 5	[1 2] 0 add	0
 13	sub	0
 13	mul	0
@@ -4669,10 +4864,14 @@
 11	none add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	[1 2] add	0
 17	sub	0
 17	mul	0
-11	drop add	0
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -4731,6 +4930,7 @@
 9	none add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	[1 2] add	0
 15	sub	0
 15	mul	0
@@ -4764,6 +4964,7 @@
 12	1	1
 12	2.5	1
 12	'x'	1
+12	none	1
 12	[1 2]	1
 12	dup	0
 12	add	0
@@ -4990,6 +5191,7 @@
 13	1	1
 13	2.5	1
 13	'x'	1
+13	none	1
 13	[1 2]	1
 13	dup	0
 13	add	0
@@ -5003,6 +5205,7 @@
 14	1	1
 14	2.5	1
 14	'x'	1
+14	none	1
 14	[1 2]	1
 14	dup	0
 14	add	0
@@ -5088,6 +5291,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -5141,6 +5345,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -5194,6 +5399,7 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
@@ -5253,11 +5459,14 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
 16	lt	1
-10	drop add	0
+10	dup sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -5320,11 +5529,15 @@
 11	none add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	[1 2] add	0
 17	sub	0
 17	mul	0
 17	lt	1
-11	drop add	0
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -5350,6 +5563,7 @@
 14	1	1
 14	2.5	1
 14	'x'	1
+14	none	1
 14	[1 2]	1
 14	dup	0
 14	add	0
@@ -5393,11 +5607,15 @@
 12	none add	0
 17	sub	0
 17	mul	0
+17	lt	1
 12	[1 2] add	0
 18	sub	0
 18	mul	0
 18	lt	1
-12	drop add	0
+12	dup add	0
+16	sub	0
+16	mul	0
+13	rop add	0
 17	sub	0
 17	mul	0
 17	eq	0
@@ -5423,6 +5641,7 @@
 15	1	1
 15	2.5	1
 15	'x'	1
+15	none	1
 15	[1 2]	1
 15	dup	0
 15	add	0
@@ -5445,28 +5664,38 @@
 6	none 0 add	0
 13	sub	0
 13	mul	0
+13	lt	1
 11	1 add	0
 13	sub	0
 13	mul	0
+13	lt	1
 11	2.5 add	0
 15	sub	0
 15	mul	0
+15	lt	1
 11	'x' add	0
 15	sub	0
 15	mul	0
+15	lt	1
 11	true add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	false add	0
 17	sub	0
 17	mul	0
+17	lt	1
 11	none add	0
 16	sub	0
 16	mul	0
 11	[1 2] add	0
 17	sub	0
 17	mul	0
-11	drop add	0
+17	lt	1
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -5476,9 +5705,11 @@
 11	not add	0
 15	sub	0
 15	mul	0
+15	lt	1
 11	size add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	eq dup	0
 14	add	0
 14	sub	0
@@ -5498,6 +5729,7 @@
 11	swap add	0
 16	sub	0
 16	mul	0
+16	lt	1
 6	[1 2] 0 add	0
 14	sub	0
 14	mul	0
@@ -5525,10 +5757,14 @@
 12	none add	0
 17	sub	0
 17	mul	0
+17	lt	1
 12	[1 2] add	0
 18	sub	0
 18	mul	0
-12	drop add	0
+12	dup add	0
+16	sub	0
+16	mul	0
+13	rop add	0
 17	sub	0
 17	mul	0
 17	eq	0
@@ -5587,6 +5823,7 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
@@ -5620,6 +5857,7 @@
 13	1	1
 13	2.5	1
 13	'x'	1
+13	none	1
 13	[1 2]	1
 13	dup	0
 13	add	0
@@ -5846,6 +6084,7 @@
 14	1	1
 14	2.5	1
 14	'x'	1
+14	none	1
 14	[1 2]	1
 14	dup	0
 14	add	0
@@ -5859,6 +6098,7 @@
 15	1	1
 15	2.5	1
 15	'x'	1
+15	none	1
 15	[1 2]	1
 15	dup	0
 15	add	0
@@ -5944,6 +6184,7 @@
 7	none add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	[1 2] add	0
 13	sub	0
 13	mul	0
@@ -5982,6 +6223,7 @@
 7	swap add	0
 12	sub	0
 12	mul	0
+12	lt	1
 5	1 'x' sub	0
 11	mul	0
 11	lt	1
@@ -5996,6 +6238,7 @@
 7	none add	0
 12	sub	0
 12	mul	0
+12	lt	1
 7	[1 2] add	0
 13	sub	0
 13	mul	0
@@ -6034,6 +6277,7 @@
 7	swap add	0
 12	sub	0
 12	mul	0
+12	lt	1
 5	2.5 'x' sub	0
 13	mul	0
 13	lt	1
@@ -6048,6 +6292,7 @@
 9	none add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	[1 2] add	0
 15	sub	0
 15	mul	0
@@ -6086,6 +6331,7 @@
 9	swap add	0
 14	sub	0
 14	mul	0
+14	lt	1
 5	'x' 0 sub	0
 11	mul	0
 11	lt	1
@@ -6106,11 +6352,14 @@
 9	none add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	[1 2] add	0
 15	sub	0
 15	mul	0
 15	lt	1
-9	drop add	0
+9	dup sub	0
+13	mul	0
+10	rop add	0
 14	sub	0
 14	mul	0
 14	eq	0
@@ -6144,6 +6393,7 @@
 9	swap add	0
 14	sub	0
 14	mul	0
+14	lt	1
 5	true 0 add	0
 12	sub	0
 12	mul	0
@@ -6168,11 +6418,15 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
 16	lt	1
-10	drop add	0
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -6205,6 +6459,7 @@
 10	swap add	0
 15	sub	0
 15	mul	0
+15	lt	1
 5	false 0 add	0
 13	sub	0
 13	mul	0
@@ -6229,11 +6484,15 @@
 11	none add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	[1 2] add	0
 17	sub	0
 17	mul	0
 17	lt	1
-11	drop add	0
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -6266,31 +6525,42 @@
 11	swap add	0
 16	sub	0
 16	mul	0
+16	lt	1
 5	none 0 add	0
 12	sub	0
 12	mul	0
+12	lt	1
 10	1 add	0
 12	sub	0
 12	mul	0
+12	lt	1
 10	2.5 add	0
 14	sub	0
 14	mul	0
+14	lt	1
 10	'x' add	0
 14	sub	0
 14	mul	0
+14	lt	1
 10	true add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	false add	0
 16	sub	0
 16	mul	0
+16	lt	1
 10	none add	0
 15	sub	0
 15	mul	0
 10	[1 2] add	0
 16	sub	0
 16	mul	0
-10	drop add	0
+16	lt	1
+10	dup add	0
+14	sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -6300,9 +6570,11 @@
 10	not add	0
 14	sub	0
 14	mul	0
+14	lt	1
 10	size add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	eq dup	0
 13	add	0
 13	sub	0
@@ -6311,7 +6583,14 @@
 13	lt	0
 13	and	0
 13	swap	0
-10	lt dup	0
+10	lt 0	1
+13	1	1
+13	2.5	1
+13	'x'	1
+13	true	1
+13	false	1
+13	[1 2]	1
+13	dup	0
 13	add	0
 13	sub	0
 13	mul	0
@@ -6357,10 +6636,14 @@
 11	none add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	[1 2] add	0
 17	sub	0
 17	mul	0
-11	drop add	0
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -6394,30 +6677,38 @@
 11	swap add	0
 16	sub	0
 16	mul	0
+16	lt	1
 5	dup 0 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 9	1 add	0
 11	sub	0
 11	mul	0
+11	lt	1
 9	2.5 add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	'x' add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	true add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	false add	0
 15	sub	0
 15	mul	0
+15	lt	1
 9	none add	0
 14	sub	0
 14	mul	0
 9	[1 2] add	0
 15	sub	0
 15	mul	0
+15	lt	1
 9	dup add	0
 13	sub	0
 13	mul	0
@@ -6431,9 +6722,11 @@
 9	not add	0
 13	sub	0
 13	mul	0
+13	lt	1
 9	size add	0
 14	sub	0
 14	mul	0
+14	lt	1
 9	eq dup	0
 12	add	0
 12	sub	0
@@ -6442,7 +6735,14 @@
 12	lt	0
 12	and	0
 12	swap	0
-9	lt dup	0
+9	lt 0	1
+12	1	1
+12	2.5	1
+12	'x'	1
+12	true	1
+12	false	1
+12	[1 2]	1
+12	dup	0
 12	add	0
 12	sub	0
 12	mul	0
@@ -6565,6 +6865,7 @@
 10	[1 2] add	0
 16	sub	0
 16	mul	0
+16	lt	1
 5	eq 0 dup	0
 10	add	0
 10	sub	0
@@ -6629,7 +6930,14 @@
 14	lt	0
 14	and	0
 14	swap	0
-5	lt none dup	0
+5	lt none 0	1
+13	1	1
+13	2.5	1
+13	'x'	1
+13	true	1
+13	false	1
+13	[1 2]	1
+13	dup	0
 13	add	0
 13	sub	0
 13	mul	0
@@ -6715,6 +7023,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -6768,6 +7077,7 @@
 8	none add	0
 13	sub	0
 13	mul	0
+13	lt	1
 8	[1 2] add	0
 14	sub	0
 14	mul	0
@@ -6821,6 +7131,7 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
@@ -6880,11 +7191,14 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
 16	lt	1
-10	drop add	0
+10	dup sub	0
+14	mul	0
+11	rop add	0
 15	sub	0
 15	mul	0
 15	eq	0
@@ -6943,11 +7257,15 @@
 11	none add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	[1 2] add	0
 17	sub	0
 17	mul	0
 17	lt	1
-11	drop add	0
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -7005,11 +7323,15 @@
 12	none add	0
 17	sub	0
 17	mul	0
+17	lt	1
 12	[1 2] add	0
 18	sub	0
 18	mul	0
 18	lt	1
-12	drop add	0
+12	dup add	0
+16	sub	0
+16	mul	0
+13	rop add	0
 17	sub	0
 17	mul	0
 17	eq	0
@@ -7046,28 +7368,38 @@
 6	none 0 add	0
 13	sub	0
 13	mul	0
+13	lt	1
 11	1 add	0
 13	sub	0
 13	mul	0
+13	lt	1
 11	2.5 add	0
 15	sub	0
 15	mul	0
+15	lt	1
 11	'x' add	0
 15	sub	0
 15	mul	0
+15	lt	1
 11	true add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	false add	0
 17	sub	0
 17	mul	0
+17	lt	1
 11	none add	0
 16	sub	0
 16	mul	0
 11	[1 2] add	0
 17	sub	0
 17	mul	0
-11	drop add	0
+17	lt	1
+11	dup add	0
+15	sub	0
+15	mul	0
+12	rop add	0
 16	sub	0
 16	mul	0
 16	eq	0
@@ -7077,9 +7409,11 @@
 11	not add	0
 15	sub	0
 15	mul	0
+15	lt	1
 11	size add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	eq dup	0
 14	add	0
 14	sub	0
@@ -7099,6 +7433,7 @@
 11	swap add	0
 16	sub	0
 16	mul	0
+16	lt	1
 6	[1 2] 0 add	0
 14	sub	0
 14	mul	0
@@ -7126,10 +7461,14 @@
 12	none add	0
 17	sub	0
 17	mul	0
+17	lt	1
 12	[1 2] add	0
 18	sub	0
 18	mul	0
-12	drop add	0
+12	dup add	0
+16	sub	0
+16	mul	0
+13	rop add	0
 17	sub	0
 17	mul	0
 17	eq	0
@@ -7158,6 +7497,7 @@
 15	'x'	1
 15	true	1
 15	false	1
+15	none	1
 15	dup	0
 15	add	0
 15	sub	0
@@ -7204,6 +7544,7 @@
 10	none add	0
 15	sub	0
 15	mul	0
+15	lt	1
 10	[1 2] add	0
 16	sub	0
 16	mul	0
@@ -7239,6 +7580,7 @@
 13	'x'	1
 13	true	1
 13	false	1
+13	none	1
 13	dup	0
 13	add	0
 13	sub	0
@@ -7433,6 +7775,7 @@
 15	'x'	1
 15	true	1
 15	false	1
+15	none	1
 15	dup	0
 15	add	0
 15	sub	0
@@ -8312,6 +8655,7 @@
 11	none add	0
 16	sub	0
 16	mul	0
+16	lt	1
 11	[1 2] add	0
 17	sub	0
 17	mul	0

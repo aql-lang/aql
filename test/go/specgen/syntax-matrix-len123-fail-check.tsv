@@ -23,7 +23,7 @@
 # (lang.(*AQL).CompileCheck), every prefix here is also refused by the
 # compiler — none is ever lowered to bytecode.
 #
-# 581 prefixes.
+# 595 prefixes.
 #
 # detail 0: no_signature
 # detail 1: incomparable
@@ -109,6 +109,7 @@
 2	none add	0
 7	sub	0
 7	mul	0
+7	lt	1
 2	[1 2] add	0
 8	sub	0
 8	mul	0
@@ -152,6 +153,7 @@
 2	none add	0
 7	sub	0
 7	mul	0
+7	lt	1
 2	[1 2] add	0
 8	sub	0
 8	mul	0
@@ -195,6 +197,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -244,6 +247,7 @@
 4	none add	0
 9	sub	0
 9	mul	0
+9	lt	1
 4	[1 2] add	0
 10	sub	0
 10	mul	0
@@ -299,6 +303,7 @@
 5	none add	0
 10	sub	0
 10	mul	0
+10	lt	1
 5	[1 2] add	0
 11	sub	0
 11	mul	0
@@ -355,6 +360,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0
@@ -390,27 +396,34 @@
 0	none 0 add	0
 7	sub	0
 7	mul	0
+7	lt	1
 5	1 add	0
 7	sub	0
 7	mul	0
+7	lt	1
 5	2.5 add	0
 9	sub	0
 9	mul	0
+9	lt	1
 5	'x' add	0
 9	sub	0
 9	mul	0
+9	lt	1
 5	true add	0
 10	sub	0
 10	mul	0
+10	lt	1
 5	false add	0
 11	sub	0
 11	mul	0
+11	lt	1
 5	none add	0
 10	sub	0
 10	mul	0
 5	[1 2] add	0
 11	sub	0
 11	mul	0
+11	lt	1
 5	dup add	0
 9	sub	0
 9	mul	0
@@ -466,6 +479,7 @@
 6	none add	0
 11	sub	0
 11	mul	0
+11	lt	1
 6	[1 2] add	0
 12	sub	0
 12	mul	0

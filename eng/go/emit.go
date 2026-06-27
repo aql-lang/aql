@@ -3292,7 +3292,9 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 				continue
 			}
 			if slot, isProm := lw.promoted[pr.seq]; isProm {
-				ops = append(ops, localOperand(slot))
+				// slot is the producer's BASE slot; output idx i lives at slot+i
+				// (multi-output stack words store one slot per result).
+				ops = append(ops, localOperand(slot+pr.idx))
 				continue
 			}
 			ops = append(ops, eventOperand(pr.seq, pr.idx))

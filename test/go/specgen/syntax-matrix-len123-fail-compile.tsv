@@ -22,131 +22,66 @@
 # lower them (CompileCheck returns no Program); the note gives the first
 # offender / refusal reason. They run correctly via the interpreter.
 #
-# 120 prefixes.
+# 56 prefixes.
 #
-# detail 0: residual shape beyond Stage 1 (call result above a literal)
-# detail 1: operand of unknown provenance or not statically materialisable at dup
-# detail 2: operand of unknown provenance or not statically materialisable at drop
-# detail 3: operand of unknown provenance or not statically materialisable at not
-# detail 4: operand of unknown provenance or not statically materialisable at size
+# detail 0: operand of unknown provenance or not statically materialisable at dup
+# detail 1: operand of unknown provenance or not statically materialisable at drop
+# detail 2: operand of unknown provenance or not statically materialisable at not
+# detail 3: operand of unknown provenance or not statically materialisable at size
 #
-0	0 0 dup	0
-2	1 dup	0
-2	2.5 dup	0
-2	'x' dup	0
-2	true dup	0
-2	false dup	0
-2	none dup	0
-2	[1 2] dup	0
-2	not dup	1
-7	rop	2
-6	not	3
-6	size	4
-2	size dup	1
-8	rop	2
-7	not	3
-7	size	4
-0	1 0 dup	0
-2	1 dup	0
-2	2.5 dup	0
-2	'x' dup	0
-2	true dup	0
-2	false dup	0
-2	none dup	0
-2	[1 2] dup	0
-2	not dup	1
-7	rop	2
-6	not	3
-6	size	4
-2	size dup	1
-8	rop	2
-7	not	3
-7	size	4
-0	2.5 0 dup	0
-4	1 dup	0
-4	2.5 dup	0
-4	'x' dup	0
-4	true dup	0
-4	false dup	0
-4	none dup	0
-4	[1 2] dup	0
-4	not dup	1
-9	rop	2
-8	not	3
-8	size	4
-4	size dup	1
-10	rop	2
-9	not	3
-9	size	4
-0	'x' 0 dup	0
-4	1 dup	0
-4	2.5 dup	0
-4	'x' dup	0
-4	true dup	0
-4	false dup	0
-4	none dup	0
-4	[1 2] dup	0
-4	not dup	1
-9	rop	2
-8	not	3
-8	size	4
-4	size dup	1
-10	rop	2
-9	not	3
-9	size	4
-0	true 0 dup	0
-5	1 dup	0
-5	2.5 dup	0
-5	'x' dup	0
-5	true dup	0
-5	false dup	0
-5	none dup	0
-5	[1 2] dup	0
-5	size dup	1
-11	rop	2
-10	not	3
-10	size	4
-0	false 0 dup	0
-6	1 dup	0
-6	2.5 dup	0
-6	'x' dup	0
-6	true dup	0
-6	false dup	0
-6	none dup	0
-6	[1 2] dup	0
-6	size dup	1
-12	rop	2
-11	not	3
-11	size	4
-0	none 0 dup	0
-5	1 dup	0
-5	2.5 dup	0
-5	'x' dup	0
-5	true dup	0
-5	false dup	0
-5	none dup	0
-5	[1 2] dup	0
-5	not dup	1
-10	rop	2
-9	not	3
-9	size	4
-5	size dup	1
-11	rop	2
-10	not	3
-10	size	4
-0	[1 2] 0 dup	0
-6	1 dup	0
-6	2.5 dup	0
-6	'x' dup	0
-6	true dup	0
-6	false dup	0
-6	none dup	0
-6	[1 2] dup	0
-6	not dup	1
-11	rop	2
-10	not	3
-10	size	4
-6	size dup	1
-12	rop	2
-11	not	3
-11	size	4
+0	0 not dup	0
+7	rop	1
+6	not	2
+6	size	3
+2	size dup	0
+8	rop	1
+7	not	2
+7	size	3
+0	1 not dup	0
+7	rop	1
+6	not	2
+6	size	3
+2	size dup	0
+8	rop	1
+7	not	2
+7	size	3
+0	2.5 not dup	0
+9	rop	1
+8	not	2
+8	size	3
+4	size dup	0
+10	rop	1
+9	not	2
+9	size	3
+0	'x' not dup	0
+9	rop	1
+8	not	2
+8	size	3
+4	size dup	0
+10	rop	1
+9	not	2
+9	size	3
+0	true size dup	0
+11	rop	1
+10	not	2
+10	size	3
+0	false size dup	0
+12	rop	1
+11	not	2
+11	size	3
+0	none not dup	0
+10	rop	1
+9	not	2
+9	size	3
+5	size dup	0
+11	rop	1
+10	not	2
+10	size	3
+0	[1 2] not dup	0
+11	rop	1
+10	not	2
+10	size	3
+6	size dup	0
+12	rop	1
+11	not	2
+11	size	3

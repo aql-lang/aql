@@ -76,41 +76,42 @@ type frontierSet struct {
 }
 
 var (
-	// fullSet — the length-1..4 separation. Counts measured at 27746 /
-	// 9671 / 3294 / 404 (after the ordering/connective check-mode
-	// soundness fix: concrete cross-family ordering rows moved
-	// runtime→check, and-disjunct downstream-typed rows likewise, and a
-	// handful of `and X false …` rows moved compile→passing); floors
-	// pinned just below as headroom.
+	// fullSet — the length-1..4 separation. Counts measured at 29798 /
+	// 10015 / 2056 / 190 (after the multi-output stack-word compiler fix:
+	// `dup`/`swap` results above a residual literal now compile, moving
+	// compile→passing; and the none-ordering soundness fix moved the
+	// remaining cross-family ordering rows runtime→check); floors pinned
+	// just below as headroom.
 	fullSet = frontierSet{
 		label:       "full(len1-4)",
 		passing:     "syntax-matrix-passing.tsv",
 		failCheck:   "syntax-matrix-fail-check.tsv",
 		failCompile: "syntax-matrix-fail-compile.tsv",
 		failRuntime: "syntax-matrix-fail-runtime.tsv",
-		minPassing:  27000, minCheck: 9000, minCompile: 3200, minRuntime: 380,
+		minPassing:  29000, minCheck: 9800, minCompile: 2000, minRuntime: 180,
 		sample: 0, // every row — the full set is small enough
 	}
 	// len123Set — the same separation over length-1..3 combinations only.
-	// Counts measured at 1992 / 581 / 120 / 14 (the ordering soundness fix
-	// moved the cross-family ordering rows runtime→check); floors pinned
-	// just below.
+	// Counts measured at 2056 / 595 / 56 / 0 — the none-ordering soundness
+	// fix moved every remaining length-1..3 runtime failure (all were
+	// cross-family ordering against `none`) to check, so the runtime
+	// bucket is now legitimately EMPTY (minRuntime 0). Floors pinned just
+	// below the others.
 	len123Set = frontierSet{
 		label:       "len123",
 		passing:     "syntax-matrix-len123-passing.tsv",
 		failCheck:   "syntax-matrix-len123-fail-check.tsv",
 		failCompile: "syntax-matrix-len123-fail-compile.tsv",
 		failRuntime: "syntax-matrix-len123-fail-runtime.tsv",
-		minPassing:  1900, minCheck: 560, minCompile: 115, minRuntime: 12,
+		minPassing:  2000, minCheck: 580, minCompile: 50, minRuntime: 0,
 		sample: 0, // every row
 	}
 	// len5Set — the length-5 layer (length-4 passing rows × one atom).
-	// Counts measured at 324700 / 96250 / 60392 / 7984 (after the
-	// ordering/connective check-mode soundness fix: concrete cross-family
-	// ordering and and-disjunct downstream-typed rows moved
-	// runtime→check, and `and X false not Y` rows moved compile→passing
-	// once the concrete-fold removed the mixed gradual carrier);
-	// compiler-mismatch stays 0. Floors pinned below. Sampled by default
+	// Counts measured at 375549 / 104662 / 41492 / 5395 (after the
+	// multi-output stack-word compiler fix moved ~19k `dup`/`swap`-above-
+	// literal rows compile→passing, and the none-ordering soundness fix
+	// moved ~2.6k rows runtime→check); compiler-mismatch stays 0 across all
+	// 527,098 length-5 programs. Floors pinned below. Sampled by default
 	// (these files are large); SPECGEN_FULL=1 forces exhaustive
 	// verification.
 	len5Set = frontierSet{
@@ -119,7 +120,7 @@ var (
 		failCheck:   "syntax-matrix-len5-fail-check.tsv",
 		failCompile: "syntax-matrix-len5-fail-compile.tsv",
 		failRuntime: "syntax-matrix-len5-fail-runtime.tsv",
-		minPassing:  324000, minCheck: 96000, minCompile: 60000, minRuntime: 7900,
+		minPassing:  374000, minCheck: 104000, minCompile: 41000, minRuntime: 5300,
 		sample: 12000,
 	}
 	frontierSets = []frontierSet{fullSet, len123Set, len5Set}
@@ -151,11 +152,12 @@ func sampleRows(rows []matrixRow, cap int) []matrixRow {
 // minCompiledRows is the floor for the compiler-parity gate: at least
 // this many non-error rows must take the bytecode-compiled path, or the
 // parity assertion is vacuous (a compiler that refused everything would
-// pass with zero comparisons). Measured at 27712 over the length-4
-// matrix; pinned a little below the live count as headroom against
-// incidental jitter. RAISE it when the compilable subset widens; only
-// lower it with a documented reason.
-const minCompiledRows = 27000
+// pass with zero comparisons). Measured at 29798 over the length-4 matrix
+// (up from 27712 once the multi-output stack-word fix let `dup`/`swap`
+// results above a residual literal compile); pinned a little below the
+// live count as headroom against incidental jitter. RAISE it when the
+// compilable subset widens; only lower it with a documented reason.
+const minCompiledRows = 29000
 
 // matrixRow is one parsed data row of the matrix.
 type matrixRow struct {
@@ -165,8 +167,15 @@ type matrixRow struct {
 	n        int    // element count (1..4), parsed from the note column
 }
 
-// readMatrix parses the full matrix file into data rows.
-func readMatrix(t *testing.T) []matrixRow { return readRows(t, matrixPath) }
+// readMatrix parses the full matrix file into data rows. The base matrix is
+// never legitimately empty, so a 0-row read is a generation failure.
+func readMatrix(t *testing.T) []matrixRow {
+	rows := readRows(t, matrixPath)
+	if len(rows) == 0 {
+		t.Fatalf("%s has no data rows (regenerate with `make spec-gen`)", matrixPath)
+	}
+	return rows
+}
 
 // readRows parses a generated tsv (full matrix or a front-coded derived
 // subset) into data rows, skipping the comment/blank header lines. Both
@@ -188,9 +197,10 @@ func readRows(t *testing.T, path string) []matrixRow {
 	if err != nil {
 		t.Fatalf("read %s: %v (regenerate with `make spec-gen`)", path, err)
 	}
-	if len(rows) == 0 {
-		t.Fatalf("%s has no data rows", path)
-	}
+	// A derived bucket may legitimately be empty (e.g. no length-1..3 program
+	// fails ONLY at runtime once concrete cross-family ordering is caught at
+	// check time). The per-file floors — not a blanket non-empty check — gate
+	// against an unexpected collapse; the base matrix is guarded in readMatrix.
 	return rows
 }
 

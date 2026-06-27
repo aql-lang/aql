@@ -105,12 +105,20 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:        "size",
-		Summary:     "The number of elements, characters, or entries in a value.",
-		Description: "Length of a list, string, or map.",
+		Word:    "size",
+		Summary: "The number of elements, characters, or entries in a value.",
+		Description: "Length of the collection a value stands for: a list's elements, a map's keys, " +
+			"a string's or atom's characters, a path's segments, an object's fields, a table's rows. " +
+			"`size` is a TOTAL function — every value has a size, so it never errors. Scalars that are " +
+			"not collections still get a rule: a NUMBER sizes to its floored magnitude (`size 7.9 => 7`, " +
+			"`size 255 => 255`; non-finite floats size 0), a BOOLEAN to 1 (true) or 0 (false), and a value " +
+			"with no size rule — `none`, a date, a bare scalar — sizes 0.",
 		Examples: []string{
 			`size [1 2 3]   ;# => 3`,
 			`size "abc"     ;# => 3`,
+			`size 7.9       ;# => 7    (floored magnitude, not a length)`,
+			`size true      ;# => 1`,
+			`size none      ;# => 0`,
 		},
 	})
 
