@@ -626,3 +626,17 @@ independent, multi-session features. EVERY one of the 33 refusing files is block
 framework ×~9-18; sort comparator Stage-G; trie module-word-in-closure-body; do-map / recursive-fn provenance;
 not-materialisable) — none is a short chain; all confirmed multi-session. compile==interpret held throughout (0
 miscompiles); the soundness invariant was never weakened to chase a flip.
+
+### UNMASKING FINDING: the SORT files are gated by the comparator-each (Stage-G), NOT the test framework.
+Instrumented the throwaway closure probe (callable_words.go:262) to surface the swallowed Stage-2 reason.
+sort_unit_test's `test-test` body refuses on `code-body word each (Stage 2)` — but that `each` is NOT the test
+framework's: it is `Sort.bubble`'s INTERNAL comparison loop, surfaced when the test body calls the algorithm. The
+algorithms apply a captured comparator as a TRAILING fn-value: `def c ((arr get i) (arr get (i add 1)) comp)`
+(sort.aql bubble-sort:236) — the Stage-G "dynamic value precedes/trails args" leaf (apply a runtime Function operand,
+OpCallDynamic ordering). So sort_smoke + sort_unit_test + sort_unit_spec are gated by the SAME comparator-each leaf,
+independent of the aql:test recursion. Fixing the trailing-fn-value apply (a bytecode LOWERING feature, plausibly more
+tractable than type-inference) would unblock the sort family — a better next target than the test framework for FIRST
+file flips. The test-test mask hid this: the recursion wall blocks the _spec files that drive run-spec/test-describe,
+but the imperative _test files and _smoke files bottom out at the library's own leaves (comparator / module-word-in-body
+/ do-provenance). Re-segment the 33: ~test-framework-recursion files vs library-leaf files — the latter may flip without
+the recursion feature.
