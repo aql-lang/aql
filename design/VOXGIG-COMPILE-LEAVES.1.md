@@ -196,3 +196,37 @@ almost certainly to make that re-dispatch take the closure path consistently, or
 not run RecordCall's code-body refusal for a Callable word already lowered as a
 closure at this site. Keep the two mandatory regressions (captured-frame-local each
 body must compile; non-closureable name-body must still refuse).
+
+## CORRECTED RETEST (post-L0, run from each repo ROOT — CRITICAL methodology)
+
+Earlier "8 compiled / 23 check-diagnostics" was a MEASUREMENT ARTIFACT: the spec
+files do `import "./bloom.aql"` resolved relative to CWD, so running from the wrong
+dir failed every import → spurious `undefined_word` check errors. Run each file FROM
+ITS REPO ROOT (`cd bloom-filter; aql check test/bloom_unit_spec.aql`). Correct state:
+- **interpret 44/48** (4 `*_prop_spec` are slow property GENERATORS, >60s timeout — not errors).
+- **check 47/48** — only `template.aql` (one `fn_body_error`). THE CHECK TRACK IS FINE.
+- **force-compile 14/48**. Refusal breakdown (by leaf, files):
+  - 14× `code-body word each` — but the each PATTERN now compiles (L0); the residual
+    cause is a MODULE CODE-BODY WORD in the body (`Test.run-spec`).
+  - 8× `code-body word test-test`; 2× `test-describe`; (run-spec → test-describe).
+  - 5× `unmatched dispatch recovered at find-kid / mk-tnode / lex-mustache` (user-fn poly).
+  - 2× `code-body word do`; 1× each `fold`, `set`(dynamic), `push`(dynamic), gradual-Any.
+  - 2× real `check diagnostics` (template-family).
+
+### L0 LANDED — commit 5f6561e4 (sound, gated, verify-bytecode + full suite green)
+collectBodyLocalDefs excludes body-local `def`/`var` names from ComputeCaptures.
+The each-body-local-value-def + var-loop patterns now compile (proven: `each [var
+[[s] (s get "name") 0]]` → COMPILES). Flips 0 voxgig FILES (chains), but is the
+foundation: the test-file eachs now refuse only on the MODULE code-body word inside.
+
+### DOMINANT REMAINING LEAF — the aql:test framework's code-body words
+`Test.run-spec` / `test-test` / `test-describe` (lang/go/modules/test.go:227,275,1411)
+DECLARE a CallableSpec (BodyPos 1, BodyOut 0) — so they SHOULD compile via the
+closure path — yet refuse "Stage 2". The recursive describe/spec body (run-spec calls
+test-describe with a body that recursively calls run-spec) fails the closure compile.
+This blocks ~all test files. NOTE: the repos' OWN gate (test/divergence/run.sh) is
+INTERPRET + `aql --compile` (fallback-allowed) must SUCCEED AND AGREE — i.e.
+compile==interpret, which HOLDS for all 48 (0 miscompiles). force-compile coverage of
+the test framework is a STRETCH beyond the repos' gate. Next pass: unmask test-
+describe's closure-body refusal (instrument recordClosureDispatch for word=="test-
+describe") and compile the recursive spec body, OR accept fallback per the repos' gate.
