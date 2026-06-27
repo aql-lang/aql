@@ -19,7 +19,24 @@ sweep.
 
 ## Real leaves (unmasked by a 9-agent workflow), highest leverage first
 
-### L1 — each over a list-literal with a COMPUTED element (14 files)
+### L0 — `var` block inside a loop/each body — THE dominant real leaf (DONE-adjacent)
+**Status: this is what actually blocks the 14 each + 8 test-test files** (L1 below
+cleared a different each-leaf but flipped 0 files — the chains hit `var`). The loop
+idiom `iota n each [ var [[t] <body with def/if> ] ]` (sort.aql:98 etc.) refuses
+because `var` is a `CompileExecutesBody` macro: its handler desugars to `def t end;
+<body>; __varundef t` (native_definition.go:583-654; `__varundef` exists precisely
+"to let a var-body compile to a closure unit"). The desugared form IS compilable,
+but the compiler can't bake a `CALL_NATIVE(var)` — the VM would re-run the handler
+and trip on the tape-coupled tokens (emit.go:2020-2041 refusal). **Fix: macro-inline
+compilation** — recognise `var` (and similar splice macros) and compile its spliced
+desugaring INLINE (the def-locals as scoped frame locals + the body + __varundef
+cleanup) rather than as a native call. Substantial; the highest-leverage remaining
+compiler feature (unblocks the 14 each + 8 test-test files once their other chain
+leaves also clear). Gate hard: the property fuzzer caught var-block miscompiles
+across all three frame-local kinds (param/capture/for-iterator), so an off-corpus
+`RunCompiledStrict` regression per kind is mandatory.
+
+### L1 — each over a list-literal with a COMPUTED element (14 files) — FIXED (609d502b)
 `[(mk)] each [...]` refuses; `[1 2 3] each` (const) compiles. The collection is a
 list-carrier with a non-const element → `resolveOperand` declines (emit.go:690,
 not inert-const, not a recorded event). Even `[(mk) (mk)]` at TOP LEVEL refuses
