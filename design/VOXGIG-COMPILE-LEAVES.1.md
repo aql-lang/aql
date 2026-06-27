@@ -429,3 +429,30 @@ partner (cts/lif) — if Atom, the recovery is mis-typing a declared-return fn's
 under mutual recursion (the real bug); if [Map], the Atom is an undefined-in-reentry
 binding. THEN the fix (preserve the declared return through the recursive cycle) + the
 bestMatch>=0 fix together clear the template. compile==interpret holds (0 miscompiles).
+
+### BREAKTHROUGH: gradual-Any forward operand (committed e6757208) — template 12 → 7
+Reliable matchSignature instrumentation (effectiveResolved + the forward Word-match at
+engine.go:6111) showed the template's pipeline no_signature (gen-program / lex-mustache /
+lex-liquid / lex-jinja / engine-known) were NOT recursion artifacts — their String params
+were fed Any operands (engine/source/src flowed from `opts get` over an Options receiver),
+and sigArgMatches(String, Any) is false → fell to the 0-arg fallback. FIX: accept an
+Any-typed forward operand for a concrete param in PURE CHECK (gated !Compiling so compile
+still refuses → no miscompile; verify-bytecode PASSES). Cleared all 5 pipeline errors.
+
+### template's last 7 — root-caused to liquid-if/liquid-for return mis-inference
+The remaining: compile-tagged-seq(2) + get(4) + gen-program(1, a cascade). ROOT: `def blk
+(liquid-if toks i)` then `blk get "next"` fails because `blk` is typed **Atom**, not the
+declared **[Map]**. liquid-if/liquid-for are declared `[Map]` (template.aql:676,703) and
+EVERY body branch returns `do {…}` (a Map) or `raise` — the bodies are correct and the
+runtime is GREEN (5/5). The checker mis-infers the call RESULT as Atom under the
+compile-tagged-seq ↔ liquid-if/liquid-for mutual recursion. Confirmed by annotating `def
+blk:Map` → the 4 get/compile-tagged-seq no_signature become 2 `type_error: value liquid-if
+does not unify with declared type Map` (net 7→3), i.e. the checker genuinely believes
+liquid-if returns non-Map. NOT located: which dispatch path produces liquid-if's Atom
+result — it does NOT reach stepWord's sig==nil recovery (2227), and wrapping
+carrierResults' ReturnsFn output (490) with an assume-guarantee reconciliation did NOT
+change it, so liquid-if's result is spliced via a third path (execFnDefSig/CallAQL residual
+or spliceFnCheckTail). NEXT: instrument spliceFnCheckTail callers to find where the
+named-fn body residual becomes the dispatch result, then reconcile a divergent residual
+with the declared concrete return there (assume-guarantee). Gate: verify-bytecode +
+TestAddGradualConcat/TestSlice still flag + the template runtime suite stays 5/5 green.
