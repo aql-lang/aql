@@ -309,3 +309,26 @@ skip; different → error). Gate with bytecode_register_soundness_test.go +
 check_type_value_test.go (both already pin the parselang idempotent-ReturnsFn
 contract) + a new template-style Parse.register-in-fn-body check regression. This is
 the LAST check-track issue; landing it makes check 48/48.
+
+### template.aql — the 18 post-L7 check errors are ALL the gradual-dispatch limit
+L7 cleared the 24 parse_unknown_lang FALSE POSITIVES (the kinds ARE registered at
+runtime), which unmasked 18 deeper errors — ALL rooted in statically analysing the
+template's DYNAMIC codegen (it lexes via a runtime-registered parser → List<Any>
+tokens → dispatches codegen fns on them):
+- ~12 `no_signature: assuming best-fit candidate for analysis` — the codegen
+  dispatches over statically-ambiguous token types. NOT .Dynamic (so the
+  intentional-dynamic suppression I tried does not catch them — reverted); these are
+  the recovery diagnostic at engine.go:6734, ERROR severity.
+- ~6 `syntax_error: unmatched opening/closing parenthesis` (source position
+  unknown) in SIMPLE fns (after-word has no paren-in-string yet errors) — a recovered
+  dispatch over the dynamic codegen OVER-COLLECTS forward args in the fn-body
+  sub-analysis (carrier.go:2921 sub.Run) and eats a `)`, leaving the `(` unmatched
+  (engine.go:995 "phantom unmatched paren"). Analysis-state bleed across fns.
+Both are the language's KNOWN gradual-dispatch limit — exactly what sort/CLAUDE.md
+documents: "aql check is advisory … known false positives on first-class function
+values, which this library threads through every sort." The template is a dynamic
+meta-compiler; full static check is structurally beyond targeted fixes. Paths:
+(a) a checker DESIGN decision — downgrade the recovery `no_signature` from ERROR to a
+non-blocking severity (broad, deserves its own gated pass; many existing tests assert
+it as error), AND fix the recovery forward-collection/paren bleed (deep); or
+(b) accept advisory check (the repos' own gate is compile==interpret, which HOLDS).
