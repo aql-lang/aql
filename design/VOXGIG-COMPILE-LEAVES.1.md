@@ -360,3 +360,30 @@ contract, like CALL_USER) so a native concrete-recovery raises == interpreter. B
 are multi-session features, NOT a recovery trick. The single-overload user-fn helper
 (L4) remains the sound boundary; concrete-mismatch natives/code-body stay refused
 (sound fallback). compile==interpret holds for all 48 (0 miscompiles).
+
+### dx-report reframing + paren fix + no_signature finding (this pass)
+**The template/dx-report.md is the key artifact** (§11–§13): it documents that
+template.aql's check errors are CHECKER LIMITATIONS not module defects ("treat aql
+check as advisory"), that soundness holds (compile==interpret byte-identical), and
+that `parse_unknown_lang` was "the single biggest blocker" — which **L7 fixed**.
+Confirmed: ALL 8 library deliverables across the repos check + force-compile CLEAN
+except template.aql; the test files' authors DOCUMENT the framework refusals as
+expected fallback. So the repos are correct; aql is the limitation.
+
+- **dx-report updated** (template repo, branch dx-report-aql-update) to reflect L7
+  (24 → 18 check errors, parse_unknown_lang: 0).
+- **PAREN BLEED FIXED** (commit 016e9ffc): checkModeFallbackPositions gathered past
+  the enclosing `)`; depth-tracking break fixed it. template.aql 18 → **12** errors
+  (all 6 emergent fn_body_error unmatched-paren gone). Gated, regression added.
+- **no_signature severity downgrade — NOT VIABLE** (the user's listed final item).
+  The template's 12 remaining no_signature are at the CONCRETE fall-through
+  (engine.go:6798), not the Any branch — user-fn dispatches over statically-imprecise
+  concrete types that resolve at run time. Downgrading the recovery no_signature to
+  info made template check CLEAN (37 info, 0 error) BUT the suite caught it hiding
+  GENUINE errors: TestAddGradualConcatReturnTyping (String-concat → Integer param)
+  and TestSliceDynamicReceiverRefines (String|List → Integer) assert provable
+  mismatches MUST flag. The recovery no_signature legitimately catches genuine type
+  errors, INDISTINGUISHABLE from the template's imprecision without confidence/
+  provenance tracking. Reverted. **The real fix is TYPE INFERENCE** — give the
+  template's get/dynamic-sourced args their correct types so they match statically
+  (no recovery, no false positive), NOT a severity change. Deep, multi-session.
