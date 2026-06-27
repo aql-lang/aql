@@ -520,3 +520,23 @@ reset is a sound standalone sub-fix worth landing on its own.
 REMAINING: gen-program (1) — a make-Compiled dispatch over Any args that the gradual-Any
 forward fix accepts (gradualAny=true, instrumented) yet still recovers; NOT reproducible even
 with the full tpl-compile shape extracted — emergent from the whole 790-line module.
+
+### COMPILE TRACK — complete analysis (session end). CHECK is 48/48 clean; COMPILE: 15/15 libs, 33 test files refuse.
+Every refusal is a SOUND MarkUncompilable (preserves compile==interpret; 0 miscompiles across 48).
+Distinct features required (first-refusal histogram over the 33): each×14, test-test×9, do×2, fold×1, not-materialisable×3.
+1. SHAPE-AGNOSTIC CLOSURE BODIES for gradual-Any fold/each (callable_words.go:98, dominant).
+   Root: a closure body is compiled for ONE input shape (List element vs Map {k,v} entry); a gradual-Any
+   collection is shape-ambiguous, so a poly re-match would feed the wrong shape and diverge. CONFIRMED
+   sound: sort's 16 algorithms each/fold over Any-typed INTERMEDIATE lists (built by swaps/partitions) — not
+   source-annotatable (genuinely dynamic). Fix = compile the body for BOTH shapes (or a shape-generic body)
+   and let OpCallNativePoly pick List-vs-Map at runtime. test-test×9 CASCADES from these (test-test HAS a
+   Callable+compiled-closure path, test.go:294; it refuses only because its body contains the un-lowerable
+   each/fold).
+2. do/error EXCEPTION-HANDLING lowering (emit.go:2041, bloom decode bloom.aql:306-310). `do [body] error
+   [handler]` over a name-referencing body = try/catch in bytecode (body+handler closures + a catch op).
+3. NOT-STATICALLY-MATERIALISABLE collections (template×3) — a const-sized collection the const pool can't size.
+PROVEN NON-VIABLE this session: (a) disabling refusals → silent miscompiles (breaks the invariant); (b)
+per-construct source surgery → runtime-risky (a `def x:String` annotation broke a runtime test) + doesn't
+converge (libraries' intermediates are genuinely Any); (c) the features are multi-session VM/emitter work.
+The five library repos need NO source change — their deployable code is check- AND compile-clean; only the
+aql:test-driven test files hit the shared emitter gap. Template repo WAS updated (forward-decl + Any-param).
