@@ -280,6 +280,12 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:    []*native.Type{},
 			BarrierPos: -1,
 			Handler:    parseRegisterHandlerFor(parent),
+			// Check-mode hook: mark the kind as registered-at-runtime so a later
+			// fn body that calls `parse <name>` resolves leniently instead of
+			// raising parse_unknown_lang. The grammar (args[1]) is not concrete
+			// under analysis, so the real parser is installed only by the Handler
+			// at run time; the checker just needs the kind to resolve.
+			ReturnsFn: parseRegisterDeferReturns,
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("parse-register", [][]native.FnParam{
@@ -464,6 +470,20 @@ func parseActionHandler(args []native.Value, _ map[string]native.Value, _ []nati
 // parseRegisterHandlerFor builds the terminal register word. It finalizes the
 // builder (applies the deferred ABNF installs with the now-complete actions)
 // and registers a `parse <name>` kind via the aql:parselang host framework.
+// parseRegisterDeferReturns is parse-register's check-mode hook: it records the
+// kind atom (args[0]) as a deferred parse kind so `parse <name>` resolves during
+// analysis (the built grammar in args[1] is not concrete under the checker, so the
+// real parser installs only at run time via the Handler). Returns no value, like
+// the Handler.
+func parseRegisterDeferReturns(args []native.Value, r *native.Registry) []native.Value {
+	if len(args) >= 1 && native.IsConcrete(args[0]) {
+		if name, err := args[0].AsConcreteAtom(); err == nil {
+			native.MarkParseKindDeferred(r, name)
+		}
+	}
+	return nil
+}
+
 func parseRegisterHandlerFor(_ *native.Registry) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		name, err := args[0].AsConcreteAtom()

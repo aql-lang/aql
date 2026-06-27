@@ -469,6 +469,17 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// Resolve the kind against the imported ParseLang namespace NOW —
 	// unknown kinds are expansion-time errors at the call site.
 	if !parseKindRegistered(r, target) {
+		if r.Check.IsActive() && parseKindDeferred(r, kind) {
+			// A Parse.register kind (aql:parse): its grammar is built by Parse
+			// builder words whose result is NOT a concrete value during analysis,
+			// so the parser can't be installed for the checker — but it IS
+			// registered at run time by the Parse.register call. Degrade to a
+			// dynamic value WITHOUT a trap (unlike the unbound-namespace case
+			// below): the runtime resolves the kind, so the compiled program must
+			// NOT raise parse_unknown_lang. The check-mode hook that records the
+			// deferral is aql:parse's parse-register ReturnsFn.
+			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
 		if r.Check.IsActive() && !parseNamespaceBound(r) {
 			// The import may be outside the checked fragment; degrade to a
 			// dynamic value rather than a false-positive diagnostic (mirror
@@ -518,6 +529,36 @@ func parseNamespaceBound(r *Registry) bool {
 
 // parseKindRegistered reports whether `parse_<kind>` is an export of the
 // bound ParseLang namespace.
+// capParseDeferredKinds holds the set of parse-kind names a Parse.register call
+// will install at RUNTIME — recorded in check mode so `parse <kind>` resolves
+// leniently during analysis even though the built grammar isn't concrete yet.
+const capParseDeferredKinds = "engine.parse.deferred-kinds"
+
+// MarkParseKindDeferred records (during check) that `kind` is registered at run
+// time by an aql:parse `Parse.register <kind> <built-grammar>` call. The grammar
+// is constructed by Parse builder words whose result is not a concrete value
+// under static analysis, so the parser can't be installed for the checker; the
+// `parse` macro therefore degrades `parse <kind>` to a dynamic value (no
+// parse_unknown_lang, no trap) for a deferred kind. Called from aql:parse's
+// parse-register check-mode ReturnsFn.
+func MarkParseKindDeferred(r *Registry, kind string) {
+	if r == nil || kind == "" {
+		return
+	}
+	if m, ok, _ := eng.Cap[map[string]bool](r, capParseDeferredKinds); ok && m != nil {
+		m[kind] = true
+		return
+	}
+	_ = r.Capabilities.Set(capParseDeferredKinds, map[string]bool{kind: true})
+}
+
+// parseKindDeferred reports whether `kind` was marked as a runtime-registered
+// Parse.register kind (see MarkParseKindDeferred).
+func parseKindDeferred(r *Registry, kind string) bool {
+	m, ok, _ := eng.Cap[map[string]bool](r, capParseDeferredKinds)
+	return ok && m != nil && m[kind]
+}
+
 func parseKindRegistered(r *Registry, target string) bool {
 	top, ok := r.Defs.Top("ParseLang")
 	if !ok {
