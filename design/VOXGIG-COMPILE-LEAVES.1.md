@@ -473,3 +473,20 @@ So the remaining 6 (compile-tagged-seq + get) + 1 cascade (gen-program) require 
 dynamic-receiver dispatch work, which must make `get`/accessor dispatch honor a Dynamic
 receiver WITHOUT relaxing every stack param — a targeted accessor-family change, not the
 blanket stack relaxation. Runtime GREEN 5/5; source correct; compile==interpret holds.
+
+### last-7 — pinned to a dispatch-PATH disconnect (def-value dispatch yields Atom)
+Instrumented the forward Word-match (engine.go:6111): `def blk (liquid-if toks i)` binds
+`blk` to a **concrete Atom** (BIND blk type=Atom dyn=false carrier=false forWord=def) — so
+the `blk get …` receiver is an Atom, no get overload matches, recovery fires. KEY: this is
+a DISPATCH-PATH disconnect — liquid-if's AnalyseFnBody/ReturnsFn returns `[Any(dyn)]`
+(carrier.go:2982 instrument) but the value bound to blk is a concrete Atom, and liquid-if
+NEVER reaches stepWord's sig==nil recovery (engine.go:2227, LIFDISP silent). So the
+def-value paren-group `(liquid-if toks i)` is evaluated via a THIRD dispatch path (not
+stepWord→ReturnsFn→carrierResults, not spliceAnonCheckResult, not spliceFnValueCheckResult)
+that, under the suspended/nested mutual-recursion analysis (fnBodyGuard, carrier.go:2787),
+splices a concrete Atom instead of liquid-if's declared [Map] or its Any(dyn) residual.
+NEXT: find which path evaluates a def-value paren-group calling a named user fn in check
+mode and why it produces an Atom under nested analysis; reconcile to the declared return
+there. The accessor-receiver Dynamic-Any fix is INERT until then (blk is an Atom, not a
+Dynamic Any, by the time get dispatches). Instrumentation gives inconsistent types across
+the two paths — pin the def-value path specifically. Runtime GREEN 5/5; compile==interpret.
