@@ -576,3 +576,33 @@ is now cleared; the residual is the test framework's recursive run-cases user-fn
 unsound-via-recovery above). Remaining frontier (first-refusal, excl. 6 slow prop_spec generators): test-test×9,
 each×6 (Stage-2 masked), do×2, dot×1, size×1, apply-op gradual-multi-overload-user-fn×1, set×1, push×1, fold×1
 (Stage-2 masked), check-diagnostics×1.
+
+### "BUILD THE BIG FEATURES" PASS — VM guarded CALL_NATIVE infra LANDED; recovery wiring PROVEN UNSOUND, reverted
+User direction: build the multi-session features to flip the 33 test files, NOT leaf-grinding. Established findings:
+
+- **`do [...] error [...]` catch-frames ALREADY compile** (feature #2 is largely done) — verified toplevel + fn ok/catch
+  paths force-compile. The bloom/do residual is `dot`/`get` over the **Dynamic Error result** of a `do`
+  ("unmatched dispatch recovered at dot"): `get "code"` over a do-Error compiles (poly), but `dot code` recovers —
+  Error's accessor is a 2-overload `{String|Atom, Error}` set, so it is NOT the single-overload guarded case.
+
+- **VM-level GUARDED CALL_NATIVE infrastructure LANDED (commit f08de09d, sound, gated, unit-tested).** `SigRef.Guard`
+  + `checkNativeParamContract` (the native twin of the CALL_USER `checkParamContract`): a guarded CALL_NATIVE re-checks
+  the concrete args against the committed sig at run time — dispatch on a match (== interpreter), raise signature_error
+  on a miss (== interpreter finding no overload). Additive/inert (Guard defaults false). `vm_guarded_native_test.go`
+  pins the contract (hand-built Program): match dispatches, mismatch raises, unguarded control dispatches.
+
+- **WIRING IT AT THE CONCRETE-MISMATCH RECOVERY (engine.go:6787) IS UNSOUND — reverted.** `tryRecordGuardedNative`
+  (single-overload-gated, compile-pass-only) recorded a guarded CALL_NATIVE for the recovered native instead of
+  refusing. `make verify-bytecode` CAUGHT a miscompile: `is 5 Integer`, `is 'x' Integer`, `teq Integer Integer` —
+  the interpreter RAISES signature_error (a FORWARD-COLLECTION/arity failure surfaced as the recovery), but `is`/`teq`
+  declare **`(Any,Any)` sigs**, so the type-guard is VACUOUS (Any always passes) → the guarded call dispatched where
+  the interpreter raised. ROOT: the concrete-mismatch recovery fires for reasons a PARAM-TYPE guard cannot see
+  (forward-collection state / arity / a vacuous Any sig), so committing+guarding diverges from the interpreter. The
+  single-overload condition is necessary but NOT sufficient. Reverted the wiring (carrier/engine/emit/lower); kept the
+  sound infra commit. **This re-confirms the doc's conclusion: the test framework's sound path is TYPE-INFERENCE** (give
+  the spec-data args their REAL types upstream so the dispatch matches statically and NEVER reaches recovery), NOT any
+  recovery-site trick. test-invoke is a 2-overload `{Atom|String, List}` native with DISTINCT closures (can't be proven
+  handler-equivalent), so neither single-overload-guard nor same-handler-poly applies — type-inference is the only sound
+  route. The guarded CALL_NATIVE infra remains the sound VM substrate for the residual recovery cases once type-inference
+  shrinks them. NEXT: the spec-data type-inference feature (flow concrete types through the aql:test run-spec/case data
+  so run-cases/test-invoke args match statically).
