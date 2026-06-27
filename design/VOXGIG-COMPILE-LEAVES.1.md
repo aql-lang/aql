@@ -412,3 +412,20 @@ downstream `get`s stay precise (the declared-return induction hypothesis at
 carrier.go:2839 IS used for the SAME key, but the narrowed-arg re-entry has a
 DIFFERENT key and re-analyses imprecisely). Deep, multi-session — proper mutual-
 recursion fixed-point / group handling.
+
+### template's last 12 — narrowed further: recursive partner's result comes back as an ATOM
+Instrumented the `get` recovery in both the minimal mutual repro and template.aql: the
+recovering `get`'s RECEIVER is an `[Atom conc=T]` (key `[ProperString]`), NOT a `[Map]`.
+So `(blk get "next")` / `(more get "next")` recover because `blk`/`more` — bound to a
+recursive/mutual partner's result — are typed ATOM, not the partner's DECLARED `[Map]`.
+get(Atom, key) has no compatible sig → bestMatch < 0 → flagged (NOT caught by the
+bestMatch>=0 fix, which only handles the args-match case like the self-recursion repro).
+A simple `do {x:[(more get "a")]}` over a local Map resolves FINE (0 errors), so it is
+NOT general map-literal scoping (dx-report §4) — it is RECURSION-SPECIFIC: the partner's
+recovered result is an Atom. Open: WHY the recovery splices an Atom for a declared-`[Map]`
+fn instead of its declared return (checkModeAssumeSig SHOULD splice the assumed sig's
+declared carriers). Next pass: instrument the recovery's spliced `results` types for the
+partner (cts/lif) — if Atom, the recovery is mis-typing a declared-return fn's result
+under mutual recursion (the real bug); if [Map], the Atom is an undefined-in-reentry
+binding. THEN the fix (preserve the declared return through the recursive cycle) + the
+bestMatch>=0 fix together clear the template. compile==interpret holds (0 miscompiles).
