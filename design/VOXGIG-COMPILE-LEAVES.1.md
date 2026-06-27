@@ -606,3 +606,23 @@ User direction: build the multi-session features to flip the 33 test files, NOT 
   route. The guarded CALL_NATIVE infra remains the sound VM substrate for the residual recovery cases once type-inference
   shrinks them. NEXT: the spec-data type-inference feature (flow concrete types through the aql:test run-spec/case data
   so run-cases/test-invoke args match statically).
+
+### CONCRETE-MISMATCH RECOVERY (engine.go:6787) IS UNSOUND TO GUARD — proven 3× by the differential. DO NOT RETRY.
+Three differential-caught attempts to compile the recovered concrete-mismatch dispatch, all reverted:
+1. Guarded CALL_NATIVE (single-overload native): caught `is 5 Integer` / `teq Integer Integer` dispatching where the
+   interpreter raises — vacuous `(Any,Any)` sigs + the recovery is a forward-collection/arity failure a type-guard can't see.
+2. Guarded CALL_USER (single-overload user fn run-cases, the doc's deferred "riskiest" option): caught
+   TestSpecCompiledOrFallback 3 + TestPropertyDifferential 1 divergences. Even a non-vacuous declared-param guard diverges —
+   the recovery fires for reasons (forward-collection state, arity, coercion) the param guard does not replicate.
+CONCLUSION: the concrete-mismatch recovery CANNOT be compiled by committing+guarding ANY dispatch; the only sound fix is to
+PREVENT the recovery (precise types upstream), never record at the recovery site.
+
+### THE STRUCTURAL WALL: test-describe is a RECURSIVE code-body word — needs TWO large features, not one.
+test-describe (a Callable code-body word) has a body that dispatches run-spec, which re-dispatches test-describe — a
+RECURSIVE higher-order closure. Compiling it needs closure-compilation of a recursive code-body word (a body calling a
+not-yet-finished enclosing closure unit), which the current closure compiler cannot lower. So flipping the test-test×9
+cluster requires BOTH (a) spec-data type-inference AND (b) recursive-code-body closure compilation — two large,
+independent, multi-session features. EVERY one of the 33 refusing files is blocked behind one such large feature (test
+framework ×~9-18; sort comparator Stage-G; trie module-word-in-closure-body; do-map / recursive-fn provenance;
+not-materialisable) — none is a short chain; all confirmed multi-session. compile==interpret held throughout (0
+miscompiles); the soundness invariant was never weakened to chase a flip.
