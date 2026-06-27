@@ -343,6 +343,21 @@ type Instr struct {
 type SigRef struct {
 	Word string
 	Sig  *Signature
+	// Guard marks a CALL_NATIVE recorded for a dispatch the checker could NOT
+	// statically commit (a concrete-mismatch / Any-carrier recovery over a
+	// SINGLE-overload native) — the compiled mirror of the interpreter's runtime
+	// matchSignature. The VM re-checks the concrete args against Sig.Args before
+	// the handler (checkNativeParamContract): on match it dispatches Sig.Handler
+	// (== the interpreter's sole-overload dispatch), on mismatch it raises the
+	// byte-identical signature_error (== the interpreter, which finds no overload).
+	// Sound ONLY for a single-overload word: with a sibling overload a runtime arg
+	// that misses Sig could match the sibling, where the interpreter dispatches but
+	// the guard raises. Unlike OpCallNativePoly (which re-matches ALL overloads and
+	// can OPTIMISTICALLY dispatch a sibling the interpreter rejects — proven unsound
+	// for the concrete-mismatch case), the guard never re-matches: it commits to the
+	// one sig and raises otherwise, so it diverges from the interpreter only if a
+	// sibling exists — which the single-overload gate forbids.
+	Guard bool
 }
 
 // TypeRef names one type operand: the canonical type ID (resolved
@@ -530,7 +545,11 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			for j, t := range s.Sig.Args {
 				names[j] = t.Leaf()
 			}
-			fmt.Fprintf(sb, " s%-3d ; %s (%s)", in.Arg, s.Word, strings.Join(names, ", "))
+			guard := ""
+			if s.Guard {
+				guard = " [guarded]"
+			}
+			fmt.Fprintf(sb, " s%-3d ; %s (%s)%s", in.Arg, s.Word, strings.Join(names, ", "), guard)
 		case OpJmp, OpJmpIfFalse, OpForNext:
 			fmt.Fprintf(sb, " -> %04d", in.Arg)
 		case OpPushLocal, OpForSetup, OpStoreLocal:

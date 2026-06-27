@@ -733,6 +733,16 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				args[i] = stack[len(stack)-1-i]
 			}
 			stack = stack[:len(stack)-n]
+			// A GUARDED native call (recovered single-overload dispatch the checker
+			// could not statically commit): re-check the concrete args against the
+			// committed sig — dispatch on a match (== the interpreter's sole-overload
+			// dispatch), raise the byte-identical signature_error on a miss (== the
+			// interpreter finding no overload). See SigRef.Guard.
+			if s.Guard {
+				if err := checkNativeParamContract(r, &s, args); err != nil {
+					return nil, stampAt(err, curDebug, pc, r)
+				}
+			}
 			results, err := s.Sig.Handler(args, r.Contexts.TopData(), nil, r)
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -1094,6 +1104,35 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		}
 		if !ok {
 			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+		}
+	}
+	return nil
+}
+
+// checkNativeParamContract enforces a GUARDED CALL_NATIVE's committed sig at run
+// time — the native twin of checkParamContract (CALL_USER). args[i] is sig
+// position i (top-of-stack first, as OpCallNative built them). Each must satisfy
+// s.Sig.Args[i] via sigTypeMatches — the SAME runtime param match the interpreter's
+// matchSignature applies, so a concrete value that the interpreter's sole-overload
+// dispatch would accept passes here and one it rejects raises the byte-identical
+// signature_error. Sound only for a single-overload word (the recorder's gate): no
+// sibling exists for a missing arg to fall through to, so raise == the interpreter.
+func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
+	for i := range args {
+		if i >= len(s.Sig.Args) {
+			break
+		}
+		at := s.Sig.Args[i]
+		if at == nil || at.Equal(TAny) {
+			continue // an Any slot is a guaranteed pass
+		}
+		// A QuoteArgs slot carries a literal Atom key (dot/get's bare-word form);
+		// the interpreter binds it as data without a type match, so don't guard it.
+		if s.Sig.QuoteArgs != nil && s.Sig.QuoteArgs[i] {
+			continue
+		}
+		if !sigTypeMatches(args[i], at) {
+			return r.AqlError("signature_error", "no matching signature for "+s.Word, s.Word)
 		}
 	}
 	return nil
