@@ -6520,6 +6520,38 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	return true, nil
 }
 
+// tryRecordRecoveredUserFn records a GUARDED CALL_USER for a user-fn dispatch that
+// matchSignature could not statically commit (an Any- or disjunct-typed operand),
+// when the fn has EXACTLY ONE real (arg-bearing) overload and no 0-arg real sig the
+// synthetic fallback would courtesy-dispatch. The sole sig either matches the
+// runtime arg (dispatch == interpreter) or misses it (the CALL_USER param contract
+// raises == the interpreter's fallback raise). Returns true — and splices the
+// recovered returns — when it records; false leaves the caller's refusal to stand
+// (multi-overload → Cluster C). The L4 leaf: design/VOXGIG-COMPILE-LEAVES.1.md.
+func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
+	if sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
+		return false
+	}
+	realOverloads := 0
+	has0ArgReal := false
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.Fallback {
+			continue // synthetic 0-arg catch-all: raises for an arg-bearing fn
+		}
+		realOverloads++
+		if s.TotalArgs() == 0 {
+			has0ArgReal = true
+		}
+	}
+	if realOverloads != 1 || has0ArgReal {
+		return false
+	}
+	recovered := sig.ReturnsFn(sigOrderArgs(args, nStack), e.registry)
+	e.spliceCheckResults(positions, recovered)
+	return true
+}
+
 func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
 	// Gather candidate positions once and try to pick a signature
 	// whose arity matches and whose declared types are compatible
@@ -6631,9 +6663,17 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// fill the rest top-down (the deepest-last ascending run reversed).
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
-		if !tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil, false) {
-			e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil, false) {
+			e.spliceCheckResults(positions, out)
+			return nil
 		}
+		// A single-overload user fn over a disjunct-typed operand recovers here
+		// (e.g. the aql:test framework's run-cases inside test-describe's body);
+		// record a guarded CALL_USER instead of refusing (it splices its own returns).
+		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
+			return nil
+		}
+		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		e.spliceCheckResults(positions, out)
 		return nil
 	}
@@ -6663,6 +6703,23 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// get/add path already relied on.
 		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), results, pos, false, e.registry, true) {
 			e.spliceCheckResults(positions, results)
+			return nil
+		}
+		// A SINGLE-overload user/module fn recovered over an Any-typed operand:
+		// matchSignature could not statically commit (the operand's type is unknown),
+		// but with exactly ONE overload the runtime dispatch is unambiguous — the
+		// concrete value either matches the sole sig (dispatch == interpreter) or
+		// fails the VM's CALL_USER param contract (raise == the interpreter's
+		// no_signature). tryRecordPoly can't take it (user fns have an FnFrame; only
+		// sub-registry builtins pass), so drive its ReturnsFn NON-suspended to compile
+		// the body unit and record a GUARDED CALL_USER — buildFnBodyReturnsFn's
+		// SetUnitParamTypes installs the param contract the VM enforces at entry, so a
+		// runtime arg that misses the sole sig raises exactly as the interpreter does.
+		// This is what unblocks the aql:test framework (run-cases) and the trie/
+		// decision walkers (find-kid / mk-tnode / lex-mustache). A MULTI-overload fn
+		// stays refused below (Cluster C): one baked overload would raise where the
+		// interpreter runtime-dispatches a sibling.
+		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
 		// On a REAL compile pass (Compiling) the MarkUncompilable already refuses
