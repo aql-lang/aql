@@ -466,6 +466,21 @@ type CallableSpec struct {
 	// handlers (native_array.go each/fold/scan, native/filter.go) — each takes
 	// res[len(res)-1].
 	BodyResultTop bool
+	// CrossCollectionTokenShape marks a word whose TOKEN-quotation body is
+	// SHAPE-GENERIC across the word's List-vs-Map overloads: both present the
+	// closure the bare element/value (ClosureInValue), never a KeyVal. So a
+	// gradual-Any (Dynamic) collection — statically ambiguous between the List and
+	// Map overload — can still compile: the recorder commits the first reachable
+	// (List) overload and lowers the token body to ONE closure, and the committed
+	// handler is RUNTIME-ROBUST (it delegates to the sibling collection's iteration
+	// when the value's concrete type is the other one), so the SAME closure drives
+	// either shape == the interpreter, which dispatches the overload by the runtime
+	// type. Without this flag a gradual collection refuses (the ambiguous-overload
+	// MarkUncompilable below). Set ONLY on words whose every List/Map token overload
+	// is ClosureInValue AND whose handlers cross-delegate (each/fold/scan). A LAMBDA
+	// body never reaches this — it matches only the single TFunction overload, so
+	// the ≥2-reachable ambiguity gate never fires for it.
+	CrossCollectionTokenShape bool
 }
 
 // FnDefInfo holds the function specification for a def-defined function.

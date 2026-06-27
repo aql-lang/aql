@@ -540,3 +540,39 @@ per-construct source surgery → runtime-risky (a `def x:String` annotation brok
 converge (libraries' intermediates are genuinely Any); (c) the features are multi-session VM/emitter work.
 The five library repos need NO source change — their deployable code is check- AND compile-clean; only the
 aql:test-driven test files hit the shared emitter gap. Template repo WAS updated (forward-decl + Any-param).
+
+### LANDED — gradual-Any each/fold/scan over a Dynamic collection (feature #1, the dominant leaf)
+The "SHAPE-AGNOSTIC CLOSURE BODIES" feature above was over-stated: for the TOKEN-quotation body
+(`each [body]`, what voxgig uses) the body is ALREADY shape-generic — both the List overload and the Map
+overload present the closure the bare element/value (`ClosureInValue`); only the LAMBDA form (`each (kv => …)`)
+diverges (List=element vs Map=KeyVal). And the `:98` ambiguity gate is INHERENTLY token-only: a TList token
+body matches BOTH the {…,TList} and {…,TMap} overloads (count 2 → refuse), while a TFunction lambda matches
+only the single {TFunction,TMap} overload (count 1 → never reaches the gate). So no "compile both shapes / poly
+re-match" was needed.
+
+**Fix (sound, gated):** (a) `CallableSpec.CrossCollectionTokenShape` (new) declares a word whose token body is
+shape-generic across its List/Map overloads — set on each/fold/scan. (b) `callable_words.go` no longer refuses
+the gradual case for such a word + a concrete (non-lambda) body: it records the FIRST-reachable (List) overload's
+closure ONCE. (c) the committed list handlers (`eachHandler`/`foldWithInit`/`foldNoInit`/`scanHandler`) are made
+RUNTIME-ROBUST — when the value is the sibling collection (a Map) at run time they delegate to the map handler
+(and vice-versa, defensively), so the SAME compiled closure drives either shape == the interpreter (which picks
+the overload by the runtime type). The cross-delegation is unreachable in the interpreter (matchSignature gates a
+Map away from a TList sig), so it is live ONLY on the compiled committed-overload path — zero interpreter change.
+
+**Gate:** `make verify-bytecode` GREEN (compile==interpret, 0 miscompiles, incl. -race + aqldebug). New off-corpus
+regression `lang/go/bytecode_gradual_each_test.go`: each/fold/scan over a Dynamic-Any collection compile NATIVE
+(no FALLBACK island) and RunCompiledStrict==Run for BOTH List and Map runtime shapes — incl. ONE compiled fn body
+driven by a List AND a Map (the strongest cross-delegation proof) — plus soundness (fallback-allowed) cases for a
+lambda-over-Dynamic and empty collections. `make fmt/vet/lint` clean. (Pre-existing branch debt unrelated to this
+change: `TestCheckAccuracyRatchet` fails identically on baseline — stale pins, falsePos 18 vs 23 + unflagged 205 vs
+189; the check path is untouched by this compile-side fix.)
+
+**Impact:** the gradual-Any "ambiguous overload (List vs Map)" refusal is ELIMINATED. First-refusal `each` dropped
+14 → 6 (the 6 residual are the Stage-2 MASKED code-body leaf — an un-lowerable inner word like `do`/`Test.run-spec`,
+NOT the gradual-overload leaf). NET voxgig FILE flips: 0 (the chains hold — test-test×9 / do×2 / Stage-2-masked each
+still gate), consistent with every prior single-leaf landing. This is the sound FOUNDATION the test-test×9 cascade
+sits on (test-test refuses only because its body contains an un-lowerable each/fold — the gradual-each piece of that
+is now cleared; the residual is the test framework's recursive run-cases user-fn-poly leaf, ruled multi-session/
+unsound-via-recovery above). Remaining frontier (first-refusal, excl. 6 slow prop_spec generators): test-test×9,
+each×6 (Stage-2 masked), do×2, dot×1, size×1, apply-op gradual-multi-overload-user-fn×1, set×1, push×1, fold×1
+(Stage-2 masked), check-diagnostics×1.

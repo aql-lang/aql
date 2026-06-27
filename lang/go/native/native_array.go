@@ -291,7 +291,7 @@ var allArrayNatives = []NativeFunc{
 		// A 0-net body is each's own each_error ("body produced no result"), raised
 		// faithfully from InvokeBody, so EmptyBodyErrors compiles it natively rather
 		// than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []Value) []Value {
 			return []Value{NewElementCarrier(DataListElemTypeFromValue(a[1]))}
 		}},
 
@@ -346,7 +346,7 @@ var allArrayNatives = []NativeFunc{
 		// 2-arg form) to the element type, since the accumulator starts as the
 		// first element. A 0-net body is fold's own fold_error, raised faithfully,
 		// so EmptyBodyErrors keeps it native rather than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []Value) []Value {
 			elem := DataListElemTypeFromValue(a[1])
 			if len(a) >= 3 {
 				return []Value{foldAccCarrier(a[2]), NewElementCarrier(elem)}
@@ -391,7 +391,7 @@ var allArrayNatives = []NativeFunc{
 		// starts as the first element, so both inputs carry the element type. A
 		// 0-net body is scan's own scan_error, raised faithfully, so EmptyBodyErrors
 		// keeps it native rather than islanding.
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, Inputs: func(a []Value) []Value {
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []Value) []Value {
 			e := DataListElemTypeFromValue(a[1])
 			return []Value{NewElementCarrier(e), NewElementCarrier(e)}
 		}},
@@ -1281,7 +1281,22 @@ func pairsReturnsFn(args []Value, _ *Registry) []Value {
 
 // ---- each ----
 
+// collIsConcreteMap / collIsConcreteList report that the runtime collection is a
+// concrete Map / List — the SIBLING shape of the overload the compiler committed
+// for a gradual-Any (Dynamic) `each`/`fold`/`scan`. The recorder optimistically
+// bakes the first-reachable (List) overload; when the value turns out to be the
+// other shape at run time, the committed handler delegates to the sibling handler
+// so the SAME compiled closure drives it, matching the interpreter (which picks
+// the overload by the runtime type). Unreachable in the interpreter: matchSignature
+// gates a Map away from a TList sig and vice-versa, so these only redirect on the
+// compiled committed-overload path. See CallableSpec.CrossCollectionTokenShape.
+func collIsConcreteMap(v Value) bool  { return IsConcrete(v) && v.Parent.ConformsTo(TMap) }
+func collIsConcreteList(v Value) bool { return IsConcrete(v) && v.Parent.ConformsTo(TList) }
+
 func eachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	if collIsConcreteMap(args[1]) {
+		return eachMapHandler(args, nil, nil, reg)
+	}
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("each_error", "each: expected concrete lists", "each")
 	}
@@ -1521,6 +1536,9 @@ func foldAccCarrier(init Value) Value {
 
 func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	// Sig is [TList, TList, TAny]: args[0]=body, args[1]=data, args[2]=init.
+	if collIsConcreteMap(args[1]) {
+		return foldMapInitHandler(args, nil, nil, reg)
+	}
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("fold_error", "fold: expected concrete lists", "fold")
 	}
@@ -1544,6 +1562,9 @@ func foldWithInitReturnsFn(args []Value, r *Registry) []Value {
 }
 
 func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	if collIsConcreteMap(args[1]) {
+		return foldMapNoInitHandler(args, nil, nil, reg)
+	}
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("fold_error", "fold: expected concrete lists", "fold")
 	}
@@ -1591,6 +1612,9 @@ func doFold(reg *Registry, acc Value, body Value, data ReadList) ([]Value, error
 // ---- scan ----
 
 func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	if collIsConcreteMap(args[1]) {
+		return scanMapHandler(args, nil, nil, reg)
+	}
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return nil, reg.AqlError("scan_error", "scan: expected concrete lists", "scan")
 	}

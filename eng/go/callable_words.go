@@ -91,11 +91,22 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// dispatch: the checker optimistically committed to ONE overload, but the
 	// runtime value could need the SIBLING — a gradual collection bound to each's
 	// Map overload errors ("expected concrete map") where the interpreter iterates
-	// the runtime List. The closure body itself compiles fine; only the OUTER
-	// overload can't be statically chosen, and a code-body word has no poly
-	// re-match. Refuse → fall back to the interpreter (compile==interpret). The
-	// body arg is never Dynamic, so anyDynamicCarrier here means a DATA arg is.
-	if anyDynamicCarrier(args) && dynamicReachableOverloadCount(r, word, args) >= 2 {
+	// the runtime List. The body arg is never Dynamic, so anyDynamicCarrier here
+	// means a DATA arg is. The ≥2-reachable gate is INHERENTLY token-form-specific:
+	// a TList token body matches BOTH the {…,TList} and {…,TMap} overloads (count
+	// 2), while a TFunction lambda body matches only the single {TFunction,TMap}
+	// overload (count 1) — so a lambda never reaches here.
+	//
+	// For a CrossCollectionTokenShape word the token body is shape-generic (both
+	// overloads present the bare value), so we DON'T refuse: fall through to record
+	// the first-reachable (List) overload's closure ONCE, relying on the committed
+	// handler being runtime-robust to the sibling collection type (it delegates to
+	// the map/list iteration by the value's concrete type), so the same closure
+	// drives either shape == the interpreter. A non-robust word (no flag) still
+	// refuses → sound interpreter fallback.
+	_, bodyIsLambda := body.Data.(FnDefInfo)
+	tokenShapeGeneric := spec.CrossCollectionTokenShape && IsConcrete(body) && !bodyIsLambda
+	if anyDynamicCarrier(args) && dynamicReachableOverloadCount(r, word, args) >= 2 && !tokenShapeGeneric {
 		es.MarkUncompilable("higher-order `" + word + "` over a gradual-Any collection: ambiguous overload (List vs Map), no static commit and no poly re-match")
 		return true
 	}
