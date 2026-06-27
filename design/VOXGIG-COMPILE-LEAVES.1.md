@@ -332,3 +332,31 @@ meta-compiler; full static check is structurally beyond targeted fixes. Paths:
 non-blocking severity (broad, deserves its own gated pass; many existing tests assert
 it as error), AND fix the recovery forward-collection/paren bleed (deep); or
 (b) accept advisory check (the repos' own gate is compile==interpret, which HOLDS).
+
+### DEEP-COMPLETION PASS: the test framework can't be force-compiled via recovery
+Per the user's "deep compiler completion" choice, I extended the recovery (engine.go
+~6700, the CONCRETE-mismatch fall-through) to try poly + the single-overload user-fn
+helper, to compile the aql:test chain (run-spec → test-describe → run-cases →
+test-invoke → recursive test-describe). Result, level by level:
+- **run-cases** (single-overload USER fn): the guarded CALL_USER helper records it
+  SOUNDLY (param contract raises == interpreter). ✓
+- **test-invoke** (a sub-registry NATIVE over concrete-mismatch): tryRecordPoly
+  records an OpCallNativePoly that re-matches OPTIMISTICALLY at run time — UNSOUND.
+  **The differential (TestCompiledCombinationParity / TestSpecCompiledOrFallback)
+  CAUGHT it**: `is 5 Integer`, `teq Integer Integer`, `flex (Node)` are GENUINE type
+  errors the interpreter raises (`signature_error`), but the poly re-match dispatched
+  them (compiled=nil/flex_error ≠ interp=signature_error). Concrete mismatches really
+  ARE genuine errors; poly can't tell type-inference imprecision from a real error.
+  Reverted; verify-bytecode green again.
+- **recursive test-describe** (a CODE-BODY word recovery): no sound recovery path
+  (poly excludes code-body; not a user fn).
+
+**Conclusion:** the recursive, dynamic aql:test framework cannot be force-compiled via
+recovery handling — that is fundamentally unsound (the differential proved it). The
+SOUND path is deeper: (a) TYPE-INFERENCE so the spec-data flow gives test-invoke /
+run-cases args their real types → they match statically → NO recovery; or (b) a
+VM-level GUARDED native call (a CALL_NATIVE carrying the matched sig as a param
+contract, like CALL_USER) so a native concrete-recovery raises == interpreter. Both
+are multi-session features, NOT a recovery trick. The single-overload user-fn helper
+(L4) remains the sound boundary; concrete-mismatch natives/code-body stay refused
+(sound fallback). compile==interpret holds for all 48 (0 miscompiles).
