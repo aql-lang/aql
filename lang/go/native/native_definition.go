@@ -267,6 +267,32 @@ func reservedWordError(r *Registry, op, name string) error {
 		fmt.Sprintf("%s %s: '%s' is a built-in word and cannot be redefined", op, name, name), op)
 }
 
+// markRefineDefUncompilable refuses bytecode compilation of a typed-def whose
+// constraint is a REFINEMENT — a predicate / DepScalar subset (`def x:(Integer gt
+// 10) v`) or a bare-refine newtype (`def x:Pos v`, Pos = refine Integer). The
+// interpreter's defTypedHandler validates the predicate and/or reparents the bound
+// value to the refine type; the bytecode value-def lowering captures NEITHER (it
+// folds `def x:Pos n` to a bare `x≡n` alias keeping the base tag). So a compiled
+// `def x:(Integer gt 10) 5` binds x=5 where the interpreter raises, and `def x:Pos
+// n` then reports typeof Integer / fails a [Pos] return-check (cluster B of the
+// broad miscompile hunt). No store-with-reparent opcode exists, so refuse → fall
+// back to the interpreter. Object / alias / schema typed-defs do not route here.
+func markRefineDefUncompilable(r *Registry, name string, body Value) {
+	// A STATIC (concrete) refinement value's reparent rides the const pool and
+	// compiles faithfully — `def p:Pt 5` (a const) folds to a Pt-tagged const, so
+	// `p is Pt` holds. Only a DYNAMIC value (a param / computed carrier) loses it:
+	// the value-def lowering folds `def x:Pos n` to a bare `x≡n` keeping the base
+	// tag, so the compiled `typeof x` / [Pos] return-check see Integer. Refuse only
+	// the dynamic case → fall back. (DepScalar's failing-static case is handled at
+	// its own branch, since a passing static value needs no reparent.)
+	if IsConcrete(body) {
+		return
+	}
+	if es := r.Check.Emit; es != nil && es.Active() {
+		es.MarkUncompilable("typed-def `" + name + "`: dynamic refinement reparent/validate is interpreter-only (no compiled store-with-reparent)")
+	}
+}
+
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
@@ -379,6 +405,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				out = ReparentValue(out, def)
 			}
 		}
+		markRefineDefUncompilable(r, name, body)
 		return installAndRecordDef(r, name, out, args[0].Pos)
 	}
 
@@ -423,6 +450,16 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	if r.Check.IsActive() && constraint.IsDepScalar() {
 		if body.Parent.ConformsTo(constraint.Parent) {
+			// DepScalar admits a value only if its predicate holds — validated at
+			// RUNTIME via v.Is. The check-mode install here is base-conformance only
+			// (the predicate is NOT run), so a compiled `def x:(Integer gt 10) 5` would
+			// bind x=5 where the interpreter raises. The compiler can't run the inline
+			// predicate at compile time (an inline `(Integer gt 10)` has no canonical
+			// node carrying the DepScalar Behavior), so it can't tell a passing value
+			// from a failing one — refuse all DepScalar typed-defs → fall back.
+			if es := r.Check.Emit; es != nil && es.Active() {
+				es.MarkUncompilable("typed-def `" + name + "`: DepScalar predicate validation is interpreter-only")
+			}
 			return installAndRecordDef(r, name, body, args[0].Pos)
 		}
 	}
@@ -455,6 +492,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 			parentLit := NewTypeLiteral(root)
 			if _, ok := Unify(body, parentLit); ok {
+				markRefineDefUncompilable(r, name, body)
 				return installAndRecordDef(r, name, ReparentValue(body, def), args[0].Pos)
 			}
 			if r.Check.IsActive() {
