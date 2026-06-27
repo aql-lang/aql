@@ -256,3 +256,32 @@ the interpreter dispatches a sibling. Mandatory off-corpus regressions: a single
 overload user fn over Any args (must compile + RunCompiledStrict==interp), and a
 multi-overload one (must still refuse). The repos' OWN gate is compile==interpret
 (holds via fallback today); this fix converts fallback → native coverage.
+
+### L4 LANDED — commit 913fe6a9 (Any + disjunct recovery, sound, gated)
+tryRecordRecoveredUserFn records a guarded CALL_USER for a single-overload arg-bearing
+user fn at BOTH the disjunct-straddle (6635) and Any-carrier (6675) recovery sites.
+Clears find-kid / mk-tnode / lex-mustache (now at their next chain leaf: "operand of
+unknown provenance at do/size"). Net voxgig flips: 0 (deep chains), same as L0/L1.
+
+### test-framework run-cases reaches a THIRD recovery path (engine.go ~6700)
+Instrumented: test-describe's body still fails Reason "unmatched dispatch recovered at
+run-cases" AFTER L4 — run-cases there is dispatched over CONCRETE-but-statically-
+mismatched args (NOT Any/disjunct carriers), so it skips both L4 sites and falls to
+the 6700 concrete-mismatch fall-through ("genuine type error" path). Extending
+tryRecordRecoveredUserFn to 6700 is plausibly sound (single-overload + the param
+contract = dispatch-or-raise == interpreter) BUT is the RISKIEST site: concrete args
+mean the param guard must match the interpreter's matchSignature coercion EXACTLY, and
+a mismatch is a silent miscompile the differential is blind to. Deferred to a focused
+pass with the mandatory off-corpus regression (a single-overload fn over concrete-
+mismatched args that the interpreter coerces vs one it rejects). NOTE: even clearing
+6700, test-describe likely chains further (test-test, recursive run-spec). The repos'
+OWN gate is compile==interpret (holds via fallback); force-compiling the recursive
+test framework is the stretch goal.
+
+### CURRENT STATE (this session: L0 + L4 landed, sound/gated/committed)
+interpret 44/48 (4 slow generators), check 47/48 (only template fn_body_error),
+force-compile 14/48. Compile leaves remaining: each/test-test (test framework, deep
+chain), do/provenance (2+1), dynamic set/push (1+1), fold (1), gradual-Any multi-
+overload (1, correctly refused), template check (1). compile==interpret holds for all
+48 (0 miscompiles) — the repos' own gate passes; the gap is native force-compile
+COVERAGE, dominated by the recursive aql:test framework.
