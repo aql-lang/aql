@@ -19,7 +19,32 @@ sweep.
 
 ## Real leaves (unmasked by a 9-agent workflow), highest leverage first
 
-### L0 (ROOT-CAUSED) — premature `execBodyRefsNames` refusal across the multi-pass each dispatch
+### L0 (FULLY TRACED w/ pointer identity) — multi-pass dispatch records AND refuses the same each
+Pointer-identity trace of `each [def j (5 add 1) j]`:
+- es A (`0x…f180`, **suspended=1, active=false**): a result-type probe pass —
+  tryRecordClosure declines at `!es.active()` (callable_words.go:84).
+- es B (`0x…f040`, **suspended=0, active=true**): the LIVE compile es —
+  tryRecordClosure REACHES recordClosureDispatch and **records the closure**.
+- **REFUSE on es B** (the SAME live es, suspended=0): the `execBodyRefsNames`
+  refusal (emit.go:2020) fires and latches es B uncompilable.
+So the live es BOTH records the each (closure) AND refuses it (RecordCall), across
+the two analyses of g's body (ReturnsFn install + compile). A suspend-skip gate
+does NOT fix it (the refusal is on the un-suspended es B; verified — no-op).
+Discriminator: `each [def j 5 j]` compiles, `each [def j (5 add 1) j]` refuses —
+`valueRefsName` (emit.go:2575) flags ANY Word, so the computed `(5 add 1)`'s `add`
+trips it; but narrowing it to non-builtins fixes only `(5 add 1)`, NOT the real
+voxgig `[def j (cur get 0) j]` (cur is a genuine frame-local capture the CLOSURE
+path handles via capture, yet the const-bake-guard refusal still fires).
+**The true fix is multi-pass dispatch CONSISTENCY**: the RecordCall refusal must not
+latch the program when the same word records via the closure path in the recording
+pass — e.g. defer code-body-word RecordCall refusals and reconcile at Finalize, or
+have RecordCall skip the latch for a Callable word whose body is closure-compilable
+(probe). Intricate + soundness-critical (a wrong skip lets a true-fallback frame-
+local body const-bake → silent miscompile). Mandatory regressions: a captured-
+frame-local each body that the closure records (must compile), and a non-closure-
+able name-body (must still refuse).
+
+### L0-PRIOR (superseded) — premature `execBodyRefsNames` refusal
 **Exact mechanism** (traced with instrumentation): an each whose body contains a
 value-def (`def j (5 add 1)`) — i.e. the body REFERENCES A NAME — dispatches TWICE:
 1. once with `es.active()==FALSE` (a non-recording pre-pass / nested closure probe):
