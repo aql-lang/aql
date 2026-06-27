@@ -1,10 +1,12 @@
 # AQL Language Specification: Minimal Failing Prefixes — COMPILE FAILURES (GENERATED)
 # format: front-coded
-# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>detail, where
-# reuse = the count of leading bytes the prefix shares with the previous
-# row's prefix and the full prefix = prevPrefix[:reuse]+suffix. detail is
-# the failure reason; the constant `compile-refused:` disposition prefix (and the
-# documentary full-matrix result) are hoisted out of every row.
+# format: detail-legend
+# Format: FRONT-CODED with a DETAIL LEGEND. Each data row is
+# reuse<TAB>suffix<TAB>code, where reuse = the count of leading bytes the
+# prefix shares with the previous row's prefix (full prefix =
+# prevPrefix[:reuse]+suffix) and code indexes the `# detail N:` legend
+# below. The constant `compile-refused:` disposition prefix (and the documentary
+# full-matrix result) are hoisted out of every row.
 #
 # DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).
 #
@@ -22,123 +24,129 @@
 #
 # 120 prefixes.
 #
-0	0 0 dup	residual shape beyond Stage 1 (call result above a literal)
-2	1 dup	residual shape beyond Stage 1 (call result above a literal)
-2	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-2	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-2	true dup	residual shape beyond Stage 1 (call result above a literal)
-2	false dup	residual shape beyond Stage 1 (call result above a literal)
-2	none dup	residual shape beyond Stage 1 (call result above a literal)
-2	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-2	not dup	operand of unknown provenance or not statically materialisable at dup
-7	rop	operand of unknown provenance or not statically materialisable at drop
-6	not	operand of unknown provenance or not statically materialisable at not
-6	size	operand of unknown provenance or not statically materialisable at size
-2	size dup	operand of unknown provenance or not statically materialisable at dup
-8	rop	operand of unknown provenance or not statically materialisable at drop
-7	not	operand of unknown provenance or not statically materialisable at not
-7	size	operand of unknown provenance or not statically materialisable at size
-0	1 0 dup	residual shape beyond Stage 1 (call result above a literal)
-2	1 dup	residual shape beyond Stage 1 (call result above a literal)
-2	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-2	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-2	true dup	residual shape beyond Stage 1 (call result above a literal)
-2	false dup	residual shape beyond Stage 1 (call result above a literal)
-2	none dup	residual shape beyond Stage 1 (call result above a literal)
-2	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-2	not dup	operand of unknown provenance or not statically materialisable at dup
-7	rop	operand of unknown provenance or not statically materialisable at drop
-6	not	operand of unknown provenance or not statically materialisable at not
-6	size	operand of unknown provenance or not statically materialisable at size
-2	size dup	operand of unknown provenance or not statically materialisable at dup
-8	rop	operand of unknown provenance or not statically materialisable at drop
-7	not	operand of unknown provenance or not statically materialisable at not
-7	size	operand of unknown provenance or not statically materialisable at size
-0	2.5 0 dup	residual shape beyond Stage 1 (call result above a literal)
-4	1 dup	residual shape beyond Stage 1 (call result above a literal)
-4	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-4	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-4	true dup	residual shape beyond Stage 1 (call result above a literal)
-4	false dup	residual shape beyond Stage 1 (call result above a literal)
-4	none dup	residual shape beyond Stage 1 (call result above a literal)
-4	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-4	not dup	operand of unknown provenance or not statically materialisable at dup
-9	rop	operand of unknown provenance or not statically materialisable at drop
-8	not	operand of unknown provenance or not statically materialisable at not
-8	size	operand of unknown provenance or not statically materialisable at size
-4	size dup	operand of unknown provenance or not statically materialisable at dup
-10	rop	operand of unknown provenance or not statically materialisable at drop
-9	not	operand of unknown provenance or not statically materialisable at not
-9	size	operand of unknown provenance or not statically materialisable at size
-0	'x' 0 dup	residual shape beyond Stage 1 (call result above a literal)
-4	1 dup	residual shape beyond Stage 1 (call result above a literal)
-4	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-4	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-4	true dup	residual shape beyond Stage 1 (call result above a literal)
-4	false dup	residual shape beyond Stage 1 (call result above a literal)
-4	none dup	residual shape beyond Stage 1 (call result above a literal)
-4	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-4	not dup	operand of unknown provenance or not statically materialisable at dup
-9	rop	operand of unknown provenance or not statically materialisable at drop
-8	not	operand of unknown provenance or not statically materialisable at not
-8	size	operand of unknown provenance or not statically materialisable at size
-4	size dup	operand of unknown provenance or not statically materialisable at dup
-10	rop	operand of unknown provenance or not statically materialisable at drop
-9	not	operand of unknown provenance or not statically materialisable at not
-9	size	operand of unknown provenance or not statically materialisable at size
-0	true 0 dup	residual shape beyond Stage 1 (call result above a literal)
-5	1 dup	residual shape beyond Stage 1 (call result above a literal)
-5	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-5	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-5	true dup	residual shape beyond Stage 1 (call result above a literal)
-5	false dup	residual shape beyond Stage 1 (call result above a literal)
-5	none dup	residual shape beyond Stage 1 (call result above a literal)
-5	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-5	size dup	operand of unknown provenance or not statically materialisable at dup
-11	rop	operand of unknown provenance or not statically materialisable at drop
-10	not	operand of unknown provenance or not statically materialisable at not
-10	size	operand of unknown provenance or not statically materialisable at size
-0	false 0 dup	residual shape beyond Stage 1 (call result above a literal)
-6	1 dup	residual shape beyond Stage 1 (call result above a literal)
-6	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-6	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-6	true dup	residual shape beyond Stage 1 (call result above a literal)
-6	false dup	residual shape beyond Stage 1 (call result above a literal)
-6	none dup	residual shape beyond Stage 1 (call result above a literal)
-6	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-6	size dup	operand of unknown provenance or not statically materialisable at dup
-12	rop	operand of unknown provenance or not statically materialisable at drop
-11	not	operand of unknown provenance or not statically materialisable at not
-11	size	operand of unknown provenance or not statically materialisable at size
-0	none 0 dup	residual shape beyond Stage 1 (call result above a literal)
-5	1 dup	residual shape beyond Stage 1 (call result above a literal)
-5	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-5	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-5	true dup	residual shape beyond Stage 1 (call result above a literal)
-5	false dup	residual shape beyond Stage 1 (call result above a literal)
-5	none dup	residual shape beyond Stage 1 (call result above a literal)
-5	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-5	not dup	operand of unknown provenance or not statically materialisable at dup
-10	rop	operand of unknown provenance or not statically materialisable at drop
-9	not	operand of unknown provenance or not statically materialisable at not
-9	size	operand of unknown provenance or not statically materialisable at size
-5	size dup	operand of unknown provenance or not statically materialisable at dup
-11	rop	operand of unknown provenance or not statically materialisable at drop
-10	not	operand of unknown provenance or not statically materialisable at not
-10	size	operand of unknown provenance or not statically materialisable at size
-0	[1 2] 0 dup	residual shape beyond Stage 1 (call result above a literal)
-6	1 dup	residual shape beyond Stage 1 (call result above a literal)
-6	2.5 dup	residual shape beyond Stage 1 (call result above a literal)
-6	'x' dup	residual shape beyond Stage 1 (call result above a literal)
-6	true dup	residual shape beyond Stage 1 (call result above a literal)
-6	false dup	residual shape beyond Stage 1 (call result above a literal)
-6	none dup	residual shape beyond Stage 1 (call result above a literal)
-6	[1 2] dup	residual shape beyond Stage 1 (call result above a literal)
-6	not dup	operand of unknown provenance or not statically materialisable at dup
-11	rop	operand of unknown provenance or not statically materialisable at drop
-10	not	operand of unknown provenance or not statically materialisable at not
-10	size	operand of unknown provenance or not statically materialisable at size
-6	size dup	operand of unknown provenance or not statically materialisable at dup
-12	rop	operand of unknown provenance or not statically materialisable at drop
-11	not	operand of unknown provenance or not statically materialisable at not
-11	size	operand of unknown provenance or not statically materialisable at size
+# detail 0: residual shape beyond Stage 1 (call result above a literal)
+# detail 1: operand of unknown provenance or not statically materialisable at dup
+# detail 2: operand of unknown provenance or not statically materialisable at drop
+# detail 3: operand of unknown provenance or not statically materialisable at not
+# detail 4: operand of unknown provenance or not statically materialisable at size
+#
+0	0 0 dup	0
+2	1 dup	0
+2	2.5 dup	0
+2	'x' dup	0
+2	true dup	0
+2	false dup	0
+2	none dup	0
+2	[1 2] dup	0
+2	not dup	1
+7	rop	2
+6	not	3
+6	size	4
+2	size dup	1
+8	rop	2
+7	not	3
+7	size	4
+0	1 0 dup	0
+2	1 dup	0
+2	2.5 dup	0
+2	'x' dup	0
+2	true dup	0
+2	false dup	0
+2	none dup	0
+2	[1 2] dup	0
+2	not dup	1
+7	rop	2
+6	not	3
+6	size	4
+2	size dup	1
+8	rop	2
+7	not	3
+7	size	4
+0	2.5 0 dup	0
+4	1 dup	0
+4	2.5 dup	0
+4	'x' dup	0
+4	true dup	0
+4	false dup	0
+4	none dup	0
+4	[1 2] dup	0
+4	not dup	1
+9	rop	2
+8	not	3
+8	size	4
+4	size dup	1
+10	rop	2
+9	not	3
+9	size	4
+0	'x' 0 dup	0
+4	1 dup	0
+4	2.5 dup	0
+4	'x' dup	0
+4	true dup	0
+4	false dup	0
+4	none dup	0
+4	[1 2] dup	0
+4	not dup	1
+9	rop	2
+8	not	3
+8	size	4
+4	size dup	1
+10	rop	2
+9	not	3
+9	size	4
+0	true 0 dup	0
+5	1 dup	0
+5	2.5 dup	0
+5	'x' dup	0
+5	true dup	0
+5	false dup	0
+5	none dup	0
+5	[1 2] dup	0
+5	size dup	1
+11	rop	2
+10	not	3
+10	size	4
+0	false 0 dup	0
+6	1 dup	0
+6	2.5 dup	0
+6	'x' dup	0
+6	true dup	0
+6	false dup	0
+6	none dup	0
+6	[1 2] dup	0
+6	size dup	1
+12	rop	2
+11	not	3
+11	size	4
+0	none 0 dup	0
+5	1 dup	0
+5	2.5 dup	0
+5	'x' dup	0
+5	true dup	0
+5	false dup	0
+5	none dup	0
+5	[1 2] dup	0
+5	not dup	1
+10	rop	2
+9	not	3
+9	size	4
+5	size dup	1
+11	rop	2
+10	not	3
+10	size	4
+0	[1 2] 0 dup	0
+6	1 dup	0
+6	2.5 dup	0
+6	'x' dup	0
+6	true dup	0
+6	false dup	0
+6	none dup	0
+6	[1 2] dup	0
+6	not dup	1
+11	rop	2
+10	not	3
+10	size	4
+6	size dup	1
+12	rop	2
+11	not	3
+11	size	4

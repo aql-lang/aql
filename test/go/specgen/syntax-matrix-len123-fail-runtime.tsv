@@ -1,10 +1,12 @@
 # AQL Language Specification: Minimal Failing Prefixes — RUNTIME FAILURES (GENERATED)
 # format: front-coded
-# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>detail, where
-# reuse = the count of leading bytes the prefix shares with the previous
-# row's prefix and the full prefix = prevPrefix[:reuse]+suffix. detail is
-# the failure reason; the constant `runtime-fail:` disposition prefix (and the
-# documentary full-matrix result) are hoisted out of every row.
+# format: detail-legend
+# Format: FRONT-CODED with a DETAIL LEGEND. Each data row is
+# reuse<TAB>suffix<TAB>code, where reuse = the count of leading bytes the
+# prefix shares with the previous row's prefix (full prefix =
+# prevPrefix[:reuse]+suffix) and code indexes the `# detail N:` legend
+# below. The constant `runtime-fail:` disposition prefix (and the documentary
+# full-matrix result) are hoisted out of every row.
 #
 # DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).
 #
@@ -23,17 +25,19 @@
 #
 # 14 prefixes.
 #
-0	0 none lt	incomparable
-0	1 none lt	incomparable
-0	2.5 none lt	incomparable
-0	'x' none lt	incomparable
-0	true none lt	incomparable
-0	false none lt	incomparable
-0	none 0 lt	incomparable
-5	1 lt	incomparable
-5	2.5 lt	incomparable
-5	'x' lt	incomparable
-5	true lt	incomparable
-5	false lt	incomparable
-5	[1 2] lt	incomparable
-0	[1 2] none lt	incomparable
+# detail 0: incomparable
+#
+0	0 none lt	0
+0	1 none lt	0
+0	2.5 none lt	0
+0	'x' none lt	0
+0	true none lt	0
+0	false none lt	0
+0	none 0 lt	0
+5	1 lt	0
+5	2.5 lt	0
+5	'x' lt	0
+5	true lt	0
+5	false lt	0
+5	[1 2] lt	0
+0	[1 2] none lt	0

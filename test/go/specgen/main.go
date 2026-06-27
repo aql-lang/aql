@@ -316,6 +316,19 @@ type dataRow struct {
 // detail) greppable. Plain files (no marker) are read verbatim.
 const frontCodeMarker = "# format: front-coded"
 
+// detailLegendMarker flags that a front-coded file's trailing field is a
+// DETAIL CODE, not the detail text. The distinct details (a handful per
+// file — the failure reasons) are enumerated once in the header as
+// `# detail <N>: <text>` lines, and each row stores only the integer N.
+// This collapses the heavily-repeated, sometimes-long refusal strings (the
+// fail-compile file had 19 distinct details over 60k rows) to one byte or
+// two per row. The decoder maps the code back to its text. Files without
+// this marker carry their trailing field verbatim.
+const detailLegendMarker = "# format: detail-legend"
+
+// detailLegendPrefix leads each legend entry line: `# detail 3: <text>`.
+const detailLegendPrefix = "# detail "
+
 // frontCode returns the byte-level front coding of cur against prev: the
 // number of shared leading bytes, and cur with that prefix removed.
 // Reconstruct with prev[:reuse]+suffix.
@@ -329,10 +342,12 @@ func frontCode(prev, cur string) (int, string) {
 
 // forEachDataRow invokes fn for every data row of a generated matrix file,
 // skipping comment/blank lines and transparently decoding the front-coded
-// format (detected by frontCodeMarker among the header comments). For a
-// PLAIN file fn receives (input, expected, note); for a FRONT-CODED file
-// note is "" and expected is the row's trailing field (the golden value or
-// failure detail), absent → "". line is the 1-based source line number.
+// format (detected by frontCodeMarker among the header comments) and the
+// optional detail legend (detailLegendMarker). For a PLAIN file fn receives
+// (input, expected, note); for a FRONT-CODED file note is "" and expected
+// is the row's trailing field — the golden value, or the failure detail
+// (legend-decoded back to its text when a legend is present), absent → "".
+// line is the 1-based source line number.
 func forEachDataRow(path string, fn func(input, expected, note string, line int)) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -343,6 +358,8 @@ func forEachDataRow(path string, fn func(input, expected, note string, line int)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	frontCoded := false
+	detailLegend := false
+	legend := map[int]string{}
 	prev := ""
 	line := 0
 	for sc.Scan() {
@@ -352,8 +369,19 @@ func forEachDataRow(path string, fn func(input, expected, note string, line int)
 			continue
 		}
 		if strings.HasPrefix(raw, "#") {
-			if strings.TrimSpace(raw) == frontCodeMarker {
+			trimmed := strings.TrimSpace(raw)
+			switch {
+			case trimmed == frontCodeMarker:
 				frontCoded = true
+			case trimmed == detailLegendMarker:
+				detailLegend = true
+			case detailLegend && strings.HasPrefix(trimmed, detailLegendPrefix):
+				rest := strings.TrimPrefix(trimmed, detailLegendPrefix)
+				if i := strings.Index(rest, ": "); i > 0 {
+					if code, e := strconv.Atoi(rest[:i]); e == nil {
+						legend[code] = rest[i+2:]
+					}
+				}
 			}
 			continue
 		}
@@ -371,6 +399,17 @@ func forEachDataRow(path string, fn func(input, expected, note string, line int)
 			extra := ""
 			if len(parts) >= 3 {
 				extra = strings.TrimSpace(parts[2])
+				if detailLegend {
+					code, e := strconv.Atoi(extra)
+					if e != nil {
+						return fmt.Errorf("bad detail code %q in %s:%d", extra, path, line)
+					}
+					d, ok := legend[code]
+					if !ok {
+						return fmt.Errorf("detail code %d not in legend in %s:%d", code, path, line)
+					}
+					extra = d
+				}
 			}
 			fn(strings.TrimSpace(input), extra, "", line)
 			continue
@@ -701,10 +740,45 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 		checkFirstViolations)
 }
 
+// writeFailRows appends, to a header already written to w, the DETAIL
+// LEGEND block (`# detail N: <text>` for each distinct detail, in
+// first-appearance order) followed by the FRONT-CODED data rows
+// (reuse<TAB>suffix<TAB>code, code = the detail's legend index). sel(k)
+// selects the rows of this file; cands[k]/notes[k] are the input/detail.
+// The caller must have emitted both the frontCodeMarker and the
+// detailLegendMarker in the header.
+func writeFailRows(w *bufio.Writer, cands, notes []string, sel func(int) bool) {
+	// Assign codes to distinct details in first-appearance order.
+	code := map[string]int{}
+	var order []string
+	for k := range cands {
+		if !sel(k) {
+			continue
+		}
+		if _, ok := code[notes[k]]; !ok {
+			code[notes[k]] = len(order)
+			order = append(order, notes[k])
+		}
+	}
+	for i, d := range order {
+		fmt.Fprintf(w, "%s%d: %s\n", detailLegendPrefix, i, d)
+	}
+	fmt.Fprintf(w, "#\n")
+	prev := ""
+	for k := range cands {
+		if !sel(k) {
+			continue
+		}
+		reuse, suffix := frontCode(prev, cands[k])
+		fmt.Fprintf(w, "%d\t%s\t%d\n", reuse, suffix, code[notes[k]])
+		prev = cands[k]
+	}
+}
+
 // writeFrontierFile writes the candidates of one class to path in
-// FRONT-CODED form (reuse<TAB>suffix<TAB>detail, detail = the failure
-// reason; the constant `<tag>:` disposition prefix is hoisted to the
-// header), and returns the count.
+// FRONT-CODED form with a detail legend (reuse<TAB>suffix<TAB>code; the
+// constant `<tag>:` disposition prefix is hoisted to the header and the
+// detail text is enumerated once in the legend), and returns the count.
 func writeFrontierFile(path, kind, tag string, cands []string, classes []frontierClass, notes []string, want frontierClass, maxLen int) int {
 	f, err := os.Create(path)
 	if err != nil {
@@ -722,15 +796,7 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 		}
 	}
 	writeFrontierHeader(w, kind, tag, n, maxLen)
-	prev := ""
-	for k, cl := range classes {
-		if cl != want {
-			continue
-		}
-		reuse, suffix := frontCode(prev, cands[k])
-		fmt.Fprintf(w, "%d\t%s\t%s\n", reuse, suffix, notes[k])
-		prev = cands[k]
-	}
+	writeFailRows(w, cands, notes, func(k int) bool { return classes[k] == want })
 	return n
 }
 
@@ -739,11 +805,13 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
 	fmt.Fprintf(w, "# AQL Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
-	fmt.Fprintf(w, "# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>detail, where\n")
-	fmt.Fprintf(w, "# reuse = the count of leading bytes the prefix shares with the previous\n")
-	fmt.Fprintf(w, "# row's prefix and the full prefix = prevPrefix[:reuse]+suffix. detail is\n")
-	fmt.Fprintf(w, "# the failure reason; the constant `%s:` disposition prefix (and the\n", tag)
-	fmt.Fprintf(w, "# documentary full-matrix result) are hoisted out of every row.\n")
+	fmt.Fprintf(w, "%s\n", detailLegendMarker)
+	fmt.Fprintf(w, "# Format: FRONT-CODED with a DETAIL LEGEND. Each data row is\n")
+	fmt.Fprintf(w, "# reuse<TAB>suffix<TAB>code, where reuse = the count of leading bytes the\n")
+	fmt.Fprintf(w, "# prefix shares with the previous row's prefix (full prefix =\n")
+	fmt.Fprintf(w, "# prevPrefix[:reuse]+suffix) and code indexes the `# detail N:` legend\n")
+	fmt.Fprintf(w, "# below. The constant `%s:` disposition prefix (and the documentary\n", tag)
+	fmt.Fprintf(w, "# full-matrix result) are hoisted out of every row.\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).\n")
 	fmt.Fprintf(w, "#\n")
@@ -1023,8 +1091,8 @@ func writeLen5Pass(path string, cands []string, classes []fiveClass, expects []s
 }
 
 // writeLen5Fail writes the length-5 minimal failing prefixes of one class
-// in FRONT-CODED form (reuse<TAB>suffix<TAB>detail). The disposition is
-// implied by the file itself, so it is not stored per row.
+// in FRONT-CODED form with a detail legend (reuse<TAB>suffix<TAB>code). The
+// disposition is implied by the file itself, so it is not stored per row.
 func writeLen5Fail(path, kind string, cands []string, classes []fiveClass, notes []string, want fiveClass) int {
 	f, err := os.Create(path)
 	if err != nil {
@@ -1042,14 +1110,7 @@ func writeLen5Fail(path, kind string, cands []string, classes []fiveClass, notes
 		}
 	}
 	writeLen5Header(w, kind, n)
-	prev := ""
-	for k, cl := range classes {
-		if cl == want {
-			reuse, suffix := frontCode(prev, cands[k])
-			fmt.Fprintf(w, "%d\t%s\t%s\n", reuse, suffix, notes[k])
-			prev = cands[k]
-		}
-	}
+	writeFailRows(w, cands, notes, func(k int) bool { return classes[k] == want })
 	return n
 }
 
@@ -1057,6 +1118,9 @@ func writeLen5Fail(path, kind string, cands []string, classes []fiveClass, notes
 func writeLen5Header(w *bufio.Writer, kind string, n int) {
 	fmt.Fprintf(w, "# AQL Language Specification: Length-5 Layer — %s (GENERATED)\n", strings.ToUpper(kind))
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
+	if kind != "passing" {
+		fmt.Fprintf(w, "%s\n", detailLegendMarker)
+	}
 	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -extend5 mode).\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# Every LENGTH-4 PASSING row, extended by one atom into a 5-part\n")
@@ -1067,26 +1131,27 @@ func writeLen5Header(w *bufio.Writer, kind string, n int) {
 	fmt.Fprintf(w, "# outcomes. Each fail row is itself a length-5 minimal failing prefix.\n")
 	fmt.Fprintf(w, "#\n")
 	// Front-coded rows: reuse<TAB>suffix<TAB>extra, full input =
-	// prevInput[:reuse]+suffix (see frontCodeMarker).
+	// prevInput[:reuse]+suffix (see frontCodeMarker). For fail kinds extra is
+	// a `# detail N:` legend code; for passing it is the expected value.
 	switch kind {
 	case "passing":
 		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = expected. These clear interpret + check +\n")
 		fmt.Fprintf(w, "# compile; `expected` is the canonical eng.Canon result.\n")
 	case "type-check":
-		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. The type checker rejects these;\n")
-		fmt.Fprintf(w, "# the compiler, which runs the checker first, refuses them too.\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED + legend, extra = detail code. The type checker\n")
+		fmt.Fprintf(w, "# rejects these; the compiler, which runs the checker first, refuses them.\n")
 	case "runtime":
-		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. These check clean AND compile, yet\n")
-		fmt.Fprintf(w, "# error at run (detail = the runtime error class).\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED + legend, extra = detail code. These check clean AND\n")
+		fmt.Fprintf(w, "# compile, yet error at run (detail = the runtime error class).\n")
 	case "mismatch":
-		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. COMPILER/INTERPRETER DIVERGENCES:\n")
-		fmt.Fprintf(w, "# these check clean and compile, but the bytecode result differs from the\n")
-		fmt.Fprintf(w, "# interpreter (re-verified on a fresh, isolated instance). detail shows\n")
-		fmt.Fprintf(w, "# both results. These are candidate compiler bugs, NOT part of the\n")
-		fmt.Fprintf(w, "# four-way split — surfaced by the length-5 differential sweep.\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED + legend, extra = detail code. COMPILER/INTERPRETER\n")
+		fmt.Fprintf(w, "# DIVERGENCES: these check clean and compile, but the bytecode result\n")
+		fmt.Fprintf(w, "# differs from the interpreter (re-verified on a fresh, isolated\n")
+		fmt.Fprintf(w, "# instance). detail shows both results. These are candidate compiler bugs,\n")
+		fmt.Fprintf(w, "# NOT part of the four-way split — surfaced by the length-5 sweep.\n")
 	default:
-		fmt.Fprintf(w, "# Format: FRONT-CODED, extra = detail. These check clean but the compiler\n")
-		fmt.Fprintf(w, "# will not lower them (detail = the refusal reason).\n")
+		fmt.Fprintf(w, "# Format: FRONT-CODED + legend, extra = detail code. These check clean but\n")
+		fmt.Fprintf(w, "# the compiler will not lower them (detail = the refusal reason).\n")
 	}
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# %d rows.\n", n)
