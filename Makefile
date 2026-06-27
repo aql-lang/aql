@@ -1,4 +1,5 @@
 .PHONY: all build install test test-ts vet fmt lint vuln clean cover cover-html cover-html-open \
+        spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
         viz viz-tools viz-clean viz-index \
@@ -40,6 +41,55 @@ build:
 
 install:
 	$(MAKE) -C cmd/go install
+
+# ---- generated syntax-combination spec ---------------------------------
+#
+# Regenerate the two committed spec files under test/go/specgen/:
+#   syntax-matrix.tsv          — the exhaustive matrix of every AQL token
+#                                sequence up to length 4 over a fixed
+#                                alphabet, with the canonical interpreter
+#                                result (or stable error class) for each.
+#   syntax-matrix-passing.tsv  — the subset of those rows that pass all
+#                                three pipelines (interpret + check +
+#                                compile), derived from the full matrix.
+#
+# They are the frozen contract their sibling syntax_matrix_test.go checks
+# the interpreter, compiler, and checker against; rerun this after any
+# deliberate change to the alphabet or to evaluation semantics, then
+# review the diff.
+
+spec-gen:
+	cd test/go && go run ./specgen -max 4 -out ./specgen/syntax-matrix.tsv
+	cd test/go && go run ./specgen -extract -in ./specgen/syntax-matrix.tsv -out ./specgen/syntax-matrix-passing.tsv
+	cd test/go && go run ./specgen -frontier \
+	  -passing ./specgen/syntax-matrix-passing.tsv \
+	  -check-out ./specgen/syntax-matrix-fail-check.tsv \
+	  -compile-out ./specgen/syntax-matrix-fail-compile.tsv \
+	  -runtime-out ./specgen/syntax-matrix-fail-runtime.tsv
+	cd test/go && go run ./specgen -extract -max 3 -in ./specgen/syntax-matrix.tsv -out ./specgen/syntax-matrix-len123-passing.tsv
+	cd test/go && go run ./specgen -frontier -max 3 \
+	  -passing ./specgen/syntax-matrix-passing.tsv \
+	  -check-out ./specgen/syntax-matrix-len123-fail-check.tsv \
+	  -compile-out ./specgen/syntax-matrix-len123-fail-compile.tsv \
+	  -runtime-out ./specgen/syntax-matrix-len123-fail-runtime.tsv
+	cd test/go && go run ./specgen -extend5 \
+	  -passing ./specgen/syntax-matrix-passing.tsv \
+	  -len123 ./specgen/syntax-matrix-len123-passing.tsv \
+	  -pass-out ./specgen/syntax-matrix-len5-passing.tsv \
+	  -check-out ./specgen/syntax-matrix-len5-fail-check.tsv \
+	  -compile-out ./specgen/syntax-matrix-len5-fail-compile.tsv \
+	  -runtime-out ./specgen/syntax-matrix-len5-fail-runtime.tsv \
+	  -mismatch-out ./specgen/syntax-matrix-len5-compiler-mismatch.tsv
+
+# spec-test runs the generated-matrix replay suite. It is gated behind the
+# `specgen` build tag so it is EXCLUDED from `make test` (the matrix-replay
+# tests re-execute the interpreter/checker/compiler over tens of thousands
+# of rows — ~7 min sampled — which is too slow for the normal unit run).
+# Set SPECGEN_FULL=1 to verify every row of every file exhaustively
+# (~24 min); the default samples the large length-5 buckets. A longer test
+# timeout is supplied because the exhaustive mode exceeds the 10-min default.
+spec-test:
+	cd test/go && go test -tags specgen -timeout 40m ./specgen/
 
 # ---- per-module fan-out -------------------------------------------------
 

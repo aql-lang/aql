@@ -1,0 +1,219 @@
+# AQL Language Specification: Minimal Failing Prefixes — RUNTIME FAILURES (GENERATED)
+# format: front-coded
+# format: detail-legend
+# Format: FRONT-CODED with a DETAIL LEGEND. Each data row is
+# reuse<TAB>suffix<TAB>code, where reuse = the count of leading bytes the
+# prefix shares with the previous row's prefix (full prefix =
+# prevPrefix[:reuse]+suffix) and code indexes the `# detail N:` legend
+# below. The constant `runtime-fail:` disposition prefix (and the documentary
+# full-matrix result) are hoisted out of every row.
+#
+# DO NOT EDIT BY HAND. Regenerate with `make spec-gen` (specgen -frontier mode).
+#
+# A MINIMAL FAILING PREFIX is a sequence that fails while its immediate
+# prefix passes — the exact atom at which a passing program first breaks.
+# Every non-passing combination truncates to one of these (the trailing
+# atoms after the break are discarded) and DUPLICATES ARE REMOVED, so this
+# is the deduped catalogue of distinct failure points.
+#
+# Scope: prefixes drawn from combinations of length 1..4.
+#
+# These prefixes PASS THE TYPE CHECKER and COMPILE to bytecode, yet they
+# ERROR AT RUN — a fault the static stages cannot predict (e.g. comparing
+# values of incomparable types). The note gives the runtime error class;
+# the interpreter and compiler agree on it (it is not a compiler bug).
+#
+# 190 prefixes.
+#
+# detail 0: incomparable
+#
+0	0 true not lt	0
+2	false not lt	0
+2	not 0 lt	0
+6	1 lt	0
+6	2.5 lt	0
+6	'x' lt	0
+6	true lt	0
+6	false lt	0
+6	none lt	0
+6	[1 2] lt	0
+0	1 true not lt	0
+2	false not lt	0
+2	not 0 lt	0
+6	1 lt	0
+6	2.5 lt	0
+6	'x' lt	0
+6	true lt	0
+6	false lt	0
+6	none lt	0
+6	[1 2] lt	0
+0	2.5 true not lt	0
+4	false not lt	0
+4	not 0 lt	0
+8	1 lt	0
+8	2.5 lt	0
+8	'x' lt	0
+8	true lt	0
+8	false lt	0
+8	none lt	0
+8	[1 2] lt	0
+0	'x' true not lt	0
+4	false not lt	0
+4	not 0 lt	0
+8	1 lt	0
+8	2.5 lt	0
+8	'x' lt	0
+8	true lt	0
+8	false lt	0
+8	none lt	0
+8	[1 2] lt	0
+4	size 0 lt	0
+9	1 lt	0
+9	2.5 lt	0
+9	'x' lt	0
+9	true lt	0
+9	false lt	0
+9	none lt	0
+0	true not 0 lt	0
+9	1 lt	0
+9	2.5 lt	0
+9	'x' lt	0
+9	none lt	0
+9	[1 2] lt	0
+5	size 0 lt	0
+10	1 lt	0
+10	2.5 lt	0
+10	'x' lt	0
+10	true lt	0
+10	false lt	0
+10	none lt	0
+0	false not 0 lt	0
+10	1 lt	0
+10	2.5 lt	0
+10	'x' lt	0
+10	none lt	0
+10	[1 2] lt	0
+6	size 0 lt	0
+11	1 lt	0
+11	2.5 lt	0
+11	'x' lt	0
+11	true lt	0
+11	false lt	0
+11	none lt	0
+0	none true not lt	0
+5	false not lt	0
+5	not 0 lt	0
+9	1 lt	0
+9	2.5 lt	0
+9	'x' lt	0
+9	true lt	0
+9	false lt	0
+9	none lt	0
+9	[1 2] lt	0
+5	size 0 lt	0
+10	1 lt	0
+10	2.5 lt	0
+10	'x' lt	0
+10	true lt	0
+10	false lt	0
+10	none lt	0
+0	[1 2] true not lt	0
+6	false not lt	0
+6	not 0 lt	0
+10	1 lt	0
+10	2.5 lt	0
+10	'x' lt	0
+10	true lt	0
+10	false lt	0
+10	none lt	0
+10	[1 2] lt	0
+6	size 0 lt	0
+11	1 lt	0
+11	2.5 lt	0
+11	'x' lt	0
+11	true lt	0
+11	false lt	0
+11	none lt	0
+0	not 0 0 lt	0
+6	1 lt	0
+6	2.5 lt	0
+6	'x' lt	0
+6	none lt	0
+6	[1 2] lt	0
+4	1 0 lt	0
+6	1 lt	0
+6	2.5 lt	0
+6	'x' lt	0
+6	none lt	0
+6	[1 2] lt	0
+4	2.5 0 lt	0
+8	1 lt	0
+8	2.5 lt	0
+8	'x' lt	0
+8	none lt	0
+8	[1 2] lt	0
+4	'x' 0 lt	0
+8	1 lt	0
+8	2.5 lt	0
+8	'x' lt	0
+8	none lt	0
+8	[1 2] lt	0
+4	true 0 lt	0
+9	1 lt	0
+9	2.5 lt	0
+9	'x' lt	0
+9	none lt	0
+9	[1 2] lt	0
+4	false 0 lt	0
+10	1 lt	0
+10	2.5 lt	0
+10	'x' lt	0
+10	none lt	0
+10	[1 2] lt	0
+4	none 0 lt	0
+9	1 lt	0
+9	2.5 lt	0
+9	'x' lt	0
+9	none lt	0
+9	[1 2] lt	0
+4	[1 2] 0 lt	0
+10	1 lt	0
+10	2.5 lt	0
+10	'x' lt	0
+10	none lt	0
+10	[1 2] lt	0
+0	size 0 'x' lt	0
+7	true lt	0
+7	false lt	0
+7	none lt	0
+7	[1 2] lt	0
+5	1 'x' lt	0
+7	true lt	0
+7	false lt	0
+7	none lt	0
+7	[1 2] lt	0
+5	2.5 'x' lt	0
+9	true lt	0
+9	false lt	0
+9	none lt	0
+9	[1 2] lt	0
+5	'x' 'x' lt	0
+9	true lt	0
+9	false lt	0
+9	none lt	0
+9	[1 2] lt	0
+5	true 'x' lt	0
+10	true lt	0
+10	false lt	0
+10	none lt	0
+10	[1 2] lt	0
+5	false 'x' lt	0
+11	true lt	0
+11	false lt	0
+11	none lt	0
+11	[1 2] lt	0
+5	none 'x' lt	0
+10	true lt	0
+10	false lt	0
+10	none lt	0
+10	[1 2] lt	0

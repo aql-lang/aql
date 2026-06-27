@@ -25,7 +25,7 @@ var booleanNatives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TBoolean, TBoolean}, Handler: andHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: andHandler, ReturnsFn: operandJoinReturns, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Handler: andHandler, ReturnsFn: foldOrJoin(andHandler), BarrierPos: -1},
 		},
 	},
 	{
@@ -33,14 +33,14 @@ var booleanNatives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{Args: []*Type{TBoolean, TBoolean}, BarrierPos: 1, Handler: orHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, ReturnsFn: operandJoinReturns},
+			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: orHandler, ReturnsFn: foldOrJoin(orHandler)},
 		},
 	},
 	{
 		Name: "otherwise",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: otherwiseHandler, ReturnsFn: operandJoinReturns},
+			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Handler: otherwiseHandler, ReturnsFn: foldOrJoin(otherwiseHandler)},
 		},
 	},
 	boolBinaryNative("xor", func(a, b bool) bool { return a != b }),
@@ -111,6 +111,27 @@ func operandJoinReturns(args []Value, _ *Registry) []Value {
 		return []Value{NewCarrier(TAny)}
 	}
 	return []Value{JoinCarriers(args[0], args[1])}
+}
+
+// foldOrJoin is the check-mode return for a value-selecting connective
+// that CONCRETE-FOLDS when it can. When both operands are concrete the
+// connective's choice is statically determined, so it runs the (pure)
+// handler to get the EXACT selected operand — `and 0 false` types
+// Boolean, not the imprecise Disjunct(Integer,Boolean) join. The precise
+// type then lets a downstream op reject the real type instead of
+// optimistically accepting a union member that won't exist at runtime
+// (e.g. `add (and 0 false) 0` correctly fails the checker rather than
+// raising signature_error at run). With a non-concrete operand the
+// selection is unknown, so it falls back to the operand join — unchanged.
+func foldOrJoin(handler func([]Value, map[string]Value, []Value, *Registry) ([]Value, error)) func([]Value, *Registry) []Value {
+	return func(args []Value, r *Registry) []Value {
+		if len(args) == 2 && IsConcrete(args[0]) && IsConcrete(args[1]) {
+			if out, err := handler(args, nil, nil, r); err == nil && len(out) == 1 {
+				return out
+			}
+		}
+		return operandJoinReturns(args, r)
+	}
 }
 
 // andHandler returns args[1] when falsy, else args[0]. Short-circuit.

@@ -382,9 +382,12 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 // a local push. Inner-fragment result operands (a branch arm's / loop body's
 // out) are never enclosing references and are left untouched.
 func promoteOperand(op *emitOperand, promoted map[int]int) {
-	if op.kind == opEvent && op.resIdx == 0 {
+	if op.kind == opEvent {
 		if slot, ok := promoted[op.idx]; ok {
-			*op = localOperand(slot)
+			// slot is the producer's BASE slot; output idx op.resIdx is at
+			// slot+resIdx. Single-output promotions have resIdx 0 (unchanged);
+			// a non-promoted multi-output producer is absent from the map.
+			*op = localOperand(slot + op.resIdx)
 		}
 	}
 }
@@ -524,6 +527,22 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 			continue
 		}
 		if nout != 1 {
+			// A multi-output NATIVE stack word (dup → 2) whose results sit ABOVE
+			// a residual literal (`0 0 dup` → [0, 0, 0]) can't be seated by the
+			// in-order reconciliation. Force it to consecutive frame slots — one
+			// per output — so each result re-pushes in residual order, the same
+			// linearisation single-output events use. Only the forceOrder trigger
+			// applies (a multi-output result is never a named value-def nor a
+			// >=2-ref operand in Stage 1); a user fn's multi-return stays Stage 3.
+			if !isUser && nout > 1 && forceOrder[ev.seq] {
+				if promoted == nil {
+					promoted = map[int]int{}
+				}
+				if _, done := promoted[ev.seq]; !done {
+					promoted[ev.seq] = unit.numLocals
+					unit.numLocals += nout
+				}
+			}
 			continue
 		}
 		// A user-fn call (evCallUser) is promoted ONLY to fix an out-of-order
@@ -836,12 +855,17 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		lw.emit(OpCallNative, si, c.pos)
 	}
 	lw.vm = lw.vm[:len(lw.vm)-n]
-	// A value-def local: this single result is referenced more than once, so
-	// store it into a frame slot now and re-push it per reference (the
-	// references were rewritten to local operands). The promotion pre-pass
-	// only marks single-result events, so nothing is left on the stack.
+	// A promoted result: store it into a frame slot now and re-push it per
+	// reference / per residual position (the references were rewritten to local
+	// operands). A single-result value-def stores one slot; a multi-output stack
+	// word forced to slots (dup, an out-of-order residual) stores idx 0..nout-1
+	// to slot..slot+nout-1 — top (highest idx) first, since OpStoreLocal pops the
+	// top — so the residual re-pushes them in idx order. Nothing is left on the
+	// simulated stack either way.
 	if slot, ok := lw.promoted[ev.seq]; ok {
-		lw.emit(OpStoreLocal, slot, c.pos)
+		for i := c.nout - 1; i >= 0; i-- {
+			lw.emit(OpStoreLocal, slot+i, c.pos)
+		}
 		lw.note()
 		return ""
 	}

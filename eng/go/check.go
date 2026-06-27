@@ -78,6 +78,7 @@ func (c *CheckState) Begin() func() {
 	c.StepCount = 0
 	c.BudgetTripped = false
 	c.SuppressedRuntimeError = false
+	c.AmbiguousGradualSplit = false
 	c.DefsInstalled = nil
 	c.DefsUsed = nil
 	c.ContextTypes = nil
