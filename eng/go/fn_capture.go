@@ -84,6 +84,26 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 		}
 		return
 	}
+	// Reach (`.`/`!.` access, e.g. `e.code`, `m.a.(k)`): the receiver is a
+	// value/word stream and a computed key is an expression. Walk both so a
+	// name used ONLY as a reach receiver (`e1.code`) or inside a computed key
+	// (`m.(k)`) is still seen — both for closure-capture analysis (a closure
+	// over `x.field` must capture `x`) and for check-mode use-recording (the
+	// receiver `def` is genuinely used). Literal bare-word keys (`.code`) are
+	// field names, not references, and are NOT walked.
+	if IsReach(v) {
+		if info, err := AsReach(v); err == nil {
+			for _, t := range info.Receiver {
+				walkBodyValue(t, callback)
+			}
+			for _, seg := range info.Segments {
+				for _, t := range seg.KeyExpr {
+					walkBodyValue(t, callback)
+				}
+			}
+		}
+		return
+	}
 	// All other shapes (numbers, strings, booleans, atoms, type
 	// literals, markers): nothing to capture.
 }

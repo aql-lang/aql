@@ -108,6 +108,13 @@ func TestCheckUncalledFunction(t *testing.T) {
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) "hello"`, 1, "local fn value, wrong-typed arg"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) 5`, 0, "local fn value, correct arg"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/r "hello"`, 0, "genuinely inert /r ref (no paren) is not a call"},
+		// A FailedDispatch fn value that a FOLLOWING higher-order word consumes
+		// is NOT a bug — the documented comparator composition `(Sort.by-number
+		// Sort.reverse)`, where by-number can't dispatch and reverse takes it as
+		// a value. The diagnostic is deferred to the end-of-run drain (matching
+		// runtime), so a consumed value never flags; a stranded one (the cases
+		// above) still does.
+		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  ((usurp f) g)`, 0, "FailedDispatch fn value consumed by a higher-order word is not flagged"},
 	}
 	for _, c := range cases {
 		if got := count(c.src); got != c.want {

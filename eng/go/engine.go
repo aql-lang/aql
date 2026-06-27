@@ -1045,13 +1045,28 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// reach here; only at the top level — where no consumer can exist
 	// anymore — does the residue become an error, with the original
 	// call-site span. The same bug check mode names uncalled_function.
-	if e.isTop && !e.registry.Check.IsActive() {
+	if e.isTop {
 		for i := 0; i < e.tape.Len(); i++ {
 			v := e.tape.At(i)
 			if v.FailedDispatch && (v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction)) {
 				name := ""
 				if info, ok := v.Data.(FnDefInfo); ok {
 					name = info.Name
+				}
+				if e.registry.Check.IsActive() {
+					// Check-mode equivalent: a FailedDispatch fn value still on
+					// the stack at the top-level drain was never consumed (a
+					// following higher-order word would have taken it). Flag it
+					// now — the genuine wrong-order namespace-call footgun — as
+					// the diagnostic, not a hard error.
+					e.registry.Check.AddDiagnostic(CheckDiagnostic{
+						Code:   "uncalled_function",
+						Detail: "call to '" + name + "' matched no signature and was left on the stack as data",
+						Word:   name,
+						Row:    v.Pos.Row,
+						Col:    v.Pos.Col,
+					})
+					continue
 				}
 				return nil, makeAqlErrorAt("uncalled_function",
 					"call to '"+name+"' matched no signature and was left on the stack as data",
@@ -2258,7 +2273,18 @@ func (e *Engine) stepWord(val Value) error {
 		// reported shape — and the divergence is silent. Two-arg mixed
 		// calls are the documented swap form (`10 sub 3`) and stay
 		// clean. Advisory only (info severity), never gating.
-		if sig.TotalArgs() >= 3 {
+		//
+		// Gated on the DEEPEST stack-bound slot being Any-typed: the
+		// genuine footgun (`(cond) if [a] [b]`, if3's all-`Any`
+		// {Any,Any,Any} sig) lands the stacked value in an untyped slot
+		// where a misbind is silent, whereas the documented receiver-first
+		// idiom (`xs set 0 v`, `s slice j e` — collection/receiver declared
+		// as the concretely-typed LAST slot) lands it in a typed slot and is
+		// correct by construction. Without this, the advisory over-fired on
+		// every receiver-first call (~190 false info across the voxgig-aql
+		// libraries, which the docs already say to ignore). Same Any-slot
+		// discriminator checkForwardStrandsOperand uses.
+		if sig.TotalArgs() >= 3 && mixedFormStackSlotAny(e, sig, positions) {
 			e.registry.Check.AddDiagnostic(CheckDiagnostic{
 				Code: "mixed_form_call",
 				Detail: w.Name + " takes " + strconv.Itoa(stkCount) + " argument(s) from the stack while forward-collecting " +
@@ -2287,6 +2313,30 @@ func (e *Engine) stepWord(val Value) error {
 	}
 	e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	return e.execMatch(match)
+}
+
+// mixedFormStackSlotAny reports whether the deepest stack-bound sig slot of a
+// mixed-form call is Any-typed. The mixed_form_call advisory fires only when it
+// is: an Any slot has no type discipline, so a value stacked into it (the
+// `(cond) if [a] [b]` footgun, if3's {Any,Any,Any}) silently misbinds — the
+// case the advisory exists to flag. A concretely-typed deepest slot (the
+// receiver-first `set`/`slice`/user-fn-typed-last idiom) binds correctly, so
+// the advisory must stay quiet there. Mirrors checkForwardStrandsOperand's
+// deepest-stack walk and its Any-slot bail.
+func mixedFormStackSlotAny(e *Engine, sig *Signature, positions []int) bool {
+	minStack := -1
+	minSigPos := -1
+	for sp, p := range positions {
+		if p < e.pointer && (minStack == -1 || p < minStack) {
+			minStack = p
+			minSigPos = sp
+		}
+	}
+	if minSigPos < 0 {
+		return false
+	}
+	t := sigArgType(sig, minSigPos)
+	return t == nil || t.Equal(TAny)
 }
 
 // checkForwardStrandsOperand implements the "forward greediness" advisory
@@ -2415,7 +2465,25 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				// NoEvalArgs suppresses list auto-evaluation for code-body
 				// positions (def body, if branches, for body, etc.).
 				noEval := match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]
-				if !noEval {
+				if noEval {
+					// Check-mode use-scan: a code body (a Test.test / each /
+					// fold / do / generator quotation) is NOT evaluated here,
+					// so a name referenced ONLY inside it would never reach
+					// recordUse and would be falsely flagged unused_def — the
+					// "opaque body" FP (a shared fixture value, a generator's
+					// charset, a test helper). Walk the body's bare words and
+					// record each as a use. Sound for unused-def: a name a
+					// runnable body references is a genuine use. Walk the
+					// ELEMENTS (the body list itself may be marked quoted,
+					// which WalkBodyWords would skip).
+					if e.registry.Check.IsActive() {
+						if lst, lerr := AsList(match.Args[i]); lerr == nil {
+							WalkBodyWords(lst.Slice(), func(w WordInfo, _ Value) {
+								e.registry.Check.recordUse(w.Name)
+							})
+						}
+					}
+				} else {
 					// Bare words never degrade to data: a list element
 					// that fails to evaluate (an undefined name, or a
 					// valid name dispatched with the wrong arity) is an
@@ -4380,31 +4448,30 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 		valIdx < e.tape.Len() && !e.tape.At(valIdx).Quoted {
 		candidates := append(append([]Value{}, resolved...), e.upcomingArgs(valIdx)...)
 		if len(candidates) > 0 {
-			if e.registry.Check.IsActive() {
-				pos := e.tape.At(valIdx).Pos
-				e.registry.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "uncalled_function",
-					Detail: "call to '" + fnDef.Name + "' matched no signature and was left on the stack as data (arguments: " + argTypeList(candidates) + ")",
-					Word:   fnDef.Name,
-					Row:    pos.Row,
-					Col:    pos.Col,
-				})
-			} else {
-				fv := e.tape.At(valIdx)
-				fv.FailedDispatch = true
-				// Borrow a span from the nearest argument when the
-				// FnDef value itself carries none, so the end-of-run
-				// report can point somewhere real.
-				if fv.Pos.Row == 0 {
-					for _, c := range candidates {
-						if c.Pos.Row > 0 {
-							fv.Pos = c.Pos
-							break
-						}
+			// Mark the value FailedDispatch and DEFER the diagnostic to the
+			// end-of-run drain — in check mode too, not just at runtime. A
+			// FailedDispatch fn value that a FOLLOWING higher-order word
+			// consumes is NOT a bug: the documented `(Sort.by-number
+			// Sort.reverse)` comparator composition leaves by-number as data
+			// for reverse to take. Emitting eagerly here flagged that as a
+			// false uncalled_function; deferring lets the drain flag only a
+			// value that survives UNCONSUMED — exactly the runtime contract,
+			// preserving the wrong-order true-positive while clearing the
+			// composition FP.
+			fv := e.tape.At(valIdx)
+			fv.FailedDispatch = true
+			// Borrow a span from the nearest argument when the FnDef value
+			// itself carries none, so the end-of-run report can point
+			// somewhere real.
+			if fv.Pos.Row == 0 {
+				for _, c := range candidates {
+					if c.Pos.Row > 0 {
+						fv.Pos = c.Pos
+						break
 					}
 				}
-				e.tape.Set(valIdx, fv)
 			}
+			e.tape.Set(valIdx, fv)
 		}
 	}
 

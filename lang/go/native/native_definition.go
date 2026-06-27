@@ -205,8 +205,28 @@ var definitionNatives = []NativeFunc{
 // `return nil, nil`, so it is consolidated here. The optional stackOnly flag
 // is forwarded to InstallDef (only the plain `def` path sets it).
 func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stackOnly ...bool) ([]Value, error) {
+	// A def's own INSTALL must not count as a USE of the name. Installing a
+	// fn runs its construction-time body pass, which resolves the fn's own
+	// name (recursion support) and records a spurious self-use; an uncalled
+	// fn would then never be flagged unused now that RecordDef no longer
+	// resets uses on rebind. Snapshot this name's use flag across
+	// install+record and restore it, so only EXTERNAL references count. A
+	// prior legitimate use (e.g. a loop-carried read before a rebind) is
+	// preserved (prevUsed stays true); a fresh def's self-use is undone.
+	checking := r.Check.IsActive()
+	prevUsed := checking && r.Check.DefsUsed != nil && r.Check.DefsUsed[name]
 	InstallDef(r, name, value, stackOnly...)
 	r.Check.RecordDef(name, pos)
+	if checking {
+		if r.Check.DefsUsed == nil {
+			r.Check.DefsUsed = map[string]bool{}
+		}
+		if prevUsed {
+			r.Check.DefsUsed[name] = true
+		} else {
+			delete(r.Check.DefsUsed, name)
+		}
+	}
 	// Mark a computed binding for value-def-local promotion in the bytecode
 	// lowerer: a named value may be referenced in any order, so its producing
 	// event is stored to a frame local rather than left on the simulated stack.
