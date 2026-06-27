@@ -5963,6 +5963,28 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	//   - /f (ForceForward) → boundary at N, all forward
 	insideForward := e.isInsidePendingForward()
 
+	// Forward/stack split ambiguity (check mode only, compile-time advisory).
+	// If a more-specific overload is rejected because the stack-top operand
+	// is a genuinely MIXED gradual carrier (carrierMixedConform), and the
+	// overload finally SELECTED forward-collects instead — leaving that
+	// carrier on the stack — the static split diverges from the runtime one
+	// (a concrete value would have matched the more-specific overload and
+	// been grabbed). noteSplit flags it so the compiler refuses; dispatch
+	// itself is unchanged. See CheckState.AmbiguousGradualSplit.
+	checkActive := e.registry != nil && e.registry.Check.IsActive()
+	mixedCarrierRejectIdx := -1
+	noteSplit := func(positions []int, fwd int) {
+		if !checkActive || mixedCarrierRejectIdx < 0 || fwd == 0 {
+			return
+		}
+		for _, p := range positions {
+			if p == mixedCarrierRejectIdx {
+				return // the carrier was consumed after all — not skipped
+			}
+		}
+		e.registry.Check.AmbiguousGradualSplit = true
+	}
+
 	// When the next forward token is a Word, prefer signatures with
 	// /q at position 0 (inspect-style name capture). The user wrote a
 	// Word, not a String — the /q sig captures the user's intent that
@@ -6229,6 +6251,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 				continue
 			}
+			noteSplit(positions, fwd)
 			return sig, positions, specAt
 		}
 
@@ -6257,6 +6280,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						}
 						continue
 					}
+					noteSplit(positions, fwd)
 					return sig, positions, specAt
 				}
 			}
@@ -6313,6 +6337,14 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				break
 			}
 			if !sigArgMatches(sig, sigIdx, stackVal) {
+				// A more-specific overload rejected because the stack-top
+				// operand is a mixed gradual carrier: a concrete value drawn
+				// from it might have matched here (and been grabbed). Remember
+				// it; if a forward-collecting overload is then selected, the
+				// split is ambiguous (noteSplit at the return points).
+				if checkActive && j == 0 && carrierMixedConform(stackVal, sigArgType(sig, sigIdx)) {
+					mixedCarrierRejectIdx = resolvedIdx[ri]
+				}
 				allMatch = false
 				break
 			}

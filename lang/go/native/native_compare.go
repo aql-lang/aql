@@ -36,9 +36,10 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			eng.MakeDepScalarSig("lt", eng.DepLT),
 			{
-				Args:    []*Type{TAny, TAny},
-				Handler: eng.LtHandler,
-				Returns: []*Type{TBoolean}, BarrierPos: -1,
+				Args:      []*Type{TAny, TAny},
+				Handler:   eng.LtHandler,
+				Returns:   []*Type{TBoolean},
+				ReturnsFn: eng.OrderingReturnsFn(eng.LtHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -48,9 +49,10 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			eng.MakeDepScalarSig("gt", eng.DepGT),
 			{
-				Args:    []*Type{TAny, TAny},
-				Handler: eng.GtHandler,
-				Returns: []*Type{TBoolean}, BarrierPos: -1,
+				Args:      []*Type{TAny, TAny},
+				Handler:   eng.GtHandler,
+				Returns:   []*Type{TBoolean},
+				ReturnsFn: eng.OrderingReturnsFn(eng.GtHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -60,9 +62,10 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			eng.MakeDepScalarSig("lte", eng.DepLTE),
 			{
-				Args:    []*Type{TAny, TAny},
-				Handler: eng.LteHandler,
-				Returns: []*Type{TBoolean}, BarrierPos: -1,
+				Args:      []*Type{TAny, TAny},
+				Handler:   eng.LteHandler,
+				Returns:   []*Type{TBoolean},
+				ReturnsFn: eng.OrderingReturnsFn(eng.LteHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -72,9 +75,10 @@ var comparisonNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			eng.MakeDepScalarSig("gte", eng.DepGTE),
 			{
-				Args:    []*Type{TAny, TAny},
-				Handler: eng.GteHandler,
-				Returns: []*Type{TBoolean}, BarrierPos: -1,
+				Args:      []*Type{TAny, TAny},
+				Handler:   eng.GteHandler,
+				Returns:   []*Type{TBoolean},
+				ReturnsFn: eng.OrderingReturnsFn(eng.GteHandler, TBoolean), BarrierPos: -1,
 			},
 		},
 	},
@@ -86,9 +90,10 @@ var comparisonNatives = []NativeFunc{
 		Name: "cmp",
 
 		Signatures: []NativeSig{{
-			Args:    []*Type{TAny, TAny},
-			Handler: eng.CmpHandler,
-			Returns: []*Type{TInteger}, BarrierPos: -1,
+			Args:      []*Type{TAny, TAny},
+			Handler:   eng.CmpHandler,
+			Returns:   []*Type{TInteger},
+			ReturnsFn: eng.OrderingReturnsFn(eng.CmpHandler, TInteger), BarrierPos: -1,
 		}},
 	},
 	{

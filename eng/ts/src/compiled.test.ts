@@ -623,6 +623,14 @@ describe('compiled (stage 1)', () => {
     })
   }
 
+  it('restores check-pass defs before interpreter fallback', () => {
+    const r = freshRegistry()
+    const { residual, compiled } = runCompiled(r, tokenize('def x 1 if false [trapq 0] [x]'))
+    assert.equal(compiled, false)
+    assert.equal(canon(residual), '1')
+    assert.equal(r.defStackDepth('x'), 1)
+  })
+
   for (const input of TRAP) {
     it(`compiles to a trap & errors like the interpreter: ${input}`, () => {
       const result = compile(freshRegistry(), tokenize(input))

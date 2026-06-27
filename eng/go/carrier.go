@@ -2057,6 +2057,40 @@ func flattenAlternatives(v Value) []Value {
 	return []Value{NewTypeLiteral(v.Parent)}
 }
 
+// carrierMixedConform reports whether v is a genuinely MIXED gradual
+// carrier with respect to type t: a non-concrete Disjunct carrier whose
+// flattened alternatives include at least one that conforms to t AND at
+// least one that does not. Such a carrier makes a forward/stack dispatch
+// split AMBIGUOUS — a concrete value drawn from it could match a more-
+// specific overload (and be grabbed from the stack) or not (and be
+// skipped, so the word forward-collects instead). The two splits leave
+// different stacks, so the bytecode compiler cannot statically reproduce
+// the runtime one. A pure carrier (all alternatives conform, or none do)
+// and a bare dynamic carrier are NOT mixed and return false: the split is
+// consistent, or is the dynamic path handled elsewhere.
+func carrierMixedConform(v Value, t *Type) bool {
+	if t == nil || !v.Carrier || IsConcrete(v) || v.Dynamic {
+		return false
+	}
+	alts := flattenAlternatives(v)
+	if len(alts) < 2 {
+		return false
+	}
+	someConform, someReject := false, false
+	for _, alt := range alts {
+		// flattenAlternatives yields type LITERALS; the denoted type is
+		// typeNodeOf(alt), NOT alt.Parent (a literal's Parent is the
+		// denoted node's lattice parent — the `Boolean` literal's Parent
+		// is `Scalar`).
+		if node := typeNodeOf(alt); node != nil && node.ConformsTo(t) {
+			someConform = true
+		} else {
+			someReject = true
+		}
+	}
+	return someConform && someReject
+}
+
 // carrierOfLiteral converts a bare type-literal value (the node
 // itself, as stored in DisjunctInfo.Alternatives) into a carrier OF
 // that node — i.e. Parent points at the literal's type, not at the

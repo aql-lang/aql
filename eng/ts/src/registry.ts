@@ -23,6 +23,14 @@ export interface FunctionEntry {
   maxForwardArgs: number
 }
 
+/** Snapshot of mutable registry state for speculative compile/check passes. */
+export interface RegistrySnapshot {
+  defStacks: Map<string, Value[]>
+  capabilities: Map<string, unknown>
+  argsStack: Value[][]
+  check: CheckState
+}
+
 export class Registry {
   private functions = new Map<string, FunctionEntry>()
   private defStacks = new Map<string, Value[]>()
@@ -185,6 +193,36 @@ export class Registry {
 
   topArgs(): Value[] | undefined {
     return this.argsStack[this.argsStack.length - 1]
+  }
+
+  /**
+   * Capture mutable execution state before a speculative pass. Function
+   * registrations are intentionally shared: they are static infrastructure,
+   * while defs/capabilities/args/check state are the runtime scopes a check-mode
+   * compile may mutate before deciding to fall back.
+   */
+  snapshot(): RegistrySnapshot {
+    const defStacks = new Map<string, Value[]>()
+    for (const [name, stack] of this.defStacks) {
+      defStacks.set(name, [...stack])
+    }
+    return {
+      defStacks,
+      capabilities: new Map(this.capabilities),
+      argsStack: this.argsStack.map((frame) => [...frame]),
+      check: this.check.clone(),
+    }
+  }
+
+  /** Restore mutable execution state in place from snapshot(). */
+  restore(snapshot: RegistrySnapshot): void {
+    this.defStacks = new Map()
+    for (const [name, stack] of snapshot.defStacks) {
+      this.defStacks.set(name, [...stack])
+    }
+    this.capabilities = new Map(snapshot.capabilities)
+    this.argsStack = snapshot.argsStack.map((frame) => [...frame])
+    this.check.restoreFrom(snapshot.check)
   }
 }
 

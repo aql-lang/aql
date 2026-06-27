@@ -308,6 +308,15 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	if a.registry.Check.SuppressedRuntimeError {
 		return nil, "check-mode suppressed a runtime error (uncompilable)", res, nil
 	}
+	// A dispatch whose forward/stack split depended on a genuinely mixed
+	// gradual carrier (e.g. `and 0 false not 0`, where `and`'s
+	// Disjunct(Integer,Boolean) result makes `not` forward-collect in
+	// check mode but stack-grab the concrete Boolean at runtime) cannot be
+	// faithfully compiled — the static split diverges from the runtime
+	// one. Refuse and fall back to the interpreter.
+	if a.registry.Check.AmbiguousGradualSplit {
+		return nil, "forward/stack split depends on a gradual operand (uncompilable)", res, nil
+	}
 	prog, reason, ok := a.registry.Check.Emit.Finalize(residual)
 	if !ok {
 		return nil, reason, res, nil

@@ -83,7 +83,7 @@ WORD class
 WORD clone
   [Any] barrier=1 +returnsfn
 WORD cmp
-  [Any Any] barrier=2 returns=[Scalar/Number/Integer]
+  [Any Any] barrier=2 returns=[Scalar/Number/Integer] +returnsfn
 WORD codequote
   [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
   [Any] barrier=1 runcheck noeval={0} +returnsfn
@@ -291,10 +291,10 @@ WORD getr
   [Any None] barrier=1
 WORD gt
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean] +returnsfn
 WORD gte
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean] +returnsfn
 WORD guard
   [Any Scalar/Boolean] barrier=1 +returnsfn
 WORD has
@@ -381,10 +381,10 @@ WORD lower
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
 WORD lt
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean] +returnsfn
 WORD lte
   [Scalar Scalar] barrier=2 runcheck typearg={1} returns=[Scalar]
-  [Any Any] barrier=2 returns=[Scalar/Boolean]
+  [Any Any] barrier=2 returns=[Scalar/Boolean] +returnsfn
 WORD macro
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD macroexpand
