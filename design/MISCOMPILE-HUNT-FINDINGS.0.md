@@ -14,7 +14,47 @@ compile-it-correctly OR `MarkUncompilable` (refuse → fall back to the interpre
 refusal is always sound and keeps the guarantee. Coverage (voxgig) is a separate,
 advisory axis — never trade soundness for it.
 
+## STATUS (updated)
+
+- **D, C, B — FIXED** (commits in this session): higher-order over gradual-Any
+  collection (refuse), multi-overload user fn + gradual-Any (refuse), typed-def
+  refinement validate/reparent (refuse dynamic + DepScalar, keep static newtype).
+- **E — PARTIALLY FIXED**: the fn-body fn-value apply (`(fnv 100)` over a Function
+  PARAM) is fixed — the fn finish refuses a user-fn count mismatch whose residual
+  carries a Function/FnDef value (resolveDynamicApply runs only for the MAIN
+  residual, so a fn-body apply was never lowered; refuse → fall back). REMAINING:
+  the /r-deferred map field auto-invoke (`{f:make42/r}.f`) and the nested-factory
+  apply in the MAIN residual (`(((mk 1) 2) 3)` → leaks a Function) — both separate
+  resolveDynamicApply gaps (it handles the single leading-fn-carrier `(mk 5) 10`
+  but not nested levels nor the deferred-field auto-invoke). Fix: extend
+  resolveDynamicApply to nested/deferred shapes, or refuse a MAIN residual that
+  ends with an unconsumed Function the program did not declare.
+- **A — DOCUMENTED / DEFERRED** (see below): narrowed to identity-`eq` only.
+
 ## A. Const-pool aliasing of a fn-returned container literal (4 cases) — SILENT wrong value
+
+UPDATE after scoping: the practical impact is NARROWER than first thought, and the
+fix is the riskiest. A fn body `[1]` bakes as a WHOLE const (`PUSH_CONST k0; RET`),
+so every call returns the SAME instance. But the List/Map const-bake is INTENTIONAL
+and load-bearing (mutation-safe — `set`/`push` on a Map/List return COPIES, never
+mutate in place; only Array/Object/Store mutate in place and those are excluded from
+isInertConst). So the ONLY divergence is identity (`eq` / ExactEqual): `(mk) eq
+(mk)` → compiled true (one const), interpreter false (fresh per call). Mutation does
+NOT diverge (verified: a `set`/`push` on the result returns a copy, leaving the const
+intact); inline / def-bound literals do NOT alias (each is its own const). `eq` is
+rare (value-equality is the common path), so this is the least practically reachable
+of the five.
+
+The correct fix is to construct the RETURNED container fresh per call — matching the
+interpreter, which re-evaluates `[1]` each call (so it is NOT a penalty vs interp,
+just parity): either an OpClone (pop → CloneValue (clone.go:42) → push) emitted
+before RET when the fn residual is a container-typed const, or re-emit the residual
+literal as OpMakeList/OpMakeMap (recursive for nested containers) instead of
+PUSH_CONST. Both are VM/lowering changes to the intentional const-bake path —
+deferred to a focused effort rather than rushed at this session's tail, since a
+mistake here (mutation safety, the isInertConst whitelist) risks a NEW, broader
+miscompile. A blanket refusal of container-literal-returning fns would restore
+soundness but drop coverage on a deliberate optimization.
 
 ```
 def mk fn [[] [List] [[1]]]   ((mk) eq (mk))     # compiled true  ; interp false

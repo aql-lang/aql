@@ -1499,6 +1499,24 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
 			}
+			// A USER fn whose residual COUNT mismatches AND whose residual carries a
+			// Function/FnDef VALUE is an UNAPPLIED fn-value-call the compiler missed —
+			// `(fnv 100)` pushes [fnv, 100] without applying, where the interpreter
+			// applies fnv → ONE value. The count-mismatch-compiles path above assumes
+			// the interpreter ALSO mismatches (and the VM RET raises the matching
+			// type_error), but here it APPLIES and succeeds. resolveDynamicApply runs
+			// only for the MAIN program residual, not fn bodies (cluster E of the broad
+			// hunt), so a fn-body fn-value apply is never lowered. Refuse → fall back. (A
+			// GENUINE count mismatch that happens to carry a fn value still errors in
+			// both engines, so the fallback is sound either way.)
+			if !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+				for _, v := range bodyStk {
+					if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+						es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
+						return
+					}
+				}
+			}
 			// A TOP-TAKING closure's driving handler reads only the top of the body
 			// residual (each / fold / scan / filter — CallableSpec.BodyResultTop), so
 			// the values the body leaves BELOW its result — notably the per-invocation
