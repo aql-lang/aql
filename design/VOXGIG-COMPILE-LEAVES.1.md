@@ -640,3 +640,26 @@ file flips. The test-test mask hid this: the recursion wall blocks the _spec fil
 but the imperative _test files and _smoke files bottom out at the library's own leaves (comparator / module-word-in-body
 / do-provenance). Re-segment the 33: ~test-framework-recursion files vs library-leaf files — the latter may flip without
 the recursion feature.
+
+### COMPARATOR / TRAILING-FN-VALUE LOWERING — a latent MISCOMPILE found+fixed; the lowering scoped.
+Attacked the sort comparator leaf (`def c (prev key comp)` — apply a captured `comp:Function` to two values).
+- **MISCOMPILE FOUND + FIXED (commit d3dda735).** A closure body whose residual is an unapplied fn-value apply
+  (`[1 2] each [(x x comp)]`) COMPILED to `[fn, fn]` while interpreting to `[0 0]` — the each took the unapplied
+  comp off the residual top. Off-corpus (no captured-comparator-in-closure shape in the curated corpus), so
+  verify-bytecode passed clean while the bug was live. Fix: such a closure body now REFUSES (sound fallback),
+  mirroring the fn-body unapplied-fn-value refusal + resolveDynamicApply's main-residual refusals. Gated +
+  off-corpus regression (bytecode_dynapply_body_test.go). So the comparator-each now REFUSES rather than
+  miscompiles — compile==interpret restored for this whole class.
+- **THE LOWERING (compile the apply, the file-flipping step) is a real VM feature, scoped:** the existing
+  dynamic-apply machinery (resolveDynamicApply/trailingApply, OpCallDynamic/Trailing) does NOT cover the
+  comparator shape: OpCallDynamicTrailing is BOUNDED TO 1 ARG (bytecode.go:163 — >1 arg's non-callable island
+  forward-collection would mis-order), trailingApply requires EXACTLY 2 residual values with an EVENT-produced
+  fn, and resolveDynamicApply runs only on the MAIN program residual, not fn/closure unit bodies. The comparator
+  is a 2-arg trailing apply with COMPUTED (event) args and a CAPTURED (param) fn. So the lowering needs: (a) an
+  N-arg trailing dynamic apply (a new opcode, or relax OpCallDynamicTrailing's 1-arg bound for the
+  GUARANTEED-callable Function-param case where there is no non-callable island), (b) wiring resolveDynamicApply
+  into the unit-body reconciliation (reconcileResults) with the residual VALUES threaded through, (c) exact
+  arg-ordering to match the interpreter's top-down bind (soundness-critical — the off-corpus regression's real
+  comparator results [0 0]/[1 -1]/[3 -1 1] are the gate). Even then the sort algorithms chain further (make Array,
+  swap-at, nested each/var) — so this unblocks the comparator leaf but the sort files need their remaining leaves
+  too. A bounded multi-step VM feature; the miscompile fix is the sound foundation it sits on.
