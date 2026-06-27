@@ -176,3 +176,23 @@ corpus retest after each; a file flips only when its whole chain is clear.
 This is the compiler/checker-completion endgame — a sequenced multi-pass effort.
 Soundness (`compile==interpret`) is already verified solid; this is purely about
 turning sound REFUSALS into sound COMPILATIONS, plus the template checker accuracy.
+
+### L0 — fix attempts RULED OUT (do not repeat)
+1. **Suspend-skip the Stage-2 refusal** (gate MarkUncompilable on `es.suspended==0`):
+   NO-OP. The latching refusal is on the LIVE active es (suspended=0), not the
+   suspended probe es.
+2. **Skip the refusal if the result is already recorded** (`es.producedBy[outs[0].ID]`):
+   NO-OP. The refusing dispatch's result carrier has a DIFFERENT ID than the
+   closure-recording dispatch's — they are separate re-analyses of the same source
+   each, so an ID match never fires.
+Open inconsistency for the next pass: `RecordCall` early-returns when `!es.active()`
+(emit.go:1882), so the refusal only runs ACTIVE; yet the refusing dispatch did NOT
+print a tryRecordClosure entry trace despite `sig.Callable=true` (so it did not
+return at the `Callable==nil` guard either). The next pass must instrument the
+carrier.go:603 dispatch chain ITSELF (which tryRecord* declined, and why
+tryRecordClosure's entry wasn't reached) for the SECOND active dispatch of the same
+each — likely a re-dispatch during the value-def's result-type analysis. The fix is
+almost certainly to make that re-dispatch take the closure path consistently, or to
+not run RecordCall's code-body refusal for a Callable word already lowered as a
+closure at this site. Keep the two mandatory regressions (captured-frame-local each
+body must compile; non-closureable name-body must still refuse).
