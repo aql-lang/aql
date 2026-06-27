@@ -1500,6 +1500,37 @@ func comboTypeNames(combo []Value) string {
 // (Map/List/Flex) return the updated node. A CONCRETE receiver reaches only its
 // own overload (sigTypeMatches is exact for it), so this returns nil there and
 // the true 0-arity stands; only a genuinely dynamic receiver reaches both.
+// dynamicReachableOverloadCount counts how many of word's same-arity overloads
+// the (partly-dynamic) arg list could match. ≥2 means the dispatch is AMBIGUOUS:
+// a gradual-Any arg matches every overload optimistically, so the checker's single
+// committed overload may not be the one the RUNTIME value needs. Used to refuse a
+// higher-order word (each/fold/scan) over a gradual collection — its List-vs-Map
+// overloads can't be statically chosen and it has no poly re-match (code body).
+func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return 0
+	}
+	n := 0
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if len(s.Args) != len(args) {
+			continue
+		}
+		reach := true
+		for j := range args {
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if reach {
+			n++
+		}
+	}
+	return n
+}
+
 func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Type {
 	fn := r.Lookup(word)
 	if fn == nil {

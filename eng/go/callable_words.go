@@ -86,6 +86,20 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	body := args[spec.BodyPos]
 
+	// A gradual-Any (Dynamic) DATA arg to a higher-order word whose overloads
+	// differ on that arg's type (each/fold/scan: TList vs TMap) is an AMBIGUOUS
+	// dispatch: the checker optimistically committed to ONE overload, but the
+	// runtime value could need the SIBLING — a gradual collection bound to each's
+	// Map overload errors ("expected concrete map") where the interpreter iterates
+	// the runtime List. The closure body itself compiles fine; only the OUTER
+	// overload can't be statically chosen, and a code-body word has no poly
+	// re-match. Refuse → fall back to the interpreter (compile==interpret). The
+	// body arg is never Dynamic, so anyDynamicCarrier here means a DATA arg is.
+	if anyDynamicCarrier(args) && dynamicReachableOverloadCount(r, word, args) >= 2 {
+		es.MarkUncompilable("higher-order `" + word + "` over a gradual-Any collection: ambiguous overload (List vs Map), no static commit and no poly re-match")
+		return true
+	}
+
 	// A lambda VALUE body (`filter ([p:Any] => …) data`): the afn's named
 	// param binds to the WORD'S callback shape ({key,value} pair for list
 	// filter, KeyVal for the map forms), not to its declared `Any`. Compile
