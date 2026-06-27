@@ -490,3 +490,33 @@ mode and why it produces an Atom under nested analysis; reconcile to the declare
 there. The accessor-receiver Dynamic-Any fix is INERT until then (blk is an Atom, not a
 Dynamic Any, by the time get dispatches). Instrumentation gives inconsistent types across
 the two paths — pin the def-value path specifically. Runtime GREEN 5/5; compile==interpret.
+
+### ROOT CAUSE CRACKED: the cluster was a FORWARD REFERENCE, not dynamic dispatch
+Instrumented the def handler (native_definition.go:237): `def blk (liquid-if toks i)` binds
+blk to a concrete Atom while `def more (compile-tagged-seq …)` binds a Map carrier. The
+difference: compile-tagged-seq (template.aql:628) calls liquid-if/liquid-for, which are
+defined LATER (676, 703) — FORWARD REFERENCES. aql analyses fn bodies at DEFINITION time, so
+compile-tagged-seq's call to the not-yet-registered liquid-if degraded to an undefined-word
+Atom, cascading false no_signature through `blk get …`. compile-tagged-seq's SELF-recursion
+resolves (in-flight), but a forward ref to a SEPARATE later def does not. The earlier
+"Dynamic-Any / dynamic-receiver" reading was a downstream symptom, not the cause.
+
+FIX SHIPPED (template repo): forward-declare liquid-if/liquid-for before compile-tagged-seq
+(real defs shadow; runtime unaffected). `aql check` 7 → 1; runtime 5/5 green. So template is
+24 → 1 across the session (7 aql fixes took 24→7; the gradual-Any fix 12→7; stubs 7→1).
+
+CHECKER TWO-PASS — explored + REJECTED as unsound. A pre-pass that registers all top-level
+fns (so forward refs resolve) made template 24→0 AND needs a per-pass FnSummaries/FnInflight
+reset in CheckState.Begin (a real latent reused-registry bug — those caches were NOT reset),
+but it is fundamentally TOO BROAD: it cannot distinguish a fn-BODY forward ref (legitimate,
+deferred to call time) from a top-level USE-BEFORE-DEF (must flag). It broke
+TestCheckTopLevelUseBeforeDefStillFlagged + TestPredicateCheckMode_TypedBindingAccepted.
+Keeping only fn defs from the pre-pass didn't fix it (a top-level fn use-before-def is also
+masked). The RIGHT checker fix re-types fn-body forward refs WITHOUT a blanket pre-register —
+re-analyse a fn body once at end-of-pass when an FnBody-tagged undefined_word resolved to a
+now-registered fn, propagating its declared return. Deep; the FnSummaries/FnInflight Begin
+reset is a sound standalone sub-fix worth landing on its own.
+
+REMAINING: gen-program (1) — a make-Compiled dispatch over Any args that the gradual-Any
+forward fix accepts (gradualAny=true, instrumented) yet still recovers; NOT reproducible even
+with the full tpl-compile shape extracted — emergent from the whole 790-line module.
