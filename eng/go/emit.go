@@ -2251,17 +2251,17 @@ func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, po
 		if IsBareTypeNode(ins[i]) {
 			return false
 		}
-		if w, isEvent := es.producerWord(ins[i].ID); isEvent && !r.IsBuiltinWord(w) {
-			// A MODULE / user word may be stateful (`list-of [Rand.int …] N` — the
-			// generator advances a seed), so freezing one assembly of its check-mode
-			// result would replicate it instead of re-running per use. Those refuse.
-			// `make` is NO LONGER excluded: an OpMakeList of make EVENTS rebuilds
-			// fresh instances per run (sound, like OpMakeMap), so an instance list —
-			// `def xs [(make Box …) (make Box …)]`, typed or not — assembles natively
-			// and feeds each/fold/get rather than refusing on the const-bake path
-			// (where isInertConst rejects the mutable members).
-			return false
-		}
+		// A non-builtin (user-fn / module) producing word is NOT refused: the element
+		// resolves to its recorded EVENT (CALL_USER / CALL_NATIVE_POLY / make), and
+		// the OpMakeList assembly RE-RUNS that event at runtime — it never freezes the
+		// check-mode result. So a list of user-fn / module results (`def specs
+		// [(Test.test …) …]`, the voxgig spec-list pattern) assembles faithfully,
+		// exactly as `make` instances and builtin results already do. A genuinely
+		// stateful generator (`list-of [Rand.int] N`) is a NoEval CODE BODY run per
+		// iteration, not a list-literal element, so it never reaches recordMakeListInner.
+		// resolveOperand only ever yields a re-running event or an inert const here
+		// (never a frozen module result), so the assembly stays sound; gated by the
+		// bytecode differential + the voxgig --compile==interpret sweep.
 		op, ok := es.resolveOperand(ins[i])
 		if !ok {
 			return false
