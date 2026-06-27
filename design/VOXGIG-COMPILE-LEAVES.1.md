@@ -285,3 +285,27 @@ chain), do/provenance (2+1), dynamic set/push (1+1), fold (1), gradual-Any multi
 overload (1, correctly refused), template check (1). compile==interpret holds for all
 48 (0 miscompiles) — the repos' own gate passes; the gap is native force-compile
 COVERAGE, dominated by the recursive aql:test framework.
+
+### CHECK leaf (template.aql — the only check failure) ROOT-CAUSED
+All 24 errors are one cause: `fn_body_error` → `parse_unknown_lang: no parser
+"mustache"/"liquid"/"jinja" registered`, raised analysing lex-mustache/liquid/jinja's
+bodies (`def _ (parse mustache src)`). Mechanism: `parse <kind>` (native_macro.go:
+parseHandler) resolves the kind via parseKindRegistered → checks the ParseLang export's
+Fields for "parse_<kind>". The template registers with `Parse.register` (aql:parse,
+parse.go:276 parse-register) whose sig has ONLY a Handler — no ReturnsFn — so in CHECK
+mode the Handler never runs (carrier.go:489 uses ReturnsFn/static Returns, not the
+Handler), the kind is never injected into ParseLang exports, and the fn-body analysis
+fails. `ParseLang.register` works because it HAS a check-mode ReturnsFn
+(parselang.go:74 parseRegisterReturns → idempotent parseRegisterInstall). The template
+imports aql:parselang (required — removing it breaks interp + yields 18 other errors),
+so parseNamespaceBound=true makes the check STRICT (no lenient degradation).
+
+**Fix (next pass, soundness-sensitive):** give parse-register a check-mode ReturnsFn
+that registers the kind (build spec from args[1] + RegisterHostParser) so the fn-body
+analysis resolves `parse <kind>`. RegisterHostParser (parselang.go:200) ERRORS on
+double-register, so the check ReturnsFn + the runtime Handler + the compile double-run
+need source-identity idempotency — mirror parselang's idents map (same source call →
+skip; different → error). Gate with bytecode_register_soundness_test.go +
+check_type_value_test.go (both already pin the parselang idempotent-ReturnsFn
+contract) + a new template-style Parse.register-in-fn-body check regression. This is
+the LAST check-track issue; landing it makes check 48/48.
