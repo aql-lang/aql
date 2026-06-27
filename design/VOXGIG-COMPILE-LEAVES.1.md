@@ -230,3 +230,29 @@ compile==interpret, which HOLDS for all 48 (0 miscompiles). force-compile covera
 the test framework is a STRETCH beyond the repos' gate. Next pass: unmask test-
 describe's closure-body refusal (instrument recordClosureDispatch for word=="test-
 describe") and compile the recursive spec body, OR accept fallback per the repos' gate.
+
+### ROOT-CAUSED: the test-framework leaf IS the single-overload user-fn recovery leaf
+test-describe's closure body fails with Reason `unmatched dispatch recovered at
+run-cases` (instrumented compileClosureBody). `run-cases` (test.go:1403) is a
+SINGLE-overload AQL user fn `fn [[| subject:Scalar cases:List][]…]`. Called with
+Any-typed spec data, matchSignature can't statically commit → the engine.go:6664
+recovery branch runs. tryRecordPoly DECLINES because its gate (carrier.go ~line 26)
+is `if !matchReg.IsBuiltinWord(word) return false` — run-cases is a user `def fn`,
+not a registered builtin (test-record IS a sub-registry builtin, so it passes; that's
+the asymmetry the 6656 comment notes). So the recovery MarkUncompilable's.
+
+THIS ONE LEAF blocks: the aql:test framework (run-spec → test-describe → run-cases →
+~all test files) AND find-kid / mk-tnode / lex-mustache (the 5 direct recovery files).
+Highest-leverage remaining leaf by far.
+
+**Fix direction (soundness-critical, next focused pass):** in the engine.go:6664
+recovery, when tryRecordPoly declines AND the word is a SINGLE-overload user fn,
+record a user-fn dispatch (a plain CALL_AQL to its one sig — no poly re-match needed
+since there's only one overload) GUARDED by checkParamContract (the param guard
+landed this session). Soundness: at run time the concrete args either match the sole
+sig (dispatch == interpreter) or fail the guard (raise == interpreter's no_signature).
+A MULTI-overload user fn must STILL refuse (Cluster C) — the guard would raise where
+the interpreter dispatches a sibling. Mandatory off-corpus regressions: a single-
+overload user fn over Any args (must compile + RunCompiledStrict==interp), and a
+multi-overload one (must still refuse). The repos' OWN gate is compile==interpret
+(holds via fallback today); this fix converts fallback → native coverage.
