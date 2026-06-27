@@ -6109,7 +6109,19 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Defined word: resolves to its def type.
 					if top, ok := e.registry.Defs.Top(ww.Name); ok {
-						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) {
+						// Gradual typing: an Any-typed forward operand — a value
+						// flowed from a dynamic `get`, or a param bound to Any at
+						// a gradual call site — is optimistically accepted for a
+						// concrete param in PURE CHECK mode. At runtime the value
+						// is concrete and dispatches (or raises) exactly as the
+						// interpreter does, so the static analysis stays advisory
+						// rather than emitting a spurious no_signature. NOT in
+						// compile mode: there the dispatch must remain UNMATCHED so
+						// the emitter refuses (force-compile) instead of baking a
+						// wrong direct call — preserving compile==interpret.
+						gradualAny := checkActive && !e.registry.Check.Compiling &&
+							top.Parent != nil && top.Parent.Equal(TAny)
+						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) || gradualAny {
 							// A dispatching binding (FnDefInfo) planned as an
 							// operand is SPECULATIVE: at runtime this token
 							// dispatches rather than arriving as a value
