@@ -19,7 +19,30 @@ sweep.
 
 ## Real leaves (unmasked by a 9-agent workflow), highest leverage first
 
-### L0 — `var` block inside a loop/each body — THE dominant real leaf (DONE-adjacent)
+### L0 (CORRECTED) — value-def of a COMPUTED expression inside an each-closure body
+**`var` is NOT the leaf** — its sig declares `RunInCheckMode: true` and it compiles
+(the splice records as value-def locals). The real dominant leaf, unmasked by direct
+minimization: a **value-def whose value is a computed paren-expression, inside an
+each-closure body**. Precise repro:
+- `[1] each [def j 5 j]` → COMPILES (value-def of a const)
+- `[1] each [def j (i mul 2) j]` → COMPILES (param-computed)
+- `[1] each [def j cur (j get 0)]` → COMPILES (value-def of a capture directly)
+- `[1] each [def j (5 add 1) j]` → **REFUSES** (value-def of a computed const)
+- `[1] each [def j (cur get 0) j]` → **REFUSES** (value-def of a computed capture-get)
+
+The SAME body `def j (5 add 1) j` compiles as a plain FN body (`def g fn
+[[][Integer][def j (5 add 1) j]] (g)` → 6) but refuses as an each-closure body — so
+it is the each$body promotion path (compileClosureBody, callable_words.go:31), not
+value-defs generally. FURTHER NARROWED: the throwaway closure PROBE (callable_words.go:251)
+SUCCEEDS; the refusal is in the post-probe REAL compile (:259) or RecordClosure
+Call's collection-operand resolve — i.e. a state-difference between the probe and the
+real emit. The next pass must instrument the REAL compileClosureBody call (:259) +
+RecordClosureCall, not the probe, to find the exact MarkUncompilable site, then fix
+the each$body value-def promotion (leaves-doc carrier-ID hazard applies; mandatory
+per-frame-local-kind RunCompiledStrict regression). This is the 14-each + 8-test-test
+blocker; `var` was a red herring.
+
+### L0-OLD (WRONG) — `var` block hypothesis (kept for the record; var compiles)
 **Status: this is what actually blocks the 14 each + 8 test-test files** (L1 below
 cleared a different each-leaf but flipped 0 files — the chains hit `var`). The loop
 idiom `iota n each [ var [[t] <body with def/if> ] ]` (sort.aql:98 etc.) refuses
