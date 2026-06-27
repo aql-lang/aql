@@ -663,3 +663,29 @@ Attacked the sort comparator leaf (`def c (prev key comp)` — apply a captured 
   comparator results [0 0]/[1 -1]/[3 -1 1] are the gate). Even then the sort algorithms chain further (make Array,
   swap-at, nested each/var) — so this unblocks the comparator leaf but the sort files need their remaining leaves
   too. A bounded multi-step VM feature; the miscompile fix is the sound foundation it sits on.
+
+### COMPARATOR LOWERING — complete sound design (the implementation site + arg-ordering de-risked).
+The trailing-fn-value apply is fully designed; the remaining work is a delicate engine-flow change:
+- **THE CRUX is ARITY.** `(prev key comp)` consumes exactly 2 args because of the PAREN-GROUP structure; the
+  flattened body residual `[prev, key, comp]` has lost it, and comp's runtime arity is unknown statically. So the
+  apply MUST be captured at the PAREN-COLLAPSE boundary (engine.go:5603, where the check-mode fn-value-call guard
+  already refuses the LEADING-dynamic case `(m.g 3)` "dynamic value precedes args"). The TRAILING case (fn-value
+  LAST, args before) is the comparator — currently falls through to the residual refuse/(now-fixed)miscompile.
+- **THE OPCODE: OpCallDynTrailTop** (new) — fn on TOP, N args below, apply-or-leave. UNLIKE OpCallDynamicTrailing
+  (fn at base, rotates the non-callable residual, 1-arg-bounded), a fn-on-top layout needs NO rotation: the
+  non-callable residual [args, fn] is ALREADY the interpreter's trailing order, so it is sound for ANY N. VM:
+  `base=len-n-1; fn=stack[top]; args=stack[base:base+n]; if appliable → island.Run([fn]+args) result replaces
+  [args,fn]; else leave as-is`.
+- **ARG-ORDERING DE-RISKED against real comparator results.** island = [fn] + args-in-stack-order (NO reversal):
+  residual [prev,key,comp] → island [comp,prev,key] → comp auto-applies to [prev,key] top-down (b=key, a=prev) →
+  body (a cmp b) = (prev cmp key) == interpreter `(prev key comp)`. Verified on `(x 2 comp)`→[1,-1] and
+  `(acc x comp)`→[3,-1,1] (bytecode_dynapply_body_test.go expectations).
+- **WIRING:** at engine.go:5603, when the paren's LAST recordable value is a Function-typed value and >=1 args
+  precede it, record an apply event (a new EmitState.RecordDynApplyTrailing) carrying the args+fn operands and
+  arity = count-1; lower it to OpCallDynTrailTop. The Step-1 closure-residual refusal (d3dda735) then becomes the
+  FALLBACK for shapes this path doesn't capture (a non-paren-bounded trailing apply), staying sound.
+- **REMAINING RISK / SCOPE:** the paren-collapse flow re-encounters the in-paren values after the boundary
+  (engine.go:5623 SkipRecorder); inserting the apply recording there without double-recording or breaking the
+  residual is the delicate part — a focused engine change, gated by the off-corpus regression + verify-bytecode +
+  the sort `--compile`==interpret sweep. Even with this, the sort algorithms chain further (make Array / swap-at /
+  nested each-var), so it unblocks the comparator leaf but not necessarily a whole sort file alone.
