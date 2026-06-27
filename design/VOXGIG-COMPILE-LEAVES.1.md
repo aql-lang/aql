@@ -19,7 +19,36 @@ sweep.
 
 ## Real leaves (unmasked by a 9-agent workflow), highest leverage first
 
-### L0 (CORRECTED) — value-def of a COMPUTED expression inside an each-closure body
+### L0 (ROOT-CAUSED) — premature `execBodyRefsNames` refusal across the multi-pass each dispatch
+**Exact mechanism** (traced with instrumentation): an each whose body contains a
+value-def (`def j (5 add 1)`) — i.e. the body REFERENCES A NAME — dispatches TWICE:
+1. once with `es.active()==FALSE` (a non-recording pre-pass / nested closure probe):
+   `tryRecordClosure` declines at the `!es.active()` guard (callable_words.go:84),
+   so carrier.go falls through to `RecordCall`, which hits the
+   `(sig.Callable != nil && execBodyRefsNames(sig, args))` refusal (emit.go:2020) →
+   `MarkUncompilable("code-body word each (Stage 2)")` → LATCHES the program;
+2. once with `es.active()==TRUE`: `tryRecordClosure` REACHES recordClosureDispatch
+   and RECORDS the closure successfully.
+The body IS compilable via the closure path (pass 2 proves it); the refusal exists
+only to guard the const-bake FALLBACK (re-running a name-referencing body in a
+sub-engine is unsound), but it fires in pass 1 even though pass 2 records via
+PUSH_CLOSURE (no fallback). **`each [def j 5 j]` (const value-def, no name-ref in
+the computed sense) compiles; `each [def j (5 add 1) j]` refuses** — execBodyRefsNames
+is the discriminator.
+
+**Fix direction:** the `execBodyRefsNames` refusal must not LATCH the program when
+the closure path will/did record the body — i.e. defer or skip it in the
+non-recording pre-pass (the proven suspend-skip precedent, commit 6e3c089e, but the
+state here is `!active` from a nested-probe es-swap rather than `suspended>0`, so the
+gate must key on the right pass identity). The es-swap interaction (recordClosure
+Dispatch swaps r.Check.Emit for the throwaway probe) is the subtlety to nail before
+implementing — a wrong gate either fails to fix it or lets a genuinely-fallback
+name-body const-bake (silent miscompile). Mandatory: a RunCompiledStrict regression
+for a name-referencing each body that the closure path records, AND one for a body
+that genuinely falls back (must still refuse). This unblocks the 14 each + 8 test-
+test files.
+
+### L0-OLDER (incomplete) — value-def of a COMPUTED expression inside an each-closure body
 **`var` is NOT the leaf** — its sig declares `RunInCheckMode: true` and it compiles
 (the splice records as value-def locals). The real dominant leaf, unmasked by direct
 minimization: a **value-def whose value is a computed paren-expression, inside an
