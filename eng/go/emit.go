@@ -1517,6 +1517,27 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 					}
 				}
 			}
+			// A CLOSURE body whose residual carries an UNAPPLIED fn-value — a captured/
+			// param comparator applied as `(a b comp)` leaves the residual [a, b, comp]
+			// with the fn VALUE on top — must REFUSE, never be trimmed to that fn below:
+			// the driving handler (BodyResultTop) would then map to the UNAPPLIED comp
+			// instead of its applied result — the off-corpus comparator-each MISCOMPILE
+			// the differential cannot see (`[1 2] each [(x x comp)]` → interp [0,0] vs
+			// compiled [fn,fn]). This mirrors resolveDynamicApply's main-residual
+			// fn-carrier / fn-precedes-args refusals (the fn-body path refuses the same
+			// shape via the !rec.closure unapplied-fn-value check above). A SOLE inert
+			// fn-reference body (`each [cmp/r]`, mapping every element to the reference)
+			// is a CONCRETE const — not a carrier and not preceded by args — so it still
+			// compiles; only an unapplied dynamic apply refuses. (Lowering the trailing
+			// apply via OpCallDynamicTrailing in a closure body is the follow-on feature.)
+			if rec.closure {
+				for i, v := range bodyStk {
+					if isFnTypedCarrier(v) || (isFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
+						es.MarkUncompilable("closure " + name + ": unapplied fn-value in body residual (dynamic apply not lowered)")
+						return
+					}
+				}
+			}
 			// A TOP-TAKING closure's driving handler reads only the top of the body
 			// residual (each / fold / scan / filter — CallableSpec.BodyResultTop), so
 			// the values the body leaves BELOW its result — notably the per-invocation
