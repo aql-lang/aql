@@ -456,3 +456,20 @@ or spliceFnCheckTail). NEXT: instrument spliceFnCheckTail callers to find where 
 named-fn body residual becomes the dispatch result, then reconcile a divergent residual
 with the declared concrete return there (assume-guarantee). Gate: verify-bytecode +
 TestAddGradualConcat/TestSlice still flag + the template runtime suite stays 5/5 green.
+
+### last-7 FINAL root-cause: liquid-if returns Dynamic-Any → dynamic-receiver dispatch
+Instrumented AnalyseFnBody (carrier.go:2982): liquid-if / liquid-for return
+`[Any(dyn)]` — a DYNAMIC Any carrier (bails=0, so not the recursion-bail path; the
+mutual-recursion body analysis collapses the [Map] residual to a dynamic Any). So
+`def blk (liquid-if …)` binds blk = Dynamic-Any, and `blk get "next"` is a `get`
+dispatched over a DYNAMIC ANY RECEIVER — which the stack-phase match rejects (the
+.Dynamic modality is not honored for a stack receiver). That is exactly the open
+"dynamic-receiver native dispatch" project (task #8), NOT a local fix: a stack-phase
+gradual-Any relaxation (even gated to .Dynamic only) OVERMATCHES — template went 7→18
+(11 cascade errors) because accepting a dynamic operand for every concrete stack param
+picks wrong overloads across the whole program. The forward-phase analogue is safe
+(committed) because a forward operand is positionally anchored; the stack phase is not.
+So the remaining 6 (compile-tagged-seq + get) + 1 cascade (gen-program) require the
+dynamic-receiver dispatch work, which must make `get`/accessor dispatch honor a Dynamic
+receiver WITHOUT relaxing every stack param — a targeted accessor-family change, not the
+blanket stack relaxation. Runtime GREEN 5/5; source correct; compile==interpret holds.
