@@ -6405,10 +6405,29 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 func (e *Engine) checkModeFallbackPositions(n int) []int {
 	positions := e.resolvedIndicesBefore(n)
 	remaining := n - len(positions)
+	// depth tracks open forward-groups entered during this walk so the close that
+	// returns to depth 0 is the ENCLOSING group's `)` — a forward arg never crosses
+	// it. Without this break the recovery could gather positions PAST the group's
+	// close when its assumed arity exceeds the real arg count; splicing those out
+	// then deletes tokens across the `)` boundary and leaves a phantom "unmatched
+	// opening parenthesis" in a later (balanced) fn body — the emergent whole-module
+	// paren bleed (template.aql's first-word / after-word / parts errors).
+	depth := 0
 	for i := e.pointer + 1; remaining > 0 && i < e.tape.Len(); i++ {
 		v := e.tape.At(i)
+		if IsCloseParen(v) {
+			if depth == 0 {
+				break
+			}
+			depth--
+			continue
+		}
+		if IsOpenParen(v) {
+			depth++
+			continue
+		}
 		if IsForward(v) || IsMark(v) || IsMove(v) ||
-			IsOpenParen(v) || IsReturnCheck(v) || IsDefCleanup(v) {
+			IsReturnCheck(v) || IsDefCleanup(v) {
 			continue
 		}
 		positions = append(positions, i)
