@@ -387,3 +387,28 @@ expected fallback. So the repos are correct; aql is the limitation.
   provenance tracking. Reverted. **The real fix is TYPE INFERENCE** — give the
   template's get/dynamic-sourced args their correct types so they match statically
   (no recovery, no false positive), NOT a severity change. Deep, multi-session.
+
+### template's remaining 12 no_signature — reproduced + root-caused (this pass)
+PAREN FIX landed (016e9ffc): template 18 → 12. The remaining 12 are EMERGENT from
+mutual recursion (compile-tagged-seq ↔ liquid-if/liquid-for) over dynamic dispatch —
+REPRODUCED minimally: a 2-fn mutual recursion `cts ↔ lif` where the recursive arg
+comes from `(blk get "next")` triggers 2 `cts` + 1 `get` no_signature; a single fn
+does NOT. The recovering recursive/mutual calls have suppress=0 but FnNameInflight>0
+(instrumented) — the codebase's same-fn SuppressBodyErrors (carrier.go:2860, "a
+re-run whose args narrowed a param … can spuriously fail dispatch") does NOT catch
+them because the error is emitted at the CALL SITE in the OUTER body, not in the
+re-entry.
+
+ATTEMPTED FIX (reverted): gate the recovery diagnostic on FnNameInflight[w.Name]==0
+(suppress in-flight fn recoveries). SOUND + narrow (verify-bytecode + suites pass;
+TestAddGradualConcat/TestSlice genuine errors still flag) and cleared 2 template
+errors — BUT PARTIAL/FRAGILE: it suppresses only the WITHIN-BODY recursive call
+(w.Name in-flight), not the mutual partner's DEF-TIME analysis (lif analysed at `def
+lif`, cts not in-flight) nor the `get` cascade (get over the imprecise recovered
+type). Couldn't isolate a clean minimal regression → reverted (no fix without a solid
+regression). The REAL fix is mutual-recursion TYPE PRECISION: a mutual call to an
+in-flight fn should yield its DECLARED return type so the partner's analysis and the
+downstream `get`s stay precise (the declared-return induction hypothesis at
+carrier.go:2839 IS used for the SAME key, but the narrowed-arg re-entry has a
+DIFFERENT key and re-analyses imprecisely). Deep, multi-session — proper mutual-
+recursion fixed-point / group handling.
