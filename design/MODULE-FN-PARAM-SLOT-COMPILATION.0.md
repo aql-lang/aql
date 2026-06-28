@@ -319,12 +319,18 @@ REMAINING 2 (each a distinct deeper leaf; verified via absolute-path import repr
    the reserved unit. Sound/general (each+fold+scan verified, verify-bytecode +
    crossdiff GREEN); off-corpus regression `bytecode_recursive_closure_test.go`.
    REMAINING msd-go leaf: with recursion compiling, the each-closure probe now fails at
-   **"unmatched dispatch recovered at sub"** — a `counts`-Array element
-   (`(counts get (v add 1)) sub 1`, where `counts = make Array (iota N each […])`) feeding
-   `sub` inside the recursive each-closure. Isolated: the SAME counts-sub WITHOUT recursion
-   COMPILES — it surfaces ONLY under recursion, so it's a carrier-inference interaction
-   (the recursive call's presence widens/clouds the counts element type so `sub`'s numeric
-   sig no longer matches). A distinct deeper leaf (carrier inference under recursion).
+   **"unmatched dispatch recovered at sub"** — ROOT-CAUSED (instrument the recovery sites
+   at engine.go:6764/6820/6845): at the failing `(counts get (v add 1)) sub 1` the
+   resolved operand carrier is **`Scalar`**, not `Integer` (site 6845, suspended=false),
+   so `sub`'s numeric (`Number`) sig can't match. `counts = make Array (iota N each
+   [drop 0])` has Integer elements; `counts get` should yield Integer. Isolated to the
+   recursion: the SAME `counts` captured into the SAME each with the SAME `counts get …
+   sub 1` but WITHOUT the recursive `… go` call keeps the element **Integer** and COMPILES;
+   adding the recursive call widens it to **Scalar**. So the recursive call contaminates
+   the carrier FIXED-POINT for the enclosing fn — a captured Array's element type widens to
+   Scalar in the round the recursion forces. A distinct, deeper leaf (carrier inference
+   under recursion); NOT to be rushed (a wrong widening fix risks unsoundness the
+   differential is blind to off-corpus). Deferred with the precise repro above.
 
 sort_smoke needs ALL 30 to flip the file; 28/30, bucket + radix-msd remain. radix-msd's
 recursion barrier is down; its remaining leaf (carrier-under-recursion `sub`) and bucket's
