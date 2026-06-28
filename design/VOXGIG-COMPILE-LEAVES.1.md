@@ -689,3 +689,18 @@ The trailing-fn-value apply is fully designed; the remaining work is a delicate 
   residual is the delicate part — a focused engine change, gated by the off-corpus regression + verify-bytecode +
   the sort `--compile`==interpret sweep. Even with this, the sort algorithms chain further (make Array / swap-at /
   nested each-var), so it unblocks the comparator leaf but not necessarily a whole sort file alone.
+
+### LANDED — comparator / trailing-fn-value lowering (commit 1d765fff). The Stage-G leaf is CLEARED.
+`(prev key comp)` — a captured/param comparator applied to its preceding args in a fn/closure body — now
+COMPILES NATIVELY via OpCallDynTrailTop (fn-on-top, N args, no rotation; args reversed stack→forward so the
+fn binds its first param to the TOP arg == the interpreter's paren auto-dispatch). The apply is captured at the
+paren-collapse boundary (engine.go RegisterTrailingApply) where the arity is known. Gate: verify-bytecode GREEN
+(0 miscompiles); off-corpus regression covers each/fold/scan + asymmetric arg-order + fn-body + 3-arg + a
+compiled-closure (lambda) comparator. The arg-order bug was caught mid-build by the asymmetric `(x 2 comp)` case
+(compiled [-1 1] vs interp [1 -1]) and fixed. Also fixed a PRE-EXISTING off-corpus MISCOMPILE on the way
+(d3dda735, closure body with an unapplied fn-value residual).
+NET voxgig file flips: 0 — the sort algorithms chain past the comparator to their other leaves (make Array / set /
+nested each-var), each refusing on its own. So the comparator Stage-G leaf is cleared and sound, but a whole sort
+file needs its sibling leaves cleared too. Next highest-leverage to actually FLIP sort_smoke: enumerate + clear the
+algorithms' remaining leaves (make-Array-from-list provenance, in-place `set`/`swap-at` over an Array, the nested
+each-var residual) as a cluster.
