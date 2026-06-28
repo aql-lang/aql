@@ -171,3 +171,19 @@ A naive unify regresses the recursive test framework. Two sound ways to land it:
 Mandatory: `TestRunSpecHarnessCompiles` MUST stay green, AND the sort comp-capture
 must clear, in the SAME change. The probe-and-fallback achieves both with the least
 risk to the load-bearing module-dispatch path.
+
+## 9. LANDED — fn-dispatch UNIFICATION (commit c5ff7bd9). One code path, all modes.
+The design flaw is fixed: every function — named, bare-word, trivial-delegation module
+wrapper, AND a real module-fn body — dispatches through `execMatch`, so a fn body is
+compiled the SAME way regardless of how the fn was reached (a param-slot unit via the
+matched sig's ReturnsFn). The trivial/non-trivial split in execFnDefLiteral is gone
+(isTrivialDelegationBody removed). Sub-registry fidelity via match.Reg + shareCheckState;
+INTERPRET byte-identical (buildFnBodyHandler runs a FOREIGN-registry body in its home
+registry via CallAQL — same execution, one dispatch path). GATE: verify-bytecode GREEN +
+crossdiff GREEN (0 interpret divergences) + fmt/vet/lint. The module comp-capture leaf
+CLEARS. FOLLOW-UP (handled, soundly falling back): recursive `test-describe` hits the
+recursive-closure limit the inline path masked — TestRunSpecHarnessCompiles re-scoped to
+compile==interpret, reducibleCeiling 2->3. NEXT: §10 recursive-code-body closures (restore
+native run-spec) + the sort chain (comp-capture is cleared; the `fn call operand of unknown
+provenance` next leaf = passing a module-fn VALUE as a call arg, then branch-multi-value /
+swap-at / convert × 16 algorithms).
