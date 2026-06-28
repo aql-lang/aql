@@ -214,6 +214,21 @@ const (
 	// (`${1 add 2}`, `${x}` for a fn param, `${typeof x}`); a fully literal or
 	// pure-binding-fold template stays a pooled const and never needs this.
 	OpInterp
+	// OpCallDynTrailTop applies a runtime FUNCTION value sitting ON TOP of its Arg
+	// args to those args — the TRAILING fn-value-call boundary BOUNDED BY A PAREN
+	// (`(prev key comp)`, a captured/param comparator applied to two computed args).
+	// Unlike OpCallDynamicTrailing (recorder lays the fn at the BASE and rotates the
+	// non-callable residual, bounded to 1 arg), the fn stays on TOP here, so NO
+	// rotation is ever needed and it is sound for ANY arity: the args are laid out
+	// in source/stack order with the fn above them; on apply the fn auto-applies to
+	// the Arg args beneath it exactly as the interpreter's paren auto-dispatch (the
+	// fn-on-top order matches the interpreter's top-down stack bind); if the value
+	// is NOT callable, [args, fn] is ALREADY the interpreter's trailing residual, so
+	// it is left untouched. Arg is the argument count (the paren's value count minus
+	// the trailing fn). The recorder captures this at the paren-collapse boundary
+	// (engine.go) where the arity is known, since the flattened residual cannot
+	// recover the paren-group size.
+	OpCallDynTrailTop
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -252,6 +267,7 @@ var opcodeNames = [...]string{
 	OpPopMark:             "POP_MARK",
 	OpCallDynamicMixed:    "CALL_DYNAMIC_MIXED",
 	OpInterp:              "INTERP",
+	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
 }
 
 func (o Opcode) String() string {

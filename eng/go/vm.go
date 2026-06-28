@@ -411,6 +411,65 @@ func (vc *vmContext) callDynamicOp(op Opcode, arg int, stack []Value, curDebug [
 	return vc.callDynamic(arg, op == OpCallDynamicTrailing, stack, curDebug, pc)
 }
 
+// callDynTrailTop applies a runtime FUNCTION value ON TOP of its n args to those
+// args — the paren-bounded trailing fn-value apply (`(prev key comp)`). The fn
+// stays on top (no rotation): on apply it auto-applies to the n args beneath it
+// exactly as the interpreter's paren auto-dispatch (the island Run([fn]+args) is
+// byte-identical to the token sequence the interpreter ran); a non-callable value
+// leaves [args, fn] untouched — ALREADY the interpreter's trailing residual. Sound
+// for ANY arity (unlike OpCallDynamicTrailing's 1-arg rotation). The args slice is
+// the same stack-order window callDynamic's leading case feeds, so the closure /
+// island binding matches the proven leading path.
+func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	r := vc.r
+	if len(stack) < n+1 {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYN_TRAIL_TOP underflow")
+	}
+	top := len(stack) - 1
+	fnVal := stack[top]
+	base := top - n
+	// The args sit BELOW the fn in stack order (deepest first). The interpreter
+	// binds a trailing fn's args TOP-DOWN (the top arg → the fn's first param);
+	// the island Run / forward apply binds the FIRST following token → the first
+	// param. So reverse the stack window into forward order, making the island bind
+	// identical to the interpreter's paren auto-dispatch (`(x 2 comp)` → comp's
+	// first param = 2 (the top), second = x — verified against the off-corpus
+	// comparator regression).
+	args := make([]Value, n)
+	for i := 0; i < n; i++ {
+		args[i] = stack[top-1-i]
+	}
+	if _, ok := fnVal.Data.(ClosurePayload); ok {
+		results, err := vc.invokeClosure(fnVal, args)
+		if err != nil {
+			return nil, stampAt(err, curDebug, pc, r)
+		}
+		return append(stack[:base], results...), nil
+	}
+	if !isAppliableFn(fnVal) {
+		return stack, nil // not callable: [args, fn] is already the interpreter's trailing residual
+	}
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
+		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+			if err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			return append(stack[:base], results...), nil
+		}
+	}
+	island := make([]Value, 0, n+1)
+	island = append(island, fnVal)
+	island = append(island, args...)
+	results, err := vc.island().Run(island)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, r)
+	}
+	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil {
+		return nil, err
+	}
+	return append(stack[:base], results...), nil
+}
+
 // callDynamicMixed handles the MIXED fn-value-call boundary (`3 m.f 2`): a
 // dynamic / fn value sits INTERIOR to a window of static args (some below it,
 // some above). The window of `w` stack values is the same token sequence the
@@ -773,6 +832,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// and interior-window (callDynamicMixed). callDynamicOp routes by opcode
 			// so run's dispatch stays a single case.
 			ns, err := vc.callDynamicOp(in.Op, int(in.Arg), stack, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			stack = ns
+		case OpCallDynTrailTop:
+			ns, err := vc.callDynTrailTop(int(in.Arg), stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}

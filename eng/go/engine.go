@@ -5601,17 +5601,31 @@ func (e *Engine) stepCloseParen() error {
 	// (m.g 3) add 1=7. The interpreter dispatches the concrete fn AT the paren,
 	// so refuse here and let the faithful interpreter fallback run it.
 	if es := e.registry.Check.Emit; es != nil && es.active() {
-		first, count := -1, 0
+		first, count, lastIdx := -1, 0, -1
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if isRecordableLiteral(e.tape.At(i)) {
 				if count == 0 && e.tape.At(i).Dynamic {
 					first = i
 				}
 				count++
+				lastIdx = i
 			}
 		}
-		if first >= 0 && count >= 2 {
+		switch {
+		case first >= 0 && count >= 2:
 			es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
+		case count >= 2 && lastIdx >= 0:
+			// TRAILING fn-value bounded by this paren — `(prev key comp)`, a captured/
+			// param comparator applied to its preceding args. The LAST value is a
+			// Function and the rest are its args; register the apply keyed on the fn
+			// value's ID with the now-known arity (count-1) so the body reconciliation
+			// lowers it to OpCallDynTrailTop. A LEADING-dynamic apply already refused
+			// above (the unsound reorder case); a non-dynamic concrete fn TRAILING its
+			// args is the sound paren-bounded apply the interpreter auto-dispatches.
+			last := e.tape.At(lastIdx)
+			if !last.Dynamic && isFnValueResidual(last) {
+				es.RegisterTrailingApply(last.ID, count-1)
+			}
 		}
 	}
 

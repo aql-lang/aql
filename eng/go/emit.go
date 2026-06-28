@@ -356,6 +356,12 @@ type EmitState struct {
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
+	// trailingApplies maps a Function VALUE's ID → the arg count of a paren-bounded
+	// TRAILING fn-value apply (`(prev key comp)`), registered at the paren-collapse
+	// boundary (registerTrailingApply) where the paren-group size is known. The body
+	// reconciliation reads it back to lower the apply to OpCallDynTrailTop — the
+	// flattened residual cannot otherwise recover the apply's arity.
+	trailingApplies map[string]int
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -427,10 +433,17 @@ type fnUnitRec struct {
 	// OR a diverging body (every path tail-calls) — fragDiverges(frag)
 	// distinguishes them (a diverging body emits no RET; a 0-result body
 	// emits a bare RET).
-	outOps   []emitOperand
-	numLoc   int
-	pos      SrcPos
-	finished bool
+	outOps []emitOperand
+	// dynTrailArity > 0 marks a body whose ENTIRE residual is a paren-bounded
+	// TRAILING fn-value apply (`(prev key comp)`): outOps are [args…, fn] (fn on
+	// top) and the unit lowering emits OpCallDynTrailTop(dynTrailArity) after seating
+	// them, collapsing [args, fn] to the one applied value before the RET. The arity
+	// is captured at the paren-collapse boundary (registerTrailingApply) where the
+	// group size is known; the flattened residual cannot recover it.
+	dynTrailArity int
+	numLoc        int
+	pos           SrcPos
+	finished      bool
 	// inShape is the closure input convention recorded for a closure body unit
 	// (ClosureInValue by default; ClosureInKeyVal for a map-iteration lambda).
 	// Copied into CompiledFn.InShape at lowering. Zero (value) for user fns.
@@ -487,6 +500,30 @@ func (es *EmitState) active() bool {
 // while recording is live (the lowering tracks it); a plain or
 // uncompilable check must net 0, like the runtime.
 func (es *EmitState) Active() bool { return es.active() }
+
+// RegisterTrailingApply records that the Function VALUE `fnID` is the trailing
+// fn-value of a paren-bounded apply over `arity` preceding args (`(prev key comp)`),
+// captured at the paren-collapse boundary where the group size is known. The body
+// reconciliation reads it back (TrailingApplyArity) to lower the apply to
+// OpCallDynTrailTop — the flattened residual cannot otherwise recover the arity.
+func (es *EmitState) RegisterTrailingApply(fnID string, arity int) {
+	if es == nil || fnID == "" || arity < 1 {
+		return
+	}
+	if es.trailingApplies == nil {
+		es.trailingApplies = map[string]int{}
+	}
+	es.trailingApplies[fnID] = arity
+}
+
+// TrailingApplyArity returns the registered arg count for a paren-bounded trailing
+// apply whose fn value is `fnID`, or 0 if none registered.
+func (es *EmitState) TrailingApplyArity(fnID string) int {
+	if es == nil || es.trailingApplies == nil {
+		return 0
+	}
+	return es.trailingApplies[fnID]
+}
 
 // MarkUncompilable latches the program uncompilable, keeping the
 // FIRST reason (later marks are consequences of the first).
@@ -1482,6 +1519,29 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				}
 				ops = append(ops, op)
 			}
+			// A paren-bounded TRAILING fn-value apply as the ENTIRE body residual
+			// (`(prev key comp)` → residual [prev, key, comp], the fn on top with its
+			// args below, registered at the paren-collapse boundary with its arity):
+			// lower it to OpCallDynTrailTop rather than refusing/miscompiling. outOps
+			// stay the full [args…, fn]; the unit lowering applies them to one value
+			// before the RET. The args must be plain (non-fn) operands the apply
+			// consumes — a nested unapplied fn falls through to refuse below.
+			dynTrail := 0
+			if len(bodyStk) >= 2 {
+				top := bodyStk[len(bodyStk)-1]
+				if a := es.TrailingApplyArity(top.ID); a > 0 && a == len(bodyStk)-1 {
+					argsOK := true
+					for _, v := range bodyStk[:len(bodyStk)-1] {
+						if isFnValueResidual(v) {
+							argsOK = false
+							break
+						}
+					}
+					if argsOK {
+						dynTrail = a
+					}
+				}
+			}
 			// A DECLARED fn must leave exactly len(returns) RUNTIME values; a
 			// different count (measured over real operands, phantom guards
 			// excluded) is a return-COUNT mismatch. For a genuine USER fn that is
@@ -1495,7 +1555,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// islands, letting the interpreter raise the matching error. An
 			// UNDECLARED fn (an anonymous lambda whose Returns were nilled, or a
 			// 0-return fn) is NOT count-checked: its residual is taken as-is.
-			if rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+			if dynTrail == 0 && rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
 				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
 			}
@@ -1509,7 +1569,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// hunt), so a fn-body fn-value apply is never lowered. Refuse → fall back. (A
 			// GENUINE count mismatch that happens to carry a fn value still errors in
 			// both engines, so the fallback is sound either way.)
-			if !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+			if dynTrail == 0 && !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
 				for _, v := range bodyStk {
 					if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
 						es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
@@ -1530,7 +1590,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// is a CONCRETE const — not a carrier and not preceded by args — so it still
 			// compiles; only an unapplied dynamic apply refuses. (Lowering the trailing
 			// apply via OpCallDynamicTrailing in a closure body is the follow-on feature.)
-			if rec.closure {
+			if dynTrail == 0 && rec.closure {
 				for i, v := range bodyStk {
 					if isFnTypedCarrier(v) || (isFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
 						es.MarkUncompilable("closure " + name + ": unapplied fn-value in body residual (dynamic apply not lowered)")
@@ -1546,9 +1606,10 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// the residual [inert-input, computed-result] refuses at the RET (an event
 			// above an inert, "result above a literal"), even though the handler only
 			// ever reads the top.
-			if rec.takesTop && len(ops) > 1 {
+			if dynTrail == 0 && rec.takesTop && len(ops) > 1 {
 				ops = trimToTopResult(ops)
 			}
+			rec.dynTrailArity = dynTrail
 			rec.outOps = ops
 			// VARIADIC-RETURNING fn: the body residual's defining (top) event leaves
 			// a runtime-variable count (a variadic branch / loop, or a call to an
@@ -3577,8 +3638,15 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// operands (const / local / type) are pushed as a trailing
 			// tail above the last event result. This is the fn-unit mirror
 			// of the program-residual reconciliation below.
-			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0, rec.pos); reason != "" {
+			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0 || rec.dynTrailArity > 0, rec.pos); reason != "" {
 				return nil, reason, false
+			}
+			// A paren-bounded trailing fn-value apply body: outOps were seated as the
+			// full [args…, fn] (fn on top); collapse them to the one applied value with
+			// OpCallDynTrailTop before the RET (the captured/param fn auto-applies to
+			// its args exactly as the interpreter's paren auto-dispatch).
+			if rec.dynTrailArity > 0 {
+				flw.emit(OpCallDynTrailTop, rec.dynTrailArity, rec.pos)
 			}
 			flw.emit(OpRet, 0, rec.pos)
 		}
