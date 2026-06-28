@@ -3,6 +3,8 @@ package native
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -15,9 +17,7 @@ import (
 // (1000-1999, alongside the Scalar/Time family); it is pinned in
 // lang/go/test/fixedid_stability_test.go. Registered as an external
 // builtin in the var initialiser so package-level signature slices that
-// reference TBytes see a non-nil pointer at slice-init time. A
-// registration error is recorded (never panics) for DefaultRegistry to
-// surface — see ADR-005 and typeinit.go.
+// reference TBytes see a non-nil pointer at slice-init time.
 var TBytes = registerBytesType()
 
 func registerBytesType() *eng.Type {
@@ -70,7 +70,6 @@ type bytesBehavior struct{}
 func (bytesBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
 
 // Format renders Bytes as length-capped hex, e.g. Bytes<68 65 6c 6c 6f>.
-// The full value is available via to-text / BinUtil.hex-encode.
 func (bytesBehavior) Format(v Value) string {
 	b, ok := asBytes(v)
 	if !ok {
@@ -107,8 +106,7 @@ func (bytesBehavior) Equal(a, b Value) bool {
 
 // Compare orders Bytes byte-lexicographically (the Comparer capability),
 // opening with the type-literal-first rule so a bare `Bytes` literal
-// sorts below every concrete value (two literals bubble to the Rank
-// fallback via ErrNoComparer).
+// sorts below every concrete value (two literals bubble to Rank).
 func (bytesBehavior) Compare(a, b Value) (int, error) {
 	aLit, bLit := IsBareTypeNode(a), IsBareTypeNode(b)
 	switch {
@@ -136,81 +134,89 @@ func (bytesBehavior) Size(v Value) int {
 	return 0
 }
 
-// bytesNatives are the core Bytes words (no import needed). The crypto /
-// encoding / hashing / random / uuid surface lives in aql:bin-util
-// (design/go-modules/BIN-UTIL.10.md); generic length/equality/ordering/
-// printing come from the behaviors above.
+// bytesNatives registers the Bytes operations as SIGNATURE OVERLOADS of
+// existing words (no new core words except unpack-prefix). Conversions go
+// through `convert`, sub-ranges through `slice`, concatenation through
+// `add`; the bit-syntax builds with `make Bytes`, decodes with `unpack`,
+// and streams with `unpack-prefix`. RegisterNativeFunc APPENDS these sigs
+// to the existing words (eng/go/registry.go upsertFnDef); a more-specific
+// sig wins dispatch, so the Bytes overloads take precedence over the
+// generic `[Scalar Scalar]` / `[Scalar Any]` forms.
 var bytesNatives = []NativeFunc{
 	{
-		Name: "utf8",
+		Name: "convert",
 		Signatures: []NativeSig{
-			{Args: []*Type{TString}, Handler: utf8Handler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			// String <-> Bytes (UTF-8), List <-> Bytes (0-255 ints), and
+			// Bytes -> Bytes (compact copy). Target type is the literal arg0.
+			{Args: []*Type{TBytes, TString}, TypeArgs: map[int]bool{0: true}, Handler: convertStringToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TString, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: convertBytesToString, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TBytes, TList}, TypeArgs: map[int]bool{0: true}, Handler: convertListToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TList, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: convertBytesToList, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TBytes, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: convertBytesToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
 		},
 	},
 	{
-		Name: "to-text",
+		Name: "slice",
 		Signatures: []NativeSig{
-			{Args: []*Type{TBytes}, Handler: toTextHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			// `slice start end b` (end-exclusive, zero-copy view); data last.
+			{Args: []*Type{TInteger, TInteger, TBytes}, Handler: bytesSliceStartEnd, Returns: []*Type{TBytes}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TBytes}, Handler: bytesSliceStart, Returns: []*Type{TBytes}, BarrierPos: -1},
+			{Args: []*Type{TBytes}, Handler: bytesSliceAll, Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
 	},
 	{
-		Name: "bytes",
+		Name: "add",
 		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: bytesOfListHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			// `a add b` concatenates two byte strings (mirrors String add).
+			{Args: []*Type{TBytes, TBytes}, Handler: addBytesHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
 	},
 	{
-		Name: "byte-ints",
+		Name: "make",
 		Signatures: []NativeSig{
-			{Args: []*Type{TBytes}, Handler: byteIntsHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			// `make Bytes [spec]` packs a frame from a bit-syntax spec.
+			{Args: []*Type{TBytes, TList}, TypeArgs: map[int]bool{0: true}, NoEvalArgs: map[int]bool{1: true}, Handler: makeBytesHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
 	},
 	{
-		Name: "byte-slice",
+		Name: "unpack",
 		Signatures: []NativeSig{
-			{Args: []*Type{TBytes, TInteger, TInteger}, Handler: byteSliceHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			// `unpack b [spec]` decodes a frame and binds each name into scope.
+			{Args: []*Type{TBytes, TList}, NoEvalArgs: map[int]bool{1: true}, Handler: unpackBytesHandler, Returns: []*Type{}, BarrierPos: -1},
 		},
 	},
 	{
-		Name: "byte-cat",
+		Name: "unpack-prefix",
 		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: byteCatHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
-		},
-	},
-	{
-		Name: "compact",
-		Signatures: []NativeSig{
-			{Args: []*Type{TBytes}, Handler: compactHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			// `unpack-prefix b [spec]` -> {ok rest} | {need n}; the streaming framer.
+			{Args: []*Type{TBytes, TList}, NoEvalArgs: map[int]bool{1: true}, Handler: unpackPrefixHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 }
 
-// utf8: [String] -> Bytes. []byte(s) allocates a fresh slice, so the
-// result owns its storage.
-func utf8Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	s, err := args[0].AsConcreteString()
+// ---- convert overloads -----------------------------------------------------
+
+func convertStringToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	s, err := args[1].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("bytes_error", "utf8: expected a String", "utf8")
+		return nil, r.AqlError("bytes_error", "convert Bytes: expected a String", "convert")
 	}
 	return []Value{newBytes([]byte(s))}, nil
 }
 
-// to-text: [Bytes] -> String. Rejects invalid UTF-8 with bad-encoding so
-// binary data never silently corrupts through a text round-trip.
-func toTextHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	b, ok := asBytes(args[0])
+func convertBytesToString(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, ok := asBytes(args[1])
 	if !ok {
-		return nil, r.AqlError("bytes_error", "to-text: expected Bytes", "to-text")
+		return nil, r.AqlError("bytes_error", "convert String: expected Bytes", "convert")
 	}
 	if !utf8.Valid(b) {
-		return nil, r.AqlError("bad-encoding", "to-text: bytes are not valid UTF-8", "to-text")
+		return nil, r.AqlError("bad-encoding", "convert String: bytes are not valid UTF-8", "convert")
 	}
 	return []Value{NewString(string(b))}, nil
 }
 
-// bytes: [List<Integer 0-255>] -> Bytes.
-func bytesOfListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	lst, err := RequireConcreteList(args[0], "bytes")
+func convertListToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	lst, err := RequireConcreteList(args[1], "convert")
 	if err != nil {
 		return nil, err
 	}
@@ -218,21 +224,20 @@ func bytesOfListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	for i := 0; i < lst.Len(); i++ {
 		n, ierr := lst.Get(i).AsConcreteInteger()
 		if ierr != nil {
-			return nil, r.AqlError("expected-byte", fmt.Sprintf("bytes: element %d is not an Integer", i), "bytes")
+			return nil, r.AqlError("expected-byte", fmt.Sprintf("convert Bytes: element %d is not an Integer", i), "convert")
 		}
 		if n < 0 || n > 255 {
-			return nil, r.AqlError("expected-byte", fmt.Sprintf("bytes: element %d = %d is out of range 0-255", i, n), "bytes")
+			return nil, r.AqlError("expected-byte", fmt.Sprintf("convert Bytes: element %d = %d is out of range 0-255", i, n), "convert")
 		}
 		out[i] = byte(n)
 	}
 	return []Value{newBytes(out)}, nil
 }
 
-// byte-ints: [Bytes] -> List<Integer 0-255>.
-func byteIntsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	b, ok := asBytes(args[0])
+func convertBytesToList(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, ok := asBytes(args[1])
 	if !ok {
-		return nil, r.AqlError("bytes_error", "byte-ints: expected Bytes", "byte-ints")
+		return nil, r.AqlError("bytes_error", "convert List: expected Bytes", "convert")
 	}
 	out := make([]Value, len(b))
 	for i, c := range b {
@@ -241,54 +246,619 @@ func byteIntsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	return []Value{NewList(out)}, nil
 }
 
-// byte-slice: [Bytes start len] -> Bytes. Returns a zero-copy sub-slice
-// VIEW sharing the parent's backing array (use compact to drop the
-// retention of a large buffer). Out-of-range raises index-range.
-func byteSliceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	b, ok := asBytes(args[0])
+// convertBytesToBytes is `convert Bytes <bytes>` — a compacting copy that
+// drops any large backing array a zero-copy slice view was pinning.
+func convertBytesToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, ok := asBytes(args[1])
 	if !ok {
-		return nil, r.AqlError("bytes_error", "byte-slice: expected Bytes", "byte-slice")
+		return nil, r.AqlError("bytes_error", "convert Bytes: expected Bytes", "convert")
 	}
-	start64, _ := args[1].AsConcreteInteger()
-	n64, _ := args[2].AsConcreteInteger()
-	start, n := int(start64), int(n64)
-	if start < 0 || n < 0 || start+n > len(b) {
-		return nil, r.AqlError("index-range",
-			fmt.Sprintf("byte-slice: range [%d,%d) out of bounds for %d bytes", start, start+n, len(b)), "byte-slice")
-	}
-	// Three-index slice caps len==cap so the view cannot read past its window.
-	return []Value{newBytes(b[start : start+n : start+n])}, nil
+	return []Value{newBytes(append([]byte(nil), b...))}, nil
 }
 
-// byte-cat: [List<Bytes>] -> Bytes. One fresh build of the joined slice.
-func byteCatHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	lst, err := RequireConcreteList(args[0], "byte-cat")
-	if err != nil {
-		return nil, err
+// ---- slice overloads -------------------------------------------------------
+
+// clampRange normalises a [start,end) window to byte bounds (slice never
+// errors on out-of-range; it clamps, matching the String/List slice).
+func clampRange(start, end, n int) (int, int) {
+	if start < 0 {
+		start = 0
 	}
-	parts := make([][]byte, lst.Len())
-	total := 0
-	for i := 0; i < lst.Len(); i++ {
-		b, ok := asBytes(lst.Get(i))
-		if !ok {
-			return nil, r.AqlError("bytes_error", fmt.Sprintf("byte-cat: element %d is not Bytes", i), "byte-cat")
-		}
-		parts[i] = b
-		total += len(b)
+	if end > n {
+		end = n
 	}
-	out := make([]byte, 0, total)
-	for _, p := range parts {
-		out = append(out, p...)
+	if start > n {
+		start = n
 	}
+	if end < start {
+		end = start
+	}
+	return start, end
+}
+
+func bytesSliceStartEnd(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, _ := asBytes(args[2])
+	s64, _ := args[0].AsConcreteInteger()
+	e64, _ := args[1].AsConcreteInteger()
+	s, e := clampRange(int(s64), int(e64), len(b))
+	return []Value{newBytes(b[s:e:e])}, nil
+}
+
+func bytesSliceStart(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, _ := asBytes(args[1])
+	s64, _ := args[0].AsConcreteInteger()
+	s, e := clampRange(int(s64), len(b), len(b))
+	return []Value{newBytes(b[s:e:e])}, nil
+}
+
+func bytesSliceAll(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, _ := asBytes(args[0])
+	return []Value{newBytes(b[0:len(b):len(b)])}, nil
+}
+
+// ---- add overload ----------------------------------------------------------
+
+// addBytesHandler concatenates two byte strings. Like addConcatHandler it
+// joins args[1] ++ args[0], so the swap form `a add b` yields a ++ b.
+func addBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b0, _ := asBytes(args[0])
+	b1, _ := asBytes(args[1])
+	out := make([]byte, 0, len(b1)+len(b0))
+	out = append(out, b1...)
+	out = append(out, b0...)
 	return []Value{newBytes(out)}, nil
 }
 
-// compact: [Bytes] -> Bytes. Forces a minimal fresh copy, dropping any
-// shared backing array a byte-slice view was pinning (BYTES.10.md §4.3).
-func compactHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	b, ok := asBytes(args[0])
-	if !ok {
-		return nil, r.AqlError("bytes_error", "compact: expected Bytes", "compact")
+// ---- bit-syntax: segment spec ---------------------------------------------
+
+// bitSeg is one parsed segment of a pack/unpack spec.
+type bitSeg struct {
+	name   string // bind/scope name; "" when the segment is a literal
+	isLit  bool   // key was a numeric literal (pack: write it; unpack: guard)
+	litVal int64
+	typ    string // u8..u64,i8..i64,f32,f64,bits,bytes,utf8,pad
+	width  int    // byte width for fixed ints/floats (1/2/4/8)
+	signed bool
+	little bool // endianness (default big = network order)
+	// size for bytes/utf8/bits/pad
+	hasSize  bool
+	sizeLit  int
+	sizeName string // size given as a previously-bound name
+}
+
+var intWidths = map[string]struct {
+	width  int
+	signed bool
+}{
+	"u8": {1, false}, "u16": {2, false}, "u32": {4, false}, "u64": {8, false},
+	"i8": {1, true}, "i16": {2, true}, "i32": {4, true}, "i64": {8, true},
+}
+
+// parseBitSegments interprets the raw (unevaluated) spec list. A segment is
+// an implicit-pair map element `name:type[/suffix]*`; an optional size is a
+// following parenthesised element `(N)` or `(name)` — e.g.
+// `[len:u16 body:bytes(len)]` parses as `[{len:u16} {body:bytes} (len)]`,
+// where `(len)` attaches to `body`. Slash suffixes carry endianness/sign
+// (be/le/signed/unsigned); sizes use the paren form because a numeric
+// `/N` is consumed as the arity word-modifier.
+func parseBitSegments(spec Value, r *Registry, word string) ([]bitSeg, error) {
+	lst, err := RequireConcreteList(spec, word)
+	if err != nil {
+		return nil, err
 	}
-	return []Value{newBytes(append([]byte(nil), b...))}, nil
+	var segs []bitSeg
+	for i := 0; i < lst.Len(); i++ {
+		el := lst.Get(i)
+		if pe, ok := el.Data.(eng.ParenExprPayload); ok {
+			if len(segs) == 0 {
+				return nil, r.AqlError("bytes_error", word+": size `(…)` with no preceding segment", word)
+			}
+			if err := attachSize(&segs[len(segs)-1], pe.Toks, r, word); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		m, merr := AsMap(el)
+		if merr != nil || m == nil {
+			return nil, r.AqlError("bytes_error", fmt.Sprintf("%s: segment %d is not a `name:type` pair", word, i), word)
+		}
+		for _, key := range m.Keys() {
+			tv, _ := m.Get(key)
+			seg, perr := parseOneSeg(key, tv, r, word)
+			if perr != nil {
+				return nil, perr
+			}
+			segs = append(segs, seg)
+		}
+	}
+	for i := range segs {
+		if (segs[i].typ == "bits" || segs[i].typ == "pad") && !segs[i].hasSize {
+			return nil, r.AqlError("bytes_error", fmt.Sprintf("%s: %s segment needs a bit count, e.g. %s(4)", word, segs[i].typ, segs[i].typ), word)
+		}
+	}
+	return segs, nil
+}
+
+// attachSize records a trailing `(N)` / `(name)` size onto a segment.
+func attachSize(seg *bitSeg, toks []Value, r *Registry, word string) error {
+	if len(toks) != 1 {
+		return r.AqlError("bytes_error", word+": size `(…)` must be a single integer or bound name", word)
+	}
+	seg.hasSize = true
+	if n, ok := toks[0].AsConcreteInteger(); ok == nil {
+		seg.sizeLit = int(n)
+		return nil
+	}
+	if w, ok := AsWord(toks[0]); ok == nil {
+		seg.sizeName = w.Name
+		return nil
+	}
+	if a, ok := AsAtom(toks[0]); ok == nil {
+		seg.sizeName = a
+		return nil
+	}
+	return r.AqlError("bytes_error", word+": size `(…)` must be a single integer or bound name", word)
+}
+
+func parseOneSeg(key string, typeVal Value, r *Registry, word string) (bitSeg, error) {
+	var seg bitSeg
+	if n, err := strconv.ParseInt(key, 10, 64); err == nil {
+		seg.isLit = true
+		seg.litVal = n
+	} else {
+		seg.name = key
+	}
+
+	typeStr := ""
+	if w, ok := AsWord(typeVal); ok == nil {
+		typeStr = w.Name
+	} else if a, ok := AsAtom(typeVal); ok == nil {
+		typeStr = a
+	} else if s, ok := AsString(typeVal); ok == nil {
+		typeStr = s
+	} else {
+		return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: segment %q has no type", word, key), word)
+	}
+
+	parts := strings.Split(typeStr, "/")
+	seg.typ = parts[0]
+	suffixes := parts[1:]
+
+	if iw, ok := intWidths[seg.typ]; ok {
+		seg.width = iw.width
+		seg.signed = iw.signed
+	} else {
+		switch seg.typ {
+		case "f32":
+			seg.width = 4
+		case "f64":
+			seg.width = 8
+		case "bits", "bytes", "utf8", "pad":
+			// size comes from a trailing paren
+		default:
+			return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: unknown segment type %q", word, seg.typ), word)
+		}
+	}
+
+	for _, sfx := range suffixes {
+		switch sfx {
+		case "be":
+			seg.little = false
+		case "le":
+			seg.little = true
+		case "signed":
+			if _, ok := intWidths[seg.typ]; !ok {
+				return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: /signed not valid on %s", word, seg.typ), word)
+			}
+			seg.signed = true
+		case "unsigned":
+			if _, ok := intWidths[seg.typ]; !ok {
+				return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: /unsigned not valid on %s", word, seg.typ), word)
+			}
+			seg.signed = false
+		default:
+			return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: unknown modifier %q on %s", word, sfx, seg.typ), word)
+		}
+	}
+	return seg, nil
+}
+
+// segSize resolves a bytes/utf8/bits/pad size: a literal, a previously-bound
+// name, or -1 meaning "the rest" (only valid for a trailing bytes/utf8).
+func segSize(seg bitSeg, r *Registry, word string) (int, error) {
+	if !seg.hasSize {
+		return -1, nil
+	}
+	if seg.sizeName == "" {
+		return seg.sizeLit, nil
+	}
+	v, ok := r.Defs.Top(seg.sizeName)
+	if !ok {
+		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size name %q is not bound", word, seg.sizeName), word)
+	}
+	n, err := v.AsConcreteInteger()
+	if err != nil {
+		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size name %q is not an Integer", word, seg.sizeName), word)
+	}
+	return int(n), nil
+}
+
+// resolveSize resolves a decode-time size: a literal, "rest" (-1), a name
+// from THIS frame's already-decoded integer fields (`seen`), or — as a
+// fallback — a binding in scope. The seen-first lookup lets unpack-prefix
+// (which does not install names into scope) resolve `bytes(len)`.
+func resolveSize(seg bitSeg, seen map[string]int64, r *Registry, word string) (int, error) {
+	if !seg.hasSize {
+		return -1, nil
+	}
+	if seg.sizeName == "" {
+		return seg.sizeLit, nil
+	}
+	if n, ok := seen[seg.sizeName]; ok {
+		return int(n), nil
+	}
+	return segSize(seg, r, word)
+}
+
+// ---- bit writer / reader (MSB-first) --------------------------------------
+
+type bitWriter struct {
+	out    []byte
+	acc    uint64 // pending sub-byte bits (MSB-first), 0..7 of them
+	accCnt int
+}
+
+func (w *bitWriter) aligned() bool { return w.accCnt == 0 }
+
+func (w *bitWriter) writeBits(val uint64, n int) {
+	for i := n - 1; i >= 0; i-- {
+		w.acc = (w.acc << 1) | ((val >> uint(i)) & 1)
+		w.accCnt++
+		if w.accCnt == 8 {
+			w.out = append(w.out, byte(w.acc))
+			w.acc, w.accCnt = 0, 0
+		}
+	}
+}
+
+func (w *bitWriter) writeBytes(b []byte) { w.out = append(w.out, b...) }
+
+type bitReader struct {
+	b      []byte
+	pos    int // byte index
+	bitPos int // 0..7 within b[pos]
+}
+
+func (rd *bitReader) aligned() bool { return rd.bitPos == 0 }
+
+func (rd *bitReader) remaining() int {
+	if rd.pos >= len(rd.b) {
+		return 0
+	}
+	return len(rd.b) - rd.pos
+}
+
+func (rd *bitReader) readBits(n int) (uint64, bool) {
+	var v uint64
+	for i := 0; i < n; i++ {
+		if rd.pos >= len(rd.b) {
+			return 0, false
+		}
+		bit := (uint64(rd.b[rd.pos]) >> uint(7-rd.bitPos)) & 1
+		v = (v << 1) | bit
+		rd.bitPos++
+		if rd.bitPos == 8 {
+			rd.bitPos = 0
+			rd.pos++
+		}
+	}
+	return v, true
+}
+
+func putUint(val uint64, width int, little bool) []byte {
+	b := make([]byte, width)
+	if little {
+		for i := 0; i < width; i++ {
+			b[i] = byte(val >> uint(8*i))
+		}
+	} else {
+		for i := 0; i < width; i++ {
+			b[width-1-i] = byte(val >> uint(8*i))
+		}
+	}
+	return b
+}
+
+func getUint(b []byte, little bool) uint64 {
+	var v uint64
+	if little {
+		for i := len(b) - 1; i >= 0; i-- {
+			v = (v << 8) | uint64(b[i])
+		}
+	} else {
+		for i := 0; i < len(b); i++ {
+			v = (v << 8) | uint64(b[i])
+		}
+	}
+	return v
+}
+
+func signExtend(v uint64, width int) int64 {
+	bits := uint(width * 8)
+	if bits < 64 && v&(1<<(bits-1)) != 0 {
+		return int64(v) - (1 << bits)
+	}
+	return int64(v)
+}
+
+// ---- pack: make Bytes [spec] ----------------------------------------------
+
+func makeBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	segs, err := parseBitSegments(args[1], r, "make")
+	if err != nil {
+		return nil, err
+	}
+	w := &bitWriter{}
+	for _, seg := range segs {
+		if err := packSeg(w, seg, r); err != nil {
+			return nil, err
+		}
+	}
+	if !w.aligned() {
+		return nil, r.AqlError("unaligned", "make Bytes: bit segments do not sum to whole bytes", "make")
+	}
+	return []Value{newBytes(w.out)}, nil
+}
+
+// packValue fetches a segment's source value: a literal, or the binding
+// named by the segment key.
+func packValue(seg bitSeg, r *Registry) (Value, bool) {
+	if seg.isLit {
+		return NewInteger(seg.litVal), true
+	}
+	return r.Defs.Top(seg.name)
+}
+
+func packSeg(w *bitWriter, seg bitSeg, r *Registry) error {
+	switch {
+	case seg.typ == "pad":
+		n, err := segSize(seg, r, "make")
+		if err != nil {
+			return err
+		}
+		w.writeBits(0, n)
+		return nil
+	case seg.typ == "bits":
+		n, err := segSize(seg, r, "make")
+		if err != nil {
+			return err
+		}
+		v, ok := packValue(seg, r)
+		if !ok {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+		}
+		iv, _ := v.AsConcreteInteger()
+		w.writeBits(uint64(iv), n)
+		return nil
+	}
+	if !w.aligned() {
+		return r.AqlError("unaligned", fmt.Sprintf("make Bytes: %s segment is not byte-aligned", seg.typ), "make")
+	}
+	switch seg.typ {
+	case "bytes":
+		v, ok := packValue(seg, r)
+		if !ok {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+		}
+		b, bok := asBytes(v)
+		if !bok {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: %q is not Bytes", seg.name), "make")
+		}
+		w.writeBytes(b)
+	case "utf8":
+		v, ok := packValue(seg, r)
+		if !ok {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+		}
+		s, serr := v.AsConcreteString()
+		if serr != nil {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: %q is not a String", seg.name), "make")
+		}
+		w.writeBytes([]byte(s))
+	case "f32":
+		v, ok := packValue(seg, r)
+		if !ok {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+		}
+		f, _ := AsFloat(v)
+		w.writeBytes(putUint(uint64(math.Float32bits(float32(f))), 4, seg.little))
+	case "f64":
+		v, ok := packValue(seg, r)
+		if !ok {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+		}
+		f, _ := AsFloat(v)
+		w.writeBytes(putUint(math.Float64bits(f), 8, seg.little))
+	default: // fixed ints
+		v, ok := packValue(seg, r)
+		if !ok {
+			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+		}
+		n, _ := v.AsConcreteInteger()
+		w.writeBytes(putUint(uint64(n), seg.width, seg.little))
+	}
+	return nil
+}
+
+// ---- unpack: decode + bind, and the streaming prefix variant --------------
+
+func unpackBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, _ := asBytes(args[0])
+	segs, err := parseBitSegments(args[1], r, "unpack")
+	if err != nil {
+		return nil, err
+	}
+	_, _, err = decodeSegs(b, segs, r, "unpack", true)
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func unpackPrefixHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	b, _ := asBytes(args[0])
+	segs, err := parseBitSegments(args[1], r, "unpack-prefix")
+	if err != nil {
+		return nil, err
+	}
+	m, rest, err := decodeSegs(b, segs, r, "unpack-prefix", false)
+	if err != nil {
+		if ne, ok := err.(needMore); ok {
+			out := NewOrderedMap()
+			out.Set("need", NewInteger(int64(ne.n)))
+			return []Value{NewMap(out)}, nil
+		}
+		return nil, err
+	}
+	out := NewOrderedMap()
+	out.Set("ok", NewMap(m))
+	out.Set("rest", newBytes(rest))
+	return []Value{NewMap(out)}, nil
+}
+
+// needMore signals a short buffer to unpack-prefix (turned into {need:n}).
+type needMore struct{ n int }
+
+func (needMore) Error() string { return "unpack-prefix: need more bytes" }
+
+// decodeSegs walks the segments over b. When bind is true it installs each
+// name into scope (unpack); otherwise it collects an ordered map (the
+// unpack-prefix {ok} payload) and returns the leftover bytes. A short
+// buffer returns a needMore error.
+func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*OrderedMap, []byte, error) {
+	rd := &bitReader{b: b}
+	out := NewOrderedMap()
+	// seen records integer fields decoded so far so a size like `bytes(len)`
+	// resolves against this frame's own earlier segments — needed for the
+	// non-binding unpack-prefix where names are not installed into scope.
+	seen := map[string]int64{}
+	emit := func(name string, v Value) {
+		if bind {
+			InstallDef(r, name, v)
+		} else {
+			out.Set(name, v)
+		}
+	}
+	for _, seg := range segs {
+		switch seg.typ {
+		case "pad":
+			n, err := resolveSize(seg, seen, r, word)
+			if err != nil {
+				return nil, nil, err
+			}
+			if _, ok := rd.readBits(n); !ok {
+				return nil, nil, shortErr(word, bind)
+			}
+			continue
+		case "bits":
+			n, err := resolveSize(seg, seen, r, word)
+			if err != nil {
+				return nil, nil, err
+			}
+			v, ok := rd.readBits(n)
+			if !ok {
+				return nil, nil, shortErr(word, bind)
+			}
+			if seg.isLit {
+				if int64(v) != seg.litVal {
+					return nil, nil, r.AqlError("no_match", fmt.Sprintf("%s: guard bits != %d", word, seg.litVal), word)
+				}
+				continue
+			}
+			seen[seg.name] = int64(v)
+			emit(seg.name, NewInteger(int64(v)))
+			continue
+		}
+		if !rd.aligned() {
+			return nil, nil, r.AqlError("unaligned", fmt.Sprintf("%s: %s segment is not byte-aligned", word, seg.typ), word)
+		}
+		switch seg.typ {
+		case "bytes", "utf8":
+			n, err := resolveSize(seg, seen, r, word)
+			if err != nil {
+				return nil, nil, err
+			}
+			if n < 0 {
+				n = rd.remaining() // trailing "rest"
+			}
+			if rd.remaining() < n {
+				return nil, nil, shortErr2(word, bind, n-rd.remaining())
+			}
+			chunk := rd.b[rd.pos : rd.pos+n : rd.pos+n]
+			rd.pos += n
+			if seg.typ == "utf8" {
+				if !utf8.Valid(chunk) {
+					return nil, nil, r.AqlError("bad-encoding", word+": utf8 segment is not valid UTF-8", word)
+				}
+				emit(seg.name, NewString(string(chunk)))
+			} else {
+				emit(seg.name, newBytes(chunk))
+			}
+		case "f32", "f64":
+			if rd.remaining() < seg.width {
+				return nil, nil, shortErr2(word, bind, seg.width-rd.remaining())
+			}
+			raw := rd.b[rd.pos : rd.pos+seg.width]
+			rd.pos += seg.width
+			var f float64
+			if seg.width == 4 {
+				f = float64(math.Float32frombits(uint32(getUint(raw, seg.little))))
+			} else {
+				f = math.Float64frombits(getUint(raw, seg.little))
+			}
+			emit(seg.name, NewFloat(f))
+		default: // fixed ints
+			if rd.remaining() < seg.width {
+				return nil, nil, shortErr2(word, bind, seg.width-rd.remaining())
+			}
+			raw := rd.b[rd.pos : rd.pos+seg.width]
+			rd.pos += seg.width
+			u := getUint(raw, seg.little)
+			var n int64
+			if seg.signed {
+				n = signExtend(u, seg.width)
+			} else {
+				n = int64(u)
+			}
+			if seg.isLit {
+				if n != seg.litVal {
+					return nil, nil, r.AqlError("no_match", fmt.Sprintf("%s: guard %s != %d", word, seg.typ, seg.litVal), word)
+				}
+				continue
+			}
+			seen[seg.name] = n
+			emit(seg.name, NewInteger(n))
+		}
+	}
+	if !rd.aligned() {
+		return nil, nil, r.AqlError("unaligned", word+": trailing sub-byte bits", word)
+	}
+	return out, rd.b[rd.pos:], nil
+}
+
+func shortErr(word string, bind bool) error {
+	if bind {
+		return fmt.Errorf("[aql/no_match] %s: buffer too short", word)
+	}
+	return needMore{n: 1}
+}
+
+func shortErr2(word string, bind bool, need int) error {
+	if bind {
+		return fmt.Errorf("[aql/no_match] %s: buffer too short", word)
+	}
+	if need < 1 {
+		need = 1
+	}
+	return needMore{n: need}
 }

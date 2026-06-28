@@ -37,9 +37,6 @@ var categories = []Category{
 	{"binary", "Bitwise and shift operators.", []string{
 		"band", "bor", "bxor", "bnot", "bsl", "bsr", "busr",
 	}},
-	{"bytes", "Byte-string values, conversions, and slicing.", []string{
-		"utf8", "to-text", "bytes", "byte-ints", "byte-slice", "byte-cat", "compact",
-	}},
 	{"string", "String manipulation.", []string{
 		"upper", "lower", "concat", "split", "trim", "contains", "indexof",
 		"replace", "changecase", "normalize", "repeat", "pad", "match", "escape",
@@ -62,7 +59,7 @@ var categories = []Category{
 		"patrun", "find", "patterns",
 	}},
 	{"control", "Control flow, definitions, and functions.", []string{
-		"unpack", "codequote", "do", "raise", "if", "case", "for", "break",
+		"unpack", "unpack-prefix", "codequote", "do", "raise", "if", "case", "for", "break",
 		"continue", "def", "undef", "var", "fn", "args",
 		"afn", "guard", "error", "force-arity", "usurp", "forward-args",
 		"stack-args",

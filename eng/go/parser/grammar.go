@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -91,6 +92,7 @@ type parserTokens struct {
 	RA  jsonic.Tin // > (angle close)
 	ML  jsonic.Tin // minilang literal: +name<delim>src<delim> (matcher-produced)
 	XML jsonic.Tin // embedded XML literal <tag>…</tag> (matcher-produced)
+	HB  jsonic.Tin // hex Bytes literal 0x"deadbeef" (matcher-produced)
 }
 
 // setupBaseTokens registers the fixed AQL tokens and removes backtick from
@@ -128,6 +130,9 @@ func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 		// xml rule (which the val.Open `<` alternate pushes). See
 		// setupXmlGrammar / setupXmlMatcher and design/XML-LITERAL.0.md.
 		XML: j.Token("#XML"),
+		// #HB carries a hex Bytes literal (`0x"deadbeef"`), produced by the
+		// hex_bytes matcher. See setupHexBytesMatcher.
+		HB: j.Token("#HB"),
 	}
 }
 
@@ -198,6 +203,92 @@ func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
 		cursor.CI += si - start // a 0d literal never spans newlines
 		return tkn
 	})
+}
+
+// hexBytesVal carries a hex Bytes literal (`0x"deadbeef"`) from the lex
+// matcher to the converter, which returns the already-built Bytes value (or
+// surfaces a build error).
+type hexBytesVal struct {
+	V   eng.Value
+	Err error
+}
+
+// setupHexBytesMatcher registers a lex matcher for the hex Bytes literal
+// `0x"<hex>"`. It fires only on `0x`/`0X` immediately followed by `"`, so a
+// bare `0xff` (an Integer) is left to normal number lexing. The matcher
+// hex-decodes at lex time and carries the Bytes value, built via
+// eng.FromNative (the []byte->Bytes bridge the lang layer installs);
+// malformed content (odd length, non-hex, unterminated) is carried as an
+// error and surfaced at conversion.
+func setupHexBytesMatcher(j *jsonic.Jsonic, t parserTokens) {
+	addMatcher(j, "hex_bytes", 1000000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+		if rule != nil {
+			if _, ok := rule.K["aql_tpl"]; ok {
+				return nil // inside a template string
+			}
+		}
+		cursor := lex.Cursor()
+		s := lex.Src
+		start := cursor.SI
+		si := start
+		if si+2 >= len(s) || s[si] != '0' || (s[si+1] != 'x' && s[si+1] != 'X') || s[si+2] != '"' {
+			return nil // not 0x" — leave 0xff and friends to the number matcher
+		}
+		si += 3 // past 0x"
+		hexStart := si
+		for si < len(s) && s[si] != '"' {
+			si++
+		}
+		var hv hexBytesVal
+		var raw string
+		if si >= len(s) {
+			hv.Err = fmt.Errorf(`[aql/bad-bytes-literal] unterminated 0x"…" bytes literal`)
+			raw = s[start:si]
+		} else {
+			hv = decodeHexLiteral(s[hexStart:si])
+			si++ // past the closing quote
+			raw = s[start:si]
+		}
+		tkn := lex.Token("#HB", t.HB, hv, raw)
+		cursor.SI = si
+		for k := start; k < si; k++ {
+			if s[k] == '\n' {
+				cursor.RI++
+				cursor.CI = 1
+			} else {
+				cursor.CI++
+			}
+		}
+		return tkn
+	})
+}
+
+func decodeHexLiteral(hexStr string) hexBytesVal {
+	if len(hexStr)%2 != 0 {
+		return hexBytesVal{Err: fmt.Errorf(`[aql/bad-bytes-literal] 0x"…" needs an even number of hex digits, got %d`, len(hexStr))}
+	}
+	b := make([]byte, len(hexStr)/2)
+	for i := range b {
+		hi, ok1 := hexNibble(hexStr[2*i])
+		lo, ok2 := hexNibble(hexStr[2*i+1])
+		if !ok1 || !ok2 {
+			return hexBytesVal{Err: fmt.Errorf(`[aql/bad-bytes-literal] 0x"…" has a non-hex digit`)}
+		}
+		b[i] = hi<<4 | lo
+	}
+	return hexBytesVal{V: eng.FromNative(b)}
+}
+
+func hexNibble(c byte) (byte, bool) {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0', true
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10, true
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10, true
+	}
+	return 0, false
 }
 
 // miniLitVal carries a minilang-literal match (`+name<delim>src<delim>`) from
@@ -365,6 +456,11 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 			// Minilang literal `+name<delim>src<delim>`: the matcher stashed a
 			// miniLitVal on the token; carry it to the converter as the node.
 			{S: [][]jsonic.Tin{{t.ML}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
+				r.Node = r.O0.Val
+			}},
+			// Hex Bytes literal `0x"deadbeef"`: the matcher stashed a
+			// hexBytesVal carrying the built Bytes value (or a build error).
+			{S: [][]jsonic.Tin{{t.HB}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = r.O0.Val
 			}},
 			{S: [][]jsonic.Tin{{t.OP}}, P: "paren"},

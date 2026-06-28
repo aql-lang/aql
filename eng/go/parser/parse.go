@@ -157,6 +157,7 @@ func Parse(src string) ([]eng.Value, error) {
 
 	// Stage 1: Lex setup — register tokens and custom matchers.
 	t := setupBaseTokens(j)
+	setupHexBytesMatcher(j, t)
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
 	setupMiniLitMatcher(j, t)
@@ -643,6 +644,14 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 		}
 		return val.V, nil
 
+	case hexBytesVal:
+		// Hex Bytes literal `0x"deadbeef"`: the matcher already decoded and
+		// built the Bytes value; surface any malformed-literal error here.
+		if val.Err != nil {
+			return eng.Value{}, val.Err
+		}
+		return val.V, nil
+
 	case numberVal:
 		return numberValToValue(val)
 
@@ -950,6 +959,14 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 	case xmlElemVal:
 		// Embedded XML literal in data context (a map value): same
 		// immutable Node/Xml value the matcher built.
+		if val.Err != nil {
+			return eng.Value{}, val.Err
+		}
+		return val.V, nil
+
+	case hexBytesVal:
+		// Hex Bytes literal in data context (a map value): the matcher
+		// already decoded and built the Bytes value.
 		if val.Err != nil {
 			return eng.Value{}, val.Err
 		}

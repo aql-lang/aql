@@ -7,14 +7,15 @@
 > against. The heavier binary words (cryptographic hashes, HMAC,
 > CRC, base/hex encodings, secure random, UUIDs) live in the expanded
 > `aql:bin-util` module — see [BIN-UTIL.10.md](BIN-UTIL.10.md). The type, its
-> literal, its core interop words, and the bit-syntax are **core** (no import).
+> literal, its interop overloads, and the bit-syntax are **core** (no import).
 > Read [README.10.md](README.10.md) for the shared conventions.
 >
 > **Decisions taken at design-review time:** (1) this doc is the **authoritative
 > full `Bytes` design** (the earlier type-only draft is folded in); (2) the
-> word surface is **split** — the type, the `0x"…"` literal, the bit-syntax,
-> and minimal interop are **core**, while crypto/encoding/hash/uuid stay in
-> `aql:bin-util`; (3) a **hex literal only** (`0x"deadbeef"`), no `b"…"` form;
+> word surface is **signature overloads of existing words** — `convert`
+> (text/ints ⇄ Bytes, compact), `slice`, `add`, `make Bytes` (pack), `unpack`
+> (decode) — plus the one new `unpack-prefix`; crypto/encoding/hash/uuid stay
+> in `aql:bin-util`; (3) a **hex literal only** (`0x"deadbeef"`), no `b"…"` form;
 > (4) the memory model is **zero-copy share + copy-on-ingest** (this supersedes
 > the earlier `DeepCloner` decision — see §4).
 >
@@ -98,7 +99,7 @@ network/data paths copy **once, at ingest, and never again.**
 ### 4.1 Immutable, shared, zero-copy
 
 The backing store is a single Go `[]byte` inside `bytesBody`. **No word mutates
-a `Bytes` in place** — every operation (`slice`, `concat`, `pack`, …) returns a
+a `Bytes` in place** — every operation (`slice`, `add`, `make Bytes`, …) returns a
 fresh value. Because the storage is therefore never written after construction,
 a `Bytes` is **shared by reference on clone** and pays nothing:
 
@@ -144,10 +145,11 @@ carries Go's standard slice-retention caveat:
 
 - **Retention caveat.** A small view keeps its *entire* backing array alive: a
   4-byte `slice` of a 1 MB frame pins all 1 MB until the view is unreachable.
-- **`compact <Bytes> -> Bytes`** forces a minimal fresh copy (`len`-sized
-  backing array) for the rare case where a small slice must outlive a large
-  buffer (e.g. caching one field extracted from each of many big frames).
-  Idiomatically you only reach for `compact` when retention actually bites.
+- **`convert Bytes <Bytes>`** forces a minimal fresh copy (`len`-sized backing
+  array) for the rare case where a small slice must outlive a large buffer
+  (e.g. caching one field extracted from each of many big frames). Converting
+  Bytes to Bytes is the "compact" operation; you only reach for it when
+  retention actually bites.
 
 ### 4.4 Cost summary
 
@@ -157,39 +159,46 @@ carries Go's standard slice-retention caveat:
 | `0x"…"` literal | 1 (at parse) | baked into the program once |
 | clone / `ForkConcurrent` / `send` | 0 | slice header only (§4.1) |
 | `slice`, `unpack` `bytes(n)` view | 0 | sub-slice view (§4.3) |
-| `compact` | 1 | force-copy to drop retention |
-| `concat` of k parts | 1 | one build of the joined slice |
-| `pack` | 1 | one build of the frame |
-| `to-text` / `utf8` | 1 | crosses the bytes⇄text boundary |
+| `convert Bytes <bytes>` (compact) | 1 | force-copy to drop retention |
+| `add` (concat) | 1 | one build of the joined slice |
+| `make Bytes [spec]` (pack) | 1 | one build of the frame |
+| `convert String`/`convert Bytes` (text⇄bytes) | 1 | crosses the bytes⇄text boundary |
 
-## 5. Core word surface (forward form)
+## 5. Word surface — overloads, not new words
 
-The type ships a **minimal core set** in forward call form; everything else
-(crypto, encodings, hashing, random, UUID) lives in `aql:bin-util`
-(BIN-UTIL.10.md), where each "data" input accepts `String | Bytes`.
+Bytes is exposed through **signature overloads of existing words** (no new core
+words except the streaming `unpack-prefix`). A `Bytes` overload is a
+more-specific signature that wins dispatch over the generic
+`[Scalar …]`/`[Any …]` form, so `convert`/`slice`/`add`/`make`/`unpack` "just
+work" on Bytes the way they already do on String/List/Number. Heavier binary
+operations (crypto, encodings, hashing, random, UUID) live in `aql:bin-util`
+(BIN-UTIL.10.md), each accepting `String | Bytes`.
 
-| word | signature (forward) | meaning |
+| operation | overload | form |
 | --- | --- | --- |
-| `utf8` | `utf8 <String> -> Bytes` | encode text as UTF-8 octets. |
-| `to-text` | `to-text <Bytes> -> String` | decode UTF-8; raises `bad-encoding`. |
-| `bytes` | `bytes <List<Integer 0–255>> -> Bytes` | pack a list of byte values. |
-| `byte-ints` | `byte-ints <Bytes> -> List<Integer>` | unpack to a list of 0–255 ints. |
-| `slice` | `slice <Bytes> <start> <len> -> Bytes` | zero-copy sub-slice view (§4.3). |
-| `concat` | `concat <List<Bytes>> -> Bytes` | join byte sequences (one build). |
-| `compact` | `compact <Bytes> -> Bytes` | force a minimal copy (drop retention). |
-| `pack` | `pack <List<segment>> -> Bytes` | build a frame from a bit-spec (§7). |
-| `unpack` | `unpack <Bytes> <List<segment>> -> Map` | match/destructure a frame (§7). |
-| `unpack-prefix` | `unpack-prefix <Bytes> <List<segment>> -> Map` | streaming framer (§7). |
+| encode text → Bytes (UTF-8) | `convert` | `convert Bytes "hi"` |
+| decode Bytes → text (raises `bad-encoding`) | `convert` | `convert String b` |
+| ints (0–255) → Bytes | `convert` | `convert Bytes [104 105]` |
+| Bytes → ints | `convert` | `convert List b` |
+| compact (force a fresh minimal copy, §4.3) | `convert` | `convert Bytes b` |
+| sub-range (end-exclusive, zero-copy view) | `slice` | `slice <start> <end> b` |
+| concatenate two byte strings | `add` | `a add b` |
+| pack a frame from a bit-spec (§7) | `make` | `make Bytes [spec]` |
+| decode a frame, binding fields (§7) | `unpack` | `unpack b [spec]` |
+| streaming-decode a leading frame (§7) | `unpack-prefix` | `unpack-prefix b [spec]` |
 
-`length` / `size`, `eq`, value ordering, and `is Bytes` need **no dedicated
-word** — they resolve through the `Sizer`/`Equal`/`Comparer` behaviors (§3).
+`size`/`length`, `eq`, value ordering (`cmp`/`lt`/`sort`), and `is Bytes` need
+**no dedicated word** — they resolve through the `Sizer`/`Equal`/`Comparer`
+behaviors (§3). The `0x"…"` literal (§6) covers hex *input*;
+`BinUtil.hex-encode` covers hex *output*.
 
-**Naming note (reconciliation).** Earlier sketches used module-qualified names
-(`bin.len`, `bin.slice`, `bin.of-list`, `bin.hex`) and an alternate
-`BinUtil.bytes`/`text`. The canonical core names are the forward-form words
-above: `length`/`size` (behavior), `slice`, `bytes`, and `BinUtil.hex-encode`
-for hex *output* (the `0x"…"` literal covers hex *input*). The NETWORK docs are
-updated to match.
+**Why overloads.** `Bytes` is a value type like `String`, so it slots into the
+generic words by type-dispatch rather than adding a parallel `byte-*`
+vocabulary. This keeps the core namespace small. Only `unpack-prefix` — a
+genuinely new streaming operation with no generic equivalent — is its own word.
+(Implementation: each overload is registered from `native_bytes.go` and
+**appended** to the existing word via `RegisterNativeFunc`; no edits to the
+host words' files are needed.)
 
 ## 6. The `0x"…"` Bytes literal
 
@@ -211,68 +220,74 @@ A first-class hex literal for protocol magic numbers and constants:
 - **Lexer hook.** A custom jsonic lex matcher registered at high priority
   (before the string matcher) in `eng/go/parser/` (`grammar.go`/`parse.go`),
   converting the matched `0x"…"` token to a `Bytes` value in
-  `convertDataValue`. There is **no `b"…"` ASCII literal** — use `utf8 "GET "`
-  for text-as-bytes, which keeps the encoding choice explicit.
+  `convertDataValue`. There is **no `b"…"` ASCII literal** — use
+  `convert Bytes "GET "` for text-as-bytes, which keeps the encoding explicit.
 
-## 7. Bit-syntax — the segment-spec DSL (`pack` / `unpack`)
+## 7. Bit-syntax — the segment-spec DSL (`make Bytes` / `unpack`)
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
-short *and* safe. AQL gets an equivalent that **reuses existing machinery**: the
-`name:Type` binding slot parsed by `eng.ParseFnParams` (`eng/go/fn_params.go` —
-the same parser behind lambda params and `receive` clauses), extended with a
-**size** and **modifier** suffix.
+short *and* safe. AQL's equivalent is a **`List` of segment tokens** captured
+**unevaluated** (the spec arg is `NoEvalArgs`) and interpreted by a small
+segment parser. `make Bytes [spec]` packs; `unpack b [spec]` decodes and binds;
+`unpack-prefix b [spec]` is the streaming variant.
 
-> **Not an `aql:minilang`.** This is a `List` of ordinary AQL **segment tokens**
-> parsed by `eng.ParseFnParams`, **not** a kind of the `mini`/MiniLang facility
-> (`MINILANG.5.md`), whose kinds take an *opaque String `src`* (`mini re '…'`,
-> `+re/…/`). The list form is deliberate for two reasons a String-sourced `mini`
-> kind could not serve: (1) a `pack` segment value can be an **inline AQL
-> expression** (`(length body):u16`), and (2) the `name:Type` slot reuses the
-> **same `ParseFnParams` binding** as `receive` clauses — one "destructure by
-> `name:Type`" concept across the language, rather than a second bespoke spec
-> parser inside a kind handler. "Bit-syntax" / "segment spec" — never
-> "minilang".
+> **Not an `aql:minilang`.** The spec is a `List` of ordinary AQL tokens
+> captured raw — **not** a kind of the `mini`/MiniLang facility
+> (`MINILANG.5.md`), whose kinds take an opaque String `src`. A small custom
+> parser interprets the tokens because the seg-types (`u8`/`u16`/`bytes`/…) are
+> **domain keywords, not registered AQL types** (so `eng.ParseFnParams`, which
+> resolves real types, cannot parse them). "Bit-syntax" / "segment spec" —
+> never "minilang".
 
 ### 7.1 Segment grammar
 
-A frame spec is a `List` of **segments**; each segment is:
+A frame spec is a `List` of segments. A segment is an implicit pair
+`name:type[/suffix]*` optionally followed by a parenthesised **size**
+`(N)` / `(name)`:
 
 ```
-<value-or-name> : <seg-type> ( ( <size> ) )? ( / <modifier> )*
+[ ver:u8  len:u16/be  body:bytes(len) ]
 ```
 
-- **value-or-name** — in `pack`, a bound `name` reads its value from scope, or a
-  **literal** (`1`, `0x"7f"`) packs a constant. In `unpack`, a `name` **binds**
-  the field into scope; a **literal** is a **match guard** (the bytes must equal
-  it, else `raise no_match`). This is exactly Erlang's dual use of one syntax.
+- **name-or-literal** — in `make` (pack) a `name` key reads the binding of that
+  name from scope; a numeric-literal key packs that constant. In `unpack` a
+  `name` key **binds** the decoded field (into scope; into the `{ok}` map for
+  `unpack-prefix`); a numeric-literal key is a **match guard** (raises
+  `no_match` on mismatch). This is Erlang's dual use of one syntax.
+- **seg-type** — `u8 u16 u32 u64`, `i8 i16 i32 i64`, `f32 f64` (IEEE-754, ref
+  `IEEE-754-COMPLIANCE.8.md`), `bits` (sub-byte unsigned int), `bytes` (raw
+  `Bytes`), `utf8` (a length-known text run → `String`), `pad` (zero bits, no
+  binding).
+- **`/suffix`** (on the type word) — `/be` (default, network order) or `/le`
+  for endianness; `/signed` / `/unsigned` for integers.
+- **`(size)`** — for `bytes`/`utf8`/`bits`/`pad`: an integer or a
+  previously-bound name (`body:bytes(len)`, Erlang's `Body:Len/binary` — the
+  killer feature). A trailing `bytes`/`utf8` with **no** size means "the rest".
+  Size uses the **paren** form (not `/N`) because a numeric `/N` is consumed as
+  the arity word-modifier; `bits`/`pad` always need a size, e.g. `bits(4)`.
 
-| element | values |
-| --- | --- |
-| **seg-type** | `u8 u16 u32 u64`, `i8 i16 i32 i64` (signed), `f32 f64` (IEEE-754, ref `IEEE-754-COMPLIANCE.8.md`), `bits(n)` (sub-byte unsigned int of *n* bits), `bytes` (raw `Bytes`), `utf8` (a length-known text run → `String`), `pad(n)` (*n* zero bits, no binding) |
-| **size** | an integer literal, or a **previously-bound name** — `body:bytes(len)` (Erlang `Body:Len/binary`), the killer feature. A trailing `bytes`/`utf8` with **no** size means "the rest". `size` applies to `bytes`/`utf8` (octet count) and is implicit for fixed-width numerics. |
-| **modifier** | `/be` (default, network byte order) or `/le`; `/unsigned` (default) or `/signed`. Modifiers apply to multi-byte numerics. |
-
-### 7.2 `pack` — build a frame
-
-```
-pack <List<segment>> -> Bytes
-```
-
-Evaluates each segment left-to-right into a single freshly-built `[]byte`
-(one allocation, §4.4). `name:` segments read `name` from scope; literal
-segments pack the constant. Numerics honour width/endianness/sign.
-
-### 7.3 `unpack` — match & destructure
+### 7.2 `make Bytes [spec]` — build a frame
 
 ```
-unpack <Bytes> <List<segment>> -> Map
+make Bytes <List<segment>> -> Bytes
 ```
 
-Walks the segments over the input bytes, **binding each `name` into scope** and
-also returning all bound fields as a `Map` (for chaining). A literal segment is
-a **guard**. `bytes(n)`/`utf8(n)` segments are **zero-copy sub-slice views**
-(§4.3). Mismatches (`guard` fails, declared size overruns the input, trailing
-bytes when the spec is exact) `raise no_match`.
+Walks the segments left-to-right into a single freshly-built `[]byte` (one
+allocation, §4.4). A `name` key reads `name` from scope; a literal key packs the
+constant. Numerics honour width/endianness/sign. (Overloads `make`'s
+constructor; the spec is `NoEvalArgs` so the keyword tokens stay raw.)
+
+### 7.3 `unpack b [spec]` — decode & bind
+
+```
+unpack <Bytes> <List<segment>>      # binds each field into scope; returns nothing
+```
+
+Walks the segments over the input bytes, **binding each `name` into scope**
+(consistent with the existing `unpack [names] map`). A literal key is a
+**guard**; `bytes(n)`/`utf8(n)` segments are **zero-copy sub-slice views**
+(§4.3). A guard mismatch or a too-short buffer `raise`s `no_match`; trailing
+bytes after the spec are left unread (use `unpack-prefix` to capture them).
 
 ### 7.4 `unpack-prefix` — the streaming framer
 
@@ -296,41 +311,45 @@ add an explicit `pad(n)` to round out a sub-byte run. (This resolves
 `NETWORK-SERVERS.0.md` §12 Q2 in favour of safety: ragged frames are an error,
 not a silent surprise.)
 
-### 7.6 Parser reuse & binding
+### 7.6 Segment parsing & binding
 
-Splitting a segment into its `name:type` core (→ `ParseFnParams`) and its
-`(size)`/`/mod` suffix (→ a thin additional pass) is a build-time step over the
-segment list; the `name:type` parsing, type resolution, and scope binding reuse
-`eng.ParseFnParams` and the per-call `DefTable` unchanged — the **same**
-mechanism `receive` clauses use (`PROCESSES.0.md` §3). One "destructure by
-`name:Type`" concept across the language, not two.
+The spec arrives raw (`NoEvalArgs`), so each `name:type` implicit-pair map and
+each trailing `(size)` `ParenExpr` is read structurally: the type word is split
+on `/` for endianness/sign suffixes, and the following paren (if any) supplies
+the size. `unpack` binds decoded fields into scope via `InstallDef` (the same
+binding the `def` word and the existing `unpack` use); `unpack-prefix` collects
+them into the `{ok}` map instead. Size names (`bytes(len)`) resolve against the
+frame's already-decoded fields first, then scope — so the non-binding
+`unpack-prefix` still resolves `len`.
 
 ## 8. Usage examples
 
-All forward form. `import "aql:bin-util"` only where a crypto/encoding word
-appears; the type, literal, and bit-syntax need no import.
+Forward form. `import "aql:bin-util"` only where a crypto/encoding word appears;
+the type, literal, and bit-syntax need no import.
 
 ```aql
-# hex literal + magic-number guard (the leading byte MUST be 0x7f)
-def frame ( recv-frame conn [ 0x"7f":u8  ver:u8  len:u16  body:bytes(len) ] )
+# hex literal; 0xff (no quote) stays an Integer
+0x"deadbeef"                              # Bytes<de ad be ef>
+0xff                                       # 255
 
-# text round-trip
-utf8 "café"  to-text                     # "café"   (é is two UTF-8 bytes)
-utf8 "café"  length                       # 5
+# text round-trip (é is two UTF-8 bytes)
+convert String (convert Bytes "café")     # 'café'
+size (convert Bytes "café")               # 5
 
 # build + match a [ver=1][u16 len][len-byte body] frame
-def body  ( utf8 "hello" )                # Bytes<68 65 6c 6c 6f>
-def msg   ( pack [ 1:u8  (length body):u16  body:bytes ] )
+def body ( convert Bytes "hello" )        # Bytes<68 65 6c 6c 6f>
+def len  ( size body )
+def msg  ( make Bytes [ 1:u8  len:u16  body:bytes ] )
 # msg == Bytes<01 00 05 68 65 6c 6c 6f>
-def parts ( unpack msg [ ver:u8  len:u16  body:bytes(len) ] )
-# parts == {ver: 1  len: 5  body: Bytes<68 65 6c 6c 6f>}
-to-text parts.body                        # "hello"
+unpack msg [ ver:u8  n:u16  body:bytes(n) ]   # binds ver, n, body into scope
+convert String body                        # 'hello'
 
-# floats + little-endian
-pack [ 3.14:f64/le  count:u32/le ]        # 8-byte float then 4-byte LE int
+# floats (little-endian) + signed
+def x 1.5  make Bytes [ x:f64/le ]         # 8-byte LE float
+def k -2   make Bytes [ k:i16 ]            # Bytes<ff fe>
 
-# sub-byte flags: a version nibble + 4 one-bit flags (sums to one byte)
-pack [ 1:bits(4)  urgent:bits(1)  ack:bits(1)  0:bits(2) ]   # one byte
+# sub-byte flags: a version nibble + flags (sums to one byte)
+make Bytes [ 1:bits(4)  1:bits(1)  0:bits(1)  0:bits(2) ]   # Bytes<90>
 
 # streaming framer loop: pull complete [u32 len][len body] frames from a buffer
 def drain fn [[buf:Bytes] [Never] [
@@ -342,33 +361,34 @@ def drain fn [[buf:Bytes] [Never] [
 
 # core ↔ bin-util handoff: hash a Bytes, render hex
 import "aql:bin-util"
-utf8 "hello"  BinUtil.sha256  BinUtil.hex-encode
+convert Bytes "hello"  BinUtil.sha256  BinUtil.hex-encode
   # "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
 # zero-copy slice + retention: keep one small field out of a huge frame
-def tag ( compact (slice big-frame 4 8) )   # compact drops the 1 MB backing array
+def tag ( convert Bytes (slice 4 8 big-frame) )   # convert-to-Bytes drops the big backing array
 
 # negative cases
 unpack 0x"01" [ ver:u8  len:u16 ]          # ERROR:no_match   (only 1 byte, needs 3)
-pack [ flag:bits(3) ]                       # ERROR:unaligned  (3 bits, not byte-aligned)
-bytes [256]                                  # ERROR:expected-byte
-to-text 0x"ff"                              # ERROR:bad-encoding (0xff is not valid UTF-8)
+make Bytes [ flag:bits(3) ]                 # ERROR:unaligned  (3 bits, not byte-aligned)
+convert Bytes [256]                         # ERROR:expected-byte
+convert String 0x"ff"                       # ERROR:bad-encoding (0xff is not valid UTF-8)
+0x"abc"                                      # ERROR:bad-bytes-literal (odd hex digit count)
 ```
 
 ## 9. Errors
 
 | code | raised when |
 | --- | --- |
-| `bad-bytes-literal` | `0x"…"` literal has an odd digit count or a non-hex digit (compile time). |
-| `expected-byte` | a `List` element passed to `bytes` is not an Integer in 0–255. |
-| `bad-encoding` | `to-text` (or a `utf8` segment) is given bytes that are not valid UTF-8. |
-| `index-range` | `slice` start/len is out of range. |
-| `no_match` | an `unpack` guard fails, or a declared size overruns / underruns the input. |
-| `unaligned` | a `bits(n)`/`pad(n)` run in a spec does not sum to a whole byte. |
+| `bad-bytes-literal` | `0x"…"` literal has an odd digit count or a non-hex digit (parse time). |
+| `expected-byte` | a `List` element passed to `convert Bytes` is not an Integer in 0–255. |
+| `bad-encoding` | `convert String` (or a `utf8` segment) is given bytes that are not valid UTF-8. |
+| `no_match` | an `unpack` guard fails, or the buffer is too short for the spec. |
+| `unaligned` | a `bits`/`pad` run in a spec does not sum to a whole byte. |
 
 Guard with `RequireConcreteList` / a `Bytes` unwrap helper and range-check
-before converting; never panic (`eng/go/CLAUDE.md`). Buffer-too-short during
-streaming is **not** an error — it is `unpack-prefix`'s `{need: n}` result.
+before converting; never panic (`eng/go/CLAUDE.md`). `slice` clamps an
+out-of-range window rather than erroring. A short buffer during streaming is
+**not** an error — it is `unpack-prefix`'s `{need: n}` result.
 
 ## 10. Policy / capabilities
 
@@ -380,7 +400,7 @@ BIN-UTIL.10.md, not on the type.)
 ## 11. Overlap & relationships
 
 - **Net-new type** — there is no binary type today. It *complements* `String`:
-  `utf8`/`to-text` are the explicit, lossless bridge between the two, where
+  `convert Bytes` / `convert String` are the explicit, lossless bridge, where
   previously binary silently became a (possibly lossy) String at the I/O
   boundary.
 - **`aql:bin-util`** (BIN-UTIL.10.md) — owns crypto/HMAC/CRC/encodings/random/
@@ -406,43 +426,45 @@ BIN-UTIL.10.md, not on the type.)
   unread field, `need` returns the bytes required to read *that* field (a lower
   bound), then the caller re-tries. Document the two-step convergence.
 - **A pure functional `with-byte` mutator** — deliberately omitted; `Bytes` is
-  immutable and edits go through `concat`/`slice`/`pack`. Revisit only if a
+  immutable and edits go through `add`/`slice`/`make Bytes`. Revisit only if a
   builder pattern proves necessary.
 
 ## 13. Phased roadmap
 
 Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
 
-- **Phase A1 — type + memory + core interop.** Register `Bytes` (§2–3), the
-  zero-copy/copy-on-ingest model (§4), `gobridge` `[]byte`↔`Bytes`, and the
-  core words `utf8`/`to-text`/`bytes`/`byte-ints`/`slice`/`concat`/`compact`
-  (§5). No literal, no bit-syntax. Independently useful (hashing, file I/O).
-- **Phase A2 — the `0x"…"` literal** (§6). The lexer matcher only.
-- **Phase A3 — bit-syntax** (§7): `pack`/`unpack`/`unpack-prefix` + the
-  segment-spec parser reusing `ParseFnParams`. This is what unblocks the
-  declarative `length-prefixed` codec and `recv-frame`.
+- **Phase A1 — type + memory + interop overloads.** Register `Bytes` (§2–3),
+  the zero-copy/copy-on-ingest model (§4), `gobridge` `[]byte`↔`Bytes`, and the
+  `convert`/`slice`/`add` Bytes overloads (§5). No literal, no bit-syntax.
+  Independently useful (hashing, file I/O). **(landed)**
+- **Phase A2 — the `0x"…"` literal** (§6). The lexer matcher only. **(landed)**
+- **Phase A3 — bit-syntax** (§7): `make Bytes`/`unpack` overloads + the new
+  `unpack-prefix` word, over a custom segment-spec parser. This unblocks the
+  declarative `length-prefixed` codec and `recv-frame`. **(landed)**
 
 ## 14. Implementation sketch
 
 - **`eng/go/gobridge.go`** — add the `[]byte` ↔ `Bytes` cases, with the
   copy-on-ingest copy in `FromNative` (§4.2).
 - **`lang/go/native/native_bytes.go`** — `registerBytesType()` via
-  `RegisterExternalBuiltin("Scalar/Bytes", <FixedID 1000–1999>, bytesBehavior{})`;
-  behavior implements `Format`/`Comparer`/`Equal`/`Sizer` (§3) and **omits**
-  `DeepCloner` (§4.1); the core words (§5); funnel init errors through
-  `TypeInitError`.
-- **`lang/go/native/native_bytes.go` (bit-syntax)** — `pack`/`unpack`/
-  `unpack-prefix` and the segment-spec parser: split each segment into the
-  `name:type` core (reuse `eng.ParseFnParams`) and a `(size)`/`/mod` suffix
-  pass; bind via the per-call `DefTable`.
+  `RegisterExternalBuiltin("Scalar/Bytes", 1009, bytesBehavior{})`; behavior
+  implements `Format`/`Comparer`/`Equal`/`Sizer` (§3) and **omits**
+  `DeepCloner` (§4.1); the `convert`/`slice`/`add` overloads (§5) appended via
+  `RegisterNativeFunc`; funnel init errors through `TypeInitError`.
+- **`lang/go/native/native_bytes.go` (bit-syntax)** — the `make Bytes` /
+  `unpack` overloads + the new `unpack-prefix`; a custom segment-spec parser
+  (`name:type` implicit pairs, `/be /le /signed /unsigned` suffixes, trailing
+  `(size)` ParenExpr) over the raw (`NoEvalArgs`) spec; an MSB-first bit
+  writer/reader; bind via `InstallDef`.
 - **`eng/go/parser/` (`grammar.go`/`parse.go`)** — the `0x"…"` custom lex
-  matcher (§6), converting to a `Bytes` value in `convertDataValue`.
-- **`lang/go/native/help/help_bytes.go`** + `describe.go` — `register(&Entry{…})`
-  for each core word and the bit-syntax words, with the §8 examples; live sigs
-  via `BuildFuncInfo`.
-- **`lang/go/test/fixedid_stability_test.go`** — pin the new FixedID.
-- **`lang/spec/`** — positive rows (round-trip `pack`→`unpack`, ordering /
-  type-literal-first, `Equal`, slice/concat, literal parse) each paired with an
-  `ERROR:<substring>` negative sibling (`no_match`, `unaligned`,
-  `expected-byte`, `bad-encoding`, `bad-bytes-literal`), per Test discipline
-  (`lang/go/CLAUDE.md`); include known-answer hex vectors.
+  matcher (§6), building the `Bytes` value via `eng.FromNative` (the bridge) and
+  carrying it like the XML literal; converter cases in both contexts.
+- **`lang/go/native/help/help_bytes.go`** — `register(&Entry{…})` for the new
+  `unpack-prefix` (the overloaded words keep their existing entries); a
+  `control`-category slot beside `unpack`.
+- **`lang/go/test/fixedid_stability_test.go`** — pin `Scalar/Bytes` = 1009.
+- **`lang/go/test/bytes.tsv`** — positive rows (convert round-trips, slice,
+  `add`, compact, `0x"…"` literal, `make Bytes`/`unpack`/`unpack-prefix`,
+  float/signed) each paired with an `ERROR:<substring>` negative sibling
+  (`no_match`, `unaligned`, `expected-byte`, `bad-encoding`,
+  `bad-bytes-literal`); plus a Go-bridge round-trip test.
