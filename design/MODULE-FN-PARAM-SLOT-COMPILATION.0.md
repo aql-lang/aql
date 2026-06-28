@@ -305,20 +305,27 @@ REMAINING 2 (each a distinct deeper leaf; verified via absolute-path import repr
 1. **bucket** — "fn each$body: stack discipline: operands of set not adjacent on top" — a
    layoutOperands adjacency refusal in bucket-sort's THREE-level-nested each (`_is` each →
    `_ins` each → `_sh` each), a different leaf class.
-2. **radix-msd** — surfaces as "code-body word each (Stage 2)" but ROOT-CAUSED deeper
-   (instrument `compileClosureBody`'s probe via `es.Reason` + the fn-finish residual
-   resolution): the each-closure PROBE fails with **"fn go: body result of unknown
-   provenance"**. The leaf is **SELF-RECURSION THROUGH A CLOSURE BODY** — msd-go calls
-   itself (`arr b-lo b-hi np msd-go`) inside an `each`-body `if`. Isolated with three
-   minimal inline repros: (a) a NON-recursive helper inside an each-body if → COMPILES;
-   (b) recursion directly in a body `if` (no closure) → COMPILES; (c) recursion inside an
-   each-closure body → FAILS. Mechanism: the recursive call inside the each$body closure
-   unit re-enters the enclosing fn's analysis before its outer-`if` MERGE result is
-   registered in producedBy, so go's finish (emit.go:1519) sees an Array residual carrier
-   with `hasProducedBy=false` → "unknown provenance". A real feature (recursion-through-
-   closure), NOT a quick drop/promote — needs the recursive callee's unit + its residual
-   provenance to survive the nested-closure re-entry. Deferred (unsoundness risk if
-   rushed; the radix-lsd win is banked).
+2. **radix-msd** — recursion-through-closure barrier CLEARED (a109cc7c), algorithm still
+   blocked one leaf deeper. The "code-body word each" was masking
+   **SELF-RECURSION THROUGH A CLOSURE BODY** (msd-go calling itself inside an each-body
+   `if`). Root cause: `recordClosureDispatch`'s throwaway PROBE used a fresh
+   `NewEmitState`, losing the enclosing in-progress unit, so the recursive call MISSED the
+   fnUnits memo and re-compiled the enclosing fn in the throwaway (which re-hit the same
+   closure and never registered its residual → "fn go: body result of unknown
+   provenance"). The non-closure recursive path already works because the recursive call
+   shares the state where the fn's key is registered — the fnUnits HIT *is* the recursion
+   guard. FIX: `forkForProbe` seeds the probe with the enclosing fnUnits/fnRecs/units
+   (fresh slice backing; shared recs read-only on the hit path) so the recursive call HITS
+   the reserved unit. Sound/general (each+fold+scan verified, verify-bytecode +
+   crossdiff GREEN); off-corpus regression `bytecode_recursive_closure_test.go`.
+   REMAINING msd-go leaf: with recursion compiling, the each-closure probe now fails at
+   **"unmatched dispatch recovered at sub"** — a `counts`-Array element
+   (`(counts get (v add 1)) sub 1`, where `counts = make Array (iota N each […])`) feeding
+   `sub` inside the recursive each-closure. Isolated: the SAME counts-sub WITHOUT recursion
+   COMPILES — it surfaces ONLY under recursion, so it's a carrier-inference interaction
+   (the recursive call's presence widens/clouds the counts element type so `sub`'s numeric
+   sig no longer matches). A distinct deeper leaf (carrier inference under recursion).
 
-sort_smoke needs ALL 30 to flip the file; 28/30, bucket + radix-msd remain — each a
-substantial compiler feature (nested-each layout / recursion-through-closure).
+sort_smoke needs ALL 30 to flip the file; 28/30, bucket + radix-msd remain. radix-msd's
+recursion barrier is down; its remaining leaf (carrier-under-recursion `sub`) and bucket's
+nested-each layout adjacency are each still open.
