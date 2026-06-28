@@ -280,16 +280,33 @@ test, 0 miscompiles), each with a hand-pinned off-corpus regression:
   COUNTED events below a trailing const compiles as a variadic multi-value (fragMulti).
   Cleared heap, intro.
 
-REMAINING 3 (each a distinct deeper leaf):
-1. **radix-lsd** — "fn radix-lsd-sort: branch leaves extra values" — the OUTER else-arm
-   has residualN=1, out=opEvent (`convert List cur`), vmlen=2: ONE leftover event below
-   the result. Source of the leftover is NOT ensure-non-neg (declares [], nets 0) nor a
-   dead each-loop value-def (those compile standalone) — needs working seq→word
-   instrumentation in the lowerer (lw.es has no `.events`; the events are the lowerEvents
-   parameter) to pin it. The opEvent arm case wants vmlen==1; dropping a leftover BELOW
-   the top opEvent result is harder than the const case (no direct drop-below-top op).
-2. **bucket** — "fn each$body: stack discipline: operands of set not adjacent on top" — a
-   layoutOperands adjacency refusal, a different leaf class.
-3. **radix-msd** — "check diagnostics" — a CHECK error, not a lowering leaf.
+## 14. SORT CHAIN — 28/30 (radix-lsd CLEARED)
+**radix-lsd CLEARED** (e565f7b0). The §13 note's leftover-source guess was WRONG: with
+working seq→word instrumentation (a temporary `dbgDumpFrag` walking `frag.events` +
+`fnRecs[unit].name`, since the lowerer has `es *EmitState`/`fnRecs`, not a `.events`
+field) the leftover vm[0] is **`list-max`** — `def mx (lst list-max)`, NOT ensure-non-neg.
+`mx` is a USER-call value-def CAPTURED BY THE each-closure (`if (pl lte mx)` reads it
+across the closure floor). planValueDefLocals saw it `refs=1 valueDef=true fragRef=true
+fragInternal=true`, so: promoteUser was false (only forceOrder/refs>=2 triggered for a
+user call) and deadValueDef false → the FIRST switch case `isUser && !promoteUser &&
+!deadValueDef` fired and LEFT list-max loose on the sim. A NATIVE captured value-def
+already promotes via the `valueDef` trigger at the promotion case; only the user-call
+equivalent was shadowed (the deliberately-narrow Test.run-spec guard). FIX: a closure
+capture can only re-push from a frame local (promoteOperand rewrites closureCaps at
+OpPushClosure) — never a transient sim slot — so a captured user-call value-def MUST
+promote. New `eachClosureCap` walks each event's operands for closure caps → `captured`
+set; `promoteUser` now includes `captured[seq] && valueDef`. Gated GREEN (verify-bytecode
+0 miscompiles + crossdiff 0 divergences + make test sole-failure the pre-existing
+ratchet). Off-corpus regression `bytecode_captured_valuedef_test.go` (inline module —
+list-max is module-private) compiles native + RunCompiledStrict==Run; confirmed it
+refuses with the exact `branch leaves extra values` leaf when the new clause is disabled.
 
-sort_smoke needs ALL 30 to flip the file; 27/30 is close but the 3 remain.
+REMAINING 2 (each a distinct deeper leaf; verified via absolute-path import repro):
+1. **bucket** — "fn each$body: stack discipline: operands of set not adjacent on top" — a
+   layoutOperands adjacency refusal, a different leaf class.
+2. **radix-msd** — "code-body word each (Stage 2)" — a code-body `each` refusal in the
+   recursive msd-go body (NOT "check diagnostics" — that earlier reading was an artifact
+   of appending a call to the library file, which leaves `Sort` unbound; the real
+   per-algorithm repro must `import` the library so the namespace resolves).
+
+sort_smoke needs ALL 30 to flip the file; 28/30, bucket + radix-msd remain.
