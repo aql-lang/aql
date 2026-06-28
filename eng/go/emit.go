@@ -492,6 +492,34 @@ func NewEmitState() *EmitState {
 	}
 }
 
+// forkForProbe returns a throwaway recording state for compiling a closure body
+// speculatively (recordClosureDispatch's probe), seeded so a RECURSIVE call
+// inside the body resolves to the enclosing in-progress unit. The closure body's
+// emission (events / code / producedBy / consts) is FRESH — a refusal discards it
+// without touching the real program. But the fn-unit resolution tables
+// (fnUnits / fnRecs / units) are COPIED from the real state: a self-recursive call
+// (`… msd-go` inside an `each` body) is then a fnUnits HIT against the enclosing
+// fn's reserved unit — the same recursion guard the in-state non-closure path
+// relies on — instead of a MISS that re-compiles the enclosing fn in the
+// throwaway, where it re-hits its own closure and never registers its residual
+// ("body result of unknown provenance"). The slices get fresh backing arrays so
+// the probe's newly-appended units never write into the real state; the shared
+// *fnUnitRec / *emitUnit pointers are only READ on the hit path (StartFnCompile
+// returns finish==nil, so no re-analysis mutates them).
+func (es *EmitState) forkForProbe() *EmitState {
+	p := NewEmitState()
+	p.reg = es.reg
+	p.fnUnits = make(map[string]int, len(es.fnUnits))
+	for k, v := range es.fnUnits {
+		p.fnUnits[k] = v
+	}
+	p.fnRecs = make([]*fnUnitRec, len(es.fnRecs))
+	copy(p.fnRecs, es.fnRecs)
+	p.units = make([]*emitUnit, len(es.units))
+	copy(p.units, es.units)
+	return p
+}
+
 func (es *EmitState) active() bool {
 	return es != nil && es.Compilable && es.suspended == 0
 }

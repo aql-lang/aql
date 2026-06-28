@@ -256,9 +256,15 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	defer r.Check.TruncateDiagnostics(diagBase)
 
 	// PROBE: compile the body in a throwaway state so a refusal leaves the
-	// real program untouched (graceful fall-through to the island).
+	// real program untouched (graceful fall-through to the island). The throwaway
+	// is SEEDED with the enclosing fn-unit tables (forkForProbe) so a self-
+	// recursive call inside the body — `… msd-go` in an `each` body — resolves to
+	// the enclosing in-progress unit instead of re-compiling it in the throwaway
+	// (which re-hits the same closure and fails its own residual). The REAL
+	// compile below resolves the recursion naturally (the enclosing unit's key is
+	// already in the real state).
 	real := r.Check.Emit
-	r.Check.Emit = NewEmitState()
+	r.Check.Emit = real.forkForProbe()
 	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	r.Check.Emit = real
 	if !probeOk {
