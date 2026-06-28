@@ -25,6 +25,14 @@ This is a **design RFC only — no implementation code yet**, matching how the
 adjacent subsystems were designed first (`PROCESSES.0.md`, `SERVICES.0.md`,
 `STREAM-WORDS.0.md`).
 
+The **dial side** is specified symmetrically in `NETWORK-CLIENTS.0.md`: it reuses
+this document's `Socket`, `Codec`, `Bytes`/bit-syntax, and streaming machinery
+unchanged, adds the `connect-raw`/`connect` dial primitives, and models a client
+as a **bidirectional `Endpoint`** — a `Service` you both `call`/`send` to the
+peer and `add` handlers to for what the peer pushes back. A served connection's
+session and a `connect`ed endpoint are the *same* type, so a proxy/gateway is
+just this document composed with its sibling.
+
 > **Decisions taken at design-review time** (the four forks this RFC opened):
 > (1) **one** new document covering both tiers (this file); (2) a **full**
 > `Bytes` value type **and an Erlang-style bit-syntax** for framing (§3), made
