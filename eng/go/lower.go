@@ -330,13 +330,28 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 		if reason != "" {
 			return reason
 		}
-		// A DEAD branch value-def (planValueDefLocals marked it): its merge result sits
-		// on the sim unconsumed — drop it (the binding is never read). lowerBranch left
-		// exactly one slot for this branch's merge on top; pop+DROP it.
-		if ev.kind == evBranch && lw.dead[ev.seq] &&
-			len(lw.vm) > 0 && lw.vm[len(lw.vm)-1].seq == ev.seq {
-			lw.emit(OpDrop, 0, ev.br.pos)
-			lw.vm = lw.vm[:len(lw.vm)-1]
+		// A PROMOTED branch value-def (planValueDefLocals marked it, a multiply-read
+		// `def bi (if …)`): store the merge to its frame slot so later references
+		// re-push from the slot (rewritePromotedRefs rewrote them to local operands).
+		// lowerBranch left exactly one merge slot on top; STORE+pop it. If the merge is
+		// not a clean single value on top (a variadic / diverged branch the plan-time
+		// branchSingleValue gate could not foresee), REFUSE — sound interpreter
+		// fallback, never a wrong store.
+		if ev.kind == evBranch {
+			if slot, ok := lw.promoted[ev.seq]; ok {
+				if lw.variadic[ev.seq] || len(lw.vm) == 0 || lw.vm[len(lw.vm)-1].seq != ev.seq {
+					return "if: promoted merge is not a single value on top (Stage 3)"
+				}
+				lw.emit(OpStoreLocal, slot, ev.br.pos)
+				lw.vm = lw.vm[:len(lw.vm)-1]
+			} else if lw.dead[ev.seq] &&
+				// A DEAD branch value-def: its merge result sits on the sim unconsumed —
+				// drop it (the binding is never read). lowerBranch left exactly one slot
+				// for this branch's merge on top; pop+DROP it.
+				len(lw.vm) > 0 && lw.vm[len(lw.vm)-1].seq == ev.seq {
+				lw.emit(OpDrop, 0, ev.br.pos)
+				lw.vm = lw.vm[:len(lw.vm)-1]
+			}
 		}
 	}
 	return ""
@@ -452,6 +467,24 @@ func eachClosureCap(ev *emitEvent, fn func(emitOperand)) {
 	case evBranch:
 		scan([]emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut, ev.br.thenVal, ev.br.elsVal})
 	}
+}
+
+// branchSingleValue reports whether a 2-arm `if` merges to exactly one value — both
+// arms present and neither a MULTI-value arm (residualN>1). Only such a branch may be
+// promoted to a frame local as a value-def: the store seats one value. A value-arm
+// (thenIsVal/elsIsVal, nil fragment) is single by construction. A no-else if (variadic
+// 0-or-1) and a multi-value arm are excluded — their merge count is runtime-variable.
+func branchSingleValue(br *emitBranch) bool {
+	if br == nil || !br.hasElse {
+		return false
+	}
+	if br.then != nil && br.then.residualN > 1 {
+		return false
+	}
+	if br.els != nil && br.els.residualN > 1 {
+		return false
+	}
+	return true
 }
 
 // childFragments returns the body fragments a branch / loop event owns — the
@@ -679,6 +712,26 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 					dead = map[int]bool{}
 				}
 				dead[ev.seq] = true
+				continue
+			}
+			// A 2-arm if-RESULT bound to a name and read MORE THAN ONCE (or across a
+			// fragment floor) — `def bi (if …); … (… get bi) … set bi …` — must be
+			// STORED to a frame local: a single sim copy is consumed by the first use,
+			// so the second (here a later `set` key) cannot find it ("operands of set
+			// not adjacent on top", bucket's `bcount set bi ((bcount get bi) add 1)`).
+			// Promote like a call result; lowerEvents stores the merge after the branch
+			// and the rewritten references re-push from the slot. Gated to a SINGLE-value
+			// merge (both arms net <=1) so the store seats exactly one value — a
+			// multi-value / variadic merge is refused at the store hook (sound fallback).
+			if branchSingleValue(ev.br) && es.eventInfo[ev.seq].valueDef &&
+				(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq])) {
+				if promoted == nil {
+					promoted = map[int]int{}
+				}
+				if _, done := promoted[ev.seq]; !done {
+					promoted[ev.seq] = unit.numLocals
+					unit.numLocals++
+				}
 			}
 			continue
 		}
