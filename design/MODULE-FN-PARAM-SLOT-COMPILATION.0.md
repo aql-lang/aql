@@ -303,10 +303,22 @@ refuses with the exact `branch leaves extra values` leaf when the new clause is 
 
 REMAINING 2 (each a distinct deeper leaf; verified via absolute-path import repro):
 1. **bucket** — "fn each$body: stack discipline: operands of set not adjacent on top" — a
-   layoutOperands adjacency refusal, a different leaf class.
-2. **radix-msd** — "code-body word each (Stage 2)" — a code-body `each` refusal in the
-   recursive msd-go body (NOT "check diagnostics" — that earlier reading was an artifact
-   of appending a call to the library file, which leaves `Sort` unbound; the real
-   per-algorithm repro must `import` the library so the namespace resolves).
+   layoutOperands adjacency refusal in bucket-sort's THREE-level-nested each (`_is` each →
+   `_ins` each → `_sh` each), a different leaf class.
+2. **radix-msd** — surfaces as "code-body word each (Stage 2)" but ROOT-CAUSED deeper
+   (instrument `compileClosureBody`'s probe via `es.Reason` + the fn-finish residual
+   resolution): the each-closure PROBE fails with **"fn go: body result of unknown
+   provenance"**. The leaf is **SELF-RECURSION THROUGH A CLOSURE BODY** — msd-go calls
+   itself (`arr b-lo b-hi np msd-go`) inside an `each`-body `if`. Isolated with three
+   minimal inline repros: (a) a NON-recursive helper inside an each-body if → COMPILES;
+   (b) recursion directly in a body `if` (no closure) → COMPILES; (c) recursion inside an
+   each-closure body → FAILS. Mechanism: the recursive call inside the each$body closure
+   unit re-enters the enclosing fn's analysis before its outer-`if` MERGE result is
+   registered in producedBy, so go's finish (emit.go:1519) sees an Array residual carrier
+   with `hasProducedBy=false` → "unknown provenance". A real feature (recursion-through-
+   closure), NOT a quick drop/promote — needs the recursive callee's unit + its residual
+   provenance to survive the nested-closure re-entry. Deferred (unsoundness risk if
+   rushed; the radix-lsd win is banked).
 
-sort_smoke needs ALL 30 to flip the file; 28/30, bucket + radix-msd remain.
+sort_smoke needs ALL 30 to flip the file; 28/30, bucket + radix-msd remain — each a
+substantial compiler feature (nested-each layout / recursion-through-closure).
