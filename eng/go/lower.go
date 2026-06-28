@@ -1104,7 +1104,20 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		}
 	default:
 		if len(lw.vm) != 0 {
-			return "branch leaves extra values (Stage 2 lowers single-result branches)"
+			// Leftover side-effect EVENT results below the single const/local result: the
+			// fragment analysis netted this arm at residualN<=1, so the events on the sim
+			// are ignored side-effect calls (`[ arr i j swap-at end 0 ]` — the in-place
+			// swap returns the array, discarded by the trailing literal `0`). They already
+			// RAN (lowerEvents emitted them); DROP their results so the arm nets exactly
+			// its single result. Only an allowVariadic branch ARM trims this way — a loop
+			// body / condition with leftovers is a genuine over-count and still refuses.
+			if !allowVariadic {
+				return "branch leaves extra values (Stage 2 lowers single-result branches)"
+			}
+			for range lw.vm {
+				lw.emit(OpDrop, 0, pos)
+			}
+			lw.vm = nil
 		}
 		lw.pushOperand(*out, pos)
 		lw.vm = lw.vm[:len(lw.vm)-1] // pushOperand tracked it; the scope owns the count
