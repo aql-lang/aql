@@ -218,3 +218,29 @@ leaves (from sort_smoke, all 11 comparison sorts), in priority order:
 
 Leaf #1 is the highest-leverage next target (root of ~9/11 comparison sorts, and the
 same def-bound-dynamic-apply lowering covers both its manifestations).
+
+## 11. SORT CHAIN PROGRESS — def-bound dynamic apply LANDED (baaf45b7); 13/30 algorithms compile
+The def-bound-dynamic-apply fix (§10 leaf #1) recording the trailing fn-value apply as a
+RecordDynApply EVENT cleared 8/11 comparison sorts. **13 of the 30 smoke-test algorithms
+now force-compile**: bead, bogo, bubble, case-insensitive, cocktail, cycle, gnome,
+insertion, is-sorted, natural, odd-even, reverse, selection, shell. Gate green
+(verify-bytecode + crossdiff + make test, 0 miscompiles).
+
+Remaining leaves (by frequency), precisely characterised:
+1. **"branch leaves extra values (Stage 2 lowers single-result branches)"** (8: bucket,
+   comb, counting, pancake, pigeonhole, radix-lsd, tim). A branch arm `[ arr i j swap-at
+   end 0 ]` leaves an EVENT (swap-at — a side-effecting in-place swap whose array result
+   is ignored) BELOW a trailing CONST (`0`, the arm's real result). lower.go:1069's
+   multi-value arm case requires EVERY residual value to be event-produced on the sim
+   stack, but a const isn't simulated, so [array_event, 0_const] (len(vm)=1 != residualN=2)
+   refuses. FIX: extend the multi-value arm lowering to seat an event-then-trailing-const
+   residual (drop/keep the leading side-effect event, push the const on top) — sound
+   because the enclosing each result is discarded (only swap-at's side effect matters) and
+   the interpreter leaves the same whole-arm residual.
+2. **"branch reads enclosing computation (Stage 3)"** (5: bitonic, intro, quick, slow,
+   stooge) — a branch arm references a value computed in the enclosing scope.
+3. **"body leaves extra values (Stage 3 lowers in-order results)"** (3: heap/sift-down,
+   merge, sort/merge-sort) — a fn body (not a closure) nets >1 in-order value.
+4. **check diagnostics** (1: radix-msd).
+
+Leaf #1 (branch-leaves-extra-values, 8 algorithms) is the next highest-leverage target.
