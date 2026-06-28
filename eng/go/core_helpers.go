@@ -192,7 +192,19 @@ func UninstallDef(r *Registry, name string) {
 // paren (the same pointer the compile boundary stores in
 // Signature.FnFrame — see eng/go/fn_frame.go).
 func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, meta *FnFrameMeta) Handler {
-	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return func(args []Value, _ map[string]Value, _ []Value, callReg *Registry) ([]Value, error) {
+		// Reached from a FOREIGN registry (callReg != the install registry r) — a
+		// module fn dispatched through the unified execMatch path from an outer
+		// engine. The inline-re-step token expansion below binds params and resolves
+		// the body in r, but execMatch re-steps the returned tokens in the CALLER's
+		// registry (callReg), where r's params + module-private words are absent
+		// ("undefined word: x"). So run the body in its HOME registry r via CallAQL
+		// and return the result — the SAME execution the old execFnDefSig path did,
+		// now behind ONE dispatch path. A same-registry fn (callReg == r, the common
+		// top-level case) keeps the inline re-step (recursion / forward-ref intact).
+		if callReg != nil && callReg != r {
+			return r.CallAQL(&s, args, fnDefCopy.Captured)
+		}
 		var result []Value
 		var names []string
 		// Wrap the entire expansion (unnamed args + body + undef

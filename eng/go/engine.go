@@ -4160,13 +4160,20 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			if fnDef.Module != "" {
 				e.traceNote = "call " + fnDef.Name
 			}
-			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
-			if trivialDelegation && sig.Handler != nil {
-				// The inner native lives in fnDef.Registry (the module sub-
-				// registry). Carry it on the match so the recorder can re-match a
-				// dynamic-input dispatch via OpCallNativePoly over that registry
-				// (`StructUtil.getpath` over a computed receiver), instead of
-				// refusing — the VM's callPoly resolves the word there.
+			// ONE dispatch path, no exceptions: a module wrapper — trivial-delegation
+			// OR a real AQL body — dispatches through execMatch, exactly like a named
+			// fn and a bare-word call. So a fn body is ANALYSED/COMPILED the SAME way
+			// regardless of how the fn was reached: a param-slot unit via the matched
+			// sig's ReturnsFn, NOT a separate def-stack CallAQL run that left Function
+			// params slot-less and unreachable to a closure capture (the sort
+			// comp-capture leaf — a fundamental dispatch-path divergence). match.Reg
+			// carries the sub-registry so the body's module-private words resolve there
+			// (the inner native's poly re-match, and the body's own scope);
+			// shareCheckState routes the body's unit-compile into the MAIN program's
+			// emit so RecordUserCall references it (else "user fn call (Stage 3)"). A
+			// no-op outside check mode — interpret runs the matched handler in the
+			// sub-registry it was installed in, exactly as before.
+			if sig.Handler != nil {
 				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name, Reg: fnDef.Registry}
 				if len(positions) > 0 {
 					match.Args = make([]Value, len(positions))
@@ -4174,11 +4181,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 						match.Args[i] = e.tape.At(pos)
 					}
 				}
-				return e.execMatch(match)
+				restoreCheck := e.shareCheckState(fnDef.Registry)
+				err := e.execMatch(match)
+				restoreCheck()
+				return err
 			}
-			// Non-trivial body — run via CallAQL in the captured sub-
-			// registry. The wrapper's body has module-private references
-			// that need fnDef.Registry's scope for resolution.
+			// Degenerate: a wrapper sig with no body-runner handler — fall through.
 			args := make([]Value, len(positions))
 			for i, pos := range positions {
 				args[i] = e.tape.At(pos)
@@ -4240,19 +4248,6 @@ func isRecordableLiteral(v Value) bool {
 		return false
 	}
 	return true
-}
-
-// isTrivialDelegationBody reports whether a wrapper FnSig is a pure
-// pass-through to an inner native of the same name — body of the form
-// `[Word(name)]` with all-unnamed Params. Module wrappers built by
-// the `makeXxxFnDef` / `wrapXxxFnDef` helpers all have this shape;
-// AQL fns defined inside a module preamble (with real bodies + named
-// params) do not. Used by execFnDefLiteral to decide whether to
-// direct-call the inner handler (trivial) or run the body in the
-// captured sub-registry (non-trivial).
-func isTrivialDelegationBody(sig *FnSig, name string) bool {
-	inner, ok := trivialDelegationTarget(sig)
-	return ok && inner == name
 }
 
 // trivialDelegationTarget reports the inner native name a wrapper FnSig
