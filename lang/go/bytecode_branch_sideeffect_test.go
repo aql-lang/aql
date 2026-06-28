@@ -28,6 +28,13 @@ func TestBranchArmSideEffectLeftover(t *testing.T) {
 			swapMod + `([3 1 4 2] M.srt)`, "[[1 3 2 4]]"},
 		{"no swaps needed (arm never taken)",
 			swapMod + `([1 2 3 4] M.srt)`, "[[1 2 3 4]]"},
+		// MULTI-VALUE arm (residualN>1): a COUNTED computed value below a trailing const.
+		// The each leaves the whole arm residual and trims to the top per iteration, so
+		// the arm compiles as a variadic multi-value (fragMulti) — the heap/intro leaf.
+		{"multi-value arm: one computed value then a const",
+			`(iota 3 each [ var [[i] if (i lt 5) [ (i add 100) end 0 ] [7] ] ])`, "[[0 0 0]]"},
+		{"multi-value arm: two computed values then a const",
+			`(iota 3 each [ var [[i] if (i lt 1) [ (i add 100) end (i add 200) end 0 ] [7] ] ])`, "[[0 7 7]]"},
 	}
 	for _, c := range strict {
 		t.Run(c.name, func(t *testing.T) {

@@ -1121,10 +1121,24 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		// `[({a:(get…)} get a)]`). Only a branch arm may carry it (allowVariadic);
 		// a loop body / condition needs a single value. lowerArms marks the merge
 		// variadic via fragMulti so only a variadic-absorbing position consumes it.
-		if !allowVariadic || len(lw.vm) != frag.residualN || !slotIs(lw.vm[len(lw.vm)-1], *out) {
+		if !allowVariadic {
 			return "branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
-		lw.fragMulti = true
+		switch {
+		case len(lw.vm) == frag.residualN && slotIs(lw.vm[len(lw.vm)-1], *out):
+			// Every value EVENT-produced on the sim, the top matching out.
+			lw.fragMulti = true
+		case out.kind != opEvent && len(lw.vm) == frag.residualN-1:
+			// A trailing CONST/LOCAL result above residualN-1 EVENTS on the sim (`[ …
+			// swap-at end 0 ]` where the swap's array result is counted in residualN):
+			// push the const on top of the seated events. The whole-arm residual
+			// ([event…, const]) matches the interpreter, and the variadic merge
+			// (fragMulti) absorbs it — the heap/intro multi-value swap-then-const arm.
+			lw.pushOperand(*out, pos)
+			lw.fragMulti = true
+		default:
+			return "branch leaves extra values (Stage 2 lowers single-result branches)"
+		}
 	case out.kind == opEvent:
 		if lw.variadic[out.idx] && !allowVariadic {
 			// The fragment's result is itself a VARIADIC (0-or-1) event — a
