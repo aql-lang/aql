@@ -301,10 +301,29 @@ ratchet). Off-corpus regression `bytecode_captured_valuedef_test.go` (inline mod
 list-max is module-private) compiles native + RunCompiledStrict==Run; confirmed it
 refuses with the exact `branch leaves extra values` leaf when the new clause is disabled.
 
-REMAINING 2 (each a distinct deeper leaf; verified via absolute-path import repro):
-1. **bucket** — "fn each$body: stack discipline: operands of set not adjacent on top" — a
-   layoutOperands adjacency refusal in bucket-sort's THREE-level-nested each (`_is` each →
-   `_ins` each → `_sh` each), a different leaf class.
+## 15. SORT CHAIN — 29/30 (bucket CLEARED)
+**bucket CLEARED** (091f3a65). Despite the "THREE-level-nested each" framing below, the
+refusal had nothing to do with nesting depth — it was a value-def bound to an `if` result
+read TWICE. Instrumented `layoutOperands`'s `set` refusal (seq→word map): the refusing
+`set` is `bcount set bi ((bcount get bi) add 1)` — key=`bi`=`def bi (if (raw gte n)
+[(n sub 1)] [raw])` (an if-result, `promoted=false`), read by BOTH `bcount get bi` AND the
+`set` key, but only the `add` result was on the sim. Root cause: planValueDefLocals
+`continue`d past EVERY evBranch result (only ever dead-dropping a zero-ref merge) — it
+never promoted an if-result, so `bi`'s single sim copy was consumed by the first use and
+the second couldn't seat ("operands of set not adjacent on top"). FIX: promote a
+single-value (`branchSingleValue`: 2-arm, both arms residualN<=1) if-result value-def read
+>=2 times (or cross-fragment) to a frame local, like a multiply-read call result;
+lowerEvents stores the merge after the branch, references re-push from the slot. The
+lower-time store hook REFUSES (sound island fallback) if the merge turns out
+variadic/diverged — a wrong store is impossible. Gates GREEN (verify-bytecode 0
+miscompiles + crossdiff 0 divergences + make test sole-failure the pre-existing ratchet;
+24-algo sweep NATIVE=23 MISCOMPILE=0). Off-corpus regression
+`bytecode_branch_valuedef_test.go` (top-level + each-body; confirmed it refuses with the
+exact leaf when the promotion is disabled).
+
+REMAINING 1 (radix-msd only):
+1. ~~**bucket**~~ — CLEARED (§15). [historic: "operands of set not adjacent on top" — NOT
+   the nested-each depth it first looked like, but a multiply-read `if`-result value-def.]
 2. **radix-msd** — recursion-through-closure barrier CLEARED (a109cc7c), algorithm still
    blocked one leaf deeper. The "code-body word each" was masking
    **SELF-RECURSION THROUGH A CLOSURE BODY** (msd-go calling itself inside an each-body
@@ -332,6 +351,9 @@ REMAINING 2 (each a distinct deeper leaf; verified via absolute-path import repr
    under recursion); NOT to be rushed (a wrong widening fix risks unsoundness the
    differential is blind to off-corpus). Deferred with the precise repro above.
 
-sort_smoke needs ALL 30 to flip the file; 28/30, bucket + radix-msd remain. radix-msd's
-recursion barrier is down; its remaining leaf (carrier-under-recursion `sub`) and bucket's
-nested-each layout adjacency are each still open.
+sort_smoke needs ALL 30 to flip the file; **29/30** — only **radix-msd** remains. Its
+recursion-through-closure barrier is down (§14); the one remaining leaf is the
+carrier-under-recursion `sub` (a captured Array's element type widens to Scalar in the
+round the recursive call forces — §14). That is the SOLE blocker to flipping
+sort_smoke.aql, and it is a carrier-inference fix (not a lowering one), so it wants its own
+careful pass — a wrong widening risks an off-corpus miscompile the differential is blind to.
