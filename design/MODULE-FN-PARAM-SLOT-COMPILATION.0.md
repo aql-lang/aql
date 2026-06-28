@@ -268,3 +268,28 @@ the planValueDefLocals instrumentation blocked the final read; the gate at lower
 + the fragRef/fragInternal computation are the place to look). This leaf (8 algorithms)
 is the same "branch arm reads an enclosing value-def" shape as the Stage-3
 "branch reads enclosing computation" leaf (5 algorithms) — likely one fix clears both 13.
+
+## 13. SORT CHAIN — 27/30 algorithms compile (this segment cleared 10)
+"Do stage 3" + "push on" cleared, each gated green (verify-bytecode + crossdiff + make
+test, 0 miscompiles), each with a hand-pinned off-corpus regression:
+- **Dead value-def drop** (e2b742e5): a `def _ (expr)` never read whose result is a
+  USER-call or an `if` MERGE was left on the stack ("body leaves extra values Stage 3");
+  now dropped (the interpreter binds it off the residual). Cleared quick, merge, slow,
+  stooge, bitonic, sort, counting, pigeonhole.
+- **Multi-value arm with trailing const** (0afb8f87): an `if` arm leaving residualN>1
+  COUNTED events below a trailing const compiles as a variadic multi-value (fragMulti).
+  Cleared heap, intro.
+
+REMAINING 3 (each a distinct deeper leaf):
+1. **radix-lsd** — "fn radix-lsd-sort: branch leaves extra values" — the OUTER else-arm
+   has residualN=1, out=opEvent (`convert List cur`), vmlen=2: ONE leftover event below
+   the result. Source of the leftover is NOT ensure-non-neg (declares [], nets 0) nor a
+   dead each-loop value-def (those compile standalone) — needs working seq→word
+   instrumentation in the lowerer (lw.es has no `.events`; the events are the lowerEvents
+   parameter) to pin it. The opEvent arm case wants vmlen==1; dropping a leftover BELOW
+   the top opEvent result is harder than the const case (no direct drop-below-top op).
+2. **bucket** — "fn each$body: stack discipline: operands of set not adjacent on top" — a
+   layoutOperands adjacency refusal, a different leaf class.
+3. **radix-msd** — "check diagnostics" — a CHECK error, not a lowering leaf.
+
+sort_smoke needs ALL 30 to flip the file; 27/30 is close but the 3 remain.
