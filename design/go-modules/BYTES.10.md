@@ -65,7 +65,9 @@ pattern used for `Time`, the fetch result, `Timeout`, and `Interval`
 - **No-panic init** — registration records any error via the `TypeInitError`
   path checked at `DefaultRegistryWithPolicy`, per ADR-005 (`eng/go/CLAUDE.md`
   "Panic Prevention" — no init-time panic).
-- Path/name: `Ideal/Bytes` (a concrete data leaf), exported so core and
+- Path/name: `Scalar/Bytes` — a concrete **Scalar** data leaf (sibling of
+  `String` and the `Scalar/Time` family, so `x is Scalar` holds, and the
+  `Scalar/…` prefix agrees with the 1000–1999 band above), exported so core and
   `BinUtil`-built values type as `Bytes` and `x is Bytes` resolves.
 
 ## 3. Payload & behavior
@@ -425,7 +427,7 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
 - **`eng/go/gobridge.go`** — add the `[]byte` ↔ `Bytes` cases, with the
   copy-on-ingest copy in `FromNative` (§4.2).
 - **`lang/go/native/native_bytes.go`** — `registerBytesType()` via
-  `RegisterExternalBuiltin("Ideal/Bytes", <FixedID 1000–1999>, bytesBehavior{})`;
+  `RegisterExternalBuiltin("Scalar/Bytes", <FixedID 1000–1999>, bytesBehavior{})`;
   behavior implements `Format`/`Comparer`/`Equal`/`Sizer` (§3) and **omits**
   `DeepCloner` (§4.1); the core words (§5); funnel init errors through
   `TypeInitError`.
