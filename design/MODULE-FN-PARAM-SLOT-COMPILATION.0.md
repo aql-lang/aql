@@ -351,9 +351,43 @@ REMAINING 1 (radix-msd only):
    under recursion); NOT to be rushed (a wrong widening fix risks unsoundness the
    differential is blind to off-corpus). Deferred with the precise repro above.
 
-sort_smoke needs ALL 30 to flip the file; **29/30** — only **radix-msd** remains. Its
-recursion-through-closure barrier is down (§14); the one remaining leaf is the
-carrier-under-recursion `sub` (a captured Array's element type widens to Scalar in the
-round the recursive call forces — §14). That is the SOLE blocker to flipping
-sort_smoke.aql, and it is a carrier-inference fix (not a lowering one), so it wants its own
-careful pass — a wrong widening risks an off-corpus miscompile the differential is blind to.
+## 16. radix-msd — FULLY ROOT-CAUSED as a 4-LAYER carrier-inference cascade (deferred)
+Instrumented end-to-end (ADD-DBG on `ReturnsAddConcat`, SUB-DBG on the recovery sites,
+PROV-DBG on the fn-finish residual, narrowArgsToParams). The failing `(hi sub lo)` at row 3
+is the TAIL of a cascade that all starts from ONE source — `counts get` returns gradual
+`Any`:
+1. **Array `get` over a non-concrete carrier returns gradual `Any`.** `counts = make Array
+   [0 0 0]` is a CARRIER (not concrete) in check mode; the Array get sig hardcodes
+   `Returns: [TAny]` (native_storage.go:191) and even the Node int-key `getIntKeyReturns`
+   bails to `NewDynamicCarrier(TAny)` for a non-concrete container. Array carriers DON'T
+   track an element type, so `counts get 0` → gradual `Any` (confirmed: `[ADDCONCAT]
+   args=[Any(dyn=true) Integer]`).
+2. **`add` over a gradual `Any` widens to gradual `Scalar`.** `lo add (gradual Any)` matches
+   the concat overload `[Scalar String]` optimistically (the gradual Any fills String), so
+   `ReturnsAddConcat` → `NewDynamicCarrier(TScalar)`. So `blo`/`bhi` = gradual Scalar.
+3. **The compile-path genArgs do NOT narrow a widened arg to the declared param type.** The
+   recursive `… go` passes the gradual Scalar `blo` as `hi`. The carrier-RESULT path
+   narrows via `narrowArgsToParams` (core_helpers.go:577), but the body-UNIT-compile path
+   (line ~532) generalises with `NewCarrier(a.Parent)` — a STRICT Scalar — and does NOT
+   narrow to `hi:Integer`. So the recursive re-analysis compiles go's body with hi=Scalar →
+   `(hi sub lo)` = Scalar sub Integer → "unmatched dispatch recovered at sub".
+   - A genArgs narrowing (mirror narrowArgsToParams; gate `genSpec == nil` — narrowing a
+     GENERIC param's type VARIABLE breaks instantiation, TestEmitGenericInstantiation) is
+     SOUND (verify-bytecode + crossdiff GREEN) and FIXES layer 3 — but only EXPOSES layer 4.
+4. **Branch-merge residual loses provenance under recursion.** With layer 3 fixed, go's
+   OUTER-if merge (an Array) has `hasProducedBy=false` at fn-finish → "fn go: body result of
+   unknown provenance" (same class as the §14 closure-residual issue, here for DIRECT
+   recursion + the gradual flow). A clean Integer direct-recursion (no get/add) already
+   compiles, so this is specifically the gradual-carrier merge.
+
+ROOT: fixing layer 1 (Array carriers track element type so `counts get` → Integer) collapses
+ALL FOUR — no gradual Any, no Scalar, no param widening, no provenance loss — and is the
+right fix, but it is a broad, corpus-wide carrier change (every Array get). Each layer is
+its own risky carrier change; the partial genArgs fix (layer 3) is sound but has NO standalone
+algorithm win (radix-msd still refuses at layer 4), so it was NOT landed — chaining
+speculative carrier changes at session end is exactly the unsoundness risk the invariant
+guards against. DEFERRED as a dedicated carrier pass (start at layer 1: Array element-type
+tracking + an Array-get ReturnsFn).
+
+sort_smoke needs ALL 30 to flip the file; **29/30** — only **radix-msd** remains, blocked by
+the layer-1 root above. NOT a lowering leaf; a dedicated carrier-inference pass.
