@@ -2944,17 +2944,21 @@ func isInertConst(v Value) bool {
 		if d.Registry == nil {
 			return true
 		}
-		// A module-export TRIVIAL-DELEGATION wrapper (`MathUtil.sqrt`): every own
-		// sig is a `[Word(inner)]` pass-through, so it holds no closure state to
-		// snapshot. The sub-registry pointer it carries is the SAME object the
-		// compiled run shares (RunProgram runs on the check-pass registry), and
-		// the VM applies it faithfully at run time via callDynamic →
-		// tryNativeFnApply (which re-resolves the inner native in that registry).
-		// So it bakes as DATA — a bare residual (`MathUtil.sqrt`), a branch-arm
-		// operand (`if c [99] MathUtil.sqrt`), or a container member. A module fn
-		// with a REAL AQL body is NOT a delegation wrapper and stays refused (its
-		// body would need CallAQL in the sub-registry, which the VM cannot do).
-		return isDelegationFnDef(d)
+		// A module-export fn value bakes as DATA — a bare residual (`MathUtil.sqrt`),
+		// a branch-arm operand, a container member, OR a comparator passed to another
+		// fn (`xs M.sort M.by-num`). The sub-registry pointer it carries is the SAME
+		// object the compiled run shares (RunProgram runs on the check-pass
+		// registry), so the baked const and the live fn are one object — no
+		// check/VM value divergence. The VM applies it faithfully at run time:
+		//   - a TRIVIAL-DELEGATION wrapper (`MathUtil.sqrt`, every own sig a
+		//     `[Word(inner)]` pass-through) via callDynamic → tryNativeFnApply, which
+		//     re-resolves the inner native in that registry;
+		//   - a REAL AQL body via the island sub-engine (callDynTrailTop/…'s
+		//     `vc.island().Run([fn, args…])`), which INTERPRETS the fn in
+		//     fnDef.Registry — CallAQL, module-private scope and all. So a real body
+		//     applies soundly too (compile == interpret, verified). A macro stays
+		//     refused (applied only by name / compile-time expansion, never as data).
+		return !d.Macro
 	case *SurfaceInfo:
 		// A surface type (`def Shape surface {area: (fnsig …)}`): an immutable
 		// contract descriptor riding its canonical minted node via the Type
