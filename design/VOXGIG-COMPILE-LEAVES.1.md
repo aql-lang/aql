@@ -704,3 +704,27 @@ nested each-var), each refusing on its own. So the comparator Stage-G leaf is cl
 file needs its sibling leaves cleared too. Next highest-leverage to actually FLIP sort_smoke: enumerate + clear the
 algorithms' remaining leaves (make-Array-from-list provenance, in-place `set`/`swap-at` over an Array, the nested
 each-var residual) as a cluster.
+
+### SORT CLUSTER — leaves cleared this pass + the remaining chain (root-caused).
+Attacking the sort algorithms to flip sort_smoke (which calls ALL 16+). CLEARED (all sound, gated, committed):
+- comparator trailing-fn-value apply (OpCallDynTrailTop, 1d765fff) + dynamic-arg variant (31f02f3c).
+- the closure-body unapplied-fn-value MISCOMPILE (d3dda735).
+- `make Array [computed]` / a CONSUMED computed list in a fn body (f28cc36a) — the plan's difficulty-5 leaf.
+- VERIFIED already compiling: Array `get`/`set`, `arr set j v`.
+
+REMAINING leaves (each its own fix; insertion-sort alone chains through several):
+1. **comp-capture (module-fn Function param) — ROOT-CAUSED.** insertion's FIRST leaf: the outer `each` closure
+   captures `comp` but resolveOperand declines — instrumented `CAPWALK comp => WORD depth=1 baseline=0`: the
+   comparator param of a MODULE fn (Sort.insertion) binds to a bare WORD PLACEHOLDER during CompileCheck's fn-body
+   re-entry (baseline=0, as if it were not the fn's own param), so the closure captures an unresolvable Word, not
+   the Function carrier. A TOP-LEVEL fn binds `comp` to a proper Function carrier (my repros compile), so this is
+   MODULE-FN-SPECIFIC — the module-fn compile-reentry param binding does not install the Function param as a
+   resolvable carrier/local. High-leverage (shared by every comparison sort's `[comp:Function …]`), but a deep
+   module-fn dispatch fix. NOT a Word-bake (the Word `comp` is the param name; baking it would resolve `comp`
+   against the registry at run time → undefined → unsound).
+2. **branch-multi-value**: `if (j gt 0) [ <stmt> <stmt> 0 ] [0]` — an `if` arm running several statements nets >1
+   value before its result; "branch leaves extra values (Stage 2 lowers single-result branches)".
+3. **swap-at / convert List** over an Array (surfaced as "check diagnostics" — likely a re-entry diagnostic).
+A sort-file flip needs ALL of these × ALL 16 algorithms (distribution sorts add counting/bucket leaves). The two
+HARDEST documented leaves (Stage-G comparator + difficulty-5 make-list) are now cleared; the residual are narrower
+but numerous. compile==interpret held throughout (0 miscompiles).
