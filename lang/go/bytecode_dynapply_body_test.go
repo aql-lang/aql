@@ -41,6 +41,14 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 			`def f fn [[comp:Function][List][ [3 1] each [ var [[x] (x 2 comp) ] ] ]] ([b:Any a:Any] => [(a cmp b)]) f`, "[[1 -1]]"},
 		{"trailing apply with a DYNAMIC arg (comp still the fn, not the leading dynamic)",
 			`def f fn [[comp:Function][List][ def arr (make Array [5 3]) [0 1] each [ var [[x] ((arr get x) 4 comp) ] ] ]] cmp/r f`, "[[1 -1]]"},
+		// The comparator apply BOUND TO A DEF-LOCAL (`def c (a b comp)`) then consumed
+		// by `if (c gt 0)` — an INTERMEDIATE apply, not the body's trailing residual.
+		// Recorded as a RecordDynApply EVENT so it seats like any computed result; this
+		// is the def-bound-dynamic-apply leaf that gates 8/11 comparison sorts.
+		{"def-bound comparator apply feeding an if (2 dynamic args)",
+			`def f fn [[comp:Function][List][ def arr (make Array [3 1 2]) [0 1] each [ var [[i] def c ((arr get i) (arr get (i add 1)) comp) if (c gt 0) [9] [0] ] ] ]] cmp/r f`, "[[9 0]]"},
+		{"def-bound comparator apply, result used twice",
+			`def f fn [[comp:Function][Integer][ def c (5 3 comp) (c add c) ]] cmp/r f`, "[2]"},
 	}
 	for _, c := range strict {
 		t.Run("strict/"+c.name, func(t *testing.T) {

@@ -933,7 +933,15 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	}); reason != "" {
 		return reason
 	}
-	if c.makeList {
+	if c.dynApply > 0 {
+		// Apply the TOP operand (a runtime fn VALUE) to the `dynApply` trailing args
+		// laid out below it — a paren-bounded trailing fn-value apply (`(a b comp)`)
+		// recorded as an event (RecordDynApply) so it seats like any computed result:
+		// a def-local, an if operand, a list member, OR the body residual. The layout
+		// above placed the operands [args…, fn] with the fn on top, exactly the stack
+		// OpCallDynTrailTop reads (fn = top, its dynApply args below).
+		lw.emit(OpCallDynTrailTop, c.dynApply, c.pos)
+	} else if c.makeList {
 		// Assemble the n laid-out operands into a list (a computed list literal,
 		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.
 		lw.emit(OpMakeList, n, c.pos)

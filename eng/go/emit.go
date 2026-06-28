@@ -47,6 +47,7 @@ const (
 	wordMakeList = "[…]"
 	wordMakeMap  = "{…}"
 	wordInterp   = "`…`"
+	wordDynApply = "(…fn)"
 )
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -143,6 +144,7 @@ type emitCall struct {
 	poly       bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
 	polyReg    *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
 	makeList   bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	dynApply   int       // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
 	makeMap    bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys    []string
 	mapImpl    bool // the source map's Implicit flag
@@ -1744,6 +1746,47 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos Sr
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}
+}
+
+// RecordDynApply records a paren-bounded TRAILING fn-value apply (`(a b comp)`):
+// the runtime fn VALUE `fn` applied to `args` (in source order — args[0] pushed
+// first / deepest), netting the single result `out`. Recorded as an EVENT so the
+// apply seats like any computed result — a def-local (`def c (a b comp)`), an `if`
+// operand, a list member, OR the body's trailing residual — not ONLY the body
+// residual (the old register-at-collapse / lower-at-reconciliation path handled
+// just that). Returns false (sound interpreter fallback) when any operand is
+// unresolvable or an ARG is itself an unapplied fn value (a nested apply the flat
+// layout cannot order). ops are sig-order (ops[0] = top): the fn on TOP, then its
+// args below it deepest-last — exactly the stack OpCallDynTrailTop reads (it
+// reverses the arg window into forward order to match the interpreter's paren
+// auto-dispatch, where the fn's first param is the arg just below it).
+func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	if !isFnValueResidual(fn) { // fn must be a genuine fn-value residual
+		return false
+	}
+	fnOp, ok := es.resolveOperand(fn)
+	if !ok {
+		return false
+	}
+	ops := make([]emitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := len(args) - 1; i >= 0; i-- {
+		if isFnValueResidual(args[i]) {
+			return false
+		}
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops = append(ops, op)
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args)}})
+	es.setProduced(out, seq)
+	return true
 }
 
 // RecordLoop records a counted/range `for`: start/end/step operand

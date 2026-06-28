@@ -5638,10 +5638,35 @@ func (e *Engine) stepCloseParen() error {
 		}
 		switch {
 		case count >= 2 && lastIdx >= 0 && !last.Dynamic && isFnValueResidual(last):
-			// TRAILING fn-value apply: register it keyed on the fn value's ID with the
-			// now-known arity (count-1) so the body reconciliation lowers it to
-			// OpCallDynTrailTop (the flattened residual cannot recover the arity).
-			es.RegisterTrailingApply(last.ID, count-1)
+			// TRAILING fn-value apply (`(a b comp)`): record it as an EVENT producing
+			// ONE carrier and COLLAPSE the [args…, fn] tape residual to that carrier —
+			// exactly as the interpreter's paren auto-dispatch nets one result. The
+			// event seats like any computed result (a def-local `def c (a b comp)`, an
+			// `if` operand, a list member, the body residual), so a comparator apply
+			// bound to a local compiles, not ONLY the body's trailing residual. On
+			// refusal (an unresolvable operand or a nested unapplied fn arg) the residual
+			// is left intact and the body-residual lowering (RegisterTrailingApply) still
+			// handles the trailing-residual case soundly.
+			var argVals []Value
+			var argIdxs []int
+			for i := openIdx + 1; i < closeIdx; i++ {
+				if isRecordableLiteral(e.tape.At(i)) && i != lastIdx {
+					argVals = append(argVals, e.tape.At(i))
+					argIdxs = append(argIdxs, i)
+				}
+			}
+			out := NewCarrier(TAny)
+			out.ID = GenerateID(IDPrefixForType(TAny))
+			out.Pos = last.Pos
+			if es.RecordDynApply(argVals, last, out, last.Pos) {
+				e.tape.Set(lastIdx, out)
+				for j := len(argIdxs) - 1; j >= 0; j-- {
+					e.tape.Remove(argIdxs[j])
+					closeIdx--
+				}
+			} else {
+				es.RegisterTrailingApply(last.ID, count-1)
+			}
 		case first >= 0 && count >= 2:
 			es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
 		}
