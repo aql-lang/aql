@@ -49,6 +49,15 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 			`def f fn [[comp:Function][List][ def arr (make Array [3 1 2]) [0 1] each [ var [[i] def c ((arr get i) (arr get (i add 1)) comp) if (c gt 0) [9] [0] ] ] ]] cmp/r f`, "[[9 0]]"},
 		{"def-bound comparator apply, result used twice",
 			`def f fn [[comp:Function][Integer][ def c (5 3 comp) (c add c) ]] cmp/r f`, "[2]"},
+		// A branch ARM whose result is an ENCLOSING-scope value-def (`[g]` / `[c]`) — the
+		// value lives on the PARENT sim, unreachable from the arm's own fragment sim, so
+		// planValueDefLocals must PROMOTE it (a fragResult that is not fragInternal) and
+		// lowerFragment re-resolves the arm's captured opEvent out to the local. Clears
+		// the comb sort + the Stage-3 "branch reads enclosing computation" cluster.
+		{"branch arm result is an enclosing computed value-def",
+			`def f fn [[n:Integer][Integer][ def g (n add 5) def gg (if (g lt 1) [1] [g]) gg ]] 3 f`, "[8]"},
+		{"branch arm result is an enclosing dynApply value-def",
+			`def f fn [[comp:Function][Integer][ def c (5 3 comp) if (c gt 0) [c] [0] ]] cmp/r f`, "[1]"},
 	}
 	for _, c := range strict {
 		t.Run("strict/"+c.name, func(t *testing.T) {

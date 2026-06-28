@@ -599,11 +599,17 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	allEvents, fragInternal := collectPromotableEvents(events)
 	fragResult := fragmentResultSeqs(allEvents)
 	for _, ev := range allEvents {
-		// A fragment's residual event (an `if` arm / loop body result) must stay on
-		// the simulated stack for the arm-result lowering, and a terminal tail call
-		// must stay terminal — never promote one. Only fragment-INTERNAL
-		// intermediates (the def-chain feeding the result) are promotable here.
-		if fragResult[ev.seq] {
+		// A fragment's residual event (an `if` arm / loop body result) PRODUCED INSIDE
+		// the fragment must stay on that fragment's simulated stack for the arm-result
+		// lowering, and a terminal tail call must stay terminal — never promote one.
+		// But a fragResult that is NOT fragInternal is an ENCLOSING-scope value used as
+		// an arm result (`def g (…); if c [1] [g]`, or the dynApply `def c (a b comp);
+		// if (c gt 0) [c] e`): it lives on the PARENT sim, unreachable from the arm's
+		// own fragment sim (lowerFragment resets lw.vm per fragment), so it MUST be
+		// promoted to a frame local — the arm then re-pushes the slot (lowerFragment
+		// re-resolves its captured opEvent `out` to the local). Without this the arm
+		// refused "branch leaves extra values" (out=opEvent, len(lw.vm)==0).
+		if fragResult[ev.seq] && fragInternal[ev.seq] {
 			continue
 		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
@@ -1045,6 +1051,20 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		lw.vm = lw.vm[:len(lw.vm)-len(frag.applyArgs)]
 		lw.vm = parent
 		return ""
+	}
+	// A fragment result that is an ENCLOSING-scope value-def PROMOTED to a frame local
+	// (planValueDefLocals now promotes a fragResult that is not fragInternal) lives in
+	// a SLOT, not on this fragment's sim stack — lowerEvents left nothing on lw.vm for
+	// it. The fragment's `out` operand was captured at RECORDING time, before
+	// promotion, so it still reads as the producing event; re-resolve it to its local
+	// so the arm RE-PUSHES the slot as its result (`def g (…); if c [1] [g]`, and the
+	// dynApply `def c (a b comp); if (c gt 0) [c] e`). Mirrors the main stream's
+	// already-rewritten references.
+	if out != nil && out.kind == opEvent {
+		if slot, ok := lw.promoted[out.idx]; ok {
+			loc := localOperand(slot + out.resIdx)
+			out = &loc
+		}
 	}
 	switch {
 	case fragDiverges(frag):
