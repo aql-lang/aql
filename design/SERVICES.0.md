@@ -69,6 +69,17 @@ extra keys are payload) — the *same* matcher `receive` uses for selective rece
 
 This is a **design RFC only — no implementation code yet.**
 
+### Relationship to `NETWORK-SERVERS.0.md`
+
+The `listen`/`connect` transport surface named in §4 (and the "still-missing
+TCP/socket server" gap in §10) is **specified** in `NETWORK-SERVERS.0.md`. That
+document supplies the acceptor, the per-connection session loop, the **`Codec`**
+extension point (bytes ⇄ messages) with built-in `http`/`json-lines`/
+`length-prefixed`/`websocket` codecs, and the `Bytes`+bit-syntax binary support
+— all dispatching into exactly the `service`/`add`/`call`/`send` model below. Its
+high-level tier *is* this document's service model exposed on a wire; its
+low-level tier is the raw-socket escape hatch beneath it.
+
 ### Scope decisions (carried forward)
 
 1. **Uniform surface, tiered cost — assume remote (§8).** Every `call`/`send`
