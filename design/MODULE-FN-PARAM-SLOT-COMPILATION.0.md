@@ -389,5 +389,24 @@ speculative carrier changes at session end is exactly the unsoundness risk the i
 guards against. DEFERRED as a dedicated carrier pass (start at layer 1: Array element-type
 tracking + an Array-get ReturnsFn).
 
+### Layer-4 mechanism CONFIRMED + layer-1 soundness wall (second investigation)
+Re-applied the genArgs narrowing and instrumented `RecordBranch`/fn-finish: layer 4 is a
+RECURSION-BAIL provenance gap that genArgs itself triggers. genArgs narrows the recursive
+arg back to `Integer`, so the recursive self-call's analysis key now MATCHES the enclosing
+in-flight key → `AnalyseFnBody`'s in-flight path BAILS returning `NewCarrier(declared)` (no
+producedBy). Instrumentation shows the enclosing fn's outer-`if` Array merge is then NOT
+recorded as a branch in the compile pass (`BR-ENTRY` shows only Disjunct/Integer merges, no
+Array) and go's body residual is an unprovenanced Array → "fn go: body result of unknown
+provenance". So genArgs trades layer 3 ("unmatched dispatch recovered at sub") for layer 4 —
+NEITHER compiles. Verified genArgs has no standalone win: a probe recursive fn with a
+widened arg but a simple (non-branch-merge) residual compiles WITH AND WITHOUT genArgs, and
+every branch-merge-residual shape hits layer 4 — so genArgs unblocks nothing and was
+reverted again. Layer-1 soundness wall: an Array is MUTABLE, so a statically-tracked element
+type is only sound as an UPPER BOUND that `set` widens; `make Array (list)` → `Array<elem>`
+read by get would mis-type any array a later `set` stores a wider value into (compile !=
+interpret). So even layer 1 needs gradual element types + set-widening, i.e. a real
+parameterised-mutable-Array-carrier feature — genuinely multi-session, not a leaf. Tree
+left clean at 29/30.
+
 sort_smoke needs ALL 30 to flip the file; **29/30** — only **radix-msd** remains, blocked by
 the layer-1 root above. NOT a lowering leaf; a dedicated carrier-inference pass.
