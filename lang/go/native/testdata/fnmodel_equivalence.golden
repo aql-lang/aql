@@ -66,6 +66,14 @@ WORD busr
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD bxor
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD byte-cat
+  [Node/List] barrier=1 returns=[Scalar/Bytes]
+WORD byte-ints
+  [Scalar/Bytes] barrier=1 returns=[Node/List]
+WORD byte-slice
+  [Scalar/Bytes Scalar/Number/Integer Scalar/Number/Integer] barrier=3 returns=[Scalar/Bytes]
+WORD bytes
+  [Node/List] barrier=1 returns=[Scalar/Bytes]
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
@@ -87,6 +95,8 @@ WORD cmp
 WORD codequote
   [Scalar/Atom] barrier=1 quote={0} returns=[Scalar/Atom]
   [Any] barrier=1 runcheck noeval={0} +returnsfn
+WORD compact
+  [Scalar/Bytes] barrier=1 returns=[Scalar/Bytes]
 WORD concat
   [Node/Map Node/List] barrier=2 returns=[Scalar/String]
   [Node/List] barrier=1 returns=[Scalar/String]
@@ -626,6 +636,8 @@ WORD timeout
   [Scalar/Number/Integer Scalar/Atom] barrier=2 quote={1} returns=[Ideal/Timeout]
 WORD tnot
   [Any] barrier=1 +returnsfn
+WORD to-text
+  [Scalar/Bytes] barrier=1 returns=[Scalar/String]
 WORD tor
   [Any Any] barrier=1 +returnsfn
 WORD tpartial
@@ -674,6 +686,8 @@ WORD upper
 WORD usurp
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
+WORD utf8
+  [Scalar/String] barrier=1 returns=[Scalar/Bytes]
 WORD validate
   [Node/Map Any] barrier=2
 WORD vals

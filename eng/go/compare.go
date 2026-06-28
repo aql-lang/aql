@@ -278,6 +278,17 @@ func ExactEqual(a, b Value) bool {
 		return _as15 == _as14
 	}
 
+	// Other scalar value-types (Bytes, the Time family, …) compare by
+	// their type's semantic equality: a scalar is identified by content,
+	// not container identity. The same-Parent gate keeps this to matching
+	// leaf types, and ConformsTo(TScalar) keeps reference-backed
+	// non-scalars (List/Map/Array/Object/Tensor/…) on the identity path
+	// below. The dispatch is the one ValuesEqual already uses.
+	if a.Parent == b.Parent && a.Parent.ConformsTo(TScalar) &&
+		a.Parent.Behavior != nil && a.Parent.Behavior != DefaultBehavior {
+		return a.Parent.Behavior.Equal(a, b)
+	}
+
 	// Non-scalars: identity comparison — both values must refer to the
 	// same underlying container. Flexness is part of identity here:
 	// nodeFamily-normalised comparison would still fail on container

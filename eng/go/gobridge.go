@@ -81,7 +81,29 @@ func ToNative(v Value) any {
 		}
 		return out
 	}
+	if bytesToNativeHook != nil {
+		if b, ok := bytesToNativeHook(v); ok {
+			return b
+		}
+	}
 	return v.String()
+}
+
+// bytesFromNativeHook / bytesToNativeHook bridge []byte <-> the Bytes
+// type. The Bytes type is owned by the lang layer (which eng cannot
+// import), so it installs the conversion via RegisterBytesBridge at type
+// registration. Until then the []byte case falls back to a string.
+var (
+	bytesFromNativeHook func([]byte) Value
+	bytesToNativeHook   func(Value) ([]byte, bool)
+)
+
+// RegisterBytesBridge installs the []byte <-> Bytes conversions used by
+// FromNative / ToNative. Called once by the lang layer when it registers
+// the Bytes type; eng stays ignorant of the concrete type.
+func RegisterBytesBridge(from func([]byte) Value, to func(Value) ([]byte, bool)) {
+	bytesFromNativeHook = from
+	bytesToNativeHook = to
 }
 
 // FromNative lifts a plain Go value to an AQL Value. See the package
@@ -113,6 +135,11 @@ func FromNative(x any) Value {
 		return floatToValue(float64(v))
 	case float64:
 		return floatToValue(v)
+	case []byte:
+		if bytesFromNativeHook != nil {
+			return bytesFromNativeHook(v)
+		}
+		return NewString(string(v))
 	case []any:
 		out := make([]Value, len(v))
 		for i, e := range v {

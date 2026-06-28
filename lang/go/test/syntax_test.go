@@ -26,6 +26,9 @@ var errorPatterns = map[string]string{
 	"type_error":       "type_error",
 	"swap_hint":        "did you swap the arguments",
 	"not_a_number":     "is not a number",
+	"expected-byte":    "expected-byte",
+	"index-range":      "index-range",
+	"bad-encoding":     "bad-encoding",
 }
 
 func TestSyntax(t *testing.T) {

@@ -37,6 +37,9 @@ var categories = []Category{
 	{"binary", "Bitwise and shift operators.", []string{
 		"band", "bor", "bxor", "bnot", "bsl", "bsr", "busr",
 	}},
+	{"bytes", "Byte-string values, conversions, and slicing.", []string{
+		"utf8", "to-text", "bytes", "byte-ints", "byte-slice", "byte-cat", "compact",
+	}},
 	{"string", "String manipulation.", []string{
 		"upper", "lower", "concat", "split", "trim", "contains", "indexof",
 		"replace", "changecase", "normalize", "repeat", "pad", "match", "escape",

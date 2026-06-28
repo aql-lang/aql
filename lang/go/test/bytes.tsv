@@ -1,0 +1,38 @@
+# Bytes — construction, conversion, ordering, slicing (Scalar/Bytes).
+# Format: expression<TAB>expected[<TAB>error-code]
+# Strings render as 'text', lists as [a b], bytes as Bytes<hex …>.
+
+# construction + hex rendering
+utf8 "hi"	Bytes<68 69>
+bytes [104 105]	Bytes<68 69>
+utf8 ""	Bytes<>
+
+# size via the generic `size` word (Sizer behavior); é is two UTF-8 bytes
+utf8 "hi" size	2
+utf8 "" size	0
+"café" utf8 size	5
+
+# round-trips
+bytes [104 105] to-text	'hi'
+utf8 "hi" byte-ints	[104 105]
+utf8 "hi" compact byte-ints	[104 105]
+
+# equality + ordering (type behaviors)
+(utf8 "hi") eq (utf8 "hi")	true
+(utf8 "ho") eq (utf8 "hi")	false
+(utf8 "a") lt (utf8 "b")	true
+(utf8 "b") lt (utf8 "a")	false
+
+# slicing (zero-copy view) + compact + concatenation
+to-text (byte-slice (utf8 "hello") 1 3)	'ell'
+to-text (compact (byte-slice (utf8 "hello") 0 2))	'he'
+def p (utf8 "ab") def q (utf8 "cd") to-text (byte-cat [p q])	'abcd'
+
+# type predicate
+(utf8 "hi") is Bytes	true
+(utf8 "hi") is String	false
+
+# negative cases
+bytes [256]		expected-byte
+bytes [-1]		expected-byte
+byte-slice (utf8 "hi") 0 5		index-range
