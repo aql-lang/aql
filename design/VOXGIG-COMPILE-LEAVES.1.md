@@ -728,3 +728,22 @@ REMAINING leaves (each its own fix; insertion-sort alone chains through several)
 A sort-file flip needs ALL of these × ALL 16 algorithms (distribution sorts add counting/bucket leaves). The two
 HARDEST documented leaves (Stage-G comparator + difficulty-5 make-list) are now cleared; the residual are narrower
 but numerous. compile==interpret held throughout (0 miscompiles).
+
+### comp-capture — root-caused to its ARCHITECTURAL BOTTOM (a module-fn compilation limitation).
+Pushed the comp-capture leaf to the deepest level via stack-trace instrumentation:
+1. `comp` (a `[comp:Function]` param of the MODULE fn Sort.insertion) IS installed correctly as a Function —
+   but via InstallFnDef (core_helpers.go:725 `r.Defs.Push(name, NewFnDef(entry))`), which binds a fresh FnDef
+   value. (TFnDef conforms to TWord in the lattice, hence the earlier "Word('')" — AsWord on a FnDef is empty.)
+2. The closure (the outer `each`) captures `comp`; ComputeCaptures returns that FnDef. resolveOperand needs a
+   re-pushable home (event / local slot / inert const). cmp/r-as-comp in a TOP-LEVEL fn is a CONCRETE inert FnDef
+   → const-bakes → my repros compile. Sort's comp is an ABSTRACT Function carrier → not bakeable.
+3. Attempted fix: a name→slot fallback (`resolveCapturedParam` + emitUnit.localByName) to land the capture on the
+   enclosing unit's PARAM SLOT. It CANNOT work — instrumented `CAPFAIL comp unitNames=[]`: the enclosing unit has
+   NO named param slots. **Module-fn bodies are NOT compiled as StartFnCompile units with param slots during
+   CompileCheck re-entry** — `comp` exists ONLY as a def-stack FnDef binding, with no frame slot for a closure to
+   capture. (A top-level fn DOES get param slots, which is why top-level repros compile.) Reverted.
+CONCLUSION: clearing comp-capture requires compiling module-fn bodies as proper units with param slots — a large,
+high-risk change to module-fn compilation (load-bearing for ALL module dispatch), genuinely multi-session. It also
+flips 0 sort files alone (insertion chains further: branch-multi-value, swap-at, convert; × 16 algorithms). The two
+HARDEST documented leaves (Stage-G comparator, difficulty-5 make-list) ARE cleared this session; comp-capture is the
+next, now root-caused to the architectural bottom for a focused follow-up. compile==interpret held throughout.
