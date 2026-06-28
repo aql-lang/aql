@@ -3,8 +3,8 @@
 > **Status: design proposal, not implemented.** This note specifies a new
 > AQL value type, `Bytes`, the foundation for all binary-adjacent
 > functionality, together with its **storage & memory model** (§4) and the
-> **`pack`/`unpack` bit-syntax mini-language** (§7) that binary wire protocols
-> are written against. The heavier binary words (cryptographic hashes, HMAC,
+> **`pack`/`unpack` bit-syntax** (§7) that binary wire protocols are written
+> against. The heavier binary words (cryptographic hashes, HMAC,
 > CRC, base/hex encodings, secure random, UUIDs) live in the expanded
 > `aql:bin-util` module — see [BIN-UTIL.10.md](BIN-UTIL.10.md). The type, its
 > literal, its core interop words, and the bit-syntax are **core** (no import).
@@ -212,13 +212,24 @@ A first-class hex literal for protocol magic numbers and constants:
   `convertDataValue`. There is **no `b"…"` ASCII literal** — use `utf8 "GET "`
   for text-as-bytes, which keeps the encoding choice explicit.
 
-## 7. The bit-syntax mini-language (`pack` / `unpack`)
+## 7. Bit-syntax — the segment-spec DSL (`pack` / `unpack`)
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
 short *and* safe. AQL gets an equivalent that **reuses existing machinery**: the
 `name:Type` binding slot parsed by `eng.ParseFnParams` (`eng/go/fn_params.go` —
 the same parser behind lambda params and `receive` clauses), extended with a
 **size** and **modifier** suffix.
+
+> **Not an `aql:minilang`.** This is a `List` of ordinary AQL **segment tokens**
+> parsed by `eng.ParseFnParams`, **not** a kind of the `mini`/MiniLang facility
+> (`MINILANG.5.md`), whose kinds take an *opaque String `src`* (`mini re '…'`,
+> `+re/…/`). The list form is deliberate for two reasons a String-sourced `mini`
+> kind could not serve: (1) a `pack` segment value can be an **inline AQL
+> expression** (`(length body):u16`), and (2) the `name:Type` slot reuses the
+> **same `ParseFnParams` binding** as `receive` clauses — one "destructure by
+> `name:Type`" concept across the language, rather than a second bespoke spec
+> parser inside a kind handler. "Bit-syntax" / "segment spec" — never
+> "minilang".
 
 ### 7.1 Segment grammar
 
