@@ -187,3 +187,34 @@ compile==interpret, reducibleCeiling 2->3. NEXT: §10 recursive-code-body closur
 native run-spec) + the sort chain (comp-capture is cleared; the `fn call operand of unknown
 provenance` next leaf = passing a module-fn VALUE as a call arg, then branch-multi-value /
 swap-at / convert × 16 algorithms).
+
+## 10. SORT CHAIN — leaves after comp-capture (this session cleared 2)
+CLEARED this session: comp-capture (the dispatch unification, c5ff7bd9) and
+module-fn-value-as-arg (`xs M.sort M.by-num`, the comparator baked as a const operand,
+e3f925ce). `sort.aql` (the LIBRARY) now force-compiles clean. Remaining per-algorithm
+leaves (from sort_smoke, all 11 comparison sorts), in priority order:
+
+1. **Def-bound dynamic apply** (HIGHEST LEVERAGE — root of ~9/11). Masked as
+   "code-body word each (Stage 2)"; the real reason (probe-unmasked) is
+   "closure each$body: unapplied fn-value in body residual (dynamic apply not
+   lowered)" AND its sibling "stack discipline: result operand of lt/gt is not on
+   top". ROOT CAUSE: a comparator apply `(a b comp)` BOUND TO A DEF-LOCAL
+   (`def c ((arr get i) (arr get j) comp)` → used by `if (c gt 0)`) is an
+   INTERMEDIATE, not the body's trailing residual. OpCallDynTrailTop lowers ONLY the
+   trailing residual (emit.go:1532 reads TrailingApplyArity for the bodyStk TOP; the
+   paren-collapse registration is engine.go:5640). A def-bound apply is never
+   lowered, so `comp` stays unapplied (#1) or its result isn't laid out on top for
+   the consuming compare (#2 — layoutOperands, lower.go:929). FIX: lower the dynamic
+   apply as an INTERMEDIATE value-producing event seatable to a frame local (like
+   user-fn-call results seat via lower.go planValueDefLocals/lowerUserCall). Affects
+   bubble, cocktail, pancake, bitonic (#1) + selection, gnome, shell, odd-even, cycle
+   (#2). The minimal repro: `def f fn [[comp:Function][List][ def arr (make Array
+   [5 3]) [0] each [ var [[i] def c ((arr get i)(arr get i) comp) if (c gt 0)[1][0] ]]
+   ]] cmp/r f` — the apply ALONE compiles; `def c (apply); if (c gt 0)` refuses.
+2. **branch reads enclosing computation (Stage 3)** — insertion.
+3. **branch leaves extra values (Stage 2 lowers single-result branches)** — comb.
+4. **Recursive test framework** (`test-test`/`test-describe`) — the *_test.aql files;
+   the §8/§9 recursive-code-body-closure follow-up (shared with run-spec).
+
+Leaf #1 is the highest-leverage next target (root of ~9/11 comparison sorts, and the
+same def-bound-dynamic-apply lowering covers both its manifestations).
