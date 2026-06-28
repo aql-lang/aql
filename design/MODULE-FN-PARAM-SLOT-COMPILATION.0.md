@@ -244,3 +244,27 @@ Remaining leaves (by frequency), precisely characterised:
 4. **check diagnostics** (1: radix-msd).
 
 Leaf #1 (branch-leaves-extra-values, 8 algorithms) is the next highest-leverage target.
+
+## 12. Leaf #2 (branch-leaves-extra-values) — REFINED root cause (deeper than trailing-const)
+Instrumented the real refusal: it is NOT the swap-at trailing-const hypothesis. The
+failing arm has out=opEvent, residualN=1, len(lw.vm)=0 — a branch arm whose single
+result is a value computed in the ENCLOSING scope. Minimal repro (no swap-at, no
+dynApply): `def f fn [[n:Integer][Integer][ def g (n add 5) def gg (if (g lt 1) [1] [g])
+gg ]] 3 f` — the else-arm `[g]` references the value-def `g`, which lives on the PARENT
+sim stack, unreachable from the arm's OWN fragment sim (lowerFragment resets lw.vm=nil
+per fragment). The dynApply sibling `def c (a b comp); if (c gt 0) [c] e` is the same
+shape.
+
+ROOT CAUSE: `g` is NOT promoted to a frame local (instrumented: promoted=false), so it
+stays on the parent sim and the arm can't re-push it. planValueDefLocals (lower.go:676)
+DOES promote value-defs — but the promotion isn't firing for a value-def referenced
+ONLY inside a branch arm. TWO-PART FIX: (1) promote such a value-def (the
+fragRef/valueDef gate must fire for an arm-only-referenced value-def), AND (2)
+re-resolve the fragment's `out` operand (captured at RECORDING time, pre-promotion, so
+still an opEvent) to its local before the arm switch — drafted at lowerFragment but
+inert until (1) lands, since `out` isn't in lw.promoted. NEXT: instrument why the
+valueDef/fragRef promotion gate skips an arm-only-referenced value-def (a build snag in
+the planValueDefLocals instrumentation blocked the final read; the gate at lower.go:676
++ the fragRef/fragInternal computation are the place to look). This leaf (8 algorithms)
+is the same "branch arm reads an enclosing value-def" shape as the Stage-3
+"branch reads enclosing computation" leaf (5 algorithms) — likely one fix clears both 13.
