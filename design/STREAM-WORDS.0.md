@@ -83,6 +83,11 @@ user sees after `import "aql:stream"`.
 
 **Sources**
 
+> The `Bytes` element type used by `from-bytes`/`to-bytes` below is the
+> first-class binary leaf specified in `design/go-modules/BYTES.10.md` (core,
+> immutable, zero-copy). No surface change here — these rows now carry the real
+> `Bytes` type rather than a placeholder.
+
 | Word | Stack effect |
 |---|---|
 | `stream.from-list`    | `List<T>          -- Stream<T>`      |

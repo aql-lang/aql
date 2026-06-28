@@ -61,7 +61,7 @@ import "aql:net"
 
 def sock ( connect-raw {tcp: "localhost:7"} )   # dial → a Socket (same type as accept's)
 send-bytes (utf8 "ping\n") sock
-to-text (recv-until sock b"\n")                  # → "ping"  (echo server)
+to-text (recv-until sock (utf8 "\n"))                  # → "ping"  (echo server)
 close sock
 ```
 
@@ -123,7 +123,7 @@ import "aql:bin-util"
 
 # build a request frame  [u8 op][u32 len][len bytes payload]
 def body  ( utf8 (jsonify {user: 42}) )
-def frame ( pack [ 2:u8  (bin.len body):u32  body:bytes ] )
+def frame ( pack [ 2:u8  (length body):u32  body:bytes ] )
 
 # … send it, read the reply frame, then match it (sized by the reply's own len)
 def r ( unpack reply-bytes [ op:u8  len:u32  payload:bytes(len) ] )
@@ -173,7 +173,7 @@ import "aql:net"
 
 def line-rpc fn [[sock:Socket  msg:String] [String] [
   send-bytes (utf8 (str.concat [ msg "\n" ])) sock
-  to-text (recv-until sock b"\n")
+  to-text (recv-until sock (utf8 "\n"))
 ]]
 
 def sock ( connect-raw {tcp: "localhost:8001"} )
@@ -188,8 +188,8 @@ close sock
 import "aql:net"
 
 def json-rpc fn [[sock:Socket  req:Map] [Map] [
-  send-bytes (bin.concat [ (utf8 (jsonify req)) b"\n" ]) sock
-  reify (to-text (recv-until sock b"\n"))
+  send-bytes (concat [ (utf8 (jsonify req))  (utf8 "\n") ]) sock
+  reify (to-text (recv-until sock (utf8 "\n")))
 ]]
 
 def sock ( connect-raw {tcp: "localhost:8002"} )
@@ -208,7 +208,7 @@ import "aql:bin-util"
 
 def bin-rpc fn [[sock:Socket  op:Integer  payload:Map] [Map] [
   def body ( utf8 (jsonify payload) )
-  send-bytes (pack [ op:u8  (bin.len body):u32  body:bytes ]) sock
+  send-bytes (pack [ op:u8  (length body):u32  body:bytes ]) sock
   def r ( recv-frame sock [ op:u8  len:u32  payload:bytes(len) ] )
   reify (to-text r.payload)
 ]]
@@ -270,7 +270,7 @@ socket — the dual of the server's `conn-session`:
 # Conceptual desugaring of `connect {tcp:A codec:C}`:
 def ep ( endpoint C )                          # a Service that also tracks pending calls
 def sock ( connect-raw {tcp: A} )
-spawn [ ep sock C client-pump b"" ]            # actor: decode peer bytes → replies + pushes
+spawn [ ep sock C client-pump 0x"" ]           # actor: decode peer bytes → replies + pushes
 ep                                             # return the Endpoint handle to the caller
 ```
 

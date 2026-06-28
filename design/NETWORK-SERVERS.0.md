@@ -136,104 +136,62 @@ and a `context.Context` for shutdown so no FD or goroutine leaks on host exit.
 
 Binary wire protocols need two things AQL lacks: a **byte-string value** and a
 terse, safe way to **build and pattern-match frames**. Both `PROCESSES.0.md` §8
-and `SERVICES.0.md` §10 name this gap. This section specifies it; it is its own
-phase (§10) because the handling API depends on it but it is independently
-useful (file I/O, hashing, `aql:stream`'s already-referenced `from-bytes`).
+and `SERVICES.0.md` §10 name this gap. The **full design is `BYTES.10.md`**
+(`design/go-modules/`); this section is the working summary the rest of this doc
+relies on. It is its own phase (§10) because the handling API depends on it but
+the type is independently useful (file I/O, hashing, `aql:stream`'s
+already-referenced `from-bytes`).
 
-### 3.1 The `Bytes` value type
+### 3.1 The `Bytes` value type (summary)
 
-A new **`Bytes`** Ideal type: an **immutable** finite sequence of octets.
+A new core **`Bytes`** type: an **immutable** finite sequence of octets.
 
 - **Immutable ⇒ sendable & zero-copy.** `Bytes` joins the "sendable" class of
   `PROCESSES.0.md` §6 — a received frame is shared into a handler by reference,
-  never copied, exactly like a `List` or `Map`. (This is AQL getting Erlang's
-  refc-binary optimisation "for free", as `SERVICES.0.md` §7.1 anticipated.)
+  never copied, exactly like a `List` or `Map`. A defensive copy happens only at
+  ingest (`recv`, the Go bridge); after that every op is copy-free
+  (`BYTES.10.md` §4). This is AQL getting Erlang's refc-binary optimisation "for
+  free", as `SERVICES.0.md` §7.1 anticipated.
 - **Distinct from `String`.** `String` is text (UTF-8, character-indexed);
-  `Bytes` is octets (byte-indexed). Conversions are explicit and total in one
-  direction (`utf8` encodes text → bytes) and fallible in the other
-  (`to-text` decodes bytes → text, raising `bad_encoding` on invalid UTF-8) so
-  binary data never silently corrupts through a text round-trip.
-- **Comparable / printable.** Ordered lexicographically by octet
-  (`TYPE-ORDERING.10.md`); printed as `Bytes<de ad be ef>` (hex, elided when
-  long).
+  `Bytes` is octets (byte-indexed). `utf8 <String> -> Bytes` encodes (total);
+  `to-text <Bytes> -> String` decodes (raises `bad-encoding`).
+- **Comparable / printable.** Ordered lexicographically by octet; printed as
+  `Bytes<de ad be ef>`.
 
-Core constructors / accessors (in `aql:bin-util`, beside the existing bitwise
-words of `BINARY-OPERATIONS.10.md`, except the literals which are core syntax):
+Core surface (forward form, **no import**): the `0x"deadbeef"` hex literal;
+`utf8`, `to-text`, `bytes` (ints→Bytes), `byte-ints`, `slice`, `concat`,
+`compact`; `length`/`size`/`eq`/ordering via type behaviors. Crypto, hashing,
+and hex/base encodings live in `aql:bin-util` (taking/returning `Bytes`). Full
+table: `BYTES.10.md` §5. (There is **no `b"…"` literal** — write `utf8 "GET "`
+for text-as-bytes.)
 
-| Word / form | Effect |
-| --- | --- |
-| `0x"deadbeef"` | a `Bytes` literal from hex (core lexer form) |
-| `b"GET "` | a `Bytes` literal from an ASCII/byte string |
-| `utf8 <String> -> Bytes` | encode text as UTF-8 bytes |
-| `to-text <Bytes> -> String` | decode UTF-8 (raises `bad_encoding`) |
-| `bin.of-list <List<Integer>> -> Bytes` | bytes from 0–255 ints |
-| `bin.len <Bytes> -> Integer` | length in octets |
-| `bin.slice <Bytes> <start> <len> -> Bytes` | sub-range (zero-copy view) |
-| `bin.concat <List<Bytes>> -> Bytes` | join |
-| `bin.hex <Bytes> -> String` / `bin.from-hex` | hex round-trip |
+### 3.2 Bit-syntax — `pack` / `unpack` (summary)
 
-### 3.2 Bit-syntax — `pack` and `unpack`
-
-Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is the feature that makes
-binary code in BEAM short *and* safe. AQL gets an equivalent that reuses
-machinery it already has: the **`name:Type` binding slot** parsed by
-`eng.ParseFnParams` (the same one `PROCESSES.0.md` §3 uses for `receive`
-clauses), extended with a **size** and **modifier** suffix. A frame spec is a
-list of *segments*:
-
-```
-<value-or-name> : <seg-type> ( <size> )? ( / <modifier> )*
-```
-
-- **`pack [ … ] -> Bytes`** builds bytes. A `name:` segment reads `name` from
-  scope; a literal segment (`1:u8`) packs that constant.
-- **`unpack <Bytes> [ … ] -> Map`** matches & destructures, **binding** each
-  `name` into scope (and returning them as a map for chaining). A *literal*
-  segment in `unpack` is a **match guard** — the bytes must equal it or
-  `unpack` raises `no_match` (exactly Erlang's `<<1:8, …>>` guard).
-
-Segment types: `u8 u16 u32 u64` / `i8 i16 i32 i64` (unsigned / signed
-integers), `f32 f64` (IEEE-754 floats, reusing `IEEE-754-COMPLIANCE.8.md`),
-`bits(n)` (a sub-byte integer of `n` bits), `bytes` (raw `Bytes`), `utf8` (a
-length-known text run). Modifiers: `/le` `/be` (endianness; **default `be` =
-network byte order**), `/signed` `/unsigned`. Size: a parenthesised
-**integer literal or a previously-bound name** — `body:bytes(len)` is Erlang's
-`Body:Len/binary`, the killer feature; a final `bytes`/`utf8` with no size means
-"the rest".
-
-Worked round-trip for a `[ver=1][u16 len][len bytes body]` frame:
+Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
+short *and* safe. AQL's equivalent reuses the **`name:Type` binding slot** parsed
+by `eng.ParseFnParams` (the same one `PROCESSES.0.md` §3 uses for `receive`
+clauses), extended with a size and modifier suffix. A frame spec is a list of
+*segments* `<value-or-name> : <seg-type> ( (size) )? ( / <modifier> )*` —
+seg-types `u8…u64`/`i8…i64`/`f32 f64`/`bits(n)`/`bytes`/`utf8`, modifiers
+`/be`(default)`/le`, `/signed`/`/unsigned`, size an integer or a
+previously-bound name (`body:bytes(len)`, the killer feature). Full grammar and
+semantics: `BYTES.10.md` §7.
 
 ```aql
-import "aql:bin-util"
-
-# build
-def body ( utf8 "hello" )
-def frame ( pack [ 1:u8  (bin.len body):u16  body:bytes ] )
+# build + match a [ver=1][u16 len][len bytes body] frame
+def body  ( utf8 "hello" )
+def frame ( pack [ 1:u8  (length body):u16  body:bytes ] )
 # frame == Bytes<01 00 05 68 65 6c 6c 6f>
-
-# match + bind (note `1:u8` asserts the version byte; `body:bytes(len)` is sized)
-def parts ( unpack frame [ ver:u8  len:u16  body:bytes(len) ] )
+def parts ( unpack frame [ ver:u8  len:u16  body:bytes(len) ] )   # 1:u8 would guard
 # parts == {ver: 1  len: 5  body: Bytes<68 65 6c 6c 6f>}
 to-text parts.body          # → "hello"
 ```
 
-A partial/streaming variant powers framing over a socket without knowing the
-length up front:
-
-- **`unpack-prefix <Bytes> [ … ] -> {ok: Map  rest: Bytes} | {need: Integer}`**
-  — match as much as the spec needs; return the bound fields **plus the
-  leftover bytes**, or, if the buffer is too short, `{need: n}` (how many more
-  bytes are required). This is the one primitive a length-prefixed framer needs
-  (§5.3); it makes "read 4 bytes, learn the length, read that many" a single
-  declarative call instead of a hand-rolled state machine.
-
-> **Why not a literal `<<>>` surface?** AQL is concatenative and brace-free for
-> binaries; `<<…>>` would clash with the comparison lexer and read foreign. The
-> `pack`/`unpack` word form keeps binaries ordinary AQL values flowing through
-> ordinary words, while the `name:type(size)/mod` segment grammar preserves the
-> density that makes Erlang's version worth having. The binding pass is *the
-> same code* as `receive` clauses, so there is one "destructure by `name:Type`"
-> concept across the language, not two.
+For framing over a socket without knowing the length up front,
+**`unpack-prefix <Bytes> [ … ] -> {ok: Map  rest: Bytes} | {need: Integer}`**
+matches as much as the spec needs and returns the bound fields plus the leftover
+bytes, or `{need: n}` more bytes required — the one primitive a length-prefixed
+framer needs (§5.3), instead of a hand-rolled state machine.
 
 ## 4. Tier 1 — the low-level handling API (`aql:net`)
 
@@ -284,7 +242,7 @@ bytes when it wants them, so a framing loop reads exactly what it needs.
 | --- | --- |
 | `recv <Socket> <n> -> Bytes` | block until ≥1 byte, return up to `n` (n=0 → whatever is available). EOF raises `closed`. |
 | `recv-bytes <Socket> <n> -> Bytes` | block until **exactly** `n` bytes (or `closed`). The fixed-frame reader. |
-| `recv-until <Socket> <delim:Bytes> -> Bytes` | read through the next `delim` (e.g. `b"\r\n"`); returns the chunk **without** the delimiter. The line/text reader. |
+| `recv-until <Socket> <delim:Bytes> -> Bytes` | read through the next `delim` (e.g. `utf8 "\r\n"`); returns the chunk **without** the delimiter. The line/text reader. |
 | `recv-frame <Socket> [ <bit-syntax> ] -> Map` | read one frame described by §3.2 bit-syntax, pulling exactly the bytes the spec (incl. a length field) requires. The length-prefixed reader. |
 
 `recv*` honour an optional `{within: <Duration>}` deadline
@@ -351,8 +309,8 @@ import "aql:net"
 
 def rev-conn fn [[conn:Socket] [Never] [
   do [
-    def line ( recv-until conn b"\n" )    # one line, delimiter stripped
-    send-bytes (bin.concat [ (bin.reverse line) b"\n" ]) conn
+    def line ( recv-until conn (utf8 "\n") )    # one line, delimiter stripped
+    send-bytes (concat [ (bytes (reverse (byte-ints line)))  (utf8 "\n") ]) conn
     rev-conn conn
   ]
   error [ case [ [get code eq closed/q] [ None ] [ raise ] ] ]
@@ -371,14 +329,14 @@ import "aql:net"
 
 def json-conn fn [[conn:Socket] [Never] [
   do [
-    def req ( reify (to-text (recv-until conn b"\n")) )   # bytes → text → value
+    def req ( reify (to-text (recv-until conn (utf8 "\n"))) )   # bytes → text → value
     def reply ( handle-request req )                       # ordinary AQL
-    send-bytes (bin.concat [ (utf8 (jsonify reply)) b"\n" ]) conn
+    send-bytes (concat [ (utf8 (jsonify reply))  (utf8 "\n") ]) conn
     json-conn conn
   ]
   error [ case [
     [get code eq closed/q]      [ None ]
-    [get code eq bad_encoding/q] [ send-bytes (utf8 "{\"err\":\"bad utf8\"}\n") conn  json-conn conn ]
+    [get code eq bad-encoding/q] [ send-bytes (utf8 "{\"err\":\"bad utf8\"}\n") conn  json-conn conn ]
     [ raise ] ] ]
 ]]
 
@@ -401,7 +359,7 @@ def rpc-conn fn [[conn:Socket] [Never] [
     def f ( recv-frame conn [ op:u8  len:u32  payload:bytes(len) ] )
     def out ( dispatch-op f.op (reify (to-text f.payload)) )   # op-code → handler
     def body ( utf8 (jsonify out) )
-    send-bytes (pack [ f.op:u8  (bin.len body):u32  body:bytes ]) conn
+    send-bytes (pack [ f.op:u8  (length body):u32  body:bytes ]) conn
     rpc-conn conn
   ]
   error [ case [ [get code eq closed/q] [ None ] [ raise ] ] ]
@@ -483,13 +441,13 @@ is one `Codec` value, written with §3–§4 primitives.
 
 ```aql
 # Conceptual desugaring of `listen {tcp:P codec:C} SVC`:
-serve-raw {tcp: P} [ [conn] => [ conn-session conn C SVC b"" ] ]
+serve-raw {tcp: P} [ [conn] => [ conn-session conn C SVC 0x"" ] ]
 
 def conn-session fn [[conn:Socket  codec:Codec  svc:Service  buf:Bytes] [Never] [
   def step ( codec.decode buf )
   do [ case [
     [ get need ?? false ] [                                # need more bytes
-      conn-session conn codec svc (bin.concat [ buf (recv conn 0) ]) ]
+      conn-session conn codec svc (concat [ buf (recv conn 0) ]) ]
     [ ] [                                                  # got a message
       def reply ( call step.msg.with-meta svc )           # dispatch into the service
       send-bytes (codec.encode reply) conn                # encode + write
@@ -591,7 +549,7 @@ add {method: "GET" path: "/todos/:id"} [ [req state] => [
 
 # Cross-cutting: decode JSON bodies once, for every route (SERVICES §1 `wrap`).
 wrap [ [req state prior] => [
-    def r ( req.body bin.len gt 0 ? (req set body-json (reify (to-text req.body))) req )
+    def r ( req.body length gt 0 ? (req set body-json (reify (to-text req.body))) req )
     prior r ] ] api
 
 # Cross-cutting: structured access logging around every request.
@@ -646,11 +604,11 @@ import "aql:bin-util"
 
 def stomp-codec {
   decode: [ [buf] => [
-    def end ( bin.index-of buf b"\x00" )           # frame terminator
+    def end ( index-of (byte-ints buf) 0 )         # position of NUL frame terminator
     end lt 0
       ? {need: 1}                                   # incomplete: ask for more
-      : { msg:  (parse-stomp (bin.slice buf 0 end))
-          rest: (bin.slice buf (inc end) ((bin.len buf) sub (inc end))) } ] ]
+      : { msg:  (parse-stomp (slice buf 0 end))
+          rest: (slice buf (inc end) ((length buf) sub (inc end))) } ] ]
   encode: [ [reply] => [ render-stomp reply ] ]
 }
 
@@ -752,7 +710,7 @@ def make-session fn [[meta:Map] [Service] [
       require-cap state.principal "fetch"                  # PERMISSIONS.10.md scope
       open-blob req.payload                                 # → Stream<Bytes>, lazy
         4096 stream.chunks-of
-        [ [chunk] => [ pack [ 2:u8 (bin.len chunk):u32 chunk:bytes ] ] ] stream.map ] ] s
+        [ [chunk] => [ pack [ 2:u8 (length chunk):u32 chunk:bytes ] ] ] stream.map ] ] s
 
   s
 ]]
