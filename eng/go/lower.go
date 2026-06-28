@@ -425,6 +425,35 @@ func promoteOperand(op *emitOperand, promoted map[int]int) {
 	}
 }
 
+// eachClosureCap calls fn for every CLOSURE-CAPTURE operand carried by ev's own
+// operands (not recursing into fragments — the caller flattens those). A closure
+// capture can only reference a frame local or an enclosing operand at run time,
+// never a transient simulated-stack slot, so a producer captured here MUST be
+// promoted to a frame local. Mirrors forEachOperand's operand-slice coverage.
+func eachClosureCap(ev *emitEvent, fn func(emitOperand)) {
+	scan := func(ops []emitOperand) {
+		for _, op := range ops {
+			if op.kind == opClosure {
+				for _, c := range op.closureCaps {
+					fn(c)
+				}
+			}
+		}
+	}
+	switch ev.kind {
+	case evCall:
+		scan(ev.call.ops)
+	case evCallUser:
+		scan(ev.uc.ops)
+	case evFallback:
+		scan(ev.fb.ins)
+	case evLoop:
+		scan([]emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut})
+	case evBranch:
+		scan([]emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut, ev.br.thenVal, ev.br.elsVal})
+	}
+}
+
 // childFragments returns the body fragments a branch / loop event owns — the
 // list-form condition, both `if` arms, and a loop body. Nil entries are kept so
 // callers iterate a fixed shape and skip them; a non-branch/loop event owns
@@ -606,6 +635,23 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	var dead map[int]bool
 	allEvents, fragInternal := collectPromotableEvents(events)
 	fragResult := fragmentResultSeqs(allEvents)
+	// captured marks producers referenced by a CLOSURE CAPTURE (an each/fold/scan
+	// body's lexical capture of an enclosing value-def). The capture resolves to a
+	// frame local re-pushed at OpPushClosure (promoteOperand rewrites closureCaps);
+	// it can never read a transient sim slot. A NATIVE captured value-def already
+	// promotes via the valueDef trigger below, but a USER-call value-def
+	// (`def mx (lst list-max)` captured by the radix each-loop) was shadowed by the
+	// "leave single-use user call on the stack" case — so its list-max result was
+	// left loose below the arm result ("branch leaves extra values"). Mark it so the
+	// user-call promotion fires and the capture re-pushes from the slot.
+	captured := map[int]bool{}
+	for _, ev := range allEvents {
+		eachClosureCap(ev, func(op emitOperand) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				captured[op.idx] = true
+			}
+		})
+	}
 	for _, ev := range allEvents {
 		// A fragment's residual event (an `if` arm / loop body result) PRODUCED INSIDE
 		// the fragment must stay on that fragment's simulated stack for the arm-result
@@ -686,7 +732,10 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// residual ref count does not capture (Test.run-spec), where storing-once
 		// or dropping its result diverges — but a refs>=2 value genuinely has
 		// several consumers, so re-push is required and sound.
-		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2)
+		// A user-call value-def captured by a closure (captured) joins the
+		// forceOrder / multi-ref triggers: the capture needs the result in a frame
+		// slot, so it must not be left loose on the sim (the radix list-max leaf).
+		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 || (captured[ev.seq] && es.eventInfo[ev.seq].valueDef))
 		// A DEAD value-def — `def _ (f …)` bound to a name referenced ZERO times —
 		// drops its result for a USER call too, not only a native. The interpreter
 		// binds the result to that name OFF the residual stack (the binding is the
