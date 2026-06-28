@@ -2487,7 +2487,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 					// error, not a silent fallback to its literal word.
 					// Use `foo/q` for an atom, `quote […]` for a literal
 					// word list / quotation.
-					evaluated, err := e.autoEvalList(match.Args[i])
+					evaluated, err := e.autoEvalList(match.Args[i], true)
 					if err != nil {
 						return err
 					}
@@ -3126,7 +3126,7 @@ func (e *Engine) autoEvalStack() error {
 			continue
 		}
 		if val.Parent.Equal(TList) && val.Data != nil && !IsTypedList(val) && !IsTableType(val) {
-			result, err := e.autoEvalList(val)
+			result, err := e.autoEvalList(val, false)
 			if err != nil {
 				return err
 			}
@@ -3144,7 +3144,9 @@ func (e *Engine) autoEvalStack() error {
 
 // autoEvalList evaluates the contents of a plain list in a sub-engine,
 // returning a new list containing the results. For example, [1 add 2] → [3].
-func (e *Engine) autoEvalList(val Value) (Value, error) {
+// consumed marks the list as a word/fn ARGUMENT being auto-evaluated (execMatch /
+// execFnDefSig), as opposed to the end-of-Run residual eval (autoEvalStack).
+func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	elems, _ := AsList(val)
 	if elems.Len() == 0 {
 		return val, nil
@@ -3162,12 +3164,27 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 	// so record it as an OpMakeList assembly of the evaluated elements; otherwise
 	// the list is an unresolvable residual and the program falls back. A
 	// fully-literal list (`[1 2 3]`) stays inert and bakes as a pooled const.
-	// Only the TOP engine records: a SUB-engine eval is a handler inferring a
-	// NoEval code body (`list-of [Rand.int 0 10] 3` — the generator is re-run per
-	// iteration, often non-deterministic), so freezing one assembly would diverge.
-	if e.isTop && e.registry.Check.IsActive() {
+	if e.registry.Check.IsActive() {
 		if es := e.registry.Check.Emit; es != nil && !isInertConst(out) {
-			es.RecordMakeList(e.registry, result, out, val.Pos)
+			switch {
+			case e.isTop:
+				// Top-level (frames==1): the canonical case, evaluated once.
+				es.RecordMakeList(e.registry, result, out, val.Pos)
+			case consumed:
+				// A CONSUMED computed list ARG inside a fn body / closure
+				// (`make Array [i 99]`, `f [j (g x)]`): the interpreter auto-evaluates
+				// it against the LIVE def stack here, so its element locals/params
+				// resolve (i → its frame slot) exactly as recordMakeListInner re-pushes
+				// them per call — OpMakeList re-assembles from operands per run, sound
+				// in a nested frame (the RecordMakeMap caller already relies on this).
+				// The end-of-Run RESIDUAL eval (consumed=false) is NOT recorded here:
+				// a fn body returning a bare-word list (`[y y]`) raises undefined_word
+				// at run time (the residual sub-engine lacks the body's def-locals), so
+				// baking OpMakeList would diverge — it stays unresolved and falls back.
+				// A stateful generator never reaches here: its body is a NoEval arg,
+				// so execMatch does not auto-evaluate it as a data list.
+				es.recordMakeListInner(e.registry, result, out, val.Pos)
+			}
 		}
 	}
 	return out, nil
@@ -4681,7 +4698,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				if !noEval {
 					// Bare words never degrade to data — propagate the
 					// auto-eval failure (see execMatch).
-					evaluated, err := e.autoEvalList(args[i])
+					evaluated, err := e.autoEvalList(args[i], true)
 					if err != nil {
 						return err
 					}
