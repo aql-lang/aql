@@ -5611,21 +5611,27 @@ func (e *Engine) stepCloseParen() error {
 				lastIdx = i
 			}
 		}
+		// Classify the paren's fn-value-call boundary. The TRAILING case is checked
+		// FIRST: when the LAST value is a concrete Function applied to the preceding
+		// args, it is the sound paren-bounded apply (`(prev key comp)`, or
+		// `((arr get x) key comp)` where an ARG is dynamic but comp is the fn) — even
+		// if an arg is dynamic, the dynamic is an ARGUMENT, not the applied fn, so the
+		// leading-dynamic reorder hazard does not apply. Only when the last value is
+		// NOT the fn does a LEADING dynamic value mean the dynamic IS the fn being
+		// applied before its args (`(m.g 3)`, `((m.g 3) add 1)`) — the unsound
+		// paren-unaware reorder the residual reconciliation cannot reproduce.
+		last := Value{}
+		if lastIdx >= 0 {
+			last = e.tape.At(lastIdx)
+		}
 		switch {
+		case count >= 2 && lastIdx >= 0 && !last.Dynamic && isFnValueResidual(last):
+			// TRAILING fn-value apply: register it keyed on the fn value's ID with the
+			// now-known arity (count-1) so the body reconciliation lowers it to
+			// OpCallDynTrailTop (the flattened residual cannot recover the arity).
+			es.RegisterTrailingApply(last.ID, count-1)
 		case first >= 0 && count >= 2:
 			es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
-		case count >= 2 && lastIdx >= 0:
-			// TRAILING fn-value bounded by this paren — `(prev key comp)`, a captured/
-			// param comparator applied to its preceding args. The LAST value is a
-			// Function and the rest are its args; register the apply keyed on the fn
-			// value's ID with the now-known arity (count-1) so the body reconciliation
-			// lowers it to OpCallDynTrailTop. A LEADING-dynamic apply already refused
-			// above (the unsound reorder case); a non-dynamic concrete fn TRAILING its
-			// args is the sound paren-bounded apply the interpreter auto-dispatches.
-			last := e.tape.At(lastIdx)
-			if !last.Dynamic && isFnValueResidual(last) {
-				es.RegisterTrailingApply(last.ID, count-1)
-			}
 		}
 	}
 

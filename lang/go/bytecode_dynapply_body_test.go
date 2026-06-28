@@ -39,6 +39,8 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 			`def g fn [[f:Function][Integer][ def a 1 def b 2 def c 3 (a b c f) ]] def add3 fn [[x:Integer y:Integer z:Integer][Integer][(x add (y add z))]] add3/r g`, "[6]"},
 		{"lambda (compiled-closure) comparator apply",
 			`def f fn [[comp:Function][List][ [3 1] each [ var [[x] (x 2 comp) ] ] ]] ([b:Any a:Any] => [(a cmp b)]) f`, "[[1 -1]]"},
+		{"trailing apply with a DYNAMIC arg (comp still the fn, not the leading dynamic)",
+			`def f fn [[comp:Function][List][ def arr (make Array [5 3]) [0 1] each [ var [[x] ((arr get x) 4 comp) ] ] ]] cmp/r f`, "[[1 -1]]"},
 	}
 	for _, c := range strict {
 		t.Run("strict/"+c.name, func(t *testing.T) {
