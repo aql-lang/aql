@@ -128,3 +128,46 @@ move silently breaks every `pkg.word` dispatch, and the differential is blind to
 off-corpus shapes. Treat as a dedicated multi-step effort with the full gate +
 off-corpus regressions at each step, not a quick patch. This is the right scope for a
 focused follow-up session.
+
+## 8. ATTEMPTED + VALIDATED the unification — sound, fixes comp-capture, but REGRESSES run-spec (recursion)
+
+Implemented approach (A) end-to-end and ran the full gate. Findings (the unification
+ATTEMPT is reverted; the insights stand):
+
+- **The unify point is engine.go:4179** (execFnDefLiteral's sub-registry branch). A
+  TRIVIAL-delegation wrapper already routes through `execMatch` (→ carrierResults →
+  the matched sig's ReturnsFn = unit-compile); the NON-trivial AQL body routed to
+  `execFnDefSig`/`CallAQL` (def-stack, no unit). Routing the non-trivial body through
+  `execMatch` IN CHECK MODE — wrapped in `e.shareCheckState(fnDef.Registry)` so the
+  body's `buildFnBodyReturnsFn` compiles its unit into the MAIN program and
+  `RecordUserCall` references it — is the change.
+- **It IS SOUND**: `make verify-bytecode` GREEN (0 miscompiles). Trivial/each/make
+  module fns compile correctly; **the sort comp-capture leaf CLEARS** (the inline-
+  module repro advances past it). `shareCheckState` is ESSENTIAL — without it the unit
+  lands in the sub-registry's emit and every module-fn call refuses "user fn call
+  (Stage 3)" (a coverage regression `make test` caught).
+- **BUT it REGRESSES `TestRunSpecHarnessCompiles`** (a positive test: `Test.run-spec`
+  must compile native). Under the unit path, `test-describe` refuses "unmatched
+  dispatch recovered at test-describe" — the RECURSIVE-code-body wall. The inline
+  `CallAQL` path AVOIDED this because the recursion terminates DATA-DRIVEN during
+  inline analysis (empty `subs`), so test-describe never compiles as a self-
+  referential unit. **So the two paths exist partly BECAUSE inline handles recursion
+  that unit-compile does not.**
+
+### Revised fix: PROBE-AND-FALLBACK (preferred) or co-implement recursive closures
+A naive unify regresses the recursive test framework. Two sound ways to land it:
+1. **Probe-and-fallback** (lower risk, preferred): at engine.go:4179 in check mode,
+   PROBE the unit-compile (execMatch in a throwaway emit state, like the closure
+   probe at callable_words.go:262). If it records cleanly, COMMIT it (sort gets param
+   slots). If it refuses (run-spec's recursion), fall back to the inline `CallAQL`
+   path (run-spec keeps compiling). Both sound; no regression. The intricacy is the
+   throwaway-state + replay at the dispatch level — model it on the existing closure
+   probe.
+2. **Co-implement recursive-code-body closure compilation** so test-describe compiles
+   as a self-referential unit (memoise the in-progress unit on FnAnalysisKey so the
+   recursive dispatch resolves to it instead of recovering). Larger; unblocks the
+   test framework too — but that is the doc's separate multi-session feature.
+
+Mandatory: `TestRunSpecHarnessCompiles` MUST stay green, AND the sort comp-capture
+must clear, in the SAME change. The probe-and-fallback achieves both with the least
+risk to the load-bearing module-dispatch path.
