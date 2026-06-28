@@ -330,6 +330,14 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 		if reason != "" {
 			return reason
 		}
+		// A DEAD branch value-def (planValueDefLocals marked it): its merge result sits
+		// on the sim unconsumed — drop it (the binding is never read). lowerBranch left
+		// exactly one slot for this branch's merge on top; pop+DROP it.
+		if ev.kind == evBranch && lw.dead[ev.seq] &&
+			len(lw.vm) > 0 && lw.vm[len(lw.vm)-1].seq == ev.seq {
+			lw.emit(OpDrop, 0, ev.br.pos)
+			lw.vm = lw.vm[:len(lw.vm)-1]
+		}
 	}
 	return ""
 }
@@ -612,6 +620,22 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		if fragResult[ev.seq] && fragInternal[ev.seq] {
 			continue
 		}
+		// A DEAD branch value-def — `def _ (if c [t] [e])` whose merge result is never
+		// read — drops that result, like a dead call value-def: the interpreter binds
+		// the if value to the dead name OFF the residual stack, so leaving the merge on
+		// the sim left the enclosing fn body with an extra value ("body leaves extra
+		// values (Stage 3)") — the recursive sorts' `def _ (if (n gt 1) [… quick-go]
+		// [arr])` pattern. Only a 2-ARM if (hasElse): a no-else if is already a variadic
+		// program-residual-only value the dead-drop must not touch.
+		if ev.kind == evBranch {
+			if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 {
+				if dead == nil {
+					dead = map[int]bool{}
+				}
+				dead[ev.seq] = true
+			}
+			continue
+		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
 		// promoted to a frame local: its result stores once and re-pushes per
 		// reference. (Without evCallUser, a user-call result above a literal in the
@@ -663,10 +687,21 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// or dropping its result diverges — but a refs>=2 value genuinely has
 		// several consumers, so re-push is required and sound.
 		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2)
+		// A DEAD value-def — `def _ (f …)` bound to a name referenced ZERO times —
+		// drops its result for a USER call too, not only a native. The interpreter
+		// binds the result to that name OFF the residual stack (the binding is the
+		// only "use", and it is never read), so leaving the user-call result on the
+		// stack left the fn body with an extra value ("body leaves extra values
+		// (Stage 3)") — the recursive sorts' `def _l (… quick-go)` ignored-recursive-
+		// result pattern. Gated on valueDef (an EXPLICIT def): this is NOT the SINGLE-
+		// use (refs>=1) harness/accumulation case the comment guards against, where the
+		// residual ref count can miss a dynamic read. The call's side effects run; only
+		// its ignored return is dropped.
+		deadValueDef := es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0
 		switch {
-		case isUser && !promoteUser:
+		case isUser && !promoteUser && !deadValueDef:
 			// leave the user-call result on the simulated stack (Stage-3 layout)
-		case !isUser && refs[ev.seq] == 0:
+		case refs[ev.seq] == 0 && (!isUser || deadValueDef):
 			// A single-result value-def bound to a name referenced zero times (a
 			// dead binding, e.g. `def b (make C {…})` with b never used) — never the
 			// program residual or a fragment read, both of which count toward refs.
