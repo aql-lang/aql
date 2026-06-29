@@ -133,24 +133,44 @@ func (bytesBehavior) Size(v Value) int {
 	return 0
 }
 
-// frameBehavior is the Behavior carried by a frame type — a Bytes subtype
-// minted by `refine Bytes [layout]` (see installIdeals). It embeds
-// bytesBehavior so a frame value renders/compares/sizes exactly like the
-// Bytes it is, and adds the parsed `layout`: the segment list that
-// `make`/`unpack`/`unpack-prefix` read to pack and decode. The layout lives
-// on the TYPE (not in a value or a side table) so it travels with the type
-// binding and there is no secondary parse at the call site (ADR-007). When
-// `def P` wraps this type with a bareRefineUnifier, the wrapper preserves
-// this Behavior as its `prev`; frameBehaviorOf walks the chain to recover it.
+// TPacket is the Ideal/Packet type — the binary-frame SPEC kind, a sibling of
+// Object/Record/Table (a structural type used by make). A concrete frame spec
+// is a Packet subtype: `def Header (refine Packet [layout])`. Packet types are
+// pure specs — `make Header {fields}` produces a plain `Bytes` (Bytes is only
+// data), and `unpack Header b` decodes a `Bytes` back to a field Map. FixedID
+// 4002 is in the lang Ideal band (4000-4999, beside Timeout/Interval); pinned
+// in lang/go/test/fixedid_stability_test.go.
+var TPacket = registerPacketType()
+
+func registerPacketType() *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Packet", 4002, nil)
+	if err != nil {
+		recordTypeInitErr(fmt.Errorf("native_bytes: register Ideal/Packet: %w", err))
+	}
+	return t
+}
+
+// frameBehavior is the Behavior carried by a frame SPEC type — a Packet subtype
+// minted by `refine Packet [layout]` (see installIdeals). It carries the parsed
+// `layout` that `make`/`unpack`/`unpack-prefix` read; its Match/Format/Equal
+// are the kernel default (a Packet type is a spec, not a value with custom
+// rendering). The layout lives on the TYPE (not a value or a side table), so it
+// travels with the type binding and there is no secondary parse at the call
+// site (ADR-007). When `def P` wraps this type with a bareRefineUnifier, the
+// wrapper preserves this Behavior as its `prev`; frameBehaviorOf walks the
+// chain to recover it.
 type frameBehavior struct {
-	bytesBehavior
 	layout []bitSeg // the parsed, validated frame layout
 	raw    Value    // the original layout List<Map> (for inspection/convert)
 }
 
+func (frameBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
+func (frameBehavior) Format(v Value) string       { return eng.DefaultBehavior.Format(v) }
+func (frameBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
+
 // frameBehaviorOf walks t's Behavior chain (down through any kernel wrapper
 // installed by `def`/`refine`) and returns the frameBehavior if t is a frame
-// type. eng.PrevBehavior follows behaviorWrapper.prev.
+// spec type. eng.PrevBehavior follows behaviorWrapper.prev.
 func frameBehaviorOf(t *Type) (*frameBehavior, bool) {
 	if t == nil {
 		return nil, false
@@ -209,25 +229,25 @@ var bytesNatives = []NativeFunc{
 	{
 		Name: "make",
 		Signatures: []NativeSig{
-			// `make <FrameType> {fields}` packs a frame. The target is a
-			// Bytes-subtype defined with `def P (refine Bytes [layout])`;
-			// the layout rides on the type, so dispatch is on the type, not
-			// an inline spec. More specific than make's `[TScalar TAny]`.
-			{Args: []*Type{TBytes, TMap}, TypeArgs: map[int]bool{0: true}, Handler: makeFrameHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			// `make <PacketType> {fields}` packs a frame into a plain Bytes.
+			// The target is a Packet subtype (`def P (refine Packet [layout])`);
+			// the layout rides on the type. More specific than make's
+			// `[TIdeal TMap]`, so it wins dispatch for Packet types.
+			{Args: []*Type{TPacket, TMap}, TypeArgs: map[int]bool{0: true}, Handler: makeFrameHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unpack",
 		Signatures: []NativeSig{
-			// `unpack <FrameType> b` decodes a frame, returning a field Map.
-			{Args: []*Type{TBytes, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			// `unpack <PacketType> b` decodes Bytes `b`, returning a field Map.
+			{Args: []*Type{TPacket, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unpack-prefix",
 		Signatures: []NativeSig{
-			// `unpack-prefix <FrameType> b` -> {ok rest} | {need n}; the streaming framer.
-			{Args: []*Type{TBytes, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackPrefixFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			// `unpack-prefix <PacketType> b` -> {ok rest} | {need n}; the streaming framer.
+			{Args: []*Type{TPacket, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackPrefixFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 }
@@ -636,17 +656,13 @@ func signExtend(v uint64, width int) int64 {
 
 // ---- pack: make <FrameType> {fields} --------------------------------------
 
-// makeFrameHandler packs `make <FrameType> {fields}`. The frame type carries
-// the layout (frameBehavior); fields supplies each named segment's value. The
-// result is a Bytes value tagged as the frame type (so `x is Packet` holds).
+// makeFrameHandler packs `make <PacketType> {fields}` into a plain Bytes (Bytes
+// is only data — the result is not tagged with the Packet type). The Packet
+// type carries the layout (frameBehavior); fields supplies each named segment.
 func makeFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	t := CanonicalType(r, &args[0])
-	fb, ok := frameBehaviorOf(t)
+	fb, ok := frameBehaviorOf(CanonicalType(r, &args[0]))
 	if !ok {
-		return nil, r.AqlErrorHint("type_error",
-			fmt.Sprintf("make: %s is not a frame type", args[0].String()),
-			"make",
-			"define one with `def P (refine Bytes [ {name:'x' type:'u8'} … ])`")
+		return nil, frameTypeErr(r, args[0], "make")
 	}
 	fields, err := RequireConcreteMap(args[1], "make")
 	if err != nil {
@@ -661,7 +677,7 @@ func makeFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if !w.aligned() {
 		return nil, r.AqlError("unaligned", "make: bit segments do not sum to whole bytes", "make")
 	}
-	return []Value{ReparentValue(newBytes(w.out), t)}, nil
+	return []Value{newBytes(w.out)}, nil
 }
 
 // packValue fetches a segment's source value for packing: a literal constant
@@ -790,9 +806,9 @@ func unpackPrefixFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Re
 
 func frameTypeErr(r *Registry, t Value, word string) error {
 	return r.AqlErrorHint("type_error",
-		fmt.Sprintf("%s: %s is not a frame type", word, t.String()),
+		fmt.Sprintf("%s: %s is not a Packet (frame) type", word, t.String()),
 		word,
-		"define one with `def P (refine Bytes [ {name:'x' type:'u8'} … ])`")
+		"define one with `def P (refine Packet [ {name:'x' type:'u8'} … ])`")
 }
 
 // needMore signals a short buffer to unpack-prefix (turned into {need:n}).

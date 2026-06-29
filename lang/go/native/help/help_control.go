@@ -9,7 +9,7 @@ func init() {
 			"Three selector forms over the same source: `unpack [names] map`, " +
 			"`unpack all map`, and `unpack {renames} map`. A fourth form decodes a " +
 			"binary frame: `unpack <FrameType> b` reads the Bytes `b` against a frame " +
-			"type (`def P (refine Bytes [layout])`) and returns a field Map " +
+			"type (`def P (refine Packet [layout])`) and returns a field Map " +
 			"(see `unpack-prefix` for the streaming variant).",
 		Notes: []string{
 			"`unpack [a b] m` — bind the listed keys: a → m.a, b → m.b.",

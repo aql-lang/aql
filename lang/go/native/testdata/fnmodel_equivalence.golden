@@ -399,10 +399,10 @@ WORD make
   [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
   [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
   [Any Any Node/Map] barrier=3 returns=[Any]
+  [Ideal/Packet Node/Map] barrier=2 typearg={0} returns=[Scalar/Bytes]
   [Ideal/Array Node/List] barrier=2 typearg={0} returns=[Ideal/Array]
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
   [Node Any] barrier=2 typearg={0} +returnsfn
-  [Scalar/Bytes Node/Map] barrier=2 typearg={0} returns=[Scalar/Bytes]
   [Scalar Any] barrier=2 typearg={0} +returnsfn
   [Any Any] barrier=2 returns=[Any]
 WORD match
@@ -661,14 +661,14 @@ WORD undef
 WORD unify
   [Any Any] barrier=2 returns=[Any Scalar/Boolean]
 WORD unpack
+  [Ideal/Packet Scalar/Bytes] barrier=2 typearg={0} returns=[Node/Map]
   [Node/Map Node/Map] barrier=2 runcheck noevalmap={0}
   [Node/List Node/Map] barrier=2 runcheck noeval={0}
-  [Scalar/Bytes Scalar/Bytes] barrier=2 typearg={0} returns=[Node/Map]
   [Scalar/Atom Node/Map] barrier=2 runcheck quote={0}
   [Scalar/Atom Scalar/String] barrier=2 runcheck quote={0}
   [Scalar/String] barrier=1 runcheck
 WORD unpack-prefix
-  [Scalar/Bytes Scalar/Bytes] barrier=2 typearg={0} returns=[Node/Map]
+  [Ideal/Packet Scalar/Bytes] barrier=2 typearg={0} returns=[Node/Map]
 WORD unquote
   [Any] barrier=1 returns=[Any]
 WORD unshift

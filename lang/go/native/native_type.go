@@ -495,15 +495,16 @@ func installIdeals(r *Registry) {
 			return tableHandler([]Value{arg}, nil, nil, r)
 		}
 	}
-	// Bytes frame types: `def Packet (refine Bytes [layout])` mints a Bytes
-	// subtype whose frameBehavior carries the parsed layout, which
-	// `make`/`unpack`/`unpack-prefix` read. Only the bare `Bytes` literal is
-	// a valid base (frame types have no subtyping). See native_bytes.go and
+	// Packet (binary-frame spec) types: `def Header (refine Packet [layout])`
+	// mints a Packet subtype whose frameBehavior carries the parsed layout,
+	// which `make`/`unpack`/`unpack-prefix` read. Packet is the spec KIND
+	// (sibling of Object/Record/Table); Bytes is only data. Only the bare
+	// `Packet` literal is a valid base. See native_bytes.go and
 	// design/go-modules/BYTES.10.md §7.
 	r.Ideals.Register(&eng.Ideal{
-		Name:    "Bytes",
+		Name:    "Packet",
 		Enabled: true,
-		Accepts: func(v Value) bool { return IsBareTypeNode(v) && v.Equal(TBytes) },
+		Accepts: func(v Value) bool { return IsBareTypeNode(v) && v.Equal(TPacket) },
 		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
 			segs, err := readBitSegments(arg, r, "refine")
 			if err != nil {

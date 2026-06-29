@@ -54,7 +54,7 @@ Existing words (bitwise, bit-twiddling, `fnv32`/`fnv64`, `ord`/`chr`) are
 
 ### 4.1 Bytes interop (now **core**, not `bin-util`)
 
-The `Bytes` type, frame types (`def P (refine Bytes [layout])` +
+The `Bytes` type, frame spec types (`Packet` kind: `def P (refine Packet [layout])` +
 `make`/`unpack`/`unpack-prefix`), and the value overloads (`convert`
 text/ints⇄Bytes + compact, `slice`, `add`; plus `size`/`eq`/ordering via type
 behaviors) are **core — no import** (see [BYTES.10.md](BYTES.10.md) §5, §7). Hex/binary byte constants are the `+hb/…/` /
