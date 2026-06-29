@@ -105,6 +105,32 @@ func TestArrayElement_NegativeStaysSound(t *testing.T) {
 				(a get 0) add 1
 			]] f`,
 		},
+		{
+			// HARDENING (residual #2): a tracked array passed to a fn that
+			// mutates it non-conformingly THROUGH ITS PARAM. The param carrier
+			// shares the make-site identity, so the inner set taints the
+			// caller's array — a get in the caller must decline. Pins that the
+			// forward-pass ordering hole is closed across the fn boundary.
+			name: "escape-arg-mutation",
+			src: `def taint fn [[x:Array] [Array] [ x set 0 "x" end x ]]
+			def f fn [[] [Scalar] [
+				def a (make Array [0 0 0])
+				def _ (a taint)
+				(a get 0) add 1
+			]] f`,
+		},
+		{
+			// HARDENING: a tracked array CAPTURED into a closure that mutates it
+			// non-conformingly. Capture preserves the carrier identity (Spike A),
+			// so the closure's set taints the captured array.
+			name: "escape-capture-mutation",
+			src: `def f fn [[] [Scalar] [
+				def a (make Array [0 0 0])
+				def mut ([] => [a set 0 "q"])
+				def _ (mut)
+				(a get 0) add 1
+			]] f`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { arrSound(t, c.src) })

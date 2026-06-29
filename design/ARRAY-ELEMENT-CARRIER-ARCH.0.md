@@ -301,17 +301,38 @@ forward-pass soundness via cross-pass accumulation are all demonstrated.
 - Q2 resolved (pos-stash), Q3 resolved (ArrayID field), Q6 (escape) covered for
   the store-as-value and alias cases; conformance trusts the bound.
 
-**Residual item #2 — status: empirically sound, not yet structurally guaranteed.**
-Forward-pass soundness relies on the enclosing compile context running an unarmed
-analysis (which populates the monotone poison) before/around the armed recording,
-which holds across the whole corpus + the forward-pass-loop regression (a
-once-called fn whose get precedes its poisoning set still compiles==interprets,
-because the enclosing program's unarmed pass poisons first). A truly single-pass,
-armed-only fn body that reads a tracked get before its own poisoning set would be
-the theoretical gap; none exists in the corpus and the top-level single-pass case
-refuses soundly. Hardening to an EXPLICIT unarmed pre-pass before the armed arm
-remains the belt-and-braces follow-up. Monitor with any new RunCompiledStrict
-counterexample.
+**Residual item #2 — RESOLVED (2026-06-29) by the strict→gradual switch; the
+explicit pre-pass is unnecessary and was rejected for cause.**
+
+The forward-pass concern was a STRICT-era artifact. With `get` returning a strict
+`NewCarrier(T)`, a get that fired BEFORE its array's poisoning set (in the single
+armed pass — `CompileCheck` is one armed walk, no separate unarmed phase) would
+record a committed strict integer op, and a later non-conforming runtime value
+would miscompile — so soundness depended on poison being populated first.
+
+The Stage-3 switch to a GRADUAL element (`NewDynamicCarrier(T)`, forced by the
+OOB→None soundness fix, §6 of the main doc) removes that dependency entirely: a
+gradual element compiles to a GUARDED / polymorphic op, never an unguarded strict
+commit. So a get on an array that is only poisoned LATER is still sound — the
+guard discharges to the real runtime dispatch (concat for a String, error for a
+None) == the interpreter. Poison ordering now affects only PRECISION (gradual-T vs
+gradual-Any), never soundness.
+
+Verified by an adversarial battery targeting the EXACT hole — a get-result feeding
+a strict consumer (arithmetic, `:Integer` fn param, native array index, mul/sub),
+plus identity-loss escapes (merge via `if`, store-as-value, fn-arg mutation,
+closure capture) — all single-pass, all runtime-divergent: ZERO miscompiles
+(clean-sound or identical error-parity). The structural cases (forward-pass loop,
+arg-mutation, capture-mutation) are pinned as permanent regressions in
+`bytecode_array_element_test.go`. Soundness now rests on the gradual-modality
+guard invariant, which is independently gated by `verify-bytecode`'s property-
+differential fuzz (`TestPropertyDifferential`).
+
+Why NOT the explicit unarmed pre-pass: `CompileCheck` is a single armed pass that
+deliberately PERSISTS check-mode side effects (def/import/macro RunInCheckMode).
+A second (unarmed) walk to pre-populate poison would re-apply those side effects
+(re-mint types, re-run Test specs) unless separately sandboxed — a real soundness
+risk introduced to close a hole the gradual result already closes. Not worth it.
 
 **Other residual items (NOT blockers — engineering):**
 1. **Lifecycle (Q4).** The spike used a package-GLOBAL poison map; production must
