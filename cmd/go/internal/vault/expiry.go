@@ -270,19 +270,31 @@ func expiryStatus(expires, now time.Time) string {
 }
 
 // humanizeDur renders a duration coarsely: days when at least a day,
-// else hours, else minutes (floor of "<1m").
+// else hours, else minutes (else "<1m").
+//
+// Each unit is ROUNDED, not truncated, so an expiry set to "now + 90d"
+// reads as "90d" the moment it is stored — by render time a few
+// milliseconds have passed, leaving 89d23h59m…, which truncation would
+// have shown as "89d". The unit thresholds are shifted down by half of
+// the next-smaller unit so rounding never produces a boundary value
+// like "24h" or "60m".
 func humanizeDur(d time.Duration) string {
 	if d < 0 {
 		d = -d
 	}
 	switch {
-	case d >= 24*time.Hour:
-		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
-	case d >= time.Hour:
-		return fmt.Sprintf("%dh", int(d/time.Hour))
-	case d >= time.Minute:
-		return fmt.Sprintf("%dm", int(d/time.Minute))
+	case d >= 24*time.Hour-30*time.Minute:
+		return fmt.Sprintf("%dd", roundDiv(d, 24*time.Hour))
+	case d >= time.Hour-30*time.Second:
+		return fmt.Sprintf("%dh", roundDiv(d, time.Hour))
+	case d >= 30*time.Second:
+		return fmt.Sprintf("%dm", roundDiv(d, time.Minute))
 	default:
 		return "<1m"
 	}
+}
+
+// roundDiv divides d by unit, rounding to the nearest whole number.
+func roundDiv(d, unit time.Duration) int {
+	return int((d + unit/2) / unit)
 }
