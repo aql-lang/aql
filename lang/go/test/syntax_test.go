@@ -31,6 +31,7 @@ var errorPatterns = map[string]string{
 	"bad-encoding":     "bad-encoding",
 	"no_match":         "no_match",
 	"unaligned":        "unaligned",
+	"bytes_error":      "bytes_error",
 }
 
 func TestSyntax(t *testing.T) {

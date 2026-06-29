@@ -69,7 +69,7 @@ var categories = []Category{
 		"canon", "mini", "parse", "emit",
 	}},
 	{"type", "Types: introspection and construction.", []string{
-		"convert", "bytes", "typeof", "inspect", "make", "refine", "class", "surface",
+		"convert", "typeof", "inspect", "make", "refine", "class", "surface",
 		"exposes", "gen", "of", "extends", "default", "const", "object", "array",
 		"base", "tor", "tand", "tany", "tall", "teq", "tpartial",
 		"is", "istype", "behave", "fnsig", "tnot", "pathof",

@@ -67,8 +67,6 @@ WORD busr
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD bxor
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
-WORD bytes
-  [Node/List] barrier=1 noeval={0} returns=[Scalar/Bytes]
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
@@ -404,7 +402,7 @@ WORD make
   [Ideal/Array Node/List] barrier=2 typearg={0} returns=[Ideal/Array]
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
   [Node Any] barrier=2 typearg={0} +returnsfn
-  [Scalar/Bytes Node/List] barrier=2 noeval={1} typearg={0} returns=[Scalar/Bytes]
+  [Scalar/Bytes Node/Map] barrier=2 typearg={0} returns=[Scalar/Bytes]
   [Scalar Any] barrier=2 typearg={0} +returnsfn
   [Any Any] barrier=2 returns=[Any]
 WORD match
@@ -665,12 +663,12 @@ WORD unify
 WORD unpack
   [Node/Map Node/Map] barrier=2 runcheck noevalmap={0}
   [Node/List Node/Map] barrier=2 runcheck noeval={0}
-  [Scalar/Bytes Node/List] barrier=2 noeval={1}
+  [Scalar/Bytes Scalar/Bytes] barrier=2 typearg={0} returns=[Node/Map]
   [Scalar/Atom Node/Map] barrier=2 runcheck quote={0}
   [Scalar/Atom Scalar/String] barrier=2 runcheck quote={0}
   [Scalar/String] barrier=1 runcheck
 WORD unpack-prefix
-  [Scalar/Bytes Node/List] barrier=2 noeval={1} returns=[Node/Map]
+  [Scalar/Bytes Scalar/Bytes] barrier=2 typearg={0} returns=[Node/Map]
 WORD unquote
   [Any] barrier=1 returns=[Any]
 WORD unshift

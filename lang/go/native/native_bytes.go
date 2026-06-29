@@ -133,6 +133,42 @@ func (bytesBehavior) Size(v Value) int {
 	return 0
 }
 
+// frameBehavior is the Behavior carried by a frame type — a Bytes subtype
+// minted by `refine Bytes [layout]` (see installIdeals). It embeds
+// bytesBehavior so a frame value renders/compares/sizes exactly like the
+// Bytes it is, and adds the parsed `layout`: the segment list that
+// `make`/`unpack`/`unpack-prefix` read to pack and decode. The layout lives
+// on the TYPE (not in a value or a side table) so it travels with the type
+// binding and there is no secondary parse at the call site (ADR-007). When
+// `def P` wraps this type with a bareRefineUnifier, the wrapper preserves
+// this Behavior as its `prev`; frameBehaviorOf walks the chain to recover it.
+type frameBehavior struct {
+	bytesBehavior
+	layout []bitSeg // the parsed, validated frame layout
+	raw    Value    // the original layout List<Map> (for inspection/convert)
+}
+
+// frameBehaviorOf walks t's Behavior chain (down through any kernel wrapper
+// installed by `def`/`refine`) and returns the frameBehavior if t is a frame
+// type. eng.PrevBehavior follows behaviorWrapper.prev.
+func frameBehaviorOf(t *Type) (*frameBehavior, bool) {
+	if t == nil {
+		return nil, false
+	}
+	var b TypeBehavior = t.Behavior
+	for b != nil {
+		if fb, ok := b.(*frameBehavior); ok {
+			return fb, true
+		}
+		nb, ok := eng.PrevBehavior(b)
+		if !ok {
+			break
+		}
+		b = nb
+	}
+	return nil, false
+}
+
 // bytesNatives registers the Bytes operations as SIGNATURE OVERLOADS of
 // existing words (no new core words except unpack-prefix). Conversions go
 // through `convert`, sub-ranges through `slice`, concatenation through
@@ -173,29 +209,25 @@ var bytesNatives = []NativeFunc{
 	{
 		Name: "make",
 		Signatures: []NativeSig{
-			// `make Bytes [spec]` packs a frame from a bit-syntax spec.
-			{Args: []*Type{TBytes, TList}, TypeArgs: map[int]bool{0: true}, NoEvalArgs: map[int]bool{1: true}, Handler: makeBytesHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
-		},
-	},
-	{
-		Name: "bytes",
-		Signatures: []NativeSig{
-			// `bytes [spec]` is sugar for `make Bytes [spec]` — same packer.
-			{Args: []*Type{TList}, NoEvalArgs: map[int]bool{0: true}, Handler: bytesHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			// `make <FrameType> {fields}` packs a frame. The target is a
+			// Bytes-subtype defined with `def P (refine Bytes [layout])`;
+			// the layout rides on the type, so dispatch is on the type, not
+			// an inline spec. More specific than make's `[TScalar TAny]`.
+			{Args: []*Type{TBytes, TMap}, TypeArgs: map[int]bool{0: true}, Handler: makeFrameHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unpack",
 		Signatures: []NativeSig{
-			// `unpack b [spec]` decodes a frame and binds each name into scope.
-			{Args: []*Type{TBytes, TList}, NoEvalArgs: map[int]bool{1: true}, Handler: unpackBytesHandler, Returns: []*Type{}, BarrierPos: -1},
+			// `unpack <FrameType> b` decodes a frame, returning a field Map.
+			{Args: []*Type{TBytes, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unpack-prefix",
 		Signatures: []NativeSig{
-			// `unpack-prefix b [spec]` -> {ok rest} | {need n}; the streaming framer.
-			{Args: []*Type{TBytes, TList}, NoEvalArgs: map[int]bool{1: true}, Handler: unpackPrefixHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			// `unpack-prefix <FrameType> b` -> {ok rest} | {need n}; the streaming framer.
+			{Args: []*Type{TBytes, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackPrefixFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 }
@@ -475,30 +507,29 @@ func readOneSeg(el Value, i int, r *Registry, word string) (bitSeg, error) {
 	return seg, nil
 }
 
-// segSize resolves a bytes/utf8/bits/pad size: a literal, a previously-bound
-// name, or -1 meaning "the rest" (only valid for a trailing bytes/utf8).
-func segSize(seg bitSeg, r *Registry, word string) (int, error) {
+// segSize resolves a bits/pad/bytes/utf8 size for PACKING: a literal, a field
+// named in the fields map, or -1 ("the rest", unused on pack).
+func segSize(seg bitSeg, fields ReadMap, r *Registry, word string) (int, error) {
 	if !seg.hasSize {
 		return -1, nil
 	}
 	if seg.sizeName == "" {
 		return seg.sizeLit, nil
 	}
-	v, ok := r.Defs.Top(seg.sizeName)
+	v, ok := fields.Get(seg.sizeName)
 	if !ok {
-		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size name %q is not bound", word, seg.sizeName), word)
+		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size field %q is not provided", word, seg.sizeName), word)
 	}
 	n, err := v.AsConcreteInteger()
 	if err != nil {
-		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size name %q is not an Integer", word, seg.sizeName), word)
+		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size field %q is not an Integer", word, seg.sizeName), word)
 	}
 	return int(n), nil
 }
 
-// resolveSize resolves a decode-time size: a literal, "rest" (-1), a name
-// from THIS frame's already-decoded integer fields (`seen`), or — as a
-// fallback — a binding in scope. The seen-first lookup lets unpack-prefix
-// (which does not install names into scope) resolve `bytes(len)`.
+// resolveSize resolves a decode-time size: a literal, "rest" (-1), or a name
+// referring to one of THIS frame's already-decoded integer fields (`seen`) —
+// the `size:'len'` case, e.g. a body sized by an earlier `len` field.
 func resolveSize(seg bitSeg, seen map[string]int64, r *Registry, word string) (int, error) {
 	if !seg.hasSize {
 		return -1, nil
@@ -509,7 +540,7 @@ func resolveSize(seg bitSeg, seen map[string]int64, r *Registry, word string) (i
 	if n, ok := seen[seg.sizeName]; ok {
 		return int(n), nil
 	}
-	return segSize(seg, r, word)
+	return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size field %q is not an earlier field", word, seg.sizeName), word)
 }
 
 // ---- bit writer / reader (MSB-first) --------------------------------------
@@ -603,64 +634,65 @@ func signExtend(v uint64, width int) int64 {
 	return int64(v)
 }
 
-// ---- pack: make Bytes [spec] ----------------------------------------------
+// ---- pack: make <FrameType> {fields} --------------------------------------
 
-func makeBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return packBytesSpec(args[1], r, "make")
-}
-
-// bytesHandler is the `bytes [spec]` sugar — identical to `make Bytes [spec]`,
-// just without the explicit type-literal target.
-func bytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return packBytesSpec(args[0], r, "bytes")
-}
-
-// packBytesSpec parses a bit-syntax spec and packs it into one Bytes value.
-// Shared by `make Bytes [spec]` and the `bytes [spec]` sugar; `word` names the
-// caller for error messages.
-func packBytesSpec(spec Value, r *Registry, word string) ([]Value, error) {
-	segs, err := readBitSegments(spec, r, word)
+// makeFrameHandler packs `make <FrameType> {fields}`. The frame type carries
+// the layout (frameBehavior); fields supplies each named segment's value. The
+// result is a Bytes value tagged as the frame type (so `x is Packet` holds).
+func makeFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	t := CanonicalType(r, &args[0])
+	fb, ok := frameBehaviorOf(t)
+	if !ok {
+		return nil, r.AqlErrorHint("type_error",
+			fmt.Sprintf("make: %s is not a frame type", args[0].String()),
+			"make",
+			"define one with `def P (refine Bytes [ {name:'x' type:'u8'} … ])`")
+	}
+	fields, err := RequireConcreteMap(args[1], "make")
 	if err != nil {
 		return nil, err
 	}
 	w := &bitWriter{}
-	for _, seg := range segs {
-		if err := packSeg(w, seg, r, word); err != nil {
+	for _, seg := range fb.layout {
+		if err := packSeg(w, seg, fields, r, "make"); err != nil {
 			return nil, err
 		}
 	}
 	if !w.aligned() {
-		return nil, r.AqlError("unaligned", word+": bit segments do not sum to whole bytes", word)
+		return nil, r.AqlError("unaligned", "make: bit segments do not sum to whole bytes", "make")
 	}
-	return []Value{newBytes(w.out)}, nil
+	return []Value{ReparentValue(newBytes(w.out), t)}, nil
 }
 
-// packValue fetches a segment's source value: a literal, or the binding
-// named by the segment key.
-func packValue(seg bitSeg, r *Registry) (Value, bool) {
+// packValue fetches a segment's source value for packing: a literal constant
+// (the `value` key) or the named field from the supplied fields map.
+func packValue(seg bitSeg, fields ReadMap) (Value, bool) {
 	if seg.isLit {
 		return NewInteger(seg.litVal), true
 	}
-	return r.Defs.Top(seg.name)
+	return fields.Get(seg.name)
 }
 
-func packSeg(w *bitWriter, seg bitSeg, r *Registry, word string) error {
+func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string) error {
+	missing := func() error {
+		return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not provided", word, seg.name), word)
+	}
 	switch {
 	case seg.typ == "pad":
-		n, err := segSize(seg, r, word)
+		n, err := segSize(seg, fields, r, word)
 		if err != nil {
 			return err
 		}
 		w.writeBits(0, n)
 		return nil
 	case seg.typ == "bits":
-		n, err := segSize(seg, r, word)
+		n, err := segSize(seg, fields, r, word)
 		if err != nil {
 			return err
 		}
-		v, ok := packValue(seg, r)
+		v, ok := packValue(seg, fields)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
+			return missing()
 		}
 		iv, _ := v.AsConcreteInteger()
 		w.writeBits(uint64(iv), n)
@@ -671,43 +703,43 @@ func packSeg(w *bitWriter, seg bitSeg, r *Registry, word string) error {
 	}
 	switch seg.typ {
 	case "bytes":
-		v, ok := packValue(seg, r)
+		v, ok := packValue(seg, fields)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
+			return missing()
 		}
 		b, bok := asBytes(v)
 		if !bok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: %q is not Bytes", word, seg.name), word)
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not Bytes", word, seg.name), word)
 		}
 		w.writeBytes(b)
 	case "utf8":
-		v, ok := packValue(seg, r)
+		v, ok := packValue(seg, fields)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
+			return missing()
 		}
 		s, serr := v.AsConcreteString()
 		if serr != nil {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: %q is not a String", word, seg.name), word)
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not a String", word, seg.name), word)
 		}
 		w.writeBytes([]byte(s))
 	case "f32":
-		v, ok := packValue(seg, r)
+		v, ok := packValue(seg, fields)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
+			return missing()
 		}
 		f, _ := AsFloat(v)
 		w.writeBytes(putUint(uint64(math.Float32bits(float32(f))), 4, seg.little))
 	case "f64":
-		v, ok := packValue(seg, r)
+		v, ok := packValue(seg, fields)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
+			return missing()
 		}
 		f, _ := AsFloat(v)
 		w.writeBytes(putUint(math.Float64bits(f), 8, seg.little))
 	default: // fixed ints
-		v, ok := packValue(seg, r)
+		v, ok := packValue(seg, fields)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
+			return missing()
 		}
 		n, _ := v.AsConcreteInteger()
 		w.writeBytes(putUint(uint64(n), seg.width, seg.little))
@@ -715,28 +747,33 @@ func packSeg(w *bitWriter, seg bitSeg, r *Registry, word string) error {
 	return nil
 }
 
-// ---- unpack: decode + bind, and the streaming prefix variant --------------
+// ---- unpack: decode a frame to a field Map, and the streaming variant -----
 
-func unpackBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	b, _ := asBytes(args[0])
-	segs, err := readBitSegments(args[1], r, "unpack")
+// unpackFrameHandler decodes `unpack <FrameType> b`, returning a field Map.
+func unpackFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fb, ok := frameBehaviorOf(CanonicalType(r, &args[0]))
+	if !ok {
+		return nil, frameTypeErr(r, args[0], "unpack")
+	}
+	b, _ := asBytes(args[1])
+	m, _, err := decodeSegs(b, fb.layout, r, "unpack", false)
 	if err != nil {
+		if _, short := err.(needMore); short {
+			return nil, r.AqlError("no_match", "unpack: buffer too short for the frame", "unpack")
+		}
 		return nil, err
 	}
-	_, _, err = decodeSegs(b, segs, r, "unpack", true)
-	if err != nil {
-		return nil, err
-	}
-	return nil, nil
+	return []Value{NewMap(m)}, nil
 }
 
-func unpackPrefixHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	b, _ := asBytes(args[0])
-	segs, err := readBitSegments(args[1], r, "unpack-prefix")
-	if err != nil {
-		return nil, err
+// unpackPrefixFrameHandler decodes a leading frame from b: {ok rest} | {need n}.
+func unpackPrefixFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	fb, ok := frameBehaviorOf(CanonicalType(r, &args[0]))
+	if !ok {
+		return nil, frameTypeErr(r, args[0], "unpack-prefix")
 	}
-	m, rest, err := decodeSegs(b, segs, r, "unpack-prefix", false)
+	b, _ := asBytes(args[1])
+	m, rest, err := decodeSegs(b, fb.layout, r, "unpack-prefix", false)
 	if err != nil {
 		if ne, ok := err.(needMore); ok {
 			out := NewOrderedMap()
@@ -749,6 +786,13 @@ func unpackPrefixHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	out.Set("ok", NewMap(m))
 	out.Set("rest", newBytes(rest))
 	return []Value{NewMap(out)}, nil
+}
+
+func frameTypeErr(r *Registry, t Value, word string) error {
+	return r.AqlErrorHint("type_error",
+		fmt.Sprintf("%s: %s is not a frame type", word, t.String()),
+		word,
+		"define one with `def P (refine Bytes [ {name:'x' type:'u8'} … ])`")
 }
 
 // needMore signals a short buffer to unpack-prefix (turned into {need:n}).

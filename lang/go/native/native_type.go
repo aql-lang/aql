@@ -495,6 +495,25 @@ func installIdeals(r *Registry) {
 			return tableHandler([]Value{arg}, nil, nil, r)
 		}
 	}
+	// Bytes frame types: `def Packet (refine Bytes [layout])` mints a Bytes
+	// subtype whose frameBehavior carries the parsed layout, which
+	// `make`/`unpack`/`unpack-prefix` read. Only the bare `Bytes` literal is
+	// a valid base (frame types have no subtyping). See native_bytes.go and
+	// design/go-modules/BYTES.10.md §7.
+	r.Ideals.Register(&eng.Ideal{
+		Name:    "Bytes",
+		Enabled: true,
+		Accepts: func(v Value) bool { return IsBareTypeNode(v) && v.Equal(TBytes) },
+		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
+			segs, err := readBitSegments(arg, r, "refine")
+			if err != nil {
+				return nil, err
+			}
+			def := r.Types.MintRefinePrefab(CanonicalType(r, &base))
+			def.Behavior = &frameBehavior{layout: segs, raw: arg}
+			return []Value{NewTypeLiteral(def)}, nil
+		},
+	})
 }
 
 // ---- enum ----
