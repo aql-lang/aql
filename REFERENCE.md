@@ -2126,7 +2126,7 @@ Backends: `auto` (default), `keychain`, `secret-service`, `wincred`,
 | `list` | List aliases and metadata (no values) | `--namespace` |
 | `expiry` | List/set/clear expiry reminders | `--namespace`, `--within` |
 | `rm <alias>` | Remove a secret | `-y` |
-| `mv <from> <to>` | Rename a key, move namespaces, or rename a namespace (`ns:`) | — |
+| `mv <from> <to>` | Rename a key, move namespaces, or rename a namespace (`ns:`); capabilities re-bind to the new name by default | `--revoke-caps`, `--dry-run` |
 | `rotate <alias>` | Replace a secret's value | `--from-stdin`/…, `--revoke-caps`, `--expiry`, `-y` |
 | `verify` | Reconcile store and keyring (alias `fsck`) | `--prune` |
 | `import <file>` | Import from a `.env` file or an encrypted bundle | — |
