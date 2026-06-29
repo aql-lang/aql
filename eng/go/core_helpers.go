@@ -324,6 +324,31 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 // no_signature against the spurious Map (the decision `eval-pred-all` cycle).
 // A concrete arg, an arg already conforming to the param, or an Any/untyped
 // param is left untouched (no precision lost).
+// recordSchemaCarrier returns the body-analysis view of a map/gradual-Any arg
+// bound to a RECORD-shape param (declared `c:SomeRecord` — Type=Map + a NewMap
+// field→type schema pattern): a carrier CARRYING the record schema
+// (RecordTypeInfo), so a body `c get "field"` recovers the field's declared type
+// instead of degrading to Any. The arg already passed the param match at the
+// call site and the runtime CALL_USER guard re-checks it, so committing to the
+// schema for body analysis is sound; recovered field types are GRADUAL
+// (getNodeReturns), discharged by a guard for a non-conforming value. Returns
+// (zero,false) for Options-typed params (OptionsTypeInfo, not MapPayload),
+// patternless params, and non-map args. Applied at BOTH body-analysis paths —
+// narrowArgsToParams (result/summary) and the armed-compile genArgs — so the
+// schema survives into the closure CAPTURE that the armed compile records.
+func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
+	if p.Pattern == nil || a.Parent == nil {
+		return Value{}, false
+	}
+	if !(a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
+		return Value{}, false
+	}
+	if pm, ok := p.Pattern.Data.(MapPayload); ok && pm.M != nil {
+		return Value{Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}, true
+	}
+	return Value{}, false
+}
+
 func narrowArgsToParams(args []Value, params []FnParam) []Value {
 	var out []Value
 	for i := range args {
@@ -332,27 +357,12 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 		}
 		a := args[i]
 		pt := params[i].Type
-		// A RECORD-shape param (declared `c:SomeRecord` — Type=Map + a NewMap
-		// field→type schema pattern) given a map / gradual-Any arg: re-bind the
-		// body's view to a carrier CARRYING the record schema (RecordTypeInfo),
-		// so a body `c get "field"` recovers the field's declared type from the
-		// schema instead of degrading to Any. The arg already passed the param
-		// match at the call site, and the runtime CALL_USER param guard re-checks
-		// the value against the param contract, so committing to the schema for
-		// body analysis is sound; the recovered field types are GRADUAL
-		// (getNodeReturns), so a non-conforming value is discharged by a guard,
-		// never miscompiled. Options-typed params (OptionsTypeInfo pattern) and
-		// patternless params are untouched. See ARRAY-ELEMENT-CARRIER methodology
-		// + the aql:test record-param plan.
-		if params[i].Pattern != nil && a.Parent != nil &&
-			(a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
-			if pm, ok := params[i].Pattern.Data.(MapPayload); ok && pm.M != nil {
-				if out == nil {
-					out = append([]Value(nil), args...)
-				}
-				out[i] = Value{Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}
-				continue
+		if rc, ok := recordSchemaCarrier(params[i], a); ok {
+			if out == nil {
+				out = append([]Value(nil), args...)
 			}
+			out[i] = rc
+			continue
 		}
 		switch {
 		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
@@ -539,6 +549,12 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// key, so the generalised analysis is the one that caches.
 			genArgs := make([]Value, len(args))
 			for i, a := range args {
+				if i < len(sigParams) {
+					if rc, ok := recordSchemaCarrier(sigParams[i], a); ok {
+						genArgs[i] = rc // preserve record schema into the armed compile + closure capture
+						continue
+					}
+				}
 				if a.Parent == nil {
 					// A root-node carrier (None / Any / Never) has a nil Parent
 					// because it IS its own lattice node — it is already an
