@@ -15,9 +15,11 @@
 > word surface is **signature overloads of existing words** — `convert`
 > (text/ints ⇄ Bytes, compact), `slice`, `add`, `make Bytes` (pack), `unpack`
 > (decode) — plus the one new `unpack-prefix`; crypto/encoding/hash/uuid stay
-> in `aql:bin-util`; (3) a **hex literal only** (`0x"deadbeef"`), no `b"…"` form;
-> (4) the memory model is **zero-copy share + copy-on-ingest** (this supersedes
-> the earlier `DeepCloner` decision — see §4).
+> in `aql:bin-util`; (3) hex/binary byte constants are the **`+hb/…/` and
+> `+bb/…/` minilang kinds** (`import "aql:minilang"`), **not** a core lexer
+> literal — there is no `0x"…"` or `b"…"` form (see §6); (4) the memory model is
+> **zero-copy share + copy-on-ingest** (this supersedes the earlier
+> `DeepCloner` decision — see §4).
 >
 > Used by `NETWORK-SERVERS.0.md` §3, `NETWORK-CLIENTS.0.md` §3, and
 > `STREAM-WORDS.0.md` (`from-bytes`/`to-bytes`), which now reference this doc
@@ -156,7 +158,7 @@ carries Go's standard slice-retention caveat:
 | Operation | Copies | Notes |
 | --- | --- | --- |
 | construct from external `[]byte` / `recv` | 1 | the ingest copy (§4.2) |
-| `0x"…"` literal | 1 (at parse) | baked into the program once |
+| `+hb/…/` / `+bb/…/` literal kind | 1 (at the call) | the decoded constant, built once |
 | clone / `ForkConcurrent` / `send` | 0 | slice header only (§4.1) |
 | `slice`, `unpack` `bytes(n)` view | 0 | sub-slice view (§4.3) |
 | `convert Bytes <bytes>` (compact) | 1 | force-copy to drop retention |
@@ -189,8 +191,8 @@ operations (crypto, encodings, hashing, random, UUID) live in `aql:bin-util`
 
 `size`/`length`, `eq`, value ordering (`cmp`/`lt`/`sort`), and `is Bytes` need
 **no dedicated word** — they resolve through the `Sizer`/`Equal`/`Comparer`
-behaviors (§3). The `0x"…"` literal (§6) covers hex *input*;
-`BinUtil.hex-encode` covers hex *output*.
+behaviors (§3). The `+hb/…/` / `+bb/…/` minilang kinds (§6) cover hex/binary
+*input*; `BinUtil.hex-encode` covers hex *output*.
 
 **Why overloads.** `Bytes` is a value type like `String`, so it slots into the
 generic words by type-dispatch rather than adding a parallel `byte-*`
@@ -200,28 +202,44 @@ genuinely new streaming operation with no generic equivalent — is its own word
 **appended** to the existing word via `RegisterNativeFunc`; no edits to the
 host words' files are needed.)
 
-## 6. The `0x"…"` Bytes literal
+## 6. Hex / binary constants — the `+hb/…/` and `+bb/…/` minilang kinds
 
-A first-class hex literal for protocol magic numbers and constants:
+Byte constants for protocol magic numbers and fixtures are written with two
+**`aql:minilang` kinds** rather than a bespoke core lexer literal: `hb` (hex
+bytes) and `bb` (binary bytes), invoked through the standard `+name<delim>src<delim>`
+literal sugar:
 
 ```aql
-0x"deadbeef"        # Bytes<de ad be ef>
-0x"00"              # Bytes<00>   (a single zero byte)
-0x""                # Bytes<>     (empty)
+import "aql:minilang"
+
++hb/deadbeef/       # Bytes<de ad be ef>
++hb/de ad be ef/    # Bytes<de ad be ef>   (whitespace/`_` group, ignored)
++bb/01001100/       # Bytes<4c>            (8 bits, MSB-first)
++bb/01001100 11110000/   # Bytes<4c f0>   (grouping ignored)
 ```
 
-- The payload is an **even** number of hex digits (`[0-9a-fA-F]`); an odd count
-  or a non-hex digit is a **parse error** (`bad-bytes-literal`), caught at
-  compile time, not runtime.
-- **Disambiguation from the integer `0x` prefix is the quote.** `0xff` is the
-  existing `Integer` 255 (`isBasePrefixedInteger`, `eng/go/parser/parse.go`);
-  `0x"ff"` is `Bytes<ff>`. The matcher fires only on `0x` *immediately followed
-  by a quote*, so no existing literal changes meaning.
-- **Lexer hook.** A custom jsonic lex matcher registered at high priority
-  (before the string matcher) in `eng/go/parser/` (`grammar.go`/`parse.go`),
-  converting the matched `0x"…"` token to a `Bytes` value in
-  `convertDataValue`. There is **no `b"…"` ASCII literal** — use
-  `convert Bytes "GET "` for text-as-bytes, which keeps the encoding explicit.
+- **`hb`** decodes an **even** number of hex digits (`[0-9a-fA-F]`); spaces,
+  tabs, newlines and `_` are grouping separators and dropped. An odd count or a
+  non-hex digit raises `mini_parse_error` when the kind runs.
+- **`bb`** decodes a run of `0`/`1` whose length (after dropping the same
+  grouping separators) is a **multiple of 8**, MSB-first per byte. A non-binary
+  digit or a non-multiple-of-8 length raises `mini_parse_error`.
+- Both are **generator kinds** (`[src:String opts:Map] → [Bytes]`), so the
+  explicit `mini hb 'deadbeef'` / desugared `MiniLang.lang_hb 'deadbeef' {} end`
+  forms are equivalent — see `lang/spec/module-minilang.tsv` §6.
+- **Why a minilang kind, not a `0x"…"` core literal.** Byte constants are an
+  *occasional* need, dominated by the network/binary code that already imports
+  `aql:minilang` for its other DSLs; folding them into the existing
+  `+name/src/` lexer sugar avoids a new core token and the `0x`-prefix
+  disambiguation it would require (`0xff` stays the `Integer` 255 —
+  `isBasePrefixedInteger`, `eng/go/parser/parse.go` — untouched). There is **no**
+  `b"…"` ASCII literal either — use `convert Bytes "GET "` for text-as-bytes,
+  which keeps the encoding explicit.
+- **The `+hb/…/` result feeds the words directly**, but note the auto-`end` the
+  literal sugar emits stops forward collection, so a kind result that is itself
+  a forward arg must be parenthesised: `unpack (+hb/0100026869/) [op:u8 …]`.
+  Implementation: `lang/go/modules/minilang.go` (`hb`/`bb` kinds + handlers),
+  `lang/go/modules/docs_minilang.go` (docs).
 
 ## 7. Bit-syntax — the segment-spec DSL (`make Bytes` / `unpack`)
 
@@ -324,12 +342,15 @@ frame's already-decoded fields first, then scope — so the non-binding
 
 ## 8. Usage examples
 
-Forward form. `import "aql:bin-util"` only where a crypto/encoding word appears;
-the type, literal, and bit-syntax need no import.
+Forward form. `import "aql:bin-util"` only where a crypto/encoding word appears,
+`import "aql:minilang"` where an `+hb/…/` / `+bb/…/` constant appears; the type
+and bit-syntax need no import.
 
 ```aql
-# hex literal; 0xff (no quote) stays an Integer
-0x"deadbeef"                              # Bytes<de ad be ef>
+# hex/binary constants via the minilang kinds; 0xff (no quote) stays an Integer
+import "aql:minilang"
++hb/deadbeef/                              # Bytes<de ad be ef>
++bb/01001100/                              # Bytes<4c>
 0xff                                       # 255
 
 # text round-trip (é is two UTF-8 bytes)
@@ -368,18 +389,18 @@ convert Bytes "hello"  BinUtil.sha256  BinUtil.hex-encode
 def tag ( convert Bytes (slice 4 8 big-frame) )   # convert-to-Bytes drops the big backing array
 
 # negative cases
-unpack 0x"01" [ ver:u8  len:u16 ]          # ERROR:no_match   (only 1 byte, needs 3)
+unpack (+hb/01/) [ ver:u8  len:u16 ]        # ERROR:no_match   (only 1 byte, needs 3)
 make Bytes [ flag:bits(3) ]                 # ERROR:unaligned  (3 bits, not byte-aligned)
 convert Bytes [256]                         # ERROR:expected-byte
-convert String 0x"ff"                       # ERROR:bad-encoding (0xff is not valid UTF-8)
-0x"abc"                                      # ERROR:bad-bytes-literal (odd hex digit count)
+convert String (+hb/ff/)                     # ERROR:bad-encoding (0xff is not valid UTF-8)
++hb/abc/                                      # ERROR:mini_parse_error (odd hex digit count)
 ```
 
 ## 9. Errors
 
 | code | raised when |
 | --- | --- |
-| `bad-bytes-literal` | `0x"…"` literal has an odd digit count or a non-hex digit (parse time). |
+| `mini_parse_error` | a `+hb/…/` source has an odd hex-digit count or a non-hex digit, or a `+bb/…/` source has a non-binary digit or a non-multiple-of-8 bit count (raised when the kind runs). |
 | `expected-byte` | a `List` element passed to `convert Bytes` is not an Integer in 0–255. |
 | `bad-encoding` | `convert String` (or a `utf8` segment) is given bytes that are not valid UTF-8. |
 | `no_match` | an `unpack` guard fails, or the buffer is too short for the spec. |
@@ -437,7 +458,9 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
   the zero-copy/copy-on-ingest model (§4), `gobridge` `[]byte`↔`Bytes`, and the
   `convert`/`slice`/`add` Bytes overloads (§5). No literal, no bit-syntax.
   Independently useful (hashing, file I/O). **(landed)**
-- **Phase A2 — the `0x"…"` literal** (§6). The lexer matcher only. **(landed)**
+- **Phase A2 — the `+hb/…/` / `+bb/…/` minilang kinds** (§6). Two generator
+  kinds registered in `aql:minilang`, reusing the existing `+name/src/` literal
+  sugar — no core lexer change. **(landed)**
 - **Phase A3 — bit-syntax** (§7): `make Bytes`/`unpack` overloads + the new
   `unpack-prefix` word, over a custom segment-spec parser. This unblocks the
   declarative `length-prefixed` codec and `recv-frame`. **(landed)**
@@ -456,15 +479,18 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
   (`name:type` implicit pairs, `/be /le /signed /unsigned` suffixes, trailing
   `(size)` ParenExpr) over the raw (`NoEvalArgs`) spec; an MSB-first bit
   writer/reader; bind via `InstallDef`.
-- **`eng/go/parser/` (`grammar.go`/`parse.go`)** — the `0x"…"` custom lex
-  matcher (§6), building the `Bytes` value via `eng.FromNative` (the bridge) and
-  carrying it like the XML literal; converter cases in both contexts.
+- **`lang/go/modules/minilang.go`** — the `hb`/`bb` generator kinds
+  (`[src:String opts:Map] → [Bytes]`) + their handlers (drop grouping, decode
+  hex / MSB-first bits, raise `mini_parse_error`), building the `Bytes` value via
+  `eng.FromNative` (the bridge); `lang/go/modules/docs_minilang.go` — the
+  `lang_hb`/`lang_bb` doc entries.
 - **`lang/go/native/help/help_bytes.go`** — `register(&Entry{…})` for the new
   `unpack-prefix` (the overloaded words keep their existing entries); a
   `control`-category slot beside `unpack`.
 - **`lang/go/test/fixedid_stability_test.go`** — pin `Scalar/Bytes` = 1009.
 - **`lang/go/test/bytes.tsv`** — positive rows (convert round-trips, slice,
-  `add`, compact, `0x"…"` literal, `make Bytes`/`unpack`/`unpack-prefix`,
-  float/signed) each paired with an `ERROR:<substring>` negative sibling
-  (`no_match`, `unaligned`, `expected-byte`, `bad-encoding`,
-  `bad-bytes-literal`); plus a Go-bridge round-trip test.
+  `add`, compact, `make Bytes`/`unpack`/`unpack-prefix`, float/signed) each
+  paired with an `ERROR:<substring>` negative sibling (`no_match`, `unaligned`,
+  `expected-byte`, `bad-encoding`); the `+hb/…/` / `+bb/…/` literal rows
+  (positive + `mini_parse_error` negatives) live in
+  `lang/spec/module-minilang.tsv` §6; plus a Go-bridge round-trip test.

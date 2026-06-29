@@ -270,7 +270,7 @@ socket — the dual of the server's `conn-session`:
 # Conceptual desugaring of `connect {tcp:A codec:C}`:
 def ep ( endpoint C )                          # a Service that also tracks pending calls
 def sock ( connect-raw {tcp: A} )
-spawn [ ep sock C client-pump 0x"" ]           # actor: decode peer bytes → replies + pushes
+spawn [ ep sock C client-pump (convert Bytes []) ]   # actor: decode peer bytes → replies + pushes
 ep                                             # return the Endpoint handle to the caller
 ```
 

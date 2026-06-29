@@ -17,12 +17,14 @@ func init() {
 			"the bound fields and the leftover bytes — or `{need: n}` when the " +
 			"buffer is too short. The streaming-framer counterpart to `unpack` " +
 			"(which decodes a whole frame and binds names into scope). Segment " +
-			"grammar is shared: `name:type[/suffix]*` with types u8..u64/i8..i64/" +
-			"f32/f64/bits/bytes/utf8/pad, suffixes be(default)/le/signed/unsigned " +
-			"or a size (int or a previously-bound name) for bytes/utf8/bits/pad.",
+			"grammar is shared: `name:type[/suffix]*(size)` with types u8..u64/" +
+			"i8..i64/f32/f64/bits/bytes/utf8/pad, slash suffixes be(default)/le/" +
+			"signed/unsigned, and a paren `(size)` (int or a previously-bound " +
+			"name) for bytes/utf8/bits/pad. Hex/binary byte constants are the " +
+			"`+hb/…/` and `+bb/…/` minilang kinds (import \"aql:minilang\").",
 		Examples: []string{
-			`unpack-prefix 0x"0100056869" [op:u8 len:u16 body:bytes/len]   # {ok:{op:1 len:5 body:Bytes<68 69>} rest:Bytes<>}`,
-			`unpack-prefix 0x"00" [op:u8 len:u16]                          # {need: 2}`,
+			`import "aql:minilang"  unpack-prefix (+hb/0100026869/) [op:u8 len:u16 body:bytes(len)]   # {ok:{op:1 len:2 body:Bytes<68 69>} rest:Bytes<>}`,
+			`unpack-prefix (convert Bytes [0]) [op:u8 len:u16]   # {need: 2}`,
 		},
 	})
 }

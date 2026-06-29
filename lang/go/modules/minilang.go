@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -172,6 +173,38 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	})
 	exports.Set("lang_m", wrapMiniFnDef("minilang-m", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TNumber}, nil, subReg))
+
+	// ---- kind: hb — hex Bytes literal ----------------------------------
+	// [src opts] → [Bytes]. `+hb/deadbeef/` (≡ mini hb 'deadbeef') decodes
+	// an even-length hex string to a Bytes constant. Whitespace and `_` in
+	// the source are ignored, so `+hb/de ad be ef/` groups for readability.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-hb",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap},
+			Returns:    []*native.Type{native.TBytes},
+			BarrierPos: -1,
+			Handler:    miniHexBytesHandler,
+		}},
+	})
+	exports.Set("lang_hb", wrapMiniFnDef("minilang-hb", [][]native.FnParam{stdPrefix},
+		[]*native.Type{native.TBytes}, nil, subReg))
+
+	// ---- kind: bb — binary Bytes literal -------------------------------
+	// [src opts] → [Bytes]. `+bb/01001100/` decodes a string of 0/1 bits
+	// (a multiple of 8, MSB-first per byte) to a Bytes constant. Whitespace
+	// and `_` are ignored, so `+bb/01001100 11110000/` groups for clarity.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-bb",
+		Signatures: []native.NativeSig{{
+			Args:       []*native.Type{native.TString, native.TMap},
+			Returns:    []*native.Type{native.TBytes},
+			BarrierPos: -1,
+			Handler:    miniBinBytesHandler,
+		}},
+	})
+	exports.Set("lang_bb", wrapMiniFnDef("minilang-bb", [][]native.FnParam{stdPrefix},
+		[]*native.Type{native.TBytes}, nil, subReg))
 
 	// ---- kind: jp — JSONPath query (github.com/ohler55/ojg) -------------
 	// [src opts doc:Any] → [List]. Run a JSONPath query over the stack
@@ -514,6 +547,67 @@ func miniOptString(opts native.Value, key string) (string, error) {
 		return "", fmt.Errorf("opts.%s: %w", key, err)
 	}
 	return s, nil
+}
+
+// miniDropGrouping strips ASCII whitespace and underscores so a binary/hex
+// source can be grouped for readability (`+hb/de ad be ef/`, `+bb/0100_1100/`).
+func miniDropGrouping(s string) string {
+	return strings.Map(func(c rune) rune {
+		switch c {
+		case ' ', '\t', '\n', '\r', '_':
+			return -1
+		}
+		return c
+	}, s)
+}
+
+// miniHexBytesHandler — args[0]=src, args[1]=opts. Decodes an even-length
+// hex string to Bytes. The value is built via eng.FromNative (the
+// []byte→Bytes bridge), which runs here at runtime where the bridge is live.
+func miniHexBytesHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	src, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("hb: src: %v", err), "lang_hb")
+	}
+	b, derr := hex.DecodeString(miniDropGrouping(src))
+	if derr != nil {
+		return nil, r.AqlErrorHint("mini_parse_error", fmt.Sprintf("hb: %v", derr), "lang_hb",
+			"use an even number of hex digits, e.g. +hb/deadbeef/")
+	}
+	return []native.Value{eng.FromNative(b)}, nil
+}
+
+// miniBinBytesHandler — args[0]=src, args[1]=opts. Decodes a string of 0/1
+// bits (a multiple of 8, MSB-first per byte) to Bytes.
+func miniBinBytesHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	src, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("bb: src: %v", err), "lang_bb")
+	}
+	bits := miniDropGrouping(src)
+	if len(bits)%8 != 0 {
+		return nil, r.AqlErrorHint("mini_parse_error",
+			fmt.Sprintf("bb: bit count %d is not a multiple of 8", len(bits)), "lang_bb",
+			"pad to whole bytes, e.g. +bb/01001100/")
+	}
+	out := make([]byte, len(bits)/8)
+	for i := range out {
+		var v byte
+		for j := 0; j < 8; j++ {
+			v <<= 1
+			switch bits[i*8+j] {
+			case '1':
+				v |= 1
+			case '0':
+			default:
+				return nil, r.AqlErrorHint("mini_parse_error",
+					fmt.Sprintf("bb: %q is not a binary digit", string(bits[i*8+j])), "lang_bb",
+					"use only 0 and 1, e.g. +bb/01001100/")
+			}
+		}
+		out[i] = v
+	}
+	return []native.Value{eng.FromNative(out)}, nil
 }
 
 // miniReHandler — args[0]=src, args[1]=opts, args[2]=subject.

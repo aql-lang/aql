@@ -158,12 +158,13 @@ A new core **`Bytes`** type: an **immutable** finite sequence of octets.
 - **Comparable / printable.** Ordered lexicographically by octet; printed as
   `Bytes<de ad be ef>`.
 
-Core surface (forward form, **no import**): the `0x"deadbeef"` hex literal;
-`utf8`, `to-text`, `bytes` (ints→Bytes), `byte-ints`, `slice`, `concat`,
-`compact`; `length`/`size`/`eq`/ordering via type behaviors. Crypto, hashing,
-and hex/base encodings live in `aql:bin-util` (taking/returning `Bytes`). Full
-table: `BYTES.10.md` §5. (There is **no `b"…"` literal** — write `utf8 "GET "`
-for text-as-bytes.)
+Core surface (forward form, **no import**): the `convert` text/ints⇄Bytes
+overloads (+ compact), `slice`, `add`; `size`/`eq`/ordering via type behaviors.
+Hex/binary constants are the `+hb/deadbeef/` / `+bb/01001100/` kinds in
+`aql:minilang` (BYTES.10.md §6). Crypto, hashing, and hex/base encodings live in
+`aql:bin-util` (taking/returning `Bytes`). Full table: `BYTES.10.md` §5. (There
+is **no `0x"…"` core literal and no `b"…"` literal** — write
+`convert Bytes "GET "` for text-as-bytes.)
 
 ### 3.2 Bit-syntax — `pack` / `unpack` (summary)
 
@@ -441,7 +442,7 @@ is one `Codec` value, written with §3–§4 primitives.
 
 ```aql
 # Conceptual desugaring of `listen {tcp:P codec:C} SVC`:
-serve-raw {tcp: P} [ [conn] => [ conn-session conn C SVC 0x"" ] ]
+serve-raw {tcp: P} [ [conn] => [ conn-session conn C SVC (convert Bytes []) ] ]
 
 def conn-session fn [[conn:Socket  codec:Codec  svc:Service  buf:Bytes] [Never] [
   def step ( codec.decode buf )
