@@ -475,7 +475,30 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 		return dyn
 	}
 	key, container := args[0], args[1]
-	if !IsConcrete(container) || !IsConcrete(key) || !container.Parent.ConformsTo(TMap) {
+	if !IsConcrete(key) {
+		return dyn
+	}
+	// A record-schema carrier (a record-typed param reparented at the call
+	// boundary by narrowArgsToParams) carries a RecordTypeInfo schema rather
+	// than a concrete map. Recover the field's declared type from the schema so
+	// a body's `c get "field"` types instead of degrading to Any. The result is
+	// GRADUAL, never strict: a field absent at run time (an open map) or a value
+	// the param guard did not pin reads optimistically and is discharged by a
+	// guard — never a committed strict op on a possibly-absent field (the
+	// Array<T> OOB→None lesson). A field outside the schema, or a dispatch-
+	// bearing (Function/FnDef) field, keeps dynamic Any.
+	if rt, ok := container.Data.(RecordTypeInfo); ok && rt.Fields != nil {
+		fv, ok := rt.Fields.Get(getKey(key))
+		if !ok {
+			return dyn
+		}
+		ft := ValueType(fv)
+		if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+			return dyn
+		}
+		return []Value{NewDynamicCarrier(ft)}
+	}
+	if !IsConcrete(container) || !container.Parent.ConformsTo(TMap) {
 		return dyn
 	}
 	m, err := AsMap(container)

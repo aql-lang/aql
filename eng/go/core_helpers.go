@@ -332,6 +332,28 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 		}
 		a := args[i]
 		pt := params[i].Type
+		// A RECORD-shape param (declared `c:SomeRecord` — Type=Map + a NewMap
+		// field→type schema pattern) given a map / gradual-Any arg: re-bind the
+		// body's view to a carrier CARRYING the record schema (RecordTypeInfo),
+		// so a body `c get "field"` recovers the field's declared type from the
+		// schema instead of degrading to Any. The arg already passed the param
+		// match at the call site, and the runtime CALL_USER param guard re-checks
+		// the value against the param contract, so committing to the schema for
+		// body analysis is sound; the recovered field types are GRADUAL
+		// (getNodeReturns), so a non-conforming value is discharged by a guard,
+		// never miscompiled. Options-typed params (OptionsTypeInfo pattern) and
+		// patternless params are untouched. See ARRAY-ELEMENT-CARRIER methodology
+		// + the aql:test record-param plan.
+		if params[i].Pattern != nil && a.Parent != nil &&
+			(a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
+			if pm, ok := params[i].Pattern.Data.(MapPayload); ok && pm.M != nil {
+				if out == nil {
+					out = append([]Value(nil), args...)
+				}
+				out[i] = Value{Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}
+				continue
+			}
+		}
 		switch {
 		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
 			!a.Parent.ConformsTo(pt):
