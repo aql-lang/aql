@@ -33,6 +33,13 @@ convert String ((convert Bytes "ab") add (convert Bytes "cd"))	'abcd'
 (convert Bytes "ho") eq (convert Bytes "hi")	false
 (convert Bytes "a") lt (convert Bytes "b")	true
 (convert Bytes "hi") is Bytes	true
+
+# a `refine Bytes` newtype value is content-equal to plain Bytes (eq agrees
+# with cmp on a tagged subtype — same nested base, compared by content)
+def B (refine Bytes) def x:B (convert Bytes "hi") x eq (convert Bytes "hi")	true
+def B (refine Bytes) def x:B (convert Bytes "hi") x eq (convert Bytes "ho")	false
+def B (refine Bytes) def x:B (convert Bytes "hi") def y:B (convert Bytes "hi") x eq y	true
+def B (refine Bytes) def x:B (convert Bytes "hi") x lt (convert Bytes "hz")	true
 (convert Bytes "hi") is String	false
 
 # A frame is a TYPE; `make` builds a field-accessible Binary INSTANCE. Fields
