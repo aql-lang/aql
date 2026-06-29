@@ -179,6 +179,13 @@ var bytesNatives = []NativeFunc{
 		},
 	},
 	{
+		Name: "bytes",
+		Signatures: []NativeSig{
+			// `bytes [spec]` is sugar for `make Bytes [spec]` — same packer.
+			{Args: []*Type{TList}, NoEvalArgs: map[int]bool{0: true}, Handler: bytesHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+		},
+	},
+	{
 		Name: "unpack",
 		Signatures: []NativeSig{
 			// `unpack b [spec]` decodes a frame and binds each name into scope.
@@ -594,18 +601,31 @@ func signExtend(v uint64, width int) int64 {
 // ---- pack: make Bytes [spec] ----------------------------------------------
 
 func makeBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	segs, err := parseBitSegments(args[1], r, "make")
+	return packBytesSpec(args[1], r, "make")
+}
+
+// bytesHandler is the `bytes [spec]` sugar — identical to `make Bytes [spec]`,
+// just without the explicit type-literal target.
+func bytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return packBytesSpec(args[0], r, "bytes")
+}
+
+// packBytesSpec parses a bit-syntax spec and packs it into one Bytes value.
+// Shared by `make Bytes [spec]` and the `bytes [spec]` sugar; `word` names the
+// caller for error messages.
+func packBytesSpec(spec Value, r *Registry, word string) ([]Value, error) {
+	segs, err := parseBitSegments(spec, r, word)
 	if err != nil {
 		return nil, err
 	}
 	w := &bitWriter{}
 	for _, seg := range segs {
-		if err := packSeg(w, seg, r); err != nil {
+		if err := packSeg(w, seg, r, word); err != nil {
 			return nil, err
 		}
 	}
 	if !w.aligned() {
-		return nil, r.AqlError("unaligned", "make Bytes: bit segments do not sum to whole bytes", "make")
+		return nil, r.AqlError("unaligned", word+": bit segments do not sum to whole bytes", word)
 	}
 	return []Value{newBytes(w.out)}, nil
 }
@@ -619,70 +639,70 @@ func packValue(seg bitSeg, r *Registry) (Value, bool) {
 	return r.Defs.Top(seg.name)
 }
 
-func packSeg(w *bitWriter, seg bitSeg, r *Registry) error {
+func packSeg(w *bitWriter, seg bitSeg, r *Registry, word string) error {
 	switch {
 	case seg.typ == "pad":
-		n, err := segSize(seg, r, "make")
+		n, err := segSize(seg, r, word)
 		if err != nil {
 			return err
 		}
 		w.writeBits(0, n)
 		return nil
 	case seg.typ == "bits":
-		n, err := segSize(seg, r, "make")
+		n, err := segSize(seg, r, word)
 		if err != nil {
 			return err
 		}
 		v, ok := packValue(seg, r)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
 		}
 		iv, _ := v.AsConcreteInteger()
 		w.writeBits(uint64(iv), n)
 		return nil
 	}
 	if !w.aligned() {
-		return r.AqlError("unaligned", fmt.Sprintf("make Bytes: %s segment is not byte-aligned", seg.typ), "make")
+		return r.AqlError("unaligned", fmt.Sprintf("%s: %s segment is not byte-aligned", word, seg.typ), word)
 	}
 	switch seg.typ {
 	case "bytes":
 		v, ok := packValue(seg, r)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
 		}
 		b, bok := asBytes(v)
 		if !bok {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: %q is not Bytes", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: %q is not Bytes", word, seg.name), word)
 		}
 		w.writeBytes(b)
 	case "utf8":
 		v, ok := packValue(seg, r)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
 		}
 		s, serr := v.AsConcreteString()
 		if serr != nil {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: %q is not a String", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: %q is not a String", word, seg.name), word)
 		}
 		w.writeBytes([]byte(s))
 	case "f32":
 		v, ok := packValue(seg, r)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
 		}
 		f, _ := AsFloat(v)
 		w.writeBytes(putUint(uint64(math.Float32bits(float32(f))), 4, seg.little))
 	case "f64":
 		v, ok := packValue(seg, r)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
 		}
 		f, _ := AsFloat(v)
 		w.writeBytes(putUint(math.Float64bits(f), 8, seg.little))
 	default: // fixed ints
 		v, ok := packValue(seg, r)
 		if !ok {
-			return r.AqlError("bytes_error", fmt.Sprintf("make Bytes: name %q is not bound", seg.name), "make")
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: name %q is not bound", word, seg.name), word)
 		}
 		n, _ := v.AsConcreteInteger()
 		w.writeBytes(putUint(uint64(n), seg.width, seg.little))

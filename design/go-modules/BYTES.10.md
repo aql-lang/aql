@@ -186,6 +186,7 @@ operations (crypto, encodings, hashing, random, UUID) live in `aql:bin-util`
 | sub-range (end-exclusive, zero-copy view) | `slice` | `slice <start> <end> b` |
 | concatenate two byte strings | `add` | `a add b` |
 | pack a frame from a bit-spec (§7) | `make` | `make Bytes [spec]` |
+| pack a frame — terse sugar for `make Bytes` (§7) | `bytes` | `bytes [spec]` |
 | decode a frame, binding fields (§7) | `unpack` | `unpack b [spec]` |
 | streaming-decode a leading frame (§7) | `unpack-prefix` | `unpack-prefix b [spec]` |
 
@@ -196,8 +197,9 @@ behaviors (§3). The `+hb/…/` / `+bb/…/` minilang kinds (§6) cover hex/bina
 
 **Why overloads.** `Bytes` is a value type like `String`, so it slots into the
 generic words by type-dispatch rather than adding a parallel `byte-*`
-vocabulary. This keeps the core namespace small. Only `unpack-prefix` — a
-genuinely new streaming operation with no generic equivalent — is its own word.
+vocabulary. This keeps the core namespace small. The two dedicated words are
+`bytes` — a one-token alias for the very common `make Bytes [spec]` pack — and
+`unpack-prefix`, a genuinely new streaming operation with no generic equivalent.
 (Implementation: each overload is registered from `native_bytes.go` and
 **appended** to the existing word via `RegisterNativeFunc`; no edits to the
 host words' files are needed.)
@@ -246,8 +248,9 @@ import "aql:minilang"
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
 short *and* safe. AQL's equivalent is a **`List` of segment tokens** captured
 **unevaluated** (the spec arg is `NoEvalArgs`) and interpreted by a small
-segment parser. `make Bytes [spec]` packs; `unpack b [spec]` decodes and binds;
-`unpack-prefix b [spec]` is the streaming variant.
+segment parser. `make Bytes [spec]` packs (or the equivalent `bytes [spec]`
+sugar); `unpack b [spec]` decodes and binds; `unpack-prefix b [spec]` is the
+streaming variant.
 
 > **Not an `aql:minilang`.** The spec is a `List` of ordinary AQL tokens
 > captured raw — **not** a kind of the `mini`/MiniLang facility
@@ -475,7 +478,8 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
   `DeepCloner` (§4.1); the `convert`/`slice`/`add` overloads (§5) appended via
   `RegisterNativeFunc`; funnel init errors through `TypeInitError`.
 - **`lang/go/native/native_bytes.go` (bit-syntax)** — the `make Bytes` /
-  `unpack` overloads + the new `unpack-prefix`; a custom segment-spec parser
+  `unpack` overloads, the `bytes [spec]` pack sugar (shares `packBytesSpec`
+  with `make Bytes`), and the new `unpack-prefix`; a custom segment-spec parser
   (`name:type` implicit pairs, `/be /le /signed /unsigned` suffixes, trailing
   `(size)` ParenExpr) over the raw (`NoEvalArgs`) spec; an MSB-first bit
   writer/reader; bind via `InstallDef`.
@@ -485,12 +489,13 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
   `eng.FromNative` (the bridge); `lang/go/modules/docs_minilang.go` — the
   `lang_hb`/`lang_bb` doc entries.
 - **`lang/go/native/help/help_bytes.go`** — `register(&Entry{…})` for the new
-  `unpack-prefix` (the overloaded words keep their existing entries); a
-  `control`-category slot beside `unpack`.
+  `bytes` and `unpack-prefix` words (the overloaded words keep their existing
+  entries); `help_categories.go` lists `bytes` in the `type` category and
+  `unpack-prefix` in `control` (beside `unpack`).
 - **`lang/go/test/fixedid_stability_test.go`** — pin `Scalar/Bytes` = 1009.
 - **`lang/go/test/bytes.tsv`** — positive rows (convert round-trips, slice,
-  `add`, compact, `make Bytes`/`unpack`/`unpack-prefix`, float/signed) each
-  paired with an `ERROR:<substring>` negative sibling (`no_match`, `unaligned`,
-  `expected-byte`, `bad-encoding`); the `+hb/…/` / `+bb/…/` literal rows
+  `add`, compact, `make Bytes`/`bytes`/`unpack`/`unpack-prefix`, float/signed)
+  each paired with an `ERROR:<substring>` negative sibling (`no_match`,
+  `unaligned`, `expected-byte`, `bad-encoding`); the `+hb/…/` / `+bb/…/` literal rows
   (positive + `mini_parse_error` negatives) live in
   `lang/spec/module-minilang.tsv` §6; plus a Go-bridge round-trip test.

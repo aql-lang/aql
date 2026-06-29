@@ -67,6 +67,8 @@ WORD busr
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD bxor
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD bytes
+  [Node/List] barrier=1 noeval={0} returns=[Scalar/Bytes]
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1

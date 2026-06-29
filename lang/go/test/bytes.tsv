@@ -34,6 +34,11 @@ make Bytes [1:u8 2:u16]	Bytes<01 00 02>
 make Bytes [1:bits(4) 5:bits(4)]	Bytes<15>
 def body (convert Bytes "hi") def len (size body) make Bytes [1:u8 len:u16 body:bytes]	Bytes<01 00 02 68 69>
 
+# `bytes [spec]` is sugar for `make Bytes [spec]` — same packer
+bytes [1:u8 2:u16]	Bytes<01 00 02>
+def body (convert Bytes "hi") def len (size body) bytes [1:u8 len:u16 body:bytes]	Bytes<01 00 02 68 69>
+(bytes [1:u8 2:u16]) eq (make Bytes [1:u8 2:u16])	true
+
 # unpack: decode + bind, then read a field; literal guards
 unpack (convert Bytes [1 0 2 104 105]) [ver:u8 len:u16 body:bytes(len)] (convert String body)	'hi'
 unpack (convert Bytes [127 2]) [127:u8 x:u8] x	2
@@ -51,3 +56,4 @@ convert Bytes [256]		expected-byte
 convert String (convert Bytes [255])		bad-encoding
 unpack (convert Bytes [1]) [127:u8 x:u8]		no_match
 make Bytes [1:bits(3)]		unaligned
+bytes [1:bits(3)]		unaligned
