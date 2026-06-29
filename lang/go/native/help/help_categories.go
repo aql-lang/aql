@@ -72,7 +72,7 @@ var categories = []Category{
 		"convert", "typeof", "inspect", "make", "refine", "class", "surface",
 		"exposes", "gen", "of", "extends", "default", "const", "object", "array",
 		"base", "tor", "tand", "tany", "tall", "teq", "tpartial",
-		"is", "istype", "behave", "fnsig", "tnot", "pathof",
+		"is", "tis", "istype", "behave", "fnsig", "tnot", "pathof",
 	}},
 	{"query", "Query pipelines, iteration, resources, and modules.", []string{
 		"select", "from", "where", "order", "limit", "offset", "distinct",

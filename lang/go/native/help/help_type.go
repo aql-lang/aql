@@ -286,6 +286,17 @@ func init() {
 		Examples:    []string{`5 is Integer     ;# => true`, `'x' is Integer   ;# => false`},
 	})
 	register(&Entry{
+		Word:    "tis",
+		Summary: "Nominal subtype test — `is` but walking only the lattice (Value.Parent).",
+		Description: "Like `is`, but consults ONLY the type lattice: it reduces each " +
+			"operand to the lattice node it denotes and asks whether the left node " +
+			"sits on the right node's parent chain. It does NOT run a predicate, " +
+			"refine, membership, or structural match — so it is tag-only. " +
+			"`100 tis (Integer gt 10)` and `5 tis (Integer gt 10)` are both true " +
+			"(base tag Integer), where `is` honours the predicate (true / false).",
+		Examples: []string{`5 tis Integer    ;# => true`, `5 tis Number     ;# => true`, `Integer tis Number ;# => true`},
+	})
+	register(&Entry{
 		Word:        "istype",
 		Summary:     "Test whether a value is a type literal rather than a concrete value.",
 		Description: "True for a bare type node like Integer or a user-defined type; false for concrete values like 5.",

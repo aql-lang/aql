@@ -190,6 +190,18 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
+		Name:          "tis",
+		CompileEffect: CompileIslandPure,
+
+		Signatures: []NativeSig{{
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       tisHandler,
+			Returns:       []*Type{TBoolean},
+			CompileEffect: CompileReadsFn, // reads the operands' lattice tags, never invokes
+		}},
+	},
+	{
 		Name: "guard",
 
 		Signatures: []NativeSig{{
@@ -760,6 +772,45 @@ func teqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 		return []Value{NewBoolean(aNode.Equal(bNode))}, nil
 	}
 	return []Value{NewBoolean(ValuesEqual(a, b))}, nil
+}
+
+// ---- tis ----
+
+// tisHandler implements `tis` — the pure-lattice variant of `is`. It
+// reduces both operands to the lattice node they denote and answers ONE
+// question: does a's node sit on b's node's parent chain (ConformsTo /
+// IsAncestor)? Unlike `is`, it consults nothing else — no Behavior.Match,
+// no Unify, no predicate run, no membership predicate, no structural-shape
+// match. It traverses Value.Parent and only Value.Parent, so it is the
+// nominal/lattice subtype test:
+//
+//	5 tis Integer            → true   (Integer ≤ Integer)
+//	5 tis Number             → true   (Integer ≤ Number)
+//	5 tis String             → false  (wrong family)
+//	Integer tis Number       → true   (both literals: lattice subtyping)
+//	5 tis Any                → true   (Any is the lattice top)
+//
+// The deliberate divergence from `is` is that `tis` is TAG-ONLY: a
+// predicate / refine / membership RHS is reduced to the lattice node it
+// hangs off, so `100 tis (Integer gt 10)` and `5 tis (Integer gt 10)` are
+// BOTH true (base tag Integer ≤ Integer) where `is` runs the predicate and
+// returns true / false respectively. Likewise a bare-refine newtype tag
+// only matches up its own chain, not its base: `2 tis Pos` is false
+// because Integer is not below the minted Pos node.
+func tisHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	a, b := args[1], args[0]
+	return []Value{NewBoolean(tisNode(a).ConformsTo(tisNode(b)))}, nil
+}
+
+// tisNode returns the lattice node a value denotes for `tis`: a bare type
+// literal IS its node (a by-value copy, so &v carries the right ID / In /
+// Out / Parent — mirroring isHandler's `bNode := &b`); any other value's
+// node is its tag, v.Parent.
+func tisNode(v Value) *Type {
+	if IsBareTypeNode(v) {
+		return &v
+	}
+	return v.Parent
 }
 
 // ---- tpartial ----
