@@ -45,6 +45,14 @@ func (r *Registry) ForkConcurrent() *Registry {
 	fork.Contexts.Push(r.Contexts.Top())
 	fork.Args = NewArgsStack()
 	fork.FnBaselines = nil
+	// debugEngines is the live-engine stack for on-demand Debug.stack
+	// introspection (registry.go). It is mutable per-Run state, so the fork
+	// must start with an empty stack of its own. Without this reset the shallow
+	// copy inherits the parent's slice header — and because the parent is
+	// mid-Run at fork time (its backing array has live entries and spare
+	// capacity), sibling forks would each append into the SHARED backing array,
+	// a data race. Reset alongside Args/FnBaselines for the same reason.
+	fork.debugEngines = nil
 	fork.FlowCtrl = FlowNone
 	fork.pendingGen = nil
 	fork.macroCache = nil
