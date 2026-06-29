@@ -171,6 +171,15 @@ type ChildTypeInfo struct {
 	// an exact length or an upper bound — never an underestimate, which
 	// would turn an in-bounds access into a false positive.
 	Len *int
+	// ArrayID is the make-site identity of a typed mutable-Array carrier
+	// (`Array<T>`), used in check mode to key the per-array element-bound /
+	// poison tracking that keeps `arr get` sound under mutation + aliasing.
+	// It is the SrcPos of the originating `make Array` call, stamped once at
+	// construction and preserved through binding/capture (a value copy keeps
+	// Data). The zero SrcPos means "no tracked identity" (an untyped or
+	// non-make array) — see design/ARRAY-ELEMENT-CARRIER-ARCH.0.md. Irrelevant
+	// to typed lists/maps, which leave it zero.
+	ArrayID SrcPos
 }
 
 // ChildEntry is a (key, value) pair retained for typed maps that
@@ -1238,6 +1247,14 @@ func NewEvalList(elems []Value) Value {
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
 	return NewValueRaw(TList, ChildTypeInfo{Child: child})
+}
+
+// NewTypedArray creates a typed mutable-Array carrier shell — Parent=TArray
+// with Data=ChildTypeInfo{Child}. Mirrors NewTypedList on the Array side; the
+// element type rides on Child, the make-site identity on ChildTypeInfo.ArrayID.
+// Callers that want it treated as abstract set Carrier (see NewCarrierTypedArray).
+func NewTypedArray(child Value, id SrcPos) Value {
+	return NewValueRaw(TArray, ChildTypeInfo{Child: child, ArrayID: id})
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.
