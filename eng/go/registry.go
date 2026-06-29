@@ -192,9 +192,10 @@ type Registry struct {
 	// to the live residual stack, which it is not otherwise handed. Cost is
 	// one slice append/trim per Run (not per step); reading is the only place
 	// a Snapshot is taken, so a program that never calls Debug.stack pays
-	// nothing beyond the push/pop. Not shared across forks (ForkConcurrent
-	// gives each goroutine its own registry), so a plain slice is safe — the
-	// same posture as argsStack.
+	// nothing beyond the push/pop. A plain slice is safe because it is
+	// per-execution state: ForkConcurrent resets it to nil (like Args), so each
+	// concurrent goroutine pushes onto its own stack and never the parent's
+	// shared backing array.
 	debugEngines []*Engine
 }
 
