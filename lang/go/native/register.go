@@ -103,6 +103,11 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// Bytes type — core construction / conversion / slicing words.
+	for _, n := range bytesNatives {
+		r.RegisterNativeFunc(n)
+	}
+
 	// I/O, help, module, temporal (consolidated)
 	for _, n := range miscNatives {
 		r.RegisterNativeFunc(n)

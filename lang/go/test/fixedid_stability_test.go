@@ -129,6 +129,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Scalar/Time/Timezone":             1008,
 		"Ideal/Timeout":                    4000, // timer types — lang/go/engine/native_misc.go
 		"Ideal/Interval":                   4001,
+		"Scalar/Bytes":                     1009, // byte-string leaf — lang/go/native/native_bytes.go
 	}
 
 	for path, want := range expected {

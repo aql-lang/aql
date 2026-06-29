@@ -1,0 +1,100 @@
+# Bytes — a plain binary Scalar (convert/slice/add/size/eq), plus binary
+# FRAME TYPES. A frame layout is a TYPE you define by refining BinarySpec
+# (BinarySpec : Binary :: Class : Object): `def Header (refine BinarySpec
+# [layout])`. `make Header {fields}` builds a field-accessible Binary INSTANCE
+# (like an object instance), `convert Bytes <inst>` serialises it to wire Bytes,
+# and `unpack`/`unpack-prefix` decode wire Bytes back into an instance. The
+# layout is a JSON-representable List of segment Maps (ADR-007: no secondary
+# parsing). Hex/binary literals are the +hb/…/, +bb/…/ minilang kinds
+# (module-minilang.tsv); here we build byte inputs with `convert Bytes`.
+# Format: expression<TAB>expected[<TAB>error-code]
+
+# 0xff (no quote) is still an Integer
+0xff	255
+
+# convert: String/List <-> Bytes, and compact (Bytes -> Bytes)
+convert Bytes "hi"	Bytes<68 69>
+convert String (convert Bytes [104 105])	'hi'
+convert List (convert Bytes [104 105])	[104 105]
+convert Bytes [104 105]	Bytes<68 69>
+convert Bytes (convert Bytes [104 105])	Bytes<68 69>
+
+# size via the generic word (Sizer behavior); é is two UTF-8 bytes
+size (convert Bytes [104 105])	2
+size (convert Bytes [])	0
+size (convert Bytes "café")	5
+
+# slice (start end data, end-exclusive) + add concatenation
+convert String (slice 1 3 (convert Bytes [104 101 108 108 111]))	'el'
+convert String ((convert Bytes "ab") add (convert Bytes "cd"))	'abcd'
+
+# equality + ordering + type predicate via behaviors
+(convert Bytes "hi") eq (convert Bytes "hi")	true
+(convert Bytes "ho") eq (convert Bytes "hi")	false
+(convert Bytes "a") lt (convert Bytes "b")	true
+(convert Bytes "hi") is Bytes	true
+
+# a `refine Bytes` newtype value is content-equal to plain Bytes (eq agrees
+# with cmp on a tagged subtype — same nested base, compared by content)
+def B (refine Bytes) def x:B (convert Bytes "hi") x eq (convert Bytes "hi")	true
+def B (refine Bytes) def x:B (convert Bytes "hi") x eq (convert Bytes "ho")	false
+def B (refine Bytes) def x:B (convert Bytes "hi") def y:B (convert Bytes "hi") x eq y	true
+def B (refine Bytes) def x:B (convert Bytes "hi") x lt (convert Bytes "hz")	true
+(convert Bytes "hi") is String	false
+
+# A frame is a TYPE; `make` builds a field-accessible Binary INSTANCE. Fields
+# are read with dot-access (`p.len`), `typeof` is the frame type, and the
+# instance `is` that type.
+def Header (refine BinarySpec [{value:1 type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) def p (make Header {len:2 body:(convert Bytes "hi")}) p.len	2
+def Header (refine BinarySpec [{value:1 type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) def p (make Header {len:2 body:(convert Bytes "hi")}) convert String p.body	'hi'
+def Header (refine BinarySpec [{value:1 type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) typeof (make Header {len:2 body:(convert Bytes "hi")})	Header
+def Header (refine BinarySpec [{value:1 type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) (make Header {len:2 body:(convert Bytes "hi")}) is Header	true
+
+# convert Bytes <instance> serialises to wire bytes; `value` segments are
+# constants, `name` segments read the instance's fields.
+def Header (refine BinarySpec [{value:1 type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) convert Bytes (make Header {len:2 body:(convert Bytes "hi")})	Bytes<01 00 02 68 69>
+def P (refine BinarySpec [{value:1 type:'u8'} {value:2 type:'u16'}]) convert Bytes (make P {})	Bytes<01 00 02>
+def P (refine BinarySpec [{value:1 type:'bits' size:4} {value:5 type:'bits' size:4}]) convert Bytes (make P {})	Bytes<15>
+
+# unpack <FrameType> b -> a Binary instance; a `value` segment is a match guard
+def P (refine BinarySpec [{name:'ver' type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) def m (unpack P (convert Bytes [1 0 2 104 105])) convert String m.body	'hi'
+def P (refine BinarySpec [{value:127 type:'u8'} {name:'x' type:'u8'}]) def m (unpack P (convert Bytes [127 2])) m.x	2
+
+# unpack-prefix: {ok rest} / {need}
+def P (refine BinarySpec [{name:'ver' type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) unpack-prefix P (convert Bytes [1 0 2 104 105 170])	{ok:Class/P{ver:1 len:2 body:Bytes<68 69>} rest:Bytes<aa>}
+def P (refine BinarySpec [{name:'ver' type:'u8'} {name:'len' type:'u16'}]) unpack-prefix P (convert Bytes [0])	{need:2}
+
+# float (little-endian) + signed round-trips
+def F (refine BinarySpec [{name:'x' type:'f64' endian:'le'}]) def w (convert Bytes (make F {x:1.5})) def m (unpack F w) m.x	1.5
+def S (refine BinarySpec [{name:'x' type:'i16'}]) def w (convert Bytes (make S {x:-2})) def m (unpack S w) m.x	-2
+
+# negative cases
+convert Bytes [256]		expected-byte
+convert String (convert Bytes [255])		bad-encoding
+def P (refine BinarySpec [{value:127 type:'u8'} {name:'x' type:'u8'}]) unpack P (convert Bytes [1])		no_match
+def P (refine BinarySpec [{value:1 type:'bits' size:3}]) convert Bytes (make P {})		unaligned
+def C class {a:1} convert Bytes (make C {})		type_error
+def P (refine BinarySpec [{name:'body' type:'bytes' size:'len'}]) unpack P (convert Bytes [104 105])		bytes_error
+refine BinarySpec [{name:'v' type:'nope'}]		bytes_error
+
+# value-range validation: a field that does not fit its declared segment
+# width/signedness is rejected at serialise time, not silently truncated.
+def P (refine BinarySpec [{name:'x' type:'u8'}]) convert Bytes (make P {x:300})		bytes_error
+def P (refine BinarySpec [{name:'x' type:'u8'}]) convert Bytes (make P {x:-1})		bytes_error
+def P (refine BinarySpec [{name:'x' type:'i8'}]) convert Bytes (make P {x:200})		bytes_error
+def P (refine BinarySpec [{name:'a' type:'bits' size:4} {name:'b' type:'bits' size:4}]) convert Bytes (make P {a:31 b:0})		bytes_error
+# in-range values still pack (boundary)
+def P (refine BinarySpec [{name:'x' type:'u8'}]) convert Bytes (make P {x:255})	Bytes<ff>
+def P (refine BinarySpec [{name:'x' type:'i8'}]) convert Bytes (make P {x:-128})	Bytes<80>
+
+# a sized bytes field whose length disagrees with the declared size is rejected
+def P (refine BinarySpec [{name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) convert Bytes (make P {len:2 body:(convert Bytes "hello")})		bytes_error
+
+# malformed layouts are rejected at refine time
+refine BinarySpec [{name:'b' type:'bytes' size:-1}]		bytes_error
+refine BinarySpec [{value:1 type:'f64'}]		bytes_error
+
+# decode-side: a u64 with the high bit set has no faithful Integer
+def P (refine BinarySpec [{name:'x' type:'u64'}]) unpack P (convert Bytes [255 255 255 255 255 255 255 255])		bytes_error
+# decode-side: nonzero padding is a malformed frame
+def P (refine BinarySpec [{name:'a' type:'bits' size:4} {value:0 type:'bits' size:4}]) unpack P (convert Bytes [255])		no_match

@@ -548,3 +548,70 @@ versioning and restore worth having.
 - The scoped-password feature requires the file backend's envelope; a
   keychain-backed vault that gains slots double-wraps (OS store of
   envelope ciphertext) and now requires an AQL passphrase to decrypt.
+
+---
+
+## ADR-007 — No secondary parsing; every AQL structure is macro-constructable Node data {#adr-007}
+
+**Status:** Accepted · **Date:** 2026-06-29
+
+### Decision
+
+A word **must not** define a custom sub-language that it parses out of a
+captured token stream or out of the text of a value. Any structure a word
+consumes must be an ordinary AQL **Node** (a `List`/`Map` of plain scalars)
+that the word only **reads** — never re-lexes, re-parses, or string-splits.
+
+Concretely, the contract is: every structure accepted by a word must be
+
+1. **constructable by a macro** — a macro emits AQL data (`quote`/`unquote`),
+   so any structure a macro can produce is, by definition, plain Node data;
+   and
+2. **JSON-representable** — expressible with maps, lists, strings, integers,
+   booleans, so it round-trips through serialisation unchanged.
+
+If a feature wants a terse surface syntax, it earns it through the **one**
+parser (a grammar rule / lexer matcher in `eng/go/parser`) or through a
+**macro** that expands to Node data — not through a private parser hidden
+inside a word's handler.
+
+### Context
+
+The motivating case is the `Bytes` bit-syntax. `make Bytes [spec]` accepted
+a spec like `[ver:u8 len:u16 body:bytes(len)]` and a hand-rolled parser
+inside the handler interpreted it: it `strings.Split`- on `/` to separate a
+type from its `be`/`le`/`signed` modifiers, positionally attached a trailing
+`(len)` ParenExpr to the preceding segment, and `strconv.ParseInt`-ed each
+map key to decide literal-vs-name. That is a second parser — a sub-language
+with its own grammar — living below the real one.
+
+Secondary parsing is corrosive: the structure it accepts can't be built or
+inspected as data (so no macro can emit it, and it can't be serialised),
+its grammar drifts from the host language's, and its rules (here, "a numeric
+`/N` is the arity modifier so sizes must use parens") are accidents of the
+token stream rather than deliberate design. AQL already has exactly one
+parser and a uniform type/`make`/`refine` model; a per-word DSL undercuts
+both.
+
+The fix for `Bytes` is to make the spec a `List` of segment `Map`s —
+`[{name:'ver' type:'u8'} {name:'body' type:'bytes' size:'len'}]` — that the
+handler reads field by field (enum-dispatch on the `type` string is data
+interpretation, not parsing). A follow-on question (whether such a layout
+should be a named **type**, instantiated by plain `make`/`unpack`, rather
+than an anonymous argument) is tracked separately in
+`design/go-modules/BYTES.10.md`; this ADR governs only the no-secondary-
+parsing principle, which holds either way.
+
+### Consequences
+
+- The `Bytes` spec is now a JSON-representable `List<Map>` read by
+  `readBitSegments` (`lang/go/native/native_bytes.go`); the old
+  `parseBitSegments`/`parseOneSeg`/`attachSize` token parser is gone, along
+  with the `0x"…"`-era reliance on raw-token capture for the spec.
+- New words may not ship a bespoke string/token grammar. When a compact
+  surface is wanted, add it to the single parser (a grammar rule or a
+  `mini`/`+name/src/` minilang kind) or provide a macro that builds the
+  Node data — both keep "one parser" and "structures are data" intact.
+- Reading a discriminator field and switching on its value (e.g. a `type`
+  enum String) is explicitly **not** secondary parsing; it is the normal way
+  a handler interprets data.

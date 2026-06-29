@@ -42,7 +42,7 @@ flat `BinUtil.*`).
   `hex-encode` / `base64-encode` for display. This is forced by the type
   system: a 32-byte SHA-256 digest and a CRC64 value both **exceed AQL's
   `int64` `Integer`**, so they cannot be Integers.
-- **Decoders return `Bytes`**; `text` converts back to String when wanted.
+- **Decoders return `Bytes`**; core `to-text` converts back to String when wanted.
 - Top-first sig order; all inner native sigs `BarrierPos: -1`; invoked
   args-before-dot (`a b BinUtil.word` / `a BinUtil.word b`). See
   README.10.md "Argument order & dispatch".
@@ -52,10 +52,17 @@ flat `BinUtil.*`).
 Existing words (bitwise, bit-twiddling, `fnv32`/`fnv64`, `ord`/`chr`) are
 **unchanged**. New words below.
 
-### 4.1 Bytes interop (the `Bytes` type surface)
+### 4.1 Bytes interop (now **core**, not `bin-util`)
 
-See [BYTES.10.md](BYTES.10.md) §5. `bytes`, `text`, `ints`, `length`,
-`slice`, `concat`, `byte-at`, `equal`.
+The `Bytes` type, frame spec types (`BinarySpec` kind: `def P (refine BinarySpec
+[layout])` builds a sealed class; `make` → a `Binary` instance; `convert Bytes`
+serialises; `unpack`/`unpack-prefix` decode), and the value overloads (`convert`
+text/ints⇄Bytes + compact, `slice`, `add`; plus `size`/`eq`/ordering via type
+behaviors) are **core — no import** (see [BYTES.10.md](BYTES.10.md) §5, §7). Hex/binary byte constants are the `+hb/…/` /
+`+bb/…/` kinds in `aql:minilang` (BYTES.10.md §6), not a `bin-util` word.
+`bin-util` does **not** re-export any of these. This keeps the network-framing hot
+path importable-free; `bin-util` builds *on top of* the core type, taking and
+returning `Bytes`.
 
 ### 4.2 Encoding — hex / base32 / base64 / base128 / ascii85
 
@@ -152,7 +159,7 @@ never panic (guard with `AsConcreteString` / `AsConcreteInteger` / the
 | `bad-uuid` | `uuid-parse` / `uuid-format` given malformed input. |
 | `random-length` | `random-bytes` / `random-hex` given a negative `n`. |
 | `random-range` | `random-int` given `max <= 0`. |
-| (plus the `Bytes` codes: `expected-byte`, `invalid-utf8`, `index-range`) | see BYTES.10.md. |
+| (plus the core `Bytes` codes: `expected-byte`, `bad-encoding`, `index-range`) | see BYTES.10.md. |
 
 ## 7. Policy / capabilities
 
@@ -178,7 +185,7 @@ security-grade randomness. Both can coexist.
 
 - **`aql:rand`** — different randomness class (CSPRNG vs seedable PRNG);
   no word collision (`BinUtil.random-*` vs `Rand.*`). Noted in §7.
-- **`aql:string-util`** — `bytes`/`text` are the explicit String↔Bytes
+- **`aql:string-util`** — core `utf8`/`to-text` are the explicit String↔Bytes
   bridge; they do not duplicate string search/transform words.
 - The folded standalone notes (base64/hex/sha*/hmac/crc*/crypto-rand) are
   fully represented here; their separate `aql:*` modules are **not**
@@ -195,7 +202,7 @@ import "aql:bin-util"
 
 # base64 round-trip
 "hi there" BinUtil.base64-encode                 # "aGkgdGhlcmU="
-"aGkgdGhlcmU=" BinUtil.base64-decode BinUtil.text # "hi there"
+"aGkgdGhlcmU=" BinUtil.base64-decode to-text      # "hi there"  (to-text is core)
 
 # HMAC sign + constant-time verify
 "secret" "msg" sha256/q BinUtil.hmac                       # Bytes(32) …

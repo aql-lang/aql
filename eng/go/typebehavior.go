@@ -174,3 +174,21 @@ type behaviorWrapper struct {
 func (w behaviorWrapper) Format(v Value) string           { return baseBehavior(w.prev).Format(v) }
 func (w behaviorWrapper) Equal(a, b Value) bool           { return baseBehavior(w.prev).Equal(a, b) }
 func (w behaviorWrapper) Compare(a, b Value) (int, error) { return baseCompare(w.prev, a, b) }
+
+// Prev returns the behavior this wrapper was layered over (DefaultBehavior
+// if none). Kernel unifiers (bareRefine, depScalar, disjunct, …) embed
+// behaviorWrapper, so this exposes a walkable chain: a caller that installed
+// a custom Behavior before a `def`/`refine` wrapped it can recover that
+// Behavior by following Prev() down the chain. Returns the wrapped behavior,
+// not DefaultBehavior, so the walk terminates (nil ends it).
+func (w behaviorWrapper) Prev() TypeBehavior { return w.prev }
+
+// PrevBehavior is the chain-walk step for Prev-exposing wrappers: it returns
+// the next behavior down and whether one exists. A plain (non-wrapper)
+// Behavior returns (nil, false), ending the walk.
+func PrevBehavior(b TypeBehavior) (TypeBehavior, bool) {
+	if w, ok := b.(interface{ Prev() TypeBehavior }); ok {
+		return w.Prev(), true
+	}
+	return nil, false
+}
