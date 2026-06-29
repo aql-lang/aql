@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -341,96 +340,83 @@ var intWidths = map[string]struct {
 	"i8": {1, true}, "i16": {2, true}, "i32": {4, true}, "i64": {8, true},
 }
 
-// parseBitSegments interprets the raw (unevaluated) spec list. A segment is
-// an implicit-pair map element `name:type[/suffix]*`; an optional size is a
-// following parenthesised element `(N)` or `(name)` — e.g.
-// `[len:u16 body:bytes(len)]` parses as `[{len:u16} {body:bytes} (len)]`,
-// where `(len)` attaches to `body`. Slash suffixes carry endianness/sign
-// (be/le/signed/unsigned); sizes use the paren form because a numeric
-// `/N` is consumed as the arity word-modifier.
-func parseBitSegments(spec Value, r *Registry, word string) ([]bitSeg, error) {
+// readBitSegments reads the spec, a `List` of segment `Map`s. Each Map is a
+// fully-structured, JSON-representable descriptor that this code only READS —
+// there is NO token-level / sub-language parsing (ADR-007: no secondary
+// parsing; every AQL structure is plain Node data a macro could construct).
+// Segment Map keys:
+//   - name (String) | value (Integer) — exactly one. `name` binds (unpack) or
+//     reads from scope (pack); `value` is a pack constant / unpack match-guard.
+//   - type (String, required) — u8..u64, i8..i64, f32, f64, bits, bytes,
+//     utf8, pad.
+//   - endian (String, optional) — "be" (default, network order) or "le".
+//   - signed (Boolean, optional) — overrides the u/i prefix default.
+//   - size (Integer | String, optional) — a literal bit/byte count, or a
+//     String naming a previously-bound field; required for bits/pad, optional
+//     for bytes/utf8 (omitted = "the rest").
+func readBitSegments(spec Value, r *Registry, word string) ([]bitSeg, error) {
 	lst, err := RequireConcreteList(spec, word)
 	if err != nil {
 		return nil, err
 	}
 	var segs []bitSeg
 	for i := 0; i < lst.Len(); i++ {
-		el := lst.Get(i)
-		if pe, ok := el.Data.(eng.ParenExprPayload); ok {
-			if len(segs) == 0 {
-				return nil, r.AqlError("bytes_error", word+": size `(…)` with no preceding segment", word)
-			}
-			if err := attachSize(&segs[len(segs)-1], pe.Toks, r, word); err != nil {
-				return nil, err
-			}
-			continue
+		seg, perr := readOneSeg(lst.Get(i), i, r, word)
+		if perr != nil {
+			return nil, perr
 		}
-		m, merr := AsMap(el)
-		if merr != nil || m == nil {
-			return nil, r.AqlError("bytes_error", fmt.Sprintf("%s: segment %d is not a `name:type` pair", word, i), word)
-		}
-		for _, key := range m.Keys() {
-			tv, _ := m.Get(key)
-			seg, perr := parseOneSeg(key, tv, r, word)
-			if perr != nil {
-				return nil, perr
-			}
-			segs = append(segs, seg)
-		}
+		segs = append(segs, seg)
 	}
 	for i := range segs {
 		if (segs[i].typ == "bits" || segs[i].typ == "pad") && !segs[i].hasSize {
-			return nil, r.AqlError("bytes_error", fmt.Sprintf("%s: %s segment needs a bit count, e.g. %s(4)", word, segs[i].typ, segs[i].typ), word)
+			return nil, r.AqlError("bytes_error", fmt.Sprintf("%s: %s segment needs a `size` (bit count)", word, segs[i].typ), word)
 		}
 	}
 	return segs, nil
 }
 
-// attachSize records a trailing `(N)` / `(name)` size onto a segment.
-func attachSize(seg *bitSeg, toks []Value, r *Registry, word string) error {
-	if len(toks) != 1 {
-		return r.AqlError("bytes_error", word+": size `(…)` must be a single integer or bound name", word)
-	}
-	seg.hasSize = true
-	if n, ok := toks[0].AsConcreteInteger(); ok == nil {
-		seg.sizeLit = int(n)
-		return nil
-	}
-	if w, ok := AsWord(toks[0]); ok == nil {
-		seg.sizeName = w.Name
-		return nil
-	}
-	if a, ok := AsAtom(toks[0]); ok == nil {
-		seg.sizeName = a
-		return nil
-	}
-	return r.AqlError("bytes_error", word+": size `(…)` must be a single integer or bound name", word)
-}
-
-func parseOneSeg(key string, typeVal Value, r *Registry, word string) (bitSeg, error) {
+func readOneSeg(el Value, i int, r *Registry, word string) (bitSeg, error) {
 	var seg bitSeg
-	if n, err := strconv.ParseInt(key, 10, 64); err == nil {
+	segErr := func(detail string) error {
+		return r.AqlError("bytes_error", fmt.Sprintf("%s: segment %d %s", word, i, detail), word)
+	}
+	m, merr := RequireConcreteMap(el, word)
+	if merr != nil {
+		return seg, segErr("is not a Map")
+	}
+
+	// Bind vs literal: exactly one of `name` / `value`.
+	nameV, hasName := m.Get("name")
+	valV, hasValue := m.Get("value")
+	switch {
+	case hasName && hasValue:
+		return seg, segErr("has both `name` and `value`")
+	case hasName:
+		s, e := nameV.AsConcreteString()
+		if e != nil {
+			return seg, segErr("`name` must be a String")
+		}
+		seg.name = s
+	case hasValue:
+		n, e := valV.AsConcreteInteger()
+		if e != nil {
+			return seg, segErr("`value` must be an Integer")
+		}
 		seg.isLit = true
 		seg.litVal = n
-	} else {
-		seg.name = key
+	default:
+		return seg, segErr("needs a `name` or `value`")
 	}
 
-	typeStr := ""
-	if w, ok := AsWord(typeVal); ok == nil {
-		typeStr = w.Name
-	} else if a, ok := AsAtom(typeVal); ok == nil {
-		typeStr = a
-	} else if s, ok := AsString(typeVal); ok == nil {
-		typeStr = s
-	} else {
-		return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: segment %q has no type", word, key), word)
+	// type (required).
+	typeV, hasType := m.Get("type")
+	if !hasType {
+		return seg, segErr("has no `type`")
 	}
-
-	parts := strings.Split(typeStr, "/")
-	seg.typ = parts[0]
-	suffixes := parts[1:]
-
+	seg.typ, merr = typeV.AsConcreteString()
+	if merr != nil {
+		return seg, segErr("`type` must be a String")
+	}
 	if iw, ok := intWidths[seg.typ]; ok {
 		seg.width = iw.width
 		seg.signed = iw.signed
@@ -441,30 +427,49 @@ func parseOneSeg(key string, typeVal Value, r *Registry, word string) (bitSeg, e
 		case "f64":
 			seg.width = 8
 		case "bits", "bytes", "utf8", "pad":
-			// size comes from a trailing paren
+			// size comes from the `size` key
 		default:
-			return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: unknown segment type %q", word, seg.typ), word)
+			return seg, segErr(fmt.Sprintf("has unknown type %q", seg.typ))
 		}
 	}
 
-	for _, sfx := range suffixes {
-		switch sfx {
+	// endian (optional; default big = network order).
+	if endV, ok := m.Get("endian"); ok {
+		es, e := endV.AsConcreteString()
+		if e != nil {
+			return seg, segErr("`endian` must be a String")
+		}
+		switch es {
 		case "be":
 			seg.little = false
 		case "le":
 			seg.little = true
-		case "signed":
-			if _, ok := intWidths[seg.typ]; !ok {
-				return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: /signed not valid on %s", word, seg.typ), word)
-			}
-			seg.signed = true
-		case "unsigned":
-			if _, ok := intWidths[seg.typ]; !ok {
-				return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: /unsigned not valid on %s", word, seg.typ), word)
-			}
-			seg.signed = false
 		default:
-			return seg, r.AqlError("bytes_error", fmt.Sprintf("%s: unknown modifier %q on %s", word, sfx, seg.typ), word)
+			return seg, segErr(fmt.Sprintf("has unknown endian %q (want \"be\" or \"le\")", es))
+		}
+	}
+
+	// signed (optional; overrides the u/i prefix, ints only).
+	if sgV, ok := m.Get("signed"); ok {
+		b, e := sgV.AsConcreteBoolean()
+		if e != nil {
+			return seg, segErr("`signed` must be a Boolean")
+		}
+		if _, isInt := intWidths[seg.typ]; !isInt {
+			return seg, segErr(fmt.Sprintf("`signed` is not valid on %s", seg.typ))
+		}
+		seg.signed = b
+	}
+
+	// size (optional; Integer literal or String field-name reference).
+	if szV, ok := m.Get("size"); ok {
+		seg.hasSize = true
+		if n, e := szV.AsConcreteInteger(); e == nil {
+			seg.sizeLit = int(n)
+		} else if s, e := szV.AsConcreteString(); e == nil {
+			seg.sizeName = s
+		} else {
+			return seg, segErr("`size` must be an Integer or a field-name String")
 		}
 	}
 	return seg, nil
@@ -614,7 +619,7 @@ func bytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 // Shared by `make Bytes [spec]` and the `bytes [spec]` sugar; `word` names the
 // caller for error messages.
 func packBytesSpec(spec Value, r *Registry, word string) ([]Value, error) {
-	segs, err := parseBitSegments(spec, r, word)
+	segs, err := readBitSegments(spec, r, word)
 	if err != nil {
 		return nil, err
 	}
@@ -714,7 +719,7 @@ func packSeg(w *bitWriter, seg bitSeg, r *Registry, word string) error {
 
 func unpackBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	b, _ := asBytes(args[0])
-	segs, err := parseBitSegments(args[1], r, "unpack")
+	segs, err := readBitSegments(args[1], r, "unpack")
 	if err != nil {
 		return nil, err
 	}
@@ -727,7 +732,7 @@ func unpackBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 
 func unpackPrefixHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	b, _ := asBytes(args[0])
-	segs, err := parseBitSegments(args[1], r, "unpack-prefix")
+	segs, err := readBitSegments(args[1], r, "unpack-prefix")
 	if err != nil {
 		return nil, err
 	}

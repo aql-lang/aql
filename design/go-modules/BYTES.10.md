@@ -239,84 +239,83 @@ import "aql:minilang"
   which keeps the encoding explicit.
 - **The `+hb/…/` result feeds the words directly**, but note the auto-`end` the
   literal sugar emits stops forward collection, so a kind result that is itself
-  a forward arg must be parenthesised: `unpack (+hb/0100026869/) [op:u8 …]`.
+  a forward arg must be parenthesised: `unpack (+hb/0100026869/) [ {name:'op' type:'u8'} … ]`.
   Implementation: `lang/go/modules/minilang.go` (`hb`/`bb` kinds + handlers),
   `lang/go/modules/docs_minilang.go` (docs).
 
-## 7. Bit-syntax — the segment-spec DSL (`make Bytes` / `unpack`)
+## 7. The layout spec — JSON-representable Node data (`make Bytes` / `unpack`)
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
-short *and* safe. AQL's equivalent is a **`List` of segment tokens** captured
-**unevaluated** (the spec arg is `NoEvalArgs`) and interpreted by a small
-segment parser. `make Bytes [spec]` packs (or the equivalent `bytes [spec]`
-sugar); `unpack b [spec]` decodes and binds; `unpack-prefix b [spec]` is the
-streaming variant.
+short *and* safe. AQL's equivalent is a **layout spec**: a `List` of segment
+`Map`s — plain, JSON-representable Node data that the handler only **reads**.
+`make Bytes [spec]` packs (or the equivalent `bytes [spec]` sugar); `unpack b
+[spec]` decodes and binds; `unpack-prefix b [spec]` is the streaming variant.
 
-> **Not an `aql:minilang`.** The spec is a `List` of ordinary AQL tokens
-> captured raw — **not** a kind of the `mini`/MiniLang facility
-> (`MINILANG.5.md`), whose kinds take an opaque String `src`. A small custom
-> parser interprets the tokens because the seg-types (`u8`/`u16`/`bytes`/…) are
-> **domain keywords, not registered AQL types** (so `eng.ParseFnParams`, which
-> resolves real types, cannot parse them). "Bit-syntax" / "segment spec" —
-> never "minilang".
+> **No secondary parsing (ADR-007).** The spec is ordinary Node data — there is
+> **no** token-level sub-language and no in-handler parser. An earlier draft
+> captured the spec raw (`name:u16/be`, a trailing `(len)` paren) and
+> `strings.Split`/`strconv`-interpreted it; that was a second grammar living
+> below the real one. It is removed. The seg-`type` is now a plain String the
+> handler enum-dispatches on (data interpretation, not parsing), and the whole
+> spec is constructable by a macro and serialisable as JSON. It is also **not**
+> an `aql:minilang` (`MINILANG.5.md`) kind — those take an opaque String `src`;
+> this is structured data.
 
-### 7.1 Segment grammar
+### 7.1 Segment schema
 
-A frame spec is a `List` of segments. A segment is an implicit pair
-`name:type[/suffix]*` optionally followed by a parenthesised **size**
-`(N)` / `(name)`:
+A spec is a `List` of segment `Map`s. Each Map is a fully-explicit descriptor —
+one key per attribute, every value a String / Integer / Boolean:
 
 ```
-[ ver:u8  len:u16/be  body:bytes(len) ]
+[ {name:'ver'  type:'u8'}
+  {name:'len'  type:'u16' endian:'le'}
+  {name:'body' type:'bytes' size:'len'} ]
 ```
 
-- **name-or-literal** — in `make` (pack) a `name` key reads the binding of that
-  name from scope; a numeric-literal key packs that constant. In `unpack` a
-  `name` key **binds** the decoded field (into scope; into the `{ok}` map for
-  `unpack-prefix`); a numeric-literal key is a **match guard** (raises
-  `no_match` on mismatch). This is Erlang's dual use of one syntax.
-- **seg-type** — `u8 u16 u32 u64`, `i8 i16 i32 i64`, `f32 f64` (IEEE-754, ref
-  `IEEE-754-COMPLIANCE.8.md`), `bits` (sub-byte unsigned int), `bytes` (raw
-  `Bytes`), `utf8` (a length-known text run → `String`), `pad` (zero bits, no
-  binding).
-- **`/suffix`** (on the type word) — `/be` (default, network order) or `/le`
-  for endianness; `/signed` / `/unsigned` for integers.
-- **`(size)`** — for `bytes`/`utf8`/`bits`/`pad`: an integer or a
-  previously-bound name (`body:bytes(len)`, Erlang's `Body:Len/binary` — the
-  killer feature). A trailing `bytes`/`utf8` with **no** size means "the rest".
-  Size uses the **paren** form (not `/N`) because a numeric `/N` is consumed as
-  the arity word-modifier; `bits`/`pad` always need a size, e.g. `bits(4)`.
+| key | type | meaning |
+| --- | --- | --- |
+| `name` | String | **bind** (unpack) / **read from scope** (pack) this field. |
+| `value` | Integer | a **pack constant** / an **unpack match-guard**. Mutually exclusive with `name`; exactly one is required. |
+| `type` | String | `u8 u16 u32 u64`, `i8 i16 i32 i64`, `f32 f64` (IEEE-754, ref `IEEE-754-COMPLIANCE.8.md`), `bits` (sub-byte uint), `bytes` (raw `Bytes`), `utf8` (length-known text → `String`), `pad` (zero bits, no binding). |
+| `endian` | String | `"be"` (default, network order) or `"le"`. |
+| `signed` | Boolean | overrides the `u`/`i`-prefix default (ints only). |
+| `size` | Integer \| String | a literal count, or a **String naming a previously-bound field** (`size:'len'`, Erlang's `Body:Len/binary` — the killer feature). Required for `bits`/`pad`; for `bytes`/`utf8` omitting it means "the rest". |
+
+The `name`-vs-`value` split replaces the old "is the key numeric?" test; the
+separate `endian`/`signed` keys replace the old `/be /le /signed` string
+suffixes; the `size` key replaces the positional `(N)`/`(name)` paren — all
+three were secondary-parsing devices.
 
 ### 7.2 `make Bytes [spec]` — build a frame
 
 ```
-make Bytes <List<segment>> -> Bytes
+make Bytes <List<segment-Map>> -> Bytes
 ```
 
-Walks the segments left-to-right into a single freshly-built `[]byte` (one
-allocation, §4.4). A `name` key reads `name` from scope; a literal key packs the
-constant. Numerics honour width/endianness/sign. (Overloads `make`'s
-constructor; the spec is `NoEvalArgs` so the keyword tokens stay raw.)
+Reads the segments left-to-right into a single freshly-built `[]byte` (one
+allocation, §4.4). A `name` key reads `name` from scope; a `value` key packs the
+constant. Numerics honour width/`endian`/`signed`. (Overloads `make`'s
+constructor.)
 
 ### 7.3 `unpack b [spec]` — decode & bind
 
 ```
-unpack <Bytes> <List<segment>>      # binds each field into scope; returns nothing
+unpack <Bytes> <List<segment-Map>>      # binds each field into scope; returns nothing
 ```
 
-Walks the segments over the input bytes, **binding each `name` into scope**
-(consistent with the existing `unpack [names] map`). A literal key is a
-**guard**; `bytes(n)`/`utf8(n)` segments are **zero-copy sub-slice views**
-(§4.3). A guard mismatch or a too-short buffer `raise`s `no_match`; trailing
-bytes after the spec are left unread (use `unpack-prefix` to capture them).
+Reads the segments over the input bytes, **binding each `name` into scope**
+(consistent with the existing `unpack [names] map`). A `value` key is a
+**guard**; `bytes`/`utf8` segments are **zero-copy sub-slice views** (§4.3). A
+guard mismatch or a too-short buffer `raise`s `no_match`; trailing bytes after
+the spec are left unread (use `unpack-prefix` to capture them).
 
 ### 7.4 `unpack-prefix` — the streaming framer
 
 ```
-unpack-prefix <Bytes> <List<segment>> -> {ok: Map  rest: Bytes} | {need: Integer}
+unpack-prefix <Bytes> <List<segment-Map>> -> {ok: Map  rest: Bytes} | {need: Integer}
 ```
 
-Matches **only what the spec requires** and returns the bound fields plus the
+Reads **only what the spec requires** and returns the bound fields plus the
 **leftover bytes** (`rest`), or — when the buffer is too short to complete the
 spec — `{need: n}` (how many more bytes are required, when computable, else a
 positive lower bound). This is the single primitive a length-prefixed framing
@@ -325,23 +324,28 @@ hand-rolled buffer state machine (`NETWORK-SERVERS.0.md` §5.3, §6.1).
 
 ### 7.5 Alignment rule
 
-`pack`/`unpack` are **byte-aligned by default**: a contiguous run of `bits(n)`
-(and `pad(n)`) segments must sum to a whole number of bytes, or the spec
-`raise`s **`unaligned`** at build time. There is no implicit trailing padding —
-add an explicit `pad(n)` to round out a sub-byte run. (This resolves
+`make`/`unpack` are **byte-aligned by default**: a contiguous run of `bits`
+(and `pad`) segments must sum to a whole number of bytes, or the spec `raise`s
+**`unaligned`** at build time. There is no implicit trailing padding — add an
+explicit `pad` segment to round out a sub-byte run. (This resolves
 `NETWORK-SERVERS.0.md` §12 Q2 in favour of safety: ragged frames are an error,
 not a silent surprise.)
 
-### 7.6 Segment parsing & binding
+### 7.6 Reading & binding
 
-The spec arrives raw (`NoEvalArgs`), so each `name:type` implicit-pair map and
-each trailing `(size)` `ParenExpr` is read structurally: the type word is split
-on `/` for endianness/sign suffixes, and the following paren (if any) supplies
-the size. `unpack` binds decoded fields into scope via `InstallDef` (the same
-binding the `def` word and the existing `unpack` use); `unpack-prefix` collects
-them into the `{ok}` map instead. Size names (`bytes(len)`) resolve against the
-frame's already-decoded fields first, then scope — so the non-binding
-`unpack-prefix` still resolves `len`.
+`readBitSegments` reads each segment Map field by field — no token parsing
+(§7's ADR-007 note). `unpack` binds decoded fields into scope via `InstallDef`
+(the same binding the `def` word and the existing `unpack` use); `unpack-prefix`
+collects them into the `{ok}` map instead. Size names (`size:'len'`) resolve
+against the frame's already-decoded fields first, then scope — so the
+non-binding `unpack-prefix` still resolves `len`.
+
+> **Open: layouts as named types.** Because a spec *is* a binary record schema,
+> the more AQL-native model is to make it a named **type** —
+> `def Packet (refine Bytes [layout])`, then `make Packet {fields}` / `unpack
+> Packet bytes` — which also removes the `make Bytes`-takes-data-**or**-a-spec
+> overload. That evolution is under review; the Node-data spec above is the
+> representation it would carry as a type body, so this section holds either way.
 
 ## 8. Usage examples
 
@@ -363,21 +367,21 @@ size (convert Bytes "café")               # 5
 # build + match a [ver=1][u16 len][len-byte body] frame
 def body ( convert Bytes "hello" )        # Bytes<68 65 6c 6c 6f>
 def len  ( size body )
-def msg  ( make Bytes [ 1:u8  len:u16  body:bytes ] )
+def msg  ( make Bytes [ {value:1 type:'u8'}  {name:'len' type:'u16'}  {name:'body' type:'bytes'} ] )
 # msg == Bytes<01 00 05 68 65 6c 6c 6f>
-unpack msg [ ver:u8  n:u16  body:bytes(n) ]   # binds ver, n, body into scope
+unpack msg [ {name:'ver' type:'u8'}  {name:'n' type:'u16'}  {name:'body' type:'bytes' size:'n'} ]   # binds ver, n, body into scope
 convert String body                        # 'hello'
 
 # floats (little-endian) + signed
-def x 1.5  make Bytes [ x:f64/le ]         # 8-byte LE float
-def k -2   make Bytes [ k:i16 ]            # Bytes<ff fe>
+def x 1.5  make Bytes [ {name:'x' type:'f64' endian:'le'} ]   # 8-byte LE float
+def k -2   make Bytes [ {name:'k' type:'i16'} ]               # Bytes<ff fe>
 
 # sub-byte flags: a version nibble + flags (sums to one byte)
-make Bytes [ 1:bits(4)  1:bits(1)  0:bits(1)  0:bits(2) ]   # Bytes<90>
+make Bytes [ {value:1 type:'bits' size:4}  {value:1 type:'bits' size:1}  {value:0 type:'bits' size:1}  {value:0 type:'bits' size:2} ]   # Bytes<90>
 
 # streaming framer loop: pull complete [u32 len][len body] frames from a buffer
 def drain fn [[buf:Bytes] [Never] [
-  def step ( unpack-prefix buf [ len:u32  body:bytes(len) ] )
+  def step ( unpack-prefix buf [ {name:'len' type:'u32'}  {name:'body' type:'bytes' size:'len'} ] )
   case [
     [ step.need ?? false ] [ buf ]              # incomplete → return buffer to refill
     [ ]                    [ handle step.ok.body   drain step.rest ] ]  # got one → continue
@@ -392,8 +396,8 @@ convert Bytes "hello"  BinUtil.sha256  BinUtil.hex-encode
 def tag ( convert Bytes (slice 4 8 big-frame) )   # convert-to-Bytes drops the big backing array
 
 # negative cases
-unpack (+hb/01/) [ ver:u8  len:u16 ]        # ERROR:no_match   (only 1 byte, needs 3)
-make Bytes [ flag:bits(3) ]                 # ERROR:unaligned  (3 bits, not byte-aligned)
+unpack (+hb/01/) [ {name:'ver' type:'u8'}  {name:'len' type:'u16'} ]   # ERROR:no_match   (only 1 byte, needs 3)
+make Bytes [ {value:1 type:'bits' size:3} ]   # ERROR:unaligned  (3 bits, not byte-aligned)
 convert Bytes [256]                         # ERROR:expected-byte
 convert String (+hb/ff/)                     # ERROR:bad-encoding (0xff is not valid UTF-8)
 +hb/abc/                                      # ERROR:mini_parse_error (odd hex digit count)
@@ -477,12 +481,12 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
   implements `Format`/`Comparer`/`Equal`/`Sizer` (§3) and **omits**
   `DeepCloner` (§4.1); the `convert`/`slice`/`add` overloads (§5) appended via
   `RegisterNativeFunc`; funnel init errors through `TypeInitError`.
-- **`lang/go/native/native_bytes.go` (bit-syntax)** — the `make Bytes` /
+- **`lang/go/native/native_bytes.go` (layout spec)** — the `make Bytes` /
   `unpack` overloads, the `bytes [spec]` pack sugar (shares `packBytesSpec`
-  with `make Bytes`), and the new `unpack-prefix`; a custom segment-spec parser
-  (`name:type` implicit pairs, `/be /le /signed /unsigned` suffixes, trailing
-  `(size)` ParenExpr) over the raw (`NoEvalArgs`) spec; an MSB-first bit
-  writer/reader; bind via `InstallDef`.
+  with `make Bytes`), and the new `unpack-prefix`; `readBitSegments`/
+  `readOneSeg` **read** (never parse) the `List<Map>` spec — `name`/`value`,
+  `type`, `endian`, `signed`, `size` keys (ADR-007: no secondary parsing); an
+  MSB-first bit writer/reader; bind via `InstallDef`.
 - **`lang/go/modules/minilang.go`** — the `hb`/`bb` generator kinds
   (`[src:String opts:Map] → [Bytes]`) + their handlers (drop grouping, decode
   hex / MSB-first bits, raise `mini_parse_error`), building the `Bytes` value via

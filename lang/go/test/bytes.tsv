@@ -29,31 +29,33 @@ convert String ((convert Bytes "ab") add (convert Bytes "cd"))	'abcd'
 (convert Bytes "hi") is Bytes	true
 (convert Bytes "hi") is String	false
 
-# pack via `make Bytes [spec]`
-make Bytes [1:u8 2:u16]	Bytes<01 00 02>
-make Bytes [1:bits(4) 5:bits(4)]	Bytes<15>
-def body (convert Bytes "hi") def len (size body) make Bytes [1:u8 len:u16 body:bytes]	Bytes<01 00 02 68 69>
+# pack via `make Bytes [spec]` — the spec is a JSON-representable List of
+# segment Maps (ADR-007: no secondary parsing). `value` = a pack constant,
+# `name` reads from scope; `size` is an int or a field-name String.
+make Bytes [{value:1 type:'u8'} {value:2 type:'u16'}]	Bytes<01 00 02>
+make Bytes [{value:1 type:'bits' size:4} {value:5 type:'bits' size:4}]	Bytes<15>
+def body (convert Bytes "hi") def len (size body) make Bytes [{value:1 type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes'}]	Bytes<01 00 02 68 69>
 
 # `bytes [spec]` is sugar for `make Bytes [spec]` — same packer
-bytes [1:u8 2:u16]	Bytes<01 00 02>
-def body (convert Bytes "hi") def len (size body) bytes [1:u8 len:u16 body:bytes]	Bytes<01 00 02 68 69>
-(bytes [1:u8 2:u16]) eq (make Bytes [1:u8 2:u16])	true
+bytes [{value:1 type:'u8'} {value:2 type:'u16'}]	Bytes<01 00 02>
+def body (convert Bytes "hi") def len (size body) bytes [{value:1 type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes'}]	Bytes<01 00 02 68 69>
+(bytes [{value:1 type:'u8'} {value:2 type:'u16'}]) eq (make Bytes [{value:1 type:'u8'} {value:2 type:'u16'}])	true
 
 # unpack: decode + bind, then read a field; literal guards
-unpack (convert Bytes [1 0 2 104 105]) [ver:u8 len:u16 body:bytes(len)] (convert String body)	'hi'
-unpack (convert Bytes [127 2]) [127:u8 x:u8] x	2
+unpack (convert Bytes [1 0 2 104 105]) [{name:'ver' type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}] (convert String body)	'hi'
+unpack (convert Bytes [127 2]) [{value:127 type:'u8'} {name:'x' type:'u8'}] x	2
 
 # unpack-prefix: {ok rest} / {need}
-unpack-prefix (convert Bytes [1 0 2 104 105 170]) [ver:u8 len:u16 body:bytes(len)]	{ok:{ver:1 len:2 body:Bytes<68 69>} rest:Bytes<aa>}
-unpack-prefix (convert Bytes [0]) [ver:u8 len:u16]	{need:2}
+unpack-prefix (convert Bytes [1 0 2 104 105 170]) [{name:'ver' type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]	{ok:{ver:1 len:2 body:Bytes<68 69>} rest:Bytes<aa>}
+unpack-prefix (convert Bytes [0]) [{name:'ver' type:'u8'} {name:'len' type:'u16'}]	{need:2}
 
 # float (little-endian) + signed round-trips
-def x 1.5 def f (make Bytes [x:f64/le]) unpack f [y:f64/le] y	1.5
-def x -2 def f (make Bytes [x:i16]) unpack f [y:i16] y	-2
+def x 1.5 def f (make Bytes [{name:'x' type:'f64' endian:'le'}]) unpack f [{name:'y' type:'f64' endian:'le'}] y	1.5
+def x -2 def f (make Bytes [{name:'x' type:'i16'}]) unpack f [{name:'y' type:'i16'}] y	-2
 
 # negative cases
 convert Bytes [256]		expected-byte
 convert String (convert Bytes [255])		bad-encoding
-unpack (convert Bytes [1]) [127:u8 x:u8]		no_match
-make Bytes [1:bits(3)]		unaligned
-bytes [1:bits(3)]		unaligned
+unpack (convert Bytes [1]) [{value:127 type:'u8'} {name:'x' type:'u8'}]		no_match
+make Bytes [{value:1 type:'bits' size:3}]		unaligned
+bytes [{value:1 type:'bits' size:3}]		unaligned
