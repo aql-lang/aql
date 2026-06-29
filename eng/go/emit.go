@@ -1876,10 +1876,21 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	seq := es.appendEvent(emitEvent{kind: evLoop, loop: lp})
 	es.SiteCounts[SiteMono]++
 	es.setProduced(out, seq)
-	// A loop leaves a runtime-variable count (one per-iteration value, N
-	// unknown at compile time) — variadic, like lowerLoop marks lw.variadic.
 	f := es.eventInfo[seq]
-	f.variadicResult = true
+	if lp.hasBodyOut {
+		// A value-producing loop leaves a runtime-variable count (one per-iteration
+		// value, N unknown at compile time) — variadic, like lowerLoop marks
+		// lw.variadic. Only the program residual absorbs it.
+		f.variadicResult = true
+	} else {
+		// A SIDE-EFFECT loop (body nets 0 per iteration — `for n [acc set …]`)
+		// leaves ZERO runtime values, deterministically: a zero-output event, NOT a
+		// variadic result. Marking it zeroOut lets a fn/closure body that ends in
+		// (or discards, via `def _ (for …)`) such a loop drop its result and RET
+		// cleanly, instead of refusing "body leaves extra values"/"variadic loop
+		// value". The loop's side effects are emitted events and still run.
+		f.zeroOut = true
+	}
 	es.eventInfo[seq] = f
 }
 

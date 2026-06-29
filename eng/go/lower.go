@@ -70,8 +70,15 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	for _, h := range endHoles {
 		(*lw.code)[h].Arg = int32(endPC)
 	}
-	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
-	lw.variadic[ev.seq] = true
+	// A value-producing loop contributes N (variadic) values to the simulated
+	// stack; a SIDE-EFFECT loop (!hasBodyOut — body nets 0 per iteration) leaves
+	// NOTHING. Mirrors RecordLoop's variadicResult/zeroOut split: keep them
+	// consistent or a unit's residual reconciliation and its stack simulation
+	// disagree on the loop's arity.
+	if lp.hasBodyOut {
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+		lw.variadic[ev.seq] = true
+	}
 	lw.note()
 	return ""
 }
@@ -660,6 +667,23 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				fragRef[op.idx] = true
 			}
 		})
+	}
+	// A SIDE-EFFECT loop (zeroOut: body nets 0 per iteration) lowers cleanly as an
+	// UNCONSUMED statement (its result is dropped, RecordLoop marked it zeroOut).
+	// But if its (zero-value) RESULT is CONSUMED — bound by `def x (for …)`
+	// (valueDef) or fed as an operand to another event (refs>0 here, counted BEFORE
+	// the residual `extra` below) — the interpreter's `def`/word forward-collection
+	// over an empty producer GRABS THE NEXT TOKEN, which the compiled 0-value loop
+	// does not replicate (off-corpus divergence: `def x (for n [print 0]) n` → interp
+	// errors "got 0", compiled returns n). A 0-value CALL consumed the same way DOES
+	// agree (both error), so the loop is the outlier — refuse and fall back to the
+	// interpreter, scoping loop-in-fn-body lowering to genuinely discarded loops.
+	for i := range events {
+		seq := events[i].seq
+		if events[i].kind == evLoop && es.eventInfo[seq].zeroOut &&
+			(refs[seq] > 0 || es.eventInfo[seq].valueDef) {
+			es.MarkUncompilable("for: side-effect loop result is consumed (Stage 3)")
+		}
 	}
 	for _, seq := range extra {
 		refs[seq]++
