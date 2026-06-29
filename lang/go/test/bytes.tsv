@@ -69,3 +69,25 @@ def P (refine BinarySpec [{value:1 type:'bits' size:3}]) convert Bytes (make P {
 def C class {a:1} convert Bytes (make C {})		type_error
 def P (refine BinarySpec [{name:'body' type:'bytes' size:'len'}]) unpack P (convert Bytes [104 105])		bytes_error
 refine BinarySpec [{name:'v' type:'nope'}]		bytes_error
+
+# value-range validation: a field that does not fit its declared segment
+# width/signedness is rejected at serialise time, not silently truncated.
+def P (refine BinarySpec [{name:'x' type:'u8'}]) convert Bytes (make P {x:300})		bytes_error
+def P (refine BinarySpec [{name:'x' type:'u8'}]) convert Bytes (make P {x:-1})		bytes_error
+def P (refine BinarySpec [{name:'x' type:'i8'}]) convert Bytes (make P {x:200})		bytes_error
+def P (refine BinarySpec [{name:'a' type:'bits' size:4} {name:'b' type:'bits' size:4}]) convert Bytes (make P {a:31 b:0})		bytes_error
+# in-range values still pack (boundary)
+def P (refine BinarySpec [{name:'x' type:'u8'}]) convert Bytes (make P {x:255})	Bytes<ff>
+def P (refine BinarySpec [{name:'x' type:'i8'}]) convert Bytes (make P {x:-128})	Bytes<80>
+
+# a sized bytes field whose length disagrees with the declared size is rejected
+def P (refine BinarySpec [{name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}]) convert Bytes (make P {len:2 body:(convert Bytes "hello")})		bytes_error
+
+# malformed layouts are rejected at refine time
+refine BinarySpec [{name:'b' type:'bytes' size:-1}]		bytes_error
+refine BinarySpec [{value:1 type:'f64'}]		bytes_error
+
+# decode-side: a u64 with the high bit set has no faithful Integer
+def P (refine BinarySpec [{name:'x' type:'u64'}]) unpack P (convert Bytes [255 255 255 255 255 255 255 255])		bytes_error
+# decode-side: nonzero padding is a malformed frame
+def P (refine BinarySpec [{name:'a' type:'bits' size:4} {value:0 type:'bits' size:4}]) unpack P (convert Bytes [255])		no_match

@@ -476,9 +476,9 @@ convert String (+hb/ff/)                      # ERROR:bad-encoding (0xff is not 
 | `mini_parse_error` | a `+hb/…/` source has an odd hex-digit count or a non-hex digit, or a `+bb/…/` source has a non-binary digit or a non-multiple-of-8 bit count (raised when the kind runs). |
 | `expected-byte` | a `List` element passed to `convert Bytes` is not an Integer in 0–255. |
 | `bad-encoding` | `convert String` (or a `utf8` segment) is given bytes that are not valid UTF-8. |
-| `no_match` | an `unpack` guard fails, or the buffer is too short for the layout. |
+| `no_match` | an `unpack` guard fails (a `value` segment mismatches, or a `pad` segment carries nonzero bits), or the buffer is too short for the layout. |
 | `unaligned` | a `bits`/`pad` run in a layout does not sum to a whole byte. |
-| `bytes_error` | a layout segment is malformed (unknown `type`, missing `size`, bad `name`/`value`) — at `refine` time — or a `size:'name'` references a field not decoded earlier at `unpack`. |
+| `bytes_error` | a layout segment is malformed (unknown `type`, missing/negative `size`, bad `name`/`value`, a `value` literal on a float/bytes/utf8/pad segment) — at `refine` time; a field that does not fit its declared segment width (`300`/`-1` for `u8`, `31` for a 4-bit field) or a sized `bytes`/`utf8` field whose length disagrees with its declared `size` — at `convert Bytes` time; a `size:'name'` referencing a field not decoded earlier, or a `u64` whose value exceeds the `Integer` range — at `unpack` time. |
 | `type_error` | `convert Bytes`/`unpack`/`unpack-prefix` is given a target that is not a binary frame (e.g. an ordinary class instance, with no layout). |
 
 Guard with `RequireConcreteList` / a `Bytes` unwrap helper and range-check

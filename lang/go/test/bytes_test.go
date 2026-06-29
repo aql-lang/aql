@@ -118,4 +118,17 @@ func TestBytesGoBridge(t *testing.T) {
 	if _, ok := eng.ToNative(native.NewString("x")).([]byte); ok {
 		t.Error("ToNative(String) unexpectedly returned []byte")
 	}
+
+	// copy-on-export: mutating the slice ToNative hands back must not corrupt
+	// the immutable Bytes value (the export twin of copy-on-ingest).
+	v2 := eng.FromNative([]byte{0x61, 0x62}) // "ab"
+	exported, ok := eng.ToNative(v2).([]byte)
+	if !ok {
+		t.Fatalf("ToNative(Bytes) returned %T, want []byte", eng.ToNative(v2))
+	}
+	exported[0] = 0x00
+	again, _ := eng.ToNative(v2).([]byte)
+	if string(again) != "ab" {
+		t.Errorf("mutating an exported slice corrupted the Bytes value: got %q, want %q", string(again), "ab")
+	}
 }

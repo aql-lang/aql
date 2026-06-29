@@ -36,7 +36,16 @@ func registerBytesType() *eng.Type {
 func init() {
 	eng.RegisterBytesBridge(
 		func(b []byte) Value { return newBytes(append([]byte(nil), b...)) },
-		func(v Value) ([]byte, bool) { return asBytes(v) },
+		// copy-on-export: a host that calls eng.ToNative gets a fresh copy,
+		// so mutating it cannot corrupt the immutable Bytes value's backing
+		// array (the export twin of FromNative's copy-on-ingest, §4.2).
+		func(v Value) ([]byte, bool) {
+			b, ok := asBytes(v)
+			if !ok {
+				return nil, false
+			}
+			return append([]byte(nil), b...), true
+		},
 	)
 }
 
@@ -515,6 +524,18 @@ func readOneSeg(el Value, i int, r *Registry, word string) (bitSeg, error) {
 		}
 	}
 
+	// A `value` literal (a pack constant / unpack guard) is only meaningful
+	// for integer-family and bits segments: packing writes an Integer and an
+	// unpack guard compares one. Reject it up front on float / bytes / utf8 /
+	// pad — a float constant would silently pack 0.0 (the Integer→float
+	// conversion fails and is ignored), and a bytes/utf8/pad literal has no
+	// decode-side guard — rather than emit a self-inconsistent frame.
+	if seg.isLit {
+		if _, isInt := intWidths[seg.typ]; !isInt && seg.typ != "bits" {
+			return seg, segErr(fmt.Sprintf("a `value` literal is not valid on a %s segment", seg.typ))
+		}
+	}
+
 	// endian (optional; default big = network order).
 	if endV, ok := m.Get("endian"); ok {
 		es, e := endV.AsConcreteString()
@@ -547,6 +568,9 @@ func readOneSeg(el Value, i int, r *Registry, word string) (bitSeg, error) {
 	if szV, ok := m.Get("size"); ok {
 		seg.hasSize = true
 		if n, e := szV.AsConcreteInteger(); e == nil {
+			if n < 0 {
+				return seg, segErr("`size` must not be negative")
+			}
 			seg.sizeLit = int(n)
 		} else if s, e := szV.AsConcreteString(); e == nil {
 			seg.sizeName = s
@@ -684,6 +708,58 @@ func signExtend(v uint64, width int) int64 {
 	return int64(v)
 }
 
+// fitsInt reports whether n is representable in a width-byte integer field of
+// the given signedness — so packing rejects out-of-range values (300 for u8,
+// -1 for u8, -129 for i8) instead of silently truncating them modulo the width.
+// Width 8 from an int64 source is always representable (a u64 field takes any
+// non-negative int64; an i64 field takes all of int64), so only sub-8-byte
+// widths and the unsigned-negative case need an explicit bound.
+func fitsInt(n int64, width int, signed bool) bool {
+	if !signed && n < 0 {
+		return false
+	}
+	if width >= 8 {
+		return true
+	}
+	if signed {
+		lo := -(int64(1) << uint(8*width-1))
+		hi := (int64(1) << uint(8*width-1)) - 1
+		return n >= lo && n <= hi
+	}
+	return n <= (int64(1)<<uint(8*width))-1
+}
+
+// fitsBits reports whether v fits an unsigned size-bit field (0 <= v < 1<<size),
+// so a 4-bit field rejects 31 / -1 instead of writing only the low bits.
+func fitsBits(v int64, size int) bool {
+	if v < 0 {
+		return false
+	}
+	if size >= 64 {
+		return true
+	}
+	return v < (int64(1) << uint(size))
+}
+
+// checkSegLen enforces a declared size on a bytes/utf8 segment at pack time:
+// when the segment carries an explicit `size` (a literal or a field name), the
+// field's byte length MUST equal it, so `convert Bytes` cannot emit a frame
+// whose length field disagrees with its payload. No size = "the rest", so the
+// length is unconstrained.
+func checkSegLen(seg bitSeg, fields ReadMap, have int, r *Registry, word string) error {
+	if !seg.hasSize {
+		return nil
+	}
+	n, err := segSize(seg, fields, r, word)
+	if err != nil {
+		return err
+	}
+	if n >= 0 && have != n {
+		return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is %d bytes but its declared size is %d", word, seg.name, have, n), word)
+	}
+	return nil
+}
+
 // ---- serialise: convert Bytes <Binary> ------------------------------------
 
 // convertBinaryToBytes serialises a Binary instance to wire bytes: it reads the
@@ -744,6 +820,9 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 			return missing()
 		}
 		iv, _ := v.AsConcreteInteger()
+		if !fitsBits(iv, n) {
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: value %d does not fit a %d-bit field", word, iv, n), word)
+		}
 		w.writeBits(uint64(iv), n)
 		return nil
 	}
@@ -760,6 +839,9 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 		if !bok {
 			return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not Bytes", word, seg.name), word)
 		}
+		if err := checkSegLen(seg, fields, len(b), r, word); err != nil {
+			return err
+		}
 		w.writeBytes(b)
 	case "utf8":
 		v, ok := packValue(seg, fields)
@@ -769,6 +851,9 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 		s, serr := v.AsConcreteString()
 		if serr != nil {
 			return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not a String", word, seg.name), word)
+		}
+		if err := checkSegLen(seg, fields, len(s), r, word); err != nil {
+			return err
 		}
 		w.writeBytes([]byte(s))
 	case "f32":
@@ -791,6 +876,13 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 			return missing()
 		}
 		n, _ := v.AsConcreteInteger()
+		if !fitsInt(n, seg.width, seg.signed) {
+			kind := "u"
+			if seg.signed {
+				kind = "i"
+			}
+			return r.AqlError("bytes_error", fmt.Sprintf("%s: value %d does not fit %s%d", word, n, kind, seg.width*8), word)
+		}
 		w.writeBytes(putUint(uint64(n), seg.width, seg.little))
 	}
 	return nil
@@ -891,8 +983,14 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			if err != nil {
 				return nil, nil, err
 			}
-			if _, ok := rd.readBits(n); !ok {
+			bits, ok := rd.readBits(n)
+			if !ok {
 				return nil, nil, shortErr(word, bind)
+			}
+			// pad is alignment filler the encoder always writes as zero;
+			// nonzero padding is a malformed frame, not a value to discard.
+			if bits != 0 {
+				return nil, nil, r.AqlError("no_match", fmt.Sprintf("%s: nonzero padding bits", word), word)
 			}
 			continue
 		case "bits":
@@ -963,6 +1061,12 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			if seg.signed {
 				n = signExtend(u, seg.width)
 			} else {
+				// AQL Integer is int64; a u64 with the high bit set has no
+				// faithful Integer (it would wrap negative), so reject it
+				// rather than expose a corrupted value.
+				if u > math.MaxInt64 {
+					return nil, nil, r.AqlError("bytes_error", fmt.Sprintf("%s: u%d value exceeds Integer range", word, seg.width*8), word)
+				}
 				n = int64(u)
 			}
 			if seg.isLit {
