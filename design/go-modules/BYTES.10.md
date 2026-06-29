@@ -3,7 +3,7 @@
 > **Status: design proposal, not implemented.** This note specifies a new
 > AQL value type, `Bytes`, the foundation for all binary-adjacent
 > functionality, together with its **storage & memory model** (§4) and the
-> **`pack`/`unpack` bit-syntax** (§7) that binary wire protocols are written
+> **`make`/`unpack` bit-syntax** (§7) that binary wire protocols are written
 > against. The heavier binary words (cryptographic hashes, HMAC,
 > CRC, base/hex encodings, secure random, UUIDs) live in the expanded
 > `aql:bin-util` module — see [BIN-UTIL.10.md](BIN-UTIL.10.md). The type, its
@@ -14,17 +14,21 @@
 > full `Bytes` design** (the earlier type-only draft is folded in); (2) `Bytes`
 > is a **plain binary Scalar** — its value operations are signature overloads of
 > existing words (`convert` text/ints ⇄ Bytes + compact, `slice`, `add`, and
-> `size`/`cmp`/`eq` via behaviors); a **binary frame layout is a TYPE** — `Packet`
-> is the spec **kind** (a sibling of `Object`/`Record`), and a layout refines it:
-> `def Header (refine Packet [layout])`, then `make Header {fields}` (→ a plain
-> `Bytes`) / `unpack` / `unpack-prefix` operate on that type (§7) — there is no
-> `make Bytes [spec]` data-vs-spec overload and no `bytes` word; crypto/encoding/
-> hash/uuid stay in `aql:bin-util`; (3) hex/binary byte constants are the
-> **`+hb/…/` and `+bb/…/` minilang kinds** (`import "aql:minilang"`), **not** a
-> core lexer literal — there is no `0x"…"` or `b"…"` form (see §6); (4) the memory
-> model is **zero-copy share + copy-on-ingest** (this supersedes the earlier
-> `DeepCloner` decision — see §4). The layout-as-type and no-secondary-parsing
-> decisions are recorded in **ADR-007**.
+> `size`/`cmp`/`eq` via behaviors); a **binary frame layout is a TYPE**, modelled
+> on the class/object machinery: **`BinarySpec : Binary :: Class : Object`** —
+> `BinarySpec` is the spec **kind**, a layout refines it into a sealed class
+> (`def Header (refine BinarySpec [layout])`), `make Header {fields}` builds a
+> field-accessible **`Binary` INSTANCE** (like an object instance: `p.ver`,
+> `typeof p → Header`), `convert Bytes <inst>` serialises the instance to wire
+> `Bytes`, and `unpack` / `unpack-prefix` decode wire `Bytes` back into an
+> instance (§7) — there is no `make Bytes [spec]` data-vs-spec overload and no
+> `bytes` word; crypto/encoding/hash/uuid stay in `aql:bin-util`; (3) hex/binary
+> byte constants are the **`+hb/…/` and `+bb/…/` minilang kinds**
+> (`import "aql:minilang"`), **not** a core lexer literal — there is no `0x"…"`
+> or `b"…"` form (see §6); (4) the memory model is **zero-copy share +
+> copy-on-ingest** (this supersedes the earlier `DeepCloner` decision — see §4).
+> The layout-as-type and no-secondary-parsing decisions are recorded in
+> **ADR-007**.
 >
 > Used by `NETWORK-SERVERS.0.md` §3, `NETWORK-CLIENTS.0.md` §3, and
 > `STREAM-WORDS.0.md` (`from-bytes`/`to-bytes`), which now reference this doc
@@ -106,7 +110,7 @@ network/data paths copy **once, at ingest, and never again.**
 ### 4.1 Immutable, shared, zero-copy
 
 The backing store is a single Go `[]byte` inside `bytesBody`. **No word mutates
-a `Bytes` in place** — every operation (`slice`, `add`, `make <FrameType>`, …) returns a
+a `Bytes` in place** — every operation (`slice`, `add`, `convert Bytes <inst>`, …) returns a
 fresh value. Because the storage is therefore never written after construction,
 a `Bytes` is **shared by reference on clone** and pays nothing:
 
@@ -168,7 +172,7 @@ carries Go's standard slice-retention caveat:
 | `slice`, `unpack` `bytes(n)` view | 0 | sub-slice view (§4.3) |
 | `convert Bytes <bytes>` (compact) | 1 | force-copy to drop retention |
 | `add` (concat) | 1 | one build of the joined slice |
-| `make <FrameType> {fields}` (pack) | 1 | one build of the frame |
+| `convert Bytes <inst>` (serialise a frame) | 1 | one build of the frame |
 | `convert String`/`convert Bytes` (text⇄bytes) | 1 | crosses the bytes⇄text boundary |
 
 ## 5. Word surface — Scalar value ops as overloads; frames as a type
@@ -189,9 +193,10 @@ operations (crypto, encodings, hashing, random, UUID) live in `aql:bin-util`
 | compact (force a fresh minimal copy, §4.3) | `convert` | `convert Bytes b` |
 | sub-range (end-exclusive, zero-copy view) | `slice` | `slice <start> <end> b` |
 | concatenate two byte strings | `add` | `a add b` |
-| define a frame spec TYPE (§7) | `refine` | `def Header (refine Packet [layout])` |
-| pack a frame to plain Bytes (§7) | `make` | `make Header {fields}` |
-| decode Bytes to a field Map (§7) | `unpack` | `unpack Header b` |
+| define a frame spec TYPE (§7) | `refine` | `def Header (refine BinarySpec [layout])` |
+| build a `Binary` instance (§7) | `make` | `make Header {fields}` |
+| serialise an instance to wire Bytes (§7) | `convert` | `convert Bytes <inst>` |
+| decode Bytes to a `Binary` instance (§7) | `unpack` | `unpack Header b` |
 | streaming-decode a leading frame (§7) | `unpack-prefix` | `unpack-prefix Header b` |
 
 `size`/`length`, `eq`, value ordering (`cmp`/`lt`/`sort`), and `is Bytes` need
@@ -202,16 +207,20 @@ behaviors (§3). The `+hb/…/` / `+bb/…/` minilang kinds (§6) cover hex/bina
 **Why this split.** `Bytes` is a value type like `String`, so its value ops slot
 into the generic words by type-dispatch rather than a parallel `byte-*`
 vocabulary. A binary *frame layout*, by contrast, is a **schema** — so it is a
-**type** under the `Packet` kind, not an argument: `make Header {fields}` is
-uniform with `make Record`/`make <ObjectType>`, and `unpack`/`unpack-prefix`
-dispatch on the spec type. There is deliberately **no `make Bytes [spec]`** (that
+**type** under the `BinarySpec` kind, exactly as a class schema is a type:
+`def Header (refine BinarySpec [layout])` mints a sealed class, `make Header
+{fields}` is uniform with `make <Class>`/`make <ObjectType>` and yields a
+field-accessible `Binary` **instance**, and `unpack`/`unpack-prefix` dispatch on
+the spec type to return one. Serialising an instance to the wire is just
+`convert Bytes <inst>` — the instance→data direction, mirroring `convert Bytes`
+on a String/List. There is deliberately **no `make Bytes [spec]`** (that
 overloaded `make Bytes` to mean two different things — construct-from-data vs
 interpret-a-spec) and **no `bytes` word**. Only `unpack-prefix` is a genuinely new
 word (streaming, no generic equivalent). (Implementation: the value overloads are
-appended from `native_bytes.go` via `RegisterNativeFunc`; `Packet` is an external
-builtin kind, and a frame type is minted by its `Ideal` whose `Construct` attaches
-the layout to a `frameBehavior` on the type —
-no kernel type-kind, see §7 / §14.)
+appended from `native_bytes.go` via `RegisterNativeFunc`; a frame type reuses the
+object/class machinery wholesale — `BinarySpec`'s `Ideal.Construct` mints a
+sealed class carrying the layout (`ObjectTypeInfo.BinaryLayout`), and `make`
+reuses the class instance path — see §7 / §14.)
 
 ## 6. Hex / binary constants — the `+hb/…/` and `+bb/…/` minilang kinds
 
@@ -252,23 +261,34 @@ import "aql:minilang"
   Implementation: `lang/go/modules/minilang.go` (`hb`/`bb` kinds + handlers),
   `lang/go/modules/docs_minilang.go` (docs).
 
-## 7. Frame types — `Packet` is the spec kind; `Bytes` is the data
+## 7. Frame types — `BinarySpec : Binary :: Class : Object`
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
-short *and* safe. AQL's equivalent splits cleanly: **`Packet`** is a builtin
-spec **kind** (a sibling of `Object`/`Record`/`Table` — a structural type used
-by `make`), and a concrete frame layout is a type that **refines** it. `Bytes`
-stays purely the **data**: `make` serialises a frame to a plain `Bytes`, and
-`unpack` decodes a `Bytes` back. `make`/`unpack`/`unpack-prefix` dispatch on the
-Packet (spec) type, uniform with `make Record`/`make <ObjectType>`.
+short *and* safe. AQL's equivalent reuses the **class/object** machinery
+wholesale, by the analogy **`BinarySpec : Binary :: Class : Object`**:
+
+- **`BinarySpec`** is the spec **kind** — the type-of-a-frame-type, exactly as
+  `Class` is the type-of-a-class. A concrete frame layout **refines** it:
+  `def Header (refine BinarySpec [layout])` mints a sealed **class** that carries
+  the wire layout (on `ObjectTypeInfo.BinaryLayout`). `Header` is thereafter a
+  first-class type — usable in signatures, `typeof`, `is Header`, etc.
+- **`Binary`** is the **instance** kind — what `make Header {fields}` produces: a
+  field-accessible **object instance** of the `Header` class (`p.ver`,
+  `typeof p → Header`, `p is Header`), indistinguishable from any other object
+  instance for field access / `convert Map` / dispatch.
+- **`Bytes`** stays purely the **wire data**. `convert Bytes <inst>` serialises
+  an instance (the instance→`Bytes` direction); `unpack`/`unpack-prefix` decode
+  `Bytes` back into a `Binary` instance.
 
 ```
-def Header (refine Packet [ {name:'ver'  type:'u8'}
-                            {name:'len'  type:'u16' endian:'le'}
-                            {name:'body' type:'bytes' size:'len'} ])
+def Header (refine BinarySpec [ {name:'ver'  type:'u8'}
+                                {name:'len'  type:'u16' endian:'le'}
+                                {name:'body' type:'bytes' size:'len'} ])
 
-make Header {ver:1 len:2 body:(convert Bytes "hi")}   # → a plain Bytes
-unpack Header wire                                    # → {ver:1 len:2 body:Bytes<…>}
+def p (make Header {ver:1 len:2 body:(convert Bytes "hi")})  # a Binary instance
+p.ver                                                        # 1  (field access)
+convert Bytes p                                              # → a plain Bytes (the wire)
+unpack Header wire                                           # → a Binary instance
 ```
 
 > **No secondary parsing (ADR-007).** The layout is ordinary Node data — a
@@ -279,6 +299,19 @@ unpack Header wire                                    # → {ver:1 len:2 body:By
 > on (data interpretation, not parsing); the whole layout is macro-constructable
 > and JSON-serialisable. It is also **not** an `aql:minilang` (`MINILANG.5.md`)
 > kind — those take an opaque String `src`; this is structured data.
+
+> **Caveat — `is Class` leaks; `is BinarySpec`/`is Binary` not yet wired.**
+> Because a frame type reuses the class machinery, a `Header` value is *also*
+> `is Class` and an instance is *also* `is Object` (they ARE sealed classes /
+> object instances under the hood) — a deliberate simplification that keeps
+> field access, `make`, `convert Map`, and `typeof` free of new wiring.
+> Separately, `BinarySpec` and `Binary` are installed as **membership types**
+> (a Go predicate over the class layer), which the `Value.Is` *method* answers,
+> but the **`is` word** and signature dispatch consult lattice `ConformsTo`, not
+> membership, for object/type operands — so `Header is BinarySpec` and
+> `p is Binary` currently return **false**. Use `typeof`/`is Header` (which do
+> work) to test frames; rooting instances under a dedicated lattice node so the
+> two predicates resolve through `is` is the clean follow-up.
 
 ### 7.1 Segment schema
 
@@ -294,71 +327,85 @@ every value a String / Integer / Boolean:
 | `signed` | Boolean | overrides the `u`/`i`-prefix default (ints only). |
 | `size` | Integer \| String | a literal count, or a **String naming an earlier field** (`size:'len'`, Erlang's `Body:Len/binary` — the killer feature). Required for `bits`/`pad`; for `bytes`/`utf8` omitting it means "the rest". |
 
-### 7.2 `def Header (refine Packet [layout])` — define a spec type
+### 7.2 `def Header (refine BinarySpec [layout])` — define a spec type
 
-`refine Packet [layout]` mints a **`Packet` subtype**: the layout is validated
-(unknown `type`, missing `size`, etc. raise `bytes_error` here, at definition
-time) and parsed once, then carried on the type. `def Header` names it; `Header`
-is thereafter a first-class type — usable in signatures, `is Header`, etc.
+`refine BinarySpec [layout]` mints a **sealed class** carrying the layout: the
+layout is validated (unknown `type`, missing `size`, etc. raise `bytes_error`
+here, at definition time) and stored on `ObjectTypeInfo.BinaryLayout`, and the
+class's field schema (name → type) is derived from the layout's named segments.
+`def Header` names it; `Header` is thereafter a first-class type — usable in
+signatures, `typeof`, `is Header`, etc.
 
-### 7.3 `make Header {fields}` — build a frame
-
-```
-make <PacketType> <Map> -> Bytes        # the result is a plain Bytes (data)
-```
-
-Reads the layout from the spec type and packs the field map left-to-right into a
-single freshly-built `[]byte` (one allocation, §4.4). The result is **plain
-`Bytes`** — `Bytes` is only data, so it is not tagged with the spec type. A
-`name` segment takes the field from `{fields}`; a `value` segment packs the
-constant; numerics honour
-width/`endian`/`signed`. A missing field raises `bytes_error`.
-
-### 7.4 `unpack Packet b` — decode to a field Map
+### 7.3 `make Header {fields}` — build a `Binary` instance
 
 ```
-unpack <FrameType> <Bytes> -> Map
+make <BinarySpec> <Map> -> Binary       # a field-accessible object instance
 ```
 
-Reads the layout from the type and decodes `b`, **returning a field `Map`**
-(composable; not a scope side effect). A `value` segment is a **guard**;
-`bytes`/`utf8` segments are **zero-copy sub-slice views** (§4.3). A guard
-mismatch or a too-short buffer `raise`s `no_match`; trailing bytes are left
+Reuses the **class instance path** (no Bytes-specific overload): `make` validates
+`{fields}` against the class's derived field schema and returns a `Binary`
+instance. Field access (`p.ver`), `typeof p` (→ `Header`), and `convert Map p`
+all work as on any object instance. A `value` (constant) segment is *not* a
+field — it is supplied at serialise time, not by `make`. A missing required
+field raises the class machinery's `make` error.
+
+### 7.4 `convert Bytes <inst>` — serialise to the wire
+
+```
+convert Bytes <Binary> -> Bytes         # the instance → wire-data direction
+```
+
+Reads the layout off the instance's spec type and packs each segment
+left-to-right into a single freshly-built `[]byte` (one allocation, §4.4): a
+`name` segment takes the field from the instance, a `value` segment packs the
+constant; numerics honour width/`endian`/`signed`. Given a non-`Binary` instance
+(an ordinary class) it raises `type_error`.
+
+### 7.5 `unpack BinarySpec b` — decode to a `Binary` instance
+
+```
+unpack <BinarySpec> <Bytes> -> Binary
+```
+
+Reads the layout from the spec type and decodes `b`, **returning a `Binary`
+instance** (composable; not a scope side effect). A `value` segment is a
+**guard**; `bytes`/`utf8` segments are **zero-copy sub-slice views** (§4.3). A
+guard mismatch or a too-short buffer `raise`s `no_match`; trailing bytes are left
 unread (use `unpack-prefix` to capture them).
 
-### 7.5 `unpack-prefix Packet b` — the streaming framer
+### 7.6 `unpack-prefix BinarySpec b` — the streaming framer
 
 ```
-unpack-prefix <FrameType> <Bytes> -> {ok: Map  rest: Bytes} | {need: Integer}
+unpack-prefix <BinarySpec> <Bytes> -> {ok: Binary  rest: Bytes} | {need: Integer}
 ```
 
-Reads **only what the layout requires** and returns the decoded fields plus the
+Reads **only what the layout requires** and returns the decoded instance plus the
 **leftover bytes** (`rest`), or — when the buffer is too short — `{need: n}`
 (more bytes required, when computable, else a positive lower bound). This is the
 single primitive a length-prefixed framing loop needs: read header → learn
 length → read body, declaratively, with no hand-rolled buffer state machine
 (`NETWORK-SERVERS.0.md` §5.3, §6.1).
 
-### 7.6 Alignment rule
+### 7.7 Alignment rule
 
-`make`/`unpack` are **byte-aligned by default**: a contiguous run of `bits`
-(and `pad`) segments must sum to a whole number of bytes, or it `raise`s
+`convert Bytes`/`unpack` are **byte-aligned by default**: a contiguous run of
+`bits` (and `pad`) segments must sum to a whole number of bytes, or it `raise`s
 **`unaligned`**. There is no implicit trailing padding — add an explicit `pad`
 segment to round out a sub-byte run. (This resolves `NETWORK-SERVERS.0.md` §12
 Q2 in favour of safety: ragged frames are an error, not a silent surprise.)
 
-### 7.7 How the layout rides on the type
+### 7.8 How the layout rides on the type
 
-`def Header (refine Packet [layout])` runs a `Packet` `Ideal.Construct`
-(`installIdeals`) that validates the layout via `readBitSegments` and mints a
-`Packet` refine prefab whose `Behavior` is a lang-layer **`frameBehavior`**
-carrying the parsed segments. `def` wraps that with the kernel's nominal
-`bareRefineUnifier`,
-which **preserves** the prior behavior as its `prev`; `make`/`unpack` recover the
-`frameBehavior` by walking the chain (`eng.PrevBehavior`). So the layout lives on
-the *type* — no kernel type-kind, no value-level spec, no side table — and
-`size:'len'` resolves against the frame's already-decoded fields, so the
-non-binding `unpack-prefix` resolves `len` with no scope dependency.
+`def Header (refine BinarySpec [layout])` runs `BinarySpec`'s `Ideal.Construct`
+(`installIdeals`): it validates the layout via `readBitSegments`, derives the
+field schema (`binaryFieldSchema`), and mints an `ObjectTypeInfo` with
+`Class:true` and `BinaryLayout` set to the raw layout. So the layout lives on the
+*type* (no kernel type-kind, no value-level spec, no side table), the instance is
+a plain object instance, and the codec recovers the layout from
+`ObjectTypeInfo.BinaryLayout` (`binarySpecLayout` on a spec type;
+`binaryInstanceLayout` via an instance's `TypeRef`). `size:'len'` resolves
+against the frame's already-decoded fields, so the non-binding `unpack-prefix`
+resolves `len` with no scope dependency.
 
 ## 8. Usage examples
 
@@ -377,24 +424,25 @@ import "aql:minilang"
 convert String (convert Bytes "café")     # 'café'
 size (convert Bytes "café")               # 5
 
-# define a frame type, then build + decode a [ver=1][u16 len][len-byte body] frame
-def Msg (refine Packet [ {name:'ver' type:'u8'}  {name:'len' type:'u16'}  {name:'body' type:'bytes' size:'len'} ])
+# define a frame type, then build + serialise + decode a [ver=1][u16 len][body] frame
+def Msg (refine BinarySpec [ {name:'ver' type:'u8'}  {name:'len' type:'u16'}  {name:'body' type:'bytes' size:'len'} ])
 def body ( convert Bytes "hello" )        # Bytes<68 65 6c 6c 6f>
-def msg  ( make Msg {ver:1 len:(size body) body:body} )
-# msg == Bytes<01 00 05 68 65 6c 6c 6f>   (and `msg is Msg`)
-def f ( unpack Msg msg )                   # → {ver:1 len:5 body:Bytes<…>}
+def msg  ( make Msg {ver:1 len:(size body) body:body} )   # a Binary instance
+msg.ver                                    # 1   (field access; typeof msg → Msg)
+def wire ( convert Bytes msg )             # Bytes<01 00 05 68 65 6c 6c 6f>
+def f ( unpack Msg wire )                  # → a Binary instance
 convert String f.body                      # 'hello'
 
 # floats (little-endian) + signed
-def F (refine Packet [ {name:'x' type:'f64' endian:'le'} ])  make F {x:1.5}   # 8-byte LE float
-def S (refine Packet [ {name:'k' type:'i16'} ])              make S {k:-2}    # Bytes<ff fe>
+def F (refine BinarySpec [ {name:'x' type:'f64' endian:'le'} ])  convert Bytes (make F {x:1.5})  # 8-byte LE float
+def S (refine BinarySpec [ {name:'k' type:'i16'} ])              convert Bytes (make S {k:-2})   # Bytes<ff fe>
 
 # sub-byte flags: a version nibble + flags (sums to one byte)
-def Flags (refine Packet [ {name:'ver' type:'bits' size:4}  {name:'a' type:'bits' size:1}  {name:'b' type:'bits' size:1}  {value:0 type:'bits' size:2} ])
-make Flags {ver:9 a:0 b:0}                  # Bytes<90>
+def Flags (refine BinarySpec [ {name:'ver' type:'bits' size:4}  {name:'a' type:'bits' size:1}  {name:'b' type:'bits' size:1}  {value:0 type:'bits' size:2} ])
+convert Bytes (make Flags {ver:9 a:0 b:0})  # Bytes<90>
 
 # streaming framer loop: pull complete [u32 len][len body] frames from a buffer
-def Frame (refine Packet [ {name:'len' type:'u32'}  {name:'body' type:'bytes' size:'len'} ])
+def Frame (refine BinarySpec [ {name:'len' type:'u32'}  {name:'body' type:'bytes' size:'len'} ])
 def drain fn [[buf:Bytes] [Never] [
   def step ( unpack-prefix Frame buf )
   case [
@@ -411,13 +459,13 @@ convert Bytes "hello"  BinUtil.sha256  BinUtil.hex-encode
 def tag ( convert Bytes (slice 4 8 big-frame) )   # convert-to-Bytes drops the big backing array
 
 # negative cases
-def Hdr (refine Packet [ {name:'ver' type:'u8'}  {name:'len' type:'u16'} ])
-unpack Hdr (+hb/01/)                         # ERROR:no_match   (only 1 byte, needs 3)
-def Odd (refine Packet [ {value:1 type:'bits' size:3} ])  make Odd {}   # ERROR:unaligned  (3 bits, not byte-aligned)
-refine Packet [ {name:'v' type:'nope'} ]      # ERROR:bytes_error (unknown segment type, at definition)
-make Packet {a:1}                            # ERROR:type_error  (bare Packet kind has no layout)
-convert Bytes [256]                          # ERROR:expected-byte
-convert String (+hb/ff/)                     # ERROR:bad-encoding (0xff is not valid UTF-8)
+def Hdr (refine BinarySpec [ {name:'ver' type:'u8'}  {name:'len' type:'u16'} ])
+unpack Hdr (+hb/01/)                          # ERROR:no_match   (only 1 byte, needs 3)
+def Odd (refine BinarySpec [ {value:1 type:'bits' size:3} ])  convert Bytes (make Odd {})  # ERROR:unaligned (3 bits)
+refine BinarySpec [ {name:'v' type:'nope'} ]  # ERROR:bytes_error (unknown segment type, at definition)
+def C class {a:1}  convert Bytes (make C {})  # ERROR:type_error  (an ordinary class is not a Binary instance)
+convert Bytes [256]                           # ERROR:expected-byte
+convert String (+hb/ff/)                      # ERROR:bad-encoding (0xff is not valid UTF-8)
 +hb/abc/                                      # ERROR:mini_parse_error (odd hex digit count)
 ```
 
@@ -430,8 +478,8 @@ convert String (+hb/ff/)                     # ERROR:bad-encoding (0xff is not v
 | `bad-encoding` | `convert String` (or a `utf8` segment) is given bytes that are not valid UTF-8. |
 | `no_match` | an `unpack` guard fails, or the buffer is too short for the layout. |
 | `unaligned` | a `bits`/`pad` run in a layout does not sum to a whole byte. |
-| `bytes_error` | a layout segment is malformed (unknown `type`, missing `size`, bad `name`/`value`) — at `refine` time — or a required field is absent at `make`. |
-| `type_error` | `make`/`unpack`/`unpack-prefix` is given a target that is not a Packet spec type (e.g. the bare `Packet` kind, with no layout). |
+| `bytes_error` | a layout segment is malformed (unknown `type`, missing `size`, bad `name`/`value`) — at `refine` time — or a `size:'name'` references a field not decoded earlier at `unpack`. |
+| `type_error` | `convert Bytes`/`unpack`/`unpack-prefix` is given a target that is not a binary frame (e.g. an ordinary class instance, with no layout). |
 
 Guard with `RequireConcreteList` / a `Bytes` unwrap helper and range-check
 before converting; never panic (`eng/go/CLAUDE.md`). `slice` clamps an
@@ -474,7 +522,7 @@ BIN-UTIL.10.md, not on the type.)
   unread field, `need` returns the bytes required to read *that* field (a lower
   bound), then the caller re-tries. Document the two-step convergence.
 - **A pure functional `with-byte` mutator** — deliberately omitted; `Bytes` is
-  immutable and edits go through `add`/`slice`/`make <FrameType>`. Revisit only if a
+  immutable and edits go through `add`/`slice`/`convert Bytes <inst>`. Revisit only if a
   builder pattern proves necessary.
 
 ## 13. Phased roadmap
@@ -488,46 +536,65 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
 - **Phase A2 — the `+hb/…/` / `+bb/…/` minilang kinds** (§6). Two generator
   kinds registered in `aql:minilang`, reusing the existing `+name/src/` literal
   sugar — no core lexer change. **(landed)**
-- **Phase A3 — frame types** (§7): the `Packet` spec kind + `def Header (refine Packet [layout])` plus the
-  `make`/`unpack` overloads and the new `unpack-prefix` word, dispatching on the
-  frame type. This unblocks the declarative `length-prefixed` codec and
-  `recv-frame`. **(landed)**
+- **Phase A3 — frame types** (§7): the `BinarySpec` spec kind +
+  `def Header (refine BinarySpec [layout])` building a sealed class, `make`
+  producing a `Binary` instance, the `convert Bytes <inst>` serialiser, the
+  `unpack` overload, and the new `unpack-prefix` word — all dispatching on the
+  frame type / instance. This unblocks the declarative `length-prefixed` codec
+  and `recv-frame`. **(landed)**
 
 ## 14. Implementation sketch
 
 - **`eng/go/gobridge.go`** — add the `[]byte` ↔ `Bytes` cases, with the
   copy-on-ingest copy in `FromNative` (§4.2).
-- **`eng/go/typebehavior.go`** — one general helper: `behaviorWrapper.Prev()` +
-  `eng.PrevBehavior` expose the wrapper chain so a custom Behavior installed
-  before a `def`/`refine` wrap can be recovered. (The only kernel change — no
-  Bytes-specific type-kind, per the kernel/domain boundary in `eng/go/CLAUDE.md`.)
+- **`eng/go/gobridge.go`** — add the `[]byte` ↔ `Bytes` cases (via the
+  `RegisterBytesBridge` hook), with the copy-on-ingest copy in `FromNative`
+  (§4.2). (No kernel type-kind for frames — they reuse the existing
+  `ObjectTypeInfo`/`ObjectInstanceInfo` machinery, per the kernel/domain
+  boundary in `eng/go/CLAUDE.md`.)
+- **`eng/go/value.go`** — `ObjectTypeInfo` gains a `BinaryLayout Value` field:
+  the raw layout `List<Map>` a binary-frame class carries (zero Value on an
+  ordinary class). This is the single hook that turns the class machinery into a
+  frame carrier.
 - **`lang/go/native/native_bytes.go`** — `registerBytesType()` via
   `RegisterExternalBuiltin("Scalar/Bytes", 1009, bytesBehavior{})`; behavior
   implements `Format`/`Comparer`/`Equal`/`Sizer` (§3) and **omits**
   `DeepCloner` (§4.1); the `convert`/`slice`/`add` value overloads (§5) appended
   via `RegisterNativeFunc`; funnel init errors through `TypeInitError`.
-- **`lang/go/native/native_bytes.go`** — `TPacket` (`Ideal/Packet`, FixedID
-  4002, the spec kind); `frameBehavior` (carries the parsed `[]bitSeg`; Match/
-  Format/Equal delegate to the kernel default) + `frameBehaviorOf` (walks the
-  Behavior chain via `eng.PrevBehavior`); the `make`/`unpack`/`unpack-prefix`
-  overloads (`[TPacket,TMap]` / `[TPacket,TBytes]`, `TypeArgs{0:true}`) read the
-  layout off the spec type — `make` returns a plain `Bytes`; `readBitSegments`/
-  `readOneSeg` **read** (never parse) the `List<Map>` layout — `name`/`value`,
-  `type`, `endian`, `signed`, `size` keys (ADR-007); an MSB-first bit writer/reader.
-- **`lang/go/native/native_type.go` (`installIdeals`)** — a `Packet` `Ideal`
-  whose `Construct` validates the layout, mints a `Packet` refine prefab, and
-  attaches the `frameBehavior`; so `refine Packet [layout]` builds the spec type.
+- **`lang/go/native/native_bytes.go`** — the frame codec: `binarySpecLayout`
+  (layout off a spec class) / `binaryInstanceLayout` (off an instance's
+  `TypeRef`); `binaryFieldSchema` derives the class's field schema from the
+  layout; `convert Bytes <Binary>` (`[TBytes,TClass]`, serialise), `unpack`
+  (`[TClass,TBytes]` → instance), `unpack-prefix` (`[TClass,TBytes]` → `{ok rest}`
+  | `{need}`) — all dispatching on `TClass` (a frame type is a sealed class) with
+  a handler guard that declines non-frame classes. `readBitSegments`/`readOneSeg`
+  **read** (never parse) the `List<Map>` layout — `name`/`value`, `type`,
+  `endian`, `signed`, `size` keys (ADR-007); an MSB-first bit writer/reader;
+  `frameInstance` builds the instance via `eng.MakeObject`. No `make` overload —
+  `make Header {fields}` reuses the object/class instance path unchanged.
+- **`lang/go/native/native_type.go` (`installIdeals`)** — `Binary` and
+  `BinarySpec` installed as **membership types** (`DefineMemberType` over
+  `TClass`): `Binary` matches an instance whose type carries a `BinaryLayout`,
+  `BinarySpec` matches such a class type (and is the `refine` base). The
+  `BinarySpec` `Ideal.Construct` validates the layout, derives the field schema,
+  and mints an `ObjectTypeInfo{Class:true, BinaryLayout:arg}` — so
+  `refine BinarySpec [layout]` builds the sealed-class spec type. **(Caveat: the
+  `is` word / dispatch don't consult membership for object/type operands, so
+  `is Binary`/`is BinarySpec` return false — see §7. The members have no FixedID;
+  they are per-registry.)**
 - **`lang/go/modules/minilang.go`** — the `hb`/`bb` generator kinds
   (`[src:String opts:Map] → [Bytes]`) + handlers, building `Bytes` via
   `eng.FromNative`; `docs_minilang.go` — the `lang_hb`/`lang_bb` doc entries.
 - **`lang/go/native/help/`** — `help_bytes.go` describes `unpack-prefix`;
-  `help_control.go`'s `unpack` entry notes the `unpack <FrameType> b` form;
+  `help_control.go`'s `unpack` entry notes the `unpack <BinarySpec> b` form;
   there is no `bytes` word. (`make`/`unpack` keep their existing entries.)
-- **`lang/go/test/fixedid_stability_test.go`** — pin `Ideal/Packet` = 4002 and `Scalar/Bytes` = 1009 (no
-  FixedID for user frame types — they are ordinary `def`-minted subtypes).
+- **`lang/go/test/fixedid_stability_test.go`** — pin `Scalar/Bytes` = 1009 (no
+  FixedID for frame types / the membership kinds — frame types are ordinary
+  class-minted subtypes; `Binary`/`BinarySpec` are per-registry members).
 - **`lang/go/test/bytes.tsv`** — value-op rows (convert round-trips, slice,
-  `add`, compact, size/eq) plus frame-type rows (`def P (refine Packet […])`,
-  `make`/`unpack`/`unpack-prefix`, `is P`, float/signed) each paired with an
-  `ERROR:<substring>` negative sibling (`no_match`, `unaligned`, `bytes_error`,
-  `type_error`, `expected-byte`, `bad-encoding`); the `+hb/…/` / `+bb/…/`
-  literal rows live in `lang/spec/module-minilang.tsv` §6; plus a Go-bridge test.
+  `add`, compact, size/eq) plus frame rows (`def H (refine BinarySpec […])`,
+  field access, `typeof`, `is H`, `convert Bytes`, `unpack`/`unpack-prefix`,
+  float/signed) each paired with an `ERROR:<substring>` negative sibling
+  (`no_match`, `unaligned`, `bytes_error`, `type_error`, `expected-byte`,
+  `bad-encoding`); the `+hb/…/` / `+bb/…/` literal rows live in
+  `lang/spec/module-minilang.tsv` §6; plus a Go-bridge test.

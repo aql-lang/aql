@@ -8,8 +8,8 @@ func init() {
 			"in the current scope — AQL's analogue of JavaScript object destructuring. " +
 			"Three selector forms over the same source: `unpack [names] map`, " +
 			"`unpack all map`, and `unpack {renames} map`. A fourth form decodes a " +
-			"binary frame: `unpack <FrameType> b` reads the Bytes `b` against a frame " +
-			"type (`def P (refine Packet [layout])`) and returns a field Map " +
+			"binary frame: `unpack <BinarySpec> b` reads the Bytes `b` against a frame " +
+			"type (`def P (refine BinarySpec [layout])`) and returns a Binary instance " +
 			"(see `unpack-prefix` for the streaming variant).",
 		Notes: []string{
 			"`unpack [a b] m` — bind the listed keys: a → m.a, b → m.b.",
@@ -19,7 +19,7 @@ func init() {
 			"A requested/renamed key absent from the source is an error (strict, like getr).",
 			"Capitalised (type) names are rejected — unpack binds values only.",
 			"Bindings obey scope: torn down at fn-body exit, persist at top level (like def).",
-			"`unpack <FrameType> b` — decode a binary frame to a field Map (a `value:` segment is a match guard, raising no_match on mismatch).",
+			"`unpack <BinarySpec> b` — decode a binary frame to a Binary instance (a `value:` segment is a match guard, raising no_match on mismatch).",
 		},
 	})
 

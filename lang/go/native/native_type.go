@@ -495,24 +495,49 @@ func installIdeals(r *Registry) {
 			return tableHandler([]Value{arg}, nil, nil, r)
 		}
 	}
-	// Packet (binary-frame spec) types: `def Header (refine Packet [layout])`
-	// mints a Packet subtype whose frameBehavior carries the parsed layout,
-	// which `make`/`unpack`/`unpack-prefix` read. Packet is the spec KIND
-	// (sibling of Object/Record/Table); Bytes is only data. Only the bare
-	// `Packet` literal is a valid base. See native_bytes.go and
-	// design/go-modules/BYTES.10.md §7.
+	// Binary / BinarySpec — the binary-frame instance / spec membership types
+	// (BinarySpec : Binary :: Class : Object). A binary frame is realised on the
+	// class machinery: `def Header (refine BinarySpec [layout])` builds a sealed
+	// CLASS whose fields are the layout's decoded types and which carries the raw
+	// wire layout (ObjectTypeInfo.BinaryLayout); `make Header {fields}` reuses the
+	// class make path to produce a field-accessible INSTANCE; `convert Bytes`/
+	// `unpack` are the Binary⇄Bytes codec (native_bytes.go). The two membership
+	// types name the roles and answer `is`:
+	//   - BinarySpec — a class TYPE carrying a layout (also the `refine` base).
+	//   - Binary     — a class INSTANCE whose type carries a layout.
+	// (Because instances reuse classes they are also `is Class` — a deliberate
+	// simplification; see design/go-modules/BYTES.10.md §7.)
+	if _, err := r.DefineMemberType("Binary", TClass, func(v Value) bool {
+		_, ok := binaryInstanceLayout(v)
+		return ok
+	}); err != nil {
+		recordTypeInitErr(fmt.Errorf("native_type: define Binary: %w", err))
+	}
+	bspec, err := r.DefineMemberType("BinarySpec", TClass, func(v Value) bool {
+		_, ok := binarySpecLayout(v)
+		return ok
+	})
+	if err != nil {
+		recordTypeInitErr(fmt.Errorf("native_type: define BinarySpec: %w", err))
+		return
+	}
 	r.Ideals.Register(&eng.Ideal{
-		Name:    "Packet",
+		Name:    "BinarySpec",
 		Enabled: true,
-		Accepts: func(v Value) bool { return IsBareTypeNode(v) && v.Equal(TPacket) },
+		Accepts: func(v Value) bool { return IsBareTypeNode(v) && v.Equal(bspec) },
 		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
 			segs, err := readBitSegments(arg, r, "refine")
 			if err != nil {
 				return nil, err
 			}
-			def := r.Types.MintRefinePrefab(CanonicalType(r, &base))
-			def.Behavior = &frameBehavior{layout: segs, raw: arg}
-			return []Value{NewTypeLiteral(def)}, nil
+			info := ObjectTypeInfo{
+				Fields:       binaryFieldSchema(segs),
+				ID:           GenerateObjectTypeID(),
+				Class:        true,
+				BinaryLayout: arg,
+			}
+			def := r.Types.MintType(info.ID, TClass)
+			return []Value{NewObjectType(def, info)}, nil
 		},
 	})
 }

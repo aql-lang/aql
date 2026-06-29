@@ -133,60 +133,54 @@ func (bytesBehavior) Size(v Value) int {
 	return 0
 }
 
-// TPacket is the Ideal/Packet type — the binary-frame SPEC kind, a sibling of
-// Object/Record/Table (a structural type used by make). A concrete frame spec
-// is a Packet subtype: `def Header (refine Packet [layout])`. Packet types are
-// pure specs — `make Header {fields}` produces a plain `Bytes` (Bytes is only
-// data), and `unpack Header b` decodes a `Bytes` back to a field Map. FixedID
-// 4002 is in the lang Ideal band (4000-4999, beside Timeout/Interval); pinned
-// in lang/go/test/fixedid_stability_test.go.
-var TPacket = registerPacketType()
+// A binary frame layout is modelled as a sealed CLASS that carries a wire
+// layout (ObjectTypeInfo.BinaryLayout): `def Header (refine BinarySpec
+// [layout])` builds it, `make Header {fields}` produces a field-accessible
+// INSTANCE (reusing the object-instance machinery wholesale), and the instance
+// serialises to `Bytes` via `convert Bytes`. Two membership types name the two
+// roles, mirroring `BinarySpec : Binary :: Class : Object`:
+//
+//   - TBinarySpec — matches a spec TYPE: a class value carrying a BinaryLayout.
+//     It is the `refine` base (`refine BinarySpec [layout]`) and the answer to
+//     `Header is BinarySpec`.
+//   - TBinary — matches an INSTANCE: an object instance whose type carries a
+//     BinaryLayout. The answer to `p is Binary`.
+//
+// Because instances reuse the class machinery they are ALSO `is Class` (they
+// are sealed records under the hood) — a deliberate simplification that keeps
+// field access / make / convert Map / typeof entirely free of new wiring.
+// Binary and BinarySpec are defined per-registry as MEMBERSHIP types in
+// installIdeals (via DefineMemberType) — the parity-proven path that answers
+// `is`/dispatch through a Go predicate. They are not global builtins (no
+// FixedID): a binary frame is realised on the class machinery, so the types
+// are membership predicates over class instances / class spec-types.
+//
+// binaryMembers builds the two predicates (instance / spec) for installIdeals.
 
-func registerPacketType() *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Packet", 4002, nil)
-	if err != nil {
-		recordTypeInitErr(fmt.Errorf("native_bytes: register Ideal/Packet: %w", err))
+// binarySpecLayout returns the wire layout carried by a binary-frame SPEC type
+// (a class value with BinaryLayout set), and whether v is such a type.
+func binarySpecLayout(v Value) (Value, bool) {
+	if !IsObjectType(v) {
+		return Value{}, false
 	}
-	return t
+	ot, err := AsObjectType(v)
+	if err != nil || !IsConcrete(ot.BinaryLayout) {
+		return Value{}, false
+	}
+	return ot.BinaryLayout, true
 }
 
-// frameBehavior is the Behavior carried by a frame SPEC type — a Packet subtype
-// minted by `refine Packet [layout]` (see installIdeals). It carries the parsed
-// `layout` that `make`/`unpack`/`unpack-prefix` read; its Match/Format/Equal
-// are the kernel default (a Packet type is a spec, not a value with custom
-// rendering). The layout lives on the TYPE (not a value or a side table), so it
-// travels with the type binding and there is no secondary parse at the call
-// site (ADR-007). When `def P` wraps this type with a bareRefineUnifier, the
-// wrapper preserves this Behavior as its `prev`; frameBehaviorOf walks the
-// chain to recover it.
-type frameBehavior struct {
-	layout []bitSeg // the parsed, validated frame layout
-	raw    Value    // the original layout List<Map> (for inspection/convert)
-}
-
-func (frameBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (frameBehavior) Format(v Value) string       { return eng.DefaultBehavior.Format(v) }
-func (frameBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
-
-// frameBehaviorOf walks t's Behavior chain (down through any kernel wrapper
-// installed by `def`/`refine`) and returns the frameBehavior if t is a frame
-// spec type. eng.PrevBehavior follows behaviorWrapper.prev.
-func frameBehaviorOf(t *Type) (*frameBehavior, bool) {
-	if t == nil {
-		return nil, false
+// binaryInstanceLayout returns the wire layout of a binary INSTANCE (an object
+// instance whose type carries a BinaryLayout), and whether v is such a value.
+func binaryInstanceLayout(v Value) (Value, bool) {
+	if !IsObjectInstance(v) {
+		return Value{}, false
 	}
-	var b TypeBehavior = t.Behavior
-	for b != nil {
-		if fb, ok := b.(*frameBehavior); ok {
-			return fb, true
-		}
-		nb, ok := eng.PrevBehavior(b)
-		if !ok {
-			break
-		}
-		b = nb
+	oi, err := AsObjectInstance(v)
+	if err != nil || oi.TypeRef == nil || !IsConcrete(oi.TypeRef.BinaryLayout) {
+		return Value{}, false
 	}
-	return nil, false
+	return oi.TypeRef.BinaryLayout, true
 }
 
 // bytesNatives registers the Bytes operations as SIGNATURE OVERLOADS of
@@ -227,27 +221,33 @@ var bytesNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "make",
+		// `make Header {fields}` reuses the object/class make path (Header is a
+		// sealed class), so no Bytes-specific `make` overload is needed here —
+		// see installIdeals' BinarySpec constructor. The result is a Binary
+		// INSTANCE, field-accessible like any object instance.
+		Name: "convert",
 		Signatures: []NativeSig{
-			// `make <PacketType> {fields}` packs a frame into a plain Bytes.
-			// The target is a Packet subtype (`def P (refine Packet [layout])`);
-			// the layout rides on the type. More specific than make's
-			// `[TIdeal TMap]`, so it wins dispatch for Packet types.
-			{Args: []*Type{TPacket, TMap}, TypeArgs: map[int]bool{0: true}, Handler: makeFrameHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			// `convert Bytes <Binary>` serialises a Binary instance to wire
+			// bytes via its spec's layout (the Binary→Bytes direction). Binary
+			// instances are sealed class instances, so dispatch is on TClass;
+			// the handler verifies it is a binary instance (declines otherwise).
+			{Args: []*Type{TBytes, TClass}, TypeArgs: map[int]bool{0: true}, Handler: convertBinaryToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unpack",
 		Signatures: []NativeSig{
-			// `unpack <PacketType> b` decodes Bytes `b`, returning a field Map.
-			{Args: []*Type{TPacket, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			// `unpack <BinarySpec> b` decodes Bytes `b` into a Binary instance.
+			// A spec is a sealed class, so dispatch is on TClass; the handler
+			// verifies the class carries a layout (errors otherwise).
+			{Args: []*Type{TClass, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackFrameHandler, Returns: []*Type{TClass}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unpack-prefix",
 		Signatures: []NativeSig{
-			// `unpack-prefix <PacketType> b` -> {ok rest} | {need n}; the streaming framer.
-			{Args: []*Type{TPacket, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackPrefixFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			// `unpack-prefix <BinarySpec> b` -> {ok: <Binary> rest: <Bytes>} | {need n}.
+			{Args: []*Type{TClass, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackPrefixFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 }
@@ -390,6 +390,36 @@ var intWidths = map[string]struct {
 }{
 	"u8": {1, false}, "u16": {2, false}, "u32": {4, false}, "u64": {8, false},
 	"i8": {1, true}, "i16": {2, true}, "i32": {4, true}, "i64": {8, true},
+}
+
+// binaryFieldType maps a segment's wire type to the AQL value type a decoded
+// field carries — used to build the spec class's field schema so a Binary
+// instance validates and type-narrows like any object instance.
+func binaryFieldType(seg bitSeg) *Type {
+	switch seg.typ {
+	case "f32", "f64":
+		return TFloat
+	case "bytes":
+		return TBytes
+	case "utf8":
+		return TString
+	default: // u8..u64, i8..i64, bits
+		return TInteger
+	}
+}
+
+// binaryFieldSchema builds the spec class's field schema (name → type literal)
+// from the NAMED segments of a layout (literal-guard and pad segments carry no
+// field).
+func binaryFieldSchema(segs []bitSeg) *OrderedMap {
+	fields := NewOrderedMap()
+	for _, seg := range segs {
+		if seg.isLit || seg.typ == "pad" {
+			continue
+		}
+		fields.Set(seg.name, NewTypeLiteral(binaryFieldType(seg)))
+	}
+	return fields
 }
 
 // readBitSegments reads the spec, a `List` of segment `Map`s. Each Map is a
@@ -654,28 +684,31 @@ func signExtend(v uint64, width int) int64 {
 	return int64(v)
 }
 
-// ---- pack: make <FrameType> {fields} --------------------------------------
+// ---- serialise: convert Bytes <Binary> ------------------------------------
 
-// makeFrameHandler packs `make <PacketType> {fields}` into a plain Bytes (Bytes
-// is only data — the result is not tagged with the Packet type). The Packet
-// type carries the layout (frameBehavior); fields supplies each named segment.
-func makeFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	fb, ok := frameBehaviorOf(CanonicalType(r, &args[0]))
+// convertBinaryToBytes serialises a Binary instance to wire bytes: it reads the
+// layout off the instance's spec type and packs each segment from the
+// instance's fields (a `value` segment packs its constant). The result is plain
+// `Bytes` (data).
+func convertBinaryToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	rawLayout, ok := binaryInstanceLayout(args[1])
 	if !ok {
-		return nil, frameTypeErr(r, args[0], "make")
+		return nil, r.AqlError("type_error", "convert Bytes: value is not a Binary instance", "convert")
 	}
-	fields, err := RequireConcreteMap(args[1], "make")
+	segs, err := readBitSegments(rawLayout, r, "convert")
 	if err != nil {
 		return nil, err
 	}
+	oi, _ := AsObjectInstance(args[1])
+	fields := oi.AllFields() // field name → value (prototype chain flattened)
 	w := &bitWriter{}
-	for _, seg := range fb.layout {
-		if err := packSeg(w, seg, fields, r, "make"); err != nil {
+	for _, seg := range segs {
+		if err := packSeg(w, seg, fields, r, "convert"); err != nil {
 			return nil, err
 		}
 	}
 	if !w.aligned() {
-		return nil, r.AqlError("unaligned", "make: bit segments do not sum to whole bytes", "make")
+		return nil, r.AqlError("unaligned", "convert Bytes: bit segments do not sum to whole bytes", "convert")
 	}
 	return []Value{newBytes(w.out)}, nil
 }
@@ -763,33 +796,48 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 	return nil
 }
 
-// ---- unpack: decode a frame to a field Map, and the streaming variant -----
+// ---- unpack: decode wire bytes into a Binary instance ---------------------
 
-// unpackFrameHandler decodes `unpack <FrameType> b`, returning a field Map.
-func unpackFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	fb, ok := frameBehaviorOf(CanonicalType(r, &args[0]))
+// frameInstance decodes `b` against the spec type `specVal`'s layout and builds
+// a Binary instance (an object instance of the spec class) from the decoded
+// fields. Returns the instance, the leftover bytes, and any error (a needMore
+// for a short buffer when streaming).
+func frameInstance(specVal Value, b []byte, r *Registry, word string) (Value, []byte, error) {
+	rawLayout, ok := binarySpecLayout(specVal)
 	if !ok {
-		return nil, frameTypeErr(r, args[0], "unpack")
+		return Value{}, nil, frameTypeErr(r, specVal, word)
 	}
-	b, _ := asBytes(args[1])
-	m, _, err := decodeSegs(b, fb.layout, r, "unpack", false)
+	segs, err := readBitSegments(rawLayout, r, word)
+	if err != nil {
+		return Value{}, nil, err
+	}
+	m, rest, derr := decodeSegs(b, segs, r, word, false)
+	if derr != nil {
+		return Value{}, nil, derr
+	}
+	ot, _ := AsObjectType(specVal)
+	inst, ierr := eng.MakeObject(ot, NewMap(m), nil, r)
+	if ierr != nil {
+		return Value{}, nil, ierr
+	}
+	return inst[0], rest, nil
+}
+
+// unpackFrameHandler decodes `unpack <PacketSpec> b` into a Binary instance.
+func unpackFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	inst, _, err := frameInstance(args[0], firstBytes(args[1]), r, "unpack")
 	if err != nil {
 		if _, short := err.(needMore); short {
 			return nil, r.AqlError("no_match", "unpack: buffer too short for the frame", "unpack")
 		}
 		return nil, err
 	}
-	return []Value{NewMap(m)}, nil
+	return []Value{inst}, nil
 }
 
-// unpackPrefixFrameHandler decodes a leading frame from b: {ok rest} | {need n}.
+// unpackPrefixFrameHandler decodes a leading frame: {ok: <Binary> rest: <Bytes>} | {need n}.
 func unpackPrefixFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	fb, ok := frameBehaviorOf(CanonicalType(r, &args[0]))
-	if !ok {
-		return nil, frameTypeErr(r, args[0], "unpack-prefix")
-	}
-	b, _ := asBytes(args[1])
-	m, rest, err := decodeSegs(b, fb.layout, r, "unpack-prefix", false)
+	inst, rest, err := frameInstance(args[0], firstBytes(args[1]), r, "unpack-prefix")
 	if err != nil {
 		if ne, ok := err.(needMore); ok {
 			out := NewOrderedMap()
@@ -799,16 +847,18 @@ func unpackPrefixFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Re
 		return nil, err
 	}
 	out := NewOrderedMap()
-	out.Set("ok", NewMap(m))
+	out.Set("ok", inst)
 	out.Set("rest", newBytes(rest))
 	return []Value{NewMap(out)}, nil
 }
 
+func firstBytes(v Value) []byte { b, _ := asBytes(v); return b }
+
 func frameTypeErr(r *Registry, t Value, word string) error {
 	return r.AqlErrorHint("type_error",
-		fmt.Sprintf("%s: %s is not a Packet (frame) type", word, t.String()),
+		fmt.Sprintf("%s: %s is not a BinarySpec (frame) type", word, t.String()),
 		word,
-		"define one with `def P (refine Packet [ {name:'x' type:'u8'} … ])`")
+		"define one with `def P (refine BinarySpec [ {name:'x' type:'u8'} … ])`")
 }
 
 // needMore signals a short buffer to unpack-prefix (turned into {need:n}).
