@@ -6,6 +6,43 @@ import (
 	"time"
 )
 
+func TestHumanizeDurRounds(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		// The reported bug: an expiry set to now+90d, read a moment later.
+		{90*24*time.Hour - 5*time.Millisecond, "90d"},
+		{90 * 24 * time.Hour, "90d"},
+		{24 * time.Hour, "1d"},
+		{36 * time.Hour, "2d"}, // 1.5d rounds up
+		{34 * time.Hour, "1d"}, // 1.42d rounds down
+		// No boundary artifacts: just under a day stays in hours, just
+		// under an hour stays in minutes.
+		{23*time.Hour + 45*time.Minute, "1d"}, // rounds up into days, not "24h"
+		{23*time.Hour + 20*time.Minute, "23h"},
+		{59*time.Minute + 45*time.Second, "1h"}, // rounds up into hours, not "60m"
+		{59*time.Minute + 20*time.Second, "59m"},
+		{45 * time.Second, "1m"},
+		{20 * time.Second, "<1m"},
+	}
+	for _, c := range cases {
+		if got := humanizeDur(c.d); got != c.want {
+			t.Errorf("humanizeDur(%s) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
+func TestExpiryStatusFreshlySet(t *testing.T) {
+	// A key added with `--expiry=90d` and rendered immediately must read
+	// "in 90d", not "in 89d".
+	now := time.Now()
+	expires := now.Add(90 * 24 * time.Hour)
+	if got := expiryStatus(expires, now.Add(8*time.Millisecond)); got != "in 90d" {
+		t.Errorf("freshly-set 90d expiry = %q, want %q", got, "in 90d")
+	}
+}
+
 func TestParseExpiryAbsolute(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	cases := []struct {

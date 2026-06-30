@@ -59,7 +59,7 @@ var categories = []Category{
 		"patrun", "find", "patterns",
 	}},
 	{"control", "Control flow, definitions, and functions.", []string{
-		"unpack", "codequote", "do", "raise", "if", "case", "for", "break",
+		"unpack", "unpack-prefix", "codequote", "do", "raise", "if", "case", "for", "break",
 		"continue", "def", "undef", "var", "fn", "args",
 		"afn", "guard", "error", "force-arity", "usurp", "forward-args",
 		"stack-args",
@@ -72,7 +72,7 @@ var categories = []Category{
 		"convert", "typeof", "inspect", "make", "refine", "class", "surface",
 		"exposes", "gen", "of", "extends", "default", "const", "object", "array",
 		"base", "tor", "tand", "tany", "tall", "teq", "tpartial",
-		"is", "istype", "behave", "fnsig", "tnot", "pathof",
+		"is", "tis", "istype", "behave", "fnsig", "tnot", "pathof",
 	}},
 	{"query", "Query pipelines, iteration, resources, and modules.", []string{
 		"select", "from", "where", "order", "limit", "offset", "distinct",

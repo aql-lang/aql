@@ -63,6 +63,18 @@ document is the low-level layer (raw
 processes/mailboxes, like Erlang processes); `SERVICES.0.md` is the high-level
 layer most code is written against. The two are designed together.
 
+### Relationship to `NETWORK-SERVERS.0.md`
+
+`NETWORK-SERVERS.0.md` builds the **network-server handling API** on this
+substrate, in two tiers: a **low-level** raw-connection API (a `Socket` handle,
+passive `recv`/active mailbox messages, hand-written framing) where each
+connection is one of *these* actors; and a **high-level** message API where a
+codec turns the byte stream into messages dispatched to a `SERVICES.0.md`
+service. It also specifies the **`Bytes` type + bit-syntax** that §8's binary
+gap calls for — the bit-syntax binding pass reuses the very `name:Type` slot
+machinery (`eng.ParseFnParams`) that §3's `receive` clauses use. The networking
+phases there are the concrete realization of this document's phase-3 roadmap.
+
 ### Scope decisions (agreed)
 
 1. **Phase 1 = core actors only.** Lightweight processes, PIDs, a named process

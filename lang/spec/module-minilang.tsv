@@ -27,7 +27,7 @@ import "aql:minilang"  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
 import "aql:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  register / kinds — out-of-band exports (not mini-callable)
-import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q m/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
+import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q m/q hb/q bb/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
 import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
 # Memoising an AQL kind: built-in re/xp cache their compiled artifact in a private
@@ -68,6 +68,16 @@ import "aql:minilang"  ("AbcD" +re|[a-z]+|).fst.m	'bc'	a custom delimiter — | 
 import "aql:minilang"  ("xa/by" +re#a/b#).fst.m	'a/b'	pick a delimiter (#) so the source can contain /
 import "aql:minilang"  ("xa/by" +re/a\/b/).fst.m	'a/b'	or escape the delimiter with a backslash
 import "aql:minilang"  +bf/++++++++[>++++++++<-]>+./	'A'	bf generator via the shortcut
+import "aql:minilang"  +hb/deadbeef/	Bytes<de ad be ef>	hex Bytes literal via the shortcut
+import "aql:minilang"  mini hb 'deadbeef'	Bytes<de ad be ef>	the explicit form is equivalent
+import "aql:minilang"  (MiniLang.lang_hb 'deadbeef' {} end)	Bytes<de ad be ef>	mini/+hb are sugar — the desugared standard call is equivalent
+import "aql:minilang"  +hb/de ad be ef/	Bytes<de ad be ef>	whitespace in the source is ignored (grouping)
+import "aql:minilang"  +bb/01001100/	Bytes<4c>	binary Bytes literal — 8 bits, MSB-first
+import "aql:minilang"  (MiniLang.lang_bb '01001100' {} end)	Bytes<4c>	the desugared standard call for bb
+import "aql:minilang"  +bb/01001100 11110000/	Bytes<4c f0>	binary grouping with whitespace
+import "aql:minilang"  +hb/abc/	ERROR:mini_parse_error	an odd-length hex source is rejected
+import "aql:minilang"  +bb/0102/	ERROR:mini_parse_error	a non-binary digit is rejected
+import "aql:minilang"  +bb/0100110/	ERROR:mini_parse_error	a non-multiple-of-8 bit count is rejected
 import "aql:minilang"  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the same expansion-time error as `mini nope`
 +re/[a-z]+/	ERROR:mini_unknown_lang	the shortcut needs the import too (no auto-import)
 #

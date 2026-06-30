@@ -27,6 +27,14 @@ func init() {
 			"nodes for a node-set (an element as its Node/Xml value, an attribute/text node as a " +
 			"String), or a one-element list for a scalar count/string/boolean result. " +
 			"github.com/antchfx/xpath.",
+		"lang_hb": "Hex Bytes literal: `+hb/deadbeef/` (≡ mini hb 'deadbeef') — decode an " +
+			"even-length hex string to a Bytes value. Whitespace and `_` in the source are " +
+			"ignored, so `+hb/de ad be ef/` groups for readability. A bad/odd-length source " +
+			"raises mini_parse_error.",
+		"lang_bb": "Binary Bytes literal: `+bb/01001100/` (≡ mini bb '01001100') — decode a " +
+			"string of 0/1 bits (a multiple of 8, MSB-first per byte) to a Bytes value. " +
+			"Whitespace and `_` are ignored. A non-binary digit or a non-multiple-of-8 length " +
+			"raises mini_parse_error.",
 		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
 			"Every fn signature must start with the standard prefix [src:String opts:Map …].",
 		"kinds": "List the registered mini-language kind atoms.",

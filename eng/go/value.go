@@ -689,6 +689,7 @@ type ObjectTypeInfo struct {
 	Name            string          // full type path (e.g. "Object/Foo/Bar")
 	Type            *Type           // canonical *Type identity; populated by MintType during installation
 	Class           bool            // class-rooted (minted under Ideal/Class): sealed, flat instances — see design/CLASS-OBJECT.10.md
+	BinaryLayout    Value           // for a binary-frame spec (a class carrying a Scalar/Bytes wire layout): the raw layout List<Map>; zero Value otherwise. Read by the Bytes codec (make/unpack/convert) and the Binary/BinarySpec membership predicates. See lang/go/native/native_bytes.go and design/go-modules/BYTES.10.md.
 	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
 }
 

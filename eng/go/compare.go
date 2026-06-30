@@ -278,6 +278,42 @@ func ExactEqual(a, b Value) bool {
 		return _as15 == _as14
 	}
 
+	// Other scalar value-types (Bytes, the Time family, …) compare by
+	// their type's semantic equality: a scalar is identified by content,
+	// not container identity. The same-Parent gate keeps this to matching
+	// leaf types, and ConformsTo(TScalar) keeps reference-backed
+	// non-scalars (List/Map/Array/Object/Tensor/…) on the identity path
+	// below. The dispatch is the one ValuesEqual already uses.
+	if a.Parent == b.Parent && a.Parent.ConformsTo(TScalar) &&
+		a.Parent.Behavior != nil && a.Parent.Behavior != DefaultBehavior {
+		return a.Parent.Behavior.Equal(a, b)
+	}
+
+	// Cross-node, NESTED scalar subtype: a `refine`-newtype value (def B
+	// (refine Bytes); def x:B …) carries the minted node, not the base, so
+	// the same-Parent gate above misses `x eq <plain Bytes>`. When one
+	// operand's type is an ancestor of the other's — i.e. their lowest common
+	// ancestor IS one of the two parents — they share a base scalar leaf, so
+	// compare by that base's Comparer (a newtype's wrapper Behavior delegates
+	// Compare to the base). eq then agrees with cmp on a tagged subtype, as
+	// the ordering LCA walk in CompareValues already does. The NESTED guard is
+	// load-bearing: it admits newtype-vs-base but EXCLUDES sibling leaves
+	// (Date vs DateTime — LCA Time, neither parent — which timeCompareBehavior
+	// would otherwise rank as chronologically equal), keeping those on the
+	// identity path below, unchanged. The by-value scalar families
+	// (Number/String/Boolean/Atom) already returned above and never reach here.
+	if a.Parent != b.Parent {
+		if lca := lowestCommonAncestor(a.Parent, b.Parent); lca != nil &&
+			!lca.Equal(TScalar) && lca.ConformsTo(TScalar) &&
+			(lca.Equal(a.Parent) || lca.Equal(b.Parent)) {
+			if cmp, ok := lca.Behavior.(Comparer); ok {
+				if res, e := cmp.Compare(a, b); e == nil {
+					return res == 0
+				}
+			}
+		}
+	}
+
 	// Non-scalars: identity comparison — both values must refer to the
 	// same underlying container. Flexness is part of identity here:
 	// nodeFamily-normalised comparison would still fail on container

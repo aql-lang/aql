@@ -190,6 +190,18 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
+		Name:          "tis",
+		CompileEffect: CompileIslandPure,
+
+		Signatures: []NativeSig{{
+			Args:          []*Type{TAny, TAny},
+			BarrierPos:    1,
+			Handler:       tisHandler,
+			Returns:       []*Type{TBoolean},
+			CompileEffect: CompileReadsFn, // reads the operands' lattice tags, never invokes
+		}},
+	},
+	{
 		Name: "guard",
 
 		Signatures: []NativeSig{{
@@ -495,6 +507,51 @@ func installIdeals(r *Registry) {
 			return tableHandler([]Value{arg}, nil, nil, r)
 		}
 	}
+	// Binary / BinarySpec — the binary-frame instance / spec membership types
+	// (BinarySpec : Binary :: Class : Object). A binary frame is realised on the
+	// class machinery: `def Header (refine BinarySpec [layout])` builds a sealed
+	// CLASS whose fields are the layout's decoded types and which carries the raw
+	// wire layout (ObjectTypeInfo.BinaryLayout); `make Header {fields}` reuses the
+	// class make path to produce a field-accessible INSTANCE; `convert Bytes`/
+	// `unpack` are the Binary⇄Bytes codec (native_bytes.go). The two membership
+	// types name the roles and answer `is`:
+	//   - BinarySpec — a class TYPE carrying a layout (also the `refine` base).
+	//   - Binary     — a class INSTANCE whose type carries a layout.
+	// (Because instances reuse classes they are also `is Class` — a deliberate
+	// simplification; see design/go-modules/BYTES.10.md §7.)
+	if _, err := r.DefineMemberType("Binary", TClass, func(v Value) bool {
+		_, ok := binaryInstanceLayout(v)
+		return ok
+	}); err != nil {
+		recordTypeInitErr(fmt.Errorf("native_type: define Binary: %w", err))
+	}
+	bspec, err := r.DefineMemberType("BinarySpec", TClass, func(v Value) bool {
+		_, ok := binarySpecLayout(v)
+		return ok
+	})
+	if err != nil {
+		recordTypeInitErr(fmt.Errorf("native_type: define BinarySpec: %w", err))
+		return
+	}
+	r.Ideals.Register(&eng.Ideal{
+		Name:    "BinarySpec",
+		Enabled: true,
+		Accepts: func(v Value) bool { return IsBareTypeNode(v) && v.Equal(bspec) },
+		Construct: func(base, arg Value, r *Registry) ([]Value, error) {
+			segs, err := readBitSegments(arg, r, "refine")
+			if err != nil {
+				return nil, err
+			}
+			info := ObjectTypeInfo{
+				Fields:       binaryFieldSchema(segs),
+				ID:           GenerateObjectTypeID(),
+				Class:        true,
+				BinaryLayout: arg,
+			}
+			def := r.Types.MintType(info.ID, TClass)
+			return []Value{NewObjectType(def, info)}, nil
+		},
+	})
 }
 
 // ---- enum ----
@@ -715,6 +772,45 @@ func teqHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 		return []Value{NewBoolean(aNode.Equal(bNode))}, nil
 	}
 	return []Value{NewBoolean(ValuesEqual(a, b))}, nil
+}
+
+// ---- tis ----
+
+// tisHandler implements `tis` — the pure-lattice variant of `is`. It
+// reduces both operands to the lattice node they denote and answers ONE
+// question: does a's node sit on b's node's parent chain (ConformsTo /
+// IsAncestor)? Unlike `is`, it consults nothing else — no Behavior.Match,
+// no Unify, no predicate run, no membership predicate, no structural-shape
+// match. It traverses Value.Parent and only Value.Parent, so it is the
+// nominal/lattice subtype test:
+//
+//	5 tis Integer            → true   (Integer ≤ Integer)
+//	5 tis Number             → true   (Integer ≤ Number)
+//	5 tis String             → false  (wrong family)
+//	Integer tis Number       → true   (both literals: lattice subtyping)
+//	5 tis Any                → true   (Any is the lattice top)
+//
+// The deliberate divergence from `is` is that `tis` is TAG-ONLY: a
+// predicate / refine / membership RHS is reduced to the lattice node it
+// hangs off, so `100 tis (Integer gt 10)` and `5 tis (Integer gt 10)` are
+// BOTH true (base tag Integer ≤ Integer) where `is` runs the predicate and
+// returns true / false respectively. Likewise a bare-refine newtype tag
+// only matches up its own chain, not its base: `2 tis Pos` is false
+// because Integer is not below the minted Pos node.
+func tisHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	a, b := args[1], args[0]
+	return []Value{NewBoolean(tisNode(a).ConformsTo(tisNode(b)))}, nil
+}
+
+// tisNode returns the lattice node a value denotes for `tis`: a bare type
+// literal IS its node (a by-value copy, so &v carries the right ID / In /
+// Out / Parent — mirroring isHandler's `bNode := &b`); any other value's
+// node is its tag, v.Parent.
+func tisNode(v Value) *Type {
+	if IsBareTypeNode(v) {
+		return &v
+	}
+	return v.Parent
 }
 
 // ---- tpartial ----

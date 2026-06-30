@@ -189,6 +189,45 @@ def Pos refine Integer def x:Integer 1 x is Pos	false	supertype value is not the
 
 
 # ====================================================================
+# 5c. `tis` — the pure-lattice variant of `is` (walks only Value.Parent)
+# ====================================================================
+# `tis` reduces each operand to the lattice node it denotes and asks a
+# single ancestry question (ConformsTo / IsAncestor up Value.Parent). It
+# does NOT run a predicate / refine / membership / structural match, so it
+# is TAG-ONLY and diverges from `is` exactly where `is` consults behaviour.
+
+# Builtins: identical to `is` — both are pure lattice subtyping there.
+5 tis Integer	true	exact tag match
+5 tis Number	true	supertype: Integer ≤ Number
+5 tis Scalar	true	widens to Scalar
+5 tis String	false	wrong family
+5 tis Any	true	Any is the lattice top
+'x' tis String	true	tag match for String
+
+# Both operands type literals: lattice subtyping, asymmetric.
+Integer tis Number	true	Integer ≤ Number
+Number tis Integer	false	Number is not below Integer
+Integer tis Integer	true	identity conforms
+
+# DepScalar (predicate refine): `tis` ignores the predicate, `is` honours it.
+def Big (Integer gt 10) 5 is Big	false	is: predicate run, 5 not > 10
+def Big (Integer gt 10) 5 tis Big	true	tis: tag-only, base tag Integer ≤ Integer
+def Big (Integer gt 10) 100 tis Big	true	tis: base tag Integer ≤ Integer (predicate not run)
+
+# Bare refine (newtype): an untagged Integer is below neither — tag-only,
+# and Integer is not below the minted Pos node, so both `is` and `tis` are false.
+def Pos refine Integer 2 tis Pos	false	newtype: Integer is not below the minted Pos node
+def Pos refine Integer def y:Pos 2 y tis Pos	true	a Pos-tagged value sits on the Pos chain
+def Pos refine Integer def y:Pos 2 y tis Integer	true	Pos ≤ Integer — tag widens up the chain
+
+# Class instances: nominal — they root under Class, not Object.
+def Foo class {} (make Foo {}) tis Foo	true	instance carries the Foo tag
+def Foo class {} (make Foo {}) tis Class	true	a class instance is below Class
+def Foo class {} (make Foo {}) tis Object	false	class instances do NOT root under Object
+def Foo class {} 42 tis Foo	false	Integer's tag is not below Foo
+
+
+# ====================================================================
 # 6. :Any is universal — Any means Any, including function values
 # ====================================================================
 # The :Any parameter type must NOT be narrowed by the user-subtype

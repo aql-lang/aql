@@ -1852,6 +1852,88 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	return e.stepLiteral()
 }
 
+// stepWordRef handles the /r modifier (the ForceRef branch of stepWord):
+// resolve the name to its bound Function value as data, with no argument
+// collection or dispatch. Extracted from stepWord (mirroring stepWordUsurp)
+// so the dispatch hub stays under the cyclomatic-complexity bound; the body
+// is a verbatim move — behaviour is unchanged.
+func (e *Engine) stepWordRef(val Value, w WordInfo) error {
+	v, ok := ResolveRef(e.registry, w.Name)
+	if !ok {
+		if e.registry != nil && e.registry.Check.IsActive() {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "undefined_word",
+				Detail: "undefined word: " + w.Name,
+				Word:   w.Name,
+				Row:    val.Pos.Row,
+				Col:    val.Pos.Col,
+			})
+			placeholder := NewAtom(w.Name)
+			placeholder.Pos = val.Pos
+			placeholder.Undefined = true
+			e.tape.Set(e.pointer, placeholder)
+			return e.stepLiteral()
+		}
+		return &AqlError{
+			Code:       "undefined_word",
+			Detail:     "undefined word: " + w.Name,
+			Src:        w.Name,
+			Row:        val.Pos.Row,
+			Col:        val.Pos.Col,
+			fullSource: e.effectiveSource(),
+		}
+	}
+	// /r may reference only function words. A non-fn binding (plain
+	// value, type body) has no call/value asymmetry for /r to break,
+	// so referencing it is illegal.
+	if !IsFunctionRef(v) {
+		detail := "/r requires a function word: " + w.Name + " is bound to " + v.Parent.String()
+		if e.registry != nil && e.registry.Check.IsActive() {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "illegal_ref",
+				Detail: detail,
+				Word:   w.Name,
+				Row:    val.Pos.Row,
+				Col:    val.Pos.Col,
+			})
+			// Check mode is lenient (the illegal_ref diagnostic is advisory), but
+			// the interpreter raises illegal_ref here at runtime. Record a TERMINAL
+			// trap so a compiled program raises the byte-identical error in place
+			// instead of refusing on the downstream Undefined placeholder. Only a
+			// top-level trap is recordable; a nested /r keeps the placeholder path
+			// and refuses (falls back) as before.
+			e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
+			placeholder := NewAtom(w.Name)
+			placeholder.Pos = val.Pos
+			placeholder.Undefined = true
+			e.tape.Set(e.pointer, placeholder)
+			return e.stepLiteral()
+		}
+		return &AqlError{
+			Code:       "illegal_ref",
+			Detail:     detail,
+			Src:        w.Name,
+			Row:        val.Pos.Row,
+			Col:        val.Pos.Col,
+			fullSource: e.effectiveSource(),
+		}
+	}
+	v.Pos = val.Pos
+	e.tape.Set(e.pointer, v)
+	// (The use is recorded inside ResolveRef, covering this `/r` path, the
+	// `ref` word, and export-map reference values alike.)
+	// `/r` resolves the name to its bound value and ADVANCES the
+	// pointer, exactly like pushing a literal — it does NOT dispatch a
+	// resolved function (that is what a bare word does). The value
+	// stays a plain Function, so it still dispatches when later stepped
+	// (e.g. `get` for `pkg.fn` / `m.fn arg`, or a bare word).
+	if e.recorder != nil && isRecordableLiteral(v) {
+		e.recorder.OnPushLit(v)
+	}
+	e.pointer++
+	return nil
+}
+
 func (e *Engine) stepWord(val Value) error {
 	w, _ := AsWord(val)
 
@@ -1867,80 +1949,7 @@ func (e *Engine) stepWord(val Value) error {
 	// other piece of data — exactly the case `ref` exists to enable. /r is
 	// legal only for function words; a non-fn binding raises illegal_ref.
 	if w.ForceRef {
-		v, ok := ResolveRef(e.registry, w.Name)
-		if !ok {
-			if e.registry != nil && e.registry.Check.IsActive() {
-				e.registry.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "undefined_word",
-					Detail: "undefined word: " + w.Name,
-					Word:   w.Name,
-					Row:    val.Pos.Row,
-					Col:    val.Pos.Col,
-				})
-				placeholder := NewAtom(w.Name)
-				placeholder.Pos = val.Pos
-				placeholder.Undefined = true
-				e.tape.Set(e.pointer, placeholder)
-				return e.stepLiteral()
-			}
-			return &AqlError{
-				Code:       "undefined_word",
-				Detail:     "undefined word: " + w.Name,
-				Src:        w.Name,
-				Row:        val.Pos.Row,
-				Col:        val.Pos.Col,
-				fullSource: e.effectiveSource(),
-			}
-		}
-		// /r may reference only function words. A non-fn binding (plain
-		// value, type body) has no call/value asymmetry for /r to break,
-		// so referencing it is illegal.
-		if !IsFunctionRef(v) {
-			detail := "/r requires a function word: " + w.Name + " is bound to " + v.Parent.String()
-			if e.registry != nil && e.registry.Check.IsActive() {
-				e.registry.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "illegal_ref",
-					Detail: detail,
-					Word:   w.Name,
-					Row:    val.Pos.Row,
-					Col:    val.Pos.Col,
-				})
-				// Check mode is lenient (the illegal_ref diagnostic is advisory), but
-				// the interpreter raises illegal_ref here at runtime. Record a TERMINAL
-				// trap so a compiled program raises the byte-identical error in place
-				// instead of refusing on the downstream Undefined placeholder. Only a
-				// top-level trap is recordable; a nested /r keeps the placeholder path
-				// and refuses (falls back) as before.
-				e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
-				placeholder := NewAtom(w.Name)
-				placeholder.Pos = val.Pos
-				placeholder.Undefined = true
-				e.tape.Set(e.pointer, placeholder)
-				return e.stepLiteral()
-			}
-			return &AqlError{
-				Code:       "illegal_ref",
-				Detail:     detail,
-				Src:        w.Name,
-				Row:        val.Pos.Row,
-				Col:        val.Pos.Col,
-				fullSource: e.effectiveSource(),
-			}
-		}
-		v.Pos = val.Pos
-		e.tape.Set(e.pointer, v)
-		// (The use is recorded inside ResolveRef, covering this `/r` path, the
-		// `ref` word, and export-map reference values alike.)
-		// `/r` resolves the name to its bound value and ADVANCES the
-		// pointer, exactly like pushing a literal — it does NOT dispatch a
-		// resolved function (that is what a bare word does). The value
-		// stays a plain Function, so it still dispatches when later stepped
-		// (e.g. `get` for `pkg.fn` / `m.fn arg`, or a bare word).
-		if e.recorder != nil && isRecordableLiteral(v) {
-			e.recorder.OnPushLit(v)
-		}
-		e.pointer++
-		return nil
+		return e.stepWordRef(val, w)
 	}
 
 	// If there is a pending forward whose next slot is /q-marked
