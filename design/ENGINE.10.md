@@ -54,6 +54,13 @@ This is a fundamental property of the language. Left-to-right source
 order is NOT preserved — the function word acts as a pivot, consuming
 outward symmetrically.
 
+The four placements above are *mirror-equivalent*: they all bind the same
+sig. Forward form `f a b c` is the recommended canonical spelling (written
+order matches declared param order). The one genuinely distinct two-arg
+arrangement is the **swap form** `a f b`, which binds the forward operand
+to sig[0] and the stack operand to sig[1] (`10 sub 3` → sig[0]=3, sig[1]=10).
+See `design/SIG-ORDER-REFACTOR.10.md` for the single-convention end state.
+
 Here are some examples ([|] indicates the state of the stack: [current|future]):
 * def catter fn [[integer string] [string] [add]]
    * [1 "a"|] -> catter -> ["a1"|]
@@ -134,11 +141,15 @@ Tokens from the future stack are called forward arguments.
 A word can accept one or more type signatures. These are specified as
 lists in reverse stack order.
 
-By default all words have forward arg collection. This means they are
-eligible to collect arguments from future tokens. When prefix arguments
-are available on the stack, prefix matching is tried first; forward
-matching acts as a fallback. When invoked, to force stack only, append
-/s to the word name. To force forward only, use /f.
+By default all words have forward arg collection. This means their
+argument positions are eligible to be filled from future tokens. There is
+a single dispatch rule — not a separate "prefix" pass and "forward" pass
+with a precedence contest between them: each forward-eligible position is
+filled from the next forward token when one is present (in source order),
+and otherwise from the stack, top-down. A signature's `|` barrier marks
+where forward-eligibility ends — positions after the barrier always come
+from the stack. When invoked, to force stack only, append /s to the word
+name. To force forward only, use /f.
 
 This can also be used when defining the word, to indicate default behaviour. But this can
 always be overridden in situ.

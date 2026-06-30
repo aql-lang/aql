@@ -318,9 +318,10 @@ lower "ABC"     => 'abc'
 10 sub 3        => 7
 ```
 
-By default most words have *forward arg collection*: when prefix arguments
-are available they are tried first; forward collection is the fallback.
-Stack-manipulation words (`dup`, `swap`, `drop`) are stack-only by
+By default most words have *forward arg collection*: their argument
+positions are filled from forward tokens (in source order) and fall back
+to the stack — a single dispatch rule, not a prefix-first/forward-fallback
+contest between two paths. Stack-manipulation words (`dup`, `swap`, `drop`) are stack-only by
 default.
 
 
@@ -664,8 +665,10 @@ is a non-numeric scalar.
 
 #### `sub`
 
-Subtraction. The first argument is the minuend, the
-second is the subtrahend.
+Subtraction. Computes `args[1] - args[0]` in top-first sig order: the
+deeper operand `args[1]` is the minuend and the top operand `args[0]` is
+the subtrahend. So in both `10 3 sub` and `10 sub 3`, 10 is the minuend
+and 3 the subtrahend (`=> 7`).
 
 *Signatures:* `[integer, integer] -> [integer]`, `[decimal, decimal] -> [decimal]`
 
