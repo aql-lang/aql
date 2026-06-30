@@ -1,0 +1,61 @@
+name: Deploy playground to Pages
+
+# Rebuilds the wasm web playground (wpg → docs/index.html) and publishes
+# it to GitHub Pages on every push to main, so the live playground tracks
+# the latest engine instead of a stale committed bundle.
+#
+# Pages "Source" must be set to "GitHub Actions" in the repository
+# settings for this deploy to take effect (Settings → Pages → Build and
+# deployment → Source: GitHub Actions). Until then this workflow builds
+# and uploads the artifact but the deploy step is a no-op.
+on:
+  push:
+    branches: [main]
+  # Allow a manual re-publish from the Actions tab.
+  workflow_dispatch:
+
+# Grant the GITHUB_TOKEN the permissions the Pages deploy needs, and no more.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize deploys: a newer push supersedes an in-flight one rather than
+# racing it. Don't cancel a running deploy mid-flight (it can leave Pages
+# half-published).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: lang/go/go.mod
+
+      - name: Build wasm playground
+        # Produces docs/index.html — a single self-contained HTML file with
+        # the aql + sql.js wasm blobs base64-embedded (see wpg/Makefile).
+        run: make -C wpg wasm
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

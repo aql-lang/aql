@@ -113,8 +113,11 @@ aql describe                         # a categorised guide to every built-in wor
 ```
 
 A wasm-powered browser playground is bundled in
-[`docs/index.html`](docs/index.html); build it with
-`make -C wpg wasm`.
+[`docs/index.html`](docs/index.html); build it locally with
+`make -C wpg wasm`. On every push to `main`, the
+[`Deploy playground to Pages`](.github/workflows/pages.yml) workflow
+rebuilds it and publishes the result to GitHub Pages, so the live
+playground always tracks the latest engine.
 
 
 ## Documentation
