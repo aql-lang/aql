@@ -165,3 +165,13 @@ cmd/go/aqlbin
 /test/go/langspec/c
 /test/go/langspec/d
 /test/go/langspec/f
+
+# Generated wasm web playground. Built by wpg/Makefile (into ../docs) and
+# deployed to GitHub Pages by .github/workflows/pages.yml — the live site
+# is rebuilt from the workflow artifact on every push to main, never from
+# the repo copy. Committing it only bloated the repo and went stale.
+/docs/index.html
+/docs/aql.wasm
+/docs/wasm_exec.js
+/docs/sql-wasm.js
+/docs/sql-wasm.wasm
