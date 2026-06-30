@@ -1544,6 +1544,9 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 					op, okOut = es.resolveOperand(v)
 				}
 				if !okOut {
+					if len(rec.returns) == 0 {
+						continue
+					}
 					es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
 					return
 				}

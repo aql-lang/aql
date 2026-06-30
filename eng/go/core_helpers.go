@@ -569,7 +569,16 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				}
 				genArgs[i] = NewCarrier(a.Parent)
 			}
-			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, args, capturesCopy, bodyCopy)
+			// Key the compiled unit on the GENERALISED args, matching the body
+			// analysis (AnalyseFnBody runs on genArgs) and the FnSummaries memo. A
+			// RECURSIVE call reaches this fn with DIFFERENT concrete args (a sub-spec
+			// vs the top spec) but the SAME generalisation, so an args-keyed unit
+			// missed the in-flight unit and allocated a SECOND unit that the
+			// in-flight bail left EMPTY (the recursive `subspec run-spec` called an
+			// empty RET → sub-specs silently skipped). Keying on genArgs makes the
+			// recursive call REUSE the in-flight unit (the generalised body that
+			// handles any arg shape at run time).
+			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, genArgs, capturesCopy, bodyCopy)
 			paramNames := make([]string, len(sigParams))
 			for i, p := range sigParams {
 				paramNames[i] = p.Name
@@ -603,11 +612,17 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.SetUnitParamTypes(fnUnit, pts, pats)
 			}
 			if finishFn != nil {
-				// A fresh compilation must RECORD the body — drop any
-				// summary cached by a suspended analysis (the install-
-				// time synthetic example eval) so AnalyseFnBody re-runs
-				// under the armed capture, with the generalised args.
-				delete(r.Check.FnSummaries, key)
+				// A fresh compilation must RECORD the body into THIS unit — drop any
+				// summary cached by a prior analysis (the install-time synthetic
+				// example eval, or a DISCARDED closure PROBE compile that shares
+				// r.Check.FnSummaries) so AnalyseFnBody re-runs and re-records the
+				// body's events instead of returning the cached residual with an
+				// empty fragment. The cache (and the AnalyseFnBody call below) is
+				// keyed on genArgs, NOT args — deleting the args key left the
+				// genArgs-keyed probe summary live, so a fn dispatched under a
+				// recursive closure probe (aql:test run-case) compiled to an EMPTY
+				// stub unit in the real pass (silent 0-cases miscompile).
+				delete(r.Check.FnSummaries, FnAnalysisKey(r.AnalysisScopeID(), nameCopy, genArgs, capturesCopy, bodyCopy))
 				stkGen := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, genArgs, capturesCopy, declaredReturns)
 				finishFn(stkGen)
 			}

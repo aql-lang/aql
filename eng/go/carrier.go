@@ -1133,7 +1133,15 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	if !sigOK {
 		return false
 	}
-	return es.RecordPolyCall(word, args, outs, pos, ownerReg)
+	// Persist matchReg (NOT ownerReg): callPoly re-matches over the PolyRef's
+	// registry, and for a module sub-registry native (aql:test `test-record`)
+	// dispatched inside a module-fn body, ownerReg arrives nil (native dispatch
+	// sets no match.Reg) while matchReg is the sub-registry that actually holds the
+	// word — see the comment above. Passing ownerReg left pr.Reg nil, so callPoly
+	// looked the word up in the main registry, found 0 sigs, and deferred. Safe for
+	// core words too: poly only ever records BUILTINS (guarded above), which exist
+	// identically in every registry instance, so matchReg.Lookup always resolves.
+	return es.RecordPolyCall(word, args, outs, pos, matchReg)
 }
 
 // The code-body higher-order words that may compile as Stage-5 interpreter
