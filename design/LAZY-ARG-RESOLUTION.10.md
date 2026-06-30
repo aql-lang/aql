@@ -9,6 +9,13 @@ current engine (eng/go/engine.go) was provided separately to the team.
 
 # AQL Proposal: Structure-First, Lazy Argument Resolution for Dispatch
 
+> **⚠️ LEGACY / HISTORICAL — proposal accepted and implemented.**
+> The structure-first, lazy model proposed here is now the *shipped*
+> behaviour (`resolveForwardArgs`; see `design/FORWARD-COLLECTION-PHASES.10.md`,
+> Phase 1, which cites this doc). The "current behaviour" transcripts and
+> critique below describe the OLD **eager-probe** dispatcher of build
+> `db828ec` and no longer reflect the engine. Retained for project history.
+
 **Status:** Draft / RFC
 **Target:** `aql-lang/aql` interpreter (dispatch / overload resolution)
 **Provenance:** surfaced while upgrading the `bloom-filter` module to

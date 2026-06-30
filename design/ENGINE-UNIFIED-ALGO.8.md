@@ -1,5 +1,19 @@
 # Unified Core Engine Algorithm (Proposal)
 
+> **⚠️ LEGACY / HISTORICAL — retained for project history.**
+> This is a pre-unification *proposal*. Its "current engine behavior" review
+> describes a multi-path dispatcher that no longer exists, and several named
+> entities here were never the shipped design or have since been removed:
+> `MatchSignature`/`bestSigForForward`/`shouldResolveForwardEarly`/
+> `couldProduceType` as separate scoring paths, the feature-flagged planner,
+> and — notably — the claim below that `flexibleMatch` "supports argument
+> reordering (permutations for small arity)": **the shipped matcher never
+> permutes arguments** (`eng/go/signature.go`: `FlexibleMatch` — "Arguments
+> are never permuted"). What actually shipped is the single
+> `BarrierPos`-driven `matchSignature`. For the current model see
+> `eng/go/CLAUDE.md` ("Signature Ordering"), `design/SIG-ORDER-REFACTOR.10.md`,
+> and `design/FORWARD-COLLECTION-PHASES.10.md`.
+
 This note reviews the current engine behavior and proposes a single unified algorithm
 for signature-driven prefix/forward/infix execution with precedence.
 

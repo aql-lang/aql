@@ -1,5 +1,17 @@
 # Signature Matching Algorithm — Pseudocode
 
+> **⚠️ LEGACY / HISTORICAL — retained for project history.**
+> This pseudocode describes the **pre-unification, multi-path** dispatcher:
+> separate prefix/stack vs forward match modes, a `MatchSignatureReversed`
+> pass, and two competing planners behind a `Registry.SequentialPlanner`
+> feature flag. **None of those functions or modes exist in the current
+> engine**, which uses a single `matchSignature` + `resolveForwardArgs`
+> driven by `BarrierPos`. The scoring/specificity math here is still
+> illustrative, but the dispatch architecture it sits in is obsolete. For
+> the current model see `eng/go/CLAUDE.md` ("Signature Ordering"),
+> `design/SIG-ORDER-REFACTOR.10.md`, and
+> `design/FORWARD-COLLECTION-PHASES.10.md`.
+
 This document describes the AQL signature matching algorithm used to dispatch
 function calls to the correct overload based on the types of values on the
 stack.
