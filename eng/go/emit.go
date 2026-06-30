@@ -1544,7 +1544,16 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 					op, okOut = es.resolveOperand(v)
 				}
 				if !okOut {
-					if len(rec.returns) == 0 {
+					// A NO-FIXED-CONTRACT unit (declared `[]` → rec.returns empty: a
+					// 0-return fn / a side-effect describe-or-test grouping body) drops
+					// a no-provenance residual (the Any an in-flight recursion bail or a
+					// BodyOut-0 word leaves) — the VM produces nothing for it, so it RETs
+					// its real residual. But a TOP-TAKING closure (each/fold/scan, which
+					// is emptyBodyOK so rec.returns is ALSO empty) genuinely NEEDS its
+					// per-element result — dropping it makes the body "produce no result"
+					// (each_error) where the interpreter succeeds. Exclude takesTop: such
+					// a closure REFUSES on a no-provenance residual and falls back, sound.
+					if len(rec.returns) == 0 && !rec.takesTop {
 						continue
 					}
 					es.MarkUncompilable("fn " + name + ": body result of unknown provenance")
