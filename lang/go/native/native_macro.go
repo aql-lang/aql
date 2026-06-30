@@ -552,6 +552,20 @@ func MarkParseKindDeferred(r *Registry, kind string) {
 	_ = r.Capabilities.Set(capParseDeferredKinds, map[string]bool{kind: true})
 }
 
+// ResetParseDeferredKinds clears the deferred parse-kind set so it is scoped to
+// a single check pass. The set lives in the persistent Capabilities store, so a
+// reused AQL instance would otherwise carry a prior pass's `Parse.register`
+// kinds into a later Check: `parse <kind>` for that kind would silently degrade
+// to a dynamic value (no parse_unknown_lang) even though the kind is no longer
+// registered. Called at the start of every check pass (see lang.(*AQL).Check /
+// CompileCheck) so deferral is per-check-run, not per-instance lifetime.
+func ResetParseDeferredKinds(r *Registry) {
+	if r == nil || r.Capabilities == nil {
+		return
+	}
+	_, _ = r.Capabilities.Delete(capParseDeferredKinds)
+}
+
 // parseKindDeferred reports whether `kind` was marked as a runtime-registered
 // Parse.register kind (see MarkParseKindDeferred).
 func parseKindDeferred(r *Registry, kind string) bool {

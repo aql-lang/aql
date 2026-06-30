@@ -6860,8 +6860,22 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// sub-probe (the over-suppression that dropping it inside the suspend branch
 	// caused), while a compile pass never adds it (Finalize surfaces the
 	// MarkUncompilable reason; a diagnostic would only mask it as the generic
-	// "check diagnostics", aql.go:297).
-	if !e.registry.Check.Compiling && bestMatch < 0 {
+	// "check diagnostics", aql.go:297). Do NOT additionally gate on
+	// `bestMatch >= 0`: this fall-through is reached only when matchSignature
+	// already FAILED to commit, so a positive best-fit score here is a
+	// best-effort guess (a bare type-literal or wildcard operand that
+	// sigArgMatches accepts but the runtime rejects — `class Map`, `get 'a'
+	// Map`, `add/3 2 3`, `fold [add] {}` …). Suppressing the diagnostic when a
+	// guess exists is UNSOUND: it dropped 16 genuine error rows the interpreter
+	// raises on (TestCheckAccuracyRatchet coverage 208→192). A positive best-fit
+	// here does NOT imply the dispatch matches at runtime — matchSignature
+	// already failed; the recovery's `bestMatch` is a best-effort score that can
+	// "fit" a bare type literal (`class Map`), a wrong-typed value, or a
+	// dynamic operand whose runtime value still misses the sole sig (the
+	// recursive `f` whose `next` holds a List where the sig wants an Integer —
+	// which `signature_error`s at run time, NOT a false positive). The
+	// `!Compiling` guard alone is the correct condition.
+	if !e.registry.Check.Compiling {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
 			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
