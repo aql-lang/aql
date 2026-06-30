@@ -159,9 +159,18 @@ func ComputeCaptures(r *Registry, sig *FnSig) []CapturedBinding {
 			paramNames[p.Name] = true
 		}
 	}
+	// Names bound by a `def NAME …` (or `var [[NAME …] …]`) INSIDE this body are
+	// the body's OWN locals — the closure-body compile promotes them to frame
+	// slots, so they are never captures, even though an analysis sub-engine run of
+	// the body leaves them bound in r ABOVE the enclosing-fn baseline (which would
+	// otherwise make the depth check below grab them). This is the each/closure
+	// body-local-value-def leaf: an each body `[def j (cur get 0) j]` must capture
+	// only `cur` (the genuine enclosing binding), not its own `j`.
+	bodyLocals := map[string]bool{}
+	collectBodyLocalDefs(sig.Body, bodyLocals)
 	seen := map[string]Value{}
 	WalkBodyWords(sig.Body, func(w WordInfo, _ Value) {
-		if w.Name == "" || paramNames[w.Name] {
+		if w.Name == "" || paramNames[w.Name] || bodyLocals[w.Name] {
 			return
 		}
 		if _, dup := seen[w.Name]; dup {
@@ -189,6 +198,61 @@ func ComputeCaptures(r *Registry, sig *FnSig) []CapturedBinding {
 		out[i] = CapturedBinding{Name: n, Value: seen[n]}
 	}
 	return out
+}
+
+// collectBodyLocalDefs gathers the names a body binds for ITSELF — `def NAME …`
+// at any non-closure depth, plus `var [[NAME …] …]` temporaries — into locals.
+// These are frame-locals of the body being analysed, NOT captures (see
+// ComputeCaptures). It recurses into list / paren tokens but NOT into a nested
+// FnDefInfo (an inner closure owns its own locals + capture analysis), mirroring
+// walkBodyValue's descent rules.
+func collectBodyLocalDefs(body []Value, locals map[string]bool) {
+	for i := 0; i < len(body); i++ {
+		v := body[i]
+		if v.Quoted {
+			continue
+		}
+		if _, isFn := v.Data.(FnDefInfo); isFn {
+			continue // nested closure: its defs are its own
+		}
+		if w, err := AsWord(v); err == nil {
+			switch w.Name {
+			case "def":
+				// def NAME … — NAME is the next bare-word token.
+				if i+1 < len(body) {
+					if nw, nerr := AsWord(body[i+1]); nerr == nil && nw.Name != "" {
+						locals[nw.Name] = true
+					}
+				}
+			case "var":
+				// var [[NAME …] body] — the decl list's first element holds the
+				// temporary names; they desugar to `def NAME` at run time.
+				if i+1 < len(body) && body[i+1].Parent.Equal(TList) && body[i+1].Data != nil {
+					if outer, lerr := AsList(body[i+1]); lerr == nil {
+						elems := outer.Slice()
+						if len(elems) > 0 && elems[0].Parent.Equal(TList) && elems[0].Data != nil {
+							if decls, derr := AsList(elems[0]); derr == nil {
+								for _, d := range decls.Slice() {
+									if dw, dwe := AsWord(d); dwe == nil && dw.Name != "" {
+										locals[dw.Name] = true
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		if v.Parent.Equal(TList) && v.Data != nil {
+			if lst, lerr := AsList(v); lerr == nil {
+				collectBodyLocalDefs(lst.Slice(), locals)
+			}
+		} else if IsParenExpr(v) {
+			if toks, perr := AsParenExpr(v); perr == nil {
+				collectBodyLocalDefs(toks, locals)
+			}
+		}
+	}
 }
 
 // MergeCaptures combines per-sig capture lists into a single

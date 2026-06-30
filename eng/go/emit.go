@@ -47,6 +47,7 @@ const (
 	wordMakeList = "[…]"
 	wordMakeMap  = "{…}"
 	wordInterp   = "`…`"
+	wordDynApply = "(…fn)"
 )
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -143,6 +144,7 @@ type emitCall struct {
 	poly       bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
 	polyReg    *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
 	makeList   bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	dynApply   int       // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
 	makeMap    bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys    []string
 	mapImpl    bool // the source map's Implicit flag
@@ -356,6 +358,12 @@ type EmitState struct {
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
 	producedBy map[string]producer // value ID → producing (event seq, result idx)
+	// trailingApplies maps a Function VALUE's ID → the arg count of a paren-bounded
+	// TRAILING fn-value apply (`(prev key comp)`), registered at the paren-collapse
+	// boundary (registerTrailingApply) where the paren-group size is known. The body
+	// reconciliation reads it back to lower the apply to OpCallDynTrailTop — the
+	// flattened residual cannot otherwise recover the apply's arity.
+	trailingApplies map[string]int
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -382,6 +390,17 @@ type EmitState struct {
 type emitUnit struct {
 	localByID map[string]int
 	numLocals int
+	// capID marks the value IDs that are this unit's CAPTURES (enclosing-scope
+	// values bound into trailing slots). A capture's value may ALSO carry a
+	// producedBy entry from the ENCLOSING unit (a computed `def a (h add 1)`
+	// snapshotted into the closure) — that event lives in the parent and is
+	// unreachable here, so the body must resolve the reference to its own
+	// capture SLOT, not the parent event. resolveOperand consults this to
+	// override its usual events-first precedence for captured IDs. Pairs with
+	// the parent-side promotion of the captured computed def to a frame local
+	// (forEachOperand / promoteOperand closureCaps handling), which makes the
+	// closureCaps operand a re-pushable LOCAL so the captured VALUE is correct.
+	capID map[string]bool
 }
 
 // fnUnitRec is one compiled fn body awaiting (or holding) its
@@ -396,13 +415,15 @@ type emitUnit struct {
 // OUT of tail marking, mirroring the interpreter's HasGen exclusion
 // from frame elision (plan Stage 4).
 type fnUnitRec struct {
-	name    string
-	nParams int
-	caps    []CapturedBinding
-	generic bool
-	returns []*Type  // declared return types — enforced at the VM's RET
-	locals  []string // slot→name table (params then captures); debug only
-	frag    *EmitFragment
+	name          string
+	nParams       int
+	caps          []CapturedBinding
+	generic       bool
+	returns       []*Type  // declared return types — enforced at the VM's RET
+	paramTypes    []*Type  // declared PARAM types — enforced at the VM's CALL_USER entry
+	paramPatterns []*Value // per-param structural/value patterns — also enforced at CALL_USER
+	locals        []string // slot→name table (params then captures); debug only
+	frag          *EmitFragment
 	// variadic marks a VARIADIC-RETURNING fn: its body residual leaves a
 	// runtime-variable count (a `[]`-declared recursive accumulator, an
 	// `if c [] [a b]`). A call to it marks the call result variadic (lowerUserCall)
@@ -414,10 +435,17 @@ type fnUnitRec struct {
 	// OR a diverging body (every path tail-calls) — fragDiverges(frag)
 	// distinguishes them (a diverging body emits no RET; a 0-result body
 	// emits a bare RET).
-	outOps   []emitOperand
-	numLoc   int
-	pos      SrcPos
-	finished bool
+	outOps []emitOperand
+	// dynTrailArity > 0 marks a body whose ENTIRE residual is a paren-bounded
+	// TRAILING fn-value apply (`(prev key comp)`): outOps are [args…, fn] (fn on
+	// top) and the unit lowering emits OpCallDynTrailTop(dynTrailArity) after seating
+	// them, collapsing [args, fn] to the one applied value before the RET. The arity
+	// is captured at the paren-collapse boundary (registerTrailingApply) where the
+	// group size is known; the flattened residual cannot recover it.
+	dynTrailArity int
+	numLoc        int
+	pos           SrcPos
+	finished      bool
 	// inShape is the closure input convention recorded for a closure body unit
 	// (ClosureInValue by default; ClosureInKeyVal for a map-iteration lambda).
 	// Copied into CompiledFn.InShape at lowering. Zero (value) for user fns.
@@ -464,6 +492,34 @@ func NewEmitState() *EmitState {
 	}
 }
 
+// forkForProbe returns a throwaway recording state for compiling a closure body
+// speculatively (recordClosureDispatch's probe), seeded so a RECURSIVE call
+// inside the body resolves to the enclosing in-progress unit. The closure body's
+// emission (events / code / producedBy / consts) is FRESH — a refusal discards it
+// without touching the real program. But the fn-unit resolution tables
+// (fnUnits / fnRecs / units) are COPIED from the real state: a self-recursive call
+// (`… msd-go` inside an `each` body) is then a fnUnits HIT against the enclosing
+// fn's reserved unit — the same recursion guard the in-state non-closure path
+// relies on — instead of a MISS that re-compiles the enclosing fn in the
+// throwaway, where it re-hits its own closure and never registers its residual
+// ("body result of unknown provenance"). The slices get fresh backing arrays so
+// the probe's newly-appended units never write into the real state; the shared
+// *fnUnitRec / *emitUnit pointers are only READ on the hit path (StartFnCompile
+// returns finish==nil, so no re-analysis mutates them).
+func (es *EmitState) forkForProbe() *EmitState {
+	p := NewEmitState()
+	p.reg = es.reg
+	p.fnUnits = make(map[string]int, len(es.fnUnits))
+	for k, v := range es.fnUnits {
+		p.fnUnits[k] = v
+	}
+	p.fnRecs = make([]*fnUnitRec, len(es.fnRecs))
+	copy(p.fnRecs, es.fnRecs)
+	p.units = make([]*emitUnit, len(es.units))
+	copy(p.units, es.units)
+	return p
+}
+
 func (es *EmitState) active() bool {
 	return es != nil && es.Compilable && es.suspended == 0
 }
@@ -474,6 +530,30 @@ func (es *EmitState) active() bool {
 // while recording is live (the lowering tracks it); a plain or
 // uncompilable check must net 0, like the runtime.
 func (es *EmitState) Active() bool { return es.active() }
+
+// RegisterTrailingApply records that the Function VALUE `fnID` is the trailing
+// fn-value of a paren-bounded apply over `arity` preceding args (`(prev key comp)`),
+// captured at the paren-collapse boundary where the group size is known. The body
+// reconciliation reads it back (TrailingApplyArity) to lower the apply to
+// OpCallDynTrailTop — the flattened residual cannot otherwise recover the arity.
+func (es *EmitState) RegisterTrailingApply(fnID string, arity int) {
+	if es == nil || fnID == "" || arity < 1 {
+		return
+	}
+	if es.trailingApplies == nil {
+		es.trailingApplies = map[string]int{}
+	}
+	es.trailingApplies[fnID] = arity
+}
+
+// TrailingApplyArity returns the registered arg count for a paren-bounded trailing
+// apply whose fn value is `fnID`, or 0 if none registered.
+func (es *EmitState) TrailingApplyArity(fnID string) int {
+	if es == nil || es.trailingApplies == nil {
+		return 0
+	}
+	return es.trailingApplies[fnID]
+}
 
 // MarkUncompilable latches the program uncompilable, keeping the
 // FIRST reason (later marks are consequences of the first).
@@ -624,6 +704,21 @@ func (es *EmitState) MarkValueDef(v Value) {
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RememberOriginal saved).
 func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
+	// A CAPTURE of the CURRENT unit overrides events-first: the captured value
+	// may carry a producedBy entry from the ENCLOSING unit (a computed
+	// `def a (h add 1)` snapshotted into a closure), but that event lives in the
+	// parent frame and is unreachable from inside the body — the reference must
+	// resolve to this unit's own capture SLOT. Without this the each/scan/…$body
+	// reference resolved to the parent event and refused "branch reads enclosing
+	// computation". A param capture has no producedBy entry, so this only changes
+	// the computed-capture case. (The captured VALUE is carried correctly by the
+	// parent-side promotion of the computed def — see forEachOperand /
+	// promoteOperand closureCaps handling.)
+	if cur := es.units[len(es.units)-1]; cur != nil && cur.capID[v.ID] {
+		if slot, ok := cur.localByID[v.ID]; ok {
+			return localOperand(slot), true
+		}
+	}
 	// Events first, locals second: a join can REUSE a local's value ID
 	// for its result (JoinCarriers keeps the then-side ID when types
 	// agree), and the event is then the value's stack-discipline truth
@@ -649,7 +744,16 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		return typeOperand(es.internType(v)), true
 	}
 	lit, ok := es.materialise(v)
-	if !ok || !isInertConst(lit) {
+	if !ok {
+		return emitOperand{}, false
+	}
+	// At MODULE scope a NoEvalArgs body that is inert except for InterpStrings
+	// (interpBodyInert) bakes as code-as-data and is re-interpreted against the
+	// registry — sound where there is no enclosing VM frame to shadow (see
+	// noEvalBodiesInertScoped). isInertConst stays strict so this admission never
+	// reaches a compiled fn frame: there the body refuses at the Stage-2 gate
+	// before resolveOperand, so the operand never gets here.
+	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
 		return emitOperand{}, false
 	}
 	return constOperand(es.intern(lit)), true
@@ -1396,7 +1500,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}}
 	es.units = append(es.units, u)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
@@ -1407,6 +1511,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	// ID. Registered after params, locals nParams…nParams+nCaps-1.
 	for _, cb := range captures {
 		es.RegisterLocal(cb.Value.ID)
+		u.capID[cb.Value.ID] = true
 	}
 	resume := es.beginFragment()
 	es.fnArm = true
@@ -1444,6 +1549,29 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 				}
 				ops = append(ops, op)
 			}
+			// A paren-bounded TRAILING fn-value apply as the ENTIRE body residual
+			// (`(prev key comp)` → residual [prev, key, comp], the fn on top with its
+			// args below, registered at the paren-collapse boundary with its arity):
+			// lower it to OpCallDynTrailTop rather than refusing/miscompiling. outOps
+			// stay the full [args…, fn]; the unit lowering applies them to one value
+			// before the RET. The args must be plain (non-fn) operands the apply
+			// consumes — a nested unapplied fn falls through to refuse below.
+			dynTrail := 0
+			if len(bodyStk) >= 2 {
+				top := bodyStk[len(bodyStk)-1]
+				if a := es.TrailingApplyArity(top.ID); a > 0 && a == len(bodyStk)-1 {
+					argsOK := true
+					for _, v := range bodyStk[:len(bodyStk)-1] {
+						if isFnValueResidual(v) {
+							argsOK = false
+							break
+						}
+					}
+					if argsOK {
+						dynTrail = a
+					}
+				}
+			}
 			// A DECLARED fn must leave exactly len(returns) RUNTIME values; a
 			// different count (measured over real operands, phantom guards
 			// excluded) is a return-COUNT mismatch. For a genuine USER fn that is
@@ -1457,9 +1585,48 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// islands, letting the interpreter raise the matching error. An
 			// UNDECLARED fn (an anonymous lambda whose Returns were nilled, or a
 			// 0-return fn) is NOT count-checked: its residual is taken as-is.
-			if rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+			if dynTrail == 0 && rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
 				es.MarkUncompilable("closure " + name + ": body value count differs from declared returns")
 				return
+			}
+			// A USER fn whose residual COUNT mismatches AND whose residual carries a
+			// Function/FnDef VALUE is an UNAPPLIED fn-value-call the compiler missed —
+			// `(fnv 100)` pushes [fnv, 100] without applying, where the interpreter
+			// applies fnv → ONE value. The count-mismatch-compiles path above assumes
+			// the interpreter ALSO mismatches (and the VM RET raises the matching
+			// type_error), but here it APPLIES and succeeds. resolveDynamicApply runs
+			// only for the MAIN program residual, not fn bodies (cluster E of the broad
+			// hunt), so a fn-body fn-value apply is never lowered. Refuse → fall back. (A
+			// GENUINE count mismatch that happens to carry a fn value still errors in
+			// both engines, so the fallback is sound either way.)
+			if dynTrail == 0 && !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
+				for _, v := range bodyStk {
+					if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+						es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
+						return
+					}
+				}
+			}
+			// A CLOSURE body whose residual carries an UNAPPLIED fn-value — a captured/
+			// param comparator applied as `(a b comp)` leaves the residual [a, b, comp]
+			// with the fn VALUE on top — must REFUSE, never be trimmed to that fn below:
+			// the driving handler (BodyResultTop) would then map to the UNAPPLIED comp
+			// instead of its applied result — the off-corpus comparator-each MISCOMPILE
+			// the differential cannot see (`[1 2] each [(x x comp)]` → interp [0,0] vs
+			// compiled [fn,fn]). This mirrors resolveDynamicApply's main-residual
+			// fn-carrier / fn-precedes-args refusals (the fn-body path refuses the same
+			// shape via the !rec.closure unapplied-fn-value check above). A SOLE inert
+			// fn-reference body (`each [cmp/r]`, mapping every element to the reference)
+			// is a CONCRETE const — not a carrier and not preceded by args — so it still
+			// compiles; only an unapplied dynamic apply refuses. (Lowering the trailing
+			// apply via OpCallDynamicTrailing in a closure body is the follow-on feature.)
+			if dynTrail == 0 && rec.closure {
+				for i, v := range bodyStk {
+					if isFnTypedCarrier(v) || (isFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
+						es.MarkUncompilable("closure " + name + ": unapplied fn-value in body residual (dynamic apply not lowered)")
+						return
+					}
+				}
 			}
 			// A TOP-TAKING closure's driving handler reads only the top of the body
 			// residual (each / fold / scan / filter — CallableSpec.BodyResultTop), so
@@ -1469,9 +1636,10 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// the residual [inert-input, computed-result] refuses at the RET (an event
 			// above an inert, "result above a literal"), even though the handler only
 			// ever reads the top.
-			if rec.takesTop && len(ops) > 1 {
+			if dynTrail == 0 && rec.takesTop && len(ops) > 1 {
 				ops = trimToTopResult(ops)
 			}
+			rec.dynTrailArity = dynTrail
 			rec.outOps = ops
 			// VARIADIC-RETURNING fn: the body residual's defining (top) event leaves
 			// a runtime-variable count (a variadic branch / loop, or a call to an
@@ -1557,6 +1725,18 @@ func trimToTopResult(ops []emitOperand) []emitOperand {
 // slots and re-flow unchanged. A capture unreachable from the call
 // site marks the program uncompilable — the interpreter keeps owning
 // that shape.
+// SetUnitParamTypes records the declared param types for a compiled fn unit, so
+// the VM enforces them at CALL_USER entry (the gradual-Any param-guard, mirroring
+// the RET return-check). Set from the matched sig at the dispatch site, where the
+// param types are known; a memoised unit is harmlessly re-set with the same types.
+func (es *EmitState) SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value) {
+	if unit < 0 || unit >= len(es.fnRecs) {
+		return
+	}
+	es.fnRecs[unit].paramTypes = paramTypes
+	es.fnRecs[unit].paramPatterns = paramPatterns
+}
+
 func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos) {
 	if !es.active() || unit < 0 {
 		return
@@ -1594,6 +1774,47 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos Sr
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}
+}
+
+// RecordDynApply records a paren-bounded TRAILING fn-value apply (`(a b comp)`):
+// the runtime fn VALUE `fn` applied to `args` (in source order — args[0] pushed
+// first / deepest), netting the single result `out`. Recorded as an EVENT so the
+// apply seats like any computed result — a def-local (`def c (a b comp)`), an `if`
+// operand, a list member, OR the body's trailing residual — not ONLY the body
+// residual (the old register-at-collapse / lower-at-reconciliation path handled
+// just that). Returns false (sound interpreter fallback) when any operand is
+// unresolvable or an ARG is itself an unapplied fn value (a nested apply the flat
+// layout cannot order). ops are sig-order (ops[0] = top): the fn on TOP, then its
+// args below it deepest-last — exactly the stack OpCallDynTrailTop reads (it
+// reverses the arg window into forward order to match the interpreter's paren
+// auto-dispatch, where the fn's first param is the arg just below it).
+func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	if !isFnValueResidual(fn) { // fn must be a genuine fn-value residual
+		return false
+	}
+	fnOp, ok := es.resolveOperand(fn)
+	if !ok {
+		return false
+	}
+	ops := make([]emitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := len(args) - 1; i >= 0; i-- {
+		if isFnValueResidual(args[i]) {
+			return false
+		}
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops = append(ops, op)
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args)}})
+	es.setProduced(out, seq)
+	return true
 }
 
 // RecordLoop records a counted/range `for`: start/end/step operand
@@ -1655,10 +1876,21 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	seq := es.appendEvent(emitEvent{kind: evLoop, loop: lp})
 	es.SiteCounts[SiteMono]++
 	es.setProduced(out, seq)
-	// A loop leaves a runtime-variable count (one per-iteration value, N
-	// unknown at compile time) — variadic, like lowerLoop marks lw.variadic.
 	f := es.eventInfo[seq]
-	f.variadicResult = true
+	if lp.hasBodyOut {
+		// A value-producing loop leaves a runtime-variable count (one per-iteration
+		// value, N unknown at compile time) — variadic, like lowerLoop marks
+		// lw.variadic. Only the program residual absorbs it.
+		f.variadicResult = true
+	} else {
+		// A SIDE-EFFECT loop (body nets 0 per iteration — `for n [acc set …]`)
+		// leaves ZERO runtime values, deterministically: a zero-output event, NOT a
+		// variadic result. Marking it zeroOut lets a fn/closure body that ends in
+		// (or discards, via `def _ (for …)`) such a loop drop its result and RET
+		// cleanly, instead of refusing "body leaves extra values"/"variadic loop
+		// value". The loop's side effects are emitted events and still run.
+		f.zeroOut = true
+	}
 	es.eventInfo[seq] = f
 }
 
@@ -1949,7 +2181,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !noEvalBodiesInert(sig, args)):
+	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !es.noEvalBodiesInertScoped(sig, args)):
 		// A code-body word is refused when:
 		//   - its body is not inert data; OR
 		//   - it SPLICES the body onto the tape (CompileExecutesBody, e.g. `var`):
@@ -2183,17 +2415,17 @@ func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, po
 		if IsBareTypeNode(ins[i]) {
 			return false
 		}
-		if w, isEvent := es.producerWord(ins[i].ID); isEvent && !r.IsBuiltinWord(w) {
-			// A MODULE / user word may be stateful (`list-of [Rand.int …] N` — the
-			// generator advances a seed), so freezing one assembly of its check-mode
-			// result would replicate it instead of re-running per use. Those refuse.
-			// `make` is NO LONGER excluded: an OpMakeList of make EVENTS rebuilds
-			// fresh instances per run (sound, like OpMakeMap), so an instance list —
-			// `def xs [(make Box …) (make Box …)]`, typed or not — assembles natively
-			// and feeds each/fold/get rather than refusing on the const-bake path
-			// (where isInertConst rejects the mutable members).
-			return false
-		}
+		// A non-builtin (user-fn / module) producing word is NOT refused: the element
+		// resolves to its recorded EVENT (CALL_USER / CALL_NATIVE_POLY / make), and
+		// the OpMakeList assembly RE-RUNS that event at runtime — it never freezes the
+		// check-mode result. So a list of user-fn / module results (`def specs
+		// [(Test.test …) …]`, the voxgig spec-list pattern) assembles faithfully,
+		// exactly as `make` instances and builtin results already do. A genuinely
+		// stateful generator (`list-of [Rand.int] N`) is a NoEval CODE BODY run per
+		// iteration, not a list-literal element, so it never reaches recordMakeListInner.
+		// resolveOperand only ever yields a re-running event or an inert const here
+		// (never a frozen module result), so the assembly stays sound; gated by the
+		// bytecode differential + the voxgig --compile==interpret sweep.
 		op, ok := es.resolveOperand(ins[i])
 		if !ok {
 			return false
@@ -2379,6 +2611,111 @@ func noEvalBodiesInert(sig *Signature, args []Value) bool {
 		}
 	}
 	return true
+}
+
+// noEvalBodiesInertScoped is noEvalBodiesInert plus a MODULE-SCOPE allowance for
+// InterpString-bearing bodies. A re-interpreting NoEvalArgs handler (the
+// property harness's test-check-prop, Callable==nil) bakes its body as data and
+// re-runs it in a sub-engine against the registry; an InterpString `${name}`
+// there resolves against the registry exactly as the interpreter does — SOUND
+// only when there is no enclosing compiled fn frame (len(es.units)==1). Inside a
+// fn frame a `${frame-local}` would resolve against the registry instead of the
+// VM slot and diverge (`def f fn [[pfx] … check-prop … `${pfx}` …]`), so there
+// the strict isInertConst path keeps the body refused → sound interpreter
+// fallback. (The same fn-frame hazard already exists for a bare-Word/paren
+// member; this widening deliberately does NOT extend it — it admits InterpString
+// only where every name resolves through the registry.)
+func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool {
+	moduleScope := len(es.units) == 1
+	for i := range args {
+		if !sig.NoEvalArgs[i] {
+			continue
+		}
+		inert := isInertConst(args[i])
+		if !inert && moduleScope {
+			inert = interpBodyInert(args[i])
+		}
+		if !inert {
+			return false
+		}
+		if bodyHasSentinel(args[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// interpBodyInert is isInertConst widened so a NESTED InterpString counts as
+// inert. Its TOP-LEVEL semantics match isInertConst EXACTLY — a standalone
+// ParenExpr / Word / InterpString is NOT bakeable data (a standalone ParenExpr
+// is deferred code; baking `(loopy 1)` would wrongly let a nested too-deep
+// macroexpand compile) — so only a List/Map at the top recurses through the
+// InterpString-admitting member check; everything else defers to isInertConst.
+// Only noEvalBodiesInertScoped (and resolveOperand) call this, and only at
+// MODULE scope — an InterpString must NEVER bake inside a compiled fn frame.
+func interpBodyInert(v Value) bool {
+	switch v.Data.(type) {
+	case ListPayload, MapPayload:
+		return interpMemberInert(v)
+	default:
+		return isInertConst(v)
+	}
+}
+
+// interpMemberInert is isInertConstMember widened to admit an InterpString whose
+// hole expressions are themselves inert members — immutable code-as-data the VM
+// pushes verbatim and a re-interpreting handler runs against the registry.
+// Container members (List/Map/ParenExpr) recurse HERE so a nested InterpString
+// at any depth is reached; every other leaf defers to the strict
+// isInertConstMember so leaf soundness (mutable-instance exclusion, canonical
+// type pointers) stays single-sourced.
+func interpMemberInert(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return false
+	}
+	if IsInterpString(v) {
+		parts, err := AsInterpString(v)
+		if err != nil {
+			return false
+		}
+		for _, p := range parts {
+			for _, tk := range p.Expr {
+				if !interpMemberInert(tk) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if !interpMemberInert(e) {
+				return false
+			}
+		}
+		return true
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !interpMemberInert(mv) {
+				return false
+			}
+		}
+		return true
+	case ParenExprPayload:
+		for _, tk := range d.Toks {
+			if !interpMemberInert(tk) {
+				return false
+			}
+		}
+		return true
+	default:
+		return isInertConstMember(v)
+	}
 }
 
 // execBodyRefsNames reports whether a body-EXECUTING word's (sig.Callable != nil)
@@ -2689,17 +3026,21 @@ func isInertConst(v Value) bool {
 		if d.Registry == nil {
 			return true
 		}
-		// A module-export TRIVIAL-DELEGATION wrapper (`MathUtil.sqrt`): every own
-		// sig is a `[Word(inner)]` pass-through, so it holds no closure state to
-		// snapshot. The sub-registry pointer it carries is the SAME object the
-		// compiled run shares (RunProgram runs on the check-pass registry), and
-		// the VM applies it faithfully at run time via callDynamic →
-		// tryNativeFnApply (which re-resolves the inner native in that registry).
-		// So it bakes as DATA — a bare residual (`MathUtil.sqrt`), a branch-arm
-		// operand (`if c [99] MathUtil.sqrt`), or a container member. A module fn
-		// with a REAL AQL body is NOT a delegation wrapper and stays refused (its
-		// body would need CallAQL in the sub-registry, which the VM cannot do).
-		return isDelegationFnDef(d)
+		// A module-export fn value bakes as DATA — a bare residual (`MathUtil.sqrt`),
+		// a branch-arm operand, a container member, OR a comparator passed to another
+		// fn (`xs M.sort M.by-num`). The sub-registry pointer it carries is the SAME
+		// object the compiled run shares (RunProgram runs on the check-pass
+		// registry), so the baked const and the live fn are one object — no
+		// check/VM value divergence. The VM applies it faithfully at run time:
+		//   - a TRIVIAL-DELEGATION wrapper (`MathUtil.sqrt`, every own sig a
+		//     `[Word(inner)]` pass-through) via callDynamic → tryNativeFnApply, which
+		//     re-resolves the inner native in that registry;
+		//   - a REAL AQL body via the island sub-engine (callDynTrailTop/…'s
+		//     `vc.island().Run([fn, args…])`), which INTERPRETS the fn in
+		//     fnDef.Registry — CallAQL, module-private scope and all. So a real body
+		//     applies soundly too (compile == interpret, verified). A macro stays
+		//     refused (applied only by name / compile-time expansion, never as data).
+		return !d.Macro
 	case *SurfaceInfo:
 		// A surface type (`def Shape surface {area: (fnsig …)}`): an immutable
 		// contract descriptor riding its canonical minted node via the Type
@@ -3348,7 +3689,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// boundary needs no rewrite here (it stays a plain CALL_USER).
 			// Generic instantiations stay out of tail marking too — the
 			// interpreter's HasGen exclusion, mirrored (plan Stage 4).
-			if !markTailCalls(rec.frag, &rec.outOps[0], true) {
+			if !es.markTailCalls(rec.frag, &rec.outOps[0], true, rec.returns) {
 				// Every path tail-called: the body diverges (a trailing
 				// all-arms-tail branch isn't caught by fragDiverges, so
 				// track it here) and emits no reachable RET.
@@ -3363,7 +3704,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
@@ -3383,8 +3724,15 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// operands (const / local / type) are pushed as a trailing
 			// tail above the last event result. This is the fn-unit mirror
 			// of the program-residual reconciliation below.
-			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0, rec.pos); reason != "" {
+			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0 || rec.dynTrailArity > 0, rec.pos); reason != "" {
 				return nil, reason, false
+			}
+			// A paren-bounded trailing fn-value apply body: outOps were seated as the
+			// full [args…, fn] (fn on top); collapse them to the one applied value with
+			// OpCallDynTrailTop before the RET (the captured/param fn auto-applies to
+			// its args exactly as the interpreter's paren auto-dispatch).
+			if rec.dynTrailArity > 0 {
+				flw.emit(OpCallDynTrailTop, rec.dynTrailArity, rec.pos)
 			}
 			flw.emit(OpRet, 0, rec.pos)
 		}

@@ -171,6 +171,15 @@ type ChildTypeInfo struct {
 	// an exact length or an upper bound — never an underestimate, which
 	// would turn an in-bounds access into a false positive.
 	Len *int
+	// ArrayID is the make-site identity of a typed mutable-Array carrier
+	// (`Array<T>`), used in check mode to key the per-array element-bound /
+	// poison tracking that keeps `arr get` sound under mutation + aliasing.
+	// It is the SrcPos of the originating `make Array` call, stamped once at
+	// construction and preserved through binding/capture (a value copy keeps
+	// Data). The zero SrcPos means "no tracked identity" (an untyped or
+	// non-make array) — see design/ARRAY-ELEMENT-CARRIER-ARCH.0.md. Irrelevant
+	// to typed lists/maps, which leave it zero.
+	ArrayID SrcPos
 }
 
 // ChildEntry is a (key, value) pair retained for typed maps that
@@ -466,6 +475,21 @@ type CallableSpec struct {
 	// handlers (native_array.go each/fold/scan, native/filter.go) — each takes
 	// res[len(res)-1].
 	BodyResultTop bool
+	// CrossCollectionTokenShape marks a word whose TOKEN-quotation body is
+	// SHAPE-GENERIC across the word's List-vs-Map overloads: both present the
+	// closure the bare element/value (ClosureInValue), never a KeyVal. So a
+	// gradual-Any (Dynamic) collection — statically ambiguous between the List and
+	// Map overload — can still compile: the recorder commits the first reachable
+	// (List) overload and lowers the token body to ONE closure, and the committed
+	// handler is RUNTIME-ROBUST (it delegates to the sibling collection's iteration
+	// when the value's concrete type is the other one), so the SAME closure drives
+	// either shape == the interpreter, which dispatches the overload by the runtime
+	// type. Without this flag a gradual collection refuses (the ambiguous-overload
+	// MarkUncompilable below). Set ONLY on words whose every List/Map token overload
+	// is ClosureInValue AND whose handlers cross-delegate (each/fold/scan). A LAMBDA
+	// body never reaches this — it matches only the single TFunction overload, so
+	// the ≥2-reachable ambiguity gate never fires for it.
+	CrossCollectionTokenShape bool
 }
 
 // FnDefInfo holds the function specification for a def-defined function.
@@ -1224,6 +1248,14 @@ func NewEvalList(elems []Value) Value {
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
 	return NewValueRaw(TList, ChildTypeInfo{Child: child})
+}
+
+// NewTypedArray creates a typed mutable-Array carrier shell — Parent=TArray
+// with Data=ChildTypeInfo{Child}. Mirrors NewTypedList on the Array side; the
+// element type rides on Child, the make-site identity on ChildTypeInfo.ArrayID.
+// Callers that want it treated as abstract set Carrier (see NewCarrierTypedArray).
+func NewTypedArray(child Value, id SrcPos) Value {
+	return NewValueRaw(TArray, ChildTypeInfo{Child: child, ArrayID: id})
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.

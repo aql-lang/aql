@@ -214,6 +214,21 @@ const (
 	// (`${1 add 2}`, `${x}` for a fn param, `${typeof x}`); a fully literal or
 	// pure-binding-fold template stays a pooled const and never needs this.
 	OpInterp
+	// OpCallDynTrailTop applies a runtime FUNCTION value sitting ON TOP of its Arg
+	// args to those args — the TRAILING fn-value-call boundary BOUNDED BY A PAREN
+	// (`(prev key comp)`, a captured/param comparator applied to two computed args).
+	// Unlike OpCallDynamicTrailing (recorder lays the fn at the BASE and rotates the
+	// non-callable residual, bounded to 1 arg), the fn stays on TOP here, so NO
+	// rotation is ever needed and it is sound for ANY arity: the args are laid out
+	// in source/stack order with the fn above them; on apply the fn auto-applies to
+	// the Arg args beneath it exactly as the interpreter's paren auto-dispatch (the
+	// fn-on-top order matches the interpreter's top-down stack bind); if the value
+	// is NOT callable, [args, fn] is ALREADY the interpreter's trailing residual, so
+	// it is left untouched. Arg is the argument count (the paren's value count minus
+	// the trailing fn). The recorder captures this at the paren-collapse boundary
+	// (engine.go) where the arity is known, since the flattened residual cannot
+	// recover the paren-group size.
+	OpCallDynTrailTop
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -252,6 +267,7 @@ var opcodeNames = [...]string{
 	OpPopMark:             "POP_MARK",
 	OpCallDynamicMixed:    "CALL_DYNAMIC_MIXED",
 	OpInterp:              "INTERP",
+	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
 }
 
 func (o Opcode) String() string {
@@ -343,6 +359,21 @@ type Instr struct {
 type SigRef struct {
 	Word string
 	Sig  *Signature
+	// Guard marks a CALL_NATIVE recorded for a dispatch the checker could NOT
+	// statically commit (a concrete-mismatch / Any-carrier recovery over a
+	// SINGLE-overload native) — the compiled mirror of the interpreter's runtime
+	// matchSignature. The VM re-checks the concrete args against Sig.Args before
+	// the handler (checkNativeParamContract): on match it dispatches Sig.Handler
+	// (== the interpreter's sole-overload dispatch), on mismatch it raises the
+	// byte-identical signature_error (== the interpreter, which finds no overload).
+	// Sound ONLY for a single-overload word: with a sibling overload a runtime arg
+	// that misses Sig could match the sibling, where the interpreter dispatches but
+	// the guard raises. Unlike OpCallNativePoly (which re-matches ALL overloads and
+	// can OPTIMISTICALLY dispatch a sibling the interpreter rejects — proven unsound
+	// for the concrete-mismatch case), the guard never re-matches: it commits to the
+	// one sig and raises otherwise, so it diverges from the interpreter only if a
+	// sibling exists — which the single-overload gate forbids.
+	Guard bool
 }
 
 // TypeRef names one type operand: the canonical type ID (resolved
@@ -453,6 +484,25 @@ type CompiledFn struct {
 	// bare refine stays nominal, and builtins are unchanged. Empty for a
 	// fn with no declared return (no check runs).
 	Returns []*Type
+	// Params are the declared PARAM types (param slots 0..len(Params)-1, which
+	// align with the leading param locals; captures, if any, follow and are NOT
+	// listed). Enforced at CALL_USER entry against the incoming arg the same way
+	// Returns is enforced at RET — via v.Is(exp). This guards the gradual-Any
+	// boundary: a value of static type exactly Any optimistically matches a
+	// concrete param at check time, but the runtime value may not match; the
+	// interpreter runtime-matches it, so the compiled OpCallUser must too, else a
+	// laundered List bound to an `m:Map` param silently runs the body. A nil
+	// entry (a closure's [Any] input) is a guaranteed-pass, like Returns=[Any].
+	Params []*Type
+	// ParamPatterns are the per-param structural/value patterns (FnParam.Pattern):
+	// an inline disjunct (`x:(Integer tor String)`), inline predicate
+	// (`b:(Integer gt 10)`), bounded (`x:Map/t`), or map/list shape — the
+	// constraint that rides in Pattern, NOT Type (Type is left a loose root for
+	// these). Checked at CALL_USER alongside Params via the SAME OpenUnifyMap /
+	// Unify the interpreter's dispatch runs, so a value laundered past such a
+	// param raises the same signature_error rather than running the body. Nil
+	// where the param has no pattern.
+	ParamPatterns []*Value
 	// LocalNames maps a frame local slot to its source name (params in
 	// slots 0..NParams-1, then captures), for a debugger / disassembler.
 	// Body-local iterator slots have no name (empty string). Purely
@@ -511,7 +561,11 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			for j, t := range s.Sig.Args {
 				names[j] = t.Leaf()
 			}
-			fmt.Fprintf(sb, " s%-3d ; %s (%s)", in.Arg, s.Word, strings.Join(names, ", "))
+			guard := ""
+			if s.Guard {
+				guard = " [guarded]"
+			}
+			fmt.Fprintf(sb, " s%-3d ; %s (%s)%s", in.Arg, s.Word, strings.Join(names, ", "), guard)
 		case OpJmp, OpJmpIfFalse, OpForNext:
 			fmt.Fprintf(sb, " -> %04d", in.Arg)
 		case OpPushLocal, OpForSetup, OpStoreLocal:

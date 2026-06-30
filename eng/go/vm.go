@@ -411,6 +411,65 @@ func (vc *vmContext) callDynamicOp(op Opcode, arg int, stack []Value, curDebug [
 	return vc.callDynamic(arg, op == OpCallDynamicTrailing, stack, curDebug, pc)
 }
 
+// callDynTrailTop applies a runtime FUNCTION value ON TOP of its n args to those
+// args — the paren-bounded trailing fn-value apply (`(prev key comp)`). The fn
+// stays on top (no rotation): on apply it auto-applies to the n args beneath it
+// exactly as the interpreter's paren auto-dispatch (the island Run([fn]+args) is
+// byte-identical to the token sequence the interpreter ran); a non-callable value
+// leaves [args, fn] untouched — ALREADY the interpreter's trailing residual. Sound
+// for ANY arity (unlike OpCallDynamicTrailing's 1-arg rotation). The args slice is
+// the same stack-order window callDynamic's leading case feeds, so the closure /
+// island binding matches the proven leading path.
+func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	r := vc.r
+	if len(stack) < n+1 {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYN_TRAIL_TOP underflow")
+	}
+	top := len(stack) - 1
+	fnVal := stack[top]
+	base := top - n
+	// The args sit BELOW the fn in stack order (deepest first). The interpreter
+	// binds a trailing fn's args TOP-DOWN (the top arg → the fn's first param);
+	// the island Run / forward apply binds the FIRST following token → the first
+	// param. So reverse the stack window into forward order, making the island bind
+	// identical to the interpreter's paren auto-dispatch (`(x 2 comp)` → comp's
+	// first param = 2 (the top), second = x — verified against the off-corpus
+	// comparator regression).
+	args := make([]Value, n)
+	for i := 0; i < n; i++ {
+		args[i] = stack[top-1-i]
+	}
+	if _, ok := fnVal.Data.(ClosurePayload); ok {
+		results, err := vc.invokeClosure(fnVal, args)
+		if err != nil {
+			return nil, stampAt(err, curDebug, pc, r)
+		}
+		return append(stack[:base], results...), nil
+	}
+	if !isAppliableFn(fnVal) {
+		return stack, nil // not callable: [args, fn] is already the interpreter's trailing residual
+	}
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
+		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+			if err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			return append(stack[:base], results...), nil
+		}
+	}
+	island := make([]Value, 0, n+1)
+	island = append(island, fnVal)
+	island = append(island, args...)
+	results, err := vc.island().Run(island)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, r)
+	}
+	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil {
+		return nil, err
+	}
+	return append(stack[:base], results...), nil
+}
+
 // callDynamicMixed handles the MIXED fn-value-call boundary (`3 m.f 2`): a
 // dynamic / fn value sits INTERIOR to a window of static args (some below it,
 // some above). The window of `w` stack values is the same token sequence the
@@ -733,6 +792,16 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				args[i] = stack[len(stack)-1-i]
 			}
 			stack = stack[:len(stack)-n]
+			// A GUARDED native call (recovered single-overload dispatch the checker
+			// could not statically commit): re-check the concrete args against the
+			// committed sig — dispatch on a match (== the interpreter's sole-overload
+			// dispatch), raise the byte-identical signature_error on a miss (== the
+			// interpreter finding no overload). See SigRef.Guard.
+			if s.Guard {
+				if err := checkNativeParamContract(r, &s, args); err != nil {
+					return nil, stampAt(err, curDebug, pc, r)
+				}
+			}
 			results, err := s.Sig.Handler(args, r.Contexts.TopData(), nil, r)
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -763,6 +832,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// and interior-window (callDynamicMixed). callDynamicOp routes by opcode
 			// so run's dispatch stays a single case.
 			ns, err := vc.callDynamicOp(in.Op, int(in.Arg), stack, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			stack = ns
+		case OpCallDynTrailTop:
+			ns, err := vc.callDynTrailTop(int(in.Arg), stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}
@@ -798,6 +873,15 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				nl[i] = stack[len(stack)-1-i]
 			}
 			stack = stack[:len(stack)-fn.NParams]
+			// Param-type guard — the compiled mirror of the interpreter's
+			// runtime sig match. A gradual (Dynamic) arg optimistically matched a
+			// concrete param at check time, but the runtime value may not match;
+			// without this a laundered List bound to an `m:Map` param silently runs
+			// the body. nl[i] is param i (the body's slot i); Params[i] is its
+			// declared type. Raises the same signature_error the interpreter raises.
+			if err := checkParamContract(r, fn, nl); err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
 			if in.Op == OpCallUser {
 				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack)})
 				vc.frameDepth++ // balanced by the matching RET below
@@ -1038,6 +1122,87 @@ func vmShuffle(stack []Value, op Opcode, arg int, debug []SrcPos, pc int) ([]Val
 // The re-entrant closure / fn-root RET (no frame) runs on a fresh stack and only
 // the underflow is a count error there (a surplus is the higher-order caller's
 // domain) — preserving the prior closure behaviour. Returns nil when satisfied.
+// checkParamContract enforces the declared PARAM types at CALL_USER entry — the
+// compiled mirror of the interpreter's runtime signature match (and the symmetric
+// twin of checkReturnContract at RET). Each param local nl[i] must satisfy
+// Params[i] via v.Is(exp), the SAME membership the param boundary asks. A nil /
+// Any param is a guaranteed pass (a closure's [Any] input, or a fn declaring an
+// Any param). Multi-overload gradual calls never compile, so the single chosen
+// overload's guard mirrors the interpreter exactly. On mismatch it raises the
+// byte-identical signature_error the interpreter raises for an unmatched dispatch.
+func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
+	for i, pt := range fn.Params {
+		if pt == nil || i >= len(locals) {
+			continue
+		}
+		// Use sigTypeMatches — the interpreter's RUNTIME param match — NOT v.Is.
+		// v.Is is a strict SUBSET: it rejects a concrete map at an `Options` slot
+		// (Options roots under Ideal, TMap ⋢ TOptions), which the interpreter's
+		// sigTypeMatches accepts (signature.go's Options/Record special-cases). A
+		// v.Is guard therefore OVER-RAISES on Options / structural params — a
+		// regression. sigTypeMatches subsumes v.Is and folds in those special
+		// cases, the Any root, and (inert at run time) gradual optimism, so it
+		// matches the interpreter exactly for a concrete runtime value. A
+		// constraint carried in FnParam.Pattern (inline disjunct / predicate /
+		// bounded / structural) is NOT threaded into Params and so is not enforced
+		// here — see design/PARAM-GUARD-SKIP-MISCOMPILE.0.md; this guard catches the
+		// plain-type laundering (the reported bug) without over-raising.
+		if !sigTypeMatches(locals[i], pt) {
+			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+		}
+	}
+	// An inline disjunct / predicate / bounded / structural param carries its
+	// real constraint in ParamPatterns (its Type is a loose root sigTypeMatches
+	// passes), so check it the SAME way the interpreter's dispatch does
+	// (engine.go: OpenUnifyMap for a concrete map pattern, else Unify).
+	for i, pp := range fn.ParamPatterns {
+		if pp == nil || i >= len(locals) {
+			continue
+		}
+		pat := *pp
+		v := locals[i]
+		ok := false
+		if pat.Parent.Equal(TMap) && v.Parent.Equal(TMap) && pat.Data != nil && v.Data != nil && !IsOptionsType(pat) {
+			ok = OpenUnifyMap(pat, v)
+		} else {
+			_, ok = Unify(v, pat)
+		}
+		if !ok {
+			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+		}
+	}
+	return nil
+}
+
+// checkNativeParamContract enforces a GUARDED CALL_NATIVE's committed sig at run
+// time — the native twin of checkParamContract (CALL_USER). args[i] is sig
+// position i (top-of-stack first, as OpCallNative built them). Each must satisfy
+// s.Sig.Args[i] via sigTypeMatches — the SAME runtime param match the interpreter's
+// matchSignature applies, so a concrete value that the interpreter's sole-overload
+// dispatch would accept passes here and one it rejects raises the byte-identical
+// signature_error. Sound only for a single-overload word (the recorder's gate): no
+// sibling exists for a missing arg to fall through to, so raise == the interpreter.
+func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
+	for i := range args {
+		if i >= len(s.Sig.Args) {
+			break
+		}
+		at := s.Sig.Args[i]
+		if at == nil || at.Equal(TAny) {
+			continue // an Any slot is a guaranteed pass
+		}
+		// A QuoteArgs slot carries a literal Atom key (dot/get's bare-word form);
+		// the interpreter binds it as data without a type match, so don't guard it.
+		if s.Sig.QuoteArgs != nil && s.Sig.QuoteArgs[i] {
+			continue
+		}
+		if !sigTypeMatches(args[i], at) {
+			return r.AqlError("signature_error", "no matching signature for "+s.Word, s.Word)
+		}
+	}
+	return nil
+}
+
 func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase int, hasFrame bool) error {
 	rets := fn.Returns
 	if len(rets) == 0 {

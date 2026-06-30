@@ -82,12 +82,18 @@ func (c *CheckState) Begin() func() {
 	c.DefsInstalled = nil
 	c.DefsUsed = nil
 	c.ContextTypes = nil
+	c.ArrayPoison = map[SrcPos]bool{} // fresh per run; SHARED (not cloned) across branches within the run
 	c.InflightBails = 0
 	c.FnNameInflight = nil
 	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
 	c.Emit = nil
 	c.FnBodyDepth = 0
+	// Compiling marks a REAL compile pass; the compile entry points
+	// (CompileCheck / RunCompiled) set it true AFTER this Begin. Reset it here so
+	// it is a proper per-pass flag — a later plain check on a reused registry
+	// must not inherit a prior compile's true.
+	c.Compiling = false
 	return func() {
 		c.Mode = false
 	}
@@ -299,6 +305,32 @@ func (c *CheckState) RecordContextSet(key string, carrier Value) {
 		return
 	}
 	c.ContextTypes[key] = carrier
+}
+
+// PoisonArray marks the typed mutable-Array carrier with make-site identity
+// `id` as non-strict-readable: a later `arr get` on it must fall back to gradual
+// Any rather than its element type. Called when a `set` writes a non-conforming
+// value or the array escapes off-carrier. Monotone (never cleared) and shared
+// across branch clones, so the taint holds on every path. No-op for the zero id
+// (an untracked array) or outside check mode.
+func (c *CheckState) PoisonArray(id SrcPos) {
+	if !c.IsActive() || (id == SrcPos{}) {
+		return
+	}
+	if c.ArrayPoison == nil {
+		c.ArrayPoison = map[SrcPos]bool{}
+	}
+	c.ArrayPoison[id] = true
+}
+
+// ArrayPoisoned reports whether the typed-Array carrier with identity `id` has
+// been poisoned in this check run (see PoisonArray). A zero id (untracked array)
+// is always treated as poisoned so `get` declines to Any.
+func (c *CheckState) ArrayPoisoned(id SrcPos) bool {
+	if c == nil || (id == SrcPos{}) {
+		return true
+	}
+	return c.ArrayPoison[id]
 }
 
 // LookupContextType returns the carrier recorded for the given key via

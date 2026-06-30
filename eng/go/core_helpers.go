@@ -192,7 +192,19 @@ func UninstallDef(r *Registry, name string) {
 // paren (the same pointer the compile boundary stores in
 // Signature.FnFrame — see eng/go/fn_frame.go).
 func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, meta *FnFrameMeta) Handler {
-	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return func(args []Value, _ map[string]Value, _ []Value, callReg *Registry) ([]Value, error) {
+		// Reached from a FOREIGN registry (callReg != the install registry r) — a
+		// module fn dispatched through the unified execMatch path from an outer
+		// engine. The inline-re-step token expansion below binds params and resolves
+		// the body in r, but execMatch re-steps the returned tokens in the CALLER's
+		// registry (callReg), where r's params + module-private words are absent
+		// ("undefined word: x"). So run the body in its HOME registry r via CallAQL
+		// and return the result — the SAME execution the old execFnDefSig path did,
+		// now behind ONE dispatch path. A same-registry fn (callReg == r, the common
+		// top-level case) keeps the inline re-step (recursion / forward-ref intact).
+		if callReg != nil && callReg != r {
+			return r.CallAQL(&s, args, fnDefCopy.Captured)
+		}
 		var result []Value
 		var names []string
 		// Wrap the entire expansion (unnamed args + body + undef
@@ -312,6 +324,31 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 // no_signature against the spurious Map (the decision `eval-pred-all` cycle).
 // A concrete arg, an arg already conforming to the param, or an Any/untyped
 // param is left untouched (no precision lost).
+// recordSchemaCarrier returns the body-analysis view of a map/gradual-Any arg
+// bound to a RECORD-shape param (declared `c:SomeRecord` — Type=Map + a NewMap
+// field→type schema pattern): a carrier CARRYING the record schema
+// (RecordTypeInfo), so a body `c get "field"` recovers the field's declared type
+// instead of degrading to Any. The arg already passed the param match at the
+// call site and the runtime CALL_USER guard re-checks it, so committing to the
+// schema for body analysis is sound; recovered field types are GRADUAL
+// (getNodeReturns), discharged by a guard for a non-conforming value. Returns
+// (zero,false) for Options-typed params (OptionsTypeInfo, not MapPayload),
+// patternless params, and non-map args. Applied at BOTH body-analysis paths —
+// narrowArgsToParams (result/summary) and the armed-compile genArgs — so the
+// schema survives into the closure CAPTURE that the armed compile records.
+func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
+	if p.Pattern == nil || a.Parent == nil {
+		return Value{}, false
+	}
+	if !(a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
+		return Value{}, false
+	}
+	if pm, ok := p.Pattern.Data.(MapPayload); ok && pm.M != nil {
+		return Value{Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}, true
+	}
+	return Value{}, false
+}
+
 func narrowArgsToParams(args []Value, params []FnParam) []Value {
 	var out []Value
 	for i := range args {
@@ -320,6 +357,13 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 		}
 		a := args[i]
 		pt := params[i].Type
+		if rc, ok := recordSchemaCarrier(params[i], a); ok {
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			out[i] = rc
+			continue
+		}
 		switch {
 		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
 			!a.Parent.ConformsTo(pt):
@@ -484,7 +528,19 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		es := r.Check.Emit
 		fnUnit := -1
 		var finishFn func([]Value)
-		if es != nil {
+		// Cluster C (broad miscompile hunt): a gradual-Any arg to a MULTI-overload
+		// user fn is an AMBIGUOUS dispatch. The checker commits to one overload
+		// (whose CALL_USER param guard then RAISES at runtime when the value matches
+		// a SIBLING overload), but the interpreter runtime-re-matches and dispatches
+		// the sibling — `def g fn [[a:Integer]['i'] [a:String]['s']] (g (id 5))`
+		// returned 'i' interpreted but signature_error compiled. Natives re-match via
+		// OpCallNativePoly; user-fn overloads have NO poly path. Refuse → fall back.
+		clusterCRefuse := es != nil && es.active() && anyDynamicCarrier(args) &&
+			dynamicReachableOverloadCount(r, nameCopy, args) >= 2
+		if clusterCRefuse {
+			es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
+		}
+		if es != nil && !clusterCRefuse {
 			// The body unit must be compiled against GENERALISED args
 			// — pure carriers of the call's arg types. The call's
 			// kept-concrete values would constant-fold inside the body
@@ -493,6 +549,12 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// key, so the generalised analysis is the one that caches.
 			genArgs := make([]Value, len(args))
 			for i, a := range args {
+				if i < len(sigParams) {
+					if rc, ok := recordSchemaCarrier(sigParams[i], a); ok {
+						genArgs[i] = rc // preserve record schema into the armed compile + closure capture
+						continue
+					}
+				}
 				if a.Parent == nil {
 					// A root-node carrier (None / Any / Never) has a nil Parent
 					// because it IS its own lattice node — it is already an
@@ -525,6 +587,20 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
 				fnUnit = -1
+			}
+			if fnUnit >= 0 {
+				// Record the declared PARAM types so the VM enforces them at
+				// CALL_USER entry (the gradual-Any param-guard, mirroring the RET
+				// return-check). A gradual (Dynamic) arg optimistically matched a
+				// concrete param at check time; the compiled call must re-check the
+				// runtime value, or a laundered mismatch silently runs the body.
+				pts := make([]*Type, len(sigParams))
+				pats := make([]*Value, len(sigParams))
+				for i := range sigParams {
+					pts[i] = sigParams[i].Type
+					pats[i] = sigParams[i].Pattern
+				}
+				es.SetUnitParamTypes(fnUnit, pts, pats)
 			}
 			if finishFn != nil {
 				// A fresh compilation must RECORD the body — drop any

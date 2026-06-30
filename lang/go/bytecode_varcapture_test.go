@@ -24,6 +24,18 @@ func TestVarBodyCaptureCompiles(t *testing.T) {
 		// Decline point 2: a var-body CAPTURING an enclosing fn local (the bloom shape).
 		{"capture in var body", `def f fn [[xs:List] [List] [ ([0 1 2] each [var [[i] xs i dot end]]) ]] ([10 20 30] f)`},
 		{"capture, reach into element", `def data [{a:1} {a:2}] (data each [var [[s] (s dot a/q)]])`},
+		// Decline point 3: a loop body capturing an enclosing COMPUTED def (not a
+		// param). The captured value carries a producedBy entry from the parent
+		// frame; the body must read its own capture SLOT (resolveOperand capID),
+		// and the parent must PROMOTE the computed def to a frame local so the
+		// closureCaps operand is a re-pushable local carrying the right VALUE
+		// (forEachOperand / promoteOperand closureCaps handling). With only the
+		// read-side this miscompiled (`i mul a` read the wrong slot) — so this is
+		// the explicit compiled==interpreter guard the langspec differential is
+		// blind to (the shape isn't in the corpus). The Bloom.indices-for / merge
+		// shape: a derived local read inside the per-element loop.
+		{"capture COMPUTED enclosing def in loop body", `def f fn [[k:Integer h:Integer] [List] [ def a (h add 1)  iota k each [var [[i] i mul a]] ]] (3 5 f)`},
+		{"capture two computed defs in loop body", `def f fn [[k:Integer h:Integer] [List] [ def a (h add 1)  def b (h mul 2)  iota k each [var [[i] (i mul a) add b]] ]] (3 5 f)`},
 	}
 	for _, c := range positives {
 		t.Run("compiles/"+c.name, func(t *testing.T) {

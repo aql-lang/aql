@@ -70,8 +70,15 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	for _, h := range endHoles {
 		(*lw.code)[h].Arg = int32(endPC)
 	}
-	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
-	lw.variadic[ev.seq] = true
+	// A value-producing loop contributes N (variadic) values to the simulated
+	// stack; a SIDE-EFFECT loop (!hasBodyOut — body nets 0 per iteration) leaves
+	// NOTHING. Mirrors RecordLoop's variadicResult/zeroOut split: keep them
+	// consistent or a unit's residual reconciliation and its stack simulation
+	// disagree on the loop's arity.
+	if lp.hasBodyOut {
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+		lw.variadic[ev.seq] = true
+	}
 	lw.note()
 	return ""
 }
@@ -330,6 +337,29 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 		if reason != "" {
 			return reason
 		}
+		// A PROMOTED branch value-def (planValueDefLocals marked it, a multiply-read
+		// `def bi (if …)`): store the merge to its frame slot so later references
+		// re-push from the slot (rewritePromotedRefs rewrote them to local operands).
+		// lowerBranch left exactly one merge slot on top; STORE+pop it. If the merge is
+		// not a clean single value on top (a variadic / diverged branch the plan-time
+		// branchSingleValue gate could not foresee), REFUSE — sound interpreter
+		// fallback, never a wrong store.
+		if ev.kind == evBranch {
+			if slot, ok := lw.promoted[ev.seq]; ok {
+				if lw.variadic[ev.seq] || len(lw.vm) == 0 || lw.vm[len(lw.vm)-1].seq != ev.seq {
+					return "if: promoted merge is not a single value on top (Stage 3)"
+				}
+				lw.emit(OpStoreLocal, slot, ev.br.pos)
+				lw.vm = lw.vm[:len(lw.vm)-1]
+			} else if lw.dead[ev.seq] &&
+				// A DEAD branch value-def: its merge result sits on the sim unconsumed —
+				// drop it (the binding is never read). lowerBranch left exactly one slot
+				// for this branch's merge on top; pop+DROP it.
+				len(lw.vm) > 0 && lw.vm[len(lw.vm)-1].seq == ev.seq {
+				lw.emit(OpDrop, 0, ev.br.pos)
+				lw.vm = lw.vm[:len(lw.vm)-1]
+			}
+		}
 	}
 	return ""
 }
@@ -339,25 +369,39 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 // range and body out. A callback (rather than a returned slice) keeps the hot
 // planning loops — the scopeFloor guard and planValueDefLocals — allocation-free.
 func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
+	// visit surfaces an operand AND, for a closure operand, its lexical
+	// captures — enclosing-scope operands carried in closureCaps. Surfacing them
+	// makes a def used ONLY as a closure capture REFERENCE-COUNTED (so
+	// planValueDefLocals promotes a captured computed def to a frame local rather
+	// than leaving it an un-re-pushable event), and lets the scopeFloor guard see
+	// a cross-floor capture. Captures are flat operands (no nested closures).
+	visit := func(op emitOperand) {
+		fn(op)
+		if op.kind == opClosure {
+			for _, c := range op.closureCaps {
+				fn(c)
+			}
+		}
+	}
 	switch ev.kind {
 	case evCall:
 		for _, op := range ev.call.ops {
-			fn(op)
+			visit(op)
 		}
 	case evLoop:
-		fn(ev.loop.start)
-		fn(ev.loop.end)
-		fn(ev.loop.step)
-		fn(ev.loop.bodyOut)
+		visit(ev.loop.start)
+		visit(ev.loop.end)
+		visit(ev.loop.step)
+		visit(ev.loop.bodyOut)
 	case evBreak, evContinue, evTrap:
 		// no operands
 	case evCallUser:
 		for _, op := range ev.uc.ops {
-			fn(op)
+			visit(op)
 		}
 	case evFallback:
 		for _, op := range ev.fb.ins {
-			fn(op)
+			visit(op)
 		}
 	default: // evBranch
 		// thenVal / elsVal are the value-arm operands — meaningful only when
@@ -368,12 +412,12 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		// complete so a computed-arm event is REFERENCE-COUNTED — otherwise
 		// planValueDefLocals sees it as zero-referenced, marks it dead, and the
 		// lowerer drops the value the computed-branch lowering needs on the stack.
-		fn(ev.br.cond)
-		fn(ev.br.condOut)
-		fn(ev.br.thenOut)
-		fn(ev.br.elsOut)
-		fn(ev.br.thenVal)
-		fn(ev.br.elsVal)
+		visit(ev.br.cond)
+		visit(ev.br.condOut)
+		visit(ev.br.thenOut)
+		visit(ev.br.elsOut)
+		visit(ev.br.thenVal)
+		visit(ev.br.elsVal)
 	}
 }
 
@@ -389,7 +433,65 @@ func promoteOperand(op *emitOperand, promoted map[int]int) {
 			// a non-promoted multi-output producer is absent from the map.
 			*op = localOperand(slot + op.resIdx)
 		}
+		return
 	}
+	// A closure operand carries its lexical captures as enclosing-scope operands.
+	// A captured computed def promoted to a frame local must have its closureCaps
+	// entry rewritten to the local push too, so OpPushClosure captures the right
+	// VALUE (re-pushed from the frame slot) rather than a stale/unreachable event
+	// operand — the value-passing half of the each/scan/…$body computed-capture fix.
+	if op.kind == opClosure {
+		for i := range op.closureCaps {
+			promoteOperand(&op.closureCaps[i], promoted)
+		}
+	}
+}
+
+// eachClosureCap calls fn for every CLOSURE-CAPTURE operand carried by ev's own
+// operands (not recursing into fragments — the caller flattens those). A closure
+// capture can only reference a frame local or an enclosing operand at run time,
+// never a transient simulated-stack slot, so a producer captured here MUST be
+// promoted to a frame local. Mirrors forEachOperand's operand-slice coverage.
+func eachClosureCap(ev *emitEvent, fn func(emitOperand)) {
+	scan := func(ops []emitOperand) {
+		for _, op := range ops {
+			if op.kind == opClosure {
+				for _, c := range op.closureCaps {
+					fn(c)
+				}
+			}
+		}
+	}
+	switch ev.kind {
+	case evCall:
+		scan(ev.call.ops)
+	case evCallUser:
+		scan(ev.uc.ops)
+	case evFallback:
+		scan(ev.fb.ins)
+	case evLoop:
+		scan([]emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut})
+	case evBranch:
+		scan([]emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut, ev.br.thenVal, ev.br.elsVal})
+	}
+}
+
+// branchSingleValue reports whether a 2-arm `if` merges to exactly one value — both
+// arms present and neither a MULTI-value arm (residualN>1). Only such a branch may be
+// promoted to a frame local as a value-def: the store seats one value. A value-arm
+// (thenIsVal/elsIsVal, nil fragment) is single by construction. A no-else if (variadic
+// 0-or-1) and a multi-value arm are excluded — their merge count is runtime-variable.
+func branchSingleValue(br *emitBranch) bool {
+	if br == nil || !br.hasElse {
+		return false
+	}
+	if br.then != nil && br.then.residualN > 1 {
+		return false
+	}
+	if br.els != nil && br.els.residualN > 1 {
+		return false
+	}
+	return true
 }
 
 // childFragments returns the body fragments a branch / loop event owns — the
@@ -468,6 +570,68 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 	}
 }
 
+// collectPromotableEvents flattens a unit's top-level events together with every
+// event nested in an inline branch arm / loop body, depth-first — so the
+// value-def promotion decision can run over a def-chain inside an `if` arm or
+// `for` body, not just the top level. Without this such a chain's computed
+// producers sit interleaved on the closed fragment's simulated stack and a later
+// binary op refuses "operands of <op> not adjacent on top". (Ref-counting via
+// forEachFragmentOperand and rewriting via rewritePromotedRefs already recurse
+// into fragments; only the promotion decision did not.)
+func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool) {
+	var out []*emitEvent
+	fragInternal := map[int]bool{}
+	var walk func(evs []emitEvent, inFrag bool)
+	walk = func(evs []emitEvent, inFrag bool) {
+		for i := range evs {
+			out = append(out, &evs[i])
+			if inFrag {
+				fragInternal[evs[i].seq] = true
+			}
+			for _, frag := range childFragments(&evs[i]) {
+				// Only recurse into a SINGLE-result fragment (a single-value branch
+				// arm residualN==1, or a loop body / condition residualN==0). A
+				// MULTI-value arm (residualN>1, e.g. `[n mul 2 m (n sub 1)]`) leaves
+				// several residual values on the sim stack, and promotion / dead-drop
+				// would wrongly store or drop one of them ("branch leaves extra
+				// values") — leave those untouched.
+				if frag != nil && frag.residualN <= 1 {
+					walk(frag.events, true)
+				}
+			}
+		}
+	}
+	walk(events, false)
+	return out, fragInternal
+}
+
+// fragmentResultSeqs collects the event seqs that ARE a fragment's residual —
+// the value an `if` arm / list-condition / loop body leaves on the simulated
+// stack for its enclosing branch/loop (thenOut / elsOut / condOut / bodyOut).
+// These must NOT be promoted to a frame local: the arm-result lowering
+// (lowerFragment) requires the residual on the sim stack, and a tail call in an
+// arm must stay terminal for OpTailCallUser detection. Only fragment-INTERNAL
+// intermediates (the def-chain feeding the result) are promotable.
+func fragmentResultSeqs(allEvents []*emitEvent) map[int]bool {
+	res := map[int]bool{}
+	mark := func(op emitOperand) {
+		if op.kind == opEvent {
+			res[op.idx] = true
+		}
+	}
+	for _, ev := range allEvents {
+		switch ev.kind {
+		case evBranch:
+			mark(ev.br.thenOut)
+			mark(ev.br.elsOut)
+			mark(ev.br.condOut)
+		case evLoop:
+			mark(ev.loop.bodyOut)
+		}
+	}
+	return res
+}
+
 // planValueDefLocals decides which of a unit's top-level computed results are
 // referenced more than once and so must be promoted to a frame local (the
 // carrier-identity item's value-def locals). A single VM-stack copy of a
@@ -504,13 +668,97 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 			}
 		})
 	}
+	// A SIDE-EFFECT loop (zeroOut: body nets 0 per iteration) lowers cleanly as an
+	// UNCONSUMED statement (its result is dropped, RecordLoop marked it zeroOut).
+	// But if its (zero-value) RESULT is CONSUMED — bound by `def x (for …)`
+	// (valueDef) or fed as an operand to another event (refs>0 here, counted BEFORE
+	// the residual `extra` below) — the interpreter's `def`/word forward-collection
+	// over an empty producer GRABS THE NEXT TOKEN, which the compiled 0-value loop
+	// does not replicate (off-corpus divergence: `def x (for n [print 0]) n` → interp
+	// errors "got 0", compiled returns n). A 0-value CALL consumed the same way DOES
+	// agree (both error), so the loop is the outlier — refuse and fall back to the
+	// interpreter, scoping loop-in-fn-body lowering to genuinely discarded loops.
+	for i := range events {
+		seq := events[i].seq
+		if events[i].kind == evLoop && es.eventInfo[seq].zeroOut &&
+			(refs[seq] > 0 || es.eventInfo[seq].valueDef) {
+			es.MarkUncompilable("for: side-effect loop result is consumed (Stage 3)")
+		}
+	}
 	for _, seq := range extra {
 		refs[seq]++
 	}
 	var promoted map[int]int
 	var dead map[int]bool
-	for i := range events {
-		ev := &events[i]
+	allEvents, fragInternal := collectPromotableEvents(events)
+	fragResult := fragmentResultSeqs(allEvents)
+	// captured marks producers referenced by a CLOSURE CAPTURE (an each/fold/scan
+	// body's lexical capture of an enclosing value-def). The capture resolves to a
+	// frame local re-pushed at OpPushClosure (promoteOperand rewrites closureCaps);
+	// it can never read a transient sim slot. A NATIVE captured value-def already
+	// promotes via the valueDef trigger below, but a USER-call value-def
+	// (`def mx (lst list-max)` captured by the radix each-loop) was shadowed by the
+	// "leave single-use user call on the stack" case — so its list-max result was
+	// left loose below the arm result ("branch leaves extra values"). Mark it so the
+	// user-call promotion fires and the capture re-pushes from the slot.
+	captured := map[int]bool{}
+	for _, ev := range allEvents {
+		eachClosureCap(ev, func(op emitOperand) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				captured[op.idx] = true
+			}
+		})
+	}
+	for _, ev := range allEvents {
+		// A fragment's residual event (an `if` arm / loop body result) PRODUCED INSIDE
+		// the fragment must stay on that fragment's simulated stack for the arm-result
+		// lowering, and a terminal tail call must stay terminal — never promote one.
+		// But a fragResult that is NOT fragInternal is an ENCLOSING-scope value used as
+		// an arm result (`def g (…); if c [1] [g]`, or the dynApply `def c (a b comp);
+		// if (c gt 0) [c] e`): it lives on the PARENT sim, unreachable from the arm's
+		// own fragment sim (lowerFragment resets lw.vm per fragment), so it MUST be
+		// promoted to a frame local — the arm then re-pushes the slot (lowerFragment
+		// re-resolves its captured opEvent `out` to the local). Without this the arm
+		// refused "branch leaves extra values" (out=opEvent, len(lw.vm)==0).
+		if fragResult[ev.seq] && fragInternal[ev.seq] {
+			continue
+		}
+		// A DEAD branch value-def — `def _ (if c [t] [e])` whose merge result is never
+		// read — drops that result, like a dead call value-def: the interpreter binds
+		// the if value to the dead name OFF the residual stack, so leaving the merge on
+		// the sim left the enclosing fn body with an extra value ("body leaves extra
+		// values (Stage 3)") — the recursive sorts' `def _ (if (n gt 1) [… quick-go]
+		// [arr])` pattern. Only a 2-ARM if (hasElse): a no-else if is already a variadic
+		// program-residual-only value the dead-drop must not touch.
+		if ev.kind == evBranch {
+			if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 {
+				if dead == nil {
+					dead = map[int]bool{}
+				}
+				dead[ev.seq] = true
+				continue
+			}
+			// A 2-arm if-RESULT bound to a name and read MORE THAN ONCE (or across a
+			// fragment floor) — `def bi (if …); … (… get bi) … set bi …` — must be
+			// STORED to a frame local: a single sim copy is consumed by the first use,
+			// so the second (here a later `set` key) cannot find it ("operands of set
+			// not adjacent on top", bucket's `bcount set bi ((bcount get bi) add 1)`).
+			// Promote like a call result; lowerEvents stores the merge after the branch
+			// and the rewritten references re-push from the slot. Gated to a SINGLE-value
+			// merge (both arms net <=1) so the store seats exactly one value — a
+			// multi-value / variadic merge is refused at the store hook (sound fallback).
+			if branchSingleValue(ev.br) && es.eventInfo[ev.seq].valueDef &&
+				(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq])) {
+				if promoted == nil {
+					promoted = map[int]int{}
+				}
+				if _, done := promoted[ev.seq]; !done {
+					promoted[ev.seq] = unit.numLocals
+					unit.numLocals++
+				}
+			}
+			continue
+		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
 		// promoted to a frame local: its result stores once and re-pushes per
 		// reference. (Without evCallUser, a user-call result above a literal in the
@@ -561,11 +809,25 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// residual ref count does not capture (Test.run-spec), where storing-once
 		// or dropping its result diverges — but a refs>=2 value genuinely has
 		// several consumers, so re-push is required and sound.
-		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2)
+		// A user-call value-def captured by a closure (captured) joins the
+		// forceOrder / multi-ref triggers: the capture needs the result in a frame
+		// slot, so it must not be left loose on the sim (the radix list-max leaf).
+		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 || (captured[ev.seq] && es.eventInfo[ev.seq].valueDef))
+		// A DEAD value-def — `def _ (f …)` bound to a name referenced ZERO times —
+		// drops its result for a USER call too, not only a native. The interpreter
+		// binds the result to that name OFF the residual stack (the binding is the
+		// only "use", and it is never read), so leaving the user-call result on the
+		// stack left the fn body with an extra value ("body leaves extra values
+		// (Stage 3)") — the recursive sorts' `def _l (… quick-go)` ignored-recursive-
+		// result pattern. Gated on valueDef (an EXPLICIT def): this is NOT the SINGLE-
+		// use (refs>=1) harness/accumulation case the comment guards against, where the
+		// residual ref count can miss a dynamic read. The call's side effects run; only
+		// its ignored return is dropped.
+		deadValueDef := es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0
 		switch {
-		case isUser && !promoteUser:
+		case isUser && !promoteUser && !deadValueDef:
 			// leave the user-call result on the simulated stack (Stage-3 layout)
-		case !isUser && refs[ev.seq] == 0:
+		case refs[ev.seq] == 0 && (!isUser || deadValueDef):
 			// A single-result value-def bound to a name referenced zero times (a
 			// dead binding, e.g. `def b (make C {…})` with b never used) — never the
 			// program residual or a fragment read, both of which count toward refs.
@@ -576,16 +838,21 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] >= 2 || es.eventInfo[ev.seq].valueDef || fragRef[ev.seq] || forceOrder[ev.seq]:
+		case refs[ev.seq] >= 2 || es.eventInfo[ev.seq].valueDef || (fragRef[ev.seq] && !fragInternal[ev.seq]) || forceOrder[ev.seq]:
 			// Promote to a frame slot (store now, re-push per reference) when the
 			// result is referenced more than once, OR it is a NAMED value-def
-			// (`def x (expr)`, marked via MarkValueDef), OR it is read from INSIDE a
-			// branch/loop fragment (fragRef): a binding may be consumed in any order,
-			// not just stack order — `def a (make…) def b (make…) a.x … b.x` reads a
-			// (produced first, now deeper) before b — and a cross-floor fragment read
-			// cannot reach the parent stack at all. The single-consume simulated
-			// stack seats neither; a frame local re-pushes freely from any scope. The
-			// extra STORE/PUSH for an in-order single use is harmless.
+			// (`def x (expr)`, marked via MarkValueDef), OR it is a UNIT-level producer
+			// read from INSIDE a branch/loop fragment (fragRef && !fragInternal): a
+			// binding may be consumed in any order, not just stack order — `def a
+			// (make…) def b (make…) a.x … b.x` reads a (produced first, now deeper)
+			// before b — and a cross-floor fragment read cannot reach the parent stack
+			// at all. The single-consume simulated stack seats neither; a frame local
+			// re-pushes freely from any scope. The fragRef trigger is gated on
+			// !fragInternal: a producer INSIDE the fragment (its own intermediate) is
+			// reachable on the fragment's local sim stack, and force-promoting it via
+			// fragRef wrongly stored a tail call's argument and broke OpTailCallUser
+			// detection — so a fragment-internal value promotes only via valueDef /
+			// refs>=2. The extra STORE/PUSH for an in-order single use is harmless.
 			if promoted == nil {
 				promoted = map[int]int{}
 			}
@@ -833,7 +1100,15 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	}); reason != "" {
 		return reason
 	}
-	if c.makeList {
+	if c.dynApply > 0 {
+		// Apply the TOP operand (a runtime fn VALUE) to the `dynApply` trailing args
+		// laid out below it — a paren-bounded trailing fn-value apply (`(a b comp)`)
+		// recorded as an event (RecordDynApply) so it seats like any computed result:
+		// a def-local, an if operand, a list member, OR the body residual. The layout
+		// above placed the operands [args…, fn] with the fn on top, exactly the stack
+		// OpCallDynTrailTop reads (fn = top, its dynApply args below).
+		lw.emit(OpCallDynTrailTop, c.dynApply, c.pos)
+	} else if c.makeList {
 		// Assemble the n laid-out operands into a list (a computed list literal,
 		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.
 		lw.emit(OpMakeList, n, c.pos)
@@ -938,6 +1213,20 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		lw.vm = parent
 		return ""
 	}
+	// A fragment result that is an ENCLOSING-scope value-def PROMOTED to a frame local
+	// (planValueDefLocals now promotes a fragResult that is not fragInternal) lives in
+	// a SLOT, not on this fragment's sim stack — lowerEvents left nothing on lw.vm for
+	// it. The fragment's `out` operand was captured at RECORDING time, before
+	// promotion, so it still reads as the producing event; re-resolve it to its local
+	// so the arm RE-PUSHES the slot as its result (`def g (…); if c [1] [g]`, and the
+	// dynApply `def c (a b comp); if (c gt 0) [c] e`). Mirrors the main stream's
+	// already-rewritten references.
+	if out != nil && out.kind == opEvent {
+		if slot, ok := lw.promoted[out.idx]; ok {
+			loc := localOperand(slot + out.resIdx)
+			out = &loc
+		}
+	}
 	switch {
 	case fragDiverges(frag):
 		// Control left via break/continue; the residual scope is
@@ -958,10 +1247,24 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		// `[({a:(get…)} get a)]`). Only a branch arm may carry it (allowVariadic);
 		// a loop body / condition needs a single value. lowerArms marks the merge
 		// variadic via fragMulti so only a variadic-absorbing position consumes it.
-		if !allowVariadic || len(lw.vm) != frag.residualN || !slotIs(lw.vm[len(lw.vm)-1], *out) {
+		if !allowVariadic {
 			return "branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
-		lw.fragMulti = true
+		switch {
+		case len(lw.vm) == frag.residualN && slotIs(lw.vm[len(lw.vm)-1], *out):
+			// Every value EVENT-produced on the sim, the top matching out.
+			lw.fragMulti = true
+		case out.kind != opEvent && len(lw.vm) == frag.residualN-1:
+			// A trailing CONST/LOCAL result above residualN-1 EVENTS on the sim (`[ …
+			// swap-at end 0 ]` where the swap's array result is counted in residualN):
+			// push the const on top of the seated events. The whole-arm residual
+			// ([event…, const]) matches the interpreter, and the variadic merge
+			// (fragMulti) absorbs it — the heap/intro multi-value swap-then-const arm.
+			lw.pushOperand(*out, pos)
+			lw.fragMulti = true
+		default:
+			return "branch leaves extra values (Stage 2 lowers single-result branches)"
+		}
 	case out.kind == opEvent:
 		if lw.variadic[out.idx] && !allowVariadic {
 			// The fragment's result is itself a VARIADIC (0-or-1) event — a
@@ -976,7 +1279,20 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		}
 	default:
 		if len(lw.vm) != 0 {
-			return "branch leaves extra values (Stage 2 lowers single-result branches)"
+			// Leftover side-effect EVENT results below the single const/local result: the
+			// fragment analysis netted this arm at residualN<=1, so the events on the sim
+			// are ignored side-effect calls (`[ arr i j swap-at end 0 ]` — the in-place
+			// swap returns the array, discarded by the trailing literal `0`). They already
+			// RAN (lowerEvents emitted them); DROP their results so the arm nets exactly
+			// its single result. Only an allowVariadic branch ARM trims this way — a loop
+			// body / condition with leftovers is a genuine over-count and still refuses.
+			if !allowVariadic {
+				return "branch leaves extra values (Stage 2 lowers single-result branches)"
+			}
+			for range lw.vm {
+				lw.emit(OpDrop, 0, pos)
+			}
+			lw.vm = nil
 		}
 		lw.pushOperand(*out, pos)
 		lw.vm = lw.vm[:len(lw.vm)-1] // pushOperand tracked it; the scope owns the count
@@ -1175,19 +1491,55 @@ func fragSingleResidual(frag *EmitFragment) bool {
 	return depth == 1
 }
 
-func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasOut bool) {
+// tailCompatibleReturns reports whether a tail call to calleeUnit is sound w.r.t.
+// the CALLER's declared return types. A TAIL_CALL_USER REPLACES the caller's
+// frame, so the callee's RET returns straight to the caller's caller, BYPASSING
+// the caller's return-type check (checkReturnContract at RET). That is sound only
+// if the callee's result already satisfies the caller's contract — i.e. each
+// callee return type conforms to the caller's. A caller with no contract (empty)
+// is trivially safe; a count mismatch falls back to a regular CALL_USER so the
+// caller's RET check runs (which the interpreter runs too). Without this a
+// `[Map]`-declared fn tail-calling a `[Integer]`-returning one returned the
+// Integer UNCAUGHT — a compile==interpret violation (the interpreter raises
+// type_error). A caller declaring `[Any]` (or self/compatible recursion) stays a
+// tail call: the check it bypasses is vacuous / already implied by the callee.
+func (es *EmitState) tailCompatibleReturns(calleeUnit int, callerReturns []*Type) bool {
+	if len(callerReturns) == 0 {
+		return true
+	}
+	if calleeUnit < 0 || calleeUnit >= len(es.fnRecs) {
+		return false
+	}
+	callee := es.fnRecs[calleeUnit].returns
+	if len(callee) != len(callerReturns) {
+		return false
+	}
+	for i, exp := range callerReturns {
+		if exp == nil || exp.Equal(TAny) {
+			continue
+		}
+		if callee[i] == nil || !callee[i].ConformsTo(exp) {
+			return false
+		}
+	}
+	return true
+}
+
+func (es *EmitState) markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool, callerReturns []*Type) (stillHasOut bool) {
 	if frag == nil || len(frag.events) == 0 || !hasOut || out.kind != opEvent {
 		return hasOut
 	}
 	last := &frag.events[len(frag.events)-1]
 	switch last.kind {
 	case evCallUser:
-		if last.seq == out.idx && fragSingleResidual(frag) {
+		if last.seq == out.idx && fragSingleResidual(frag) && es.tailCompatibleReturns(last.uc.unit, callerReturns) {
 			// Tail position requires the call's result to be the fragment's WHOLE
 			// residual — nothing left BELOW it. A multi-value arm (`[n mul 2 m (n
 			// sub 1)]`, where n*2 sits below the recursive call) is NOT tail: a
 			// frame-replacing TAIL_CALL_USER would discard the lower values. Only
-			// mark tail when the net residual is exactly the call's single result.
+			// mark tail when the net residual is exactly the call's single result
+			// AND the callee's returns satisfy the caller's (else the tail call
+			// would bypass the caller's return-type check — see tailCompatibleReturns).
 			last.uc.tail = true
 			return false
 		}
@@ -1202,7 +1554,7 @@ func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasO
 			// tail-diverges, the whole branch does (lowerBranch's const-cond
 			// path then emits no merge slot, matching hasThenOut=false).
 			if last.br.hasThenOut {
-				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
+				last.br.hasThenOut = es.markTailCalls(last.br.then, &last.br.thenOut, true, callerReturns)
 				if !last.br.hasThenOut {
 					return false
 				}
@@ -1211,10 +1563,10 @@ func markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool) (stillHasO
 		}
 		if last.br.hasElse {
 			if last.br.hasThenOut {
-				last.br.hasThenOut = markTailCalls(last.br.then, &last.br.thenOut, true)
+				last.br.hasThenOut = es.markTailCalls(last.br.then, &last.br.thenOut, true, callerReturns)
 			}
 			if last.br.hasElsOut {
-				last.br.hasElsOut = markTailCalls(last.br.els, &last.br.elsOut, true)
+				last.br.hasElsOut = es.markTailCalls(last.br.els, &last.br.elsOut, true, callerReturns)
 			}
 			// The branch still merges normally for non-tail arms; if
 			// EVERY arm tail-calls, control never reaches the merge —

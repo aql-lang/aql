@@ -2265,46 +2265,11 @@ func (e *Engine) stepWord(val Value) error {
 		}
 	}
 
-	// Check-mode advisory: the forward-greediness gotcha. When a word
-	// forward-collects an argument AND also takes a stack argument (a
-	// swap-form dispatch) while a SIBLING operand — a value of the same
-	// type the word just consumed — remains unconsumed on the stack below
-	// it, the author likely meant the stacked operands to be consumed
-	// together (the `1 2 add 3 mul → 5` surprise: `add` grabs the forward
-	// `3` and strands the `1`). Advisory only (info severity), emitted in
-	// check mode, never gating. See design/FORWARD-STRAND-ADVISORY.10.md.
-	if e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0 {
-		e.checkForwardStrandsOperand(w, sig, positions, val.Pos)
-		// Mixed-form advisory (ERRORS.8.md §6.2, VOXGIG T9.4): a call
-		// of three or more args that takes operand(s) from a PRECEDING
-		// expression while also forward-collecting binds differently
-		// from the all-forward reading — `(cond) if [a] [b]` is the
-		// reported shape — and the divergence is silent. Two-arg mixed
-		// calls are the documented swap form (`10 sub 3`) and stay
-		// clean. Advisory only (info severity), never gating.
-		//
-		// Gated on the DEEPEST stack-bound slot being Any-typed: the
-		// genuine footgun (`(cond) if [a] [b]`, if3's all-`Any`
-		// {Any,Any,Any} sig) lands the stacked value in an untyped slot
-		// where a misbind is silent, whereas the documented receiver-first
-		// idiom (`xs set 0 v`, `s slice j e` — collection/receiver declared
-		// as the concretely-typed LAST slot) lands it in a typed slot and is
-		// correct by construction. Without this, the advisory over-fired on
-		// every receiver-first call (~190 false info across the voxgig-aql
-		// libraries, which the docs already say to ignore). Same Any-slot
-		// discriminator checkForwardStrandsOperand uses.
-		if sig.TotalArgs() >= 3 && mixedFormStackSlotAny(e, sig, positions) {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
-				Code: "mixed_form_call",
-				Detail: w.Name + " takes " + strconv.Itoa(stkCount) + " argument(s) from the stack while forward-collecting " +
-					strconv.Itoa(fwdCount) + " — the mixed form binds differently from the all-forward form; " +
-					"prefer " + w.Name + " arg1 arg2 … or group explicitly",
-				Word: w.Name,
-				Row:  val.Pos.Row,
-				Col:  val.Pos.Col,
-			})
-		}
-	}
+	// Check-mode forward-greediness advisories (forward-strand + mixed-form).
+	// Extracted from stepWord to keep this hot dispatch path under the
+	// cyclomatic-complexity gate; diagnostics only — no effect on execution
+	// or dispatch. See design/FORWARD-STRAND-ADVISORY.10.md.
+	e.checkMixedFormAdvisories(w, sig, positions, val.Pos, fwdCount, stkCount)
 
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
@@ -2322,6 +2287,38 @@ func (e *Engine) stepWord(val Value) error {
 	}
 	e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	return e.execMatch(match)
+}
+
+// checkMixedFormAdvisories emits the two check-mode forward-greediness
+// advisories when a word forward-collects an argument AND also takes a stack
+// argument (a swap-form dispatch): the forward-strand advisory (the
+// `1 2 add 3 mul → 5` surprise — `add` grabs the forward `3` and strands the
+// `1`) and the mixed-form-call advisory (a 3+-arg call taking operand(s) from a
+// PRECEDING expression while forward-collecting binds differently from the
+// all-forward reading — `(cond) if [a] [b]`). Both are advisory only (info
+// severity), emitted in check mode, never gating. The mixed-form arm fires only
+// when the deepest stack-bound slot is Any-typed (the genuine footgun, if3's
+// {Any,Any,Any}); a concretely-typed receiver-first idiom (`xs set 0 v`,
+// `s slice j e`) binds correctly and stays quiet — without that gate the
+// advisory over-fired ~190 false info across the voxgig-aql libraries. Extracted
+// from stepWord so the hot dispatch path stays under the cyclomatic-complexity
+// gate. See design/FORWARD-STRAND-ADVISORY.10.md, ERRORS.8.md §6.2.
+func (e *Engine) checkMixedFormAdvisories(w WordInfo, sig *Signature, positions []int, pos SrcPos, fwdCount, stkCount int) {
+	if !(e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0) {
+		return
+	}
+	e.checkForwardStrandsOperand(w, sig, positions, pos)
+	if sig.TotalArgs() >= 3 && mixedFormStackSlotAny(e, sig, positions) {
+		e.registry.Check.AddDiagnostic(CheckDiagnostic{
+			Code: "mixed_form_call",
+			Detail: w.Name + " takes " + strconv.Itoa(stkCount) + " argument(s) from the stack while forward-collecting " +
+				strconv.Itoa(fwdCount) + " — the mixed form binds differently from the all-forward form; " +
+				"prefer " + w.Name + " arg1 arg2 … or group explicitly",
+			Word: w.Name,
+			Row:  pos.Row,
+			Col:  pos.Col,
+		})
+	}
 }
 
 // mixedFormStackSlotAny reports whether the deepest stack-bound sig slot of a
@@ -2499,7 +2496,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 					// error, not a silent fallback to its literal word.
 					// Use `foo/q` for an atom, `quote […]` for a literal
 					// word list / quotation.
-					evaluated, err := e.autoEvalList(match.Args[i])
+					evaluated, err := e.autoEvalList(match.Args[i], true)
 					if err != nil {
 						return err
 					}
@@ -3138,7 +3135,7 @@ func (e *Engine) autoEvalStack() error {
 			continue
 		}
 		if val.Parent.Equal(TList) && val.Data != nil && !IsTypedList(val) && !IsTableType(val) {
-			result, err := e.autoEvalList(val)
+			result, err := e.autoEvalList(val, false)
 			if err != nil {
 				return err
 			}
@@ -3156,7 +3153,9 @@ func (e *Engine) autoEvalStack() error {
 
 // autoEvalList evaluates the contents of a plain list in a sub-engine,
 // returning a new list containing the results. For example, [1 add 2] → [3].
-func (e *Engine) autoEvalList(val Value) (Value, error) {
+// consumed marks the list as a word/fn ARGUMENT being auto-evaluated (execMatch /
+// execFnDefSig), as opposed to the end-of-Run residual eval (autoEvalStack).
+func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	elems, _ := AsList(val)
 	if elems.Len() == 0 {
 		return val, nil
@@ -3174,12 +3173,27 @@ func (e *Engine) autoEvalList(val Value) (Value, error) {
 	// so record it as an OpMakeList assembly of the evaluated elements; otherwise
 	// the list is an unresolvable residual and the program falls back. A
 	// fully-literal list (`[1 2 3]`) stays inert and bakes as a pooled const.
-	// Only the TOP engine records: a SUB-engine eval is a handler inferring a
-	// NoEval code body (`list-of [Rand.int 0 10] 3` — the generator is re-run per
-	// iteration, often non-deterministic), so freezing one assembly would diverge.
-	if e.isTop && e.registry.Check.IsActive() {
+	if e.registry.Check.IsActive() {
 		if es := e.registry.Check.Emit; es != nil && !isInertConst(out) {
-			es.RecordMakeList(e.registry, result, out, val.Pos)
+			switch {
+			case e.isTop:
+				// Top-level (frames==1): the canonical case, evaluated once.
+				es.RecordMakeList(e.registry, result, out, val.Pos)
+			case consumed:
+				// A CONSUMED computed list ARG inside a fn body / closure
+				// (`make Array [i 99]`, `f [j (g x)]`): the interpreter auto-evaluates
+				// it against the LIVE def stack here, so its element locals/params
+				// resolve (i → its frame slot) exactly as recordMakeListInner re-pushes
+				// them per call — OpMakeList re-assembles from operands per run, sound
+				// in a nested frame (the RecordMakeMap caller already relies on this).
+				// The end-of-Run RESIDUAL eval (consumed=false) is NOT recorded here:
+				// a fn body returning a bare-word list (`[y y]`) raises undefined_word
+				// at run time (the residual sub-engine lacks the body's def-locals), so
+				// baking OpMakeList would diverge — it stays unresolved and falls back.
+				// A stateful generator never reaches here: its body is a NoEval arg,
+				// so execMatch does not auto-evaluate it as a data list.
+				es.recordMakeListInner(e.registry, result, out, val.Pos)
+			}
 		}
 	}
 	return out, nil
@@ -4155,13 +4169,20 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			if fnDef.Module != "" {
 				e.traceNote = "call " + fnDef.Name
 			}
-			trivialDelegation := isTrivialDelegationBody(wrapperSig, fnDef.Name)
-			if trivialDelegation && sig.Handler != nil {
-				// The inner native lives in fnDef.Registry (the module sub-
-				// registry). Carry it on the match so the recorder can re-match a
-				// dynamic-input dispatch via OpCallNativePoly over that registry
-				// (`StructUtil.getpath` over a computed receiver), instead of
-				// refusing — the VM's callPoly resolves the word there.
+			// ONE dispatch path, no exceptions: a module wrapper — trivial-delegation
+			// OR a real AQL body — dispatches through execMatch, exactly like a named
+			// fn and a bare-word call. So a fn body is ANALYSED/COMPILED the SAME way
+			// regardless of how the fn was reached: a param-slot unit via the matched
+			// sig's ReturnsFn, NOT a separate def-stack CallAQL run that left Function
+			// params slot-less and unreachable to a closure capture (the sort
+			// comp-capture leaf — a fundamental dispatch-path divergence). match.Reg
+			// carries the sub-registry so the body's module-private words resolve there
+			// (the inner native's poly re-match, and the body's own scope);
+			// shareCheckState routes the body's unit-compile into the MAIN program's
+			// emit so RecordUserCall references it (else "user fn call (Stage 3)"). A
+			// no-op outside check mode — interpret runs the matched handler in the
+			// sub-registry it was installed in, exactly as before.
+			if sig.Handler != nil {
 				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name, Reg: fnDef.Registry}
 				if len(positions) > 0 {
 					match.Args = make([]Value, len(positions))
@@ -4169,11 +4190,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 						match.Args[i] = e.tape.At(pos)
 					}
 				}
-				return e.execMatch(match)
+				restoreCheck := e.shareCheckState(fnDef.Registry)
+				err := e.execMatch(match)
+				restoreCheck()
+				return err
 			}
-			// Non-trivial body — run via CallAQL in the captured sub-
-			// registry. The wrapper's body has module-private references
-			// that need fnDef.Registry's scope for resolution.
+			// Degenerate: a wrapper sig with no body-runner handler — fall through.
 			args := make([]Value, len(positions))
 			for i, pos := range positions {
 				args[i] = e.tape.At(pos)
@@ -4235,19 +4257,6 @@ func isRecordableLiteral(v Value) bool {
 		return false
 	}
 	return true
-}
-
-// isTrivialDelegationBody reports whether a wrapper FnSig is a pure
-// pass-through to an inner native of the same name — body of the form
-// `[Word(name)]` with all-unnamed Params. Module wrappers built by
-// the `makeXxxFnDef` / `wrapXxxFnDef` helpers all have this shape;
-// AQL fns defined inside a module preamble (with real bodies + named
-// params) do not. Used by execFnDefLiteral to decide whether to
-// direct-call the inner handler (trivial) or run the body in the
-// captured sub-registry (non-trivial).
-func isTrivialDelegationBody(sig *FnSig, name string) bool {
-	inner, ok := trivialDelegationTarget(sig)
-	return ok && inner == name
 }
 
 // trivialDelegationTarget reports the inner native name a wrapper FnSig
@@ -4693,7 +4702,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				if !noEval {
 					// Bare words never degrade to data — propagate the
 					// auto-eval failure (see execMatch).
-					evaluated, err := e.autoEvalList(args[i])
+					evaluated, err := e.autoEvalList(args[i], true)
 					if err != nil {
 						return err
 					}
@@ -5613,16 +5622,61 @@ func (e *Engine) stepCloseParen() error {
 	// (m.g 3) add 1=7. The interpreter dispatches the concrete fn AT the paren,
 	// so refuse here and let the faithful interpreter fallback run it.
 	if es := e.registry.Check.Emit; es != nil && es.active() {
-		first, count := -1, 0
+		first, count, lastIdx := -1, 0, -1
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if isRecordableLiteral(e.tape.At(i)) {
 				if count == 0 && e.tape.At(i).Dynamic {
 					first = i
 				}
 				count++
+				lastIdx = i
 			}
 		}
-		if first >= 0 && count >= 2 {
+		// Classify the paren's fn-value-call boundary. The TRAILING case is checked
+		// FIRST: when the LAST value is a concrete Function applied to the preceding
+		// args, it is the sound paren-bounded apply (`(prev key comp)`, or
+		// `((arr get x) key comp)` where an ARG is dynamic but comp is the fn) — even
+		// if an arg is dynamic, the dynamic is an ARGUMENT, not the applied fn, so the
+		// leading-dynamic reorder hazard does not apply. Only when the last value is
+		// NOT the fn does a LEADING dynamic value mean the dynamic IS the fn being
+		// applied before its args (`(m.g 3)`, `((m.g 3) add 1)`) — the unsound
+		// paren-unaware reorder the residual reconciliation cannot reproduce.
+		last := Value{}
+		if lastIdx >= 0 {
+			last = e.tape.At(lastIdx)
+		}
+		switch {
+		case count >= 2 && lastIdx >= 0 && !last.Dynamic && isFnValueResidual(last):
+			// TRAILING fn-value apply (`(a b comp)`): record it as an EVENT producing
+			// ONE carrier and COLLAPSE the [args…, fn] tape residual to that carrier —
+			// exactly as the interpreter's paren auto-dispatch nets one result. The
+			// event seats like any computed result (a def-local `def c (a b comp)`, an
+			// `if` operand, a list member, the body residual), so a comparator apply
+			// bound to a local compiles, not ONLY the body's trailing residual. On
+			// refusal (an unresolvable operand or a nested unapplied fn arg) the residual
+			// is left intact and the body-residual lowering (RegisterTrailingApply) still
+			// handles the trailing-residual case soundly.
+			var argVals []Value
+			var argIdxs []int
+			for i := openIdx + 1; i < closeIdx; i++ {
+				if isRecordableLiteral(e.tape.At(i)) && i != lastIdx {
+					argVals = append(argVals, e.tape.At(i))
+					argIdxs = append(argIdxs, i)
+				}
+			}
+			out := NewCarrier(TAny)
+			out.ID = GenerateID(IDPrefixForType(TAny))
+			out.Pos = last.Pos
+			if es.RecordDynApply(argVals, last, out, last.Pos) {
+				e.tape.Set(lastIdx, out)
+				for j := len(argIdxs) - 1; j >= 0; j-- {
+					e.tape.Remove(argIdxs[j])
+					closeIdx--
+				}
+			} else {
+				es.RegisterTrailingApply(last.ID, count-1)
+			}
+		case first >= 0 && count >= 2:
 			es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
 		}
 	}
@@ -6121,7 +6175,19 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 					// Defined word: resolves to its def type.
 					if top, ok := e.registry.Defs.Top(ww.Name); ok {
-						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) {
+						// Gradual typing: an Any-typed forward operand — a value
+						// flowed from a dynamic `get`, or a param bound to Any at
+						// a gradual call site — is optimistically accepted for a
+						// concrete param in PURE CHECK mode. At runtime the value
+						// is concrete and dispatches (or raises) exactly as the
+						// interpreter does, so the static analysis stays advisory
+						// rather than emitting a spurious no_signature. NOT in
+						// compile mode: there the dispatch must remain UNMATCHED so
+						// the emitter refuses (force-compile) instead of baking a
+						// wrong direct call — preserving compile==interpret.
+						gradualAny := checkActive && !e.registry.Check.Compiling &&
+							top.Parent != nil && top.Parent.Equal(TAny)
+						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) || gradualAny {
 							// A dispatching binding (FnDefInfo) planned as an
 							// operand is SPECULATIVE: at runtime this token
 							// dispatches rather than arriving as a value
@@ -6417,10 +6483,29 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 func (e *Engine) checkModeFallbackPositions(n int) []int {
 	positions := e.resolvedIndicesBefore(n)
 	remaining := n - len(positions)
+	// depth tracks open forward-groups entered during this walk so the close that
+	// returns to depth 0 is the ENCLOSING group's `)` — a forward arg never crosses
+	// it. Without this break the recovery could gather positions PAST the group's
+	// close when its assumed arity exceeds the real arg count; splicing those out
+	// then deletes tokens across the `)` boundary and leaves a phantom "unmatched
+	// opening parenthesis" in a later (balanced) fn body — the emergent whole-module
+	// paren bleed (template.aql's first-word / after-word / parts errors).
+	depth := 0
 	for i := e.pointer + 1; remaining > 0 && i < e.tape.Len(); i++ {
 		v := e.tape.At(i)
+		if IsCloseParen(v) {
+			if depth == 0 {
+				break
+			}
+			depth--
+			continue
+		}
+		if IsOpenParen(v) {
+			depth++
+			continue
+		}
 		if IsForward(v) || IsMark(v) || IsMove(v) ||
-			IsOpenParen(v) || IsReturnCheck(v) || IsDefCleanup(v) {
+			IsReturnCheck(v) || IsDefCleanup(v) {
 			continue
 		}
 		positions = append(positions, i)
@@ -6530,6 +6615,38 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	results := carrierResults(e.registry, w.Name, synth, args, pos, nil, false)
 	e.spliceCheckResults(positions, results)
 	return true, nil
+}
+
+// tryRecordRecoveredUserFn records a GUARDED CALL_USER for a user-fn dispatch that
+// matchSignature could not statically commit (an Any- or disjunct-typed operand),
+// when the fn has EXACTLY ONE real (arg-bearing) overload and no 0-arg real sig the
+// synthetic fallback would courtesy-dispatch. The sole sig either matches the
+// runtime arg (dispatch == interpreter) or misses it (the CALL_USER param contract
+// raises == the interpreter's fallback raise). Returns true — and splices the
+// recovered returns — when it records; false leaves the caller's refusal to stand
+// (multi-overload → Cluster C). The L4 leaf: design/VOXGIG-COMPILE-LEAVES.1.md.
+func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
+	if sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
+		return false
+	}
+	realOverloads := 0
+	has0ArgReal := false
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.Fallback {
+			continue // synthetic 0-arg catch-all: raises for an arg-bearing fn
+		}
+		realOverloads++
+		if s.TotalArgs() == 0 {
+			has0ArgReal = true
+		}
+	}
+	if realOverloads != 1 || has0ArgReal {
+		return false
+	}
+	recovered := sig.ReturnsFn(sigOrderArgs(args, nStack), e.registry)
+	e.spliceCheckResults(positions, recovered)
+	return true
 }
 
 func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
@@ -6643,9 +6760,17 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// fill the rest top-down (the deepest-last ascending run reversed).
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
-		if !tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil, false) {
-			e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil, false) {
+			e.spliceCheckResults(positions, out)
+			return nil
 		}
+		// A single-overload user fn over a disjunct-typed operand recovers here
+		// (e.g. the aql:test framework's run-cases inside test-describe's body);
+		// record a guarded CALL_USER instead of refusing (it splices its own returns).
+		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
+			return nil
+		}
+		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		e.spliceCheckResults(positions, out)
 		return nil
 	}
@@ -6661,7 +6786,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// call, never a duplicate CALL_NATIVE for the same dispatch. Concrete (non-
 	// Any) operands that reach here are a genuine type error and still refuse.
 	es := e.registry.Check.Emit
-	if es.active() && anyAnyCarrier(args) {
+	if es.active() && (anyAnyCarrier(args) || anyDisjunctCarrier(args)) {
 		resume := es.Suspend()
 		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 		resume()
@@ -6677,7 +6802,66 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			e.spliceCheckResults(positions, results)
 			return nil
 		}
+		// A SINGLE-overload user/module fn recovered over an Any-typed operand:
+		// matchSignature could not statically commit (the operand's type is unknown),
+		// but with exactly ONE overload the runtime dispatch is unambiguous — the
+		// concrete value either matches the sole sig (dispatch == interpreter) or
+		// fails the VM's CALL_USER param contract (raise == the interpreter's
+		// no_signature). tryRecordPoly can't take it (user fns have an FnFrame; only
+		// sub-registry builtins pass), so drive its ReturnsFn NON-suspended to compile
+		// the body unit and record a GUARDED CALL_USER — buildFnBodyReturnsFn's
+		// SetUnitParamTypes installs the param contract the VM enforces at entry, so a
+		// runtime arg that misses the sole sig raises exactly as the interpreter does.
+		// This is what unblocks the aql:test framework (run-cases) and the trie/
+		// decision walkers (find-kid / mk-tnode / lex-mustache). A MULTI-overload fn
+		// stays refused below (Cluster C): one baked overload would raise where the
+		// interpreter runtime-dispatches a sibling.
+		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
+			return nil
+		}
+		// On a REAL compile pass (Compiling) the MarkUncompilable already refuses
+		// and Finalize surfaces THIS reason, so an error-severity no_signature
+		// diagnostic here would only mask it as the generic "check diagnostics"
+		// (aql.go:297). On a plain check pass this branch is still reachable —
+		// IsolateEmit arms a fresh ACTIVE Emit while analysing each fn body — and
+		// there the diagnostic IS the genuine static report, so gate it on
+		// !Compiling, matching the fall-through path below.
 		es.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		if !e.registry.Check.Compiling && bestMatch < 0 {
+			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "no_signature",
+				Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
+				Word:   w.Name,
+				Row:    pos.Row,
+				Col:    pos.Col,
+			})
+		}
+		e.spliceCheckResults(positions, results)
+		return nil
+	}
+	// A no-signature dispatch reached here UNDER A SUSPENDED outer recovery
+	// (es.suspended > 0) is being ANALYSED to read an enclosing dispatch's result
+	// type — carrierResults suspends recording and re-runs the body purely to
+	// inspect its residual — NOT compiled. Its real compile decision happens on
+	// the non-suspended recording pass (or it is subsumed by the enclosing poly's
+	// runtime re-match). MarkUncompilable here PREMATURELY latches the whole
+	// program refusal: the trie find-kid `(nd "kids" get) get (ch)` shape refuses
+	// because the inner get's result-type probe analyses the outer get against a
+	// transient String-carrier alternative. Skip the latch (and its diagnostic)
+	// under suspend; still splice the analysis result so the enclosing probe
+	// reads a residual.
+	if es == nil || es.suspended == 0 {
+		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+	}
+	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile pass
+	// (!Compiling), where it is the genuine static report of an unmatched dispatch.
+	// This gate is INDEPENDENT of the suspend skip above: a plain check reports a
+	// genuine unmatched dispatch even when it is reached under a suspended
+	// sub-probe (the over-suppression that dropping it inside the suspend branch
+	// caused), while a compile pass never adds it (Finalize surfaces the
+	// MarkUncompilable reason; a diagnostic would only mask it as the generic
+	// "check diagnostics", aql.go:297).
+	if !e.registry.Check.Compiling && bestMatch < 0 {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
 			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
@@ -6685,17 +6869,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			Row:    pos.Row,
 			Col:    pos.Col,
 		})
-		e.spliceCheckResults(positions, results)
-		return nil
 	}
-	e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-	e.registry.Check.AddDiagnostic(CheckDiagnostic{
-		Code:   "no_signature",
-		Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
-		Word:   w.Name,
-		Row:    pos.Row,
-		Col:    pos.Col,
-	})
 	results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 	e.spliceCheckResults(positions, results)
 	return nil

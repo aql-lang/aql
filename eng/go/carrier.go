@@ -79,6 +79,30 @@ func NewCarrierTypedListValue(child Value) Value {
 	return v
 }
 
+// NewCarrierTypedArray constructs a typed mutable-Array carrier — an Array
+// carrier whose ELEMENT type is known (`Array<elem>`). Mirrors
+// NewCarrierTypedList on the Array side: a Value with Parent=TArray and
+// Data=ChildTypeInfo{Child: NewCarrier(elem)}, Carrier set so the engine
+// treats it as abstract. `id` is the make-site identity (the SrcPos of the
+// originating `make Array`) used in check mode to key element-bound / poison
+// tracking; pass a zero SrcPos for an untyped/untracked array. Downstream
+// `arr get` recovers the element via DataArrayElemTypeFromValue. A concrete
+// runtime Array (ArrayInstanceInfo) is unaffected — this is a CHECK-MODE
+// carrier shape only. See design/ARRAY-ELEMENT-CARRIER{,-ARCH}.0.md.
+func NewCarrierTypedArray(elem *Type, id SrcPos) Value {
+	v := NewTypedArray(NewCarrier(elem), id)
+	v.Carrier = true
+	return v
+}
+
+// NewCarrierTypedArrayValue is NewCarrierTypedArray with an arbitrary carrier
+// element (nested typed array, disjunct, …) instead of a bare Parent.
+func NewCarrierTypedArrayValue(child Value, id SrcPos) Value {
+	v := NewTypedArray(child, id)
+	v.Carrier = true
+	return v
+}
+
 // NewCarrierTypedListLen constructs a typed-list carrier with a
 // statically-known length, so a downstream index check can reason
 // about a computed list (e.g. `iota n`). n MUST be the exact length
@@ -204,6 +228,62 @@ func DataListElemTypeFromValue(data Value) *Type {
 		}
 	}
 	return t
+}
+
+// DataArrayElemTypeFromValue reads the element type of a typed mutable-Array
+// carrier (`Array<T>`), the Array twin of DataListElemTypeFromValue. Returns
+// TAny when the value carries no ChildTypeInfo (an untyped array carrier — e.g.
+// a param `a:Array` with no element annotation), so an untyped array behaves
+// EXACTLY as today: `get` → gradual Any → the existing sound refusal path.
+func DataArrayElemTypeFromValue(data Value) *Type {
+	if ct, ok := data.Data.(ChildTypeInfo); ok {
+		if ct.Child.Data == nil && !ct.Child.Carrier {
+			c := ct.Child // bare type-literal child IS the element type
+			return &c
+		}
+		return ct.Child.Parent
+	}
+	return TAny
+}
+
+// DataArrayIDFromValue reads the make-site identity of a typed-Array carrier,
+// or the zero SrcPos when the value carries none (untracked array).
+func DataArrayIDFromValue(data Value) SrcPos {
+	if ct, ok := data.Data.(ChildTypeInfo); ok {
+		return ct.ArrayID
+	}
+	return SrcPos{}
+}
+
+// observeArrayWrite feeds the Array<T> poison gate from a `set` dispatch in
+// check mode. Two effects, both keyed by make-site identity:
+//   - CONFORMANCE: `set i v arr` whose value v does not PROVABLY conform to
+//     arr's element type taints arr — its gets must decline to gradual Any.
+//     "Trust the bound": a gradual Integer (bound Integer) conforms; a concrete
+//     String or a gradual Any does not. (Spike B2.)
+//   - ESCAPE: a tracked array stored AS A VALUE into any container (`set v into
+//     map/object/array/store`) is tainted — a re-read of the container yields a
+//     carrier without the make-site id, so later off-carrier mutations would be
+//     invisible to this gate.
+//
+// Aliasing (`def b a`) needs no handling: b shares a's carrier identity, so b's
+// writes already key the same poison entry. Read-only consumption (`convert List
+// arr`, `size arr`) is NOT a write and never taints. set arg order is uniform —
+// args[0]=key/index, args[1]=value, args[2]=container — across Array/Map/Object/
+// Store/Flex sigs.
+func observeArrayWrite(r *Registry, word string, args []Value) {
+	if word != "set" || len(args) < 3 || !r.Check.IsActive() {
+		return
+	}
+	if elem := DataArrayElemTypeFromValue(args[2]); elem != nil && !elem.Equal(TAny) {
+		valT := args[1].Parent
+		if valT == nil || !valT.ConformsTo(elem) {
+			r.Check.PoisonArray(DataArrayIDFromValue(args[2]))
+		}
+	}
+	if vid := DataArrayIDFromValue(args[1]); (vid != SrcPos{}) {
+		r.Check.PoisonArray(vid) // tracked array stored as a value — escapes
+	}
 }
 
 // toCarrier converts a concrete Value to its carrier form. Control /
@@ -402,6 +482,7 @@ func isLiteralWord(v Value) bool {
 // free statement-position residual would be collected by the NEXT word
 // and corrupt its arity. The dynamic-recovery callers pass false.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value {
+	observeArrayWrite(r, word, args) // Array<T> poison gate (design/ARRAY-ELEMENT-CARRIER-ARCH.0.md)
 	// `args` inside a compiled fn body projects the frame's params (pushed by
 	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
 	// then folds to param N — a frame local — via tryFoldStaticIndex; bare
@@ -487,6 +568,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	var out []Value
 	switch {
 	case sig.ReturnsFn != nil:
+		r.Check.CurCallPos = pos // expose call site to ReturnsFn (e.g. make Array identity)
 		raw := sig.ReturnsFn(args, r)
 		out = make([]Value, len(raw))
 		for i, v := range raw {
@@ -1500,6 +1582,37 @@ func comboTypeNames(combo []Value) string {
 // (Map/List/Flex) return the updated node. A CONCRETE receiver reaches only its
 // own overload (sigTypeMatches is exact for it), so this returns nil there and
 // the true 0-arity stands; only a genuinely dynamic receiver reaches both.
+// dynamicReachableOverloadCount counts how many of word's same-arity overloads
+// the (partly-dynamic) arg list could match. ≥2 means the dispatch is AMBIGUOUS:
+// a gradual-Any arg matches every overload optimistically, so the checker's single
+// committed overload may not be the one the RUNTIME value needs. Used to refuse a
+// higher-order word (each/fold/scan) over a gradual collection — its List-vs-Map
+// overloads can't be statically chosen and it has no poly re-match (code body).
+func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return 0
+	}
+	n := 0
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if len(s.Args) != len(args) {
+			continue
+		}
+		reach := true
+		for j := range args {
+			if !sigTypeMatches(args[j], s.Args[j]) {
+				reach = false
+				break
+			}
+		}
+		if reach {
+			n++
+		}
+	}
+	return n
+}
+
 func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Type {
 	fn := r.Lookup(word)
 	if fn == nil {
@@ -1746,6 +1859,26 @@ func anyDynamicCarrier(vs []Value) bool {
 func anyAnyCarrier(vs []Value) bool {
 	for _, v := range vs {
 		if v.Carrier && v.Parent != nil && v.Parent.Equal(TAny) {
+			return true
+		}
+	}
+	return false
+}
+
+// anyDisjunctCarrier reports whether any value is a UNION (Disjunct) carrier — a
+// receiver whose static type is a union of alternatives (`Map | Any` from an
+// if-branch join, the trie/tst node-vs-none shape). Like an Any carrier it
+// conforms to no single concrete overload, so matchSignature cannot commit and
+// the dispatch reaches the no-signature recovery — but at run time it holds ONE
+// concrete alternative, and the SAME first-match the interpreter takes
+// dispatches it. So a poly-safe word (get/getr) over a union receiver records a
+// runtime-re-matching OpCallNativePoly instead of refusing; a runtime member
+// that matches no overload routes to the sound OpFallback island. (A bare
+// disjunct carrier carries no DisjunctInfo payload, so IsDisjunct is false here —
+// the carrier's Parent IS the union type, which is what we test.)
+func anyDisjunctCarrier(vs []Value) bool {
+	for _, v := range vs {
+		if v.Carrier && v.Parent != nil && v.Parent.ConformsTo(TDisjunct) {
 			return true
 		}
 	}
@@ -2547,7 +2680,19 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 		return noop
 	}
 	for _, c := range clauses {
-		r.Defs.Push(c.Name, NewCarrier(c.Type))
+		narrowed := NewCarrier(c.Type)
+		// is-narrowing is a static-only refinement: at runtime the binding is
+		// UNCHANGED, so the narrowed carrier must keep the source's value ID — its
+		// provenance (param slot / producing event). NewCarrier mints a FRESH ID
+		// with no producedBy/localByID entry, so resolveOperand fails ("fn call
+		// operand of unknown provenance") when the narrowed value feeds a user
+		// call — the stats as-summary `if (x is List) [build x] [x]` shape. The
+		// slot already holds the right runtime value because it IS the same
+		// binding, so no value-passing half is needed (unlike a closure capture).
+		if cur, ok := r.Defs.Top(c.Name); ok {
+			narrowed.ID = cur.ID
+		}
+		r.Defs.Push(c.Name, narrowed)
 	}
 	return func() {
 		for _, c := range clauses {
@@ -2608,6 +2753,12 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 			// has no positive representation for the exact difference).
 			continue
 		}
+		// Preserve the source binding's value ID (see ApplyGuardNarrowing): the
+		// else-branch value is the SAME runtime binding, statically refined to the
+		// complement type, so it must resolve to cur's provenance. Set AFTER the
+		// ValuesEqual(narrowed, cur) check above so the "did not refine" early-out
+		// (which can compare by ID) is unaffected.
+		narrowed.ID = cur.ID
 		r.Defs.Push(c.Name, narrowed)
 		pushed = append(pushed, applied{name: c.Name})
 	}

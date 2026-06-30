@@ -188,7 +188,7 @@ func accessorGetSignatures() []NativeSig {
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getIntKeyReturns},
 		// [Key | Array]
-		{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, ReturnsFn: getArrayReturns},
 		// [Key | Object] — atom/string field reads resolve the field's
 		// declared type from the schema (getObjectReturns).
 		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
@@ -475,7 +475,30 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 		return dyn
 	}
 	key, container := args[0], args[1]
-	if !IsConcrete(container) || !IsConcrete(key) || !container.Parent.ConformsTo(TMap) {
+	if !IsConcrete(key) {
+		return dyn
+	}
+	// A record-schema carrier (a record-typed param reparented at the call
+	// boundary by narrowArgsToParams) carries a RecordTypeInfo schema rather
+	// than a concrete map. Recover the field's declared type from the schema so
+	// a body's `c get "field"` types instead of degrading to Any. The result is
+	// GRADUAL, never strict: a field absent at run time (an open map) or a value
+	// the param guard did not pin reads optimistically and is discharged by a
+	// guard — never a committed strict op on a possibly-absent field (the
+	// Array<T> OOB→None lesson). A field outside the schema, or a dispatch-
+	// bearing (Function/FnDef) field, keeps dynamic Any.
+	if rt, ok := container.Data.(RecordTypeInfo); ok && rt.Fields != nil {
+		fv, ok := rt.Fields.Get(getKey(key))
+		if !ok {
+			return dyn
+		}
+		ft := ValueType(fv)
+		if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+			return dyn
+		}
+		return []Value{NewDynamicCarrier(ft)}
+	}
+	if !IsConcrete(container) || !container.Parent.ConformsTo(TMap) {
 		return dyn
 	}
 	m, err := AsMap(container)
@@ -668,6 +691,34 @@ func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 	return []Value{val}, nil
+}
+
+// getArrayReturns is the check-mode carrier result for `arr get i`. It is the
+// Option C admissibility gate: the element type T is recovered only when the
+// receiver is a typed mutable-Array carrier (`Array<T>`) that is (a) tracked — a
+// non-zero make-site id, (b) typed — a concrete element T, and (c) not poisoned
+// — no non-conforming set and no escape (CheckState.ArrayPoisoned). Otherwise it
+// falls back to a gradual Any carrier, EXACTLY today's behaviour.
+//
+// The admitted result is a GRADUAL element carrier (NewDynamicCarrier(T)), NOT a
+// strict one: an out-of-bounds `get` returns None at run time, so a STRICT T
+// would be a silent over-claim (TestCheckTypeSoundness array.tsv: `(make Array
+// [10 20 30]) get 5` is None at run time). The gradual T narrows the gradual-Any
+// baseline to T — collapsing the radix-msd cascade (`lo add (counts get)` →
+// numeric; confirmed by Stage 0) — while staying sound: a None at run time is
+// matched optimistically and discharged by a guard, never a strict integer op on
+// a None. This mirrors the list path, whose integer-indexed get likewise stays
+// gradual (getIntKeyReturns). See design/ARRAY-ELEMENT-CARRIER{,-ARCH}.0.md §6.
+func getArrayReturns(args []Value, r *Registry) []Value {
+	if len(args) >= 2 {
+		recv := args[1]
+		id := DataArrayIDFromValue(recv)
+		elem := DataArrayElemTypeFromValue(recv)
+		if (id != SrcPos{}) && elem != nil && !elem.Equal(TAny) && !r.Check.ArrayPoisoned(id) {
+			return []Value{NewDynamicCarrier(elem)}
+		}
+	}
+	return []Value{NewDynamicCarrier(TAny)}
 }
 
 func getNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

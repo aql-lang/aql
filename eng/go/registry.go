@@ -323,6 +323,26 @@ func (r *Registry) MacroCacheClear() {
 //     check-mode footprint at a glance instead of scanning ten
 //     adjacent declarations.
 type CheckState struct {
+	// CurCallPos is a TRANSIENT scratch: carrierResults writes the current
+	// call's source position here immediately before invoking a sig's
+	// ReturnsFn, so a ReturnsFn that needs the call site (e.g. `make Array`
+	// stamping a typed-Array carrier's make-site identity) can read it — the
+	// ReturnsFunc signature carries no pos. Overwritten on every dispatch; not
+	// persistent state. Zero = unknown (synthetic/top-level).
+	CurCallPos SrcPos
+	// ArrayPoison records, by make-site identity (ChildTypeInfo.ArrayID), the
+	// typed mutable-Array carriers that must NOT yield a strict element from
+	// `get` — because some `set` wrote a non-conforming value, or the array
+	// escaped where it can be mutated off-carrier. It is the soundness gate of
+	// the Array<T> feature (design/ARRAY-ELEMENT-CARRIER{,-ARCH}.0.md).
+	//
+	// Lifecycle is deliberately UNLIKE ContextTypes: it is MONOTONE (only ever
+	// grows; a poison is never cleared) and SHARED across branch clones (clone()
+	// does NOT deep-copy it), so a non-conforming set on ANY reachable path taints
+	// the array everywhere — the union semantics soundness requires. Reset only at
+	// Begin() (per check run). Use PoisonArray / ArrayPoisoned, never touch
+	// directly.
+	ArrayPoison map[SrcPos]bool
 	// Mode toggles static type-checking execution. When true, the
 	// engine runs the same dispatch/matching machinery but carries
 	// type-only Carrier values instead of concrete payloads, and

@@ -86,6 +86,31 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	body := args[spec.BodyPos]
 
+	// A gradual-Any (Dynamic) DATA arg to a higher-order word whose overloads
+	// differ on that arg's type (each/fold/scan: TList vs TMap) is an AMBIGUOUS
+	// dispatch: the checker optimistically committed to ONE overload, but the
+	// runtime value could need the SIBLING — a gradual collection bound to each's
+	// Map overload errors ("expected concrete map") where the interpreter iterates
+	// the runtime List. The body arg is never Dynamic, so anyDynamicCarrier here
+	// means a DATA arg is. The ≥2-reachable gate is INHERENTLY token-form-specific:
+	// a TList token body matches BOTH the {…,TList} and {…,TMap} overloads (count
+	// 2), while a TFunction lambda body matches only the single {TFunction,TMap}
+	// overload (count 1) — so a lambda never reaches here.
+	//
+	// For a CrossCollectionTokenShape word the token body is shape-generic (both
+	// overloads present the bare value), so we DON'T refuse: fall through to record
+	// the first-reachable (List) overload's closure ONCE, relying on the committed
+	// handler being runtime-robust to the sibling collection type (it delegates to
+	// the map/list iteration by the value's concrete type), so the same closure
+	// drives either shape == the interpreter. A non-robust word (no flag) still
+	// refuses → sound interpreter fallback.
+	_, bodyIsLambda := body.Data.(FnDefInfo)
+	tokenShapeGeneric := spec.CrossCollectionTokenShape && IsConcrete(body) && !bodyIsLambda
+	if anyDynamicCarrier(args) && dynamicReachableOverloadCount(r, word, args) >= 2 && !tokenShapeGeneric {
+		es.MarkUncompilable("higher-order `" + word + "` over a gradual-Any collection: ambiguous overload (List vs Map), no static commit and no poly re-match")
+		return true
+	}
+
 	// A lambda VALUE body (`filter ([p:Any] => …) data`): the afn's named
 	// param binds to the WORD'S callback shape ({key,value} pair for list
 	// filter, KeyVal for the map forms), not to its declared `Any`. Compile
@@ -231,9 +256,15 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	defer r.Check.TruncateDiagnostics(diagBase)
 
 	// PROBE: compile the body in a throwaway state so a refusal leaves the
-	// real program untouched (graceful fall-through to the island).
+	// real program untouched (graceful fall-through to the island). The throwaway
+	// is SEEDED with the enclosing fn-unit tables (forkForProbe) so a self-
+	// recursive call inside the body — `… msd-go` in an `each` body — resolves to
+	// the enclosing in-progress unit instead of re-compiling it in the throwaway
+	// (which re-hits the same closure and fails its own residual). The REAL
+	// compile below resolves the recursion naturally (the enclosing unit's key is
+	// already in the real state).
 	real := r.Check.Emit
-	r.Check.Emit = NewEmitState()
+	r.Check.Emit = real.forkForProbe()
 	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	r.Check.Emit = real
 	if !probeOk {

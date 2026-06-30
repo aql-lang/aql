@@ -429,12 +429,16 @@ var (
 	SetAtomReferent           = eng.SetAtomReferent
 	NewBoolean                = eng.NewBoolean
 	// NewCalDuration moved to lang/go/engine/native_temporal.go (Step 8).
-	NewCarrier               = eng.NewCarrier
-	NewElementCarrier        = eng.NewElementCarrier
-	NewCarrierTypedList      = eng.NewCarrierTypedList
-	NewCarrierTypedListValue = eng.NewCarrierTypedListValue
-	NewDynamicCarrier        = eng.NewDynamicCarrier
-	NewDynamicCarrierValue   = eng.NewDynamicCarrierValue
+	NewCarrier                 = eng.NewCarrier
+	NewElementCarrier          = eng.NewElementCarrier
+	NewCarrierTypedList        = eng.NewCarrierTypedList
+	NewCarrierTypedListValue   = eng.NewCarrierTypedListValue
+	NewCarrierTypedArray       = eng.NewCarrierTypedArray
+	NewCarrierTypedArrayValue  = eng.NewCarrierTypedArrayValue
+	DataArrayElemTypeFromValue = eng.DataArrayElemTypeFromValue
+	DataArrayIDFromValue       = eng.DataArrayIDFromValue
+	NewDynamicCarrier          = eng.NewDynamicCarrier
+	NewDynamicCarrierValue     = eng.NewDynamicCarrierValue
 	// NewClkDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
 	NewFloat       = eng.NewFloat

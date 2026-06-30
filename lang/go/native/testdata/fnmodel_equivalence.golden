@@ -150,7 +150,7 @@ WORD dot
   [Scalar/String Ideal/Object] barrier=1 +returnsfn
   [Scalar/String Node/Xml] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 +returnsfn
-  [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Ideal/Array] barrier=1 +returnsfn
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
@@ -267,7 +267,7 @@ WORD get
   [Scalar/String Ideal/Object] barrier=1 +returnsfn
   [Scalar/String Node/Xml] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 +returnsfn
-  [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Any]
+  [Scalar/Number/Integer Ideal/Array] barrier=1 +returnsfn
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
@@ -400,7 +400,7 @@ WORD make
   [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
   [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
   [Any Any Node/Map] barrier=3 returns=[Any]
-  [Ideal/Array Node/List] barrier=2 typearg={0} returns=[Ideal/Array]
+  [Ideal/Array Node/List] barrier=2 typearg={0} +returnsfn
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
   [Node Any] barrier=2 typearg={0} +returnsfn
   [Scalar Any] barrier=2 typearg={0} +returnsfn
