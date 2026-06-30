@@ -1046,6 +1046,13 @@ Recipes cover the major ecosystems — `npm`/`yarn`/`pnpm`/`bun`,
 `cocoapods`, `composer`, `github`, `gitlab`, `terraform` (use
 `--registry=HOST` for the registry-scoped ones). The full table is in
 [CLI.md → Publishing](CLI.md#publishing-a-package-with-a-vault-held-token).
+
+Tools that take their credential as a flag, on stdin, or via a config
+file — NuGet, Docker, Helm, Maven, Gradle, Conan, pub.dev, JSR — have no
+recipe, but plain `vault exec` still keeps the secret in the vault; e.g.
+`aql vault exec tok -- sh -c 'dotnet nuget push pkg.nupkg --api-key "$tok" -s URL'`.
+See [CLI.md → Publishers without a recipe](CLI.md#publishers-without-a-recipe).
+
 For AQL's own registry, `aql login --vault` keeps the registry token in
 the vault and `aql publish` reads it back automatically.
 

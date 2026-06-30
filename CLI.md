@@ -822,10 +822,10 @@ tool reads:
 | `github`/`gh` · `gitlab`/`glab` · `terraform`/`tf` | CLI tokens | `GH_TOKEN`+`GITHUB_TOKEN` / `GITLAB_TOKEN` / `TF_TOKEN_<host>` |
 
 The recipe sets the env-var names, so an alias under `--for` takes no
-`=ENV`/`--prefix`/`--upper` remap. Tools that need a config file or two
-credentials (maven, gradle, conan, docker/helm, nuget's `--api-key`,
-pub.dev, jsr) are not covered — they can't be expressed as a single
-env-injected secret.
+`=ENV`/`--prefix`/`--upper` remap. A tool that takes its credential
+another way — a flag, stdin, or a config file — has no `--for` recipe,
+but plain `vault exec` still keeps the secret in the vault; see
+[Publishers without a recipe](#publishers-without-a-recipe) below.
 
 To rehearse the plumbing without unlocking the vault, add `--dry-run`: no
 passphrase is read and an obviously-fake filler value is injected in place
@@ -836,6 +836,67 @@ own dry run:
 ```bash
 aql vault exec --dry-run --for=npm npm_token -- npm publish --dry-run
 ```
+
+#### Publishers without a recipe
+
+Some tools don't read their credential from an environment variable, so
+there's no `--for` recipe for them. The secret still belongs in the
+vault — store it once and feed the injected `$tok` to whatever the tool
+expects (the alias is `tok` below; `vault exec` puts its value in
+`$tok`). Group by how the tool takes the credential:
+
+**As a `--flag`** — wrap in `sh -c` so the shell expands `$tok` onto the
+flag (the value can show in `ps`, usually fine in CI):
+
+```bash
+# NuGet — dotnet nuget push --api-key
+aql vault exec tok -- sh -c \
+  'dotnet nuget push pkg.nupkg --api-key "$tok" --source https://api.nuget.org/v3/index.json --skip-duplicate'
+
+# JSR — deno / npx jsr publish --token
+aql vault exec tok -- sh -c 'npx jsr publish --token "$tok"'
+```
+
+**On stdin** — pipe it in, so it never reaches the argument list:
+
+```bash
+# Docker — docker login --password-stdin, then push
+aql vault exec tok -- sh -c \
+  'printf %s "$tok" | docker login REGISTRY -u USER --password-stdin && docker push REGISTRY/IMAGE:TAG'
+
+# Helm — helm registry login --password-stdin, then push (OCI)
+aql vault exec tok -- sh -c \
+  'printf %s "$tok" | helm registry login REGISTRY -u USER --password-stdin && helm push chart-0.1.0.tgz oci://REGISTRY/NS'
+```
+
+**In an environment variable the tool reads** (just not a standard name)
+— remap the alias to that exact variable with `tok=ENV`:
+
+```bash
+# Gradle — ORG_GRADLE_PROJECT_<repo>Password (<repo> = the maven { name = } block, case-sensitive)
+aql vault exec tok=ORG_GRADLE_PROJECT_mavenPassword -- gradle publish
+
+# Conan 2 — CONAN_PASSWORD, with the (non-secret) username set alongside
+CONAN_LOGIN_USERNAME=USER aql vault exec tok=CONAN_PASSWORD -- conan upload pkg/1.0 -r REMOTE -c
+```
+
+**In a config file that interpolates an environment variable** — point
+the config at a variable, then inject it:
+
+```bash
+# Maven — settings.xml <server> with <password>${env.tok}</password>
+#   (the <server> id must match the distributionManagement repository id)
+aql vault exec tok -- mvn -s settings.xml deploy
+
+# pub.dev — record that the token lives in $tok, then publish
+aql vault exec tok -- sh -c 'dart pub token add https://pub.dev --env-var tok && dart pub publish --force'
+```
+
+In every case the token is read from the encrypted vault into one child
+process and is gone when it exits — never written to `~/.npmrc`,
+`~/.docker/config.json`, `settings.xml`, or your shell history. (Flag
+and env-var spellings verified against each tool's official docs,
+2026-06.)
 
 For AQL's **own** registry, `aql login --vault` stores the registry token
 in the vault instead of plaintext `~/.aql/user.jsonic`, and `aql publish`

@@ -10,9 +10,11 @@ import (
 // form a tool reads its credential from, so
 // `aql vault exec --for=<name> <alias> -- <cmd>` is a one-liner and the
 // token never touches disk or argv. Every recipe here is pure environment
-// injection (no temp files, a single secret). Tools that need a config file
-// or two distinct credentials (maven, gradle, conan, docker/helm, nuget's
-// --api-key, pub.dev, jsr) are intentionally not covered.
+// injection (no temp files, a single secret). Tools that read their
+// credential another way (maven, gradle, conan, docker/helm, nuget's
+// --api-key, pub.dev, jsr) are intentionally not covered here — plain
+// `vault exec` feeds them via a flag/stdin/config-file; see CLI.md
+// "Publishers without a recipe".
 type publishRecipe struct {
 	name string
 	// defaultRegistry is the host used by registry-scoped recipes (npm,
