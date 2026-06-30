@@ -554,6 +554,22 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						genArgs[i] = rc // preserve record schema into the armed compile + closure capture
 						continue
 					}
+					// A RECOVERED call: an Any arg flowed into a CONCRETELY-typed
+					// param (matchSignature couldn't statically commit, so dispatch
+					// recovered — tryRecordRecoveredUserFn). Compile the body against
+					// the DECLARED param type, not strict-Any: the body's words then
+					// dispatch against the real type (e.g. `convert Float` over an
+					// Integer param inside a chain whose source was an Options `get`),
+					// instead of refusing "unmatched dispatch" on strict-Any. Sound by
+					// the param contract — SetUnitParamTypes installs a CALL_USER guard
+					// that raises == the interpreter when a runtime arg misses the
+					// declared type, so assuming it here can only narrow, never admit a
+					// value the interpreter would reject.
+					if pt := sigParams[i].Type; pt != nil && !pt.Equal(TAny) &&
+						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
+						genArgs[i] = NewCarrier(pt)
+						continue
+					}
 				}
 				if a.Parent == nil {
 					// A root-node carrier (None / Any / Never) has a nil Parent
