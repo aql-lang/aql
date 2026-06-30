@@ -1795,6 +1795,18 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 	if !isFnValueResidual(fn) { // fn must be a genuine fn-value residual
 		return false
 	}
+	// The lowered apply (OpCallDynTrailTop) nets EXACTLY ONE value (nout: 1
+	// below). AQL fns can return 0 or multiple values, so refuse the lowering
+	// for a CONCRETE callee (a baked `/r` reference) that is not provably
+	// single-valued: a multi-return callee miscompiles (`(1 2 pair/r)` with
+	// pair → [Integer Integer] compiled to [2 1] vs the interpreter's [1 2])
+	// and a zero-return callee underflows the following STORE_LOCAL/DROP. A
+	// fn-typed CARRIER (a `comp:Function` param/captured value) carries no
+	// static return arity here; it stays lowered (the comparator convention),
+	// matching the interpreter's single-result paren auto-dispatch.
+	if !fnConcreteSingleValuedOrCarrier(fn) {
+		return false
+	}
 	fnOp, ok := es.resolveOperand(fn)
 	if !ok {
 		return false
@@ -3767,6 +3779,41 @@ func isFnValueResidual(v Value) bool {
 		return true
 	}
 	return v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
+}
+
+// fnConcreteSingleValuedOrCarrier reports whether the fn VALUE v is safe to
+// lower as a single-result paren-bounded apply (OpCallDynTrailTop, which nets
+// EXACTLY ONE value). Two shapes pass:
+//
+//   - A fn-typed CARRIER (no concrete FnDefInfo payload) — a `comp:Function`
+//     param/captured value whose return arity is unknown statically. The
+//     comparator-apply convention relies on this still lowering, matching the
+//     interpreter's single-result paren auto-dispatch; refusing it would lose
+//     compiled coverage with no soundness gain.
+//   - A concrete FnDefInfo whose EVERY authored overload declares exactly one
+//     return type. A `fn […]`-declared callee always carries an explicit return
+//     block (a single return → a length-1 Returns; a lambda → [Any]); only an
+//     empty `[]` block yields nil/length-0, i.e. a genuine zero-return fn. So a
+//     concrete callee with any sig of length != 1 (0 returns, or 2+ like
+//     `pair → [Integer Integer]`) is NOT single-valued and the lowering is
+//     unsound — underflow on zero-return, wrong-order/leftover values on
+//     multi-return. Such a callee is refused so the faithful interpreter island
+//     runs it.
+func fnConcreteSingleValuedOrCarrier(v Value) bool {
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return true // carrier — arity unknown; keep lowering (comparator convention)
+	}
+	sigs := fd.OwnSigs()
+	if len(sigs) == 0 {
+		return false
+	}
+	for i := range sigs {
+		if len(sigs[i].Returns) != 1 {
+			return false
+		}
+	}
+	return true
 }
 
 func eventPos(ev emitEvent) SrcPos {

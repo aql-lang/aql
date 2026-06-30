@@ -5,42 +5,41 @@ import (
 	"testing"
 )
 
-// TestRecoveryCompatibleSigNoFalseError pins the bestMatch gate on the recovery
-// no_signature diagnostic (engine.go checkModeAssumeSig). A recursive call whose args
-// resolve LATE (forward-collection during the fn's own in-flight analysis) makes
-// matchSignature transiently return nil and fall into the recovery — but the recovery's
-// own lenient scoring (sigArgMatches) DOES find a sig the args satisfy (bestMatch >= 0),
-// picks it, and produces the right result. The error diagnostic was therefore spurious
-// (the args match the sig). Emit it ONLY when no compatible sig exists (bestMatch < 0 =
-// a genuine mismatch).
+// TestRecoveryCompatibleSigNoFalseError pins the check-mode recovery
+// (engine.go checkModeAssumeSig): a SINGLE-overload fn applied to a value of
+// statically-unknown type whose RUNTIME value DOES satisfy the sole sig must
+// not be reported. matchSignature can't commit statically (the operand type is
+// unknown), but the recovery records a guarded CALL_USER whose param contract
+// the VM enforces at entry — so the diagnostic is correctly withheld and the
+// runtime dispatch matches.
 //
-// Repro: a self-recursive fn whose recursive arg is `(blk get "next")` (an Integer that
-// resolves through the in-flight body). Its args (List, Integer) match the sole sig, so
-// no no_signature must be reported. A GENUINE mismatch (provable String → Integer) is
-// bestMatch < 0 and STILL flags — see TestAddGradualConcatReturnTyping /
-// TestSliceDynamicReceiverRefines, which still pass. Compile is unaffected
-// (MarkUncompilable still refuses); this is check-diagnostic-only.
+// This must NOT be confused with suppressing the diagnostic whenever the
+// recovery's lenient scoring finds a best-fit (`bestMatch >= 0`): that gate was
+// UNSOUND. A positive best-fit does not imply a runtime match — the recovery
+// fall-through can score a bare type literal (`class Map`), a wrong-typed value,
+// or a dynamic operand whose runtime value still MISSES the sole sig (e.g. a
+// recursive fn whose argument is a List where the sig wants an Integer, which
+// `signature_error`s at run time). Those are genuine errors and ARE reported;
+// the gate dropped 16 of them (TestCheckAccuracyRatchet coverage 208→192).
 func TestRecoveryCompatibleSigNoFalseError(t *testing.T) {
-	const src = `def f fn [ [t:List i:Integer] [Map] [
-  if (i gte (t size)) [ do {next:[i]} ] [
-    def blk  (f t (i add 1))
-    def more (f t (blk get "next"))
-    do { next:[(more get "next")] }
-  ]
-] ]
-def _ ([{}] f 0)`
+	// `m get "k"` is a dynamic (statically-unknown) carrier; at run time it is
+	// the Integer 5, which satisfies `g`'s sole `[n:Integer]` sig. The
+	// single-overload recovery records a guarded CALL_USER, so no no_signature.
+	const src = `def g fn [ [n:Integer] [Integer] [ n add 1 ] ]
+def m (flex {k:5})
+def x (m get "k")
+def _ (g x)`
 
 	a, _ := New()
 	res, _ := a.Check(src)
 	for _, d := range res.Diagnostics {
-		if d.Code == "no_signature" && (d.Word == "f" || strings.Contains(d.Detail, "for f")) {
-			t.Errorf("recursive call whose args match the sole sig must not emit no_signature: %s", d.Detail)
+		if d.Code == "no_signature" && (d.Word == "g" || strings.Contains(d.Detail, "for g")) {
+			t.Errorf("a dynamic operand that satisfies the sole sig at runtime must not emit no_signature: %s", d.Detail)
 		}
 	}
 
-	// NEGATIVE: a provable concrete mismatch (no compatible sig, bestMatch < 0) MUST
-	// still raise no_signature (or a hard signature error) — the gate only drops the
-	// spurious compatible-sig case.
+	// NEGATIVE: a provable concrete mismatch (no compatible sig) MUST still
+	// raise no_signature (or a hard signature error).
 	const bad = `def need-map fn [ [m:Map] [Integer] [ 1 ] ]
 def _ (need-map "not-a-map")`
 	b, _ := New()

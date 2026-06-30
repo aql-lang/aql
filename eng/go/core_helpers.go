@@ -198,12 +198,24 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// engine. The inline-re-step token expansion below binds params and resolves
 		// the body in r, but execMatch re-steps the returned tokens in the CALLER's
 		// registry (callReg), where r's params + module-private words are absent
-		// ("undefined word: x"). So run the body in its HOME registry r via CallAQL
-		// and return the result — the SAME execution the old execFnDefSig path did,
-		// now behind ONE dispatch path. A same-registry fn (callReg == r, the common
-		// top-level case) keeps the inline re-step (recursion / forward-ref intact).
+		// ("undefined word: x"). So run the body via CallAQL and return the result —
+		// the SAME execution the old execFnDefSig path did, now behind ONE dispatch
+		// path. A same-registry fn (callReg == r, the common top-level case) keeps the
+		// inline re-step (recursion / forward-ref intact).
+		//
+		// Pointer inequality alone is too broad: a registry FORK (await/timer/model
+		// background branch — ForkConcurrent) is a NEW *Registry yet shares r's whole
+		// binding lineage PLUS the branch's own local defs. Discriminate by scope id:
+		// a fork inherits r's regID (AnalysisScopeID), a true module sub-registry has
+		// its own. For a fork, run in callReg (the fork) so a branch-local binding
+		// (`TimeUtil.await [[def x 1 read] …]`) the body reads resolves — r lacks it;
+		// for a genuine module sub-registry, run in r where its private words live.
 		if callReg != nil && callReg != r {
-			return r.CallAQL(&s, args, fnDefCopy.Captured)
+			target := r
+			if callReg.AnalysisScopeID() == r.AnalysisScopeID() {
+				target = callReg
+			}
+			return target.CallAQL(&s, args, fnDefCopy.Captured)
 		}
 		var result []Value
 		var names []string
@@ -344,7 +356,14 @@ func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
 		return Value{}, false
 	}
 	if pm, ok := p.Pattern.Data.(MapPayload); ok && pm.M != nil {
-		return Value{Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}, true
+		// A fresh, distinct ID per carrier: the bytecode compiler keys a
+		// param's frame-local slot by Value.ID (StartFnCompile →
+		// RegisterLocal). A struct-literal carrier left with the zero ID would
+		// make every record-typed param collapse onto the SAME slot (id ""),
+		// so a fn reading >1 record param (`fn [[c:C d:D] …]`) miscompiles to a
+		// single local → RunCompiledStrict VM error / wrong local. Mint a
+		// unique node ID exactly as NewValueRaw does for ordinary values.
+		return Value{ID: GenerateID(IDPrefixForType(TMap)), Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}, true
 	}
 	return Value{}, false
 }
