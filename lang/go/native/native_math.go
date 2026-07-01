@@ -213,7 +213,7 @@ var mathNatives = []NativeFunc{
 					return NewFloat(b / a), nil
 				},
 			}),
-			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
+			ReturnsFn: returnsDivMod(), BarrierPos: -1,
 		}},
 	},
 	{
@@ -243,7 +243,7 @@ var mathNatives = []NativeFunc{
 					return NewFloat(math.Mod(b, a)), nil
 				},
 			}),
-			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
+			ReturnsFn: returnsDivMod(), BarrierPos: -1,
 		}},
 	},
 	{

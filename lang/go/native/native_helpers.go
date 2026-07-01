@@ -175,6 +175,46 @@ func numericBinaryHandler(ops towerOps) Handler {
 	}
 }
 
+// returnsDivMod is the check-mode ReturnsFn for div / mod. An INTEGER-family
+// division or modulo by a STATICALLY-ZERO divisor DIVERGES (raises) at
+// runtime — exactly like `raise`, it leaves NO residual. Modelling it as an
+// empty residual lets an enclosing `do` catch it as an Error value (do's
+// empty-body residual → Error carrier), so `do [1 div 0] convert Map e` types
+// cleanly, while every other operand pair produces the normal numeric result.
+// Float division by zero is IEEE inf/nan (no raise), so a Float operand is
+// excluded. A non-concrete or non-zero divisor delegates to the shared
+// numeric-binary result.
+func returnsDivMod() ReturnsFunc {
+	base := ReturnsNumericBinary()
+	return func(args []Value, r *Registry) []Value {
+		if len(args) == 2 && isStaticZeroIntDivisor(args[0]) &&
+			!args[0].Parent.ConformsTo(TFloat) && !args[1].Parent.ConformsTo(TFloat) {
+			return nil // divergence: no residual (raise-like)
+		}
+		return base(args, r)
+	}
+}
+
+// isStaticZeroIntDivisor reports whether v is a concrete integer-family value
+// equal to zero — the divisor shape that makes div / mod raise at runtime.
+func isStaticZeroIntDivisor(v Value) bool {
+	if !IsConcrete(v) {
+		return false
+	}
+	if v.Parent.ConformsTo(TBigInteger) {
+		if b, err := AsBigInteger(v); err == nil && b != nil {
+			return b.Sign() == 0
+		}
+		return false
+	}
+	if v.Parent.ConformsTo(TInteger) {
+		if n, err := v.AsConcreteInteger(); err == nil {
+			return n == 0
+		}
+	}
+	return false
+}
+
 // apdBin runs a binary apd Context op into a fresh Decimal and wraps the
 // result as a BigDecimal, mapping any apd error (division by zero,
 // exponent overflow, …) to the caller. Informational Conditions
