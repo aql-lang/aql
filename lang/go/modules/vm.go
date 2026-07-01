@@ -499,7 +499,7 @@ func makeRunFnDef(wordName string, subReg *native.Registry) native.Value {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TString}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       []native.Value{native.NewWord(wordName)},
+			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
 			BarrierPos: -1,
 		}},
 		Registry: subReg,
@@ -524,7 +524,7 @@ func makeRunWithFnDef(wordName string, subReg *native.Registry) native.Value {
 				{Type: native.TAny},
 			},
 			Returns:    []*native.Type{native.TAny},
-			Body:       []native.Value{native.NewWord(wordName)},
+			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
 			BarrierPos: 0,
 		}},
 		Registry: subReg,

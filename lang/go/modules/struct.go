@@ -64,7 +64,7 @@ func makeModuleFnDef(n native.NativeFunc, subReg *native.Registry) native.Value 
 		fnSigs[i] = native.FnSig{
 			Params:     params,
 			Returns:    s.Returns,
-			Body:       []native.Value{native.NewWord(n.Name)},
+			Impl:       native.AQL([]native.Value{native.NewWord(n.Name)}),
 			NoEvalArgs: s.NoEvalArgs,
 			BarrierPos: s.BarrierPos,
 			// Carry the inner native's check-mode ReturnsFn onto the wrapper

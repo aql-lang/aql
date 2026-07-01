@@ -502,7 +502,7 @@ func wrapMiniFnDef(wordName string, overloads [][]native.FnParam, returns []*nat
 		sigs = append(sigs, native.FnSig{
 			Params:     params,
 			Returns:    returns,
-			Body:       []native.Value{native.NewWord(wordName)},
+			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
 			BarrierPos: -1,
 			QuoteArgs:  quoteArgs,
 		})

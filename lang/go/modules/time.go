@@ -146,7 +146,7 @@ func makeTimeFnDef(wordName string, params []native.FnParam, returns []*native.T
 			{
 				Params:  params,
 				Returns: returns,
-				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 			},
 		},
 		Registry: subReg,

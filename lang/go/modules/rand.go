@@ -231,7 +231,7 @@ func wrapRandFnDefNoEval(
 		Signatures: []native.FnSig{{
 			Params:        params,
 			Returns:       returns,
-			Body:          []native.Value{native.NewWord(wordName)},
+			Impl:          native.AQL([]native.Value{native.NewWord(wordName)}),
 			BarrierPos:    -1,
 			NoEvalArgs:    noEval,
 			NoEvalMapArgs: noEvalMap,

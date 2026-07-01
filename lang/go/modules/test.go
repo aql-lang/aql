@@ -707,7 +707,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		genSig := native.FnSig{
 			Params:     []native.FnParam{{Name: "r", Type: native.TMap}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), genBody...),
+			Impl:       native.AQL(append([]native.Value(nil), genBody...)),
 			BarrierPos: -1,
 		}
 		genResults, err := parent.CallAQL(&genSig, []native.Value{native.NewMap(randMap)}, nil)
@@ -734,7 +734,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), propBody...),
+			Impl:       native.AQL(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
 		propResults, err := parent.CallAQL(&propSig, []native.Value{input}, nil)
@@ -888,7 +888,7 @@ func shrinkFailingProgram(
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), propBody...),
+			Impl:       native.AQL(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
 		res, err := parent.CallAQL(&propSig, []native.Value{candidateValue}, nil)
@@ -984,7 +984,7 @@ func shrinkFailingInput(
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), propBody...),
+			Impl:       native.AQL(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
 		res, err := parent.CallAQL(&propSig, []native.Value{candidateValue}, nil)

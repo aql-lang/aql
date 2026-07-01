@@ -46,7 +46,7 @@ func makeReportFnDef(wordName string, subReg *native.Registry) native.Value {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TString},
-			Body:       []native.Value{native.NewWord(wordName)},
+			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
 			BarrierPos: -1,
 		}},
 		Registry: subReg,

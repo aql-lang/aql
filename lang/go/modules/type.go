@@ -98,7 +98,7 @@ func makeTypeUnaryFnDef(wordName string, subReg *native.Registry, returnType *na
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}},
 			Returns: []*native.Type{returnType},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -114,7 +114,7 @@ func makeTypeBinaryAnyFnDef(name, bodyWord string, subReg *native.Registry, retu
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{returnType},
-			Body:    []native.Value{native.NewWord(bodyWord)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(bodyWord)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -129,7 +129,7 @@ func makeTypePickOmitFnDef(wordName string, subReg *native.Registry) native.Valu
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{native.TType},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -144,7 +144,7 @@ func makeTypeBrandFnDef(wordName string, subReg *native.Registry) native.Value {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{native.TType},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
