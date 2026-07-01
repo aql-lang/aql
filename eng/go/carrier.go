@@ -348,6 +348,16 @@ func toCarrier(v Value) Value {
 	if _, ok := v.Data.(DisjunctInfo); ok {
 		return v
 	}
+	// Keep generic SCHEMA values concrete: their *TypeSchemaInfo IS the type
+	// definition (the parameters + body `of` instantiates). Stripping it to a
+	// bare carrier loses the schema, so IsTypeSchema goes false and `of`
+	// rejects it — e.g. a schema exported from a module and read back through
+	// `Pkg.Box` (whose ModuleExport get returns the stored value, carrier-
+	// stripped) could no longer be instantiated `Pkg.Box of [Integer]`. Same
+	// rationale as the FnDef / Disjunct / Module payload preservations above.
+	if _, ok := v.Data.(*TypeSchemaInfo); ok {
+		return v
+	}
 	// Keep MODULE instances (Ideal/Module, Ideal/ModuleExport) concrete, same
 	// rationale as FnDefInfo: stripping nulls the ExtensionPayload descriptor /
 	// exports, so `MathUtil.$module` would become an opaque carrier the
@@ -2878,6 +2888,17 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	if len(body) == 0 {
 		return nil
 	}
+	// Record the caller→callee edge for the dynamic-scope undefined-word
+	// rescue. The current top of FnNameStack is the fn whose body is executing
+	// and just triggered this dispatch (empty at the top level). Recorded
+	// BEFORE the memo / quota / in-flight early-returns below so a cached or
+	// recursively-bailing call still contributes its edge — the self-edge of a
+	// recursive fn in particular.
+	if name != "" {
+		if n := len(r.Check.FnNameStack); n > 0 {
+			r.Check.recordCallEdge(r.Check.FnNameStack[n-1], name)
+		}
+	}
 	key := FnAnalysisKey(r.AnalysisScopeID(), name, args, captures, body)
 
 	if r.Check.FnSummaries == nil {
@@ -2965,6 +2986,22 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// (RescueForwardRefDiagnostics).
 	r.Check.FnBodyDepth++
 	defer func() { r.Check.FnBodyDepth-- }()
+
+	// Push this fn onto the named-fn stack so its body-local defs and
+	// undefined_word diagnostics attribute to it, and record its parameters as
+	// binders of their names. Params are frame-lifetime, so a name a callee
+	// reads that is one of this fn's params is a sound dynamic-scope reference
+	// whenever this fn reaches that callee. Anonymous bodies are transparent
+	// (not pushed).
+	if name != "" {
+		r.Check.FnNameStack = append(r.Check.FnNameStack, name)
+		defer func() {
+			r.Check.FnNameStack = r.Check.FnNameStack[:len(r.Check.FnNameStack)-1]
+		}()
+		for _, pn := range paramNames {
+			r.Check.RecordFnBinder(pn)
+		}
+	}
 
 	// runOnce performs one full body analysis: snapshot def-stack
 	// depths so any defs the body, captures, or parameter bindings

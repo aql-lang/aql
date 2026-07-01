@@ -35,7 +35,26 @@ func (c *CheckState) Clone() *CheckState {
 	cp.DefsInstalled = cloneMap(c.DefsInstalled)
 	cp.DefsUsed = cloneMap(c.DefsUsed)
 	cp.ContextTypes = cloneMap(c.ContextTypes)
+	cp.FnBinders = cloneNestedSet(c.FnBinders)
+	cp.FnCallGraph = cloneNestedSet(c.FnCallGraph)
+	if c.FnNameStack != nil {
+		cp.FnNameStack = append([]string(nil), c.FnNameStack...)
+	}
 	return &cp
+}
+
+// cloneNestedSet deep-copies a name→set map so a sandbox's mutation of an
+// inner set cannot bleed into the snapshot (cloneMap only copies the outer
+// header, leaving the inner maps shared).
+func cloneNestedSet(m map[string]map[string]bool) map[string]map[string]bool {
+	if m == nil {
+		return nil
+	}
+	cp := make(map[string]map[string]bool, len(m))
+	for k, inner := range m {
+		cp[k] = cloneMap(inner)
+	}
+	return cp
 }
 
 func cloneMap[K comparable, V any](m map[K]V) map[K]V {
@@ -81,6 +100,9 @@ func (c *CheckState) Begin() func() {
 	c.AmbiguousGradualSplit = false
 	c.DefsInstalled = nil
 	c.DefsUsed = nil
+	c.FnNameStack = nil
+	c.FnBinders = nil
+	c.FnCallGraph = nil
 	c.ContextTypes = nil
 	c.ArrayPoison = map[SrcPos]bool{} // fresh per run; SHARED (not cloned) across branches within the run
 	c.InflightBails = 0
@@ -123,6 +145,13 @@ func (c *CheckState) AddDiagnostic(d CheckDiagnostic) {
 	}
 	if c.FnBodyDepth > 0 {
 		d.FnBody = true
+		// Attribute the finding to the innermost NAMED fn on the stack — the
+		// reader for the dynamic-scope undefined-word rescue. Empty when the
+		// only enclosing body is anonymous, which the rescue treats as "no
+		// reader" (never dynamic-rescued).
+		if n := len(c.FnNameStack); n > 0 {
+			d.FnName = c.FnNameStack[n-1]
+		}
 	}
 	c.Diagnostics = append(c.Diagnostics, d)
 }
@@ -279,13 +308,121 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 	kept := r.Check.Diagnostics[:0]
 	for _, d := range r.Check.Diagnostics {
 		if d.Code == "undefined_word" && d.FnBody && d.Word != "" {
+			// Module-scope forward reference: the name has a binding by end of
+			// pass (recursion, mutual recursion, a later top-level def).
 			if _, bound := r.Defs.Top(d.Word); bound || r.Lookup(d.Word) != nil {
+				continue
+			}
+			// Dynamic-scope reference: the name lives only in a per-call frame
+			// (a fn parameter or a body-local def), popped before end of pass,
+			// but AQL's dynamic scoping makes it visible to a fn REACHED from
+			// the binder's frame. Rescue iff some fn that binds the name can
+			// actually reach the reading fn through the call graph — the SOUND
+			// condition. A name merely bound by an unrelated fn that never
+			// calls the reader (`def f fn [[] [x]] def g fn [[x:Integer] [1]] f`)
+			// stays flagged: it genuinely errors at run time.
+			if r.Check.dynamicScopeReachable(d.Word, d.FnName) {
 				continue
 			}
 		}
 		kept = append(kept, d)
 	}
 	r.Check.Diagnostics = kept
+}
+
+// recordCallEdge notes that fn `caller` dispatches fn `callee` (both named).
+// The self-edge of a recursive fn is recorded too — it is what makes a
+// body-local binding visible to a same-fn read on a sibling branch across a
+// recursive frame. No-op for the top-level caller (empty name).
+func (c *CheckState) recordCallEdge(caller, callee string) {
+	if caller == "" || callee == "" {
+		return
+	}
+	if c.FnCallGraph == nil {
+		c.FnCallGraph = map[string]map[string]bool{}
+	}
+	m := c.FnCallGraph[caller]
+	if m == nil {
+		m = map[string]bool{}
+		c.FnCallGraph[caller] = m
+	}
+	m[callee] = true
+}
+
+// RecordFnBinder attributes a binding of `name` to the innermost named fn
+// currently under analysis (top of FnNameStack) — a body-local def, or (via
+// the AnalyseFnBody param loop) a parameter. No-op outside check mode, at the
+// top level (empty stack), or for engine-internal ($-/_-prefixed) names.
+func (c *CheckState) RecordFnBinder(name string) {
+	if !c.IsActive() || name == "" || len(c.FnNameStack) == 0 {
+		return
+	}
+	if name[0] == '_' || name[0] == '$' {
+		return
+	}
+	fn := c.FnNameStack[len(c.FnNameStack)-1]
+	if fn == "" {
+		return
+	}
+	if c.FnBinders == nil {
+		c.FnBinders = map[string]map[string]bool{}
+	}
+	m := c.FnBinders[name]
+	if m == nil {
+		m = map[string]bool{}
+		c.FnBinders[name] = m
+	}
+	m[fn] = true
+}
+
+// dynamicScopeReachable reports whether some fn that binds `name` can reach
+// `reader` (the fn whose body referenced it) through the recorded call graph
+// — i.e. a runtime call stack exists where `reader` executes while a binder
+// frame of `name` is live. Parameters/captures are frame-lifetime, so the
+// answer is sound for them; a body-local binder is sound for the recursion
+// idiom (the def precedes the reaching call) with a documented narrow residual
+// when a local is bound only AFTER the call that reaches the reader.
+func (c *CheckState) dynamicScopeReachable(name, reader string) bool {
+	if reader == "" {
+		return false
+	}
+	binders := c.FnBinders[name]
+	if len(binders) == 0 {
+		return false
+	}
+	for b := range binders {
+		if c.callReaches(b, reader) {
+			return true
+		}
+	}
+	return false
+}
+
+// callReaches reports whether fn `from` transitively calls `to` in the
+// recorded call graph. A fn reaches itself ONLY via an actual recursion edge
+// (from→…→from), never trivially — so a non-recursive fn's own body-local
+// binding is not treated as visible to a same-fn read on a sibling branch.
+func (c *CheckState) callReaches(from, to string) bool {
+	if len(c.FnCallGraph) == 0 {
+		return false
+	}
+	seen := map[string]bool{}
+	var walk func(n string) bool
+	walk = func(n string) bool {
+		for callee := range c.FnCallGraph[n] {
+			if callee == to {
+				return true
+			}
+			if !seen[callee] {
+				seen[callee] = true
+				if walk(callee) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return walk(from)
 }
 
 // RecordContextSet records (key → carrier) for the given store-set

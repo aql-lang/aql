@@ -485,6 +485,31 @@ type CheckState struct {
 	// diagnostics are tagged FnBody and rescued at end of pass when
 	// the name has a binding by then (RescueForwardRefDiagnostics).
 	FnBodyDepth int
+
+	// FnNameStack is the stack of NAMED fn bodies currently under analysis
+	// (one entry per AnalyseFnBody whose fn has a name). Its top is the fn
+	// whose body is executing; used to attribute body-local defs and
+	// undefined_word diagnostics to their enclosing fn and to record the
+	// caller→callee edge for each dispatch. Anonymous bodies (name "") are
+	// transparent — not pushed — so attribution lands on the nearest named
+	// ancestor. Pushed/popped in lockstep with FnBodyDepth.
+	FnNameStack []string
+
+	// FnBinders maps a NAME to the set of fn names that bind it (as a
+	// parameter or a body-local def) somewhere in the pass. With FnCallGraph
+	// it is the SOUND basis for the dynamic-scope undefined-word rescue: a
+	// fn-body reference to a name only ever bound in a per-call frame is
+	// rescued iff a binder of that name can actually REACH the reading fn
+	// through the call graph (RescueForwardRefDiagnostics). This replaces the
+	// reverted "bound anywhere in the pass" rescue, which masked a genuinely-
+	// undefined name that merely shared a name with an unrelated fn's param.
+	FnBinders map[string]map[string]bool
+
+	// FnCallGraph maps a fn name to the set of fn names its body calls,
+	// recorded at each nested AnalyseFnBody entry (including the self-edge of
+	// a recursive fn). Its transitive closure answers "can a binder of X
+	// reach the fn that reads X" for the dynamic-scope rescue.
+	FnCallGraph map[string]map[string]bool
 }
 
 // DefaultCheckStepBudget caps total check-mode steps across all
@@ -557,6 +582,7 @@ type CheckDiagnostic struct {
 	Col      int           `json:"col,omitempty"`      // 1-based column number, 0 if unknown
 	Severity CheckSeverity `json:"severity,omitempty"` // default severity from checkCodeSeverity; empty = info
 	FnBody   bool          `json:"fnBody,omitempty"`   // emitted during fn-body analysis (call-time code) — see RescueForwardRefDiagnostics
+	FnName   string        `json:"fnName,omitempty"`   // enclosing named fn for an FnBody diagnostic — the reader for the dynamic-scope rescue
 }
 
 // NewRegistry creates an empty registry.

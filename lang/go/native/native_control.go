@@ -231,7 +231,24 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	}
 	stk := RunCarrierBody(r, body)
 	if len(stk) == 0 {
-		return []Value{NewCarrier(TAny)}
+		// A NON-EMPTY body that produced an empty residual ran to nothing —
+		// for `do` (the error-catching word) that is exactly the shape a
+		// raising body leaves: `raise …` (and an integer div/mod by a static
+		// zero) yields no carrier, and at runtime `do` catches the error and
+		// surfaces it as an Error VALUE (doListHandler's `NewError(err)`).
+		// Model that residual as an Error carrier so a downstream field read
+		// (`e dot code`, `e.message`, `convert Map e`) matches the [_ Error]
+		// accessor sigs instead of failing no_signature.
+		//
+		// An EMPTY body (`do []`) genuinely completes with an empty stack — it
+		// did NOT raise — so it must stay empty: inventing an Error here would
+		// wrongly admit `do [] convert Map` at check time (Error → Map) while
+		// the runtime leaves `convert` no argument. Distinguish the two by the
+		// body's token count.
+		if bl, err := AsList(body); err == nil && !bl.IsNil() && bl.Len() > 0 {
+			return []Value{NewCarrier(TError)}
+		}
+		return nil
 	}
 	// `do` leaves the body's ENTIRE residual stack (doListHandler returns the
 	// full InvokeBody result), so a multi-value literal body — `do [10 20 30]`

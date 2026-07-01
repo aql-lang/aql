@@ -587,6 +587,40 @@ func (e *Engine) returnCountError(funcName string, expected, got int, pos SrcPos
 	return makeAqlErrorAt("type_error", returnCountErrorText(funcName, expected, got), funcName, src, "", pos)
 }
 
+// validateReturnTypes checks the top nret residual values (results[extra:])
+// against a ReturnCheck's declared return types, returning the first mismatch
+// as an AqlError (nil when all conform). Extracted from stepCloseParen so that
+// hot path stays under the cyclomatic-complexity gate.
+//
+// Uses the membership predicate v.Is(exp) — the SAME question the parameter
+// boundary asks (sigTypeMatches → v.Is) — so a type's Behavior governs both
+// ends symmetrically: a predicate refine runs its predicate on the way out
+// (subset semantics), a bare refine stays nominal (newtype), and
+// builtins/objects are unchanged (v.Is ≡ v.Parent.ConformsTo on concrete
+// values). See design/REFINE-NEWTYPE-VS-SUBSET.10.md.
+func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra int) error {
+	for k, exp := range rc.Returns {
+		got := results[extra+k]
+		// A GRADUAL (dynamic) residual optimistically conforms to any declared
+		// return in check mode — the checker genuinely does not know the type
+		// (e.g. a value read off a shapeless carrier, `m.n` over an abstract
+		// Map), so gating here would be a false positive. This mirrors the
+		// parameter boundary, where a dynamic arg matches a concrete slot, and
+		// stays sound because the compiled/interpreted RET re-checks the real
+		// runtime value (Dynamic is never set on a concrete runtime value).
+		// Without this, a fn dispatched through a path that surfaces a dynamic
+		// body residual (module / mini-kind dispatch) wrongly fails its own
+		// declared-return check while the identical body called directly passes.
+		if got.Dynamic && e.registry != nil && e.registry.Check.IsActive() {
+			continue
+		}
+		if !got.Is(exp) {
+			return e.returnTypeError(rc.FuncName, k+1, exp, got, rc.Pos)
+		}
+	}
+	return nil
+}
+
 // returnTypeError builds a detailed AqlError for a return type mismatch. The
 // detail/hint text is shared with the VM via returnTypeErrorText.
 func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value, pos SrcPos) *AqlError {
@@ -5589,17 +5623,8 @@ func (e *Engine) stepCloseParen() error {
 			}
 
 			// Validate the top nret values match declared return types.
-			// Use the membership predicate v.Is(exp) — the SAME question
-			// the parameter boundary asks (sigTypeMatches → v.Is) — so a
-			// type's Behavior governs both ends symmetrically: a predicate
-			// refine runs its predicate on the way out (subset semantics),
-			// a bare refine stays nominal (newtype), and builtins/objects
-			// are unchanged (v.Is ≡ v.Parent.ConformsTo on concrete values).
-			// See design/REFINE-NEWTYPE-VS-SUBSET.10.md.
-			for k, exp := range rc.Returns {
-				if !results[extra+k].Is(exp) {
-					return e.returnTypeError(rc.FuncName, k+1, exp, results[extra+k], rc.Pos)
-				}
+			if err := e.validateReturnTypes(rc, results, extra); err != nil {
+				return err
 			}
 
 			// Discard unconsumed unnamed args from the bottom of the scope.

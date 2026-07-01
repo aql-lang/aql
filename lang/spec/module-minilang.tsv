@@ -52,6 +52,7 @@ import "aql:minilang"  mini bf '['	ERROR:mini_parse_error	unbalanced brackets
 import "aql:minilang"  mini bf '+[]' {steps:100}	ERROR:mini_eval_error	a runaway program hits the step budget instead of hanging
 import "aql:minilang"  mini bf '<'	ERROR:mini_eval_error	leaving the tape is loud
 import "aql:minilang"  MiniLang.register re (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_kind_exists	collision with a registered kind
+import "aql:minilang"  for 2 [MiniLang.register cnt (fn [[src:String opts:Map subject:String] [Integer] [1]]) end]	ERROR:mini_kind_exists	a loop re-registering the same kind still collides at runtime
 import "aql:minilang"  MiniLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:mini_bad_signature	the standard prefix [src:String opts:Map …] is enforced
 import "aql:minilang"  MiniLang.register lang_x (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	the lang_ prefix is register's job, not the caller's
 import "aql:minilang"  MiniLang.register Bad (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	capitalised kind names are rejected (types)

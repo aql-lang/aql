@@ -34,6 +34,7 @@ ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
 import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  parse calc {file:'x.calc'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1
 import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  parse calc {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
 import "aql:parselang"  ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]]) end  ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_kind_exists	collision with a registered parser
+import "aql:parselang"  for 2 [ParseLang.register calc (fn [[source:String opts:Map] [Integer] [1]]) end]	ERROR:parse_kind_exists	a loop re-registering the same kind still collides at runtime
 import "aql:parselang"  ParseLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:parse_bad_signature	the standard prefix [source:String opts:Map …] is enforced
 import "aql:parselang"  ParseLang.register parse_x (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	the parse_ prefix is register's job, not the caller's
 import "aql:parselang"  ParseLang.register Bad (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	capitalised parser names are rejected (types)

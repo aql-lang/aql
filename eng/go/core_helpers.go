@@ -40,6 +40,12 @@ func InstallFrameBinding(r *Registry, name string, body Value) {
 func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 
+	// Attribute a body-local def to its enclosing fn for the dynamic-scope
+	// undefined-word rescue (check mode only; no-op at the top level or outside
+	// check). A name bound as a local inside fn F is visible — via AQL's
+	// dynamic scoping — to any fn F reaches on the call stack.
+	r.Check.RecordFnBinder(name)
+
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
 	if body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction) {
@@ -700,11 +706,51 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 								Code:   "unbound_param",
 								Detail: detail,
 								Word:   nameCopy,
+								// A FN whose return names an uninferable type
+								// parameter still RUNS (it returns whatever the
+								// body produces; the result degrades to
+								// dynamic(Any) below) — unlike an uninferable
+								// `make` parameter, which cannot construct the
+								// instance and is a hard error. So this is a
+								// non-gating precision REPORT, not a defect
+								// (spec: generics-fn.tsv §8 `loose` "the checker
+								// reports the precision loss"). Warning severity
+								// overrides the code map's default Error.
+								Severity: SeverityWarning,
 							})
 						}
 						c := NewCarrier(TAny)
 						c.Dynamic = true
 						out[i] = c
+						continue
+					}
+				}
+				// A fn DECLARED to return a Function whose body produced a
+				// CONCRETE closure value (a real FnDefInfo — e.g. a returned
+				// lambda `([] => [c1])`) surfaces that value rather than an
+				// abstract Function carrier. The carrier has no FnDefInfo, so
+				// binding it (`def g (mkfn)`) and later referencing `g` would
+				// fail to dispatch (undefined_word) — the closure-render gap.
+				// Cloned for a fresh ID (operand-provenance, like the concrete
+				// list/map fold in getNodeReturns). Only for a concrete fn
+				// residual aligned to this return slot; anything else keeps the
+				// carrier below.
+				//
+				// PLAIN-CHECK ONLY (!Compiling): during a REAL compile pass the
+				// emitter models a returned closure through its own PUSH_CLOSURE
+				// machinery, and surfacing the concrete FnDefInfo here instead
+				// reorders the recorded call residual and detaches the capture
+				// from its construction site — the factory-apply / returned-
+				// capturing-closure units then refuse ("capture … unreachable",
+				// "call results reordered"). The checker's precision win (a
+				// bindable, dispatchable closure) is only needed on the plain
+				// check pass; the compile pass keeps the carrier and compiles the
+				// closure as before.
+				if !r.Check.Compiling &&
+					(t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) && len(stk) >= len(declaredReturns) {
+					if bv := stk[len(stk)-len(declaredReturns)+i]; IsConcrete(bv) &&
+						(bv.Parent.ConformsTo(TFunction) || bv.Parent.ConformsTo(TFnDef)) {
+						out[i] = CloneValue(bv)
 						continue
 					}
 				}
