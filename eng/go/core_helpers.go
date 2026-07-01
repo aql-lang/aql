@@ -700,6 +700,17 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 								Code:   "unbound_param",
 								Detail: detail,
 								Word:   nameCopy,
+								// A FN whose return names an uninferable type
+								// parameter still RUNS (it returns whatever the
+								// body produces; the result degrades to
+								// dynamic(Any) below) — unlike an uninferable
+								// `make` parameter, which cannot construct the
+								// instance and is a hard error. So this is a
+								// non-gating precision REPORT, not a defect
+								// (spec: generics-fn.tsv §8 `loose` "the checker
+								// reports the precision loss"). Warning severity
+								// overrides the code map's default Error.
+								Severity: SeverityWarning,
 							})
 						}
 						c := NewCarrier(TAny)
