@@ -228,7 +228,6 @@ func TestCompareTypes(t *testing.T) {
 	}{
 		{"list_before_map", NewTypeLiteral(TList), NewTypeLiteral(TMap), -1},
 		{"map_after_list", NewTypeLiteral(TMap), NewTypeLiteral(TList), 1},
-		{"object_before_record", NewTypeLiteral(TObject), NewTypeLiteral(TRecord), -1},
 		{"record_before_table", NewTypeLiteral(TRecord), NewTypeLiteral(TTable), -1},
 		{"type_before_subtype", NewTypeLiteral(TList), NewTypeLiteral(foo), -1},
 		{"bar_before_foo_by_name", NewTypeLiteral(bar), NewTypeLiteral(foo), -1},

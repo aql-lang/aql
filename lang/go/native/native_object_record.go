@@ -157,11 +157,7 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	}
 	parentDef := parentInfo.Type
 	if parentDef == nil {
-		if parentInfo.Class {
-			parentDef = TClass
-		} else {
-			parentDef = TObject
-		}
+		parentDef = TClass
 	}
 	def := r.Types.MintType(id, parentDef)
 	return []Value{NewObjectType(def, info)}, nil

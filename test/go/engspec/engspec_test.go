@@ -835,8 +835,8 @@ func registerEngSpecStorage(r *eng.Registry) {
 		Name: "set",
 
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TObject}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
-			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TObject}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TClass}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TClass}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
@@ -846,9 +846,9 @@ func registerEngSpecStorage(r *eng.Registry) {
 			{Args: []*eng.Type{eng.TAtom, eng.TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TString, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TInteger, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TAtom, eng.TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TString, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TInteger, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TAtom, eng.TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TString, eng.TClass}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TInteger, eng.TClass}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TAny, eng.TNone}, BarrierPos: 1, Handler: getNoneH, Returns: []*eng.Type{eng.TNone}},
 		},
 	})
@@ -897,21 +897,6 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		}
 		return fields
 	}
-	objectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-		fieldsVal := args[0]
-		if !fieldsVal.Parent.Equal(eng.TMap) {
-			return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
-		}
-		m, err := eng.AsMutableMap(fieldsVal)
-		if err != nil {
-			return nil, fmt.Errorf("object: argument must be a concrete map, got %s", fieldsVal.String())
-		}
-		fields := parseObjectFields(m, r)
-		id := eng.GenerateObjectTypeID()
-		info := eng.ObjectTypeInfo{Fields: fields, Parent: nil, ID: id, Name: ""}
-		def := r.Types.MintType(id, eng.TObject)
-		return []eng.Value{eng.NewObjectType(def, info)}, nil
-	}
 	objectWithParentH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		fieldsVal := args[0]
 		parentVal := args[1]
@@ -940,10 +925,10 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 			}
 		}
 		id := eng.GenerateObjectTypeID()
-		info := eng.ObjectTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: ""}
+		info := eng.ObjectTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: "", Class: true}
 		parentDef := parentInfo.Type
 		if parentDef == nil {
-			parentDef = eng.TObject
+			parentDef = eng.TClass
 		}
 		def := r.Types.MintType(id, parentDef)
 		return []eng.Value{eng.NewObjectType(def, info)}, nil
@@ -955,9 +940,6 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
-		if eng.IsBareTypeNode(base) && base.Equal(eng.TObject) {
-			return objectH([]eng.Value{arg}, nil, nil, reg)
-		}
 		if eng.IsObjectType(base) {
 			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
 		}
@@ -967,7 +949,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 			}
 			return recordH([]eng.Value{arg}, nil, nil, reg)
 		}
-		return nil, fmt.Errorf("refine: base must be Object, Record, or an object type, got %s", base.String())
+		return nil, fmt.Errorf("refine: base must be Record or an object type, got %s", base.String())
 	}
 	// refine BaseType — the 1-arg bare-subtype form. Returns the base
 	// type unchanged; the paired `def` mints a fresh subtype of it.

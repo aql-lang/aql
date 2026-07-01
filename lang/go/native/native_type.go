@@ -814,8 +814,9 @@ func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			Fields: newFields,
 			Parent: nil,
 			ID:     id,
+			Class:  true,
 		}
-		def := r.Types.MintType(id, TObject)
+		def := r.Types.MintType(id, TClass)
 		return []Value{NewObjectType(def, newInfo)}, nil
 	default:
 		return nil, r.AqlError("type_error",

@@ -93,7 +93,7 @@ export {
   TNode,
   TNone,
   TNumber,
-  TObject,
+  TClass,
   TOpenParen,
   TOptions,
   TPath,

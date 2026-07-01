@@ -86,7 +86,6 @@ Path	Path
 Node	Node	node-family root
 List	List	
 Map	Map	
-Object	Object	object-family root
 Record	Record	object-family member
 Resource	Resource	
 Entity	Entity	
@@ -304,7 +303,6 @@ undef foo		undef of an unbound value name is a harmless no-op
 5 is Atom	false	
 5 is List	false	a different lattice root
 5 is Map	false	
-5 is Object	false	
 5 is None	false	
 5 is Never	false	nothing is Never
 5 is Type	false	a value is not a type
@@ -366,7 +364,6 @@ none is None	true	exact type
 none is Any	true	
 none is Never	false	nothing is Never
 none is Scalar	false	None is its own lattice root
-none is Object	false	
 none is Integer	false	
 none is List	false	
 		
@@ -492,7 +489,6 @@ List is Type	true
 Map is Type	true	
 		
 # --- builtin type literals: object family ---		
-Object is Type	true	
 Resource is Type	true	
 Entity is Type	true	
 Table is Type	true	

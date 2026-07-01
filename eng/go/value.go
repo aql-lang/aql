@@ -708,40 +708,26 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 	return result
 }
 
-// ObjectInstanceInfo holds a concrete instance of an object type.
-// TypeRef points back to the ObjectTypeInfo that created this instance.
-// Fields holds the type's own resolved field values.
-// Prototype points to the parent instance (like JavaScript prototypes):
-// field lookups fall through to the prototype chain for inherited fields.
+// ObjectInstanceInfo holds a concrete instance of an object (class)
+// type. TypeRef points back to the ObjectTypeInfo that created this
+// instance; Fields holds every resolved field. Instances are FLAT —
+// class construction resolves the full field set (own + inherited)
+// eagerly at make, so there is no prototype chain (open objects, which
+// used one, were removed).
 type ObjectInstanceInfo struct {
-	TypeRef   *ObjectTypeInfo     // the object type this is an instance of
-	Fields    *OrderedMap         // own field name → resolved Value
-	Prototype *ObjectInstanceInfo // parent instance (nil if root type)
+	TypeRef *ObjectTypeInfo // the object type this is an instance of
+	Fields  *OrderedMap     // resolved field values (flat: own + inherited)
 }
 
-// GetField returns a field value by searching own fields first, then walking
-// the prototype chain. Returns the value and true if found, zero and false otherwise.
+// GetField returns a field value (flat lookup — instances carry every
+// field resolved at make).
 func (oi ObjectInstanceInfo) GetField(name string) (Value, bool) {
-	if v, ok := oi.Fields.Get(name); ok {
-		return v, true
-	}
-	if oi.Prototype != nil {
-		return oi.Prototype.GetField(name)
-	}
-	return Value{}, false
+	return oi.Fields.Get(name)
 }
 
-// AllFields returns all fields including those from the prototype chain.
-// Prototype fields come first, own fields override.
+// AllFields returns the instance's resolved fields (flat).
 func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
 	result := NewOrderedMap()
-	if oi.Prototype != nil {
-		proto := oi.Prototype.AllFields()
-		for _, k := range proto.Keys() {
-			v, _ := proto.Get(k)
-			result.Set(k, v)
-		}
-	}
 	for _, k := range oi.Fields.Keys() {
 		v, _ := oi.Fields.Get(k)
 		result.Set(k, v)

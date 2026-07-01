@@ -66,7 +66,6 @@ const builtinDecls: BuiltinDecl[] = [
   { path: 'Node/Xml/FlexXml' },
 
   // Ideal branch.
-  { path: 'Ideal/Object' },
   { path: 'Ideal/Resource' },
   { path: 'Ideal/Resource/Entity' },
   { path: 'Ideal/Record' },
@@ -229,7 +228,7 @@ export const TList = newType('Node/List')
 export const TMap = newType('Node/Map')
 export const TInspect = newType('Node/Map/Inspect')
 export const TXml = newType('Node/Xml')
-export const TObject = newType('Ideal/Object')
+export const TClass = newType('Ideal/Class')
 export const TRecord = newType('Ideal/Record')
 export const TOptions = newType('Ideal/Options')
 export const TError = newType('Ideal/Error')

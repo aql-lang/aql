@@ -59,9 +59,7 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
-			// [Key | Object / Class instance]
-			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			// [Key | Class instance]
 			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
@@ -90,10 +88,6 @@ func accessorGetrSignatures() []NativeSig {
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
-		// [Key | Object]
-		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
-		{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
-		{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 		// [Key | Class instance] — strict field read (mirrors get's TClass
 		// sigs; getrObjectHandler resolves the flat instance via
 		// AsObjectInstance and raises on a missing field). Field type

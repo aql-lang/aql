@@ -998,7 +998,7 @@ func TestTypeofMetatypes(t *testing.T) {
 		{"Node", NewTypeLiteral(TNode), "Any"},
 		{"Any", NewTypeLiteral(TAny), "Any"},
 		{"None", NewTypeLiteral(TNone), "None"},
-		{"Object", NewTypeLiteral(TObject), "Ideal"},
+		{"Class", NewTypeLiteral(TClass), "Ideal"},
 		{"Table", NewTypeLiteral(TTable), "Ideal"},
 		{"Record", NewTypeLiteral(TRecord), "Ideal"},
 		{"Resource", NewTypeLiteral(TResource), "Ideal"},
@@ -1057,7 +1057,7 @@ func TestIs_BroadTypeRoot(t *testing.T) {
 	}{
 		{"Boolean is Type", NewTypeLiteral(TBoolean), NewTypeLiteral(TType), true},
 		{"List is Type", NewTypeLiteral(TList), NewTypeLiteral(TType), true},
-		{"Object is Type", NewTypeLiteral(TObject), NewTypeLiteral(TType), true},
+		{"Class is Type", NewTypeLiteral(TClass), NewTypeLiteral(TType), true},
 		{"Any is Type", NewTypeLiteral(TAny), NewTypeLiteral(TType), true},
 		{"Scalar is Type", NewTypeLiteral(TScalar), NewTypeLiteral(TType), true},
 		{"Node is Type", NewTypeLiteral(TNode), NewTypeLiteral(TType), true},

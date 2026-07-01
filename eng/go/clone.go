@@ -185,21 +185,12 @@ func (c *cloner) cloneStore(s *StoreInstanceInfo) *StoreInstanceInfo {
 }
 
 // cloneObject deep-clones an ObjectInstanceInfo: the field map is
-// duplicated value-by-value and the prototype instance cloned
-// (cycle-guarded). TypeRef is a shared type descriptor (immutable).
+// duplicated value-by-value. Instances are flat, so there is no
+// prototype to clone. TypeRef is a shared type descriptor (immutable).
 func (c *cloner) cloneObject(o ObjectInstanceInfo) ObjectInstanceInfo {
 	out := ObjectInstanceInfo{TypeRef: o.TypeRef}
 	if o.Fields != nil {
 		out.Fields = c.cloneOrderedMap(o.Fields)
-	}
-	if o.Prototype != nil {
-		if cp, ok := c.seen[o.Prototype]; ok {
-			proto := cp.(ObjectInstanceInfo)
-			out.Prototype = &proto
-		} else {
-			proto := c.cloneObject(*o.Prototype)
-			out.Prototype = &proto
-		}
 	}
 	return out
 }

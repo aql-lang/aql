@@ -89,7 +89,6 @@ typeof List	Node
 typeof Map	Node
 
 # --- object family ---
-typeof Object	Ideal	one Parent hop
 typeof Resource	Ideal	
 typeof Entity	Resource	
 typeof Table	Ideal	
@@ -170,7 +169,6 @@ pathof List	[Node List]
 pathof Map	[Node Map]	
 		
 # --- object family ---		
-pathof Object	[Ideal Object]
 pathof Resource	[Ideal Resource]
 pathof Entity	[Ideal Resource Entity]
 pathof Table	[Ideal Table]

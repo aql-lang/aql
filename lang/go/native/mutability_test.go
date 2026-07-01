@@ -28,7 +28,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(TObject, instance)
+	instanceVal := NewObjectInstance(TClass, instance)
 
 	// Verify initial value
 	result := runAQL(t, r, []Value{
@@ -75,7 +75,7 @@ func TestObjectSetFieldString(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(TObject, instance)
+	instanceVal := NewObjectInstance(TClass, instance)
 
 	// Mutate via string key
 	result := runAQL(t, r, []Value{
@@ -90,44 +90,6 @@ func TestObjectSetFieldString(t *testing.T) {
 	_as2, _ := AsInteger(result[0])
 	if len(result) != 1 || _as2 != 99 {
 		t.Fatalf("got %v, want 99", result)
-	}
-}
-
-func TestObjectSetAddsNewField(t *testing.T) {
-	// set can add a new field not in the original type schema
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-
-	fields := NewOrderedMap()
-	fields.Set("a", NewTypeLiteral(TInteger))
-	objType := ObjectTypeInfo{
-		Fields: fields,
-		ID:     GenerateObjectTypeID(),
-		Name:   "Object/Flex",
-	}
-
-	instance := ObjectInstanceInfo{
-		TypeRef: &objType,
-		Fields: func() *OrderedMap {
-			m := NewOrderedMap()
-			m.Set("a", NewInteger(1))
-			return m
-		}(),
-	}
-	instanceVal := NewObjectInstance(TObject, instance)
-
-	// Add a new field "b"
-	runAQL(t, r, []Value{
-		instanceVal, NewWord("set"), NewWord("b"), NewInteger(2),
-	})
-
-	// Read it back
-	result := runAQL(t, r, []Value{
-		instanceVal, NewWord("dot"), NewWord("b"),
-	})
-	_as3, _ := AsInteger(result[0])
-	if len(result) != 1 || _as3 != 2 {
-		t.Fatalf("got %v, want 2", result)
 	}
 }
 
@@ -152,8 +114,8 @@ func TestObjectMutationSharedReference(t *testing.T) {
 			return m
 		}(),
 	}
-	ref1 := NewObjectInstance(TObject, instance)
-	ref2 := NewObjectInstance(TObject, instance) // same underlying Fields pointer
+	ref1 := NewObjectInstance(TClass, instance)
+	ref2 := NewObjectInstance(TClass, instance) // same underlying Fields pointer
 
 	// Mutate via ref1
 	runAQL(t, r, []Value{
@@ -307,7 +269,7 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Test",
 	}
-	inst := NewObjectInstance(TObject, ObjectInstanceInfo{
+	inst := NewObjectInstance(TClass, ObjectInstanceInfo{
 		TypeRef: &objType,
 		Fields:  objFields,
 	})

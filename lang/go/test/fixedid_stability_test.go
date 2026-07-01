@@ -68,15 +68,16 @@ func TestFixedIDStability(t *testing.T) {
 		"Word/__MK":                  27,
 		"Word/__MV":                  28,
 		"Ideal":                      48,
-		"Ideal/Object":               30,
-		"Node/Map/Inspect":           31,
-		"Ideal/Fetch":                3000,
-		"Ideal/Fetch/Request":        3001,
-		"Ideal/Fetch/Response":       3002,
-		"Ideal/Resource":             36,
-		"Ideal/Resource/Entity":      37,
-		"Ideal/Options":              38,
-		"Type":                       39,
+		// FixedID 30 retired with Ideal/Object (the bare open container);
+		// class instances live under Ideal/Class. Not recycled.
+		"Node/Map/Inspect":      31,
+		"Ideal/Fetch":           3000,
+		"Ideal/Fetch/Request":   3001,
+		"Ideal/Fetch/Response":  3002,
+		"Ideal/Resource":        36,
+		"Ideal/Resource/Entity": 37,
+		"Ideal/Options":         38,
+		"Type":                  39,
 		// FixedIDs 40, 41, 46 retired with Type/ScalarType,
 		// Type/NodeType, Type/IdealType. Sig "type literal here" is
 		// now expressed via Signature.TypeArgs[i]=true.

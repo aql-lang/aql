@@ -151,7 +151,6 @@ var (
 	TNode           = eng.TNode
 	TNone           = eng.TNone
 	TNumber         = eng.TNumber
-	TObject         = eng.TObject
 	TClass          = eng.TClass
 	TSurface        = eng.TSurface
 	TSelf           = eng.TSelf

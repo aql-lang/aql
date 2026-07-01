@@ -62,7 +62,6 @@ var (
 	TDispatchMod    = mustType("Word/__DM")
 	TInternal       = mustType("Word/__IN")
 	TInspect        = mustType("Node/Map/Inspect")
-	TObject         = mustType("Ideal/Object")
 	TClass          = mustType("Ideal/Class")
 	TSurface        = mustType("Ideal/Surface")
 	TSelf           = mustType("Type/Self")

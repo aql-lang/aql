@@ -12,9 +12,7 @@ import (
 //
 //	make ScalarType data            cast / parse a scalar
 //	make ScalarType {opts} data     scalar with options (Path abs flag)
-//	make ObjectType data            instantiate a named object
-//	make Object data Object         instantiate with prototype
-//	make Array [list]               build an Array
+//	make ClassType data             instantiate a class (flat, sealed)
 //	make *Type *Type {opts}           three-arg shape with arbitrary options
 //	make *Type Any                   two-arg fallback
 //
@@ -169,52 +167,15 @@ func parseMakeOptions(opts Value) (useBase bool, err error) {
 	return useBase, nil
 }
 
-// buildBasePrototype creates a prototype instance with base values
-// for a type that has no explicit prototype. If the type has a
-// parent, it recursively builds prototypes up the chain.
-func buildBasePrototype(objType ObjectTypeInfo) (*ObjectInstanceInfo, error) {
-	var proto *ObjectInstanceInfo
-	if objType.Parent != nil {
-		var err error
-		proto, err = buildBasePrototype(*objType.Parent)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	fields := NewOrderedMap()
-	for _, key := range objType.Fields.Keys() {
-		constraint, _ := objType.Fields.Get(key)
-		if constraint.Data != nil {
-			fields.Set(key, constraint)
-		} else {
-			bv, err := BaseValueForConstraint(constraint)
-			if err != nil {
-				return nil, fmt.Errorf("make: field %q: %w", key, err)
-			}
-			fields.Set(key, bv)
-		}
-	}
-
-	return &ObjectInstanceInfo{
-		TypeRef:   &objType,
-		Fields:    fields,
-		Prototype: proto,
-	}, nil
-}
-
-// makeObject creates an object instance from an ObjectTypeInfo, a
-// map source, and an optional prototype instance.
-// MakeObject is the exported wrapper around the internal object
+// MakeObject is the exported wrapper around the class-instance
 // construction path. Used by lang-side `def x:T body` to build a
-// Person-typed ObjectInstance from a raw Map body when the typed
-// binding's constraint is an ObjectType — closes the
-// structural-vs-nominal dispatch gap for object types.
-func MakeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo, r *Registry) ([]Value, error) {
-	return makeObject(objType, srcVal, prototype, r)
+// typed instance from a raw Map body when the typed binding's
+// constraint is an object (class) type.
+func MakeObject(objType ObjectTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
+	return makeObject(objType, srcVal, r)
 }
 
-func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceInfo, r *Registry) ([]Value, error) {
+func makeObject(objType ObjectTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 	if !srcVal.Parent.ConformsTo(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 	}
@@ -222,90 +183,10 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, prototype *ObjectInstanceI
 	if err != nil {
 		return nil, fmt.Errorf("make: expected concrete map, got %s", srcVal.String())
 	}
-
-	// Class types take the flat path: every field (own + inherited)
-	// resolves eagerly into one field map — no prototype chain, no
-	// delegation at get. See design/CLASS-OBJECT.10.md §3.
-	if objType.Class {
-		return makeClassInstance(objType, provided, r)
-	}
-
-	if prototype == nil && objType.Parent != nil {
-		prototype, err = buildBasePrototype(*objType.Parent)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if prototype != nil && objType.Parent != nil {
-		// An open object (nil TypeRef) can never satisfy a typed
-		// parent requirement — report it rather than dereferencing
-		// the absent schema.
-		if prototype.TypeRef == nil {
-			return nil, fmt.Errorf("make: prototype is an open Object (no type) — expected a %s instance",
-				objType.Parent.Name)
-		}
-		if prototype.TypeRef.ID != objType.Parent.ID {
-			return nil, fmt.Errorf("make: prototype type %s does not match parent type %s",
-				prototype.TypeRef.Name, objType.Parent.Name)
-		}
-	}
-
-	allFields := objType.AllFields()
-
-	for _, key := range provided.Keys() {
-		if _, ok := allFields.Get(key); !ok {
-			return nil, fmt.Errorf("make: unknown field %q for object type %s", key, objType.Name)
-		}
-	}
-
-	ownFields := objType.Fields
-	result := NewOrderedMap()
-
-	for _, key := range ownFields.Keys() {
-		constraint, _ := ownFields.Get(key)
-		val, hasVal := provided.Get(key)
-
-		if !hasVal {
-			if constraint.Data != nil {
-				result.Set(key, constraint)
-				continue
-			}
-			return nil, fmt.Errorf("make: missing field %q for object type %s", key, objType.Name)
-		}
-
-		val = ResolveWordValue(val)
-
-		if val.Parent.ConformsTo(ValueType(constraint)) {
-			result.Set(key, val)
-		} else {
-			converted, err := MakeConvert(val, ValueType(constraint))
-			if err != nil {
-				return nil, fmt.Errorf("make: field %q: %w", key, err)
-			}
-			result.Set(key, converted)
-		}
-	}
-
-	if prototype != nil {
-		for _, key := range provided.Keys() {
-			if _, ownOk := ownFields.Get(key); !ownOk {
-				val, _ := provided.Get(key)
-				val = ResolveWordValue(val)
-				setPrototypeField(prototype, key, val)
-			}
-		}
-	}
-
-	instanceType := objType.Type
-	if instanceType == nil {
-		instanceType = TObject
-	}
-	return []Value{NewObjectInstance(instanceType, ObjectInstanceInfo{
-		TypeRef:   &objType,
-		Fields:    result,
-		Prototype: prototype,
-	})}, nil
+	// Every object type is now a class — flat, sealed instances (open
+	// objects and their prototype chain were removed). See
+	// design/CLASS-OBJECT.10.md §3.
+	return makeClassInstance(objType, provided, r)
 }
 
 // makeClassInstance constructs a flat, sealed class instance: the
@@ -816,21 +697,21 @@ func MakeTableR(tt TableTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 // NewRegistry so every Registry, including the bare eng spec runner,
 // can `make` the structural kinds.
 func registerKernelIdeals(r *Registry) {
+	// The "Object" Ideal instantiates class types (ObjectType payloads,
+	// minted under Ideal/Class). The bare Object lattice type was removed;
+	// this kind is keyed purely on the ObjectType payload now.
 	r.Ideals.Register(&Ideal{
 		Name:    "Object",
 		Enabled: true,
-		// Bare Object stays accepted so `refine Object {…}` routes to the
-		// Construct guard (which points users at `class`); the bare form is
-		// no longer instantiable — open objects were removed.
 		Accepts: func(v Value) bool {
-			return (IsBareTypeNode(v) && v.Equal(TObject)) || IsObjectType(v)
+			return IsObjectType(v)
 		},
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
 			objType, err := AsObjectType(typ)
 			if err != nil {
-				return nil, fmt.Errorf("make: bare Object is not constructible — open objects were removed; use `class` for schema, or a flex map for an open mutable container")
+				return nil, fmt.Errorf("make: expected a class type, got %s", typ.String())
 			}
-			return makeObject(objType, data, nil, r)
+			return makeObject(objType, data, r)
 		},
 	})
 	r.Ideals.Register(&Ideal{
@@ -911,7 +792,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 
 	if IsObjectType(targetVal) {
 		objType, _ := AsObjectType(targetVal)
-		return makeObject(objType, srcVal, nil, reg)
+		return makeObject(objType, srcVal, reg)
 	}
 
 	if IsRecordType(targetVal) {
@@ -991,7 +872,7 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 	}
 	if IsObjectType(targetVal) {
 		objType, _ := AsObjectType(targetVal)
-		return makeObject(objType, srcVal, nil, reg)
+		return makeObject(objType, srcVal, reg)
 	}
 	// Not an object type and unclaimed by an Ideal kind (e.g.
 	// Options) — defer to the generic make dispatcher.
@@ -1186,23 +1067,4 @@ func ResolveFieldType(r *Registry, v Value) Value {
 	}
 
 	return v
-}
-
-// setPrototypeField sets a field value on the appropriate level of a
-// prototype chain. A level's declared fields come from its schema
-// (TypeRef); an OPEN object level (nil TypeRef — no schema) declares
-// whatever its own field map currently holds.
-func setPrototypeField(proto *ObjectInstanceInfo, key string, val Value) {
-	for p := proto; p != nil; p = p.Prototype {
-		declared := false
-		if p.TypeRef != nil {
-			_, declared = p.TypeRef.Fields.Get(key)
-		} else if p.Fields != nil {
-			_, declared = p.Fields.Get(key)
-		}
-		if declared {
-			p.Fields.Set(key, val)
-			return
-		}
-	}
 }

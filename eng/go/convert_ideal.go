@@ -114,24 +114,16 @@ func ObjectFields(oi *ObjectInstanceInfo) *OrderedMap {
 	return objectFieldMap(oi)
 }
 
-// objectFieldMap flattens an object's prototype chain (base first) then
-// its own fields into a fresh OrderedMap.
+// objectFieldMap copies an instance's (flat) fields into a fresh
+// OrderedMap.
 func objectFieldMap(oi *ObjectInstanceInfo) *OrderedMap {
 	out := NewOrderedMap()
-	var fill func(o *ObjectInstanceInfo)
-	fill = func(o *ObjectInstanceInfo) {
-		if o == nil {
-			return
-		}
-		fill(o.Prototype)
-		if o.Fields != nil {
-			for _, k := range o.Fields.Keys() {
-				val, _ := o.Fields.Get(k)
-				out.Set(k, val)
-			}
+	if oi != nil && oi.Fields != nil {
+		for _, k := range oi.Fields.Keys() {
+			val, _ := oi.Fields.Get(k)
+			out.Set(k, val)
 		}
 	}
-	fill(oi)
 	return out
 }
 
@@ -263,7 +255,6 @@ func (reachConvertBehavior) ToList(v Value) (Value, error) {
 }
 
 func init() {
-	TObject.Behavior = objectConvertBehavior{}
 	// Class instances project to maps/lists the same way Object
 	// instances do — flat field maps (class instances have no
 	// prototype chain, so the flatten is a single pass). The behavior

@@ -35,7 +35,7 @@ import {
   TMap,
   TIdeal,
   TNode,
-  TObject,
+  TClass,
   TScalar,
   TType,
   TWord,
@@ -717,11 +717,11 @@ function registerSpecWords(r: Registry): void {
   reg({
     name: 'get',
     signatures: [
-      { args: [TString, TObject], barrierPos: 1, handler: getNodeH },
+      { args: [TString, TClass], barrierPos: 1, handler: getNodeH },
       { args: [TString, TNode], barrierPos: 1, handler: getNodeH },
-      { args: [TInteger, TObject], barrierPos: 1, handler: getNodeH },
+      { args: [TInteger, TClass], barrierPos: 1, handler: getNodeH },
       { args: [TInteger, TNode], barrierPos: 1, handler: getNodeH },
-      { args: [TAtom, TObject], barrierPos: 1, handler: getNodeH },
+      { args: [TAtom, TClass], barrierPos: 1, handler: getNodeH },
       { args: [TAtom, TNode], barrierPos: 1, handler: getNodeH },
       { args: [TAny, TNone], barrierPos: 1, handler: () => [newNone()] },
     ],
@@ -730,8 +730,8 @@ function registerSpecWords(r: Registry): void {
     name: 'set',
     forwardPrecedence: true,
     signatures: [
-      { args: [TString, TAny, TObject], handler: () => unsupportedMake('set') },
-      { args: [TAtom, TAny, TObject], handler: () => unsupportedMake('set') },
+      { args: [TString, TAny, TClass], handler: () => unsupportedMake('set') },
+      { args: [TAtom, TAny, TClass], handler: () => unsupportedMake('set') },
     ],
   })
   // refine — the uniform type constructor (its sig list is what inspect

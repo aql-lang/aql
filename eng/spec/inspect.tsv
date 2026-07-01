@@ -85,8 +85,8 @@ inspect make	{name:'make' kind:native signatures:[{args:['Scalar' 'Map' 'Any']} 
 inspect inspect	{name:'inspect' kind:native signatures:[{args:['Atom']} {args:['Any']}]}	Atom/q sig (was Atom + Word) plus Any fallback
 		
 # --- state ---		
-inspect get	{name:'get' kind:native signatures:[{args:['String' 'Object']} {args:['String' 'Node']} {args:['Integer' 'Object']} {args:['Integer' 'Node']} {args:['Atom' 'Object']} {args:['Atom' 'Node']} {args:['Any' 'None']}]}
-inspect set	{name:'set' kind:native signatures:[{args:['String' 'Any' 'Object']} {args:['Atom' 'Any' 'Object']}]}
+inspect get	{name:'get' kind:native signatures:[{args:['String' 'Class']} {args:['String' 'Node']} {args:['Integer' 'Class']} {args:['Integer' 'Node']} {args:['Atom' 'Class']} {args:['Atom' 'Node']} {args:['Any' 'None']}]}
+inspect set	{name:'set' kind:native signatures:[{args:['String' 'Any' 'Class']} {args:['Atom' 'Any' 'Class']}]}
 inspect do	{name:'do' kind:native signatures:[{args:['Map']} {args:['List']}]}	
 		
 # --- a fixture word ---		
@@ -116,7 +116,6 @@ inspect Atom	{type:'Type' struct:'Atom' kind:literal}
 inspect Node	{type:'Type' struct:'Node' kind:literal}	
 inspect List	{type:'Type' struct:'List' kind:literal}	
 inspect Map	{type:'Type' struct:'Map' kind:literal}	
-inspect Object	{type:'Type' struct:'Object' kind:literal}	
 inspect Resource	{type:'Type' struct:'Resource' kind:literal}	
 inspect Entity	{type:'Type' struct:'Entity' kind:literal}	
 inspect Table	{type:'Type' struct:'Table' kind:literal}	
@@ -172,8 +171,6 @@ inspect ( refine Record [ { a:Integer } { b:String } ] )	{type:'Type' struct:'Ma
 def Pt (refine Record [ { x:Integer } { y:Integer } ]) inspect Pt	{name:'Pt' type:'Type' struct:'Map' kind:record fields:{x:'Integer' y:'Integer'}}	
 		
 # --- object (struct is the named type; fields includes inherited, parent first) ---		
-def Vec (refine Object { x:Integer y:Integer }) inspect Vec	{name:'Vec' type:'Type' struct:'Vec' kind:object fields:{x:'Integer' y:'Integer'}}	
-def Bar (refine Object { b:Integer }) def Baz (refine Bar { c:String }) inspect Baz	{name:'Baz' type:'Type' struct:'Baz' kind:object parent:'Object/Bar' fields:{b:'Integer' c:'String'}}	Baz extends Bar — `b` (inherited) then `c`
 		
 # --- disjunct / enum (alternatives are the members' VType paths) ---		
 inspect ( Integer tor Boolean )	{type:'Type' struct:'Disjunct' kind:disjunct alternatives:['Scalar/Number/Integer' 'Scalar/Boolean']}	

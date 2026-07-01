@@ -908,7 +908,7 @@ func frameInstance(specVal Value, b []byte, r *Registry, word string) (Value, []
 		return Value{}, nil, derr
 	}
 	ot, _ := AsObjectType(specVal)
-	inst, ierr := eng.MakeObject(ot, NewMap(m), nil, r)
+	inst, ierr := eng.MakeObject(ot, NewMap(m), r)
 	if ierr != nil {
 		return Value{}, nil, ierr
 	}

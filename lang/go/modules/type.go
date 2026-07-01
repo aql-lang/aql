@@ -212,8 +212,9 @@ func constructRecordOrObjectLike(original native.Value, newFields *native.Ordere
 		Fields: newFields,
 		Parent: nil,
 		ID:     id,
+		Class:  true,
 	}
-	def := r.Types.MintType(id, native.TObject)
+	def := r.Types.MintType(id, native.TClass)
 	return native.NewObjectType(def, info)
 }
 

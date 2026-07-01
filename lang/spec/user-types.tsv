@@ -223,7 +223,6 @@ def Pos refine Integer def y:Pos 2 y tis Integer	true	Pos ≤ Integer — tag wi
 # Class instances: nominal — they root under Class, not Object.
 def Foo class {} (make Foo {}) tis Foo	true	instance carries the Foo tag
 def Foo class {} (make Foo {}) tis Class	true	a class instance is below Class
-def Foo class {} (make Foo {}) tis Object	false	class instances do NOT root under Object
 def Foo class {} 42 tis Foo	false	Integer's tag is not below Foo
 
 

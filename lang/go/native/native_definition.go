@@ -433,7 +433,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos); ok {
 				return installAndRecordDef(r, name, carrier, args[0].Pos)
 			}
-			result, err := eng.MakeObject(info, body, nil, r)
+			result, err := eng.MakeObject(info, body, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}

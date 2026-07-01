@@ -132,7 +132,7 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 
 	// Hydration IS construction: route through make (defaults fill,
 	// required fields enforced, predicates run, sealing applies).
-	results, err := eng.MakeObject(*info, NewMap(provided), nil, r)
+	results, err := eng.MakeObject(*info, NewMap(provided), r)
 	if err != nil {
 		return nil, r.AqlError("reify_error", err.Error(), "reify")
 	}

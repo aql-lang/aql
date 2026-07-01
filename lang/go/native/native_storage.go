@@ -26,21 +26,7 @@ var storageNatives = []NativeFunc{
 		Name: "set",
 
 		Signatures: []NativeSig{
-			// Object
-			{
-				Args:    []*Type{TString, TAny, TObject},
-				Handler: setObjectHandler,
-				Returns: []*Type{}, BarrierPos: -1,
-			},
-			{
-				Args:      []*Type{TAtom, TAny, TObject},
-				QuoteArgs: map[int]bool{0: true},
-				Handler:   setObjectHandler,
-				Returns:   []*Type{}, BarrierPos:
-
-				// Store (copy-on-write)
-				-1,
-			},
+			// Store (copy-on-write)
 
 			{
 				Args:      []*Type{TString, TAny, TStore},
@@ -178,11 +164,6 @@ func accessorGetSignatures() []NativeSig {
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getIntKeyReturns},
-		// [Key | Object] — atom/string field reads resolve the field's
-		// declared type from the schema (getObjectReturns).
-		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-		{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-		{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 		// [Key | ModuleExport] — transparent export access + $module/$name
 		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
@@ -237,21 +218,7 @@ func stripQuoteArgs(sigs []NativeSig) []NativeSig {
 	return out
 }
 
-// ---- kernel-container handlers (Node / Object / Array / None) ----
-
-func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	container := args[2]
-	if !IsConcrete(container) {
-		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
-	}
-	key := StoreKey(args[0])
-	oi, ok := container.Data.(ObjectInstanceInfo)
-	if !ok {
-		return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
-	}
-	oi.Fields.Set(key, args[1])
-	return nil, nil
-}
+// ---- kernel-container handlers (Node / Store / Class / None) ----
 
 // setMapHandler is the Map form of set. A Map stays immutable: the
 // handler returns a NEW map with the key bound (overwriting an existing

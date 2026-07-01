@@ -260,15 +260,10 @@ func TestObjectTypeVTypeMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	barType := result[0].Parent
-	// Bar (Class/Foo/Bar) roots under Class — and is NOT an Object
-	// (classes and the Object container are separate branches).
+	// Bar (Class/Foo/Bar) roots under Class.
 	tCls, _ := native.NewType("Class")
 	if !barType.ConformsTo(tCls) {
 		t.Error("Class/Foo/Bar should match Class")
-	}
-	tObj, _ := native.NewType("Object")
-	if barType.ConformsTo(tObj) {
-		t.Error("Class/Foo/Bar must NOT match Object")
 	}
 	// Bar (Class/Foo/Bar) should match Class/Foo
 	tObjFoo, _ := native.NewType("Class/Foo")
@@ -297,8 +292,8 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 	if native.TWord.ID == "" {
 		t.Error("TWord should have a fixed ID")
 	}
-	if native.TObject.ID == "" {
-		t.Error("TObject should have a fixed ID")
+	if native.TClass.ID == "" {
+		t.Error("TClass should have a fixed ID")
 	}
 
 	// Fixed IDs must be 14 chars (prefix + 12 hex)
@@ -319,8 +314,8 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 	if !strings.HasPrefix(native.TWord.ID, "W_") {
 		t.Errorf("TWord ID should start with W_, got %s", native.TWord.ID)
 	}
-	if !strings.HasPrefix(native.TObject.ID, "T_") {
-		t.Errorf("TObject ID should start with T_, got %s", native.TObject.ID)
+	if !strings.HasPrefix(native.TClass.ID, "T_") {
+		t.Errorf("TClass ID should start with T_, got %s", native.TClass.ID)
 	}
 
 	// Specific known values: TAny=1, TNone=2, TScalar=3, TString=4
@@ -355,7 +350,7 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 		"TList": native.TList, "TListArgs": native.TListArgs,
 		"TMap": native.TMap, "TTable": native.TTable, "TRecord": native.TRecord,
 		"TAtom": native.TAtom, "TWord": native.TWord, "TFunction": native.TFunction,
-		"TObject": native.TObject,
+		"TClass": native.TClass,
 	}
 	for name, typ := range builtins {
 		if prev, exists := ids[typ.ID]; exists {
@@ -927,9 +922,6 @@ func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 	if !inst.Parent.ConformsTo(native.TClass) {
 		t.Errorf("expected instance type to match TClass, got %s", inst.Parent)
 	}
-	if inst.Parent.ConformsTo(native.TObject) {
-		t.Errorf("a class instance must NOT match TObject")
-	}
 	oi, _ := native.AsObjectInstance(inst)
 	if oi.TypeRef.Name != "Class/Foo" {
 		t.Errorf("expected TypeRef.Name='Class/Foo', got %s", oi.TypeRef.Name)
@@ -991,9 +983,8 @@ func TestMakeObjectPrototypeBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	oi, _ := native.AsObjectInstance(result[0])
-	if oi.Prototype != nil {
-		t.Fatal("class instances must have no prototype")
-	}
+	// Class instances are flat — the ObjectInstanceInfo has no Prototype
+	// field at all (open objects, which had one, were removed).
 	y, _ := oi.Fields.Get("y")
 	x, _ := oi.Fields.Get("x")
 	if _v, _ := native.AsString(y); _v != "A" {
@@ -1099,9 +1090,6 @@ func TestMakeObjectPrototypeGetField(t *testing.T) {
 		t.Fatal(err)
 	}
 	oi, _ := native.AsObjectInstance(result[0])
-	if oi.Prototype != nil {
-		t.Fatal("class instances must have no prototype")
-	}
 	x, ok := oi.GetField("x")
 	if !ok {
 		t.Fatal("expected GetField to find the inherited field flat")
@@ -1258,9 +1246,6 @@ func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	oi, _ := native.AsObjectInstance(result[0])
-	if oi.Prototype != nil {
-		t.Fatal("class instances must have no prototype")
-	}
 	checks := map[string]interface{}{
 		"a": int64(10), "b": "twenty", "c": true, "d": int64(40),
 		"e": "fifty", "f": false, "g": int64(70),
@@ -1306,9 +1291,7 @@ func TestMakeObjectDeep7LevelsPrototypeDepth(t *testing.T) {
 		t.Fatal(err)
 	}
 	oi, _ := native.AsObjectInstance(result[0])
-	if oi.Prototype != nil {
-		t.Errorf("expected no prototype chain, got one")
-	}
+	_ = oi
 	if oi.Fields.Len() != 7 {
 		t.Errorf("expected 7 flat fields, got %d", oi.Fields.Len())
 	}

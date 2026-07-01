@@ -152,7 +152,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// caller is responsible for minting first.
 		def := body.Parent
 		if def == nil {
-			def = TObject
+			def = TClass
 		}
 		body = NewObjectType(def, info)
 		r.Defs.Push(name, body)

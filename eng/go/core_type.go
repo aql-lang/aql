@@ -321,15 +321,10 @@ func InstallType(r *Registry, name string, body Value) error {
 	}
 	if IsObjectType(body) {
 		info, _ := AsObjectType(body)
-		// Class types root under Ideal/Class, not Object — classes are
-		// sealed nominal records, Object is the open mutable container
-		// (design/CLASS-OBJECT.10.md).
-		rootName := "Object"
-		rootDef := TObject
-		if info.Class {
-			rootName = "Class"
-			rootDef = TClass
-		}
+		// Object types are class types now — sealed nominal records rooted
+		// under Ideal/Class (the open Object container was removed).
+		rootName := "Class"
+		rootDef := TClass
 		if info.Parent != nil {
 			info.Name = info.Parent.Name + "/" + name
 		} else {
