@@ -1981,8 +1981,8 @@ func TestEdgeSignatureNoPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Register("echo", Signature{
-		Args:    []*Type{TAny},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil }, BarrierPos: -1,
+		Args: []*Type{TAny},
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil }), BarrierPos: -1,
 	})
 	e := NewTop(r)
 	result, err := e.Run([]Value{NewWord("echo"), NewInteger(42)})
@@ -2003,9 +2003,9 @@ func TestEdgeSignatureMultipleForward(t *testing.T) {
 	}
 	r.Register("pair", Signature{
 		Args: []*Type{TAny, TAny},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return args, nil
-		}, BarrierPos: -1,
+		}), BarrierPos: -1,
 	})
 	e := NewTop(r)
 	result, err := e.Run([]Value{
@@ -2027,9 +2027,9 @@ func TestEdgeSignatureReturnsMultiple(t *testing.T) {
 	}
 	r.Register("triple", Signature{
 		Args: []*Type{TAny},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0], args[0], args[0]}, nil
-		}, BarrierPos: -1,
+		}), BarrierPos: -1,
 	})
 	e := NewTop(r)
 	result, err := e.Run([]Value{NewInteger(7), NewWord("triple")})

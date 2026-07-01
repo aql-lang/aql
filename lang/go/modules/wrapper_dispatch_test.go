@@ -90,13 +90,13 @@ func TestModuleWrapperRebindPreservesArgHandling(t *testing.T) {
 			Args:       []*native.Type{native.TAtom, native.TList},
 			QuoteArgs:  map[int]bool{0: true},
 			NoEvalArgs: map[int]bool{1: true},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				name, _ := args[0].AsConcreteAtom()
 				body, _ := native.AsList(args[1])
 				// Returning the un-run body length proves NoEvalArgs held
 				// (a sub-Run of [zzz gt 1] would error on undefined zzz).
 				return []native.Value{native.NewString(name), native.NewInteger(int64(body.Len()))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TString, native.TInteger}, BarrierPos: -1,
 		}},
 	})
@@ -105,7 +105,7 @@ func TestModuleWrapperRebindPreservesArgHandling(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAtom}, {Type: native.TList}},
 			Returns:    []*native.Type{native.TString, native.TInteger},
-			Body:       []native.Value{native.NewWord("qop")},
+			Impl:       native.AQL([]native.Value{native.NewWord("qop")}),
 			NoEvalArgs: map[int]bool{1: true},
 			BarrierPos: -1,
 		}},
@@ -151,11 +151,11 @@ func buildProbeRegistry(innerBarrier int) *native.Registry {
 		Name: "op",
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a, _ := args[0].AsConcreteInteger()
 				b, _ := args[1].AsConcreteInteger()
 				return []native.Value{native.NewInteger(a + b)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: innerBarrier,
 		}},
 	})
@@ -165,7 +165,7 @@ func buildProbeRegistry(innerBarrier int) *native.Registry {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{native.TInteger},
-			Body:    []native.Value{native.NewWord("op")}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord("op")}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})

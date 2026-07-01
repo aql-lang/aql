@@ -115,7 +115,7 @@ func buildInspection(r *Registry, name string) Value {
 	ownSigs := fn.OwnSigs()
 	isDefined := false
 	for i := range ownSigs {
-		if len(ownSigs[i].Body) > 0 {
+		if len(ownSigs[i].Body()) > 0 {
 			isDefined = true
 			break
 		}

@@ -17,9 +17,9 @@ func registerSpin(r *Registry) {
 		Name: "spin",
 		Signatures: []Signature{{
 			Args: []*Type{},
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewWord("spin")}, nil
-			},
+			}),
 			Returns: []*Type{TAny},
 		}},
 	})

@@ -806,7 +806,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 		}
 	}
 	lam, hasOwn := fd.FirstOwnSig()
-	if own != 1 || !hasOwn || len(lam.Body) == 0 || bodyToksHaveSentinel(lam.Body) {
+	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
 		return emitOperand{}, false
 	}
 	inputs := make([]Value, len(lam.Params))
@@ -826,13 +826,13 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit.reg = r
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		return emitOperand{}, false
 	}

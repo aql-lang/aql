@@ -837,16 +837,16 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			barrier = len(s.Params)
 		}
 
-		cs := s // keep Params (names), Returns, Body, NoEval*, Handler
-		// AQL-bodied sigs get the body-splicing runner. A sig that already
-		// carries its own Handler with NO AQL Body is a pre-compiled /
+		cs := s // keep Params (names), Returns, NoEval*, Impl
+		// AQL-bodied sigs get the body-splicing runner in a fresh AQLImpl. A sig
+		// that already carries a Go handler with NO AQL Body is a pre-compiled /
 		// synthetic overload — a `usurp` wrapper (whose handler re-dispatches
 		// the wrapped fn through a paren) or a captured native fn value bound
 		// to a name. Wrapping the body-runner around its empty Body would
-		// emit zero values and fail the return check, so preserve the
-		// existing Handler/ReturnsFn instead; the fn it forwards to performs
-		// its own arg-binding and return validation. (An already-compiled AQL
-		// fn re-bound by name still has Body>0, so it correctly gets a fresh
+		// emit zero values and fail the return check, so preserve the existing
+		// Impl/ReturnsFn instead; the fn it forwards to performs its own
+		// arg-binding and return validation. (An already-compiled AQL fn
+		// re-bound by name still has Body>0, so it correctly gets a fresh
 		// body-runner — only Body-less handler sigs are preserved.)
 		if s.dispatchHandler() == nil || len(s.body()) > 0 {
 			meta := &FnFrameMeta{
@@ -854,8 +854,11 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 				HasGen:       fnDefCopy.Gen != nil,
 				InstallNames: fnInstallNames(s, fnDefCopy.Captured),
 			}
-			cs.FnFrame = meta
-			cs.Handler = buildFnBodyHandler(r, name, s, fnDefCopy, meta)
+			cs.Impl = &AQLImpl{
+				Body:     s.body(),
+				FnFrame:  meta,
+				dispatch: buildFnBodyHandler(r, name, s, fnDefCopy, meta),
+			}
 			cs.ReturnsFn = buildFnBodyReturnsFn(r, name, s, fnDefCopy)
 		}
 		cs.BarrierPos = barrier
@@ -1523,7 +1526,7 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 			expanded = append(expanded, FnSig{
 				Params:     reducedParams,
 				Returns:    sig.Returns,
-				Body:       body,
+				Impl:       AQL(body),
 				BarrierPos: expandedBarrier,
 			})
 		}

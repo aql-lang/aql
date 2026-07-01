@@ -862,7 +862,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 	if len(entries) == 1 {
 		hasBody := false
 		for i := range top.Signatures {
-			if len(top.Signatures[i].Body) > 0 {
+			if len(top.Signatures[i].body()) > 0 {
 				hasBody = true
 				break
 			}
@@ -909,7 +909,7 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 	return Signature{
 		Fallback:   true,
 		BarrierPos: 0,
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			top, ok := r.Defs.Top(name)
 			if !ok {
 				return nil, fmt.Errorf("undefined: %s", name)
@@ -947,7 +947,7 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 						"`end` / `;` only ends the statement — it does NOT turn a following word into a nested call.")
 			}
 			return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
-		},
+		}),
 	}
 }
 
@@ -1019,8 +1019,8 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 		Name: name,
 
 		Signatures: []Signature{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TInteger}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -1042,9 +1042,9 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 		Name: name,
 
 		Signatures: []Signature{
-			{Args: []*Type{TFloat, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TNumber, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TFloat, TNumber}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat, TFloat}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TNumber, TFloat}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat, TNumber}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -1066,7 +1066,7 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 		Name: name,
 
 		Signatures: []Signature{
-			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TInteger}, Impl: Go(handler), Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	}
 }

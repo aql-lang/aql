@@ -102,14 +102,7 @@ func UsurpFunction(v Value) (Value, bool) {
 		rev.TypeArgs = nil
 		rev.NoEvalArgs = nil
 		rev.NoEvalMapArgs = nil
-		rev.Body = nil
-		// Drop any inherited AQL fn-frame meta: this wrapper re-dispatches the
-		// ORIGINAL (which carries its own frame) via a Go handler, so it is a
-		// GoImpl — a stale FnFrame would misclassify it as an AQL body and lose
-		// its RunInCheckMode re-dispatch (see normalizeSig's Impl synthesis).
-		rev.FnFrame = nil
 		rev.ReturnsFn = nil
-		rev.CheckFullStackFn = nil
 		rev.Fallback = false
 		// The re-dispatch layout must respect the ORIGINAL sig's barrier so a
 		// stack-only or mixed-barrier original still receives its args in the
@@ -119,15 +112,14 @@ func UsurpFunction(v Value) (Value, bool) {
 		if origBarrier < 0 || origBarrier > len(src.Params) {
 			origBarrier = len(src.Params)
 		}
-		rev.Handler = usurpDispatchHandler(orig, origBarrier)
-		// usurp is a static arg permutation: the handler re-dispatches the
-		// ORIGINAL with the args reversed (a token stream the engine re-steps).
-		// Running it in CHECK mode means the carrier compiler steps that
-		// re-dispatch and compiles the original call directly — `usurp (ref f) a
+		// A Go re-dispatch wrapper: it re-dispatches the ORIGINAL (which carries
+		// its own frame) via a Go handler, so it is a GoImpl — replacing any
+		// inherited AQL impl. RunInCheck lets the carrier compiler step the
+		// re-dispatch and compile the original call directly — `usurp (ref f) a
 		// b` lowers exactly like `f b a` — instead of refusing the opaque
 		// wrapper dispatch. Soundness rides the differential (the compiled
 		// re-dispatch is byte-identical to the runtime one).
-		rev.RunInCheckMode = true
+		rev.Impl = Go(usurpDispatchHandler(orig, origBarrier), RunInCheck())
 		normalizeSig(&rev)
 		wrapped = append(wrapped, rev)
 	}
@@ -180,24 +172,19 @@ func rebarrierFunction(v Value, stack bool) (Value, bool) {
 		ws.TypeArgs = nil
 		ws.NoEvalArgs = nil
 		ws.NoEvalMapArgs = nil
-		ws.Body = nil
-		// Drop any inherited AQL fn-frame meta (see UsurpFunction): the wrapper
-		// re-dispatches the ORIGINAL via a Go handler, so it is a GoImpl.
-		ws.FnFrame = nil
 		ws.ReturnsFn = nil
-		ws.CheckFullStackFn = nil
 		ws.Fallback = false
 		origBarrier := src.BarrierPos
 		if origBarrier < 0 || origBarrier > len(src.Params) {
 			origBarrier = len(src.Params)
 		}
-		ws.Handler = rebarrierDispatchHandler(orig, origBarrier)
-		// Like usurp (UsurpFunction): the wrapper re-dispatches the ORIGINAL in
-		// caller order, so running it in CHECK mode lets the carrier compiler step
-		// the re-dispatch and compile the original call directly — `forward-args f
-		// a b` / `a b stack-args f` lower exactly like the plain `f` call — instead
-		// of refusing the opaque wrapper. Soundness rides the differential.
-		ws.RunInCheckMode = true
+		// A Go re-dispatch wrapper (see UsurpFunction): replaces any inherited
+		// AQL impl with a GoImpl. Like usurp, running it in CHECK mode lets the
+		// carrier compiler step the re-dispatch and compile the original call
+		// directly — `forward-args f a b` / `a b stack-args f` lower exactly like
+		// the plain `f` call — instead of refusing the opaque wrapper. Soundness
+		// rides the differential.
+		ws.Impl = Go(rebarrierDispatchHandler(orig, origBarrier), RunInCheck())
 		normalizeSig(&ws)
 		wrapped = append(wrapped, ws)
 	}
@@ -232,14 +219,12 @@ func ForceArityFunction(v Value, n int) (Value, bool) {
 	sig := Signature{
 		Params:     params,
 		BarrierPos: n, // all-forward: caller writes  f a b …
-		// Re-dispatch the original respecting ITS barrier (not always
-		// forward) so force-arity composes over stack-form wrappers
-		// (e.g. force-arity over stack-args).
-		Handler: rebarrierDispatchHandler(orig, funcSigBarrier(orig, n)),
-		// Re-dispatch in check mode so the carrier compiler compiles the original
-		// call directly (`force-arity 2 f a b` lowers like `f a b`), mirroring
-		// usurp / rebarrier. Soundness rides the differential.
-		RunInCheckMode: true,
+		// Re-dispatch the original respecting ITS barrier (not always forward) so
+		// force-arity composes over stack-form wrappers (e.g. force-arity over
+		// stack-args). Re-dispatch in check mode so the carrier compiler compiles
+		// the original call directly (`force-arity 2 f a b` lowers like `f a b`),
+		// mirroring usurp / rebarrier. Soundness rides the differential.
+		Impl: Go(rebarrierDispatchHandler(orig, funcSigBarrier(orig, n)), RunInCheck()),
 	}
 	normalizeSig(&sig)
 	return NewFunction(FnDefInfo{

@@ -730,7 +730,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		PushGenBindings(r, genSpec)
 		for i := range fnDef.Signatures {
 			s := &fnDef.Signatures[i]
-			if len(s.Body) == 0 {
+			if len(s.Body()) == 0 {
 				continue
 			}
 			paramNames := make([]string, len(s.Params))
@@ -761,7 +761,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 					carrierArgs[j] = NewCarrier(t)
 				}
 			}
-			eng.AnalyseFnBody(r, "", paramNames, s.Body, carrierArgs, fnDef.Captured, s.Returns)
+			eng.AnalyseFnBody(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns)
 		}
 		PopGenBindings(r, genSpec)
 	}
@@ -834,7 +834,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	sig := FnSig{
 		Params:     params,
 		Returns:    []*Type{TAny},
-		Body:       bodyElems,
+		Impl:       AQL(bodyElems),
 		BarrierPos: barrierPos,
 		QuoteArgs:  eng.QuoteArgsFromParams(params),
 	}

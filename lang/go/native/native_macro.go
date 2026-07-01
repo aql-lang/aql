@@ -271,7 +271,7 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	sig := FnSig{
 		Params:        params,
 		Returns:       []*Type{TAny},
-		Body:          bodyElems,
+		Impl:          AQL(bodyElems),
 		BarrierPos:    barrierPos,
 		FormArgs:      form,
 		NoEvalArgs:    form,

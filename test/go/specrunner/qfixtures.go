@@ -52,7 +52,7 @@ func registerArith(r *eng.Registry) {
 		Name: "addq",
 		Signatures: []eng.Signature{{
 			Args:    numberPair,
-			Handler: numericBinary(func(a, b int64) int64 { return b + a }, func(a, b float64) float64 { return b + a }),
+			Impl:    eng.Go(numericBinary(func(a, b int64) int64 { return b + a }, func(a, b float64) float64 { return b + a })),
 			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
 		}},
 	})
@@ -60,7 +60,7 @@ func registerArith(r *eng.Registry) {
 		Name: "subq",
 		Signatures: []eng.Signature{{
 			Args:    numberPair,
-			Handler: numericBinary(func(a, b int64) int64 { return b - a }, func(a, b float64) float64 { return b - a }),
+			Impl:    eng.Go(numericBinary(func(a, b int64) int64 { return b - a }, func(a, b float64) float64 { return b - a })),
 			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
 		}},
 	})
@@ -68,7 +68,7 @@ func registerArith(r *eng.Registry) {
 		Name: "mulq",
 		Signatures: []eng.Signature{{
 			Args:    numberPair,
-			Handler: numericBinary(func(a, b int64) int64 { return b * a }, func(a, b float64) float64 { return b * a }),
+			Impl:    eng.Go(numericBinary(func(a, b int64) int64 { return b * a }, func(a, b float64) float64 { return b * a })),
 			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
 		}},
 	})
@@ -76,14 +76,14 @@ func registerArith(r *eng.Registry) {
 		Name: "negq",
 		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				if args[0].Parent.ConformsTo(eng.TInteger) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(-n)}, nil
 				}
 				f, _ := eng.AsFloat(args[0])
 				return []eng.Value{eng.NewFloat(-f)}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TNumber},
 		}},
 	})
@@ -94,11 +94,11 @@ func registerStringProbe(r *eng.Registry) {
 		Name: "concatq",
 		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TString, eng.TString},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := eng.AsString(args[0])
 				b, _ := eng.AsString(args[1])
 				return []eng.Value{eng.NewString(b + a)}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 		}},
 	})
@@ -110,18 +110,18 @@ func registerDispatch(r *eng.Registry) {
 		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger},
-				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewString("int:" + strconv.FormatInt(n, 10))}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TString},
-				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					s, _ := eng.AsString(args[0])
 					return []eng.Value{eng.NewString("str:" + s)}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
@@ -129,12 +129,12 @@ func registerDispatch(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "tagq",
 		Signatures: []eng.Signature{
-			{Args: []*eng.Type{eng.TAny}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			{Args: []*eng.Type{eng.TAny}, Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("any")}, nil
-			}, Returns: []*eng.Type{eng.TString}, BarrierPos: -1},
-			{Args: []*eng.Type{eng.TInteger}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			}), Returns: []*eng.Type{eng.TString}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TInteger}, Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("specific")}, nil
-			}, Returns: []*eng.Type{eng.TString}, BarrierPos: -1},
+			}), Returns: []*eng.Type{eng.TString}, BarrierPos: -1},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
@@ -142,17 +142,17 @@ func registerDispatch(r *eng.Registry) {
 		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(0)},
-				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewInteger(1)}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TInteger},
-				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					n, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewInteger(n)}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 			},
 		},
@@ -162,16 +162,16 @@ func registerDispatch(r *eng.Registry) {
 		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(99)},
-				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("ninety-nine")}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TInteger},
-				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("general")}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
@@ -181,16 +181,16 @@ func registerDispatch(r *eng.Registry) {
 		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TString}, Patterns: map[int]eng.Value{0: eng.NewString("admin")},
-				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("matched-admin")}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TString},
-				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{eng.NewString("other")}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
@@ -202,12 +202,12 @@ func registerBarrierArity(r *eng.Registry) {
 		Name: "tripq",
 		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := eng.AsInteger(args[0])
 				b, _ := eng.AsInteger(args[1])
 				c, _ := eng.AsInteger(args[2])
 				return []eng.Value{eng.NewString(fmt.Sprintf("%d,%d,%d", a, b, c))}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 		}},
 	})
@@ -216,11 +216,11 @@ func registerBarrierArity(r *eng.Registry) {
 		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TInteger, eng.TInteger},
 			BarrierPos: 1,
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := eng.AsInteger(args[0])
 				b, _ := eng.AsInteger(args[1])
 				return []eng.Value{eng.NewString(fmt.Sprintf("%d:%d", a, b))}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TString},
 		}},
 	})
@@ -228,9 +228,9 @@ func registerBarrierArity(r *eng.Registry) {
 		Name: "nilq",
 		Signatures: []eng.Signature{{
 			Args: []*eng.Type{},
-			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("nil")}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TString}, BarrierPos: 0,
 		}},
 	})
@@ -239,19 +239,19 @@ func registerBarrierArity(r *eng.Registry) {
 		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger},
-				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					a, _ := eng.AsInteger(args[0])
 					return []eng.Value{eng.NewString(fmt.Sprintf("one:%d", a))}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*eng.Type{eng.TInteger, eng.TInteger},
-				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					a, _ := eng.AsInteger(args[0])
 					b, _ := eng.AsInteger(args[1])
 					return []eng.Value{eng.NewString(fmt.Sprintf("two:%d,%d", a, b))}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TString}, BarrierPos: -1,
 			},
 		},
@@ -274,7 +274,7 @@ func registerBarrierArity(r *eng.Registry) {
 			Name: name,
 			Signatures: []eng.Signature{{
 				Args: args, BarrierPos: barrier,
-				Handler: intArgsFmt,
+				Impl:    eng.Go(intArgsFmt),
 				Returns: []*eng.Type{eng.TString},
 			}},
 		})
@@ -294,10 +294,10 @@ func registerListProbes(r *eng.Registry) {
 		Name: "lengthq",
 		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TList},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				lst, _ := eng.AsList(args[0])
 				return []eng.Value{eng.NewInteger(int64(lst.Len()))}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 		}},
 	})
@@ -305,13 +305,13 @@ func registerListProbes(r *eng.Registry) {
 		Name: "firstq",
 		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TList},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				lst, _ := eng.AsList(args[0])
 				if lst.Len() == 0 {
 					return []eng.Value{eng.NewNone()}, nil
 				}
 				return []eng.Value{lst.Get(0)}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TAny}, BarrierPos: -1,
 		}},
 	})

@@ -119,63 +119,6 @@ func normalizeSig(s *Signature) {
 		}
 	}
 	s.Patterns = patterns
-
-	// Synthesize the run-implementation sum from the flat authoring fields
-	// (the same install-boundary demotion Params gets from Args above), UNLESS
-	// an author wrote Impl directly (via Go(...) / AQL(...) / a built AQLImpl)
-	// and set no flat inputs — then keep it. Synthesizing whenever a flat input
-	// is present also re-derives Impl for a copy-then-mutate site that changed
-	// a flat field after inheriting a stale Impl (usurp/force wrappers,
-	// InstallFnDef's re-bound bodies). This dual path lets flat-field authors
-	// and Impl authors coexist during the Phase-3c migration; the whole block
-	// is retired once the flat fields are deleted.
-	//
-	// The AQL-body discriminator is `FnFrame != nil || len(Body) > 0`:
-	//   - an installed fn / lambda carries FnFrame (its Body may be EMPTY —
-	//     `def v fn [[x] [] []]` — yet it is still an AQL frame) plus a derived
-	//     splicing Handler (→ dispatch);
-	//   - a module-ref carries Body=[Word(inner)] with a nil Handler
-	//     (→ dispatch nil, the execFnDefLiteral splice path).
-	// Everything else is a Go handler (a native word, a usurp/force wrapper —
-	// which clears FnFrame in core_ref.go — the synthetic fallback, a
-	// captured-native-fn). Always allocated fresh: a re-normalized sig may
-	// have copied a prior Impl pointer that must not be mutated in place.
-	if s.Impl == nil || s.hasFlatImplInputs() {
-		if s.FnFrame != nil || len(s.Body) > 0 {
-			s.Impl = &AQLImpl{Body: s.Body, FnFrame: s.FnFrame, dispatch: s.Handler}
-		} else {
-			s.Impl = &GoImpl{
-				Handler:          s.Handler,
-				FullStack:        s.FullStack,
-				CheckFullStackFn: s.CheckFullStackFn,
-				ParkResult:       s.ParkResult,
-				RunInCheckMode:   s.RunInCheckMode,
-			}
-		}
-	}
-	// Refresh the flat impl fields FROM Impl so external readers of those fields
-	// (tests, help/inspect) see the authoritative values whether the sig was
-	// authored with flat fields or with Impl directly — the same mirror
-	// discipline Args gets from Params above. Retired together with the fields
-	// in the final Phase-3c step, when the readers move onto the accessors.
-	switch impl := s.Impl.(type) {
-	case *GoImpl:
-		s.Handler = impl.Handler
-		s.FullStack = impl.FullStack
-		s.CheckFullStackFn = impl.CheckFullStackFn
-		s.ParkResult = impl.ParkResult
-		s.RunInCheckMode = impl.RunInCheckMode
-		s.Body = nil
-		s.FnFrame = nil
-	case *AQLImpl:
-		s.Handler = impl.dispatch
-		s.Body = impl.Body
-		s.FnFrame = impl.FnFrame
-		s.FullStack = false
-		s.CheckFullStackFn = nil
-		s.ParkResult = false
-		s.RunInCheckMode = false
-	}
 }
 
 // sigArgType returns the declared type at signature position i. It is the

@@ -97,101 +97,70 @@ func CheckFullStack(fn CheckFullStackFunc) GoOpt {
 // directly instead, so they can attach the derived body-splicer and frame meta.
 func AQL(body []Value) *AQLImpl { return &AQLImpl{Body: body} }
 
-// hasFlatImplInputs reports whether any legacy flat implementation field is
-// set. normalizeSig synthesizes Impl from these inputs whenever any is present
-// (so a copy-then-mutate site that changes a flat field re-derives Impl); an
-// author that writes Impl directly leaves them all zero, and normalizeSig keeps
-// the authored Impl untouched. Retired together with the flat fields.
-func (s *Signature) hasFlatImplInputs() bool {
-	return s.Handler != nil || len(s.Body) > 0 || s.FnFrame != nil ||
-		s.FullStack || s.CheckFullStackFn != nil || s.ParkResult || s.RunInCheckMode
-}
-
 // --- Signature accessors: the SINGLE way every reader reaches the run
-// implementation. They read `Impl` once normalizeSig has synthesized it, and
-// fall back to the flat authoring fields for a Signature built in a test that
-// never went through normalizeSig (Impl == nil). ---
+// implementation, all reading the authoritative Impl. A nil Impl means the
+// Signature has no implementation (a check-mode shape synth, a match-only test
+// fixture) — dispatchHandler() is nil and the rest return their zero. ---
 
-// dispatchHandler returns the Go function execMatch invokes for this sig, or
+// DispatchHandler returns the Go function execMatch invokes for this sig, or
 // nil when the sig is dispatched by splicing its AQL Body (module ref /
-// un-installed lambda). It is also the native-vs-AQL discriminator.
+// un-installed lambda) or has no implementation. It is also the native-vs-AQL
+// discriminator, and the exported read surface for external inspectors that
+// previously read the Handler field. dispatchHandler is the internal spelling.
+func (s *Signature) DispatchHandler() Handler { return s.dispatchHandler() }
+
+// Body is the exported read surface for a signature's AQL token body (the
+// lang-layer introspection/behaviour words that previously read the Body
+// field). nil for a Go sig / no impl. body is the internal spelling.
+func (s *Signature) Body() []Value { return s.body() }
+
 func (s *Signature) dispatchHandler() Handler {
-	if s.Impl != nil {
-		return s.Impl.dispatchHandler()
+	if s.Impl == nil {
+		return nil
 	}
-	return s.Handler
+	return s.Impl.dispatchHandler()
 }
 
-// body returns the sig's AQL token body (nil for a Go sig).
+// body returns the sig's AQL token body (nil for a Go sig / no impl).
 func (s *Signature) body() []Value {
-	switch impl := s.Impl.(type) {
-	case *AQLImpl:
-		return impl.Body
-	case *GoImpl:
-		return nil
-	default:
-		return s.Body
+	if a, ok := s.Impl.(*AQLImpl); ok {
+		return a.Body
 	}
+	return nil
 }
 
 // fnFrame returns the AQL fn-frame metadata stamped on an installed body /
 // anonymous lambda (nil for Go sigs and module refs).
 func (s *Signature) fnFrame() *FnFrameMeta {
-	switch impl := s.Impl.(type) {
-	case *AQLImpl:
-		return impl.FnFrame
-	case *GoImpl:
-		return nil
-	default:
-		return s.FnFrame
+	if a, ok := s.Impl.(*AQLImpl); ok {
+		return a.FnFrame
 	}
+	return nil
 }
 
 // fullStack reports whether the handler receives the full resolved stack.
 func (s *Signature) fullStack() bool {
-	switch impl := s.Impl.(type) {
-	case *GoImpl:
-		return impl.FullStack
-	case *AQLImpl:
-		return false
-	default:
-		return s.FullStack
-	}
+	g, ok := s.Impl.(*GoImpl)
+	return ok && g.FullStack
 }
 
 // checkFullStackFn returns the check-mode full-stack handler, if any.
 func (s *Signature) checkFullStackFn() CheckFullStackFunc {
-	switch impl := s.Impl.(type) {
-	case *GoImpl:
-		return impl.CheckFullStackFn
-	case *AQLImpl:
-		return nil
-	default:
-		return s.CheckFullStackFn
+	if g, ok := s.Impl.(*GoImpl); ok {
+		return g.CheckFullStackFn
 	}
+	return nil
 }
 
 // parkResult reports whether the pointer advances past the spliced result
 // instead of re-stepping it.
 func (s *Signature) parkResult() bool {
-	switch impl := s.Impl.(type) {
-	case *GoImpl:
-		return impl.ParkResult
-	case *AQLImpl:
-		return false
-	default:
-		return s.ParkResult
-	}
+	g, ok := s.Impl.(*GoImpl)
+	return ok && g.ParkResult
 }
 
 // runInCheckMode reports whether the handler runs even under check mode.
 func (s *Signature) runInCheckMode() bool {
-	switch impl := s.Impl.(type) {
-	case *GoImpl:
-		return impl.RunInCheckMode
-	case *AQLImpl:
-		return false
-	default:
-		return s.RunInCheckMode
-	}
+	g, ok := s.Impl.(*GoImpl)
+	return ok && g.RunInCheckMode
 }

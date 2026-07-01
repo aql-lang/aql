@@ -252,10 +252,10 @@ func TestEngineIfOnlyChosenBranchExecutes(t *testing.T) {
 	r.Register("side-effect",
 		Signature{
 			Args: []*Type{TAny},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				callCount++
 				return args, nil
-			}, BarrierPos: -
+			}), BarrierPos: -
 
 			// if true [side-effect 1] [side-effect 2] → only then-branch runs
 			1,

@@ -25,10 +25,10 @@ func TestFormArgsRawCapture(t *testing.T) {
 			FormArgs:      map[int]bool{0: true, 1: true, 2: true, 3: true},
 			NoEvalArgs:    map[int]bool{0: true, 1: true, 2: true, 3: true},
 			NoEvalMapArgs: map[int]bool{0: true, 1: true, 2: true, 3: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				captured = append([]Value(nil), args...)
 				return []Value{NewBoolean(true)}, nil
-			},
+			}),
 			BarrierPos: -1,
 		}},
 	})

@@ -4654,8 +4654,11 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 				HasGen:       fnDef.Gen != nil,
 				InstallNames: fnInstallNames(sig, fnDef.Captured),
 			}
-			compiled.FnFrame = meta
-			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta)
+			compiled.Impl = &AQLImpl{
+				Body:     sig.body(),
+				FnFrame:  meta,
+				dispatch: buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta),
+			}
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
 		}
 		normalizeSig(&compiled)

@@ -485,7 +485,7 @@ func TestWalkBeforeIdentity(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -540,7 +540,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
 		}},
 	}
 	inner := native.NewOrderedMap()
@@ -602,7 +602,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewInteger(99)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewInteger(99)}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -649,7 +649,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("path")}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("path")}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -697,14 +697,14 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    identityBody, BarrierPos: -1,
+			Impl:    native.AQL(identityBody), BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    identityBody, BarrierPos: -1,
+			Impl:    native.AQL(identityBody), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -766,14 +766,14 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    []native.Value{native.NewInteger(99)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewInteger(99)}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -823,14 +823,14 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    identityBody, BarrierPos: -1,
+			Impl:    native.AQL(identityBody), BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Body:    identityBody, BarrierPos: -1,
+			Impl:    native.AQL(identityBody), BarrierPos: -1,
 		}},
 	}
 	innerMap := native.NewOrderedMap()

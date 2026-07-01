@@ -1555,11 +1555,11 @@ func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 		a.Register("add3",
 			Signature{
 				Args: []*Type{TNumber, TNumber},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+				Impl: eng.Go(func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
 					x, _ := eng.AsInteger(args[0])
 					y, _ := eng.AsInteger(args[1])
 					return []Value{NewInteger(x + y)}, nil
-				},
+				}),
 				Returns: []*Type{TInteger}, BarrierPos: -1,
 			},
 			// The higher-arity overload — never matched by the integer chain,
@@ -1567,9 +1567,9 @@ func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 			// forward arity 3).
 			Signature{
 				Args: []*Type{TMap, TAny, TAny},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
+				Impl: eng.Go(func(args []Value, _ map[string]Value, _ []Value, _ *eng.Registry) ([]Value, error) {
 					return []Value{args[0]}, nil
-				},
+				}),
 				Returns: []*Type{TMap}, BarrierPos: -1,
 			},
 		)

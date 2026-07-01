@@ -32,18 +32,18 @@ func TestResolveForwardArgs_LazySkipOrdering(t *testing.T) {
 			Signatures: []Signature{
 				{
 					Args: []*Type{TString},
-					Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 						order = append(order, "imp")
 						s, _ := AsString(args[0])
 						return []Value{NewString("file:" + s)}, nil
-					},
+					}),
 					Returns: []*Type{TString}, BarrierPos: -1,
 				},
 				{
 					Args: []*Type{TInteger, TInteger},
-					Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+					Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 						return []Value{NewString("two")}, nil
-					},
+					}),
 					Returns: []*Type{TString}, BarrierPos: -1,
 				},
 			},
@@ -53,10 +53,10 @@ func TestResolveForwardArgs_LazySkipOrdering(t *testing.T) {
 			Name: "probe",
 			Signatures: []Signature{{
 				Args: []*Type{},
-				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					order = append(order, "probe")
 					return []Value{NewInteger(1)}, nil
-				},
+				}),
 				Returns: []*Type{TInteger}, BarrierPos: 0,
 			}},
 		})
@@ -99,12 +99,12 @@ func TestResolveForwardArgs_ClaimedGroupStillEvaluated(t *testing.T) {
 			Name: "addq2",
 			Signatures: []Signature{{
 				Args: []*Type{TInteger, TInteger},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					order = append(order, "addq2")
 					a, _ := AsInteger(args[0])
 					b, _ := AsInteger(args[1])
 					return []Value{NewInteger(a + b)}, nil
-				},
+				}),
 				Returns: []*Type{TInteger}, BarrierPos: -1,
 			}},
 		})
@@ -112,10 +112,10 @@ func TestResolveForwardArgs_ClaimedGroupStillEvaluated(t *testing.T) {
 			Name: "probe",
 			Signatures: []Signature{{
 				Args: []*Type{},
-				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					order = append(order, "probe")
 					return []Value{NewInteger(40)}, nil
-				},
+				}),
 				Returns: []*Type{TInteger}, BarrierPos: 0,
 			}},
 		})

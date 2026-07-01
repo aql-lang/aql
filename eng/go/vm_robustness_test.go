@@ -40,7 +40,7 @@ func TestVMRecoversHandlerPanic(t *testing.T) {
 		Name: "boom",
 		Signatures: []Signature{{
 			Args:    []*Type{TInteger},
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { panic("kaboom") },
+			Impl:    Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { panic("kaboom") }),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})

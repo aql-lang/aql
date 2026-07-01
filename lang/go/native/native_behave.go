@@ -137,7 +137,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("behave %s: cannot install on builtin type %s", name, target.Leaf())
 	}
 
-	body := append([]Value{}, sig.Body...)
+	body := append([]Value{}, sig.Body()...)
 
 	// Reuse an existing userBehavior wrapper if one is already
 	// installed — adding a new capability (canon on top of compare)

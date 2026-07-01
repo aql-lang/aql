@@ -568,7 +568,7 @@ func TestRegisterFunctions(t *testing.T) {
 				t.Error("expected at least one signature")
 			}
 			for i, sig := range fn.Signatures {
-				if sig.Handler == nil {
+				if sig.DispatchHandler() == nil {
 					t.Errorf("signature %d has nil handler", i)
 				}
 			}
@@ -675,7 +675,7 @@ func makeTrueFilterFn() Value {
 				Params: []FnParam{
 					{Name: "item", Type: TMap},
 				},
-				Body: []Value{NewBoolean(true)}, BarrierPos: -1,
+				Impl: AQL([]Value{NewBoolean(true)}), BarrierPos: -1,
 			},
 		},
 	})
@@ -731,11 +731,11 @@ func makeWalkValueFn() Value {
 				Params: []FnParam{
 					{Name: "node", Type: TMap},
 				},
-				Body: []Value{
+				Impl: AQL([]Value{
 					NewWord("getpath"),
 					NewString("value"),
 					NewWord("node"),
-				}, BarrierPos: -1,
+				}), BarrierPos: -1,
 			},
 		},
 	})

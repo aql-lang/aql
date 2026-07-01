@@ -526,8 +526,8 @@ func debugNatives() []native.NativeFunc {
 							fmt.Sprintf("Debug.body: no such word %q", name), "Debug.body")
 					}
 					for _, sig := range fn.OwnSigs() {
-						if len(sig.Body) > 0 {
-							body := native.NewList(append([]native.Value(nil), sig.Body...))
+						if len(sig.Body()) > 0 {
+							body := native.NewList(append([]native.Value(nil), sig.Body()...))
 							body.Quoted = true
 							return []native.Value{body}, nil
 						}

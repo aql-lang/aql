@@ -428,7 +428,7 @@ func MakeDepScalarSig(opName string, kind DepKind) Signature {
 	return Signature{
 		Args:     []*Type{TScalar, TScalar},
 		TypeArgs: map[int]bool{1: true},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 			// arg1 is the type-literal at the deep position. Reject
 			// non-leaf bases — only the well-known scalar types map
 			// to a supported DepScalar base.
@@ -455,9 +455,9 @@ func MakeDepScalarSig(opName string, kind DepKind) Signature {
 				r.Check.Emit.RememberOriginal(dep)
 			}
 			return []Value{dep}, nil
-		},
-		Returns:        []*Type{TScalar},
-		RunInCheckMode: true, BarrierPos:
+		}, RunInCheck()),
+		Returns: []*Type{TScalar},
+		BarrierPos:
 
 		// The `between` word registration is defined in
 		// lang/go/engine/native_compare.go alongside the other DepScalar

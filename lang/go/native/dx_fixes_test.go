@@ -137,11 +137,11 @@ func TestDXTopLevelRecover(t *testing.T) {
 		Name: "dx-boom",
 		Signatures: []NativeSig{{
 			Args: []*Type{},
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				var p *int
 				_ = *p // nil deref → panic
 				return nil, nil
-			}, BarrierPos: 0,
+			}), BarrierPos: 0,
 		}},
 	})
 	_, runErr := NewTop(r).Run([]Value{NewWord("dx-boom")})

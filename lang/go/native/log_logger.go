@@ -58,7 +58,7 @@ func wrapLoggerFnDef(n NativeFunc, subReg *Registry) Value {
 		sigs[i] = FnSig{
 			Params:     params,
 			Returns:    s.Returns,
-			Body:       []Value{NewWord(n.Name)},
+			Impl:       AQL([]Value{NewWord(n.Name)}),
 			BarrierPos: -1,
 		}
 	}
