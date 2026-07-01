@@ -785,7 +785,44 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		frag := es.TakeFragment()
 		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[countArg].Pos)
 	}
+	// Plain check (no bytecode recording): a STATICALLY-COUNTED loop leaves the
+	// SPREAD of its per-iteration residual on the stack, not one List value
+	// (`for 3 ['x']` leaves `'x' 'x' 'x'`; `for [1 4] [7 8]` leaves six ints).
+	// Model that exactly so the residual's arity and element types match the
+	// runtime — the List above is a variadic APPROXIMATION the bytecode lowerer
+	// requires, kept for the recording path (which never reaches here, es!=nil).
+	// The per-iteration residual is the loop's fixed-point join, so repeating it
+	// count times is a sound over-approximation: a break/continue loop runs
+	// FEWER iterations, and a shorter runtime stack is still covered by the
+	// longer checked one. Bounded to keep the residual small; past the cap the
+	// List approximation stands.
+	if !es.Active() && lowerable && len(stk) > 0 {
+		if n := loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)); n >= 0 && n*int64(len(stk)) <= loopSpreadResidualCap {
+			spread := make([]Value, 0, int(n)*len(stk))
+			for i := int64(0); i < n; i++ {
+				spread = append(spread, stk...)
+			}
+			return spread
+		}
+	}
 	return []Value{out}
+}
+
+// loopSpreadResidualCap bounds the check-mode spread of a statically-counted
+// loop's residual (native_control forCarrierAnalyse). A loop with more total
+// residual values than this keeps the single-List approximation rather than
+// materialising a large residual stack — the exact arity of a big loop is not
+// worth the memory, and such loops rarely leave a consumed residual.
+const loopSpreadResidualCap = 256
+
+// asInt64Or returns v's integer value, or def when v is not a concrete integer.
+func asInt64Or(v Value, def int64) int64 {
+	if IsConcrete(v) && v.Parent.ConformsTo(TInteger) {
+		if n, err := AsInteger(v); err == nil {
+			return n
+		}
+	}
+	return def
 }
 
 // ---- error handler ----
