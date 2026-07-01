@@ -74,6 +74,10 @@ type (
 	MoveInfo            = eng.MoveInfo
 	NativeFunc          = eng.NativeFunc
 	NativeSig           = eng.Signature // native authoring sig == the unified dispatch Signature
+	SigImpl             = eng.SigImpl   // sealed run-impl sum (GoImpl | AQLImpl)
+	GoImpl              = eng.GoImpl    // native / internal Go-handler implementation
+	AQLImpl             = eng.AQLImpl   // AQL body implementation (module ref / lambda / installed fn)
+	GoOpt               = eng.GoOpt     // optional dispatch knob for Go(...)
 	CompileEffect       = eng.CompileEffect
 	CallableSpec        = eng.CallableSpec
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo
@@ -502,6 +506,12 @@ var (
 	NewTypedMap            = eng.NewTypedMap
 	NewWord                = eng.NewWord
 	NewWordModified        = eng.NewWordModified
+	Go                     = eng.Go
+	AQL                    = eng.AQL
+	RunInCheck             = eng.RunInCheck
+	Park                   = eng.Park
+	FullStack              = eng.FullStack
+	CheckFullStack         = eng.CheckFullStack
 	NextMarkID             = eng.NextMarkID
 	OpenUnifyMap           = eng.OpenUnifyMap
 	RankSignatures         = eng.RankSignatures

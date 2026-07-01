@@ -57,6 +57,56 @@ type AQLImpl struct {
 func (a *AQLImpl) dispatchHandler() Handler { return a.dispatch }
 func (a *AQLImpl) sigImpl()                 {}
 
+// --- Authoring constructors. Native words and internal Go-handler sites write
+// `Impl: Go(handler, opts...)`; module-refs / un-installed bodies write
+// `Impl: AQL(body)`. These are the ONLY way an implementation is spelled once
+// the flat authoring fields are retired. ---
+
+// GoOpt sets an optional dispatch knob on a GoImpl built by Go.
+type GoOpt func(*GoImpl)
+
+// Go builds the implementation of a native word / internal Go handler.
+func Go(h Handler, opts ...GoOpt) *GoImpl {
+	g := &GoImpl{Handler: h}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
+}
+
+// RunInCheck marks the handler to run even under check mode (usurp/force
+// re-dispatch wrappers, def/undef, refine, depscalar predicates).
+func RunInCheck() GoOpt { return func(g *GoImpl) { g.RunInCheckMode = true } }
+
+// Park makes execMatch advance past the spliced result instead of re-stepping
+// it (the `ref` word).
+func Park() GoOpt { return func(g *GoImpl) { g.ParkResult = true } }
+
+// FullStack passes the full resolved stack to the handler (depth/pick/roll/…).
+func FullStack() GoOpt { return func(g *GoImpl) { g.FullStack = true } }
+
+// CheckFullStack sets the check-mode full-stack replacement handler (paired
+// with FullStack on the stack-shuffling words).
+func CheckFullStack(fn CheckFullStackFunc) GoOpt {
+	return func(g *GoImpl) { g.CheckFullStackFn = fn }
+}
+
+// AQL builds the implementation of a module-ref trivial delegation or an
+// un-installed lambda body — a token Body spliced by execFnDefLiteral (dispatch
+// nil, no frame). InstallFnDef / compileFnDefLiteral build `&AQLImpl{…}`
+// directly instead, so they can attach the derived body-splicer and frame meta.
+func AQL(body []Value) *AQLImpl { return &AQLImpl{Body: body} }
+
+// hasFlatImplInputs reports whether any legacy flat implementation field is
+// set. normalizeSig synthesizes Impl from these inputs whenever any is present
+// (so a copy-then-mutate site that changes a flat field re-derives Impl); an
+// author that writes Impl directly leaves them all zero, and normalizeSig keeps
+// the authored Impl untouched. Retired together with the flat fields.
+func (s *Signature) hasFlatImplInputs() bool {
+	return s.Handler != nil || len(s.Body) > 0 || s.FnFrame != nil ||
+		s.FullStack || s.CheckFullStackFn != nil || s.ParkResult || s.RunInCheckMode
+}
+
 // --- Signature accessors: the SINGLE way every reader reaches the run
 // implementation. They read `Impl` once normalizeSig has synthesized it, and
 // fall back to the flat authoring fields for a Signature built in a test that

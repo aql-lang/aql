@@ -121,8 +121,16 @@ func normalizeSig(s *Signature) {
 	s.Patterns = patterns
 
 	// Synthesize the run-implementation sum from the flat authoring fields
-	// (the same install-boundary demotion Params gets from Args above). The
-	// AQL-body discriminator is `FnFrame != nil || len(Body) > 0`:
+	// (the same install-boundary demotion Params gets from Args above), UNLESS
+	// an author wrote Impl directly (via Go(...) / AQL(...) / a built AQLImpl)
+	// and set no flat inputs — then keep it. Synthesizing whenever a flat input
+	// is present also re-derives Impl for a copy-then-mutate site that changed
+	// a flat field after inheriting a stale Impl (usurp/force wrappers,
+	// InstallFnDef's re-bound bodies). This dual path lets flat-field authors
+	// and Impl authors coexist during the Phase-3c migration; the whole block
+	// is retired once the flat fields are deleted.
+	//
+	// The AQL-body discriminator is `FnFrame != nil || len(Body) > 0`:
 	//   - an installed fn / lambda carries FnFrame (its Body may be EMPTY —
 	//     `def v fn [[x] [] []]` — yet it is still an AQL frame) plus a derived
 	//     splicing Handler (→ dispatch);
@@ -132,15 +140,17 @@ func normalizeSig(s *Signature) {
 	// which clears FnFrame in core_ref.go — the synthetic fallback, a
 	// captured-native-fn). Always allocated fresh: a re-normalized sig may
 	// have copied a prior Impl pointer that must not be mutated in place.
-	if s.FnFrame != nil || len(s.Body) > 0 {
-		s.Impl = &AQLImpl{Body: s.Body, FnFrame: s.FnFrame, dispatch: s.Handler}
-	} else {
-		s.Impl = &GoImpl{
-			Handler:          s.Handler,
-			FullStack:        s.FullStack,
-			CheckFullStackFn: s.CheckFullStackFn,
-			ParkResult:       s.ParkResult,
-			RunInCheckMode:   s.RunInCheckMode,
+	if s.Impl == nil || s.hasFlatImplInputs() {
+		if s.FnFrame != nil || len(s.Body) > 0 {
+			s.Impl = &AQLImpl{Body: s.Body, FnFrame: s.FnFrame, dispatch: s.Handler}
+		} else {
+			s.Impl = &GoImpl{
+				Handler:          s.Handler,
+				FullStack:        s.FullStack,
+				CheckFullStackFn: s.CheckFullStackFn,
+				ParkResult:       s.ParkResult,
+				RunInCheckMode:   s.RunInCheckMode,
+			}
 		}
 	}
 }
