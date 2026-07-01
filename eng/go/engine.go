@@ -6666,17 +6666,34 @@ func singleOverloadRecoverable(sig *Signature, fn *FnDefInfo) bool {
 	}
 	realOverloads := 0
 	has0ArgReal := false
+	var sole *Signature
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
 		if s.Fallback {
 			continue // synthetic 0-arg catch-all: raises for an arg-bearing fn
 		}
 		realOverloads++
+		sole = s
 		if s.TotalArgs() == 0 {
 			has0ArgReal = true
 		}
 	}
-	return realOverloads == 1 && !has0ArgReal
+	if realOverloads != 1 || has0ArgReal || sole == nil {
+		return false
+	}
+	// AQL-BODIED user fn ONLY (Codex PR #211 review #2). A core native (one-sig
+	// with a ReturnsFn, e.g. `enum`) and a trivial-delegation module wrapper
+	// (body = [Word(inner)] short-circuiting to an inner native) do NOT get the
+	// guarded CALL_USER param contract, so their unmatched dispatch is not
+	// deferrable. The discriminator is a real AQL body (len(Body) > 0), NOT a nil
+	// Handler: an AQL fn defined in a module preamble carries a synthesized CallAQL
+	// Handler yet is genuinely AQL-bodied (the `engine-known` case) — gating on
+	// Handler==nil wrongly excludes it. Core natives have an empty Body; delegation
+	// wrappers are caught by trivialDelegationTarget.
+	if _, isDelegation := trivialDelegationTarget(sole); isDelegation {
+		return false
+	}
+	return len(sole.Body) > 0
 }
 
 func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
@@ -6685,6 +6702,32 @@ func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []
 	}
 	recovered := sig.ReturnsFn(sigOrderArgs(args, nStack), e.registry)
 	e.spliceCheckResults(positions, recovered)
+	return true
+}
+
+// concreteArgsMatch reports whether every NON-Any-carrier operand still MATCHES
+// its sole-sig param position — so the failed dispatch is attributable SOLELY to
+// the Any-typed (statically-unknown) operand(s), not a provably-wrong concrete
+// arg. Guards the multi-arg case `g x 123` (g[a:Integer b:String]; x:Any->a ok,
+// but 123->b:String wrong): the concrete mismatch stays a genuine error and must
+// NOT be suppressed alongside the deferrable Any (Codex PR #211 review #1). Used
+// only to gate the plain-check no_signature diagnostic; the armed recovery records
+// a guarded CALL_USER that raises == interpreter regardless, so it needs no such check.
+func concreteArgsMatch(sig *Signature, args []Value, nStack int) bool {
+	window := sigOrderArgs(args, nStack)
+	n := sig.TotalArgs()
+	if len(window) < n {
+		return false // arity shortfall — a genuine mismatch, do not suppress
+	}
+	for i := 0; i < n; i++ {
+		v := window[i]
+		if v.Carrier && v.Parent != nil && v.Parent.Equal(TAny) {
+			continue // the deferrable unknown operand
+		}
+		if !sigArgMatches(sig, i, v) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -6932,7 +6975,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// interpreter always raises on and must stay flagged (TestJoinCarriersDynamicArm
 	// / TestSliceDynamicReceiverRefines). Only the fully-unknown Any carrier is
 	// deferrable to the runtime CALL_USER contract.
-	recoverableUnknownType := anyAnyCarrier(args) && singleOverloadRecoverable(sig, fn)
+	recoverableUnknownType := anyAnyCarrier(args) && singleOverloadRecoverable(sig, fn) && concreteArgsMatch(sig, args, nStack)
 	if !e.registry.Check.Compiling && !recoverableUnknownType {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
