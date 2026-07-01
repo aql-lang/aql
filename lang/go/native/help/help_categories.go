@@ -70,7 +70,7 @@ var categories = []Category{
 	}},
 	{"type", "Types: introspection and construction.", []string{
 		"convert", "typeof", "inspect", "make", "refine", "class", "surface",
-		"exposes", "gen", "of", "extends", "default", "const", "object",
+		"exposes", "gen", "of", "extends", "default", "const",
 		"base", "tor", "tand", "tany", "tall", "teq", "tpartial",
 		"is", "tis", "istype", "behave", "fnsig", "tnot", "pathof",
 	}},

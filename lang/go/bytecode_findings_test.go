@@ -109,7 +109,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 // instead of refusing "operand shape needs reordering". `setpath recv k v`
 // with a computed receiver is the driving shape.
 func TestThreeArgComputedReceiverLowers(t *testing.T) {
-	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) dot b`
+	const src = `import "aql:struct-util" (StructUtil.setpath (flex {a:1}) "b" 2) dot b`
 
 	a, err := New()
 	if err != nil {

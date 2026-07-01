@@ -40,7 +40,6 @@ var makeNatives = []NativeFunc{
 			// the handler.
 			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeNodeHandler, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
 			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarHandler, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TObject, TAny, TObject}, Handler: eng.MakeWithPrototype, Returns: []*Type{TObject}, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny, TMap}, Handler: eng.MakeWithOpts, Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Handler: eng.MakeHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},

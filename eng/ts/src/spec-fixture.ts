@@ -689,7 +689,6 @@ function registerSpecWords(r: Registry): void {
     name: 'make',
     forwardPrecedence: true,
     signatures: [
-      { args: [TObject, TAny, TObject], handler: () => unsupportedMake('Object prototype') },
       { args: [TScalar, TMap, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarOptsHandler(a) },
       { args: [TAny, TAny, TMap], handler: () => unsupportedMake('with-opts') },
       { args: [TIdeal, TMap], typeArgs: new Set([0]), handler: (a) => makeIdealHandler(a) },

@@ -125,17 +125,6 @@ def Foo (class { a:Integer }) def x make Foo { a:1 } def y make Foo { a:2 } ( x 
 #    `make Object {…}`; `array […]` for `make Array […]`. Mutable		
 #    containers set in place and return nothing; immutable values		
 #    (Map, List) return the updated copy from set.		
-def o object {a:1} end o set b 2 end o.b	2	open in-place set; dot access reads it back
-def o object {} end o set a 1 end o.a	1	make Object {} / object {} construct an empty open container
-def o (make Object {a:1}) end o.a	1	make Object is the long form of the sugar
-def o object {a:1} end def k 'dyn' end o set (k) 3 end o get (k)	3	computed keys write and read
-def o object {a:1} end o set z 99 end o size	2	any key writes — Objects are open (no sealing) — and size counts all fields
-def o object {a:1} end def al o end al set a 9 end o.a	9	bindings share the container (mutable column aliasing)
-def o object {a:1} end (convert Map o) dot a	1	freeze: convert Map projects the fields to an immutable Map
-(convert Object {x:1}) dot x	1	thaw: convert Object seeds a fresh mutable container from a Map
-def o object {a:1} end o is Object	true	a plain Object is an Object…
-def o object {a:1} end o is Class	false	…and not a class instance
-object 5	ERROR:signature_error	the seed must be a map
 		
 # §  array + List copy-returning set (Phase C)		
 def xs [1 2 3] end def ys (xs set 0 99) end ys	[99 2 3]	List set is copy-returning — a NEW list
@@ -144,6 +133,3 @@ def xs [1 2 3] end def ys (xs set 0 99) end xs	[1 2 3]	…and the receiver is un
 #
 # §X  open objects (no schema, nil TypeRef) must render, not crash —
 #     formatting any open instance was a SIGSEGV (bloom report #3)
-make Object {x:1}	Object{x:1}	an open object renders under its lattice leaf
-object {x:1 y:2}	Object{x:1 y:2}	the object builder form renders the same way
-def o (make Object {x:1}) set y 2 o end o	Object{x:1 y:2}	an open object accepts new fields and re-renders

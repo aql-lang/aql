@@ -190,21 +190,6 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "object",
-		Summary: "Construct an open mutable keyed container (sugar for make Object).",
-		Description: "`object {…}` builds the mutable keyed sibling of Array: any key " +
-			"writes in place (set returns nothing; computed keys via parens), every " +
-			"field enumerates (items/size), and bindings share the container. For " +
-			"sealed, schema-checked records use `class` instead. `convert Map o` " +
-			"freezes to an immutable Map; `convert Object m` thaws back.",
-		Examples: []string{
-			`def o object {a:1}`,
-			`o set b 2 end o.b              ;# => 2 — in place`,
-			`o set (k) 3                    ;# computed key`,
-		},
-	})
-
-	register(&Entry{
 		Word:    "base",
 		Summary: "Return the zero/default value for the type of a value.",
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +

@@ -100,7 +100,6 @@ WORD continue
   [] barrier=0
 WORD convert
   [Scalar Node/Map Scalar] barrier=3 typearg={0} +returnsfn
-  [Ideal/Object Node/Map] barrier=2 typearg={0} returns=[Ideal/Object]
   [Node/List Scalar/Bytes] barrier=2 typearg={0} +returnsfn
   [Node Ideal] barrier=2 typearg={0} +returnsfn
   [Scalar/Bytes Ideal/Class] barrier=2 typearg={0} +returnsfn
@@ -392,7 +391,6 @@ WORD macro
 WORD macroexpand
   [Any] barrier=1 returns=[Node/List]
 WORD make
-  [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
   [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
   [Any Any Node/Map] barrier=3 returns=[Any]
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
@@ -437,8 +435,6 @@ WORD not
   [Any] barrier=1 returns=[Scalar/Boolean]
 WORD now
   [] barrier=0 returns=[Scalar/Time/Instant]
-WORD object
-  [Node/Map] barrier=1 returns=[Ideal/Object]
 WORD of
   [Node/List Any] barrier=1 runcheck typearg={1} returns=[Type]
 WORD or

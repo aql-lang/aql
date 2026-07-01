@@ -166,9 +166,3 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	def := r.Types.MintType(id, parentDef)
 	return []Value{NewObjectType(def, info)}, nil
 }
-
-// objectSugarHandler backs the `object {…}` constructor sugar —
-// exactly `make Object {…}` (eng.MakeOpenObject).
-func objectSugarHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return MakeOpenObject(args[0])
-}

@@ -779,20 +779,16 @@ func registerKernelIdeals(r *Registry) {
 	r.Ideals.Register(&Ideal{
 		Name:    "Object",
 		Enabled: true,
+		// Bare Object stays accepted so `refine Object {…}` routes to the
+		// Construct guard (which points users at `class`); the bare form is
+		// no longer instantiable — open objects were removed.
 		Accepts: func(v Value) bool {
 			return (IsBareTypeNode(v) && v.Equal(TObject)) || IsObjectType(v)
 		},
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
-			// Bare Object: construct a plain OPEN mutable keyed
-			// container — the 2x2's keyed sibling of Array (design/
-			// CLASS-OBJECT.10.md Phase B). Open (any key writes),
-			// fully enumerable, in-place set, no schema, no seal.
-			if IsBareTypeNode(typ) && typ.Equal(TObject) {
-				return MakeOpenObject(data)
-			}
 			objType, err := AsObjectType(typ)
 			if err != nil {
-				return nil, fmt.Errorf("make: expected a constructed object type, got %s", typ.String())
+				return nil, fmt.Errorf("make: bare Object is not constructible — open objects were removed; use `class` for schema, or a flex map for an open mutable container")
 			}
 			return makeObject(objType, data, nil, r)
 		},
@@ -825,39 +821,6 @@ func registerKernelIdeals(r *Registry) {
 			return MakeTableR(tt, data, r)
 		},
 	})
-}
-
-// MakeWithPrototype is the 3-arg make-with-prototype dispatcher.
-func MakeWithPrototype(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	resolved := make([]Value, len(args))
-	for i, a := range args {
-		resolved[i] = ResolveTypeLiteralDef(a, reg)
-	}
-	var targetVal, srcVal, protoVal Value
-	for _, a := range resolved {
-		switch {
-		case IsObjectType(a) && targetVal.Parent.Equal(nil):
-			targetVal = a
-		case IsObjectInstance(a):
-			protoVal = a
-		default:
-			srcVal = a
-		}
-	}
-
-	if !IsObjectType(targetVal) {
-		return nil, fmt.Errorf("make: prototype can only be used with object types, got %s", targetVal.String())
-	}
-	if !IsObjectInstance(protoVal) {
-		return nil, fmt.Errorf("make: prototype must be an object instance, got %s", protoVal.String())
-	}
-
-	objType, _ := AsObjectType(targetVal)
-	protoInfo, _ := AsObjectInstance(protoVal)
-	if objType.Class {
-		return nil, fmt.Errorf("make: a class has no prototypes — instances are flat; construct with `make %s {…}`", objType.Name)
-	}
-	return makeObject(objType, srcVal, &protoInfo, reg)
 }
 
 // MakeWithOpts is the 3-arg make-with-options dispatcher.
@@ -972,24 +935,6 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 	// Not an object type and unclaimed by an Ideal kind (e.g.
 	// Options) — defer to the generic make dispatcher.
 	return MakeHandler([]Value{targetVal, srcVal}, nil, nil, reg)
-}
-
-// MakeOpenObject constructs a plain open Object instance — the
-// mutable keyed container — seeded from a concrete map. The field
-// map is copied so the new container is decoupled from the literal;
-// the instance has no TypeRef (no schema, no sealing) and no
-// prototype. `object {…}` and `make Object {…}` both route here.
-func MakeOpenObject(data Value) ([]Value, error) {
-	m, err := RequireConcreteMap(data, "make")
-	if err != nil {
-		return nil, fmt.Errorf("make: Object source must be a concrete map: %w", err)
-	}
-	fields := NewOrderedMap()
-	for _, k := range m.Keys() {
-		v, _ := m.Get(k)
-		fields.Set(k, ResolveWordValue(v))
-	}
-	return []Value{NewObjectInstance(TObject, ObjectInstanceInfo{Fields: fields})}, nil
 }
 
 // MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
