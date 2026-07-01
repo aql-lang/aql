@@ -6650,8 +6650,18 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 // raises == the interpreter's fallback raise). Returns true — and splices the
 // recovered returns — when it records; false leaves the caller's refusal to stand
 // (multi-overload → Cluster C). The L4 leaf: design/VOXGIG-COMPILE-LEAVES.1.md.
-func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
-	if sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
+// singleOverloadRecoverable reports whether fn is a user fn with EXACTLY ONE
+// real (arg-bearing, non-fallback) overload — the shape whose dispatch over an
+// Any/disjunct-carrier arg is RECOVERABLE: runtime dispatch is unambiguous, and
+// the VM's CALL_USER param contract raises exactly as the interpreter would if
+// the concrete value misses the sole sig. Used both to RECORD a guarded call on
+// an armed (compile) pass — tryRecordRecoveredUserFn below — and to SUPPRESS the
+// no_signature diagnostic on a plain check pass (Emit inactive), so a plain
+// check agrees with a compile pass instead of flagging what compile silently
+// recovers (the `engine-known engine` FP: an `is String`-guarded Options-`get`
+// value whose type the plain-check pass leaves a strict-Any carrier).
+func singleOverloadRecoverable(sig *Signature, fn *FnDefInfo) bool {
+	if fn == nil || sig == nil || sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
 		return false
 	}
 	realOverloads := 0
@@ -6666,7 +6676,11 @@ func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []
 			has0ArgReal = true
 		}
 	}
-	if realOverloads != 1 || has0ArgReal {
+	return realOverloads == 1 && !has0ArgReal
+}
+
+func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
+	if !singleOverloadRecoverable(sig, fn) {
 		return false
 	}
 	recovered := sig.ReturnsFn(sigOrderArgs(args, nStack), e.registry)
@@ -6900,7 +6914,26 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// recursive `f` whose `next` holds a List where the sig wants an Integer —
 	// which `signature_error`s at run time, NOT a false positive). The
 	// `!Compiling` guard alone is the correct condition.
-	if !e.registry.Check.Compiling {
+	// EXCEPTION to the "!Compiling alone" rule: a SINGLE-overload user fn
+	// dispatched over an Any/disjunct-CARRIER arg (a value of statically-unknown
+	// type, not a concrete mismatch) is NOT a genuine unmatched dispatch — it is
+	// the exact shape the armed (compile) pass RECOVERS as a guarded CALL_USER
+	// above (singleOverloadRecoverable), where the VM's param contract raises ==
+	// the interpreter iff the runtime value misses the sole sig. A plain check
+	// pass reaches HERE (Emit inactive, so the recovery block was skipped) and
+	// would otherwise flag what compile silently recovers — the `engine-known
+	// engine` false positive (`is String`-guarded Options-`get`). Suppressing is
+	// SOUND and narrower than the rejected bestMatch>=0 gate: it fires only on an
+	// unknown-TYPE carrier (never a concrete/type-literal operand) AND a one-
+	// overload user fn, so it cannot drop the concrete-mismatch error rows.
+	// anyAnyCarrier ONLY, NOT anyDisjunctCarrier: a DISJUNCT's members are
+	// statically known, so a disjunct that misses the param in EVERY member
+	// (Integer|String -> Map, String|List -> Integer) is a GENUINE error the
+	// interpreter always raises on and must stay flagged (TestJoinCarriersDynamicArm
+	// / TestSliceDynamicReceiverRefines). Only the fully-unknown Any carrier is
+	// deferrable to the runtime CALL_USER contract.
+	recoverableUnknownType := anyAnyCarrier(args) && singleOverloadRecoverable(sig, fn)
+	if !e.registry.Check.Compiling && !recoverableUnknownType {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
 			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
