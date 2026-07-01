@@ -367,6 +367,46 @@ func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry
 	})}, nil
 }
 
+// makeResource constructs a flat instance of a ResourceType (the SDK
+// Resource/Entity hierarchy). Like a class instance it resolves every
+// field (own + inherited) eagerly into a single map with no prototype;
+// unlike a class it uses the object-type diagnostics ("missing field",
+// "unknown field") the SDK spec pins, and its own ResourceInstanceInfo
+// payload keeps it off the class-instance representation.
+func makeResource(resType ResourceTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
+	allFields := resType.AllFields()
+
+	for _, key := range provided.Keys() {
+		if _, ok := allFields.Get(key); !ok {
+			return nil, fmt.Errorf("make: unknown field %q for %s", key, resType.Name)
+		}
+	}
+
+	result := NewOrderedMap()
+	for _, key := range allFields.Keys() {
+		constraint, _ := allFields.Get(key)
+		val, hasVal := provided.Get(key)
+		if !hasVal {
+			if constraint.Data != nil {
+				result.Set(key, FreshenDefault(constraint))
+				continue
+			}
+			return nil, fmt.Errorf("make: missing field %q for %s", key, resType.Name)
+		}
+		checked, err := MakeClassFieldValue(val, constraint, r)
+		if err != nil {
+			return nil, fmt.Errorf("make: field %q: %w", key, err)
+		}
+		result.Set(key, checked)
+	}
+
+	instanceType := resType.Type
+	return []Value{NewResourceInstance(instanceType, ResourceInstanceInfo{
+		TypeRef: &resType,
+		Fields:  result,
+	})}, nil
+}
+
 // MakeClassInstance constructs a class instance from a field map,
 // running the same strict validation as `make` — exported for the
 // struct-utility writers (StructUtil.setpath, clone) whose instance
@@ -791,6 +831,27 @@ func registerKernelIdeals(r *Registry) {
 				return nil, fmt.Errorf("make: bare Object is not constructible — open objects were removed; use `class` for schema, or a flex map for an open mutable container")
 			}
 			return makeObject(objType, data, nil, r)
+		},
+	})
+	r.Ideals.Register(&Ideal{
+		Name:    "Resource",
+		Enabled: true,
+		Accepts: func(v Value) bool {
+			return IsResourceType(v)
+		},
+		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
+			resType, err := AsResourceType(typ)
+			if err != nil {
+				return nil, fmt.Errorf("make: expected a Resource/Entity type, got %s", typ.String())
+			}
+			if !data.Parent.ConformsTo(TMap) {
+				return nil, fmt.Errorf("make: resource values must be a map, got %s", data.String())
+			}
+			provided, err := AsMutableMap(data)
+			if err != nil {
+				return nil, fmt.Errorf("make: expected concrete map, got %s", data.String())
+			}
+			return makeResource(resType, provided, r)
 		},
 	})
 	r.Ideals.Register(&Ideal{

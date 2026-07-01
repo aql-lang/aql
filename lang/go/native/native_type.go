@@ -299,28 +299,30 @@ func installResourceTypes(r *Registry) {
 	resourceFields := NewOrderedMap()
 	resourceFields.Set("kind", NewTypeLiteral(TString))
 
-	resourceInfo := ObjectTypeInfo{
+	resourceInfo := ResourceTypeInfo{
 		Fields: resourceFields,
 		Parent: nil,
-		ID:     BuiltinIDForPath("Ideal/Object/Resource"),
+		ID:     BuiltinIDForPath("Ideal/Resource"),
+		Name:   TResource.String(),
 	}
 
-	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
+	InstallDef(r, "Resource", NewResourceType(TResource, resourceInfo))
 
 	resourceVal, _ := r.Defs.Top("Resource")
-	installedResource, _ := AsObjectType(resourceVal)
+	installedResource, _ := AsResourceType(resourceVal)
 
 	entityFields := NewOrderedMap()
 	entityFields.Set("spec", NewTypeLiteral(TString))
 	entityFields.Set("entity", NewTypeLiteral(TString))
 
-	entityInfo := ObjectTypeInfo{
+	entityInfo := ResourceTypeInfo{
 		Fields: entityFields,
 		Parent: &installedResource,
-		ID:     BuiltinIDForPath("Ideal/Object/Resource/Entity"),
+		ID:     BuiltinIDForPath("Ideal/Resource/Entity"),
+		Name:   TResourceEntity.String(),
 	}
 
-	InstallDef(r, "Entity", NewObjectType(TResourceEntity, entityInfo))
+	InstallDef(r, "Entity", NewResourceType(TResourceEntity, entityInfo))
 }
 
 // ---- table ----

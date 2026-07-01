@@ -67,8 +67,8 @@ const builtinDecls: BuiltinDecl[] = [
 
   // Ideal branch.
   { path: 'Ideal/Object' },
-  { path: 'Ideal/Object/Resource' },
-  { path: 'Ideal/Object/Resource/Entity' },
+  { path: 'Ideal/Resource' },
+  { path: 'Ideal/Resource/Entity' },
   { path: 'Ideal/Record' },
   { path: 'Ideal/Options' },
   { path: 'Ideal/Error' },

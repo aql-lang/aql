@@ -349,44 +349,46 @@ func (NonePayload) payloadMarker()         {}
 func (ExtensionPayload) payloadMarker()    {}
 
 // Direct eng-defined struct markers.
-func (WordInfo) payloadMarker()           {}
-func (ForwardInfo) payloadMarker()        {}
-func (MarkInfo) payloadMarker()           {}
-func (MoveInfo) payloadMarker()           {}
-func (SpliceInfo) payloadMarker()         {}
-func (ReturnCheckInfo) payloadMarker()    {}
-func (DefCleanupInfo) payloadMarker()     {}
-func (GuardFactInfo) payloadMarker()      {}
-func (FrameOpenInfo) payloadMarker()      {}
-func (ModuleDesc) payloadMarker()         {}
-func (FnDefInfo) payloadMarker()          {}
-func (FnUndefInfo) payloadMarker()        {}
-func (DisjunctInfo) payloadMarker()       {}
-func (NegationInfo) payloadMarker()       {}
-func (ChildTypeInfo) payloadMarker()      {}
-func (RecordTypeInfo) payloadMarker()     {}
-func (OptionsTypeInfo) payloadMarker()    {}
-func (TableTypeInfo) payloadMarker()      {}
-func (TableData) payloadMarker()          {}
-func (ObjectTypeInfo) payloadMarker()     {}
-func (ObjectInstanceInfo) payloadMarker() {}
-func (*SurfaceInfo) payloadMarker()       {}
-func (*GenSpecInfo) payloadMarker()       {}
-func (GenParam) payloadMarker()           {}
-func (*TypeSchemaInfo) payloadMarker()    {}
-func (GenInstRef) payloadMarker()         {}
-func (*FlexListData) payloadMarker()      {}
-func (XmlElementPayload) payloadMarker()  {}
-func (XmlInterpPayload) payloadMarker()   {}
-func (*FlexXmlData) payloadMarker()       {}
-func (*StoreInstanceInfo) payloadMarker() {}
-func (*TimeoutInfo) payloadMarker()       {}
-func (*IntervalInfo) payloadMarker()      {}
-func (ErrorInfo) payloadMarker()          {}
-func (CalDurationData) payloadMarker()    {}
-func (DepScalarInfo) payloadMarker()      {}
-func (ClosurePayload) payloadMarker()     {}
-func (PathInfo) payloadMarker()           {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
+func (WordInfo) payloadMarker()             {}
+func (ForwardInfo) payloadMarker()          {}
+func (MarkInfo) payloadMarker()             {}
+func (MoveInfo) payloadMarker()             {}
+func (SpliceInfo) payloadMarker()           {}
+func (ReturnCheckInfo) payloadMarker()      {}
+func (DefCleanupInfo) payloadMarker()       {}
+func (GuardFactInfo) payloadMarker()        {}
+func (FrameOpenInfo) payloadMarker()        {}
+func (ModuleDesc) payloadMarker()           {}
+func (FnDefInfo) payloadMarker()            {}
+func (FnUndefInfo) payloadMarker()          {}
+func (DisjunctInfo) payloadMarker()         {}
+func (NegationInfo) payloadMarker()         {}
+func (ChildTypeInfo) payloadMarker()        {}
+func (RecordTypeInfo) payloadMarker()       {}
+func (OptionsTypeInfo) payloadMarker()      {}
+func (TableTypeInfo) payloadMarker()        {}
+func (TableData) payloadMarker()            {}
+func (ObjectTypeInfo) payloadMarker()       {}
+func (ObjectInstanceInfo) payloadMarker()   {}
+func (*SurfaceInfo) payloadMarker()         {}
+func (*GenSpecInfo) payloadMarker()         {}
+func (GenParam) payloadMarker()             {}
+func (*TypeSchemaInfo) payloadMarker()      {}
+func (GenInstRef) payloadMarker()           {}
+func (*FlexListData) payloadMarker()        {}
+func (XmlElementPayload) payloadMarker()    {}
+func (XmlInterpPayload) payloadMarker()     {}
+func (*FlexXmlData) payloadMarker()         {}
+func (*StoreInstanceInfo) payloadMarker()   {}
+func (ResourceTypeInfo) payloadMarker()     {}
+func (ResourceInstanceInfo) payloadMarker() {}
+func (*TimeoutInfo) payloadMarker()         {}
+func (*IntervalInfo) payloadMarker()        {}
+func (ErrorInfo) payloadMarker()            {}
+func (CalDurationData) payloadMarker()      {}
+func (DepScalarInfo) payloadMarker()        {}
+func (ClosurePayload) payloadMarker()       {}
+func (PathInfo) payloadMarker()             {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
 
 // noneSentinel is kept for backward compat with code that reads it
 // directly. NewNone() now produces NonePayload below.

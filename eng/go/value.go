@@ -749,6 +749,55 @@ func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
 	return result
 }
 
+// ResourceTypeInfo holds the type definition for the SDK Resource /
+// Entity object-type hierarchy (Ideal/Resource, Ideal/Resource/Entity).
+// It mirrors the shape of a class type — own fields, a parent chain, a
+// minted lattice identity — but is a distinct payload so the shared
+// class-instance representation stays class-only. Instances are flat
+// (schema resolved eagerly at make; no prototype delegation).
+type ResourceTypeInfo struct {
+	Fields          *OrderedMap       // own fields (field name → type-constraint Value)
+	Parent          *ResourceTypeInfo // parent resource type (nil for Resource root)
+	ID              string            // unique internal ID: "T_" + 12 hex chars
+	Name            string            // full type path (e.g. "Ideal/Resource/Entity")
+	Type            *Type             // canonical *Type identity; populated by MintType during installation
+	cachedAllFields *OrderedMap       // lazily computed merged field map
+}
+
+// AllFields returns all fields including inherited ones (parent first,
+// own overriding), mirroring ObjectTypeInfo.AllFields.
+func (o *ResourceTypeInfo) AllFields() *OrderedMap {
+	if o.cachedAllFields != nil {
+		return o.cachedAllFields
+	}
+	result := NewOrderedMap()
+	if o.Parent != nil {
+		for _, k := range o.Parent.AllFields().Keys() {
+			v, _ := o.Parent.AllFields().Get(k)
+			result.Set(k, v)
+		}
+	}
+	for _, k := range o.Fields.Keys() {
+		v, _ := o.Fields.Get(k)
+		result.Set(k, v)
+	}
+	o.cachedAllFields = result
+	return result
+}
+
+// ResourceInstanceInfo is a flat, schema-resolved instance of a
+// ResourceType. Like a class instance it has no prototype chain — every
+// field (own + inherited) is resolved at make into a single map.
+type ResourceInstanceInfo struct {
+	TypeRef *ResourceTypeInfo // the resource type this is an instance of
+	Fields  *OrderedMap       // resolved field values (flat: own + inherited)
+}
+
+// GetField returns a field value (flat lookup — no prototype chain).
+func (ri ResourceInstanceInfo) GetField(name string) (Value, bool) {
+	return ri.Fields.Get(name)
+}
+
 // StoreInstanceInfo is a copy-on-write key-value store (Object/Store).
 // Unlike regular Object instances which have typed fields, Store instances
 // hold arbitrary key-value pairs. Key resolution walks the prototype chain,
@@ -1717,6 +1766,17 @@ func NewObjectInstance(t *Type, info ObjectInstanceInfo) Value {
 	return NewValueRaw(t, info)
 }
 
+// NewResourceType creates a Resource/Entity type value; sets info.Type to t.
+func NewResourceType(t *Type, info ResourceTypeInfo) Value {
+	info.Type = t
+	return NewValueRaw(t, info)
+}
+
+// NewResourceInstance creates a resource instance value of the given type.
+func NewResourceInstance(t *Type, info ResourceInstanceInfo) Value {
+	return NewValueRaw(t, info)
+}
+
 // NewStore creates a Store value of the given type. Pass TStore for
 // the builtin Object/Store, TStoreSystem for Object/Store/System, or
 // a user-defined *Type for a custom store subtype. The Value's
@@ -2075,6 +2135,36 @@ func AsObjectInstance(v Value) (ObjectInstanceInfo, error) {
 	info, ok := v.Data.(ObjectInstanceInfo)
 	if !ok {
 		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsResourceType reports whether v is a Resource/Entity type descriptor.
+func IsResourceType(v Value) bool {
+	_, ok := v.Data.(ResourceTypeInfo)
+	return ok
+}
+
+// AsResourceType returns the ResourceTypeInfo, or an error if v is not one.
+func AsResourceType(v Value) (ResourceTypeInfo, error) {
+	info, ok := v.Data.(ResourceTypeInfo)
+	if !ok {
+		return ResourceTypeInfo{}, fmt.Errorf("AsResourceType: not a resource type value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsResourceInstance reports whether v is a Resource/Entity instance.
+func IsResourceInstance(v Value) bool {
+	_, ok := v.Data.(ResourceInstanceInfo)
+	return ok
+}
+
+// AsResourceInstance returns the ResourceInstanceInfo, or an error if v is not one.
+func AsResourceInstance(v Value) (ResourceInstanceInfo, error) {
+	info, ok := v.Data.(ResourceInstanceInfo)
+	if !ok {
+		return ResourceInstanceInfo{}, fmt.Errorf("AsResourceInstance: not a resource instance value (got %T)", v.Data)
 	}
 	return info, nil
 }

@@ -72,8 +72,8 @@ var (
 	TStore          = mustType("Ideal/Store")
 	TStoreSystem    = mustType("Ideal/Store/System")
 	TReach          = mustType("Ideal/Reach")
-	TResource       = mustType("Ideal/Object/Resource")
-	TResourceEntity = mustType("Ideal/Object/Resource/Entity")
+	TResource       = mustType("Ideal/Resource")
+	TResourceEntity = mustType("Ideal/Resource/Entity")
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/go/native/fetch.go (Step 8 migration); registered via
 	// RegisterExternalBuiltin at lang/go/native package init.

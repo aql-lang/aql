@@ -90,7 +90,7 @@ typeof Map	Node
 
 # --- object family ---
 typeof Object	Ideal	one Parent hop
-typeof Resource	Object	
+typeof Resource	Ideal	
 typeof Entity	Resource	
 typeof Table	Ideal	
 typeof Record	Ideal	
@@ -171,8 +171,8 @@ pathof Map	[Node Map]
 		
 # --- object family ---		
 pathof Object	[Ideal Object]
-pathof Resource	[Ideal Object Resource]
-pathof Entity	[Ideal Object Resource Entity]
+pathof Resource	[Ideal Resource]
+pathof Entity	[Ideal Resource Entity]
 pathof Table	[Ideal Table]
 pathof Record	[Ideal Record]
 		
@@ -225,7 +225,7 @@ pathof Integer is List	true	the result is itself a List
 lengthq ( pathof Integer )	3	Scalar / Number / Integer
 lengthq ( pathof Number )	2	Scalar / Number
 lengthq ( pathof Boolean )	2	Scalar / Boolean
-lengthq ( pathof Entity )	4	Ideal / Object / Resource / Entity
+lengthq ( pathof Entity )	3	Ideal / Resource / Entity
 lengthq ( pathof Type )	1	Type has no ancestors
 lengthq ( pathof None )	1	
 lengthq ( pathof Enum )	3	Type / Disjunct / Enum

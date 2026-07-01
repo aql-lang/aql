@@ -37,7 +37,7 @@
 		
 Resource	Resource	the bare type literal renders as its name
 Entity	Entity	
-typeof Resource	Object	Resource's metatype is Type
+typeof Resource	Ideal	Resource is a peer Ideal kind (re-rooted off Object)
 typeof Entity	Resource	
 		
 # ====================================================================		

@@ -1001,7 +1001,7 @@ func TestTypeofMetatypes(t *testing.T) {
 		{"Object", NewTypeLiteral(TObject), "Ideal"},
 		{"Table", NewTypeLiteral(TTable), "Ideal"},
 		{"Record", NewTypeLiteral(TRecord), "Ideal"},
-		{"Resource", NewTypeLiteral(TResource), "Object"},
+		{"Resource", NewTypeLiteral(TResource), "Ideal"},
 		{"Atom", NewTypeLiteral(TAtom), "Scalar"},
 		{"Type", NewTypeLiteral(TType), "Any"},
 		{"Function", NewTypeLiteral(TFunction), "Type"},

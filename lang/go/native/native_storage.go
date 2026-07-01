@@ -194,6 +194,9 @@ func accessorGetSignatures() []NativeSig {
 		// type resolved from the schema (getObjectReturns).
 		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
 		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+		// Resource/Entity instances (SDK object hierarchy) — flat field read.
+		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
 		// [Key | None] — chained-read propagation
 		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
 		// [Key | Store] — check-mode-aware ReturnsFn picks up a
@@ -644,6 +647,13 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+	if ri, err := AsResourceInstance(container); err == nil {
+		val, ok := ri.GetField(k)
+		if !ok {
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}
 		return []Value{val}, nil

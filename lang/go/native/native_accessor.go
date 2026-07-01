@@ -64,6 +64,8 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			// [Key | Store]
 			{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
@@ -98,6 +100,8 @@ func accessorGetrSignatures() []NativeSig {
 		// narrows from the schema via getObjectReturns, as get does.
 		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
 		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
+		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: getrObjectHandler, Returns: []*Type{TAny}},
 		// [Key | ModuleExport] / [Key | Module]
 		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
@@ -141,6 +145,10 @@ func hasObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	if m, err := AsMutableMap(container); err == nil {
 		_, found := m.Get(k)
 		return []Value{NewBoolean(found)}, nil
+	}
+	if ri, err := AsResourceInstance(container); err == nil {
+		_, ok := ri.GetField(k)
+		return []Value{NewBoolean(ok)}, nil
 	}
 	oi, err := AsObjectInstance(container)
 	if err != nil {
@@ -217,6 +225,13 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		val, found := m.Get(k)
 		if !found {
 			return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in object", k), "getr")
+		}
+		return []Value{val}, nil
+	}
+	if ri, err := AsResourceInstance(container); err == nil {
+		val, ok := ri.GetField(k)
+		if !ok {
+			return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in resource", k), "getr")
 		}
 		return []Value{val}, nil
 	}

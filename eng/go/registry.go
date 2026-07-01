@@ -1137,7 +1137,7 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if name == "" {
 		return v
 	}
-	if top, ok := reg.Defs.Top(name); ok && IsObjectType(top) {
+	if top, ok := reg.Defs.Top(name); ok && (IsObjectType(top) || IsResourceType(top)) {
 		return top
 	}
 	return v
