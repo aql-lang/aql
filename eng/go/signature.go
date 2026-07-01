@@ -103,7 +103,15 @@ func normalizeSig(s *Signature) {
 		// merge INTO QuoteArgs — the field every dispatch-side reader
 		// consults — without disturbing native-set entries (two
 		// declaration surfaces, one per-position property).
-		if p.Quote {
+		//
+		// Only write a NEW entry: a native /q sig already carries the
+		// position in QuoteArgs (its FnParam.Quote was DERIVED from that map
+		// in the legacy-Args branch above), so re-writing it would mutate the
+		// package-level author map that every Registry shares — a data race
+		// under concurrent registration. Skipping the redundant write keeps
+		// the shared native map read-only; the AQL path (QuoteArgs nil/absent)
+		// still populates its own per-parse map.
+		if p.Quote && !s.QuoteArgs[i] {
 			if s.QuoteArgs == nil {
 				s.QuoteArgs = make(map[int]bool)
 			}

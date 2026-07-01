@@ -263,7 +263,7 @@ type FnSig struct {
 	BarrierPos int
 	// NoEvalArgs lists per-sig-position the list-shaped args that
 	// must NOT be auto-evaluated when consumed by this fn. Mirrors
-	// NativeSig.NoEvalArgs so module FnDef wrappers can preserve
+	// Signature.NoEvalArgs so module FnDef wrappers can preserve
 	// quoted code bodies passed at unnamed-param positions (e.g.
 	// `rand.list-of [body] N` — body is code, not data).
 	//
@@ -278,7 +278,7 @@ type FnSig struct {
 	NoEvalMapArgs map[int]bool
 	// RawParens marks arg positions where a forward ParenExpr is captured
 	// RAW (not pre-evaluated) so the handler receives the paren as code.
-	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.9.md.
+	// Opt-in; see Signature.RawParens and design/PAREN-REPRESENTATION.9.md.
 	RawParens map[int]bool
 	// FormArgs marks arg positions captured as a raw FORM — a generalization
 	// of RawParens (don't pre-eval a paren) and QuoteArgs (capture a bare word
@@ -336,7 +336,7 @@ type FnSig struct {
 	// CompileEffect declares the word's compile-relevant semantics for the
 	// bytecode recorder, so it can classify the word WITHOUT a name-keyed table
 	// in eng (which couples the engine to specific, often module, word names).
-	// The zero value is CompileDefault (an ordinary word). Set on the NativeSig
+	// The zero value is CompileDefault (an ordinary word). Set on the Signature
 	// at registration; copied here by RegisterNativeFunc.
 	CompileEffect CompileEffect
 	// Callable, when non-nil, declares this word as a code-body higher-order

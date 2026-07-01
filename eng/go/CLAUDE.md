@@ -56,8 +56,7 @@ handler.
 
 Concretely:
 
-- `Signature.Args[0]` and `NativeSig.Args[0]` (kernel words):
-  top of stack.
+- `Signature.Args[0]` (native kernel words): top of stack.
 - `FnSig.Params[0]` (AQL `def fn […]` definitions, module FnDef
   wrappers): also top of stack. Empirical: AQL source `def f fn
   [[a:Integer b:String]…]` called as `f 1 "x"` (forward form)

@@ -95,7 +95,7 @@ func TestDynamicFirstMatchPartition(t *testing.T) {
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "wdiv",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TInteger}, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString}, Returns: []*Type{TAtom}},
 		},

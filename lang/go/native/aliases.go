@@ -73,7 +73,7 @@ type (
 	ModuleDesc          = eng.ModuleDesc
 	MoveInfo            = eng.MoveInfo
 	NativeFunc          = eng.NativeFunc
-	NativeSig           = eng.NativeSig
+	NativeSig           = eng.Signature // native authoring sig == the unified dispatch Signature
 	CompileEffect       = eng.CompileEffect
 	CallableSpec        = eng.CallableSpec
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo

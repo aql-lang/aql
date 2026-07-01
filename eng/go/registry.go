@@ -1018,7 +1018,7 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 			{Args: []*Type{TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
@@ -1041,7 +1041,7 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TFloat, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 			{Args: []*Type{TNumber, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
 			{Args: []*Type{TFloat, TNumber}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
@@ -1065,7 +1065,7 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	}
@@ -1218,7 +1218,7 @@ func StoreKey(v Value) string {
 }
 
 // RegisterNativeFunc installs a NativeFunc into the registry, converts
-// NativeSig to Signature, and registers with the appropriate precedence.
+// native-authored Signature, and registers with the appropriate precedence.
 //
 // The function name is validated against the language-fundamental
 // word-name rule (ValidateWordName in word_name.go): must begin with
@@ -1231,44 +1231,17 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		return
 	}
 	for _, sig := range fn.Signatures {
-		// Synthesize the unified Params descriptor from the native sig's
-		// positional Args (+ any structural Patterns). Native sigs have
-		// no param names, so Name stays empty — Params[i].Type carries
-		// the per-position type that readers are migrating to.
-		params := make([]FnParam, len(sig.Args))
-		for i, t := range sig.Args {
-			params[i] = FnParam{Type: t}
-			if sig.Patterns != nil {
-				if pat, ok := sig.Patterns[i]; ok {
-					p := pat
-					params[i].Pattern = &p
-				}
-			}
+		// The native author fills a plain Signature (positional Args + a Go
+		// Handler); Register → upsertFnDef → normalizeSig synthesizes the
+		// authoritative Params from Args+Patterns. Only the WORD-level fields
+		// (CompileEffect, Callable) fold onto each sig here. `BarrierAllForward`
+		// (-1) is the "default all-forward" sentinel; `0` is explicit all-stack —
+		// upsertFnDef resolves it once.
+		s := sig
+		s.CompileEffect |= fn.CompileEffect
+		if s.Callable == nil {
+			s.Callable = fn.Callable
 		}
-		//nolint:staticcheck // S1016: explicit field-by-field copy keeps any NativeSig↔Signature divergence visible
-		s := Signature{
-			Params:           params,
-			Handler:          sig.Handler,
-			FullStack:        sig.FullStack,
-			QuoteArgs:        sig.QuoteArgs,
-			NoEvalArgs:       sig.NoEvalArgs,
-			RawParens:        sig.RawParens,
-			FormArgs:         sig.FormArgs,
-			NoEvalMapArgs:    sig.NoEvalMapArgs,
-			TypeArgs:         sig.TypeArgs,
-			BarrierPos:       sig.BarrierPos,
-			Fallback:         sig.Fallback,
-			Returns:          sig.Returns,
-			ReturnsFn:        sig.ReturnsFn,
-			RunInCheckMode:   sig.RunInCheckMode,
-			CheckFullStackFn: sig.CheckFullStackFn,
-			ParkResult:       sig.ParkResult,
-			CompileEffect:    sig.CompileEffect | fn.CompileEffect,
-			Callable:         fn.Callable,
-		}
-		// One path. `BarrierAllForward` (-1) on a NativeSig is the
-		// "default all-forward" sentinel; `0` is explicit all-stack.
-		// upsertFnDef resolves the sentinel once.
 		r.Register(fn.Name, s)
 	}
 }

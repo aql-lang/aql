@@ -15,7 +15,7 @@ import (
 func registerSpin(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "spin",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewWord("spin")}, nil

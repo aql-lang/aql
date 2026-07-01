@@ -29,7 +29,7 @@ func TestResolveForwardArgs_LazySkipOrdering(t *testing.T) {
 		// have pre-evaluated the trailing group.
 		r.RegisterNativeFunc(NativeFunc{
 			Name: "imp",
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{
 					Args: []*Type{TString},
 					Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -51,7 +51,7 @@ func TestResolveForwardArgs_LazySkipOrdering(t *testing.T) {
 		// probe: 0-arg word that records "probe" and yields a value.
 		r.RegisterNativeFunc(NativeFunc{
 			Name: "probe",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args: []*Type{},
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					order = append(order, "probe")
@@ -97,7 +97,7 @@ func TestResolveForwardArgs_ClaimedGroupStillEvaluated(t *testing.T) {
 	setup := func(r *Registry) {
 		r.RegisterNativeFunc(NativeFunc{
 			Name: "addq2",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args: []*Type{TInteger, TInteger},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					order = append(order, "addq2")
@@ -110,7 +110,7 @@ func TestResolveForwardArgs_ClaimedGroupStillEvaluated(t *testing.T) {
 		})
 		r.RegisterNativeFunc(NativeFunc{
 			Name: "probe",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args: []*Type{},
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					order = append(order, "probe")

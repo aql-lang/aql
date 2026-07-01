@@ -38,7 +38,7 @@ func TestVMRecoversHandlerPanic(t *testing.T) {
 	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "boom",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { panic("kaboom") },
 			Returns: []*Type{TInteger}, BarrierPos: -1,

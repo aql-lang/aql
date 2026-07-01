@@ -64,7 +64,7 @@ func registerArith(r *eng.Registry) {
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
 
-			Signatures: []eng.NativeSig{
+			Signatures: []eng.Signature{
 				{Args: []*eng.Type{eng.TNumber, eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
 			},
 		})
@@ -108,7 +108,7 @@ func registerUnary(r *eng.Registry) {
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
 
-			Signatures: []eng.NativeSig{
+			Signatures: []eng.Signature{
 				{Args: []*eng.Type{eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
 			},
 		})
@@ -127,7 +127,7 @@ func registerConstants(r *eng.Registry) {
 	push := func(name string, v eng.Value) {
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
-			Signatures: []eng.NativeSig{{
+			Signatures: []eng.Signature{{
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{v}, nil
 				},
@@ -146,7 +146,7 @@ func registerStackOps(r *eng.Registry) {
 	full := func(name string, n int, fn func(stk []eng.Value) ([]eng.Value, error)) {
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
-			Signatures: []eng.NativeSig{{
+			Signatures: []eng.Signature{{
 				FullStack: true,
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					if len(stk) < n {
@@ -178,7 +178,7 @@ func registerStackOps(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "depth",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			FullStack: true,
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				out := append([]eng.Value{}, stk...)
@@ -197,7 +197,7 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 	// followed by a newline. Returns nothing.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "print",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TAny},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				fmt.Fprintln(out, args[0].String())
@@ -211,7 +211,7 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 	// end-of-line printout for non-interactive inspection.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "show",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			FullStack: true,
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				parts := make([]string, len(stk))

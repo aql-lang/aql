@@ -191,7 +191,7 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "describe",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TInteger},
 				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -244,7 +244,7 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "tag",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TAny},
 				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -292,7 +292,7 @@ func TestOutputCapture(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "emit",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TString},
 			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				s, _ := AsString(args[0])
@@ -321,7 +321,7 @@ func TestAqlErrorPropagation(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "bork",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				return nil, reg.AqlError("test_failure", "always fails", "bork")

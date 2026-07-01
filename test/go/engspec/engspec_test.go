@@ -61,7 +61,7 @@ func registerSpecWords(r *eng.Registry) {
 
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "addq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b + a }, func(a, b float64) float64 { return b + a }),
 			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
@@ -69,7 +69,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "subq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b - a }, func(a, b float64) float64 { return b - a }),
 			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
@@ -77,7 +77,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "mulq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:    numberPair,
 			Handler: numericBinary(func(a, b int64) int64 { return b * a }, func(a, b float64) float64 { return b * a }),
 			Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1,
@@ -85,7 +85,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "negq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TNumber}, BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				if args[0].Parent.ConformsTo(eng.TInteger) {
@@ -100,7 +100,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "concatq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TString, eng.TString},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := eng.AsString(args[0])
@@ -112,7 +112,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "describeq",
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -133,7 +133,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "tagq",
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TAny}, Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("any")}, nil
 			}, Returns: []*eng.Type{eng.TString}, BarrierPos: -1},
@@ -144,7 +144,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "factq",
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(0)},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -164,7 +164,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "codeq",
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger}, Patterns: map[int]eng.Value{0: eng.NewInteger(99)},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -183,7 +183,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "routeq",
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TString}, Patterns: map[int]eng.Value{0: eng.NewString("admin")},
 				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -202,7 +202,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "tripq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TInteger, eng.TInteger, eng.TInteger},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := eng.AsInteger(args[0])
@@ -215,7 +215,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "pairq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TInteger, eng.TInteger},
 			BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -232,7 +232,7 @@ func registerSpecWords(r *eng.Registry) {
 	// argCount filter (the fallback-section match path).
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "nilq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{},
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.NewString("nil")}, nil
@@ -249,7 +249,7 @@ func registerSpecWords(r *eng.Registry) {
 	// forced forward/stack boundary.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "flexq",
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args: []*eng.Type{eng.TInteger},
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -294,7 +294,7 @@ func registerSpecWords(r *eng.Registry) {
 		}
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
-			Signatures: []eng.NativeSig{{
+			Signatures: []eng.Signature{{
 				Args: args, BarrierPos: barrier,
 				Handler: intArgsFmt,
 				Returns: []*eng.Type{eng.TString},
@@ -312,7 +312,7 @@ func registerSpecWords(r *eng.Registry) {
 
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "lengthq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				lst, _ := eng.AsList(args[0])
@@ -323,7 +323,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "firstq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TList},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				lst, _ := eng.AsList(args[0])
@@ -337,7 +337,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "replayq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -366,7 +366,7 @@ func registerSpecWords(r *eng.Registry) {
 	// whole lang word set into the engspec setup.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "break",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 				r.FlowCtrl = eng.FlowBreak
 				return nil, nil
@@ -376,7 +376,7 @@ func registerSpecWords(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "continue",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 				r.FlowCtrl = eng.FlowContinue
 				return nil, nil
@@ -467,7 +467,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "def",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args:          []*eng.Type{eng.TMap, eng.TAny},
 				NoEvalMapArgs: map[int]bool{0: true},
@@ -491,7 +491,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// rows (forth.tsv etc.) can express splices after the def-list flip.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "word",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TAny},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -505,7 +505,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "fn",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
@@ -532,7 +532,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "quote",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args:      []*eng.Type{eng.TAtom},
 				QuoteArgs: map[int]bool{0: true},
@@ -559,7 +559,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	// args — return the current fn-call's args frame as a List.
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "args",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				v, ok, err := reg.Args.Top()
 				if err != nil {
@@ -581,7 +581,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "__pa",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				if _, err := reg.Args.Pop(); err != nil {
 					return nil, err
@@ -598,7 +598,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "undef",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:      []*eng.Type{eng.TAtom},
 			QuoteArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
@@ -640,7 +640,7 @@ func registerEngSpecStack(r *eng.Registry) {
 		}
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
-			Signatures: []eng.NativeSig{{
+			Signatures: []eng.Signature{{
 				Args: args,
 				Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return fn(args), nil
@@ -671,7 +671,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "typeof",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TAny},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{eng.TypeOf(args[0])}, nil
@@ -682,7 +682,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "pathof",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:     []*eng.Type{eng.TAny},
 			TypeArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -694,7 +694,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "is",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TAny, eng.TAny},
 			BarrierPos: 1,
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -706,7 +706,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "enum",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -751,7 +751,7 @@ func registerEngSpecMake(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "make",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TScalar, eng.TMap, eng.TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
 			{Args: []*eng.Type{eng.TIdeal, eng.TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
 			{Args: []*eng.Type{eng.TArray, eng.TList}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeArrayHandler, Returns: []*eng.Type{eng.TArray}, BarrierPos: -1},
@@ -859,7 +859,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "set",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TInteger, eng.TAny, eng.TArray}, Handler: setArrayH, Returns: []*eng.Type{}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TObject}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TObject}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
@@ -868,7 +868,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "get",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TAtom, eng.TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TString, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TInteger, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
@@ -1008,7 +1008,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "refine",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{
 				Args:           []*eng.Type{eng.TAny, eng.TNode},
 				Handler:        refineCtorH,
@@ -1049,7 +1049,7 @@ func registerEngSpecInspect(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "inspect",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: atomH, Returns: []*eng.Type{eng.TInspect}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAny}, Handler: typeH, Returns: []*eng.Type{eng.TInspect}, BarrierPos: -1},
 		},
@@ -1241,7 +1241,7 @@ func registerEngSpecFnSig(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "fnsig",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
@@ -1292,7 +1292,7 @@ func registerEngSpecBoolean(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "not",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TBoolean}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAny}, Handler: notH, Returns: []*eng.Type{eng.TBoolean}, BarrierPos: -1},
 		},
@@ -1300,7 +1300,7 @@ func registerEngSpecBoolean(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "and",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TBoolean, eng.TBoolean}, Handler: andH, Returns: []*eng.Type{eng.TBoolean}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: andH, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 		},
@@ -1308,7 +1308,7 @@ func registerEngSpecBoolean(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "or",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TBoolean, eng.TBoolean}, BarrierPos: 1, Handler: orH, Returns: []*eng.Type{eng.TBoolean}},
 			{Args: []*eng.Type{eng.TAny, eng.TAny}, BarrierPos: 1, Handler: orH, Returns: []*eng.Type{eng.TAny}},
 		},
@@ -1348,7 +1348,7 @@ func registerEngSpecDo(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "do",
 
-		Signatures: []eng.NativeSig{
+		Signatures: []eng.Signature{
 			{Args: []*eng.Type{eng.TList}, NoEvalArgs: map[int]bool{0: true}, Handler: listH, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TMap}, Handler: mapH, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 		},
@@ -1399,7 +1399,7 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "tor",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TAny, eng.TAny},
 			BarrierPos: 1,
 			Handler:    eng.TorHandler,
@@ -1409,7 +1409,7 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "tand",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TAny, eng.TAny},
 			BarrierPos: 1,
 			Handler:    eng.TandHandler,

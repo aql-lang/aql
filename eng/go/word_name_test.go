@@ -108,7 +108,7 @@ func TestRegisterNativeFuncRejectsBadName(t *testing.T) {
 	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "Integer", // uppercase — invalid
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger},
 			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, nil
@@ -132,7 +132,7 @@ func TestDefRejectsBadName(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "def",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom, TAny},
 			QuoteArgs:  map[int]bool{0: true},
 			NoEvalArgs: map[int]bool{1: true},
