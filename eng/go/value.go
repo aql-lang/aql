@@ -2715,19 +2715,20 @@ func kernelFormatDefault(v Value) string {
 			val, _ := allFields.Get(k)
 			parts = append(parts, k+":"+val.String())
 		}
-		// An OPEN object (`object {…}` / `make Object {…}`) carries no
-		// TypeRef by design — render it under its lattice leaf instead
-		// of dereferencing the absent schema (was a SIGSEGV).
+		// A class instance normally carries its schema TypeRef; guard
+		// defensively against a nil/anonymous TypeRef by rendering under
+		// the lattice leaf or ID instead of dereferencing an absent
+		// schema (was a SIGSEGV).
 		name := ""
 		switch {
 		case oi.TypeRef != nil && oi.TypeRef.Name != "":
 			name = oi.TypeRef.Name
 		case oi.TypeRef != nil:
-			name = "Ideal/Object/" + oi.TypeRef.ID
+			name = "Ideal/Class/" + oi.TypeRef.ID
 		case v.Parent != nil:
 			name = v.Parent.Leaf()
 		default:
-			name = "Object"
+			name = "Class"
 		}
 		return name + "{" + strings.Join(parts, " ") + "}"
 	case IsClassType(v):
@@ -2740,7 +2741,7 @@ func kernelFormatDefault(v Value) string {
 		}
 		name := ot.Name
 		if name == "" {
-			name = "Ideal/Object/" + ot.ID
+			name = "Ideal/Class/" + ot.ID
 		}
 		return "object<" + name + ">{" + strings.Join(parts, " ") + "}"
 	case IsDisjunct(v):

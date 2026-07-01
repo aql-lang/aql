@@ -24,8 +24,8 @@ var typeNatives = []NativeFunc{
 		// refine is the uniform type constructor — see
 		// design/TYPE-UNIFORM.10.md. `refine BaseType arg`
 		// builds a (sub)type:
-		//   refine Object {fields}     → object type
-		//   refine <objtype> {fields}  → object subtype (inheritance)
+		//   class {fields}              → class type (see the `class` word)
+		//   refine <classtype> {fields} → class subtype (inheritance)
 		//   refine Record [a:T b:U]    → record type (list of pairs)
 		//   refine Table  (refine Record …) → table type
 		//   refine BaseType            → a bare nominal subtype, no
@@ -377,7 +377,7 @@ func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
 				"refine")
 		}
 		return nil, r.AqlError("type_error",
-			fmt.Sprintf("refine: base must be Object, Record, Table, or an object type, got %s", base.String()),
+			fmt.Sprintf("refine: base must be Record, Table, or a class type, got %s", base.String()),
 			"refine")
 	}
 	if ideal.Construct == nil {

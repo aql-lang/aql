@@ -304,9 +304,9 @@ scalar type literal AND the forward arg is concrete; otherwise the
 | | `[M, S]` | `[Any]` | | — |
 | | `[L, I]` | `[Any]` | Strict: error if index OOB | `arg0: L` |
 | | `[M, I]` | `[Any]` | | — |
-| | `[O, A]` | `[Any]` | Object field access (strict) | — |
-| | `[O, S]` | `[Any]` | | — |
-| | `[O, I]` | `[Any]` | | — |
+| | `[Class, A]` | `[Any]` | Class-instance field access (strict; also Resource instances) | — |
+| | `[Class, S]` | `[Any]` | | — |
+| | `[Class, I]` | `[Any]` | | — |
 | | `[None, Any]` | error | Error if parent is None | — |
 
 
@@ -320,9 +320,9 @@ scalar type literal AND the forward arg is concrete; otherwise the
 | | `[A, Node]` /q | `[Any]` | Map property access; None if missing | — |
 | | `[S, Node]` | `[Any]` | | — |
 | | `[I, Node]` | `[Any]` | List index or map key | — |
-| | `[A, Object]` /q | `[Any]` | Object field access | — |
-| | `[S, Object]` | `[Any]` | | — |
-| | `[I, Object]` | `[Any]` | | — |
+| | `[A, Class]` /q | `[Any]` | Class-instance field access (also Resource instances) | — |
+| | `[S, Class]` | `[Any]` | | — |
+| | `[I, Class]` | `[Any]` | | — |
 | | `[Any, None]` | `[None]` | None propagation | — |
 | `set` | `[S, Any, Store]` | `[]` | Store key=value in Store | — |
 | | `[A, Any, Store]` /q | `[]` | | — |
@@ -376,14 +376,12 @@ scalar type literal AND the forward arg is concrete; otherwise the
 | | `[Scalar]` | `[M]` | | — |
 | `is` | `[Any, Any]` | `[B]` | Unification-based type/value check | — |
 | `make` | `[Scalar, M, Any]` (TypeArgs[0]) | `[Scalar]` | Scalar type + opts + value | — |
-| | `[Ideal, M]` (TypeArgs[0]) | `[Ideal]` | Ideal kind + source map | — |
-| | `[Array, L]` | `[Array]` | Array from list | — |
+| | `[Ideal, M]` (TypeArgs[0]) | `[Ideal]` | Ideal kind + source map (class/record/table/resource instances) | — |
 | | `[Scalar, Any]` (TypeArgs[0]) | `[Scalar]` | Scalar type + value | — |
-| | `[Object, Any, Object]` | `[Object]` | Object from source with prototype | — |
 | | `[Any, Any, M]` | `[Any]` | Generic: type + source + options | — |
 | | `[Any, Any]` | `[Any]` | Generic: type + source | — |
 | `refine` | `[Any]` | `[Type]` | Subtype/newtype of a base type | — |
-| | `[Any, Node]` | `[Type]` | Refine with a field shape: `refine Object {…}`, `refine Record […]`, `refine Table Base` | — |
+| | `[Any, Node]` | `[Type]` | Refine with a field shape: `refine <ClassType> {…}` (subclass; base classes use the `class` word), `refine Record […]`, `refine Table Base` | — |
 | `tall` | `[L]` | `[Any]` | List-tand: folds via map-merge / unify; errors on `[]` | — |
 | `tand` | `[Any, Any]` | `[Any]` | Conjunction: merges concrete maps; unifies otherwise | — |
 | `tany` | `[L]` | `[Any]` | List-tor: builds flattened disjunct of all elements; errors on `[]` | — |

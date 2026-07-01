@@ -250,8 +250,9 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
    `DefCleanupInfo`, `FrameOpenInfo`, `ModuleDesc`, `FnDefInfo`, `FnUndefInfo`,
    `DisjunctInfo`, `ChildTypeInfo`, `RecordTypeInfo`,
    `OptionsTypeInfo`, `TableTypeInfo`, `TableData`,
-   `ObjectTypeInfo`, `ObjectInstanceInfo`, `*StoreInstanceInfo`,
-   `*ArrayInstanceInfo`, `*TimeoutInfo`, `*IntervalInfo`,
+   `ClassTypeInfo`, `ClassInstanceInfo`, `*StoreInstanceInfo`,
+   `ResourceTypeInfo`, `ResourceInstanceInfo`,
+   `*TimeoutInfo`, `*IntervalInfo`,
    `ErrorInfo`, `CalDurationData`, `DepScalarInfo`,
    `PathInfo`, `noneSentinel`.
 
@@ -309,8 +310,8 @@ nearest implementation (like the `Comparer` walk); the base `Ideal`
 behavior is the terminal fallback returning `{}` / `[]`, so every
 Ideal — built-in or user-defined, in Go or AQL — is convertible.
 Return `ErrNoConverter` to decline and keep walking. Concrete
-projections are installed for Object (→ fields), Array (→ elements /
-index map), Store (→ entries), Error (→ {message}), Table (→ rows /
+projections are installed for Class instances (→ fields), Store
+(→ entries), Error (→ {message}), Table (→ rows /
 columnar map), and — in their owning packages — ModuleExport
 (→ exports), Module (→ descriptor), Tensor/Matrix/Vector (→ nested
 rows / {shape,values}), Fetch Request/Response (→ their map), and
@@ -331,9 +332,9 @@ constants) **iff** one of these holds:
    `Module`.
 3. It is a meta-type used by `is`/`typeof`/`inspect`: `Type`,
    `Function`, `FnDef`, `FnUndef`, `Disjunct`, `Enum`.
-4. It is a structural type used by `make`/`record`/`object`:
-   `Record`, `Options`, `Table`, `ChildType`, `ObjectType`,
-   `ObjectInstance`, `Store`, `Array`, `Error`.
+4. It is a structural type used by `make`/`record`/`class`:
+   `Record`, `Options`, `Table`, `ChildType`, `Class`,
+   `Resource`, `Store`, `Error`.
 
 Everything else — domain types like `Date`, `DateTime`,
 `CalDuration`, `Matrix`, `Timeout`, `Interval`,
@@ -346,7 +347,7 @@ var TFoo = registerFooType()
 
 func registerFooType() *eng.Type {
     t, err := eng.Builtin.RegisterExternalBuiltin(
-        "Object/Foo",  // path
+        "Ideal/Foo",   // path
         N,             // stable FixedID from the documented per-module range
         fooBehavior{}, // optional; nil → DefaultBehavior
     )
@@ -578,7 +579,7 @@ Current reparent callsites:
 - `defTypedHandler` predicate-type branch.
 - `defTypedHandler` refine-bare branch.
 - `defTypedHandler` FnUndef branch.
-- (`ObjectType` branch uses `eng.MakeObject` to construct an
+- (the class-type branch uses `eng.MakeObject` to construct an
   instance rather than reparenting — different shape, same intent.)
 
 ## Refine ↔ Def Constructor Protocol

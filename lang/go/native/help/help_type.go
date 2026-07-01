@@ -53,9 +53,8 @@ func init() {
 			"CONCRETE value ({retries:3}) declares a default, typed by the value itself. " +
 			"Instances (`make Foo {\u2026}`) are flat \u2014 every field, own and inherited, " +
 			"resolves at make \u2014 and sealed: writing an undeclared field raises " +
-			"sealed_field. Subclass with refine: `def Bar refine Foo {\u2026}`. Class " +
-			"instances are NOT Objects \u2014 classes and the open keyed container are " +
-			"separate branches.",
+			"sealed_field. Subclass with refine: `def Bar refine Foo {\u2026}`. For open, " +
+			"unsealed mutable data use a FlexMap (`flex {\u2026}`) instead.",
 		Examples: []string{
 			`def Point class {x:1, y:2}     ;# x,y default to 1,2`,
 			`def p (make Point {x:9})       ;# p.x => 9, p.y => 2`,
@@ -243,10 +242,10 @@ func init() {
 
 	register(&Entry{
 		Word:    "tpartial",
-		Summary: "Wrap every field of a Record or Object type in `T | None`.",
+		Summary: "Wrap every field of a Record or class type in `T | None`.",
 		Description: "Returns a new type where each field's value type is " +
 			"replaced with the disjunct of itself and None. Idempotent — a " +
-			"field already including None is unchanged. For Object types, " +
+			"field already including None is unchanged. For class types, " +
 			"inherited fields are flattened into the result.",
 	})
 }

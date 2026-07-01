@@ -368,7 +368,7 @@ func FreshenDefault(v Value) Value {
 			fv, _ := info.Fields.Get(k)
 			fields.Set(k, FreshenDefault(fv))
 		}
-		ninfo := info // struct copy: TypeRef / Prototype stay shared
+		ninfo := info // struct copy: TypeRef stays shared (class instances are flat, no prototype)
 		ninfo.Fields = fields
 		out.Data = ninfo
 	case IsStore(v):

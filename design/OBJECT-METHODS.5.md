@@ -1,7 +1,15 @@
 # Object Methods and Self/This Binding
 
-> **Status: descriptive (current state) + exploratory (design space).**
-> No implementation work proposed.
+> **Status: descriptive + exploratory (design space).** No implementation
+> work proposed.
+>
+> **Syntax note (2026-07):** this note predates the Object/Array removal.
+> The open `Object` container and the `refine Object {…}` form shown
+> throughout are **gone** — user records are now defined with the `class`
+> word (`def Person class {name:String age:Integer}`; subclass with
+> `refine <ClassType> {…}`). The discussion of methods as free functions
+> over an instance still applies to class instances; read every
+> `refine Object {…}` below as `class {…}`.
 
 ## Question
 

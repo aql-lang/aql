@@ -32,8 +32,8 @@ func TestObjectTypeDefine(t *testing.T) {
 	}
 }
 
-// TestObjectTypeAnonymous creates an anonymous object type.
-// type Object {c:99} → anonymous object with type Object/<internal-id>
+// TestObjectTypeAnonymous creates an anonymous class type.
+// class {c:99} → anonymous class type named Ideal/Class/<internal-id>
 func TestObjectTypeAnonymous(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`class {c:99}`,
@@ -45,8 +45,8 @@ func TestObjectTypeAnonymous(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	s := result[0].String()
-	if !strings.Contains(s, "Object/T_") {
-		t.Errorf("expected anonymous object type with Object/T_ prefix, got %s", s)
+	if !strings.Contains(s, "Class/T_") {
+		t.Errorf("expected anonymous class type with Class/T_ prefix, got %s", s)
 	}
 	if !strings.Contains(s, "c:") {
 		t.Errorf("expected field c, got %s", s)

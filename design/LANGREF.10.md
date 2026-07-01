@@ -1699,10 +1699,10 @@ context set "key" 42
 
 #### `get` (alias `.`)
 
-Retrieve a value by key from a Store, Map, List, or Object. For Store
-lookups, key resolution walks the prototype chain. For Maps and
-Objects, returns None if the key is missing. The `.` operator is an
-alias. Dot notation `foo.bar` is expanded by the parser to `get bar`.
+Retrieve a value by key from a Store, Map, List, or class instance. For
+Store lookups, key resolution walks the prototype chain. For Maps and
+class instances, returns None if the key is missing. The `.` operator is
+an alias. Dot notation `foo.bar` is expanded by the parser to `get bar`.
 
 *Signatures:*
 - `[string, Store] -> [any]` — Store lookup
@@ -1710,9 +1710,9 @@ alias. Dot notation `foo.bar` is expanded by the parser to `get bar`.
 - `[atom, Node] -> [any]` — Map property / List index
 - `[string, Node] -> [any]`
 - `[integer, Node] -> [any]`
-- `[atom, Object] -> [any]` — Object field access
-- `[string, Object] -> [any]`
-- `[integer, Object] -> [any]`
+- `[atom, Class] -> [any]` — class-instance field access (also Resource instances)
+- `[string, Class] -> [any]`
+- `[integer, Class] -> [any]`
 - `[any, None] -> [None]` — None propagation
 
 *Precedence:* forward
@@ -2455,16 +2455,16 @@ See `get` (alias `.`) under Storage Words above.
 
 Strict variant of `get`. Same access patterns but errors when the
 target is `none` or when the key/index is missing. Works on Maps,
-Lists, and Objects.
+Lists, and class instances.
 
 *Signatures:*
 - `[map, atom] -> [any]`
 - `[map, string] -> [any]`
 - `[list, integer] -> [any]`
 - `[map, integer] -> [any]`
-- `[object, atom] -> [any]`
-- `[object, string] -> [any]`
-- `[object, integer] -> [any]`
+- `[class, atom] -> [any]`
+- `[class, string] -> [any]`
+- `[class, integer] -> [any]`
 - `[none, any] -> ERROR`
 
 ```
@@ -3481,7 +3481,7 @@ bare capitalised word). Lowercase names are rejected — the
 case rule applies the same way `type` enforces it.
 
 The shadow / pop pattern works uniformly across every kind of type
-body: literals, records, disjuncts, typed lists/maps, object types,
+body: literals, records, disjuncts, typed lists/maps, class types,
 dependent scalars, fn-shape types, and predicate types. A predicate
 shadowing a literal swaps the membership semantics for the duration
 of the shadow.
@@ -3584,7 +3584,7 @@ The `CheckResult` JSON object has:
 - **List / map args** keep concrete Data so pattern matching continues to work.
 - **Function words** with `Returns` or `ReturnsFn` metadata return typed carriers
   without running their handlers.
-- **`def`, `undef`, `fn`, `type`, `record`, `object`, `module`, `import`, `export`,
+- **`def`, `undef`, `fn`, `class`, `refine`, `module`, `import`, `export`,
   `quote`** execute their handlers even in check mode (they mutate state that
   later analysis needs to observe).
 - **`if`** analyses both branches, joins the residual carrier stacks via common-

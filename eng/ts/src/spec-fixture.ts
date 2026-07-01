@@ -1326,7 +1326,7 @@ function registerSpecWords(r: Registry): void {
 
   // Simple-value defs the def.tsv spec references. A word whose name
   // is in the def stack is substituted by its value before normal
-  // dispatch, provided the value isn't an FnDef / ObjectType.
+  // dispatch, provided the value isn't an FnDef / ClassType.
   r.pushDef('pi', newInteger(3n))
   r.pushDef('tau', newInteger(6n))
   r.pushDef('greeting', newString('hello'))

@@ -1,5 +1,12 @@
 # Ideals — Type-Kinds as First-Class Registered Descriptors
 
+> **Removal note (2026-07):** the `Array` kind used as an example Ideal
+> throughout was removed; disregard `Array` in the Ideal enumerations
+> below (FlexList — a Node, not an Ideal — covers the mutable-list role).
+> The `Object` kind remains as the internal Ideal, but it now
+> instantiates **class** types (there is no user-facing `Object`
+> type/word; `class` is the surface form).
+
 Status: implemented — Phases 1-3 (the `type` / `make` pipeline,
 `Enabled` enforcement, the conformance contract) plus a host kind
 family, `Tensor` / `Matrix` / `Vector`, in `lang/go/modules/matrix`.
