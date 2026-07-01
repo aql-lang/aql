@@ -719,6 +719,23 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						continue
 					}
 				}
+				// A fn DECLARED to return a Function whose body produced a
+				// CONCRETE closure value (a real FnDefInfo — e.g. a returned
+				// lambda `([] => [c1])`) surfaces that value rather than an
+				// abstract Function carrier. The carrier has no FnDefInfo, so
+				// binding it (`def g (mkfn)`) and later referencing `g` would
+				// fail to dispatch (undefined_word) — the closure-render gap.
+				// Cloned for a fresh ID (operand-provenance, like the concrete
+				// list/map fold in getNodeReturns). Only for a concrete fn
+				// residual aligned to this return slot; anything else keeps the
+				// carrier below.
+				if (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) && len(stk) >= len(declaredReturns) {
+					if bv := stk[len(stk)-len(declaredReturns)+i]; IsConcrete(bv) &&
+						(bv.Parent.ConformsTo(TFunction) || bv.Parent.ConformsTo(TFnDef)) {
+						out[i] = CloneValue(bv)
+						continue
+					}
+				}
 				c := NewCarrier(t)
 				// A declared `Any` return is "statically unknown", not "the Any
 				// root": a STRICT Any conforms to no typed slot, so a user fn
