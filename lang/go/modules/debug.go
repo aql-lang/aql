@@ -80,10 +80,10 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					fmt.Fprintln(r.Output, native.FormatForPrint(args[0]))
 					return []native.Value{args[0]}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -98,7 +98,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TString, native.TAny},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					label, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -106,7 +106,7 @@ func debugNatives() []native.NativeFunc {
 					value := args[1]
 					fmt.Fprintf(r.Output, "%s: %s\n", label, native.FormatForPrint(value))
 					return []native.Value{value}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -116,7 +116,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					v := args[0]
 					typeName := "Any"
 					if v.Parent != nil {
@@ -124,7 +124,7 @@ func debugNatives() []native.NativeFunc {
 					}
 					fmt.Fprintf(r.Output, "%s = %s\n", typeName, native.FormatForPrint(v))
 					return []native.Value{v}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -134,7 +134,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TBoolean, native.TString},
 				Returns:    []*native.Type{},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					cond, err := args[0].AsConcreteBoolean()
 					if err != nil {
 						return nil, err
@@ -147,7 +147,7 @@ func debugNatives() []native.NativeFunc {
 						return nil, r.AqlError("assertion_failure", msg, "Debug.assert")
 					}
 					return nil, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -157,13 +157,13 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TNever},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					msg, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
 					return nil, r.AqlError("not_implemented", msg, "Debug.todo")
-				},
+				}),
 			}},
 		},
 
@@ -175,7 +175,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					src, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -190,7 +190,7 @@ func debugNatives() []native.NativeFunc {
 					lst := native.NewList(tokens)
 					lst.Quoted = true
 					return []native.Value{lst}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -201,7 +201,7 @@ func debugNatives() []native.NativeFunc {
 				Returns:    []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Debug.deps")
 					if err != nil {
 						return nil, err
@@ -217,7 +217,7 @@ func debugNatives() []native.NativeFunc {
 					})
 					sort.Strings(names)
 					return []native.Value{stringsToList(names)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -227,7 +227,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -235,7 +235,7 @@ func debugNatives() []native.NativeFunc {
 					var sb strings.Builder
 					native.DescribeName(r, &sb, name)
 					return []native.Value{native.NewString(strings.TrimRight(sb.String(), "\n"))}, nil
-				},
+				}),
 			}},
 		},
 
@@ -251,9 +251,9 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					return []native.Value{stringsToList(r.RegisteredWordNames())}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -263,7 +263,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					names := append([]string(nil), r.Defs.Names()...)
 					sort.Strings(names)
 					om := native.NewOrderedMap()
@@ -273,7 +273,7 @@ func debugNatives() []native.NativeFunc {
 						}
 					}
 					return []native.Value{native.NewMap(om)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -283,7 +283,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					names := moduleNamesFn()
 					sort.Strings(names)
 					out := make([]string, len(names))
@@ -291,7 +291,7 @@ func debugNatives() []native.NativeFunc {
 						out[i] = "aql:" + n
 					}
 					return []native.Value{stringsToList(out)}, nil
-				},
+				}),
 			}},
 		},
 
@@ -303,9 +303,9 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TInteger},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewInteger(int64(sizeOfValue(args[0])))}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -315,7 +315,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					var c shapeCensus
 					c.walk(args[0], 0)
 					om := native.NewOrderedMap()
@@ -326,7 +326,7 @@ func debugNatives() []native.NativeFunc {
 					om.Set("scalars", native.NewInteger(int64(c.scalars)))
 					om.Set("max-depth", native.NewInteger(int64(c.maxDepth)))
 					return []native.Value{native.NewMap(om)}, nil
-				},
+				}),
 			}},
 		},
 
@@ -340,13 +340,13 @@ func debugNatives() []native.NativeFunc {
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
 				ReturnsFn:  bodyAnalysisReturns(native.TInteger),
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					_, steps, err := runCounted(r, args[0], "Debug.steps")
 					if err != nil {
 						return nil, err
 					}
 					return []native.Value{native.NewInteger(int64(steps))}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -358,7 +358,7 @@ func debugNatives() []native.NativeFunc {
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
 				ReturnsFn:  bodyAnalysisReturns(native.TMap),
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					clk := native.EffectiveClock(r)
 					start := clk.Now()
 					res, steps, err := runCounted(r, args[0], "Debug.time")
@@ -371,7 +371,7 @@ func debugNatives() []native.NativeFunc {
 					om.Set("elapsed-ms", native.NewFloat(float64(elapsed.Nanoseconds())/1e6))
 					om.Set("steps", native.NewInteger(int64(steps)))
 					return []native.Value{native.NewMap(om)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -383,7 +383,7 @@ func debugNatives() []native.NativeFunc {
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
 				ReturnsFn:  bodyAnalysisReturns(native.TMap),
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					n, err := args[1].AsConcreteInteger()
 					if err != nil {
 						return nil, err
@@ -419,7 +419,7 @@ func debugNatives() []native.NativeFunc {
 					om.Set("max-ms", native.NewFloat(maxMs))
 					om.Set("steps-per-run", native.NewInteger(int64(steps)))
 					return []native.Value{native.NewMap(om)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -431,7 +431,7 @@ func debugNatives() []native.NativeFunc {
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
 				ReturnsFn:  bodyAnalysisReturns(native.TAny),
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Debug.trace")
 					if err != nil {
 						return nil, err
@@ -441,7 +441,7 @@ func debugNatives() []native.NativeFunc {
 						return nil, terr
 					}
 					return []native.Value{lastOrNone(res)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -453,7 +453,7 @@ func debugNatives() []native.NativeFunc {
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
 				ReturnsFn:  bodyAnalysisReturns(native.TList),
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Debug.profile")
 					if err != nil {
 						return nil, err
@@ -475,7 +475,7 @@ func debugNatives() []native.NativeFunc {
 						return nil, rerr
 					}
 					return []native.Value{profileRows(counts)}, nil
-				},
+				}),
 			}},
 		},
 
@@ -487,7 +487,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -505,7 +505,7 @@ func debugNatives() []native.NativeFunc {
 						sigs = append(sigs, native.NewMap(sm))
 					}
 					return []native.Value{native.NewList(sigs)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -515,7 +515,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -533,7 +533,7 @@ func debugNatives() []native.NativeFunc {
 						}
 					}
 					return []native.Value{native.NewAtom("native")}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -543,7 +543,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -554,7 +554,7 @@ func debugNatives() []native.NativeFunc {
 					}
 					fmt.Fprintf(r.Output, "%s = %s\n", name, native.FormatForPrint(v))
 					return []native.Value{v}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -565,7 +565,7 @@ func debugNatives() []native.NativeFunc {
 				Returns:    []*native.Type{native.TString},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Debug.disasm")
 					if err != nil {
 						return nil, err
@@ -580,7 +580,7 @@ func debugNatives() []native.NativeFunc {
 							fmt.Sprintf("Debug.disasm: %v", cerr), "Debug.disasm")
 					}
 					return []native.Value{native.NewString(strings.TrimRight(stackform.Pretty(form), "\n"))}, nil
-				},
+				}),
 			}},
 		},
 
@@ -591,13 +591,13 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					snap, ok := r.CurrentStack()
 					if !ok {
 						return []native.Value{native.NewList(nil)}, nil
 					}
 					return []native.Value{native.NewList(snap)}, nil
-				},
+				}),
 			}},
 		},
 
@@ -609,11 +609,11 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					var m runtime.MemStats
 					runtime.ReadMemStats(&m)
 					return []native.Value{heapMap(&m)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -623,7 +623,7 @@ func debugNatives() []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					var before, after runtime.MemStats
 					runtime.ReadMemStats(&before)
 					runtime.GC()
@@ -633,7 +633,7 @@ func debugNatives() []native.NativeFunc {
 					om.Set("alloc-after", native.NewInteger(int64(after.Alloc)))
 					om.Set("num-gc", native.NewInteger(int64(after.NumGC)))
 					return []native.Value{native.NewMap(om)}, nil
-				},
+				}),
 			}},
 		},
 	}

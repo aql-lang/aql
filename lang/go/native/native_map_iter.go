@@ -329,13 +329,13 @@ var mapNatives = []NativeFunc{
 	{
 		Name: "keys",
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: keysHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(keysHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "vals",
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: valsHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(valsHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 }

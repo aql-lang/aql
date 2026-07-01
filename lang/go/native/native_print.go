@@ -15,7 +15,7 @@ var printNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
-			Handler: eng.PrintHandler,
+			Impl:    Go(eng.PrintHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},

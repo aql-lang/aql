@@ -323,7 +323,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				what, err := typeBodyArg(args[0], "TypeUtil.exclude", r)
 				if err != nil {
 					return nil, err
@@ -357,7 +357,7 @@ var typeModuleNatives = []native.NativeFunc{
 					return []native.Value{kept[0]}, nil
 				}
 				return []native.Value{native.NewDisjunct(kept)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -368,7 +368,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				what, err := typeBodyArg(args[0], "TypeUtil.extract", r)
 				if err != nil {
 					return nil, err
@@ -398,7 +398,7 @@ var typeModuleNatives = []native.NativeFunc{
 					return []native.Value{kept[0]}, nil
 				}
 				return []native.Value{native.NewDisjunct(kept)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -409,7 +409,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				t := args[0]
 				fields := fieldsOf(t)
 				if fields == nil {
@@ -422,7 +422,7 @@ var typeModuleNatives = []native.NativeFunc{
 					newFields.Set(k, stripNoneFromField(ft))
 				}
 				return []native.Value{constructRecordOrObjectLike(t, newFields, r)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -434,7 +434,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				namesList := args[0]
 				t := args[1]
 				fields := fieldsOf(t)
@@ -458,7 +458,7 @@ var typeModuleNatives = []native.NativeFunc{
 					}
 				}
 				return []native.Value{constructRecordOrObjectLike(t, newFields, r)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -470,7 +470,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				namesList := args[0]
 				t := args[1]
 				fields := fieldsOf(t)
@@ -494,7 +494,7 @@ var typeModuleNatives = []native.NativeFunc{
 					}
 				}
 				return []native.Value{constructRecordOrObjectLike(t, newFields, r)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -507,7 +507,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				b := args[0]
 				a := args[1]
 				af := fieldsOf(a)
@@ -535,7 +535,7 @@ var typeModuleNatives = []native.NativeFunc{
 					}
 				}
 				return []native.Value{constructRecordOrObjectLike(a, newFields, r)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -546,7 +546,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fn := args[0]
 				sigs, err := fnSigs(fn, "TypeUtil.paramsof", r)
 				if err != nil {
@@ -565,7 +565,7 @@ var typeModuleNatives = []native.NativeFunc{
 					}
 				}
 				return []native.Value{native.NewList(elems)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 			CompileEffect: native.CompileReadsFn, // reads a fn's param types, never invokes it
 		}},
@@ -577,13 +577,13 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				v, err := returnsofResult(args[0], r)
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{v}, nil
-			},
+			}),
 			// Static return: the fn's declared return type is known at check time
 			// for a concrete fn (the same value the handler computes), so report it
 			// precisely instead of the opaque TAny — that makes the output a
@@ -609,7 +609,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				fn := args[0]
 				sigs, err := fnSigs(fn, "TypeUtil.arityof", r)
 				if err != nil {
@@ -625,7 +625,7 @@ var typeModuleNatives = []native.NativeFunc{
 					}
 				}
 				return []native.Value{native.NewInteger(n)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			CompileEffect: native.CompileReadsFn, // reads a fn's arity, never invokes it
 		}},
@@ -637,7 +637,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				t, err := typeBodyArg(args[0], "TypeUtil.parent", r)
 				if err != nil {
 					return nil, err
@@ -647,7 +647,7 @@ var typeModuleNatives = []native.NativeFunc{
 					return []native.Value{native.NewTypeLiteral(native.TAny)}, nil
 				}
 				return []native.Value{native.NewTypeLiteral(node.Parent)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -658,7 +658,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				t, err := typeBodyArg(args[0], "TypeUtil.root", r)
 				if err != nil {
 					return nil, err
@@ -671,7 +671,7 @@ var typeModuleNatives = []native.NativeFunc{
 					node = node.Parent
 				}
 				return []native.Value{native.NewTypeLiteral(node)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -682,7 +682,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				a, err := typeBodyArg(args[0], "TypeUtil.lca", r)
 				if err != nil {
 					return nil, err
@@ -711,7 +711,7 @@ var typeModuleNatives = []native.NativeFunc{
 					}
 				}
 				return []native.Value{native.NewTypeLiteral(native.TAny)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -722,14 +722,14 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				t, err := typeBodyArg(args[0], "TypeUtil.alts", r)
 				if err != nil {
 					return nil, err
 				}
 				alts := native.FlattenDisjunctAlts(t)
 				return []native.Value{native.NewList(alts)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
@@ -740,7 +740,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				t, err := typeBodyArg(args[0], "TypeUtil.nominal", r)
 				if err != nil {
 					return nil, err
@@ -752,7 +752,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))
 				return []native.Value{native.NewTypeLiteral(anon)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},
@@ -764,7 +764,7 @@ var typeModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TAny, native.TAny},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				tag, err := args[0].AsConcreteAtom()
 				if err != nil {
 					return nil, err
@@ -781,7 +781,7 @@ var typeModuleNatives = []native.NativeFunc{
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))
 				anon.Name = "brand:" + tag
 				return []native.Value{native.NewTypeLiteral(anon)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,
 		}},
 	},

@@ -59,9 +59,9 @@ func reportNatives() []native.NativeFunc {
 			Name: "report-value",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TAny},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(native.FormatForPrint(args[0]))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
@@ -69,9 +69,9 @@ func reportNatives() []native.NativeFunc {
 			Name: "report-record",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TAny},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(formatRecord(args[0]))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
@@ -79,9 +79,9 @@ func reportNatives() []native.NativeFunc {
 			Name: "report-table",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TAny},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(formatTableValue(args[0]))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
@@ -89,9 +89,9 @@ func reportNatives() []native.NativeFunc {
 			Name: "report-list",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TAny},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(formatListValue(args[0]))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},

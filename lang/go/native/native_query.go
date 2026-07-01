@@ -37,7 +37,7 @@ var QueryNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    selectColsHandler,
+			Impl:       Go(selectColsHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -51,13 +51,13 @@ var QueryNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAtom, TList},
 				QuoteArgs:  map[int]bool{0: true},
-				Handler:    fromNameHandler,
+				Impl:       Go(fromNameHandler),
 				Returns:    []*Type{TList},
 				BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TList, TList},
-				Handler:    fromValueHandler,
+				Impl:       Go(fromValueHandler),
 				Returns:    []*Type{TList},
 				BarrierPos: -1,
 			},
@@ -69,7 +69,7 @@ var QueryNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    queryWhereHandler,
+			Impl:       Go(queryWhereHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -80,7 +80,7 @@ var QueryNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    queryOrderHandler,
+			Impl:       Go(queryOrderHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -91,7 +91,7 @@ var QueryNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    queryGroupHandler,
+			Impl:       Go(queryGroupHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -102,7 +102,7 @@ var QueryNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    queryHavingHandler,
+			Impl:       Go(queryHavingHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -111,7 +111,7 @@ var QueryNatives = []NativeFunc{
 		Name: "limit",
 		Signatures: []NativeSig{{
 			Args:       []*Type{TInteger, TList},
-			Handler:    queryLimitHandler,
+			Impl:       Go(queryLimitHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -120,7 +120,7 @@ var QueryNatives = []NativeFunc{
 		Name: "offset",
 		Signatures: []NativeSig{{
 			Args:       []*Type{TInteger, TList},
-			Handler:    queryOffsetHandler,
+			Impl:       Go(queryOffsetHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -129,7 +129,7 @@ var QueryNatives = []NativeFunc{
 		Name: "distinct",
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList},
-			Handler:    queryDistinctHandler,
+			Impl:       Go(queryDistinctHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -145,7 +145,7 @@ var QueryNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    queryOnHandler,
+			Impl:       Go(queryOnHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -155,7 +155,7 @@ var QueryNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    queryUsingHandler,
+			Impl:       Go(queryUsingHandler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -363,7 +363,7 @@ func queryJoinNative(name, joinType string) NativeFunc {
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAtom, TList},
 			QuoteArgs:  map[int]bool{0: true},
-			Handler:    handler,
+			Impl:       Go(handler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},
@@ -433,7 +433,7 @@ func querySetOpNative(name, op string) NativeFunc {
 		Name: name,
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList},
-			Handler:    handler,
+			Impl:       Go(handler),
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
 		}},

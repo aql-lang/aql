@@ -65,7 +65,7 @@ func registerArith(r *eng.Registry) {
 			Name: name,
 
 			Signatures: []eng.Signature{
-				{Args: []*eng.Type{eng.TNumber, eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
+				{Args: []*eng.Type{eng.TNumber, eng.TNumber}, Impl: eng.Go(h), Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
 			},
 		})
 	}
@@ -109,7 +109,7 @@ func registerUnary(r *eng.Registry) {
 			Name: name,
 
 			Signatures: []eng.Signature{
-				{Args: []*eng.Type{eng.TNumber}, Handler: h, Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
+				{Args: []*eng.Type{eng.TNumber}, Impl: eng.Go(h), Returns: []*eng.Type{eng.TNumber}, BarrierPos: -1},
 			},
 		})
 	}
@@ -128,9 +128,9 @@ func registerConstants(r *eng.Registry) {
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
 			Signatures: []eng.Signature{{
-				Handler: func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					return []eng.Value{v}, nil
-				},
+				}),
 				Returns: []*eng.Type{eng.TNumber}, BarrierPos: 0,
 			}},
 		})
@@ -147,13 +147,12 @@ func registerStackOps(r *eng.Registry) {
 		r.RegisterNativeFunc(eng.NativeFunc{
 			Name: name,
 			Signatures: []eng.Signature{{
-				FullStack: true,
-				Handler: func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+				Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 					if len(stk) < n {
 						return nil, fmt.Errorf("%s: needs %d items, stack has %d", name, n, len(stk))
 					}
 					return fn(stk)
-				},
+				}, eng.FullStack()),
 				Returns: []*eng.Type{}, BarrierPos: 0,
 			}},
 		})
@@ -179,11 +178,10 @@ func registerStackOps(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "depth",
 		Signatures: []eng.Signature{{
-			FullStack: true,
-			Handler: func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				out := append([]eng.Value{}, stk...)
 				return append(out, eng.NewInteger(int64(len(stk)))), nil
-			},
+			}, eng.FullStack()),
 			Returns: []*eng.Type{eng.TInteger}, BarrierPos: 0,
 		}},
 	})
@@ -199,10 +197,10 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 		Name: "print",
 		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TAny},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				fmt.Fprintln(out, args[0].String())
 				return nil, nil
-			},
+			}),
 			Returns: []*eng.Type{}, BarrierPos: 0,
 		}},
 	})
@@ -212,8 +210,7 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "show",
 		Signatures: []eng.Signature{{
-			FullStack: true,
-			Handler: func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(_ []eng.Value, _ map[string]eng.Value, stk []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				parts := make([]string, len(stk))
 				for i, v := range stk {
 					parts[i] = v.String()
@@ -230,7 +227,7 @@ func registerDisplay(r *eng.Registry, out io.Writer) {
 					fmt.Fprintln(out)
 				}
 				return append([]eng.Value{}, stk...), nil
-			},
+			}, eng.FullStack()),
 			Returns: []*eng.Type{}, BarrierPos: 0,
 		}},
 	})

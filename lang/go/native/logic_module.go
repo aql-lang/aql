@@ -19,8 +19,8 @@ var LogicModuleNatives = []NativeFunc{
 	{
 		Name: "implies",
 		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TBoolean, TBoolean}, Impl: Go(impliesHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(impliesHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 }

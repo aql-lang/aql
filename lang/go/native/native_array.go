@@ -37,7 +37,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger},
-			Handler:   iotaHandler,
+			Impl:      Go(iotaHandler),
 			ReturnsFn: returnsIotaLen, BarrierPos: -1,
 		}},
 	},
@@ -51,12 +51,12 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			{
 				Args:      []*Type{TInteger, TInteger, TInteger},
-				Handler:   rangeThreeHandler,
+				Impl:      Go(rangeThreeHandler),
 				ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TInteger, TInteger},
-				Handler:   rangeTwoHandler,
+				Impl:      Go(rangeTwoHandler),
 				ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 			},
 		},
@@ -66,7 +66,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
-			Handler:   shapeHandler,
+			Impl:      Go(shapeHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
@@ -75,7 +75,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TList},
-			Handler: rankHandler,
+			Impl:    Go(rankHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -84,7 +84,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
-			Handler:   reshapeHandler,
+			Impl:      Go(reshapeHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
@@ -98,7 +98,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
-			Handler:   arrTransposeHandler,
+			Impl:      Go(arrTransposeHandler),
 			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
 		}},
 	},
@@ -107,7 +107,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
-			Handler:   reverseHandler,
+			Impl:      Go(reverseHandler),
 			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
 		}},
 	},
@@ -116,7 +116,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
-			Handler:   takeHandler,
+			Impl:      Go(takeHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
@@ -125,7 +125,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
-			Handler:   shedHandler,
+			Impl:      Go(shedHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
@@ -135,7 +135,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
-			Handler:   whereHandler,
+			Impl:      Go(whereHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
@@ -144,7 +144,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
-			Handler:   uniqueHandler,
+			Impl:      Go(uniqueHandler),
 			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
 		}},
 	},
@@ -153,7 +153,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
-			Handler:   indicesHandler,
+			Impl:      Go(indicesHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
@@ -162,7 +162,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
-			Handler:   gradeHandler,
+			Impl:      Go(gradeHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
 		}},
 	},
@@ -171,7 +171,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
-			Handler:   atHandler,
+			Impl:      Go(atHandler),
 			ReturnsFn: returnsAtChecked, BarrierPos: -1,
 		}},
 	},
@@ -186,7 +186,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TInteger, TAny, TList},
-			Handler: insertAtHandler,
+			Impl:    Go(insertAtHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
@@ -198,7 +198,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
-			Handler:   removeAtHandler,
+			Impl:      Go(removeAtHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
@@ -208,14 +208,14 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			{
 				Args:      []*Type{TList, TList},
-				Handler:   sortbyHandler,
+				Impl:      Go(sortbyHandler),
 				ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 			},
 			// Lens form: `sortby $.age people` derives the sort key from each
 			// element via the reach, then sorts the data by those keys.
 			{
 				Args:      []*Type{TReach, TList},
-				Handler:   sortbyReachHandler,
+				Impl:      Go(sortbyReachHandler),
 				ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 			},
 		},
@@ -225,7 +225,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
-			Handler:   memberHandler,
+			Impl:      Go(memberHandler),
 			ReturnsFn: returnsCarrierTypedListBoolean, BarrierPos: -1,
 		}},
 	},
@@ -236,12 +236,12 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			{
 				Args:    []*Type{TList, TList},
-				Handler: groupTwoHandler,
+				Impl:    Go(groupTwoHandler),
 				Returns: []*Type{TMap}, BarrierPos: -1,
 			},
 			{
 				Args:    []*Type{TList},
-				Handler: groupOneHandler,
+				Impl:    Go(groupOneHandler),
 				Returns: []*Type{TMap}, BarrierPos: -1,
 			},
 		},
@@ -251,7 +251,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
-			Handler:   replicateHandler,
+			Impl:      Go(replicateHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
@@ -260,7 +260,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
-			Handler:   expandHandler,
+			Impl:      Go(expandHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
@@ -269,7 +269,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TInteger, TList},
-			Handler:   windowHandler,
+			Impl:      Go(windowHandler),
 			ReturnsFn: windowReturnsFn, BarrierPos: -1,
 		}},
 	},
@@ -278,7 +278,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList},
-			Handler:   pairsHandler,
+			Impl:      Go(pairsHandler),
 			ReturnsFn: pairsReturnsFn, BarrierPos: -1,
 		}},
 	},
@@ -299,21 +299,21 @@ var allArrayNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    eachHandler,
+				Impl:       Go(eachHandler),
 				ReturnsFn:  eachReturnsFn, BarrierPos: -1,
 			},
 			// Lens form: `each $.name people` plucks the reach from every
 			// element (the receiverless Reach acts as an arity-1 accessor fn).
 			{
 				Args:    []*Type{TReach, TList},
-				Handler: eachReachHandler,
+				Impl:    Go(eachReachHandler),
 				Returns: []*Type{TList}, BarrierPos: -1,
 			},
 			// Map forms — iterate entries in key order, keeping the map shape
 			// (mapValues). Quotation pushes the value; a lambda receives a
 			// KeyVal {k v i n}. See native_map_iter.go.
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: eachMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: eachMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(eachMapHandler), Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Impl: Go(eachMapHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
@@ -330,12 +330,12 @@ var allArrayNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    forEachHandler,
+				Impl:       Go(forEachHandler),
 				ReturnsFn:  forEachReturnsFn, BarrierPos: -1,
 			},
 			// Map forms — iterate entries for side effects, produce nothing.
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: forEachMapHandler, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: forEachMapHandler, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(forEachMapHandler), BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Impl: Go(forEachMapHandler), BarrierPos: -1},
 		},
 	},
 	{
@@ -362,14 +362,14 @@ var allArrayNatives = []NativeFunc{
 				// init from the stack.
 				Args:       []*Type{TList, TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    foldWithInitHandler,
+				Impl:       Go(foldWithInitHandler),
 				ReturnsFn:  foldWithInitReturnsFn, BarrierPos: -1,
 			},
 			{
 				// Without initial: body data → result (uses first element as init)
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    foldNoInitHandler,
+				Impl:       Go(foldNoInitHandler),
 				ReturnsFn:  foldNoInitReturnsFn, BarrierPos: -1,
 			},
 			// Map forms — reduce entries (quotation: acc beneath, value on top;
@@ -378,10 +378,10 @@ var allArrayNatives = []NativeFunc{
 			// (DataListElemTypeFromValue reads a map's common value type), so the
 			// list ReturnsFns narrow the map forms too — `fold [add] {map} 0`
 			// checks as Integer, not Any.
-			{Args: []*Type{TList, TMap, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapInitHandler, ReturnsFn: foldWithInitReturnsFn, BarrierPos: -1},
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: foldMapNoInitHandler, ReturnsFn: foldNoInitReturnsFn, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap, TAny}, Handler: foldMapInitHandler, ReturnsFn: foldWithInitReturnsFn, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: foldMapNoInitHandler, ReturnsFn: foldNoInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TList, TMap, TAny}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(foldMapInitHandler), ReturnsFn: foldWithInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(foldMapNoInitHandler), ReturnsFn: foldNoInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap, TAny}, Impl: Go(foldMapInitHandler), ReturnsFn: foldWithInitReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Impl: Go(foldMapNoInitHandler), ReturnsFn: foldNoInitReturnsFn, BarrierPos: -1},
 		},
 	},
 	{
@@ -400,14 +400,14 @@ var allArrayNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    scanHandler,
+				Impl:       Go(scanHandler),
 				ReturnsFn:  scanReturnsFn, BarrierPos: -1,
 			},
 			// Map forms — running fold over a map's values (the first value
 			// seeds), keeping the map shape. Quotation: acc beneath, value on
 			// top; lambda: (acc, KeyVal).
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Handler: scanMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Handler: scanMapHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(scanMapHandler), Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Impl: Go(scanMapHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 	{
@@ -426,7 +426,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    outerHandler,
+			Impl:       Go(outerHandler),
 			ReturnsFn:  outerReturnsFn, BarrierPos: -1,
 		}},
 	},
@@ -437,7 +437,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TList, TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true, 1: true},
-			Handler:    innerHandler,
+			Impl:       Go(innerHandler),
 			ReturnsFn:  innerReturnsFn, BarrierPos: -1,
 		}},
 	},
@@ -448,7 +448,7 @@ var allArrayNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TList, TList},
-			Handler:   compressHandler,
+			Impl:      Go(compressHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
 		}},
 	},
@@ -461,7 +461,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TInteger, TList, TList},
 			NoEvalArgs: map[int]bool{1: true},
-			Handler:    eachrankHandler,
+			Impl:       Go(eachrankHandler),
 			ReturnsFn:  ReturnsPreserveListAt(2), BarrierPos: -1,
 		}},
 	},
@@ -474,7 +474,7 @@ var allArrayNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:       []*Type{TInteger, TList, TList},
 			NoEvalArgs: map[int]bool{1: true},
-			Handler:    foldaxisHandler,
+			Impl:       Go(foldaxisHandler),
 			ReturnsFn:  ReturnsPreserveListAt(2), BarrierPos: -1,
 		}},
 	},

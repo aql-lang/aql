@@ -83,7 +83,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "vm-run",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -93,7 +93,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run: load sandbox: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
@@ -102,7 +102,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "vm-run-sandbox",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -112,7 +112,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run-sandbox: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
@@ -121,7 +121,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "vm-run-compute",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -131,7 +131,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run-compute: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
@@ -148,7 +148,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "vm-parse",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -161,7 +161,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					lst := native.NewList(tokens)
 					lst.Quoted = true
 					return []native.Value{lst}, nil
-				},
+				}),
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
 			}},
@@ -170,7 +170,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "vm-run-with",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString, native.TMap},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -180,7 +180,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run-with: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
@@ -194,7 +194,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "vm-check",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -204,7 +204,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, err
 					}
 					return []native.Value{res}, nil
-				},
+				}),
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
 			}},
@@ -219,7 +219,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "vm-compile",
 			Signatures: []native.NativeSig{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -229,7 +229,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, err
 					}
 					return []native.Value{res}, nil
-				},
+				}),
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
 			}},

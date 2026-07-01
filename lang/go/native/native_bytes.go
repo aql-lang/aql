@@ -206,27 +206,27 @@ var bytesNatives = []NativeFunc{
 		Signatures: []NativeSig{
 			// String <-> Bytes (UTF-8), List <-> Bytes (0-255 ints), and
 			// Bytes -> Bytes (compact copy). Target type is the literal arg0.
-			{Args: []*Type{TBytes, TString}, TypeArgs: map[int]bool{0: true}, Handler: convertStringToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TString, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: convertBytesToString, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TBytes, TList}, TypeArgs: map[int]bool{0: true}, Handler: convertListToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TList, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: convertBytesToList, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TBytes, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: convertBytesToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TBytes, TString}, TypeArgs: map[int]bool{0: true}, Impl: Go(convertStringToBytes), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TString, TBytes}, TypeArgs: map[int]bool{0: true}, Impl: Go(convertBytesToString), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TBytes, TList}, TypeArgs: map[int]bool{0: true}, Impl: Go(convertListToBytes), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TList, TBytes}, TypeArgs: map[int]bool{0: true}, Impl: Go(convertBytesToList), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TBytes, TBytes}, TypeArgs: map[int]bool{0: true}, Impl: Go(convertBytesToBytes), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "slice",
 		Signatures: []NativeSig{
 			// `slice start end b` (end-exclusive, zero-copy view); data last.
-			{Args: []*Type{TInteger, TInteger, TBytes}, Handler: bytesSliceStartEnd, Returns: []*Type{TBytes}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TBytes}, Handler: bytesSliceStart, Returns: []*Type{TBytes}, BarrierPos: -1},
-			{Args: []*Type{TBytes}, Handler: bytesSliceAll, Returns: []*Type{TBytes}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TInteger, TBytes}, Impl: Go(bytesSliceStartEnd), Returns: []*Type{TBytes}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TBytes}, Impl: Go(bytesSliceStart), Returns: []*Type{TBytes}, BarrierPos: -1},
+			{Args: []*Type{TBytes}, Impl: Go(bytesSliceAll), Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "add",
 		Signatures: []NativeSig{
 			// `a add b` concatenates two byte strings (mirrors String add).
-			{Args: []*Type{TBytes, TBytes}, Handler: addBytesHandler, Returns: []*Type{TBytes}, BarrierPos: -1},
+			{Args: []*Type{TBytes, TBytes}, Impl: Go(addBytesHandler), Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
 	},
 	{
@@ -240,7 +240,7 @@ var bytesNatives = []NativeFunc{
 			// bytes via its spec's layout (the Binary→Bytes direction). Binary
 			// instances are sealed class instances, so dispatch is on TClass;
 			// the handler verifies it is a binary instance (declines otherwise).
-			{Args: []*Type{TBytes, TClass}, TypeArgs: map[int]bool{0: true}, Handler: convertBinaryToBytes, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TBytes, TClass}, TypeArgs: map[int]bool{0: true}, Impl: Go(convertBinaryToBytes), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
 		},
 	},
 	{
@@ -249,14 +249,14 @@ var bytesNatives = []NativeFunc{
 			// `unpack <BinarySpec> b` decodes Bytes `b` into a Binary instance.
 			// A spec is a sealed class, so dispatch is on TClass; the handler
 			// verifies the class carries a layout (errors otherwise).
-			{Args: []*Type{TClass, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackFrameHandler, Returns: []*Type{TClass}, BarrierPos: -1},
+			{Args: []*Type{TClass, TBytes}, TypeArgs: map[int]bool{0: true}, Impl: Go(unpackFrameHandler), Returns: []*Type{TClass}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unpack-prefix",
 		Signatures: []NativeSig{
 			// `unpack-prefix <BinarySpec> b` -> {ok: <Binary> rest: <Bytes>} | {need n}.
-			{Args: []*Type{TClass, TBytes}, TypeArgs: map[int]bool{0: true}, Handler: unpackPrefixFrameHandler, Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TClass, TBytes}, TypeArgs: map[int]bool{0: true}, Impl: Go(unpackPrefixFrameHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 }

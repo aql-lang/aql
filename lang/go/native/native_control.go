@@ -20,7 +20,7 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    doListHandler,
+				Impl:       Go(doListHandler),
 				ReturnsFn:  doListReturnsFn, BarrierPos: -1,
 				// Only the LIST (code-body) sig islands — its NoEvalArgs body
 				// re-enters the interpreter. The Map sig is a pure value eval
@@ -30,7 +30,7 @@ var controlNatives = []NativeFunc{
 			},
 			{
 				Args:    []*Type{TMap},
-				Handler: doMapHandler,
+				Impl:    Go(doMapHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 		},
@@ -42,13 +42,13 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAny, TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
-				Handler:    if3Handler,
+				Impl:       Go(if3Handler),
 				ReturnsFn:  if3ReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
-				Handler:    if2Handler,
+				Impl:       Go(if2Handler),
 				ReturnsFn:  if2ReturnsFn, BarrierPos:
 
 				// Clause-list form: `if [c1 b1 c2 b2 … else]`. Even elements
@@ -66,7 +66,7 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    ifListHandler,
+				Impl:       Go(ifListHandler),
 				ReturnsFn:  ifListReturnsFn, BarrierPos: -1,
 			},
 		},
@@ -97,7 +97,7 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
-				Handler:    caseHandler,
+				Impl:       Go(caseHandler),
 				ReturnsFn:  caseReturnsFn,
 				Returns:    []*Type{TAny}, BarrierPos: -1,
 			},
@@ -112,7 +112,7 @@ var controlNatives = []NativeFunc{
 		Name: "__casematch",
 		Signatures: []NativeSig{{
 			Args:       []*Type{TAny, TAny},
-			Handler:    caseMatchHandler,
+			Impl:       Go(caseMatchHandler),
 			Returns:    []*Type{TBoolean},
 			BarrierPos: 0,
 		}},
@@ -124,13 +124,13 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Handler:    forCountHandler,
+				Impl:       Go(forCountHandler),
 				ReturnsFn:  forIntegerListReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Handler:    forRangeHandler,
+				Impl:       Go(forRangeHandler),
 				ReturnsFn:  forListListReturnsFn, BarrierPos: -1,
 			},
 		},
@@ -142,20 +142,20 @@ var controlNatives = []NativeFunc{
 	{
 		Name: "break",
 		Signatures: []NativeSig{{
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				r.FlowCtrl = FlowBreak
 				return nil, nil
-			},
+			}),
 			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
 	{
 		Name: "continue",
 		Signatures: []NativeSig{{
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				r.FlowCtrl = FlowContinue
 				return nil, nil
-			},
+			}),
 			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
@@ -184,7 +184,7 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    errorHandler,
+				Impl:       Go(errorHandler),
 				// BarrierPos 1: the handler list is forward-collected, but the
 				// do-result (position 1) MUST come from the stack — never a trailing
 				// token. The former TError sig filtered a following `3` by type; the

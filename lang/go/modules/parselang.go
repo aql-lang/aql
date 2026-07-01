@@ -67,7 +67,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       parseRegisterHandler(exports, registerIdents),
+			Impl:          native.Go(parseRegisterHandler(exports, registerIdents)),
 			// Check-mode install so `ParseLang.parse_<name>` is statically
 			// resolvable; idempotent on the source-call identity so the compiled
 			// program's runtime re-run does not raise parse_kind_exists.
@@ -85,7 +85,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
-			Handler:    parseKindsHandler(exports),
+			Impl:       native.Go(parseKindsHandler(exports)),
 		}},
 	})
 	exports.Set("kinds", wrapMiniFnDef("parselang-kinds", [][]native.FnParam{{}},
@@ -101,7 +101,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TAny},
 			Returns:    []*native.Type{native.TString},
 			BarrierPos: -1,
-			Handler:    parseSourceHandler,
+			Impl:       native.Go(parseSourceHandler),
 		}},
 	})
 	exports.Set("source", wrapMiniFnDef("parselang-source", [][]native.FnParam{
@@ -309,7 +309,7 @@ func installHostParser(exports *native.OrderedMap, subReg *native.Registry, spec
 			Args:       []*native.Type{native.TAny, native.TMap},
 			Returns:    spec.Returns,
 			BarrierPos: -1,
-			Handler:    shell,
+			Impl:       native.Go(shell),
 		}},
 	})
 	params := []native.FnParam{{Type: native.TAny}, {Type: native.TMap}}

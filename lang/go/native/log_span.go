@@ -207,7 +207,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 				Args:       []*Type{TAtom, TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					key, err := args[0].AsConcreteAtom()
 					if err != nil {
 						return nil, r.AqlError("log_error", "attribute key must be an atom", "Span.set-attr")
@@ -218,7 +218,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 					}
 					lsr.mu.Unlock()
 					return nil, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -228,17 +228,17 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 					Args:       []*Type{TString, TMap},
 					Returns:    []*Type{},
 					BarrierPos: -1,
-					Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 						return spanAddEvent(lsr, r, st, args[0], args[1])
-					},
+					}),
 				},
 				{
 					Args:       []*Type{TString},
 					Returns:    []*Type{},
 					BarrierPos: -1,
-					Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 						return spanAddEvent(lsr, r, st, args[0], NewMap(NewOrderedMap()))
-					},
+					}),
 				},
 			},
 		},
@@ -248,7 +248,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 				Args:       []*Type{TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					lsr.mu.Lock()
 					if !st.ended { // an ended span is frozen
 						st.status = "error"
@@ -256,7 +256,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 					}
 					lsr.mu.Unlock()
 					return nil, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -268,10 +268,10 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 				Args:       []*Type{},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					lsr.endSpan(r, st)
 					return nil, nil
-				},
+				}),
 			}},
 		},
 	}
@@ -309,26 +309,26 @@ func logSpanNative(lsr *LogSinkRegistry) NativeFunc {
 				Returns:    []*Type{TMap},
 				BarrierPos: -1,
 				ReturnsFn:  spanShapeReturns(lsr),
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, r.AqlError("log_error", "span name must be a string", "Log.span")
 					}
 					return start(r, name, asConcreteOrderedMap(args[1]))
-				},
+				}),
 			},
 			{
 				Args:       []*Type{TString},
 				Returns:    []*Type{TMap},
 				BarrierPos: -1,
 				ReturnsFn:  spanShapeReturns(lsr),
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, r.AqlError("log_error", "span name must be a string", "Log.span")
 					}
 					return start(r, name, nil)
-				},
+				}),
 			},
 		},
 	}
@@ -365,7 +365,7 @@ func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 			NoEvalArgs: map[int]bool{1: true},
 			BarrierPos: -1,
 			ReturnsFn:  withSpanReturnsFn,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, r.AqlError("log_error", "span name must be a string", "Log.with-span")
@@ -390,7 +390,7 @@ func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 					return []Value{out[len(out)-1]}, nil
 				}
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }
@@ -403,7 +403,7 @@ func logEndNative(lsr *LogSinkRegistry) NativeFunc {
 			Args:       []*Type{TMap},
 			Returns:    []*Type{},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				m, err := RequireConcreteMap(args[0], "Log.end")
 				if err != nil {
 					return nil, err
@@ -424,7 +424,7 @@ func logEndNative(lsr *LogSinkRegistry) NativeFunc {
 				}
 				lsr.endSpan(r, target)
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }
@@ -438,7 +438,7 @@ func logCurrentSpanNative(lsr *LogSinkRegistry) NativeFunc {
 			Args:       []*Type{},
 			Returns:    []*Type{TAny},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				lsr.mu.Lock()
 				var st *spanState
 				if n := len(lsr.spanStack); n > 0 {
@@ -453,7 +453,7 @@ func logCurrentSpanNative(lsr *LogSinkRegistry) NativeFunc {
 					return nil, r.AqlError("log_error", err.Error(), "Log.current-span")
 				}
 				return []Value{NewMap(inst)}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -467,14 +467,14 @@ func logTracesNative(lsr *LogSinkRegistry) NativeFunc {
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				spans := lsr.Traces()
 				out := make([]Value, len(spans))
 				for i, st := range spans {
 					out[i] = spanToMap(st)
 				}
 				return []Value{NewList(out)}, nil
-			},
+			}),
 		}},
 	}
 }

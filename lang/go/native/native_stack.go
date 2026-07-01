@@ -15,7 +15,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny},
-			Handler:   dupHandler,
+			Impl:      Go(dupHandler),
 			ReturnsFn: ReturnsIdentity(0, 0), BarrierPos: 0,
 		}},
 	},
@@ -24,7 +24,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
-			Handler:   swapHandler,
+			Impl:      Go(swapHandler),
 			ReturnsFn: ReturnsIdentity(0, 1), BarrierPos: 0,
 		}},
 	},
@@ -33,7 +33,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny},
-			Handler: dropHandler,
+			Impl:    Go(dropHandler),
 			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
@@ -42,7 +42,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
-			Handler:   overHandler,
+			Impl:      Go(overHandler),
 			ReturnsFn: ReturnsIdentity(1, 0, 1), BarrierPos: 0,
 		}},
 	},
@@ -51,7 +51,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny, TAny},
-			Handler:   rotHandler,
+			Impl:      Go(rotHandler),
 			ReturnsFn: ReturnsIdentity(1, 0, 2), BarrierPos: 0,
 		}},
 	},
@@ -60,7 +60,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
-			Handler:   nipHandler,
+			Impl:      Go(nipHandler),
 			ReturnsFn: ReturnsIdentity(0), BarrierPos: 0,
 		}},
 	},
@@ -69,7 +69,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
-			Handler:   tuckHandler,
+			Impl:      Go(tuckHandler),
 			ReturnsFn: ReturnsIdentity(0, 1, 0), BarrierPos: 0,
 		}},
 	},
@@ -78,7 +78,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny},
-			Handler:   dup2Handler,
+			Impl:      Go(dup2Handler),
 			ReturnsFn: ReturnsIdentity(1, 0, 1, 0), BarrierPos: 0,
 		}},
 	},
@@ -87,7 +87,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny, TAny, TAny},
-			Handler:   swap2Handler,
+			Impl:      Go(swap2Handler),
 			ReturnsFn: ReturnsIdentity(1, 0, 3, 2), BarrierPos: 0,
 		}},
 	},
@@ -96,7 +96,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:    []*Type{TAny, TAny},
-			Handler: drop2Handler,
+			Impl:    Go(drop2Handler),
 			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
@@ -105,7 +105,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TAny, TAny, TAny, TAny},
-			Handler:   over2Handler,
+			Impl:      Go(over2Handler),
 			ReturnsFn: ReturnsIdentity(3, 2, 1, 0, 3, 2), BarrierPos: 0,
 		}},
 	},
@@ -113,29 +113,26 @@ var stackNatives = []NativeFunc{
 		Name: "depth",
 
 		Signatures: []NativeSig{{
-			FullStack:        true,
-			Handler:          depthHandler,
-			CheckFullStackFn: depthCheckFullStack, BarrierPos: 0,
+			Impl:       Go(depthHandler, FullStack(), CheckFullStack(depthCheckFullStack)),
+			BarrierPos: 0,
 		}},
 	},
 	{
 		Name: "pick",
 
 		Signatures: []NativeSig{{
-			Args:             []*Type{TInteger},
-			FullStack:        true,
-			Handler:          pickHandler,
-			CheckFullStackFn: pickCheckFullStack, BarrierPos: 0,
+			Args:       []*Type{TInteger},
+			Impl:       Go(pickHandler, FullStack(), CheckFullStack(pickCheckFullStack)),
+			BarrierPos: 0,
 		}},
 	},
 	{
 		Name: "roll",
 
 		Signatures: []NativeSig{{
-			Args:             []*Type{TInteger},
-			FullStack:        true,
-			Handler:          rollHandler,
-			CheckFullStackFn: rollCheckFullStack, BarrierPos: 0,
+			Args:       []*Type{TInteger},
+			Impl:       Go(rollHandler, FullStack(), CheckFullStack(rollCheckFullStack)),
+			BarrierPos: 0,
 		}},
 	},
 }

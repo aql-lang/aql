@@ -35,20 +35,20 @@ var errorNatives = []NativeFunc{
 			{
 				Args:      []*Type{TAtom, TString},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   raiseCodeMessageHandler,
+				Impl:      Go(raiseCodeMessageHandler),
 				Returns:   []*Type{}, BarrierPos: -1,
 			},
 			// raise <message> — code defaults to user_error.
 			{
 				Args:    []*Type{TString},
-				Handler: raiseMessageHandler,
+				Impl:    Go(raiseMessageHandler),
 				Returns: []*Type{}, BarrierPos: -1,
 			},
 			// raise <spec> — {code:… message:…} required; remaining
 			// keys are preserved on the Error value for the handler.
 			{
 				Args:    []*Type{TMap},
-				Handler: raiseSpecHandler,
+				Impl:    Go(raiseSpecHandler),
 				Returns: []*Type{}, BarrierPos: -1,
 			},
 		},
@@ -65,8 +65,8 @@ var errorNatives = []NativeFunc{
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAtom, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -76,8 +76,8 @@ var errorNatives = []NativeFunc{
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 }

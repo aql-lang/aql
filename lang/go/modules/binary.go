@@ -211,13 +211,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewInteger(int64(bits.OnesCount64(uint64(x))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -226,13 +226,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewInteger(int64(bits.LeadingZeros64(uint64(x))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -241,13 +241,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewInteger(int64(bits.TrailingZeros64(uint64(x))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -256,13 +256,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewBoolean(bits.OnesCount64(uint64(x))%2 == 1)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 		}},
 	},
@@ -271,13 +271,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewInteger(int64(bits.Len64(uint64(x))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -288,7 +288,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -300,7 +300,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return []native.Value{native.NewInteger(-1)}, nil
 				}
 				return []native.Value{native.NewInteger(int64((uint64(1) << uint(n)) - 1))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -309,13 +309,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewInteger(int64(bits.Reverse64(uint64(x))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -324,13 +324,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewInteger(int64(bits.ReverseBytes64(uint64(x))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -341,7 +341,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -353,7 +353,7 @@ var binaryModuleNatives = []native.NativeFunc{
 				// bits.RotateLeft64 reduces n mod 64 internally and
 				// accepts negative shifts (rotates the other way).
 				return []native.Value{native.NewInteger(int64(bits.RotateLeft64(uint64(x), int(n%64))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -362,7 +362,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -372,7 +372,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				return []native.Value{native.NewInteger(int64(bits.RotateLeft64(uint64(x), -int(n%64))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -383,7 +383,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -397,7 +397,7 @@ var binaryModuleNatives = []native.NativeFunc{
 						fmt.Sprintf("BinUtil.test: bit index out of range [0, 64): %d", n), "test")
 				}
 				return []native.Value{native.NewBoolean((uint64(x)>>uint(n))&1 != 0)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 		}},
 	},
@@ -406,7 +406,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -420,7 +420,7 @@ var binaryModuleNatives = []native.NativeFunc{
 						fmt.Sprintf("BinUtil.set: bit index out of range [0, 64): %d", n), "set")
 				}
 				return []native.Value{native.NewInteger(int64(uint64(x) | (uint64(1) << uint(n))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -429,7 +429,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -443,7 +443,7 @@ var binaryModuleNatives = []native.NativeFunc{
 						fmt.Sprintf("BinUtil.clear: bit index out of range [0, 64): %d", n), "clear")
 				}
 				return []native.Value{native.NewInteger(int64(uint64(x) &^ (uint64(1) << uint(n))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -452,7 +452,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -466,7 +466,7 @@ var binaryModuleNatives = []native.NativeFunc{
 						fmt.Sprintf("BinUtil.toggle: bit index out of range [0, 64): %d", n), "toggle")
 				}
 				return []native.Value{native.NewInteger(int64(uint64(x) ^ (uint64(1) << uint(n))))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -481,7 +481,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				lo, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -509,7 +509,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					mask = (uint64(1) << width) - 1
 				}
 				return []native.Value{native.NewInteger(int64((uint64(x) >> uint(lo)) & mask))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -521,7 +521,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger, native.TInteger, native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				lo, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -555,7 +555,7 @@ var binaryModuleNatives = []native.NativeFunc{
 				shifted := (uint64(bits_) & fieldMask) << uint(lo)
 				clear := uint64(x) &^ (fieldMask << uint(lo))
 				return []native.Value{native.NewInteger(int64(clear | shifted))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -566,7 +566,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TString},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, err
@@ -576,7 +576,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, r.AqlError("range_error", "BinUtil.ord: empty string has no codepoint", "ord")
 				}
 				return []native.Value{native.NewInteger(int64(rs[0]))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -586,7 +586,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
 				if err != nil {
 					return nil, err
@@ -596,7 +596,7 @@ var binaryModuleNatives = []native.NativeFunc{
 						fmt.Sprintf("BinUtil.chr: codepoint %d out of range [0, 0x10FFFF]", n), "chr")
 				}
 				return []native.Value{native.NewString(string(rune(n)))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},
@@ -607,7 +607,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TString},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, err
@@ -615,7 +615,7 @@ var binaryModuleNatives = []native.NativeFunc{
 				h := fnv.New32a()
 				_, _ = h.Write([]byte(s))
 				return []native.Value{native.NewInteger(int64(h.Sum32()))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -626,7 +626,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TString},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, err
@@ -634,7 +634,7 @@ var binaryModuleNatives = []native.NativeFunc{
 				h := fnv.New64a()
 				_, _ = h.Write([]byte(s))
 				return []native.Value{native.NewInteger(int64(h.Sum64() & sign63Mask))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
@@ -646,13 +646,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TString},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewString(base64.StdEncoding.EncodeToString([]byte(s)))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},
@@ -663,7 +663,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TString},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, err
@@ -674,7 +674,7 @@ var binaryModuleNatives = []native.NativeFunc{
 						fmt.Sprintf("BinUtil.base64-decode: invalid base64: %v", derr), "base64-decode")
 				}
 				return []native.Value{native.NewString(string(b))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},
@@ -684,13 +684,13 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TString},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewString(hex.EncodeToString([]byte(s)))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},
@@ -701,7 +701,7 @@ var binaryModuleNatives = []native.NativeFunc{
 
 		Signatures: []native.NativeSig{{
 			Args: []*native.Type{native.TString},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, err
@@ -712,7 +712,7 @@ var binaryModuleNatives = []native.NativeFunc{
 						fmt.Sprintf("BinUtil.hex-decode: invalid hex: %v", derr), "hex-decode")
 				}
 				return []native.Value{native.NewString(string(b))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},

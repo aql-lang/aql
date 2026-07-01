@@ -21,7 +21,7 @@ var fileInfoNatives = []NativeFunc{
 		Name: "__folder",
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
-			Handler: srcFolderHandler,
+			Impl:    Go(srcFolderHandler),
 			Returns: []*Type{TPath}, BarrierPos: 0,
 		}},
 	},
@@ -29,7 +29,7 @@ var fileInfoNatives = []NativeFunc{
 		Name: "__file",
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
-			Handler: srcFileHandler,
+			Impl:    Go(srcFileHandler),
 			Returns: []*Type{TString}, BarrierPos: 0,
 		}},
 	},

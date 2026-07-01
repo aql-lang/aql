@@ -35,7 +35,7 @@ var behaveNative = NativeFunc{
 		{
 			Args:      []*Type{TAtom, TFunction},
 			QuoteArgs: map[int]bool{0: true},
-			Handler:   behaveHandler,
+			Impl:      Go(behaveHandler),
 			Returns:   []*Type{}, BarrierPos:
 
 			// String form for the behavior name (`behave "compare" fn […]`).
@@ -44,7 +44,7 @@ var behaveNative = NativeFunc{
 
 		{
 			Args:    []*Type{TString, TFunction},
-			Handler: behaveHandler,
+			Impl:    Go(behaveHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		},
 	},

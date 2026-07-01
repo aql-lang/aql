@@ -32,7 +32,7 @@ var flexNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TNode},
-			Handler:   flexHandler,
+			Impl:      Go(flexHandler),
 			Returns:   []*Type{TNode},
 			ReturnsFn: flexReturns, BarrierPos: -1,
 		}},
@@ -42,7 +42,7 @@ var flexNatives = []NativeFunc{
 
 		Signatures: []NativeSig{{
 			Args:      []*Type{TNode},
-			Handler:   nodeHandler,
+			Impl:      Go(nodeHandler),
 			Returns:   []*Type{TNode},
 			ReturnsFn: nodeReturns, BarrierPos: -1,
 		}},
@@ -56,25 +56,25 @@ var flexNatives = []NativeFunc{
 			// list (including another FlexList, which conforms to List).
 			{
 				Args:    []*Type{TList, TFlexList},
-				Handler: appendListHandler,
+				Impl:    Go(appendListHandler),
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
 			// Any other value: append as a single element.
 			{
 				Args:    []*Type{TAny, TFlexList},
-				Handler: appendElemHandler,
+				Impl:    Go(appendElemHandler),
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
 			// FlexXml: append child nodes (elements or text) in place.
 			// A List splices its elements; any other value is one child.
 			{
 				Args:    []*Type{TList, TFlexXml},
-				Handler: appendXmlListHandler,
+				Impl:    Go(appendXmlListHandler),
 				Returns: []*Type{TFlexXml}, BarrierPos: -1,
 			},
 			{
 				Args:    []*Type{TAny, TFlexXml},
-				Handler: appendXmlChildHandler,
+				Impl:    Go(appendXmlChildHandler),
 				Returns: []*Type{TFlexXml}, BarrierPos: -1,
 			},
 		},

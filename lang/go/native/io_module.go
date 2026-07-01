@@ -40,9 +40,9 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 			Name: name,
 			Signatures: []NativeSig{{
 				Args: []*Type{},
-				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					return []Value{newStreamAtom(name, streamKind)}, nil
-				},
+				}),
 				Returns: []*Type{streamKind}, BarrierPos: -1,
 			}},
 		}
@@ -52,22 +52,22 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 			Name: "printstr",
 			Signatures: []NativeSig{{
 				Args:    []*Type{TAny},
-				Handler: eng.PrintstrHandler,
+				Impl:    Go(eng.PrintstrHandler),
 				Returns: []*Type{}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "read",
 			Signatures: []NativeSig{
-				{Args: []*Type{TPath, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TPath}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{streamKind, TMap}, Handler: readOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{streamKind}, Handler: readHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TMap, TPath}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TMap, TString}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TMap, streamKind}, Handler: readOptsRevHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPath, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPath}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TString, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TString}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{streamKind}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TMap, TPath}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TMap, TString}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TMap, streamKind}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 		{
@@ -76,18 +76,18 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 			// so the result can be threaded straight into read.
 			Name: "write",
 			Signatures: []NativeSig{
-				{Args: []*Type{TPath, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{TPath}, BarrierPos: -1},
-				{Args: []*Type{TPath, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{TPath}, BarrierPos: -1},
-				{Args: []*Type{TPath, TString}, Handler: writeHandler, Returns: []*Type{TPath}, BarrierPos: -1},
-				{Args: []*Type{TPath, TAny}, Handler: writeAnyHandler, Returns: []*Type{TPath}, BarrierPos: -1},
-				{Args: []*Type{TString, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString}, Handler: writeHandler, Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TAny}, Handler: writeAnyHandler, Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{streamKind, TString, TMap}, Handler: writeOptsHandler, Returns: []*Type{streamKind}, BarrierPos: -1},
-				{Args: []*Type{streamKind, TAny, TMap}, Handler: writeAnyOptsHandler, Returns: []*Type{streamKind}, BarrierPos: -1},
-				{Args: []*Type{streamKind, TString}, Handler: writeHandler, Returns: []*Type{streamKind}, BarrierPos: -1},
-				{Args: []*Type{streamKind, TAny}, Handler: writeAnyHandler, Returns: []*Type{streamKind}, BarrierPos: -1},
+				{Args: []*Type{TPath, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPath}, BarrierPos: -1},
+				{Args: []*Type{TPath, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPath}, BarrierPos: -1},
+				{Args: []*Type{TPath, TString}, Impl: Go(writeHandler), Returns: []*Type{TPath}, BarrierPos: -1},
+				{Args: []*Type{TPath, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TPath}, BarrierPos: -1},
+				{Args: []*Type{TString, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TString}, Impl: Go(writeHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TString}, Impl: Go(writeHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 			},
 		},
 		streamHandle("stdin"),
@@ -97,15 +97,15 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 			Name: "trace",
 			Signatures: []NativeSig{{
 				Args:    []*Type{TList},
-				Handler: eng.TraceHandler,
+				Impl:    Go(eng.TraceHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "folder",
 			Signatures: []NativeSig{
-				{Args: []*Type{TOptions, TPath}, Handler: folderOptsHandler, Returns: []*Type{TList}, BarrierPos: -1},
-				{Args: []*Type{TPath}, Handler: folderHandler, Returns: []*Type{TList}, BarrierPos: -1},
+				{Args: []*Type{TOptions, TPath}, Impl: Go(folderOptsHandler), Returns: []*Type{TList}, BarrierPos: -1},
+				{Args: []*Type{TPath}, Impl: Go(folderHandler), Returns: []*Type{TList}, BarrierPos: -1},
 			},
 		},
 	}

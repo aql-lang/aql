@@ -85,7 +85,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap, native.TString},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
-			Handler:    miniReHandler,
+			Impl:       native.Go(miniReHandler),
 		}},
 	})
 	exports.Set("lang_re", wrapMiniFnDef("minilang-re", [][]native.FnParam{
@@ -102,7 +102,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{TMiniCompiled, native.TMap, native.TString},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
-			Handler:    miniRunReHandler,
+			Impl:       native.Go(miniRunReHandler),
 		}},
 	})
 	exports.Set("run-re", wrapMiniFnDef("minilang-run-re", [][]native.FnParam{
@@ -123,13 +123,13 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 				Args:       []*native.Type{native.TString, native.TMap, native.TString},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
-				Handler:    miniBfHandler,
+				Impl:       native.Go(miniBfHandler),
 			},
 			{
 				Args:       []*native.Type{native.TString, native.TMap},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
-				Handler:    miniBfHandler,
+				Impl:       native.Go(miniBfHandler),
 			},
 		},
 	})
@@ -150,7 +150,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
 			Returns:    []*native.Type{native.TAny},
 			BarrierPos: -1,
-			Handler:    miniGexHandler,
+			Impl:       native.Go(miniGexHandler),
 		}},
 	})
 	exports.Set("lang_gex", wrapMiniFnDef("minilang-gex", [][]native.FnParam{
@@ -168,7 +168,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TNumber},
 			BarrierPos: -1,
-			Handler:    miniMathHandler,
+			Impl:       native.Go(miniMathHandler),
 		}},
 	})
 	exports.Set("lang_m", wrapMiniFnDef("minilang-m", [][]native.FnParam{stdPrefix},
@@ -184,7 +184,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TBytes},
 			BarrierPos: -1,
-			Handler:    miniHexBytesHandler,
+			Impl:       native.Go(miniHexBytesHandler),
 		}},
 	})
 	exports.Set("lang_hb", wrapMiniFnDef("minilang-hb", [][]native.FnParam{stdPrefix},
@@ -200,7 +200,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TBytes},
 			BarrierPos: -1,
-			Handler:    miniBinBytesHandler,
+			Impl:       native.Go(miniBinBytesHandler),
 		}},
 	})
 	exports.Set("lang_bb", wrapMiniFnDef("minilang-bb", [][]native.FnParam{stdPrefix},
@@ -216,7 +216,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
-			Handler:    miniJsonPathHandler,
+			Impl:       native.Go(miniJsonPathHandler),
 		}},
 	})
 	exports.Set("lang_jp", wrapMiniFnDef("minilang-jp", [][]native.FnParam{
@@ -232,7 +232,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
-			Handler:    miniJqHandler,
+			Impl:       native.Go(miniJqHandler),
 		}},
 	})
 	exports.Set("lang_jq", wrapMiniFnDef("minilang-jq", [][]native.FnParam{
@@ -251,7 +251,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap, native.TXml},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
-			Handler:    miniXPathHandler,
+			Impl:       native.Go(miniXPathHandler),
 		}},
 	})
 	exports.Set("lang_xp", wrapMiniFnDef("minilang-xp", [][]native.FnParam{
@@ -278,7 +278,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       miniRegisterHandler(exports, miniRegisterIdents),
+			Impl:          native.Go(miniRegisterHandler(exports, miniRegisterIdents)),
 			// Check-mode install so a later `mini <name> …` resolves the
 			// statically-registered kind (the fn is provided literally) instead
 			// of flagging "no mini-language is registered" — the minilang twin
@@ -298,7 +298,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
-			Handler:    miniKindsHandler(exports),
+			Impl:       native.Go(miniKindsHandler(exports)),
 		}},
 	})
 	exports.Set("kinds", wrapMiniFnDef("minilang-kinds", [][]native.FnParam{{}},
@@ -317,7 +317,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       miniRegisterCompiledHandler(exports),
+			Impl:          native.Go(miniRegisterCompiledHandler(exports)),
 		}},
 	})
 	exports.Set("register-compiled", wrapMiniFnDef("minilang-register-compiled", [][]native.FnParam{
@@ -485,7 +485,7 @@ func installHostMiniLang(exports *native.OrderedMap, subReg *native.Registry, sp
 			Args:       args,
 			Returns:    spec.Returns,
 			BarrierPos: -1,
-			Handler:    spec.Handler,
+			Impl:       native.Go(spec.Handler),
 		}},
 	})
 	exports.Set(key, wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg))

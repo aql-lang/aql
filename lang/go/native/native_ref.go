@@ -36,15 +36,14 @@ var refNatives = []NativeFunc{
 			// arrives here with args[0] = Atom(add).
 			Args:      []*Type{TAtom},
 			QuoteArgs: map[int]bool{0: true},
-			Handler:   refHandler,
+			Impl:      Go(refHandler, RunInCheck(), Park()),
 			Returns:   []*Type{TAny},
 			// ParkResult: leave the resolved Function value as inert data at
 			// the call site instead of re-stepping it — so `ref f` behaves
 			// exactly like `f/r`, never auto-invoking (not even a 0-arg fn).
 			// The value still dispatches when re-stepped elsewhere (from a
 			// map, a paren), matching `(f/r)` / `ops.f a b`.
-			ParkResult:     true,
-			RunInCheckMode: true, BarrierPos: -1,
+			BarrierPos: -1,
 		}},
 	},
 	{
@@ -56,8 +55,8 @@ var refNatives = []NativeFunc{
 
 		Signatures: []NativeSig{
 			{
-				Args:    []*Type{TFunction},
-				Handler: applyHandler,
+				Args: []*Type{TFunction},
+				Impl: Go(applyHandler),
 				// Check mode: return the applied fn VALUE concrete (identity,
 				// not widened to Any) so the check engine re-steps it exactly as
 				// runtime — the fn then dispatches against its preceding stack
@@ -72,7 +71,7 @@ var refNatives = []NativeFunc{
 			// the lens "get". Forward-eligible so the reach reads first.
 			{
 				Args:    []*Type{TReach, TAny},
-				Handler: applyReachHandler,
+				Impl:    Go(applyReachHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 		},
@@ -85,7 +84,7 @@ var refNatives = []NativeFunc{
 		// already-bound reach it swaps the receiver. Forward-eligible.
 		Signatures: []NativeSig{{
 			Args:    []*Type{TReach, TAny},
-			Handler: rebindHandler,
+			Impl:    Go(rebindHandler),
 			Returns: []*Type{TReach}, BarrierPos: -1,
 		}},
 	},
@@ -104,17 +103,17 @@ var refNatives = []NativeFunc{
 		// Atom sig; a parenthesised Function value takes the [Function] sig.
 		Signatures: []NativeSig{
 			{
-				Args:           []*Type{TFunction},
-				Handler:        usurpHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TFunction},
+				Impl:       Go(usurpHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAtom},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        usurpAtomHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAtom},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(usurpAtomHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 		},
 	},
@@ -125,17 +124,17 @@ var refNatives = []NativeFunc{
 		// Function and accepts a value ([Function]) or a name ([Atom] /q).
 		Signatures: []NativeSig{
 			{
-				Args:           []*Type{TFunction},
-				Handler:        stackArgsHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TFunction},
+				Impl:       Go(stackArgsHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAtom},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        stackArgsAtomHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAtom},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(stackArgsAtomHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 		},
 	},
@@ -148,17 +147,17 @@ var refNatives = []NativeFunc{
 		//   - [Integer, Atom] (/q) `force-arity 2 f`
 		Signatures: []NativeSig{
 			{
-				Args:           []*Type{TInteger, TFunction},
-				Handler:        forceArityHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TInteger, TFunction},
+				Impl:       Go(forceArityHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TInteger, TAtom},
-				QuoteArgs:      map[int]bool{1: true},
-				Handler:        forceArityAtomHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TInteger, TAtom},
+				QuoteArgs:  map[int]bool{1: true},
+				Impl:       Go(forceArityAtomHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 		},
 	},
@@ -168,17 +167,17 @@ var refNatives = []NativeFunc{
 		// so it dispatches in FORWARD form.
 		Signatures: []NativeSig{
 			{
-				Args:           []*Type{TFunction},
-				Handler:        forwardArgsHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TFunction},
+				Impl:       Go(forwardArgsHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAtom},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        forwardArgsAtomHandler,
-				Returns:        []*Type{TFunction},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAtom},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(forwardArgsAtomHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
 			},
 		},
 	},

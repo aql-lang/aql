@@ -70,7 +70,7 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 			// and the runtime answer is unchanged. RNG-bound methods (int/bool/...)
 			// stay dynamic at the field read, so no seed-specific draw is baked.
 			ReturnsFn: randWithSeedReturns,
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				seed, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -81,7 +81,7 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 					return nil, err
 				}
 				return []native.Value{native.NewMap(instance)}, nil
-			},
+			}),
 		}},
 	})
 	exports.Set("with-seed", wrapRandFnDef("rand-with-seed",
@@ -258,7 +258,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Args:       []*native.Type{native.TInteger, native.TInteger},
 				Returns:    []*native.Type{native.TInteger},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					lo, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
@@ -276,7 +276,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					n := lo + state.rng.Int63n(hi-lo)
 					state.mu.Unlock()
 					return []native.Value{native.NewInteger(n)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -285,12 +285,12 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TBoolean},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					state.mu.Lock()
 					b := state.rng.Intn(2) == 1
 					state.mu.Unlock()
 					return []native.Value{native.NewBoolean(b)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -300,12 +300,12 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TFloat},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					state.mu.Lock()
 					f := state.rng.Float64()
 					state.mu.Unlock()
 					return []native.Value{native.NewFloat(f)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -317,7 +317,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Args:       []*native.Type{native.TString, native.TInteger},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					charset, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -345,7 +345,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					}
 					state.mu.Unlock()
 					return []native.Value{native.NewString(string(out))}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -366,7 +366,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Returns:    []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					n, err := args[1].AsConcreteInteger()
 					if err != nil {
 						return nil, err
@@ -412,7 +412,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						out = append(out, res[len(res)-1])
 					}
 					return []native.Value{native.NewList(out)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -426,7 +426,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Returns:       []*native.Type{native.TMap},
 				NoEvalMapArgs: map[int]bool{0: true},
 				BarrierPos:    -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					schema, err := native.RequireConcreteMap(args[0], "Rand.map-from schema")
 					if err != nil {
 						return nil, err
@@ -451,7 +451,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						out.Set(key, res[len(res)-1])
 					}
 					return []native.Value{native.NewMap(out)}, nil
-				},
+				}),
 			}},
 		},
 		{
@@ -460,7 +460,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					lst, err := native.RequireConcreteList(args[0], "Rand.one-of")
 					if err != nil {
 						return nil, err
@@ -474,7 +474,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					idx := state.rng.Intn(n)
 					state.mu.Unlock()
 					return []native.Value{lst.Get(idx)}, nil
-				},
+				}),
 			}},
 		},
 	}

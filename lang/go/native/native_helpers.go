@@ -270,10 +270,10 @@ func ApdUnaryNative(name string, floatFn func(float64) float64, apdFn func(c *ap
 	return NativeFunc{
 		Name: name,
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: floatHandler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TFloat}, Handler: floatHandler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TBigInteger}, Handler: bigHandler, Returns: []*Type{TBigDecimal}, BarrierPos: -1},
-			{Args: []*Type{TBigDecimal}, Handler: bigHandler, Returns: []*Type{TBigDecimal}, BarrierPos: -1},
+			{Args: []*Type{TInteger}, Impl: Go(floatHandler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat}, Impl: Go(floatHandler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TBigInteger}, Impl: Go(bigHandler), Returns: []*Type{TBigDecimal}, BarrierPos: -1},
+			{Args: []*Type{TBigDecimal}, Impl: Go(bigHandler), Returns: []*Type{TBigDecimal}, BarrierPos: -1},
 		},
 	}
 }
@@ -291,10 +291,10 @@ func FloatUnaryBigNative(name string, floatFn func(float64) float64) NativeFunc 
 	return NativeFunc{
 		Name: name,
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TBigInteger}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TBigDecimal}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TInteger}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TBigInteger}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TBigDecimal}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }

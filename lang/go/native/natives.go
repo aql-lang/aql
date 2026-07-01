@@ -28,15 +28,14 @@ var Natives = []NativeFunc{
 				// handler just marks it Quoted=true.
 				Args:      []*Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   quoteWordHandler,
+				Impl:      Go(quoteWordHandler),
 				Returns:   []*Type{TAtom}, BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAny},
-				NoEvalArgs:     map[int]bool{0: true},
-				Handler:        quoteAnyHandler,
-				RunInCheckMode: true,
-				ReturnsFn:      ReturnsIdentity(0), BarrierPos: -1,
+				Args:       []*Type{TAny},
+				NoEvalArgs: map[int]bool{0: true},
+				Impl:       Go(quoteAnyHandler, RunInCheck()),
+				ReturnsFn:  ReturnsIdentity(0), BarrierPos: -1,
 			},
 		},
 	},
@@ -56,16 +55,15 @@ var Natives = []NativeFunc{
 			{
 				Args:      []*Type{TAtom},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   quoteWordHandler,
+				Impl:      Go(quoteWordHandler),
 				Returns:   []*Type{TAtom}, BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAny},
-				NoEvalArgs:     map[int]bool{0: true},
-				RawParens:      map[int]bool{0: true},
-				Handler:        quoteAnyHandler,
-				RunInCheckMode: true,
-				ReturnsFn:      ReturnsIdentity(0), BarrierPos: -1,
+				Args:       []*Type{TAny},
+				NoEvalArgs: map[int]bool{0: true},
+				RawParens:  map[int]bool{0: true},
+				Impl:       Go(quoteAnyHandler, RunInCheck()),
+				ReturnsFn:  ReturnsIdentity(0), BarrierPos: -1,
 			},
 		},
 	},
@@ -83,7 +81,7 @@ var Natives = []NativeFunc{
 			{
 				Args:       []*Type{TAny, TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Handler:    reachHandler,
+				Impl:       Go(reachHandler),
 				Returns:    []*Type{TReach}, BarrierPos: -1,
 			},
 		},
@@ -102,7 +100,7 @@ var Natives = []NativeFunc{
 			{
 				Args:       []*Type{TAny},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    wordHandler,
+				Impl:       Go(wordHandler),
 				Returns:    []*Type{TAny}, BarrierPos: -1,
 			},
 		},
@@ -118,10 +116,9 @@ var Natives = []NativeFunc{
 		Name: "stack",
 
 		Signatures: []NativeSig{{
-			Args:             []*Type{TInteger},
-			FullStack:        true,
-			Handler:          stackCollectHandler,
-			CheckFullStackFn: stackCollectCheckFullStackFn, BarrierPos: 0,
+			Args:       []*Type{TInteger},
+			Impl:       Go(stackCollectHandler, FullStack(), CheckFullStack(stackCollectCheckFullStackFn)),
+			BarrierPos: 0,
 		}},
 	},
 
@@ -133,14 +130,14 @@ var Natives = []NativeFunc{
 		Name: "list",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TResourceEntity}, Handler: listEntityOptsHandler, BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Handler: listEntityHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: listAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: listAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Handler: listFilterHandler, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: listAllHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: listRecordFilterHandler, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: listRecordAllHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(listEntityOptsHandler), BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(listEntityHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(listAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(listAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(listFilterHandler), BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(listAllHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(listRecordFilterHandler), BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(listRecordAllHandler), BarrierPos: -1},
 		},
 	},
 
@@ -149,12 +146,12 @@ var Natives = []NativeFunc{
 		Name: "create",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TResourceEntity}, Handler: createEntityOptsHandler, BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Handler: createEntityHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: createAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: createAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Handler: createHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: createRecordHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(createEntityOptsHandler), BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(createEntityHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(createAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(createAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(createHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(createRecordHandler), BarrierPos: -1},
 		},
 	},
 
@@ -163,12 +160,12 @@ var Natives = []NativeFunc{
 		Name: "load",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TResourceEntity}, Handler: loadEntityOptsHandler, BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Handler: loadEntityHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: loadAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: loadAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Handler: loadHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: loadRecordHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(loadEntityOptsHandler), BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(loadEntityHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(loadAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(loadAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(loadHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(loadRecordHandler), BarrierPos: -1},
 		},
 	},
 
@@ -177,12 +174,12 @@ var Natives = []NativeFunc{
 		Name: "update",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TResourceEntity}, Handler: updateEntityOptsHandler, BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Handler: updateEntityHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: updateAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: updateAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Handler: updateHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: updateRecordHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(updateEntityOptsHandler), BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(updateEntityHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(updateAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(updateAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(updateHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(updateRecordHandler), BarrierPos: -1},
 		},
 	},
 
@@ -191,12 +188,12 @@ var Natives = []NativeFunc{
 		Name: "remove",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TMap, TResourceEntity}, Handler: removeEntityOptsHandler, BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Handler: removeEntityHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: removeAPIOptsHandler, Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: removeAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Handler: removeHandler, BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Handler: removeRecordHandler, BarrierPos: -1},
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(removeEntityOptsHandler), BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(removeEntityHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(removeAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(removeAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(removeHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(removeRecordHandler), BarrierPos: -1},
 		},
 	},
 
@@ -206,7 +203,7 @@ var Natives = []NativeFunc{
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: sizeHandler, ReturnsFn: sizeReturns, BarrierPos: -1, Returns: []*Type{TInteger}},
+			{Args: []*Type{TAny}, Impl: Go(sizeHandler), ReturnsFn: sizeReturns, BarrierPos: -1, Returns: []*Type{TInteger}},
 		},
 	},
 
@@ -220,8 +217,8 @@ var Natives = []NativeFunc{
 		Name: "flatten",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TList}, Handler: flattenDepthHandler, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: flattenDefaultHandler, BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, Impl: Go(flattenDepthHandler), BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(flattenDefaultHandler), BarrierPos: -1},
 		},
 	},
 
@@ -235,15 +232,15 @@ var Natives = []NativeFunc{
 		}},
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TFunction, TAny}, Handler: filterHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TFunction, TAny}, Impl: Go(filterHandler), ReturnsFn: filterReturnsFn, BarrierPos: -1},
 			// Lens form: `filter $.active xs` keeps the elements whose reach
 			// applies to a truthy value (the reach reads the ELEMENT, not the
 			// {key,value} wrapper the Function form receives).
-			{Args: []*Type{TReach, TAny}, Handler: filterReachHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TReach, TAny}, Impl: Go(filterReachHandler), ReturnsFn: filterReturnsFn, BarrierPos: -1},
 			// Quotation form: `filter [body] xs` runs the quoted body once
 			// per element (element pushed first, like each/fold) and keeps
 			// the elements whose body result is Boolean true.
-			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Handler: filterBodyHandler, ReturnsFn: filterReturnsFn, BarrierPos: -1},
+			{Args: []*Type{TList, TAny}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(filterBodyHandler), ReturnsFn: filterReturnsFn, BarrierPos: -1},
 		},
 	},
 
@@ -252,8 +249,8 @@ var Natives = []NativeFunc{
 		Name: "join",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TString, TList}, Handler: joinSepHandler, Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: joinDefaultHandler, Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TString, TList}, Impl: Go(joinSepHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(joinDefaultHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 
@@ -269,35 +266,35 @@ var Natives = []NativeFunc{
 		Name: "push",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny, TFlexList}, Handler: pushFlexHandler, Returns: []*Type{TFlexList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TFlexList}, Impl: Go(pushFlexHandler), Returns: []*Type{TFlexList}, BarrierPos: -1},
 			// Returns a List (was undeclared → Any, which widened a fold/scan
 			// accumulator to Any on the second round and then wrongly rejected the
 			// next `push` — `[] fold [push] xs`). Mirrors unshift's List overload.
-			{Args: []*Type{TAny, TList}, Handler: pushHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Impl: Go(pushHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "pop",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TFlexList}, Handler: popFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: popHandler, Returns: []*Type{TList, TAny}, BarrierPos: -1},
+			{Args: []*Type{TFlexList}, Impl: Go(popFlexHandler), Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(popHandler), Returns: []*Type{TList, TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "unshift",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny, TFlexList}, Handler: unshiftFlexHandler, Returns: []*Type{TFlexList}, BarrierPos: -1},
-			{Args: []*Type{TAny, TList}, Handler: unshiftHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TFlexList}, Impl: Go(unshiftFlexHandler), Returns: []*Type{TFlexList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Impl: Go(unshiftHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "shift",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TFlexList}, Handler: shiftFlexHandler, Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: shiftHandler, Returns: []*Type{TList, TAny}, BarrierPos: -1},
+			{Args: []*Type{TFlexList}, Impl: Go(shiftFlexHandler), Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(shiftHandler), Returns: []*Type{TList, TAny}, BarrierPos: -1},
 		},
 	},
 
@@ -306,7 +303,7 @@ var Natives = []NativeFunc{
 		Name: "istype",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: istypeHandler, BarrierPos: -1},
+			{Args: []*Type{TAny}, Impl: Go(istypeHandler), BarrierPos: -1},
 		},
 	},
 
@@ -322,7 +319,7 @@ var Natives = []NativeFunc{
 			{
 				Args:       []*Type{TMap, TAny, TAny, TAny},
 				NoEvalArgs: map[int]bool{2: true, 3: true},
-				Handler:    walkCoreHandler,
+				Impl:       Go(walkCoreHandler),
 				// Visit-only: walk returns its input data (arg 1) unchanged,
 				// so the result carries the data's exact provenance/type.
 				ReturnsFn: ReturnsIdentity(1), BarrierPos: -1,
@@ -330,7 +327,7 @@ var Natives = []NativeFunc{
 			{
 				Args:       []*Type{TMap, TAny, TAny},
 				NoEvalArgs: map[int]bool{2: true},
-				Handler:    walkCoreHandler,
+				Impl:       Go(walkCoreHandler),
 				ReturnsFn:  ReturnsIdentity(1), BarrierPos: -1,
 			},
 		},
@@ -354,12 +351,12 @@ func stringSliceNative() NativeFunc {
 		Name: "slice",
 
 		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TInteger, TString}, Handler: sliceStartEndHandler, Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TInteger, TList}, Handler: sliceStartEndHandler, Returns: []*Type{TList}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TString}, Handler: sliceStartHandler, Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TList}, Handler: sliceStartHandler, Returns: []*Type{TList}, BarrierPos: -1},
-			{Args: []*Type{TString}, Handler: sliceAllHandler, Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TList}, Handler: sliceAllHandler, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TInteger, TString}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TInteger, TList}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TString}, Impl: Go(sliceStartHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, Impl: Go(sliceStartHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TString}, Impl: Go(sliceAllHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(sliceAllHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	}
 }

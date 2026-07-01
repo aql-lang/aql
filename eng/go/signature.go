@@ -153,6 +153,29 @@ func normalizeSig(s *Signature) {
 			}
 		}
 	}
+	// Refresh the flat impl fields FROM Impl so external readers of those fields
+	// (tests, help/inspect) see the authoritative values whether the sig was
+	// authored with flat fields or with Impl directly — the same mirror
+	// discipline Args gets from Params above. Retired together with the fields
+	// in the final Phase-3c step, when the readers move onto the accessors.
+	switch impl := s.Impl.(type) {
+	case *GoImpl:
+		s.Handler = impl.Handler
+		s.FullStack = impl.FullStack
+		s.CheckFullStackFn = impl.CheckFullStackFn
+		s.ParkResult = impl.ParkResult
+		s.RunInCheckMode = impl.RunInCheckMode
+		s.Body = nil
+		s.FnFrame = nil
+	case *AQLImpl:
+		s.Handler = impl.dispatch
+		s.Body = impl.Body
+		s.FnFrame = impl.FnFrame
+		s.FullStack = false
+		s.CheckFullStackFn = nil
+		s.ParkResult = false
+		s.RunInCheckMode = false
+	}
 }
 
 // sigArgType returns the declared type at signature position i. It is the
