@@ -177,7 +177,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- grammar — mint a fresh builder --------------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-grammar",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{gT},
 			BarrierPos: -1,
@@ -190,7 +190,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- abnf — install an ABNF grammar (deferred to register) ---------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-abnf",
-		Signatures: []native.NativeSig{
+		Signatures: []native.Signature{
 			{
 				Args:       []*native.Type{gT, native.TString, native.TMap},
 				Returns:    []*native.Type{},
@@ -213,7 +213,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- rule — declarative grammar rule (the Map-subtype form) --------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-rule",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{gT, native.TAtom, native.TMap},
 			QuoteArgs:  map[int]bool{1: true},
 			Returns:    []*native.Type{},
@@ -228,7 +228,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- token — register a fixed lexer token --------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-token",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			// name is a token identifier like "#PL" (special chars) → a String.
 			Args:       []*native.Type{gT, native.TString, native.TString},
 			Returns:    []*native.Type{},
@@ -243,7 +243,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- matcher — register an AQL-fn-backed custom lex matcher --------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-matcher",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:          []*native.Type{gT, native.TAtom, native.TInteger, native.TFunction},
 			QuoteArgs:     map[int]bool{1: true},
 			Returns:       []*native.Type{},
@@ -259,7 +259,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- action — attach an AQL-fn-backed semantic action (mark) -------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-action",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:          []*native.Type{gT, native.TString, native.TFunction},
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
@@ -274,7 +274,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- register — finalize + register as a `parse <name>` kind -------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-register",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAtom, gT},
 			QuoteArgs:  map[int]bool{0: true},
 			Returns:    []*native.Type{},

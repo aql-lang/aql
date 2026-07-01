@@ -15,7 +15,7 @@ var booleanNatives = []NativeFunc{
 	{
 		Name: "not",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TBoolean}, Impl: Go(notHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 			{Args: []*Type{TAny}, Impl: Go(notHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
@@ -23,7 +23,7 @@ var booleanNatives = []NativeFunc{
 	{
 		Name: "and",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TBoolean, TBoolean}, Impl: Go(andHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Impl: Go(andHandler), ReturnsFn: foldOrJoin(andHandler), BarrierPos: -1},
 		},
@@ -31,7 +31,7 @@ var booleanNatives = []NativeFunc{
 	{
 		Name: "or",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TBoolean, TBoolean}, BarrierPos: 1, Impl: Go(orHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Impl: Go(orHandler), ReturnsFn: foldOrJoin(orHandler)},
 		},
@@ -39,7 +39,7 @@ var booleanNatives = []NativeFunc{
 	{
 		Name: "otherwise",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TAny, TAny}, BarrierPos: 1, Impl: Go(otherwiseHandler), ReturnsFn: foldOrJoin(otherwiseHandler)},
 		},
 	},
@@ -49,14 +49,14 @@ var booleanNatives = []NativeFunc{
 	{
 		Name: "any",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TList}, Impl: Go(anyHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "all",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TList}, Impl: Go(allHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
@@ -163,7 +163,7 @@ func boolBinaryNative(name string, fn func(a, b bool) bool) NativeFunc {
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TBoolean, TBoolean}, Impl: Go(handler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Impl: Go(handler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},

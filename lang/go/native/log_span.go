@@ -203,7 +203,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 	return []NativeFunc{
 		{
 			Name: "span-set-attr",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args:       []*Type{TAtom, TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
@@ -223,7 +223,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 		},
 		{
 			Name: "span-add-event",
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{
 					Args:       []*Type{TString, TMap},
 					Returns:    []*Type{},
@@ -244,7 +244,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 		},
 		{
 			Name: "span-record-error",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args:       []*Type{TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
@@ -264,7 +264,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 			// separator token, so a `.end` dot-access would terminate the
 			// statement instead of reading the method.
 			Name: "span-finish",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args:       []*Type{},
 				Returns:    []*Type{},
 				BarrierPos: -1,
@@ -303,7 +303,7 @@ func logSpanNative(lsr *LogSinkRegistry) NativeFunc {
 	}
 	return NativeFunc{
 		Name: "log-span",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TString, TMap},
 				Returns:    []*Type{TMap},
@@ -359,7 +359,7 @@ func withSpanReturnsFn(args []Value, r *Registry) []Value {
 func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-with-span",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TString, TList},
 			Returns:    []*Type{TAny},
 			NoEvalArgs: map[int]bool{1: true},
@@ -399,7 +399,7 @@ func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 func logEndNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-end",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TMap},
 			Returns:    []*Type{},
 			BarrierPos: -1,
@@ -434,7 +434,7 @@ func logEndNative(lsr *LogSinkRegistry) NativeFunc {
 func logCurrentSpanNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-current-span",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TAny},
 			BarrierPos: -1,
@@ -463,7 +463,7 @@ func logCurrentSpanNative(lsr *LogSinkRegistry) NativeFunc {
 func logTracesNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-traces",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,

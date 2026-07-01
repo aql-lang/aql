@@ -29,7 +29,7 @@ var errorNatives = []NativeFunc{
 		// compiles with no RET — the error propagates and the catcher wraps it.
 		CompileEffect: CompileQuoteInert | CompileDiverges,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// raise <code> <message> — the /q'd Atom position lets a
 			// bare word name the code (raise bad_input "…").
 			{
@@ -64,7 +64,7 @@ var errorNatives = []NativeFunc{
 		Name:          "get",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TAtom, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
@@ -75,7 +75,7 @@ var errorNatives = []NativeFunc{
 		Name:          "dot",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},

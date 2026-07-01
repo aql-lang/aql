@@ -89,7 +89,7 @@ func loggerNatives(st *loggerState) []NativeFunc {
 func loggerLevelNative(st *loggerState, word string, level LogLevel) NativeFunc {
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TMap},
 				Returns:    []*Type{},
@@ -117,7 +117,7 @@ func loggerLevelNative(st *loggerState, word string, level LogLevel) NativeFunc 
 func loggerChildNative(st *loggerState) NativeFunc {
 	return NativeFunc{
 		Name: "logger-child",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TMap},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,
@@ -138,7 +138,7 @@ func loggerChildNative(st *loggerState) NativeFunc {
 func logLoggerNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-logger",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TString},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,
@@ -163,7 +163,7 @@ func logLoggerNative(lsr *LogSinkRegistry) NativeFunc {
 func logWithNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-with",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TString, TMap},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,

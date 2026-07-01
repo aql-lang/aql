@@ -101,7 +101,7 @@ var mathNatives = []NativeFunc{
 	{
 		Name: "add",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TNumber, TNumber},
 				Impl: Go(numericBinaryHandler(towerOps{
@@ -136,7 +136,7 @@ var mathNatives = []NativeFunc{
 	{
 		Name: "sub",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TNumber, TNumber},
 				Impl: Go(numericBinaryHandler(towerOps{
@@ -161,7 +161,7 @@ var mathNatives = []NativeFunc{
 	{
 		Name: "mul",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
 			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
@@ -181,7 +181,7 @@ var mathNatives = []NativeFunc{
 	{
 		Name: "div",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
 			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
@@ -219,7 +219,7 @@ var mathNatives = []NativeFunc{
 	{
 		Name: "mod",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
 			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
@@ -249,7 +249,7 @@ var mathNatives = []NativeFunc{
 	{
 		Name: "pow",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
 			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
@@ -284,7 +284,7 @@ var mathNatives = []NativeFunc{
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, Inputs: func(_ []Value) []Value {
 			return []Value{}
 		}},
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TMap, TList},
 			Impl:       Go(withDecimalHandler),
 			NoEvalArgs: map[int]bool{1: true},

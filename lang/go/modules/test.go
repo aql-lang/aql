@@ -103,7 +103,7 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.Defs.Delete("export")
 	modReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "export",
-		Signatures: []native.NativeSig{
+		Signatures: []native.Signature{
 			{
 				Args: []*native.Type{native.TAtom, native.TMap},
 				Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -232,7 +232,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Callable: &native.CallableSpec{BodyPos: 1, BodyOut: 0, Inputs: func(_ []native.Value) []native.Value {
 				return []native.Value{}
 			}},
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString, native.TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -279,7 +279,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Callable: &native.CallableSpec{BodyPos: 1, BodyOut: 0, Inputs: func(_ []native.Value) []native.Value {
 				return []native.Value{}
 			}},
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString, native.TList},
 				NoEvalArgs: map[int]bool{1: true},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -315,7 +315,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// Test.results — return the accumulated TestResult Table.
 		{
 			Name: "test-results",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
 				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{activeRun(parent).asTable()}, nil
@@ -326,7 +326,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// Test.reset — clear the active TestRun.
 		{
 			Name: "test-reset",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
 				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					run := activeRun(parent)
@@ -343,7 +343,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// Test.summary — return a Record with pass/fail/total counts.
 		{
 			Name: "test-summary",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
 				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{activeRun(parent).summary()}, nil
@@ -356,7 +356,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// alternative to the verbose Test.results table.
 		{
 			Name: "test-report",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
 				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{activeRun(parent).report()}, nil
@@ -367,7 +367,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// Test.fail-count — return the failure count as an integer.
 		{
 			Name: "test-fail-count",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
 				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					run := activeRun(parent)
@@ -386,7 +386,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// handler catches the error and records the case as failed.
 		{
 			Name: "assert-equal",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny, native.TAny},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					// args[0] is the forward / first arg (expected),
@@ -407,7 +407,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "assert-not-equal",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny, native.TAny},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					if native.ValuesEqual(args[0], args[1]) {
@@ -423,7 +423,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "assert-ok",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					if !isTruthy(args[0]) {
@@ -438,7 +438,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "assert-throws",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -459,7 +459,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "assert-match",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TString},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					sub, _ := args[0].AsConcreteString()
@@ -484,7 +484,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// in the caller's scope.
 		{
 			Name: "test-invoke",
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TAtom, native.TList},
 					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -509,7 +509,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		//   imperative API.
 		{
 			Name: "test-record",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{
 					native.TString, native.TList, native.TBoolean,
 					native.TAny, native.TAny, native.TAny, native.TInteger,
@@ -555,7 +555,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		//   bodies intact for the Stage-5 reducer / Stage-3 runner.
 		{
 			Name: "test-prop",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString, native.TList, native.TList},
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
@@ -596,7 +596,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// failing input verbatim.
 		{
 			Name: "test-check-prop",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{
 					native.TString,  // name
 					native.TList,    // gen body (quoted)
@@ -621,7 +621,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// park it while iterating, instead of commenting it out (§11b.4).
 		{
 			Name: "test-skip",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{
 					native.TString,  // name
 					native.TList,    // gen body (quoted, ignored)

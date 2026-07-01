@@ -33,13 +33,13 @@ package native
 var StructModuleNatives = []NativeFunc{
 	{
 		Name: "transform",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TMap, TAny}, Impl: Go(transformHandler), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "merge",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TList, TMap}, Impl: Go(mergeListMapHandler), BarrierPos: -1},
 			{Args: []*Type{TMap, TList}, Impl: Go(mergeMapListHandler), BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Impl: Go(mergeHandler), BarrierPos: -1},
@@ -47,13 +47,13 @@ var StructModuleNatives = []NativeFunc{
 	},
 	{
 		Name: "validate",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TMap, TAny}, Impl: Go(validateHandler), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "getpath",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TAny}, Impl: Go(getpathHandler), BarrierPos: -1},
 			// Lens form: `getpath $.a.b m` reads through a Reach (honors
 			// per-segment getr strictness + computed keys, natively).
@@ -62,7 +62,7 @@ var StructModuleNatives = []NativeFunc{
 	},
 	{
 		Name: "setpath",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TAny, TAny}, Impl: Go(setpathHandler), BarrierPos: -1},
 			{Args: []*Type{TAny, TString, TAny}, Impl: Go(setpathHandler), BarrierPos: -1},
 			// Lens forms: a Reach path in the leading or middle slot
@@ -73,19 +73,19 @@ var StructModuleNatives = []NativeFunc{
 	},
 	{
 		Name: "inject",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TAny, TAny}, Impl: Go(injectHandler), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "clone",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TAny}, Impl: Go(cloneHandler), ReturnsFn: cloneReturnsFn, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "walk",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TFunction, TFunction, TAny}, Impl: Go(walkBeforeAfterHandler), BarrierPos: -1},
 			{Args: []*Type{TFunction, TAny}, Impl: Go(walkBeforeHandler), BarrierPos: -1},
 			{Args: []*Type{TAny}, Impl: Go(walkHandler), BarrierPos: -1},
@@ -93,19 +93,19 @@ var StructModuleNatives = []NativeFunc{
 	},
 	{
 		Name: "selector",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TMap, TAny}, Impl: Go(selectorHandler), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "items",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TAny}, Impl: Go(itemsHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "jsonify",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TMap, TAny}, Impl: Go(jsonifyFlagsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TAny}, Impl: Go(jsonifyDefaultHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
@@ -117,7 +117,7 @@ var StructModuleNatives = []NativeFunc{
 		// the jsonic superset so strict JSON parses too; malformed
 		// input raises [aql/parse_error]. See design/PARSING.10.md §2.
 		Name: "parse",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString}, Impl: Go(parseTextHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
@@ -127,14 +127,14 @@ var StructModuleNatives = []NativeFunc{
 		// explicit class type or a tor union of classes ($class then
 		// selects the member). See reify.go + design/CLASS-OBJECT.10.md §3e.
 		Name: "reify",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TAny, TMap}, Impl: Go(reifyHandler), BarrierPos: -1},
 			{Args: []*Type{TAny, TString}, Impl: Go(reifyHandler), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "nodify",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TAny}, Impl: Go(nodifyHandler), BarrierPos: -1},
 		},
 	},

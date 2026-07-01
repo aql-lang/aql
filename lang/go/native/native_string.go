@@ -106,7 +106,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "concat",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TMap, TList}, Impl: Go(concatOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TList}, Impl: Go(concatHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
@@ -114,7 +114,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "split",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TString, TMap}, Impl: Go(splitOptsHandler), Returns: []*Type{TList}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Impl: Go(splitHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
@@ -122,7 +122,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "trim",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TMap}, Impl: Go(trimOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(trimHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TAtom, TMap}, Impl: Go(trimOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
@@ -132,7 +132,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "contains",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TString, TMap}, Impl: Go(containsOptsHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Impl: Go(containsHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
@@ -149,7 +149,7 @@ var StringModuleNatives = []NativeFunc{
 		// form (for each needle, its index in the haystack) is a separate
 		// word, ArrayUtil.indices, in the aql:array-util module — see
 		// native_array.go and ADR-001.
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TString, TMap}, Impl: Go(indexOfOptsHandler), Returns: []*Type{TInteger}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Impl: Go(indexOfHandler), Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
@@ -157,7 +157,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "replace",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TString, TString, TMap}, Impl: Go(replaceOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString, TString, TString}, Impl: Go(replaceHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
@@ -165,7 +165,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "changecase",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TMap}, Impl: Go(changeCaseOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(changeCaseHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TAtom, TMap}, Impl: Go(changeCaseOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
@@ -175,7 +175,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "normalize",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TMap}, Impl: Go(normalizeOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(normalizeHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
@@ -184,7 +184,7 @@ var StringModuleNatives = []NativeFunc{
 		Name: "repeat",
 
 		// Subject-last: `repeat count input` (count then the string).
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TInteger, TString, TMap}, Impl: Go(repeatOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TString}, Impl: Go(repeatHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
@@ -192,7 +192,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "pad",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TInteger, TMap, TString}, Impl: Go(padOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TString}, Impl: Go(padHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TAny}, Impl: Go(padWidthHandler), BarrierPos: -1},
@@ -202,7 +202,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "match",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TString, TMap}, Impl: Go(matchOptsHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 			{Args: []*Type{TString, TString}, Impl: Go(matchHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 		},
@@ -210,7 +210,7 @@ var StringModuleNatives = []NativeFunc{
 	{
 		Name: "escape",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TMap}, Impl: Go(escapeOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(escapeHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
@@ -239,7 +239,7 @@ func unaryStringNative(name string, fn func(string) string) NativeFunc {
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString}, Impl: Go(handler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TAtom}, Impl: Go(handler), Returns: []*Type{TString}, BarrierPos: -1},
 		},

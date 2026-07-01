@@ -34,7 +34,7 @@ var QueryNatives = []NativeFunc{
 		// does not consume a builder from the stack, it creates one.
 		Name:          "select",
 		CompileEffect: CompileFallbackBody,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(selectColsHandler),
@@ -47,7 +47,7 @@ var QueryNatives = []NativeFunc{
 		// name form: `from people` — name forward (quoted), builder
 		// from the stack. value form: `from <table-value>`.
 		Name: "from",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAtom, TList},
 				QuoteArgs:  map[int]bool{0: true},
@@ -66,7 +66,7 @@ var QueryNatives = []NativeFunc{
 	{
 		Name:          "where",
 		CompileEffect: CompileFallbackBody,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(queryWhereHandler),
@@ -77,7 +77,7 @@ var QueryNatives = []NativeFunc{
 	{
 		Name:          "order",
 		CompileEffect: CompileFallbackBody,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(queryOrderHandler),
@@ -88,7 +88,7 @@ var QueryNatives = []NativeFunc{
 	{
 		Name:          "group",
 		CompileEffect: CompileFallbackBody,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(queryGroupHandler),
@@ -99,7 +99,7 @@ var QueryNatives = []NativeFunc{
 	{
 		Name:          "having",
 		CompileEffect: CompileFallbackBody,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(queryHavingHandler),
@@ -109,7 +109,7 @@ var QueryNatives = []NativeFunc{
 	},
 	{
 		Name: "limit",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList},
 			Impl:       Go(queryLimitHandler),
 			Returns:    []*Type{TList},
@@ -118,7 +118,7 @@ var QueryNatives = []NativeFunc{
 	},
 	{
 		Name: "offset",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList},
 			Impl:       Go(queryOffsetHandler),
 			Returns:    []*Type{TList},
@@ -127,7 +127,7 @@ var QueryNatives = []NativeFunc{
 	},
 	{
 		Name: "distinct",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			Impl:       Go(queryDistinctHandler),
 			Returns:    []*Type{TList},
@@ -142,7 +142,7 @@ var QueryNatives = []NativeFunc{
 	queryJoinNative("crossjoin", "CROSS JOIN"),
 	{
 		Name: "on",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(queryOnHandler),
@@ -152,7 +152,7 @@ var QueryNatives = []NativeFunc{
 	},
 	{
 		Name: "using",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(queryUsingHandler),
@@ -360,7 +360,7 @@ func queryJoinNative(name, joinType string) NativeFunc {
 	}
 	return NativeFunc{
 		Name: name,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom, TList},
 			QuoteArgs:  map[int]bool{0: true},
 			Impl:       Go(handler),
@@ -431,7 +431,7 @@ func querySetOpNative(name, op string) NativeFunc {
 	}
 	return NativeFunc{
 		Name: name,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList},
 			Impl:       Go(handler),
 			Returns:    []*Type{TList},

@@ -73,11 +73,10 @@ type (
 	ModuleDesc          = eng.ModuleDesc
 	MoveInfo            = eng.MoveInfo
 	NativeFunc          = eng.NativeFunc
-	NativeSig           = eng.Signature // native authoring sig == the unified dispatch Signature
-	SigImpl             = eng.SigImpl   // sealed run-impl sum (GoImpl | AQLImpl)
-	GoImpl              = eng.GoImpl    // native / internal Go-handler implementation
-	AQLImpl             = eng.AQLImpl   // AQL body implementation (module ref / lambda / installed fn)
-	GoOpt               = eng.GoOpt     // optional dispatch knob for Go(...)
+	SigImpl             = eng.SigImpl // sealed run-impl sum (GoImpl | AQLImpl)
+	GoImpl              = eng.GoImpl  // native / internal Go-handler implementation
+	AQLImpl             = eng.AQLImpl // AQL body implementation (module ref / lambda / installed fn)
+	GoOpt               = eng.GoOpt   // optional dispatch knob for Go(...)
 	CompileEffect       = eng.CompileEffect
 	CallableSpec        = eng.CallableSpec
 	ObjectInstanceInfo  = eng.ObjectInstanceInfo
@@ -213,7 +212,7 @@ const (
 	DepLTE = eng.DepLTE
 
 	// Compile-effect classifications (eng.CompileEffect) for the bytecode
-	// recorder — declared on a NativeSig instead of a name-keyed eng table.
+	// recorder — declared on a Signature instead of a name-keyed eng table.
 	CompileDefault      = eng.CompileDefault
 	CompileReadsFn      = eng.CompileReadsFn
 	CompileStoresFn     = eng.CompileStoresFn

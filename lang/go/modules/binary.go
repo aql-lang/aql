@@ -209,7 +209,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "popcount",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
@@ -224,7 +224,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "clz",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
@@ -239,7 +239,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "ctz",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
@@ -254,7 +254,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "parity",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
@@ -269,7 +269,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "bitlen",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
@@ -286,7 +286,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "mask",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -307,7 +307,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "reverse",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
@@ -322,7 +322,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "swap",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				x, err := intArg(args[0])
@@ -339,7 +339,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "rotl",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -360,7 +360,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "rotr",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -381,7 +381,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "test",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -404,7 +404,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "set",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -427,7 +427,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "clear",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -450,7 +450,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "toggle",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -479,7 +479,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "extract",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				lo, err := intArg(args[0])
@@ -519,7 +519,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "insert",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger, native.TInteger, native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				lo, err := intArg(args[0])
@@ -564,7 +564,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "ord",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TString},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
@@ -584,7 +584,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "chr",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				n, err := intArg(args[0])
@@ -605,7 +605,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "fnv32",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TString},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
@@ -624,7 +624,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "fnv64",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TString},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
@@ -644,7 +644,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "base64-encode",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TString},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
@@ -661,7 +661,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "base64-decode",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TString},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
@@ -682,7 +682,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "hex-encode",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TString},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()
@@ -699,7 +699,7 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "hex-decode",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TString},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 				s, err := args[0].AsConcreteString()

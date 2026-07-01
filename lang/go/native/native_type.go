@@ -42,7 +42,7 @@ var typeNatives = []NativeFunc{
 		// (a following `def` / `behave` / `;`) comes next.
 		Name: "refine",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TNode},
 				Impl:       Go(refineHandler, RunInCheck()),
@@ -68,7 +68,7 @@ var typeNatives = []NativeFunc{
 		// `def Bar refine Foo {…}`. See design/CLASS-OBJECT.10.md.
 		Name: "class",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TMap},
 			Impl:       Go(classHandler, RunInCheck()),
 			Returns:    []*Type{TType},
@@ -83,7 +83,7 @@ var typeNatives = []NativeFunc{
 		// loudly checks) conformance. See design/SURFACES.10.md.
 		Name: "surface",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TMap},
 			Impl:       Go(surfaceHandler, RunInCheck()),
 			Returns:    []*Type{TType},
@@ -98,7 +98,7 @@ var typeNatives = []NativeFunc{
 		// (surface_unsatisfied lists every gap), idempotent.
 		Name: "exposes",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
 			Impl:       Go(exposesHandler, RunInCheck()),
 			Returns:    []*Type{},
@@ -113,7 +113,7 @@ var typeNatives = []NativeFunc{
 		// See design/CLASS-OBJECT.10.md §2.3.
 		Name: "object",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TMap},
 			Impl:    Go(objectSugarHandler),
 			Returns: []*Type{TObject}, BarrierPos: -1,
@@ -125,7 +125,7 @@ var typeNatives = []NativeFunc{
 		// nothing — the indexed sibling of Object.
 		Name: "array",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TList},
 			Impl:    Go(arraySugarHandler),
 			Returns: []*Type{TArray}, BarrierPos: -1,
@@ -134,7 +134,7 @@ var typeNatives = []NativeFunc{
 	{
 		Name: "pathof",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:     []*Type{TAny},
 			TypeArgs: map[int]bool{0: true},
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -146,7 +146,7 @@ var typeNatives = []NativeFunc{
 	{
 		Name: "enum",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(enumHandler),
@@ -158,7 +158,7 @@ var typeNatives = []NativeFunc{
 		Name:          "typeof",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TAny},
 			Impl:      Go(typeofHandler),
 			Returns:   []*Type{TType},
@@ -170,7 +170,7 @@ var typeNatives = []NativeFunc{
 		Name:          "is",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
 			Impl:       Go(isHandler),
@@ -181,7 +181,7 @@ var typeNatives = []NativeFunc{
 		Name:          "teq",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
 			Impl:          Go(teqHandler),
@@ -193,7 +193,7 @@ var typeNatives = []NativeFunc{
 		Name:          "tis",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
 			Impl:          Go(tisHandler),
@@ -204,7 +204,7 @@ var typeNatives = []NativeFunc{
 	{
 		Name: "guard",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TBoolean},
 			BarrierPos: 1,
 			Impl:       Go(guardHandler),
@@ -213,7 +213,7 @@ var typeNatives = []NativeFunc{
 	{
 		Name: "base",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TAny},
 			Impl:      Go(baseHandler),
 			ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
@@ -227,7 +227,7 @@ var typeNatives = []NativeFunc{
 		Name:          "tor",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
 			Impl:          Go(eng.TorHandler),
@@ -239,7 +239,7 @@ var typeNatives = []NativeFunc{
 		Name:          "tand",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
 			Impl:          Go(eng.TandHandler),
@@ -254,7 +254,7 @@ var typeNatives = []NativeFunc{
 		Name:          "tnot",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny},
 			BarrierPos:    -1,
 			Impl:          Go(eng.TnotHandler),
@@ -265,14 +265,14 @@ var typeNatives = []NativeFunc{
 	{
 		Name: "tany",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TList}, Impl: Go(tanyHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "tall",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TList}, Impl: Go(tallHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
@@ -280,7 +280,7 @@ var typeNatives = []NativeFunc{
 		Name:          "convert",
 		CompileEffect: CompileModuleFold,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// Ideal → Map / List (per-type IdealConverter; base Ideal → {} / [])
 			{
 				Args:     []*Type{TNode, TIdeal},
@@ -820,7 +820,7 @@ func tisNode(v Value) *Type {
 var TPartialModuleNatives = []NativeFunc{
 	{
 		Name: "tpartial",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny},
 			Impl:    Go(tpartialHandler),
 			Returns: []*Type{TType}, BarrierPos: -1,

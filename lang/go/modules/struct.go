@@ -49,7 +49,7 @@ func BuildStructModule(parent *native.Registry) (native.ModuleDesc, error) {
 // makeModuleFnDef builds a FnDef value wrapping a moved-out native word. Each
 // signature delegates via a trivial body [Word(name)], which execFnDefLiteral
 // short-circuits to a direct dispatch of the inner native in the
-// sub-registry. The wrapper FnSigs mirror the inner native's NativeSigs
+// sub-registry. The wrapper FnSigs mirror the inner native's Signatures
 // exactly — same arg types, returns, NoEvalArgs, and BarrierPos — so dispatch
 // behaviour is identical to the former core word (dot-access dispatch keys
 // off the inner native's signatures; see the "Module FnDef Wrappers" note in

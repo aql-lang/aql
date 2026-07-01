@@ -20,7 +20,7 @@ func TestFormArgsRawCapture(t *testing.T) {
 	var captured []Value
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "__formecho",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny, TAny, TAny},
 			FormArgs:      map[int]bool{0: true, 1: true, 2: true, 3: true},
 			NoEvalArgs:    map[int]bool{0: true, 1: true, 2: true, 3: true},

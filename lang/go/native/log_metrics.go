@@ -125,7 +125,7 @@ func instrumentNative(word string, st *instrumentState) NativeFunc {
 	}
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TMap},
 				Returns:    []*Type{},
@@ -160,7 +160,7 @@ func instrumentCtor(word, kind string, lsr *LogSinkRegistry) NativeFunc {
 	}
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TString},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,
@@ -197,7 +197,7 @@ func logHistogramNative(lsr *LogSinkRegistry) NativeFunc {
 func logMeasurementsNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-measurements",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,

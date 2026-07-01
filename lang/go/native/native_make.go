@@ -24,7 +24,7 @@ var makeNatives = []NativeFunc{
 		Name:          "make",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// make is an IMPURE constructor: each call mints a fresh
 			// instance at run time (NewValueRaw), so its check-mode result
 			// carrier must also be fresh-identity per call — ReturnsIdentity

@@ -81,7 +81,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// caps the number of matches (default all).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-re",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap, native.TString},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
@@ -98,7 +98,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// compiles the pattern at the call site and splices a run-re call.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-run-re",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{TMiniCompiled, native.TMap, native.TString},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
@@ -118,7 +118,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// hanging).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-bf",
-		Signatures: []native.NativeSig{
+		Signatures: []native.Signature{
 			{
 				Args:       []*native.Type{native.TString, native.TMap, native.TString},
 				Returns:    []*native.Type{native.TString},
@@ -146,7 +146,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// (whole-subject), with `**`/`*?` for a literal `*`/`?`. See gex.go.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-gex",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
 			Returns:    []*native.Type{native.TAny},
 			BarrierPos: -1,
@@ -164,7 +164,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// coercion follows AQL's integer/float domain rules. See minilang_math.go.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-m",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TNumber},
 			BarrierPos: -1,
@@ -180,7 +180,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// the source are ignored, so `+hb/de ad be ef/` groups for readability.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-hb",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TBytes},
 			BarrierPos: -1,
@@ -196,7 +196,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// and `_` are ignored, so `+bb/01001100 11110000/` groups for clarity.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-bb",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TBytes},
 			BarrierPos: -1,
@@ -212,7 +212,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// return the matched nodes as a List. See minilang_query.go.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-jp",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
@@ -228,7 +228,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// (the same data shapes as jp) and return its output stream as a List.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-jq",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
@@ -247,7 +247,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// See minilang_xpath.go.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-xp",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap, native.TXml},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
@@ -272,7 +272,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	miniRegisterIdents := map[string]registerIdent{}
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:          []*native.Type{native.TAtom, native.TFunction},
 			QuoteArgs:     map[int]bool{0: true},
 			Returns:       []*native.Type{},
@@ -294,7 +294,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// MiniLang.kinds → List of the registered kind atoms (lang_ stripped).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-kinds",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
@@ -311,7 +311,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// See design/MINILANG.5.md §13.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register-compiled",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:          []*native.Type{native.TAtom, native.TFunction},
 			QuoteArgs:     map[int]bool{0: true},
 			Returns:       []*native.Type{},
@@ -481,7 +481,7 @@ func installHostMiniLang(exports *native.OrderedMap, subReg *native.Registry, sp
 	inner := "minilang-host-" + spec.Name
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: inner,
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       args,
 			Returns:    spec.Returns,
 			BarrierPos: -1,

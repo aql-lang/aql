@@ -31,7 +31,7 @@ func dashboardNatives() []native.NativeFunc {
 		{
 			// Render a one-shot snapshot of a list of widget maps.
 			Name: "debug-dashboard",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
@@ -49,7 +49,7 @@ func dashboardNatives() []native.NativeFunc {
 		{
 			// Construct a widget map from a title and a sample source string.
 			Name: "debug-widget",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				// Canonical forward form: `Debug.widget TITLE SAMPLE-SOURCE`.
 				Args:       []*native.Type{native.TString, native.TString},
 				Returns:    []*native.Type{native.TMap},

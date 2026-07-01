@@ -89,13 +89,13 @@ func asPatrun(v Value) (*patrunMatcher, bool) {
 var patrunNatives = []NativeFunc{
 	{
 		Name: "patrun",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{}, Impl: Go(patrunNewHandler), Returns: []*Type{TPatrun}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "add",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// add PATTERN VALUE PATRUN — register a rule (in place). The VALUE
 			// may be a fn (the dispatch-table pattern: `add {cmd:"sum"} (=>…)
 			// pm`), which the handler STASHES in the patrun and never invokes on
@@ -107,7 +107,7 @@ var patrunNatives = []NativeFunc{
 	},
 	{
 		Name: "find",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// find SUBJECT PATRUN {opts} — opts: {exact:Boolean}.
 			{Args: []*Type{TMap, TPatrun, TMap}, Impl: Go(patrunFindHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			// find SUBJECT PATRUN
@@ -116,14 +116,14 @@ var patrunNatives = []NativeFunc{
 	},
 	{
 		Name: "remove",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// remove PATTERN PATRUN — delete a rule by its pattern (in place).
 			{Args: []*Type{TMap, TPatrun}, Impl: Go(patrunRemoveHandler), Returns: []*Type{}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "patterns",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// patterns PATRUN — the registered rules as [{pattern value} …].
 			{Args: []*Type{TPatrun}, Impl: Go(patrunPatternsHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},

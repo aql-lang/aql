@@ -30,7 +30,7 @@ func stepNatives() []native.NativeFunc {
 		{
 			// Run a quoted body under interactive single-step control.
 			Name: "debug-step",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TAny},
 				NoEvalArgs: map[int]bool{0: true},
@@ -47,7 +47,7 @@ func stepNatives() []native.NativeFunc {
 		{
 			// A breakpoint: pause here when a controller is attached; else a no-op.
 			Name: debugBreakWord,
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{},
 				BarrierPos: -1,
@@ -60,7 +60,7 @@ func stepNatives() []native.NativeFunc {
 		{
 			// A conditional breakpoint: pause only when the condition is true.
 			Name: "debug-break-when",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TBoolean},
 				Returns:    []*native.Type{},
 				BarrierPos: -1,
@@ -79,7 +79,7 @@ func stepNatives() []native.NativeFunc {
 		{
 			// Parse a source string and step it (the REPL/CLI entry point).
 			Name: "debug-run-stepped",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,

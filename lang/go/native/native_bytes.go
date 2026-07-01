@@ -203,7 +203,7 @@ func binaryInstanceLayout(v Value) (Value, bool) {
 var bytesNatives = []NativeFunc{
 	{
 		Name: "convert",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// String <-> Bytes (UTF-8), List <-> Bytes (0-255 ints), and
 			// Bytes -> Bytes (compact copy). Target type is the literal arg0.
 			{Args: []*Type{TBytes, TString}, TypeArgs: map[int]bool{0: true}, Impl: Go(convertStringToBytes), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
@@ -215,7 +215,7 @@ var bytesNatives = []NativeFunc{
 	},
 	{
 		Name: "slice",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// `slice start end b` (end-exclusive, zero-copy view); data last.
 			{Args: []*Type{TInteger, TInteger, TBytes}, Impl: Go(bytesSliceStartEnd), Returns: []*Type{TBytes}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TBytes}, Impl: Go(bytesSliceStart), Returns: []*Type{TBytes}, BarrierPos: -1},
@@ -224,7 +224,7 @@ var bytesNatives = []NativeFunc{
 	},
 	{
 		Name: "add",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// `a add b` concatenates two byte strings (mirrors String add).
 			{Args: []*Type{TBytes, TBytes}, Impl: Go(addBytesHandler), Returns: []*Type{TBytes}, BarrierPos: -1},
 		},
@@ -235,7 +235,7 @@ var bytesNatives = []NativeFunc{
 		// see installIdeals' BinarySpec constructor. The result is a Binary
 		// INSTANCE, field-accessible like any object instance.
 		Name: "convert",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// `convert Bytes <Binary>` serialises a Binary instance to wire
 			// bytes via its spec's layout (the Binary→Bytes direction). Binary
 			// instances are sealed class instances, so dispatch is on TClass;
@@ -245,7 +245,7 @@ var bytesNatives = []NativeFunc{
 	},
 	{
 		Name: "unpack",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// `unpack <BinarySpec> b` decodes Bytes `b` into a Binary instance.
 			// A spec is a sealed class, so dispatch is on TClass; the handler
 			// verifies the class carries a layout (errors otherwise).
@@ -254,7 +254,7 @@ var bytesNatives = []NativeFunc{
 	},
 	{
 		Name: "unpack-prefix",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// `unpack-prefix <BinarySpec> b` -> {ok: <Binary> rest: <Bytes>} | {need n}.
 			{Args: []*Type{TClass, TBytes}, TypeArgs: map[int]bool{0: true}, Impl: Go(unpackPrefixFrameHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 		},

@@ -19,7 +19,7 @@ import (
 var fileInfoNatives = []NativeFunc{
 	{
 		Name: "__folder",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{},
 			Impl:    Go(srcFolderHandler),
 			Returns: []*Type{TPath}, BarrierPos: 0,
@@ -27,7 +27,7 @@ var fileInfoNatives = []NativeFunc{
 	},
 	{
 		Name: "__file",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{},
 			Impl:    Go(srcFileHandler),
 			Returns: []*Type{TString}, BarrierPos: 0,

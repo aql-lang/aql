@@ -24,7 +24,7 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "band",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
 			Impl:    Go(bandHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -33,7 +33,7 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "bor",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
 			Impl:    Go(borHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -42,7 +42,7 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "bxor",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
 			Impl:    Go(bxorHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -51,7 +51,7 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "bnot",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger},
 			Impl:    Go(bnotHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -60,7 +60,7 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "bsl",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
 			Impl:    Go(bslHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -69,7 +69,7 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "bsr",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
 			Impl:    Go(bsrHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -78,7 +78,7 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "busr",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
 			Impl:    Go(busrHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,

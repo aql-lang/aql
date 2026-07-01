@@ -21,7 +21,7 @@ import "strings"
 var xmlNatives = []NativeFunc{
 	{
 		Name: "xml-elem",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TXml},
 			Impl:    Go(elemHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
@@ -29,7 +29,7 @@ var xmlNatives = []NativeFunc{
 	},
 	{
 		Name: "xml-text",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TXml},
 			Impl:    Go(textHandler),
 			Returns: []*Type{TString}, BarrierPos: -1,
@@ -37,7 +37,7 @@ var xmlNatives = []NativeFunc{
 	},
 	{
 		Name: "xml-attr",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:    []*Type{TString, TXml},
 				Impl:    Go(xmlAttrHandler),

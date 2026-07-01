@@ -81,7 +81,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 	return []native.NativeFunc{
 		{
 			Name: "vm-run",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
@@ -100,7 +100,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "vm-run-sandbox",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
@@ -119,7 +119,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "vm-run-compute",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
@@ -146,7 +146,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// design/PARSING.10.md §3. Parse errors raise
 			// [aql/parse_error] with the same message the CLI prints.
 			Name: "vm-parse",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
@@ -168,7 +168,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		{
 			Name: "vm-run-with",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TMap},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
@@ -192,7 +192,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// (a syntax error rides back as one error-severity diagnostic), so
 			// callers get one uniform shape to inspect.
 			Name: "vm-check",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
@@ -217,7 +217,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// poly / dynamic / meta). Like vm-check it never raises for
 			// uncompilable or malformed input — refusal is data, not an error.
 			Name: "vm-compile",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()

@@ -54,7 +54,7 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 	withSeedSubReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "rand-with-seed",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TInteger},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
@@ -170,7 +170,7 @@ func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 	}
 
 	exports := native.NewOrderedMap()
-	// Wrapper FnSig Params match the inner NativeSig.Args order
+	// Wrapper FnSig Params match the inner Signature.Args order
 	// (top-first per SIG-ORDER-REFACTOR.10.md). Aligned with the
 	// FORWARD canonical surface — sig[0] is the first arg written
 	// after the word: `Rand.int LO HI`, `Rand.string CHARSET LEN`.
@@ -249,7 +249,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 	return []native.NativeFunc{
 		{
 			Name: "rand-int",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				// Canonical surface (forward form): `Rand.int LO HI`.
 				// sig[0]=lo, sig[1]=hi. Returns a uniform integer in
 				// the HALF-OPEN range [lo, hi) — inclusive lower,
@@ -281,7 +281,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 		},
 		{
 			Name: "rand-bool",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TBoolean},
 				BarrierPos: -1,
@@ -295,7 +295,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 		},
 		{
 			Name: "rand-float",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				// Returns a uniform decimal in [0.0, 1.0).
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TFloat},
@@ -310,7 +310,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 		},
 		{
 			Name: "rand-string",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				// Canonical surface (forward form):
 				// `Rand.string CHARSET LENGTH`. sig[0]=charset (String),
 				// sig[1]=length (Integer).
@@ -361,7 +361,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 			Callable: &native.CallableSpec{BodyPos: 0, BodyOut: 1, BodyResultTop: true, Inputs: func(_ []native.Value) []native.Value {
 				return []native.Value{}
 			}},
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList, native.TInteger},
 				Returns:    []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
@@ -421,7 +421,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 			// has the same keys with each body's top-of-stack as the
 			// corresponding value.
 			Name: "rand-map-from",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:          []*native.Type{native.TMap},
 				Returns:       []*native.Type{native.TMap},
 				NoEvalMapArgs: map[int]bool{0: true},
@@ -456,7 +456,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 		},
 		{
 			Name: "rand-one-of",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,

@@ -212,7 +212,7 @@ func (lsr *LogSinkRegistry) registerFnSink(name string, min LogLevel, fn Value) 
 func logRegisterNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-register",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TFunction, TAtom, TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,

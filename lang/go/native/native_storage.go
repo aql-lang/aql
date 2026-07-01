@@ -25,7 +25,7 @@ var storageNatives = []NativeFunc{
 	{
 		Name: "set",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// Array (indexed by integer)
 			{
 				Args:    []*Type{TInteger, TAny, TArray},
@@ -161,7 +161,7 @@ var storageNatives = []NativeFunc{
 	{
 		Name: "context",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{},
 			Impl:    Go(contextHandler),
 			Returns: []*Type{TStore}, BarrierPos: -1,
@@ -176,8 +176,8 @@ var storageNatives = []NativeFunc{
 // bare WORD is evaluated but an already-evaluated Atom key still matches).
 // Keeping ONE
 // source for both words prevents the two from drifting apart.
-func accessorGetSignatures() []NativeSig {
-	return []NativeSig{
+func accessorGetSignatures() []Signature {
+	return []Signature{
 		// [Key | Node] — covers Map, List, Options, record-shape. The
 		// atom / string key sigs narrow a concrete map FIELD read via
 		// getNodeReturns; the integer-key sig stays Any because an
@@ -236,8 +236,8 @@ func accessorGetSignatures() []NativeSig {
 // no overload, and errors, which is the split's intent. `dot`/`dotr` keep the
 // QuoteArgs versions (literal bare-word keys). Sigs are copied so the shared
 // accessorGetSignatures slice (used by `dot`) keeps its QuoteArgs.
-func stripQuoteArgs(sigs []NativeSig) []NativeSig {
-	out := make([]NativeSig, len(sigs))
+func stripQuoteArgs(sigs []Signature) []Signature {
+	out := make([]Signature, len(sigs))
 	for i, s := range sigs {
 		s.QuoteArgs = nil
 		out[i] = s

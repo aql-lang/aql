@@ -165,7 +165,7 @@ var MathNatives = func() []native.NativeFunc {
 		{
 			Name: "abs",
 
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TInteger},
 					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -197,7 +197,7 @@ var MathNatives = func() []native.NativeFunc {
 		{
 			Name: "negate",
 
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TInteger},
 					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -226,7 +226,7 @@ var MathNatives = func() []native.NativeFunc {
 		{
 			Name: "sign",
 
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TInteger},
 					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
@@ -396,7 +396,7 @@ var MathNatives = func() []native.NativeFunc {
 	out = append(out, native.NativeFunc{
 		Name: "scalb",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TNumber, native.TNumber},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, _ := native.AsNumber(args[0])
@@ -413,7 +413,7 @@ var MathNatives = func() []native.NativeFunc {
 	out = append(out, native.NativeFunc{
 		Name: "fma",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TNumber, native.TNumber, native.TNumber},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a, _ := native.AsNumber(args[0])
@@ -429,7 +429,7 @@ var MathNatives = func() []native.NativeFunc {
 	out = append(out, native.NativeFunc{
 		Name: "math-pi",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{},
 			Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				return []native.Value{native.NewFloat(math.Pi)}, nil
@@ -440,7 +440,7 @@ var MathNatives = func() []native.NativeFunc {
 	out = append(out, native.NativeFunc{
 		Name: "math-e",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{},
 			Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				return []native.Value{native.NewFloat(math.E)}, nil
@@ -457,7 +457,7 @@ var MathNatives = func() []native.NativeFunc {
 // and BinaryNumOpNative) into one NativeFunc, preserving signature
 // order: integer overloads first, then number overloads.
 func mergeBinaryNumNatives(name string, intNative, numNative native.NativeFunc) native.NativeFunc {
-	sigs := make([]native.NativeSig, 0, len(intNative.Signatures)+len(numNative.Signatures))
+	sigs := make([]native.Signature, 0, len(intNative.Signatures)+len(numNative.Signatures))
 	sigs = append(sigs, intNative.Signatures...)
 	sigs = append(sigs, numNative.Signatures...)
 	return native.NativeFunc{
@@ -473,7 +473,7 @@ func ceilFloorNative(name string, fn func(float64) float64) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TFloat},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				d, err := args[0].AsConcreteFloat()
@@ -494,7 +494,7 @@ func classifierNative(name string, pred func(float64) bool) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TNumber},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				f, _ := native.AsNumber(args[0])
@@ -518,7 +518,7 @@ func swapBinaryFloatNative(name string, fn func(a, b float64) float64) native.Na
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{
+		Signatures: []native.Signature{
 			{Args: []*native.Type{native.TNumber, native.TNumber}, Impl: native.Go(handler), Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
 		},
 	}
@@ -536,7 +536,7 @@ func atan2Native() native.NativeFunc {
 	return native.NativeFunc{
 		Name: "atan2",
 
-		Signatures: []native.NativeSig{
+		Signatures: []native.Signature{
 			{Args: []*native.Type{native.TFloat, native.TFloat}, Impl: native.Go(numHandler), Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
 			{Args: []*native.Type{native.TNumber, native.TFloat}, Impl: native.Go(numHandler), Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
 			{Args: []*native.Type{native.TFloat, native.TNumber}, Impl: native.Go(numHandler), Returns: []*native.Type{native.TFloat}, BarrierPos: -1},
@@ -565,7 +565,7 @@ func hypotNative() native.NativeFunc {
 	base := native.BinaryNumOpNative("hypot", func(a, b float64) (float64, error) {
 		return math.Hypot(a, b), nil
 	})
-	intSig := native.NativeSig{
+	intSig := native.Signature{
 		Args: []*native.Type{native.TInteger, native.TInteger},
 		Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 			a0, err := args[0].AsConcreteInteger()
@@ -583,6 +583,6 @@ func hypotNative() native.NativeFunc {
 	return native.NativeFunc{
 		Name: base.Name,
 
-		Signatures: append(append([]native.NativeSig{}, base.Signatures...), intSig),
+		Signatures: append(append([]native.Signature{}, base.Signatures...), intSig),
 	}
 }

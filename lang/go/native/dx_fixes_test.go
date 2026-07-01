@@ -135,7 +135,7 @@ func TestDXTopLevelRecover(t *testing.T) {
 	registerIOWords(r)
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "dx-boom",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{},
 			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				var p *int

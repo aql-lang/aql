@@ -33,7 +33,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "lt",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("lt", eng.DepLT),
 			{
 				Args:      []*Type{TAny, TAny},
@@ -46,7 +46,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "gt",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("gt", eng.DepGT),
 			{
 				Args:      []*Type{TAny, TAny},
@@ -59,7 +59,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "lte",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("lte", eng.DepLTE),
 			{
 				Args:      []*Type{TAny, TAny},
@@ -72,7 +72,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "gte",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("gte", eng.DepGTE),
 			{
 				Args:      []*Type{TAny, TAny},
@@ -89,7 +89,7 @@ var comparisonNatives = []NativeFunc{
 		// [aql/incomparable]; use tcmp for a cross-type total order.
 		Name: "cmp",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TAny, TAny},
 			Impl:      Go(eng.CmpHandler),
 			Returns:   []*Type{TInteger},
@@ -105,7 +105,7 @@ var comparisonNatives = []NativeFunc{
 		Name:          "tcmp",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(eng.TcmpHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -115,7 +115,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "between",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TScalar, TScalar, TScalar},
 			TypeArgs:   map[int]bool{2: true},
 			Impl:       Go(eng.BetweenHandler, RunInCheck()),
@@ -126,7 +126,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "eq",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(eng.EqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
@@ -135,7 +135,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "neq",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(eng.NeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
@@ -144,7 +144,7 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "deq",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(eng.DeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,

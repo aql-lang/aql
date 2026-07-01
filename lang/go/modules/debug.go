@@ -76,7 +76,7 @@ func debugNatives() []native.NativeFunc {
 		// ── (A) Printing & tracing ────────────────────────────────────
 		{
 			Name: "debug-tap",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
@@ -94,7 +94,7 @@ func debugNatives() []native.NativeFunc {
 			// `(compute) "label" Debug.label` taps a value already on the
 			// stack — the whole point of a labelled tap.
 			Name: "debug-label",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString, native.TAny},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
@@ -112,7 +112,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Like tap, but prints the type alongside the value.
 			Name: "debug-dump",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
@@ -130,7 +130,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// `cond msg Debug.assert` — raise assertion_failure when cond is false.
 			Name: "debug-assert",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TBoolean, native.TString},
 				Returns:    []*native.Type{},
 				BarrierPos: -1,
@@ -153,7 +153,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// A typed hole: always raises not_implemented with the message.
 			Name: "debug-todo",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TNever},
 				BarrierPos: -1,
@@ -171,7 +171,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Parse source to its token/value list without running it.
 			Name: "debug-parse",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
@@ -196,7 +196,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// The distinct word names a quoted body references.
 			Name: "debug-deps",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
@@ -223,7 +223,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// The full `describe` text for a word, as a String.
 			Name: "debug-explain",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
@@ -247,7 +247,7 @@ func debugNatives() []native.NativeFunc {
 			// registered (e.g. moved to an unimported module) and would
 			// fail with undefined_word.
 			Name: "debug-words",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
@@ -259,7 +259,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Current def-bound names mapped to their active top binding.
 			Name: "debug-defs",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
@@ -279,7 +279,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// The native modules available to import.
 			Name: "debug-modules",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
@@ -299,7 +299,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Estimated retained byte size of a value (deep walk).
 			Name: "debug-sizeof",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TInteger},
 				BarrierPos: -1,
@@ -311,7 +311,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Structural census of a value: counts by kind, depth, node count.
 			Name: "debug-shape",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TAny},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
@@ -334,7 +334,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Engine step count for a body (deterministic, clock-free).
 			Name: "debug-steps",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TInteger},
 				NoEvalArgs: map[int]bool{0: true},
@@ -352,7 +352,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Run once, return {result, elapsed-ms, steps}.
 			Name: "debug-time",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TMap},
 				NoEvalArgs: map[int]bool{0: true},
@@ -377,7 +377,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// `body n Debug.bench` — run n times, return timing stats.
 			Name: "debug-bench",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList, native.TInteger},
 				Returns:    []*native.Type{native.TMap},
 				NoEvalArgs: map[int]bool{0: true},
@@ -425,7 +425,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Run a body with step-by-step tracing printed to output.
 			Name: "debug-trace",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TAny},
 				NoEvalArgs: map[int]bool{0: true},
@@ -447,7 +447,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Per-word step-count profile of a body, costliest first.
 			Name: "debug-profile",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
@@ -483,7 +483,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// The signatures of a word, as structured data.
 			Name: "debug-sig",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
@@ -511,7 +511,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// The quoted body of an AQL-defined word; `native/q` for a host word.
 			Name: "debug-body",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
@@ -539,7 +539,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Print a name's current binding and return it (None if unbound).
 			Name: "debug-watch",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
@@ -560,7 +560,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Compile a quoted body to its StackForm disassembly (a String).
 			Name: "debug-disasm",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TString},
 				NoEvalArgs: map[int]bool{0: true},
@@ -587,7 +587,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// A snapshot of the current data stack at the call site.
 			Name: "debug-stack",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
@@ -605,7 +605,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Go-runtime heap stats as a map.
 			Name: "debug-heap",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
@@ -619,7 +619,7 @@ func debugNatives() []native.NativeFunc {
 		{
 			// Force a GC and report before/after heap deltas.
 			Name: "debug-gc",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,

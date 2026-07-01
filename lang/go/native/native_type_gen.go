@@ -27,7 +27,7 @@ var genNatives = []NativeFunc{
 	{
 		Name: "gen",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(genHandler, RunInCheck()),
@@ -42,7 +42,7 @@ var genNatives = []NativeFunc{
 		// stack.
 		Name: "extends",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			// Slot 0 (the bound) is an ORDINARY TAny slot: TAny admits
 			// both type literals (rejectsTypeLiteral carves out TAny)
 			// and payload-carrying bounds (DepScalar, surface, class,
@@ -62,7 +62,7 @@ var genNatives = []NativeFunc{
 		// chains off the GenParam `extends` produced.
 		Name: "default",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				// Chains off the GenParam `extends` produced. Slot 0
 				// (the default value) is ordinary TAny — see extends.
@@ -85,7 +85,7 @@ var genNatives = []NativeFunc{
 		// collected forward, the schema comes from the stack.
 		Name: "of",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:     []*Type{TList, TAny},
 			TypeArgs: map[int]bool{1: true},
 			Impl:     Go(ofHandler, RunInCheck()),

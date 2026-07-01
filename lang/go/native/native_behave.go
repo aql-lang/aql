@@ -31,7 +31,7 @@ import (
 var behaveNative = NativeFunc{
 	Name: "behave",
 
-	Signatures: []NativeSig{
+	Signatures: []Signature{
 		{
 			Args:      []*Type{TAtom, TFunction},
 			QuoteArgs: map[int]bool{0: true},

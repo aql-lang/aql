@@ -23,7 +23,7 @@ package native
 var NetModuleNatives = []NativeFunc{
 	{
 		Name: "fetch",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TString, TMap}, Impl: Go(fetchStringMapHandler), BarrierPos: -1},
 			{Args: []*Type{TMap}, Impl: Go(fetchMapHandler), BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(fetchStringHandler), BarrierPos: -1},
@@ -31,13 +31,13 @@ var NetModuleNatives = []NativeFunc{
 	},
 	{
 		Name: "prepare",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "direct",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
 	},

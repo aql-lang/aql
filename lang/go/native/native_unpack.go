@@ -47,7 +47,7 @@ import (
 var unpackNatives = []NativeFunc{
 	{
 		Name: "unpack",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// `unpack [names] map`: explicit names list. NoEvalArgs[0]
 			// keeps the bare words un-evaluated so they survive as names.
 			{

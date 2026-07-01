@@ -620,7 +620,7 @@ func asConcreteOrderedMap(v Value) *OrderedMap {
 func levelNative(lsr *LogSinkRegistry, word string, level LogLevel) NativeFunc {
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TMap},
 				Returns:    []*Type{},
@@ -648,7 +648,7 @@ func levelNative(lsr *LogSinkRegistry, word string, level LogLevel) NativeFunc {
 func logGenericNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-log",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAtom, TAny, TMap},
 				Returns:    []*Type{},
@@ -696,7 +696,7 @@ func levelArg(r *Registry, v Value, word string) (LogLevel, error) {
 func logSetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-set-level",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
@@ -715,7 +715,7 @@ func logSetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 func logGetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-get-level",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TAtom},
 			BarrierPos: -1,
@@ -729,7 +729,7 @@ func logGetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 func logEnabledNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-enabled",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{TBoolean},
 			BarrierPos: -1,
@@ -756,7 +756,7 @@ func logEnabledNative(lsr *LogSinkRegistry) NativeFunc {
 func logSetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-set-format",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
@@ -778,7 +778,7 @@ func logSetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 func logGetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-get-format",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TAtom},
 			BarrierPos: -1,
@@ -792,7 +792,7 @@ func logGetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 func logAddSinkNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-add-sink",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
@@ -817,7 +817,7 @@ func logAddSinkNative(lsr *LogSinkRegistry) NativeFunc {
 func logRemoveSinkNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-remove-sink",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
@@ -853,7 +853,7 @@ func checkLogInstall(r *Registry, word, sink string) error {
 func logSinksNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-sinks",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
@@ -872,7 +872,7 @@ func logSinksNative(lsr *LogSinkRegistry) NativeFunc {
 func logDumpNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-dump",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
@@ -891,7 +891,7 @@ func logDumpNative(lsr *LogSinkRegistry) NativeFunc {
 func logClearNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-clear",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{},
 			BarrierPos: -1,

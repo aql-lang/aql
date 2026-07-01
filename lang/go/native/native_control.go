@@ -16,7 +16,7 @@ var controlNatives = []NativeFunc{
 			return []Value{}
 		}},
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
@@ -38,7 +38,7 @@ var controlNatives = []NativeFunc{
 	{
 		Name: "if",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
@@ -88,7 +88,7 @@ var controlNatives = []NativeFunc{
 		Name:          "case",
 		CompileEffect: CompileFallbackBody,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// One Any/Any sig; the handler disambiguates the two call
 			// shapes (forward `case v [clauses]` vs stack-value
 			// `v case [clauses]`) by which arg is the clause list —
@@ -110,7 +110,7 @@ var controlNatives = []NativeFunc{
 		// newtype (`Pos`) matches structurally exactly as case does — which
 		// the `is` word (nominal) would not. Not user-facing.
 		Name: "__casematch",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
 			Impl:       Go(caseMatchHandler),
 			Returns:    []*Type{TBoolean},
@@ -120,7 +120,7 @@ var controlNatives = []NativeFunc{
 	{
 		Name: "for",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
@@ -141,7 +141,7 @@ var controlNatives = []NativeFunc{
 	// loop's flow-control resolver.
 	{
 		Name: "break",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				r.FlowCtrl = FlowBreak
 				return nil, nil
@@ -151,7 +151,7 @@ var controlNatives = []NativeFunc{
 	},
 	{
 		Name: "continue",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				r.FlowCtrl = FlowContinue
 				return nil, nil
@@ -180,7 +180,7 @@ var controlNatives = []NativeFunc{
 		// the pass-through sig even when the runtime value is an Error. One sig
 		// with a runtime IsError branch keeps dispatch mono (so the handler body
 		// compiles as a closure) and correct on both paths.
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},

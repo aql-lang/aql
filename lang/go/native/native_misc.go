@@ -97,7 +97,7 @@ func init() {
 		{
 			Name: "help",
 
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{Args: []*Type{}, Impl: Go(helpOverviewHandler), BarrierPos: -1},
 			},
 		},
@@ -106,7 +106,7 @@ func init() {
 		{
 			Name: "describe",
 
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{Args: []*Type{TString}, Impl: Go(describeWordHandler), BarrierPos: -1},
 				{Args: []*Type{TAtom}, Impl: Go(describeWordHandler), BarrierPos: -1},
 				{
@@ -123,7 +123,7 @@ func init() {
 		{
 			Name: "referent",
 
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{Args: []*Type{TAtom}, Impl: Go(referentHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
@@ -132,7 +132,7 @@ func init() {
 		{
 			Name: "module",
 
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
 				Impl:       Go(moduleHandler, RunInCheck()),
@@ -143,7 +143,7 @@ func init() {
 		{
 			Name: "import",
 
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{
 					Args:       []*Type{TModuleInst},
 					Impl:       Go(importAllHandler, RunInCheck()),
@@ -223,7 +223,7 @@ func init() {
 		{
 			Name: "export",
 
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{
 					Args:       []*Type{TAtom, TMap},
 					Impl:       Go(exportNoopHandler, RunInCheck()),

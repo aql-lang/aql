@@ -54,7 +54,7 @@ var accessorNatives = []NativeFunc{
 		// over the baked container + key — the VM runs the same pure handler.
 		CompileEffect: CompileModuleFold | CompileQuoteInert,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// [Key | Node] — Map, List, Options, record-shape
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
@@ -84,8 +84,8 @@ var accessorNatives = []NativeFunc{
 // literal field — the `!.` sugar); `getr` uses the stripQuoteArgs variant
 // (same overloads, QuoteArgs cleared: an evaluated Atom key still matches; a
 // bare WORD is evaluated). One source keeps the two words from drifting.
-func accessorGetrSignatures() []NativeSig {
-	return []NativeSig{
+func accessorGetrSignatures() []Signature {
+	return []Signature{
 		// [Key | Node] — key forward, container from stack
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMapHandler)},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler)},

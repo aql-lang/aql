@@ -53,7 +53,7 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// [value:Any opts:Map …] and return a value.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-register",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:          []*native.Type{native.TAtom, native.TFunction},
 			QuoteArgs:     map[int]bool{0: true},
 			Returns:       []*native.Type{},
@@ -74,7 +74,7 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- out-of-band: kinds -------------------------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-kinds",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
@@ -87,7 +87,7 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- emit_auto: the natural-format dispatcher ---------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-auto",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAny, native.TMap},
 			Returns:    []*native.Type{native.TString},
 			BarrierPos: -1,
@@ -211,7 +211,7 @@ func installHostEmitter(exports *native.OrderedMap, subReg *native.Registry, spe
 	inner := "emitlang-host-" + spec.Name
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: inner,
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAny, native.TMap},
 			Returns:    returns,
 			BarrierPos: -1,

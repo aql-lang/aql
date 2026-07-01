@@ -38,7 +38,7 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
 			Name: name,
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args: []*Type{},
 				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					return []Value{newStreamAtom(name, streamKind)}, nil
@@ -50,7 +50,7 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 	return []NativeFunc{
 		{
 			Name: "printstr",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args:    []*Type{TAny},
 				Impl:    Go(eng.PrintstrHandler),
 				Returns: []*Type{}, BarrierPos: -1,
@@ -58,7 +58,7 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 		},
 		{
 			Name: "read",
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{Args: []*Type{TPath, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TPath}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TString, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
@@ -75,7 +75,7 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 			// type (a file path, or the Stream handle for a standard stream),
 			// so the result can be threaded straight into read.
 			Name: "write",
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{Args: []*Type{TPath, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPath}, BarrierPos: -1},
 				{Args: []*Type{TPath, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPath}, BarrierPos: -1},
 				{Args: []*Type{TPath, TString}, Impl: Go(writeHandler), Returns: []*Type{TPath}, BarrierPos: -1},
@@ -95,7 +95,7 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 		streamHandle("stderr"),
 		{
 			Name: "trace",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args:    []*Type{TList},
 				Impl:    Go(eng.TraceHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
@@ -103,7 +103,7 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 		},
 		{
 			Name: "folder",
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{Args: []*Type{TOptions, TPath}, Impl: Go(folderOptsHandler), Returns: []*Type{TList}, BarrierPos: -1},
 				{Args: []*Type{TPath}, Impl: Go(folderHandler), Returns: []*Type{TList}, BarrierPos: -1},
 			},

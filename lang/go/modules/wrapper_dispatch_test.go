@@ -86,7 +86,7 @@ func TestModuleWrapperRebindPreservesArgHandling(t *testing.T) {
 	subReg, _ := native.DefaultRegistry()
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "qop",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAtom, native.TList},
 			QuoteArgs:  map[int]bool{0: true},
 			NoEvalArgs: map[int]bool{1: true},
@@ -149,7 +149,7 @@ func buildProbeRegistry(innerBarrier int) *native.Registry {
 	subReg, _ := native.DefaultRegistry()
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "op",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TAny, native.TAny},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a, _ := args[0].AsConcreteInteger()

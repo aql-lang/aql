@@ -57,7 +57,7 @@ func reportNatives() []native.NativeFunc {
 	return []native.NativeFunc{
 		{
 			Name: "report-value",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(native.FormatForPrint(args[0]))}, nil
@@ -67,7 +67,7 @@ func reportNatives() []native.NativeFunc {
 		},
 		{
 			Name: "report-record",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(formatRecord(args[0]))}, nil
@@ -77,7 +77,7 @@ func reportNatives() []native.NativeFunc {
 		},
 		{
 			Name: "report-table",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(formatTableValue(args[0]))}, nil
@@ -87,7 +87,7 @@ func reportNatives() []native.NativeFunc {
 		},
 		{
 			Name: "report-list",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(formatListValue(args[0]))}, nil

@@ -38,7 +38,7 @@ var inspectNatives = []NativeFunc{
 	{
 		Name: "inspect",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// /q captures the upcoming Word as an Atom; the same sig
 			// also matches an explicit Atom on the stack (per
 			// signature.go §1.5 — Atom/q subsumes Atom).
@@ -60,7 +60,7 @@ var inspectNatives = []NativeFunc{
 	{
 		Name: "canon",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TAny}, Impl: Go(canonHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},

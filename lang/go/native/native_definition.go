@@ -17,7 +17,7 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "def",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				// Typed-name binding: def name:*Type body. Sorts first
 				// because TMap is more specific than TString / TAtom
@@ -49,7 +49,7 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "undef",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TString},
 				Impl:       Go(undefHandler, RunInCheck()),
@@ -92,7 +92,7 @@ var definitionNatives = []NativeFunc{
 		// the property the compiled `each`/`fold`/… var-body closure needs. Reuses
 		// undefHandler so the unbind behaviour is byte-identical to `undef name`.
 		Name: "__varundef",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TString},
 				Impl:       Go(undefHandler, RunInCheck()),
@@ -119,7 +119,7 @@ var definitionNatives = []NativeFunc{
 		// recorder cannot lower marks the program uncompilable through the same
 		// path it does anywhere else, so a refusing body REFUSES rather than
 		// producing a silent empty unit.
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(varHandler, RunInCheck()),
@@ -129,7 +129,7 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "fn",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(fnHandler, RunInCheck()),
@@ -153,7 +153,7 @@ var definitionNatives = []NativeFunc{
 		// paren body reference params at all: `x:Integer => (x mul 2)`.
 		Name: "afn",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
 			NoEvalArgs: map[int]bool{0: true, 1: true},
 			RawParens:  map[int]bool{0: true},
@@ -165,7 +165,7 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "fnsig",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(fnsigHandler, RunInCheck()),
@@ -180,7 +180,7 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "args",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Impl:    Go(argsHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
@@ -188,7 +188,7 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "__pa",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Impl:    Go(popArgsHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},

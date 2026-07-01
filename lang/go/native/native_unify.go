@@ -16,7 +16,7 @@ var unifyNatives = []NativeFunc{
 	{
 		Name: "unify",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
 			Impl:    Go(unifyHandler),
 			Returns: []*Type{TAny, TBoolean}, BarrierPos: -1,

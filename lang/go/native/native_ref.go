@@ -30,7 +30,7 @@ var refNatives = []NativeFunc{
 	{
 		Name: "ref",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			// /q on the name slot lets the parser capture the upcoming
 			// Word as an Atom rather than executing it. `ref add` then
 			// arrives here with args[0] = Atom(add).
@@ -53,7 +53,7 @@ var refNatives = []NativeFunc{
 		// collection would force callers to put fn-args after the fn,
 		// which fights AQL's left-to-right stack flow.
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TFunction},
 				Impl: Go(applyHandler),
@@ -82,7 +82,7 @@ var refNatives = []NativeFunc{
 		// Reach with `person` as the receiver (inert data — a bound lens).
 		// Apply it / read it later with `apply` or `getpath`. For an
 		// already-bound reach it swaps the receiver. Forward-eligible.
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TReach, TAny},
 			Impl:    Go(rebindHandler),
 			Returns: []*Type{TReach}, BarrierPos: -1,
@@ -101,7 +101,7 @@ var refNatives = []NativeFunc{
 		//                     function-form companion of the `/u` suffix).
 		// When the next token is a Word, matchSignature prefers the /q
 		// Atom sig; a parenthesised Function value takes the [Function] sig.
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TFunction},
 				Impl:       Go(usurpHandler, RunInCheck()),
@@ -122,7 +122,7 @@ var refNatives = []NativeFunc{
 		// The function-form companion of the `/s` modifier: wrap a function
 		// so it dispatches in STACK form. Like `usurp`, returns a new
 		// Function and accepts a value ([Function]) or a name ([Atom] /q).
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TFunction},
 				Impl:       Go(stackArgsHandler, RunInCheck()),
@@ -145,7 +145,7 @@ var refNatives = []NativeFunc{
 		// new Function. Like usurp, accepts a function value or a name:
 		//   - [Integer, Function]  `force-arity 2 (f/r)`
 		//   - [Integer, Atom] (/q) `force-arity 2 f`
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TInteger, TFunction},
 				Impl:       Go(forceArityHandler, RunInCheck()),
@@ -165,7 +165,7 @@ var refNatives = []NativeFunc{
 		Name: "forward-args",
 		// The function-form companion of the `/f` modifier: wrap a function
 		// so it dispatches in FORWARD form.
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TFunction},
 				Impl:       Go(forwardArgsHandler, RunInCheck()),

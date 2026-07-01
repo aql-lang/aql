@@ -35,7 +35,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "iota",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TInteger},
 			Impl:      Go(iotaHandler),
 			ReturnsFn: returnsIotaLen, BarrierPos: -1,
@@ -48,7 +48,7 @@ var allArrayNatives = []NativeFunc{
 		// 2-arg sig (step defaults to 1) handles `range start stop`.
 		Name: "range",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:      []*Type{TInteger, TInteger, TInteger},
 				Impl:      Go(rangeThreeHandler),
@@ -64,7 +64,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "shape",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList},
 			Impl:      Go(shapeHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
@@ -73,7 +73,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "rank",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TList},
 			Impl:    Go(rankHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -82,7 +82,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "reshape",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList, TList},
 			Impl:      Go(reshapeHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
@@ -96,7 +96,7 @@ var allArrayNatives = []NativeFunc{
 		// native_string.go.
 		Name: "transpose",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList},
 			Impl:      Go(arrTransposeHandler),
 			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
@@ -105,7 +105,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "reverse",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList},
 			Impl:      Go(reverseHandler),
 			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
@@ -114,7 +114,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "take",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TInteger, TList},
 			Impl:      Go(takeHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
@@ -123,7 +123,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "shed",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TInteger, TList},
 			Impl:      Go(shedHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
@@ -133,7 +133,7 @@ var allArrayNatives = []NativeFunc{
 		Name:          "where",
 		CompileEffect: CompileFallbackBody,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList},
 			Impl:      Go(whereHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
@@ -142,7 +142,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "unique",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList},
 			Impl:      Go(uniqueHandler),
 			ReturnsFn: ReturnsPreserveListAt(0), BarrierPos: -1,
@@ -151,7 +151,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "indices",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList, TList},
 			Impl:      Go(indicesHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
@@ -160,7 +160,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "grade",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList},
 			Impl:      Go(gradeHandler),
 			ReturnsFn: returnsCarrierTypedListInteger, BarrierPos: -1,
@@ -169,7 +169,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "at",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList, TList},
 			Impl:      Go(atHandler),
 			ReturnsFn: returnsAtChecked, BarrierPos: -1,
@@ -184,7 +184,7 @@ var allArrayNatives = []NativeFunc{
 		// take/concat/shed composition.
 		Name: "insert-at",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TAny, TList},
 			Impl:    Go(insertAtHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
@@ -196,7 +196,7 @@ var allArrayNatives = []NativeFunc{
 		// `[1 2 3] remove-at 1`.
 		Name: "remove-at",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TInteger, TList},
 			Impl:      Go(removeAtHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
@@ -205,7 +205,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "sortby",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:      []*Type{TList, TList},
 				Impl:      Go(sortbyHandler),
@@ -223,7 +223,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "member",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList, TList},
 			Impl:      Go(memberHandler),
 			ReturnsFn: returnsCarrierTypedListBoolean, BarrierPos: -1,
@@ -233,7 +233,7 @@ var allArrayNatives = []NativeFunc{
 		Name:          "group",
 		CompileEffect: CompileFallbackBody,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:    []*Type{TList, TList},
 				Impl:    Go(groupTwoHandler),
@@ -249,7 +249,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "replicate",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList, TList},
 			Impl:      Go(replicateHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
@@ -258,7 +258,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "expand",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList, TList},
 			Impl:      Go(expandHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
@@ -267,7 +267,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "window",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TInteger, TList},
 			Impl:      Go(windowHandler),
 			ReturnsFn: windowReturnsFn, BarrierPos: -1,
@@ -276,7 +276,7 @@ var allArrayNatives = []NativeFunc{
 	{
 		Name: "pairs",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList},
 			Impl:      Go(pairsHandler),
 			ReturnsFn: pairsReturnsFn, BarrierPos: -1,
@@ -295,7 +295,7 @@ var allArrayNatives = []NativeFunc{
 			return []Value{NewElementCarrier(DataListElemTypeFromValue(a[1]))}
 		}},
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
@@ -326,7 +326,7 @@ var allArrayNatives = []NativeFunc{
 		Name:          "for-each",
 		CompileEffect: CompileFallbackBody,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
@@ -354,7 +354,7 @@ var allArrayNatives = []NativeFunc{
 			return []Value{NewElementCarrier(elem), NewElementCarrier(elem)}
 		}},
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				// With initial value: init fold body data → result.
 				// Sig is body-first (matching each/scan) so the swap form
@@ -396,7 +396,7 @@ var allArrayNatives = []NativeFunc{
 			return []Value{NewElementCarrier(e), NewElementCarrier(e)}
 		}},
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{0: true},
@@ -423,7 +423,7 @@ var allArrayNatives = []NativeFunc{
 			return []Value{NewElementCarrier(le), NewElementCarrier(re)}
 		}},
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(outerHandler),
@@ -434,7 +434,7 @@ var allArrayNatives = []NativeFunc{
 		Name:          "inner",
 		CompileEffect: CompileFallbackBody,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList, TList, TList, TList},
 			NoEvalArgs: map[int]bool{0: true, 1: true},
 			Impl:       Go(innerHandler),
@@ -446,7 +446,7 @@ var allArrayNatives = []NativeFunc{
 		// aql:array module word like where/replicate.
 		Name: "compress",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TList, TList},
 			Impl:      Go(compressHandler),
 			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
@@ -458,7 +458,7 @@ var allArrayNatives = []NativeFunc{
 		// via NoEvalArgs.
 		Name: "eachrank",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList, TList},
 			NoEvalArgs: map[int]bool{1: true},
 			Impl:       Go(eachrankHandler),
@@ -471,7 +471,7 @@ var allArrayNatives = []NativeFunc{
 		// NoEvalArgs.
 		Name: "foldaxis",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TInteger, TList, TList},
 			NoEvalArgs: map[int]bool{1: true},
 			Impl:       Go(foldaxisHandler),

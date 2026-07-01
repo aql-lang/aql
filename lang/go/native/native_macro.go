@@ -22,7 +22,7 @@ var macroNatives = []NativeFunc{
 		// Common-Lisp temporary generator. Capture-free temporaries for
 		// hand-written `word`/`__SP` macros today, and the manual-hygiene
 		// tool before automatic hygiene (Phase 4) lands. Zero args.
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{},
 			Impl: Go(gensymHandler, RunInCheck()),
 			// Pure mint (a per-registry counter → a fresh `tmp$G<n>` atom), so
@@ -42,7 +42,7 @@ var macroNatives = []NativeFunc{
 		// runs at expansion time, the returned template spliced into the call
 		// site. NoEvalArgs{0}: the [[params][body]] list must not be evaluated
 		// (the template body must not run at definition time).
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
 			Impl:       Go(macroHandler, RunInCheck()),
@@ -58,7 +58,7 @@ var macroNatives = []NativeFunc{
 		Name: "unquote",
 		// Template escape — recognized by the expander. Stepped outside an
 		// expansion it is a misuse and errors.
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny},
 			Impl:    Go(unquoteOutsideMacroHandler),
 			Returns: []*Type{TAny}, BarrierPos: -1,
@@ -66,7 +66,7 @@ var macroNatives = []NativeFunc{
 	},
 	{
 		Name: "splice",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny},
 			Impl:    Go(spliceOutsideMacroHandler),
 			Returns: []*Type{TAny}, BarrierPos: -1,
@@ -78,7 +78,7 @@ var macroNatives = []NativeFunc{
 		// (a List) WITHOUT splicing/running it. Introspection for testing and
 		// debugging. The macro call is captured raw (FormArgs{0}); see
 		// macroexpandHandler.
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:     []*Type{TAny},
 			FormArgs: map[int]bool{0: true},
 			Impl:     Go(macroexpandHandler),
@@ -105,7 +105,7 @@ var macroNatives = []NativeFunc{
 		// from the collected values whether or not they are concrete), so
 		// the checker steps the expansion and validates the call against
 		// the kind's standard signature.
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:      []*Type{TAtom, TString, TMap},
 				QuoteArgs: map[int]bool{0: true},
@@ -144,7 +144,7 @@ var macroNatives = []NativeFunc{
 		// works). The AUTO family declares slot 0 as TAny (no quote): it matches
 		// when the leading operand is a literal map/list/scalar (data-first,
 		// no kind). The handler then classifies an Atom slot 0 as kind-or-data.
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:      []*Type{TAtom, TAny, TAny},
 				QuoteArgs: map[int]bool{0: true},
@@ -191,7 +191,7 @@ var macroNatives = []NativeFunc{
 		// against the imported `ParseLang` namespace at expansion time —
 		// unknown kinds fail loudly here. A parser returns Any (an AST, a
 		// transduction, …, per the language).
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:      []*Type{TAtom, TMap, TAny},
 				QuoteArgs: map[int]bool{0: true},

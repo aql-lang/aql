@@ -31,7 +31,7 @@ import (
 var sortNative = NativeFunc{
 	Name: "sort",
 
-	Signatures: []NativeSig{
+	Signatures: []Signature{
 		{
 			Args:    []*Type{TList},
 			Impl:    Go(sortListHandler),

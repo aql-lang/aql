@@ -126,7 +126,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.RegisterNativeFunc(NativeFunc{
 		Name: "export",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TAtom, TMap},
 				Impl: Go(func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

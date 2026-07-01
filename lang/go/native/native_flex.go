@@ -30,7 +30,7 @@ var flexNatives = []NativeFunc{
 	{
 		Name: "flex",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TNode},
 			Impl:      Go(flexHandler),
 			Returns:   []*Type{TNode},
@@ -40,7 +40,7 @@ var flexNatives = []NativeFunc{
 	{
 		Name: "node",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TNode},
 			Impl:      Go(nodeHandler),
 			Returns:   []*Type{TNode},
@@ -50,7 +50,7 @@ var flexNatives = []NativeFunc{
 	{
 		Name: "append",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// List source: concatenate its elements. More specific
 			// than the Any sig, so it wins whenever the argument is a
 			// list (including another FlexList, which conforms to List).
