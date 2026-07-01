@@ -1,5 +1,12 @@
 # AQL Behavior Mechanism — Commentary and Comparison
 
+> **Syntax note (2026-07):** the `refine Object {…}` examples and the
+> "Object types" dispatch discussion below predate the Object/Array
+> removal. The open `Object` type is gone; user records are now `class`
+> types (`def Person class {name:String age:Integer}`). The behavior /
+> dispatch mechanism described is unchanged — read `refine Object {…}`
+> as `class {…}` and "Object types" as "class types".
+
 ## What it is
 
 AQL associates per-type capabilities — `compare`, `canon`, `nodify` —

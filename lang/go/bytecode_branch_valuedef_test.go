@@ -21,12 +21,12 @@ func TestBranchValueDefPromote(t *testing.T) {
 	strict := []struct{ name, src, want string }{
 		// the bucket clamp shape: an if-result value-def read by a get AND a set key.
 		{"if-result value-def read twice (bucket clamp)",
-			`def bcount (make Array [0 0 0])
+			`def bcount (flex [0 0 0])
 def n 3
 def raw 5
 def bi (if (raw gte n) [(n sub 1)] [raw])
-bcount set bi ((bcount get bi) add 1) end
-(convert List bcount)`, "[[0 0 1]]"},
+def _ (bcount set bi ((bcount get bi) add 1)) end
+(node bcount)`, "[[0 0 1]]"},
 		// an if-result read across a get and an arithmetic use (two reads, no set).
 		{"if-result value-def in two arithmetic reads",
 			`def k (if (3 gt 1) [2] [0])
@@ -35,15 +35,15 @@ bcount set bi ((bcount get bi) add 1) end
 		{"if-result value-def read twice inside an each body",
 			`import module [
   def srt fn [[xs:List] [List] [
-    def bcount (make Array (iota 3 each [drop 0]))
+    def bcount (flex (iota 3 each [drop 0]))
     def n 3
     def _bc (iota 4 each [ var [[i]
       def raw (i add 1)
       def bi (if (raw gte n) [(n sub 1)] [raw])
-      bcount set bi ((bcount get bi) add 1) end
+      def _ (bcount set bi ((bcount get bi) add 1)) end
       0
     ] ])
-    (convert List bcount)
+    (node bcount)
   ]]
   export "M" {srt: srt/r}
 ] end ([0 0 0 0] M.srt)`, "[[0 1 3]]"},

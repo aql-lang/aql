@@ -291,6 +291,51 @@ func markRefineDefUncompilable(r *Registry, name string, body Value) {
 	}
 }
 
+// resolveResourceTypeInfo returns the ResourceTypeInfo a typed-def
+// annotation denotes, and true, for a Resource/Entity constraint. A
+// word-resolved annotation already carries the ResourceTypeInfo body;
+// a bare Resource-family type literal (the shape `def e:Entity {…}`
+// produces, since builtin type names parse to literals in data context)
+// is resolved from the type binding by its lattice-leaf name.
+func resolveResourceTypeInfo(r *Registry, constraint Value) (ResourceTypeInfo, bool) {
+	if IsResourceType(constraint) {
+		info, _ := AsResourceType(constraint)
+		return info, true
+	}
+	// A bare Resource-family type literal (what `def e:Entity {…}`
+	// produces — builtin type names parse to literals in data context)
+	// carries no ResourceTypeInfo; resolve it from the def binding by
+	// the rendered type name. The lookup itself is the guard: only the
+	// Resource/Entity def bindings resolve to a ResourceType, so this
+	// never hijacks a non-Resource annotation.
+	if r != nil && IsBareTypeNode(constraint) {
+		if info, ok := lookupResourceTypeByName(r, constraint.String()); ok {
+			return info, true
+		}
+	}
+	return ResourceTypeInfo{}, false
+}
+
+// lookupResourceTypeByName resolves a Resource/Entity ResourceTypeInfo
+// from a type name. Resource and Entity are installed as def bindings
+// (installResourceTypes), so — unlike a user class, which is a type
+// binding reachable via TopTypeBody — their schema is found through the
+// def store.
+func lookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool) {
+	if r == nil || name == "" {
+		return ResourceTypeInfo{}, false
+	}
+	v, ok := r.Defs.Top(name)
+	if !ok {
+		return ResourceTypeInfo{}, false
+	}
+	info, err := AsResourceType(v)
+	if err != nil {
+		return ResourceTypeInfo{}, false
+	}
+	return info, true
+}
+
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
@@ -420,8 +465,8 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// Accepts both a raw Map (built via make) and an already-typed
 	// ObjectInstance (passed through). Other body shapes fall
 	// through to Unify and either succeed or surface a type error.
-	if IsObjectType(constraint) {
-		info, _ := AsObjectType(constraint)
+	if IsClassType(constraint) {
+		info, _ := AsClassType(constraint)
 		if body.Parent.Equal(TMap) {
 			// `def b:Type {map}` is `def b (make Type map)`. In emit mode record
 			// the make event the direct MakeObject call would skip, so the bound
@@ -431,17 +476,49 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos); ok {
 				return installAndRecordDef(r, name, carrier, args[0].Pos)
 			}
-			result, err := eng.MakeObject(info, body, nil, r)
+			result, err := eng.MakeObject(info, body, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
 			return installAndRecordDef(r, name, result[0], args[0].Pos)
 		}
-		if IsObjectInstance(body) {
-			oi, _ := AsObjectInstance(body)
+		if IsClassInstance(body) {
+			oi, _ := AsClassInstance(body)
 			// Accept if the instance's nominal type matches the
 			// declared one (covers `def x:Person make Person {…}`).
 			if oi.TypeRef != nil && oi.TypeRef.ID == info.ID {
+				return installAndRecordDef(r, name, body, args[0].Pos)
+			}
+		}
+	}
+	// Resource/Entity annotation: `def e:Entity {map}` is `def e (make
+	// Entity map)` — the same construction path a class annotation takes,
+	// routed through MakeResource (Resource/Entity have their own flat
+	// instance struct). make's `[Ideal Map]` sig serves both kinds, so
+	// the emit-mode RecordTypedDefMake carrier is recorded identically.
+	// Unlike user class names (which parse as Words and resolve to their
+	// ClassTypeInfo), the builtin Resource/Entity names parse to BARE
+	// type literals in data context, so resolveResourceTypeInfo also
+	// looks the schema up by name when the constraint carries no body.
+	if resInfo, isRes := resolveResourceTypeInfo(r, constraint); isRes {
+		if body.Parent.Equal(TMap) {
+			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos); ok {
+				return installAndRecordDef(r, name, carrier, args[0].Pos)
+			}
+			provided, merr := AsMutableMap(body)
+			if merr != nil {
+				return nil, fmt.Errorf("def %s: %w", name, merr)
+			}
+			result, err := MakeResource(resInfo, provided, r)
+			if err != nil {
+				return nil, fmt.Errorf("def %s: %w", name, err)
+			}
+			return installAndRecordDef(r, name, result[0], args[0].Pos)
+		}
+		if IsResourceInstance(body) {
+			ri, _ := AsResourceInstance(body)
+			// Accept a pre-made instance whose nominal type matches.
+			if ri.TypeRef != nil && ri.TypeRef.ID == resInfo.ID {
 				return installAndRecordDef(r, name, body, args[0].Pos)
 			}
 		}

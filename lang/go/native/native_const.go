@@ -47,13 +47,9 @@ func constHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			fmt.Sprintf("const: needs a concrete value, got %s", v.String()), "const")
 	}
 	switch v.Data.(type) {
-	case ObjectInstanceInfo:
+	case ClassInstanceInfo, ResourceInstanceInfo:
 		return nil, r.AqlErrorHint("const_error",
 			"const: a mutable instance cannot pin a value", "const",
-			"const exemplars must be immutable — scalars, Lists, or Maps")
-	case *eng.ArrayInstanceInfo:
-		return nil, r.AqlErrorHint("const_error",
-			"const: a mutable Array cannot pin a value", "const",
 			"const exemplars must be immutable — scalars, Lists, or Maps")
 	case *eng.StoreInstanceInfo:
 		return nil, r.AqlErrorHint("const_error",

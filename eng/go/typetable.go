@@ -619,16 +619,19 @@ var builtinDecls = []builtinDecl{
 	// Xml Behavior through the parent chain. See design/XML-LITERAL.0.md §5.
 	{Path: "Node/Xml/FlexXml", FixedID: 110, Rank: 30_310_000_000},
 
-	// Ideal branch — the structural type-kinds (Object, Array, Record,
-	// Options, Error, Store, Table) are direct children of Ideal: peer
-	// kinds. Resource/Entity are genuine object types (an Object ←
-	// Resource ← Entity inheritance chain), so they stay under Object.
-	// External modules graft Tensor / Timeout / Fetch / … on as further
-	// Ideal/* kinds via RegisterExternalBuiltin.
-	{Path: "Ideal/Object", FixedID: 30, Rank: 40_100_000_000},
-	{Path: "Ideal/Object/Resource", FixedID: 36, Rank: 40_110_000_000},
-	{Path: "Ideal/Object/Resource/Entity", FixedID: 37, Rank: 40_111_000_000},
-	{Path: "Ideal/Array", FixedID: 44, Rank: 40_200_000_000},
+	// Ideal branch — the structural type-kinds (Class, Record, Options,
+	// Error, Store, Table) are direct children of Ideal: peer kinds. The
+	// bare Object container type was removed (FixedID 30 retired, not
+	// recycled); class instances live under Ideal/Class. Resource/Entity
+	// are the SDK object-type hierarchy (Resource ← Entity), their own
+	// peer kind under Ideal (they no longer descend from Object). FixedIDs
+	// 36/37 are kept across the re-root so serialised Resource/Entity IDs
+	// stay wire-stable. External modules graft Tensor / Timeout / Fetch /
+	// … on as further Ideal/* kinds via RegisterExternalBuiltin.
+	{Path: "Ideal/Resource", FixedID: 36, Rank: 40_120_000_000},
+	{Path: "Ideal/Resource/Entity", FixedID: 37, Rank: 40_121_000_000},
+	// FixedID 44 retired with Ideal/Array (the mutable indexed container)
+	// when it was removed; FlexList covers the mutable-list role. Not recycled.
 	{Path: "Ideal/Record", FixedID: 16, Rank: 40_300_000_000},
 	{Path: "Ideal/Options", FixedID: 38, Rank: 40_400_000_000},
 	{Path: "Ideal/Error", FixedID: 45, Rank: 40_500_000_000},

@@ -571,14 +571,14 @@ export function newOptions(map: OrderedMap): Value {
 }
 
 /**
- * An object TYPE built by `refine Object {…}` / `refine Base {…}`.
+ * A class TYPE built by `class {…}` / `refine Base {…}`.
  * `name` is empty until a `def Name …` binding stamps it. `parentPath`
- * is the lattice path of the parent (the base `Object`, or another
- * object type's path like `Object/Bar`). `fields` maps field name →
- * type literal, with inherited fields first. Mirrors ObjectTypeInfo in
+ * is the lattice path of the parent (the base `Class`, or another
+ * class type's path like `Class/Bar`). `fields` maps field name →
+ * type literal, with inherited fields first. Mirrors ClassTypeInfo in
  * eng/go.
  */
-export class ObjectTypeInfo {
+export class ClassTypeInfo {
   name: string
   readonly parentPath: string
   readonly fields: OrderedMap
@@ -587,14 +587,14 @@ export class ObjectTypeInfo {
     this.parentPath = parentPath
     this.fields = fields
   }
-  /** The full lattice path of this object type, once named. */
+  /** The full lattice path of this class type, once named. */
   get path(): string {
     return `${this.parentPath}/${this.name}`
   }
 }
 
-/** Construct an object-type value (a Type-branch value carrying ObjectTypeInfo). */
-export function newObjectType(info: ObjectTypeInfo): Value {
+/** Construct a class-type value (a Type-branch value carrying ClassTypeInfo). */
+export function newClassType(info: ClassTypeInfo): Value {
   return new Value(TType, info)
 }
 

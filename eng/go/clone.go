@@ -10,9 +10,9 @@ package eng
 // function, or engine marker that is safe to share because nothing can
 // mutate it in place.
 //
-//   - Mutable, deep-copied: List, Map, FlexList, Array, Store, Object
+//   - Mutable, deep-copied: List, Map, FlexList, Store, Object
 //     instance, Table, and an Error's raise-payload map. Pointer-backed
-//     graphs (Store/Array/FlexList/Object via their prototype or element
+//     graphs (Store/FlexList/Object via their prototype or element
 //     links) are cloned cycle-safely — a self-referential or shared node
 //     is reproduced with the SAME sharing, never expanded infinitely.
 //   - Immutable, shared: Integer/Float/Big*/String/Boolean/Atom/Path/
@@ -81,19 +81,10 @@ func (c *cloner) clone(v Value) Value {
 		nd.Elems = c.cloneSlice(p.Elems)
 		return c.withPayload(v, nd)
 
-	case *ArrayInstanceInfo:
-		if cp, ok := c.seen[p]; ok {
-			return c.withPayload(v, cp.(*ArrayInstanceInfo))
-		}
-		nd := &ArrayInstanceInfo{}
-		c.seen[p] = nd
-		nd.Elems = c.cloneSlice(p.Elems)
-		return c.withPayload(v, nd)
-
 	case *StoreInstanceInfo:
 		return c.withPayload(v, c.cloneStore(p))
 
-	case ObjectInstanceInfo:
+	case ClassInstanceInfo:
 		return c.withPayload(v, c.cloneObject(p))
 
 	case TableData:
@@ -193,22 +184,13 @@ func (c *cloner) cloneStore(s *StoreInstanceInfo) *StoreInstanceInfo {
 	return out
 }
 
-// cloneObject deep-clones an ObjectInstanceInfo: the field map is
-// duplicated value-by-value and the prototype instance cloned
-// (cycle-guarded). TypeRef is a shared type descriptor (immutable).
-func (c *cloner) cloneObject(o ObjectInstanceInfo) ObjectInstanceInfo {
-	out := ObjectInstanceInfo{TypeRef: o.TypeRef}
+// cloneObject deep-clones an ClassInstanceInfo: the field map is
+// duplicated value-by-value. Instances are flat, so there is no
+// prototype to clone. TypeRef is a shared type descriptor (immutable).
+func (c *cloner) cloneObject(o ClassInstanceInfo) ClassInstanceInfo {
+	out := ClassInstanceInfo{TypeRef: o.TypeRef}
 	if o.Fields != nil {
 		out.Fields = c.cloneOrderedMap(o.Fields)
-	}
-	if o.Prototype != nil {
-		if cp, ok := c.seen[o.Prototype]; ok {
-			proto := cp.(ObjectInstanceInfo)
-			out.Prototype = &proto
-		} else {
-			proto := c.cloneObject(*o.Prototype)
-			out.Prototype = &proto
-		}
 	}
 	return out
 }

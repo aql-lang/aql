@@ -63,7 +63,7 @@ var comboParity = []string{
 	`size (each [mul 2] [1 2 3])`,          // F4 over island result
 	`typeof (fold [add] [1 2 3] 0)`,
 	`(each [mul 2] [1 2 3]) is List`,
-	`make Array (each [mul 2] [1 2 3])`,
+	`flex (each [mul 2] [1 2 3])`,
 
 	// --- islands in loops with varying threaded inputs (reuse safety) ---
 	`for 4 [each [mul 2] (iota i)]`,
@@ -97,11 +97,11 @@ var comboParity = []string{
 
 	// --- F4: integer-keyed get on a dynamic receiver → CALL_NATIVE_POLY
 	// (runtime sig match); atom-keyed field get stays islanded ---
-	`(make Array [10 20 30]) get 1`,
+	`(flex [10 20 30]) get 1`,
 	`(each [add 1] [1 2 3]) get 0`,
-	`get 1 (make Array [5 6 7])`,
+	`get 1 (flex [5 6 7])`,
 	`def xs [10 20 30] xs get 2`,
-	`(make Array [1 2 3]) is Array`, // typed query on a dynamic result via poly
+	`(flex [1 2 3]) is FlexList`, // typed query on a dynamic result via poly
 	// dynamic-INPUT poly: a builtin native over a dynamic operand re-matches
 	// its signature at run time (plan P3/P4 widening) instead of refusing.
 	`add (do [add 1 2]) 10`,
@@ -206,10 +206,10 @@ func TestCompiledCombinationPath(t *testing.T) {
 		{`do [add 1 2]`, "native"},          // single-result do body → closure
 		// F4 over a now-native each result is itself native (no dynamic island).
 		{`size (each [mul 2] [1 2 3])`, "native"},
-		{`make Array (each [mul 2] [1 2 3])`, "native"},
+		{`flex (each [mul 2] [1 2 3])`, "native"},
 		// F4 INTEGER-keyed (sequence index) get on a dynamic receiver runtime-
 		// dispatches via CALL_NATIVE_POLY (plan P3) — never returns a method.
-		{`(make Array [10 20 30]) get 1`, "native"},
+		{`(flex [10 20 30]) get 1`, "native"},
 		{`def xs [10 20 30] xs get 1`, "native"},
 		// An ATOM-keyed field get now polys too: a data field is returned
 		// directly, a named 0-arg method result is auto-applied VM-native, and

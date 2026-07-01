@@ -319,17 +319,12 @@ func InstallType(r *Registry, name string, body Value) error {
 	if err := validateTypeName(r, name); err != nil {
 		return err
 	}
-	if IsObjectType(body) {
-		info, _ := AsObjectType(body)
-		// Class types root under Ideal/Class, not Object — classes are
-		// sealed nominal records, Object is the open mutable container
-		// (design/CLASS-OBJECT.10.md).
-		rootName := "Object"
-		rootDef := TObject
-		if info.Class {
-			rootName = "Class"
-			rootDef = TClass
-		}
+	if IsClassType(body) {
+		info, _ := AsClassType(body)
+		// Object types are class types now — sealed nominal records rooted
+		// under Ideal/Class (the open Object container was removed).
+		rootName := "Class"
+		rootDef := TClass
 		if info.Parent != nil {
 			info.Name = info.Parent.Name + "/" + name
 		} else {
@@ -343,7 +338,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			parentDef = info.Parent.Type
 		}
 		def := r.Types.MintType(name, parentDef)
-		body = NewObjectType(def, info)
+		body = NewClassType(def, info)
 		r.Defs.PushType(name, def, body)
 	} else if IsTypeSchema(body) {
 		// `def Box gen [T] class {…}` route: mint the SCHEMA node where

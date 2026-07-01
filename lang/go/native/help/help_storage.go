@@ -3,31 +3,32 @@ package help
 func init() {
 	register(&Entry{
 		Word:    "set",
-		Summary: "Set a key in a container (Store, Object, Array, or Map).",
-		Description: "Stores a value under a key. On the MUTABLE containers — a Store " +
-			"(copy-on-write context layer), an Object instance (in-place field write), or " +
-			"an Array (in-place indexed write) — set mutates the receiver and returns " +
-			"nothing. On an immutable MAP, set returns a NEW map with the key bound and " +
-			"leaves the receiver untouched (the same copy-returning contract as push), so " +
-			"calls chain: `{} set a 1 set b 2`. Keys are strings or atoms (integers for " +
-			"Array); wrap a variable in parens for a computed key: `m set (k) v`.",
+		Summary: "Set a key in a container (Store, class instance, FlexMap/FlexList, or Map).",
+		Description: "Stores a value under a key. On a Store (copy-on-write context layer) or " +
+			"a class instance (in-place field write, sealed to declared fields) set mutates " +
+			"the receiver and returns nothing. On a FlexMap/FlexList set mutates in place and " +
+			"RETURNS THE NODE, so writes chain: `flex {} set a 1 set b 2`. On an immutable MAP " +
+			"or LIST set returns a NEW value with the key bound and leaves the receiver " +
+			"untouched (the same copy-returning contract as push): `{} set a 1 set b 2`. Keys " +
+			"are strings or atoms (integers for List/FlexList indices); wrap a variable in " +
+			"parens for a computed key: `m set (k) v`.",
 		// Canonical order: `receiver value key set`.
 		Examples: []string{
 			`ctx 42 "x" set         ;# store 42 under key "x" in a Store/context`,
-			`c 1 "count" set        ;# Object: set field count (c.count := 1)`,
+			`c 1 "count" set        ;# class instance: set field count (c.count := 1)`,
 			`{a:1} set b 2          ;# => {a:1 b:2} — new map; {a:1} is unchanged`,
 		},
 	})
 
 	register(&Entry{
 		Word:    "get",
-		Summary: "Retrieve a value by an EVALUATED key from a Store, Map, List, or Object.",
+		Summary: "Retrieve a value by an EVALUATED key from a Store, Map, List, class instance, or flex node.",
 		Description: "Retrieves a value by key from a Store (with prototype chain resolution), " +
-			"a Map (by string key), a List (by integer index), or an Object instance (by string field name). " +
+			"a Map/FlexMap (by string key), a List/FlexList (by integer index), or a class instance (by string field name). " +
 			"get EVALUATES its key: `lst get i` reads the VALUE of i, and `m get \"a\"` reads field \"a\". " +
 			"A bare-word LITERAL key uses dot (`m dot a`) or the . shorthand (`m.a`) — get itself no longer " +
 			"quotes a bare word. " +
-			"Returns None for missing keys in Maps/Objects/Lists.",
+			"Returns None for missing keys in Maps/class instances/Lists.",
 		// Canonical order: `receiver key get`.
 		Examples: []string{
 			`{k: 9} "k" get         ;# => 9   — Map value by string key`,
@@ -45,7 +46,7 @@ func init() {
 			"field/key names; use get when the key is computed.",
 		Examples: []string{
 			`{k: 9} dot k           ;# => 9   — literal field k (≡ {k:9}.k)`,
-			`c dot count            ;# Object field count (same as c.count)`,
+			`c dot count            ;# class field count (same as c.count)`,
 		},
 	})
 
@@ -73,7 +74,7 @@ func init() {
 			"missing key, an out-of-range index, or a None parent all answer " +
 			"false rather than raising, so it composes inside if/filter " +
 			"conditions. Covers Map/List/record (string, atom, or integer " +
-			"key), Array (index), Object and class instances, and Store.",
+			"key), FlexMap/FlexList (key/index), class instances, and Store.",
 		Examples: []string{
 			`{a:None} has a         ;# => true  — present, value is none`,
 			`{a:1} has b            ;# => false — absent`,
@@ -85,7 +86,7 @@ func init() {
 	register(&Entry{
 		Word:    "context",
 		Summary: "Push the current context Store onto the stack.",
-		Description: "Returns the current context Store. The context is a Store (Object/Store) " +
+		Description: "Returns the current context Store. The context is a Store (Ideal/Store) " +
 			"that supports prototype chain resolution for nested scopes. " +
 			"Use 'context set key value' to store and 'context get key' to retrieve.",
 	})

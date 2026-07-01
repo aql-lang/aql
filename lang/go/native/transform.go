@@ -79,17 +79,16 @@ func valueToAny(v Value) any {
 			out[i] = valueToAny(elem)
 		}
 		return out
-	case IsObjectInstance(v):
-		// Class / object instances project to their flattened field
-		// map, so items / walk / transform / jsonify see real data
+	case IsFlatInstance(v):
+		// Class and Resource/Entity instances project to their flattened
+		// field map, so items / walk / transform / jsonify see real data
 		// rather than the debug rendering. (The $class metadata key is
 		// added by the serialization layer, not here — enumeration
 		// reports fields only.)
-		oi, err := AsObjectInstance(v)
-		if err != nil {
+		flat, ok := FlatInstanceFields(v)
+		if !ok {
 			return v.String()
 		}
-		flat := ObjectFields(&oi)
 		out := make(map[string]any, flat.Len())
 		for _, key := range flat.Keys() {
 			val, _ := flat.Get(key)

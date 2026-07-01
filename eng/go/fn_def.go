@@ -176,7 +176,7 @@ func IsSigTypeValue(r *Registry, v Value) bool {
 		return true
 	}
 	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
-		IsTypedMap(v) || IsTableType(v) || IsObjectType(v) {
+		IsTypedMap(v) || IsTableType(v) || IsClassType(v) {
 		return true
 	}
 	if IsWord(v) {

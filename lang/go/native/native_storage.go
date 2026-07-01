@@ -18,7 +18,7 @@ import (
 // r.LookupContextType) so check-mode can recover a typed carrier
 // from a previous set on the same key.
 //
-// Algorithms (GetKey, AsStore, AsArray, CowSet, AsObjectInstance,
+// Algorithms (GetKey, AsStore, AsArray, CowSet, AsClassInstance,
 // AsMutableMap, …) live in eng; this file owns the word names and
 // dispatch wiring.
 var storageNatives = []NativeFunc{
@@ -26,30 +26,7 @@ var storageNatives = []NativeFunc{
 		Name: "set",
 
 		Signatures: []Signature{
-			// Array (indexed by integer)
-			{
-				Args:    []*Type{TInteger, TAny, TArray},
-				Impl:    Go(setArrayHandler),
-				Returns: []*Type{}, BarrierPos:
-
-				// Object
-				-1,
-			},
-
-			{
-				Args:    []*Type{TString, TAny, TObject},
-				Impl:    Go(setObjectHandler),
-				Returns: []*Type{}, BarrierPos: -1,
-			},
-			{
-				Args:      []*Type{TAtom, TAny, TObject},
-				QuoteArgs: map[int]bool{0: true},
-				Impl:      Go(setObjectHandler),
-				Returns:   []*Type{}, BarrierPos:
-
-				// Store (copy-on-write)
-				-1,
-			},
+			// Store (copy-on-write)
 
 			{
 				Args:      []*Type{TString, TAny, TStore},
@@ -187,13 +164,6 @@ func accessorGetSignatures() []Signature {
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getIntKeyReturns},
-		// [Key | Array]
-		{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Impl: Go(getArrayHandler), ReturnsFn: getArrayReturns},
-		// [Key | Object] — atom/string field reads resolve the field's
-		// declared type from the schema (getObjectReturns).
-		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getObjectReturns},
-		{Args: []*Type{TString, TObject}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getObjectReturns},
-		{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Impl: Go(getObjectHandler), Returns: []*Type{TAny}},
 		// [Key | ModuleExport] — transparent export access + $module/$name
 		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
@@ -205,6 +175,10 @@ func accessorGetSignatures() []Signature {
 		// type resolved from the schema (getObjectReturns).
 		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getObjectReturns},
 		{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getObjectReturns},
+		// Resource/Entity instances (SDK object hierarchy) — flat field
+		// read. Field type resolved from the Resource schema (getResourceReturns).
+		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getResourceReturns},
+		{Args: []*Type{TString, TResource}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getResourceReturns},
 		// [Key | None] — chained-read propagation
 		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getNoneHandler), Returns: []*Type{TNone}},
 		// [Key | Store] — check-mode-aware ReturnsFn picks up a
@@ -245,21 +219,7 @@ func stripQuoteArgs(sigs []Signature) []Signature {
 	return out
 }
 
-// ---- kernel-container handlers (Node / Object / Array / None) ----
-
-func setObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	container := args[2]
-	if !IsConcrete(container) {
-		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
-	}
-	key := StoreKey(args[0])
-	oi, ok := container.Data.(ObjectInstanceInfo)
-	if !ok {
-		return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
-	}
-	oi.Fields.Set(key, args[1])
-	return nil, nil
-}
+// ---- kernel-container handlers (Node / Store / Class / None) ----
 
 // setMapHandler is the Map form of set. A Map stays immutable: the
 // handler returns a NEW map with the key bound (overwriting an existing
@@ -295,13 +255,13 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 // instances: a field declared in the class schema (own or inherited)
 // writes into the flat field map and returns nothing; an undeclared
 // field raises sealed_field loudly — the open-bag use case belongs to
-// plain maps/Objects, not class instances (design/CLASS-OBJECT.10.md).
+// plain maps / FlexMaps, not class instances (design/CLASS-OBJECT.10.md).
 func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	container := args[2]
 	if !IsConcrete(container) {
 		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
 	}
-	oi, ok := container.Data.(ObjectInstanceInfo)
+	oi, ok := container.Data.(ClassInstanceInfo)
 	if !ok {
 		return nil, fmt.Errorf("set: expected a class instance, got %s", container.Parent.String())
 	}
@@ -418,19 +378,6 @@ func getXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	default:
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
-}
-
-func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr, err := AsArray(args[2])
-	if err != nil {
-		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].Parent.String())
-	}
-	asInt, _ := args[0].AsConcreteInteger()
-	idx := int(asInt)
-	if !arr.Set(idx, args[1]) {
-		return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
-	}
-	return nil, nil
 }
 
 // isClosureBearingWrapper reports whether v is a module-method wrapper FnDef
@@ -628,7 +575,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // getObjectReturns narrows a field read over an OBJECT / CLASS instance
 // carrier to the field's DECLARED type, resolved from the type SCHEMA. In
 // check mode the instance is an abstract type carrier (no field payload),
-// so the field type comes from the bound type's ObjectTypeInfo.AllFields()
+// so the field type comes from the bound type's ClassTypeInfo.AllFields()
 // (own + inherited). A method field (function-typed), an absent/sealed
 // field (→ None), or a type whose schema can't be resolved keeps the
 // dynamic(Any) the poly path handles — the same dispatch-bearing exclusion
@@ -643,13 +590,41 @@ func getObjectReturns(args []Value, r *Registry) []Value {
 	if !ok {
 		return dyn
 	}
-	info, oerr := AsObjectType(body)
+	info, oerr := AsClassType(body)
 	if oerr != nil {
 		return dyn
 	}
 	fv, ok := info.AllFields().Get(getKey(args[0]))
 	if !ok {
 		return []Value{NewCarrier(TNone)} // sealed / absent field reads as None
+	}
+	ft := ValueType(fv)
+	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+		return dyn
+	}
+	return []Value{NewCarrier(ft)}
+}
+
+// getResourceReturns is getObjectReturns for the Resource/Entity
+// hierarchy: it reads the field type from the ResourceType schema so a
+// Resource-instance field read (`e.spec`) carries its declared type in
+// check/bytecode contexts instead of degrading to Any. Resource/Entity
+// are installed as type bindings (installResourceTypes), so their
+// schema is reachable via TopTypeBody like a class type's.
+func getResourceReturns(args []Value, r *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if r == nil || len(args) != 2 || !IsConcrete(args[0]) || args[1].Parent == nil {
+		return dyn
+	}
+	// Resource/Entity are def bindings, not type bindings, so resolve
+	// the schema through the def store by the instance's type name.
+	info, ok := lookupResourceTypeByName(r, args[1].Parent.Leaf())
+	if !ok {
+		return dyn
+	}
+	fv, ok := info.AllFields().Get(getKey(args[0]))
+	if !ok {
+		return []Value{NewCarrier(TNone)} // absent field reads as None
 	}
 	ft := ValueType(fv)
 	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
@@ -672,53 +647,19 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := AsObjectInstance(container)
+	if ri, err := AsResourceInstance(container); err == nil {
+		val, ok := ri.GetField(k)
+		if !ok {
+			return []Value{NewTypeLiteral(TNone)}, nil
+		}
+		return []Value{val}, nil
+	}
+	oi, _ := AsClassInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 	return []Value{val}, nil
-}
-
-func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr, err := AsArray(args[1])
-	if err != nil {
-		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].Parent.String())
-	}
-	idx, _ := args[0].AsConcreteInteger()
-	val, ok := arr.Get(int(idx))
-	if !ok {
-		return []Value{NewTypeLiteral(TNone)}, nil
-	}
-	return []Value{val}, nil
-}
-
-// getArrayReturns is the check-mode carrier result for `arr get i`. It is the
-// Option C admissibility gate: the element type T is recovered only when the
-// receiver is a typed mutable-Array carrier (`Array<T>`) that is (a) tracked — a
-// non-zero make-site id, (b) typed — a concrete element T, and (c) not poisoned
-// — no non-conforming set and no escape (CheckState.ArrayPoisoned). Otherwise it
-// falls back to a gradual Any carrier, EXACTLY today's behaviour.
-//
-// The admitted result is a GRADUAL element carrier (NewDynamicCarrier(T)), NOT a
-// strict one: an out-of-bounds `get` returns None at run time, so a STRICT T
-// would be a silent over-claim (TestCheckTypeSoundness array.tsv: `(make Array
-// [10 20 30]) get 5` is None at run time). The gradual T narrows the gradual-Any
-// baseline to T — collapsing the radix-msd cascade (`lo add (counts get)` →
-// numeric; confirmed by Stage 0) — while staying sound: a None at run time is
-// matched optimistically and discharged by a guard, never a strict integer op on
-// a None. This mirrors the list path, whose integer-indexed get likewise stays
-// gradual (getIntKeyReturns). See design/ARRAY-ELEMENT-CARRIER{,-ARCH}.0.md §6.
-func getArrayReturns(args []Value, r *Registry) []Value {
-	if len(args) >= 2 {
-		recv := args[1]
-		id := DataArrayIDFromValue(recv)
-		elem := DataArrayElemTypeFromValue(recv)
-		if (id != SrcPos{}) && elem != nil && !elem.Equal(TAny) && !r.Check.ArrayPoisoned(id) {
-			return []Value{NewDynamicCarrier(elem)}
-		}
-	}
-	return []Value{NewDynamicCarrier(TAny)}
 }
 
 func getNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

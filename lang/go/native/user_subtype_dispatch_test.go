@@ -70,7 +70,7 @@ func TestUserTypeBindingShape_ObjectRefinement(t *testing.T) {
 	}
 
 	// 2. The body in r.TopTypeBody is a POPULATED body — its Data
-	//    carries the ObjectTypeInfo payload; the lattice node is at
+	//    carries the ClassTypeInfo payload; the lattice node is at
 	//    body.Parent.
 	body, ok := r.TopTypeBody("Foo")
 	if !ok {

@@ -70,7 +70,7 @@ func DescribeName(r *Registry, w io.Writer, name string) {
 		}
 		// A name bound to a class/object or surface type is not a word; show
 		// its schema/contract instead of the empty word view.
-		if bound, ok := r.Defs.Top(name); ok && IsObjectType(bound) {
+		if bound, ok := r.Defs.Top(name); ok && IsClassType(bound) {
 			fmt.Fprint(w, formatTypeSchema(name, bound))
 			return
 		}

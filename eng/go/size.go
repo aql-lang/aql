@@ -93,22 +93,22 @@ func (mapFormatBehavior) Size(v Value) int {
 // idealSizeBehavior carries the Sizer capability for the Ideal
 // family. Installed on the Ideal root, the SizeOf walk reaches it
 // for any Ideal-family instance whose own type has no Sizer. Each
-// kind sizes to its member count: an Object's fields, an Array's
-// elements, a Store's entries, a Table's rows. Record instances are
-// field-maps and size via the Map Sizer instead.
+// kind sizes to its member count: an Object's fields, a Store's
+// entries, a Table's rows. Record instances are field-maps and size
+// via the Map Sizer instead.
 type idealSizeBehavior struct{ defaultBehavior }
 
 func (idealSizeBehavior) formatDelegate() {}
 
 func (idealSizeBehavior) Size(v Value) int {
 	switch d := v.Data.(type) {
-	case ObjectInstanceInfo:
+	case ClassInstanceInfo:
 		if d.Fields != nil {
 			return d.Fields.Len()
 		}
-	case *ArrayInstanceInfo:
-		if d != nil {
-			return len(d.Elems)
+	case ResourceInstanceInfo:
+		if d.Fields != nil {
+			return d.Fields.Len()
 		}
 	case *StoreInstanceInfo:
 		if d != nil {

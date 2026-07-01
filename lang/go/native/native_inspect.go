@@ -32,7 +32,7 @@ import "github.com/aql-lang/aql/eng/go"
 //
 // The returned value carries Parent `Inspect` but its payload is an
 // OrderedMap so it renders and round-trips like a map. Algorithms
-// (IsRecordType / AsObjectType / IsDepScalar / …) live in eng; this
+// (IsRecordType / AsClassType / IsDepScalar / …) live in eng; this
 // file owns the word name and dispatch wiring.
 var inspectNatives = []NativeFunc{
 	{
@@ -192,9 +192,9 @@ func buildTypeInspection(name string, tv Value) Value {
 		}
 		result.Set("fields", NewMap(fields))
 
-	case IsObjectType(tv):
+	case IsClassType(tv):
 		result.Set("kind", NewAtom("object"))
-		oi, _ := AsObjectType(tv)
+		oi, _ := AsClassType(tv)
 		if oi.Parent != nil {
 			result.Set("parent", NewString(oi.Parent.Name))
 		}

@@ -67,7 +67,6 @@ export type { AqlType } from './type.ts'
 export {
   TAbsent,
   TAny,
-  TArray,
   TAtom,
   TBigDecimal,
   TBigInteger,
@@ -94,7 +93,7 @@ export {
   TNode,
   TNone,
   TNumber,
-  TObject,
+  TClass,
   TOpenParen,
   TOptions,
   TPath,
@@ -115,7 +114,7 @@ export {
 } from './type.ts'
 export {
   ChildType,
-  ObjectTypeInfo,
+  ClassTypeInfo,
   OptionsData,
   OrderedMap,
   Value,
@@ -139,8 +138,8 @@ export {
   newMap,
   newMark,
   newMove,
+  newClassType,
   newNone,
-  newObjectType,
   newOptions,
   newParenExpr,
   newString,

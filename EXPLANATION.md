@@ -504,9 +504,10 @@ objects:
 * **Scalars** (numbers, strings, booleans, atoms, times) are
   immutable. Every operation returns a new value.
 * **Nodes** (lists, maps) are immutable values. List/map operations
-  return new copies.
-* **Ideals** (Store, Array, Record-instance, Table-instance,
-  Object-instance, Tensor) are mutable. Their methods modify in
+  return new copies. (The `flex` family — FlexMap/FlexList — is the
+  deliberately mutable Node exception; see the Reference.)
+* **Ideals** (Store, Record-instance, Table-instance,
+  Class-instance, Tensor) are mutable. Their methods modify in
   place.
 
 This distinction matters for concurrency. When `await` runs
@@ -728,8 +729,8 @@ lives under the module's prefix until you alias it explicitly.
 ## Ideals and type-kinds
 
 AQL has a system for *type-kinds* called **Ideals**. An Ideal is
-the type-constructor turned into data — `Object`, `Record`, `Table`,
-`Array` are all instances. Each Ideal carries:
+the type-constructor turned into data — `Class`, `Record`, `Table`,
+`Store` are all instances. Each Ideal carries:
 
 * a name and a lattice anchor (so the kind has a place in the
   hierarchy),
@@ -744,8 +745,8 @@ the kernel routes `refine`, `make`, `is`, and unification through
 it the same way it does for the built-ins. The `aql:matrix-util`
 module does exactly this for `Matrix` and `Vector`.
 
-You usually don't write Ideals — you use them via `refine`
-(Record / Table / Object) and `make`. The framework matters only if you're
+You usually don't write Ideals — you use them via `class` / `refine`
+(Class / Record / Table) and `make`. The framework matters only if you're
 extending the language with a new kind of typed container.
 
 

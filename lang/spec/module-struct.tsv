@@ -82,7 +82,7 @@ import "aql:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius}
 import "aql:struct-util"  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected
 import "aql:struct-util"  def P class {name:'x' note:none} (StructUtil.reify P (StructUtil.jsonify (make P {note:none}))) dot note	none	JSON null hydrates as the CONCRETE none value (the exact jsonify→reify inverse), not the None type literal
 #
-# §  struct words on class / Object instances — type-preserving.
+# §  struct words on class and resource instances — type-preserving.
 #    clone gives a fresh instance of the same type (deq-equal,
 #    eq-distinct); setpath round-trips through construction, so a
 #    class edit runs the same strict schema checks as make and the
@@ -95,8 +95,6 @@ import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make P
 import "aql:struct-util"  def Point class {x:1} def p (make Point {}) def w (StructUtil.setpath p "x" 9) p dot x	1	…and the receiver untouched
 import "aql:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "nope" 9	ERROR:unknown field	a class edit re-makes: unknown fields stay loud
 import "aql:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "x" 'hi'	ERROR:expected Integer	…and off-schema values stay loud
-import "aql:struct-util"  (StructUtil.setpath (object {a:1}) "b" 2) typeof	Object	an open Object edit stays an Object
-import "aql:struct-util"  (StructUtil.setpath (object {a:1}) "b" 2) dot b	2	…and accepts new keys (open contract)
 import "aql:struct-util"  def Point class {x:1} StructUtil.walk (make Point {})	[{path:'x' value:1}]	walk sees the instance's field projection
 #
 # §  parse — jsonic/JSON text → data (the decode complement of

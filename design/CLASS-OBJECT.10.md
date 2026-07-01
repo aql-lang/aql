@@ -1,5 +1,17 @@
 # Class / Object Split — Container Symmetry and the `class` Word
 
+> **Superseded (2026-07).** The `class` word landed, but the mutable
+> `Object`/`Array` *containers* this note proposes were **removed**, not
+> shipped: `FlexMap`/`FlexList` (the `flex` family) fill the mutable-Node
+> role, so the 2×2 (`List : Array :: Map : Object`) collapsed to
+> `List/Map` (immutable) + `FlexList/FlexMap` (mutable) + `class` (typed,
+> sealed records). The `Object`/`Array` lattice types, the `object`/`array`
+> words, and the shared object instance struct are gone; the SDK
+> `Resource`/`Entity` hierarchy was re-rooted under `Ideal/Resource` with
+> its own structs, and the class instance struct is now `ClassInstanceInfo`.
+> This document is kept as the historical design record for the `class`
+> word only. See `REFERENCE.md` (container model) for the current story.
+
 Status: **discovery note** — directions agreed in design conversation
 (2026-06-09, language owner; revised same day — no aliases, paren-free
 definition forms, flat instances). **Not an ADR** (ADRs are added only

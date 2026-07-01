@@ -24,8 +24,8 @@ var typeNatives = []NativeFunc{
 		// refine is the uniform type constructor — see
 		// design/TYPE-UNIFORM.10.md. `refine BaseType arg`
 		// builds a (sub)type:
-		//   refine Object {fields}     → object type
-		//   refine <objtype> {fields}  → object subtype (inheritance)
+		//   class {fields}              → class type (see the `class` word)
+		//   refine <classtype> {fields} → class subtype (inheritance)
 		//   refine Record [a:T b:U]    → record type (list of pairs)
 		//   refine Table  (refine Record …) → table type
 		//   refine BaseType            → a bare nominal subtype, no
@@ -103,32 +103,6 @@ var typeNatives = []NativeFunc{
 			Impl:       Go(exposesHandler, RunInCheck()),
 			Returns:    []*Type{},
 			BarrierPos: 1,
-		}},
-	},
-	{
-		// object {…} — construct a plain OPEN mutable keyed container,
-		// sugar for `make Object {…}`. Open (any key writes, computed
-		// keys via parens), fully enumerable, in-place set returning
-		// nothing — the keyed sibling of Array in the container 2x2.
-		// See design/CLASS-OBJECT.10.md §2.3.
-		Name: "object",
-
-		Signatures: []Signature{{
-			Args:    []*Type{TMap},
-			Impl:    Go(objectSugarHandler),
-			Returns: []*Type{TObject}, BarrierPos: -1,
-		}},
-	},
-	{
-		// array […] — construct a mutable Array, sugar for
-		// `make Array […]`. In-place bounds-checked set returning
-		// nothing — the indexed sibling of Object.
-		Name: "array",
-
-		Signatures: []Signature{{
-			Args:    []*Type{TList},
-			Impl:    Go(arraySugarHandler),
-			Returns: []*Type{TArray}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -292,17 +266,6 @@ var typeNatives = []NativeFunc{
 				// `convert Float`ed scalar) sees an inhabitant, not a bare node.
 				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
 			},
-			// Map → Object (thaw): a fresh open mutable container
-			// seeded from the map — the inverse of `convert Map o`
-			// (freeze). Shallow, like the rest of the copy semantics.
-			{
-				Args:     []*Type{TObject, TMap},
-				TypeArgs: map[int]bool{0: true},
-				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-					return MakeOpenObject(args[1])
-				}),
-				Returns: []*Type{TObject}, BarrierPos: -1,
-			},
 			{
 				Args:     []*Type{TScalar, TMap, TScalar},
 				TypeArgs: map[int]bool{0: true},
@@ -336,28 +299,30 @@ func installResourceTypes(r *Registry) {
 	resourceFields := NewOrderedMap()
 	resourceFields.Set("kind", NewTypeLiteral(TString))
 
-	resourceInfo := ObjectTypeInfo{
+	resourceInfo := ResourceTypeInfo{
 		Fields: resourceFields,
 		Parent: nil,
-		ID:     BuiltinIDForPath("Ideal/Object/Resource"),
+		ID:     BuiltinIDForPath("Ideal/Resource"),
+		Name:   TResource.String(),
 	}
 
-	InstallDef(r, "Resource", NewObjectType(TResource, resourceInfo))
+	InstallDef(r, "Resource", NewResourceType(TResource, resourceInfo))
 
 	resourceVal, _ := r.Defs.Top("Resource")
-	installedResource, _ := AsObjectType(resourceVal)
+	installedResource, _ := AsResourceType(resourceVal)
 
 	entityFields := NewOrderedMap()
 	entityFields.Set("spec", NewTypeLiteral(TString))
 	entityFields.Set("entity", NewTypeLiteral(TString))
 
-	entityInfo := ObjectTypeInfo{
+	entityInfo := ResourceTypeInfo{
 		Fields: entityFields,
 		Parent: &installedResource,
-		ID:     BuiltinIDForPath("Ideal/Object/Resource/Entity"),
+		ID:     BuiltinIDForPath("Ideal/Resource/Entity"),
+		Name:   TResourceEntity.String(),
 	}
 
-	InstallDef(r, "Entity", NewObjectType(TResourceEntity, entityInfo))
+	InstallDef(r, "Entity", NewResourceType(TResourceEntity, entityInfo))
 }
 
 // ---- table ----
@@ -412,7 +377,7 @@ func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
 				"refine")
 		}
 		return nil, r.AqlError("type_error",
-			fmt.Sprintf("refine: base must be Object, Record, Table, or an object type, got %s", base.String()),
+			fmt.Sprintf("refine: base must be Record, Table, or a class type, got %s", base.String()),
 			"refine")
 	}
 	if ideal.Construct == nil {
@@ -469,7 +434,7 @@ func installIdeals(r *Registry) {
 			// (`def Bar refine Foo {…}`). The bare-Object form is
 			// REMOVED: classes are defined with the `class` word
 			// (design/CLASS-OBJECT.10.md — no deprecated aliases).
-			if IsObjectType(base) {
+			if IsClassType(base) {
 				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 			}
 			return nil, r.AqlErrorHint("refine_error",
@@ -511,7 +476,7 @@ func installIdeals(r *Registry) {
 	// (BinarySpec : Binary :: Class : Object). A binary frame is realised on the
 	// class machinery: `def Header (refine BinarySpec [layout])` builds a sealed
 	// CLASS whose fields are the layout's decoded types and which carries the raw
-	// wire layout (ObjectTypeInfo.BinaryLayout); `make Header {fields}` reuses the
+	// wire layout (ClassTypeInfo.BinaryLayout); `make Header {fields}` reuses the
 	// class make path to produce a field-accessible INSTANCE; `convert Bytes`/
 	// `unpack` are the Binary⇄Bytes codec (native_bytes.go). The two membership
 	// types name the roles and answer `is`:
@@ -542,14 +507,13 @@ func installIdeals(r *Registry) {
 			if err != nil {
 				return nil, err
 			}
-			info := ObjectTypeInfo{
+			info := ClassTypeInfo{
 				Fields:       binaryFieldSchema(segs),
 				ID:           GenerateObjectTypeID(),
-				Class:        true,
 				BinaryLayout: arg,
 			}
 			def := r.Types.MintType(info.ID, TClass)
-			return []Value{NewObjectType(def, info)}, nil
+			return []Value{NewClassType(def, info)}, nil
 		},
 	})
 }
@@ -648,7 +612,7 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
 	// Object/Table refinement RHS: the body is a populated type value
-	// (Data carries ObjectTypeInfo/TableTypeInfo), but its denoted
+	// (Data carries ClassTypeInfo/TableTypeInfo), but its denoted
 	// lattice node is at b.Parent. For tag-identity ("does a carry
 	// T's tag?") we want to compare a.Parent against the lattice
 	// node. Without this, the handler falls through to UnifyR, which
@@ -661,7 +625,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// bare-refine bodies have Data==nil so they already route through
 	// the b.Data==nil branch below; only Object/Table bodies need
 	// this redirect.
-	if (IsObjectType(b) || IsTableType(b)) && b.Parent != nil {
+	if (IsClassType(b) || IsTableType(b)) && b.Parent != nil {
 		latticeNode := b.Parent
 		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
 	}
@@ -841,17 +805,17 @@ func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	case IsRecordType(t):
 		rec, _ := AsRecordType(t)
 		return []Value{NewRecordType(partializeFields(rec.Fields))}, nil
-	case IsObjectType(t):
-		info, _ := AsObjectType(t)
+	case IsClassType(t):
+		info, _ := AsClassType(t)
 		newFields := partializeFields(info.AllFields())
 		id := GenerateObjectTypeID()
-		newInfo := ObjectTypeInfo{
+		newInfo := ClassTypeInfo{
 			Fields: newFields,
 			Parent: nil,
 			ID:     id,
 		}
-		def := r.Types.MintType(id, TObject)
-		return []Value{NewObjectType(def, newInfo)}, nil
+		def := r.Types.MintType(id, TClass)
+		return []Value{NewClassType(def, newInfo)}, nil
 	default:
 		return nil, r.AqlError("type_error",
 			fmt.Sprintf("tpartial: argument must be a Record or Object type, got %s", t.String()),

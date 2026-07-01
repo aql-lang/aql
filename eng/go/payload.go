@@ -104,8 +104,8 @@ type ListPayload struct{ Elems []Value }
 type MapPayload struct{ M *OrderedMap }
 
 // FlexListData is the mutable element store for a Node/List/FlexList
-// value. It is pointer-backed (stored as *FlexListData, like
-// *ArrayInstanceInfo) so in-place growth — append/push — is visible
+// value. It is pointer-backed (stored as *FlexListData) so in-place
+// growth — append/push — is visible
 // through every Value copy sharing the payload. FlexMap needs no
 // counterpart: MapPayload's *OrderedMap is already pointer-backed.
 // Constructed by NewFlexList.
@@ -314,8 +314,8 @@ func (HostTypeBody) hostTypeBody() {}
 //   WordInfo, ForwardInfo, MarkInfo, MoveInfo, ReturnCheckInfo,
 //   DefCleanupInfo, ModuleDesc, FnDefInfo, FnUndefInfo,
 //   DisjunctInfo, ChildTypeInfo, RecordTypeInfo, OptionsTypeInfo,
-//   TableTypeInfo, TableData, ObjectTypeInfo, ObjectInstanceInfo,
-//   *StoreInstanceInfo, *ArrayInstanceInfo, *TimeoutInfo,
+//   TableTypeInfo, TableData, ClassTypeInfo, ClassInstanceInfo,
+//   *StoreInstanceInfo, *TimeoutInfo,
 //   *IntervalInfo, ErrorInfo, CalDurationData,
 //   DepScalarInfo, Materializer (interface), noneSentinel
 //   (legacy — to be removed in Step 5f).
@@ -349,45 +349,46 @@ func (NonePayload) payloadMarker()         {}
 func (ExtensionPayload) payloadMarker()    {}
 
 // Direct eng-defined struct markers.
-func (WordInfo) payloadMarker()           {}
-func (ForwardInfo) payloadMarker()        {}
-func (MarkInfo) payloadMarker()           {}
-func (MoveInfo) payloadMarker()           {}
-func (SpliceInfo) payloadMarker()         {}
-func (ReturnCheckInfo) payloadMarker()    {}
-func (DefCleanupInfo) payloadMarker()     {}
-func (GuardFactInfo) payloadMarker()      {}
-func (FrameOpenInfo) payloadMarker()      {}
-func (ModuleDesc) payloadMarker()         {}
-func (FnDefInfo) payloadMarker()          {}
-func (FnUndefInfo) payloadMarker()        {}
-func (DisjunctInfo) payloadMarker()       {}
-func (NegationInfo) payloadMarker()       {}
-func (ChildTypeInfo) payloadMarker()      {}
-func (RecordTypeInfo) payloadMarker()     {}
-func (OptionsTypeInfo) payloadMarker()    {}
-func (TableTypeInfo) payloadMarker()      {}
-func (TableData) payloadMarker()          {}
-func (ObjectTypeInfo) payloadMarker()     {}
-func (ObjectInstanceInfo) payloadMarker() {}
-func (*SurfaceInfo) payloadMarker()       {}
-func (*GenSpecInfo) payloadMarker()       {}
-func (GenParam) payloadMarker()           {}
-func (*TypeSchemaInfo) payloadMarker()    {}
-func (GenInstRef) payloadMarker()         {}
-func (*FlexListData) payloadMarker()      {}
-func (XmlElementPayload) payloadMarker()  {}
-func (XmlInterpPayload) payloadMarker()   {}
-func (*FlexXmlData) payloadMarker()       {}
-func (*StoreInstanceInfo) payloadMarker() {}
-func (*ArrayInstanceInfo) payloadMarker() {}
-func (*TimeoutInfo) payloadMarker()       {}
-func (*IntervalInfo) payloadMarker()      {}
-func (ErrorInfo) payloadMarker()          {}
-func (CalDurationData) payloadMarker()    {}
-func (DepScalarInfo) payloadMarker()      {}
-func (ClosurePayload) payloadMarker()     {}
-func (PathInfo) payloadMarker()           {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
+func (WordInfo) payloadMarker()             {}
+func (ForwardInfo) payloadMarker()          {}
+func (MarkInfo) payloadMarker()             {}
+func (MoveInfo) payloadMarker()             {}
+func (SpliceInfo) payloadMarker()           {}
+func (ReturnCheckInfo) payloadMarker()      {}
+func (DefCleanupInfo) payloadMarker()       {}
+func (GuardFactInfo) payloadMarker()        {}
+func (FrameOpenInfo) payloadMarker()        {}
+func (ModuleDesc) payloadMarker()           {}
+func (FnDefInfo) payloadMarker()            {}
+func (FnUndefInfo) payloadMarker()          {}
+func (DisjunctInfo) payloadMarker()         {}
+func (NegationInfo) payloadMarker()         {}
+func (ChildTypeInfo) payloadMarker()        {}
+func (RecordTypeInfo) payloadMarker()       {}
+func (OptionsTypeInfo) payloadMarker()      {}
+func (TableTypeInfo) payloadMarker()        {}
+func (TableData) payloadMarker()            {}
+func (ClassTypeInfo) payloadMarker()        {}
+func (ClassInstanceInfo) payloadMarker()    {}
+func (*SurfaceInfo) payloadMarker()         {}
+func (*GenSpecInfo) payloadMarker()         {}
+func (GenParam) payloadMarker()             {}
+func (*TypeSchemaInfo) payloadMarker()      {}
+func (GenInstRef) payloadMarker()           {}
+func (*FlexListData) payloadMarker()        {}
+func (XmlElementPayload) payloadMarker()    {}
+func (XmlInterpPayload) payloadMarker()     {}
+func (*FlexXmlData) payloadMarker()         {}
+func (*StoreInstanceInfo) payloadMarker()   {}
+func (ResourceTypeInfo) payloadMarker()     {}
+func (ResourceInstanceInfo) payloadMarker() {}
+func (*TimeoutInfo) payloadMarker()         {}
+func (*IntervalInfo) payloadMarker()        {}
+func (ErrorInfo) payloadMarker()            {}
+func (CalDurationData) payloadMarker()      {}
+func (DepScalarInfo) payloadMarker()        {}
+func (ClosurePayload) payloadMarker()       {}
+func (PathInfo) payloadMarker()             {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
 
 // noneSentinel is kept for backward compat with code that reads it
 // directly. NewNone() now produces NonePayload below.

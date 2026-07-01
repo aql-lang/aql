@@ -387,8 +387,8 @@ func ResolveSigType(r *Registry, v Value) (*Type, *Value, error) {
 	// instantiation body itself. Without these branches they fell to
 	// the TAny tail: a silent wildcard (the same degradation the
 	// TypeDef refactor closed for NAMED types).
-	if IsObjectType(v) {
-		if oi, aerr := AsObjectType(v); aerr == nil && oi.Type != nil {
+	if IsClassType(v) {
+		if oi, aerr := AsClassType(v); aerr == nil && oi.Type != nil {
 			return CanonicalType(r, oi.Type), nil, nil
 		}
 	}

@@ -58,8 +58,8 @@ func typeArgNode(arg Value) *Type {
 	switch {
 	case IsBareTypeNode(arg):
 		return &arg
-	case IsObjectType(arg):
-		oi, _ := AsObjectType(arg)
+	case IsClassType(arg):
+		oi, _ := AsClassType(arg)
 		return oi.Type
 	case IsSurfaceType(arg):
 		si, _ := AsSurfaceType(arg)
@@ -96,8 +96,8 @@ func containsTypeParam(v Value) bool {
 				return true
 			}
 		}
-	case IsObjectType(v):
-		oi, _ := AsObjectType(v)
+	case IsClassType(v):
+		oi, _ := AsClassType(v)
 		for _, k := range oi.Fields.Keys() {
 			fv, _ := oi.Fields.Get(k)
 			if containsTypeParam(fv) {
@@ -236,8 +236,8 @@ func SubstituteTypeParams(r *Registry, v Value, bindings map[string]Value, selfN
 		}
 		return NewRecordType(fields), nil
 
-	case IsObjectType(v):
-		oi, _ := AsObjectType(v)
+	case IsClassType(v):
+		oi, _ := AsClassType(v)
 		fields := NewOrderedMap()
 		for _, k := range oi.Fields.Keys() {
 			fv, _ := oi.Fields.Get(k)
@@ -461,7 +461,7 @@ func InstantiateSchema(r *Registry, info *TypeSchemaInfo, args []Value) (Value, 
 	// Shape the instantiated body per schema kind.
 	switch info.Kind {
 	case SchemaClass:
-		oi, aerr := AsObjectType(body)
+		oi, aerr := AsClassType(body)
 		if aerr != nil {
 			r.Defs.Pop(key)
 			r.Types.Retire(node)
@@ -469,7 +469,6 @@ func InstantiateSchema(r *Registry, info *TypeSchemaInfo, args []Value) (Value, 
 		}
 		oi.Type = node
 		oi.Name = displayName
-		oi.Class = true
 		body = NewValueRaw(node, oi)
 	default:
 		// Records / fnsig shapes are STRUCTURAL kinds: the substituted

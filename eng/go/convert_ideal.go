@@ -3,7 +3,6 @@ package eng
 import (
 	"errors"
 	"sort"
-	"strconv"
 )
 
 // ErrNoConverter lets a Behavior decline the IdealConverter capability so
@@ -93,46 +92,38 @@ func (objectConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavi
 func (objectConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (objectConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
 func (objectConvertBehavior) ToMap(v Value) (Value, error) {
-	oi, err := AsObjectInstance(v)
-	if err != nil {
+	fm, ok := FlatInstanceFields(v)
+	if !ok {
 		return NewMap(NewOrderedMap()), nil
 	}
-	return NewMap(objectFieldMap(&oi)), nil
+	return NewMap(fm), nil
 }
 func (objectConvertBehavior) ToList(v Value) (Value, error) {
-	oi, err := AsObjectInstance(v)
-	if err != nil {
+	fm, ok := FlatInstanceFields(v)
+	if !ok {
 		return NewList(nil), nil
 	}
-	return NewList(orderedMapValues(objectFieldMap(&oi))), nil
+	return NewList(orderedMapValues(fm)), nil
 }
 
-// ObjectFields is the exported view of objectFieldMap — the flattened
+// ClassFields is the exported view of objectFieldMap — the flattened
 // field map of an object or class instance (prototype chain base-first
 // for legacy object instances; class instances are already flat). Used
 // by the lang layer for items / transform / serialization projections.
-func ObjectFields(oi *ObjectInstanceInfo) *OrderedMap {
+func ClassFields(oi *ClassInstanceInfo) *OrderedMap {
 	return objectFieldMap(oi)
 }
 
-// objectFieldMap flattens an object's prototype chain (base first) then
-// its own fields into a fresh OrderedMap.
-func objectFieldMap(oi *ObjectInstanceInfo) *OrderedMap {
+// objectFieldMap copies an instance's (flat) fields into a fresh
+// OrderedMap.
+func objectFieldMap(oi *ClassInstanceInfo) *OrderedMap {
 	out := NewOrderedMap()
-	var fill func(o *ObjectInstanceInfo)
-	fill = func(o *ObjectInstanceInfo) {
-		if o == nil {
-			return
-		}
-		fill(o.Prototype)
-		if o.Fields != nil {
-			for _, k := range o.Fields.Keys() {
-				val, _ := o.Fields.Get(k)
-				out.Set(k, val)
-			}
+	if oi != nil && oi.Fields != nil {
+		for _, k := range oi.Fields.Keys() {
+			val, _ := oi.Fields.Get(k)
+			out.Set(k, val)
 		}
 	}
-	fill(oi)
 	return out
 }
 
@@ -143,32 +134,6 @@ func orderedMapValues(m *OrderedMap) []Value {
 		out = append(out, v)
 	}
 	return out
-}
-
-// arrayConvertBehavior: an Array instance → its elements (List); ToMap is
-// an index→element map.
-type arrayConvertBehavior struct{}
-
-func (arrayConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (arrayConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
-func (arrayConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
-func (arrayConvertBehavior) ToList(v Value) (Value, error) {
-	ai, err := AsArray(v)
-	if err != nil || ai == nil {
-		return NewList(nil), nil
-	}
-	return NewList(append([]Value(nil), ai.Elems...)), nil
-}
-func (arrayConvertBehavior) ToMap(v Value) (Value, error) {
-	ai, err := AsArray(v)
-	if err != nil || ai == nil {
-		return NewMap(NewOrderedMap()), nil
-	}
-	m := NewOrderedMap()
-	for i, e := range ai.Elems {
-		m.Set(strconv.Itoa(i), e)
-	}
-	return NewMap(m), nil
 }
 
 // storeConvertBehavior: a Store → its own key/value entries (sorted keys
@@ -290,14 +255,15 @@ func (reachConvertBehavior) ToList(v Value) (Value, error) {
 }
 
 func init() {
-	TObject.Behavior = objectConvertBehavior{}
-	// Class instances project to maps/lists the same way Object
-	// instances do — flat field maps (class instances have no
-	// prototype chain, so the flatten is a single pass). The behavior
-	// carries no Sizer, so the SizeOf walk continues past Class to the
-	// Ideal root's payload-switch Sizer.
+	// Class instances project to maps/lists as flat field maps (class
+	// instances have no prototype chain, so the flatten is a single
+	// pass). The behavior carries no Sizer, so the SizeOf walk continues
+	// past Class to the Ideal root's payload-switch Sizer.
 	TClass.Behavior = objectConvertBehavior{}
-	TArray.Behavior = arrayConvertBehavior{}
+	// Resource/Entity instances share the flat field-map shape, so they
+	// reuse the same converter (registered on the TResource root, so
+	// Entity inherits it via the Parent-chain Behavior walk).
+	TResource.Behavior = objectConvertBehavior{}
 	TStore.Behavior = storeConvertBehavior{}
 	TError.Behavior = errorConvertBehavior{}
 	TReach.Behavior = reachConvertBehavior{}

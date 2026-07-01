@@ -6,7 +6,7 @@
 # each element on the stack. fold optionally takes an initial accumulator;
 # scan has no init form — it always seeds from the first element. (filter,
 # which takes a Function callback, and the richer combinators —
-# where/group/unique/sortby — live in the aql:array module.)
+# where/group/unique/sortby — live in the aql:array-util module.)
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  each — map a code body over a list

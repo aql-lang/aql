@@ -97,10 +97,9 @@ RANK             TYPE PATH                  REPRESENTATIVE LITERAL          NOTE
 
 ─── kernel Ideal band (4·10¹⁰) ──────────────────────────────────────────────────────────────
 40_000_000_000   Ideal                      Ideal
-40_100_000_000   Ideal/Object               Object
-40_110_000_000   Ideal/Object/Resource      Resource
-40_111_000_000   Ideal/Object/Resource/Entity   make Entity {kind:'api' …}
-40_200_000_000   Ideal/Array                make Array [1 2 3]
+40_100_000_000   Ideal/Class                def P (class {x:1})
+40_110_000_000   Ideal/Resource             Resource
+40_111_000_000   Ideal/Resource/Entity      make Entity {kind:'api' …}
 40_300_000_000   Ideal/Record               refine Record [x:Integer]
 40_400_000_000   Ideal/Options              make Options {x:1, y?:String}
 40_500_000_000   Ideal/Error                (raised error value)

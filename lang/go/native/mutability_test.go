@@ -14,13 +14,13 @@ func TestObjectSetFieldAtom(t *testing.T) {
 
 	fields := NewOrderedMap()
 	fields.Set("name", NewTypeLiteral(TString))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: fields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Person",
 	}
 
-	instance := ObjectInstanceInfo{
+	instance := ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields: func() *OrderedMap {
 			m := NewOrderedMap()
@@ -28,7 +28,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(TObject, instance)
+	instanceVal := NewClassInstance(TClass, instance)
 
 	// Verify initial value
 	result := runAQL(t, r, []Value{
@@ -61,13 +61,13 @@ func TestObjectSetFieldString(t *testing.T) {
 
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TInteger))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: fields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Point",
 	}
 
-	instance := ObjectInstanceInfo{
+	instance := ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields: func() *OrderedMap {
 			m := NewOrderedMap()
@@ -75,7 +75,7 @@ func TestObjectSetFieldString(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(TObject, instance)
+	instanceVal := NewClassInstance(TClass, instance)
 
 	// Mutate via string key
 	result := runAQL(t, r, []Value{
@@ -93,44 +93,6 @@ func TestObjectSetFieldString(t *testing.T) {
 	}
 }
 
-func TestObjectSetAddsNewField(t *testing.T) {
-	// set can add a new field not in the original type schema
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-
-	fields := NewOrderedMap()
-	fields.Set("a", NewTypeLiteral(TInteger))
-	objType := ObjectTypeInfo{
-		Fields: fields,
-		ID:     GenerateObjectTypeID(),
-		Name:   "Object/Flex",
-	}
-
-	instance := ObjectInstanceInfo{
-		TypeRef: &objType,
-		Fields: func() *OrderedMap {
-			m := NewOrderedMap()
-			m.Set("a", NewInteger(1))
-			return m
-		}(),
-	}
-	instanceVal := NewObjectInstance(TObject, instance)
-
-	// Add a new field "b"
-	runAQL(t, r, []Value{
-		instanceVal, NewWord("set"), NewWord("b"), NewInteger(2),
-	})
-
-	// Read it back
-	result := runAQL(t, r, []Value{
-		instanceVal, NewWord("dot"), NewWord("b"),
-	})
-	_as3, _ := AsInteger(result[0])
-	if len(result) != 1 || _as3 != 2 {
-		t.Fatalf("got %v, want 2", result)
-	}
-}
-
 func TestObjectMutationSharedReference(t *testing.T) {
 	// Two references to the same Object instance see mutations
 	r, _ := DefaultRegistry()
@@ -138,13 +100,13 @@ func TestObjectMutationSharedReference(t *testing.T) {
 
 	fields := NewOrderedMap()
 	fields.Set("v", NewTypeLiteral(TInteger))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: fields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Counter",
 	}
 
-	instance := ObjectInstanceInfo{
+	instance := ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields: func() *OrderedMap {
 			m := NewOrderedMap()
@@ -152,8 +114,8 @@ func TestObjectMutationSharedReference(t *testing.T) {
 			return m
 		}(),
 	}
-	ref1 := NewObjectInstance(TObject, instance)
-	ref2 := NewObjectInstance(TObject, instance) // same underlying Fields pointer
+	ref1 := NewClassInstance(TClass, instance)
+	ref2 := NewClassInstance(TClass, instance) // same underlying Fields pointer
 
 	// Mutate via ref1
 	runAQL(t, r, []Value{
@@ -302,21 +264,21 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 	// Object instances expose Fields directly (not through AsMap/AsMutableMap)
 	objFields := NewOrderedMap()
 	objFields.Set("v", NewInteger(0))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: objFields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Test",
 	}
-	inst := NewObjectInstance(TObject, ObjectInstanceInfo{
+	inst := NewClassInstance(TClass, ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields:  objFields,
 	})
-	// AsMap returns an error for Object (Data is ObjectInstanceInfo, not *OrderedMap)
+	// AsMap returns an error for Object (Data is ClassInstanceInfo, not *OrderedMap)
 	if _m, err := AsMap(inst); err == nil && _m != nil {
 		t.Fatal("AsMap should return nil/error for Object instance")
 	}
-	// But Fields are mutable via the ObjectInstanceInfo
-	oi := inst.Data.(ObjectInstanceInfo)
+	// But Fields are mutable via the ClassInstanceInfo
+	oi := inst.Data.(ClassInstanceInfo)
 	oi.Fields.Set("v", NewInteger(42))
 	v3, _ := oi.Fields.Get("v")
 	_as8, _ := AsInteger(v3)
@@ -354,116 +316,6 @@ func TestAsListReturnsReadList(t *testing.T) {
 	_as11, _ := AsInteger(rl.Get(0))
 	if _as11 != 1 {
 		t.Fatal("mutating Slice() copy should not affect ReadList")
-	}
-}
-
-// --- Array mutability ---
-
-func TestArrayGetByIndex(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-	arr := NewArray([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
-
-	result := runAQL(t, r, []Value{
-		arr, NewWord("get"), NewInteger(1),
-	})
-	_as12, _ := AsInteger(result[0])
-	if len(result) != 1 || _as12 != 20 {
-		t.Fatalf("got %v, want 20", result)
-	}
-}
-
-func TestArrayGetOutOfBoundsReturnsNone(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-	arr := NewArray([]Value{NewInteger(10)})
-
-	result := runAQL(t, r, []Value{
-		arr, NewWord("get"), NewInteger(5),
-	})
-	if len(result) != 1 || !IsNoneShape(result[0]) {
-		t.Fatalf("got %v, want None", result)
-	}
-}
-
-func TestArraySetByIndex(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-	arr := NewArray([]Value{NewInteger(10), NewInteger(20)})
-
-	// set 0 99 arr
-	runAQL(t, r, []Value{
-		arr, NewWord("set"), NewInteger(0), NewInteger(99),
-	})
-
-	// Verify mutation
-	result := runAQL(t, r, []Value{
-		arr, NewWord("get"), NewInteger(0),
-	})
-	_as13, _ := AsInteger(result[0])
-	if len(result) != 1 || _as13 != 99 {
-		t.Fatalf("after set: got %v, want 99", result)
-	}
-}
-
-func TestArraySetOutOfBoundsErrors(t *testing.T) {
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-	arr := NewArray([]Value{NewInteger(10)})
-
-	err := runAQLError(t, r, []Value{
-		arr, NewWord("set"), NewInteger(5), NewInteger(99),
-	})
-	if err == nil {
-		t.Fatal("expected error for out-of-bounds set")
-	}
-}
-
-func TestArrayMutationSharedReference(t *testing.T) {
-	// Two values wrapping the same ArrayInstanceInfo see mutations
-	r, _ := DefaultRegistry()
-	registerIOWords(r)
-	ai := &ArrayInstanceInfo{Elems: []Value{NewInteger(0)}}
-	ref1 := NewValueRaw(TArray, ai)
-	ref2 := NewValueRaw(TArray, ai)
-
-	runAQL(t, r, []Value{
-		ref1, NewWord("set"), NewInteger(0), NewInteger(42),
-	})
-
-	result := runAQL(t, r, []Value{
-		ref2, NewWord("get"), NewInteger(0),
-	})
-	_as14, _ := AsInteger(result[0])
-	if len(result) != 1 || _as14 != 42 {
-		t.Fatalf("ref2 got %v, want 42 (shared mutation)", result)
-	}
-}
-
-func TestArrayIsDistinctFromList(t *testing.T) {
-	// Array is Ideal/Array; List is Node/List — different branches.
-	arr := NewArray([]Value{NewInteger(1)})
-	list := NewList([]Value{NewInteger(1)})
-
-	if arr.Parent.ConformsTo(TList) {
-		t.Error("Array should not match TList")
-	}
-	if list.Parent.ConformsTo(TArray) {
-		t.Error("List should not match TArray")
-	}
-	if !arr.Parent.ConformsTo(TIdeal) {
-		t.Error("Array should match TIdeal")
-	}
-	if !arr.Parent.ConformsTo(TArray) {
-		t.Error("Array should match TArray")
-	}
-}
-
-func TestArrayStringRepresentation(t *testing.T) {
-	arr := NewArray([]Value{NewInteger(1), NewString("hello")})
-	s := arr.String()
-	if s != "Array[1 'hello']" {
-		t.Errorf("got %q, want Array[1 'hello']", s)
 	}
 }
 

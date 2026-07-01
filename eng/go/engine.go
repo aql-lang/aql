@@ -2056,11 +2056,11 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	// Simple value def: substitute the word with its value directly,
-	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
+	// bypassing function dispatch entirely. FnDefInfo and ClassTypeInfo
 	// entries are not simple values — they go through normal Lookup.
 	if top, ok := e.registry.Defs.Top(w.Name); ok {
 		switch top.Data.(type) {
-		case FnDefInfo, *ObjectTypeInfo:
+		case FnDefInfo, *ClassTypeInfo:
 			// Not a simple value — fall through to Lookup.
 		default:
 			// f w ≡ f (w): a word bound to a DATA __SP splice marker that
@@ -6653,27 +6653,84 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 // raises == the interpreter's fallback raise). Returns true — and splices the
 // recovered returns — when it records; false leaves the caller's refusal to stand
 // (multi-overload → Cluster C). The L4 leaf: design/VOXGIG-COMPILE-LEAVES.1.md.
-func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
-	if sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
+// singleOverloadRecoverable reports whether fn is a user fn with EXACTLY ONE
+// real (arg-bearing, non-fallback) overload — the shape whose dispatch over an
+// Any/disjunct-carrier arg is RECOVERABLE: runtime dispatch is unambiguous, and
+// the VM's CALL_USER param contract raises exactly as the interpreter would if
+// the concrete value misses the sole sig. Used both to RECORD a guarded call on
+// an armed (compile) pass — tryRecordRecoveredUserFn below — and to SUPPRESS the
+// no_signature diagnostic on a plain check pass (Emit inactive), so a plain
+// check agrees with a compile pass instead of flagging what compile silently
+// recovers (the `engine-known engine` FP: an `is String`-guarded Options-`get`
+// value whose type the plain-check pass leaves a strict-Any carrier).
+func singleOverloadRecoverable(sig *Signature, fn *FnDefInfo) bool {
+	if fn == nil || sig == nil || sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
 		return false
 	}
 	realOverloads := 0
 	has0ArgReal := false
+	var sole *Signature
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
 		if s.Fallback {
 			continue // synthetic 0-arg catch-all: raises for an arg-bearing fn
 		}
 		realOverloads++
+		sole = s
 		if s.TotalArgs() == 0 {
 			has0ArgReal = true
 		}
 	}
-	if realOverloads != 1 || has0ArgReal {
+	if realOverloads != 1 || has0ArgReal || sole == nil {
+		return false
+	}
+	// AQL-BODIED user fn ONLY (Codex PR #211 review #2). A core native (one-sig
+	// with a ReturnsFn, e.g. `enum`) and a trivial-delegation module wrapper
+	// (body = [Word(inner)] short-circuiting to an inner native) do NOT get the
+	// guarded CALL_USER param contract, so their unmatched dispatch is not
+	// deferrable. The discriminator is a real AQL body (len(Body) > 0), NOT a nil
+	// Handler: an AQL fn defined in a module preamble carries a synthesized CallAQL
+	// Handler yet is genuinely AQL-bodied (the `engine-known` case) — gating on
+	// Handler==nil wrongly excludes it. Core natives have an empty Body; delegation
+	// wrappers are caught by trivialDelegationTarget.
+	if _, isDelegation := trivialDelegationTarget(sole); isDelegation {
+		return false
+	}
+	return len(sole.body()) > 0
+}
+
+func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
+	if !singleOverloadRecoverable(sig, fn) {
 		return false
 	}
 	recovered := sig.ReturnsFn(sigOrderArgs(args, nStack), e.registry)
 	e.spliceCheckResults(positions, recovered)
+	return true
+}
+
+// concreteArgsMatch reports whether every NON-Any-carrier operand still MATCHES
+// its sole-sig param position — so the failed dispatch is attributable SOLELY to
+// the Any-typed (statically-unknown) operand(s), not a provably-wrong concrete
+// arg. Guards the multi-arg case `g x 123` (g[a:Integer b:String]; x:Any->a ok,
+// but 123->b:String wrong): the concrete mismatch stays a genuine error and must
+// NOT be suppressed alongside the deferrable Any (Codex PR #211 review #1). Used
+// only to gate the plain-check no_signature diagnostic; the armed recovery records
+// a guarded CALL_USER that raises == interpreter regardless, so it needs no such check.
+func concreteArgsMatch(sig *Signature, args []Value, nStack int) bool {
+	window := sigOrderArgs(args, nStack)
+	n := sig.TotalArgs()
+	if len(window) < n {
+		return false // arity shortfall — a genuine mismatch, do not suppress
+	}
+	for i := 0; i < n; i++ {
+		v := window[i]
+		if v.Carrier && v.Parent != nil && v.Parent.Equal(TAny) {
+			continue // the deferrable unknown operand
+		}
+		if !sigArgMatches(sig, i, v) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -6903,7 +6960,26 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// recursive `f` whose `next` holds a List where the sig wants an Integer —
 	// which `signature_error`s at run time, NOT a false positive). The
 	// `!Compiling` guard alone is the correct condition.
-	if !e.registry.Check.Compiling {
+	// EXCEPTION to the "!Compiling alone" rule: a SINGLE-overload user fn
+	// dispatched over an Any/disjunct-CARRIER arg (a value of statically-unknown
+	// type, not a concrete mismatch) is NOT a genuine unmatched dispatch — it is
+	// the exact shape the armed (compile) pass RECOVERS as a guarded CALL_USER
+	// above (singleOverloadRecoverable), where the VM's param contract raises ==
+	// the interpreter iff the runtime value misses the sole sig. A plain check
+	// pass reaches HERE (Emit inactive, so the recovery block was skipped) and
+	// would otherwise flag what compile silently recovers — the `engine-known
+	// engine` false positive (`is String`-guarded Options-`get`). Suppressing is
+	// SOUND and narrower than the rejected bestMatch>=0 gate: it fires only on an
+	// unknown-TYPE carrier (never a concrete/type-literal operand) AND a one-
+	// overload user fn, so it cannot drop the concrete-mismatch error rows.
+	// anyAnyCarrier ONLY, NOT anyDisjunctCarrier: a DISJUNCT's members are
+	// statically known, so a disjunct that misses the param in EVERY member
+	// (Integer|String -> Map, String|List -> Integer) is a GENUINE error the
+	// interpreter always raises on and must stay flagged (TestJoinCarriersDynamicArm
+	// / TestSliceDynamicReceiverRefines). Only the fully-unknown Any carrier is
+	// deferrable to the runtime CALL_USER contract.
+	recoverableUnknownType := anyAnyCarrier(args) && singleOverloadRecoverable(sig, fn) && concreteArgsMatch(sig, args, nStack)
+	if !e.registry.Check.Compiling && !recoverableUnknownType {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
 			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",

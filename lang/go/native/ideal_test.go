@@ -20,9 +20,6 @@ func TestIdeals_KernelKindsRegistered(t *testing.T) {
 			t.Errorf("kernel Ideal %q is not registered", name)
 		}
 	}
-	if id := r.Ideals.For(NewTypeLiteral(TObject)); id == nil || id.Name != "Object" {
-		t.Errorf("For(Object literal) = %v, want Object", id)
-	}
 	if id := r.Ideals.For(NewTypeLiteral(TRecord)); id == nil || id.Name != "Record" {
 		t.Errorf("For(Record literal) = %v, want Record", id)
 	}
