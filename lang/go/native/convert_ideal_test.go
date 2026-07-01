@@ -98,7 +98,7 @@ func TestConvertIdealBuiltins(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("a", NewInteger(1))
 	fields.Set("b", NewString("x"))
-	obj := NewObjectInstance(TClass, ObjectInstanceInfo{Fields: fields})
+	obj := NewClassInstance(TClass, ClassInstanceInfo{Fields: fields})
 	if got := runConvert(t, obj, "convert Map thing"); got != "{a:1 b:'x'}" {
 		t.Errorf("Object→Map = %s, want {a:1 b:'x'}", got)
 	}

@@ -266,8 +266,8 @@ func boundNode(bound Value) *Type {
 	switch {
 	case IsBareTypeNode(bound):
 		return &bound
-	case IsObjectType(bound):
-		oi, _ := AsObjectType(bound)
+	case IsClassType(bound):
+		oi, _ := AsClassType(bound)
 		return oi.Type
 	case IsSurfaceType(bound):
 		si, _ := AsSurfaceType(bound)

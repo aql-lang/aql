@@ -14,13 +14,13 @@ func TestObjectSetFieldAtom(t *testing.T) {
 
 	fields := NewOrderedMap()
 	fields.Set("name", NewTypeLiteral(TString))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: fields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Person",
 	}
 
-	instance := ObjectInstanceInfo{
+	instance := ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields: func() *OrderedMap {
 			m := NewOrderedMap()
@@ -28,7 +28,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(TClass, instance)
+	instanceVal := NewClassInstance(TClass, instance)
 
 	// Verify initial value
 	result := runAQL(t, r, []Value{
@@ -61,13 +61,13 @@ func TestObjectSetFieldString(t *testing.T) {
 
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TInteger))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: fields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Point",
 	}
 
-	instance := ObjectInstanceInfo{
+	instance := ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields: func() *OrderedMap {
 			m := NewOrderedMap()
@@ -75,7 +75,7 @@ func TestObjectSetFieldString(t *testing.T) {
 			return m
 		}(),
 	}
-	instanceVal := NewObjectInstance(TClass, instance)
+	instanceVal := NewClassInstance(TClass, instance)
 
 	// Mutate via string key
 	result := runAQL(t, r, []Value{
@@ -100,13 +100,13 @@ func TestObjectMutationSharedReference(t *testing.T) {
 
 	fields := NewOrderedMap()
 	fields.Set("v", NewTypeLiteral(TInteger))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: fields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Counter",
 	}
 
-	instance := ObjectInstanceInfo{
+	instance := ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields: func() *OrderedMap {
 			m := NewOrderedMap()
@@ -114,8 +114,8 @@ func TestObjectMutationSharedReference(t *testing.T) {
 			return m
 		}(),
 	}
-	ref1 := NewObjectInstance(TClass, instance)
-	ref2 := NewObjectInstance(TClass, instance) // same underlying Fields pointer
+	ref1 := NewClassInstance(TClass, instance)
+	ref2 := NewClassInstance(TClass, instance) // same underlying Fields pointer
 
 	// Mutate via ref1
 	runAQL(t, r, []Value{
@@ -264,21 +264,21 @@ func TestAsMapReturnsReadMap(t *testing.T) {
 	// Object instances expose Fields directly (not through AsMap/AsMutableMap)
 	objFields := NewOrderedMap()
 	objFields.Set("v", NewInteger(0))
-	objType := ObjectTypeInfo{
+	objType := ClassTypeInfo{
 		Fields: objFields,
 		ID:     GenerateObjectTypeID(),
 		Name:   "Object/Test",
 	}
-	inst := NewObjectInstance(TClass, ObjectInstanceInfo{
+	inst := NewClassInstance(TClass, ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields:  objFields,
 	})
-	// AsMap returns an error for Object (Data is ObjectInstanceInfo, not *OrderedMap)
+	// AsMap returns an error for Object (Data is ClassInstanceInfo, not *OrderedMap)
 	if _m, err := AsMap(inst); err == nil && _m != nil {
 		t.Fatal("AsMap should return nil/error for Object instance")
 	}
-	// But Fields are mutable via the ObjectInstanceInfo
-	oi := inst.Data.(ObjectInstanceInfo)
+	// But Fields are mutable via the ClassInstanceInfo
+	oi := inst.Data.(ClassInstanceInfo)
 	oi.Fields.Set("v", NewInteger(42))
 	v3, _ := oi.Fields.Get("v")
 	_as8, _ := AsInteger(v3)

@@ -1117,7 +1117,7 @@ func (r *Registry) RegisterPart(part string) {
 }
 
 // ResolveTypeLiteralDef checks whether a bare type literal (Data==nil) has
-// a richer definition installed under the same name (e.g. an ObjectTypeInfo
+// a richer definition installed under the same name (e.g. an ClassTypeInfo
 // from RegisterResource or a `type Foo object {…}` binding). If so it
 // returns that value; otherwise it returns the original unchanged. This
 // lets the parser eagerly resolve all type names while the engine still
@@ -1137,7 +1137,7 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if name == "" {
 		return v
 	}
-	if top, ok := reg.Defs.Top(name); ok && (IsObjectType(top) || IsResourceType(top)) {
+	if top, ok := reg.Defs.Top(name); ok && (IsClassType(top) || IsResourceType(top)) {
 		return top
 	}
 	return v

@@ -405,7 +405,7 @@ func init() {
 			// Any yields the other (more specific) side.
 			return other, nil
 		}},
-		{func(v Value, _ ValueShape) bool { return IsObjectType(v) }, unifyObjectType},
+		{func(v Value, _ ValueShape) bool { return IsClassType(v) }, unifyObjectType},
 		{func(v Value, _ ValueShape) bool { return typeParamLitNode(v) != nil }, func(ruling, other Value) (Value, *UnifyError) {
 			return unifyTypeParam(ruling, typeParamLitNode(ruling), other)
 		}},
@@ -432,15 +432,15 @@ func foldDegenRoot(name string, root ValueShape) func(Value, Value) (Value, *Uni
 // matching the Record/Options exclusivity rules).
 func unifyObjectType(a, b Value) (Value, *UnifyError) {
 	ot, other := a, b
-	if !IsObjectType(ot) {
+	if !IsClassType(ot) {
 		ot, other = b, a
 	}
-	oi, err := AsObjectType(ot)
+	oi, err := AsClassType(ot)
 	if err != nil || oi.Type == nil {
 		return Value{}, unifyFail("object type has no minted node (declare it with def)", a, b)
 	}
-	if IsObjectType(other) {
-		ooi, oerr := AsObjectType(other)
+	if IsClassType(other) {
+		ooi, oerr := AsClassType(other)
 		if oerr == nil && ooi.ID == oi.ID {
 			return ot, nil
 		}

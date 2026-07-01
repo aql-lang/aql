@@ -314,7 +314,7 @@ func (HostTypeBody) hostTypeBody() {}
 //   WordInfo, ForwardInfo, MarkInfo, MoveInfo, ReturnCheckInfo,
 //   DefCleanupInfo, ModuleDesc, FnDefInfo, FnUndefInfo,
 //   DisjunctInfo, ChildTypeInfo, RecordTypeInfo, OptionsTypeInfo,
-//   TableTypeInfo, TableData, ObjectTypeInfo, ObjectInstanceInfo,
+//   TableTypeInfo, TableData, ClassTypeInfo, ClassInstanceInfo,
 //   *StoreInstanceInfo, *TimeoutInfo,
 //   *IntervalInfo, ErrorInfo, CalDurationData,
 //   DepScalarInfo, Materializer (interface), noneSentinel
@@ -368,8 +368,8 @@ func (RecordTypeInfo) payloadMarker()       {}
 func (OptionsTypeInfo) payloadMarker()      {}
 func (TableTypeInfo) payloadMarker()        {}
 func (TableData) payloadMarker()            {}
-func (ObjectTypeInfo) payloadMarker()       {}
-func (ObjectInstanceInfo) payloadMarker()   {}
+func (ClassTypeInfo) payloadMarker()        {}
+func (ClassInstanceInfo) payloadMarker()    {}
 func (*SurfaceInfo) payloadMarker()         {}
 func (*GenSpecInfo) payloadMarker()         {}
 func (GenParam) payloadMarker()             {}

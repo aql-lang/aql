@@ -49,7 +49,7 @@ func docToAny(v native.Value) any {
 			return sliceToAny(lst.Slice())
 		}
 		return idealListToAny(v)
-	case native.IsObjectInstance(v):
+	case native.IsClassInstance(v):
 		return native.ValueToAny(v) // already a recursive field map
 	default:
 		// Other Ideals (Store, …) project to a map; everything else (scalars)

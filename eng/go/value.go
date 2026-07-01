@@ -665,7 +665,7 @@ type NegationInfo struct {
 	Inner Value
 }
 
-// ObjectTypeInfo holds the type definition for an object type.
+// ClassTypeInfo holds the type definition for an object type.
 // Object types form an inheritance hierarchy analogous to class inheritance.
 // For example, Object/Foo has parent Object, Object/Foo/Bar has parent Foo.
 // Fields are the type's own fields (not including inherited ones).
@@ -673,22 +673,21 @@ type NegationInfo struct {
 // ID is a unique internal identifier: "T_" followed by 12 lowercase hex characters.
 // Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
 // registered via def.
-type ObjectTypeInfo struct {
-	Fields          *OrderedMap     // own fields (field name → type-constraint Value)
-	Parent          *ObjectTypeInfo // parent object type (nil if direct child of Object)
-	ID              string          // unique internal ID: "T_" + 12 hex chars
-	Name            string          // full type path (e.g. "Object/Foo/Bar")
-	Type            *Type           // canonical *Type identity; populated by MintType during installation
-	Class           bool            // class-rooted (minted under Ideal/Class): sealed, flat instances — see design/CLASS-OBJECT.10.md
-	BinaryLayout    Value           // for a binary-frame spec (a class carrying a Scalar/Bytes wire layout): the raw layout List<Map>; zero Value otherwise. Read by the Bytes codec (make/unpack/convert) and the Binary/BinarySpec membership predicates. See lang/go/native/native_bytes.go and design/go-modules/BYTES.10.md.
-	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
+type ClassTypeInfo struct {
+	Fields          *OrderedMap    // own fields (field name → type-constraint Value)
+	Parent          *ClassTypeInfo // parent class type (nil if direct child of Ideal/Class)
+	ID              string         // unique internal ID: "T_" + 12 hex chars
+	Name            string         // full type path (e.g. "Class/Foo/Bar")
+	Type            *Type          // canonical *Type identity; populated by MintType during installation
+	BinaryLayout    Value          // for a binary-frame spec (a class carrying a Scalar/Bytes wire layout): the raw layout List<Map>; zero Value otherwise. Read by the Bytes codec (make/unpack/convert) and the Binary/BinarySpec membership predicates. See lang/go/native/native_bytes.go and design/go-modules/BYTES.10.md.
+	cachedAllFields *OrderedMap    // lazily computed merged field map (immutable after first call)
 }
 
 // AllFields returns all fields including inherited ones. Parent fields come
 // first, followed by the type's own fields. Own fields override inherited
-// fields with the same name. The result is cached since ObjectTypeInfo is
+// fields with the same name. The result is cached since ClassTypeInfo is
 // immutable after registration.
-func (o *ObjectTypeInfo) AllFields() *OrderedMap {
+func (o *ClassTypeInfo) AllFields() *OrderedMap {
 	if o.cachedAllFields != nil {
 		return o.cachedAllFields
 	}
@@ -708,25 +707,25 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 	return result
 }
 
-// ObjectInstanceInfo holds a concrete instance of an object (class)
-// type. TypeRef points back to the ObjectTypeInfo that created this
+// ClassInstanceInfo holds a concrete instance of an object (class)
+// type. TypeRef points back to the ClassTypeInfo that created this
 // instance; Fields holds every resolved field. Instances are FLAT —
 // class construction resolves the full field set (own + inherited)
 // eagerly at make, so there is no prototype chain (open objects, which
 // used one, were removed).
-type ObjectInstanceInfo struct {
-	TypeRef *ObjectTypeInfo // the object type this is an instance of
-	Fields  *OrderedMap     // resolved field values (flat: own + inherited)
+type ClassInstanceInfo struct {
+	TypeRef *ClassTypeInfo // the object type this is an instance of
+	Fields  *OrderedMap    // resolved field values (flat: own + inherited)
 }
 
 // GetField returns a field value (flat lookup — instances carry every
 // field resolved at make).
-func (oi ObjectInstanceInfo) GetField(name string) (Value, bool) {
+func (oi ClassInstanceInfo) GetField(name string) (Value, bool) {
 	return oi.Fields.Get(name)
 }
 
 // AllFields returns the instance's resolved fields (flat).
-func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
+func (oi ClassInstanceInfo) AllFields() *OrderedMap {
 	result := NewOrderedMap()
 	for _, k := range oi.Fields.Keys() {
 		v, _ := oi.Fields.Get(k)
@@ -751,7 +750,7 @@ type ResourceTypeInfo struct {
 }
 
 // AllFields returns all fields including inherited ones (parent first,
-// own overriding), mirroring ObjectTypeInfo.AllFields.
+// own overriding), mirroring ClassTypeInfo.AllFields.
 func (o *ResourceTypeInfo) AllFields() *OrderedMap {
 	if o.cachedAllFields != nil {
 		return o.cachedAllFields
@@ -1735,20 +1734,20 @@ func NewNegation(inner Value) Value {
 	return NewValueRaw(TNegation, NegationInfo{Inner: inner})
 }
 
-// NewObjectType creates an object type value. The caller must
+// NewClassType creates an object type value. The caller must
 // provide the canonical *Type identity — typically minted via
 // r.Types.MintType for named types being installed, or for anonymous
 // `object {…}` declarations. The info's Type field is set to t for
 // downstream code that needs the parent's *Type when extending.
-func NewObjectType(t *Type, info ObjectTypeInfo) Value {
+func NewClassType(t *Type, info ClassTypeInfo) Value {
 	info.Type = t
 	return NewValueRaw(t, info)
 }
 
-// NewObjectInstance creates an object instance value of the given
+// NewClassInstance creates an object instance value of the given
 // type. The caller must provide the type's *Type identity (typically
 // info.TypeRef.Type for the type currently being instantiated).
-func NewObjectInstance(t *Type, info ObjectInstanceInfo) Value {
+func NewClassInstance(t *Type, info ClassInstanceInfo) Value {
 	return NewValueRaw(t, info)
 }
 
@@ -2075,21 +2074,21 @@ func AsNegation(v Value) (NegationInfo, error) {
 	return info, nil
 }
 
-// IsObjectType reports whether this value is an object type definition.
-// The test is payload-based: any value carrying ObjectTypeInfo is an
+// IsClassType reports whether this value is an object type definition.
+// The test is payload-based: any value carrying ClassTypeInfo is an
 // object type, regardless of where its Parent sits in the lattice — a
 // builtin like Resource is an object type whose Parent is the peer
 // Ideal kind Ideal/Resource, not a descendant of Ideal/Object.
-func IsObjectType(v Value) bool {
-	_, ok := v.Data.(ObjectTypeInfo)
+func IsClassType(v Value) bool {
+	_, ok := v.Data.(ClassTypeInfo)
 	return ok
 }
 
-// AsObjectType returns the ObjectTypeInfo, panics if not an object type.
-func AsObjectType(v Value) (ObjectTypeInfo, error) {
-	info, ok := v.Data.(ObjectTypeInfo)
+// AsClassType returns the ClassTypeInfo, panics if not an object type.
+func AsClassType(v Value) (ClassTypeInfo, error) {
+	info, ok := v.Data.(ClassTypeInfo)
 	if !ok {
-		return ObjectTypeInfo{}, fmt.Errorf("AsObjectType: not an object type value (got %T)", v.Data)
+		return ClassTypeInfo{}, fmt.Errorf("AsClassType: not an object type value (got %T)", v.Data)
 	}
 	return info, nil
 }
@@ -2109,18 +2108,18 @@ func AsStore(v Value) (*StoreInstanceInfo, error) {
 	return si, nil
 }
 
-// IsObjectInstance reports whether this value is an object instance.
-// Payload-based — see IsObjectType.
-func IsObjectInstance(v Value) bool {
-	_, ok := v.Data.(ObjectInstanceInfo)
+// IsClassInstance reports whether this value is an object instance.
+// Payload-based — see IsClassType.
+func IsClassInstance(v Value) bool {
+	_, ok := v.Data.(ClassInstanceInfo)
 	return ok
 }
 
-// AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
-func AsObjectInstance(v Value) (ObjectInstanceInfo, error) {
-	info, ok := v.Data.(ObjectInstanceInfo)
+// AsClassInstance returns the ClassInstanceInfo, panics if not an object instance.
+func AsClassInstance(v Value) (ClassInstanceInfo, error) {
+	info, ok := v.Data.(ClassInstanceInfo)
 	if !ok {
-		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
+		return ClassInstanceInfo{}, fmt.Errorf("AsClassInstance: not an object instance value (got %T)", v.Data)
 	}
 	return info, nil
 }
@@ -2708,8 +2707,8 @@ func kernelFormatDefault(v Value) string {
 	// Timeout / Interval render via their per-Type Behavior — see
 	// coretype_format_behaviors.go. Their arms have been removed
 	// from this switch.
-	case IsObjectInstance(v):
-		oi, _ := AsObjectInstance(v)
+	case IsClassInstance(v):
+		oi, _ := AsClassInstance(v)
 		allFields := oi.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -2731,8 +2730,8 @@ func kernelFormatDefault(v Value) string {
 			name = "Object"
 		}
 		return name + "{" + strings.Join(parts, " ") + "}"
-	case IsObjectType(v):
-		ot, _ := AsObjectType(v)
+	case IsClassType(v):
+		ot, _ := AsClassType(v)
 		allFields := ot.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -2826,7 +2825,7 @@ func IsTypeValue(v Value) bool {
 
 	// Options type, record type, typed list/map, table type, object type.
 	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
-		IsTypedMap(v) || IsTableType(v) || IsObjectType(v) {
+		IsTypedMap(v) || IsTableType(v) || IsClassType(v) {
 		return true
 	}
 

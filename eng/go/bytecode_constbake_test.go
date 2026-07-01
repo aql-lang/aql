@@ -24,7 +24,7 @@ func TestIsInertConstRejectsMutableInstances(t *testing.T) {
 		v    Value
 	}{
 		{"store", NewStore(TStore)},
-		{"class-instance", NewObjectInstance(TClass, ObjectInstanceInfo{})},
+		{"class-instance", NewClassInstance(TClass, ClassInstanceInfo{})},
 	}
 	for _, m := range mutable {
 		if isInertConst(m.v) {

@@ -94,7 +94,7 @@ func TestObjectTypeParentFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsObjectType(result[0])
+	ot, _ := native.AsClassType(result[0])
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 total fields (a,b,d), got %d", all.Len())
@@ -116,7 +116,7 @@ func TestObjectTypeOwnFieldsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsObjectType(result[0])
+	ot, _ := native.AsClassType(result[0])
 	if ot.Fields.Len() != 1 {
 		t.Fatalf("expected 1 own field (d), got %d", ot.Fields.Len())
 	}
@@ -144,7 +144,7 @@ func TestObjectTypeDeepInheritance(t *testing.T) {
 	if !strings.Contains(s, "Class/Foo/Bar/Baz") {
 		t.Errorf("expected type name 'Class/Foo/Bar/Baz', got %s", s)
 	}
-	ot, _ := native.AsObjectType(result[0])
+	ot, _ := native.AsClassType(result[0])
 	all := ot.AllFields()
 	if all.Len() != 3 {
 		t.Fatalf("expected 3 fields (a,b,c), got %d", all.Len())
@@ -165,7 +165,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp1, _ := native.AsObjectType(result[0])
+	_tmp1, _ := native.AsClassType(result[0])
 	fooID := _tmp1.ID
 
 	result2, err := runNativeSteps(t, nil, []string{
@@ -176,7 +176,7 @@ func TestObjectTypeUniqueID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp2, _ := native.AsObjectType(result2[0])
+	_tmp2, _ := native.AsClassType(result2[0])
 	barID := _tmp2.ID
 
 	if fooID == barID {
@@ -199,7 +199,7 @@ func TestObjectTypeParentIsNilForRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsObjectType(result[0])
+	ot, _ := native.AsClassType(result[0])
 	if ot.Parent != nil {
 		t.Errorf("expected nil parent for root object type, got %+v", ot.Parent)
 	}
@@ -218,7 +218,7 @@ func TestObjectTypeParentReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsObjectType(result[0])
+	ot, _ := native.AsClassType(result[0])
 	if ot.Parent == nil {
 		t.Fatal("expected non-nil parent for child object type")
 	}
@@ -237,7 +237,7 @@ func TestObjectTypeFieldOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ot, _ := native.AsObjectType(result[0])
+	ot, _ := native.AsClassType(result[0])
 	all := ot.AllFields()
 	// a should be narrowed to Integer, b inherited as Boolean
 	if all.Len() != 2 {
@@ -441,10 +441,10 @@ func objFields(t *testing.T, result []native.Value) *native.OrderedMap {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
 	v := result[0]
-	if !native.IsObjectInstance(v) {
+	if !native.IsClassInstance(v) {
 		t.Fatalf("expected object instance, got %s", v.String())
 	}
-	oi, _ := native.AsObjectInstance(v)
+	oi, _ := native.AsClassInstance(v)
 	return oi.AllFields()
 }
 
@@ -458,10 +458,10 @@ func TestMakeObjectBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	inst := result[0]
-	if !native.IsObjectInstance(inst) {
+	if !native.IsClassInstance(inst) {
 		t.Fatalf("expected object instance, got %s", inst.String())
 	}
-	oi, _ := native.AsObjectInstance(inst)
+	oi, _ := native.AsClassInstance(inst)
 	if oi.TypeRef.Name != "Class/Foo" {
 		t.Errorf("expected type ref Class/Foo, got %s", oi.TypeRef.Name)
 	}
@@ -922,7 +922,7 @@ func TestMakeObjectInstanceTypeMatchesObjectType(t *testing.T) {
 	if !inst.Parent.ConformsTo(native.TClass) {
 		t.Errorf("expected instance type to match TClass, got %s", inst.Parent)
 	}
-	oi, _ := native.AsObjectInstance(inst)
+	oi, _ := native.AsClassInstance(inst)
 	if oi.TypeRef.Name != "Class/Foo" {
 		t.Errorf("expected TypeRef.Name='Class/Foo', got %s", oi.TypeRef.Name)
 	}
@@ -938,7 +938,7 @@ func TestMakeObjectInstanceChildTypeRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := native.AsObjectInstance(result[0])
+	oi, _ := native.AsClassInstance(result[0])
 	if oi.TypeRef.Name != "Class/Foo/Bar" {
 		t.Errorf("expected TypeRef.Name='Class/Foo/Bar', got %s", oi.TypeRef.Name)
 	}
@@ -982,8 +982,8 @@ func TestMakeObjectPrototypeBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := native.AsObjectInstance(result[0])
-	// Class instances are flat — the ObjectInstanceInfo has no Prototype
+	oi, _ := native.AsClassInstance(result[0])
+	// Class instances are flat — the ClassInstanceInfo has no Prototype
 	// field at all (open objects, which had one, were removed).
 	y, _ := oi.Fields.Get("y")
 	x, _ := oi.Fields.Get("x")
@@ -1046,7 +1046,7 @@ func TestMakeObjectAutoPrototypeWithDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp55, _ := native.AsObjectInstance(result[0])
+	_tmp55, _ := native.AsClassInstance(result[0])
 	allF := _tmp55.AllFields()
 	x, _ := allF.Get("x")
 	_v56, _ := native.AsInteger(x)
@@ -1067,7 +1067,7 @@ func TestMakeObjectPrototypeOverrideInherited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp58, _ := native.AsObjectInstance(result[0])
+	_tmp58, _ := native.AsClassInstance(result[0])
 	allF := _tmp58.AllFields()
 	x, _ := allF.Get("x")
 	_v59, _ := native.AsInteger(x)
@@ -1089,7 +1089,7 @@ func TestMakeObjectPrototypeGetField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := native.AsObjectInstance(result[0])
+	oi, _ := native.AsClassInstance(result[0])
 	x, ok := oi.GetField("x")
 	if !ok {
 		t.Fatal("expected GetField to find the inherited field flat")
@@ -1195,7 +1195,7 @@ func TestMakeObjectDeep7LevelsAllDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp65, _ := native.AsObjectInstance(result[0])
+	_tmp65, _ := native.AsClassInstance(result[0])
 	allF := _tmp65.AllFields()
 	checks := map[string]interface{}{
 		"a": int64(1), "b": "two", "c": true, "d": int64(4),
@@ -1245,7 +1245,7 @@ func TestMakeObjectDeep7LevelsPrototypeChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := native.AsObjectInstance(result[0])
+	oi, _ := native.AsClassInstance(result[0])
 	checks := map[string]interface{}{
 		"a": int64(10), "b": "twenty", "c": true, "d": int64(40),
 		"e": "fifty", "f": false, "g": int64(70),
@@ -1290,7 +1290,7 @@ func TestMakeObjectDeep7LevelsPrototypeDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := native.AsObjectInstance(result[0])
+	oi, _ := native.AsClassInstance(result[0])
 	_ = oi
 	if oi.Fields.Len() != 7 {
 		t.Errorf("expected 7 flat fields, got %d", oi.Fields.Len())
@@ -1309,7 +1309,7 @@ func TestMakeObjectDeep7GrandparentFieldAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := native.AsObjectInstance(result[0])
+	oi, _ := native.AsClassInstance(result[0])
 	b, ok := oi.GetField("b")
 	if !ok {
 		t.Fatal("expected GetField to find 'b' flat on the instance")
@@ -1332,7 +1332,7 @@ func TestMakeObjectDeep7OverrideGrandparentField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oi, _ := native.AsObjectInstance(result[0])
+	oi, _ := native.AsClassInstance(result[0])
 	a, _ := oi.Fields.Get("a")
 	if _v, _ := native.AsInteger(a); _v != 999 {
 		t.Errorf("expected a=999, got %d", _v)
@@ -1351,7 +1351,7 @@ func TestMakeObjectDeep7NarrowingChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_tmp81, _ := native.AsObjectInstance(result[0])
+	_tmp81, _ := native.AsClassInstance(result[0])
 	allF := _tmp81.AllFields()
 	x, _ := allF.Get("x")
 	_v82, _ := native.AsInteger(x)

@@ -334,8 +334,8 @@ func ExactEqual(a, b Value) bool {
 	// Object / class instances identify by their underlying field map —
 	// the same aliasing rule as Map: two bindings to one instance are
 	// eq, two structurally-equal instances are not (that's deq).
-	if ai, aok := a.Data.(ObjectInstanceInfo); aok {
-		bi, bok := b.Data.(ObjectInstanceInfo)
+	if ai, aok := a.Data.(ClassInstanceInfo); aok {
+		bi, bok := b.Data.(ClassInstanceInfo)
 		return bok && ai.Fields != nil && ai.Fields == bi.Fields
 	}
 
@@ -502,12 +502,12 @@ func DeepEqual(a, b Value) bool {
 	// object instances with dynamic fields); GetField walks the legacy
 	// prototype chain, and class instances are flat so it is a plain
 	// map hit. See design/CLASS-OBJECT.10.md.
-	if IsObjectInstance(a) && IsObjectInstance(b) {
+	if IsClassInstance(a) && IsClassInstance(b) {
 		if !a.Parent.Equal(b.Parent) {
 			return false
 		}
-		ai, aErr := AsObjectInstance(a)
-		bi, bErr := AsObjectInstance(b)
+		ai, aErr := AsClassInstance(a)
+		bi, bErr := AsClassInstance(b)
 		if aErr != nil || bErr != nil {
 			return false
 		}

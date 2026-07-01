@@ -434,7 +434,7 @@ func installIdeals(r *Registry) {
 			// (`def Bar refine Foo {…}`). The bare-Object form is
 			// REMOVED: classes are defined with the `class` word
 			// (design/CLASS-OBJECT.10.md — no deprecated aliases).
-			if IsObjectType(base) {
+			if IsClassType(base) {
 				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 			}
 			return nil, r.AqlErrorHint("refine_error",
@@ -476,7 +476,7 @@ func installIdeals(r *Registry) {
 	// (BinarySpec : Binary :: Class : Object). A binary frame is realised on the
 	// class machinery: `def Header (refine BinarySpec [layout])` builds a sealed
 	// CLASS whose fields are the layout's decoded types and which carries the raw
-	// wire layout (ObjectTypeInfo.BinaryLayout); `make Header {fields}` reuses the
+	// wire layout (ClassTypeInfo.BinaryLayout); `make Header {fields}` reuses the
 	// class make path to produce a field-accessible INSTANCE; `convert Bytes`/
 	// `unpack` are the Binary⇄Bytes codec (native_bytes.go). The two membership
 	// types name the roles and answer `is`:
@@ -507,14 +507,13 @@ func installIdeals(r *Registry) {
 			if err != nil {
 				return nil, err
 			}
-			info := ObjectTypeInfo{
+			info := ClassTypeInfo{
 				Fields:       binaryFieldSchema(segs),
 				ID:           GenerateObjectTypeID(),
-				Class:        true,
 				BinaryLayout: arg,
 			}
 			def := r.Types.MintType(info.ID, TClass)
-			return []Value{NewObjectType(def, info)}, nil
+			return []Value{NewClassType(def, info)}, nil
 		},
 	})
 }
@@ -613,7 +612,7 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	a, b := args[1], args[0]
 	// Object/Table refinement RHS: the body is a populated type value
-	// (Data carries ObjectTypeInfo/TableTypeInfo), but its denoted
+	// (Data carries ClassTypeInfo/TableTypeInfo), but its denoted
 	// lattice node is at b.Parent. For tag-identity ("does a carry
 	// T's tag?") we want to compare a.Parent against the lattice
 	// node. Without this, the handler falls through to UnifyR, which
@@ -626,7 +625,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// bare-refine bodies have Data==nil so they already route through
 	// the b.Data==nil branch below; only Object/Table bodies need
 	// this redirect.
-	if (IsObjectType(b) || IsTableType(b)) && b.Parent != nil {
+	if (IsClassType(b) || IsTableType(b)) && b.Parent != nil {
 		latticeNode := b.Parent
 		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
 	}
@@ -806,18 +805,17 @@ func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	case IsRecordType(t):
 		rec, _ := AsRecordType(t)
 		return []Value{NewRecordType(partializeFields(rec.Fields))}, nil
-	case IsObjectType(t):
-		info, _ := AsObjectType(t)
+	case IsClassType(t):
+		info, _ := AsClassType(t)
 		newFields := partializeFields(info.AllFields())
 		id := GenerateObjectTypeID()
-		newInfo := ObjectTypeInfo{
+		newInfo := ClassTypeInfo{
 			Fields: newFields,
 			Parent: nil,
 			ID:     id,
-			Class:  true,
 		}
 		def := r.Types.MintType(id, TClass)
-		return []Value{NewObjectType(def, newInfo)}, nil
+		return []Value{NewClassType(def, newInfo)}, nil
 	default:
 		return nil, r.AqlError("type_error",
 			fmt.Sprintf("tpartial: argument must be a Record or Object type, got %s", t.String()),

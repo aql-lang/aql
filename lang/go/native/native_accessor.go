@@ -90,7 +90,7 @@ func accessorGetrSignatures() []NativeSig {
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
 		// [Key | Class instance] — strict field read (mirrors get's TClass
 		// sigs; getrObjectHandler resolves the flat instance via
-		// AsObjectInstance and raises on a missing field). Field type
+		// AsClassInstance and raises on a missing field). Field type
 		// narrows from the schema via getObjectReturns, as get does.
 		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
 		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
@@ -144,7 +144,7 @@ func hasObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 		_, ok := ri.GetField(k)
 		return []Value{NewBoolean(ok)}, nil
 	}
-	oi, err := AsObjectInstance(container)
+	oi, err := AsClassInstance(container)
 	if err != nil {
 		return []Value{NewBoolean(false)}, nil
 	}
@@ -229,7 +229,7 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := AsObjectInstance(container)
+	oi, _ := AsClassInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in object", k), "getr")

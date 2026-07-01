@@ -84,7 +84,7 @@ func (c *cloner) clone(v Value) Value {
 	case *StoreInstanceInfo:
 		return c.withPayload(v, c.cloneStore(p))
 
-	case ObjectInstanceInfo:
+	case ClassInstanceInfo:
 		return c.withPayload(v, c.cloneObject(p))
 
 	case TableData:
@@ -184,11 +184,11 @@ func (c *cloner) cloneStore(s *StoreInstanceInfo) *StoreInstanceInfo {
 	return out
 }
 
-// cloneObject deep-clones an ObjectInstanceInfo: the field map is
+// cloneObject deep-clones an ClassInstanceInfo: the field map is
 // duplicated value-by-value. Instances are flat, so there is no
 // prototype to clone. TypeRef is a shared type descriptor (immutable).
-func (c *cloner) cloneObject(o ObjectInstanceInfo) ObjectInstanceInfo {
-	out := ObjectInstanceInfo{TypeRef: o.TypeRef}
+func (c *cloner) cloneObject(o ClassInstanceInfo) ClassInstanceInfo {
+	out := ClassInstanceInfo{TypeRef: o.TypeRef}
 	if o.Fields != nil {
 		out.Fields = c.cloneOrderedMap(o.Fields)
 	}

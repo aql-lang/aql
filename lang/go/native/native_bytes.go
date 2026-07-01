@@ -143,7 +143,7 @@ func (bytesBehavior) Size(v Value) int {
 }
 
 // A binary frame layout is modelled as a sealed CLASS that carries a wire
-// layout (ObjectTypeInfo.BinaryLayout): `def Header (refine BinarySpec
+// layout (ClassTypeInfo.BinaryLayout): `def Header (refine BinarySpec
 // [layout])` builds it, `make Header {fields}` produces a field-accessible
 // INSTANCE (reusing the object-instance machinery wholesale), and the instance
 // serialises to `Bytes` via `convert Bytes`. Two membership types name the two
@@ -169,10 +169,10 @@ func (bytesBehavior) Size(v Value) int {
 // binarySpecLayout returns the wire layout carried by a binary-frame SPEC type
 // (a class value with BinaryLayout set), and whether v is such a type.
 func binarySpecLayout(v Value) (Value, bool) {
-	if !IsObjectType(v) {
+	if !IsClassType(v) {
 		return Value{}, false
 	}
-	ot, err := AsObjectType(v)
+	ot, err := AsClassType(v)
 	if err != nil || !IsConcrete(ot.BinaryLayout) {
 		return Value{}, false
 	}
@@ -182,10 +182,10 @@ func binarySpecLayout(v Value) (Value, bool) {
 // binaryInstanceLayout returns the wire layout of a binary INSTANCE (an object
 // instance whose type carries a BinaryLayout), and whether v is such a value.
 func binaryInstanceLayout(v Value) (Value, bool) {
-	if !IsObjectInstance(v) {
+	if !IsClassInstance(v) {
 		return Value{}, false
 	}
-	oi, err := AsObjectInstance(v)
+	oi, err := AsClassInstance(v)
 	if err != nil || oi.TypeRef == nil || !IsConcrete(oi.TypeRef.BinaryLayout) {
 		return Value{}, false
 	}
@@ -775,7 +775,7 @@ func convertBinaryToBytes(args []Value, _ map[string]Value, _ []Value, r *Regist
 	if err != nil {
 		return nil, err
 	}
-	oi, _ := AsObjectInstance(args[1])
+	oi, _ := AsClassInstance(args[1])
 	fields := oi.AllFields() // field name → value (prototype chain flattened)
 	w := &bitWriter{}
 	for _, seg := range segs {
@@ -907,7 +907,7 @@ func frameInstance(specVal Value, b []byte, r *Registry, word string) (Value, []
 	if derr != nil {
 		return Value{}, nil, derr
 	}
-	ot, _ := AsObjectType(specVal)
+	ot, _ := AsClassType(specVal)
 	inst, ierr := eng.MakeObject(ot, NewMap(m), r)
 	if ierr != nil {
 		return Value{}, nil, ierr

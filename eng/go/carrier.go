@@ -1887,7 +1887,7 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 				// A concrete constructor target — a bare type node
 				// (`make Path …`, `make Foo …`) or a structural type body
 				// (`make P {}` for a class/record, whose literal carries an
-				// ObjectTypeInfo/RecordTypeInfo payload). ValueType yields the
+				// ClassTypeInfo/RecordTypeInfo payload). ValueType yields the
 				// made *Type in both cases (the node itself, or the body's
 				// Parent); a fresh carrier of it is the per-call instance.
 				t := ValueType(args[m])
@@ -2532,7 +2532,7 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 				tv = v
 			}
 		}
-		if tv.Data != nil && !IsObjectType(tv) {
+		if tv.Data != nil && !IsClassType(tv) {
 			continue
 		}
 		// A bare type-literal clause IS its type; an ObjectType keeps

@@ -18,7 +18,7 @@ import (
 // r.LookupContextType) so check-mode can recover a typed carrier
 // from a previous set on the same key.
 //
-// Algorithms (GetKey, AsStore, AsArray, CowSet, AsObjectInstance,
+// Algorithms (GetKey, AsStore, AsArray, CowSet, AsClassInstance,
 // AsMutableMap, …) live in eng; this file owns the word names and
 // dispatch wiring.
 var storageNatives = []NativeFunc{
@@ -260,7 +260,7 @@ func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	if !IsConcrete(container) {
 		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
 	}
-	oi, ok := container.Data.(ObjectInstanceInfo)
+	oi, ok := container.Data.(ClassInstanceInfo)
 	if !ok {
 		return nil, fmt.Errorf("set: expected a class instance, got %s", container.Parent.String())
 	}
@@ -574,7 +574,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // getObjectReturns narrows a field read over an OBJECT / CLASS instance
 // carrier to the field's DECLARED type, resolved from the type SCHEMA. In
 // check mode the instance is an abstract type carrier (no field payload),
-// so the field type comes from the bound type's ObjectTypeInfo.AllFields()
+// so the field type comes from the bound type's ClassTypeInfo.AllFields()
 // (own + inherited). A method field (function-typed), an absent/sealed
 // field (→ None), or a type whose schema can't be resolved keeps the
 // dynamic(Any) the poly path handles — the same dispatch-bearing exclusion
@@ -589,7 +589,7 @@ func getObjectReturns(args []Value, r *Registry) []Value {
 	if !ok {
 		return dyn
 	}
-	info, oerr := AsObjectType(body)
+	info, oerr := AsClassType(body)
 	if oerr != nil {
 		return dyn
 	}
@@ -625,7 +625,7 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := AsObjectInstance(container)
+	oi, _ := AsClassInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return []Value{NewTypeLiteral(TNone)}, nil

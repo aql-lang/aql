@@ -196,8 +196,8 @@ func fieldsOf(v native.Value) *native.OrderedMap {
 	case native.IsRecordType(v):
 		rec, _ := native.AsRecordType(v)
 		return rec.Fields
-	case native.IsObjectType(v):
-		info, _ := native.AsObjectType(v)
+	case native.IsClassType(v):
+		info, _ := native.AsClassType(v)
 		return info.AllFields()
 	}
 	return nil
@@ -208,14 +208,13 @@ func constructRecordOrObjectLike(original native.Value, newFields *native.Ordere
 		return native.NewRecordType(newFields)
 	}
 	id := native.GenerateObjectTypeID()
-	info := native.ObjectTypeInfo{
+	info := native.ClassTypeInfo{
 		Fields: newFields,
 		Parent: nil,
 		ID:     id,
-		Class:  true,
 	}
 	def := r.Types.MintType(id, native.TClass)
-	return native.NewObjectType(def, info)
+	return native.NewClassType(def, info)
 }
 
 func stripNoneFromField(t native.Value) native.Value {

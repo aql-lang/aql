@@ -33,7 +33,7 @@ func isTypeLike(v Value) bool {
 		return true
 	}
 	return IsRecordType(v) || IsOptionsType(v) || IsTableType(v) ||
-		IsObjectType(v) || IsHostTypeBody(v)
+		IsClassType(v) || IsHostTypeBody(v)
 }
 
 // MakeRecord creates a record instance from a source value and
@@ -171,11 +171,11 @@ func parseMakeOptions(opts Value) (useBase bool, err error) {
 // construction path. Used by lang-side `def x:T body` to build a
 // typed instance from a raw Map body when the typed binding's
 // constraint is an object (class) type.
-func MakeObject(objType ObjectTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
+func MakeObject(objType ClassTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 	return makeObject(objType, srcVal, r)
 }
 
-func makeObject(objType ObjectTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
+func makeObject(objType ClassTypeInfo, srcVal Value, r *Registry) ([]Value, error) {
 	if !srcVal.Parent.ConformsTo(TMap) {
 		return nil, fmt.Errorf("make: object values must be a map, got %s", srcVal.String())
 	}
@@ -202,7 +202,7 @@ func makeObject(objType ObjectTypeInfo, srcVal Value, r *Registry) ([]Value, err
 // loudly, predicate-typed fields run their predicate via Unify, and
 // a defaulted field rejects values outside the default's own type.
 // See design/CLASS-OBJECT.10.md §3c.
-func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
+func makeClassInstance(objType ClassTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
 	allFields := objType.AllFields()
 
 	for _, key := range provided.Keys() {
@@ -242,7 +242,7 @@ func makeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry
 	if instanceType == nil {
 		instanceType = TClass
 	}
-	return []Value{NewObjectInstance(instanceType, ObjectInstanceInfo{
+	return []Value{NewClassInstance(instanceType, ClassInstanceInfo{
 		TypeRef: &objType,
 		Fields:  result,
 	})}, nil
@@ -292,7 +292,7 @@ func makeResource(resType ResourceTypeInfo, provided *OrderedMap, r *Registry) (
 // running the same strict validation as `make` — exported for the
 // struct-utility writers (StructUtil.setpath, clone) whose instance
 // edits round-trip through construction so schema checks run.
-func MakeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry) (Value, error) {
+func MakeClassInstance(objType ClassTypeInfo, provided *OrderedMap, r *Registry) (Value, error) {
 	vals, err := makeClassInstance(objType, provided, r)
 	if err != nil {
 		return Value{}, err
@@ -308,7 +308,7 @@ func MakeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry
 // place). Drives FreshenDefault's identity fast path: scalars and
 // purely-immutable nodes share safely and are returned unchanged.
 func containsSharedMutable(v Value) bool {
-	if IsFlexNode(v) || IsStore(v) || IsObjectInstance(v) {
+	if IsFlexNode(v) || IsStore(v) || IsClassInstance(v) {
 		return true
 	}
 	if !IsConcrete(v) {
@@ -358,8 +358,8 @@ func FreshenDefault(v Value) Value {
 	}
 	out := v
 	switch {
-	case IsObjectInstance(v):
-		info, err := AsObjectInstance(v)
+	case IsClassInstance(v):
+		info, err := AsClassInstance(v)
 		if err != nil {
 			return v
 		}
@@ -443,9 +443,9 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 
 	// Class-typed field ({i:Inner}) — nominal check: the value must be
 	// an instance of that class (or a subclass, via the lattice).
-	if IsObjectType(constraint) {
-		info, _ := AsObjectType(constraint)
-		if IsObjectInstance(val) && info.Type != nil && val.Parent.ConformsTo(info.Type) {
+	if IsClassType(constraint) {
+		info, _ := AsClassType(constraint)
+		if IsClassInstance(val) && info.Type != nil && val.Parent.ConformsTo(info.Type) {
 			return val, nil
 		}
 		return Value{}, fmt.Errorf("expected a %s instance, got %s (%s)",
@@ -704,10 +704,10 @@ func registerKernelIdeals(r *Registry) {
 		Name:    "Object",
 		Enabled: true,
 		Accepts: func(v Value) bool {
-			return IsObjectType(v)
+			return IsClassType(v)
 		},
 		Instantiate: func(typ, data Value, r *Registry) ([]Value, error) {
-			objType, err := AsObjectType(typ)
+			objType, err := AsClassType(typ)
 			if err != nil {
 				return nil, fmt.Errorf("make: expected a class type, got %s", typ.String())
 			}
@@ -790,8 +790,8 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return nil, err
 	}
 
-	if IsObjectType(targetVal) {
-		objType, _ := AsObjectType(targetVal)
+	if IsClassType(targetVal) {
+		objType, _ := AsClassType(targetVal)
 		return makeObject(objType, srcVal, reg)
 	}
 
@@ -870,8 +870,8 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 			return nil, fmt.Errorf("make: the %s type-kind is not available in this registry", m.Name)
 		}
 	}
-	if IsObjectType(targetVal) {
-		objType, _ := AsObjectType(targetVal)
+	if IsClassType(targetVal) {
+		objType, _ := AsClassType(targetVal)
 		return makeObject(objType, srcVal, reg)
 	}
 	// Not an object type and unclaimed by an Ideal kind (e.g.

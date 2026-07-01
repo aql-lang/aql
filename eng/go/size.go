@@ -102,7 +102,7 @@ func (idealSizeBehavior) formatDelegate() {}
 
 func (idealSizeBehavior) Size(v Value) int {
 	switch d := v.Data.(type) {
-	case ObjectInstanceInfo:
+	case ClassInstanceInfo:
 		if d.Fields != nil {
 			return d.Fields.Len()
 		}

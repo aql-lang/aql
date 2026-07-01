@@ -166,9 +166,9 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 	// MakeClassInstance, so the same strict validation `make` runs
 	// applies to the edit — an unknown top-level field or an
 	// off-schema value errors loudly rather than degrading to a Map.
-	if IsObjectInstance(data) {
-		info, _ := AsObjectInstance(data)
-		fields := ObjectFields(&info)
+	if IsClassInstance(data) {
+		info, _ := AsClassInstance(data)
+		fields := ClassFields(&info)
 		out := NewOrderedMap()
 		for _, key := range fields.Keys() {
 			v, _ := fields.Get(key)
@@ -185,14 +185,14 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 			}
 			out.Set(keyStr, child)
 		}
-		if info.TypeRef != nil && info.TypeRef.Class {
+		if info.TypeRef != nil {
 			inst, err := MakeClassInstance(*info.TypeRef, out, r)
 			if err != nil {
 				return Value{}, fmt.Errorf("setpath: %w", err)
 			}
 			return inst, nil
 		}
-		return NewObjectInstance(data.Parent, ObjectInstanceInfo{
+		return NewClassInstance(data.Parent, ClassInstanceInfo{
 			TypeRef: info.TypeRef,
 			Fields:  out,
 		}), nil

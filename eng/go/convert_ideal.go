@@ -92,31 +92,31 @@ func (objectConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavi
 func (objectConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (objectConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
 func (objectConvertBehavior) ToMap(v Value) (Value, error) {
-	oi, err := AsObjectInstance(v)
+	oi, err := AsClassInstance(v)
 	if err != nil {
 		return NewMap(NewOrderedMap()), nil
 	}
 	return NewMap(objectFieldMap(&oi)), nil
 }
 func (objectConvertBehavior) ToList(v Value) (Value, error) {
-	oi, err := AsObjectInstance(v)
+	oi, err := AsClassInstance(v)
 	if err != nil {
 		return NewList(nil), nil
 	}
 	return NewList(orderedMapValues(objectFieldMap(&oi))), nil
 }
 
-// ObjectFields is the exported view of objectFieldMap — the flattened
+// ClassFields is the exported view of objectFieldMap — the flattened
 // field map of an object or class instance (prototype chain base-first
 // for legacy object instances; class instances are already flat). Used
 // by the lang layer for items / transform / serialization projections.
-func ObjectFields(oi *ObjectInstanceInfo) *OrderedMap {
+func ClassFields(oi *ClassInstanceInfo) *OrderedMap {
 	return objectFieldMap(oi)
 }
 
 // objectFieldMap copies an instance's (flat) fields into a fresh
 // OrderedMap.
-func objectFieldMap(oi *ObjectInstanceInfo) *OrderedMap {
+func objectFieldMap(oi *ClassInstanceInfo) *OrderedMap {
 	out := NewOrderedMap()
 	if oi != nil && oi.Fields != nil {
 		for _, k := range oi.Fields.Keys() {

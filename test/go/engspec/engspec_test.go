@@ -774,7 +774,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 			return nil, fmt.Errorf("set: cannot set field on type literal")
 		}
 		key := eng.StoreKey(args[0])
-		oi, ok := container.Data.(eng.ObjectInstanceInfo)
+		oi, ok := container.Data.(eng.ClassInstanceInfo)
 		if !ok {
 			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
 		}
@@ -821,7 +821,7 @@ func registerEngSpecStorage(r *eng.Registry) {
 			}
 			return []eng.Value{val}, nil
 		}
-		oi, _ := eng.AsObjectInstance(container)
+		oi, _ := eng.AsClassInstance(container)
 		val, ok := oi.GetField(k)
 		if !ok {
 			return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
@@ -907,10 +907,10 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		if err != nil {
 			return nil, fmt.Errorf("object: first argument must be a concrete map, got %s", fieldsVal.String())
 		}
-		if !eng.IsObjectType(parentVal) {
+		if !eng.IsClassType(parentVal) {
 			return nil, fmt.Errorf("object: parent must be an object type, got %s", parentVal.String())
 		}
-		parentInfo, _ := eng.AsObjectType(parentVal)
+		parentInfo, _ := eng.AsClassType(parentVal)
 		fields := parseObjectFields(m, r)
 		parentAllFields := parentInfo.AllFields()
 		for _, key := range fields.Keys() {
@@ -925,13 +925,13 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 			}
 		}
 		id := eng.GenerateObjectTypeID()
-		info := eng.ObjectTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: "", Class: true}
+		info := eng.ClassTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: ""}
 		parentDef := parentInfo.Type
 		if parentDef == nil {
 			parentDef = eng.TClass
 		}
 		def := r.Types.MintType(id, parentDef)
-		return []eng.Value{eng.NewObjectType(def, info)}, nil
+		return []eng.Value{eng.NewClassType(def, info)}, nil
 	}
 	// refine — the uniform type constructor.
 	// Mirrors lang/go/native/native_type.go::refineHandler; dispatches
@@ -940,7 +940,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
-		if eng.IsObjectType(base) {
+		if eng.IsClassType(base) {
 			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
 		}
 		if eng.IsBareTypeNode(base) && base.Equal(eng.TRecord) {
@@ -1101,9 +1101,9 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		}
 		result.Set("fields", eng.NewMap(fields))
 
-	case eng.IsObjectType(tv):
+	case eng.IsClassType(tv):
 		result.Set("kind", eng.NewAtom("object"))
-		oi, _ := eng.AsObjectType(tv)
+		oi, _ := eng.AsClassType(tv)
 		if oi.Parent != nil {
 			result.Set("parent", eng.NewString(oi.Parent.Name))
 		}

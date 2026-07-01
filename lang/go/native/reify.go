@@ -139,16 +139,12 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 	return results, nil
 }
 
-// resolveReifyTarget returns the class ObjectTypeInfo to construct:
+// resolveReifyTarget returns the class ClassTypeInfo to construct:
 // a direct class target (with $class cross-checked when present), or
 // a member selected by $class from a tor union of classes.
-func resolveReifyTarget(target Value, className string, r *Registry) (*eng.ObjectTypeInfo, error) {
-	if IsObjectType(target) {
-		info, _ := AsObjectType(target)
-		if !info.Class {
-			return nil, r.AqlError("reify_error",
-				"reify: target must be a class (or a tor union of classes)", "reify")
-		}
+func resolveReifyTarget(target Value, className string, r *Registry) (*eng.ClassTypeInfo, error) {
+	if IsClassType(target) {
+		info, _ := AsClassType(target)
 		if className != "" && className != classShortName(&info) {
 			return nil, r.AqlError("reify_error",
 				fmt.Sprintf("reify: $class %q does not match target class %s", className, classShortName(&info)), "reify")
@@ -162,13 +158,10 @@ func resolveReifyTarget(target Value, className string, r *Registry) (*eng.Objec
 		}
 		var names []string
 		for _, alt := range di.Alternatives {
-			if !IsObjectType(alt) {
+			if !IsClassType(alt) {
 				continue
 			}
-			info, _ := AsObjectType(alt)
-			if !info.Class {
-				continue
-			}
+			info, _ := AsClassType(alt)
 			names = append(names, classShortName(&info))
 			if classShortName(&info) == className {
 				return &info, nil
@@ -183,7 +176,7 @@ func resolveReifyTarget(target Value, className string, r *Registry) (*eng.Objec
 
 // classShortName is the user-facing class name — the last segment of
 // the installed path ("Class/Point" → "Point").
-func classShortName(info *eng.ObjectTypeInfo) string {
+func classShortName(info *eng.ClassTypeInfo) string {
 	name := info.Name
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		name = name[i+1:]
@@ -198,31 +191,28 @@ func classShortName(info *eng.ObjectTypeInfo) string {
 // the field contract.
 func reifyFieldValue(raw any, constraint Value, r *Registry) (Value, error) {
 	// Nested class field + map input → recursive hydration.
-	if IsObjectType(constraint) {
-		info, _ := AsObjectType(constraint)
-		if info.Class {
-			switch m := raw.(type) {
-			case map[string]any:
-				res, err := reifyFromAnyMap(constraint, m, r)
+	if IsClassType(constraint) {
+		switch m := raw.(type) {
+		case map[string]any:
+			res, err := reifyFromAnyMap(constraint, m, r)
+			if err != nil {
+				return Value{}, err
+			}
+			return res[0], nil
+		case Value:
+			if mm, err := RequireConcreteMap(m, "reify"); err == nil {
+				anyMap := make(map[string]any, mm.Len())
+				keys := make([]string, 0, mm.Len())
+				for _, k := range mm.Keys() {
+					v, _ := mm.Get(k)
+					anyMap[k] = v
+					keys = append(keys, k)
+				}
+				res, err := reifyFromAnyMapOrdered(constraint, anyMap, keys, r)
 				if err != nil {
 					return Value{}, err
 				}
 				return res[0], nil
-			case Value:
-				if mm, err := RequireConcreteMap(m, "reify"); err == nil {
-					anyMap := make(map[string]any, mm.Len())
-					keys := make([]string, 0, mm.Len())
-					for _, k := range mm.Keys() {
-						v, _ := mm.Get(k)
-						anyMap[k] = v
-						keys = append(keys, k)
-					}
-					res, err := reifyFromAnyMapOrdered(constraint, anyMap, keys, r)
-					if err != nil {
-						return Value{}, err
-					}
-					return res[0], nil
-				}
 			}
 		}
 	}

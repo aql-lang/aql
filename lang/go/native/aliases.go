@@ -75,8 +75,8 @@ type (
 	NativeSig            = eng.NativeSig
 	CompileEffect        = eng.CompileEffect
 	CallableSpec         = eng.CallableSpec
-	ObjectInstanceInfo   = eng.ObjectInstanceInfo
-	ObjectTypeInfo       = eng.ObjectTypeInfo
+	ClassInstanceInfo    = eng.ClassInstanceInfo
+	ClassTypeInfo        = eng.ClassTypeInfo
 	ResourceInstanceInfo = eng.ResourceInstanceInfo
 	ResourceTypeInfo     = eng.ResourceTypeInfo
 	SurfaceInfo          = eng.SurfaceInfo
@@ -248,8 +248,8 @@ var (
 	AsFlexXml                 = eng.AsFlexXml
 	IsXmlValue                = eng.IsXmlValue
 	XmlParts                  = eng.XmlParts
-	AsObjectInstance          = eng.AsObjectInstance
-	AsObjectType              = eng.AsObjectType
+	AsClassInstance           = eng.AsClassInstance
+	AsClassType               = eng.AsClassType
 	AsResourceInstance        = eng.AsResourceInstance
 	AsResourceType            = eng.AsResourceType
 	AsOptionsType             = eng.AsOptionsType
@@ -275,8 +275,8 @@ var (
 	IsMove                    = eng.IsMove
 	IsNone                    = eng.IsNone
 	IsNoneShape               = eng.IsNoneShape
-	IsObjectInstance          = eng.IsObjectInstance
-	IsObjectType              = eng.IsObjectType
+	IsClassInstance           = eng.IsClassInstance
+	IsClassType               = eng.IsClassType
 	IsResourceInstance        = eng.IsResourceInstance
 	IsResourceType            = eng.IsResourceType
 	IsOpenParen               = eng.IsOpenParen
@@ -375,7 +375,7 @@ var (
 	CanonicalType             = eng.CanonicalType
 	MakeClassFieldValue       = eng.MakeClassFieldValue
 	MakeClassInstance         = eng.MakeClassInstance
-	ObjectFields              = eng.ObjectFields
+	ClassFields               = eng.ClassFields
 	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef
@@ -464,8 +464,8 @@ var (
 	NewMove               = eng.NewMove
 	NewMoveCont           = eng.NewMoveCont
 	NewMoveIf             = eng.NewMoveIf
-	NewObjectInstance     = eng.NewObjectInstance
-	NewObjectType         = eng.NewObjectType
+	NewClassInstance      = eng.NewClassInstance
+	NewClassType          = eng.NewClassType
 	NewResourceInstance   = eng.NewResourceInstance
 	NewResourceType       = eng.NewResourceType
 	NewOpenParen          = eng.NewOpenParen

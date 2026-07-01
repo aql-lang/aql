@@ -2835,7 +2835,7 @@ func (es *EmitState) intern(v Value) int {
 // outside a type body nothing freshens it, so isInertConst keeps it out of the
 // const pool. Pairs with the const-bake regression gate.
 func isFreshenedInstance(v Value) bool {
-	return IsObjectInstance(v) || IsStore(v) || IsFlexList(v)
+	return IsClassInstance(v) || IsStore(v) || IsFlexList(v)
 }
 
 // isTypeBodyPayload reports a structural type-body payload — pooled
@@ -2940,7 +2940,7 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		return true
 	case DisjunctInfo:
 		return allInert(d.Alternatives, memberOK)
-	case ObjectTypeInfo:
+	case ClassTypeInfo:
 		// A class / object type body is const-bakeable iff every field
 		// default is plain data — a method (fn-value) field is not, so a
 		// class with methods (the surface-body case) still refuses. The
@@ -3002,7 +3002,7 @@ func isInertConst(v Value) bool {
 		// (RememberOriginal at the constructor); type-algebra words
 		// (tcmp/teq/tand/…) then run over the baked predicate at run time.
 		return true
-	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ObjectTypeInfo, TableTypeInfo:
+	case RecordTypeInfo, OptionsTypeInfo, ChildTypeInfo, DisjunctInfo, ClassTypeInfo, TableTypeInfo:
 		// STRUCTURAL type bodies (what a bound type name pushes at a
 		// use site — make's operand). Sound as consts when their
 		// interior is carrier-free (typeBodyConstOK): the payload is

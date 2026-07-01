@@ -16,7 +16,7 @@ import "fmt"
 //	                                          same-named fields.
 //
 // Algorithms (ResolveFieldType, Unify, MintType, NewRecordType,
-// NewObjectType, …) live in eng.
+// NewClassType, …) live in eng.
 
 func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
@@ -93,22 +93,20 @@ func classHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// identity (deq "same exact class", is-by-ancestry).
 	if spec := r.TakePendingGen(); spec != nil {
 		fields := parseObjectFields(m, r)
-		body := NewValueRaw(TClass, ObjectTypeInfo{
+		body := NewValueRaw(TClass, ClassTypeInfo{
 			Fields: fields,
 			ID:     GenerateObjectTypeID(),
-			Class:  true,
 		})
 		return genWrapSchema(r, spec, body, SchemaClass)
 	}
 	fields := parseObjectFields(m, r)
 	id := GenerateObjectTypeID()
-	info := ObjectTypeInfo{
+	info := ClassTypeInfo{
 		Fields: fields,
 		ID:     id,
-		Class:  true,
 	}
 	def := r.Types.MintType(id, TClass)
-	return []Value{NewObjectType(def, info)}, nil
+	return []Value{NewClassType(def, info)}, nil
 }
 
 func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -123,10 +121,10 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		return nil, fmt.Errorf("object: first argument must be a concrete map, got %s", fieldsVal.String())
 	}
 
-	if !IsObjectType(parentVal) {
+	if !IsClassType(parentVal) {
 		return nil, fmt.Errorf("object: parent must be an object type, got %s", parentVal.String())
 	}
-	parentInfo, _ := AsObjectType(parentVal)
+	parentInfo, _ := AsClassType(parentVal)
 
 	fields := parseObjectFields(m, r)
 
@@ -145,7 +143,7 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	}
 
 	id := GenerateObjectTypeID()
-	info := ObjectTypeInfo{
+	info := ClassTypeInfo{
 		Fields: fields,
 		Parent: &parentInfo,
 		ID:     id,
@@ -153,12 +151,11 @@ func objectWithParentHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		// Subclassing a class type (refine Foo {…}) yields a class
 		// type: sealed, flat instances, minted under the parent's
 		// Class-branch node.
-		Class: parentInfo.Class,
 	}
 	parentDef := parentInfo.Type
 	if parentDef == nil {
 		parentDef = TClass
 	}
 	def := r.Types.MintType(id, parentDef)
-	return []Value{NewObjectType(def, info)}, nil
+	return []Value{NewClassType(def, info)}, nil
 }

@@ -40,14 +40,14 @@ func valueToAnySer(v Value) any {
 	if !IsConcrete(v) {
 		return nil
 	}
-	if IsObjectInstance(v) {
-		oi, err := AsObjectInstance(v)
+	if IsClassInstance(v) {
+		oi, err := AsClassInstance(v)
 		if err != nil {
 			return v.String()
 		}
-		flat := ObjectFields(&oi)
+		flat := ClassFields(&oi)
 		out := make(map[string]any, flat.Len()+1)
-		if oi.TypeRef != nil && oi.TypeRef.Class {
+		if oi.TypeRef != nil {
 			out["$class"] = classShortName(oi.TypeRef)
 		}
 		for _, key := range flat.Keys() {

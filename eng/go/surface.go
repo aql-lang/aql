@@ -105,8 +105,8 @@ func unifySurface(a, b Value) (Value, *UnifyError) {
 	}
 	var node *Type
 	switch {
-	case IsObjectType(other):
-		oi, _ := AsObjectType(other)
+	case IsClassType(other):
+		oi, _ := AsClassType(other)
 		node = oi.Type
 	case IsBareTypeNode(other):
 		node = &other

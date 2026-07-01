@@ -422,8 +422,8 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// Accepts both a raw Map (built via make) and an already-typed
 	// ObjectInstance (passed through). Other body shapes fall
 	// through to Unify and either succeed or surface a type error.
-	if IsObjectType(constraint) {
-		info, _ := AsObjectType(constraint)
+	if IsClassType(constraint) {
+		info, _ := AsClassType(constraint)
 		if body.Parent.Equal(TMap) {
 			// `def b:Type {map}` is `def b (make Type map)`. In emit mode record
 			// the make event the direct MakeObject call would skip, so the bound
@@ -439,8 +439,8 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 			return installAndRecordDef(r, name, result[0], args[0].Pos)
 		}
-		if IsObjectInstance(body) {
-			oi, _ := AsObjectInstance(body)
+		if IsClassInstance(body) {
+			oi, _ := AsClassInstance(body)
 			// Accept if the instance's nominal type matches the
 			// declared one (covers `def x:Person make Person {…}`).
 			if oi.TypeRef != nil && oi.TypeRef.ID == info.ID {
