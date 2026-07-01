@@ -45,7 +45,7 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// emitter so the runtime register handler is idempotent for the compiled
 	// path's double execution (check-mode ReturnsFn install + VM re-run) while
 	// a genuine user double-register still errors. Mirrors parselang-register.
-	registerIdents := map[string]string{}
+	registerIdents := map[string]registerIdent{}
 
 	// ---- out-of-band: register ----------------------------------------
 	// EmitLang.register <name> <fn> installs an AQL function as the emitter
@@ -305,17 +305,6 @@ func emitValidKindName(name string) string {
 	return ""
 }
 
-// emitRegisterIdentity is the source-call identity of a register call — the
-// registering fn value's parse position. Mirrors parseRegisterIdentity: it
-// lets the runtime handler treat the compiled path's double execution (the
-// check-mode ReturnsFn install + the VM's CALL re-run of the same `register`)
-// as one registration, while a genuine user double-register (a different
-// fn-value Pos) still errors.
-func emitRegisterIdentity(fn native.Value) string {
-	p := fn.Pos
-	return fmt.Sprintf("%d:%d:%s", p.Row, p.Col, p.Src)
-}
-
 // emitRegisterValidate runs the name + signature validation `register`
 // enforces, returning the validated key ("emit_<name>") or an error. Shared by
 // the runtime handler and the check-mode ReturnsFn so both apply the exact
@@ -363,39 +352,25 @@ func emitRegisterValidate(args []native.Value, r *native.Registry) (string, erro
 	return "emit_" + name, nil
 }
 
-// emitRegisterInstall validates and installs an AQL fn as emit_<name>, tracking
-// the registering source-call identity in idents. It is the single install
-// body shared by the runtime handler and the check-mode ReturnsFn. The
-// collision rule is idempotent on identity (mirrors parseRegisterInstall): a
-// key already registered errors `emit_kind_exists` UNLESS the existing entry
-// was installed by the SAME source call, so the compiled path's double
-// execution is one logical registration while a genuine user double-register
-// still errors.
-func emitRegisterInstall(exports *native.OrderedMap, idents map[string]string, args []native.Value, r *native.Registry) error {
+// emitRegisterInstall validates and installs an AQL fn as emit_<name>. It is
+// the single install body shared by the runtime handler and the check-mode
+// ReturnsFn; the collision / idempotency rule lives in registerCollisionInstall
+// (shared with ParseLang / MiniLang).
+func emitRegisterInstall(exports *native.OrderedMap, idents map[string]registerIdent, args []native.Value, r *native.Registry) error {
 	key, err := emitRegisterValidate(args, r)
 	if err != nil {
 		return err
 	}
-	id := emitRegisterIdentity(args[1])
-	if _, exists := exports.Get(key); exists {
-		// "::" is the zero identity (no Pos) — never treat two position-less
-		// calls as the same source call, so a genuine double-register without
-		// source positions still errors.
-		if prev, ok := idents[key]; ok && prev == id && id != "::" {
-			return nil // same source call — idempotent re-register
-		}
+	return registerCollisionInstall(exports, idents, key, args[1], r.Check.IsActive(), func() error {
 		return r.AqlError("emit_kind_exists",
 			fmt.Sprintf("register: emitter %q is already registered", strings.TrimPrefix(key, "emit_")), "register")
-	}
-	exports.Set(key, args[1])
-	idents[key] = id
-	return nil
+	})
 }
 
 // emitRegisterHandler validates and installs an AQL fn as emit_<name>.
 // Mirrors parseRegisterHandler inverted: the standard prefix is
 // [value:Any opts:Map …] and every signature must return a value.
-func emitRegisterHandler(exports *native.OrderedMap, idents map[string]string) native.Handler {
+func emitRegisterHandler(exports *native.OrderedMap, idents map[string]registerIdent) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		if err := emitRegisterInstall(exports, idents, args, r); err != nil {
 			return nil, err
@@ -411,7 +386,7 @@ func emitRegisterHandler(exports *native.OrderedMap, idents map[string]string) n
 // runtime handler re-running the identical `register` in the compiled program
 // is a no-op rather than an emit_kind_exists error. A non-concrete name or fn
 // value leaves the export unresolved. Mirrors parseRegisterReturns.
-func emitRegisterReturns(exports *native.OrderedMap, idents map[string]string) native.ReturnsFunc {
+func emitRegisterReturns(exports *native.OrderedMap, idents map[string]registerIdent) native.ReturnsFunc {
 	return func(args []native.Value, r *native.Registry) []native.Value {
 		if len(args) < 2 || !native.IsConcrete(args[0]) {
 			return nil
@@ -419,7 +394,9 @@ func emitRegisterReturns(exports *native.OrderedMap, idents map[string]string) n
 		if _, ok := args[1].Data.(native.FnDefInfo); !ok {
 			return nil
 		}
-		_ = emitRegisterInstall(exports, idents, args, r)
+		if err := emitRegisterInstall(exports, idents, args, r); err != nil {
+			surfaceRegisterCheckError(r, err, args[0])
+		}
 		return nil
 	}
 }

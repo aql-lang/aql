@@ -69,6 +69,7 @@ import "aql:emitlang"  EmitLang.register Bad (fn [[value:Any opts:Map] [String] 
 import "aql:emitlang"  EmitLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:emit_bad_signature	the standard prefix [value:Any opts:Map …] is enforced
 import "aql:emitlang"  EmitLang.register emit_x (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_bad_name	the emit_ prefix is register's job, not the caller's
 import "aql:emitlang"  EmitLang.register json (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_kind_exists	collision with a built-in emitter
+import "aql:emitlang"  for 2 [EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]]) end]	ERROR:emit_kind_exists	a loop re-registering the same kind is a genuine double-register (idempotency covers only the compiled double-exec, not runtime repeats)
 #
 # §10  every per-kind export covered by its qualified name (ADR-003) — the
 #      desugared standard call `EmitLang.emit_<kind> <data> <opts> end`.
