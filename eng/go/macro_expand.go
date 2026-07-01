@@ -129,8 +129,8 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	}
 
 	// Run the template body → the template token list (its last result).
-	body := make([]Value, len(sig.Body))
-	copy(body, sig.Body)
+	body := make([]Value, len(sig.body()))
+	copy(body, sig.body())
 	res, runErr := New(r).Run(body)
 	if runErr != nil {
 		r.Defs.Restore(snap)

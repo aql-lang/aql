@@ -2130,7 +2130,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 	// returns a single Any approximation instead (len(outs)==1), so it falls
 	// through to recordCallRefusal and the program falls back. Only the compiled
 	// case reaches here with an empty residual.
-	if sig != nil && sig.FnFrame != nil && len(outs) == 0 {
+	if sig != nil && sig.fnFrame() != nil && len(outs) == 0 {
 		return true
 	}
 	// `apply` of a fn VALUE (`…args fn apply`): apply's ReturnsFn returns the
@@ -2176,13 +2176,13 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// calls): the callee is a runtime value, Stage 3 territory.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("anonymous function dispatch (Stage 3)")
-	case sig.RunInCheckMode:
+	case sig.runInCheckMode():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("compile-time word " + word)
-	case sig.FnFrame != nil:
+	case sig.fnFrame() != nil:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("user fn call " + word + " (Stage 3)")
-	case sig.FullStack:
+	case sig.fullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
 	case word == "args" || word == "__pa":

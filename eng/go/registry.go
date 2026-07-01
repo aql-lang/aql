@@ -880,7 +880,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 				continue
 			}
 			sigs = append(sigs, s)
-			if len(s.Body) > 0 {
+			if len(s.body()) > 0 {
 				hasAQL = true
 			}
 		}
@@ -923,8 +923,8 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 				if fn := r.Lookup(name); fn != nil {
 					for i := range fn.Signatures {
 						sig := &fn.Signatures[i]
-						if sig.TotalArgs() == 0 && sig.Handler != nil && !sig.Fallback {
-							return sig.Handler(nil, nil, nil, r)
+						if sig.TotalArgs() == 0 && sig.dispatchHandler() != nil && !sig.Fallback {
+							return sig.dispatchHandler()(nil, nil, nil, r)
 						}
 						if sig.TotalArgs() > 0 {
 							hasForwardSig = true
@@ -1305,8 +1305,8 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			tokens = append(tokens, args[i])
 		}
 	}
-	body := make([]Value, len(sig.Body))
-	copy(body, sig.Body)
+	body := make([]Value, len(sig.body()))
+	copy(body, sig.body())
 	tokens = append(tokens, body...)
 
 	// Snapshot DefStacks lengths before body execution so we can

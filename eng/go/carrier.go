@@ -806,7 +806,7 @@ func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
 func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
 	es := r.Check.Emit
 	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileModuleFold) || len(outs) != 1 ||
-		sig.Handler == nil || len(sig.NoEvalArgs) > 0 {
+		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	sawModule := false
@@ -856,7 +856,7 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	return true
 }
 
-// concreteHandlerEval runs sig.Handler on the already-resolved args with check
+// concreteHandlerEval runs sig.dispatchHandler() on the already-resolved args with check
 // mode OFF, so a pure reader produces its REAL value rather than the declared-
 // type carrier the check-mode ReturnsFn emits. Nothing is recorded (the handler
 // is called directly, off the emit path) and the def stack is snapshotted /
@@ -868,7 +868,7 @@ func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
 	r.Check.Mode = false
-	res, err := sig.Handler(args, nil, nil, r)
+	res, err := sig.dispatchHandler()(args, nil, nil, r)
 	r.Check.Mode = prev
 	r.Defs.Restore(snap)
 	if err != nil || len(res) != 1 {
@@ -904,7 +904,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	}
 	// Meta / re-stepping shapes never bake (RecordCall refuses them regardless;
 	// screen here so they don't slip through forceDynOut).
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.QuoteArgs) > 0 {
+	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.QuoteArgs) > 0 {
 		return false
 	}
 	// A code-body (NoEvalArgs) native bakes only when its bodies are INERT consts
@@ -927,7 +927,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 			return false
 		}
 	}
-	// The VM bakes this exact sig and calls sig.Handler DIRECTLY, so it must be
+	// The VM bakes this exact sig and calls sig.dispatchHandler() DIRECTLY, so it must be
 	// a REAL native binding: the word's own main-registry BUILTIN sig, OR a
 	// trivial-delegation module inner-native sig reached via dot-access
 	// (`StructUtil.clone …`). Both are sound to bake with the main registry —
@@ -971,7 +971,7 @@ func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value)
 	}
 	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
 	// regardless; screen here so they cannot slip through this exemption).
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	// A word that DECLARES CompileQuoteInert (quote / codequote / raise / timeout
@@ -1095,7 +1095,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// quoted/meta operands, user-fn frames, full-stack words, compile-time
 	// words. (a CompileIslandPure get passes these — get's key is its only
 	// QuoteArg and is handled below.)
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	// get/getr/set carry exactly ONE QuoteArg — the inert Atom key — which bakes
@@ -3119,7 +3119,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 // since no fn unit was compiled. Returns true when it claimed the dispatch.
 func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
 	es := r.Check.Emit
-	if es == nil || !es.active() || sig == nil || sig.FnFrame == nil || len(outs) != 1 {
+	if es == nil || !es.active() || sig == nil || sig.fnFrame() == nil || len(outs) != 1 {
 		return false
 	}
 	return isDeferredWordList(outs[0])
