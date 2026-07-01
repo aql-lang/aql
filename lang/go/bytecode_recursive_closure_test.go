@@ -26,26 +26,26 @@ func TestRecursionThroughClosure(t *testing.T) {
 		// in `def _x (if (blo lt hi) [ a hi blo go ] [ a ])` inside `iota _ each […]`.
 		{"each-body recursion",
 			`import module [
-  def go fn [[hi:Integer lo:Integer a:Array] [Array] [
+  def go fn [[hi:Integer lo:Integer a:FlexList] [FlexList] [
     def cnt ((hi sub lo) add 1)
     if (cnt lte 1) [ a ] [
       def _r (iota 2 each [ var [[v] def blo (lo add v) def _x (if (blo lt hi) [ a hi blo go ] [ a ]) 0 ] ])
       a
     ]
   ]]
-  def srt fn [[xs:List] [List] [ def arr (make Array xs) def _s (arr 0 ((xs size) sub 1) go) (convert List arr) ]]
+  def srt fn [[xs:List] [List] [ def arr (flex xs) def _s (arr 0 ((xs size) sub 1) go) (node arr) ]]
   export "M" {srt: srt/r}
 ] end ([5 3 1 2] M.srt)`, "[[5 3 1 2]]"},
 		// recursion inside a FOLD body (different higher-order word, same closure path).
 		{"fold-body recursion",
 			`import module [
-  def go fn [[n:Integer a:Array] [Array] [
+  def go fn [[n:Integer a:FlexList] [FlexList] [
     if (n lte 0) [ a ] [
       def _r (0 fold [ var [[acc v] def _x (if (v lt n) [ a (n sub 1) go ] [ a ]) acc ] ] [0 1])
       a
     ]
   ]]
-  def srt fn [[xs:List] [List] [ def arr (make Array xs) def _s (arr 2 go) (convert List arr) ]]
+  def srt fn [[xs:List] [List] [ def arr (flex xs) def _s (arr 2 go) (node arr) ]]
   export "M" {srt: srt/r}
 ] end ([7 8 9] M.srt)`, "[[7 8 9]]"},
 	}

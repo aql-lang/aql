@@ -688,20 +688,18 @@ Path tcmp Path	0	# self-equal
 #   1. Same-kind ordering: user-type Rank shares one band per branch
 #      (Scalar 2.1·10¹⁰, Node 3.1·10¹⁰, Ideal 4.1·10¹⁰); within the
 #      band compareTypes tiebreaks by depth then lex name.
-#   2. User-type vs kernel: kernel positional Rank (e.g. Object
+#   2. User-type vs kernel: kernel positional Rank (e.g. Class
 #      4.1·10⁹) sits BELOW the user band (4.1·10¹⁰), so a user-
-#      defined Object subtype sorts AFTER Object itself.
+#      defined Class subtype sorts AFTER Class itself.
 #
 # Plus the within-family rule still applies: a user-type LITERAL
 # sorts strictly below any concrete instance of that user type.
 # =============================================================================
 
-# --- Object-subtype kind (lattice-minted via `class`) ---
+# --- Class-subtype kind (lattice-minted via `class`) ---
 def Cat class {color:String} def Dog class {breed:String} Cat tcmp Dog	-1
 def Cat class {color:String} def Dog class {breed:String} Dog tcmp Cat	1
 def Cat class {color:String} def Dog class {breed:String} Cat tcmp Cat	0
-def Cat class {color:String} Cat tcmp Object	1
-def Cat class {color:String} Object tcmp Cat	-1
 def Cat class {color:String} (make Cat {color:'orange'}) tcmp Cat	1
 def Cat class {color:String} Cat tcmp (make Cat {color:'orange'})	-1
 def Cat class {color:String} (make Cat {color:'a'}) tcmp (make Cat {color:'b'})	-1
@@ -745,9 +743,8 @@ def Cat class {x:Integer} def Color enum [a b] Color tcmp Cat	1
 
 # --- Transitivity across user types ---
 def Cat class {x:Integer} def Dog class {y:Integer} (((Cat tcmp Dog) lt 0) and ((Dog tcmp (make Dog {y:1})) lt 0) and ((Cat tcmp (make Dog {y:1})) lt 0))	true	# transitive: Cat < Dog < Dog-instance, so Cat < Dog-instance
-def Cat class {x:Integer} def Dog class {y:Integer} (((Object tcmp Cat) lt 0) and ((Cat tcmp Dog) lt 0) and ((Object tcmp Dog) lt 0))	true
 def A class {x:Integer} def B class {x:Integer} def C class {x:Integer} (((A tcmp B) lt 0) and ((B tcmp C) lt 0) and ((A tcmp C) lt 0))	true
 
 # --- User type sorts after every kernel type in its branch ---
-def Cat class {x:Integer} (((Object tcmp Cat) lt 0) and ((Resource tcmp Cat) lt 0) and ((Entity tcmp Cat) lt 0))	true
+def Cat class {x:Integer} (((Resource tcmp Cat) lt 0) and ((Entity tcmp Cat) lt 0))	true
 def Maybe (String tor None) (((Disjunct tcmp Maybe) lt 0) and ((Function tcmp Maybe) lt 0))	true

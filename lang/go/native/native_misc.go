@@ -406,13 +406,9 @@ func describeWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 // declares a default (whose own type then constrains the field).
 // Inherited fields from the refine chain are listed and marked.
 func formatTypeSchema(name string, v Value) string {
-	info, _ := AsObjectType(v)
+	info, _ := AsClassType(v)
 	var b strings.Builder
-	kind := "object type"
-	if info.Class {
-		kind = "class"
-	}
-	fmt.Fprintf(&b, "%s — %s", name, kind)
+	fmt.Fprintf(&b, "%s — %s", name, "class")
 	if info.Name != "" {
 		fmt.Fprintf(&b, " (%s)", info.Name)
 	}
@@ -441,9 +437,7 @@ func formatTypeSchema(name string, v Value) string {
 			fmt.Fprintf(&b, "  %-*s : %s  (required)%s\n", w, k, c.String(), inherited)
 		}
 	}
-	if info.Class {
-		fmt.Fprintf(&b, "\nInstances: make %s {…} — sealed (typed set of existing fields only).\n", name)
-	}
+	fmt.Fprintf(&b, "\nInstances: make %s {…} — sealed (typed set of existing fields only).\n", name)
 	return b.String()
 }
 

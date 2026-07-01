@@ -331,19 +331,14 @@ func ExactEqual(a, b Value) bool {
 	if IsXmlValue(a) && IsXmlValue(b) {
 		return a.Parent.Equal(b.Parent) && sameContainer(a.Data, b.Data)
 	}
-	// Ideal/Array: identity IS the container — two Arrays are equal
-	// only when they are the same array instance (aliased bindings),
-	// never by content. Content comparison goes through
-	// `convert List`. See design/FLEX-NODES.10.md (identity-vs-content).
-	if a.Parent.Equal(TArray) && b.Parent.Equal(TArray) {
-		return sameContainer(a.Data, b.Data)
-	}
-	// Object / class instances identify by their underlying field map —
-	// the same aliasing rule as Map: two bindings to one instance are
-	// eq, two structurally-equal instances are not (that's deq).
-	if ai, aok := a.Data.(ObjectInstanceInfo); aok {
-		bi, bok := b.Data.(ObjectInstanceInfo)
-		return bok && ai.Fields != nil && ai.Fields == bi.Fields
+	// Flat instances (class + Resource/Entity) identify by their
+	// underlying field map — the same aliasing rule as Map: two bindings
+	// to one instance are eq, two structurally-equal instances are not
+	// (that's deq). A shared Fields pointer is the identity key; a
+	// class/resource cross-pair can never share one, so it stays unequal.
+	if af, _, aok := flatInstanceParts(a); aok {
+		bf, _, bok := flatInstanceParts(b)
+		return bok && af != nil && af == bf
 	}
 
 	return false
@@ -398,9 +393,6 @@ func sameContainer(a, b Payload) bool {
 			return len(av.Cren) == len(bv.Cren)
 		}
 		return &av.Cren[0] == &bv.Cren[0]
-	case *ArrayInstanceInfo:
-		bv, ok := b.(*ArrayInstanceInfo)
-		return ok && av == bv
 	default:
 		return false
 	}
@@ -505,20 +497,19 @@ func DeepEqual(a, b Value) bool {
 		return xmlElementsEqual(a, b)
 	}
 
-	// Class / object instances: structural equality requires the SAME
-	// (exact) type — a Point3 is never deq-equal to a Point even with
-	// equal visible fields — and field-wise deep equality. The key set
-	// is the union of schema fields and own fields (covering legacy
-	// object instances with dynamic fields); GetField walks the legacy
-	// prototype chain, and class instances are flat so it is a plain
-	// map hit. See design/CLASS-OBJECT.10.md.
-	if IsObjectInstance(a) && IsObjectInstance(b) {
+	// Flat instances (class + Resource/Entity): structural equality
+	// requires the SAME (exact) type — a Point3 is never deq-equal to a
+	// Point even with equal visible fields — and field-wise deep
+	// equality. The key set is the union of schema fields and own
+	// fields; both instance kinds store a flat Fields map, so a lookup
+	// is a plain map hit. See design/CLASS-OBJECT.10.md.
+	if IsFlatInstance(a) && IsFlatInstance(b) {
 		if !a.Parent.Equal(b.Parent) {
 			return false
 		}
-		ai, aErr := AsObjectInstance(a)
-		bi, bErr := AsObjectInstance(b)
-		if aErr != nil || bErr != nil {
+		aFields, aSchema, aok := flatInstanceParts(a)
+		bFields, bSchema, bok := flatInstanceParts(b)
+		if !aok || !bok || aFields == nil || bFields == nil {
 			return false
 		}
 		seen := map[string]bool{}
@@ -531,14 +522,13 @@ func DeepEqual(a, b Value) bool {
 				}
 			}
 		}
-		if ai.TypeRef != nil {
-			addKeys(ai.TypeRef.AllFields().Keys())
-		}
-		addKeys(ai.Fields.Keys())
-		addKeys(bi.Fields.Keys())
+		addKeys(aSchema)
+		_ = bSchema // a.Parent == b.Parent, so their schemas coincide
+		addKeys(aFields.Keys())
+		addKeys(bFields.Keys())
 		for _, k := range keys {
-			av, aok := ai.GetField(k)
-			bv, bok := bi.GetField(k)
+			av, aok := aFields.Get(k)
+			bv, bok := bFields.Get(k)
 			if aok != bok {
 				return false
 			}

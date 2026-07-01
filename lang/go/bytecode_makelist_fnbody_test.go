@@ -8,7 +8,7 @@ import (
 
 // TestComputedListInFnBody pins the fix for the difficulty-5 make/list provenance
 // leaf (VOXGIG-COMPILE-COMPLETION-PLAN.0.md §1.3): a COMPUTED list literal CONSUMED
-// as an argument inside a fn body (`make Array [i 99]`, `f [j (g x)]`) now lowers to
+// as an argument inside a fn body (`flex [i 99]`, `f [j (g x)]`) now lowers to
 // OpMakeList instead of refusing — the interpreter auto-evaluates the consumed arg
 // against the live def stack, so its element locals/params resolve exactly as
 // OpMakeList re-pushes them per call.
@@ -21,8 +21,8 @@ import (
 func TestComputedListInFnBody(t *testing.T) {
 	// MUST compile natively (no island) + RunCompiledStrict == Run.
 	strict := []struct{ name, src, want string }{
-		{"make Array over a computed list (param element)",
-			`def f fn [[i:Integer][Any][ (make Array [i 99]) ]] (f 7)`, "[Array[7 99]]"},
+		{"flex over a computed list (param element)",
+			`def f fn [[i:Integer][Any][ (flex [i 99]) ]] (f 7)`, "[[7 99]]"},
 		{"computed list bound then sized",
 			`def f fn [[i:Integer][Integer][ def xs [i 99] (xs size) ]] (f 7)`, "[2]"},
 		{"computed list with a nested call element",

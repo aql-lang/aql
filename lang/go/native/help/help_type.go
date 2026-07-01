@@ -53,9 +53,8 @@ func init() {
 			"CONCRETE value ({retries:3}) declares a default, typed by the value itself. " +
 			"Instances (`make Foo {\u2026}`) are flat \u2014 every field, own and inherited, " +
 			"resolves at make \u2014 and sealed: writing an undeclared field raises " +
-			"sealed_field. Subclass with refine: `def Bar refine Foo {\u2026}`. Class " +
-			"instances are NOT Objects \u2014 classes and the open keyed container are " +
-			"separate branches.",
+			"sealed_field. Subclass with refine: `def Bar refine Foo {\u2026}`. For open, " +
+			"unsealed mutable data use a FlexMap (`flex {\u2026}`) instead.",
 		Examples: []string{
 			`def Point class {x:1, y:2}     ;# x,y default to 1,2`,
 			`def p (make Point {x:9})       ;# p.x => 9, p.y => 2`,
@@ -190,33 +189,6 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "object",
-		Summary: "Construct an open mutable keyed container (sugar for make Object).",
-		Description: "`object {…}` builds the mutable keyed sibling of Array: any key " +
-			"writes in place (set returns nothing; computed keys via parens), every " +
-			"field enumerates (items/size), and bindings share the container. For " +
-			"sealed, schema-checked records use `class` instead. `convert Map o` " +
-			"freezes to an immutable Map; `convert Object m` thaws back.",
-		Examples: []string{
-			`def o object {a:1}`,
-			`o set b 2 end o.b              ;# => 2 — in place`,
-			`o set (k) 3                    ;# computed key`,
-		},
-	})
-
-	register(&Entry{
-		Word:    "array",
-		Summary: "Construct a mutable Array (sugar for make Array).",
-		Description: "`array […]` builds the mutable indexed sibling of Object: " +
-			"in-place bounds-checked `set i v` returning nothing, dot/index reads, " +
-			"size. Lists stay immutable — `xs set 0 99` on a List returns a NEW list.",
-		Examples: []string{
-			`def a array [1 2 3]`,
-			`a set 0 99 end a.0             ;# => 99 — in place`,
-		},
-	})
-
-	register(&Entry{
 		Word:    "base",
 		Summary: "Return the zero/default value for the type of a value.",
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +
@@ -270,10 +242,10 @@ func init() {
 
 	register(&Entry{
 		Word:    "tpartial",
-		Summary: "Wrap every field of a Record or Object type in `T | None`.",
+		Summary: "Wrap every field of a Record or class type in `T | None`.",
 		Description: "Returns a new type where each field's value type is " +
 			"replaced with the disjunct of itself and None. Idempotent — a " +
-			"field already including None is unchanged. For Object types, " +
+			"field already including None is unchanged. For class types, " +
 			"inherited fields are flattened into the result.",
 	})
 }

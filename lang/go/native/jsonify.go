@@ -40,16 +40,32 @@ func valueToAnySer(v Value) any {
 	if !IsConcrete(v) {
 		return nil
 	}
-	if IsObjectInstance(v) {
-		oi, err := AsObjectInstance(v)
+	if IsClassInstance(v) {
+		oi, err := AsClassInstance(v)
 		if err != nil {
 			return v.String()
 		}
-		flat := ObjectFields(&oi)
+		flat := ClassFields(&oi)
 		out := make(map[string]any, flat.Len()+1)
-		if oi.TypeRef != nil && oi.TypeRef.Class {
+		if oi.TypeRef != nil {
 			out["$class"] = classShortName(oi.TypeRef)
 		}
+		for _, key := range flat.Keys() {
+			val, _ := flat.Get(key)
+			out[escapeSerKey(key)] = valueToAnySer(val)
+		}
+		return out
+	}
+	if IsResourceInstance(v) {
+		// Resource/Entity instances serialize as their flat field map.
+		// They carry no `$class` key — Resource/Entity are not part of
+		// the class reify contract (StructUtil.reify targets classes), so
+		// emitting one would produce JSON reify could not round-trip.
+		flat, ok := FlatInstanceFields(v)
+		if !ok {
+			return v.String()
+		}
+		out := make(map[string]any, flat.Len())
 		for _, key := range flat.Keys() {
 			val, _ := flat.Get(key)
 			out[escapeSerKey(key)] = valueToAnySer(val)

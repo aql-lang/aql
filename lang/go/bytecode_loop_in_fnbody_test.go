@@ -35,8 +35,8 @@ func loopSound(t *testing.T, src string) {
 // native lowering (no FALLBACK island) and runs == interpret.
 func TestLoopInFnBody_SideEffectStatement(t *testing.T) {
 	const src = `def sum-to fn [[n:Integer] [Integer] [
-		def acc (make Array [0])
-		for n [ acc set 0 ((acc get 0) add 1) end ]
+		def acc (flex [0])
+		for n [ def _ (acc set 0 ((acc get 0) add 1)) end ]
 		acc get 0
 	]]
 	sum-to 5`
@@ -62,8 +62,8 @@ func TestLoopInFnBody_ZeroReturnWholeBody(t *testing.T) {
 // Nested side-effect loops inside a fn body.
 func TestLoopInFnBody_Nested(t *testing.T) {
 	const src = `def grid fn [[n:Integer] [Integer] [
-		def acc (make Array [0])
-		for n [ for n [ acc set 0 ((acc get 0) add 1) end ] ]
+		def acc (flex [0])
+		for n [ for n [ def _ (acc set 0 ((acc get 0) add 1)) end ] ]
 		acc get 0
 	]]
 	grid 4`

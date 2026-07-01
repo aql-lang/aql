@@ -171,15 +171,6 @@ type ChildTypeInfo struct {
 	// an exact length or an upper bound — never an underestimate, which
 	// would turn an in-bounds access into a false positive.
 	Len *int
-	// ArrayID is the make-site identity of a typed mutable-Array carrier
-	// (`Array<T>`), used in check mode to key the per-array element-bound /
-	// poison tracking that keeps `arr get` sound under mutation + aliasing.
-	// It is the SrcPos of the originating `make Array` call, stamped once at
-	// construction and preserved through binding/capture (a value copy keeps
-	// Data). The zero SrcPos means "no tracked identity" (an untyped or
-	// non-make array) — see design/ARRAY-ELEMENT-CARRIER-ARCH.0.md. Irrelevant
-	// to typed lists/maps, which leave it zero.
-	ArrayID SrcPos
 }
 
 // ChildEntry is a (key, value) pair retained for typed maps that
@@ -674,7 +665,7 @@ type NegationInfo struct {
 	Inner Value
 }
 
-// ObjectTypeInfo holds the type definition for an object type.
+// ClassTypeInfo holds the type definition for an object type.
 // Object types form an inheritance hierarchy analogous to class inheritance.
 // For example, Object/Foo has parent Object, Object/Foo/Bar has parent Foo.
 // Fields are the type's own fields (not including inherited ones).
@@ -682,22 +673,21 @@ type NegationInfo struct {
 // ID is a unique internal identifier: "T_" followed by 12 lowercase hex characters.
 // Name is the full type path (e.g. "Object/Foo/Bar"), set when the type is
 // registered via def.
-type ObjectTypeInfo struct {
-	Fields          *OrderedMap     // own fields (field name → type-constraint Value)
-	Parent          *ObjectTypeInfo // parent object type (nil if direct child of Object)
-	ID              string          // unique internal ID: "T_" + 12 hex chars
-	Name            string          // full type path (e.g. "Object/Foo/Bar")
-	Type            *Type           // canonical *Type identity; populated by MintType during installation
-	Class           bool            // class-rooted (minted under Ideal/Class): sealed, flat instances — see design/CLASS-OBJECT.10.md
-	BinaryLayout    Value           // for a binary-frame spec (a class carrying a Scalar/Bytes wire layout): the raw layout List<Map>; zero Value otherwise. Read by the Bytes codec (make/unpack/convert) and the Binary/BinarySpec membership predicates. See lang/go/native/native_bytes.go and design/go-modules/BYTES.10.md.
-	cachedAllFields *OrderedMap     // lazily computed merged field map (immutable after first call)
+type ClassTypeInfo struct {
+	Fields          *OrderedMap    // own fields (field name → type-constraint Value)
+	Parent          *ClassTypeInfo // parent class type (nil if direct child of Ideal/Class)
+	ID              string         // unique internal ID: "T_" + 12 hex chars
+	Name            string         // full type path (e.g. "Class/Foo/Bar")
+	Type            *Type          // canonical *Type identity; populated by MintType during installation
+	BinaryLayout    Value          // for a binary-frame spec (a class carrying a Scalar/Bytes wire layout): the raw layout List<Map>; zero Value otherwise. Read by the Bytes codec (make/unpack/convert) and the Binary/BinarySpec membership predicates. See lang/go/native/native_bytes.go and design/go-modules/BYTES.10.md.
+	cachedAllFields *OrderedMap    // lazily computed merged field map (immutable after first call)
 }
 
 // AllFields returns all fields including inherited ones. Parent fields come
 // first, followed by the type's own fields. Own fields override inherited
-// fields with the same name. The result is cached since ObjectTypeInfo is
+// fields with the same name. The result is cached since ClassTypeInfo is
 // immutable after registration.
-func (o *ObjectTypeInfo) AllFields() *OrderedMap {
+func (o *ClassTypeInfo) AllFields() *OrderedMap {
 	if o.cachedAllFields != nil {
 		return o.cachedAllFields
 	}
@@ -717,45 +707,80 @@ func (o *ObjectTypeInfo) AllFields() *OrderedMap {
 	return result
 }
 
-// ObjectInstanceInfo holds a concrete instance of an object type.
-// TypeRef points back to the ObjectTypeInfo that created this instance.
-// Fields holds the type's own resolved field values.
-// Prototype points to the parent instance (like JavaScript prototypes):
-// field lookups fall through to the prototype chain for inherited fields.
-type ObjectInstanceInfo struct {
-	TypeRef   *ObjectTypeInfo     // the object type this is an instance of
-	Fields    *OrderedMap         // own field name → resolved Value
-	Prototype *ObjectInstanceInfo // parent instance (nil if root type)
+// ClassInstanceInfo holds a concrete instance of an object (class)
+// type. TypeRef points back to the ClassTypeInfo that created this
+// instance; Fields holds every resolved field. Instances are FLAT —
+// class construction resolves the full field set (own + inherited)
+// eagerly at make, so there is no prototype chain (open objects, which
+// used one, were removed).
+type ClassInstanceInfo struct {
+	TypeRef *ClassTypeInfo // the object type this is an instance of
+	Fields  *OrderedMap    // resolved field values (flat: own + inherited)
 }
 
-// GetField returns a field value by searching own fields first, then walking
-// the prototype chain. Returns the value and true if found, zero and false otherwise.
-func (oi ObjectInstanceInfo) GetField(name string) (Value, bool) {
-	if v, ok := oi.Fields.Get(name); ok {
-		return v, true
-	}
-	if oi.Prototype != nil {
-		return oi.Prototype.GetField(name)
-	}
-	return Value{}, false
+// GetField returns a field value (flat lookup — instances carry every
+// field resolved at make).
+func (oi ClassInstanceInfo) GetField(name string) (Value, bool) {
+	return oi.Fields.Get(name)
 }
 
-// AllFields returns all fields including those from the prototype chain.
-// Prototype fields come first, own fields override.
-func (oi ObjectInstanceInfo) AllFields() *OrderedMap {
+// AllFields returns the instance's resolved fields (flat).
+func (oi ClassInstanceInfo) AllFields() *OrderedMap {
 	result := NewOrderedMap()
-	if oi.Prototype != nil {
-		proto := oi.Prototype.AllFields()
-		for _, k := range proto.Keys() {
-			v, _ := proto.Get(k)
-			result.Set(k, v)
-		}
-	}
 	for _, k := range oi.Fields.Keys() {
 		v, _ := oi.Fields.Get(k)
 		result.Set(k, v)
 	}
 	return result
+}
+
+// ResourceTypeInfo holds the type definition for the SDK Resource /
+// Entity object-type hierarchy (Ideal/Resource, Ideal/Resource/Entity).
+// It mirrors the shape of a class type — own fields, a parent chain, a
+// minted lattice identity — but is a distinct payload so the shared
+// class-instance representation stays class-only. Instances are flat
+// (schema resolved eagerly at make; no prototype delegation).
+type ResourceTypeInfo struct {
+	Fields          *OrderedMap       // own fields (field name → type-constraint Value)
+	Parent          *ResourceTypeInfo // parent resource type (nil for Resource root)
+	ID              string            // unique internal ID: "T_" + 12 hex chars
+	Name            string            // full type path (e.g. "Ideal/Resource/Entity")
+	Type            *Type             // canonical *Type identity; populated by MintType during installation
+	cachedAllFields *OrderedMap       // lazily computed merged field map
+}
+
+// AllFields returns all fields including inherited ones (parent first,
+// own overriding), mirroring ClassTypeInfo.AllFields.
+func (o *ResourceTypeInfo) AllFields() *OrderedMap {
+	if o.cachedAllFields != nil {
+		return o.cachedAllFields
+	}
+	result := NewOrderedMap()
+	if o.Parent != nil {
+		for _, k := range o.Parent.AllFields().Keys() {
+			v, _ := o.Parent.AllFields().Get(k)
+			result.Set(k, v)
+		}
+	}
+	for _, k := range o.Fields.Keys() {
+		v, _ := o.Fields.Get(k)
+		result.Set(k, v)
+	}
+	o.cachedAllFields = result
+	return result
+}
+
+// ResourceInstanceInfo is a flat, schema-resolved instance of a
+// ResourceType. Like a class instance it has no prototype chain — every
+// field (own + inherited) is resolved at make into a single map.
+type ResourceInstanceInfo struct {
+	TypeRef *ResourceTypeInfo // the resource type this is an instance of
+	Fields  *OrderedMap       // resolved field values (flat: own + inherited)
+}
+
+// GetField returns a field value (flat lookup — no prototype chain).
+func (ri ResourceInstanceInfo) GetField(name string) (Value, bool) {
+	return ri.Fields.Get(name)
 }
 
 // StoreInstanceInfo is a copy-on-write key-value store (Object/Store).
@@ -794,39 +819,6 @@ func (si *StoreInstanceInfo) Set(key string, val Value) {
 		childStore.Parent = si
 		childStore.ParentKey = key
 	}
-}
-
-// ArrayInstanceInfo is a mutable ordered array (Ideal/Array).
-// Unlike immutable Node/List values, Array instances can be modified
-// in place via set (index assignment). An Array is FIXED-EXTENT:
-// there is deliberately no growth operation — `set` is in-bounds
-// replacement only, and growth is FlexList's job (the former Append
-// method was dead code and was removed to make the contract explicit;
-// see design/FLEX-NODES.10.md).
-type ArrayInstanceInfo struct {
-	Elems []Value
-}
-
-// Get returns the element at index i. Returns zero Value and false if out of bounds.
-func (ai *ArrayInstanceInfo) Get(i int) (Value, bool) {
-	if i < 0 || i >= len(ai.Elems) {
-		return Value{}, false
-	}
-	return ai.Elems[i], true
-}
-
-// Set sets the element at index i. Returns false if out of bounds.
-func (ai *ArrayInstanceInfo) Set(i int, val Value) bool {
-	if i < 0 || i >= len(ai.Elems) {
-		return false
-	}
-	ai.Elems[i] = val
-	return true
-}
-
-// Len returns the number of elements.
-func (ai *ArrayInstanceInfo) Len() int {
-	return len(ai.Elems)
 }
 
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
@@ -1248,14 +1240,6 @@ func NewEvalList(elems []Value) Value {
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
 	return NewValueRaw(TList, ChildTypeInfo{Child: child})
-}
-
-// NewTypedArray creates a typed mutable-Array carrier shell — Parent=TArray
-// with Data=ChildTypeInfo{Child}. Mirrors NewTypedList on the Array side; the
-// element type rides on Child, the make-site identity on ChildTypeInfo.ArrayID.
-// Callers that want it treated as abstract set Carrier (see NewCarrierTypedArray).
-func NewTypedArray(child Value, id SrcPos) Value {
-	return NewValueRaw(TArray, ChildTypeInfo{Child: child, ArrayID: id})
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.
@@ -1750,20 +1734,31 @@ func NewNegation(inner Value) Value {
 	return NewValueRaw(TNegation, NegationInfo{Inner: inner})
 }
 
-// NewObjectType creates an object type value. The caller must
+// NewClassType creates an object type value. The caller must
 // provide the canonical *Type identity — typically minted via
 // r.Types.MintType for named types being installed, or for anonymous
 // `object {…}` declarations. The info's Type field is set to t for
 // downstream code that needs the parent's *Type when extending.
-func NewObjectType(t *Type, info ObjectTypeInfo) Value {
+func NewClassType(t *Type, info ClassTypeInfo) Value {
 	info.Type = t
 	return NewValueRaw(t, info)
 }
 
-// NewObjectInstance creates an object instance value of the given
+// NewClassInstance creates an object instance value of the given
 // type. The caller must provide the type's *Type identity (typically
 // info.TypeRef.Type for the type currently being instantiated).
-func NewObjectInstance(t *Type, info ObjectInstanceInfo) Value {
+func NewClassInstance(t *Type, info ClassInstanceInfo) Value {
+	return NewValueRaw(t, info)
+}
+
+// NewResourceType creates a Resource/Entity type value; sets info.Type to t.
+func NewResourceType(t *Type, info ResourceTypeInfo) Value {
+	info.Type = t
+	return NewValueRaw(t, info)
+}
+
+// NewResourceInstance creates a resource instance value of the given type.
+func NewResourceInstance(t *Type, info ResourceInstanceInfo) Value {
 	return NewValueRaw(t, info)
 }
 
@@ -1802,18 +1797,6 @@ func NewStoreWithPrototype(t *Type, prototype *StoreInstanceInfo) Value {
 		Data:      make(map[string]Value),
 		Prototype: prototype,
 	})
-}
-
-// NewArray creates a mutable Array value from a slice of elements.
-func NewArray(elems []Value) Value {
-	data := make([]Value, len(elems))
-	copy(data, elems)
-	return NewValueRaw(TArray, &ArrayInstanceInfo{Elems: data})
-}
-
-// NewArrayEmpty creates an empty mutable Array value.
-func NewArrayEmpty() Value {
-	return NewValueRaw(TArray, &ArrayInstanceInfo{Elems: nil})
 }
 
 // As* accessors for Scalar/Time/* moved to
@@ -2091,21 +2074,21 @@ func AsNegation(v Value) (NegationInfo, error) {
 	return info, nil
 }
 
-// IsObjectType reports whether this value is an object type definition.
-// The test is payload-based: any value carrying ObjectTypeInfo is an
+// IsClassType reports whether this value is an object type definition.
+// The test is payload-based: any value carrying ClassTypeInfo is an
 // object type, regardless of where its Parent sits in the lattice — a
 // builtin like Resource is an object type whose Parent is the peer
 // Ideal kind Ideal/Resource, not a descendant of Ideal/Object.
-func IsObjectType(v Value) bool {
-	_, ok := v.Data.(ObjectTypeInfo)
+func IsClassType(v Value) bool {
+	_, ok := v.Data.(ClassTypeInfo)
 	return ok
 }
 
-// AsObjectType returns the ObjectTypeInfo, panics if not an object type.
-func AsObjectType(v Value) (ObjectTypeInfo, error) {
-	info, ok := v.Data.(ObjectTypeInfo)
+// AsClassType returns the ClassTypeInfo, panics if not an object type.
+func AsClassType(v Value) (ClassTypeInfo, error) {
+	info, ok := v.Data.(ClassTypeInfo)
 	if !ok {
-		return ObjectTypeInfo{}, fmt.Errorf("AsObjectType: not an object type value (got %T)", v.Data)
+		return ClassTypeInfo{}, fmt.Errorf("AsClassType: not an object type value (got %T)", v.Data)
 	}
 	return info, nil
 }
@@ -2125,35 +2108,104 @@ func AsStore(v Value) (*StoreInstanceInfo, error) {
 	return si, nil
 }
 
-// IsArray reports whether this value is an Array instance.
-func IsArray(v Value) bool {
-	_, ok := v.Data.(*ArrayInstanceInfo)
-	return ok && v.Parent.ConformsTo(TArray)
-}
-
-// AsArray returns the ArrayInstanceInfo pointer. Returns an error if not an array.
-func AsArray(v Value) (*ArrayInstanceInfo, error) {
-	ai, ok := v.Data.(*ArrayInstanceInfo)
-	if !ok {
-		return nil, fmt.Errorf("AsArray: not an array value (got %T)", v.Data)
-	}
-	return ai, nil
-}
-
-// IsObjectInstance reports whether this value is an object instance.
-// Payload-based — see IsObjectType.
-func IsObjectInstance(v Value) bool {
-	_, ok := v.Data.(ObjectInstanceInfo)
+// IsClassInstance reports whether this value is an object instance.
+// Payload-based — see IsClassType.
+func IsClassInstance(v Value) bool {
+	_, ok := v.Data.(ClassInstanceInfo)
 	return ok
 }
 
-// AsObjectInstance returns the ObjectInstanceInfo, panics if not an object instance.
-func AsObjectInstance(v Value) (ObjectInstanceInfo, error) {
-	info, ok := v.Data.(ObjectInstanceInfo)
+// AsClassInstance returns the ClassInstanceInfo, panics if not an object instance.
+func AsClassInstance(v Value) (ClassInstanceInfo, error) {
+	info, ok := v.Data.(ClassInstanceInfo)
 	if !ok {
-		return ObjectInstanceInfo{}, fmt.Errorf("AsObjectInstance: not an object instance value (got %T)", v.Data)
+		return ClassInstanceInfo{}, fmt.Errorf("AsClassInstance: not an object instance value (got %T)", v.Data)
 	}
 	return info, nil
+}
+
+// IsResourceType reports whether v is a Resource/Entity type descriptor.
+func IsResourceType(v Value) bool {
+	_, ok := v.Data.(ResourceTypeInfo)
+	return ok
+}
+
+// AsResourceType returns the ResourceTypeInfo, or an error if v is not one.
+func AsResourceType(v Value) (ResourceTypeInfo, error) {
+	info, ok := v.Data.(ResourceTypeInfo)
+	if !ok {
+		return ResourceTypeInfo{}, fmt.Errorf("AsResourceType: not a resource type value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsResourceInstance reports whether v is a Resource/Entity instance.
+func IsResourceInstance(v Value) bool {
+	_, ok := v.Data.(ResourceInstanceInfo)
+	return ok
+}
+
+// AsResourceInstance returns the ResourceInstanceInfo, or an error if v is not one.
+func AsResourceInstance(v Value) (ResourceInstanceInfo, error) {
+	info, ok := v.Data.(ResourceInstanceInfo)
+	if !ok {
+		return ResourceInstanceInfo{}, fmt.Errorf("AsResourceInstance: not a resource instance value (got %T)", v.Data)
+	}
+	return info, nil
+}
+
+// IsFlatInstance reports whether v is a flat field-map instance — a
+// class instance or a Resource/Entity instance. Both resolve every
+// field (own + inherited) into a single map at make time with no
+// prototype chain and carry an optional schema TypeRef, so container-
+// shaped operations (field projection, size, deq, eq, serialization)
+// treat them uniformly. Sites that special-case one MUST use this (or
+// FlatInstanceFields / flatInstanceParts) so the two representations
+// stay in lockstep.
+func IsFlatInstance(v Value) bool {
+	switch v.Data.(type) {
+	case ClassInstanceInfo, ResourceInstanceInfo:
+		return true
+	}
+	return false
+}
+
+// FlatInstanceFields returns a fresh copy of a flat instance's field
+// map (class or Resource/Entity) and true; (nil, false) otherwise.
+// Field order follows the instance's own order.
+func FlatInstanceFields(v Value) (*OrderedMap, bool) {
+	fields, _, ok := flatInstanceParts(v)
+	if !ok {
+		return nil, false
+	}
+	out := NewOrderedMap()
+	if fields != nil {
+		for _, k := range fields.Keys() {
+			val, _ := fields.Get(k)
+			out.Set(k, val)
+		}
+	}
+	return out, true
+}
+
+// flatInstanceParts returns the LIVE (shared) flat Fields map and the
+// declared schema key order (own + inherited) for a class or resource
+// instance. The Fields map is not copied — callers that mutate must
+// copy first (see FlatInstanceFields).
+func flatInstanceParts(v Value) (fields *OrderedMap, schemaKeys []string, ok bool) {
+	switch d := v.Data.(type) {
+	case ClassInstanceInfo:
+		if d.TypeRef != nil {
+			schemaKeys = d.TypeRef.AllFields().Keys()
+		}
+		return d.Fields, schemaKeys, true
+	case ResourceInstanceInfo:
+		if d.TypeRef != nil {
+			schemaKeys = d.TypeRef.AllFields().Keys()
+		}
+		return d.Fields, schemaKeys, true
+	}
+	return nil, nil, false
 }
 
 // IsAtom reports whether this value is an atom.
@@ -2706,42 +2758,50 @@ func kernelFormatDefault(v Value) string {
 	// TList rendering moved to listFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes List values there.
-	case IsArray(v):
-		arr, _ := AsArray(v)
-		parts := make([]string, arr.Len())
-		for i := 0; i < arr.Len(); i++ {
-			e, _ := arr.Get(i)
-			parts[i] = e.String()
-		}
-		return "Array[" + strings.Join(parts, " ") + "]"
 	// Timeout / Interval render via their per-Type Behavior — see
 	// coretype_format_behaviors.go. Their arms have been removed
 	// from this switch.
-	case IsObjectInstance(v):
-		oi, _ := AsObjectInstance(v)
+	case IsClassInstance(v):
+		oi, _ := AsClassInstance(v)
 		allFields := oi.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
 			val, _ := allFields.Get(k)
 			parts = append(parts, k+":"+val.String())
 		}
-		// An OPEN object (`object {…}` / `make Object {…}`) carries no
-		// TypeRef by design — render it under its lattice leaf instead
-		// of dereferencing the absent schema (was a SIGSEGV).
+		// A class instance normally carries its schema TypeRef; guard
+		// defensively against a nil/anonymous TypeRef by rendering under
+		// the lattice leaf or ID instead of dereferencing an absent
+		// schema (was a SIGSEGV).
 		name := ""
 		switch {
 		case oi.TypeRef != nil && oi.TypeRef.Name != "":
 			name = oi.TypeRef.Name
 		case oi.TypeRef != nil:
-			name = "Ideal/Object/" + oi.TypeRef.ID
+			name = "Ideal/Class/" + oi.TypeRef.ID
 		case v.Parent != nil:
 			name = v.Parent.Leaf()
 		default:
-			name = "Object"
+			name = "Class"
 		}
 		return name + "{" + strings.Join(parts, " ") + "}"
-	case IsObjectType(v):
-		ot, _ := AsObjectType(v)
+	case IsResourceInstance(v):
+		ri, _ := AsResourceInstance(v)
+		parts := make([]string, 0, ri.Fields.Len())
+		for _, k := range ri.Fields.Keys() {
+			val, _ := ri.Fields.Get(k)
+			parts = append(parts, k+":"+val.String())
+		}
+		name := "Resource"
+		switch {
+		case ri.TypeRef != nil && ri.TypeRef.Name != "":
+			name = ri.TypeRef.Name
+		case v.Parent != nil:
+			name = v.Parent.Leaf()
+		}
+		return name + "{" + strings.Join(parts, " ") + "}"
+	case IsClassType(v):
+		ot, _ := AsClassType(v)
 		allFields := ot.AllFields()
 		parts := make([]string, 0, allFields.Len())
 		for _, k := range allFields.Keys() {
@@ -2750,7 +2810,7 @@ func kernelFormatDefault(v Value) string {
 		}
 		name := ot.Name
 		if name == "" {
-			name = "Ideal/Object/" + ot.ID
+			name = "Ideal/Class/" + ot.ID
 		}
 		return "object<" + name + ">{" + strings.Join(parts, " ") + "}"
 	case IsDisjunct(v):
@@ -2835,7 +2895,7 @@ func IsTypeValue(v Value) bool {
 
 	// Options type, record type, typed list/map, table type, object type.
 	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
-		IsTypedMap(v) || IsTableType(v) || IsObjectType(v) {
+		IsTypedMap(v) || IsTableType(v) || IsClassType(v) {
 		return true
 	}
 

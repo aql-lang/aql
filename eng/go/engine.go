@@ -2056,11 +2056,11 @@ func (e *Engine) stepWord(val Value) error {
 	}
 
 	// Simple value def: substitute the word with its value directly,
-	// bypassing function dispatch entirely. FnDefInfo and ObjectTypeInfo
+	// bypassing function dispatch entirely. FnDefInfo and ClassTypeInfo
 	// entries are not simple values — they go through normal Lookup.
 	if top, ok := e.registry.Defs.Top(w.Name); ok {
 		switch top.Data.(type) {
-		case FnDefInfo, *ObjectTypeInfo:
+		case FnDefInfo, *ClassTypeInfo:
 			// Not a simple value — fall through to Lookup.
 		default:
 			// f w ≡ f (w): a word bound to a DATA __SP splice marker that

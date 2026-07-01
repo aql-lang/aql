@@ -46,7 +46,7 @@ prefix.
 | `enum` | `List -> Enum` | fixed enumeration |
 | `is` | `Any Any -> Boolean` | subtype / membership test |
 | `teq` | `Any Any -> Boolean` | strict type equality (lattice node identity) |
-| `tpartial` | `Any -> Type` | wrap every Record/Object field as `T \| None` |
+| `tpartial` | `Any -> Type` | wrap every Record/class field as `T \| None` |
 | `guard` | `Any Boolean -> Any` | value-or-None on predicate |
 | `base` | `Any -> Any` | zero/default for a type |
 | `convert` | `Scalar Scalar -> Scalar` (2-arg)<br/>`Scalar Map Scalar -> Scalar` (3-arg) | scalar coercion |
@@ -66,13 +66,13 @@ Loaded via `import "aql:type"`; words accessed as `type.<verb>`.
 | `type.exclude` | `Any Any -> Any` | set difference with **subtype semantics**: an alternative is removed when it equals OR subtypes any member of the remove-set. So `(Integer tor String) type.exclude Number -> String` (Integer is a subtype of Number, so it's removed). `(String tor None) type.exclude None -> String`. Result is `Never` if everything is excluded. | TypeScript `Exclude<T,U>` |
 | `type.extract` | `Any Any -> Any` | intersection with **subtype semantics**: an alternative is kept when it equals OR subtypes any member of the keep-set. So `(Integer tor Decimal tor String) type.extract Number -> Integer\|Decimal`. `(String tor Number tor Boolean) type.extract Number -> Number`. | TypeScript `Extract<T,U>` |
 
-### Record / Object surgery
+### Record / Class surgery
 
 | Word | Signature | Semantics | Inspiration |
 |---|---|---|---|
-| `type.pick` | `Any List -> Type` | retain only the named fields. `Person type.pick [name age]` returns a record with just those two fields. On Object types, picks from `AllFields()` (inherited fields included) and produces a fresh anonymous Object type with no parent. | TypeScript `Pick<T,K>` |
-| `type.omit` | `Any List -> Type` | drop the named fields. Same Object-flattening as `type.pick`. | TypeScript `Omit<T,K>` |
-| `type.merge` | `Any Any -> Type` | combine two record/object types by field-union; overlapping fields unify via `tand` rules and error if unifiable fails. | TypeScript intersection of records |
+| `type.pick` | `Any List -> Type` | retain only the named fields. `Person type.pick [name age]` returns a record with just those two fields. On class types, picks from `AllFields()` (inherited fields included) and produces a fresh anonymous class type with no parent. | TypeScript `Pick<T,K>` |
+| `type.omit` | `Any List -> Type` | drop the named fields. Same class-flattening as `type.pick`. | TypeScript `Omit<T,K>` |
+| `type.merge` | `Any Any -> Type` | combine two record/class types by field-union; overlapping fields unify via `tand` rules and error if unifiable fails. | TypeScript intersection of records |
 | `type.required` | `Any -> Type` | strip `\| None` from every field. Inverse of `tpartial`. | TypeScript `Required<T>` |
 
 ### Function-type introspection
@@ -125,9 +125,9 @@ bodies (record types, disjuncts) compare via `ValuesEqual`.
 For Record types, the result is another Record type with the same
 field order and each value type wrapped as `T | None`.
 
-For Object types, all fields (including inherited) are flattened
+For class types, all fields (including inherited) are flattened
 into the result's own field map, and the result is registered as a
-fresh anonymous Object type (lattice parent: `Object`). `tpartial
+fresh anonymous class type (lattice parent: `Class`). `tpartial
 Person` is NOT a subtype of `Person` — AQL's lattice runs the other
 way (a child requires more, not less).
 
@@ -136,7 +136,7 @@ from every field.
 
 ## Notes on `type.pick` / `type.omit` semantics
 
-Both flatten inherited fields. The result is a fresh anonymous Object
+Both flatten inherited fields. The result is a fresh anonymous class
 type (no parent link). This avoids leaking surprising inheritance
 relationships and matches `tpartial`'s flattening choice for
 consistency.

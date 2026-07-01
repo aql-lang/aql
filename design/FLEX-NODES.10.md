@@ -9,6 +9,16 @@ Status: implemented.
 > unchanged; only the "no Map/List `set` signatures at all" phrasing
 > below is superseded. flex.tsv §5 pins the merged contract.
 
+> **Removal note (2026-07):** the mutable Ideal containers this design
+> contrasts against — `Array` (indexed) and `Object` (keyed) — have since
+> been **removed** from the language. FlexList/FlexMap are now the *only*
+> mutable containers, so the "FlexList vs Array" comparison below is
+> historical: there is no `Array` to graduate into or convert from. The
+> headline justification for keeping a distinct opaque `Array` — freeing
+> unboxed numeric backing for `Tensor`/`Matrix` — was never realized
+> (`aql:matrix-util` uses its own `TensorData`), which is what made the
+> removal clean. `class` covers typed, sealed records.
+
 ## Problem
 
 AQL's Node types (`Map`, `List`) are immutable: the mutation words

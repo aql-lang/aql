@@ -166,9 +166,9 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 	// MakeClassInstance, so the same strict validation `make` runs
 	// applies to the edit — an unknown top-level field or an
 	// off-schema value errors loudly rather than degrading to a Map.
-	if IsObjectInstance(data) {
-		info, _ := AsObjectInstance(data)
-		fields := ObjectFields(&info)
+	if IsClassInstance(data) {
+		info, _ := AsClassInstance(data)
+		fields := ClassFields(&info)
 		out := NewOrderedMap()
 		for _, key := range fields.Keys() {
 			v, _ := fields.Get(key)
@@ -185,14 +185,50 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 			}
 			out.Set(keyStr, child)
 		}
-		if info.TypeRef != nil && info.TypeRef.Class {
+		if info.TypeRef != nil {
 			inst, err := MakeClassInstance(*info.TypeRef, out, r)
 			if err != nil {
 				return Value{}, fmt.Errorf("setpath: %w", err)
 			}
 			return inst, nil
 		}
-		return NewObjectInstance(data.Parent, ObjectInstanceInfo{
+		return NewClassInstance(data.Parent, ClassInstanceInfo{
+			TypeRef: info.TypeRef,
+			Fields:  out,
+		}), nil
+	}
+
+	// Resource/Entity instance: same type-preserving rebuild as a class
+	// instance, routed through MakeResource so the SDK schema validation
+	// (missing/unknown field, field types) runs on the edit.
+	if IsResourceInstance(data) {
+		info, _ := AsResourceInstance(data)
+		out := NewOrderedMap()
+		if info.Fields != nil {
+			for _, key := range info.Fields.Keys() {
+				v, _ := info.Fields.Get(key)
+				out.Set(key, v)
+			}
+		}
+		keyStr := reachKeyString(k)
+		if len(rest) == 0 {
+			out.Set(keyStr, val)
+		} else {
+			existing, _ := out.Get(keyStr)
+			child, err := setReachNative(existing, rest, val, r)
+			if err != nil {
+				return Value{}, err
+			}
+			out.Set(keyStr, child)
+		}
+		if info.TypeRef != nil {
+			results, err := MakeResource(*info.TypeRef, out, r)
+			if err != nil {
+				return Value{}, fmt.Errorf("setpath: %w", err)
+			}
+			return results[0], nil
+		}
+		return NewResourceInstance(data.Parent, ResourceInstanceInfo{
 			TypeRef: info.TypeRef,
 			Fields:  out,
 		}), nil

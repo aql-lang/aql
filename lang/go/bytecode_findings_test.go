@@ -109,7 +109,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 // instead of refusing "operand shape needs reordering". `setpath recv k v`
 // with a computed receiver is the driving shape.
 func TestThreeArgComputedReceiverLowers(t *testing.T) {
-	const src = `import "aql:struct-util" (StructUtil.setpath (object {a:1}) "b" 2) dot b`
+	const src = `import "aql:struct-util" (StructUtil.setpath (flex {a:1}) "b" 2) dot b`
 
 	a, err := New()
 	if err != nil {
@@ -1325,16 +1325,16 @@ func TestModuleSyntheticConstFold(t *testing.T) {
 		}
 	}
 
-	// CONTROL: `convert` over a NON-module ideal (an Array instance) is not a
+	// CONTROL: `convert` over a NON-module ideal (a class instance) is not a
 	// module-synthetic fold — it goes through the normal path and still produces
 	// the value, proving the fold is scoped to module operands and does not
 	// hijack every convert.
-	const arr = `convert List (make Array [1 2 3])`
+	const arr = `def C class {a:1 b:2} convert List (make C {})`
 	a, _ := New()
 	gotC, compiled, _ := a.RunCompiled(arr)
 	b, _ := New()
 	gotI, _ := b.Run(arr)
-	if !compiled || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[[1 2 3]]" {
+	if !compiled || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[[1 2]]" {
 		t.Errorf("%q: array convert control failed: compiled=%v gotC=%v gotI=%v", arr, compiled, gotC, gotI)
 	}
 }
@@ -1693,12 +1693,12 @@ func TestValueDefLocalsClassIsolation(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		// flex default + push to a only: b stays empty (isolation).
 		{"flex isolation", `def Foo class {items:(flex [])} def a (make Foo {}) def b (make Foo {}) (a.items push 1) b.items`, "[[1] []]"},
-		// Array default + set on a only: b unchanged.
-		{"array isolation", `def Bits class {bits:(make Array [0 0 0])} def a (make Bits {}) def b (make Bits {}) set 0 9 a.bits end b.bits`, "[Array[0 0 0]]"},
+		// flex-list default + set on a only: b unchanged (a shows the write).
+		{"flex set isolation", `def Bits class {bits:(flex [0 0 0])} def a (make Bits {}) def b (make Bits {}) def _ (set 0 9 a.bits) end b.bits`, "[[0 0 0]]"},
 		// nested instance default + set on a.i only: b.i.n unchanged.
 		{"nested isolation", `def Inner class {n:0} def Outer class {i:(make Inner {})} def a (make Outer {}) def b (make Outer {}) set n 9 a.i end b.i.n`, "[0]"},
 		// two value-defs read OUT of production order (a before b, b on top).
-		{"out-of-order defs", `def a (make Array [1 2 3]) def b (make Array [4 5 6]) a.0 add b.0`, "[5]"},
+		{"out-of-order defs", `def a (flex [1 2 3]) def b (flex [4 5 6]) a.0 add b.0`, "[5]"},
 	} {
 		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
 		gotI, errI := mustNew(t).Run(c.src)
@@ -1736,7 +1736,7 @@ func TestEnclosingReadInBranchCompiles(t *testing.T) {
 		// enclosing computed value read in an if condition AND then-arm.
 		{"if-enclosing", `def y (1 add 2) if (y gt 0) [y mul 2] [0]`, "[6]"},
 		// enclosing instance read across a branch.
-		{"if-instance", `def a (make Array [1 2 3]) if (a.0 gt 0) [a.1] [99]`, "[2]"},
+		{"if-instance", `def a (flex [1 2 3]) if (a.0 gt 0) [a.1] [99]`, "[2]"},
 		// The SAME enclosing-read pattern INSIDE A FN BODY now compiles too:
 		// planValueDefLocals runs for every unit, not just frame 0, so the fn
 		// unit's `def y (n add 1)` promotes to a frame slot read across the arm.

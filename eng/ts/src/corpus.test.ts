@@ -23,7 +23,9 @@ import { SPEC_DIR, parseSpec, registerSpecWords, renderStack, tokenize } from '.
 
 // The compiled-coverage floor: at least this many value rows must compile and
 // match the interpreter. Raise it as feature gaps close (never lower it).
-const COMPILE_FLOOR = 1589
+// Lowered from 1589 → 1584 (Array removal) → 1575 (Object type removal), as
+// those types' eng/spec rows were deleted.
+const COMPILE_FLOOR = 1575
 // The native-error-parity floor: at least this many ERROR rows must compile to
 // a program that raises the interpreter's exact error code (a native OpTrap),
 // rather than refusing. Raise it as trap coverage grows (never lower it).

@@ -754,9 +754,7 @@ func registerEngSpecMake(r *eng.Registry) {
 		Signatures: []eng.NativeSig{
 			{Args: []*eng.Type{eng.TScalar, eng.TMap, eng.TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
 			{Args: []*eng.Type{eng.TIdeal, eng.TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*eng.Type{eng.TArray, eng.TList}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeArrayHandler, Returns: []*eng.Type{eng.TArray}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TScalar, eng.TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*eng.Type{eng.TObject, eng.TAny, eng.TObject}, Handler: eng.MakeWithPrototype, Returns: []*eng.Type{eng.TObject}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAny, eng.TAny, eng.TMap}, Handler: eng.MakeWithOpts, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAny, eng.TAny}, Handler: eng.MakeHandler, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
 		},
@@ -776,22 +774,11 @@ func registerEngSpecStorage(r *eng.Registry) {
 			return nil, fmt.Errorf("set: cannot set field on type literal")
 		}
 		key := eng.StoreKey(args[0])
-		oi, ok := container.Data.(eng.ObjectInstanceInfo)
+		oi, ok := container.Data.(eng.ClassInstanceInfo)
 		if !ok {
 			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
 		}
 		oi.Fields.Set(key, args[1])
-		return nil, nil
-	}
-	setArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-		arr, err := eng.AsArray(args[2])
-		if err != nil {
-			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].Parent.String())
-		}
-		idx, _ := args[0].AsConcreteInteger()
-		if !arr.Set(int(idx), args[1]) {
-			return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
-		}
 		return nil, nil
 	}
 	getNodeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -834,20 +821,8 @@ func registerEngSpecStorage(r *eng.Registry) {
 			}
 			return []eng.Value{val}, nil
 		}
-		oi, _ := eng.AsObjectInstance(container)
+		oi, _ := eng.AsClassInstance(container)
 		val, ok := oi.GetField(k)
-		if !ok {
-			return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
-		}
-		return []eng.Value{val}, nil
-	}
-	getArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-		arr, err := eng.AsArray(args[1])
-		if err != nil {
-			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].Parent.String())
-		}
-		idx, _ := args[0].AsConcreteInteger()
-		val, ok := arr.Get(int(idx))
 		if !ok {
 			return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
 		}
@@ -860,9 +835,8 @@ func registerEngSpecStorage(r *eng.Registry) {
 		Name: "set",
 
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TInteger, eng.TAny, eng.TArray}, Handler: setArrayH, Returns: []*eng.Type{}, BarrierPos: -1},
-			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TObject}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
-			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TObject}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TClass}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
+			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TClass}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
 		},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
@@ -872,10 +846,9 @@ func registerEngSpecStorage(r *eng.Registry) {
 			{Args: []*eng.Type{eng.TAtom, eng.TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TString, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TInteger, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TInteger, eng.TArray}, BarrierPos: 1, Handler: getArrayH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TAtom, eng.TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TString, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TInteger, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TAtom, eng.TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TString, eng.TClass}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
+			{Args: []*eng.Type{eng.TInteger, eng.TClass}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TAny, eng.TNone}, BarrierPos: 1, Handler: getNoneH, Returns: []*eng.Type{eng.TNone}},
 		},
 	})
@@ -924,21 +897,6 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		}
 		return fields
 	}
-	objectH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-		fieldsVal := args[0]
-		if !fieldsVal.Parent.Equal(eng.TMap) {
-			return nil, fmt.Errorf("object: argument must be a map of field definitions, got %s", fieldsVal.String())
-		}
-		m, err := eng.AsMutableMap(fieldsVal)
-		if err != nil {
-			return nil, fmt.Errorf("object: argument must be a concrete map, got %s", fieldsVal.String())
-		}
-		fields := parseObjectFields(m, r)
-		id := eng.GenerateObjectTypeID()
-		info := eng.ObjectTypeInfo{Fields: fields, Parent: nil, ID: id, Name: ""}
-		def := r.Types.MintType(id, eng.TObject)
-		return []eng.Value{eng.NewObjectType(def, info)}, nil
-	}
 	objectWithParentH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		fieldsVal := args[0]
 		parentVal := args[1]
@@ -949,10 +907,10 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 		if err != nil {
 			return nil, fmt.Errorf("object: first argument must be a concrete map, got %s", fieldsVal.String())
 		}
-		if !eng.IsObjectType(parentVal) {
+		if !eng.IsClassType(parentVal) {
 			return nil, fmt.Errorf("object: parent must be an object type, got %s", parentVal.String())
 		}
-		parentInfo, _ := eng.AsObjectType(parentVal)
+		parentInfo, _ := eng.AsClassType(parentVal)
 		fields := parseObjectFields(m, r)
 		parentAllFields := parentInfo.AllFields()
 		for _, key := range fields.Keys() {
@@ -967,13 +925,13 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 			}
 		}
 		id := eng.GenerateObjectTypeID()
-		info := eng.ObjectTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: ""}
+		info := eng.ClassTypeInfo{Fields: fields, Parent: &parentInfo, ID: id, Name: ""}
 		parentDef := parentInfo.Type
 		if parentDef == nil {
-			parentDef = eng.TObject
+			parentDef = eng.TClass
 		}
 		def := r.Types.MintType(id, parentDef)
-		return []eng.Value{eng.NewObjectType(def, info)}, nil
+		return []eng.Value{eng.NewClassType(def, info)}, nil
 	}
 	// refine — the uniform type constructor.
 	// Mirrors lang/go/native/native_type.go::refineHandler; dispatches
@@ -982,10 +940,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 	refineCtorH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		base := args[0]
 		arg := args[1]
-		if eng.IsBareTypeNode(base) && base.Equal(eng.TObject) {
-			return objectH([]eng.Value{arg}, nil, nil, reg)
-		}
-		if eng.IsObjectType(base) {
+		if eng.IsClassType(base) {
 			return objectWithParentH([]eng.Value{arg, base}, nil, nil, reg)
 		}
 		if eng.IsBareTypeNode(base) && base.Equal(eng.TRecord) {
@@ -994,7 +949,7 @@ func registerEngSpecObjectRecord(r *eng.Registry) {
 			}
 			return recordH([]eng.Value{arg}, nil, nil, reg)
 		}
-		return nil, fmt.Errorf("refine: base must be Object, Record, or an object type, got %s", base.String())
+		return nil, fmt.Errorf("refine: base must be Record or an object type, got %s", base.String())
 	}
 	// refine BaseType — the 1-arg bare-subtype form. Returns the base
 	// type unchanged; the paired `def` mints a fresh subtype of it.
@@ -1146,9 +1101,9 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 		}
 		result.Set("fields", eng.NewMap(fields))
 
-	case eng.IsObjectType(tv):
+	case eng.IsClassType(tv):
 		result.Set("kind", eng.NewAtom("object"))
-		oi, _ := eng.AsObjectType(tv)
+		oi, _ := eng.AsClassType(tv)
 		if oi.Parent != nil {
 			result.Set("parent", eng.NewString(oi.Parent.Name))
 		}

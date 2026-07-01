@@ -42,15 +42,15 @@ def Vec refine List  def k fn [[List] [String] ['l']  [Vec] [String] ['v']]  ins
 def Dict refine Map  def k fn [[Map] [String] ['m']  [Dict] [String] ['d']]  inspect k 'signatures' get	[{args:['Dict']} {args:['Map']} {args:[]}]	refine Map sorts before Map
 
 # ---------------------------------------------------------------------
-# 3. User-defined Object / Record types
+# 3. User-defined class / Record types
 # ---------------------------------------------------------------------
 # `def Foo (class {x:Integer})` mints Foo in the external
-# Ideal band — higher Rank than the kernel Object node. Verified via
+# Ideal band — higher Rank than the kernel Class node. Verified via
 # both inspect (sort key) and dispatch (only Foo-typed instances hit
 # the Foo overload).
 
-def Foo (class {x:Integer})  def k fn [[Object] [String] ['o']  [Foo] [String] ['f']]  inspect k 'signatures' get	[{args:['Foo']} {args:['Object']} {args:[]}]	Foo subtype sorts before Object
-def Foo (class {x:Integer})  def k fn [[Object] [String] ['o']  [Foo] [String] ['f']]  make Foo {x:1} k	'f'	Foo instance dispatches to the Foo sig
+def Foo (class {x:Integer})  def k fn [[Class] [String] ['o']  [Foo] [String] ['f']]  inspect k 'signatures' get	[{args:['Foo']} {args:['Class']} {args:[]}]	Foo subtype sorts before Class
+def Foo (class {x:Integer})  def k fn [[Class] [String] ['o']  [Foo] [String] ['f']]  make Foo {x:1} k	'f'	Foo instance dispatches to the Foo sig
 def Foo (class {x:Integer})  def k fn [[Any] [String] ['a']  [Foo] [String] ['f']]  make Foo {x:1} k	'f'	specific Foo wins over the Any catch-all
 
 # Sibling user types: same Rank, same depth — tiebreak by name. Lex

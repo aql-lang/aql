@@ -420,10 +420,10 @@ Any
 │   └── Map
 │       └── FlexMap                  -- mutable map (see Flex nodes)
 ├── Ideal
-│   ├── Object (Resource (Entity))
 │   ├── Class                       -- user classes root here
+│   ├── Resource (Entity)           -- SDK object-type hierarchy
 │   ├── Surface                     -- user surfaces (operation contracts)
-│   ├── Array, Record, Options, Error
+│   ├── Record, Options, Error
 │   ├── Store, Table
 │   ├── Fetch (Request | Response)
 │   ├── Timeout, Interval
@@ -599,8 +599,8 @@ sort [Integer 0 5 -3]         # returns [Integer -3 0 5]
 value declares a required field, a **concrete** value declares a
 default (and the default's own type becomes the field's type).
 `make` constructs flat instances — every field resolved eagerly,
-no prototypes. A **mutable** default — a flex node, `Array`,
-`Store`, or instance — is copied fresh for each `make`, so
+no prototypes. A **mutable** default — a flex node, `Store`, or
+instance — is copied fresh for each `make`, so
 instances never share one underlying container (no Python-style
 mutable-default trap); a mutable value you **pass in** is taken
 as-is, so deliberate sharing stays available:
@@ -651,20 +651,25 @@ keys error. The target is an explicit class or a `tor` union the
 type-preservingly; `StructUtil.setpath` returns a *new* instance
 with the edit applied, schema-checked.
 
-Classes complete a 2×2 container table:
+Classes sit in a 2×2 container table:
 
 |  | immutable (`set` returns a copy) | mutable (`set` writes in place) |
 |---|---|---|
-| **open keys** | `Map` `{…}` | `Object` — `object {…}` |
-| **fixed shape** | `List` `[…]` | `Array` — `array […]`; class instances (typed, sealed) |
+| **open keys** | `Map` `{…}` | `FlexMap` — `flex {…}` |
+| **fixed shape** | `List` `[…]` | `FlexList` — `flex […]`; class instances (typed, sealed) |
 
-`object {…}` / `array […]` are sugar for `make Object {…}` /
-`make Array […]`. `convert Map <obj>` freezes an Object to a Map;
-`convert Object <map>` thaws. Note that Object, Array, and class
-instances are shared mutable state: writes are visible through
-every alias, and concurrent writers (e.g. inside `parallel`
-branches) must coordinate — prefer the immutable column for data
-that crosses branch boundaries.
+The mutable column is the flex nodes (`flex {…}` / `flex […]`; see
+[Flex nodes](#flex-nodes--flexmap-and-flexlist)) plus class instances.
+`node <flex>` freezes a flex node back to an immutable Map/List. Flex
+nodes and class instances are shared mutable state: writes are visible
+through every alias, and concurrent writers (e.g. inside `parallel`
+branches) must coordinate — prefer the immutable column for data that
+crosses branch boundaries.
+
+> The former open-keyed `Object` container (`object {…}` / `make
+> Object`) and fixed-shape `Array` (`array […]` / `make Array`) were
+> removed. Use `flex {…}` / `flex […]` for open mutable containers,
+> and `class` for a typed, sealed record.
 
 ### Surfaces
 
@@ -1167,7 +1172,7 @@ def first fn [[xs:List] [Any] [xs get 0]]
 first [10 20 30]              # returns 10
 ```
 
-**Object / Record / Table types — nominal, by construction.** An
+**Class / Record / Table types — nominal, by construction.** An
 instance built with `make` carries the type's tag, so it satisfies
 both parameter and return slots of that type (and of any supertype):
 
@@ -1580,7 +1585,7 @@ type:
 | Integer / Float | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
 | Boolean | `1` for `true`, `0` for `false` | `true size` returns `1` |
 | Path | segment count | `(make Path "a/b/c") size` returns `3` |
-| Object / Array / Store / Table | field / element / entry / row count | `(make Pt {x:1 y:2}) size` returns `2` |
+| class instance / Store / Table | field / entry / row count | `(make Pt {x:1 y:2}) size` returns `2` |
 | `None`, a Date, a bare scalar, or any non-concrete value (e.g. a bare type literal) | `0` (never errors) | `None size` returns `0`, `List size` returns `0` |
 
 Dispatch is type-driven: each type contributes its own size rule via
@@ -1595,11 +1600,11 @@ word — `size` subsumes it.
 | `get` / `.` | Lookup field/key, or index a list | `{x:1} . x` returns `1`; `[10,20,30] 0 get` returns `10` |
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
 | `has` | Key/index presence as a Boolean — true when **bound**, even to `none`; total (never raises, `none` parent answers `false`) | `{a:None} has a` returns `true`; `{a:1} has b` returns `false`; `[10,20] has 1` returns `true` |
-| `set` | Set a key — in place on Store / Object / Array and on FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)); copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}`; `set a/q 1 (flex {})` |
+| `set` | Set a key — in place on Store, class instances, and FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)); copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}`; `set a/q 1 (flex {})` |
 | `context` | Push the current context Store | `context` |
 
 > **`set` has two contracts, decided by the receiver's mutability.**
-> On the **mutable** containers — Store, Object instance, Array — both
+> On the **mutable** containers — Store, class instances, flex nodes — both
 > the forward form (`b set flag 1`) and the stack form
 > (`b 1 'flag' set`) write into the receiver itself and produce **no
 > value**; read the container back to observe the write (so
@@ -1630,7 +1635,7 @@ word — `size` subsumes it.
 > territory, not a base word.
 
 > **A number can't be a reach receiver.** `get`'s receiver is always a
-> container (Map / List / Store / Object / module), so a numeric literal
+> container (Map / List / Store / class instance / module), so a numeric literal
 > before a `.` is a **syntax error**, not a `get` on a number. In
 > particular `1.2.3` (a malformed numeric literal), `1 . 2`, and
 > `5 . foo` all raise `[aql/syntax_error]: a number has no members`. A
@@ -1724,7 +1729,7 @@ Key semantics (full design note: `design/FLEX-NODES.10.md`):
   `set c/q 3 (set b/q 2 (flex {a:1}))`.
 - **Bindings share the node.** `def g f` aliases the same container;
   mutation through either is visible through both (this is reference
-  semantics, like Store/Object/Array).
+  semantics, like Store and class instances).
 - **Writes adopt — trees stay entirely one column.** A plain map/list
   stored into a flex container (`set`, `push`, `unshift`, `append`) is
   deep-flexed on the way in, so a flex tree is mutable at every depth
@@ -1743,21 +1748,12 @@ Key semantics (full design note: `design/FLEX-NODES.10.md`):
   `filter`, `unify` on a flex input produce ordinary `List`/`Map` results.
 - Canon renders flex nodes round-trippable: `(flex {a:1})`.
 
-**FlexList vs Array.** The rule of thumb: *if the data's identity is
-its contents, it's a (Flex)List; if its identity is the container,
-it's an Array.* `FlexList` is a *Node* — it participates in everything
-List does (each/sort/format/unify/`deq`, every `List` signature slot),
-grows and shrinks in place, compares by content, and graduates to an
-immutable List via `node`. `Array` (`Ideal/Array`, `make Array
-[1 2 3]`) is the *identity-like* indexed store: opaque to Node
-structure, **fixed extent** (`set` replaces in-bounds slots only —
-there is deliberately no growth word), and `eq` only to itself (an
-aliased binding is `eq`; equal content in a different instance is
-not — project with `convert List` for content semantics). Use Array
-for shared mutable state addressed by index and bulk/numeric
-workloads; use FlexList to build structural data incrementally and
-flow it through the list words. See `lang/spec/array.tsv` and
-`design/FLEX-NODES.10.md`.
+`FlexList` is a *Node* — it participates in everything List does
+(each/sort/format/unify/`deq`, every `List` signature slot), grows and
+shrinks in place, compares by content, and graduates to an immutable
+List via `node`. It is the mutable list: build structural data
+incrementally and flow it through the list words, then freeze with
+`node`. See `design/FLEX-NODES.10.md`.
 
 **Record and Table.** Both are Ideal type *descriptors*; their `make`
 instances are plain immutable Map / List-of-Map shapes. Flex nodes give
@@ -1812,7 +1808,7 @@ value. Flexness is marked at every level (`canon (flex {a:[1]})`
 returns `'(flex {a:(flex [1])})'`), strings pick a quoting that
 re-parses exactly (`canon "it's"` returns `"it's"` double-quoted, and
 content with both quote kinds or backslashes is escaped), and a plain
-list renders bare. Identity-bearing values — `Store`, `Array`, object
+list renders bare. Identity-bearing values — `Store`, class
 instances, functions, timers — still render, but rebuilding them from
 the source produces a *fresh* container: data round-trips, identity
 does not.

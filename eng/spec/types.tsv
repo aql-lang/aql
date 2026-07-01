@@ -47,7 +47,7 @@
 # What's NOT covered		
 # ------------------		
 # This is the aqleng (engine-kernel) subset. The richer type words		
-# (record, table, object, make, guard, inspect, base, convert, …) are		
+# (record, table, class, make, guard, inspect, base, convert, …) are		
 # layered on top in production aql; their semantics depend on parser /		
 # native-mod features that are intentionally out of aqleng scope.		
 		
@@ -71,7 +71,7 @@
 # globally unique.		
 		
 # Leaf rendering — every type literal renders as its leaf.		
-# Family roots (Scalar / Node / Object) and the metatype root (Type)		
+# Family roots (Scalar / Node / Ideal) and the metatype root (Type)		
 # are themselves type-name words that resolve to type literals.		
 Scalar	Scalar	scalar-family root
 Number	Number	scalar mid-level
@@ -86,12 +86,10 @@ Path	Path
 Node	Node	node-family root
 List	List	
 Map	Map	
-Object	Object	object-family root
-Record	Record	object-family member
+Record	Record	Ideal-family member
 Resource	Resource	
 Entity	Entity	
 Table	Table	
-Array	Array	
 Options	Options	
 Any	Any	universal top type
 Never	Never	uninhabited bottom type
@@ -305,7 +303,6 @@ undef foo		undef of an unbound value name is a harmless no-op
 5 is Atom	false	
 5 is List	false	a different lattice root
 5 is Map	false	
-5 is Object	false	
 5 is None	false	
 5 is Never	false	nothing is Never
 5 is Type	false	a value is not a type
@@ -367,7 +364,6 @@ none is None	true	exact type
 none is Any	true	
 none is Never	false	nothing is Never
 none is Scalar	false	None is its own lattice root
-none is Object	false	
 none is Integer	false	
 none is List	false	
 		
@@ -492,14 +488,12 @@ Node is Type	true
 List is Type	true	
 Map is Type	true	
 		
-# --- builtin type literals: object family ---		
-Object is Type	true	
+# --- builtin type literals: Ideal family ---		
 Resource is Type	true	
 Entity is Type	true	
 Table is Type	true	
 Record is Type	true	
 Options is Type	true	
-Array is Type	true
 
 # --- builtin type literals: type family ---
 

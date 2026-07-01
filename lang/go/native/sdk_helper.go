@@ -55,7 +55,10 @@ func entityToAPIMap(v Value) *OrderedMap {
 	if !IsConcrete(v) {
 		return m
 	}
-	inst, _ := AsObjectInstance(v)
+	inst, err := AsResourceInstance(v)
+	if err != nil {
+		return m
+	}
 	if kind, ok := inst.GetField("kind"); ok {
 		m.Set("kind", kind)
 	}

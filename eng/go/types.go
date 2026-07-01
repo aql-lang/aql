@@ -62,7 +62,6 @@ var (
 	TDispatchMod    = mustType("Word/__DM")
 	TInternal       = mustType("Word/__IN")
 	TInspect        = mustType("Node/Map/Inspect")
-	TObject         = mustType("Ideal/Object")
 	TClass          = mustType("Ideal/Class")
 	TSurface        = mustType("Ideal/Surface")
 	TSelf           = mustType("Type/Self")
@@ -71,10 +70,9 @@ var (
 	TGenParam       = mustType("Type/GenParam")
 	TStore          = mustType("Ideal/Store")
 	TStoreSystem    = mustType("Ideal/Store/System")
-	TArray          = mustType("Ideal/Array")
 	TReach          = mustType("Ideal/Reach")
-	TResource       = mustType("Ideal/Object/Resource")
-	TResourceEntity = mustType("Ideal/Object/Resource/Entity")
+	TResource       = mustType("Ideal/Resource")
+	TResourceEntity = mustType("Ideal/Resource/Entity")
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/go/native/fetch.go (Step 8 migration); registered via
 	// RegisterExternalBuiltin at lang/go/native package init.

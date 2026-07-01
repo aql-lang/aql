@@ -1,22 +1,22 @@
 # tokens	expected	note
 # =====================================================================		
-# object — nominal type with fields, inheritance, and instantiation		
-# =====================================================================		
-# `class {field:Type …}` builds an object type — AQL's		
-# inheritance-aware type form. Object types can be:		
-#		
-#   - anonymous       — `class {a:String}` produces an unnamed		
-#                       Type with an internal ID (Object/T_…).		
+# class — nominal type with fields, inheritance, and instantiation
+# =====================================================================
+# `class {field:Type …}` builds a class type — AQL's
+# inheritance-aware type form. Class types can be:
+#
+#   - anonymous       — `class {a:String}` produces an unnamed
+#                       Type with an internal ID (Class/T_…).
 #   - named           — `def Foo (class {a:String})` installs Foo		
 #                       on the type stack.		
 #   - inheriting      — `def Bar (refine Foo {b:Integer})` extends		
-#                       Foo with new fields. The result type ID is		
-#                       `Object/Foo/Bar` and the instance carries		
-#                       both Foo's and Bar's field constraints.		
+#                       Foo with new fields. The result type ID is
+#                       `Class/Foo/Bar` and the instance carries
+#                       both Foo's and Bar's field constraints.
 #		
-# Instantiation goes via `make NAME data`. The result is a typed		
-# object value that:		
-#   - renders as `Object/<path>{k:v,…}`,		
+# Instantiation goes via `make NAME data`. The result is a typed
+# class instance that:
+#   - renders as `Class/<path>{k:v,…}`,
 #   - reports `typeof` as the named type,		
 #   - supports dotted field access (`.field`),		
 #   - satisfies parent-type `is` checks.		
@@ -34,15 +34,15 @@
 		
 		
 # ====================================================================		
-# 1. Anonymous object types		
-# ====================================================================		
-# `object {fields}` produces an Type with a synthesized		
-# internal name (Object/T_…). The exact ID is non-deterministic, so		
+# 1. Anonymous class types
+# ====================================================================
+# `class {fields}` produces a Type with a synthesized
+# internal name (Class/T_…). The exact ID is non-deterministic, so
 # this section relies on type-stable assertions (typeof, is) rather		
 # than literal string comparison.		
 		
 # An anonymous Type reports its `typeof` as a synthesised name		
-# (Object/T_xxx) — the internal ID used to disambiguate anonymous		
+# (Class/T_xxx) — the internal ID used to disambiguate anonymous
 # instances. Tests can't pin the exact ID, so this section uses		
 # named types in subsequent rows. Bare construction succeeds:		
 lengthq [ class { a:Integer } ]	1	the constructor produces exactly one stack value
@@ -50,7 +50,7 @@ lengthq [ class { a:String b:Boolean } ]	1	multi-field anonymous still produces 
 lengthq [ class { } ]	1	empty-field is allowed
 		
 # ====================================================================		
-# 2. Named object types via `def NAME (class {…})`		
+# 2. Named class types via `def NAME (class {…})`
 # ====================================================================		
 # `def NAME class {…}` binds the named class type; once bound		
 # the bare name resolves to the Type value at that name.		
@@ -61,8 +61,8 @@ def Foo (class { a:String b:Boolean }) typeof Foo	Foo	multi-field named type
 # ====================================================================		
 # 3. Instantiation via `make`		
 # ====================================================================		
-# `make NAME data` validates each declared field against `data` and		
-# returns a typed object value.		
+# `make NAME data` validates each declared field against `data` and
+# returns a typed class instance.
 		
 def Foo (class { a:String }) make Foo { a:'hi' } typeof	Foo	the made value's typeof is the type name
 def Foo (class { a:String b:Integer }) make Foo { a:'hi' b:9 } typeof	Foo	
@@ -73,20 +73,20 @@ def Foo (class { a:String }) make Foo { }	ERROR:missing field	make rejects missi
 # ====================================================================		
 # 4. Field access via dotted accessor		
 # ====================================================================		
-# Object instances support the same `.field` syntax that maps do.		
+# Class instances support the same `.field` syntax that maps do.
 		
 def Foo (class { a:String }) ( make Foo { a:'hi' } ) .a	'hi'	
 def Foo (class { a:String b:Integer }) ( make Foo { a:'x' b:7 } ) .a	'x'	
 def Foo (class { a:String b:Integer }) ( make Foo { a:'x' b:7 } ) .b	7	
 		
-# Chained field access — object whose field is another object.		
+# Chained field access — an instance whose field is another instance.
 def Inner (class { v:Integer }) def Outer (class { i:Inner }) ( make Outer { i:( make Inner { v:99 } ) } ) .i .v	99	
 		
 # ====================================================================		
 # 5. Inheritance		
 # ====================================================================		
 # `def Child (refine Parent {fields})` makes Child inherit from		
-# Parent. The full type path is `Object/Parent/Child` and Child		
+# Parent. The full type path is `Class/Parent/Child` and Child
 # instances carry both sets of fields.		
 		
 # Path / structure inspection — typeof reports the most-specific name.		
@@ -109,44 +109,27 @@ def Foo (class { a:String }) def Bar (refine Foo { b:Integer }) ( make Bar { a:'
 # A made instance can be captured by `def`. The bound name then		
 # substitutes the instance value at every use site.		
 		
-def Foo (class { a:String }) def f ( make Foo { a:'hi' } ) f .a	'hi'	def-captured object instance preserves type & fields
+def Foo (class { a:String }) def f ( make Foo { a:'hi' } ) f .a	'hi'	def-captured class instance preserves type & fields
 def Foo (class { a:Integer }) def f ( make Foo { a:42 } ) f .a addq 8	50	field access composes with arithmetic
 		
 # ====================================================================		
 # 7. Multiple instances		
 # ====================================================================		
-# Each `make` call yields a fresh object value; they're independent.		
+# Each `make` call yields a fresh class instance; they're independent.
 		
 def Foo (class { a:Integer }) def x make Foo { a:1 } def y make Foo { a:2 } ( x .a ) addq ( y .a )	3	
 		
 # ====================================================================		
-# §  plain Object — the OPEN mutable keyed container (Phase B) and		
-#    the container-2x2 completion (Phase C). `object {…}` is sugar for		
-#    `make Object {…}`; `array […]` for `make Array […]`. Mutable		
-#    containers set in place and return nothing; immutable values		
-#    (Map, List) return the updated copy from set.		
-def o object {a:1} end o set b 2 end o.b	2	open in-place set; dot access reads it back
-def o object {} end o set a 1 end o.a	1	make Object {} / object {} construct an empty open container
-def o (make Object {a:1}) end o.a	1	make Object is the long form of the sugar
-def o object {a:1} end def k 'dyn' end o set (k) 3 end o get (k)	3	computed keys write and read
-def o object {a:1} end o set z 99 end o size	2	any key writes — Objects are open (no sealing) — and size counts all fields
-def o object {a:1} end def al o end al set a 9 end o.a	9	bindings share the container (mutable column aliasing)
-def o object {a:1} end (convert Map o) dot a	1	freeze: convert Map projects the fields to an immutable Map
-(convert Object {x:1}) dot x	1	thaw: convert Object seeds a fresh mutable container from a Map
-def o object {a:1} end o is Object	true	a plain Object is an Object…
-def o object {a:1} end o is Class	false	…and not a class instance
-object 5	ERROR:signature_error	the seed must be a map
+# §  The former open Object container and fixed Array were removed;		
+#    `flex {…}` / `flex […]` are the mutable containers now (they set in		
+#    place). Immutable Nodes (Map, List) return the updated COPY from		
+#    set; the receiver is untouched — the flex nodes cover the		
+#    mutable-container role.		
 		
-# §  array + List copy-returning set (Phase C)		
-def a array [1 2 3] end a set 0 99 end a.0	99	array sugar; in-place indexed set; dot index
-def a array [1 2] end a set 5 9	ERROR:out of bounds	in-place Array set is bounds-checked
-(make Array [7 8]) size	2	make Array is the long form
+# §  List copy-returning set		
 def xs [1 2 3] end def ys (xs set 0 99) end ys	[99 2 3]	List set is copy-returning — a NEW list
 def xs [1 2 3] end def ys (xs set 0 99) end xs	[1 2 3]	…and the receiver is untouched (immutable column)
 [1 2] set 5 9	ERROR:index_out_of_range	List set rejects out-of-range indices loudly
 #
-# §X  open objects (no schema, nil TypeRef) must render, not crash —
-#     formatting any open instance was a SIGSEGV (bloom report #3)
-make Object {x:1}	Object{x:1}	an open object renders under its lattice leaf
-object {x:1 y:2}	Object{x:1 y:2}	the object builder form renders the same way
-def o (make Object {x:1}) set y 2 o end o	Object{x:1 y:2}	an open object accepts new fields and re-renders
+# §X  an anonymous class instance (nil/empty TypeRef) must render, not
+#     crash — formatting an unnamed instance was once a SIGSEGV (bloom report #3)

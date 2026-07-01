@@ -10,22 +10,20 @@ import (
 
 // The `jp` (JSONPath, github.com/ohler55/ojg) and `jq` (jq filter,
 // github.com/itchyny/gojq) mini-languages query a document — the stack subject,
-// which may be a Node (Map/List), Object, Array, Table or Record. Both ship
+// which may be a Node (Map/List), a class instance, Table or Record. Both ship
 // built-in with aql:minilang and return a List of results.
 
 const qImp = `import "aql:minilang"  `
 
 // TestMiniQuerySubjectTypes pins that jp and jq work over every supported
 // subject shape (the document conversion path). A Map/Record subject needs an
-// explicit {} opts (the mini opts gotcha); List/Array/Object/Table do not.
+// explicit {} opts (the mini opts gotcha); List / class-instance / Table do not.
 func TestMiniQuerySubjectTypes(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{"jp Node", `{store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store.book[*].title' {}`, "['A' 'B']"},
 		{"jq Node", `{a:1 b:2} mini jq '.a + .b' {}`, "[3]"},
 		{"jp List", `[{n:1} {n:2} {n:3}] mini jp '$[*].n'`, "[1 2 3]"},
 		{"jq List", `[1 2 3 4] mini jq '.[] | select(. > 2)'`, "[3 4]"},
-		{"jp Array", `(make Array [{k:10} {k:20}]) mini jp '$[*].k'`, "[10 20]"},
-		{"jq Array", `(make Array [1 2 3]) mini jq 'add'`, "[6]"},
 		{"jp Object", `def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'`, "[7]"},
 		{"jq Object", `def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'`, "[16]"},
 		{"jp Record", `def R (refine Record [{a:Integer b:String}])  (make R {a:5 b:'hi'}) mini jp '$.b' {}`, "['hi']"},

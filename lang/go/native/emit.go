@@ -44,13 +44,13 @@ func classifyNode(v Value) (emitNodeKind, []walkEntry) {
 		return emitXml, entries
 	}
 
-	// List-like: a concrete List, or an Ideal Array/Table (which childrenOf
+	// List-like: a concrete List, or an Ideal Table (which childrenOf
 	// projects to a List).
 	if IsConcrete(v) {
 		if v.Parent.ConformsTo(TList) {
 			return emitList, entries
 		}
-		if IsArray(v) || v.Parent.ConformsTo(TTable) {
+		if v.Parent.ConformsTo(TTable) {
 			return emitList, entries
 		}
 		if v.Parent.ConformsTo(TMap) {
@@ -127,7 +127,7 @@ func NaturalEmitKind(v Value) (string, bool) {
 		if v.Parent.ConformsTo(TTable) {
 			return "csv", true
 		}
-		if v.Parent.ConformsTo(TList) || IsArray(v) {
+		if v.Parent.ConformsTo(TList) {
 			return "json", true
 		}
 		if v.Parent.ConformsTo(TMap) {

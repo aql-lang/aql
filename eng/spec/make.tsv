@@ -9,7 +9,7 @@
 #   make Type {opts} v   scalar with options (e.g. Path { abs:true })		
 #   make Path s | [parts]      build a Path from a string or list		
 #   make Options {map}         wrap a map as an Options instance		
-#   make Type {data}     instantiate a named object — see object.tsv		
+#   make Type {data}     instantiate a named class instance — see object.tsv		
 #   make RecordType {data}     instantiate a named record — see record.tsv		
 #		
 # Dispatch is order-agnostic for the two-arg form: the matcher		
@@ -18,7 +18,7 @@
 #		
 # This file covers the parts of `make` that the aqleng-only kernel		
 # can demonstrate without relying on the production `record` /		
-# `object` constructor words. The named-type instantiation rows		
+# `class` constructor words. The named-type instantiation rows		
 # live in spec/prod/object.tsv, record.tsv, and resource.tsv.		
 		
 		

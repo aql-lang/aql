@@ -38,14 +38,15 @@ Any/Scalar                         -- (`Path()` renders just "Scalar")
 Any/Node                           -- (`Path()` renders just "Node")
   List                             -- ordered sequence of values
     Args                           -- argument list (internal — args stack frame)
+    FlexList                       -- mutable list (see Flex nodes)
   Map                              -- ordered key-value pairs
     Inspect                        -- inspection-result map (from `inspect`)
+    FlexMap                        -- mutable map (see Flex nodes)
 
 Any/Ideal                          -- structural & domain "kinds"
-  Object                           -- typed instances (mutable)
-    Resource
-      Entity
-  Array                            -- mutable ordered array
+  Class                            -- user classes (sealed nominal records)
+  Resource                         -- SDK object-type hierarchy
+    Entity
   Record                           -- typed field schema
   Options                          -- map with defaults/constraints
   Error                            -- error value
@@ -57,7 +58,7 @@ Any/Ideal                          -- structural & domain "kinds"
   Timeout · Interval               -- (external — timer handles)
   Tensor                           -- (external — matrix module)
     Matrix · Vector
-  [User-defined]                   -- created via `def Foo refine Object {…}`
+  [User-defined]                   -- created via `def Foo class {…}`
 
 Any/Word                           -- bare-word values + internal runtime markers
   __FW (Forward)                   -- forward arg-collection marker
@@ -102,8 +103,9 @@ Any/Type                           -- the "type of types" branch
 |---|---|
 | `Scalar` (numbers, strings, atoms, paths, time) | immutable |
 | `Node` (List, Map) | immutable values |
-| `Ideal/Object` and descendants | mutable instances |
-| `Ideal/Store`, `Ideal/Array`, `Ideal/Table` | mutable containers |
+| `Node/List/FlexList`, `Node/Map/FlexMap` | mutable Node containers (flex) |
+| `Ideal/Class` and descendants | mutable instances |
+| `Ideal/Store`, `Ideal/Table` | mutable containers |
 | `Ideal/Record`, `Ideal/Options` | type-shape values (immutable bodies) |
 
 ## ID Prefixes
@@ -141,8 +143,8 @@ Type names auto-expand via the kernel `Builtin` table:
 | `Number`, `Integer`, `Decimal` | `Scalar/Number[/…]` |
 | `Boolean`, `Atom`, `Path` | `Scalar/[…]` |
 | `Date`, `DateTime`, `Instant`, `TimeOfDay`, `Duration`, `CalDuration`, `ClkDuration`, `Timezone` | `Scalar/Time/[…]` (external) |
-| `List`, `Map` | `Node/[…]` |
-| `Object`, `Resource`, `Entity`, `Array`, `Record`, `Options`, `Error`, `Store`, `Table` | `Ideal/[…]` |
+| `List`, `Map`, `FlexList`, `FlexMap` | `Node/[…]` |
+| `Class`, `Resource`, `Entity`, `Record`, `Options`, `Error`, `Store`, `Table` | `Ideal/[…]` |
 | `Tensor`, `Matrix`, `Vector` | `Ideal/Tensor/[…]` (external) |
 | `Timeout`, `Interval` | `Ideal/[…]` (external) |
 | `Function`, `FunctionSignature`, `Disjunct`, `Enum`, `Negation` | `Type/[…]` |

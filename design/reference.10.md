@@ -70,12 +70,12 @@ Any/Scalar
     Timezone
 
 Any/Node
-  List (Args)
-  Map (Inspect)
+  List (Args, FlexList)
+  Map (Inspect, FlexMap)
 
 Any/Ideal
-  Object (Resource (Entity))
-  Array  Record  Options  Error  Store (System)  Table
+  Class  Resource (Entity)
+  Record  Options  Error  Store (System)  Table
   Fetch (Request | Response)                   -- external
   Timeout  Interval                            -- external
   Tensor (Matrix | Vector)                     -- external
@@ -130,7 +130,7 @@ These names expand automatically:
 | `is` | `[Any, Any] -> [Boolean]` | Type compatibility check |
 | `convert` | `[Scalar, Scalar] -> [Scalar]` (`TypeArgs[0]=true`) | Type conversion |
 | `base` | `[Any] -> [Any]` | Zero/base value for a type |
-| `refine` | `[Any] -> [Type]` / `[Any, Node] -> [Type]` | Build a subtype: `refine Object {…}`, `refine Record […]`, `refine Table Base` (bind with `def Name (refine …)`) |
+| `refine` | `[Any] -> [Type]` / `[Any, Node] -> [Type]` | Build a subtype: `refine <ClassType> {…}` (subclass; base classes use `class`), `refine Record […]`, `refine Table Base` (bind with `def Name (refine …)`) |
 | `make` | `[Any, Any] -> [Any]` | Construct typed value |
 | `inspect` | `[Any] -> [Map]` | Inspect word or type |
 

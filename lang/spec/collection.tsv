@@ -4,7 +4,7 @@
 #
 # Core list/map words available in the base registry. (Many richer
 # array combinators — each/fold/scan/filter/where/group/unique — live in
-# the `aql:array` module and are specified there.)
+# the `aql:array-util` module and are specified there.)
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  sort — ascending by the canonical total order

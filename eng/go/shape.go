@@ -35,8 +35,8 @@ const (
 	ShapeTypedMap                  // typed map — Parent=TMap, Data=ChildTypeInfo
 	ShapeRecord                    // record type — Parent=TMap, Data=RecordTypeInfo
 	ShapeOptions                   // options type — Parent=TMap, Data=OptionsTypeInfo
-	ShapeObjectInstance            // object instance — Data=ObjectInstanceInfo
-	ShapeObjectType                // object type — Data=ObjectTypeInfo
+	ShapeObjectInstance            // object instance — Data=ClassInstanceInfo
+	ShapeObjectType                // object type — Data=ClassTypeInfo
 )
 
 // Shape classifies v into exactly one ValueShape. The classification
@@ -84,10 +84,10 @@ func Shape(v Value) ValueShape {
 		}
 		return ShapeFnDef
 	}
-	if _, ok := v.Data.(ObjectInstanceInfo); ok {
+	if _, ok := v.Data.(ClassInstanceInfo); ok {
 		return ShapeObjectInstance
 	}
-	if _, ok := v.Data.(ObjectTypeInfo); ok {
+	if _, ok := v.Data.(ClassTypeInfo); ok {
 		return ShapeObjectType
 	}
 

@@ -59,13 +59,11 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
-			// [Index | Array]
-			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: hasArrayHandler, Returns: []*Type{TBoolean}},
-			// [Key | Object / Class instance]
-			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			// [Key | Class instance]
 			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			// [Key | Store]
 			{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
@@ -90,16 +88,14 @@ func accessorGetrSignatures() []NativeSig {
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
-		// [Key | Object]
-		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler},
-		{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
-		{Args: []*Type{TInteger, TObject}, BarrierPos: 1, Handler: getrObjectHandler},
 		// [Key | Class instance] — strict field read (mirrors get's TClass
 		// sigs; getrObjectHandler resolves the flat instance via
-		// AsObjectInstance and raises on a missing field). Field type
+		// AsClassInstance and raises on a missing field). Field type
 		// narrows from the schema via getObjectReturns, as get does.
 		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
 		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
+		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: getrObjectHandler, Returns: []*Type{TAny}},
 		// [Key | ModuleExport] / [Key | Module]
 		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
@@ -134,16 +130,6 @@ func hasNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	return []Value{NewBoolean(false)}, nil
 }
 
-func hasArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr, err := AsArray(args[1])
-	if err != nil {
-		return []Value{NewBoolean(false)}, nil
-	}
-	idx, _ := args[0].AsConcreteInteger()
-	_, ok := arr.Get(int(idx))
-	return []Value{NewBoolean(ok)}, nil
-}
-
 func hasObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	container := args[1]
 	if !IsConcrete(container) {
@@ -154,7 +140,11 @@ func hasObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 		_, found := m.Get(k)
 		return []Value{NewBoolean(found)}, nil
 	}
-	oi, err := AsObjectInstance(container)
+	if ri, err := AsResourceInstance(container); err == nil {
+		_, ok := ri.GetField(k)
+		return []Value{NewBoolean(ok)}, nil
+	}
+	oi, err := AsClassInstance(container)
 	if err != nil {
 		return []Value{NewBoolean(false)}, nil
 	}
@@ -232,7 +222,14 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		}
 		return []Value{val}, nil
 	}
-	oi, _ := AsObjectInstance(container)
+	if ri, err := AsResourceInstance(container); err == nil {
+		val, ok := ri.GetField(k)
+		if !ok {
+			return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in resource", k), "getr")
+		}
+		return []Value{val}, nil
+	}
+	oi, _ := AsClassInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
 		return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in object", k), "getr")

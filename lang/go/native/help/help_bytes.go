@@ -5,9 +5,9 @@ package help
 // and `convert Bytes <bytes>` compacts; `slice` takes sub-ranges; `add`
 // concatenates; generic `size`/`cmp`/`eq`/`sort` work via the type's behaviors.
 // Binary FRAME layouts are a separate concern: a frame is a TYPE you define by
-// refining `BinarySpec` (BinarySpec : Binary :: Class : Object) —
+// refining `BinarySpec` (BinarySpec : Binary :: a class type : its instance) —
 // `def Header (refine BinarySpec [layout])`. `make Header {fields}` builds a
-// field-accessible Binary INSTANCE (like an object instance), `convert Bytes
+// field-accessible Binary INSTANCE (like a class instance), `convert Bytes
 // <inst>` serialises it to wire Bytes, and `unpack`/`unpack-prefix` decode wire
 // Bytes back into an instance (ADR-007 — the layout is plain Node data on the
 // type, not a parsed spec). See design/go-modules/BYTES.10.md. Heavier binary

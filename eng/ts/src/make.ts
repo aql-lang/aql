@@ -1,8 +1,8 @@
 // Scalar `make` coercion, ported from eng/go/core_make.go +
 // registry.go::ValToString. Covers the scalar target types the
 // eng/spec make.tsv rows exercise: String, Integer, Number, Float,
-// Boolean, Atom. Object / Array / Options / prototype overloads are
-// added by a later increment.
+// Boolean, Atom. Class / Options overloads are added by a later
+// increment.
 import { formatFloat } from './canon.ts'
 import { AqlError } from './error.ts'
 import {

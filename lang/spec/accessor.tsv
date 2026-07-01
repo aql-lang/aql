@@ -42,11 +42,8 @@ def i 1 end [10 20 30] get i	20	get EVALUATES i — the index is i's value
 [10 20 30] getr 5	ERROR:out of bounds	getr raises out of bounds
 [10 20 30]!.5	ERROR:out of bounds	!. is strict too
 
-# ---- Array: integer index ----
-(make Array [10 20 30]) get 1	20	Array element by evaluated index
-(make Array [10 20 30]) dot 0	10	Array element by literal index
 
-# ---- Object / class instance: field read ----
+# ---- class instance: field read ----
 def P class {x:1 y:2} end (make P {}) dot x	1	dot reads field x by literal name
 def P class {x:1 y:2} end (make P {}).y	2	. operator on a class instance field
 def P class {x:1 y:2} end (make P {}) get 'x'	1	get reads field x by string name

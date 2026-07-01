@@ -109,8 +109,8 @@ func exposesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // bare type literals (builtins, refine newtypes) ARE their node.
 func exposerNode(r *Registry, v Value) (*Type, error) {
 	switch {
-	case IsObjectType(v):
-		info, _ := AsObjectType(v)
+	case IsClassType(v):
+		info, _ := AsClassType(v)
 		if info.Type != nil {
 			return info.Type, nil
 		}

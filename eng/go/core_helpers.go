@@ -135,9 +135,9 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		return
 	}
 
-	// ObjectTypeInfo body: set the proper name in the type hierarchy.
-	if IsObjectType(body) {
-		info, _ := AsObjectType(body)
+	// ClassTypeInfo body: set the proper name in the type hierarchy.
+	if IsClassType(body) {
+		info, _ := AsClassType(body)
 		if info.Parent != nil {
 			// Child type: full name is Parent/Name (e.g. Ideal/Foo/Bar)
 			info.Name = info.Parent.Name + "/" + name
@@ -150,7 +150,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 			r.RegisterPart(p)
 		}
 		// Preserve the body's *Type identity (set by the caller via
-		// NewObjectType). InstallDef rewrites info.Name based on the
+		// NewClassType). InstallDef rewrites info.Name based on the
 		// def name and parent, then re-wraps the value — but the def
 		// itself stays the caller's choice. For builtin object types
 		// (Resource, Entity) the caller passes the canonical builtin
@@ -158,9 +158,9 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// caller is responsible for minting first.
 		def := body.Parent
 		if def == nil {
-			def = TObject
+			def = TClass
 		}
-		body = NewObjectType(def, info)
+		body = NewClassType(def, info)
 		r.Defs.Push(name, body)
 		return
 	}
@@ -1146,7 +1146,7 @@ func IsTypeBody(v Value) bool {
 		return true
 	}
 	// Object type
-	if IsObjectType(v) {
+	if IsClassType(v) {
 		return true
 	}
 	// Surface type (pure operation contract)

@@ -295,7 +295,7 @@ func schemaFields(info *TypeSchemaInfo) *OrderedMap {
 		rt, _ := AsRecordType(info.Body)
 		return rt.Fields
 	}
-	if oi, err := AsObjectType(info.Body); err == nil {
+	if oi, err := AsClassType(info.Body); err == nil {
 		return oi.Fields
 	}
 	return nil
