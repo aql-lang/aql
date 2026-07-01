@@ -39,11 +39,6 @@ func InstallFrameBinding(r *Registry, name string, body Value) {
 
 func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
-	// Record the name for the dynamic-scope undefined-word rescue (check mode
-	// only; no-op otherwise). A def / param / capture bound anywhere in the
-	// pass makes a fn-body reference to the same name a possible dynamic-scope
-	// reference rather than a typo.
-	r.Check.RecordBoundName(name)
 
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
@@ -734,7 +729,19 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// list/map fold in getNodeReturns). Only for a concrete fn
 				// residual aligned to this return slot; anything else keeps the
 				// carrier below.
-				if (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) && len(stk) >= len(declaredReturns) {
+				//
+				// PLAIN-CHECK ONLY (!Compiling): during a REAL compile pass the
+				// emitter models a returned closure through its own PUSH_CLOSURE
+				// machinery, and surfacing the concrete FnDefInfo here instead
+				// reorders the recorded call residual and detaches the capture
+				// from its construction site — the factory-apply / returned-
+				// capturing-closure units then refuse ("capture … unreachable",
+				// "call results reordered"). The checker's precision win (a
+				// bindable, dispatchable closure) is only needed on the plain
+				// check pass; the compile pass keeps the carrier and compiles the
+				// closure as before.
+				if !r.Check.Compiling &&
+					(t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) && len(stk) >= len(declaredReturns) {
 					if bv := stk[len(stk)-len(declaredReturns)+i]; IsConcrete(bv) &&
 						(bv.Parent.ConformsTo(TFunction) || bv.Parent.ConformsTo(TFnDef)) {
 						out[i] = CloneValue(bv)

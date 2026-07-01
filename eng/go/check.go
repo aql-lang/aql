@@ -31,7 +31,6 @@ func (c *CheckState) Clone() *CheckState {
 	}
 	cp.FnSummaries = cloneMap(c.FnSummaries)
 	cp.FnInflight = cloneMap(c.FnInflight)
-	cp.EverBound = cloneMap(c.EverBound)
 	cp.FnAnalysisCounts = cloneMap(c.FnAnalysisCounts)
 	cp.DefsInstalled = cloneMap(c.DefsInstalled)
 	cp.DefsUsed = cloneMap(c.DefsUsed)
@@ -82,7 +81,6 @@ func (c *CheckState) Begin() func() {
 	c.AmbiguousGradualSplit = false
 	c.DefsInstalled = nil
 	c.DefsUsed = nil
-	c.EverBound = nil
 	c.ContextTypes = nil
 	c.ArrayPoison = map[SrcPos]bool{} // fresh per run; SHARED (not cloned) across branches within the run
 	c.InflightBails = 0
@@ -286,38 +284,10 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 			if _, bound := r.Defs.Top(d.Word); bound || r.Lookup(d.Word) != nil {
 				continue
 			}
-			// Dynamic-scope reference: the name only ever lives in a per-call
-			// frame (a fn parameter or a body-local def), popped before end of
-			// pass, but AQL's dynamic scoping makes it visible to a fn called
-			// within that frame. Rescue it iff it was bound SOMEWHERE in the
-			// pass (recursion.tsv: a dynamically-called `g` reading the caller's
-			// `n`; a body-local `def acc2` read across a recursive frame). A
-			// name bound nowhere stays flagged as a genuine typo.
-			if r.Check.EverBound[d.Word] {
-				continue
-			}
 		}
 		kept = append(kept, d)
 	}
 	r.Check.Diagnostics = kept
-}
-
-// RecordBoundName notes that `name` was bound (as a def, fn parameter, or
-// capture) at some point in the pass. Monotone: never cleared as frames
-// unwind, so the dynamic-scope rescue can later recognise a fn-body reference
-// to a name that only ever lives in a per-call frame. No-op outside check mode
-// and for empty / internal ($-prefixed, __-prefixed) names.
-func (c *CheckState) RecordBoundName(name string) {
-	if !c.IsActive() || name == "" {
-		return
-	}
-	if name[0] == '_' || name[0] == '$' {
-		return // engine-internal / synthetic bindings are never user references
-	}
-	if c.EverBound == nil {
-		c.EverBound = map[string]bool{}
-	}
-	c.EverBound[name] = true
 }
 
 // RecordContextSet records (key → carrier) for the given store-set
