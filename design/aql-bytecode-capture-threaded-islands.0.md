@@ -6,6 +6,41 @@ increment for Stage 5 (span-level `OpFallback` islands). See
 `aql-bytecode-plan.0.md` (Stage 5) and `aql-bytecode-runtime-independence.0.md`
 (the P7 refusals→0 / islands→0 finish line).
 
+> **Prototype finding (do NOT land capture-threading in isolation).** The
+> 4-part change in §3 was prototyped end-to-end (FallbackSpan.Captures +
+> record-side `collectBodyCaptures` + N-input-free capture threading in
+> `lower.go` + install-as-defs in `vm.go`) and it works mechanically — but it
+> **moves zero corpus rows and cannot be exercised by a clean test**, so it
+> must NOT be committed on its own. Two empirical reasons:
+>
+> 1. **Simple code bodies already compile natively.** `def x 5 do [x add 1]`
+>    and `def x 5 def y 10 do [x add y]` both `prog=true, islanded=false` — the
+>    `do` body compiles through the ordinary fragment/closure path and never
+>    reaches `tryRecordFallback`. So the only rows that reach the island path
+>    are the *complex* ones.
+> 2. **Every complex code-body corpus row is MULTIPLY blocked**, not just by a
+>    capture. `case.tsv:50` (`def e (do [raise bad_input "nope"]) do [e dot
+>    code case [bad_input/q "B" "other"]]`) has TWO `do`s: the *second* islands
+>    fine once `e` is captured — but the *first* refuses independently (its
+>    body `[raise bad_input "nope"]` is divergent / uses the consumer-quoted
+>    bare word `bad_input`, which `collectBodyCaptures` rejects), so the whole
+>    program is already uncompilable before the capture record matters.
+>    `corpus-core.tsv:50` (`walk`) is blocked by a *capturing-lambda arg* that
+>    cannot bake (plus `flex` reference cells), not a body name.
+>    `module-test.tsv:48` needs cross-registry module-preamble closures.
+>
+> **Conclusion:** capture-threading is correct and reusable, but there is **no
+> isolated, gate-verifiable win** — it only pays off shipped *together with*
+> its co-blockers (consumer-quoted / divergent body-word acceptance; capturing
+> code-value args threaded into the island; cross-registry closure bodies). A
+> compiler change that moves no ratchet and no test would be dead,
+> unverifiable machinery in a miscompile-sensitive path, so the prototype was
+> reverted. The correct next unit of work is a **bundle** that unblocks one
+> corpus row fully — most likely `case.tsv:50` = capture-threading (§3) +
+> consumer-quoted/divergent body-word acceptance in `collectBodyCaptures`.
+> That bundle can then be gated on islands 0→1 with `make status` + the full
+> differential/property/full-corpus suite.
+
 ## 1. Where we are
 
 The island machinery is **fully built but dormant**: `OpFallback`
