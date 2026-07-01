@@ -1645,6 +1645,15 @@ func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 // scan returns the list of accumulator states, so its element type
 // is the stabilised accumulator (same fixed point as fold).
 func scanReturnsFn(args []Value, r *Registry) []Value {
+	// A statically-empty collection runs the body ZERO times ("empty in,
+	// empty out"), so the body never executes at runtime — analysing it here
+	// would flag operand-starved words (`scan [add] []` reports no_signature on
+	// `add` over the empty element type) that can never actually run. Skip the
+	// body analysis and return an empty-list carrier. Sound: the runtime result
+	// is the empty list, which a bare List carrier admits.
+	if n, ok := StaticListLen(args[1]); ok && n == 0 {
+		return []Value{NewCarrier(TList)}
+	}
 	elem := DataListElemTypeFromValue(args[1])
 	acc, ok := foldAccumFixedPoint(r, args[0], NewCarrier(elem), elem)
 	if !ok {

@@ -318,6 +318,7 @@ var (
 	CompareValues             = eng.CompareValues
 	CowSet                    = eng.CowSet
 	DataListElemTypeFromValue = eng.DataListElemTypeFromValue
+	StaticListLen             = eng.StaticListLen
 	ExpandOptionalSigs        = eng.ExpandOptionalSigs
 	parseFnParams             = eng.ParseFnParams
 	parseFnReturns            = eng.ParseFnReturns

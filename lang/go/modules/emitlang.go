@@ -41,6 +41,11 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		return native.ModuleDesc{}, err
 	}
 	exports := native.NewOrderedMap()
+	// registerIdents tracks the source-call identity of each AQL-registered
+	// emitter so the runtime register handler is idempotent for the compiled
+	// path's double execution (check-mode ReturnsFn install + VM re-run) while
+	// a genuine user double-register still errors. Mirrors parselang-register.
+	registerIdents := map[string]string{}
 
 	// ---- out-of-band: register ----------------------------------------
 	// EmitLang.register <name> <fn> installs an AQL function as the emitter
@@ -54,7 +59,12 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       emitRegisterHandler(exports),
+			Handler:       emitRegisterHandler(exports, registerIdents),
+			// Check-mode install so `emit <name>` is statically resolvable;
+			// idempotent on the source-call identity so the compiled program's
+			// runtime re-run does not raise emit_kind_exists. Mirrors
+			// parseRegisterReturns.
+			ReturnsFn: emitRegisterReturns(exports, registerIdents),
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("emitlang-register", [][]native.FnParam{
@@ -295,57 +305,122 @@ func emitValidKindName(name string) string {
 	return ""
 }
 
+// emitRegisterIdentity is the source-call identity of a register call — the
+// registering fn value's parse position. Mirrors parseRegisterIdentity: it
+// lets the runtime handler treat the compiled path's double execution (the
+// check-mode ReturnsFn install + the VM's CALL re-run of the same `register`)
+// as one registration, while a genuine user double-register (a different
+// fn-value Pos) still errors.
+func emitRegisterIdentity(fn native.Value) string {
+	p := fn.Pos
+	return fmt.Sprintf("%d:%d:%s", p.Row, p.Col, p.Src)
+}
+
+// emitRegisterValidate runs the name + signature validation `register`
+// enforces, returning the validated key ("emit_<name>") or an error. Shared by
+// the runtime handler and the check-mode ReturnsFn so both apply the exact
+// same contract.
+func emitRegisterValidate(args []native.Value, r *native.Registry) (string, error) {
+	name, err := args[0].AsConcreteAtom()
+	if err != nil {
+		return "", r.AqlError("emit_bad_name", fmt.Sprintf("register: %v", err), "register")
+	}
+	if why := emitValidKindName(name); why != "" {
+		return "", r.AqlError("emit_bad_name", "register: "+why, "register")
+	}
+	fnDef, ok := args[1].Data.(native.FnDefInfo)
+	if !ok || len(fnDef.Signatures) == 0 {
+		return "", r.AqlError("emit_bad_signature", "register: expected a function value", "register")
+	}
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) < 2 {
+			return "", r.AqlErrorHint("emit_bad_signature",
+				"register: every signature must start [value:Any opts:Map …] and return a value",
+				"register",
+				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
+		}
+		p0 := sig.Params[0].Type
+		if p0 == nil || !p0.Equal(native.TAny) {
+			return "", r.AqlErrorHint("emit_bad_signature",
+				"register: the first parameter must be value:Any so the emitter accepts every value",
+				"register",
+				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
+		}
+		p1 := sig.Params[1].Type
+		if p1 == nil || !p1.ConformsTo(native.TMap) {
+			return "", r.AqlErrorHint("emit_bad_signature",
+				"register: every signature must start [value:Any opts:Map …] and return a String",
+				"register",
+				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
+		}
+		if len(sig.Returns) == 0 || sig.Returns[0] == nil || !sig.Returns[0].ConformsTo(native.TString) {
+			return "", r.AqlErrorHint("emit_bad_signature",
+				"register: every signature must return a String (emit is value→string)",
+				"register",
+				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
+		}
+	}
+	return "emit_" + name, nil
+}
+
+// emitRegisterInstall validates and installs an AQL fn as emit_<name>, tracking
+// the registering source-call identity in idents. It is the single install
+// body shared by the runtime handler and the check-mode ReturnsFn. The
+// collision rule is idempotent on identity (mirrors parseRegisterInstall): a
+// key already registered errors `emit_kind_exists` UNLESS the existing entry
+// was installed by the SAME source call, so the compiled path's double
+// execution is one logical registration while a genuine user double-register
+// still errors.
+func emitRegisterInstall(exports *native.OrderedMap, idents map[string]string, args []native.Value, r *native.Registry) error {
+	key, err := emitRegisterValidate(args, r)
+	if err != nil {
+		return err
+	}
+	id := emitRegisterIdentity(args[1])
+	if _, exists := exports.Get(key); exists {
+		// "::" is the zero identity (no Pos) — never treat two position-less
+		// calls as the same source call, so a genuine double-register without
+		// source positions still errors.
+		if prev, ok := idents[key]; ok && prev == id && id != "::" {
+			return nil // same source call — idempotent re-register
+		}
+		return r.AqlError("emit_kind_exists",
+			fmt.Sprintf("register: emitter %q is already registered", strings.TrimPrefix(key, "emit_")), "register")
+	}
+	exports.Set(key, args[1])
+	idents[key] = id
+	return nil
+}
+
 // emitRegisterHandler validates and installs an AQL fn as emit_<name>.
 // Mirrors parseRegisterHandler inverted: the standard prefix is
 // [value:Any opts:Map …] and every signature must return a value.
-func emitRegisterHandler(exports *native.OrderedMap) native.Handler {
+func emitRegisterHandler(exports *native.OrderedMap, idents map[string]string) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		name, err := args[0].AsConcreteAtom()
-		if err != nil {
-			return nil, r.AqlError("emit_bad_name", fmt.Sprintf("register: %v", err), "register")
+		if err := emitRegisterInstall(exports, idents, args, r); err != nil {
+			return nil, err
 		}
-		if why := emitValidKindName(name); why != "" {
-			return nil, r.AqlError("emit_bad_name", "register: "+why, "register")
-		}
-		key := "emit_" + name
-		if _, exists := exports.Get(key); exists {
-			return nil, r.AqlError("emit_kind_exists",
-				fmt.Sprintf("register: emitter %q is already registered", name), "register")
-		}
-		fnDef, ok := args[1].Data.(native.FnDefInfo)
-		if !ok || len(fnDef.Signatures) == 0 {
-			return nil, r.AqlError("emit_bad_signature", "register: expected a function value", "register")
-		}
-		for _, sig := range fnDef.Signatures {
-			if len(sig.Params) < 2 {
-				return nil, r.AqlErrorHint("emit_bad_signature",
-					"register: every signature must start [value:Any opts:Map …] and return a value",
-					"register",
-					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-			}
-			p0 := sig.Params[0].Type
-			if p0 == nil || !p0.Equal(native.TAny) {
-				return nil, r.AqlErrorHint("emit_bad_signature",
-					"register: the first parameter must be value:Any so the emitter accepts every value",
-					"register",
-					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-			}
-			p1 := sig.Params[1].Type
-			if p1 == nil || !p1.ConformsTo(native.TMap) {
-				return nil, r.AqlErrorHint("emit_bad_signature",
-					"register: every signature must start [value:Any opts:Map …] and return a String",
-					"register",
-					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-			}
-			if len(sig.Returns) == 0 || sig.Returns[0] == nil || !sig.Returns[0].ConformsTo(native.TString) {
-				return nil, r.AqlErrorHint("emit_bad_signature",
-					"register: every signature must return a String (emit is value→string)",
-					"register",
-					"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-			}
-		}
-		exports.Set(key, args[1])
 		return nil, nil
+	}
+}
+
+// emitRegisterReturns is the check-mode counterpart of emitRegisterHandler: it
+// performs the SAME install so a dynamically-registered emitter
+// (`EmitLang.register up …`) is statically resolvable as `emit up` during the
+// check pass. Idempotent on the registering source-call identity, so the
+// runtime handler re-running the identical `register` in the compiled program
+// is a no-op rather than an emit_kind_exists error. A non-concrete name or fn
+// value leaves the export unresolved. Mirrors parseRegisterReturns.
+func emitRegisterReturns(exports *native.OrderedMap, idents map[string]string) native.ReturnsFunc {
+	return func(args []native.Value, r *native.Registry) []native.Value {
+		if len(args) < 2 || !native.IsConcrete(args[0]) {
+			return nil
+		}
+		if _, ok := args[1].Data.(native.FnDefInfo); !ok {
+			return nil
+		}
+		_ = emitRegisterInstall(exports, idents, args, r)
+		return nil
 	}
 }
 
