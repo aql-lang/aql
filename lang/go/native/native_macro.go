@@ -25,7 +25,15 @@ var macroNatives = []NativeFunc{
 		Signatures: []NativeSig{{
 			Args:    []*Type{},
 			Handler: gensymHandler,
-			Returns: []*Type{TAtom}, BarrierPos: 0,
+			// Pure mint (a per-registry counter → a fresh `tmp$G<n>` atom), so
+			// it runs in check mode too: a hand-hygiene macro that binds
+			// `def g (gensym)` and splices `def unquote g …` needs a REAL name
+			// during the check pass, or the expansion produces `def <empty>`
+			// (invalid_word_name). Running it also keeps the check-time and
+			// runtime gensym counters in lockstep, so the compiled expansion is
+			// byte-identical to the interpreted one.
+			RunInCheckMode: true,
+			Returns:        []*Type{TAtom}, BarrierPos: 0,
 		}},
 	},
 	{

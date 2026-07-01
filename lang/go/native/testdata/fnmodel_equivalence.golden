@@ -257,7 +257,7 @@ WORD forward-args
 WORD gen
   [Node/List] barrier=1 runcheck noeval={0}
 WORD gensym
-  [] barrier=0 returns=[Scalar/Atom]
+  [] barrier=0 runcheck returns=[Scalar/Atom]
 WORD get
   [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 returns=[Any]
