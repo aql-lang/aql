@@ -2731,6 +2731,21 @@ func kernelFormatDefault(v Value) string {
 			name = "Class"
 		}
 		return name + "{" + strings.Join(parts, " ") + "}"
+	case IsResourceInstance(v):
+		ri, _ := AsResourceInstance(v)
+		parts := make([]string, 0, ri.Fields.Len())
+		for _, k := range ri.Fields.Keys() {
+			val, _ := ri.Fields.Get(k)
+			parts = append(parts, k+":"+val.String())
+		}
+		name := "Resource"
+		switch {
+		case ri.TypeRef != nil && ri.TypeRef.Name != "":
+			name = ri.TypeRef.Name
+		case v.Parent != nil:
+			name = v.Parent.Leaf()
+		}
+		return name + "{" + strings.Join(parts, " ") + "}"
 	case IsClassType(v):
 		ot, _ := AsClassType(v)
 		allFields := ot.AllFields()

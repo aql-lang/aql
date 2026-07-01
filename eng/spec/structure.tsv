@@ -20,9 +20,9 @@
 #     embedding the function value — so `def f fn[…] {x:f}` is an		
 #     error, not `{x:<fn>}`. To embed a function value, write the		
 #     `( fn … )` literal inline.		
-#   - Object / record *instances* (via `make Type …` /		
+#   - Class / record *instances* (via `make Type …` /		
 #     `make RecordType …`) need the production constructor words		
-#     (`object`, `record`) which aren't in the kernel — those are		
+#     (`class`, `record`) which aren't in the kernel — those are		
 #     covered in lang/spec/object.tsv and lang/spec/record.tsv. A		
 #     'record' in the structural sense `{ field:Type … }` (a map all		
 #     of whose values are type literals) IS a kernel construct and is		

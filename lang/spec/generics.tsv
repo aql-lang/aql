@@ -66,7 +66,7 @@ def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [Int
 def Box gen [T] class {value:T} def xs:[:(Box of [Integer])] [(make (Box of [String]) {value:'s'})]	ERROR:does not unify	…and rejects sibling-instantiation elements
 def Box gen [T] class {value:T} def b (make (Box of [Integer]) {value:7}) end case b [(Box of [Integer]) 'int-box' 'other']	'int-box'	a case clause's paren pattern evaluates and matches the exact instantiation
 def Box gen [T] class {value:T} def b (make (Box of [String]) {value:'s'}) end case b [(Box of [Integer]) 'int-box' 'other']	'other'	…and not a sibling
-def Circle class {r:1.0} def c (make Circle {r:2.0}) end case c [Circle 'circle' 'other']	'circle'	a bare class name in a case clause admits its instances (the object-type unify fold)
+def Circle class {r:1.0} def c (make Circle {r:2.0}) end case c [Circle 'circle' 'other']	'circle'	a bare class name in a case clause admits its instances (the class-type unify fold)
 #
 # §8  value-to-type inference — a bare schema as a construction target
 def Box gen [T] class {value:T} end (make Box {value:42}) typeof	Box of [Integer]	make infers the type argument from the body

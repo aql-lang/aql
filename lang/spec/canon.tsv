@@ -5,8 +5,8 @@
 # harness compare against. For DATA values (scalars, atoms, paths,
 # none, type literals, plain and flex Node trees) the result is
 # ROUND-TRIPPABLE: evaluating it reproduces an equivalent value, with
-# flexness marked at every level. Identity-bearing values (Array,
-# Store, instances, functions) render too, but rebuilding from source
+# flexness marked at every level. Identity-bearing values (Store,
+# class instances, functions) render too, but rebuilding from source
 # yields a FRESH container — only data round-trips, not identity.
 #
 # NOTE on expectations: the spec runner itself canon-renders the

@@ -16,7 +16,7 @@ import "aql:type-util"  TypeUtil.root String	Scalar	String's branch root is Scal
 # §3  swap form
 import "aql:type-util"  Integer TypeUtil.parent	Number	swap form dispatches
 #
-# §4  tpartial — make every field of a Record/Object type optional (moved here)
+# §4  tpartial — make every field of a Record/class type optional (moved here)
 import "aql:type-util"  (TypeUtil.tpartial (refine Record [x:Integer])) istype	true	tpartial yields a type
 #
 # §5  negative — unbound without import

@@ -2,8 +2,8 @@
 # Format: input<TAB>expected<TAB>description
 #
 # `def Foo class {schema}` defines a class: a sealed nominal record
-# type rooted under Ideal/Class (NOT under Object — Object is the open
-# mutable keyed container; classes are sealed nominal records — see
+# type rooted under Ideal/Class (its own Ideal branch — the former open
+# `Object` container was removed; classes are sealed nominal records — see
 # design/CLASS-OBJECT.10.md). Schema entries: a TYPE value declares a
 # required field; a CONCRETE value declares a default (the field's
 # type is the value's own type). Instances are FLAT (every field, own

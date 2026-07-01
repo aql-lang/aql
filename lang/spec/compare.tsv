@@ -688,15 +688,15 @@ Path tcmp Path	0	# self-equal
 #   1. Same-kind ordering: user-type Rank shares one band per branch
 #      (Scalar 2.1·10¹⁰, Node 3.1·10¹⁰, Ideal 4.1·10¹⁰); within the
 #      band compareTypes tiebreaks by depth then lex name.
-#   2. User-type vs kernel: kernel positional Rank (e.g. Object
+#   2. User-type vs kernel: kernel positional Rank (e.g. Class
 #      4.1·10⁹) sits BELOW the user band (4.1·10¹⁰), so a user-
-#      defined Object subtype sorts AFTER Object itself.
+#      defined Class subtype sorts AFTER Class itself.
 #
 # Plus the within-family rule still applies: a user-type LITERAL
 # sorts strictly below any concrete instance of that user type.
 # =============================================================================
 
-# --- Object-subtype kind (lattice-minted via `class`) ---
+# --- Class-subtype kind (lattice-minted via `class`) ---
 def Cat class {color:String} def Dog class {breed:String} Cat tcmp Dog	-1
 def Cat class {color:String} def Dog class {breed:String} Dog tcmp Cat	1
 def Cat class {color:String} def Dog class {breed:String} Cat tcmp Cat	0

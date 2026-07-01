@@ -92,7 +92,7 @@ def m2 {x:1} unpack [y] m2	ERROR:unpack_error	unpack missing key
 gen [T]	ERROR:gen_without_constructor	orphan gen spec
 
 # --- checker narrowing pinned as compiled differential cases ---
-# schema-enforced object/class field reads narrow to the declared type
+# schema-enforced class field reads narrow to the declared type
 # (sound because make AND set type-check the field schema), list integer-
 # index reads narrow to the element type, and the value-selecting
 # connectives narrow to the join of their operands.

@@ -82,7 +82,7 @@ import "aql:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius}
 import "aql:struct-util"  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected
 import "aql:struct-util"  def P class {name:'x' note:none} (StructUtil.reify P (StructUtil.jsonify (make P {note:none}))) dot note	none	JSON null hydrates as the CONCRETE none value (the exact jsonify→reify inverse), not the None type literal
 #
-# §  struct words on class / Object instances — type-preserving.
+# §  struct words on class and resource instances — type-preserving.
 #    clone gives a fresh instance of the same type (deq-equal,
 #    eq-distinct); setpath round-trips through construction, so a
 #    class edit runs the same strict schema checks as make and the

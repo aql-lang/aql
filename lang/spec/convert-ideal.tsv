@@ -10,13 +10,13 @@
 # built-in projections are below.
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  Object → its fields
-def Foo (class {x:Integer}) convert Map (make Foo {x:5})	{x:5}	an object projects to its fields
+# §1  Class instance → its fields
+def Foo (class {x:Integer}) convert Map (make Foo {x:5})	{x:5}	a class instance projects to its fields
 def Foo (class {x:Integer}) convert List (make Foo {x:5})	[5]	…and to its field values
 def Foo (class {x:Integer}) typeof (convert Map (make Foo {x:5}))	Map	result is a Map
 def Foo (class {x:Integer}) typeof (convert List (make Foo {x:5}))	List	result is a List
-def E (class {}) convert Map (make E {})	{}	an empty object → empty Map
-def E (class {}) convert List (make E {})	[]	an empty object → empty List
+def E (class {}) convert Map (make E {})	{}	an empty class instance → empty Map
+def E (class {}) convert List (make E {})	[]	an empty class instance → empty List
 #
 # §2  ModuleExport → its exported fields
 import module [export "Foo" {a:1 b:2}] convert Map Foo	{a:1 b:2}	a ModuleExport projects to its exports

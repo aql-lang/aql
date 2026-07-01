@@ -22,7 +22,7 @@
 #      Record / Options only.
 #   2. InstallType (eng/go/core_type.go) attaches a per-kind Unifier
 #      Behavior at mint time:
-#        - Object / Table → parent-chain walk (default)
+#        - Class / Table → parent-chain walk (default)
 #        - Disjunct       → disjunctUnifier (unifies against alternatives)
 #        - DepScalar      → depScalarUnifier (runs the bound check)
 #        - bare refine X  → bareRefineUnifier (admits base-type values)
@@ -36,7 +36,7 @@
 
 
 # ====================================================================
-# 1. Object refinement — `def Foo (class {…})`
+# 1. Class refinement — `def Foo (class {…})`
 # ====================================================================
 # A typed fn param [f:Foo] should accept Foo instances built with
 # `make Foo {…}` and reject unrelated values.
@@ -155,9 +155,9 @@ def Big (Integer gt 10) 5 is Big	false	DepScalar: tag is Integer but 5 not > 10
 # Bare refine: tag identity. An untagged 42 is NOT a Pos.
 def Pos refine Integer 42 is Pos	false	bare refine: 42's tag is Integer, not Pos
 
-# Object refine: an instance constructed via `make Foo {}` carries
+# Class refine: an instance constructed via `make Foo {}` carries
 # the Foo tag. So `(make Foo {}) is Foo` is true.
-def Foo class {} (make Foo {}) is Foo	true	Object: instance carries Foo tag
+def Foo class {} (make Foo {}) is Foo	true	Class: instance carries Foo tag
 def Foo class {} 42 is Foo	false	Integer's tag is not Foo
 
 # Builtin: lattice subtyping. 42's tag is Integer; Integer ≤ Number ≤ Scalar.
@@ -250,12 +250,12 @@ def f fn [[x:Any] [Integer] [42]] none f	42	Any accepts None
 # return annotations: an instance satisfies its own type, and a wrong
 # value is now a real (not silent) type error.
 
-def Foo (class {}) def mk fn [[] [Foo] [make Foo {}]] typeof (mk)	Foo	Object return: instance satisfies its own type
-def Foo (class {x:0}) def mk fn [[] [Foo] [make Foo {x:5}]] (mk) get 'x'	5	Object return: returned instance is usable
-def Foo (class {}) def id fn [[f:Foo] [Foo] [f]] typeof (id (make Foo {}))	Foo	Object param+return: pass-through keeps the type
-def Foo (class {}) def mk fn [[] [Foo] [42]] mk	ERROR:return value	Object return rejects Integer (real static safety, not Any)
-def Foo (class {}) def mk fn [[] [Foo] ['hi']] mk	ERROR:return value	Object return rejects String
-def Bar (class {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1}]] typeof (mk)	Foo	Object return admits a subtype instance (Foo is-a Bar)
+def Foo (class {}) def mk fn [[] [Foo] [make Foo {}]] typeof (mk)	Foo	Class return: instance satisfies its own type
+def Foo (class {x:0}) def mk fn [[] [Foo] [make Foo {x:5}]] (mk) get 'x'	5	Class return: returned instance is usable
+def Foo (class {}) def id fn [[f:Foo] [Foo] [f]] typeof (id (make Foo {}))	Foo	Class param+return: pass-through keeps the type
+def Foo (class {}) def mk fn [[] [Foo] [42]] mk	ERROR:return value	Class return rejects Integer (real static safety, not Any)
+def Foo (class {}) def mk fn [[] [Foo] ['hi']] mk	ERROR:return value	Class return rejects String
+def Bar (class {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1}]] typeof (mk)	Foo	Class return admits a subtype instance (Foo is-a Bar)
 
 # ====================================================================
 # 8. User types in the RETURN position — negative cases
@@ -264,7 +264,7 @@ def Bar (class {n:0}) def Foo (refine Bar {}) def mk fn [[] [Bar] [make Foo {n:1
 # these all degraded to `Any` and silently passed (or raised a bogus
 # arity error); each is now a precise, intentional type/word error.
 
-def A (class {}) def B (class {}) def mk fn [[] [A] [make B {}]] mk	ERROR:expected A, got B	sibling Object types are distinct in the return slot
+def A (class {}) def B (class {}) def mk fn [[] [A] [make B {}]] mk	ERROR:expected A, got B	sibling class types are distinct in the return slot
 def Bar (class {}) def Foo (refine Bar {}) def mk fn [[] [Foo] [make Bar {}]] mk	ERROR:expected Foo, got Bar	supertype instance is not the declared subtype return
 def Pos (refine Integer) def mk fn [[] [Pos] [7]] mk	ERROR:expected Pos, got Integer	bare scalar refine return rejects a plain base value (nominal, matches param side)
 def Foo (class {}) def mk fn [[] [Foo] [(make Foo {}) (make Foo {})]] mk	ERROR:return value(s)	arity check still fires for a user-typed return

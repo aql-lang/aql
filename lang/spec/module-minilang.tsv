@@ -136,7 +136,7 @@ import "aql:minilang"  mini m 'x +' {x:1}	ERROR:mini_syntax_error	a malformed fo
 #
 # §jpq  jp — JSONPath (github.com/ohler55/ojg) — and jq — jq filter
 #       (github.com/itchyny/gojq). The document is the stack subject and may be
-#       any AQL shape: a Node (Map/List), Object, Array, Table or Record. Both
+#       any AQL shape: a Node (Map/List), class instance, Table or Record. Both
 #       return a LIST of results (jp: matched nodes; jq: the output stream). A
 #       MAP/Record subject needs an explicit {} opts (a bare map is otherwise
 #       claimed as mini's opts — the same gotcha as gex).
@@ -144,8 +144,8 @@ import "aql:minilang"  {store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store
 import "aql:minilang"  {a:1 b:2} mini jq '.a + .b' {}	[3]	a jq filter over a Node; jq's output stream is a List
 import "aql:minilang"  [{n:1} {n:2} {n:3}] mini jp '$[*].n'	[1 2 3]	a List subject needs no {} (only a Map subject is claimed as opts)
 import "aql:minilang"  [1 2 3 4] mini jq '.[] | select(. > 2)'	[3 4]	jq select over a List subject
-import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'	[7]	an Object projects to its field map
-import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'	[16]	jq over an Object
+import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'	[7]	a class instance projects to its field map
+import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'	[16]	jq over a class instance
 import "aql:minilang"  def R (refine Record [{a:Integer b:String}])  (make R {a:5 b:'hi'}) mini jp '$.b' {}	['hi']	a Record (a Map) — needs the explicit {} like any Map subject
 import "aql:minilang"  def Row (refine Record [{a:Integer b:String}])  def T (refine Table Row)  (make T [[1 'x'] [2 'y']]) mini jp '$[*].a'	[1 2]	a Table projects to its rows (field maps)
 import "aql:minilang"  def Row (refine Record [{a:Integer}])  def T (refine Table Row)  (make T [[1] [2] [3]]) mini jq 'map(.a) | add'	[6]	jq over a Table's rows

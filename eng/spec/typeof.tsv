@@ -88,7 +88,7 @@ typeof Node	Any	Node's lattice parent is Any
 typeof List	Node
 typeof Map	Node
 
-# --- object family ---
+# --- Ideal family ---
 typeof Resource	Ideal	
 typeof Entity	Resource	
 typeof Table	Ideal	
@@ -168,7 +168,7 @@ pathof Node	[Node]
 pathof List	[Node List]	
 pathof Map	[Node Map]	
 		
-# --- object family ---		
+# --- Ideal family ---		
 pathof Resource	[Ideal Resource]
 pathof Entity	[Ideal Resource Entity]
 pathof Table	[Ideal Table]

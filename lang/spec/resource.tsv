@@ -10,8 +10,8 @@
 #		
 # Hierarchy:		
 #		
-#   Object/Resource           {kind:String}		
-#       └── Object/Resource/Entity   {spec:String, entity:String}		
+#   Ideal/Resource           {kind:String}
+#       └── Ideal/Resource/Entity   {spec:String, entity:String}
 #                                    (inherits kind from Resource)		
 #		
 # Resource is the abstract carrier; `Entity` adds the (`spec`,		
@@ -59,8 +59,8 @@ Entity is List	false
 # ====================================================================		
 # `make Entity {…}` validates the data against Entity's fields		
 # (kind:String + spec:String + entity:String, with kind inherited		
-# from Resource). Returns a typed object value rendered as		
-# `Object/Resource/Entity{…}`.		
+# from Resource). Returns a typed resource instance rendered as
+# `Entity{…}`.
 		
 make Entity { kind:'api' spec:'voxgig-solardemo' entity:'planet' } typeof	Entity	the made value's typeof is Entity
 make Entity { kind:'db' spec:'users' entity:'user' } typeof	Entity	
@@ -122,8 +122,7 @@ size [ Resource ]	1	the type literal can be wrapped in a list
 size [ Entity ]	1	
 size [ Resource Entity ]	2	both are first-class type-literal values
 		
-# A user-defined type that USES Resource or Entity as a parent must		
-# go through a user-named indirection — `type X object {…} Resource`		
-# does NOT install Resource as the parent because the bare Resource		
-# type literal does not satisfy `object`'s second-arg slot at parse		
-# time. Inheriting requires an intermediate user type.		
+# A user-defined type that USES Resource or Entity as a parent must
+# go through a user-named indirection: a bare Resource/Entity type
+# literal is not itself accepted as a refine base in the field-shape
+# form. Inheriting requires an intermediate user type.
