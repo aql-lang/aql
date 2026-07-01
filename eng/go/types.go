@@ -71,7 +71,6 @@ var (
 	TGenParam       = mustType("Type/GenParam")
 	TStore          = mustType("Ideal/Store")
 	TStoreSystem    = mustType("Ideal/Store/System")
-	TArray          = mustType("Ideal/Array")
 	TReach          = mustType("Ideal/Reach")
 	TResource       = mustType("Ideal/Object/Resource")
 	TResourceEntity = mustType("Ideal/Object/Resource/Entity")

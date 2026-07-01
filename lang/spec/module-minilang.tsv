@@ -144,8 +144,6 @@ import "aql:minilang"  {store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store
 import "aql:minilang"  {a:1 b:2} mini jq '.a + .b' {}	[3]	a jq filter over a Node; jq's output stream is a List
 import "aql:minilang"  [{n:1} {n:2} {n:3}] mini jp '$[*].n'	[1 2 3]	a List subject needs no {} (only a Map subject is claimed as opts)
 import "aql:minilang"  [1 2 3 4] mini jq '.[] | select(. > 2)'	[3 4]	jq select over a List subject
-import "aql:minilang"  (make Array [{k:10} {k:20}]) mini jp '$[*].k'	[10 20]	an Array projects to a List for the query
-import "aql:minilang"  (make Array [1 2 3]) mini jq 'add'	[6]	jq add over an Array
 import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'	[7]	an Object projects to its field map
 import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'	[16]	jq over an Object
 import "aql:minilang"  def R (refine Record [{a:Integer b:String}])  (make R {a:5 b:'hi'}) mini jp '$.b' {}	['hi']	a Record (a Map) — needs the explicit {} like any Map subject

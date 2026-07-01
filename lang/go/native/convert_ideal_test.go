@@ -85,15 +85,6 @@ func TestConvertIdealNativeOverride(t *testing.T) {
 // TestConvertIdealBuiltins covers the concrete IdealConverter overrides on
 // the built-in kernel Ideals (constructed in Go, exercised via the engine).
 func TestConvertIdealBuiltins(t *testing.T) {
-	// Array → its elements (List); index→element (Map).
-	arr := NewArray([]Value{NewInteger(10), NewInteger(20)})
-	if got := runConvert(t, arr, "convert List thing"); got != "[10 20]" {
-		t.Errorf("Array→List = %s, want [10 20]", got)
-	}
-	if got := runConvert(t, arr, "convert Map thing"); got != "{0:10 1:20}" {
-		t.Errorf("Array→Map = %s, want {0:10 1:20}", got)
-	}
-
 	// Error → {message:…} / [message].
 	erv := NewError(fmt.Errorf("boom"))
 	if got := runConvert(t, erv, "convert Map thing"); got != "{message:'boom'}" {

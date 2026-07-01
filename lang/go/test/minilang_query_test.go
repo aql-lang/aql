@@ -24,8 +24,6 @@ func TestMiniQuerySubjectTypes(t *testing.T) {
 		{"jq Node", `{a:1 b:2} mini jq '.a + .b' {}`, "[3]"},
 		{"jp List", `[{n:1} {n:2} {n:3}] mini jp '$[*].n'`, "[1 2 3]"},
 		{"jq List", `[1 2 3 4] mini jq '.[] | select(. > 2)'`, "[3 4]"},
-		{"jp Array", `(make Array [{k:10} {k:20}]) mini jp '$[*].k'`, "[10 20]"},
-		{"jq Array", `(make Array [1 2 3]) mini jq 'add'`, "[6]"},
 		{"jp Object", `def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'`, "[7]"},
 		{"jq Object", `def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'`, "[16]"},
 		{"jp Record", `def R (refine Record [{a:Integer b:String}])  (make R {a:5 b:'hi'}) mini jp '$.b' {}`, "['hi']"},

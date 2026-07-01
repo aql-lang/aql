@@ -42,5 +42,4 @@ import "aql:vm" def s "it's \"q\" \\ ok" (Vm.run (canon s)) eq s	true	the escape
 import "aql:vm" (Vm.run (canon [1 {a:none} x/q])) deq [1 {a:none} x/q]	true	mixed data (none, atom) round-trips
 #
 # §5  totality and limits
-canon (make Array [1 2])	'Array[1 2]'	identity values render — but rebuilding from source is a FRESH container, identity does not round-trip
 canon	ERROR:signature	canon needs a value

@@ -315,10 +315,10 @@ func childrenOf(v Value) ([]walkEntry, bool) {
 }
 
 // idealChildren enumerates an Ideal value's children via the IdealConverter
-// projection: arrays and tables project to a List (integer-index keys, so paths
+// projection: tables project to a List (integer-index keys, so paths
 // read list-style); every other Ideal projects to a Map (named keys).
 func idealChildren(v Value) ([]walkEntry, bool) {
-	if IsArray(v) || v.Parent.ConformsTo(TTable) {
+	if v.Parent.ConformsTo(TTable) {
 		lv, err := ConvertIdealToList(v)
 		if err != nil {
 			return nil, false

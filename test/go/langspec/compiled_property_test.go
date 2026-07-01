@@ -402,10 +402,10 @@ func genMap(r *rand.Rand, vcat cat, depth int, scope []string) *gnode {
 // genProgram returns a top-level node and the var names it may reference. With
 // some probability it wraps the body in one or two def-bindings to stress
 // value-def locals (OpStoreLocal) and local references.
-// genArrProg builds an in-place ARRAY MUTATION program — the load-bearing
+// genArrProg builds an in-place FLEX-LIST MUTATION program — the load-bearing
 // "a pooled const must never reach an in-place mutator" territory:
 //
-//	def a0 (make Array [0 0 …]) (a0 set i v) … <read of a0>
+//	def a0 (flex [0 0 …]) (def _ (a0 set i v)) … <read of a0>
 //
 // The array is referenced and mutated repeatedly; if the compiler aliased it to
 // a pooled const, hoisted the make, or reordered set/read, the result diverges.
@@ -767,13 +767,15 @@ func render(n *gnode, scope []string) string {
 	case "arrprog":
 		zeros := strings.TrimSpace(strings.Repeat("0 ", n.n))
 		var sb strings.Builder
-		sb.WriteString("def a0 (make Array [" + zeros + "])")
+		sb.WriteString("def a0 (flex [" + zeros + "])")
 		for _, k := range n.kids {
 			sb.WriteString(" " + render(k, scope))
 		}
 		return sb.String()
 	case "setarr":
-		return "(a0 set " + fmt.Sprint(n.n) + " " + render(n.kids[0], scope) + ")"
+		// flex `set` returns the node (chaining); bind it away so the mutation
+		// is a pure statement, matching the former 0-result Array `set`.
+		return "def _ (a0 set " + fmt.Sprint(n.n) + " " + render(n.kids[0], scope) + ")"
 	case "arrget":
 		return "(a0 get " + fmt.Sprint(n.n) + ")"
 	case "arrsize":

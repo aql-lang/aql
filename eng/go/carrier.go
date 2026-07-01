@@ -79,30 +79,6 @@ func NewCarrierTypedListValue(child Value) Value {
 	return v
 }
 
-// NewCarrierTypedArray constructs a typed mutable-Array carrier — an Array
-// carrier whose ELEMENT type is known (`Array<elem>`). Mirrors
-// NewCarrierTypedList on the Array side: a Value with Parent=TArray and
-// Data=ChildTypeInfo{Child: NewCarrier(elem)}, Carrier set so the engine
-// treats it as abstract. `id` is the make-site identity (the SrcPos of the
-// originating `make Array`) used in check mode to key element-bound / poison
-// tracking; pass a zero SrcPos for an untyped/untracked array. Downstream
-// `arr get` recovers the element via DataArrayElemTypeFromValue. A concrete
-// runtime Array (ArrayInstanceInfo) is unaffected — this is a CHECK-MODE
-// carrier shape only. See design/ARRAY-ELEMENT-CARRIER{,-ARCH}.0.md.
-func NewCarrierTypedArray(elem *Type, id SrcPos) Value {
-	v := NewTypedArray(NewCarrier(elem), id)
-	v.Carrier = true
-	return v
-}
-
-// NewCarrierTypedArrayValue is NewCarrierTypedArray with an arbitrary carrier
-// element (nested typed array, disjunct, …) instead of a bare Parent.
-func NewCarrierTypedArrayValue(child Value, id SrcPos) Value {
-	v := NewTypedArray(child, id)
-	v.Carrier = true
-	return v
-}
-
 // NewCarrierTypedListLen constructs a typed-list carrier with a
 // statically-known length, so a downstream index check can reason
 // about a computed list (e.g. `iota n`). n MUST be the exact length
@@ -228,62 +204,6 @@ func DataListElemTypeFromValue(data Value) *Type {
 		}
 	}
 	return t
-}
-
-// DataArrayElemTypeFromValue reads the element type of a typed mutable-Array
-// carrier (`Array<T>`), the Array twin of DataListElemTypeFromValue. Returns
-// TAny when the value carries no ChildTypeInfo (an untyped array carrier — e.g.
-// a param `a:Array` with no element annotation), so an untyped array behaves
-// EXACTLY as today: `get` → gradual Any → the existing sound refusal path.
-func DataArrayElemTypeFromValue(data Value) *Type {
-	if ct, ok := data.Data.(ChildTypeInfo); ok {
-		if ct.Child.Data == nil && !ct.Child.Carrier {
-			c := ct.Child // bare type-literal child IS the element type
-			return &c
-		}
-		return ct.Child.Parent
-	}
-	return TAny
-}
-
-// DataArrayIDFromValue reads the make-site identity of a typed-Array carrier,
-// or the zero SrcPos when the value carries none (untracked array).
-func DataArrayIDFromValue(data Value) SrcPos {
-	if ct, ok := data.Data.(ChildTypeInfo); ok {
-		return ct.ArrayID
-	}
-	return SrcPos{}
-}
-
-// observeArrayWrite feeds the Array<T> poison gate from a `set` dispatch in
-// check mode. Two effects, both keyed by make-site identity:
-//   - CONFORMANCE: `set i v arr` whose value v does not PROVABLY conform to
-//     arr's element type taints arr — its gets must decline to gradual Any.
-//     "Trust the bound": a gradual Integer (bound Integer) conforms; a concrete
-//     String or a gradual Any does not. (Spike B2.)
-//   - ESCAPE: a tracked array stored AS A VALUE into any container (`set v into
-//     map/object/array/store`) is tainted — a re-read of the container yields a
-//     carrier without the make-site id, so later off-carrier mutations would be
-//     invisible to this gate.
-//
-// Aliasing (`def b a`) needs no handling: b shares a's carrier identity, so b's
-// writes already key the same poison entry. Read-only consumption (`convert List
-// arr`, `size arr`) is NOT a write and never taints. set arg order is uniform —
-// args[0]=key/index, args[1]=value, args[2]=container — across Array/Map/Object/
-// Store/Flex sigs.
-func observeArrayWrite(r *Registry, word string, args []Value) {
-	if word != "set" || len(args) < 3 || !r.Check.IsActive() {
-		return
-	}
-	if elem := DataArrayElemTypeFromValue(args[2]); elem != nil && !elem.Equal(TAny) {
-		valT := args[1].Parent
-		if valT == nil || !valT.ConformsTo(elem) {
-			r.Check.PoisonArray(DataArrayIDFromValue(args[2]))
-		}
-	}
-	if vid := DataArrayIDFromValue(args[1]); (vid != SrcPos{}) {
-		r.Check.PoisonArray(vid) // tracked array stored as a value — escapes
-	}
 }
 
 // toCarrier converts a concrete Value to its carrier form. Control /
@@ -482,7 +402,6 @@ func isLiteralWord(v Value) bool {
 // free statement-position residual would be collected by the NEXT word
 // and corrupt its arity. The dynamic-recovery callers pass false.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value {
-	observeArrayWrite(r, word, args) // Array<T> poison gate (design/ARRAY-ELEMENT-CARRIER-ARCH.0.md)
 	// `args` inside a compiled fn body projects the frame's params (pushed by
 	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
 	// then folds to param N — a frame local — via tryFoldStaticIndex; bare

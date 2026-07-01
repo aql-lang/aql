@@ -33,11 +33,6 @@ var makeNatives = []NativeFunc{
 			// lowerer's per-value provenance. See ReturnsFreshInstance.
 			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
 			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			// TypeArgs on position 0 is required: without it the bare
-			// `Array` literal is rejected at the TArray slot by the
-			// matcher's type-literal rule and `make Array [1 2 3]`
-			// never dispatches.
-			{Args: []*Type{TArray, TList}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeArrayHandler, ReturnsFn: makeArrayReturns, BarrierPos: -1},
 			// Node-family targets: make FlexMap/FlexList (mutable deep
 			// copy) and make Map/List (deep immutable conversion — the
 			// inverse). Structural type bodies that land in the Node
@@ -50,23 +45,4 @@ var makeNatives = []NativeFunc{
 			{Args: []*Type{TAny, TAny}, Handler: eng.MakeHandler, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
-}
-
-// makeArrayReturns is the check-mode carrier result for `make Array (src)`. It
-// mints a typed mutable-Array carrier `Array<T>` whose element type T is the
-// source list's element type, stamped with the make-site identity (the call
-// pos, exposed via r.Check.CurCallPos) so check-mode element-bound / poison
-// tracking can key this array through binding, capture, and aliasing.
-//
-// `make Array [0 0 0]` → Array<Integer>; `make Array someUntypedList` →
-// Array<Any> (DataListElemTypeFromValue falls back to Any), which behaves
-// exactly as the prior flat `Returns: [TArray]`. Stage 2 mints the carrier but
-// nothing reads the element yet (`get` still returns Any), so this is inert
-// until the `get` gate lands. See design/ARRAY-ELEMENT-CARRIER{,-ARCH}.0.md.
-func makeArrayReturns(args []Value, r *Registry) []Value {
-	elem := TAny
-	if len(args) >= 2 {
-		elem = DataListElemTypeFromValue(args[1])
-	}
-	return []Value{NewCarrierTypedArray(elem, r.Check.CurCallPos)}
 }

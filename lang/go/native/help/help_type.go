@@ -205,18 +205,6 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "array",
-		Summary: "Construct a mutable Array (sugar for make Array).",
-		Description: "`array […]` builds the mutable indexed sibling of Object: " +
-			"in-place bounds-checked `set i v` returning nothing, dot/index reads, " +
-			"size. Lists stay immutable — `xs set 0 99` on a List returns a NEW list.",
-		Examples: []string{
-			`def a array [1 2 3]`,
-			`a set 0 99 end a.0             ;# => 99 — in place`,
-		},
-	})
-
-	register(&Entry{
 		Word:    "base",
 		Summary: "Return the zero/default value for the type of a value.",
 		Description: "Consumes a value and returns the zero value for its type: 0 for integers, " +

@@ -18,7 +18,6 @@ type (
 	BranchRecord       = eng.BranchRecord
 	EmitFragment       = eng.EmitFragment
 	AqlError           = eng.AqlError
-	ArrayInstanceInfo  = eng.ArrayInstanceInfo
 	CalDurationData    = eng.CalDurationData
 	CheckDiagnostic    = eng.CheckDiagnostic
 	CheckFullStackFunc = eng.CheckFullStackFunc
@@ -111,7 +110,6 @@ type (
 var (
 	DefaultBehavior = eng.DefaultBehavior
 	TAny            = eng.TAny
-	TArray          = eng.TArray
 	TAtom           = eng.TAtom
 	TBoolean        = eng.TBoolean
 	// TCalDuration / TClkDuration / TDate / TDateTime / TDuration
@@ -234,7 +232,6 @@ var (
 	AnalyseFnBody             = eng.AnalyseFnBody
 	AnalyseLoopBody           = eng.AnalyseLoopBody
 	AsAtom                    = eng.AsAtom
-	AsArray                   = eng.AsArray
 	AsChildType               = eng.AsChildType
 	AsDefCleanup              = eng.AsDefCleanup
 	AsDisjunct                = eng.AsDisjunct
@@ -258,7 +255,6 @@ var (
 	AsReturnCheck             = eng.AsReturnCheck
 	AsStore                   = eng.AsStore
 	AsTableType               = eng.AsTableType
-	IsArray                   = eng.IsArray
 	IsAtom                    = eng.IsAtom
 	IsBoolean                 = eng.IsBoolean
 	IsCloseParen              = eng.IsCloseParen
@@ -409,8 +405,6 @@ var (
 	ClosureWantsKeyVal        = eng.ClosureWantsKeyVal
 	CloneValue                = eng.CloneValue
 	NewSyncWriter             = eng.NewSyncWriter
-	NewArray                  = eng.NewArray
-	NewArrayEmpty             = eng.NewArrayEmpty
 	NewReadList               = eng.NewReadList
 	ContextStoreLookup        = eng.ContextStoreLookup
 	ExactEqual                = eng.ExactEqual
@@ -429,16 +423,12 @@ var (
 	SetAtomReferent           = eng.SetAtomReferent
 	NewBoolean                = eng.NewBoolean
 	// NewCalDuration moved to lang/go/engine/native_temporal.go (Step 8).
-	NewCarrier                 = eng.NewCarrier
-	NewElementCarrier          = eng.NewElementCarrier
-	NewCarrierTypedList        = eng.NewCarrierTypedList
-	NewCarrierTypedListValue   = eng.NewCarrierTypedListValue
-	NewCarrierTypedArray       = eng.NewCarrierTypedArray
-	NewCarrierTypedArrayValue  = eng.NewCarrierTypedArrayValue
-	DataArrayElemTypeFromValue = eng.DataArrayElemTypeFromValue
-	DataArrayIDFromValue       = eng.DataArrayIDFromValue
-	NewDynamicCarrier          = eng.NewDynamicCarrier
-	NewDynamicCarrierValue     = eng.NewDynamicCarrierValue
+	NewCarrier               = eng.NewCarrier
+	NewElementCarrier        = eng.NewElementCarrier
+	NewCarrierTypedList      = eng.NewCarrierTypedList
+	NewCarrierTypedListValue = eng.NewCarrierTypedListValue
+	NewDynamicCarrier        = eng.NewDynamicCarrier
+	NewDynamicCarrierValue   = eng.NewDynamicCarrierValue
 	// NewClkDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
 	NewFloat       = eng.NewFloat

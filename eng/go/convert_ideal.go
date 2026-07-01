@@ -3,7 +3,6 @@ package eng
 import (
 	"errors"
 	"sort"
-	"strconv"
 )
 
 // ErrNoConverter lets a Behavior decline the IdealConverter capability so
@@ -145,32 +144,6 @@ func orderedMapValues(m *OrderedMap) []Value {
 	return out
 }
 
-// arrayConvertBehavior: an Array instance → its elements (List); ToMap is
-// an index→element map.
-type arrayConvertBehavior struct{}
-
-func (arrayConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (arrayConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
-func (arrayConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
-func (arrayConvertBehavior) ToList(v Value) (Value, error) {
-	ai, err := AsArray(v)
-	if err != nil || ai == nil {
-		return NewList(nil), nil
-	}
-	return NewList(append([]Value(nil), ai.Elems...)), nil
-}
-func (arrayConvertBehavior) ToMap(v Value) (Value, error) {
-	ai, err := AsArray(v)
-	if err != nil || ai == nil {
-		return NewMap(NewOrderedMap()), nil
-	}
-	m := NewOrderedMap()
-	for i, e := range ai.Elems {
-		m.Set(strconv.Itoa(i), e)
-	}
-	return NewMap(m), nil
-}
-
 // storeConvertBehavior: a Store → its own key/value entries (sorted keys
 // for determinism); ToList is the values in that order.
 type storeConvertBehavior struct{}
@@ -297,7 +270,6 @@ func init() {
 	// carries no Sizer, so the SizeOf walk continues past Class to the
 	// Ideal root's payload-switch Sizer.
 	TClass.Behavior = objectConvertBehavior{}
-	TArray.Behavior = arrayConvertBehavior{}
 	TStore.Behavior = storeConvertBehavior{}
 	TError.Behavior = errorConvertBehavior{}
 	TReach.Behavior = reachConvertBehavior{}

@@ -141,15 +141,6 @@ func TestWalkUserDefinedObject(t *testing.T) {
 	}
 }
 
-func TestWalkArrayInstance(t *testing.T) {
-	// An Array descends via the IdealConverter (ToList) — integer-index keys.
-	got := walkPaths(t, dfs(`(make Array [10 20])`))
-	want := []string{"", "0", "1"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("array descent paths = %v, want %v", got, want)
-	}
-}
-
 func TestWalkReturnsInputUnchanged(t *testing.T) {
 	// walk is visit-only: it returns its input data (here a map) unchanged,
 	// so the value remains on the stack for the pipeline.

@@ -69,7 +69,6 @@ const builtinDecls: BuiltinDecl[] = [
   { path: 'Ideal/Object' },
   { path: 'Ideal/Object/Resource' },
   { path: 'Ideal/Object/Resource/Entity' },
-  { path: 'Ideal/Array' },
   { path: 'Ideal/Record' },
   { path: 'Ideal/Options' },
   { path: 'Ideal/Error' },
@@ -231,7 +230,6 @@ export const TMap = newType('Node/Map')
 export const TInspect = newType('Node/Map/Inspect')
 export const TXml = newType('Node/Xml')
 export const TObject = newType('Ideal/Object')
-export const TArray = newType('Ideal/Array')
 export const TRecord = newType('Ideal/Record')
 export const TOptions = newType('Ideal/Options')
 export const TError = newType('Ideal/Error')

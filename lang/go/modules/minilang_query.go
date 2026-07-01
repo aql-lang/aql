@@ -49,8 +49,6 @@ func docToAny(v native.Value) any {
 			return sliceToAny(lst.Slice())
 		}
 		return idealListToAny(v)
-	case native.IsArray(v):
-		return idealListToAny(v)
 	case native.IsObjectInstance(v):
 		return native.ValueToAny(v) // already a recursive field map
 	default:

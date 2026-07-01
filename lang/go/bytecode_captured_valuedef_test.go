@@ -25,14 +25,14 @@ func TestCapturedUserCallValueDefPromote(t *testing.T) {
 		// each-closure, with a trailing `convert List` arm result.
 		{"captured user-call value-def in an each-closure (radix list-max shape)",
 			`import module [
-  def hmax fn [[a:Array] [Integer] [ a get 0 ]]
+  def hmax fn [[a:FlexList] [Integer] [ a get 0 ]]
   def srt fn [[xs:List] [List] [
     def n (xs size)
     if (n lte 1) [ xs ] [
-      def arr (make Array xs)
+      def arr (flex xs)
       def mx (arr hmax)
       def _ (iota 3 each [ var [[i] if (i lt mx) [ arr set i mx end 0 ] [0] ] ])
-      (convert List arr)
+      (node arr)
     ]
   ]]
   export "M" {srt: srt/r}
@@ -41,12 +41,12 @@ func TestCapturedUserCallValueDefPromote(t *testing.T) {
 		// frame local, re-pushed per capture-read at run time).
 		{"captured user-call value-def read twice in the closure",
 			`import module [
-  def hmax fn [[a:Array] [Integer] [ a get 0 ]]
+  def hmax fn [[a:FlexList] [Integer] [ a get 0 ]]
   def srt fn [[xs:List] [List] [
-    def arr (make Array xs)
+    def arr (flex xs)
     def mx (arr hmax)
     def _ (iota 3 each [ var [[i] if (i lt mx) [ arr set i (mx add mx) end 0 ] [0] ] ])
-    (convert List arr)
+    (node arr)
   ]]
   export "M" {srt: srt/r}
 ] end ([4 1 2] M.srt)`, "[[8 8 8]]"},

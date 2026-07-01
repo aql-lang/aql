@@ -59,8 +59,6 @@ var accessorNatives = []NativeFunc{
 			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
-			// [Index | Array]
-			{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: hasArrayHandler, Returns: []*Type{TBoolean}},
 			// [Key | Object / Class instance]
 			{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TObject}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
@@ -132,16 +130,6 @@ func hasNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		return []Value{NewBoolean(ok)}, nil
 	}
 	return []Value{NewBoolean(false)}, nil
-}
-
-func hasArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr, err := AsArray(args[1])
-	if err != nil {
-		return []Value{NewBoolean(false)}, nil
-	}
-	idx, _ := args[0].AsConcreteInteger()
-	_, ok := arr.Get(int(idx))
-	return []Value{NewBoolean(ok)}, nil
 }
 
 func hasObjectHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

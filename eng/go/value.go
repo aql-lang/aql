@@ -171,15 +171,6 @@ type ChildTypeInfo struct {
 	// an exact length or an upper bound — never an underestimate, which
 	// would turn an in-bounds access into a false positive.
 	Len *int
-	// ArrayID is the make-site identity of a typed mutable-Array carrier
-	// (`Array<T>`), used in check mode to key the per-array element-bound /
-	// poison tracking that keeps `arr get` sound under mutation + aliasing.
-	// It is the SrcPos of the originating `make Array` call, stamped once at
-	// construction and preserved through binding/capture (a value copy keeps
-	// Data). The zero SrcPos means "no tracked identity" (an untyped or
-	// non-make array) — see design/ARRAY-ELEMENT-CARRIER-ARCH.0.md. Irrelevant
-	// to typed lists/maps, which leave it zero.
-	ArrayID SrcPos
 }
 
 // ChildEntry is a (key, value) pair retained for typed maps that
@@ -796,39 +787,6 @@ func (si *StoreInstanceInfo) Set(key string, val Value) {
 	}
 }
 
-// ArrayInstanceInfo is a mutable ordered array (Ideal/Array).
-// Unlike immutable Node/List values, Array instances can be modified
-// in place via set (index assignment). An Array is FIXED-EXTENT:
-// there is deliberately no growth operation — `set` is in-bounds
-// replacement only, and growth is FlexList's job (the former Append
-// method was dead code and was removed to make the contract explicit;
-// see design/FLEX-NODES.10.md).
-type ArrayInstanceInfo struct {
-	Elems []Value
-}
-
-// Get returns the element at index i. Returns zero Value and false if out of bounds.
-func (ai *ArrayInstanceInfo) Get(i int) (Value, bool) {
-	if i < 0 || i >= len(ai.Elems) {
-		return Value{}, false
-	}
-	return ai.Elems[i], true
-}
-
-// Set sets the element at index i. Returns false if out of bounds.
-func (ai *ArrayInstanceInfo) Set(i int, val Value) bool {
-	if i < 0 || i >= len(ai.Elems) {
-		return false
-	}
-	ai.Elems[i] = val
-	return true
-}
-
-// Len returns the number of elements.
-func (ai *ArrayInstanceInfo) Len() int {
-	return len(ai.Elems)
-}
-
 // "T_" followed by 12 lowercase hex characters (6 random bytes).
 func GenerateObjectTypeID() string {
 	return GenerateID("T_")
@@ -1248,14 +1206,6 @@ func NewEvalList(elems []Value) Value {
 // For example, NewTypedList(NewTypeLiteral(TString)) represents [:string].
 func NewTypedList(child Value) Value {
 	return NewValueRaw(TList, ChildTypeInfo{Child: child})
-}
-
-// NewTypedArray creates a typed mutable-Array carrier shell — Parent=TArray
-// with Data=ChildTypeInfo{Child}. Mirrors NewTypedList on the Array side; the
-// element type rides on Child, the make-site identity on ChildTypeInfo.ArrayID.
-// Callers that want it treated as abstract set Carrier (see NewCarrierTypedArray).
-func NewTypedArray(child Value, id SrcPos) Value {
-	return NewValueRaw(TArray, ChildTypeInfo{Child: child, ArrayID: id})
 }
 
 // NewMap creates a map value from an ordered map of string keys to Values.
@@ -1804,18 +1754,6 @@ func NewStoreWithPrototype(t *Type, prototype *StoreInstanceInfo) Value {
 	})
 }
 
-// NewArray creates a mutable Array value from a slice of elements.
-func NewArray(elems []Value) Value {
-	data := make([]Value, len(elems))
-	copy(data, elems)
-	return NewValueRaw(TArray, &ArrayInstanceInfo{Elems: data})
-}
-
-// NewArrayEmpty creates an empty mutable Array value.
-func NewArrayEmpty() Value {
-	return NewValueRaw(TArray, &ArrayInstanceInfo{Elems: nil})
-}
-
 // As* accessors for Scalar/Time/* moved to
 // lang/go/engine/native_temporal.go (Step 6/7). The kernel no longer
 // carries methods named for types it doesn't own. CalDurationData
@@ -2123,21 +2061,6 @@ func AsStore(v Value) (*StoreInstanceInfo, error) {
 		return nil, fmt.Errorf("AsStore: not a store value (got %T)", v.Data)
 	}
 	return si, nil
-}
-
-// IsArray reports whether this value is an Array instance.
-func IsArray(v Value) bool {
-	_, ok := v.Data.(*ArrayInstanceInfo)
-	return ok && v.Parent.ConformsTo(TArray)
-}
-
-// AsArray returns the ArrayInstanceInfo pointer. Returns an error if not an array.
-func AsArray(v Value) (*ArrayInstanceInfo, error) {
-	ai, ok := v.Data.(*ArrayInstanceInfo)
-	if !ok {
-		return nil, fmt.Errorf("AsArray: not an array value (got %T)", v.Data)
-	}
-	return ai, nil
 }
 
 // IsObjectInstance reports whether this value is an object instance.
@@ -2706,14 +2629,6 @@ func kernelFormatDefault(v Value) string {
 	// TList rendering moved to listFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes List values there.
-	case IsArray(v):
-		arr, _ := AsArray(v)
-		parts := make([]string, arr.Len())
-		for i := 0; i < arr.Len(); i++ {
-			e, _ := arr.Get(i)
-			parts[i] = e.String()
-		}
-		return "Array[" + strings.Join(parts, " ") + "]"
 	// Timeout / Interval render via their per-Type Behavior — see
 	// coretype_format_behaviors.go. Their arms have been removed
 	// from this switch.

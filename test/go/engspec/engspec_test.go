@@ -754,7 +754,6 @@ func registerEngSpecMake(r *eng.Registry) {
 		Signatures: []eng.NativeSig{
 			{Args: []*eng.Type{eng.TScalar, eng.TMap, eng.TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
 			{Args: []*eng.Type{eng.TIdeal, eng.TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*eng.Type{eng.TArray, eng.TList}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeArrayHandler, Returns: []*eng.Type{eng.TArray}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TScalar, eng.TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarHandler, ReturnsFn: eng.ReturnsFreshInstance(0), BarrierPos: -1},
 			{Args: []*eng.Type{eng.TObject, eng.TAny, eng.TObject}, Handler: eng.MakeWithPrototype, Returns: []*eng.Type{eng.TObject}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAny, eng.TAny, eng.TMap}, Handler: eng.MakeWithOpts, Returns: []*eng.Type{eng.TAny}, BarrierPos: -1},
@@ -781,17 +780,6 @@ func registerEngSpecStorage(r *eng.Registry) {
 			return nil, fmt.Errorf("set: expected an Object instance, got %s", container.Parent.String())
 		}
 		oi.Fields.Set(key, args[1])
-		return nil, nil
-	}
-	setArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-		arr, err := eng.AsArray(args[2])
-		if err != nil {
-			return nil, fmt.Errorf("set: expected an Array, got %s", args[2].Parent.String())
-		}
-		idx, _ := args[0].AsConcreteInteger()
-		if !arr.Set(int(idx), args[1]) {
-			return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
-		}
 		return nil, nil
 	}
 	getNodeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
@@ -841,18 +829,6 @@ func registerEngSpecStorage(r *eng.Registry) {
 		}
 		return []eng.Value{val}, nil
 	}
-	getArrayH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
-		arr, err := eng.AsArray(args[1])
-		if err != nil {
-			return nil, fmt.Errorf("get: expected an Array, got %s", args[1].Parent.String())
-		}
-		idx, _ := args[0].AsConcreteInteger()
-		val, ok := arr.Get(int(idx))
-		if !ok {
-			return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
-		}
-		return []eng.Value{val}, nil
-	}
 	getNoneH := func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 		return []eng.Value{eng.NewTypeLiteral(eng.TNone)}, nil
 	}
@@ -860,7 +836,6 @@ func registerEngSpecStorage(r *eng.Registry) {
 		Name: "set",
 
 		Signatures: []eng.NativeSig{
-			{Args: []*eng.Type{eng.TInteger, eng.TAny, eng.TArray}, Handler: setArrayH, Returns: []*eng.Type{}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TString, eng.TAny, eng.TObject}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
 			{Args: []*eng.Type{eng.TAtom, eng.TAny, eng.TObject}, QuoteArgs: map[int]bool{0: true}, Handler: setObjectH, Returns: []*eng.Type{}, BarrierPos: -1},
 		},
@@ -872,7 +847,6 @@ func registerEngSpecStorage(r *eng.Registry) {
 			{Args: []*eng.Type{eng.TAtom, eng.TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TString, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TInteger, eng.TNode}, BarrierPos: 1, Handler: getNodeH, Returns: []*eng.Type{eng.TAny}},
-			{Args: []*eng.Type{eng.TInteger, eng.TArray}, BarrierPos: 1, Handler: getArrayH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TAtom, eng.TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TString, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},
 			{Args: []*eng.Type{eng.TInteger, eng.TObject}, BarrierPos: 1, Handler: getObjectH, Returns: []*eng.Type{eng.TAny}},

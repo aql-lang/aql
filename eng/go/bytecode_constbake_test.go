@@ -23,8 +23,6 @@ func TestIsInertConstRejectsMutableInstances(t *testing.T) {
 		name string
 		v    Value
 	}{
-		{"array", NewArray([]Value{NewInteger(1), NewInteger(2)})},
-		{"empty-array", NewArrayEmpty()},
 		{"store", NewStore(TStore)},
 		{"object-instance", NewObjectInstance(TObject, ObjectInstanceInfo{})},
 	}

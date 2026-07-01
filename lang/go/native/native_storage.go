@@ -26,16 +26,7 @@ var storageNatives = []NativeFunc{
 		Name: "set",
 
 		Signatures: []NativeSig{
-			// Array (indexed by integer)
-			{
-				Args:    []*Type{TInteger, TAny, TArray},
-				Handler: setArrayHandler,
-				Returns: []*Type{}, BarrierPos:
-
-				// Object
-				-1,
-			},
-
+			// Object
 			{
 				Args:    []*Type{TString, TAny, TObject},
 				Handler: setObjectHandler,
@@ -187,8 +178,6 @@ func accessorGetSignatures() []NativeSig {
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getIntKeyReturns},
-		// [Key | Array]
-		{Args: []*Type{TInteger, TArray}, BarrierPos: 1, Handler: getArrayHandler, ReturnsFn: getArrayReturns},
 		// [Key | Object] — atom/string field reads resolve the field's
 		// declared type from the schema (getObjectReturns).
 		{Args: []*Type{TAtom, TObject}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
@@ -418,19 +407,6 @@ func getXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	default:
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
-}
-
-func setArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr, err := AsArray(args[2])
-	if err != nil {
-		return nil, fmt.Errorf("set: expected an Array, got %s", args[2].Parent.String())
-	}
-	asInt, _ := args[0].AsConcreteInteger()
-	idx := int(asInt)
-	if !arr.Set(idx, args[1]) {
-		return nil, fmt.Errorf("set: index %d out of bounds (length %d)", idx, arr.Len())
-	}
-	return nil, nil
 }
 
 // isClosureBearingWrapper reports whether v is a module-method wrapper FnDef
@@ -678,47 +654,6 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
 	return []Value{val}, nil
-}
-
-func getArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	arr, err := AsArray(args[1])
-	if err != nil {
-		return nil, fmt.Errorf("get: expected an Array, got %s", args[1].Parent.String())
-	}
-	idx, _ := args[0].AsConcreteInteger()
-	val, ok := arr.Get(int(idx))
-	if !ok {
-		return []Value{NewTypeLiteral(TNone)}, nil
-	}
-	return []Value{val}, nil
-}
-
-// getArrayReturns is the check-mode carrier result for `arr get i`. It is the
-// Option C admissibility gate: the element type T is recovered only when the
-// receiver is a typed mutable-Array carrier (`Array<T>`) that is (a) tracked — a
-// non-zero make-site id, (b) typed — a concrete element T, and (c) not poisoned
-// — no non-conforming set and no escape (CheckState.ArrayPoisoned). Otherwise it
-// falls back to a gradual Any carrier, EXACTLY today's behaviour.
-//
-// The admitted result is a GRADUAL element carrier (NewDynamicCarrier(T)), NOT a
-// strict one: an out-of-bounds `get` returns None at run time, so a STRICT T
-// would be a silent over-claim (TestCheckTypeSoundness array.tsv: `(make Array
-// [10 20 30]) get 5` is None at run time). The gradual T narrows the gradual-Any
-// baseline to T — collapsing the radix-msd cascade (`lo add (counts get)` →
-// numeric; confirmed by Stage 0) — while staying sound: a None at run time is
-// matched optimistically and discharged by a guard, never a strict integer op on
-// a None. This mirrors the list path, whose integer-indexed get likewise stays
-// gradual (getIntKeyReturns). See design/ARRAY-ELEMENT-CARRIER{,-ARCH}.0.md §6.
-func getArrayReturns(args []Value, r *Registry) []Value {
-	if len(args) >= 2 {
-		recv := args[1]
-		id := DataArrayIDFromValue(recv)
-		elem := DataArrayElemTypeFromValue(recv)
-		if (id != SrcPos{}) && elem != nil && !elem.Equal(TAny) && !r.Check.ArrayPoisoned(id) {
-			return []Value{NewDynamicCarrier(elem)}
-		}
-	}
-	return []Value{NewDynamicCarrier(TAny)}
 }
 
 func getNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

@@ -331,13 +331,6 @@ func ExactEqual(a, b Value) bool {
 	if IsXmlValue(a) && IsXmlValue(b) {
 		return a.Parent.Equal(b.Parent) && sameContainer(a.Data, b.Data)
 	}
-	// Ideal/Array: identity IS the container — two Arrays are equal
-	// only when they are the same array instance (aliased bindings),
-	// never by content. Content comparison goes through
-	// `convert List`. See design/FLEX-NODES.10.md (identity-vs-content).
-	if a.Parent.Equal(TArray) && b.Parent.Equal(TArray) {
-		return sameContainer(a.Data, b.Data)
-	}
 	// Object / class instances identify by their underlying field map —
 	// the same aliasing rule as Map: two bindings to one instance are
 	// eq, two structurally-equal instances are not (that's deq).
@@ -398,9 +391,6 @@ func sameContainer(a, b Payload) bool {
 			return len(av.Cren) == len(bv.Cren)
 		}
 		return &av.Cren[0] == &bv.Cren[0]
-	case *ArrayInstanceInfo:
-		bv, ok := b.(*ArrayInstanceInfo)
-		return ok && av == bv
 	default:
 		return false
 	}

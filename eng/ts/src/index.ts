@@ -67,7 +67,6 @@ export type { AqlType } from './type.ts'
 export {
   TAbsent,
   TAny,
-  TArray,
   TAtom,
   TBigDecimal,
   TBigInteger,

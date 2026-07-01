@@ -382,13 +382,12 @@ func MakeClassInstance(objType ObjectTypeInfo, provided *OrderedMap, r *Registry
 // containsSharedMutable reports whether v is — or transitively
 // contains — a payload whose mutations are visible through shared
 // Value copies: a flex node (FlexList's *FlexListData, FlexMap's
-// pointer-backed *OrderedMap), an Array (*ArrayInstanceInfo), a Store
-// (*StoreInstanceInfo), or an object/class instance (whose Fields
-// *OrderedMap `set` writes in place). Drives FreshenDefault's
-// identity fast path: scalars and purely-immutable nodes share
-// safely and are returned unchanged.
+// pointer-backed *OrderedMap), a Store (*StoreInstanceInfo), or an
+// object/class instance (whose Fields *OrderedMap `set` writes in
+// place). Drives FreshenDefault's identity fast path: scalars and
+// purely-immutable nodes share safely and are returned unchanged.
 func containsSharedMutable(v Value) bool {
-	if IsFlexNode(v) || IsArray(v) || IsStore(v) || IsObjectInstance(v) {
+	if IsFlexNode(v) || IsStore(v) || IsObjectInstance(v) {
 		return true
 	}
 	if !IsConcrete(v) {
@@ -421,8 +420,8 @@ func containsSharedMutable(v Value) bool {
 // FreshenDefault returns v with every shared-mutable container payload
 // it transitively contains replaced by a fresh, independent copy —
 // same kind, same type tag, new identity. Flex nodes copy to flex
-// nodes, Arrays to Arrays, Stores to a fresh own-data layer, and
-// instances to a fresh Fields map; immutable containers are rebuilt
+// nodes, Stores to a fresh own-data layer, and instances to a fresh
+// Fields map; immutable containers are rebuilt
 // only on the path down to a mutable payload, and a value with no
 // shared-mutable state anywhere inside is returned unchanged.
 //
@@ -451,16 +450,6 @@ func FreshenDefault(v Value) Value {
 		ninfo := info // struct copy: TypeRef / Prototype stay shared
 		ninfo.Fields = fields
 		out.Data = ninfo
-	case IsArray(v):
-		ai, err := AsArray(v)
-		if err != nil || ai == nil {
-			return v
-		}
-		elems := make([]Value, len(ai.Elems))
-		for i := range ai.Elems {
-			elems[i] = FreshenDefault(ai.Elems[i])
-		}
-		out.Data = &ArrayInstanceInfo{Elems: elems}
 	case IsStore(v):
 		si, err := AsStore(v)
 		if err != nil || si == nil {
@@ -1001,16 +990,6 @@ func MakeOpenObject(data Value) ([]Value, error) {
 		fields.Set(k, ResolveWordValue(v))
 	}
 	return []Value{NewObjectInstance(TObject, ObjectInstanceInfo{Fields: fields})}, nil
-}
-
-// MakeArrayHandler is the 2-arg [Array, List] make handler.
-func MakeArrayHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	srcVal := args[1]
-	if !srcVal.Parent.ConformsTo(TList) || !IsConcrete(srcVal) {
-		return nil, fmt.Errorf("make: Array source must be a concrete list, got %s", srcVal.String())
-	}
-	srcList, _ := AsList(srcVal)
-	return []Value{NewArray(srcList.Slice())}, nil
 }
 
 // MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.

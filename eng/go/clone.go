@@ -10,9 +10,9 @@ package eng
 // function, or engine marker that is safe to share because nothing can
 // mutate it in place.
 //
-//   - Mutable, deep-copied: List, Map, FlexList, Array, Store, Object
+//   - Mutable, deep-copied: List, Map, FlexList, Store, Object
 //     instance, Table, and an Error's raise-payload map. Pointer-backed
-//     graphs (Store/Array/FlexList/Object via their prototype or element
+//     graphs (Store/FlexList/Object via their prototype or element
 //     links) are cloned cycle-safely — a self-referential or shared node
 //     is reproduced with the SAME sharing, never expanded infinitely.
 //   - Immutable, shared: Integer/Float/Big*/String/Boolean/Atom/Path/
@@ -77,15 +77,6 @@ func (c *cloner) clone(v Value) Value {
 			return c.withPayload(v, cp.(*FlexListData))
 		}
 		nd := &FlexListData{}
-		c.seen[p] = nd
-		nd.Elems = c.cloneSlice(p.Elems)
-		return c.withPayload(v, nd)
-
-	case *ArrayInstanceInfo:
-		if cp, ok := c.seen[p]; ok {
-			return c.withPayload(v, cp.(*ArrayInstanceInfo))
-		}
-		nd := &ArrayInstanceInfo{}
 		c.seen[p] = nd
 		nd.Elems = c.cloneSlice(p.Elems)
 		return c.withPayload(v, nd)

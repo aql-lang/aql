@@ -169,10 +169,10 @@ func TestCompareValuesPaths(t *testing.T) {
 func TestCompareValuesCrossBranch(t *testing.T) {
 	// Cross-branch pairs order by the top-level precedence
 	// Never < Any < None < Word < Type < Scalar < Node < Ideal.
-	arr := NewArray([]Value{NewInteger(1)}) // Ideal branch
-	lst := NewList([]Value{NewInteger(1)})  // Node branch
-	num := NewInteger(5)                    // Scalar branch
-	none := NewTypeLiteral(TNone)           // None branch
+	arr := NewStore(TStore)                // Ideal branch
+	lst := NewList([]Value{NewInteger(1)}) // Node branch
+	num := NewInteger(5)                   // Scalar branch
+	none := NewTypeLiteral(TNone)          // None branch
 	tests := []struct {
 		name string
 		a, b Value
@@ -216,7 +216,7 @@ func TestCompareValuesSameBranchBySize(t *testing.T) {
 
 // TestCompareTypes — the type order used as the post-size tiebreaker
 // and for sorting type literals: family rank (List < Map, Object <
-// Array < Record < Table), then depth (a type before its subtype),
+// Record < Table), then depth (a type before its subtype),
 // then name (siblings Foo and Bar).
 func TestCompareTypes(t *testing.T) {
 	foo := &Type{Name: "Foo", Parent: TList}
@@ -228,8 +228,7 @@ func TestCompareTypes(t *testing.T) {
 	}{
 		{"list_before_map", NewTypeLiteral(TList), NewTypeLiteral(TMap), -1},
 		{"map_after_list", NewTypeLiteral(TMap), NewTypeLiteral(TList), 1},
-		{"object_before_array", NewTypeLiteral(TObject), NewTypeLiteral(TArray), -1},
-		{"array_before_record", NewTypeLiteral(TArray), NewTypeLiteral(TRecord), -1},
+		{"object_before_record", NewTypeLiteral(TObject), NewTypeLiteral(TRecord), -1},
 		{"record_before_table", NewTypeLiteral(TRecord), NewTypeLiteral(TTable), -1},
 		{"type_before_subtype", NewTypeLiteral(TList), NewTypeLiteral(foo), -1},
 		{"bar_before_foo_by_name", NewTypeLiteral(bar), NewTypeLiteral(foo), -1},

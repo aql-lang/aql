@@ -28,23 +28,6 @@ func TestCloneMapIndependence(t *testing.T) {
 	}
 }
 
-func TestCloneArrayIndependence(t *testing.T) {
-	orig := NewArray([]Value{NewInteger(1), NewInteger(2)})
-	clone := CloneValue(orig)
-
-	ca, _ := AsArray(clone)
-	ca.Elems[0] = NewInteger(42)
-
-	oa, _ := AsArray(orig)
-	if n, _ := AsInteger(oa.Elems[0]); n != 1 {
-		t.Errorf("clone array mutation leaked: original[0] = %d, want 1", n)
-	}
-	// And the clone is a distinct backing slice.
-	if &ca.Elems[0] == &oa.Elems[0] {
-		t.Error("clone shares the original array's backing slice")
-	}
-}
-
 func TestCloneStoreIndependence(t *testing.T) {
 	si := &StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]Value{}}
 	si.Set("k", NewInteger(1))

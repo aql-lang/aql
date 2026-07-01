@@ -39,8 +39,6 @@ WORD apply
   [Type/Function] barrier=0 returns=[Any] +returnsfn
 WORD args
   [] barrier=0 returns=[Node/List]
-WORD array
-  [Node/List] barrier=1 returns=[Ideal/Array]
 WORD await
   [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
   [Node/List] barrier=1 noeval={0} returns=[Any]
@@ -150,7 +148,6 @@ WORD dot
   [Scalar/String Ideal/Object] barrier=1 +returnsfn
   [Scalar/String Node/Xml] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 +returnsfn
-  [Scalar/Number/Integer Ideal/Array] barrier=1 +returnsfn
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
@@ -267,7 +264,6 @@ WORD get
   [Scalar/String Ideal/Object] barrier=1 +returnsfn
   [Scalar/String Node/Xml] barrier=1 returns=[Any]
   [Scalar/String Node] barrier=1 +returnsfn
-  [Scalar/Number/Integer Ideal/Array] barrier=1 +returnsfn
   [Scalar/Number/Integer Ideal/Object] barrier=1 returns=[Any]
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
@@ -309,7 +305,6 @@ WORD has
   [Scalar/String Ideal/Store] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Object] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Node] barrier=1 returns=[Scalar/Boolean]
-  [Scalar/Number/Integer Ideal/Array] barrier=1 returns=[Scalar/Boolean]
   [Scalar/Number/Integer Node] barrier=1 returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} returns=[Scalar/Boolean]
@@ -400,7 +395,6 @@ WORD make
   [Ideal/Object Any Ideal/Object] barrier=3 returns=[Ideal/Object]
   [Scalar Node/Map Any] barrier=3 typearg={0} +returnsfn
   [Any Any Node/Map] barrier=3 returns=[Any]
-  [Ideal/Array Node/List] barrier=2 typearg={0} +returnsfn
   [Ideal Node/Map] barrier=2 typearg={0} +returnsfn
   [Node Any] barrier=2 typearg={0} +returnsfn
   [Scalar Any] barrier=2 typearg={0} +returnsfn
@@ -556,7 +550,6 @@ WORD set
   [Scalar/String Any Node/Xml/FlexXml] barrier=3 returns=[Node/Xml/FlexXml]
   [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap]
   [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
-  [Scalar/Number/Integer Any Ideal/Array] barrier=3
   [Scalar/Number/Integer Any Node/List/FlexList] barrier=3 returns=[Node/List/FlexList]
   [Scalar/Number/Integer Any Node/List] barrier=3 returns=[Node/List]
   [Scalar/Atom Any Ideal/Class] barrier=3 quote={0}

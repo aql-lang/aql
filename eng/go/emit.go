@@ -2829,13 +2829,13 @@ func (es *EmitState) intern(v Value) int {
 
 // isFreshenedInstance reports whether v is a concrete MUTABLE instance that
 // make's FreshenDefault (core_make.go) copies per instance when v is a
-// class-schema field default — an Object/Array/Store/flex value. Admitting one
+// class-schema field default — an Object/Store/flex value. Admitting one
 // as a SCHEMA member (ONLY through typeBodyConstOK's memberOK, never standalone)
 // is mutation-safe precisely because every `make` freshens it into its own copy;
 // outside a type body nothing freshens it, so isInertConst keeps it out of the
 // const pool. Pairs with the const-bake regression gate.
 func isFreshenedInstance(v Value) bool {
-	return IsObjectInstance(v) || IsArray(v) || IsStore(v) || IsFlexList(v)
+	return IsObjectInstance(v) || IsStore(v) || IsFlexList(v)
 }
 
 // isTypeBodyPayload reports a structural type-body payload — pooled

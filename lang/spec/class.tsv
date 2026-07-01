@@ -104,13 +104,12 @@ def Point class {x:1} def p (make Point {x:5}) undef Point end p set x 9 end p.x
 def Point class {x:1} def p (make Point {x:5}) undef Point end p set x 'hi'	ERROR:expected Integer	…which still rejects off-schema values
 def Point class {x:1} def p (make Point {}) undef Point end make Point {}	ERROR:undefined word	the NAME is gone — construction is a loud error
 #
-# §X  mutable defaults are per-instance — a concrete flex/Array/Store/
+# §X  mutable defaults are per-instance — a concrete flex/Store/
 #     instance default in the schema is FRESHENED at every make, so two
 #     instances never alias one underlying container (the Python
 #     mutable-default trap; bloom-filter report #2). Values the CALLER
 #     passes are not copied — sharing what you pass in is intentional.
 def Foo class {items:(flex [])} def a (make Foo {}) def b (make Foo {}) (a.items push 1) b.items	(flex [1]) (flex [])	flex-list default: each instance gets its own
 def Foo class {m:(flex {})} def a (make Foo {}) def b (make Foo {}) set k 1 a.m end b.m	(flex {k:1}) (flex {})	flex-map default: per-instance
-def Bits class {bits:(make Array [0 0 0])} def a (make Bits {}) def b (make Bits {}) set 0 9 a.bits end b.bits	Array[0 0 0]	Array default: writes to one instance do not leak
 def Inner class {n:0} def Outer class {i:(make Inner {})} def a (make Outer {}) def b (make Outer {}) set n 9 a.i end b.i.n	0	nested instance default: per-instance fields map
 def Foo class {items:(flex [])} def s (flex []) def a (make Foo {items:s}) def b (make Foo {items:s}) (a.items push 1) b.items	(flex [1]) (flex [1])	caller-PROVIDED container stays shared — only schema defaults freshen

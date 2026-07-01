@@ -91,7 +91,6 @@ Record	Record	object-family member
 Resource	Resource	
 Entity	Entity	
 Table	Table	
-Array	Array	
 Options	Options	
 Any	Any	universal top type
 Never	Never	uninhabited bottom type
@@ -499,7 +498,6 @@ Entity is Type	true
 Table is Type	true	
 Record is Type	true	
 Options is Type	true	
-Array is Type	true
 
 # --- builtin type literals: type family ---
 

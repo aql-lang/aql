@@ -224,10 +224,10 @@ func TestEmitStage2CompletionShapes(t *testing.T) {
 func TestEmitP5MultiResult(t *testing.T) {
 	// Positive: these now COMPILE.
 	for _, src := range []string{
-		`raise "boom"`,                          // 0-result, diverges with an error at run time
-		`5 7 swap`,                              // 2-in-2-out: distinct output ids
-		`5 7 swap sub`,                          // a multi-result consumed by a downstream call
-		`def a (make Array [1 2 3]) set 1 99 a`, // 0-result in-place mutator (Array set)
+		`raise "boom"`, // 0-result, diverges with an error at run time
+		`5 7 swap`,     // 2-in-2-out: distinct output ids
+		`5 7 swap sub`, // a multi-result consumed by a downstream call
+		`def C class {x:1} def a (make C {}) set 'x' 99 a`, // 0-result in-place mutator (class set)
 	} {
 		if got, reason := compile(t, src); got == "" {
 			t.Errorf("%q unexpectedly uncompilable: %s", src, reason)
@@ -1611,7 +1611,7 @@ func TestEmitF4DynamicDispatch(t *testing.T) {
 		{`size (each [mul 2] [1 2 3])`, int64(3)},
 		{`typeof (each [mul 2] [1 2 3])`, "List"},
 		{`(each [mul 2] [1 2 3]) is List`, "true"},
-		{`make Array (each [mul 2] [1 2 3])`, "Array[2 4 6]"},
+		{`flex (each [mul 2] [1 2 3])`, "[2 4 6]"},
 	} {
 		got, reason := compile(t, c.src)
 		if reason != "" {

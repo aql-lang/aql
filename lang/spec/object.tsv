@@ -138,9 +138,6 @@ def o object {a:1} end o is Class	false	…and not a class instance
 object 5	ERROR:signature_error	the seed must be a map
 		
 # §  array + List copy-returning set (Phase C)		
-def a array [1 2 3] end a set 0 99 end a.0	99	array sugar; in-place indexed set; dot index
-def a array [1 2] end a set 5 9	ERROR:out of bounds	in-place Array set is bounds-checked
-(make Array [7 8]) size	2	make Array is the long form
 def xs [1 2 3] end def ys (xs set 0 99) end ys	[99 2 3]	List set is copy-returning — a NEW list
 def xs [1 2 3] end def ys (xs set 0 99) end xs	[1 2 3]	…and the receiver is untouched (immutable column)
 [1 2] set 5 9	ERROR:index_out_of_range	List set rejects out-of-range indices loudly

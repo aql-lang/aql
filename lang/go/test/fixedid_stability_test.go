@@ -80,9 +80,9 @@ func TestFixedIDStability(t *testing.T) {
 		// FixedIDs 40, 41, 46 retired with Type/ScalarType,
 		// Type/NodeType, Type/IdealType. Sig "type literal here" is
 		// now expressed via Signature.TypeArgs[i]=true.
-		"Ideal/Store":            42,
-		"Ideal/Store/System":     43,
-		"Ideal/Array":            44,
+		"Ideal/Store":        42,
+		"Ideal/Store/System": 43,
+		// FixedID 44 retired with Ideal/Array (removed); not recycled.
 		"Ideal/Error":            45,
 		"Scalar/Path":            47,
 		"Ideal/Tensor":           2001, // matrix module range (2000-2999)

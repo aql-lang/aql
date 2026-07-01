@@ -628,7 +628,8 @@ var builtinDecls = []builtinDecl{
 	{Path: "Ideal/Object", FixedID: 30, Rank: 40_100_000_000},
 	{Path: "Ideal/Object/Resource", FixedID: 36, Rank: 40_110_000_000},
 	{Path: "Ideal/Object/Resource/Entity", FixedID: 37, Rank: 40_111_000_000},
-	{Path: "Ideal/Array", FixedID: 44, Rank: 40_200_000_000},
+	// FixedID 44 retired with Ideal/Array (the mutable indexed container)
+	// when it was removed; FlexList covers the mutable-list role. Not recycled.
 	{Path: "Ideal/Record", FixedID: 16, Rank: 40_300_000_000},
 	{Path: "Ideal/Options", FixedID: 38, Rank: 40_400_000_000},
 	{Path: "Ideal/Error", FixedID: 45, Rank: 40_500_000_000},

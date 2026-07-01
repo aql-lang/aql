@@ -51,10 +51,6 @@ func constHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		return nil, r.AqlErrorHint("const_error",
 			"const: a mutable instance cannot pin a value", "const",
 			"const exemplars must be immutable — scalars, Lists, or Maps")
-	case *eng.ArrayInstanceInfo:
-		return nil, r.AqlErrorHint("const_error",
-			"const: a mutable Array cannot pin a value", "const",
-			"const exemplars must be immutable — scalars, Lists, or Maps")
 	case *eng.StoreInstanceInfo:
 		return nil, r.AqlErrorHint("const_error",
 			"const: a mutable Store cannot pin a value", "const",

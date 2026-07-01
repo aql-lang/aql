@@ -120,18 +120,6 @@ var typeNatives = []NativeFunc{
 		}},
 	},
 	{
-		// array […] — construct a mutable Array, sugar for
-		// `make Array […]`. In-place bounds-checked set returning
-		// nothing — the indexed sibling of Object.
-		Name: "array",
-
-		Signatures: []NativeSig{{
-			Args:    []*Type{TList},
-			Handler: arraySugarHandler,
-			Returns: []*Type{TArray}, BarrierPos: -1,
-		}},
-	},
-	{
 		Name: "pathof",
 
 		Signatures: []NativeSig{{

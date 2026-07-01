@@ -33,7 +33,6 @@ import {
   TString,
   TList,
   TMap,
-  TArray,
   TIdeal,
   TNode,
   TObject,
@@ -693,7 +692,6 @@ function registerSpecWords(r: Registry): void {
       { args: [TObject, TAny, TObject], handler: () => unsupportedMake('Object prototype') },
       { args: [TScalar, TMap, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarOptsHandler(a) },
       { args: [TAny, TAny, TMap], handler: () => unsupportedMake('with-opts') },
-      { args: [TArray, TList], typeArgs: new Set([0]), handler: () => unsupportedMake('Array') },
       { args: [TIdeal, TMap], typeArgs: new Set([0]), handler: (a) => makeIdealHandler(a) },
       { args: [TScalar, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarHandler(a) },
       { args: [TAny, TAny], handler: () => unsupportedMake('generic') },
@@ -722,7 +720,6 @@ function registerSpecWords(r: Registry): void {
     signatures: [
       { args: [TString, TObject], barrierPos: 1, handler: getNodeH },
       { args: [TString, TNode], barrierPos: 1, handler: getNodeH },
-      { args: [TInteger, TArray], barrierPos: 1, handler: getNodeH },
       { args: [TInteger, TObject], barrierPos: 1, handler: getNodeH },
       { args: [TInteger, TNode], barrierPos: 1, handler: getNodeH },
       { args: [TAtom, TObject], barrierPos: 1, handler: getNodeH },
@@ -735,7 +732,6 @@ function registerSpecWords(r: Registry): void {
     forwardPrecedence: true,
     signatures: [
       { args: [TString, TAny, TObject], handler: () => unsupportedMake('set') },
-      { args: [TInteger, TAny, TArray], handler: () => unsupportedMake('set') },
       { args: [TAtom, TAny, TObject], handler: () => unsupportedMake('set') },
     ],
   })
