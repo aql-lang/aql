@@ -2282,7 +2282,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Value) ([]emitOperand, bool) {
 	introspect := sig.CompileEffect.Has(CompileReadsFn)
 	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
-	for _, t := range sig.Args {
+	for _, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			if inertFn {
 				continue

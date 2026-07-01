@@ -557,8 +557,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " k%-3d ; %s (%s)", in.Arg, CanonValue(c), c.Parent.Leaf())
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
-			names := make([]string, len(s.Sig.Args))
-			for j, t := range s.Sig.Args {
+			names := make([]string, s.Sig.TotalArgs())
+			for j, t := range s.Sig.ArgTypes() {
 				names[j] = t.Leaf()
 			}
 			guard := ""

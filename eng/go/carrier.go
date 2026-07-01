@@ -917,7 +917,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	if len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args) {
 		return false
 	}
-	for _, t := range sig.Args {
+	for _, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			return false
 		}
@@ -1110,7 +1110,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// A fn-valued operand or result means a fn-invoking / fn-returning word
 	// (apply/usurp, an atom-keyed method get): the value would need dynamic
 	// INVOCATION (the fn-value-call boundary, P4). Keep those out of poly.
-	for _, t := range sig.Args {
+	for _, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			return false
 		}
@@ -1307,8 +1307,8 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 		return false
 	}
 	barrier := sig.BarrierPos
-	if barrier < 0 || barrier > len(sig.Args) {
-		barrier = len(sig.Args)
+	if barrier < 0 || barrier > sig.TotalArgs() {
+		barrier = sig.TotalArgs()
 	}
 	// Span faithfulness for a BARRIERED sig (e.g. `get`: key forward,
 	// receiver stack). The forward-form span `word arg0 arg1 …` can only
@@ -1559,12 +1559,12 @@ func joinReturnRows(rows [][]Value) ([]Value, bool) {
 func firstMatchingSig(fn *FnDefInfo, args []Value) *Signature {
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
-		if len(s.Args) != len(args) {
+		if s.TotalArgs() != len(args) {
 			continue
 		}
 		ok := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				ok = false
 				break
 			}
@@ -1614,12 +1614,12 @@ func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 	n := 0
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
-		if len(s.Args) != len(args) {
+		if s.TotalArgs() != len(args) {
 			continue
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1640,12 +1640,12 @@ func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Typ
 	seen := map[string]bool{}
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
-		if len(s.Args) != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
+		if s.TotalArgs() != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
 			continue
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1694,12 +1694,12 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 		// receiver) instead of the `String|List` disjunct, so a String consumer
 		// of the result then failed no_signature (radix's edge splitter, where
 		// the sliced label is a get-result of unknown type).
-		if len(s.Args) != len(args) {
+		if s.TotalArgs() != len(args) {
 			continue
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1826,10 +1826,10 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 	}
 	for k := range fn.Signatures {
 		s := &fn.Signatures[k]
-		if s.Fallback || len(s.Args) != len(args) || i >= len(s.Args) {
+		if s.Fallback || s.TotalArgs() != len(args) || i >= s.TotalArgs() {
 			continue
 		}
-		st := s.Args[i]
+		st := sigArgType(s, i)
 		if st == nil || st.Equal(matchedSlot) {
 			continue
 		}
@@ -1844,7 +1844,7 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 				}
 				continue
 			}
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -2039,8 +2039,8 @@ func objectMakeSig(r *Registry) *Signature {
 	}
 	for i := range fd.Signatures {
 		s := &fd.Signatures[i]
-		if len(s.Args) == 2 && s.Args[0] != nil && s.Args[1] != nil &&
-			s.Args[0].Equal(TIdeal) && s.Args[1].Equal(TMap) {
+		if s.TotalArgs() == 2 && sigArgType(s, 0) != nil && sigArgType(s, 1) != nil &&
+			sigArgType(s, 0).Equal(TIdeal) && sigArgType(s, 1).Equal(TMap) {
 			return s
 		}
 	}

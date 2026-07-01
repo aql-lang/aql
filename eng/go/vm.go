@@ -764,7 +764,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
-			n := len(s.Sig.Args)
+			n := s.Sig.TotalArgs()
 			if len(stack) < n {
 				return nil, vmErrAt(curDebug, pc, "CALL_NATIVE underflow at "+s.Word)
 			}
@@ -1177,17 +1177,17 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 // checkNativeParamContract enforces a GUARDED CALL_NATIVE's committed sig at run
 // time — the native twin of checkParamContract (CALL_USER). args[i] is sig
 // position i (top-of-stack first, as OpCallNative built them). Each must satisfy
-// s.Sig.Args[i] via sigTypeMatches — the SAME runtime param match the interpreter's
+// sigArgType(s.Sig, i) via sigTypeMatches — the SAME runtime param match the interpreter's
 // matchSignature applies, so a concrete value that the interpreter's sole-overload
 // dispatch would accept passes here and one it rejects raises the byte-identical
 // signature_error. Sound only for a single-overload word (the recorder's gate): no
 // sibling exists for a missing arg to fall through to, so raise == the interpreter.
 func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 	for i := range args {
-		if i >= len(s.Sig.Args) {
+		if i >= s.Sig.TotalArgs() {
 			break
 		}
-		at := s.Sig.Args[i]
+		at := sigArgType(s.Sig, i)
 		if at == nil || at.Equal(TAny) {
 			continue // an Any slot is a guaranteed pass
 		}
