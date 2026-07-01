@@ -81,8 +81,34 @@ def bad gen [T] fn [[x:T] [T] [x undefinedword]]
 		t.Errorf("uncalled generic fn body not analysed at declaration; diags = %v", diagCodes(res))
 	}
 
+	// §9.4 (revised, gradual): an UNCONSTRAINED type parameter admits any
+	// type, so a value of it is statically ANY type — like an explicit `Any`
+	// param. Declaration-time analysis therefore ADMITS an operation on a bare
+	// `T` (`x add 1`, `b dot value`) gradually rather than flagging it: the
+	// operation may be valid for the instantiations that actually reach the fn,
+	// and the per-call analysis (with the real arg types) checks each call
+	// against its concrete type. This aligns declaration-time generic checking
+	// with the checker's gradual-modality direction and the spec rows
+	// (generics-fn.tsv: a generic fn used as a higher-order body / recursively).
+	// A genuine defect the instantiation can't fix — an UNDEFINED word — is
+	// still reported (asserted above).
 	res, err = checkSrc(t, `
 def f gen [T] fn [[x:T] [T] [x add 1]]
+`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" {
+			t.Errorf("unconstrained T should admit ops gradually at declaration (per-call checks the real type); got %s", d.Detail)
+		}
+	}
+
+	// A BOUNDED parameter stays strictly checked at its bound: an operation the
+	// bound cannot justify is still flagged at declaration time (the constraint
+	// is a real static contract, unlike a bare unconstrained parameter).
+	res, err = checkSrc(t, `
+def bnd gen [(T extends Number)] fn [[x:T] [T] [x dot nope]]
 `)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -94,7 +120,7 @@ def f gen [T] fn [[x:T] [T] [x add 1]]
 		}
 	}
 	if !found {
-		t.Errorf("unconstrained T admitted add — §9.4 wants the bound's justification; diags = %v", diagCodes(res))
+		t.Errorf("Number-bounded T should reject an unjustified `dot`; diags = %v", diagCodes(res))
 	}
 
 	res, err = checkSrc(t, `

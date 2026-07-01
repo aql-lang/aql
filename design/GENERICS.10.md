@@ -692,13 +692,33 @@ rather than by the TypeScript default. Worth revisiting then.
 analysed with `TypeParam{T}` in the parameter slots sees abstract
 values whose Parent is a placeholder. Operations on those carriers —
 `T add T`, `T size`, `T.field` — must produce sensible carrier
-results. Recommended rule: **a `TypeParam` carrier matches no
-signature except those whose param slot is also `T` or a
-constraint-satisfying broader type.** Stricter than TypeScript (which
-treats unconstrained type parameters loosely in some contexts) but
-sound: a generic fn body can only call operations that the
-constraints license. `<T extends Comparable>` lets you call
-`lt`/`gt` on a `T`; without the constraint, you cannot.
+results.
+
+*Original rule (strict):* a `TypeParam` carrier matched no signature
+except those whose param slot is also `T` or a constraint-satisfying
+broader type — stricter than TypeScript, on the argument that a generic
+body can only call operations the constraints license.
+
+*Revised rule (gradual — current).* An **unconstrained** parameter is
+`extends Any`, so a value of it is statically ANY type — indistinguishable
+from an explicit `Any` param. Declaration-time analysis therefore binds a
+**dynamic(Any)** carrier for an unconstrained `T` and admits body
+operations gradually, exactly as it does for an `Any` parameter (the
+checker's gradual-modality direction: "statically unknown, optimistically
+anything"). The per-call analysis, which sees the real instantiated arg
+types, is where an operation is actually checked against a concrete type —
+so a misuse specific to a real call is still caught, while a bare-`T` body
+that is valid for its actual instantiations (a generic fn used as a
+higher-order body, or recursively — `generics-fn.tsv`) no longer produces a
+declaration-time false positive. A genuine defect no instantiation can fix
+(an **undefined word**) is still reported at declaration time.
+
+A **bounded** parameter is unchanged and stays strictly checked: a
+`(T extends Number)` carrier reaches Number ops through the bound and
+rejects operations the bound cannot justify. `<T extends Comparable>` lets
+you call `lt`/`gt` on a `T`; `(T extends Number)` justifies `add` but not a
+field `dot`. The `TypeParam` matching rule above still governs bounded
+parameters — only the unconstrained case is relaxed to gradual.
 
 **Carrier disjunct cap and generic explosions.** A program that
 instantiates the same schema with many different types builds wide

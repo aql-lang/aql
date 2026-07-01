@@ -332,6 +332,20 @@ func TypeParamName(t *Type) string {
 	return ""
 }
 
+// IsUnconstrainedTypeParam reports whether t is a generic type-PARAMETER with
+// no `extends` bound (a plain `gen [T]`, not `gen [(T extends C)]`). Such a
+// parameter admits a value of ANY type, so — like an explicit `Any` — a value
+// of that type is statically unknown and a body word over it must match
+// gradually rather than fail against a strict abstract carrier. A bounded
+// parameter is analysed at its bound and stays strict.
+func IsUnconstrainedTypeParam(t *Type) bool {
+	if t == nil {
+		return false
+	}
+	g, ok := t.Behavior.(*genParamUnifier)
+	return ok && !g.param.HasBound
+}
+
 // schemaUnifier is the Behavior installed on a minted SCHEMA node.
 // Matching needs nothing beyond the default lattice walk — an
 // instantiation node is a child of the schema node, so instances

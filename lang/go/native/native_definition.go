@@ -719,6 +719,16 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// via the dynamic-help example generator; generic params have no
 	// synthesizable example values, hence this explicit path.
 	if r.Check.IsActive() && genSpec != nil {
+		// Names of UNCONSTRAINED type parameters (`gen [T]`, no `extends`): a
+		// value of such a type is statically unknown — like an explicit `Any` —
+		// so a body word over the param must match gradually, not fail
+		// no_signature against a strict abstract carrier.
+		unconstrained := map[string]bool{}
+		for _, gp := range genSpec.Params {
+			if !gp.HasBound {
+				unconstrained[gp.Name] = true
+			}
+		}
 		PushGenBindings(r, genSpec)
 		for i := range fnDef.Signatures {
 			s := &fnDef.Signatures[i]
@@ -733,7 +743,25 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 				if t == nil {
 					t = TAny
 				}
-				carrierArgs[j] = NewCarrier(t)
+				// A plain-Any param, or one typed by an unconstrained type
+				// parameter, binds a DYNAMIC (gradual) carrier so a body word
+				// over it (`b dot value`) matches optimistically instead of
+				// failing no_signature — mirroring the gradual treatment
+				// ParamInputCarrier gives an `Any` param, extended to the
+				// type-parameter case this construction-time generic check hits.
+				// A CONCRETE or BOUNDED (`T extends C`) param keeps a strict
+				// carrier so its real shape is still checked against the bound;
+				// a genuine misuse or undefined word in the body still surfaces.
+				if t.Equal(TAny) || eng.IsUnconstrainedTypeParam(t) || unconstrained[t.Leaf()] {
+					// A value of an unconstrained type parameter (or Any) is
+					// statically ANY type, so bind dynamic(Any) — a body word
+					// then matches gradually. dynamic(T) is NOT enough: the
+					// gradual receiver match keys on an Any bound, so a `dot` over
+					// a dynamic(T) carrier still misses every concrete slot.
+					carrierArgs[j] = NewDynamicCarrier(TAny)
+				} else {
+					carrierArgs[j] = NewCarrier(t)
+				}
 			}
 			eng.AnalyseFnBody(r, "", paramNames, s.Body, carrierArgs, fnDef.Captured, s.Returns)
 		}
