@@ -1792,3 +1792,49 @@ func TestCheckIndexOutOfRange(t *testing.T) {
 		})
 	}
 }
+
+// TestDynamicScopeUndefinedRescue pins the dynamic-scope undefined-word
+// rescue: AQL is dynamically scoped, so a fn body run at CALL time sees names
+// bound in the dynamic call chain (a callee reading the caller's param; a
+// body-local def read across a recursive frame). Such a reference must NOT be
+// flagged undefined_word, while a name bound NOWHERE still is (a genuine typo).
+func TestDynamicScopeUndefinedRescue(t *testing.T) {
+	hasUndefined := func(res lang.CheckResult) bool {
+		for _, d := range res.Diagnostics {
+			if d.Code == "undefined_word" && d.Severity == "error" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// POSITIVE: a callee reads the caller's dynamically-scoped param — valid,
+	// must not flag (recursion.tsv:72).
+	res, err := checkSrc(t, `def g fn [[] [Integer] [n]] def f2 fn [[n:Integer] [Integer] [g]] f2 42`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if hasUndefined(res) {
+		t.Errorf("dynamic-scope param reference wrongly flagged undefined_word: %v", diagCodes(res))
+	}
+
+	// POSITIVE: a body-local def bound in one recursive frame, read in another
+	// (recursion.tsv:71).
+	res, err = checkSrc(t, `def f fn [[n:Integer] [Integer] [if (n lte 0) [acc2] [def acc2 n f (n sub 1)]]] f 2`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if hasUndefined(res) {
+		t.Errorf("dynamic-scope body-local reference wrongly flagged undefined_word: %v", diagCodes(res))
+	}
+
+	// NEGATIVE: a name bound NOWHERE in the program is a genuine typo and MUST
+	// still be flagged — the rescue keys on "bound somewhere", not "any word".
+	res, err = checkSrc(t, `def h fn [[] [Integer] [totallyundefinedxyz]] h`)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if !hasUndefined(res) {
+		t.Errorf("genuine typo in a fn body should still flag undefined_word; got %v", diagCodes(res))
+	}
+}

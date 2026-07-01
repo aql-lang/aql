@@ -364,6 +364,18 @@ type CheckState struct {
 	// a placeholder instead of looping.
 	FnInflight map[string]bool
 
+	// EverBound records every NAME bound as a def, fn parameter, or
+	// lexical capture at ANY point during the pass (monotone — never
+	// cleared, even as per-call frames unwind). AQL is dynamically
+	// scoped: a fn body runs at CALL time and sees whatever the dynamic
+	// call chain has bound, so a body reference to a name that some
+	// param/local elsewhere binds is a valid dynamic-scope reference, not
+	// a typo. RescueForwardRefDiagnostics consults this to drop the
+	// fn-body undefined_word for such names (the per-call param `n` a
+	// dynamically-called `g` reads; a body-local `def acc2` used across a
+	// recursive frame). A name bound NOWHERE stays flagged.
+	EverBound map[string]bool
+
 	// FnNameInflight counts, per fn NAME, how many of its body analyses
 	// are on the stack. A recursive self-call with a DIFFERENT arg shape
 	// has a different FnInflight key, so it does not bail — it re-analyses

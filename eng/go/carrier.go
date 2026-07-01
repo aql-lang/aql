@@ -3010,6 +3010,11 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		var input []Value
 		for i, arg := range args {
 			if i < len(paramNames) && paramNames[i] != "" {
+				// Record the parameter name for the dynamic-scope undefined-word
+				// rescue: this per-call binding is popped when the frame
+				// unwinds, but a fn dynamically called from this body can read
+				// it, so a reference elsewhere must not be flagged a typo.
+				r.Check.RecordBoundName(paramNames[i])
 				r.Defs.Push(paramNames[i], arg)
 			} else {
 				input = append(input, arg)

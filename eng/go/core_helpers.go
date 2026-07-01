@@ -39,6 +39,11 @@ func InstallFrameBinding(r *Registry, name string, body Value) {
 
 func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
+	// Record the name for the dynamic-scope undefined-word rescue (check mode
+	// only; no-op otherwise). A def / param / capture bound anywhere in the
+	// pass makes a fn-body reference to the same name a possible dynamic-scope
+	// reference rather than a typo.
+	r.Check.RecordBoundName(name)
 
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
