@@ -1792,3 +1792,58 @@ func TestCheckIndexOutOfRange(t *testing.T) {
 		})
 	}
 }
+
+// TestDynamicScopeUndefinedRescue pins the SOUND dynamic-scope undefined-word
+// rescue: AQL is dynamically scoped, so a fn body run at CALL time sees names
+// bound in the dynamic call chain (a callee reading the caller's param; a
+// body-local def read across a recursive frame). Such a reference must NOT be
+// flagged undefined_word — but ONLY when a fn that binds the name can actually
+// REACH the reading fn through the call graph. A name merely bound by an
+// unrelated fn that never calls the reader is a genuine runtime error and MUST
+// stay flagged (the earlier "bound anywhere in the pass" rescue was unsound —
+// PR #209 review P1). See eng/go/check.go RescueForwardRefDiagnostics.
+func TestDynamicScopeUndefinedRescue(t *testing.T) {
+	// Assert on the SPECIFIC word so each case is pinned precisely and is
+	// insulated from any unrelated undefined_word the checker may emit.
+	flags := func(res lang.CheckResult, word string) bool {
+		for _, d := range res.Diagnostics {
+			if d.Code == "undefined_word" && d.Severity == "error" && d.Word == word {
+				return true
+			}
+		}
+		return false
+	}
+	check := func(src string) lang.CheckResult {
+		res, err := checkSrc(t, src)
+		if err != nil {
+			t.Fatalf("check %q: %v", src, err)
+		}
+		return res
+	}
+
+	// POSITIVE: a callee reads the caller's dynamically-scoped param. The
+	// binder f2 calls g, so g's read of n is a valid dynamic-scope reference
+	// and must not flag (recursion.tsv:72).
+	if res := check(`def g fn [[] [Integer] [n]] def f2 fn [[n:Integer] [Integer] [g]] f2 42`); flags(res, "n") {
+		t.Errorf("dynamic-scope param reference `n` wrongly flagged undefined_word: %v", diagCodes(res))
+	}
+
+	// POSITIVE: a body-local def bound in one recursive frame, read in another.
+	// f defs acc2 then recurses, so the base branch's read is visible across
+	// the recursive frame (recursion.tsv:71).
+	if res := check(`def f fn [[n:Integer] [Integer] [if (n lte 0) [acc2] [def acc2 n f (n sub 1)]]] f 2`); flags(res, "acc2") {
+		t.Errorf("dynamic-scope body-local reference `acc2` wrongly flagged undefined_word: %v", diagCodes(res))
+	}
+
+	// NEGATIVE (soundness): g binds x as a param but NEVER calls f, so f's read
+	// of x cannot see g's frame — it errors at run time and MUST stay flagged.
+	// This is exactly the case the unsound "bound anywhere" rescue masked.
+	if res := check(`def f fn [[] [Integer] [x]] def g fn [[x:Integer] [Integer] [1]] f`); !flags(res, "x") {
+		t.Errorf("name `x` bound only by an unreachable fn must stay flagged (unsound rescue): %v", diagCodes(res))
+	}
+
+	// NEGATIVE: a name bound NOWHERE is a plain typo and must stay flagged.
+	if res := check(`def h fn [[] [Integer] [totallyundefinedxyz]] h`); !flags(res, "totallyundefinedxyz") {
+		t.Errorf("genuinely-undefined name must stay flagged: %v", diagCodes(res))
+	}
+}

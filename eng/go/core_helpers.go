@@ -40,6 +40,12 @@ func InstallFrameBinding(r *Registry, name string, body Value) {
 func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
 
+	// Attribute a body-local def to its enclosing fn for the dynamic-scope
+	// undefined-word rescue (check mode only; no-op at the top level or outside
+	// check). A name bound as a local inside fn F is visible — via AQL's
+	// dynamic scoping — to any fn F reaches on the call stack.
+	r.Check.RecordFnBinder(name)
+
 	// FnDefInfo body (from fn word): install typed signatures.
 	// Only fn-based defs register functions; simple value defs just use DefStacks.
 	if body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction) {
