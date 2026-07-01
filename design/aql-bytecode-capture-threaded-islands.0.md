@@ -6,40 +6,65 @@ increment for Stage 5 (span-level `OpFallback` islands). See
 `aql-bytecode-plan.0.md` (Stage 5) and `aql-bytecode-runtime-independence.0.md`
 (the P7 refusals→0 / islands→0 finish line).
 
-> **Prototype finding (do NOT land capture-threading in isolation).** The
-> 4-part change in §3 was prototyped end-to-end (FallbackSpan.Captures +
-> record-side `collectBodyCaptures` + N-input-free capture threading in
-> `lower.go` + install-as-defs in `vm.go`) and it works mechanically — but it
-> **moves zero corpus rows and cannot be exercised by a clean test**, so it
-> must NOT be committed on its own. Two empirical reasons:
+> **Prototype finding #2 (do NOT land capture-threading in isolation — a
+> second, sharper prototype confirms it and CORRECTS the case.tsv:50 analysis
+> below).** The 4-part change in §3 was re-prototyped end-to-end
+> (`FallbackSpan.Captures` + `FallbackCapture` + record-side
+> `collectBodyCaptures` replacing `bodyFreeForFallback` + capture-operand
+> threading through `lower.go`'s promotion/scan traversals + install-as-scoped-
+> defs in `vm.go::runFallback`) and it is **correct and gate-clean** — the full
+> `fmt/vet/lint/test` + differential + property + full-corpus suite passes. But
+> it still **moves zero corpus rows**, so it was reverted again. The empirical
+> findings, several of which correct the analysis in §2 below:
 >
-> 1. **Simple code bodies already compile natively.** `def x 5 do [x add 1]`
->    and `def x 5 def y 10 do [x add y]` both `prog=true, islanded=false` — the
->    `do` body compiles through the ordinary fragment/closure path and never
->    reaches `tryRecordFallback`. So the only rows that reach the island path
->    are the *complex* ones.
-> 2. **Every complex code-body corpus row is MULTIPLY blocked**, not just by a
->    capture. `case.tsv:50` (`def e (do [raise bad_input "nope"]) do [e dot
->    code case [bad_input/q "B" "other"]]`) has TWO `do`s: the *second* islands
->    fine once `e` is captured — but the *first* refuses independently (its
->    body `[raise bad_input "nope"]` is divergent / uses the consumer-quoted
->    bare word `bad_input`, which `collectBodyCaptures` rejects), so the whole
->    program is already uncompilable before the capture record matters.
->    `corpus-core.tsv:50` (`walk`) is blocked by a *capturing-lambda arg* that
->    cannot bake (plus `flex` reference cells), not a body name.
->    `module-test.tsv:48` needs cross-registry module-preamble closures.
+> 1. **The stale "islands = 0" was wrong.** After the PR #210 → main merge the
+>    live corpus is 3524 value rows with **1 island already** (`error.tsv:25`
+>    `def e (do [1 div 0]) convert Map e`, islanded via the existing non-capture
+>    path) and 112 refusals — the committed `COMPILED_STATUS.md` was stale at
+>    3520/0/31. (This refresh is the one shippable artefact from the
+>    investigation.)
+> 2. **case.tsv:50's real blocker is the consumer-quoted bare word `code`, NOT
+>    the first `do`.** Empirically `do [raise bad_input "nope"]` and the whole
+>    `def e (do [raise …]) e dot code` prefix **both compile natively** — the
+>    first `do` never reaches `tryRecordFallback`. The sole refusal is the
+>    *second* `do`'s body `[e dot code case […]]`: `collectBodyCaptures` cleanly
+>    captures `e` (a value-def → promoted frame local, threaded and re-installed
+>    as a scoped `def`), but the bare word **`code`** (the field key `e dot code`
+>    consumer-quotes) is not a native / type / value-def, so the walk cannot
+>    classify it and refuses. With `e` alone captured the row *does* island and
+>    the differential matches (`[B]` in both engines) — but only because I
+>    forced `code` through; see #3.
+> 3. **Admitting non-value-def free words to get `code` through is UNSOUND — the
+>    property fuzzer proved it.** A relaxation that let any top-level unbound
+>    free word pass (treating it as "consumer-quoted or undefined, resolves
+>    identically") diverged on seed 1 iter 748: `… def v1 (size ([0] each [var
+>    [[v] (4 sub v1) 4]])) 4`. Here `v1` is EXECUTED (`4 sub v1`) as a *forward
+>    self-reference* — unbound while its own RHS runs — so the interpreter raises
+>    `signature_error` while the island resolves `v1` differently and returns a
+>    value. The island sub-engine shares the registry, so a body word resolves
+>    identically to the interpreter EXCEPT names bound as compiled-context frame
+>    locals; a live value-def is captured, but an EXECUTED bare ref that is *not*
+>    a live value-def (a forward/self ref, an fn param, a loop iterator) can
+>    diverge. `code` (consumer-quoted, never executed) is safe in principle, but
+>    **distinguishing it from an executed ref needs sound quote-aware dispatch
+>    analysis** — a substantial, miscompile-sensitive change, not a heuristic.
+> 4. **Even a sound quote-analysis only converts case.tsv:50 refused → islanded,
+>    which RAISES the island count.** The P7 finish line is islands→0 (native),
+>    with `islandCeiling = 0`; an island is a *stepping stone away from* native,
+>    not a goal. Trading a whole-program fallback for a partial one is lateral at
+>    best on the P7 ratchets and moves the island metric the wrong way.
 >
-> **Conclusion:** capture-threading is correct and reusable, but there is **no
-> isolated, gate-verifiable win** — it only pays off shipped *together with*
-> its co-blockers (consumer-quoted / divergent body-word acceptance; capturing
-> code-value args threaded into the island; cross-registry closure bodies). A
-> compiler change that moves no ratchet and no test would be dead,
-> unverifiable machinery in a miscompile-sensitive path, so the prototype was
-> reverted. The correct next unit of work is a **bundle** that unblocks one
-> corpus row fully — most likely `case.tsv:50` = capture-threading (§3) +
-> consumer-quoted/divergent body-word acceptance in `collectBodyCaptures`.
-> That bundle can then be gated on islands 0→1 with `make status` + the full
-> differential/property/full-corpus suite.
+> **Conclusion (unchanged, now with sharper evidence):** capture-threading is
+> correct and reusable, but there is **no isolated, gate-verifiable win**.
+> `case.tsv:50` needs capture-threading **plus** sound consumer-quoted-key
+> handling (quote-aware body analysis), and even then only islands a row that
+> should really compile *natively*. A compiler change that moves no ratchet in
+> the most miscompile-sensitive part of the tree is dead machinery, so the
+> prototype was reverted a second time. **Recommended next front instead:**
+> pursue rows that can go *native* (the operand-provenance / dispatch-recovery
+> families dominate the 112 refusals) or the dynamic-method-dispatch family
+> (`module-log`, ~9 rows on one `OpCallDynamicMixed`-class pattern) — real
+> ratchet movement toward runtime independence rather than more islands.
 
 ## 1. Where we are
 
@@ -68,6 +93,10 @@ Only the first family is addressable by an island: the others are either
 dynamic-fn machinery or genuinely unmaterialisable operands.
 
 ## 2. The gap
+
+> **Superseded in part by prototype finding #2 (top of file).** The case.tsv:50
+> analysis here is corrected: the blocker is the second `do`'s consumer-quoted
+> key `code`, not the first `do`; `e` captures cleanly. Read finding #2 first.
 
 `tryRecordFallback` already islands a code-body higher-order word when its body
 is *self-contained* — `bodyFreeForFallback` (`carrier.go:1269`) requires every
