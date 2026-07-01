@@ -1285,7 +1285,7 @@ def TestSet refine Table (refine Record [name:String in:List out:Any])
 #             importing the word.
 # - cases:    inline TestSet (may be empty)
 # - subs:     list of sub-specs (may be empty)
-def TestSpec refine Record [name:String subject:(Atom tor String) cases:List subs:List]
+def TestSpec refine Record [name:String subject:Any cases:List subs:List]
 
 # ============================================================
 # Property-based testing (PBT) — Stage 3
