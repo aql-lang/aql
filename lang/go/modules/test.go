@@ -1392,7 +1392,7 @@ def run-property fn [[| p:Map] [Map] [
 # describe scope so their results inherit the parent spec name in the
 # path column.
 
-def run-case fn [[| subject:Scalar c:Map] [] [
+def run-case fn [[| subject:(Atom tor String) c:TestCase] [] [
   def in quote (c get "in")
   def expected (c get "out")
   def actual (in subject test-invoke)
@@ -1400,7 +1400,7 @@ def run-case fn [[| subject:Scalar c:Map] [] [
   0 None actual expected matched [] (c get "name") test-record
 ]]
 
-def run-cases fn [[| subject:Scalar cases:List] [] [
+def run-cases fn [[| subject:(Atom tor String) cases:List] [] [
   for (cases size) [
     def _i i
     def c (cases _i get)
@@ -1408,7 +1408,7 @@ def run-cases fn [[| subject:Scalar cases:List] [] [
   ] end
 ]]
 
-def run-spec fn [[| s:Map] [] [
+def run-spec fn [[| s:TestSpec] [] [
   [
     def subject (s get "subject")
     def cases quote (s get "cases")

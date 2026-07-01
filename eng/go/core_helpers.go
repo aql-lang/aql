@@ -573,6 +573,22 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						genArgs[i] = rc // preserve record schema into the armed compile + closure capture
 						continue
 					}
+					// A RECOVERED call: an Any arg flowed into a CONCRETELY-typed
+					// param (matchSignature couldn't statically commit, so dispatch
+					// recovered — tryRecordRecoveredUserFn). Compile the body against
+					// the DECLARED param type, not strict-Any: the body's words then
+					// dispatch against the real type (e.g. `convert Float` over an
+					// Integer param inside a chain whose source was an Options `get`),
+					// instead of refusing "unmatched dispatch" on strict-Any. Sound by
+					// the param contract — SetUnitParamTypes installs a CALL_USER guard
+					// that raises == the interpreter when a runtime arg misses the
+					// declared type, so assuming it here can only narrow, never admit a
+					// value the interpreter would reject.
+					if pt := sigParams[i].Type; pt != nil && !pt.Equal(TAny) &&
+						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
+						genArgs[i] = NewCarrier(pt)
+						continue
+					}
 				}
 				if a.Parent == nil {
 					// A root-node carrier (None / Any / Never) has a nil Parent
@@ -588,7 +604,16 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				}
 				genArgs[i] = NewCarrier(a.Parent)
 			}
-			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, args, capturesCopy, bodyCopy)
+			// Key the compiled unit on the GENERALISED args, matching the body
+			// analysis (AnalyseFnBody runs on genArgs) and the FnSummaries memo. A
+			// RECURSIVE call reaches this fn with DIFFERENT concrete args (a sub-spec
+			// vs the top spec) but the SAME generalisation, so an args-keyed unit
+			// missed the in-flight unit and allocated a SECOND unit that the
+			// in-flight bail left EMPTY (the recursive `subspec run-spec` called an
+			// empty RET → sub-specs silently skipped). Keying on genArgs makes the
+			// recursive call REUSE the in-flight unit (the generalised body that
+			// handles any arg shape at run time).
+			key := FnAnalysisKey(r.AnalysisScopeID(), nameCopy, genArgs, capturesCopy, bodyCopy)
 			paramNames := make([]string, len(sigParams))
 			for i, p := range sigParams {
 				paramNames[i] = p.Name
@@ -622,11 +647,17 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.SetUnitParamTypes(fnUnit, pts, pats)
 			}
 			if finishFn != nil {
-				// A fresh compilation must RECORD the body — drop any
-				// summary cached by a suspended analysis (the install-
-				// time synthetic example eval) so AnalyseFnBody re-runs
-				// under the armed capture, with the generalised args.
-				delete(r.Check.FnSummaries, key)
+				// A fresh compilation must RECORD the body into THIS unit — drop any
+				// summary cached by a prior analysis (the install-time synthetic
+				// example eval, or a DISCARDED closure PROBE compile that shares
+				// r.Check.FnSummaries) so AnalyseFnBody re-runs and re-records the
+				// body's events instead of returning the cached residual with an
+				// empty fragment. The cache (and the AnalyseFnBody call below) is
+				// keyed on genArgs, NOT args — deleting the args key left the
+				// genArgs-keyed probe summary live, so a fn dispatched under a
+				// recursive closure probe (aql:test run-case) compiled to an EMPTY
+				// stub unit in the real pass (silent 0-cases miscompile).
+				delete(r.Check.FnSummaries, FnAnalysisKey(r.AnalysisScopeID(), nameCopy, genArgs, capturesCopy, bodyCopy))
 				stkGen := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, genArgs, capturesCopy, declaredReturns)
 				finishFn(stkGen)
 			}
