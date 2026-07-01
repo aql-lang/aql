@@ -295,8 +295,20 @@ type FnSig struct {
 	// Empty/nil on a freshly-parsed AQL FnSig; populated by the install/
 	// compile boundary (compileFnDef / RegisterNativeFunc shim). ---
 
+	// Impl is the signature's run implementation as a sealed sum
+	// (GoImpl | AQLImpl). It is the authoritative source every reader
+	// consults through the Signature accessors (dispatchHandler / body /
+	// fnFrame / fullStack / checkFullStackFn / parkResult / runInCheckMode
+	// in sigimpl.go). normalizeSig synthesizes it at the install boundary
+	// from the flat authoring fields below — the same demotion Params gets
+	// from the legacy Args — so those fields survive only as authoring
+	// INPUTS. nil only for a Signature that never went through normalizeSig
+	// (a raw test fixture), in which case the accessors read the flat
+	// fields directly.
+	Impl SigImpl
 	// Handler is the Go implementation for a native sig (nil for an
-	// un-compiled AQL sig; the compile boundary attaches one).
+	// un-compiled AQL sig; the compile boundary attaches one). Authoring
+	// INPUT to Impl — read the resolved value via dispatchHandler().
 	Handler Handler
 	// FnFrame marks this sig as an AQL fn-body overload whose dispatch
 	// splices a tape frame (buildFnBodyHandler). Attached at the same

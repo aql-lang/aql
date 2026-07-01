@@ -103,6 +103,11 @@ func UsurpFunction(v Value) (Value, bool) {
 		rev.NoEvalArgs = nil
 		rev.NoEvalMapArgs = nil
 		rev.Body = nil
+		// Drop any inherited AQL fn-frame meta: this wrapper re-dispatches the
+		// ORIGINAL (which carries its own frame) via a Go handler, so it is a
+		// GoImpl — a stale FnFrame would misclassify it as an AQL body and lose
+		// its RunInCheckMode re-dispatch (see normalizeSig's Impl synthesis).
+		rev.FnFrame = nil
 		rev.ReturnsFn = nil
 		rev.CheckFullStackFn = nil
 		rev.Fallback = false
@@ -176,6 +181,9 @@ func rebarrierFunction(v Value, stack bool) (Value, bool) {
 		ws.NoEvalArgs = nil
 		ws.NoEvalMapArgs = nil
 		ws.Body = nil
+		// Drop any inherited AQL fn-frame meta (see UsurpFunction): the wrapper
+		// re-dispatches the ORIGINAL via a Go handler, so it is a GoImpl.
+		ws.FnFrame = nil
 		ws.ReturnsFn = nil
 		ws.CheckFullStackFn = nil
 		ws.Fallback = false

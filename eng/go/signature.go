@@ -119,6 +119,30 @@ func normalizeSig(s *Signature) {
 		}
 	}
 	s.Patterns = patterns
+
+	// Synthesize the run-implementation sum from the flat authoring fields
+	// (the same install-boundary demotion Params gets from Args above). The
+	// AQL-body discriminator is `FnFrame != nil || len(Body) > 0`:
+	//   - an installed fn / lambda carries FnFrame (its Body may be EMPTY —
+	//     `def v fn [[x] [] []]` — yet it is still an AQL frame) plus a derived
+	//     splicing Handler (→ dispatch);
+	//   - a module-ref carries Body=[Word(inner)] with a nil Handler
+	//     (→ dispatch nil, the execFnDefLiteral splice path).
+	// Everything else is a Go handler (a native word, a usurp/force wrapper —
+	// which clears FnFrame in core_ref.go — the synthetic fallback, a
+	// captured-native-fn). Always allocated fresh: a re-normalized sig may
+	// have copied a prior Impl pointer that must not be mutated in place.
+	if s.FnFrame != nil || len(s.Body) > 0 {
+		s.Impl = &AQLImpl{Body: s.Body, FnFrame: s.FnFrame, dispatch: s.Handler}
+	} else {
+		s.Impl = &GoImpl{
+			Handler:          s.Handler,
+			FullStack:        s.FullStack,
+			CheckFullStackFn: s.CheckFullStackFn,
+			ParkResult:       s.ParkResult,
+			RunInCheckMode:   s.RunInCheckMode,
+		}
+	}
 }
 
 // sigArgType returns the declared type at signature position i. It is the
