@@ -254,7 +254,7 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 // instances: a field declared in the class schema (own or inherited)
 // writes into the flat field map and returns nothing; an undeclared
 // field raises sealed_field loudly — the open-bag use case belongs to
-// plain maps/Objects, not class instances (design/CLASS-OBJECT.10.md).
+// plain maps / FlexMaps, not class instances (design/CLASS-OBJECT.10.md).
 func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	container := args[2]
 	if !IsConcrete(container) {

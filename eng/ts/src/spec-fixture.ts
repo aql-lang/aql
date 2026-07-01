@@ -65,8 +65,8 @@ import {
   newMark,
   newMove,
   newNone,
-  newObjectType,
-  ObjectTypeInfo,
+  newClassType,
+  ClassTypeInfo,
   newParenExpr,
   newString,
   newTypedList,
@@ -683,8 +683,8 @@ function registerSpecWords(r: Registry): void {
   // make — scalar coercion. The eng/spec make.tsv rows exercise the
   // scalar targets (String/Integer/Number/Float/Boolean/Atom). The
   // [Scalar, Any] sig with typeArgs on arg0 forces a type-literal
-  // target. Object/Array/Options overloads are added by a later
-  // increment. Mirrors registerEngSpecMake (scalar slice).
+  // target. Class/Options overloads are added by a later increment.
+  // Mirrors registerEngSpecMake (scalar slice).
   reg({
     name: 'make',
     forwardPrecedence: true,
@@ -758,15 +758,15 @@ function registerSpecWords(r: Registry): void {
             }
             return [newMap(om)]
           }
-          // refine Object {field:Type …} — a fresh object type with the
-          // base Object as parent. refine Base {…} extends an existing
-          // object type, inheriting its fields. The struct name is empty
-          // until a `def Name …` binding stamps it.
-          if (base.data === null && base.vType.leaf() === 'Object' && args[1]!.isMap()) {
-            return [buildObjectType('Object', new OrderedMap(), args[1]!)]
+          // class {field:Type …} — a fresh class type with the base
+          // Class as parent. refine Base {…} extends an existing class
+          // type, inheriting its fields. The struct name is empty until
+          // a `def Name …` binding stamps it.
+          if (base.data === null && base.vType.leaf() === 'Class' && args[1]!.isMap()) {
+            return [buildClassType('Class', new OrderedMap(), args[1]!)]
           }
-          if (base.data instanceof ObjectTypeInfo && args[1]!.isMap()) {
-            return [buildObjectType(base.data.path, base.data.fields, args[1]!)]
+          if (base.data instanceof ClassTypeInfo && args[1]!.isMap()) {
+            return [buildClassType(base.data.path, base.data.fields, args[1]!)]
           }
           return unsupportedMake('refine')
         },
@@ -959,10 +959,10 @@ function registerSpecWords(r: Registry): void {
               return []
             }
           }
-          // A capitalised name binding an object type stamps the struct
+          // A capitalised name binding a class type stamps the struct
           // name onto it, so `inspect Name` reports struct:Name and a
-          // child type can record `Object/Name` as its parent path.
-          if (value.data instanceof ObjectTypeInfo && value.data.name === '') {
+          // child type can record `Class/Name` as its parent path.
+          if (value.data instanceof ClassTypeInfo && value.data.name === '') {
             value.data.name = name
           }
           registry.pushDef(name, value)
@@ -1985,15 +1985,15 @@ function buildWordInspection(
 function strList(items: string[]): Value {
   return newList(items.map((s) => newString(s)), { eval: false })
 }
-// buildObjectType assembles an object-type value from a parent path,
+// buildClassType assembles a class-type value from a parent path,
 // the parent's inherited fields, and a field map. Inherited fields keep
 // their order and are followed by the map's own fields.
-function buildObjectType(parentPath: string, inherited: OrderedMap, fieldMap: Value): Value {
+function buildClassType(parentPath: string, inherited: OrderedMap, fieldMap: Value): Value {
   const fields = new OrderedMap()
   for (const k of inherited.keys()) fields.set(k, inherited.get(k)!)
   const m = fieldMap.asMap()
   for (const k of m.keys()) fields.set(k, m.get(k)!)
-  return newObjectType(new ObjectTypeInfo('', parentPath, fields))
+  return newClassType(new ClassTypeInfo('', parentPath, fields))
 }
 
 function buildTypeInspection(v: Value): Value {
@@ -2038,15 +2038,15 @@ function buildTypeInspection(v: Value): Value {
     om.set('signatures', newList(sigs, { eval: false }))
     return newInspect(om)
   }
-  // Object type (refine Object {…}): kind:object with its struct name,
+  // Class type (class {…}): kind:object with its struct name,
   // optional parent path (omitted for a direct child of the base
-  // Object), and its fields rendered as a name→type-leaf map.
-  if (v.data instanceof ObjectTypeInfo) {
+  // Class), and its fields rendered as a name→type-leaf map.
+  if (v.data instanceof ClassTypeInfo) {
     const info = v.data
     om.set('type', newString('Type'))
     om.set('struct', newString(info.name))
     om.set('kind', newWord('object'))
-    if (info.parentPath !== 'Object') om.set('parent', newString(info.parentPath))
+    if (info.parentPath !== 'Class') om.set('parent', newString(info.parentPath))
     const fields = new OrderedMap()
     for (const k of info.fields.keys()) fields.set(k, newString(info.fields.get(k)!.vType.leaf()))
     om.set('fields', newMap(fields))

@@ -348,9 +348,9 @@ func sigTypeMatches(v Value, t *Type) bool {
 //
 // A type literal is a by-value copy of its lattice node (Data==nil,
 // Parent set to the supertype); the denoted node is &v. A structural
-// type body (RecordType, OptionsType, TableType, ObjectType,
+// type body (RecordType, OptionsType, TableType, ClassType,
 // ChildType) carries non-nil Data but its Parent is the family root
-// (TMap, TList, TObject) — we match against the Parent for those.
+// (TMap, TList, TClass) — we match against the Parent for those.
 // Carriers (Data==nil but Carrier=true) are values, not types, and
 // are rejected here.
 func sigTypeMatchesAsType(v Value, t *Type) bool {

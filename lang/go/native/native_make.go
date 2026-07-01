@@ -3,22 +3,19 @@ package native
 import "github.com/aql-lang/aql/eng/go"
 
 // makeNatives installs the `make` word — the universal constructor
-// for typed values (scalars, objects, records, paths, arrays).
+// for typed values (scalars, class instances, records, tables).
 //
 //	make T data       — build a T-typed value from data; T may be a
-//	                    Scalar type, an ObjectType, a RecordType, an
-//	                    Array type, or any subtype thereof.
+//	                    Scalar type, a ClassType, a RecordType, a
+//	                    TableType, or any subtype thereof.
 //	make T data opts  — same with an options map (currently the
-//	                    `use_base:true` flag for objects/records).
-//	make T data Proto — for an Object target: build the instance with
-//	                    Proto's field values as the starting point.
+//	                    `use_base:true` flag for classes/records).
 //
 // The algorithm primitives (MakeHandler, MakeScalarHandler,
-// MakeScalarOptsHandler, MakeObjHandler, MakeArrayHandler,
-// MakeWithPrototype, MakeWithOpts, plus MakeObject / MakeConvert /
-// MakeFieldValue / ResolveFieldType) live in eng/go/core_make.go;
-// this file owns the word name, signature shape, and dispatch
-// wiring.
+// MakeScalarOptsHandler, MakeObjHandler, MakeWithOpts, plus
+// MakeObject / MakeConvert / MakeFieldValue / ResolveFieldType) live
+// in eng/go/core_make.go; this file owns the word name, signature
+// shape, and dispatch wiring.
 var makeNatives = []NativeFunc{
 	{
 		Name:          "make",

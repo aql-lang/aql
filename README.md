@@ -216,10 +216,12 @@ mid-2026 snapshots most commonly need these renames:
   root under `Ideal/Class` (so `p is Object` is now false), and
   serialize as pure JSON with a `$class` key (`StructUtil.jsonify` /
   `StructUtil.reify`).
-- **`set` mutates Store/Object/Array in place and returns nothing** —
-  `def r (b set k v)` binds nothing; read the container back instead.
-  On an immutable **Map**, `set` is copy-returning: `{a:1} set b 2`
-  yields a new map and the receiver is unchanged.
+- **`set` mutates a Store or class instance in place and returns
+  nothing** — `def r (b set k v)` binds nothing; read the container
+  back instead. A **FlexMap**/**FlexList** `set` also mutates in place
+  but *returns the node* (so writes chain). On an immutable **Map**,
+  `set` is copy-returning: `{a:1} set b 2` yields a new map and the
+  receiver is unchanged.
 
 
 ## Contributing

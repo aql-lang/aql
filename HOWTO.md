@@ -29,7 +29,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Use a SQLite database](#use-a-sqlite-database)
 * [Define a record type](#define-a-record-type)
 * [Define a table type](#define-a-table-type)
-* [Define an object type with methods](#define-an-object-type-with-methods)
+* [Define a class type with methods](#define-a-class-type-with-methods)
 * [Define a generic type](#define-a-generic-type)
 * [Use scoped variables](#use-scoped-variables)
 * [Iterate with `for`](#iterate-with-for)
@@ -448,10 +448,10 @@ make Inventory [["Widget" 5] ["Bolt" 12]]
 ```
 
 
-## Define an object type with methods
+## Define a class type with methods
 
-Objects are mutable, inheritable types. Declare one with `refine
-Object` and a field map (`name: defaultValue`); construct instances
+Class instances are mutable, inheritable, sealed records. Declare one
+with `class` and a field map (`name: defaultValue`); construct instances
 with `make`. Read fields with the dotted accessor (`.field`) and
 mutate them with `set` (note the arg order — `obj value key set` —
 see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for why):
@@ -483,9 +483,9 @@ make Counter {} .count                # returns error — parses as make Counter
 Binding to `c` first (as above) sidesteps this; otherwise wrap the
 construct. See [Reference: Maps and access](REFERENCE.md#maps-and-access).
 
-### Nested object fields need an explicit constructor default
+### Nested class fields need an explicit constructor default
 
-A field whose type is another object type must default to a **constructed
+A field whose type is another class type must default to a **constructed
 instance**, not the bare type literal. Writing `field: NestedType` stores
 the *type* `NestedType` as the field value — `inst.field` is then the type
 literal, not a usable instance. Construct the default with `(make
@@ -493,24 +493,24 @@ NestedType {})`:
 
 <!-- aql-test: skip -->
 ```
-def Bits (class {})
+def Bits (class {flag: 0})
 def Foo  (class {bits: (make Bits {})})   # construct the default
 
 def inst (make Foo {})
-inst.bits 1 "0" set                               # mutate the nested object
-inst.bits                             # returns Object/Bits{0:1}
+inst.bits 1 "flag" set                            # mutate the nested instance
+inst.bits                             # returns Class/Bits{flag:1}
 ```
 
 The `field: NestedType` form looks reasonable (it reads like a type
 declaration) but only names the type; `inst.bits` is then the bare type
-literal (`object<Object/Bits>{}`), not a usable instance. Reach for
+literal (`Class/Bits`), not a usable instance. Reach for
 `(make NestedType {})` whenever a field should default to a fresh nested
-object.
+instance.
 
 ### Methods are free functions over the instance
 
-AQL objects hold **fields, not methods**: the field map has no method
-slot and there is no inline dispatch. Putting a body in the map
+AQL class instances hold **fields, not methods**: the field map has no
+method slot and there is no inline dispatch. Putting a body in the map
 (`class {count: 0, inc: [count 1 add]}`) does **not** create a
 callable — that just stores a list under the field `inc`, and `c inc`
 raises `undefined_word`. Model a method as an ordinary typed `fn`
@@ -635,7 +635,7 @@ instead — `each` does pass the element to the body:
 iota 5 each [dup mul]         # returns [0 1 4 9 16]
 ```
 
-For a **side-effecting loop that collects nothing** — mutating an object,
+For a **side-effecting loop that collects nothing** — mutating an instance,
 accumulating into state — use `for-each`. Unlike `each`, its body may leave
 the stack empty (no throwaway sentinel needed), and it produces no result:
 
