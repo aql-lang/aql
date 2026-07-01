@@ -10,14 +10,14 @@ import (
 
 // The `jp` (JSONPath, github.com/ohler55/ojg) and `jq` (jq filter,
 // github.com/itchyny/gojq) mini-languages query a document — the stack subject,
-// which may be a Node (Map/List), Object, Array, Table or Record. Both ship
+// which may be a Node (Map/List), a class instance, Table or Record. Both ship
 // built-in with aql:minilang and return a List of results.
 
 const qImp = `import "aql:minilang"  `
 
 // TestMiniQuerySubjectTypes pins that jp and jq work over every supported
 // subject shape (the document conversion path). A Map/Record subject needs an
-// explicit {} opts (the mini opts gotcha); List/Array/Object/Table do not.
+// explicit {} opts (the mini opts gotcha); List / class-instance / Table do not.
 func TestMiniQuerySubjectTypes(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{"jp Node", `{store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store.book[*].title' {}`, "['A' 'B']"},

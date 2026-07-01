@@ -175,9 +175,10 @@ func accessorGetSignatures() []NativeSig {
 		// type resolved from the schema (getObjectReturns).
 		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
 		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-		// Resource/Entity instances (SDK object hierarchy) — flat field read.
-		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
-		{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: getObjectHandler, Returns: []*Type{TAny}},
+		// Resource/Entity instances (SDK object hierarchy) — flat field
+		// read. Field type resolved from the Resource schema (getResourceReturns).
+		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getResourceReturns},
+		{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getResourceReturns},
 		// [Key | None] — chained-read propagation
 		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
 		// [Key | Store] — check-mode-aware ReturnsFn picks up a
@@ -596,6 +597,34 @@ func getObjectReturns(args []Value, r *Registry) []Value {
 	fv, ok := info.AllFields().Get(getKey(args[0]))
 	if !ok {
 		return []Value{NewCarrier(TNone)} // sealed / absent field reads as None
+	}
+	ft := ValueType(fv)
+	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+		return dyn
+	}
+	return []Value{NewCarrier(ft)}
+}
+
+// getResourceReturns is getObjectReturns for the Resource/Entity
+// hierarchy: it reads the field type from the ResourceType schema so a
+// Resource-instance field read (`e.spec`) carries its declared type in
+// check/bytecode contexts instead of degrading to Any. Resource/Entity
+// are installed as type bindings (installResourceTypes), so their
+// schema is reachable via TopTypeBody like a class type's.
+func getResourceReturns(args []Value, r *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if r == nil || len(args) != 2 || !IsConcrete(args[0]) || args[1].Parent == nil {
+		return dyn
+	}
+	// Resource/Entity are def bindings, not type bindings, so resolve
+	// the schema through the def store by the instance's type name.
+	info, ok := lookupResourceTypeByName(r, args[1].Parent.Leaf())
+	if !ok {
+		return dyn
+	}
+	fv, ok := info.AllFields().Get(getKey(args[0]))
+	if !ok {
+		return []Value{NewCarrier(TNone)} // absent field reads as None
 	}
 	ft := ValueType(fv)
 	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {

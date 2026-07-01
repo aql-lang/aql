@@ -92,18 +92,18 @@ func (objectConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavi
 func (objectConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (objectConvertBehavior) Format(v Value) string       { return kernelFormatDefault(v) }
 func (objectConvertBehavior) ToMap(v Value) (Value, error) {
-	oi, err := AsClassInstance(v)
-	if err != nil {
+	fm, ok := FlatInstanceFields(v)
+	if !ok {
 		return NewMap(NewOrderedMap()), nil
 	}
-	return NewMap(objectFieldMap(&oi)), nil
+	return NewMap(fm), nil
 }
 func (objectConvertBehavior) ToList(v Value) (Value, error) {
-	oi, err := AsClassInstance(v)
-	if err != nil {
+	fm, ok := FlatInstanceFields(v)
+	if !ok {
 		return NewList(nil), nil
 	}
-	return NewList(orderedMapValues(objectFieldMap(&oi))), nil
+	return NewList(orderedMapValues(fm)), nil
 }
 
 // ClassFields is the exported view of objectFieldMap — the flattened
@@ -255,12 +255,15 @@ func (reachConvertBehavior) ToList(v Value) (Value, error) {
 }
 
 func init() {
-	// Class instances project to maps/lists the same way Object
-	// instances do — flat field maps (class instances have no
-	// prototype chain, so the flatten is a single pass). The behavior
-	// carries no Sizer, so the SizeOf walk continues past Class to the
-	// Ideal root's payload-switch Sizer.
+	// Class instances project to maps/lists as flat field maps (class
+	// instances have no prototype chain, so the flatten is a single
+	// pass). The behavior carries no Sizer, so the SizeOf walk continues
+	// past Class to the Ideal root's payload-switch Sizer.
 	TClass.Behavior = objectConvertBehavior{}
+	// Resource/Entity instances share the flat field-map shape, so they
+	// reuse the same converter (registered on the TResource root, so
+	// Entity inherits it via the Parent-chain Behavior walk).
+	TResource.Behavior = objectConvertBehavior{}
 	TStore.Behavior = storeConvertBehavior{}
 	TError.Behavior = errorConvertBehavior{}
 	TReach.Behavior = reachConvertBehavior{}

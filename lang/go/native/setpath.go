@@ -198,6 +198,42 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 		}), nil
 	}
 
+	// Resource/Entity instance: same type-preserving rebuild as a class
+	// instance, routed through MakeResource so the SDK schema validation
+	// (missing/unknown field, field types) runs on the edit.
+	if IsResourceInstance(data) {
+		info, _ := AsResourceInstance(data)
+		out := NewOrderedMap()
+		if info.Fields != nil {
+			for _, key := range info.Fields.Keys() {
+				v, _ := info.Fields.Get(key)
+				out.Set(key, v)
+			}
+		}
+		keyStr := reachKeyString(k)
+		if len(rest) == 0 {
+			out.Set(keyStr, val)
+		} else {
+			existing, _ := out.Get(keyStr)
+			child, err := setReachNative(existing, rest, val, r)
+			if err != nil {
+				return Value{}, err
+			}
+			out.Set(keyStr, child)
+		}
+		if info.TypeRef != nil {
+			results, err := MakeResource(*info.TypeRef, out, r)
+			if err != nil {
+				return Value{}, fmt.Errorf("setpath: %w", err)
+			}
+			return results[0], nil
+		}
+		return NewResourceInstance(data.Parent, ResourceInstanceInfo{
+			TypeRef: info.TypeRef,
+			Fields:  out,
+		}), nil
+	}
+
 	// List index.
 	if k.Parent.ConformsTo(TInteger) && data.Parent.ConformsTo(TList) && IsConcrete(data) {
 		lst, _ := AsList(data)

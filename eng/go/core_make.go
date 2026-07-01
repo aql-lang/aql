@@ -254,6 +254,15 @@ func makeClassInstance(objType ClassTypeInfo, provided *OrderedMap, r *Registry)
 // unlike a class it uses the object-type diagnostics ("missing field",
 // "unknown field") the SDK spec pins, and its own ResourceInstanceInfo
 // payload keeps it off the class-instance representation.
+// MakeResource is the exported entry to construct a Resource/Entity
+// instance from a resolved ResourceType and a provided field map,
+// mirroring MakeObject for the class path. Used by the lang layer's
+// typed-def and setpath rebuild paths so a Resource instance is built
+// the same way `make Entity {…}` builds it.
+func MakeResource(resType ResourceTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
+	return makeResource(resType, provided, r)
+}
+
 func makeResource(resType ResourceTypeInfo, provided *OrderedMap, r *Registry) ([]Value, error) {
 	allFields := resType.AllFields()
 

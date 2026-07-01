@@ -279,6 +279,7 @@ var (
 	IsClassType               = eng.IsClassType
 	IsResourceInstance        = eng.IsResourceInstance
 	IsResourceType            = eng.IsResourceType
+	IsFlatInstance            = eng.IsFlatInstance
 	IsOpenParen               = eng.IsOpenParen
 	IsOptionsType             = eng.IsOptionsType
 	IsParenExpr               = eng.IsParenExpr
@@ -375,7 +376,9 @@ var (
 	CanonicalType             = eng.CanonicalType
 	MakeClassFieldValue       = eng.MakeClassFieldValue
 	MakeClassInstance         = eng.MakeClassInstance
+	MakeResource              = eng.MakeResource
 	ClassFields               = eng.ClassFields
+	FlatInstanceFields        = eng.FlatInstanceFields
 	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef

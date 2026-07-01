@@ -106,6 +106,10 @@ func (idealSizeBehavior) Size(v Value) int {
 		if d.Fields != nil {
 			return d.Fields.Len()
 		}
+	case ResourceInstanceInfo:
+		if d.Fields != nil {
+			return d.Fields.Len()
+		}
 	case *StoreInstanceInfo:
 		if d != nil {
 			return len(d.Data)

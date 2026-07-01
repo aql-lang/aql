@@ -126,3 +126,34 @@ size [ Resource Entity ]	2	both are first-class type-literal values
 # go through a user-named indirection: a bare Resource/Entity type
 # literal is not itself accepted as a refine base in the field-shape
 # form. Inheriting requires an intermediate user type.
+
+# ====================================================================
+# 9. Resource/Entity instances are flat field-map values
+# ====================================================================
+# Resource/Entity have their OWN instance struct (ResourceInstanceInfo),
+# distinct from class instances, but share the flat field-map shape, so
+# every container-style operation treats them like class instances:
+# size, deq (structural), eq (alias identity), convert, struct-util
+# projection, typed-def construction, and const rejection.
+
+size ( make Entity { kind:'api' spec:'s' entity:'x' } )	3	an Entity instance sizes to its field count
+size ( make Resource { kind:'k' } )	1	a Resource instance counts its one field
+deq ( make Entity { kind:'api' spec:'s' entity:'x' } ) ( make Entity { kind:'api' spec:'s' entity:'x' } )	true	structurally-equal Entity instances are deq
+deq ( make Entity { kind:'api' spec:'s' entity:'x' } ) ( make Entity { kind:'api' spec:'s' entity:'z' } )	false	differing fields are NOT deq
+def e ( make Entity { kind:'api' spec:'s' entity:'x' } ) def f e e f eq	true	two bindings to the SAME instance are eq (alias identity)
+eq ( make Entity { kind:'api' spec:'s' entity:'x' } ) ( make Entity { kind:'api' spec:'s' entity:'x' } )	false	distinct instances are NOT eq even with equal fields
+convert Map ( make Entity { kind:'api' spec:'s' entity:'x' } )	{kind:'api' spec:'s' entity:'x'}	Entity projects to its field map
+convert List ( make Entity { kind:'api' spec:'s' entity:'x' } )	['api' 's' 'x']	Entity projects to its field values
+
+# struct-util projection sees the resolved fields (not a debug string).
+import "aql:struct-util" StructUtil.items ( make Entity { kind:'api' spec:'s' entity:'x' } )	[['entity' 'x'] ['kind' 'api'] ['spec' 's']]	items enumerates Entity fields
+import "aql:struct-util" StructUtil.setpath ( make Entity { kind:'api' spec:'s' entity:'x' } ) "entity" "y"	Entity{kind:'api' spec:'s' entity:'y'}	setpath preserves the Entity type and other fields
+
+# Typed-def parity: `def e:Entity {map}` constructs like `make Entity {map}`.
+def e:Entity { kind:'api' spec:'s' entity:'x' } e .spec	's'	def e:Entity {…} constructs a real Entity instance
+def e:Entity { kind:'api' spec:'s' entity:'x' } typeof e	Entity	typed-def yields an Entity instance
+def e:Resource { kind:'k' } typeof e	Resource	typed-def also works for the Resource base
+def e:Entity { kind:'api' } e	ERROR:missing field	typed-def enforces the schema (missing spec/entity)
+
+# const rejects a mutable Resource instance (parity with class instances).
+const ( make Entity { kind:'api' spec:'s' entity:'x' } )	ERROR:mutable instance	a Resource instance cannot pin a const exemplar

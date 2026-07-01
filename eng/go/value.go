@@ -2154,6 +2154,60 @@ func AsResourceInstance(v Value) (ResourceInstanceInfo, error) {
 	return info, nil
 }
 
+// IsFlatInstance reports whether v is a flat field-map instance — a
+// class instance or a Resource/Entity instance. Both resolve every
+// field (own + inherited) into a single map at make time with no
+// prototype chain and carry an optional schema TypeRef, so container-
+// shaped operations (field projection, size, deq, eq, serialization)
+// treat them uniformly. Sites that special-case one MUST use this (or
+// FlatInstanceFields / flatInstanceParts) so the two representations
+// stay in lockstep.
+func IsFlatInstance(v Value) bool {
+	switch v.Data.(type) {
+	case ClassInstanceInfo, ResourceInstanceInfo:
+		return true
+	}
+	return false
+}
+
+// FlatInstanceFields returns a fresh copy of a flat instance's field
+// map (class or Resource/Entity) and true; (nil, false) otherwise.
+// Field order follows the instance's own order.
+func FlatInstanceFields(v Value) (*OrderedMap, bool) {
+	fields, _, ok := flatInstanceParts(v)
+	if !ok {
+		return nil, false
+	}
+	out := NewOrderedMap()
+	if fields != nil {
+		for _, k := range fields.Keys() {
+			val, _ := fields.Get(k)
+			out.Set(k, val)
+		}
+	}
+	return out, true
+}
+
+// flatInstanceParts returns the LIVE (shared) flat Fields map and the
+// declared schema key order (own + inherited) for a class or resource
+// instance. The Fields map is not copied — callers that mutate must
+// copy first (see FlatInstanceFields).
+func flatInstanceParts(v Value) (fields *OrderedMap, schemaKeys []string, ok bool) {
+	switch d := v.Data.(type) {
+	case ClassInstanceInfo:
+		if d.TypeRef != nil {
+			schemaKeys = d.TypeRef.AllFields().Keys()
+		}
+		return d.Fields, schemaKeys, true
+	case ResourceInstanceInfo:
+		if d.TypeRef != nil {
+			schemaKeys = d.TypeRef.AllFields().Keys()
+		}
+		return d.Fields, schemaKeys, true
+	}
+	return nil, nil, false
+}
+
 // IsAtom reports whether this value is an atom.
 // IsPath reports whether this value is a Path.
 func IsPath(v Value) bool {

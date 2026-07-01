@@ -56,6 +56,22 @@ func valueToAnySer(v Value) any {
 		}
 		return out
 	}
+	if IsResourceInstance(v) {
+		// Resource/Entity instances serialize as their flat field map.
+		// They carry no `$class` key — Resource/Entity are not part of
+		// the class reify contract (StructUtil.reify targets classes), so
+		// emitting one would produce JSON reify could not round-trip.
+		flat, ok := FlatInstanceFields(v)
+		if !ok {
+			return v.String()
+		}
+		out := make(map[string]any, flat.Len())
+		for _, key := range flat.Keys() {
+			val, _ := flat.Get(key)
+			out[escapeSerKey(key)] = valueToAnySer(val)
+		}
+		return out
+	}
 	if v.Parent.ConformsTo(TMap) {
 		if m, _ := AsMap(v); m != nil {
 			out := make(map[string]any, m.Len())
