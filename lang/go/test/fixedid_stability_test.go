@@ -121,7 +121,7 @@ func TestFixedIDStability(t *testing.T) {
 		// --- Externally-registered types (Step 8 migration) ---
 		// Time family — lang/go/native/native_temporal.go. Only the
 		// family root and the three instant-bearing leaves are global;
-		// TimeOfDay / Duration / CalDuration / ClkDuration / Timezone
+		// TimeOfDay / Duration / CalendarDuration / ClockDuration / Timezone
 		// (former FixedIDs 1004-1008) moved to aql:time-util as
 		// per-import module mints with no FixedID — see
 		// MintTemporalModuleTypes and design/OPEN-WORDS.0.md.

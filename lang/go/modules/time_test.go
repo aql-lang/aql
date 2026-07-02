@@ -42,11 +42,11 @@ func timeTT(t *testing.T, r *native.Registry) native.TemporalModuleTypes {
 		return &node
 	}
 	return native.TemporalModuleTypes{
-		TimeOfDay:   get("TimeOfDay"),
-		Duration:    get("Duration"),
-		CalDuration: get("CalDuration"),
-		ClkDuration: get("ClkDuration"),
-		Timezone:    get("Timezone"),
+		TimeOfDay:        get("TimeOfDay"),
+		Duration:         get("Duration"),
+		CalendarDuration: get("CalendarDuration"),
+		ClockDuration:    get("ClockDuration"),
+		Timezone:         get("Timezone"),
 	}
 }
 
@@ -461,7 +461,7 @@ func TestNowStandardWord(t *testing.T) {
 func TestTimeDurYears(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("years", native.NewInteger(2)))
-	cd, ok := native.AsCalDuration(result[0])
+	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 2 || cd.Months != 0 || cd.Days != 0 {
 		t.Errorf("2 years = %+v, want {2 0 0}", cd)
 	}
@@ -470,7 +470,7 @@ func TestTimeDurYears(t *testing.T) {
 func TestTimeDurMonths(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("months", native.NewInteger(6)))
-	cd, ok := native.AsCalDuration(result[0])
+	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Months != 6 {
 		t.Errorf("6 months = %+v, want {0 6 0}", cd)
 	}
@@ -479,7 +479,7 @@ func TestTimeDurMonths(t *testing.T) {
 func TestTimeDurWeeks(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("weeks", native.NewInteger(2)))
-	cd, ok := native.AsCalDuration(result[0])
+	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Days != 14 {
 		t.Errorf("2 weeks = %+v, want {0 0 14}", cd)
 	}
@@ -488,7 +488,7 @@ func TestTimeDurWeeks(t *testing.T) {
 func TestTimeDurDays(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("days", native.NewInteger(30)))
-	cd, ok := native.AsCalDuration(result[0])
+	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Days != 30 {
 		t.Errorf("30 days = %+v, want {0 0 30}", cd)
 	}
@@ -497,7 +497,7 @@ func TestTimeDurDays(t *testing.T) {
 func TestTimeDurHours(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("hours", native.NewInteger(3)))
-	d, ok := native.AsClkDuration(result[0])
+	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 3*time.Hour {
 		t.Errorf("3 hours = %v, want %v", d, 3*time.Hour)
 	}
@@ -506,7 +506,7 @@ func TestTimeDurHours(t *testing.T) {
 func TestTimeDurMinutes(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("minutes", native.NewInteger(90)))
-	d, ok := native.AsClkDuration(result[0])
+	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 90*time.Minute {
 		t.Errorf("90 minutes = %v, want %v", d, 90*time.Minute)
 	}
@@ -515,7 +515,7 @@ func TestTimeDurMinutes(t *testing.T) {
 func TestTimeDurSeconds(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("seconds", native.NewInteger(30)))
-	d, ok := native.AsClkDuration(result[0])
+	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 30*time.Second {
 		t.Errorf("30 seconds = %v, want %v", d, 30*time.Second)
 	}
@@ -524,7 +524,7 @@ func TestTimeDurSeconds(t *testing.T) {
 func TestTimeDurMs(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("ms", native.NewInteger(500)))
-	d, ok := native.AsClkDuration(result[0])
+	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 500*time.Millisecond {
 		t.Errorf("500 ms = %v, want %v", d, 500*time.Millisecond)
 	}
@@ -533,7 +533,7 @@ func TestTimeDurMs(t *testing.T) {
 func TestTimeCalDur(t *testing.T) {
 	r := timeRegistry(t)
 	result := runAQL(t, r, callTimeDot("cal-dur", native.NewInteger(1), native.NewInteger(6), native.NewInteger(15)))
-	cd, ok := native.AsCalDuration(result[0])
+	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 1 || cd.Months != 6 || cd.Days != 15 {
 		t.Errorf("cal-dur 1 6 15 = %+v, want {1 6 15}", cd)
 	}
@@ -546,7 +546,7 @@ func TestTimeCalDur(t *testing.T) {
 
 func TestTimeTotalHours(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-hours", timeTT(t, r).NewClkDuration(90*time.Minute)))
+	result := runAQL(t, r, callTimeDot("total-hours", timeTT(t, r).NewClockDuration(90*time.Minute)))
 	v, _ := native.AsNumber(result[0])
 	if v != 1.5 {
 		t.Errorf("total-hours(90min) = %v, want 1.5", v)
@@ -555,7 +555,7 @@ func TestTimeTotalHours(t *testing.T) {
 
 func TestTimeTotalMinutes(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-minutes", timeTT(t, r).NewClkDuration(2*time.Hour)))
+	result := runAQL(t, r, callTimeDot("total-minutes", timeTT(t, r).NewClockDuration(2*time.Hour)))
 	v, _ := native.AsNumber(result[0])
 	if v != 120.0 {
 		t.Errorf("total-minutes(2h) = %v, want 120", v)
@@ -564,7 +564,7 @@ func TestTimeTotalMinutes(t *testing.T) {
 
 func TestTimeTotalSeconds(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-seconds", timeTT(t, r).NewClkDuration(90*time.Second)))
+	result := runAQL(t, r, callTimeDot("total-seconds", timeTT(t, r).NewClockDuration(90*time.Second)))
 	v, _ := native.AsNumber(result[0])
 	if v != 90.0 {
 		t.Errorf("total-seconds(90s) = %v, want 90", v)
@@ -573,7 +573,7 @@ func TestTimeTotalSeconds(t *testing.T) {
 
 func TestTimeTotalMs(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-ms", timeTT(t, r).NewClkDuration(2*time.Second+500*time.Millisecond)))
+	result := runAQL(t, r, callTimeDot("total-ms", timeTT(t, r).NewClockDuration(2*time.Second+500*time.Millisecond)))
 	v, _ := native.AsNumber(result[0])
 	if v != 2500.0 {
 		t.Errorf("total-ms(2.5s) = %v, want 2500", v)
@@ -582,7 +582,7 @@ func TestTimeTotalMs(t *testing.T) {
 
 func TestTimeDurYearsExtract(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-years", timeTT(t, r).NewCalDuration(1, 6, 15)))
+	result := runAQL(t, r, callTimeDot("dur-years", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
 	v, _ := native.AsInteger(result[0])
 	if v != 1 {
 		t.Errorf("dur-years = %d, want 1", v)
@@ -591,7 +591,7 @@ func TestTimeDurYearsExtract(t *testing.T) {
 
 func TestTimeDurMonthsExtract(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-months", timeTT(t, r).NewCalDuration(1, 6, 15)))
+	result := runAQL(t, r, callTimeDot("dur-months", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
 	v, _ := native.AsInteger(result[0])
 	if v != 6 {
 		t.Errorf("dur-months = %d, want 6", v)
@@ -600,7 +600,7 @@ func TestTimeDurMonthsExtract(t *testing.T) {
 
 func TestTimeDurDaysExtract(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-days", timeTT(t, r).NewCalDuration(1, 6, 15)))
+	result := runAQL(t, r, callTimeDot("dur-days", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
 	v, _ := native.AsInteger(result[0])
 	if v != 15 {
 		t.Errorf("dur-days = %d, want 15", v)
@@ -609,17 +609,17 @@ func TestTimeDurDaysExtract(t *testing.T) {
 
 func TestTimeDurSign(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalDuration(1, 0, 0)))
+	result := runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(1, 0, 0)))
 	v, _ := native.AsInteger(result[0])
 	if v != 1 {
 		t.Errorf("dur-sign(+) = %d, want 1", v)
 	}
-	result = runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalDuration(-1, 0, 0)))
+	result = runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(-1, 0, 0)))
 	v, _ = native.AsInteger(result[0])
 	if v != -1 {
 		t.Errorf("dur-sign(-) = %d, want -1", v)
 	}
-	result = runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalDuration(0, 0, 0)))
+	result = runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(0, 0, 0)))
 	v, _ = native.AsInteger(result[0])
 	if v != 0 {
 		t.Errorf("dur-sign(0) = %d, want 0", v)
@@ -633,7 +633,7 @@ func TestTimeUntil(t *testing.T) {
 	d1 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("until", d1, d2))
-	cd, ok := native.AsCalDuration(result[0])
+	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 2 || cd.Days != 14 {
 		t.Errorf("until = %+v, want {0 2 14}", cd)
 	}
@@ -644,7 +644,7 @@ func TestTimeSince(t *testing.T) {
 	d1 := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("since", d1, d2))
-	cd, ok := native.AsCalDuration(result[0])
+	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 2 || cd.Days != 14 {
 		t.Errorf("since = %+v, want {0 2 14}", cd)
 	}
@@ -655,7 +655,7 @@ func TestTimeDiffInstants(t *testing.T) {
 	i1 := native.NewInstant(time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC))
 	i2 := native.NewInstant(time.Date(2024, 1, 1, 12, 30, 0, 0, time.UTC))
 	result := runAQL(t, r, callTimeDot("diff", i1, i2))
-	d, ok := native.AsClkDuration(result[0])
+	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 2*time.Hour+30*time.Minute {
 		t.Errorf("diff = %v, want 2h30m", d)
 	}
@@ -860,12 +860,12 @@ func TestTimeTzOffset(t *testing.T) {
 // the bare words dispatch them exactly as they did when they sat on
 // the core signatures.
 
-func TestAddDateCalDuration(t *testing.T) {
+func TestAddDateCalendarDuration(t *testing.T) {
 	r := timeRegistry(t)
 	e := native.New(r)
-	// "2024-01-31" date add 1 months → need date + CalDuration on stack
+	// "2024-01-31" date add 1 months → need date + CalendarDuration on stack
 	d := native.NewDate(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC))
-	cd := timeTT(t, r).NewCalDuration(0, 1, 0)
+	cd := timeTT(t, r).NewCalendarDuration(0, 1, 0)
 	result, err := e.Run([]native.Value{cd, d, native.NewWord("add")})
 	if err != nil {
 		t.Fatalf("add: %v", err)
@@ -878,11 +878,11 @@ func TestAddDateCalDuration(t *testing.T) {
 	}
 }
 
-func TestSubDateCalDuration(t *testing.T) {
+func TestSubDateCalendarDuration(t *testing.T) {
 	r := timeRegistry(t)
 	e := native.New(r)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	cd := timeTT(t, r).NewCalDuration(0, 1, 0)
+	cd := timeTT(t, r).NewCalendarDuration(0, 1, 0)
 	result, err := e.Run([]native.Value{cd, d, native.NewWord("sub")})
 	if err != nil {
 		t.Fatalf("sub: %v", err)
@@ -894,11 +894,11 @@ func TestSubDateCalDuration(t *testing.T) {
 	}
 }
 
-func TestAddInstantClkDuration(t *testing.T) {
+func TestAddInstantClockDuration(t *testing.T) {
 	r := timeRegistry(t)
 	e := native.New(r)
 	ins := native.NewInstant(time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC))
-	dur := timeTT(t, r).NewClkDuration(30 * time.Minute)
+	dur := timeTT(t, r).NewClockDuration(30 * time.Minute)
 	result, err := e.Run([]native.Value{dur, ins, native.NewWord("add")})
 	if err != nil {
 		t.Fatalf("add: %v", err)

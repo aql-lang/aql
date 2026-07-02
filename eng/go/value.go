@@ -2766,8 +2766,8 @@ func kernelFormatDefault(v Value) string {
 			return "true"
 		}
 		return "false"
-	// Domain types (Instant, DateTime, Date, TimeOfDay, CalDuration,
-	// ClkDuration, Timezone, Matrix, Timeout, Interval) now render
+	// Domain types (Instant, DateTime, Date, TimeOfDay, CalendarDuration,
+	// ClockDuration, Timezone, Matrix, Timeout, Interval) now render
 	// via their per-Type Behavior installed by
 	// coretype_format_behaviors.go and dispatched at the top of this
 	// function. Their old switch arms have been removed.

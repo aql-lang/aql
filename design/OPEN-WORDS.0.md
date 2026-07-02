@@ -4,10 +4,13 @@ Status: **IMPLEMENTED (rev 1 model)**. Landed as described in §2, with
 the open questions resolved to their leans; see "Implementation notes"
 at the end for the decisions, the mechanism as built, and where each
 piece lives. Pinned by `lang/spec/open-words.tsv` and
-`lang/go/test/reserved_words_test.go`. The §6 migrations (temporal
-add/sub, MatrixUtil) are NOT done — the mechanism is in, the moves are
-follow-up work. Discussion artifact per the ADR rule (design notes
-capture discovery; no ADR entry without explicit maintainer
+`lang/go/test/reserved_words_test.go`. §6 migration 1 is DONE — the
+temporal add/sub overloads (and the duration/timezone/time-of-day
+TYPES, renamed CalendarDuration / ClockDuration) moved to
+aql:time-util via the transplant path; the MatrixUtil migration
+remains follow-up work (host-registration route — see the
+Implementation notes). Discussion artifact per the ADR rule (design
+notes capture discovery; no ADR entry without explicit maintainer
 instruction).
 
 Rev 1 replaces rev 0's dedicated `extend`/`overload` word with plain
@@ -43,7 +46,7 @@ temporal ones). Nothing at the AQL level can:
   `mat-` prefix is the workaround made visible.
 - `design/BEHAVIORS.10.md` §"Single dispatch on the LCA" already
   concedes the gap, naming this exact example: cross-type addition
-  (Date + CalDuration) "would need either a multimethod-style
+  (Date + CalendarDuration) "would need either a multimethod-style
   extension or the user attaching the impl to the LCA themselves."
 
 The temporal overloads on core `add`/`sub` live in `native_math.go`
@@ -447,7 +450,7 @@ which are versioned with the dependency that owns them.
 Consequence for the §6 migrations: a migration qualifies for the
 transplant path exactly when the module also takes ownership of the
 TYPES. Migration 1 is DONE this way: TimeOfDay / Duration /
-CalDuration / ClkDuration / Timezone moved out of the global builtin
+CalendarDuration / ClockDuration / Timezone moved out of the global builtin
 table (former FixedIDs 1004-1008) into aql:time-util as per-import
 mints (`MintTemporalModuleTypes`, the StreamKind pattern), and the
 temporal add/sub overloads ride the module's exported word-extension

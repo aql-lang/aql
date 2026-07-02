@@ -34,7 +34,7 @@ func nodeFamily(t *Type) *Type {
 // ValuesEqual compares the data payloads of two values with the same type.
 //
 // Routes through Behavior.Equal for the same-Parent case so types
-// with normalisation semantics (CalDuration, DepScalar in a future
+// with normalisation semantics (CalendarDuration, DepScalar in a future
 // step, and plugin types) can supply their own equality. The
 // cross-Parent case falls through to the default switch since
 // equality across types is a matching-strategy concern, not a

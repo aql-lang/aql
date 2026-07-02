@@ -16,7 +16,7 @@ import (
 // TestBehave runs the behavior-dispatch spec at behave.tsv. Each row
 // exercises one of the kernel capabilities wired through `reg`:
 // kernel scalar Comparers / Formatters / Jsonifiers, lang-layer
-// native variants (Date, Instant, ClkDuration), and user-defined
+// native variants (Date, Instant, ClockDuration), and user-defined
 // behaviors installed via `reg compare/q | canon/q | jsonify/q`.
 //
 // The native rows use the `aql:time` module, so the runner wires

@@ -40,28 +40,28 @@ func init() {
 		"add-years":  "Shift a Date by n years.",
 
 		// duration constructors — calendar
-		"years":   "n years as a CalDuration.",
-		"months":  "n months as a CalDuration.",
+		"years":   "n years as a CalendarDuration.",
+		"months":  "n months as a CalendarDuration.",
 		"weeks":   "n weeks as a duration (in days).",
 		"days":    "n days as a duration.",
-		"cal-dur": "Years/months/days to a CalDuration.",
+		"cal-dur": "Years/months/days to a CalendarDuration.",
 
 		// duration constructors — clock
-		"hours":   "n hours as a ClkDuration.",
-		"minutes": "n minutes as a ClkDuration.",
-		"seconds": "n seconds as a ClkDuration.",
-		"ms":      "n milliseconds as a ClkDuration.",
-		"us":      "n microseconds as a ClkDuration.",
-		"ns":      "n nanoseconds as a ClkDuration.",
+		"hours":   "n hours as a ClockDuration.",
+		"minutes": "n minutes as a ClockDuration.",
+		"seconds": "n seconds as a ClockDuration.",
+		"ms":      "n milliseconds as a ClockDuration.",
+		"us":      "n microseconds as a ClockDuration.",
+		"ns":      "n nanoseconds as a ClockDuration.",
 
 		// duration extraction
-		"total-hours":   "ClkDuration as total hours (Float).",
-		"total-minutes": "ClkDuration as total minutes (Float).",
-		"total-seconds": "ClkDuration as total seconds (Float).",
-		"total-ms":      "ClkDuration as total milliseconds.",
-		"dur-years":     "Years field of a CalDuration.",
-		"dur-months":    "Months field of a CalDuration.",
-		"dur-days":      "Days field of a CalDuration.",
+		"total-hours":   "ClockDuration as total hours (Float).",
+		"total-minutes": "ClockDuration as total minutes (Float).",
+		"total-seconds": "ClockDuration as total seconds (Float).",
+		"total-ms":      "ClockDuration as total milliseconds.",
+		"dur-years":     "Years field of a CalendarDuration.",
+		"dur-months":    "Months field of a CalendarDuration.",
+		"dur-days":      "Days field of a CalendarDuration.",
 		"dur-sign":      "Sign (-1/0/1) of a duration.",
 
 		// differences
@@ -84,8 +84,8 @@ func init() {
 		"end-of":   "Last instant of the given unit of a Date.",
 
 		// arithmetic word extensions (transplanted onto core add/sub at import)
-		"add": "Date/DateTime/Instant plus a CalDuration/ClkDuration (word extension of core add).",
-		"sub": "Date/DateTime/Instant minus a CalDuration/ClkDuration (word extension of core sub).",
+		"add": "Date/DateTime/Instant plus a CalendarDuration/ClockDuration (word extension of core add).",
+		"sub": "Date/DateTime/Instant minus a CalendarDuration/ClockDuration (word extension of core sub).",
 
 		// conversions
 		"to-date":        "Date part of a DateTime/Instant.",

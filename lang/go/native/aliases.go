@@ -117,7 +117,7 @@ var (
 	TAny            = eng.TAny
 	TAtom           = eng.TAtom
 	TBoolean        = eng.TBoolean
-	// TCalDuration / TClkDuration / TDate / TDateTime / TDuration
+	// TCalendarDuration / TClockDuration / TDate / TDateTime / TDuration
 	// moved to lang/go/engine/native_temporal.go (Step 8) — declared
 	// directly in this package, no eng alias needed.
 	TFloat      = eng.TFloat
@@ -439,7 +439,7 @@ var (
 	AtomReferent              = eng.AtomReferent
 	SetAtomReferent           = eng.SetAtomReferent
 	NewBoolean                = eng.NewBoolean
-	// NewCalDuration moved to lang/go/engine/native_temporal.go (Step 8).
+	// NewCalendarDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = eng.NewCarrier
 	NewElementCarrier        = eng.NewElementCarrier
 	ElementCarrierFromValue  = eng.ElementCarrierFromValue
@@ -447,7 +447,7 @@ var (
 	NewCarrierTypedListValue = eng.NewCarrierTypedListValue
 	NewDynamicCarrier        = eng.NewDynamicCarrier
 	NewDynamicCarrierValue   = eng.NewDynamicCarrierValue
-	// NewClkDuration moved to lang/go/engine/native_temporal.go (Step 8).
+	// NewClockDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
 	NewFloat       = eng.NewFloat
 	NewDefCleanup  = eng.NewDefCleanup

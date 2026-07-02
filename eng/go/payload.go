@@ -227,7 +227,7 @@ type TimePayload struct {
 }
 
 // DurationPayload carries a time.Duration for TimeOfDay /
-// ClkDuration; same Parent-discriminator pattern as TimePayload.
+// ClockDuration; same Parent-discriminator pattern as TimePayload.
 type DurationPayload struct {
 	D any /* time.Duration */
 }

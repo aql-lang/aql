@@ -39,12 +39,12 @@ type TypeBehavior interface {
 	// Format renders v as a string. The canonical default
 	// delegates to Value.String (which uses the kernel's
 	// existing switch). Domain types override to produce a
-	// type-specific rendering (e.g. CalDuration → "P1Y2M3D").
+	// type-specific rendering (e.g. CalendarDuration → "P1Y2M3D").
 	Format(v Value) string
 
 	// Equal reports semantic equality. The canonical default is
 	// the existing ValuesEqual deep-compare. Types with
-	// normalisation semantics (CalDuration, DepScalar) override
+	// normalisation semantics (CalendarDuration, DepScalar) override
 	// to do their type-specific compare.
 	Equal(a, b Value) bool
 }

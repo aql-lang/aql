@@ -13,8 +13,8 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
-	// The module-owned temporal types (TimeOfDay, Duration, CalDuration,
-	// ClkDuration, Timezone) escape to the importer — as exported type
+	// The module-owned temporal types (TimeOfDay, Duration, CalendarDuration,
+	// ClockDuration, Timezone) escape to the importer — as exported type
 	// literals, as the Parent tag on every duration/timezone value the
 	// words produce, and inside the add/sub word-extension signatures —
 	// so they must draw IDs from the importing tree's counter (see eng
@@ -78,30 +78,30 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Duration construction
 	for _, name := range []string{"years", "months", "weeks", "days"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TInteger}}, []*native.Type{tt.CalDuration}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TInteger}}, []*native.Type{tt.CalendarDuration}, subReg))
 	}
 	for _, name := range []string{"hours", "minutes", "seconds", "ms", "us", "ns"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TNumber}}, []*native.Type{tt.ClkDuration}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TNumber}}, []*native.Type{tt.ClockDuration}, subReg))
 	}
-	exports.Set("cal-dur", makeTimeFnDef("cal-dur", []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TInteger}}, []*native.Type{tt.CalDuration}, subReg))
+	exports.Set("cal-dur", makeTimeFnDef("cal-dur", []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TInteger}}, []*native.Type{tt.CalendarDuration}, subReg))
 	// ISO 8601 duration string parsing (`"P1Y2M3D" duration`)
 	// removed as a feature. Use cal-dur or the years/months/days
 	// constructors directly.
 
 	// Duration extraction
 	for _, name := range []string{"total-hours", "total-minutes", "total-seconds", "total-ms"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: tt.ClkDuration}}, []*native.Type{native.TFloat}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: tt.ClockDuration}}, []*native.Type{native.TFloat}, subReg))
 	}
 	for _, name := range []string{"dur-years", "dur-months", "dur-days"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: tt.CalDuration}}, []*native.Type{native.TInteger}, subReg))
+		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: tt.CalendarDuration}}, []*native.Type{native.TInteger}, subReg))
 	}
-	exports.Set("dur-sign", makeTimeFnDef("dur-sign", []native.FnParam{{Type: tt.CalDuration}}, []*native.Type{native.TInteger}, subReg))
+	exports.Set("dur-sign", makeTimeFnDef("dur-sign", []native.FnParam{{Type: tt.CalendarDuration}}, []*native.Type{native.TInteger}, subReg))
 
 	// Arithmetic
-	exports.Set("until", makeTimeFnDef("until", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{tt.CalDuration}, subReg))
-	exports.Set("since", makeTimeFnDef("since", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{tt.CalDuration}, subReg))
-	exports.Set("diff", makeTimeFnDef("diff", []native.FnParam{{Type: native.TInstant}, {Type: native.TInstant}}, []*native.Type{tt.ClkDuration}, subReg))
-	exports.Set("elapsed", makeTimeFnDef("elapsed", []native.FnParam{{Type: native.TInstant}}, []*native.Type{tt.ClkDuration}, subReg))
+	exports.Set("until", makeTimeFnDef("until", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{tt.CalendarDuration}, subReg))
+	exports.Set("since", makeTimeFnDef("since", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{tt.CalendarDuration}, subReg))
+	exports.Set("diff", makeTimeFnDef("diff", []native.FnParam{{Type: native.TInstant}, {Type: native.TInstant}}, []*native.Type{tt.ClockDuration}, subReg))
+	exports.Set("elapsed", makeTimeFnDef("elapsed", []native.FnParam{{Type: native.TInstant}}, []*native.Type{tt.ClockDuration}, subReg))
 
 	// Comparison extended
 	exports.Set("compare", makeTimeFnDef("time-compare", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TInteger}, subReg))
@@ -139,12 +139,12 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 
 	// The module-owned temporal types, exported as type literals so the
-	// importer can reference them — `x is TimeUtil.CalDuration`,
-	// `def d:(TimeUtil.ClkDuration) …` — mirroring IO.StreamKind.
+	// importer can reference them — `x is TimeUtil.CalendarDuration`,
+	// `def d:(TimeUtil.ClockDuration) …` — mirroring IO.StreamKind.
 	exports.Set("TimeOfDay", native.NewTypeLiteral(tt.TimeOfDay))
 	exports.Set("Duration", native.NewTypeLiteral(tt.Duration))
-	exports.Set("CalDuration", native.NewTypeLiteral(tt.CalDuration))
-	exports.Set("ClkDuration", native.NewTypeLiteral(tt.ClkDuration))
+	exports.Set("CalendarDuration", native.NewTypeLiteral(tt.CalendarDuration))
+	exports.Set("ClockDuration", native.NewTypeLiteral(tt.ClockDuration))
 	exports.Set("Timezone", native.NewTypeLiteral(tt.Timezone))
 
 	// The temporal add / sub overloads, exported as WORD EXTENSIONS
@@ -192,8 +192,8 @@ func extractTime(v native.Value) time.Time {
 	return time.Time{}
 }
 
-// dateDiffCalDuration computes the CalDuration between two dates (from → to).
-func dateDiffCalDuration(from, to time.Time) native.CalDurationData {
+// dateDiffCalendarDuration computes the CalendarDuration between two dates (from → to).
+func dateDiffCalendarDuration(from, to time.Time) native.CalDurationData {
 	years := to.Year() - from.Year()
 	months := int(to.Month()) - int(from.Month())
 	days := to.Day() - from.Day()
@@ -251,9 +251,9 @@ func dateToStringNative(name string, fn func(time.Time) string) native.NativeFun
 	}
 }
 
-// intToCalDurationNative builds a NativeFunc with [TInteger] -> [TCalDuration]
+// intToCalendarDurationNative builds a NativeFunc with [TInteger] -> [TCalendarDuration]
 // where the handler turns the integer into a CalDurationData via fn.
-func intToCalDurationNative(tt native.TemporalModuleTypes, name string, fn func(int) (int, int, int)) native.NativeFunc {
+func intToCalendarDurationNative(tt native.TemporalModuleTypes, name string, fn func(int) (int, int, int)) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
@@ -265,16 +265,16 @@ func intToCalDurationNative(tt native.TemporalModuleTypes, name string, fn func(
 					return nil, err
 				}
 				y, m, d := fn(int(n))
-				return []native.Value{tt.NewCalDuration(y, m, d)}, nil
+				return []native.Value{tt.NewCalendarDuration(y, m, d)}, nil
 			}),
-			Returns: []*native.Type{tt.CalDuration}, BarrierPos: -1,
+			Returns: []*native.Type{tt.CalendarDuration}, BarrierPos: -1,
 		}},
 	}
 }
 
-// numToClkDurationNative builds a NativeFunc with [TNumber] -> [TClkDuration]
+// numToClockDurationNative builds a NativeFunc with [TNumber] -> [TClockDuration]
 // where the handler scales the numeric input by `unit`.
-func numToClkDurationNative(tt native.TemporalModuleTypes, name string, unit time.Duration) native.NativeFunc {
+func numToClockDurationNative(tt native.TemporalModuleTypes, name string, unit time.Duration) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
@@ -285,15 +285,15 @@ func numToClkDurationNative(tt native.TemporalModuleTypes, name string, unit tim
 				if err != nil {
 					return nil, err
 				}
-				return []native.Value{tt.NewClkDuration(time.Duration(n * float64(unit)))}, nil
+				return []native.Value{tt.NewClockDuration(time.Duration(n * float64(unit)))}, nil
 			}),
-			Returns: []*native.Type{tt.ClkDuration}, BarrierPos: -1,
+			Returns: []*native.Type{tt.ClockDuration}, BarrierPos: -1,
 		}},
 	}
 }
 
 // clkDurationToFloatNative builds a NativeFunc with
-// [TClkDuration] -> [TFloat] for a total-* extraction. `returnType`
+// [TClockDuration] -> [TFloat] for a total-* extraction. `returnType`
 // is exposed because total-ms historically declared TInteger even
 // though the value pushed is Float.
 func clkDurationToFloatNative(tt native.TemporalModuleTypes, name string, returnType *native.Type, fn func(time.Duration) float64) native.NativeFunc {
@@ -301,9 +301,9 @@ func clkDurationToFloatNative(tt native.TemporalModuleTypes, name string, return
 		Name: name,
 
 		Signatures: []native.Signature{{
-			Args: []*native.Type{tt.ClkDuration},
+			Args: []*native.Type{tt.ClockDuration},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				d, _ := native.AsClkDuration(args[0])
+				d, _ := native.AsClockDuration(args[0])
 				return []native.Value{native.NewFloat(fn(d))}, nil
 			}),
 			Returns: []*native.Type{returnType}, BarrierPos: -1,
@@ -312,15 +312,15 @@ func clkDurationToFloatNative(tt native.TemporalModuleTypes, name string, return
 }
 
 // calDurationToIntNative builds a NativeFunc with
-// [TCalDuration] -> [TInteger] for dur-years/dur-months/dur-days.
+// [TCalendarDuration] -> [TInteger] for dur-years/dur-months/dur-days.
 func calDurationToIntNative(tt native.TemporalModuleTypes, name string, fn func(native.CalDurationData) int64) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
 		Signatures: []native.Signature{{
-			Args: []*native.Type{tt.CalDuration},
+			Args: []*native.Type{tt.CalendarDuration},
 			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				cd, _ := native.AsCalDuration(args[0])
+				cd, _ := native.AsCalendarDuration(args[0])
 				return []native.Value{native.NewInteger(fn(cd))}, nil
 			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
@@ -611,18 +611,18 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 		addDateNative("add-days", func(n int) (int, int, int) { return 0, 0, n }),
 		addDateNative("add-months", func(n int) (int, int, int) { return 0, n, 0 }),
 		addDateNative("add-years", func(n int) (int, int, int) { return n, 0, 0 }),
-		// --- Duration construction (Integer -> CalDuration) ---
-		intToCalDurationNative(tt, "years", func(n int) (int, int, int) { return n, 0, 0 }),
-		intToCalDurationNative(tt, "months", func(n int) (int, int, int) { return 0, n, 0 }),
-		intToCalDurationNative(tt, "weeks", func(n int) (int, int, int) { return 0, 0, n * 7 }),
-		intToCalDurationNative(tt, "days", func(n int) (int, int, int) { return 0, 0, n }),
-		// --- Duration construction (Number -> ClkDuration) ---
-		numToClkDurationNative(tt, "hours", time.Hour),
-		numToClkDurationNative(tt, "minutes", time.Minute),
-		numToClkDurationNative(tt, "seconds", time.Second),
-		numToClkDurationNative(tt, "ms", time.Millisecond),
-		numToClkDurationNative(tt, "us", time.Microsecond),
-		numToClkDurationNative(tt, "ns", time.Nanosecond),
+		// --- Duration construction (Integer -> CalendarDuration) ---
+		intToCalendarDurationNative(tt, "years", func(n int) (int, int, int) { return n, 0, 0 }),
+		intToCalendarDurationNative(tt, "months", func(n int) (int, int, int) { return 0, n, 0 }),
+		intToCalendarDurationNative(tt, "weeks", func(n int) (int, int, int) { return 0, 0, n * 7 }),
+		intToCalendarDurationNative(tt, "days", func(n int) (int, int, int) { return 0, 0, n }),
+		// --- Duration construction (Number -> ClockDuration) ---
+		numToClockDurationNative(tt, "hours", time.Hour),
+		numToClockDurationNative(tt, "minutes", time.Minute),
+		numToClockDurationNative(tt, "seconds", time.Second),
+		numToClockDurationNative(tt, "ms", time.Millisecond),
+		numToClockDurationNative(tt, "us", time.Microsecond),
+		numToClockDurationNative(tt, "ns", time.Nanosecond),
 		{
 			// cal-dur 1 6 15 → args[0]=15 (nearest), args[1]=6, args[2]=1 (deepest)
 			Name: "cal-dur",
@@ -642,9 +642,9 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					return []native.Value{tt.NewCalDuration(int(y), int(m), int(d))}, nil
+					return []native.Value{tt.NewCalendarDuration(int(y), int(m), int(d))}, nil
 				}),
-				Returns: []*native.Type{tt.CalDuration}, BarrierPos: -1,
+				Returns: []*native.Type{tt.CalendarDuration}, BarrierPos: -1,
 			}},
 		},
 		// time-duration (ISO 8601 P1Y2M3D parser) removed as a feature.
@@ -656,7 +656,7 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 		calDurationToIntNative(tt, "dur-years", func(cd native.CalDurationData) int64 { return int64(cd.Years) }),
 		calDurationToIntNative(tt, "dur-months", func(cd native.CalDurationData) int64 { return int64(cd.Months) }),
 		calDurationToIntNative(tt, "dur-days", func(cd native.CalDurationData) int64 { return int64(cd.Days) }),
-		// dur-sign — two overloads (CalDuration and ClkDuration), both
+		// dur-sign — two overloads (CalendarDuration and ClockDuration), both
 		// return -1/0/1 integers. Historically two separate r.Register
 		// calls; here unified into one NativeFunc with two signatures.
 		{
@@ -664,9 +664,9 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 
 			Signatures: []native.Signature{
 				{
-					Args: []*native.Type{tt.CalDuration},
+					Args: []*native.Type{tt.CalendarDuration},
 					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-						cd, _ := native.AsCalDuration(args[0])
+						cd, _ := native.AsCalendarDuration(args[0])
 						total := cd.Years*365 + cd.Months*30 + cd.Days
 						switch {
 						case total < 0:
@@ -680,9 +680,9 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 				{
-					Args: []*native.Type{tt.ClkDuration},
+					Args: []*native.Type{tt.ClockDuration},
 					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-						d, _ := native.AsClkDuration(args[0])
+						d, _ := native.AsClockDuration(args[0])
 						switch {
 						case d < 0:
 							return []native.Value{native.NewInteger(-1)}, nil
@@ -706,10 +706,10 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					from := extractTime(args[1])
 					to := extractTime(args[0])
-					cd := dateDiffCalDuration(from, to)
-					return []native.Value{tt.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
+					cd := dateDiffCalendarDuration(from, to)
+					return []native.Value{tt.NewCalendarDuration(cd.Years, cd.Months, cd.Days)}, nil
 				}),
-				Returns: []*native.Type{tt.CalDuration}, BarrierPos: -1,
+				Returns: []*native.Type{tt.CalendarDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -721,10 +721,10 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					from := extractTime(args[0])
 					to := extractTime(args[1])
-					cd := dateDiffCalDuration(from, to)
-					return []native.Value{tt.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
+					cd := dateDiffCalendarDuration(from, to)
+					return []native.Value{tt.NewCalendarDuration(cd.Years, cd.Months, cd.Days)}, nil
 				}),
-				Returns: []*native.Type{tt.CalDuration}, BarrierPos: -1,
+				Returns: []*native.Type{tt.CalendarDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -736,9 +736,9 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
-					return []native.Value{tt.NewClkDuration(t2.Sub(t1))}, nil
+					return []native.Value{tt.NewClockDuration(t2.Sub(t1))}, nil
 				}),
-				Returns: []*native.Type{tt.ClkDuration}, BarrierPos: -1,
+				Returns: []*native.Type{tt.ClockDuration}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -748,9 +748,9 @@ func timeNatives(tt native.TemporalModuleTypes) []native.NativeFunc {
 				Args: []*native.Type{native.TInstant},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					start := extractTime(args[0])
-					return []native.Value{tt.NewClkDuration(time.Since(start))}, nil
+					return []native.Value{tt.NewClockDuration(time.Since(start))}, nil
 				}),
-				Returns: []*native.Type{tt.ClkDuration}, BarrierPos: -1,
+				Returns: []*native.Type{tt.ClockDuration}, BarrierPos: -1,
 			}},
 		},
 		// --- Comparison extended ---
