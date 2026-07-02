@@ -25,3 +25,25 @@ import "aql:parse"  import "aql:parselang"  typeof Parse.RuleSpec	Map	Parse.Rule
 import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.abnf g '= = bad ='  Parse.register broke g	ERROR:parse_bad_grammar	a malformed ABNF grammar is a loud error at register, not a panic
 import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.action g 'noat' ([nd:Any] => [1])	ERROR:parse_bad_action	an action ref must start with '@' (a mark/phase selector)
 import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.abnf g 'x = "a"' {start:'x'}  Parse.register json g	ERROR:already registered	registering a name that collides with a built-in parse kind is refused
+#
+# §5  Parse.spec — the WHOLE grammar as one declarative map. Sections (all
+#     optional): token:{name:literal}, matcher:{name:{priority fn}},
+#     action:{'@ref': fn-or-list}, rule:{name:{open close}} (the Parse.rule
+#     shape), abnf: String | {src +opts} | [entry…]. Sections apply in
+#     dependency order (token, action, rule, abnf; matchers last at
+#     register), so the map form is equivalent to — and composes with — the
+#     chained builder words.
+import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {action:{'@op:o:INC': ([nd:Any] => [7])} abnf:{src:'op = "inc" / "dec"' start:'op'}}  Parse.register sp1 g  end  parse sp1 'inc'	7	the §1 grammar as ONE map — action + abnf sections
+import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {token:{'#PL':'+'} rule:{extra:{open:[{s:'#PL'}]}} action:{'@op:o:INC': ([nd:Any] => [5])} abnf:{src:'op = "inc"' start:'op'}}  Parse.register sp2 g  end  parse sp2 'inc'	5	the §2 grammar as one map — token, declarative rule, action and abnf sections coexist
+import "aql:parse"  import "aql:parselang"  def f1 ([nd:Any] => [3])  def f2 ([nd:Any] => [nd add 4])  def g Parse.grammar  Parse.spec g {action:{'@op:o:INC': [f1/r f2/r]} abnf:{src:'op = "inc"' start:'op'}}  Parse.register sp3 g  end  parse sp3 'inc'	7	an action LIST runs in order, each fn seeing the previous one's node (/r keeps the fns inert in the list)
+import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {abnf:[{src:'op = "inc" / "dec"' start:'op'}]}  Parse.action g '@op:o:INC' ([nd:Any] => [9])  Parse.register sp4 g  end  parse sp4 'inc'	9	the abnf section takes a LIST of entries, and the map form composes with the chained builder words
+import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {matcher:{skip:{priority:1000000 fn:([s:String] => [None])}} action:{'@op:o:INC': ([nd:Any] => [2])} abnf:{src:'op = "inc"' start:'op'}}  Parse.register sp5 g  end  parse sp5 'inc'	2	a declining custom matcher rides in the matcher section
+import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {token:{'#PL':'+'} rule:{extra:{open:[{s:'#PL' c:{dlist:0} u:{tag:'t'} k:{p:'q'} n:{x:1}}]}} action:{'@op:o:INC': ([nd:Any] => [1])} abnf:{src:'op = "inc"' start:'op'}}  Parse.register sp6 g  end  parse sp6 'inc'	1	the widened alternate fields — declarative condition c, custom props u/k, counters n — build and register cleanly
+# §5  negatives — each malformed section shape is a loud per-section error
+import "aql:parse"  def g Parse.grammar  Parse.spec g {bogus:{}}	ERROR:parse_bad_spec	an unknown section key is refused (sections: token, matcher, action, rule, abnf)
+import "aql:parse"  def g Parse.grammar  Parse.spec g {token:{'#PL':42}}	ERROR:parse_bad_token	a token literal must be a String
+import "aql:parse"  def g Parse.grammar  Parse.spec g {action:{noat: ([nd:Any] => [1])}}	ERROR:parse_bad_action	an action ref must start with '@' — same rule as Parse.action
+import "aql:parse"  def g Parse.grammar  Parse.spec g {matcher:{skip:{fn:([s:String] => [None])}}}	ERROR:parse_bad_matcher	a matcher entry needs an Integer priority
+import "aql:parse"  def g Parse.grammar  Parse.spec g {abnf:{start:'op'}}	ERROR:parse_bad_abnf	an abnf entry map must carry src
+import "aql:parse"  def g Parse.grammar  Parse.spec g {rule:{extra:'nope'}}	ERROR:parse_bad_rule	a rule entry must be a {open close} map
+import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {abnf:{src:'op = "inc"' start:'op'}}  Parse.register sp7 g  Parse.spec g {token:{'#X':'x'}}	ERROR:parse_grammar_done	a builder is single-use — Parse.spec obeys the same seal as the chained words

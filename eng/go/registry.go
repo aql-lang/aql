@@ -557,6 +557,15 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// A strict read (getr/dotr) whose miss is statically decidable — a
 	// known Micron kind with a concrete unknown key (native_micron.go).
 	"not_found": SeverityError,
+	// Parse.spec's check-mode dry pass (aql:parse): a concrete
+	// whole-grammar map with a decidable shape error — unknown section,
+	// mistyped token/action/matcher/abnf/rule entries.
+	"parse_bad_spec":    SeverityError,
+	"parse_bad_token":   SeverityError,
+	"parse_bad_action":  SeverityError,
+	"parse_bad_matcher": SeverityError,
+	"parse_bad_abnf":    SeverityError,
+	"parse_bad_rule":    SeverityError,
 	// Generics (design/GENERICS.10.md §9.2).
 	"constraint_violation": SeverityError,
 	"unbound_param":        SeverityError,

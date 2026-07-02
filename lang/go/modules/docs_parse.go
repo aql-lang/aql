@@ -19,6 +19,13 @@ func init() {
 		"action": "Attach a semantic action (a mark) backed by an AQL fn: `Parse.action <grammar> <ref> <fn>`. " +
 			"ref is @rule:phase (bo/ao/bc/ac) or @rule:o|c:MARK. The fn receives the rule's current node " +
 			"and returns its replacement — the bridge that lets a parser emit custom AQL data types.",
+		"spec": "Apply a WHOLE declarative grammar in one call: `Parse.spec <grammar> {sections}`. " +
+			"Sections (all optional): token:{name:literal}, matcher:{name:{priority fn}}, " +
+			"action:{'@ref': fn-or-list}, rule:{name:{open:[alt…] close:[alt…]}} (the Parse.rule " +
+			"shape — see Parse.RuleSpec/Parse.AltSpec), abnf: a String, a {src start tag builtins " +
+			"marks} map, or a list of either. Applies in dependency order (token, action, rule, " +
+			"abnf; matchers last) and defers to Parse.register, so it composes with the chained " +
+			"builder words. An unknown section is a loud parse_bad_spec.",
 		"register": "Finalize a builder and register it as a `parse <name>` kind: `Parse.register <name> <grammar>`. " +
 			"After import of aql:parselang, run it via the macro: `parse <name> '<source>'`.",
 	})
