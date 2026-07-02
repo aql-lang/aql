@@ -561,7 +561,6 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// whole-grammar map with a decidable shape error — unknown section,
 	// mistyped token/action/matcher/abnf/rule entries.
 	"parse_bad_spec":    SeverityError,
-	"parse_bad_token":   SeverityError,
 	"parse_bad_action":  SeverityError,
 	"parse_bad_matcher": SeverityError,
 	"parse_bad_abnf":    SeverityError,
