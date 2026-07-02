@@ -79,7 +79,7 @@ func TestTimeoutReturnType(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	if !result[0].Parent.Equal(TTimeout) {
+	if result[0].Parent.Name != "Timeout" {
 		t.Fatalf("expected Timeout, got %s", result[0].Parent)
 	}
 	ti, _ := result[0].Data.(*TimeoutInfo), true
@@ -111,7 +111,7 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].Parent.Equal(TTimeout) {
+	if len(result) != 1 || result[0].Parent.Name != "Timeout" {
 		t.Fatalf("expected Timeout result, got %v", result)
 	}
 
@@ -144,7 +144,7 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || !result[0].Parent.Equal(TTimeout) {
+	if len(result) != 1 || result[0].Parent.Name != "Timeout" {
 		t.Fatalf("expected Timeout result, got %v", result)
 	}
 
@@ -187,7 +187,7 @@ func TestIntervalReturnType(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	if !result[0].Parent.Equal(TInterval) {
+	if result[0].Parent.Name != "Interval" {
 		t.Fatalf("expected Interval, got %s", result[0].Parent)
 	}
 	ii, _ := result[0].Data.(*IntervalInfo), true
@@ -366,8 +366,12 @@ func TestCancelIdempotent(t *testing.T) {
 // =============================================================================
 
 func TestTimeoutString(t *testing.T) {
+	treg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	info := &TimeoutInfo{ID: "T_test12345678", Ms: 100}
-	v := NewTimeout(info)
+	v := MintTemporalModuleTypes(treg).NewTimeout(info)
 	s := v.String()
 	if s != "Timeout(T_test12345678,100ms)" {
 		t.Errorf("got %q", s)
@@ -375,8 +379,12 @@ func TestTimeoutString(t *testing.T) {
 }
 
 func TestIntervalString(t *testing.T) {
+	treg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	info := &IntervalInfo{ID: "T_test12345678", Ms: 50}
-	v := NewInterval(info)
+	v := MintTemporalModuleTypes(treg).NewInterval(info)
 	s := v.String()
 	if s != "Interval(T_test12345678,50ms)" {
 		t.Errorf("got %q", s)
@@ -398,7 +406,7 @@ func TestTimerTypeLiteralNoPanic(t *testing.T) {
 				}
 			}()
 			e := NewTop(reg)
-			_, _ = e.Run([]Value{NewTypeLiteral(TTimeout), NewWord(word)})
+			_, _ = e.Run([]Value{NewTypeLiteral(MintTemporalModuleTypes(reg).Timeout), NewWord(word)})
 		})
 	}
 }

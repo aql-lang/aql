@@ -473,6 +473,19 @@ future migration whose types must STAY global builtins would instead
 go through the host registration layer (Go-side `Register`, locked
 signatures) in the owning module's builder.
 
+The remaining module-owned globals followed (no word extensions
+needed — pure type moves): the Fetch family (3000-3002) →
+aql:net (`MintFetchTypes`, exported as Net.Fetch / Net.Request /
+Net.Response); Timeout / Interval (4000-4001) → aql:time-util
+(joined `MintTemporalModuleTypes`, exported as TimeUtil.Timeout /
+TimeUtil.Interval); and the three self-registered module carriers
+MiniLangCompiled (5003) / ParseGrammar (5005) / Model (5006) →
+per-import mints in their own builders. Still global by necessity:
+Bytes and Node/Xml (parser-produced), Date / DateTime / Instant
+(cross-module producers), Module / ModuleExport / KeyVal (core
+machinery), and Patrun (its words — including a locked overload on
+core add — are core vocabulary; moving it is a feature decision).
+
 Two properties the batteries pin
 (`lang/go/test/module_extend_test.go`, open-words.tsv §6–§7): file
 modules re-RUN per import (no module cache), so a re-imported module

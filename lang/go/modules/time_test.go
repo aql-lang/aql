@@ -440,7 +440,7 @@ func TestNowStandardWord(t *testing.T) {
 	}
 	// `now` moved to aql:time-util; register the time/async words bare to
 	// exercise the unchanged handler (production uses TimeUtil.now).
-	for _, n := range native.TimeAsyncModuleNatives {
+	for _, n := range native.TimeAsyncModuleNatives(native.MintTemporalModuleTypes(r)) {
 		r.RegisterNativeFunc(n)
 	}
 	e := native.New(r)

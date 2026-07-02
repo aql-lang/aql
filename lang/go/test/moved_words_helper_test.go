@@ -13,10 +13,10 @@ func seedAQL(a *lang.AQL) {
 	moved := [][]native.NativeFunc{
 		native.IOModuleNativeFuncs(native.NewStreamKind()),
 		native.StructModuleNatives,
-		native.NetModuleNatives,
+		native.NetModuleNatives(native.MintFetchTypes(a.NativeRegistry())),
 		native.BitwiseModuleNatives,
 		native.TPartialModuleNatives,
-		native.TimeAsyncModuleNatives,
+		native.TimeAsyncModuleNatives(native.MintTemporalModuleTypes(a.NativeRegistry())),
 		native.LogicModuleNatives,
 		native.StringModuleNatives,
 	}

@@ -427,10 +427,11 @@ Any
 │   ├── Surface                     -- user surfaces (operation contracts)
 │   ├── Record, Options, Error
 │   ├── Store, Table
-│   ├── Fetch (Request | Response)
-│   ├── Timeout, Interval
-│   └── (aql:matrix-util owns Tensor with Matrix | Vector —
-│        module-minted per import, e.g. MatrixUtil.Matrix)
+│   └── (module-minted per import — the owning module exports
+│        the literals: aql:net owns Fetch with Request | Response
+│        (Net.Response); aql:time-util owns Timeout and Interval
+│        (TimeUtil.Timeout); aql:matrix-util owns Tensor with
+│        Matrix | Vector (MatrixUtil.Matrix))
 ├── Word
 │   └── (internal control words)
 └── Type

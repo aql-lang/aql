@@ -24,14 +24,24 @@ func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
-	for _, n := range native.NetModuleNatives {
+	// Response values escape to the importer, so the Fetch-family mints
+	// draw IDs from the importing tree's counter.
+	subReg.Types.AdoptSeqFrom(parent.Types)
+	ft := native.MintFetchTypes(subReg)
+	netNatives := native.NetModuleNatives(ft)
+	for _, n := range netNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
 	exports := native.NewOrderedMap()
-	for _, n := range native.NetModuleNatives {
+	for _, n := range netNatives {
 		exports.Set(n.Name, makeModuleFnDef(n, subReg))
 	}
+	// The module-owned Fetch types, exported as type literals —
+	// `resp is Net.Response` — mirroring IO.StreamKind.
+	exports.Set("Fetch", native.NewTypeLiteral(ft.Fetch))
+	exports.Set("Request", native.NewTypeLiteral(ft.Request))
+	exports.Set("Response", native.NewTypeLiteral(ft.Response))
 
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{

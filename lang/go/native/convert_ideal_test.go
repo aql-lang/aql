@@ -130,8 +130,14 @@ func TestConvertIdealMoreBuiltins(t *testing.T) {
 		t.Errorf("Table→Map = %s", got)
 	}
 
-	// Timeout → {id ms} / [id ms].
-	to := Value{Parent: TTimeout, Data: &TimeoutInfo{ID: "t1", Ms: 500}}
+	// Timeout → {id ms} / [id ms]. The timer types are per-import
+	// module mints now; mint a set for the constructed test value.
+	treg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmt := MintTemporalModuleTypes(treg)
+	to := Value{Parent: tmt.Timeout, Data: &TimeoutInfo{ID: "t1", Ms: 500}}
 	if got := runConvert(t, to, "convert Map thing"); got != "{id:'t1' ms:500}" {
 		t.Errorf("Timeout→Map = %s", got)
 	}
@@ -142,7 +148,7 @@ func TestConvertIdealMoreBuiltins(t *testing.T) {
 	// Fetch Response (map-backed) → its map.
 	resp := NewOrderedMap()
 	resp.Set("status", NewInteger(200))
-	fr := Value{Parent: TFetchResponse, Data: MapPayload{M: resp}}
+	fr := Value{Parent: MintFetchTypes(treg).Response, Data: MapPayload{M: resp}}
 	if got := runConvert(t, fr, "convert Map thing"); got != "{status:200}" {
 		t.Errorf("Fetch→Map = %s", got)
 	}

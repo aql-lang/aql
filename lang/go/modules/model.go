@@ -51,23 +51,11 @@ import (
 //	watch   Map       {mod,add,rem} filesystem events that trigger a rebuild
 //	actions Map        name -> Function, or name -> {run:Function, step:'pre'|'post'|'all'}
 
-// TModel is Ideal/Model — the inert carrier wrapping a *modelHandle (the
-// assembled model Build/Watch plus the registry used to run its AQL-function
-// actions) in an ExtensionPayload the kernel never inspects. FixedID 5006 —
-// next free in the 5000–9999 kernel/language band (Module 5000, ModuleExport
-// 5001, KeyVal 5002, MiniLangCompiled 5003, Patrun 5004, ParseGrammar 5005).
-// See eng/go/CLAUDE.md "FixedID Allocation" and test/fixedid_stability_test.go.
-var TModel = registerModelType()
-
-var modelTypeInitErr error
-
-func registerModelType() *native.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Model", 5006, nil)
-	if err != nil {
-		modelTypeInitErr = fmt.Errorf("model: register Ideal/Model: %w", err)
-	}
-	return t
-}
+// The Model carrier type — the inert wrapper around a *modelHandle in
+// an ExtensionPayload the kernel never inspects — is a per-import
+// module mint (former global FixedID 5006, retired): BuildModelModule
+// mints it into the sub-registry and threads it to the constructor.
+// See MintTemporalModuleTypes / MintTensorTypes for the pattern.
 
 // inlineSeq names inline-source scratch directories uniquely (within the
 // active FileOps — disk for the OS backend, memory for a test backend).
@@ -97,13 +85,14 @@ type modelHandle struct {
 
 // BuildModelModule creates the "aql:model" native module.
 func BuildModelModule(parent *native.Registry) (native.ModuleDesc, error) {
-	if modelTypeInitErr != nil {
-		return native.ModuleDesc{}, modelTypeInitErr
-	}
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
+	// Model handles escape to the importer, so the mint draws its ID
+	// from the importing tree's counter.
+	subReg.Types.AdoptSeqFrom(parent.Types)
+	tModel := subReg.Types.MintType("Model", native.TIdeal)
 	exports := native.NewOrderedMap()
 
 	// Model.new <spec:Map> -> Model
@@ -111,29 +100,29 @@ func BuildModelModule(parent *native.Registry) (native.ModuleDesc, error) {
 		Name: "model-new",
 		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TMap},
-			Returns:    []*native.Type{TModel},
+			Returns:    []*native.Type{tModel},
 			BarrierPos: -1,
-			Impl:       native.Go(modelNewHandler),
+			Impl:       native.Go(modelNewHandlerFor(tModel)),
 		}},
 	})
 	exports.Set("new", wrapMiniFnDef("model-new", [][]native.FnParam{{{Type: native.TMap}}},
-		[]*native.Type{TModel}, nil, subReg))
+		[]*native.Type{tModel}, nil, subReg))
 
-	registerModelWord(subReg, exports, "run", modelRunHandler)
-	registerModelWord(subReg, exports, "start", modelStartHandler)
-	registerModelWord(subReg, exports, "model", modelModelHandler)
+	registerModelWord(tModel, subReg, exports, "run", modelRunHandler)
+	registerModelWord(tModel, subReg, exports, "start", modelStartHandler)
+	registerModelWord(tModel, subReg, exports, "model", modelModelHandler)
 
 	// Model.stop <Model> -> (nothing)
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "model-stop",
 		Signatures: []native.Signature{{
-			Args:       []*native.Type{TModel},
+			Args:       []*native.Type{tModel},
 			Returns:    []*native.Type{},
 			BarrierPos: -1,
 			Impl:       native.Go(modelStopHandler),
 		}},
 	})
-	exports.Set("stop", wrapMiniFnDef("model-stop", [][]native.FnParam{{{Type: TModel}}},
+	exports.Set("stop", wrapMiniFnDef("model-stop", [][]native.FnParam{{{Type: tModel}}},
 		[]*native.Type{}, nil, subReg))
 
 	return native.ModuleDesc{
@@ -144,18 +133,18 @@ func BuildModelModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 // registerModelWord registers a [Model] -> [Map] word under both the inner
 // sub-registry and the export map.
-func registerModelWord(subReg *native.Registry, exports *native.OrderedMap, name string, h native.Handler) {
+func registerModelWord(tModel *native.Type, subReg *native.Registry, exports *native.OrderedMap, name string, h native.Handler) {
 	inner := "model-" + name
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: inner,
 		Signatures: []native.Signature{{
-			Args:       []*native.Type{TModel},
+			Args:       []*native.Type{tModel},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
 			Impl:       native.Go(h),
 		}},
 	})
-	exports.Set(name, wrapMiniFnDef(inner, [][]native.FnParam{{{Type: TModel}}},
+	exports.Set(name, wrapMiniFnDef(inner, [][]native.FnParam{{{Type: tModel}}},
 		[]*native.Type{native.TMap}, nil, subReg))
 }
 
@@ -184,59 +173,61 @@ type parsedSpec struct {
 
 // modelNewHandler decodes the spec Map, wires a FileOps-backed model.FS, and
 // assembles the model Build/Watch.
-func modelNewHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	if !native.IsConcrete(args[0]) {
-		return nil, r.AqlError("model_bad_spec", "new: spec must be a concrete Map", "new")
-	}
-	specMap, merr := native.AsMap(args[0])
-	if merr != nil {
-		return nil, r.AqlError("model_bad_spec", "new: spec must be a Map", "new")
-	}
-
-	h := &modelHandle{reg: r, actionReg: r}
-	ps, err := parseSpec(specMap, h, r)
-	if err != nil {
-		return nil, err
-	}
-
-	// Every file operation goes through the active aql:io FileOps so a test
-	// can run the model on an in-memory FS (capabilities.NewMem).
-	fs := &fileOpsFS{ops: native.EffectiveFileOps(r), dry: ps.dryrun, mem: map[string][]byte{}}
-
-	path, base := ps.path, ps.base
-	if ps.hasInline {
-		base = filepath.Join(os.TempDir(), fmt.Sprintf("aql-model-%d-%d", os.Getpid(), inlineSeq.Add(1)))
-		path = filepath.Join(base, "model.jsonic")
-		if mkErr := fs.MkdirAll(base, 0o755); mkErr != nil {
-			return nil, r.AqlError("model_io", "new: inline base dir: "+mkErr.Error(), "new")
+func modelNewHandlerFor(tModel *native.Type) native.Handler {
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+		if !native.IsConcrete(args[0]) {
+			return nil, r.AqlError("model_bad_spec", "new: spec must be a concrete Map", "new")
 		}
-		if wErr := fs.WriteFile(path, []byte(ps.inlineSrc), 0o600); wErr != nil {
-			return nil, r.AqlError("model_io", "new: write inline source: "+wErr.Error(), "new")
+		specMap, merr := native.AsMap(args[0])
+		if merr != nil {
+			return nil, r.AqlError("model_bad_spec", "new: spec must be a Map", "new")
 		}
-	} else if base == "" {
-		base = filepath.Dir(path)
+
+		h := &modelHandle{reg: r, actionReg: r}
+		ps, err := parseSpec(specMap, h, r)
+		if err != nil {
+			return nil, err
+		}
+
+		// Every file operation goes through the active aql:io FileOps so a test
+		// can run the model on an in-memory FS (capabilities.NewMem).
+		fs := &fileOpsFS{ops: native.EffectiveFileOps(r), dry: ps.dryrun, mem: map[string][]byte{}}
+
+		path, base := ps.path, ps.base
+		if ps.hasInline {
+			base = filepath.Join(os.TempDir(), fmt.Sprintf("aql-model-%d-%d", os.Getpid(), inlineSeq.Add(1)))
+			path = filepath.Join(base, "model.jsonic")
+			if mkErr := fs.MkdirAll(base, 0o755); mkErr != nil {
+				return nil, r.AqlError("model_io", "new: inline base dir: "+mkErr.Error(), "new")
+			}
+			if wErr := fs.WriteFile(path, []byte(ps.inlineSrc), 0o600); wErr != nil {
+				return nil, r.AqlError("model_io", "new: write inline source: "+wErr.Error(), "new")
+			}
+		} else if base == "" {
+			base = filepath.Dir(path)
+		}
+
+		build := model.NewBuild(model.BuildSpec{
+			Name:    "model",
+			Path:    path,
+			Base:    base,
+			Args:    ps.args,
+			Dryrun:  ps.dryrun,
+			Actions: ps.actions,
+			Order:   ps.order,
+			Idle:    model.DefaultIdle,
+			Watch:   ps.watch,
+			FS:      fs,
+			Res: []model.ProducerDef{
+				{Path: "/", Build: model.ModelProducer},
+				{Path: "/", Build: model.LocalProducer},
+			},
+		})
+		h.build = build
+		h.watch = model.NewWatch(build, "model", model.DefaultIdle)
+
+		return []native.Value{eng.NewExtension(tModel, h)}, nil
 	}
-
-	build := model.NewBuild(model.BuildSpec{
-		Name:    "model",
-		Path:    path,
-		Base:    base,
-		Args:    ps.args,
-		Dryrun:  ps.dryrun,
-		Actions: ps.actions,
-		Order:   ps.order,
-		Idle:    model.DefaultIdle,
-		Watch:   ps.watch,
-		FS:      fs,
-		Res: []model.ProducerDef{
-			{Path: "/", Build: model.ModelProducer},
-			{Path: "/", Build: model.LocalProducer},
-		},
-	})
-	h.build = build
-	h.watch = model.NewWatch(build, "model", model.DefaultIdle)
-
-	return []native.Value{eng.NewExtension(TModel, h)}, nil
 }
 
 // parseSpec decodes the spec Map, wiring AQL-function actions through

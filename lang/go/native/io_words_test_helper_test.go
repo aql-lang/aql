@@ -17,10 +17,10 @@ func registerIOWords(r *Registry) {
 	moved := [][]NativeFunc{
 		IOModuleNativeFuncs(MintStreamKind(r)),
 		StructModuleNatives,
-		NetModuleNatives,
+		NetModuleNatives(MintFetchTypes(r)),
 		BitwiseModuleNatives,
 		TPartialModuleNatives,
-		TimeAsyncModuleNatives,
+		TimeAsyncModuleNatives(MintTemporalModuleTypes(r)),
 		LogicModuleNatives,
 		StringModuleNatives,
 	}

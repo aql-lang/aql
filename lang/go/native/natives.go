@@ -605,15 +605,15 @@ func sleepHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 
 // intervalListHandler / intervalAtomHandler schedule a repeated callback
 // (a quoted code list or word) at the given millisecond interval.
-func intervalListHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	return startInterval(args, r, true)
+func (tt TemporalModuleTypes) intervalListHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	return tt.startInterval(args, r, true)
 }
 
-func intervalAtomHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	return startInterval(args, r, false)
+func (tt TemporalModuleTypes) intervalAtomHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	return tt.startInterval(args, r, false)
 }
 
-func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
+func (tt TemporalModuleTypes) startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms <= 0 {
 		return nil, r.AqlError("interval_error", fmt.Sprintf("interval: milliseconds must be positive, got %d", ms), "interval")
@@ -646,7 +646,7 @@ func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 		Ticker: ticker,
 		Done:   done,
 	}
-	return []Value{NewInterval(info)}, nil
+	return []Value{tt.NewInterval(info)}, nil
 }
 
 // cancelTimeoutHandler stops a pending Timeout timer.

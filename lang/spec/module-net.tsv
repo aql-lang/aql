@@ -29,3 +29,10 @@ Net.fetch "http://x"	ERROR:undefined_word	`Net` is unbound without `import`
 #     wrappers without any network.
 import "aql:net" Net.prepare {kind:"api"}	ERROR:missing required "spec" field	prepare validates the API descriptor
 import "aql:net" Net.direct {kind:"api"}	ERROR:missing required "spec" field	direct validates the API descriptor
+#
+# module-owned Fetch types — per-import mints, exported literals
+# (former global FixedIDs 3000-3002 retired; a fetch Response value
+# carries the module-minted Net.Response type).
+import "aql:net"  Net.Response is Net.Fetch	true	Response is a lattice child of the module's Fetch root
+import "aql:net"  Net.Request is Net.Fetch	true	Request is a lattice child of the module's Fetch root
+import "aql:net"  typeof Net.Response	Fetch	the exported literal IS its lattice node (typeof reports the parent)

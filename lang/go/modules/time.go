@@ -26,12 +26,13 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 		subReg.RegisterNativeFunc(n)
 	}
 	// now / sleep / timeout / interval / await / cancel moved here from core.
-	for _, n := range native.TimeAsyncModuleNatives {
+	asyncNatives := native.TimeAsyncModuleNatives(tt)
+	for _, n := range asyncNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
 	exports := native.NewOrderedMap()
-	for _, n := range native.TimeAsyncModuleNatives {
+	for _, n := range asyncNatives {
 		exports.Set(n.Name, makeModuleFnDef(n, subReg))
 	}
 
@@ -146,6 +147,8 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("CalendarDuration", native.NewTypeLiteral(tt.CalendarDuration))
 	exports.Set("ClockDuration", native.NewTypeLiteral(tt.ClockDuration))
 	exports.Set("Timezone", native.NewTypeLiteral(tt.Timezone))
+	exports.Set("Timeout", native.NewTypeLiteral(tt.Timeout))
+	exports.Set("Interval", native.NewTypeLiteral(tt.Interval))
 
 	// The temporal add / sub overloads, exported as WORD EXTENSIONS
 	// (design/OPEN-WORDS.0.md): import transplants them onto the

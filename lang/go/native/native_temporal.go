@@ -51,6 +51,11 @@ type TemporalModuleTypes struct {
 	CalendarDuration *Type
 	ClockDuration    *Type
 	Timezone         *Type
+	// The timer handle types (former global FixedIDs 4000-4001) —
+	// their words (timeout / interval / await / cancel) are module
+	// words already; the handles they return carry these mints.
+	Timeout  *Type
+	Interval *Type
 }
 
 // MintTemporalModuleTypes mints the module-owned temporal types into
@@ -68,6 +73,8 @@ func MintTemporalModuleTypes(r *Registry) TemporalModuleTypes {
 		CalendarDuration: r.Types.MintTypeWithBehavior("CalendarDuration", duration, calDurationFormatBehavior{}),
 		ClockDuration:    r.Types.MintTypeWithBehavior("ClockDuration", duration, clkDurationFormatBehavior{}),
 		Timezone:         r.Types.MintTypeWithBehavior("Timezone", TTime, timezoneFormatBehavior{}),
+		Timeout:          r.Types.MintTypeWithBehavior("Timeout", eng.TIdeal, timeoutFormatBehavior{}),
+		Interval:         r.Types.MintTypeWithBehavior("Interval", eng.TIdeal, intervalFormatBehavior{}),
 	}
 }
 

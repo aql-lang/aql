@@ -56,13 +56,15 @@ func miniCompiledPattern(src string) (*regexp.Regexp, error) {
 
 // BuildMiniLangModule creates the "aql:minilang" native module.
 func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
-	if miniTypeInitErr != nil {
-		return native.ModuleDesc{}, miniTypeInitErr
-	}
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
+	// Compiled carriers escape to the importer (the hook splices them
+	// into the parent's tape), so the mint draws its ID from the
+	// importing tree's counter.
+	subReg.Types.AdoptSeqFrom(parent.Types)
+	tMini := subReg.Types.MintType("MiniLangCompiled", native.TIdeal)
 	exports := native.NewOrderedMap()
 
 	// Wrapper params are UNNAMED — the trivial-delegation short-circuit in
@@ -99,16 +101,16 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-run-re",
 		Signatures: []native.Signature{{
-			Args:       []*native.Type{TMiniCompiled, native.TMap, native.TString},
+			Args:       []*native.Type{tMini, native.TMap, native.TString},
 			Returns:    []*native.Type{native.TMap},
 			BarrierPos: -1,
 			Impl:       native.Go(miniRunReHandler),
 		}},
 	})
 	exports.Set("run-re", wrapMiniFnDef("minilang-run-re", [][]native.FnParam{
-		{{Type: TMiniCompiled}, {Type: native.TMap}, {Type: native.TString}},
+		{{Type: tMini}, {Type: native.TMap}, {Type: native.TString}},
 	}, []*native.Type{native.TMap}, nil, subReg))
-	native.RegisterMiniCompileGoHook(parent, "re", miniReCompile)
+	native.RegisterMiniCompileGoHook(parent, "re", miniReCompileFor(tMini))
 
 	// ---- kind: bf — brainfuck ------------------------------------------
 	// Filter form  [src opts input:String] → [String]: the stack value is
@@ -670,22 +672,13 @@ func reMatchResult(re *regexp.Regexp, subject string, limit int64) native.Value 
 
 // ---- compiled re: the carrier type + the `run-re` consumer + the hook ----
 
-// miniTypeInitErr records a type-registration failure (ADR-005: recorded, not
-// panicked) for BuildMiniLangModule to surface.
-var miniTypeInitErr error
-
-// TMiniCompiled is the inert carrier a compile hook splices in place of the
-// DSL source: it wraps the kind's precompiled artifact (for `re`, a
-// *regexp.Regexp) in an ExtensionPayload the kernel never inspects.
-var TMiniCompiled = registerMiniCompiledType()
-
-func registerMiniCompiledType() *native.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/MiniLangCompiled", 5003, nil)
-	if err != nil {
-		miniTypeInitErr = fmt.Errorf("minilang: register Ideal/MiniLangCompiled: %w", err)
-	}
-	return t
-}
+// The MiniLangCompiled carrier type — the inert value a compile hook
+// splices in place of the DSL source, wrapping the kind's precompiled
+// artifact (for `re`, a *regexp.Regexp) in an ExtensionPayload the
+// kernel never inspects — is a per-import module mint (former global
+// FixedID 5003, retired): BuildMiniLangModule mints it and threads it
+// to the run-re consumer and the `re` compile hook. See
+// MintTemporalModuleTypes / MintTensorTypes for the pattern.
 
 // miniRunReHandler — args[0]=compiled carrier, args[1]=opts, args[2]=subject.
 // The compiled consumer for `re`: the pattern was compiled at the call site by
@@ -720,19 +713,21 @@ func miniRunReHandler(args []native.Value, _ map[string]native.Value, _ []native
 // byte-identical to the transducer — which is what compiled mode runs (the
 // bytecode recorder, in check mode, never takes the compile-hook path), so
 // compiled/interpreted parity holds. Valid patterns still get the carrier.
-func miniReCompile(src string, opts native.Value, _ *native.Registry) ([]native.Value, error) {
-	re, cerr := miniCompiledPattern(src)
-	if cerr != nil {
+func miniReCompileFor(tMini *native.Type) func(string, native.Value, *native.Registry) ([]native.Value, error) {
+	return func(src string, opts native.Value, _ *native.Registry) ([]native.Value, error) {
+		re, cerr := miniCompiledPattern(src)
+		if cerr != nil {
+			return []native.Value{
+				native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("lang_re"),
+				native.NewString(src), opts, native.NewEnd(),
+			}, nil
+		}
+		carrier := eng.NewExtension(tMini, re)
 		return []native.Value{
-			native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("lang_re"),
-			native.NewString(src), opts, native.NewEnd(),
+			native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("run-re"),
+			carrier, opts, native.NewEnd(),
 		}, nil
 	}
-	carrier := eng.NewExtension(TMiniCompiled, re)
-	return []native.Value{
-		native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("run-re"),
-		carrier, opts, native.NewEnd(),
-	}, nil
 }
 
 // miniBfDefaultSteps is the default brainfuck execution budget — loud

@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+// testFetchTypes mints a standalone Fetch-family set for direct
+// handler calls (production mints per import via BuildNetModule).
+func testFetchTypes(t *testing.T) FetchModuleTypes {
+	t.Helper()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return MintFetchTypes(r)
+}
+
 func TestFetchFunc(t *testing.T) {
 	r, err := NewRegistry()
 	if err != nil {
@@ -17,7 +28,7 @@ func TestFetchFunc(t *testing.T) {
 	Register(r)
 	// fetch moved to aql:net; register the net-module words and verify the
 	// move preserves its three signatures.
-	for _, n := range NetModuleNatives {
+	for _, n := range NetModuleNatives(MintFetchTypes(r)) {
 		r.RegisterNativeFunc(n)
 	}
 	fn := r.Lookup("fetch")
@@ -37,7 +48,7 @@ func TestFetchStringHandler(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	result, err := fetchStringHandler(
+	result, err := testFetchTypes(t).fetchStringHandler(
 		[]Value{NewString(ts.URL)},
 		nil, nil, nil,
 	)
@@ -49,8 +60,8 @@ func TestFetchStringHandler(t *testing.T) {
 	}
 
 	resp := result[0]
-	if !resp.Parent.Equal(TFetchResponse) {
-		t.Errorf("expected type %s, got %s", TFetchResponse, resp.Parent)
+	if resp.Parent.Name != "Response" {
+		t.Errorf("expected a Fetch Response, got %s", resp.Parent)
 	}
 
 	m, _ := AsMap(resp)
@@ -116,7 +127,7 @@ func TestFetchMapHandler(t *testing.T) {
 	reqMap.Set("headers", NewMap(headers))
 	reqMap.Set("body", NewString(`{"name":"test"}`))
 
-	result, err := fetchMapHandler(
+	result, err := testFetchTypes(t).fetchMapHandler(
 		[]Value{NewMap(reqMap)},
 		nil, nil, nil,
 	)
@@ -165,7 +176,7 @@ func TestFetchStringMapHandler(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("method", NewString("PUT"))
 
-	result, err := fetchStringMapHandler(
+	result, err := testFetchTypes(t).fetchStringMapHandler(
 		[]Value{NewString(ts.URL), NewMap(opts)},
 		nil, nil, nil,
 	)
@@ -189,7 +200,7 @@ func TestFetchMissingURL(t *testing.T) {
 	reqMap := NewOrderedMap()
 	reqMap.Set("method", NewString("GET"))
 
-	_, err := fetchMapHandler(
+	_, err := testFetchTypes(t).fetchMapHandler(
 		[]Value{NewMap(reqMap)},
 		nil, nil, nil,
 	)
@@ -213,7 +224,7 @@ func TestFetchDefaultMethodIsGET(t *testing.T) {
 	reqMap := NewOrderedMap()
 	reqMap.Set("url", NewString(ts.URL))
 
-	_, err := fetchMapHandler(
+	_, err := testFetchTypes(t).fetchMapHandler(
 		[]Value{NewMap(reqMap)},
 		nil, nil, nil,
 	)
@@ -232,7 +243,7 @@ func TestFetchResponseNotOk(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	result, err := fetchStringHandler(
+	result, err := testFetchTypes(t).fetchStringHandler(
 		[]Value{NewString(ts.URL)},
 		nil, nil, nil,
 	)
@@ -272,7 +283,7 @@ func TestFetchRedirect(t *testing.T) {
 	}))
 	defer redirect.Close()
 
-	result, err := fetchStringHandler(
+	result, err := testFetchTypes(t).fetchStringHandler(
 		[]Value{NewString(redirect.URL)},
 		nil, nil, nil,
 	)
@@ -304,7 +315,7 @@ func TestFetchTimeout(t *testing.T) {
 	reqMap.Set("url", NewString(ts.URL))
 	reqMap.Set("timeout", NewInteger(1)) // 1ms timeout
 
-	_, err := fetchMapHandler(
+	_, err := testFetchTypes(t).fetchMapHandler(
 		[]Value{NewMap(reqMap)},
 		nil, nil, nil,
 	)
@@ -322,7 +333,7 @@ func TestFetchResponseHeaders(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	result, err := fetchStringHandler(
+	result, err := testFetchTypes(t).fetchStringHandler(
 		[]Value{NewString(ts.URL)},
 		nil, nil, nil,
 	)
@@ -361,7 +372,7 @@ func TestFetchResponseType(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	result, err := fetchStringHandler(
+	result, err := testFetchTypes(t).fetchStringHandler(
 		[]Value{NewString(ts.URL)},
 		nil, nil, nil,
 	)
@@ -374,7 +385,7 @@ func TestFetchResponseType(t *testing.T) {
 	if !resp.Parent.ConformsTo(TIdeal) {
 		t.Errorf("expected response to match Ideal, got %s", resp.Parent)
 	}
-	if !resp.Parent.Equal(TFetchResponse) {
+	if resp.Parent.Name != "Response" {
 		t.Errorf("expected Ideal/Fetch/Response, got %s", resp.Parent)
 	}
 }
@@ -386,7 +397,7 @@ func TestFetchServerError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	result, err := fetchStringHandler(
+	result, err := testFetchTypes(t).fetchStringHandler(
 		[]Value{NewString(ts.URL)},
 		nil, nil, nil,
 	)

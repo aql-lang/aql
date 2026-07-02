@@ -131,22 +131,12 @@ func composeAltActions(acts []tabnasabnf.ActionFn) tabnas.AltAction {
 	}
 }
 
-// parseTypeInitErr records a type-registration failure (ADR-005: recorded,
-// not panicked) for BuildParseModule to surface.
-var parseTypeInitErr error
-
-// TParseGrammar is the carrier type for a Parse.grammar builder: it wraps the
-// *tabnas.Tabnas engine + callbacks in an ExtensionPayload the kernel never
-// inspects.
-var TParseGrammar = registerParseGrammarType()
-
-func registerParseGrammarType() *native.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/ParseGrammar", 5005, nil)
-	if err != nil {
-		parseTypeInitErr = fmt.Errorf("parse: register Ideal/ParseGrammar: %w", err)
-	}
-	return t
-}
+// The ParseGrammar carrier type — wrapping the *tabnas.Tabnas engine +
+// callbacks in an ExtensionPayload the kernel never inspects — is a
+// per-import module mint (former global FixedID 5005, retired):
+// BuildParseModule mints it into the sub-registry and threads it to
+// the grammar constructor. See MintTemporalModuleTypes /
+// MintTensorTypes for the pattern.
 
 // asParseGrammar unwraps a Grammar carrier, or errors with a clear message.
 func asParseGrammar(v native.Value, word string, r *native.Registry) (*parseGrammar, error) {
@@ -163,16 +153,16 @@ func asParseGrammar(v native.Value, word string, r *native.Registry) (*parseGram
 
 // BuildParseModule creates the "aql:parse" native module.
 func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
-	if parseTypeInitErr != nil {
-		return native.ModuleDesc{}, parseTypeInitErr
-	}
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 	exports := native.NewOrderedMap()
 
-	gT := TParseGrammar
+	// Grammar values escape to the importer, so the mint draws its ID
+	// from the importing tree's counter.
+	subReg.Types.AdoptSeqFrom(parent.Types)
+	gT := subReg.Types.MintType("ParseGrammar", native.TIdeal)
 
 	// ---- grammar — mint a fresh builder --------------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
@@ -181,7 +171,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{gT},
 			BarrierPos: -1,
-			Impl:       native.Go(parseGrammarHandler),
+			Impl:       native.Go(parseGrammarHandlerFor(gT)),
 		}},
 	})
 	exports.Set("grammar", wrapMiniFnDef("parse-grammar", [][]native.FnParam{{}},
@@ -335,12 +325,14 @@ func parseRuleSpecType() native.Value {
 
 // ---- handlers --------------------------------------------------------
 
-func parseGrammarHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-	g := &parseGrammar{
-		j:           tabnas.Make(), // bare engine — the user's grammar is the whole grammar
-		markActions: tabnasabnf.ActionsMap{},
+func parseGrammarHandlerFor(gT *native.Type) native.Handler {
+	return func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+		g := &parseGrammar{
+			j:           tabnas.Make(), // bare engine — the user's grammar is the whole grammar
+			markActions: tabnasabnf.ActionsMap{},
+		}
+		return []native.Value{eng.NewExtension(gT, g)}, nil
 	}
-	return []native.Value{eng.NewExtension(TParseGrammar, g)}, nil
 }
 
 // parseAbnfHandler — args[0]=grammar, args[1]=src, args[2]=opts (optional).

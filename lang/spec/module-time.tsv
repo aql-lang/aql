@@ -160,3 +160,5 @@ import "aql:time-util"  TimeUtil.sub (TimeUtil.to-date (TimeUtil.unix 1700000000
 import "aql:time-util"  (TimeUtil.hours 2) is TimeUtil.ClockDuration	true	clock durations carry the module-minted ClockDuration type
 import "aql:time-util"  (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) is TimeUtil.TimeOfDay	true	TimeOfDay is module-minted and exported
 import "aql:time-util"  (TimeUtil.tz-utc) is TimeUtil.Timezone	true	Timezone is module-minted and exported
+import "aql:time-util"  (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) (TimeUtil.timeout 900 [1]) is TimeUtil.Timeout	true	timer handles carry the module-minted Timeout type (exported literal)
+import "aql:time-util"  (TimeUtil.cancel (TimeUtil.interval 1000 [1 add 2])) (TimeUtil.interval 900 [1]) is TimeUtil.Interval	true	interval handles carry the module-minted Interval type (exported literal)
