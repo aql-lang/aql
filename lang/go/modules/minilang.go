@@ -208,6 +208,30 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("lang_bb", wrapMiniFnDef("minilang-bb", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TBytes}, nil, subReg))
 
+	// ---- kind: micron (short form: m) — Micron literal ------------------
+	// [src opts] → [Micron]. `+m:alice@example.com` (≡ mini m
+	// 'alice@example.com') parses the source with each builtin Micron
+	// leaf's STRING constructor in turn — Emailon, Urlon, then Pathon —
+	// and the first match wins (eng.MicronFromString). Pathon's string
+	// form accepts any whitespace-free source, so it is the catch-all:
+	// `+m:a/b` is a Pathon, and a micron literal never fails to parse.
+	// URL sources contain `:` and `/`, so pick a delimiter outside the
+	// source — `+m|https://x.com/a` — or the first `:`/`/` closes the
+	// literal early (the standard closed-form rule).
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-micron",
+		Signatures: []native.Signature{{
+			Args:       []*native.Type{native.TString, native.TMap},
+			Returns:    []*native.Type{native.TMicron},
+			BarrierPos: -1,
+			Impl:       native.Go(miniMicronHandler),
+		}},
+	})
+	micronFnDef := wrapMiniFnDef("minilang-micron", [][]native.FnParam{stdPrefix},
+		[]*native.Type{native.TMicron}, nil, subReg)
+	exports.Set("lang_micron", micronFnDef)
+	exports.Set("lang_m", micronFnDef)
+
 	// ---- kind: jp — JSONPath query (github.com/ohler55/ojg) -------------
 	// [src opts doc:Any] → [List]. Run a JSONPath query over the stack
 	// subject — a Node (Map/List), Object, Array, Table or Record — and
@@ -561,6 +585,21 @@ func miniDropGrouping(s string) string {
 		}
 		return c
 	}, s)
+}
+
+// miniMicronHandler — args[0]=src, args[1]=opts (none defined). Parses
+// the source with each builtin Micron leaf's string constructor in
+// turn — Emailon, Urlon, then Pathon — first match wins.
+func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	src, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: src: %v", err), "lang_micron")
+	}
+	v, merr := eng.MicronFromString(src)
+	if merr != nil {
+		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: %v", merr), "lang_micron")
+	}
+	return []native.Value{v}, nil
 }
 
 // miniHexBytesHandler — args[0]=src, args[1]=opts. Decodes an even-length
