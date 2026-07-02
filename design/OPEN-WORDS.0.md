@@ -165,7 +165,7 @@ Non-overlap is what makes rules 2 and 3 in §2 hold: dispatch order
 between contributions becomes semantically irrelevant (only
 error-message-relevant), and no existing call can change meaning.
 
-### 4.2 Piracy and per-module nominal identity — PREREQUISITE BUG
+### 4.2 Piracy and per-module nominal identity — prerequisite bug (FIXED)
 
 The classic multimethod hazard (Julia's type piracy, Haskell's orphan
 instances): module X contributes `add [Foo Bar]` where it owns neither
@@ -175,40 +175,47 @@ module is a different lattice node from `Foo` minted by another, so
 two honest modules' contributions on their own types cannot overlap
 even with identical spellings.
 
-**Confirmed broken today.** The doctrine holds within one registry
+**Confirmed broken at rev 0; fixed alongside this note.** The
+doctrine held within one registry
 (`def A (refine Integer) def B (refine Integer) A teq B` → false) but
 **fails across module boundaries**:
 
 ```
 import module [def Foo (refine Integer) export "M1" {Foo: Foo}]
 import module [def Bar (refine String)  export "M2" {Bar: Bar}]
-M1.Foo teq M2.Bar                 # returns true — WRONG (refine of
+M1.Foo teq M2.Bar                 # returned true — WRONG (refine of
                                   # Integer identical to refine of String)
 
 import module [def Foo (refine Integer) export "M1" {Foo: Foo}]
 def A (refine String)
-A teq M1.Foo                      # returns true — WRONG (first
+A teq M1.Foo                      # returned true — WRONG (first
                                   # top-level mint after the import
-                                  # collides too)
+                                  # collided too)
 ```
 
-Cause: `TypeTable.mintID` (`eng/go/typetable.go:255`) derives IDs from
-a **per-table** counter (`tt.seq`), and every sub-registry forked for
-a module body starts from the parent's count — so the Nth mint in any
-two sibling registries gets the same ID, and identity (`teq`, the
-nominal `is` walk, dispatch) is ID-based. Any two registries forked
-from the same parent produce colliding types at equal mint ordinals;
-`is` accepts a value of one module's newtype where another module's
-type is required.
+Cause: `TypeTable.mintID` derived IDs from a strictly **per-table**
+counter, and every sub-registry forked for a module body started from
+the parent's count — so the Nth mint in any two sibling registries got
+the same ID, and identity (`teq`, the nominal `is` walk, dispatch) is
+ID-based. This had to be fixed before open words is sound — the
+non-overlap check in §4.1 compares types by identity, and colliding
+identities would let one module's contribution silently capture
+another module's types.
 
-This must be fixed before open words is sound — the non-overlap check
-in §4.1 compares types by identity, and colliding identities would
-let one module's contribution silently capture another module's
-types. Fix directions (separate change, its own spec rows):
-process-global atomic counter for dynamic IDs, a per-registry
-namespace component in the ID, or sub-registries sharing a *pointer*
-to the parent's counter. Pin with rows asserting cross-module
-`teq`/`is` distinctness for same-shaped and different-shaped mints.
+**The fix (landed with this note):** the mint counter is shared **per
+registry tree** — module sub-registries adopt the importing tree's
+counter (`TypeTable.AdoptSeqFrom`, called by `RunModuleBody` and
+`BuildIOModule` for its StreamKind mint), concurrent forks share it
+(`CloneDynamic`), while rollback sandboxes **copy** it (`Clone`) so
+their discarded mints don't shift later IDs — which is what keeps a
+check-mode pass and a plain run of one program minting identical IDs
+(the type-soundness ratchet compares the two engines by identity).
+Deliberately per-tree rather than process-global: dynamic IDs stay a
+deterministic function of the program. Pinned in
+`eng/go/mintid_test.go` and `lang/spec/module-instance.tsv` §7. Known
+residual: two *unrelated* engines in one process can still mint
+colliding IDs; hosts exchanging Values across engines is out of scope
+(and was never sound).
 
 ### 4.3 Orphan rule (advisory)
 

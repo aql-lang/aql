@@ -43,3 +43,17 @@ import [Foo Bar] module [export "Foo" {a:1}]  Bar.$name	'Foo'	$name is the decla
 #
 # §6  negative — a missing export via getr (!.) errors
 import "aql:math-util"  MathUtil!.nope	ERROR:not_found	unknown export raises not_found (the documented strict-lookup code)
+#
+# §7  minted-type identity is per-mint, across module boundaries.
+# Types minted in sibling registries (two inline module bodies, or a
+# module body and the importing top level) are DISTINCT lattice nodes —
+# the dynamic-ID counter is process-global, so same-ordinal mints in
+# forked registries can never collide (they did once: a refine of
+# Integer in one module was teq-identical to a refine of String in
+# another). eng-level pin: eng/go/mintid_test.go; design/OPEN-WORDS.0.md §4.2.
+import module [def Foo (refine Integer) export "M1" {Foo: Foo}] import module [def Foo (refine Integer) export "M2" {Foo: Foo}] M1.Foo teq M2.Foo	false	same-shaped newtypes from two modules are distinct nominal identities
+import module [def Foo (refine Integer) export "M1" {Foo: Foo}] import module [def Bar (refine String) export "M2" {Bar: Bar}] M1.Foo teq M2.Bar	false	different-shaped mints from two modules are distinct (the original collision)
+import module [def Foo (refine Integer) export "M1" {Foo: Foo}] def A (refine String) A teq M1.Foo	false	the first top-level mint after an import is distinct from the module's mint
+import module [def Foo (refine Integer) export "M1" {Foo: Foo}] M1.Foo teq M1.Foo	true	a module's exported type is teq-identical to itself
+import module [def Foo (refine Integer) export "M1" {Foo: Foo}] import module [def Foo (refine Integer) export "M2" {Foo: Foo}] def F1 M1.Foo def F2 M2.Foo def x:F1 5 x is F2	false	a value of one module's newtype is NOT a member of another module's same-shaped newtype
+import module [def Foo (refine Integer) export "M1" {Foo: Foo}] def F1 M1.Foo def x:F1 5 x is F1	true	membership in the owning module's type is unaffected

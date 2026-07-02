@@ -20,6 +20,13 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
 	}
+	// The module's minted types (refine newtypes, classes) escape to the
+	// importer through its exports, so they must draw IDs from the
+	// importing tree's counter — a fresh counter would let the module's
+	// Nth mint collide with the parent's Nth mint, making one module's
+	// newtype teq-identical to another's. See eng TypeTable.mintID and
+	// lang/spec/module-instance.tsv §7.
+	modReg.Types.AdoptSeqFrom(parent.Types)
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
