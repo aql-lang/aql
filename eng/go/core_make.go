@@ -33,7 +33,7 @@ func isTypeLike(v Value) bool {
 		return true
 	}
 	return IsRecordType(v) || IsOptionsType(v) || IsTableType(v) ||
-		IsClassType(v) || IsHostTypeBody(v)
+		IsClassType(v) || IsMicronType(v) || IsHostTypeBody(v)
 }
 
 // MakeRecord creates a record instance from a source value and
@@ -541,9 +541,8 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		}
 	}
 
-	if IsBareTypeNode(targetVal) && targetVal.Equal(TPathon) {
-		return makePathon(srcVal, false)
-	}
+	// (The former 2-arg Pathon special case is gone — the Micron
+	// Ideal's Instantiate, dispatched above, owns the whole family.)
 
 	if targetVal.Equal(TOptions) && IsBareTypeNode(targetVal) {
 		if !srcVal.Parent.Equal(TMap) || !IsConcrete(srcVal) {
@@ -758,6 +757,19 @@ func registerKernelIdeals(r *Registry) {
 			return MakeRecordR(recType, data, false, r)
 		},
 	})
+	// The "Micron" Ideal owns the structured-scalar family: `refine
+	// Micron {fields}` constructs user kinds (micron.go) and `make`
+	// instantiates the builtin leaves (Pathon / Emailon / Urlon), user
+	// kinds, and their newtypes. Construct is kernel-resident (unlike
+	// Object/Record/Table, whose constructors the language layer wires
+	// in installIdeals) because the family needs no surface handlers.
+	r.Ideals.Register(&Ideal{
+		Name:        "Micron",
+		Enabled:     true,
+		Accepts:     micronAccepts,
+		Construct:   micronConstruct,
+		Instantiate: micronInstantiate,
+	})
 	r.Ideals.Register(&Ideal{
 		Name:    "Table",
 		Enabled: true,
@@ -827,13 +839,18 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 // MakeScalarHandler converts a scalar value to a target scalar type.
 func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
+	// The Micron family (Pathon / Emailon / Urlon, user kinds — whose
+	// resolved def body is a MicronTypeInfo, not a bare literal — and
+	// their newtypes) constructs through the family dispatcher: the
+	// same routine the Micron Ideal's Instantiate runs, so the scalar
+	// sig path and the generic make path agree.
+	if micronAccepts(targetVal) {
+		return micronInstantiate(targetVal, srcVal, reg)
+	}
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
 	}
 	targetType := &targetVal
-	if targetType.Equal(TPathon) {
-		return makePathon(srcVal, false)
-	}
 	if srcVal.Parent.ConformsTo(targetType) {
 		return []Value{srcVal}, nil
 	}

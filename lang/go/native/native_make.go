@@ -30,6 +30,23 @@ func makeObjReturns() ReturnsFunc {
 	}
 }
 
+// makeScalarReturns is the scalar make sig's check-mode result:
+// ReturnsFreshInstance(0) plus the Micron construction validation
+// (eng.CheckMicronConstruction — string parsing, unknown / missing /
+// mistyped fields, the abstract root — on a fully-concrete source,
+// with the byte-identical runtime messages). Micron targets dispatch
+// through the scalar sig (the family roots under Scalar), so this is
+// their CheckMakeConstruction analogue.
+func makeScalarReturns() ReturnsFunc {
+	fresh := ReturnsFreshInstance(0)
+	return func(args []Value, r *Registry) []Value {
+		if len(args) >= 2 {
+			eng.CheckMicronConstruction(r, args[0], args[1], args[0].Pos)
+		}
+		return fresh(args, r)
+	}
+}
+
 var makeNatives = []NativeFunc{
 	{
 		Name:          "make",
@@ -50,7 +67,7 @@ var makeNatives = []NativeFunc{
 			// TypeArgs slot are deferred back to MakeHandler inside
 			// the handler.
 			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeNodeHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarHandler), ReturnsFn: makeScalarReturns(), BarrierPos: -1},
 			{Args: []*Type{TAny, TAny, TMap}, Impl: Go(eng.MakeWithOpts), Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Impl: Go(eng.MakeHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},

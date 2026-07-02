@@ -327,27 +327,25 @@ func (wordCompareBehavior) Compare(a, b Value) (int, error) {
 // to bail.
 //
 // CompareValues reaches it only for cross-family pairs: the LCA walk
-// stops at a branch root's own Comparer (Number/String/Boolean/Atom)
-// for any same-family pair. The one same-Rank pair that does reach here
-// is Pathon-vs-Pathon — Pathon has no Comparer of its own — so two paths fall
-// through to Scalar, where comparePathons orders them by segment count
-// (shortest first), then segment by segment in reverse lexical order,
-// then relative before absolute.
+// stops at a branch root's own Comparer (Number/String/Boolean/Atom,
+// and the Micron family Comparer for Pathon/Emailon/Urlon pairs) for
+// any same-family pair. The one same-Rank pair that does reach here is
+// DepScalar-vs-DepScalar (their wrapper Comparers opt out), settled by
+// comparePathons' canonical-form branch below.
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 	// Cross-family scalar pairs (e.g. Boolean-vs-Integer) and the
-	// Pathon-vs-Pathon case both land here. For cross-family pairs the
-	// Rank discriminator must own the result — applying the type-
+	// same-type DepScalar case both land here. For cross-family pairs
+	// the Rank discriminator must own the result — applying the type-
 	// literal-first rule here would override Rank (e.g. `true cmp
 	// Integer` should stay -1 via Rank, not flip to +1 because
-	// Integer is a literal). The Pathon-vs-Pathon-literal case is
-	// settled by comparePathons' own litVsConcrete check.
+	// Integer is a literal).
 	if c := compareTypes(ValueType(a), ValueType(b)); c != 0 {
 		return c, nil
 	}
-	// Same scalar type — Pathon-vs-Pathon orders by segment count, then
-	// segment by segment, then absolute before relative.
+	// Same scalar type with no family Comparer of its own — DepScalar
+	// pairs order by canonical form via comparePathons' first branch.
 	return comparePathons(a, b), nil
 }
 
@@ -410,38 +408,6 @@ func comparePathons(a, b Value) int {
 	}
 }
 
-// pathonEqualBehavior gives the Pathon family content equality: two
-// concrete Paths are equal iff they have the same segments and the
-// same absolute/relative flag — exactly the pairs comparePathons orders
-// as 0 — so eq/deq agree with cmp on Paths (both route here via
-// scalarSemanticEqual). Without it, Pathon fell through ExactEqual's
-// and DeepEqual's dispatch to `return false`, making identical
-// concrete Paths eq-unequal while cmp said 0.
-//
-// Compare is deliberately NOT implemented: Pathon ordering keeps
-// routing through the LCA walk to scalarCompareBehavior →
-// comparePathons, unchanged. Non-concrete operands (the bare `Pathon`
-// type literal) fall back to the kernel default, which compares
-// lattice identity.
-type pathonEqualBehavior struct{ defaultBehavior }
-
-func (pathonEqualBehavior) Equal(a, b Value) bool {
-	ap, aerr := AsPathon(a)
-	bp, berr := AsPathon(b)
-	if aerr != nil || berr != nil {
-		return DefaultBehavior.Equal(a, b)
-	}
-	if ap.Abs != bp.Abs || len(ap.Parts) != len(bp.Parts) {
-		return false
-	}
-	for i := range ap.Parts {
-		if ap.Parts[i] != bp.Parts[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // init attaches the scalar Comparers to their owning kernel types.
 // The Builtin TypeTable has been populated by the typetable.go init
 // at this point (same package, lexicographic file order isn't
@@ -460,5 +426,4 @@ func init() {
 	TAtom.Behavior = atomCompareBehavior{}
 	TScalar.Behavior = scalarCompareBehavior{}
 	TWord.Behavior = wordCompareBehavior{}
-	TPathon.Behavior = pathonEqualBehavior{}
 }

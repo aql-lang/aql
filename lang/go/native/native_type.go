@@ -625,7 +625,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// bare-refine bodies have Data==nil so they already route through
 	// the b.Data==nil branch below; only Object/Table bodies need
 	// this redirect.
-	if (IsClassType(b) || IsTableType(b)) && b.Parent != nil {
+	if (IsClassType(b) || IsTableType(b) || eng.IsMicronType(b)) && b.Parent != nil {
 		latticeNode := b.Parent
 		return []Value{NewBoolean(a.Parent.Equal(latticeNode) || a.Parent.IsSubtypeOf(latticeNode))}, nil
 	}

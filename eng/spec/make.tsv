@@ -141,8 +141,20 @@ make Number 'y'	ERROR:cannot convert
 make Pathon 99	ERROR:Pathon source must be a list or string	Pathon requires list/string source
 make Path 'a/b'	ERROR:	the bare Path name is gone — hard-renamed to Pathon (go: undefined_word; ts errors differently until the port catches up — the exact code is pinned in lang/spec/micron.tsv)
 		
-# Type-literal target with non-applicable source.		
+# Type-literal target with non-applicable source.
 make List 5	ERROR:	List is a Node-family type; not a make target
+
+# ====================================================================
+# 6b. Micron construction smoke (Emailon / Urlon) — the full battery
+#     (map forms, properties, refinements, ordering) is Go-only and
+#     lives in lang/spec/micron.tsv.
+# ====================================================================
+make Emailon 'alice@example.com'	alice@example.com	string form, validated
+make Emailon 'not-an-email'	ERROR:invalid email address	no @ — rejected
+make Emailon 'alice@example.com' typeof	Emailon
+make Urlon 'https://x.com/a?q=1'	https://x.com/a?q=1	absolute URL
+make Urlon 'not a url'	ERROR:absolute URL	relative/invalid rejected
+make Urlon 'https://x.com/a?q=1' typeof	Urlon
 		
 # ====================================================================		
 # 7. Composition with def		

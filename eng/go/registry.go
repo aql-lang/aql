@@ -551,6 +551,12 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,
 	"body_error":            SeverityWarning,
+	// The Micron naming rule: a type bound under Scalar/Micron whose
+	// name does not end in the "on" suffix (micron.go).
+	"micron_name": SeverityError,
+	// A strict read (getr/dotr) whose miss is statically decidable — a
+	// known Micron kind with a concrete unknown key (native_micron.go).
+	"not_found": SeverityError,
 	// Generics (design/GENERICS.10.md §9.2).
 	"constraint_violation": SeverityError,
 	"unbound_param":        SeverityError,

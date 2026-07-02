@@ -68,6 +68,13 @@ func (r *Registry) DefineMemberType(name string, parent *Type, member func(v Val
 	if err := validateTypeName(r, name); err != nil {
 		return nil, err
 	}
+	// The Micron naming rule applies on the host path too — a member
+	// type minted under Scalar/Micron must carry the "on" suffix.
+	if parent != nil && parent.ConformsTo(TMicron) {
+		if err := requireMicronName(name); err != nil {
+			return nil, err
+		}
+	}
 	def := r.Types.MintMemberType(name, parent, member)
 	r.Defs.PushType(name, def, NewTypeLiteral(def))
 	for _, p := range strings.Split(name, "/") {

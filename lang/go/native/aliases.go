@@ -166,6 +166,9 @@ var (
 	TParenExpr      = eng.TParenExpr
 	TReach          = eng.TReach
 	TPathon         = eng.TPathon
+	TMicron         = eng.TMicron
+	TEmailon        = eng.TEmailon
+	TUrlon          = eng.TUrlon
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
 	TResourceEntity = eng.TResourceEntity

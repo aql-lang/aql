@@ -337,6 +337,8 @@ func (StrPayload) payloadMarker()          {}
 func (BoolPayload) payloadMarker()         {}
 func (AtomPayload) payloadMarker()         {}
 func (PathonPayload) payloadMarker()       {}
+func (MicronPayload) payloadMarker()       {}
+func (MicronTypeInfo) payloadMarker()      {}
 func (ListPayload) payloadMarker()         {}
 func (MapPayload) payloadMarker()          {}
 func (ParenExprPayload) payloadMarker()    {}

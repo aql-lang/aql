@@ -160,7 +160,7 @@ When a field needs an "unset" state distinct from a real value:
 - **For pointers / interfaces**: `nil` IS unambiguously "unset"
   when the type has no zero-value inhabitant — fine to use.
 - **For booleans**: don't try to overload. Add a second field
-  (`PathInfo.Abs` plus an `AbsSet bool` if both states matter)
+  (`PathonInfo.Abs` plus an `AbsSet bool` if both states matter)
   or split into an enum.
 - **For strings**: empty string is rarely a valid user value,
   but if it could be, use a `*string` or a separate `XSet bool`.
@@ -235,7 +235,8 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
 1. **Wrapper variants** — for Go built-in types we can't add
    methods to: `IntPayload{N: int64}`, `StrPayload{S: string}`,
    `BoolPayload{B: bool}`, `FloatPayload{F: float64}`,
-   `AtomPayload{Name: string}`, `PathPayload{Info: PathInfo}`,
+   `AtomPayload{Name: string}`, `PathonPayload{Info: PathonInfo}`,
+   `MicronPayload{Fields *OrderedMap}`,
    `ListPayload{Elems: []Value}`, `MapPayload{M: *OrderedMap}`,
    `ParenExprPayload{Toks: []Value}`,
    `InterpStringPayload{Parts: []InterpPart}`,
@@ -253,7 +254,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
    `ResourceTypeInfo`, `ResourceInstanceInfo`,
    `*TimeoutInfo`, `*IntervalInfo`,
    `ErrorInfo`, `CalDurationData`, `DepScalarInfo`,
-   `PathInfo`, `noneSentinel`.
+   `PathonInfo`, `MicronTypeInfo`, `noneSentinel`.
 
 When adding a new kernel-known payload shape, register the
 marker in `payload.go` (either as a wrapper struct or with a
@@ -324,7 +325,7 @@ delegates to the kernel default so rendering is unchanged.
 constants) **iff** one of these holds:
 
 1. The parser emits it directly: `Integer`, `Float`, `String`,
-   `Boolean`, `Atom`, `Path`, `None`, `List`, `Map`.
+   `Boolean`, `Atom`, `None`, `List`, `Map`.
 2. The interpreter loop branches on it structurally: `Word`,
    `Forward`, `Mark`, `Move`, `OpenParen`, `CloseParen`, `End`,
    `ReturnCheck`, `DefCleanup`, `ParenExpr`, `InterpString`,
@@ -333,7 +334,10 @@ constants) **iff** one of these holds:
    `Function`, `FnDef`, `FnUndef`, `Disjunct`, `Enum`.
 4. It is a structural type used by `make`/`record`/`class`:
    `Record`, `Options`, `Table`, `ChildType`, `Class`,
-   `Resource`, `Store`, `Error`.
+   `Resource`, `Store`, `Error`, and the `Scalar/Micron`
+   structured-scalar family (`Micron`, `Pathon`, `Emailon`,
+   `Urlon` — micron.go owns their Ideal, Behavior, and the
+   `-on` naming rule).
 
 Everything else — domain types like `Date`, `DateTime`,
 `CalDuration`, `Matrix`, `Timeout`, `Interval`,
@@ -469,7 +473,7 @@ externally-registered type means:
    numeric Comparers don't read DepScalarInfo as a zero float).
 2. **Rank fallback** via `compareTypes` (Rank → depth → name →
    ID). Reached when no Comparer applies — cross-family pairs,
-   Path-vs-Path-of-same-shape edge cases, etc.
+   cross-Micron-kind pairs, etc.
 3. **Structural compare** (`compareStructural`) when types are
    identical: lists by length-then-element-wise, maps by length-
    then-sorted-keys-then-values, others by `CanonValue` lex.
@@ -480,9 +484,10 @@ literal (`Data == nil && !Carrier`), it sorts FIRST. Both-literal
 pairs delegate to `litVsLitOrder` → `compareTypes` so they order by
 lattice Rank. The rule lives in the per-family Comparers (not
 `scalarCompareBehavior`, which handles cross-family pairs where
-Rank must own the result); the Path family applies it inside
-`comparePaths` so the rule stays inside the Path family without
-leaking.
+Rank must own the result); the Micron family applies it inside
+its family Comparer (`micronBehavior.Compare` — Pathon pairs keep
+the verbatim `comparePathons` order) so the rule stays inside the
+family without leaking.
 
 Result is a strict total order over distinct lattice nodes, with
 one deliberate value-level equivalence: cross-leaf numeric

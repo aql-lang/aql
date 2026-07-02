@@ -2774,6 +2774,13 @@ func kernelFormatDefault(v Value) string {
 	case IsPathon(v):
 		_as6, _ := AsPathon(v)
 		return _as6.String()
+	case IsMicronValue(v):
+		// Backstop for Micron instances whose minted node carries a
+		// wrapper Behavior that delegates Format to the kernel default
+		// (a bare-nominal newtype's bareRefineUnifier wraps the fresh
+		// mint's DefaultBehavior) — without this arm they would fall
+		// to the %v branch and render the payload struct.
+		return micronRender(v)
 	// TList rendering moved to listFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes List values there.

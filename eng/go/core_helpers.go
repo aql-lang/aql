@@ -1416,6 +1416,10 @@ func IsTypeBody(v Value) bool {
 	if v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction) {
 		return true
 	}
+	// Micron type body (`refine Micron {fields}`)
+	if IsMicronType(v) {
+		return true
+	}
 	// Host-Ideal constructed type (ExtensionPayload + HostTypeBody).
 	if IsHostTypeBody(v) {
 		return true
@@ -1475,7 +1479,7 @@ func IsLiteralTypeBody(v Value) bool {
 		v.Parent.ConformsTo(TString),
 		v.Parent.ConformsTo(TBoolean),
 		v.Parent.ConformsTo(TAtom),
-		v.Parent.Equal(TPathon):
+		v.Parent.ConformsTo(TMicron):
 		return v.Data != nil
 	}
 	if v.Parent.Equal(TList) && v.Data != nil {

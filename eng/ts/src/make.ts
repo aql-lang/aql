@@ -12,8 +12,10 @@ import {
   TFloat,
   TInteger,
   TNumber,
+  TEmailon,
   TPathon,
   TString,
+  TUrlon,
 } from './type.ts'
 import {
   newAtom,
@@ -25,7 +27,10 @@ import {
   newString,
   OrderedMap,
   Value,
+  newEmailon,
+  newUrlon,
 } from './value.ts'
+import type { UrlonInfo } from './value.ts'
 
 /**
  * The 2-arg [Ideal, Map] make handler. Options instances are built from
@@ -70,6 +75,53 @@ export function makePathon(src: Value, absOverride: boolean | undefined): Value[
   const segments = text.split('/').filter((s) => s !== '')
   if (absOverride !== undefined) abs = absOverride
   return [newPath(segments, abs)]
+}
+
+/**
+ * Build an Emailon from a plain user@host address string. Mirrors the
+ * Go engine's makeEmailon (string form; the map form is Go-only for
+ * now — lang/spec/micron.tsv owns the full battery).
+ */
+export function makeEmailon(src: Value): Value[] {
+  if (!src.vType.matches(TString) || src.data === null) {
+    throw new AqlError('type_error', `make: Emailon source must be a string or map, got ${src.toString()}`)
+  }
+  const s = valToString(src)
+  if (!/^[^@\s<>]+@[^@\s<>]+$/.test(s)) {
+    throw new AqlError('type_error', `make: invalid email address ${JSON.stringify(s)}`)
+  }
+  const at = s.lastIndexOf('@')
+  return [newEmailon(s.slice(0, at), s.slice(at + 1))]
+}
+
+/**
+ * Build an Urlon from an absolute URL string. Mirrors the Go engine's
+ * makeUrlon (string form).
+ */
+export function makeUrlon(src: Value): Value[] {
+  if (!src.vType.matches(TString) || src.data === null) {
+    throw new AqlError('type_error', `make: Urlon source must be a string or map, got ${src.toString()}`)
+  }
+  const s = valToString(src)
+  let u: URL
+  try {
+    u = new URL(s)
+  } catch {
+    throw new AqlError('type_error', `make: Urlon requires an absolute URL (scheme://host…), got ${JSON.stringify(s)}`)
+  }
+  if (!u.protocol || !u.hostname) {
+    throw new AqlError('type_error', `make: Urlon requires an absolute URL (scheme://host…), got ${JSON.stringify(s)}`)
+  }
+  const info: UrlonInfo = { scheme: u.protocol.replace(/:$/, ''), host: u.hostname }
+  if (u.port !== '') info.port = Number(u.port)
+  // WHATWG normalises an empty path to '/'; mirror Go's net/url, which
+  // keeps it empty, so both engines render the same href.
+  if (u.pathname && !(u.pathname === '/' && !s.slice(s.indexOf('://') + 3).includes('/'))) {
+    info.path = u.pathname
+  }
+  if (u.search) info.query = u.search.slice(1)
+  if (u.hash) info.fragment = u.hash.slice(1)
+  return [newUrlon(info)]
 }
 
 /** Convert a source value to a target scalar type. Mirrors MakeConvert. */
@@ -127,6 +179,8 @@ export function makeScalarHandler(args: Value[]): Value[] {
   }
   const targetType = target.vType
   if (targetType.equal(TPathon)) return makePathon(src, undefined)
+  if (targetType.equal(TEmailon)) return makeEmailon(src)
+  if (targetType.equal(TUrlon)) return makeUrlon(src)
   if (src.vType.matches(targetType)) return [src]
   return [makeConvert(src, targetType)]
 }

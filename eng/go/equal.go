@@ -101,6 +101,25 @@ func valuesEqualDefault(a, b Value) bool {
 		}
 		return depScalarsEqual(ai, bi)
 	}
+	// Micron instances (Emailon / Urlon / user kinds) and Pathons:
+	// content equality, as a backstop for values whose minted node
+	// carries a wrapper Behavior that delegates Equal here. Without
+	// these branches the default %v-format arm would compare the
+	// OrderedMap POINTER, making equal-content Microns unequal.
+	if am, aok := a.Data.(MicronPayload); aok {
+		bm, bok := b.Data.(MicronPayload)
+		return bok && mapsEqual(am.Fields, bm.Fields)
+	}
+	if _, bok := b.Data.(MicronPayload); bok {
+		return false
+	}
+	if ap, aok := a.Data.(PathonPayload); aok {
+		bp, bok := b.Data.(PathonPayload)
+		return bok && pathonContentEqual(ap.Info, bp.Info)
+	}
+	if _, bok := b.Data.(PathonPayload); bok {
+		return false
+	}
 	switch {
 	case a.Parent.ConformsTo(TString):
 		as, _ := AsString(a)

@@ -18,3 +18,183 @@ typeof Pathon	Micron
 typeof Micron	Scalar
 pathof Pathon	[Scalar Micron Pathon]
 make Pathon 'a/b' typeof	Pathon
+
+# ─────────────────────────────────────────────────────────────────────
+# §1  Construction — Emailon. String form (a plain user@host address)
+#     and map form ({user host}) build the SAME value: the map form
+#     re-renders through the string validator, so there is exactly one
+#     validation path.
+make Emailon 'alice@example.com'	alice@example.com
+make Emailon {user:'alice' host:'example.com'}	alice@example.com
+make Emailon 'alice@example.com' typeof	Emailon
+pathof Emailon	[Scalar Micron Emailon]
+# paired negatives — each malformed shape has its own error
+make Emailon 'not-an-email'	ERROR:invalid email address	no @ at all
+make Emailon 'a@'	ERROR:invalid email address	empty host
+make Emailon 'Alice <a@b.c>'	ERROR:plain user@host	display-name form rejected
+make Emailon 42	ERROR:Emailon source must be a string or map	wrong source type
+make Emailon {user:'a'}	ERROR:requires both user and host	missing field
+make Emailon {user:'a' host:'b.c' extra:'x'}	ERROR:Emailon has no field extra	unknown field
+make Emailon {user:'a' host:42}	ERROR:field host must be a String	wrong field type
+
+# ─────────────────────────────────────────────────────────────────────
+# §2  Construction — Urlon. Absolute URLs only (scheme://host…); the
+#     map form re-renders to an href and re-parses it.
+make Urlon 'https://x.com/a?q=1'	https://x.com/a?q=1
+make Urlon {scheme:'https' host:'x.com' path:'/a' query:'q=1'}	https://x.com/a?q=1
+make Urlon 'http://h.example:8080/p'	http://h.example:8080/p
+make Urlon 'https://x.com/a?q=1' typeof	Urlon
+pathof Urlon	[Scalar Micron Urlon]
+# paired negatives
+make Urlon 'not a url'	ERROR:absolute URL	no scheme/host
+make Urlon '/relative/only'	ERROR:absolute URL	relative URLs rejected
+make Urlon 99	ERROR:Urlon source must be a string or map	wrong source type
+make Urlon {scheme:'https'}	ERROR:requires both scheme and host	missing host
+make Urlon {scheme:'https' host:'x.com' bogus:'y'}	ERROR:Urlon has no field bogus	unknown field
+make Urlon {scheme:'https' host:'x.com' port:'80'}	ERROR:port must be an Integer	port is Integer-typed
+
+# ─────────────────────────────────────────────────────────────────────
+# §3  Construction — the abstract root and Pathon under make.
+make Micron 1	ERROR:Micron is abstract	the root is not constructible
+make Pathon 'a/b/c'	a/b/c	Pathon keeps its forms under the new name
+make Pathon [ 'x' 'y' ]	x/y
+make Pathon 99	ERROR:Pathon source must be a list or string
+
+# ─────────────────────────────────────────────────────────────────────
+# §4  Properties — read-only, via dot/get (miss reads none) and the
+#     strict twins dotr/getr (miss errors). Derived properties
+#     (address / href / parts / abs) are synthesized at read time.
+def e (make Emailon 'alice@example.com') e.user	'alice'
+def e (make Emailon 'alice@example.com') e.host	'example.com'
+def e (make Emailon 'alice@example.com') e.address	'alice@example.com'	derived — synthesized, not stored
+def u (make Urlon 'https://x.com/a?q=1') u.scheme	'https'
+def u (make Urlon 'https://x.com/a?q=1') u.host	'x.com'
+def u (make Urlon 'https://x.com/a?q=1') u.path	'/a'
+def u (make Urlon 'https://x.com/a?q=1') u.query	'q=1'
+def u (make Urlon 'https://x.com/a?q=1') u.href	'https://x.com/a?q=1'	derived
+def u (make Urlon 'https://x.com/a?q=1') u.port	None	no explicit port → none
+def u (make Urlon 'http://h.co:8080/p') u.port	8080	explicit port is an Integer
+def u (make Urlon 'https://x.com/a') u.fragment	None	absent optional field reads none
+def p (make Pathon '/a/b') p.parts	['a' 'b']
+def p (make Pathon '/a/b') p.abs	true
+def p (make Pathon 'a/b') p.abs	false
+# get evaluates its key; dot quotes it
+def e (make Emailon 'a@b.c') e get 'host'	'b.c'
+def e (make Emailon 'a@b.c') e.bogus	None	forgiving read — unknown property is none
+# strict twins: a miss is a loud error
+def e (make Emailon 'a@b.c') e!.host	'b.c'
+def e (make Emailon 'a@b.c') e!.bogus	ERROR:no property	getr raises on a miss
+# has answers presence, including derived and optional fields
+def e (make Emailon 'a@b.c') e has user/q	true
+def e (make Emailon 'a@b.c') e has address/q	true	derived properties are present
+def e (make Emailon 'a@b.c') e has bogus/q	false
+def u (make Urlon 'https://x.com/a') u has port/q	false	absent optional field
+def u (make Urlon 'http://h.co:8080/p') u has port/q	true
+
+# ─────────────────────────────────────────────────────────────────────
+# §5  Immutability — set on any Micron is an explicit error, on every
+#     leaf and on user kinds.
+def e (make Emailon 'a@b.c') set user/q 'x' e	ERROR:immutable	Emailon values are immutable
+def u (make Urlon 'https://x.com/a') set host/q 'y' u	ERROR:immutable
+def p (make Pathon 'a/b') set abs/q true p	ERROR:immutable
+def Baron refine Micron {foo:String} end def b (make Baron {foo:'x'}) set foo/q 'y' b	ERROR:immutable	user kinds are immutable too
+
+# ─────────────────────────────────────────────────────────────────────
+# §6  Equality — content, not identity. Two Microns with the same
+#     primary fields ARE equal; derived fields don't participate.
+(make Emailon 'a@b.c') eq (make Emailon 'a@b.c')	true
+(make Emailon 'a@b.c') eq (make Emailon {user:'a' host:'b.c'})	true	map form ≡ string form
+(make Emailon 'a@b.c') eq (make Emailon 'z@b.c')	false
+(make Urlon 'https://x.com/a?q=1') eq (make Urlon {scheme:'https' host:'x.com' path:'/a' query:'q=1'})	true
+(make Pathon 'a/b') eq (make Pathon ['a' 'b'])	true
+(make Pathon 'a/b') eq (make Pathon '/a/b')	false	abs flag is content
+(make Emailon 'a@b.c') eq (make Urlon 'https://b.c/a')	false	sibling leaves never equal
+def Baron refine Micron {foo:String} end (make Baron {foo:'hi'}) eq (make Baron {foo:'hi'})	true
+def Baron refine Micron {foo:String} end (make Baron {foo:'hi'}) eq (make Baron {foo:'ho'})	false
+# newtype-vs-base: equal content compares TRUE across the nominal tag
+def Workon refine Emailon end (make Workon 'a@b.c') eq (make Emailon 'a@b.c')	true
+
+# ─────────────────────────────────────────────────────────────────────
+# §7  Ordering — Pathon keeps its historical order (segment count, then
+#     reverse-lex segments, then relative-before-absolute); other leaves
+#     order by canonical render; cross-kind pairs are cmp-incomparable
+#     but tcmp-ordered by Rank (Micron < Pathon < Emailon < Urlon).
+(make Emailon 'a@b.c') cmp (make Emailon 'a@b.c')	0
+(make Emailon 'a@b.c') cmp (make Emailon 'b@b.c')	-1
+(make Emailon 'b@b.c') cmp (make Emailon 'a@b.c')	1
+(make Urlon 'https://a.co/x') cmp (make Urlon 'https://b.co/x')	-1
+(make Pathon 'a') cmp (make Pathon ['a' 'b'])	-1	shorter path first — verbatim old order
+# type-literal-first inside the family
+Emailon cmp (make Emailon 'a@b.c')	-1
+Pathon cmp (make Pathon 'a')	-1
+Micron cmp Pathon	-1	literals order by lattice Rank
+Emailon cmp Pathon	1
+Emailon tcmp Urlon	-1
+Micron tcmp Pathon	-1
+# cross-kind concrete pairs: cmp refuses, tcmp orders by Rank
+(make Emailon 'a@b.c') cmp (make Pathon 'a/b')	ERROR:incomparable
+(make Emailon 'a@b.c') cmp (make Urlon 'https://b.c/a')	ERROR:incomparable
+(make Pathon 'a') tcmp (make Emailon 'a@b.c')	-1
+(make Emailon 'a@b.c') tcmp (make Urlon 'https://b.c/a')	-1
+(make Urlon 'https://b.c/a') tcmp (make Pathon 'a')	1
+# transitivity spot-check within a leaf
+(make Emailon 'a@b.c') lt (make Emailon 'b@b.c')	true
+(make Emailon 'b@b.c') lt (make Emailon 'c@b.c')	true
+(make Emailon 'a@b.c') lt (make Emailon 'c@b.c')	true
+
+# ─────────────────────────────────────────────────────────────────────
+# §8  typeof / pathof / is.
+typeof (make Emailon 'a@b.c')	Emailon
+typeof (make Urlon 'https://x.com/a')	Urlon
+typeof Emailon	Micron
+typeof Urlon	Micron
+pathof Micron	[Scalar Micron]
+(make Emailon 'a@b.c') is Emailon	true
+(make Emailon 'a@b.c') is Micron	true
+(make Emailon 'a@b.c') is Urlon	false	sibling leaf
+(make Emailon 'a@b.c') is Scalar	true
+5 is Micron	false
+Emailon is Type	true
+
+# ─────────────────────────────────────────────────────────────────────
+# §9  User refinements and the naming rule. Schema-carrying refinement
+#     is allowed of the ROOT only; bare nominal refinement (newtype) of
+#     any Micron kind. Every bound name must end in "on" (case-
+#     sensitive, at least 3 chars).
+def Baron refine Micron {foo:String} end typeof Baron	Baron	a schema kind reports its nominal name (class-type precedent)
+def Baron refine Micron {foo:String} end pathof Baron	[Scalar Micron Baron]
+def Baron refine Micron {foo:String} end (make Baron {foo:'hi'}).foo	'hi'
+def Baron refine Micron {foo:String} end typeof (make Baron {foo:'hi'})	Baron
+def Baron refine Micron {foo:String} end (make Baron {foo:'hi'}) is Baron	true
+def Baron refine Micron {foo:String} end (make Baron {foo:'hi'}) is Micron	true
+# per-field validation
+def Baron refine Micron {foo:String} end make Baron {foo:1}	ERROR:expected String	field type enforced
+def Baron refine Micron {foo:String} end make Baron {bar:'x'}	ERROR:Baron has no field	unknown field
+def Baron refine Micron {foo:String} end make Baron {}	ERROR:missing field	missing field
+def Baron refine Micron {foo:String} end make Baron 5	ERROR:takes a map of fields	non-map source
+# naming rule negatives — suffix, length, case
+def Bad refine Micron {x:String}	ERROR:micron_name	no -on suffix
+def On refine Micron	ERROR:micron_name	bare On too short
+def BARON refine Micron {x:String}	ERROR:micron_name	suffix is case-sensitive
+def Mail Emailon	ERROR:micron_name	an alias mints under the family — same rule
+def Mailon Emailon end make Mailon 'a@b.c' typeof	Emailon	a passing alias resolves to the aliased leaf
+# newtype (bare nominal refine) of a leaf — inherits construction and
+# validation; schema-refine of a leaf is a loud error
+def Workon refine Emailon end make Workon 'a@b.c' typeof	Workon
+def Workon refine Emailon end (make Workon 'a@b.c').host	'b.c'
+def Workon refine Emailon end make Workon 'nope'	ERROR:invalid email address	newtype inherits validation
+def Workon refine Emailon end (make Workon 'a@b.c') is Emailon	true
+refine Emailon {x:String}	ERROR:validation contract	a leaf's field set is sealed
+def Nudon refine Micron end typeof Nudon	Micron	bare nominal refine of the root is legal at def time…
+def Nudon refine Micron end make Nudon 1	ERROR:no field schema	…but has no constructor
+# newtype of a user kind
+def Baron refine Micron {foo:String} end def Subon refine Baron end (make Subon {foo:'x'}).foo	'x'
+def Baron refine Micron {foo:String} end def Subon refine Baron end typeof (make Subon {foo:'x'})	Subon
+
+# ─────────────────────────────────────────────────────────────────────
+# §10  Open-words interplay. The builtin Micron leaves are BUILTINS —
+#      a module cannot anchor a core-word extension on [Emailon
+#      Emailon] (the module-scope rule requires an OriginUserDef type);
+#      a user Micron minted inside the module DOES qualify.
+import module [def add fn [[a:Emailon b:Emailon] [Boolean] [true]] export "M" {add: add/r}]	ERROR:extend_user_type	builtin Micron leaves do not anchor module extensions
+import module [def Baron refine Micron {v:Integer} def add fn [[a:Baron b:Baron] [Integer] [(a.v) add (b.v)]] def mk fn [[n:Integer] [Baron] [make Baron {v:n}]] export "M" {add: add/r mk: mk/r}]  (M.mk 2) add (M.mk 3)	5	a module-minted Micron anchors an add extension
