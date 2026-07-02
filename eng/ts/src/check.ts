@@ -89,6 +89,16 @@ export class CheckState {
    * fixed-point refinement yet).
    */
   fnInflight = new Set<string>()
+
+  /**
+   * When > 0, error-level DISPATCH diagnostics (no_signature /
+   * undefined_word) are dropped: the enclosing analysis runs a body under
+   * args a real match already REJECTED (the best-fit recovery), so its
+   * dispatch failures are cascade noise — the one honest diagnostic is the
+   * recovery's own no_signature. Mirrors the Go engine's
+   * SuppressBodyErrors discipline.
+   */
+  suppressBodyErrors = 0
   /**
    * When set, the check pass doubles as the bytecode recording pass:
    * each native dispatch is offered to emit.recordCall. Null for a plain
@@ -152,6 +162,13 @@ export class CheckState {
     const diag: CheckDiagnostic = {
       ...d,
       severity: d.severity ?? severityFor(d.code),
+    }
+    if (
+      this.suppressBodyErrors > 0 &&
+      diag.severity === 'error' &&
+      (diag.code === 'no_signature' || diag.code === 'undefined_word')
+    ) {
+      return
     }
     if (this.fnBodyDepth > 0) diag.fnBody = true
     this.diagnostics.push(diag)

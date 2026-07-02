@@ -1,6 +1,25 @@
 # Type checker — comprehensive review
 
-Status: **review note — findings and roadmap, no code.** Grounded at `5277166`.
+Status: **review note — findings and roadmap. IMPLEMENTED June 2026** (the
+commit chain from `b857a56` to `02eecd9`): Tier 1 items 1–5 (the three
+false negatives fixed with byte-identical runtime messages, moving 25 ERROR
+rows to statically-flagged — pins 182→157; the heterogeneous-element FP
+fixed via join-aware element carriers; the check-vs-run divergence ratchet
+gate, pin 104), Tier 2 (single severity table + completeness gate; the
+distribute-over-dispatch invariant test — which found and fixed a THIRD
+non-distributing carrier shape, named-union tags; the CheckState lifecycle
+gate — which caught a live Clone bug on FnNameInflight; the
+recordDispatchOutcome emit seam), Tier 3 (`aql check --strict`; the
+Any-frontier ratio gate — which exposed its own stale 303 pin; the A8
+macro_not_expandable advisory; TandReturnsFn + DepScalarInfo carrier
+preservation, shrinking the frontier 354→345; typed-code-values and
+store-identity contexts designed in `checker-precision-fronts.0.md`),
+Tier 4 (expected-vs-actual no_signature messages; positions on branch
+diagnostics; best-fit recovery cascade suppression), and the god-function
+decomposition (carrierResults → five named phases; AnalyseFnBody →
+runFnBodyOnce / declaredReturnBail / refineRecursiveSummary).
+
+Originally grounded at `5277166`.
 Produced by a three-lane review (architecture / self-admitted-gap inventory /
 feature boundaries) plus a fresh empirical differential probe of `aql check`
 vs `aql run` on targeted programs. Prior art: `checker-accuracy-review.10.md`
