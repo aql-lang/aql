@@ -190,6 +190,69 @@ export "Bad" {add: add/r}`,
 	}
 }
 
+// TestModuleExtendPointClass pins the canonical user-module shape end
+// to end: an AQL file module that mints a CLASS type Point {x,y},
+// merges a [Point Point] overload into core `add` (its own class is
+// the user type the module-scope rule requires), and exports both.
+// The importer constructs Points through the exported type with
+// `make`, and `p0 add p1` dispatches the transplanted overload —
+// whose body runs in MODULE scope (it references the module's own
+// `Point` binding via `make Point {…}`).
+func TestModuleExtendPointClass(t *testing.T) {
+	files := map[string]string{
+		"pointer.aql": `def Point class {x:Integer y:Integer}
+def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]]
+export "Pointer" {Point: Point add: add/r}`,
+	}
+	steps := []string{
+		`import "./pointer.aql"`,
+		`def p0 make Pointer.Point {x:1 y:2}`,
+		`def p1 make Pointer.Point {x:4 y:6}`,
+		`def p2 (p0 add p1)`,
+	}
+
+	result, err := runMemFSModuleSteps(t, files, append(steps, `p2.x`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "5")
+
+	result, err = runMemFSModuleSteps(t, files, append(steps, `p2.y`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "8")
+
+	result, err = runMemFSModuleSteps(t, files, append(steps, `p2 is Pointer.Point`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "true")
+
+	result, err = runMemFSModuleSteps(t, files, append(steps, `typeof p2`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "Point")
+
+	// Paired negative: numeric add is untouched, and a Point plus a
+	// number is still a signature error — the extension is anchored to
+	// the module's class on BOTH operands.
+	result, err = runMemFSModuleSteps(t, files, append(steps, `add 40 2`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResult(t, result, "42")
+
+	_, err = runMemFSModuleSteps(t, files, append(steps, `add p0 1`))
+	if err == nil {
+		t.Fatal("add Point Integer: expected signature_error, got none")
+	}
+	if !strings.Contains(err.Error(), "signature_error") {
+		t.Fatalf("add Point Integer: expected signature_error, got %v", err)
+	}
+}
+
 // TestModuleExtendFileUndefReimport pins retraction + re-import: undef
 // pops the transplant (base word intact), and importing the module
 // again re-installs a working extension.

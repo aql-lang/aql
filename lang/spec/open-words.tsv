@@ -90,6 +90,16 @@ import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  undef add  add (M.mk true) (M.mk true)	ERROR:signature_error	undef pops the transplant; the transplanted tuple is gone (negative twin)
 #
 # ─────────────────────────────────────────────────────────────────────
+# §7b  the canonical user-module shape: a CLASS type + a merged overload
+# A module mints Point {x,y}, merges [Point Point] into core add (its
+# own class anchors the signature), and exports both; the importer
+# makes Points through the exported type and `p0 add p1` dispatches
+# the transplant, whose body runs in module scope (`make Point …`).
+import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  def p1 make Pointer.Point {x:4 y:6}  def p2 (p0 add p1)  p2.x	5	Point addition via the transplanted class overload — x field
+import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  def p1 make Pointer.Point {x:4 y:6}  def p2 (p0 add p1)  p2 is Pointer.Point	true	the sum is a Point of the module's minted class
+import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  add p0 1	ERROR:signature_error	the overload is anchored to Point on BOTH operands — a Point plus a number stays refused (negative twin)
+#
+# ─────────────────────────────────────────────────────────────────────
 # §8  extending module-provided words
 import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt "x"	7	a native-module wrapper rebound to a bare name carries LOCKED sigs, so def merges onto it (§4.1 — module words count); no user-type rule here, the word is not core
 import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt 16.0	4.0	the wrapper's locked signature still dispatches first
