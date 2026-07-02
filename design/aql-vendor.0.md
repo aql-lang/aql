@@ -115,11 +115,21 @@ Two files, keeping human intent and machine reproducibility separate
   ```
 
 - **`vendor.lock`** — the resolved, verifiable truth, written by the
-  tool: for each entry the exact resolved `version`/commit, the concrete
-  `source` URL it came from, a `sha256` of the fetched archive (and,
-  optionally, a per-tree Merkle hash), and the local `path`. `vendor`
-  with no args reproduces exactly from this file; CI can `--frozen` to
-  fail on drift.
+  tool. Each entry records:
+  - the concrete `source` URL and, for a VCS source, the **resolved
+    commit SHA** — which is what is fetched. A tag/semver is kept only as
+    metadata + the update constraint: tags can be force-moved or deleted,
+    so a later `--frozen` sync of a *tag* could pull different bytes and
+    fail the hash check instead of reproducing. Pin the commit, not the
+    tag.
+  - a **`tree` hash** — a canonical content hash of the *extracted files*
+    (a Merkle hash over sorted relative paths + file bytes + modes),
+    **required**, because it is what `aql vendor verify` re-derives from
+    the working tree. The archive `sha256` cannot be recomputed from
+    extracted files (compression, entry order, and archive metadata are
+    lost), so it is recorded too but only guards a *re-download*, never
+    the on-disk tree.
+  - the local `path`.
 
 ## 6. On-disk layout
 
@@ -135,56 +145,102 @@ vendor/
 
 The default path is derived from the source (host + path), overridable
 per entry with `into:` so it can drop straight into a place the target
-toolchain already looks (e.g. a TS `paths` mapping, a Python namespace
-dir, a Go module `replace` target). AQL writes files and nothing else;
-how the tree is wired into a build is the target ecosystem's concern
-(§9).
+toolchain already looks (a TS `paths` mapping, a Python namespace dir).
+Two guards on `into` (enforced at write time, §8):
+
+- **Containment.** `into` must resolve *inside* the project root — no
+  absolute path and no `../` escape. The archive-entry `filepath.IsLocal`
+  check guards paths *inside* the archive; it does not guard where the
+  tree lands, so the destination is validated separately.
+- **Ownership.** The tool only swaps into a directory it *owns* — an
+  empty dir, or one carrying an `.aql-vendor` marker from a prior vendor
+  of the same entry. It refuses to overwrite a non-empty, unmanaged
+  directory (so `into: "src/acme"` can never delete hand-written code),
+  and `into` paths must be unique across lock entries.
+
+AQL writes files and nothing else; wiring the tree into a build is the
+target ecosystem's concern (§9) — note the Go caveat there: a module
+root's `vendor/` is special to the Go toolchain, so Go SDKs default
+*outside* `vendor/`.
 
 ## 7. Command surface
 
 ```
 aql vendor <spec> [--version=<v>] [--into=<dir>] [--source=<url>] [--frozen]
-aql vendor                 # sync every entry from vendor.lock (reproduce)
+aql vendor                 # reconcile: lock+fetch new/changed manifest entries, then materialise
 aql vendor update [<name>] # re-resolve to the latest allowed version, relock
 aql vendor list            # show vendored packages, versions, sources
-aql vendor rm <name>       # drop from vendor/ + manifest + lock
-aql vendor verify          # re-hash vendor/ against vendor.lock (tamper check)
+aql vendor rm <name>       # drop from vendor tree + manifest + lock
+aql vendor verify          # re-derive the tree hash and check it against vendor.lock
 ```
 
 - `aql vendor github.com/acme/widget-py@v3.0.1` — add + fetch + record.
-- `aql vendor` — hermetic reproduce (the CI / fresh-clone path).
-- `--frozen` — never re-resolve; fail if the lock is missing/stale.
+- `aql vendor` — **reconcile the manifest with the tree**: a `vendor:`
+  entry added or bumped by hand is resolved, locked, and materialised;
+  unchanged entries reproduce from the lock. (Plain sync must read the
+  manifest — syncing only the already-locked entries would silently
+  ignore a hand-added dependency.)
+- `--frozen` — the CI / fresh-clone path: never re-resolve; fail if the
+  manifest and lock disagree, or the lock is missing/stale.
 
 ## 8. Fetch and safety plumbing
 
 Reuse the machinery `install` already proved
 (`cmd/go/internal/install/install.go`): a bounded download
 (`io.LimitReader` with a size cap so a hostile source can't stream an
-unbounded body), an HTTP timeout, and — critically — **archive-slip
-protection** on every entry via `filepath.IsLocal` (rejects `..`,
-absolute, and volume-relative paths) before writing under the
-destination. Extend the extractor from zip-only to **zip + tar.gz** (git
-hosts serve tarballs). Everything lands atomically (extract to a temp dir,
-verify the hash, then swap into `vendor/…`) so a failed fetch never leaves
-a half-written tree.
+unbounded body) and an HTTP timeout. Extraction then hardens on three
+fronts:
+
+- **Path containment (archive entries).** Every entry name is checked
+  with `filepath.IsLocal` (rejects `..`, absolute, and volume-relative
+  paths) before writing.
+- **Link-aware extraction (tar).** `filepath.IsLocal` on *names* is not
+  enough once we accept `tar.gz` (git hosts serve tarballs): a tar can
+  carry a symlink/hardlink whose target escapes the temp dir and then a
+  later "local-looking" entry *under* that link. The extractor therefore
+  **rejects link entries outright** (or, if links must ever be preserved,
+  resolves each final path with symlink-aware containment). Zip has no
+  link problem; tar does — so the expansion from zip to tar must add this
+  explicitly.
+- **Destination containment (`into`).** The `into` target is resolved and
+  checked to lie within the project root and to be an owned/empty
+  directory (§6) *before* the swap — the archive-entry check guards paths
+  inside the archive, not where the tree lands.
+
+Everything lands atomically (extract to a temp dir, verify the `tree`
+hash, then swap into place) so a failed or tampered fetch never leaves a
+half-written tree, and a hash mismatch aborts *before* the swap.
 
 ## 9. Language integration
 
 AQL stays language-agnostic: it delivers files and records provenance.
-Consuming a vendored tree is per-ecosystem, and the design leaves a
-**post-vendor hook** seam for it (a declared command run in the vendored
-dir after placement, recorded but sandboxed under the CLI permission
-model):
+Consuming a vendored tree is per-ecosystem:
 
-- **TypeScript / Node** — map `vendor/<name>` via `tsconfig.json`
+- **TypeScript / Node** — map the vendored dir via `tsconfig.json`
   `compilerOptions.paths`, or a `package.json` `file:` dependency.
 - **Python** — a namespace package under a vendored `src/` on the path,
-  or an editable `pip install -e vendor/<name>`.
-- **Go** — a `replace <module> => ./vendor/<name>` in `go.mod`.
+  or an editable `pip install -e <dir>`.
+- **Go** — **not** under `vendor/`. The Go toolchain treats a module
+  root's `vendor/` specially and rejects `replace <mod> => ./vendor/…`
+  ("replacement module directory path … is inside vendor directory"), so
+  a Go SDK placed there breaks normal module commands. Go SDKs default to
+  a non-`vendor/` dir (e.g. `third_party/<name>`, or a `go.work use`),
+  with the `replace`/`use` pointing there. This is exactly why the
+  default path is source-derived and per-ecosystem overridable (§6)
+  rather than hard-wired to `vendor/`.
 - **Rust** — a `[patch]` / path dependency in `Cargo.toml`.
 
-The hook is optional; the default is "files are placed, you wire them"
-(the honest, minimal contract). Auto-wiring per ecosystem is a follow-up.
+A **post-vendor hook** (a declared command run in the vendored dir after
+placement — `npm install`, `pip install -e`, …) is an optional seam, off
+by default. Its trust boundary must be stated honestly: the CLI
+permission model (`--perms`) gates *AQL words* (the fileops / network /
+process capability wrappers), it does **not** sandbox the syscalls of a
+spawned `npm` / `pip` / shell process once launched. A hook therefore
+runs with the user's full privileges and is **explicitly unsandboxed** —
+enable it only for trusted vendored code. A real OS-level sandbox
+(namespaces / seccomp / a container) for hooks is a future option, not a
+guarantee the design makes today. The safe default stays "files are
+placed, you wire them."
 
 ## 10. The vendor repository space
 
@@ -209,18 +265,26 @@ repos and skip running a service at all.
 Vendored code is committed and executed by the target toolchain, so treat
 it as a supply-chain dependency:
 
-- **Integrity.** Every fetch is hashed (`sha256` of the archive) and
-  checked against `vendor.lock`; a mismatch aborts. `aql vendor verify`
-  re-hashes the on-disk tree to catch post-vendor tampering.
-- **Pinning.** The lock records a concrete commit/tag, never a floating
-  branch; `--frozen` enforces it in CI.
-- **Path safety.** `filepath.IsLocal` guard on extraction (§8).
-- **Provenance.** The lock records the exact resolved source URL + ref +
-  hash, so an audit can answer "where did this come from."
-- **Untrusted hooks.** A §9 post-vendor hook runs under the existing
-  policy/permission model (`--perms`), off by default, never implicitly.
-- **Future.** Optional signature verification (sigstore-style) and a
-  `--require-signed` gate.
+- **Integrity.** The fetched archive is hashed (`sha256`) to guard
+  re-downloads, and — the load-bearing check — the extracted tree gets a
+  canonical `tree` hash pinned in the lock. `aql vendor verify`
+  re-derives the tree hash from the working files to catch post-vendor
+  tampering; it does not (cannot) re-hash the archive from the extracted
+  files (§5). A mismatch aborts before any swap (§8).
+- **Pinning.** For VCS sources the lock records and fetches the resolved
+  **commit SHA**, never a tag or branch — tags move, commits don't — so
+  `--frozen` is genuinely reproducible (§5).
+- **Path safety.** Archive-entry containment (`filepath.IsLocal`),
+  link-entry rejection for tar, and destination (`into`) containment +
+  ownership — all before the atomic swap (§6, §8).
+- **Provenance.** The lock records the exact resolved source URL + commit
+  + tree hash, so an audit can answer "where did this come from."
+- **Hooks are unsandboxed.** A §9 post-vendor hook is off by default and,
+  when enabled, runs with full user privileges — `--perms` gates AQL
+  words, not a spawned process's syscalls. It is a trusted-code seam, not
+  a security boundary; enable only for code you trust.
+- **Future.** An OS-level sandbox for hooks, and optional signature
+  verification (sigstore-style) with a `--require-signed` gate.
 
 ## 12. Entry-point wiring
 
