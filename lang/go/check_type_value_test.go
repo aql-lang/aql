@@ -160,3 +160,38 @@ func TestMiniLangRegisterCheck(t *testing.T) {
 		t.Errorf("minilang register then use: expected 0 errors, got %d", n)
 	}
 }
+
+// A fn whose analysed body residual is PROVABLY DISJOINT from its declared
+// return type is flagged at check time with the byte-identical runtime
+// type_error (checkBodyReturnConformance, eng/go/core_helpers.go) — the
+// check-mode mirror of the RET check. Only impossibility flags; every
+// value-dependent or under-modeled shape stays with the runtime check.
+func TestDeclaredReturnBodyConformance(t *testing.T) {
+	flagged := []string{
+		`def f fn [[a:Integer] [String] [42]] f 1`,      // constant body, wrong family
+		`def f fn [[a:Integer] [String] [a add 1]] f 1`, // computed body, wrong family
+	}
+	for _, src := range flagged {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("impossible declared return must be flagged: %q", src)
+		}
+	}
+	clean := []string{
+		`def f fn [[a:Integer] [String] ["ok"]] f 1`, // conforming body
+		// value-dependent subset return: Integer residual against a
+		// DepScalar refine of Integer — runtime may accept, stays clean.
+		`def Big (Integer gt 10) def f fn [[n:Big] [Big] [n add 1]] f 50`,
+		// disjunct residual with a conforming alternative (branch join).
+		`def f fn [[a:Integer] [Integer] [if (a gt 0) [a] ["neg"]]] f 1`,
+		// mutual recursion: the sibling is undefined at install-time
+		// analysis; the memoized residual is not evidence.
+		`def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 10`,
+		// fn-value frontier: apply leaves an unapplied Function residual.
+		`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/r) 5`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}

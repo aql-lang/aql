@@ -433,6 +433,166 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 	return out
 }
 
+// checkBodyReturnConformance is the check-mode mirror of the runtime RET
+// check (validateReturnTypes): the analysed body residual's top K values are
+// compared slot-wise against the K declared return types, and a mismatch is
+// reported as the SAME type_error the runtime raises (returnTypeErrorText, so
+// the two surfaces are byte-identical). Unlike the runtime's membership check
+// (`got.Is(exp)`), only a PROVABLY IMPOSSIBLE return flags here: the residual
+// type neither conforms to the declaration nor the declaration to it, and
+// their tand meet is Never — the same disjointness proof the gradual param
+// match uses (sigTypeMatches). A subtype/refine declaration stays
+// value-dependent (`[n add 1]` against a declared `Big (Integer gt 10)` may
+// pass at runtime) and is left to the RET check. Dynamic residuals are the
+// gradual contract; a short residual (recursion bail, zero-net body shape),
+// a None placeholder, and a bare type node are left to the runtime arity /
+// membership errors; a disjunct flags only when EVERY alternative is
+// impossible. Deduped by detail — the ReturnsFn runs once per analysed call
+// shape, but shapes repeat across call sites.
+func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk []Value, pos SrcPos) {
+	if len(declared) == 0 || len(stk) < len(declared) || !r.Check.IsActive() {
+		return
+	}
+	// A residual computed while this body contained an UNDEFINED word is not
+	// evidence: a mutually-recursive sibling defined later (`def isod … isev
+	// … def isev …`) makes the install-time analysis see an incomplete world,
+	// and the FnSummaries memo then serves that broken residual to every
+	// later call. The undefined_word diagnostic tagged with this fn's name is
+	// still in the list here (RescueForwardRefDiagnostics drops it only at
+	// end of pass), so its presence is the reliable "analysis ran early"
+	// signal — skip; the runtime RET check still guards these bodies.
+	for _, d := range r.Check.Diagnostics {
+		if d.Code == "undefined_word" && d.FnName == name {
+			return
+		}
+	}
+	extra := len(stk) - len(declared)
+	for k, exp := range declared {
+		if exp == nil || exp.Equal(TAny) {
+			continue
+		}
+		got := stk[extra+k]
+		if got.Dynamic || got.Parent == nil || IsBareTypeNode(got) || got.Parent.Equal(TNone) {
+			continue
+		}
+		if !residualProvablyDisjoint(got, exp) {
+			continue
+		}
+		detail, _ := returnTypeErrorText(name, k+1, exp, got)
+		dup := false
+		for _, d := range r.Check.Diagnostics {
+			if d.Code == "type_error" && d.Detail == detail {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "type_error",
+				Detail: detail,
+				Word:   name,
+				Row:    pos.Row,
+				Col:    pos.Col,
+			})
+		}
+	}
+}
+
+// residualProvablyDisjoint reports whether a body-residual value's type can
+// NEVER inhabit the declared return type: no conformance in either direction
+// AND a Never tand meet. The either-direction conformance mirrors
+// sigTypeMatches' gradual rule (tand wrongly reports two container-family
+// types as disjoint when one conforms to the other). A disjunct residual is
+// disjoint only if every alternative is.
+func residualProvablyDisjoint(got Value, exp *Type) bool {
+	if IsDisjunct(got) {
+		di, err := AsDisjunct(got)
+		if err != nil || len(di.Alternatives) == 0 {
+			return false
+		}
+		for _, alt := range di.Alternatives {
+			probe := alt
+			if IsBareTypeNode(alt) {
+				probe = carrierOfLiteral(alt)
+			}
+			if !residualProvablyDisjoint(probe, exp) {
+				return false
+			}
+		}
+		return true
+	}
+	p := got.Parent
+	if p == nil || p.ConformsTo(exp) || exp.ConformsTo(p) {
+		return false
+	}
+	// An OPAQUE union residual (Parent=Disjunct with no readable
+	// alternatives — the payload was stripped upstream) denotes "one of
+	// several types" — nothing is provable about it. And a Function/FnDef
+	// residual sits on the fn-value-call frontier: `v f/r apply` leaves an
+	// UNAPPLIED Function in the abstract residual where the runtime calls
+	// it (the "fn-value-call boundary" imprecision class), so a Function
+	// residual routinely means "not modeled", not "returns a function".
+	// Both stay with the runtime RET check.
+	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) || p.ConformsTo(TFnDef) {
+		return false
+	}
+	return isNeverShape(TandValues(NewCarrier(p), NewCarrier(exp)))
+}
+
+// checkRecordShapeArgs is the pattern / record-shape check for one analysed
+// call: for each declared record-typed param, verify the arg map carries each
+// declared field key with a conforming type. Skips calls whose arg is empty
+// or whose key set doesn't overlap the pattern at all (that shape is
+// typically the synthetic/default arg map used during fn body analysis, not
+// a real user call).
+func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args []Value) {
+	for i, pat := range paramPatterns {
+		if pat == nil || i >= len(args) {
+			continue
+		}
+		val := args[i]
+		if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
+			!IsConcrete(*pat) || !IsConcrete(val) {
+			continue
+		}
+		pMap, _ := AsMap(*pat)
+		vMap, _ := AsMap(val)
+		if pMap == nil || vMap == nil || vMap.Len() == 0 {
+			continue
+		}
+		overlap := 0
+		for _, k := range pMap.Keys() {
+			if _, ok := vMap.Get(k); ok {
+				overlap++
+			}
+		}
+		if overlap == 0 {
+			continue
+		}
+		for _, key := range pMap.Keys() {
+			pv, _ := pMap.Get(key)
+			av, hasKey := vMap.Get(key)
+			if !hasKey {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code:     "record_shape_mismatch",
+					Detail:   "argument to " + name + " missing field: " + key,
+					Word:     name,
+					Severity: SeverityError,
+				})
+				continue
+			}
+			if IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(TAny) {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code:     "record_shape_mismatch",
+					Detail:   "argument to " + name + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
+					Word:     name,
+					Severity: SeverityError,
+				})
+			}
+		}
+	}
+}
+
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -450,60 +610,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	genSpec := fnDef.Gen
 	sigParams := append([]FnParam(nil), s.Params...)
 	return func(args []Value, _ *Registry) []Value {
-		// Pattern / record-shape check: for each declared
-		// record-typed param, verify the arg map carries each
-		// declared field key. Skip calls whose arg is empty or
-		// whose key set doesn't overlap the pattern at all
-		// (that pattern is typically the one used during fn
-		// body analysis, not a real user call).
-		for i, pat := range paramPatterns {
-			if pat == nil || i >= len(args) {
-				continue
-			}
-			val := args[i]
-			if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
-				!IsConcrete(*pat) || !IsConcrete(val) {
-				continue
-			}
-			pMap, _ := AsMap(*pat)
-			vMap, _ := AsMap(val)
-			if pMap == nil || vMap == nil || vMap.Len() == 0 {
-				continue
-			}
-			// Overlap gate: only emit if val's keys intersect
-			// the pattern at all. This avoids false positives
-			// when analysing with synthetic/default arg maps.
-			overlap := 0
-			for _, k := range pMap.Keys() {
-				if _, ok := vMap.Get(k); ok {
-					overlap++
-				}
-			}
-			if overlap == 0 {
-				continue
-			}
-			for _, key := range pMap.Keys() {
-				pv, _ := pMap.Get(key)
-				av, hasKey := vMap.Get(key)
-				if !hasKey {
-					r.Check.AddDiagnostic(CheckDiagnostic{
-						Code:     "record_shape_mismatch",
-						Detail:   "argument to " + nameCopy + " missing field: " + key,
-						Word:     nameCopy,
-						Severity: SeverityError,
-					})
-					continue
-				}
-				if IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(TAny) {
-					r.Check.AddDiagnostic(CheckDiagnostic{
-						Code:     "record_shape_mismatch",
-						Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
-						Word:     nameCopy,
-						Severity: SeverityError,
-					})
-				}
-			}
-		}
+		checkRecordShapeArgs(r, nameCopy, paramPatterns, args)
 		// Generic fns (Phase 5): infer the parameter bindings from the
 		// call's arg carriers and install them around the body
 		// analysis, so body-internal `of [T]` / `make (Box of [T])`
@@ -671,6 +778,13 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, narrowArgsToParams(args, sigParams), capturesCopy, declaredReturns)
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
+		}
+		if genSpec == nil {
+			var retPos SrcPos
+			if len(bodyCopy) > 0 {
+				retPos = bodyCopy[0].Pos
+			}
+			checkBodyReturnConformance(r, nameCopy, declaredReturns, stk, retPos)
 		}
 		if len(declaredReturns) > 0 {
 			out := make([]Value, len(declaredReturns))
