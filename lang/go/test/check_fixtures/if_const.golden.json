@@ -6,6 +6,9 @@
     {
       "code": "unreachable_branch",
       "detail": "if condition is a constant true; else-branch is unreachable",
+      "word": "if",
+      "row": 1,
+      "col": 1,
       "severity": "warning"
     }
   ],

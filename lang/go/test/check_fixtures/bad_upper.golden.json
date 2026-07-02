@@ -5,7 +5,7 @@
   "diagnostics": [
     {
       "code": "no_signature",
-      "detail": "no matching signature for upper; assuming best-fit candidate for analysis",
+      "detail": "no matching signature for upper — got (Integer); nearest [String]; assuming best-fit candidate for analysis",
       "word": "upper",
       "row": 1,
       "col": 1,

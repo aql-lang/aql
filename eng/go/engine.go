@@ -6901,17 +6901,75 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// which `signature_error`s at run time, NOT a false positive). The
 	// `!Compiling` guard alone is the correct condition.
 	if !e.registry.Check.Compiling {
+		// Expected-vs-actual: name the operand types the dispatch saw and
+		// the nearest candidate's declared types, so the user can see the
+		// mismatch without reconstructing the stack ("got (Map, Integer);
+		// nearest [Number Number]").
+		detail := "no matching signature for " + w.Name
+		if got := argTypeSummary(args); got != "" {
+			detail += " — got (" + got + ")"
+			if near := sigTypeSummary(sig); near != "" {
+				detail += "; nearest [" + near + "]"
+			}
+		}
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
-			Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
+			Detail: detail + "; assuming best-fit candidate for analysis",
 			Word:   w.Name,
 			Row:    pos.Row,
 			Col:    pos.Col,
 		})
 	}
+	// The assumed dispatch runs its ReturnsFn against args the REAL
+	// match already rejected — a user fn's body analysis under those args
+	// produces CASCADE noise (an unbound param surfacing as a spurious
+	// `undefined_word: x` from inside the body, a dependent no_signature on
+	// a body word). The one honest diagnostic is the no_signature above;
+	// suppress the error-level body diagnostics of the consequent analysis
+	// (the SuppressBodyErrors discipline recursive re-entry already uses).
+	e.registry.Check.SuppressBodyErrors++
 	results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
+	e.registry.Check.SuppressBodyErrors--
 	e.spliceCheckResults(positions, results)
 	return nil
+}
+
+// argTypeSummary renders the operand types of a failed dispatch for the
+// no_signature expected-vs-actual message: comma-separated Parent names,
+// dynamic carriers marked. Empty for a 0-arg dispatch.
+func argTypeSummary(args []Value) string {
+	if len(args) == 0 {
+		return ""
+	}
+	parts := make([]string, len(args))
+	for i, a := range args {
+		switch {
+		case a.Parent == nil:
+			parts[i] = "?"
+		case a.Dynamic:
+			parts[i] = "dynamic(" + a.Parent.Leaf() + ")"
+		default:
+			parts[i] = a.Parent.Leaf()
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// sigTypeSummary renders the best-fit candidate's declared arg types for the
+// no_signature message. Empty for a 0-arg sig.
+func sigTypeSummary(sig *Signature) string {
+	if sig == nil || len(sig.Args) == 0 {
+		return ""
+	}
+	parts := make([]string, len(sig.Args))
+	for i, t := range sig.Args {
+		if t == nil {
+			parts[i] = "?"
+			continue
+		}
+		parts[i] = t.Leaf()
+	}
+	return strings.Join(parts, " ")
 }
 
 // spliceCheckResults removes the word at the pointer plus the consumed
