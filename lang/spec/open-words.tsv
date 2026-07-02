@@ -55,11 +55,42 @@ def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add (fnsig [[Boolea
 def f fn [[a:Integer] [Integer] [1]]  def f fn [[a:Integer] [Integer] [2]]  f 5	2	re-def of a plain user fn with the same tuple REPLACES it (the REPL idiom) — no merge semantics without locked sigs
 #
 # ─────────────────────────────────────────────────────────────────────
-# §6  export transplant — one level, opt-in transitivity
-import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  add true false	true	exporting the merged word transplants the extension into the importer's bare word
-import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  M.add true false	true	the namespaced binding exists alongside the transplant (§4.9)
-import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {x:1}]  add true false	ERROR:signature_error	a module-body merge WITHOUT an export of the word is module-private — nothing crosses the boundary
-import module [import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "I" {add: add/r}] export "O" {x:1}]  add true false	ERROR:signature_error	one level only: A importing B does not forward B's extension to A's importer — this is also the firewall idiom
-import module [import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "I" {add: add/r}] export "O" {add: add/r}]  add true false	true	re-export is the opt-in for transitivity: the outer module re-exports the word and its importer gains the extension
-import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]] export "N" {add: add/r}]	ERROR:extend_conflict	the same unlocked tuple arriving from two different modules is a loud conflict (§4.4)
-import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]]  add true false	false	a direct user def still shadows a transplanted tuple freely — the conflict rule is module-vs-module only
+# §6  module scope: extending a core word REQUIRES a user type (§4.4b)
+#
+# A module may extend a core word only with at least one user-defined
+# (non-kernel) argument type per signature. An all-kernel tuple would
+# change what core calls mean for every importer (`add 1 {}` suddenly
+# working) and breaks forward compatibility the day core claims the
+# tuple as a locked signature. Top-level programs are unrestricted
+# (§1); external-builtin domain types (Date, Matrix, …) anchor a
+# module's signature just like a minted user type.
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]	ERROR:extend_user_type	a module cannot extend a core word with an all-core tuple
+import module [def add fn [[a:Integer b:Map] [Integer] [1]] export "M" {add: add/r}]	ERROR:extend_user_type	`add 1 {}` can never start working because of an import
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {x:1}]	ERROR:extend_user_type	refused at the module-body def itself — even a module-PRIVATE all-core extension breaks when core later claims the tuple
+import module [def Flag (refine Boolean) def add fn [[a:Integer b:Flag] [Boolean] [true]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r}]  add 1 (M.mk true)	true	a MIXED tuple qualifies — one user type anchors the signature
+import module [def add fn [[a:Date b:Date] [Boolean] [true]] export "M" {add: add/r}]  import "aql:time-util"  add TimeUtil.today TimeUtil.today	true	an external-builtin domain type (Date) anchors a module extension — the §6 migration shape
+#
+# ─────────────────────────────────────────────────────────────────────
+# §7  export transplant — one level, opt-in transitivity (user-typed)
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk true)	true	exporting the merged word transplants the extension into the importer's bare word
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk false)	false	the transplanted body runs (module-closure execution) — not a stub match
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  M.add (M.mk true) (M.mk false)	false	the namespaced binding exists alongside the transplant (§4.9)
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  add 1 2	3	locked native dispatch is untouched by a transplant
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  typeof (M.mk true)	Flag	the module's minted type crosses the boundary with its values
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  def Flag M.Flag  def x:Flag true  def y:Flag true  add x y	true	the importer constructs its OWN values via the exported type (alias annotation) and the transplanted signature dispatches on them
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk true)	ERROR:signature_error	a module-body merge WITHOUT an export of the word is module-private — nothing crosses the boundary
+import module [import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "I" {add: add/r mk: mk/r Flag: Flag}] def Flag I.Flag def omk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "O" {mk: omk/r}]  add (O.mk true) (O.mk true)	ERROR:signature_error	one level only: the TYPE crossed two boundaries (O.mk builds Flag-conforming values) but the word extension did not — this is also the firewall idiom
+import module [import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "I" {add: add/r mk: mk/r Flag: Flag}] def Flag I.Flag def omk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "O" {mk: omk/r add: add/r}]  add (O.mk true) (O.mk true)	true	re-export is the opt-in for transitivity: the outer module re-exports the word and its importer gains the extension
+import module [def add fn [[a:Date b:Date] [Boolean] [true]] export "M" {add: add/r}]  import module [def add fn [[a:Date b:Date] [Boolean] [false]] export "N" {add: add/r}]	ERROR:extend_conflict	the same unlocked tuple arriving from two different modules is a loud conflict (§4.4)
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  def add fn [[a:(M.Flag) b:(M.Flag)] [Boolean] [a or b]]  add (M.mk true) (M.mk false)	true	a direct user def still replaces a transplanted tuple freely — the conflict rule is module-vs-module only
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  undef add  add 1 2	3	undef pops the transplant; the base word is intact
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  undef add  add (M.mk true) (M.mk true)	ERROR:signature_error	undef pops the transplant; the transplanted tuple is gone (negative twin)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §8  extending module-provided words
+import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt "x"	7	a native-module wrapper rebound to a bare name carries LOCKED sigs, so def merges onto it (§4.1 — module words count); no user-type rule here, the word is not core
+import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt 16.0	4.0	the wrapper's locked signature still dispatches first
+import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[x:Float] [Float] [1.0]]	ERROR:locked_signature	the wrapper's locked tuple cannot be replaced, same as a core word's
+import module [def w fn [[a:Integer] [Integer] [1]] export "B" {w: w/r}]  def w B.w  def w fn [[a:String] [Integer] [2]]  w "s"	2	a PLAIN module fn (no locked sigs) rebound and re-defd keeps user-word semantics — the new overload dispatches
+import module [def w fn [[a:Integer] [Integer] [1]] export "B" {w: w/r}]  def w B.w  def w fn [[a:String] [Integer] [2]]  w 5	1	…and the module fn's own overload stays reachable (cross-stack overloading, not a merge)
+import module [import "aql:math-util" def sqrt MathUtil.sqrt def sqrt fn [[s:String] [Integer] [7]] export "M" {sqrt: sqrt/r}]  M.sqrt "x"	7	a module may extend ANOTHER module's word and export it; with no bare `sqrt` in the importer the export degrades to the namespaced binding (§4.9)

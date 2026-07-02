@@ -167,6 +167,51 @@ func mergeExtensionSigs(r *Registry, name string, base *FnDefInfo, incoming []Si
 	return merged, changed, nil
 }
 
+// isKernelType reports whether t is a KERNEL-declared builtin — a type
+// core owns and the parser can produce (FixedID inside the eng ranges,
+// below 1000). External-builtin domain types (Date, Matrix, Fetch,
+// Timeout — FixedID >= 1000, registered via RegisterExternalBuiltin by
+// their owning module) and runtime-minted user types are NOT kernel
+// types. nil (an untyped Any slot) counts as kernel.
+func isKernelType(t *Type) bool {
+	return t == nil || (t.Origin == OriginBuiltin && t.FixedID < 1000)
+}
+
+// sigHasUserType reports whether at least one of the signature's
+// argument types is a non-kernel type. The module-scope safety rule
+// for extending CORE words: an all-kernel tuple is refused — it would
+// surprise importers (`add 1 {}` suddenly working from an import) and
+// breaks forward compatibility the day core claims the tuple as a
+// locked signature. A user-minted type or an external-builtin domain
+// type (Matrix, Date, …) anchors the signature to the module's own
+// domain, which is the intended use.
+func sigHasUserType(s *Signature) bool {
+	for i := 0; i < s.TotalArgs(); i++ {
+		if !isKernelType(sigArgType(s, i)) {
+			return true
+		}
+	}
+	return false
+}
+
+// requireUserTypedSigs enforces the module-scope core-word rule over a
+// set of merge candidates: every signature must carry at least one
+// non-kernel argument type. word names the error source (`def` for a
+// module-body merge, `import` for a transplant).
+func requireUserTypedSigs(r *Registry, name, word string, sigs []Signature) error {
+	for i := range sigs {
+		if sigs[i].Fallback || sigHasUserType(&sigs[i]) {
+			continue
+		}
+		return r.AqlErrorHint("extend_user_type",
+			fmt.Sprintf("%s %s: a module may extend a core word only with at least one user-defined argument type per signature — %s is all core types",
+				word, name, sigTupleString(&sigs[i])),
+			word,
+			"an all-core tuple would change what core calls mean for every importer and breaks when a future core version claims it; anchor the signature with a named type (refine / class) from your module")
+	}
+	return nil
+}
+
 // sigTupleString renders a signature's argument tuple as `[Integer
 // String]` for the locked/conflict error messages.
 func sigTupleString(s *Signature) string {
@@ -204,6 +249,19 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 			fmt.Sprintf("def %s: no existing word to extend", name), "def")
 	}
 	compiled := compileFnSigs(r, name, ext, false)
+	// Module-scope safety rule: extending a CORE word from a module
+	// body requires a user-defined argument type in every added
+	// signature. Enforced at def time so the module author sees the
+	// refusal immediately, not the importer at transplant. Top-level
+	// programs (no ModuleScope) extend freely — the author is standing
+	// at the point of change. Module-provided words (wrapper
+	// rebindings — locked but not builtin here) are exempt: they are
+	// versioned with the module dependency that owns them.
+	if r.ModuleScope && r.IsBuiltinWord(name) {
+		if err := requireUserTypedSigs(r, name, "def", compiled); err != nil {
+			return err
+		}
+	}
 	merged, _, err := mergeExtensionSigs(r, name, base, compiled, "")
 	if err != nil {
 		return err
@@ -211,10 +269,19 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 	clone := FnDefInfo{
 		Name:       name,
 		Signatures: merged,
-		Registry:   base.Registry,
 		Captured:   ext.Captured,
 		Extends:    name,
 	}
+	// Registry stays nil — the clone LIVES in r (the registry the def
+	// ran in), and nil means "this registry" everywhere a name lookup
+	// re-resolves the value (execFnDefLiteral's foreign-registry
+	// branch). Inheriting base.Registry would be wrong for a clone of
+	// a module-wrapper rebinding: dot-dispatch of the exported clone
+	// would then re-look the name up in the WRAPPER's sub-registry,
+	// where only the un-merged inner native exists, silently dropping
+	// the merge. Per-signature execution scope is already carried by
+	// each sig's compiled handler closure. resolveModuleExport tags
+	// the module registry at export exactly because this is nil.
 	SortSignatures(clone.Signatures)
 	clone.MaxForwardArgs = calcMaxForwardArgs(clone.Signatures)
 	r.Check.RecordFnBinder(name)
@@ -261,6 +328,15 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
 	if len(incoming) == 0 {
 		return nil
 	}
+	// Defence in depth for the module-scope core-word rule: the merge
+	// that built the exported clone already refused all-kernel tuples,
+	// but a transplant onto a CORE word re-checks so a hand-built /
+	// host-constructed clone can't smuggle one past the importer.
+	if r.IsBuiltinWord(name) {
+		if err := requireUserTypedSigs(r, name, "import", incoming); err != nil {
+			return err
+		}
+	}
 	merged, changed, err := mergeExtensionSigs(r, name, base, incoming, origin)
 	if err != nil {
 		return err
@@ -271,8 +347,10 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
 	clone := FnDefInfo{
 		Name:       name,
 		Signatures: merged,
-		Registry:   base.Registry,
-		Extends:    name,
+		// Registry nil for the same reason as InstallWordExtension's
+		// clone: the binding lives in r, and each incoming sig's
+		// handler already closes over its module sub-registry.
+		Extends: name,
 	}
 	SortSignatures(clone.Signatures)
 	clone.MaxForwardArgs = calcMaxForwardArgs(clone.Signatures)

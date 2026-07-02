@@ -20,6 +20,11 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
 	}
+	// Mark this registry as MODULE scope: a module body may extend a
+	// core word only with user-typed signatures (the open-words
+	// module-scope safety rule — see Registry.ModuleScope and
+	// design/OPEN-WORDS.0.md). Top-level programs are unrestricted.
+	modReg.ModuleScope = true
 	// The module's minted types (refine newtypes, classes) escape to the
 	// importer through its exports, so they must draw IDs from the
 	// importing tree's counter — a fresh counter would let the module's

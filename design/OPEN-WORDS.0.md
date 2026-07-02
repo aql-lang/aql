@@ -421,6 +421,34 @@ modules collide loudly); **Q4** `undef` unwinds in reverse install
 order, no import/local distinction; **Q5** the namespaced `Foo.add`
 binding exists alongside the transplant.
 
+**Module-scope user-type rule (added post-rev-1, maintainer
+instruction).** A MODULE may extend a CORE word only with at least one
+user-defined argument type per signature — an all-kernel tuple
+(`add [Boolean Boolean]`, `add [Integer Map]`) raises
+`[aql/extend_user_type]`. Rationale: an all-core tuple would change
+what core calls mean for every importer (`add 1 {}` suddenly working
+because of an import) and breaks forward compatibility the day core
+claims the tuple as a locked signature. "User type" means any
+non-KERNEL type: a runtime mint (refine / class) or an
+external-builtin domain type (`Date`, `Matrix`, FixedID ≥ 1000) — the
+latter is what keeps the §6 migrations (`add [Date CalDuration]`,
+`add [Matrix Matrix]`) expressible. Enforced at the module-body `def`
+(`Registry.ModuleScope`, set by `RunModuleBody`) so the module author
+sees the refusal immediately — even a module-PRIVATE all-core
+extension is refused, since it breaks on the same future core claim —
+and re-checked at transplant as defence in depth. Top-level programs
+are unrestricted (the author is standing at the point of change), and
+the rule does not apply to extending module-provided words (wrapper
+rebindings), which are versioned with the dependency that owns them.
+
+A per-import subtlety the file battery pins
+(`lang/go/test/module_extend_test.go`): file modules re-RUN per import
+(no module cache), so a re-imported module re-mints its user types —
+only shared-type tuples (external builtins like `Date`) can actually
+collide across importers or dedupe across diamond imports. User-typed
+tuples from two modules are distinct by construction (per-tree mintID,
+§5.2), so they coexist rather than conflict.
+
 §4.5 sealed inventory as audited: `def` (`bindsReferent`, forward-hint
 and macro-expander name checks), `make` (`autoEvalMap` gating keys on
 `match.Name`), `word` (splice-paren expansion in `carrier.go`).

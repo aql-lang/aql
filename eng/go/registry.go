@@ -62,12 +62,21 @@ type Registry struct {
 	// Contexts is the scoped context stack; top = current engine's context Store. See contextstack.go.
 	Contexts *ContextStack
 	// Args is the per-call args list stack. See argsstack.go.
-	Args           *ArgsStack
-	Manager        any               // external manager (e.g. UniversalManager) for SDK operations
-	SDKCache       map[string]any    // cached SDK instances keyed by spec name
-	BaseDir        string            // base directory for resolving relative file paths (set by loadFileModule)
-	BaseFile       string            // full path of the current source file ("" if none); surfaced by __file/__folder
-	Source         string            // most recent source text for error reporting
+	Args     *ArgsStack
+	Manager  any            // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache map[string]any // cached SDK instances keyed by spec name
+	BaseDir  string         // base directory for resolving relative file paths (set by loadFileModule)
+	BaseFile string         // full path of the current source file ("" if none); surfaced by __file/__folder
+	Source   string         // most recent source text for error reporting
+	// ModuleScope marks a registry that runs a MODULE body (set by the
+	// module-body runner, e.g. RunModuleBody in lang). Read by
+	// InstallWordExtension: a module may extend a CORE word only with
+	// signatures carrying at least one user-defined (non-kernel)
+	// argument type — an all-kernel tuple (`add [Boolean Boolean]`)
+	// would surprise importers (`add 1 {}` suddenly working) and breaks
+	// forward compatibility the day core claims the tuple as a locked
+	// signature. See design/OPEN-WORDS.0.md "Implementation notes".
+	ModuleScope    bool
 	errs           []error           // registration errors accumulated during setup
 	ready          bool              // true after initial setup; triggers dynamic help generation
 	OnRegisterHook func(name string) // called when a function is registered after startup
