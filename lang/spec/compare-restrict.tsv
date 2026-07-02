@@ -53,3 +53,11 @@ List lt Map	ERROR:incomparable	two cross-branch type literals
 [1] tcmp {a:1}	-1	List ranks below Map
 true tcmp 5	-1	Boolean ranks below Number
 1 tcmp 1.0	0	cross-leaf magnitude ties
+
+# ── Bytes: an external Scalar leaf obeys the same rules ───────────────
+(convert Bytes "a") lt "b"	ERROR:incomparable	Bytes vs String — different families, no shared comparer
+(convert Bytes "a") cmp 1	ERROR:incomparable	Bytes vs Integer — same
+(convert Bytes "hi") tcmp 'zz'	1	tcmp still orders it: Bytes sits in the external Scalar band, after the kernel scalar families
+(convert Bytes "hi") eq "hi"	false	cross-type eq is false, never an error
+(convert Bytes "hi") deq "hi"	false	deq likewise
+(convert Bytes "hi") deq (convert Bytes "hi")	true	deq agrees with eq on a scalar leaf (content equality, like Number/String — not the compound identity/structural split)

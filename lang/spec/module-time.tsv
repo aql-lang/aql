@@ -129,3 +129,6 @@ import "aql:time-util"  typeof (TimeUtil.timeout 100000 [totally-undefined-xyz])
 import "aql:time-util"  100 (TimeUtil.sleep 0) add 23	123	sleep 0 pauses then continues; 100+23
 import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	same Date value is eq (content equality)
 import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUtil.unix 1577836800)	false	Date and Instant are distinct leaf types — eq is by type+content, NOT chronological (the same instant is `cmp`-equal but not `eq`)
+import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	deq agrees with eq on a Time scalar — content equality, never container identity
+import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	unequal Dates are deq-unequal
+import "aql:time-util"  [(TimeUtil.to-date (TimeUtil.unix 1577836800))] deq [(TimeUtil.to-date (TimeUtil.unix 1577836800))]	true	deq recurses into Nodes holding Time scalars
