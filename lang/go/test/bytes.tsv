@@ -98,3 +98,46 @@ refine BinarySpec [{value:1 type:'f64'}]		bytes_error
 def P (refine BinarySpec [{name:'x' type:'u64'}]) unpack P (convert Bytes [255 255 255 255 255 255 255 255])		bytes_error
 # decode-side: nonzero padding is a malformed frame
 def P (refine BinarySpec [{name:'a' type:'bits' size:4} {value:0 type:'bits' size:4}]) unpack P (convert Bytes [255])		no_match
+
+# ── Scalarness: Bytes is a Scalar leaf. These rows pin the placement
+# itself and everything that follows from it — the scalar equality
+# contract (eq and deq agree: content, never container identity), the
+# family-restricted ordering rules, immutability at the AQL level, and
+# the ABSENCE of Node affordances (no flex twin, no element iteration).
+
+# lattice placement
+(convert Bytes "hi") is Scalar	true
+(convert Bytes "hi") is Node	false
+typeof (convert Bytes "hi")	Bytes
+
+# deq agrees with eq on a scalar leaf: content equality, both directions
+(convert Bytes "hi") deq (convert Bytes "hi")	true
+(convert Bytes "ho") deq (convert Bytes "hi")	false
+# …including nested inside a Node…
+[(convert Bytes "hi")] deq [(convert Bytes "hi")]	true
+[(convert Bytes "ho")] deq [(convert Bytes "hi")]	false
+# …and through a refine newtype (deq agrees with eq and cmp on a tagged subtype)
+def B (refine Bytes) def x:B (convert Bytes "hi") x deq (convert Bytes "hi")	true
+def B (refine Bytes) def x:B (convert Bytes "hi") x deq (convert Bytes "ho")	false
+
+# cross-type equality is false — never an error, never a coercion
+(convert Bytes "hi") eq "hi"	false
+(convert Bytes "hi") deq "hi"	false
+
+# ordering: the family-restricted words reject a cross-family pair;
+# tcmp orders it (Bytes sits in the external Scalar band, after the
+# kernel scalar families)
+(convert Bytes "a") lt "b"		incomparable
+(convert Bytes "hi") tcmp "zz"	1
+sort [(convert Bytes "b") (convert Bytes "a")]	[Bytes<61> Bytes<62>]
+# type-literal-first: the bare Bytes literal sorts below every concrete value
+(convert Bytes "hi") gt Bytes	true
+Bytes tcmp (convert Bytes "hi")	-1
+
+# immutability: add returns a new value and leaves its source unchanged
+def a (convert Bytes "ab") def c (a add (convert Bytes "cd")) a	Bytes<61 62>
+
+# no Node affordances: no flex (mutable) twin, no element iteration —
+# the octets are not Values; convert List is the explicit boundary
+flex (convert Bytes "hi")		signature_error
+each (convert Bytes "hi") ([x:Any] => [x])		signature_error

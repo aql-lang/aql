@@ -410,6 +410,38 @@ func comparePaths(a, b Value) int {
 	}
 }
 
+// pathEqualBehavior gives the Path family content equality: two
+// concrete Paths are equal iff they have the same segments and the
+// same absolute/relative flag — exactly the pairs comparePaths orders
+// as 0 — so eq/deq agree with cmp on Paths (both route here via
+// scalarSemanticEqual). Without it, Path fell through ExactEqual's
+// and DeepEqual's dispatch to `return false`, making identical
+// concrete Paths eq-unequal while cmp said 0.
+//
+// Compare is deliberately NOT implemented: Path ordering keeps
+// routing through the LCA walk to scalarCompareBehavior →
+// comparePaths, unchanged. Non-concrete operands (the bare `Path`
+// type literal) fall back to the kernel default, which compares
+// lattice identity.
+type pathEqualBehavior struct{ defaultBehavior }
+
+func (pathEqualBehavior) Equal(a, b Value) bool {
+	ap, aerr := AsPath(a)
+	bp, berr := AsPath(b)
+	if aerr != nil || berr != nil {
+		return DefaultBehavior.Equal(a, b)
+	}
+	if ap.Abs != bp.Abs || len(ap.Parts) != len(bp.Parts) {
+		return false
+	}
+	for i := range ap.Parts {
+		if ap.Parts[i] != bp.Parts[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // init attaches the scalar Comparers to their owning kernel types.
 // The Builtin TypeTable has been populated by the typetable.go init
 // at this point (same package, lexicographic file order isn't
@@ -428,4 +460,5 @@ func init() {
 	TAtom.Behavior = atomCompareBehavior{}
 	TScalar.Behavior = scalarCompareBehavior{}
 	TWord.Behavior = wordCompareBehavior{}
+	TPath.Behavior = pathEqualBehavior{}
 }

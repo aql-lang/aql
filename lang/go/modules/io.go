@@ -28,6 +28,10 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
+	// StreamKind escapes to the importer (the exported type literal, and
+	// the Parent tag on the stdin/stdout/stderr handles), so it must draw
+	// its ID from the importing tree's counter — see eng TypeTable.mintID.
+	subReg.Types.AdoptSeqFrom(parent.Types)
 	// StreamKind — the type of the stdin/stdout/stderr handles — is owned
 	// by this module: minted per import into the sub-registry, never a
 	// global builtin. It tags the handles and types the read/write Stream
