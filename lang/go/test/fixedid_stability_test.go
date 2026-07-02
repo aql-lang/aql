@@ -84,11 +84,11 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Store":        42,
 		"Ideal/Store/System": 43,
 		// FixedID 44 retired with Ideal/Array (removed); not recycled.
-		"Ideal/Error":            45,
-		"Scalar/Path":            47,
-		"Ideal/Tensor":           2001, // matrix module range (2000-2999)
-		"Ideal/Tensor/Matrix":    2000, // historical Matrix FixedID, kept
-		"Ideal/Tensor/Vector":    2002,
+		"Ideal/Error": 45,
+		"Scalar/Path": 47,
+		// Tensor family (former FixedIDs 2000-2002) moved to
+		// aql:matrix-util as per-import module mints with no FixedID —
+		// see MintTensorTypes and design/OPEN-WORDS.0.md.
 		"Ideal/Module":           5000,
 		"Ideal/ModuleExport":     5001,
 		"Node/Map/KeyVal":        5002, // map-iteration entry — lang/go/native/native_keyval.go

@@ -201,6 +201,18 @@ func InstallMatrixExports(r *native.Registry) error {
 	for name, exportMap := range desc.Exports {
 		r.Defs.Push(name, native.NewMap(exportMap))
 	}
+	// Transplant the module's word extensions (the matrix add / sub /
+	// mul overloads) like the real import path does.
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			if ext, ok := native.IsWordExtension(v); ok {
+				if err := native.TransplantExtension(r, ext, "aql:matrix-util"); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
 }
 

@@ -429,7 +429,8 @@ Any
 │   ├── Store, Table
 │   ├── Fetch (Request | Response)
 │   ├── Timeout, Interval
-│   └── Tensor (Matrix | Vector)
+│   └── (aql:matrix-util owns Tensor with Matrix | Vector —
+│        module-minted per import, e.g. MatrixUtil.Matrix)
 ├── Word
 │   └── (internal control words)
 └── Type

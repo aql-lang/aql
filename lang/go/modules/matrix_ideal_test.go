@@ -60,7 +60,7 @@ func TestTensorIdeals_Registered(t *testing.T) {
 
 func TestMake_Vector(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "make Vector [1 2 3]")
+	res, err := runTensorSrc(t, r, "make MatrixUtil.Vector [1 2 3]")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestMake_Vector(t *testing.T) {
 
 func TestMake_Matrix(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "make Matrix [[1 2][3 4]]")
+	res, err := runTensorSrc(t, r, "make MatrixUtil.Matrix [[1 2][3 4]]")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestMake_Matrix(t *testing.T) {
 func TestMake_Tensor(t *testing.T) {
 	r := tensorRegistry(t)
 	// Nested-list form — the shape is inferred from the nesting.
-	res, err := runTensorSrc(t, r, "make Tensor [[[1 2][3 4]][[5 6][7 8]]]")
+	res, err := runTensorSrc(t, r, "make MatrixUtil.Tensor [[[1 2][3 4]][[5 6][7 8]]]")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestMake_Tensor(t *testing.T) {
 		t.Fatalf("nested form: got shape %v, want [2 2 2]", td.Shape)
 	}
 	// Explicit {shape data} map form.
-	res, err = runTensorSrc(t, r, "make Tensor {shape:[2 3] data:[1 2 3 4 5 6]}")
+	res, err = runTensorSrc(t, r, "make MatrixUtil.Tensor {shape:[2 3] data:[1 2 3 4 5 6]}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestMake_Tensor(t *testing.T) {
 		t.Fatalf("map form: got shape %v, want [2 3]", td.Shape)
 	}
 	// Ragged nested data is rejected.
-	if _, err := runTensorSrc(t, r, "make Tensor [[1 2][3 4 5]]"); err == nil {
+	if _, err := runTensorSrc(t, r, "make MatrixUtil.Tensor [[1 2][3 4 5]]"); err == nil {
 		t.Error("ragged tensor data should fail")
 	}
 }
@@ -114,7 +114,7 @@ func TestMake_Tensor(t *testing.T) {
 func TestType_ShapedMatrix(t *testing.T) {
 	r := tensorRegistry(t)
 	res, err := runTensorSrc(t, r,
-		"def Mat3 (refine Matrix {rows:3 cols:3}) make Mat3 [[1 2 3][4 5 6][7 8 9]]")
+		"def Mat3 (refine MatrixUtil.Matrix {rows:3 cols:3}) make Mat3 [[1 2 3][4 5 6][7 8 9]]")
 	if err != nil {
 		t.Fatalf("shaped make should succeed: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestType_ShapedMatrix(t *testing.T) {
 	}
 	// A shape mismatch against the constructed type is rejected.
 	_, err = runTensorSrc(t, r,
-		"def M3 (refine Matrix {rows:3 cols:3}) make M3 [[1 2][3 4]]")
+		"def M3 (refine MatrixUtil.Matrix {rows:3 cols:3}) make M3 [[1 2][3 4]]")
 	if err == nil {
 		t.Fatal("shape-mismatched make should fail")
 	}
@@ -134,14 +134,14 @@ func TestType_ShapedMatrix(t *testing.T) {
 
 func TestType_ShapedVector(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "def V5 (refine Vector {len:5}) make V5 [1 2 3 4 5]")
+	res, err := runTensorSrc(t, r, "def V5 (refine MatrixUtil.Vector {len:5}) make V5 [1 2 3 4 5]")
 	if err != nil {
 		t.Fatalf("shaped vector make should succeed: %v", err)
 	}
 	if td := AsTensor(res[0]); !shapeEqual(td.Shape, []int{5}) {
 		t.Fatalf("got shape %v, want [5]", td.Shape)
 	}
-	_, err = runTensorSrc(t, r, "def V3 (refine Vector {len:3}) make V3 [1 2 3 4 5]")
+	_, err = runTensorSrc(t, r, "def V3 (refine MatrixUtil.Vector {len:3}) make V3 [1 2 3 4 5]")
 	if err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Errorf("length-mismatched vector make should fail with a shape error, got %v", err)
 	}
@@ -153,7 +153,7 @@ func TestType_ShapedVector(t *testing.T) {
 // collapse era's answer for any type literal.
 func TestTensorType_TypeofIsKind(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "(refine Matrix {rows:2 cols:2}) typeof")
+	res, err := runTensorSrc(t, r, "(refine MatrixUtil.Matrix {rows:2 cols:2}) typeof")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,13 +167,13 @@ func TestTensorType_TypeofIsKind(t *testing.T) {
 func TestTensorIdeals_DisableBaseDisablesFamily(t *testing.T) {
 	r := tensorRegistry(t)
 	r.Ideals.Get("Tensor").Enabled = false
-	_, err := runTensorSrc(t, r, "make Matrix [[1 2][3 4]]")
+	_, err := runTensorSrc(t, r, "make MatrixUtil.Matrix [[1 2][3 4]]")
 	if err == nil || !strings.Contains(err.Error(), "not available") {
-		t.Errorf("make Matrix with Tensor disabled: want a 'not available' error, got %v", err)
+		t.Errorf("make MatrixUtil.Matrix with Tensor disabled: want a 'not available' error, got %v", err)
 	}
 	r.Ideals.Get("Tensor").Enabled = true
-	if _, err := runTensorSrc(t, r, "make Matrix [[1 2][3 4]]"); err != nil {
-		t.Errorf("make Matrix after re-enabling Tensor: %v", err)
+	if _, err := runTensorSrc(t, r, "make MatrixUtil.Matrix [[1 2][3 4]]"); err != nil {
+		t.Errorf("make MatrixUtil.Matrix after re-enabling Tensor: %v", err)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestTensorIdeals_DisableBaseDisablesFamily(t *testing.T) {
 // Tensor.
 func TestMatrix_IsTensor(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "make Matrix [[1 2][3 4]] is Tensor")
+	res, err := runTensorSrc(t, r, "make MatrixUtil.Matrix [[1 2][3 4]] is MatrixUtil.Tensor")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestMatrix_IsTensor(t *testing.T) {
 
 func TestTensor_Format(t *testing.T) {
 	r := tensorRegistry(t)
-	res, err := runTensorSrc(t, r, "make Matrix [[1 2 3][4 5 6]]")
+	res, err := runTensorSrc(t, r, "make MatrixUtil.Matrix [[1 2 3][4 5 6]]")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -449,17 +449,29 @@ which are versioned with the dependency that owns them.
 
 Consequence for the §6 migrations: a migration qualifies for the
 transplant path exactly when the module also takes ownership of the
-TYPES. Migration 1 is DONE this way: TimeOfDay / Duration /
-CalendarDuration / ClockDuration / Timezone moved out of the global builtin
-table (former FixedIDs 1004-1008) into aql:time-util as per-import
-mints (`MintTemporalModuleTypes`, the StreamKind pattern), and the
-temporal add/sub overloads ride the module's exported word-extension
-clones (`TemporalArithmeticExtensions` + `NewWordExtension`) — the
-minted duration types are what satisfy the user-type rule. Only Date /
-DateTime / Instant (and the Scalar/Time root) remain core. A migration
-whose types must STAY global builtins (`Matrix`) cannot ride the
-transplant; it would go through the host registration layer (Go-side
-`Register`, locked signatures) in the owning module's builder.
+TYPES. Both are DONE this way:
+
+- Migration 1: TimeOfDay / Duration / CalendarDuration /
+  ClockDuration / Timezone moved out of the global builtin table
+  (former FixedIDs 1004-1008) into aql:time-util as per-import mints
+  (`MintTemporalModuleTypes`, the StreamKind pattern), and the
+  temporal add/sub overloads ride the module's exported word-extension
+  clones (`TemporalArithmeticExtensions` + `NewWordExtension`). Only
+  Date / DateTime / Instant (and the Scalar/Time root) remain core.
+- Migration 2: the Tensor family (Tensor / Matrix / Vector, former
+  FixedIDs 2000-2002) moved into aql:matrix-util the same way
+  (`MintTensorTypes` + `TensorArithmeticExtensions`): import
+  transplants [Matrix Matrix] overloads onto bare add / sub / mul,
+  with mat-add / mat-sub / mat-mul kept as aliases backed by the same
+  handlers. The Ideal-kind surface is namespaced now — `make
+  MatrixUtil.Matrix [[1 2][3 4]]`, `refine MatrixUtil.Matrix {rows:R
+  cols:C}` — since the bare names left the builtin index with the
+  types.
+
+In both cases the minted types are what satisfy the user-type rule. A
+future migration whose types must STAY global builtins would instead
+go through the host registration layer (Go-side `Register`, locked
+signatures) in the owning module's builder.
 
 Two properties the batteries pin
 (`lang/go/test/module_extend_test.go`, open-words.tsv §6–§7): file

@@ -52,3 +52,27 @@ import "aql:matrix-util"  MatrixUtil.dot [1 2 3] [4 5 6]	32.0	dot: dot product o
 # §8  negative
 MatrixUtil.zeros 2 2	ERROR:undefined_word	`MatrixUtil` is unbound without `import`
 import "aql:matrix-util"  MatrixUtil.create [[1 2] [3]]	ERROR:row 1 has 1 elements	create rejects ragged rows
+#
+# ─────────────────────────────────────────────────────────────────────
+# matrix arithmetic — word extensions of core add/sub/mul (open words)
+# The tensor types are module-owned per-import mints (former global
+# FixedIDs 2000-2002 retired) and the arithmetic rides the module's
+# exported word extensions; import transplants them onto the
+# importer's bare add/sub/mul (design/OPEN-WORDS.0.md §6 migration 2).
+import "aql:matrix-util"  MatrixUtil.values (add (MatrixUtil.eye 2) (MatrixUtil.eye 2))	[2.0 0.0 0.0 2.0]	Matrix + Matrix dispatches on bare add via the transplanted extension
+import "aql:matrix-util"  MatrixUtil.values ((MatrixUtil.fill 2 2 5.0) sub (MatrixUtil.ones 2 2))	[4.0 4.0 4.0 4.0]	Matrix - Matrix (swap form reads a-b, like numeric sub)
+import "aql:matrix-util"  MatrixUtil.values (mul (MatrixUtil.fill 2 2 3.0) (MatrixUtil.eye 2))	[3.0 3.0 3.0 3.0]	Matrix x Matrix product on bare mul
+import "aql:matrix-util"  MatrixUtil.values (MatrixUtil.add (MatrixUtil.eye 2) (MatrixUtil.eye 2))	[2.0 0.0 0.0 2.0]	the namespaced form works alongside the transplant
+import "aql:matrix-util"  MatrixUtil.values (MatrixUtil.sub (MatrixUtil.fill 2 2 5.0) (MatrixUtil.ones 2 2))	[-4.0 -4.0 -4.0 -4.0]	namespaced sub (forward form computes b-a, the kernel convention)
+import "aql:matrix-util"  MatrixUtil.values (MatrixUtil.mul (MatrixUtil.fill 2 2 3.0) (MatrixUtil.eye 2))	[3.0 3.0 3.0 3.0]	namespaced mul
+import "aql:matrix-util"  add 1 2	3	the locked numeric add is untouched by the transplant
+import "aql:matrix-util"  undef add  add 1 2	3	undef pops the module's extension; core add intact
+add (MatrixUtil.eye 2) (MatrixUtil.eye 2)	ERROR:undefined_word	an engine that never imports the module has no matrix vocabulary at all (negative twin)
+#
+# module-owned tensor types — per-import mints, exported literals
+import "aql:matrix-util"  typeof (MatrixUtil.eye 2)	Matrix	matrices carry the module-minted type
+import "aql:matrix-util"  (MatrixUtil.eye 2) is MatrixUtil.Matrix	true	the minted type is exported and testable with is
+import "aql:matrix-util"  (MatrixUtil.eye 2) is MatrixUtil.Tensor	true	Matrix sits under the module's Tensor node
+import "aql:matrix-util"  make MatrixUtil.Matrix [[1 2][3 4]]	Matrix(2x2)	make instantiates through the exported literal
+import "aql:matrix-util"  make MatrixUtil.Vector [1 2 3] is MatrixUtil.Matrix	false	sibling tensor kinds stay distinct
+import "aql:matrix-util"  typeof (make MatrixUtil.Vector [1 2 3])	Vector	Vector is module-minted too

@@ -62,21 +62,22 @@ def Foo refine List  def Bar refine List  def k fn [[Foo] [String] ['f']  [Bar] 
 # 4. Go-defined Ideals (Tensor / Matrix / Vector from aql:matrix)
 # ---------------------------------------------------------------------
 # Matrix and Vector are registered via RegisterExternalBuiltin as
-# lattice children of Tensor (modules/matrix.go::registerTensorTypes).
+# lattice children of Tensor (modules/matrix.go::MintTensorTypes —
+# per-import module mints, referenced via the MatrixUtil exports).
 # They share the external Ideal band Rank with their parent; same
 # Rank, deeper depth → child sorts before parent in the reversed
 # order. Matrix vs Vector are siblings — name tiebreak (Matrix < Vector
 # lex) flipped means Vector sorts first.
 
-def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']]  inspect k 'signatures' get	[{args:['Matrix']} {args:['Tensor']} {args:[]}]	Matrix sorts before Tensor (child before parent)
-def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']]  make Matrix [[1 2][3 4]] k	'm'	Matrix instance hits the Matrix sig
-def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']]  make Vector [1 2 3] k	't'	Vector isn't Matrix — falls through to Tensor
-def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']  [Vector] [String] ['v']]  inspect k 'signatures' get	[{args:['Vector']} {args:['Matrix']} {args:['Tensor']} {args:[]}]	Matrix/Vector both before Tensor; Vector before Matrix on name tiebreak (reversed)
-def k fn [[Tensor] [String] ['t']  [Matrix] [String] ['m']  [Vector] [String] ['v']]  make Vector [1 2 3] k	'v'	Vector instance hits the Vector sig
+def k fn [[a:(MatrixUtil.Tensor)] [String] ['t']  [a:(MatrixUtil.Matrix)] [String] ['m']]  inspect k 'signatures' get	[{args:['Matrix']} {args:['Tensor']} {args:[]}]	Matrix sorts before Tensor (child before parent)
+def k fn [[a:(MatrixUtil.Tensor)] [String] ['t']  [a:(MatrixUtil.Matrix)] [String] ['m']]  make MatrixUtil.Matrix [[1 2][3 4]] k	'm'	Matrix instance hits the Matrix sig
+def k fn [[a:(MatrixUtil.Tensor)] [String] ['t']  [a:(MatrixUtil.Matrix)] [String] ['m']]  make MatrixUtil.Vector [1 2 3] k	't'	Vector isn't Matrix — falls through to Tensor
+def k fn [[a:(MatrixUtil.Tensor)] [String] ['t']  [a:(MatrixUtil.Matrix)] [String] ['m']  [a:(MatrixUtil.Vector)] [String] ['v']]  inspect k 'signatures' get	[{args:['Vector']} {args:['Matrix']} {args:['Tensor']} {args:[]}]	Matrix/Vector both before Tensor; Vector before Matrix on name tiebreak (reversed)
+def k fn [[a:(MatrixUtil.Tensor)] [String] ['t']  [a:(MatrixUtil.Matrix)] [String] ['m']  [a:(MatrixUtil.Vector)] [String] ['v']]  make MatrixUtil.Vector [1 2 3] k	'v'	Vector instance hits the Vector sig
 
 # User refinement OF a Go-defined Ideal: deeper than Matrix, same
 # external band → sorts ahead of Matrix.
-def UMat refine Matrix  def k fn [[Matrix] [String] ['m']  [UMat] [String] ['u']]  inspect k 'signatures' get	[{args:['UMat']} {args:['Matrix']} {args:[]}]	user-defined subtype of Matrix sorts before Matrix
+def UMat refine MatrixUtil.Matrix  def k fn [[a:(MatrixUtil.Matrix)] [String] ['m']  [a:UMat] [String] ['u']]  inspect k 'signatures' get	[{args:['UMat']} {args:['Matrix']} {args:[]}]	user-defined subtype of Matrix sorts before Matrix
 
 # ---------------------------------------------------------------------
 # 5. Pattern-driven sort (concrete Pattern beats bare type literal)
