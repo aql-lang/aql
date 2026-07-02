@@ -211,22 +211,23 @@ type miniLitVal struct {
 // setupMiniLitMatcher registers a high-priority lex matcher for the minilang
 // shortcut `+name<delim>src<delim>` — terse sugar for `mini name 'src'`. The
 // delimiter is the first character after the (lowercase) name; the SAME
-// character closes. Backslash escapes the delimiter and itself (`\<delim>` →
-// the delimiter, `\\` → `\`); every OTHER backslash is preserved literally, so
-// regex sources keep their escapes raw (`+re/\d+/` → src `\d+`, no doubling).
+// character closes. Backslash escapes the delimiter, itself, and whitespace
+// (`\<delim>` → the delimiter, `\\` → `\`, `\<space>`/`\<tab>` → the space);
+// every OTHER backslash is preserved literally, so regex sources keep their
+// escapes raw (`+re/\d+/` → src `\d+`, no doubling).
 //
-// The closing delimiter is OPTIONAL when the source does not contain the
-// delimiter char: an unclosed literal ends at the first whitespace (or end of
-// source) — `+email:alice@example.com` ≡ `mini email 'alice@example.com'`.
-// The open form's source therefore cannot contain whitespace (or a structural
-// char you need lexed separately, e.g. a closing paren) — close the literal
-// explicitly for those. Two bounds keep an unclosed literal from being
-// captured by a stray delimiter char elsewhere: a literal NEVER spans lines
-// (the closing-delimiter scan stops at end of line), and once the source
-// spans whitespace a closing delimiter only counts when it ends a token
-// (followed by whitespace or end of line) — so `+hb/de ad be ef/` closes
-// while the `:` inside a later `{limit:2}` leaves `+re:\d {limit:2}` open
-// with source `\d`.
+// A literal is a SINGLE whitespace-free span — its source never contains
+// unescaped whitespace. Within the span the first unescaped delimiter closes
+// it (the closed form, which can abut syntax: `+re/x/).fst`). The closing
+// delimiter is OPTIONAL when the source does not contain the delimiter char:
+// with no delimiter before the first unescaped whitespace (or end of source),
+// the span IS the source — the open form, `+email:alice@example.com` ≡
+// `mini email 'alice@example.com'`. There is no scan-ahead past whitespace,
+// so a stray delimiter char in a later token (the `:` in `{limit:2}` or
+// `{limit: 2}`) can never capture the literal, and a literal never spans
+// lines. A source that needs whitespace uses the quoted `mini` form or
+// escapes (`+hb/de\ ad/`); hb/bb sources can group with `_` instead
+// (`+hb/de_ad_be_ef/`).
 //
 // The match emits a single #ML token carrying a miniLitVal; the val rule turns
 // it into r.Node and convertTopLevelValueInner expands it to the mini splice,
@@ -271,27 +272,24 @@ func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
 		}
 		delim := s[si]
 		si++
-		// Closed scan: look for the closing delimiter, honoring escapes,
-		// bounded to the CURRENT LINE (a literal never spans lines — without
-		// the bound, an unclosed literal would be captured by a stray
-		// delimiter char anywhere later in the source). Within the first
-		// whitespace-free span the first delimiter closes unconditionally
-		// (`+re/x/).fst` — the tight form). Once the source spans whitespace,
-		// a closing delimiter only counts when it ends a token (followed by
-		// whitespace or end of line): `+hb/de ad be ef/` closes, but the `:`
-		// inside a later `{limit:2}` on the same line does NOT capture
-		// `+re:\d {limit:2}` — that literal stays open with source `\d`.
+		// Single-span scan: a literal never contains unescaped whitespace.
+		// The first unescaped delimiter closes it (so a closed literal can
+		// abut syntax: `+re/x/).fst`, `+hb/de_ad/).typeof`); unescaped
+		// whitespace before any delimiter ends the literal OPEN — no
+		// scan-ahead, so a stray delimiter char in a later token (`{limit:2}`
+		// or `{limit: 2}`) can never capture it. Escapes: `\<delim>`,
+		// `\\`, `\<space>`, `\<tab>` produce the escaped char; every other
+		// backslash is preserved raw.
 		var b strings.Builder
 		closed := false
-		spanning := false
 		for si < len(s) {
 			c := s[si]
-			if c == '\n' || c == '\r' {
-				break
+			if isSpace(c) {
+				break // open form: the literal ends at unescaped whitespace
 			}
 			if c == '\\' && si+1 < len(s) {
-				if nxt := s[si+1]; nxt == delim || nxt == '\\' {
-					b.WriteByte(nxt) // \<delim> → delim ; \\ → \
+				if nxt := s[si+1]; nxt == delim || nxt == '\\' || nxt == ' ' || nxt == '\t' {
+					b.WriteByte(nxt) // \<delim> → delim ; \\ → \ ; \<ws> → ws
 					si += 2
 					continue
 				}
@@ -300,47 +298,15 @@ func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
 				continue
 			}
 			if c == delim {
-				if !spanning || si+1 >= len(s) || isSpace(s[si+1]) {
-					closed = true
-					si++
-					break
-				}
-				// A mid-token delimiter in spanning territory is source text.
-				b.WriteByte(c)
+				closed = true
 				si++
-				continue
-			}
-			if c == ' ' || c == '\t' {
-				spanning = true
+				break
 			}
 			b.WriteByte(c)
 			si++
 		}
-		if !closed {
-			// Open form: no closing delimiter on this line, so the source is
-			// the whitespace-free span after the delimiter (same escape
-			// rules). An empty span (`+name:` before whitespace/EOI) is not a
-			// literal — leave it to normal lexing.
-			b.Reset()
-			si = start + 1 + len(name) + 1 // rewind to just after the delimiter
-			for si < len(s) && !isSpace(s[si]) {
-				c := s[si]
-				if c == '\\' && si+1 < len(s) {
-					if nxt := s[si+1]; nxt == delim || nxt == '\\' {
-						b.WriteByte(nxt) // \<delim> → delim ; \\ → \
-						si += 2
-						continue
-					}
-					b.WriteByte('\\') // any other escape is preserved raw
-					si++
-					continue
-				}
-				b.WriteByte(c)
-				si++
-			}
-			if b.Len() == 0 {
-				return nil
-			}
+		if !closed && b.Len() == 0 {
+			return nil // an empty open source (`+name:` before whitespace) is not a literal
 		}
 		tkn := lex.Token("#ML", t.ML, miniLitVal{Name: name, Src: b.String()}, s[start:si])
 		cursor.SI = si

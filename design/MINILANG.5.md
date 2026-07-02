@@ -683,23 +683,27 @@ over for free: a stack subject, a trailing `{opts}` map (collected by mini's
 - **Delimiter** is the first character after the (lowercase) `name`; the
   **same** character closes. Pick any non-space char, so a source containing
   one delimiter just uses another: `+re|a/b|`, `+re#a/b#`.
-- **Backslash** escapes the delimiter and itself (`\<delim>` → the delimiter,
-  `\\` → `\`); every **other** backslash is preserved **raw**. So regex keeps
-  its escapes without doubling — `+re/\d+/` is the pattern `\d+`, versus the
-  quoted form's `'\\d+'` (the F3 escaping wart, gone for this surface).
+- **Backslash** escapes the delimiter, itself, and whitespace (`\<delim>` →
+  the delimiter, `\\` → `\`, `\<space>`/`\<tab>` → the space); every **other**
+  backslash is preserved **raw**. So regex keeps its escapes without doubling
+  — `+re/\d+/` is the pattern `\d+`, versus the quoted form's `'\\d+'` (the
+  F3 escaping wart, gone for this surface).
 - **Trigger** is `+` immediately followed by a lowercase letter, a non-space
   delimiter, and at least one source char. `+0d5` (a signed bignum) and a bare
   `+` are left to normal lexing, as is an empty unterminated source (`+re:`
   before whitespace).
-- **The closing delimiter is optional** when the source does not contain the
-  delimiter char: an unclosed literal ends at the first whitespace or end of
-  source — `+email:alice@example.com` ≡ `mini email 'alice@example.com'`. The
-  open form's source cannot contain whitespace (close the literal explicitly
-  for that: `+hb/de ad be ef/`). Two bounds keep an unclosed literal from
-  being captured by a stray delimiter char elsewhere: a literal never spans
-  lines, and once the source spans whitespace a closing delimiter only counts
-  at a token end (followed by whitespace / end of line) — so
-  `+re:\d {limit:2}` stays open with source `\d` despite the map's `:`.
+- **A literal is a single whitespace-free span** — its source never contains
+  unescaped whitespace, and the first unescaped delimiter in the span closes
+  it (so a closed literal can abut syntax: `+re/x/).fst`). **The closing
+  delimiter is optional** when the source does not contain the delimiter
+  char: with no delimiter before the first whitespace (or end of source), the
+  span IS the source — `+email:alice@example.com` ≡
+  `mini email 'alice@example.com'`. There is no scan-ahead past whitespace,
+  so a stray delimiter char in a later token (the `:` in `{limit:2}` or
+  `{limit: 2}`) can never capture the literal, and a literal never spans
+  lines. A source that needs whitespace escapes it (`\<space>` — see
+  Backslash above) or uses the quoted `mini` form; hb/bb sources group with
+  `_` (`+hb/de_ad_be_ef/`).
 - **Sugar only, opts-less in the literal** — for options, the trailing map
   rides the desugared call (`+re/\d/ {limit:2}`). There is no first-class
   compiled-pattern *value* yet; that remains the Phase-3 compile-hook /

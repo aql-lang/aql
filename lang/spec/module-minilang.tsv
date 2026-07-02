@@ -72,29 +72,33 @@ import "aql:minilang"  +bf/++++++++[>++++++++<-]>+./	'A'	bf generator via the sh
 import "aql:minilang"  +hb/deadbeef/	Bytes<de ad be ef>	hex Bytes literal via the shortcut
 import "aql:minilang"  mini hb 'deadbeef'	Bytes<de ad be ef>	the explicit form is equivalent
 import "aql:minilang"  (MiniLang.lang_hb 'deadbeef' {} end)	Bytes<de ad be ef>	mini/+hb are sugar — the desugared standard call is equivalent
-import "aql:minilang"  +hb/de ad be ef/	Bytes<de ad be ef>	whitespace in the source is ignored (grouping)
+import "aql:minilang"  +hb/de_ad_be_ef/	Bytes<de ad be ef>	underscores in the source are ignored (grouping)
+import "aql:minilang"  +hb/de\ ad\ be\ ef/	Bytes<de ad be ef>	whitespace must be escaped — a literal is a single whitespace-free span
 import "aql:minilang"  +bb/01001100/	Bytes<4c>	binary Bytes literal — 8 bits, MSB-first
 import "aql:minilang"  (MiniLang.lang_bb '01001100' {} end)	Bytes<4c>	the desugared standard call for bb
-import "aql:minilang"  +bb/01001100 11110000/	Bytes<4c f0>	binary grouping with whitespace
+import "aql:minilang"  +bb/01001100_11110000/	Bytes<4c f0>	binary grouping with underscores
 import "aql:minilang"  +hb/abc/	ERROR:mini_parse_error	an odd-length hex source is rejected
 import "aql:minilang"  +bb/0102/	ERROR:mini_parse_error	a non-binary digit is rejected
 import "aql:minilang"  +bb/0100110/	ERROR:mini_parse_error	a non-multiple-of-8 bit count is rejected
 import "aql:minilang"  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the same expansion-time error as `mini nope`
 +re/[a-z]+/	ERROR:mini_unknown_lang	the shortcut needs the import too (no auto-import)
 #
-# §6b  the OPEN form — the closing delimiter is optional when the source does not
-#      contain the delimiter char: an unclosed literal ends at the first whitespace
-#      (or end of source), so `+email:alice@example.com` ≡ `mini email 'alice@example.com'`.
-#      An open source cannot contain whitespace (close the literal explicitly for that —
-#      `+hb/de ad be ef/` needs its delimiters); a source char equal to the delimiter
-#      CLOSES there (first occurrence wins) unless backslash-escaped. A literal never
-#      spans lines.
+# §6b  the OPEN form — a literal is a single whitespace-free span, and the closing
+#      delimiter is optional when the source does not contain the delimiter char: with
+#      no delimiter before the first unescaped whitespace (or end of source), the span
+#      is the source — `+email:alice@example.com` ≡ `mini email 'alice@example.com'`.
+#      There is no scan-ahead past whitespace, so a stray delimiter char in a later
+#      token can never capture the literal, and a literal never spans lines. A source
+#      char equal to the delimiter CLOSES there (first occurrence wins) unless escaped.
 import "aql:minilang"  +hb:deadbeef	Bytes<de ad be ef>	open form: no closing delimiter needed at end of source
 import "aql:minilang"  ("a1b2c3" +re:\d {limit:2}).n	2	open form ends at whitespace — the opts map still collects, backslashes still raw
+import "aql:minilang"  ("a1b2c3" +re:\d {limit: 2}).n	2	a spaced map key's `:` cannot capture the literal (no scan-ahead)
 import "aql:minilang"  def r ("alice@example.com" +re:@example ) end  r.fst.m	'@example'	the motivating shape: a source full of punctuation, no delimiter collision
 import "aql:minilang"  ("xa:by" +re:a\:b ).fst.m	'a:b'	an escaped delimiter keeps the open form open
 import "aql:minilang"  ("aXbXc" +re:X:).n	2	a source char equal to the delimiter closes the literal — this is the CLOSED form, src 'X'
+import "aql:minilang"  (+hb/de_ad_be_ef/) typeof	Bytes	a closed literal abuts syntax — the delimiter closes before `)`
 import "aql:minilang"  +hb:dead beef	ERROR:undefined_word	the open source ends at whitespace: `beef` is a separate (undefined) word
+import "aql:minilang"  +hb/de ad be ef/	ERROR:undefined_word	whitespace no longer spans a literal — use `_` grouping, `\ ` escapes, or the quoted form
 import "aql:minilang"  +re:	ERROR:syntax_error	an empty open source is not a literal — `+re:` falls to normal lexing
 #
 # §7  compiled mini-languages — an optional expansion-time compile hook (design §13).

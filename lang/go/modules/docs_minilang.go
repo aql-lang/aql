@@ -29,7 +29,7 @@ func init() {
 			"github.com/antchfx/xpath.",
 		"lang_hb": "Hex Bytes literal: `+hb/deadbeef/` (≡ mini hb 'deadbeef') — decode an " +
 			"even-length hex string to a Bytes value. Whitespace and `_` in the source are " +
-			"ignored, so `+hb/de ad be ef/` groups for readability. A bad/odd-length source " +
+			"ignored, so `+hb/de_ad_be_ef/` groups for readability. A bad/odd-length source " +
 			"raises mini_parse_error.",
 		"lang_bb": "Binary Bytes literal: `+bb/01001100/` (≡ mini bb '01001100') — decode a " +
 			"string of 0/1 bits (a multiple of 8, MSB-first per byte) to a Bytes value. " +

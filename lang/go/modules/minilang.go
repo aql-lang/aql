@@ -177,7 +177,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- kind: hb — hex Bytes literal ----------------------------------
 	// [src opts] → [Bytes]. `+hb/deadbeef/` (≡ mini hb 'deadbeef') decodes
 	// an even-length hex string to a Bytes constant. Whitespace and `_` in
-	// the source are ignored, so `+hb/de ad be ef/` groups for readability.
+	// the source are ignored, so `+hb/de_ad_be_ef/` groups for readability.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-hb",
 		Signatures: []native.Signature{{
@@ -193,7 +193,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- kind: bb — binary Bytes literal -------------------------------
 	// [src opts] → [Bytes]. `+bb/01001100/` decodes a string of 0/1 bits
 	// (a multiple of 8, MSB-first per byte) to a Bytes constant. Whitespace
-	// and `_` are ignored, so `+bb/01001100 11110000/` groups for clarity.
+	// and `_` are ignored, so `+bb/01001100_11110000/` groups for clarity.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-bb",
 		Signatures: []native.Signature{{
@@ -550,7 +550,7 @@ func miniOptString(opts native.Value, key string) (string, error) {
 }
 
 // miniDropGrouping strips ASCII whitespace and underscores so a binary/hex
-// source can be grouped for readability (`+hb/de ad be ef/`, `+bb/0100_1100/`).
+// source can be grouped for readability (`+hb/de_ad_be_ef/`, `+bb/0100_1100/`).
 func miniDropGrouping(s string) string {
 	return strings.Map(func(c rune) rune {
 		switch c {

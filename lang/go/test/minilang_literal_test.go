@@ -9,12 +9,14 @@ import (
 
 // The `+name<delim>src<delim>` shortcut is terse lexer sugar for
 // `mini name 'src'`. The delimiter is the first character after the
-// (lowercase) name; the same character closes. Backslash escapes the
-// delimiter and itself; every other backslash is preserved raw (so regex
-// sources keep their escapes — the big ergonomic win over the quoted form,
-// which needs '\\d'). It desugars to the identical token stream as the
-// explicit `mini` call, so stack subjects, a trailing opts map, the
-// unknown-kind error, and check mode all behave the same.
+// (lowercase) name; the same character closes, and the closing delimiter is
+// optional when the source does not contain it (the OPEN form — the literal
+// is a single whitespace-free span). Backslash escapes the delimiter, itself,
+// and whitespace; every other backslash is preserved raw (so regex sources
+// keep their escapes — the big ergonomic win over the quoted form, which
+// needs '\\d'). It desugars to the identical token stream as the explicit
+// `mini` call, so stack subjects, a trailing opts map, the unknown-kind
+// error, and check mode all behave the same.
 
 const miniImp = `import "aql:minilang"  `
 
@@ -141,12 +143,16 @@ func TestMiniLitNeedsImport(t *testing.T) {
 // --- the OPEN form ----------------------------------------------------------
 
 // TestMiniLitOpenForm: the closing delimiter is optional when the source does
-// not contain the delimiter char — an unclosed literal ends at the first
-// whitespace or end of source (`+email:alice@example.com` shape).
+// not contain the delimiter char — a literal is a single whitespace-free
+// span, and with no delimiter before the first whitespace (or end of source)
+// the span IS the source (`+email:alice@example.com` shape). No scan-ahead:
+// a delimiter char in a LATER token (`{limit:2}`, `{limit: 2}`) can never
+// capture the literal.
 func TestMiniLitOpenForm(t *testing.T) {
 	cases := []struct{ lit, expl string }{
-		{`+hb:deadbeef`, `mini hb 'deadbeef'`},                                    // end of source terminates
-		{`("a1b2c3" +re:\d {limit:2}).n`, `("a1b2c3" mini re '\\d' {limit:2}).n`}, // whitespace terminates; backslash raw
+		{`+hb:deadbeef`, `mini hb 'deadbeef'`},                                     // end of source terminates
+		{`("a1b2c3" +re:\d {limit:2}).n`, `("a1b2c3" mini re '\\d' {limit:2}).n`},  // whitespace terminates; backslash raw
+		{`("a1b2c3" +re:\d {limit: 2}).n`, `("a1b2c3" mini re '\\d' {limit:2}).n`}, // a spaced map key's `:` cannot capture
 		{`("alice@example.com" +re:@example ).fst.m`, `("alice@example.com" mini re '@example').fst.m`},
 		{`("xa:by" +re:a\:b ).fst.m`, `("xa:by" mini re 'a:b').fst.m`}, // escaped delim keeps the open form open
 	}
@@ -160,11 +166,32 @@ func TestMiniLitOpenForm(t *testing.T) {
 
 // TestMiniLitOpenFormClosedPrecedence: a source char equal to the delimiter
 // CLOSES the literal (first occurrence wins) — the open form only exists when
-// the line has no closing delimiter. The whitespace-grouped closed sources
-// (`+hb/de ad be ef/`) keep working for the same reason.
+// the span has no delimiter — and a closed literal can abut syntax
+// (`…/).typeof`): the delimiter itself is the boundary, no whitespace needed.
 func TestMiniLitOpenFormClosedPrecedence(t *testing.T) {
 	if got := litRun(t, `("aXbXc" +re:X:).n`); got != int64(2) {
 		t.Errorf("+re:X: must be the closed form with src 'X': n = %v, want 2", got)
+	}
+	lit := litRun(t, `(+hb/de_ad_be_ef/) typeof`)
+	expl := litRun(t, `(mini hb 'de_ad_be_ef') typeof`)
+	if lit != expl {
+		t.Errorf("closed literal abutting `)` = %v, explicit = %v (must agree)", lit, expl)
+	}
+}
+
+// TestMiniLitSourceWhitespace: a source needs its whitespace ESCAPED — a
+// literal is a single whitespace-free span, so the old whitespace-grouped
+// spelling (`+hb/de ad be ef/`) now splits at the first space (open source
+// `de`, then stranded words). `_` grouping and the quoted form remain.
+func TestMiniLitSourceWhitespace(t *testing.T) {
+	if got := litRun(t, `+hb/de\ ad\ be\ ef/ size`); got != int64(4) {
+		t.Errorf(`+hb/de\ ad\ be\ ef/ size = %v, want 4 (escaped spaces join the span)`, got)
+	}
+	a, _ := lang.New()
+	if _, err := a.Run(miniImp + `+hb/de ad be ef/`); err == nil {
+		t.Fatal("expected undefined_word for the unescaped whitespace-grouped spelling, got nil")
+	} else if !strings.Contains(err.Error(), "undefined_word") {
+		t.Fatalf("error = %v, want undefined_word", err)
 	}
 }
 
