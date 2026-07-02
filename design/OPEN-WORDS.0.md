@@ -317,3 +317,11 @@ Per the paired-negative discipline:
    `def`'s job.)
 4. Ownership declarations for the orphan advisory (§4.3): module
    manifest field, or convention only?
+5. The word's name. `extend` is unregistered today, but sits one
+   character from the existing gen-bound word `extends`
+   (`gen [T extends Comparable]`) — both type-system-adjacent, so a
+   typo of one for the other yields confusing errors, and the type
+   vocabulary already clusters on e- (`extends`, `exposes`,
+   `exclude`, `extract`). Unregistered alternates: **`overload`**
+   (names the semantics — appending an overload — and has no near
+   neighbour; current lean), `augment`, `contribute`.
