@@ -537,7 +537,21 @@ func sigSlotValue(sig *Signature, i int) Value {
 //
 // Fallback sigs need no special-case: a fallback is always 0-arg, so
 // the arity-first rule already sinks it to the end.
+//
+// Locked signatures (native registrations) sort strictly FIRST — before
+// every unlocked (def-merged) signature, across arity. This is the
+// locked-first ordering theorem (design/OPEN-WORDS.0.md §2.3/§3.3): an
+// unlocked merged addition can never pre-empt a locked match, so no
+// previously-valid call changes its dispatch under a merge. All-locked
+// lists (pure natives) and all-unlocked lists (user fns) are unaffected;
+// only word-extension clones and cross-stack aggregates mix the two.
 func CompareSignatures(a, b *Signature) int {
+	if a.Locked != b.Locked {
+		if a.Locked {
+			return -1
+		}
+		return 1
+	}
 	if c := cmpInt(b.TotalArgs(), a.TotalArgs()); c != 0 {
 		return c
 	}

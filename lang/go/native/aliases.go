@@ -386,6 +386,11 @@ var (
 	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef
+	InstallWordExtension      = eng.InstallWordExtension
+	TransplantExtension       = eng.TransplantExtension
+	IsWordExtension           = eng.IsWordExtension
+	IsSealedWord              = eng.IsSealedWord
+	HasLockedSigs             = eng.HasLockedSigs
 	IsBareTypeNode            = eng.IsBareTypeNode
 	IsCapitalisedName         = eng.IsCapitalisedName
 	IsConcrete                = eng.IsConcrete

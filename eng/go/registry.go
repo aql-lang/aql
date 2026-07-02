@@ -715,12 +715,19 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	// host-API word-registration path (RegisterNativeFunc and the public
 	// (*AQL).Register both route here); user `def`s install through
 	// InstallFnDef / DefTable.Push and never reach here. So this set is
-	// exactly the core vocabulary that `def` / `undef` must refuse to
-	// redefine — see IsBuiltinWord.
+	// exactly the core vocabulary whose bindings `def` / `undef` must
+	// protect — see IsBuiltinWord. A `def <builtin> fn […]` is not a
+	// redefinition but a MERGE (word extension, design/OPEN-WORDS.0.md);
+	// the Locked flag stamped here is what pins every natively
+	// registered signature against replacement/removal and keeps it
+	// first in match order.
 	if r.builtinWords == nil {
 		r.builtinWords = make(map[string]bool)
 	}
 	r.builtinWords[name] = true
+	for i := range sigs {
+		sigs[i].Locked = true
+	}
 	r.upsertFnDef(name, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
@@ -842,10 +849,21 @@ func (r *Registry) Lookup(name string) *FnDefInfo {
 	// Collect every FnDefInfo binding for the name, newest-first. Each
 	// entry holds only its OWN overloads; the dispatch table is the union
 	// across the stack (overloading across stacked defs of one name).
+	//
+	// A word-extension CLONE (Extends != "") carries the base word's
+	// COMPLETE signature list plus its merge, so it OCCLUDES every
+	// deeper entry — unioning past it would resurrect the pre-merge
+	// version of any tuple the clone replaced (the stale overload would
+	// race the replacement at equal score). Stopping here is also what
+	// makes `undef` restore the exact previous state: popping the clone
+	// re-exposes whatever the walk stopped short of.
 	var entries []FnDefInfo
 	for i := len(stack) - 1; i >= 0; i-- {
 		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 			entries = append(entries, fnDef)
+			if fnDef.Extends != "" {
+				break
+			}
 		}
 	}
 	if len(entries) == 0 {
@@ -907,6 +925,11 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		Anonymous:      top.Anonymous,
 		Macro:          top.Macro,
 		Captured:       top.Captured,
+		// A word-extension clone's provenance marker rides the aggregate:
+		// when the newest entry is a clone the walk stopped there, so the
+		// aggregate IS the clone's view — a `name/r` reference (ResolveRef
+		// wraps the aggregate) must stay recognisable at export transplant.
+		Extends: top.Extends,
 	}
 }
 

@@ -382,20 +382,60 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 // installExports installs all exports from a module descriptor as defs.
 // If names is nil, all exports are installed using their original names.
 // Each export is bound as a ModuleExport whose $module points at the shared
-// Module instance.
-func installExports(r *Registry, desc ModuleDesc, names []string) {
+// Module instance. Word-extension clones found in the export maps are
+// additionally transplanted into r (see transplantWordExtensions) —
+// the only error path.
+func installExports(r *Registry, desc ModuleDesc, names []string) error {
 	mod := NewModuleInstance(desc)
 	if names == nil {
 		for name, exportMap := range desc.Exports {
 			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
-		return
+		return transplantWordExtensions(r, desc)
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
 			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
 	}
+	return transplantWordExtensions(r, desc)
+}
+
+// transplantWordExtensions scans a module's exports for word-extension
+// clones (`def <locked word> fn […]` in the module body, exported like
+// any other fn) and merges each one's unlocked signatures into the
+// importing registry's same-named word — the implicit top-level def
+// the importer consented to by importing (design/OPEN-WORDS.0.md
+// §2.4). One level only: the transplant lands in r and stops; only a
+// re-export propagates further (the re-exporting module's clone then
+// carries the signatures under ITS origin — it takes ownership).
+// Provenance is the module ref, so a diamond re-import is idempotent
+// and quiet, while two different modules extending the same unlocked
+// tuple raise [aql/extend_conflict]. When the base word does not
+// resolve in r, nothing transplants and the export stays a plain
+// namespaced binding (§4.9 — M.word still works). The transplanted
+// handlers remain closed over the module's sub-registry, so module-
+// private helpers keep resolving.
+func transplantWordExtensions(r *Registry, desc ModuleDesc) error {
+	origin := desc.Ref
+	if origin == "" {
+		// An inline module has no ref; its per-import instance ID is its
+		// provenance (each inline `import module […]` is a distinct module).
+		origin = "inline#" + desc.ID
+	}
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			ext, ok := IsWordExtension(v)
+			if !ok {
+				continue
+			}
+			if err := TransplantExtension(r, ext, origin); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // installRenamedExports applies a rename list to module exports and installs them.
@@ -433,7 +473,10 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		}
 		InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
 	}
-	return nil
+	// Renaming the namespace does not opt out of the module's word
+	// extensions — the extension targets the base word, not the
+	// namespace name. The firewall idiom is the opt-out.
+	return transplantWordExtensions(r, desc)
 }
 
 // installSingleRename renames the single export in a module to newName.
@@ -449,7 +492,7 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 	for name, exportMap := range desc.Exports {
 		InstallDef(r, newName, NewModuleExport(name, exportMap, mod))
 	}
-	return nil
+	return transplantWordExtensions(r, desc)
 }
 
 // resolveModuleExport resolves an export map value through the module's
@@ -560,7 +603,9 @@ func resolveNativeMod(r *Registry, path string) error {
 	if err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
-	installExports(r, desc, nil)
+	if err := installExports(r, desc, nil); err != nil {
+		return err
+	}
 	r.Modules.MarkLoaded(name, desc)
 	return nil
 }

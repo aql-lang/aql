@@ -1,0 +1,65 @@
+# AQL Language Specification: Open words — scoped `def` extension of existing words
+# Format: input<TAB>expected<TAB>description
+#
+# design/OPEN-WORDS.0.md: `def <word> fn […]` on a word that carries
+# LOCKED signatures (every natively registered word) MERGES the fn's
+# signatures into a word CLONE bound through the ordinary def shadow
+# stack — scoped like every other def (fn body / module body / top
+# level), popped by `undef`, inherited by sub-engines, captured by
+# closures. Locked signatures sort first in match order, so no
+# previously-valid call changes its dispatch; a merge tuple exactly
+# matching a locked tuple is refused ([aql/locked_signature]); sealed
+# words (def / make / word — the kernel's name-keyed identities) refuse
+# entirely ([aql/reserved_word]). A module exports its merged word like
+# any other fn (`export "M" {add: add/r}`) and `import` TRANSPLANTS the
+# extension one level into the importing registry; re-export is the
+# opt-in for transitivity, and the inline-module firewall is the
+# opt-out. Plain user fns (no locked sigs) keep whole-replacement
+# shadowing — the REPL/iterate idiom.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the merge — top level
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  add true false	true	a merged signature dispatches on the extended word
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  add 1 2	3	locked native dispatch is unchanged inside the extending scope
+def add fn [[a:Integer b:Integer] [Integer] [99]]  add 1 2	3	locked-first: an unlocked tuple overlapping a locked family can never pre-empt the locked match — previously-valid calls are byte-identical
+add true false	ERROR:signature_error	an engine without the merge errors exactly as today (negative twin of §1 row 1)
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  do [add true false]	true	a top-level merge is visible to sub-engines, like any top-level def
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  [false true] each [add true]	[true true]	higher-order bodies see the merge too
+#
+# ─────────────────────────────────────────────────────────────────────
+# §2  the merge — fn-body scope (body-local def, torn down at exit)
+def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  f true	true	a fn-body merge extends the word inside the body
+def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false	ERROR:signature_error	the body-local merge is INVISIBLE after fn exit (negative twin)
+def g fn [[] [Function] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] ([x:Boolean] => [add x false])]]  def h (g)  h true	true	closure capture: a lambda constructed inside a fn-scoped merge keeps the merge after the scope exits (the uniform closure rule, §4.3)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §3  locked and sealed refusals
+def add fn [[a:Number b:Number] [Number] [a]]	ERROR:locked_signature	a merge tuple exactly matching a LOCKED signature can never replace it
+def def fn [[x:Integer] [Integer] [x]]	ERROR:reserved_word	`def` is sealed — the kernel relies on its name identity
+def make fn [[x:Integer] [Integer] [x]]	ERROR:reserved_word	`make` is sealed (autoEvalMap gating keys on the name)
+def word fn [[x:Integer] [Integer] [x]]	ERROR:reserved_word	`word` is sealed (splice-paren expansion keys on the name)
+def add 42	ERROR:reserved_word	a NON-fn body on a built-in stays a refused redefinition — only fn merges open the word
+undef add	ERROR:reserved_word	undef of a built-in with no extension present stays refused
+#
+# ─────────────────────────────────────────────────────────────────────
+# §4  unlocked replacement and undef unwinding
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]]  add true false	false	re-merging the same UNLOCKED tuple replaces it in scope
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]]  undef add  add true false	true	undef pops the replacement, restoring the previous merge
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add 1 2	3	undef pops the merge; the base word is intact
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add true false	ERROR:signature_error	undef pops the merge; the added tuple is gone (negative twin)
+undef add (fnsig [[Number Number] [Number]])  add 1 2	3	targeted signature-undef never removes a locked (native) signature
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add (fnsig [[Boolean Boolean] [Boolean]])  add true false	true	targeted signature-undef leaves a word-extension clone intact (it carries locked sigs); plain `undef add` is the retraction
+#
+# ─────────────────────────────────────────────────────────────────────
+# §5  plain user fns keep whole-replacement shadowing (§4.1)
+def f fn [[a:Integer] [Integer] [1]]  def f fn [[a:Integer] [Integer] [2]]  f 5	2	re-def of a plain user fn with the same tuple REPLACES it (the REPL idiom) — no merge semantics without locked sigs
+#
+# ─────────────────────────────────────────────────────────────────────
+# §6  export transplant — one level, opt-in transitivity
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  add true false	true	exporting the merged word transplants the extension into the importer's bare word
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  M.add true false	true	the namespaced binding exists alongside the transplant (§4.9)
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {x:1}]  add true false	ERROR:signature_error	a module-body merge WITHOUT an export of the word is module-private — nothing crosses the boundary
+import module [import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "I" {add: add/r}] export "O" {x:1}]  add true false	ERROR:signature_error	one level only: A importing B does not forward B's extension to A's importer — this is also the firewall idiom
+import module [import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "I" {add: add/r}] export "O" {add: add/r}]  add true false	true	re-export is the opt-in for transitivity: the outer module re-exports the word and its importer gains the extension
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]] export "N" {add: add/r}]	ERROR:extend_conflict	the same unlocked tuple arriving from two different modules is a loud conflict (§4.4)
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]  def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]]  add true false	false	a direct user def still shadows a transplanted tuple freely — the conflict rule is module-vs-module only

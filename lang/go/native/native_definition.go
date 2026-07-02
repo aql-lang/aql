@@ -247,6 +247,9 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
+	if handled, err := defWordExtension(r, name, body, args[0].Pos); handled {
+		return nil, err
+	}
 	if r.IsBuiltinWord(name) {
 		return nil, reservedWordError(r, "def", name)
 	}
@@ -254,6 +257,50 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	return installAndRecordDef(r, name, body, args[0].Pos, stackOnly)
+}
+
+// defWordExtension routes `def <word> fn […]` on a word that carries
+// LOCKED signatures — a built-in, or a module-wrapper rebinding that
+// inherited locked inner sigs — to the open-words merge
+// (design/OPEN-WORDS.0.md): the fn's signatures merge into a word
+// clone bound through the ordinary def shadow stack, scoped like every
+// other def. Returns handled=false when the target is not extendable
+// this way: plain user fns keep today's whole-replacement shadowing
+// (the REPL/iterate idiom — §4.1), and a non-fn body on a built-in
+// keeps the reserved_word refusal. Sealed words (`def`, `make`,
+// `word`) refuse inside InstallWordExtension.
+func defWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, error) {
+	if !body.Parent.Equal(TFnDef) && !body.Parent.Equal(TFunction) {
+		return false, nil
+	}
+	fnDef, ok := body.Data.(FnDefInfo)
+	if !ok {
+		return false, nil
+	}
+	existing := r.Lookup(name)
+	if existing == nil || !eng.HasLockedSigs(existing) {
+		return false, nil
+	}
+	// Mirror installAndRecordDef's use-snapshot: the merge's
+	// construction-time body pass resolves the word's own name and
+	// would otherwise record a spurious self-use.
+	checking := r.Check.IsActive()
+	prevUsed := checking && r.Check.DefsUsed != nil && r.Check.DefsUsed[name]
+	if err := eng.InstallWordExtension(r, name, fnDef); err != nil {
+		return true, err
+	}
+	r.Check.RecordDef(name, pos)
+	if checking {
+		if r.Check.DefsUsed == nil {
+			r.Check.DefsUsed = map[string]bool{}
+		}
+		if prevUsed {
+			r.Check.DefsUsed[name] = true
+		} else {
+			delete(r.Check.DefsUsed, name)
+		}
+	}
+	return true, nil
 }
 
 // reservedWordError is the error raised when def / undef targets a core
@@ -628,6 +675,16 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	if r.IsBuiltinWord(name) {
+		// A word-extension clone on top of a built-in name is an
+		// ordinary def — `undef` pops it, restoring the pre-merge
+		// state (design/OPEN-WORDS.0.md §2.1). The base native binding
+		// itself stays frozen.
+		if entry, ok := r.Defs.TopEntry(name); ok {
+			if _, isExt := eng.IsWordExtension(entry.Body); isExt {
+				UninstallDef(r, name)
+				return nil, nil
+			}
+		}
 		return nil, reservedWordError(r, "undef", name)
 	}
 	if IsCapitalisedName(name) {

@@ -1,9 +1,14 @@
 # Open Words — scoped `def` extension of existing words
 
-Status: **PROPOSAL, rev 1**. Design only — nothing here is landed
-except the §5.2 mintID prerequisite fix. Discussion artifact per the
-ADR rule (design notes capture discovery; no ADR entry without
-explicit maintainer instruction).
+Status: **IMPLEMENTED (rev 1 model)**. Landed as described in §2, with
+the open questions resolved to their leans; see "Implementation notes"
+at the end for the decisions, the mechanism as built, and where each
+piece lives. Pinned by `lang/spec/open-words.tsv` and
+`lang/go/test/reserved_words_test.go`. The §6 migrations (temporal
+add/sub, MatrixUtil) are NOT done — the mechanism is in, the moves are
+follow-up work. Discussion artifact per the ADR rule (design notes
+capture discovery; no ADR entry without explicit maintainer
+instruction).
 
 Rev 1 replaces rev 0's dedicated `extend`/`overload` word with plain
 **`def` on an existing word**, scoped like every other `def`, plus an
@@ -372,6 +377,69 @@ Per the paired-negative discipline:
    undef-ing an import's contribution deserves a look.)
 5. Should the namespaced form (`Foo.add`) exist alongside the
    transplant (§4.9)? Lean yes.
+
+## Implementation notes (as landed)
+
+The mechanism turned out lighter than §2 assumed, because the kernel
+already had the load-bearing pieces: natives and user defs share ONE
+binding store (`Registry.Defs`), and `Registry.Lookup` already unions
+signatures across a name's def stack (`aggregateDispatch`). So a "word
+clone" is an ordinary def-stack entry:
+
+- **`Signature.Locked`** (`eng/go/value.go`) — stamped on every sig in
+  `Registry.Register` (the native/host path; user `def`s never reach
+  it). `CompareSignatures` sorts locked strictly first — the §3.3
+  theorem holds by ordering alone, across arity too (a longer unlocked
+  tuple never pre-empts a shorter locked prefix match). Locked entries
+  are also exempt from `InstallDef`'s overlap-drop and from targeted
+  `undef … fnsig` removal.
+- **`FnDefInfo.Extends`** — the clone's provenance marker (base word
+  name), detected only via `IsWordExtension`. `Lookup` stops
+  aggregating at a clone (it carries the full base list), which is what
+  makes unlocked-tuple replacement effective and `undef` restore the
+  exact previous state. `aggregateDispatch` propagates the marker so a
+  `name/r` reference stays recognisable at export.
+- **`eng/go/word_extend.go`** — sealed set + `InstallWordExtension`
+  (the def-merge; compiles added sigs through the same
+  `compileFnSigs` pipeline `InstallFnDef` uses) +
+  `TransplantExtension` (the import-side merge; `Signature.Origin`
+  carries the module ref for the §4.4 conflict/idempotence rules).
+- **lang wiring** — `defWordExtension` in
+  `lang/go/native/native_definition.go` (merge trigger: target's
+  aggregate has a locked sig AND the body is an fn — §4.1's lean,
+  which includes module-wrapper rebindings); `undef` pops a clone but
+  still refuses the bare native; `transplantWordExtensions` in
+  `native_module_module.go` runs in every export-install path.
+
+Resolved open questions: **4.1** locked-sig-bearing words only (module
+wrappers count — their rebindings carry locked sigs); **4.3** closures
+capture clones (uniform rule, pinned); **4.4** loud
+`[aql/extend_conflict]` module-vs-module, silent shadowing for direct
+user defs, diamond re-import idempotent by module-ref provenance
+(inline modules get a per-instance `inline#<id>` origin, so two inline
+modules collide loudly); **Q4** `undef` unwinds in reverse install
+order, no import/local distinction; **Q5** the namespaced `Foo.add`
+binding exists alongside the transplant.
+
+§4.5 sealed inventory as audited: `def` (`bindsReferent`, forward-hint
+and macro-expander name checks), `make` (`autoEvalMap` gating keys on
+`match.Name`), `word` (splice-paren expansion in `carrier.go`).
+`true`/`false`/`none`/`inf`/`nan` stay covered by `reservedLiterals`.
+
+§4.6 clone fidelity is free: the clone copies whole `Signature`
+structs, so `BarrierPos`/`QuoteArgs`/`NoEvalArgs`/`RawParens`/
+`FormArgs`/handlers ride along by value.
+
+§4.7 as observed: the checker follows scope through the ordinary
+registry lookup (a merged call type-checks in scope, flags out of
+scope); the bytecode recorder treats an added sig like any AQL fn —
+local merges compile with interpreter parity, and a transplanted
+(foreign-registry) sig REFUSES under `-force-compile` ("user fn call")
+and falls back to the interpreter under `-compile`, which is exactly
+the §4.7 contract.
+
+§4.8 stands as designed: the clone is rebuilt per `def` execution —
+extend at module/top level rather than in a hot fn body.
 
 ## Appendix A — rev 0 (superseded): the `extend` word
 

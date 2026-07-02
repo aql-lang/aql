@@ -5,20 +5,27 @@ import (
 	"testing"
 )
 
-// TestReservedCoreWordsCannotBeRedefined pins WAT-audit Exhibit M: a
-// built-in / kernel word, and the reserved literals true/false/none,
-// may not be redefined or undefined. The language is extended by
-// defining NEW words, never by shadowing a core one.
+// TestReservedCoreWordsCannotBeRedefined pins WAT-audit Exhibit M as
+// refined by design/OPEN-WORDS.0.md: a built-in word's VALUE binding
+// and the reserved literals true/false/none may not be redefined or
+// undefined (reserved_word); a LOCKED signature tuple may not be
+// replaced by a def-merge (locked_signature); and the sealed words
+// (def / make / word) cannot be extended at all. `def <builtin> fn`
+// with a NEW tuple is the open-words merge — pinned in
+// lang/spec/open-words.tsv, not here.
 func TestReservedCoreWordsCannotBeRedefined(t *testing.T) {
 	reserved := []string{
-		`def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add`, // native word
-		`def if 7`,     // control word
-		`def each [1]`, // higher-order word
-		`def dup 5`,    // stack word
+		`def if 7`,     // control word bound to a value
+		`def each [1]`, // higher-order word bound to a value
+		`def dup 5`,    // stack word bound to a value
 		`def true 99`,  // reserved literal
 		`def false 0`,  // reserved literal
-		`undef add`,    // can't undef a native
+		`undef add`,    // can't undef a native (no extension present)
 		`undef true`,   // can't undef a literal
+		// sealed words: even the fn-merge form refuses
+		`def def fn [[x:Number] [Number] [x]]`,
+		`def make fn [[x:Number] [Number] [x]]`,
+		`def word fn [[x:Number] [Number] [x]]`,
 	}
 	for _, src := range reserved {
 		_, err := runNativeSteps(t, nil, []string{src})
@@ -29,6 +36,14 @@ func TestReservedCoreWordsCannotBeRedefined(t *testing.T) {
 		if !strings.Contains(err.Error(), "reserved_word") {
 			t.Errorf("%q: expected reserved_word error, got %v", src, err)
 		}
+	}
+
+	// A merge whose tuple exactly matches a LOCKED (native) signature is
+	// refused with its own code — locked signatures can never be replaced.
+	if _, err := runNativeSteps(t, nil, []string{`def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add`}); err == nil {
+		t.Errorf("locked-tuple merge: expected [aql/locked_signature], got no error")
+	} else if !strings.Contains(err.Error(), "locked_signature") {
+		t.Errorf("locked-tuple merge: expected locked_signature error, got %v", err)
 	}
 
 	// `none` is the None value literal, so it is rejected one layer

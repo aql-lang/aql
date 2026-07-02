@@ -317,6 +317,24 @@ type FnSig struct {
 	// names no specific (often module) word. Copied from NativeFunc.Callable
 	// onto every signature at registration. nil = not closure-eligible.
 	Callable *CallableSpec
+
+	// Locked marks a signature registered through the Go registration
+	// layer (Registry.Register — every native / kernel word plus host
+	// words). Locked signatures can never be replaced or removed by a
+	// def-merge (design/OPEN-WORDS.0.md §2.3), and they sort FIRST in
+	// match order (CompareSignatures), so an unlocked merged addition
+	// can never pre-empt a locked match — no previously-valid call
+	// changes its dispatch. Locking is a property of the Go layer, not
+	// an AQL language ability; InstallFnDef (user `def … fn`) never
+	// sets it.
+	Locked bool
+	// Origin records which module contributed this signature via an
+	// export transplant (the module ref, e.g. "./ext.aql" or
+	// "aql:time-util"). Empty for native registrations and direct user
+	// defs. Read by the transplant collision check: the same tuple
+	// arriving from a DIFFERENT module raises [aql/extend_conflict],
+	// while identical provenance (diamond re-import) is idempotent.
+	Origin string
 }
 
 // CompileEffect is a set of compile-relevant capability flags a word declares
@@ -533,6 +551,18 @@ type FnDefInfo struct {
 	// fn whose body references only params, module-global names, or
 	// forward refs. See lang/go/CLAUDE.md "Closures and Capture".
 	Captured []CapturedBinding
+	// Extends marks this FnDefInfo as a WORD-EXTENSION CLONE: the result
+	// of `def <word> fn […]` on a word that carries locked signatures
+	// (design/OPEN-WORDS.0.md §2.1). The value is the base word's name.
+	// A clone carries the base word's COMPLETE signature list plus the
+	// merge, so Registry.Lookup stops aggregating at a clone — deeper
+	// def-stack entries for the name are occluded, which is what makes
+	// an unlocked-tuple REPLACEMENT effective and `undef` restore the
+	// exact previous state. Detected via IsWordExtension (the named-
+	// helper protocol — never probe the field inline); recognised at
+	// module import for the export transplant. Empty for every ordinary
+	// fn / native registration.
+	Extends string
 }
 
 // CapturedBinding is one lexically-captured name in a closure. The

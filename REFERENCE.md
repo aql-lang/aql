@@ -1003,10 +1003,20 @@ restricted words refuse. See
 | `referent` | What a quoted atom's name refers to | `def x 5  (quote x) referent` returns `5` |
 | `word` | Splice marker: spreads a list's elements (any other value: itself) into the token stream | `[0 word [1,2,3] 4]` returns `[0 1 2 3 4]` |
 
-> **Core words are frozen.** `def`/`undef` may not redefine a built-in
-> word, nor the literals `true`/`false`/`none` — `def add …`,
-> `def true …`, `undef if` all raise `[aql/reserved_word]`. Extend the
-> language by defining a **new** word, not by shadowing a built-in.
+> **Core bindings are frozen; core words are open.** `def`/`undef` may
+> not rebind a built-in word to a *value*, nor touch the literals
+> `true`/`false`/`none` — `def add 42`, `def true …`, `undef if` all
+> raise `[aql/reserved_word]`. But `def <built-in> fn […]` **merges**
+> the fn's signatures into the word in the current scope (fn body /
+> module body / top level) — a *word extension*: new argument-type
+> tuples append after the built-in's own (locked) signatures, so no
+> previously-valid call changes its dispatch; a tuple exactly matching
+> a locked signature raises `[aql/locked_signature]`; `undef <word>`
+> pops the extension. The sealed words `def` / `make` / `word` cannot
+> be extended at all. A module exports its merged word like any fn
+> (`export "M" {add: add/r}`) and importing the module transplants the
+> extension one level into the importer. See
+> `lang/spec/open-words.tsv` and `design/OPEN-WORDS.0.md`.
 > Re-`def`ing your **own** words still shadows as before (`def x 1; def
 > x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
 > already unusable as a `def` target.
@@ -1998,7 +2008,9 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `def_error` | `def`'s value expression produced no value to bind. |
 | `no_value_error` | A parenthesised argument expression produced no value for a call. |
 | `uncalled_function` | A call matched no signature and its function value was never consumed. |
-| `reserved_word` | `def`/`undef` targeted a built-in word or the literal `true`/`false`/`none`. |
+| `reserved_word` | `def`/`undef` targeted a built-in word's value binding, a sealed word (`def`/`make`/`word`), or the literal `true`/`false`/`none`. |
+| `locked_signature` | A word extension's signature tuple exactly matches a locked (built-in) signature — locked signatures can never be replaced. |
+| `extend_conflict` | Two different modules transplanted the same signature tuple onto one word at import. |
 | `constraint_violation` | A generic type argument does not satisfy its `extends` bound. |
 | `arity_mismatch` | `of` received the wrong number of type arguments (defaults fill only the tail). |
 | `unbound_param` | A generic parameter could not be inferred and has no default. |

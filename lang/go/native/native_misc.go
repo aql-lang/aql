@@ -557,8 +557,7 @@ func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 
 func importAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	desc, _ := asModuleDesc(args[0])
-	installExports(r, desc, nil)
-	return nil, nil
+	return nil, installExports(r, desc, nil)
 }
 
 func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -613,8 +612,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		if err != nil {
 			return nil, err
 		}
-		installExports(r, desc, nil)
-		return nil, nil
+		return nil, installExports(r, desc, nil)
 	}
 	if isDataFile(r, path) {
 		return loadDataFile(r, path)
@@ -623,8 +621,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, err
 	}
-	installExports(r, desc, nil)
-	return nil, nil
+	return nil, installExports(r, desc, nil)
 }
 
 // loadImportForCheck resolves an import in check mode for its export
@@ -652,8 +649,7 @@ func loadImportForCheck(r *Registry, path string) error {
 	if err != nil {
 		return err
 	}
-	installExports(r, desc, nil)
-	return nil
+	return installExports(r, desc, nil)
 }
 
 func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -703,8 +699,7 @@ func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
-	installExports(r, desc, nil)
-	return nil, nil
+	return nil, installExports(r, desc, nil)
 }
 
 func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
