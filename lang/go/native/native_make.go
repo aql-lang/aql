@@ -16,6 +16,20 @@ import "github.com/aql-lang/aql/eng/go"
 // MakeObject / MakeConvert / MakeFieldValue / ResolveFieldType) live
 // in eng/go/core_make.go; this file owns the word name, signature
 // shape, and dispatch wiring.
+// makeObjReturns is the class/Resource make sig's check-mode result:
+// ReturnsFreshInstance(0) plus the schema-decidable construction validation
+// (eng.CheckMakeConstruction — unknown / missing / mistyped fields on a
+// concrete construction map, with the byte-identical runtime messages).
+func makeObjReturns() ReturnsFunc {
+	fresh := ReturnsFreshInstance(0)
+	return func(args []Value, r *Registry) []Value {
+		if len(args) >= 2 {
+			eng.CheckMakeConstruction(r, args[0], args[1], args[0].Pos)
+		}
+		return fresh(args, r)
+	}
+}
+
 var makeNatives = []NativeFunc{
 	{
 		Name:          "make",
@@ -29,7 +43,7 @@ var makeNatives = []NativeFunc{
 			// collapses two `make P {}` operands onto one in the bytecode
 			// lowerer's per-value provenance. See ReturnsFreshInstance.
 			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarOptsHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeObjHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeObjHandler), ReturnsFn: makeObjReturns(), BarrierPos: -1},
 			// Node-family targets: make FlexMap/FlexList (mutable deep
 			// copy) and make Map/List (deep immutable conversion — the
 			// inverse). Structural type bodies that land in the Node

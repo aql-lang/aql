@@ -1396,8 +1396,7 @@ func forEachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 // forEachReturnsFn runs the body once in check mode (for its diagnostics)
 // and reports that for-each produces nothing.
 func forEachReturnsFn(args []Value, r *Registry) []Value {
-	elem := DataListElemTypeFromValue(args[1])
-	analyseHigherOrderBody(r, args[0], elem)
+	analyseHigherOrderBodyVals(r, args[0], ElementCarrierFromValue(args[1]))
 	return nil
 }
 
@@ -1405,8 +1404,7 @@ func forEachReturnsFn(args []Value, r *Registry) []Value {
 // top-of-stack produces. Pass the concrete data list's element
 // carrier into the body so diagnostics fire against realistic types.
 func eachReturnsFn(args []Value, r *Registry) []Value {
-	elem := DataListElemTypeFromValue(args[1])
-	stk := analyseHigherOrderBody(r, args[0], elem)
+	stk := analyseHigherOrderBodyVals(r, args[0], ElementCarrierFromValue(args[1]))
 	if len(stk) == 0 {
 		return []Value{NewCarrier(TList)}
 	}
@@ -1471,7 +1469,7 @@ func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value 
 // Bounded by the same round count as AnalyseLoopBody; only the final
 // round's diagnostics are kept. Returns the stabilised accumulator
 // carrier, or ok=false when the body is not analysable.
-func foldAccumFixedPoint(r *Registry, body Value, initAcc Value, elem *Type) (Value, bool) {
+func foldAccumFixedPoint(r *Registry, body Value, initAcc Value, elemCarrier Value) (Value, bool) {
 	// Normalise the seed to a container-faithful carrier. A List/Map SUBTYPE seed
 	// (`[]` / `[9]`) reaches here either concrete or already stripped to a carrier
 	// whose Data==nil — both drop the load-bearing ChildTypeInfo, so a body word
@@ -1479,12 +1477,10 @@ func foldAccumFixedPoint(r *Registry, body Value, initAcc Value, elem *Type) (Va
 	// wrongly fails no_signature. foldAccCarrier rebuilds the typed-list / map
 	// carrier from the seed's element type; a scalar seed is unchanged.
 	acc := foldAccCarrier(initAcc)
-	// Use NewElementCarrier (not NewCarrier) for the element: an UNTYPED element
-	// (Any, e.g. the elements of `convert List <Array>` or any untyped `[List]`)
-	// becomes a DYNAMIC carrier, so a body word over it (`add`, `BinUtil.popcount`)
-	// matches optimistically instead of failing no_signature against the bare Any
-	// root — exactly how each/filter and the CallableSpec.Inputs already shape it.
-	elemCarrier := NewElementCarrier(elem)
+	// The element rides as the caller-built carrier (ElementCarrierFromValue):
+	// an UNTYPED element is a DYNAMIC Any so a body word over it matches
+	// optimistically; a heterogeneous concrete list is a strict Disjunct so
+	// the body dispatch distributes per alternative.
 	diagBase := len(r.Check.Diagnostics)
 	for round := 0; ; round++ {
 		r.Check.TruncateDiagnostics(diagBase)
@@ -1553,8 +1549,7 @@ func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regis
 // its accumulator types correctly. The join with the init covers the
 // empty-list case (result IS the init).
 func foldWithInitReturnsFn(args []Value, r *Registry) []Value {
-	elem := DataListElemTypeFromValue(args[1])
-	acc, ok := foldAccumFixedPoint(r, args[0], args[2], elem)
+	acc, ok := foldAccumFixedPoint(r, args[0], args[2], ElementCarrierFromValue(args[1]))
 	if !ok {
 		return []Value{NewCarrier(TAny)}
 	}
@@ -1585,12 +1580,41 @@ func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 // No init — accumulator type and element type both come from the
 // data list; same bounded fixed point as the init form.
 func foldNoInitReturnsFn(args []Value, r *Registry) []Value {
-	elem := DataListElemTypeFromValue(args[1])
-	acc, ok := foldAccumFixedPoint(r, args[0], NewCarrier(elem), elem)
+	// A statically-EMPTY collection with no initial value is fold's own
+	// GUARANTEED runtime error (the accumulator has nothing to seed from) —
+	// flag it here with the byte-identical runtime message. Before the
+	// element carriers became join-aware these rows were flagged only
+	// coincidentally (the strict-Any accumulator failed the body's
+	// dispatch as a no_signature on the body word).
+	if emptyDetail := staticEmptyFoldDetail(args[1]); emptyDetail != "" {
+		r.Check.AddDiagnostic(CheckDiagnostic{
+			Code:   "fold_error",
+			Detail: emptyDetail,
+			Word:   "fold",
+		})
+		return []Value{NewCarrier(TAny)}
+	}
+	elemC := ElementCarrierFromValue(args[1])
+	acc, ok := foldAccumFixedPoint(r, args[0], elemC, elemC)
 	if !ok {
 		return []Value{NewCarrier(TAny)}
 	}
 	return []Value{acc}
+}
+
+// staticEmptyFoldDetail returns the runtime error text a no-init fold raises
+// over the given collection when it is STATICALLY empty, or "" when the
+// collection is non-empty or its size is unknown (a carrier).
+func staticEmptyFoldDetail(coll Value) string {
+	if n, ok := StaticListLen(coll); ok && n == 0 {
+		return "fold: empty list with no initial value"
+	}
+	if IsConcrete(coll) && coll.Parent.ConformsTo(TMap) {
+		if m, _ := AsMap(coll); m != nil && m.Len() == 0 {
+			return "fold: empty map with no initial value"
+		}
+	}
+	return ""
 }
 
 // doFold is the shared fold implementation used by both fold signatures.
@@ -1654,8 +1678,8 @@ func scanReturnsFn(args []Value, r *Registry) []Value {
 	if n, ok := StaticListLen(args[1]); ok && n == 0 {
 		return []Value{NewCarrier(TList)}
 	}
-	elem := DataListElemTypeFromValue(args[1])
-	acc, ok := foldAccumFixedPoint(r, args[0], NewCarrier(elem), elem)
+	elemC := ElementCarrierFromValue(args[1])
+	acc, ok := foldAccumFixedPoint(r, args[0], elemC, elemC)
 	if !ok {
 		return []Value{NewCarrier(TList)}
 	}
@@ -1697,9 +1721,8 @@ func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 }
 
 func outerReturnsFn(args []Value, r *Registry) []Value {
-	leftElem := DataListElemTypeFromValue(args[1])
-	rightElem := DataListElemTypeFromValue(args[2])
-	stk := analyseHigherOrderBody(r, args[0], leftElem, rightElem)
+	stk := analyseHigherOrderBodyVals(r, args[0],
+		ElementCarrierFromValue(args[1]), ElementCarrierFromValue(args[2]))
 	// outer produces a 2D list: TList<TList<body-result>>.
 	innerElem := TAny
 	if len(stk) > 0 {
@@ -1819,12 +1842,11 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 }
 
 func innerReturnsFn(args []Value, r *Registry) []Value {
-	leftElem := DataListElemTypeFromValue(args[2])
-	rightElem := DataListElemTypeFromValue(args[3])
 	// pair op consumes (left-elem, right-elem); agg consumes
 	// (accumulator, pair-result). Without carrier list element
 	// tracking we use the pair output as TAny for the agg input.
-	analyseHigherOrderBody(r, args[0], leftElem, rightElem)
+	analyseHigherOrderBodyVals(r, args[0],
+		ElementCarrierFromValue(args[2]), ElementCarrierFromValue(args[3]))
 	analyseHigherOrderBody(r, args[1], TAny, TAny)
 	return []Value{NewCarrier(TList)}
 }

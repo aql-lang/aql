@@ -85,6 +85,20 @@ func unionType(a, b Value) Value {
 	}
 }
 
+// TandReturnsFn is `tand`'s check-mode result: the intersection is a PURE
+// type-level computation over the operand values, so run the real handler —
+// the meet (a DepScalar interval intersection, a narrowed disjunct, Never)
+// then survives as a valid type body for a typed-def annotation
+// (`def x:(A tand B) 15`), exactly as TorReturnsFn does for unions. A
+// non-type operand (a carrier from a runtime computation) degrades to the
+// declared Any.
+func TandReturnsFn(args []Value, _ *Registry) []Value {
+	if len(args) != 2 || !IsTypeBody(args[0]) || !IsTypeBody(args[1]) {
+		return []Value{NewCarrier(TAny)}
+	}
+	return []Value{TandValues(args[1], args[0])}
+}
+
 // TandHandler delegates to TandValues for the actual intersection
 // computation. Args are passed in [args[1], args[0]] order so the
 // natural infix reading (`A tand B → tandValues(A, B)`) matches the

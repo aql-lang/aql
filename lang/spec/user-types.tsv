@@ -103,6 +103,15 @@ def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 10 g	ERROR:signature	B
 def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 5 g	ERROR:signature	Big rejects 5 (below the bound)
 def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 'hi' g	ERROR:signature	Big rejects String (wrong base type)
 
+# Typed-def against a DepScalar: a CONCRETE literal body runs the
+# predicate at bind time (and, symmetrically, at CHECK time — a failing
+# literal is a static type_error, a passing one binds the value in both
+# engines); a computed (abstract) body defers to the runtime check.
+def Big (Integer gt 10) def x:Big 50 x	50	typed-def binds a passing literal
+def Big (Integer gt 10) def x:Big 5 x	ERROR:does not unify	typed-def rejects a failing literal (statically flagged too)
+def x:(Integer gt 10) 50 x	50	inline DepScalar typed-def binds a passing literal
+def x:(Integer gt 10) 5 x	ERROR:does not unify	inline DepScalar typed-def rejects a failing literal
+
 # Lower-bounded refinement.
 def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] -5 g	99	Small accepts negative
 def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] 5 g	ERROR:signature	Small rejects positive
@@ -270,3 +279,11 @@ def Pos (refine Integer) def mk fn [[] [Pos] [7]] mk	ERROR:expected Pos, got Int
 def Foo (class {}) def mk fn [[] [Foo] [(make Foo {}) (make Foo {})]] mk	ERROR:return value(s)	arity check still fires for a user-typed return
 def Foo (class {}) def mk fn [[] [Integer Foo] [1 2]] mk	ERROR:return value 2	per-slot return typing rejects the wrong type in a later slot
 def mk fn [[] [Nope] [42]] mk	ERROR:undefined word	an unknown type name in the return slot errors, it does not silently become Any
+
+# Sibling DepScalar refinements MEET implicitly under unify: the
+# interval algebra intersects the constraints (combineDepScalars),
+# named or inline — no explicit tand spelling needed.
+def A (Integer gt 10) def B (Integer lt 20) A unify B	(Integer gt 10 lt 20) true	named sibling DepScalars meet to the interval intersection
+(Integer gt 10) unify (Integer lt 20)	(Integer gt 10 lt 20) true	inline sibling DepScalars meet identically
+def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 15 x	15	the explicit tand meet admits an in-range value
+def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 25 x	ERROR:does not unify	the meet rejects a value outside the intersection

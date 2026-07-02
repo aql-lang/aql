@@ -217,7 +217,7 @@ var typeNatives = []NativeFunc{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
 			Impl:          Go(eng.TandHandler),
-			Returns:       []*Type{TAny},
+			ReturnsFn:     eng.TandReturnsFn,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
 	},

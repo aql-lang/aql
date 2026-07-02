@@ -607,7 +607,7 @@ WORD take
 WORD tall
   [Node/List] barrier=1 returns=[Any]
 WORD tand
-  [Any Any] barrier=1 returns=[Any]
+  [Any Any] barrier=1 +returnsfn
 WORD tany
   [Node/List] barrier=1 returns=[Any]
 WORD tcmp

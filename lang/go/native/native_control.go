@@ -388,9 +388,11 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 			branch = "then"
 		}
 		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:     "unreachable_branch",
-			Detail:   "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
-			Severity: SeverityWarning,
+			Code:   "unreachable_branch",
+			Detail: "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
+			Word:   "if",
+			Row:    r.Check.CurCallPos.Row,
+			Col:    r.Check.CurCallPos.Col,
 		})
 		var stk []Value
 		var defs map[string]Value
@@ -518,9 +520,11 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	es := r.Check
 	if lit, ok := LiteralCondValue(args[0]); ok && !lit {
 		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:     "unreachable_branch",
-			Detail:   "if condition is a constant false; then-branch is unreachable",
-			Severity: SeverityWarning,
+			Code:   "unreachable_branch",
+			Detail: "if condition is a constant false; then-branch is unreachable",
+			Word:   "if",
+			Row:    r.Check.CurCallPos.Row,
+			Col:    r.Check.CurCallPos.Col,
 		})
 	}
 	condFrag, condStk := analyseCondFragment(r, args[0])
@@ -795,8 +799,11 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	// count times is a sound over-approximation: a break/continue loop runs
 	// FEWER iterations, and a shorter runtime stack is still covered by the
 	// longer checked one. Bounded to keep the residual small; past the cap the
-	// List approximation stands.
-	if !es.Active() && lowerable && len(stk) > 0 {
+	// List approximation stands. CONCRETE count only: a carrier count decomposes
+	// to a carrier endV, which asInt64Or would default to 0 — spreading a
+	// runtime-unknown iteration count to an EMPTY residual and starving every
+	// downstream consumer (`size (for n [n])` failed no_signature on nothing).
+	if !es.Active() && lowerable && len(stk) > 0 && IsConcrete(args[countArg]) {
 		if n := loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)); n >= 0 && n*int64(len(stk)) <= loopSpreadResidualCap {
 			spread := make([]Value, 0, int(n)*len(stk))
 			for i := int64(0); i < n; i++ {

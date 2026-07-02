@@ -523,15 +523,21 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 		}
 	}
-	if r.Check.IsActive() && constraint.IsDepScalar() {
+	if r.Check.IsActive() && constraint.IsDepScalar() && !IsConcrete(body) {
 		if body.Parent.ConformsTo(constraint.Parent) {
-			// DepScalar admits a value only if its predicate holds — validated at
-			// RUNTIME via v.Is. The check-mode install here is base-conformance only
-			// (the predicate is NOT run), so a compiled `def x:(Integer gt 10) 5` would
-			// bind x=5 where the interpreter raises. The compiler can't run the inline
-			// predicate at compile time (an inline `(Integer gt 10)` has no canonical
-			// node carrying the DepScalar Behavior), so it can't tell a passing value
-			// from a failing one — refuse all DepScalar typed-defs → fall back.
+			// An ABSTRACT (carrier) body admits on base conformance only —
+			// the predicate is value-level and the value is unknown here, so
+			// validation stays at RUNTIME via v.Is. A compiled `def
+			// x:(Integer gt 10) (f 1)` would bind whatever f returns where
+			// the interpreter may raise, and the compiler can't run the
+			// inline predicate (no canonical node carrying the DepScalar
+			// Behavior) — refuse abstract DepScalar typed-defs → fall back.
+			//
+			// A CONCRETE body deliberately falls THROUGH to the Unify below:
+			// unifyDepScalar runs the self-contained predicate on the real
+			// value, so `def x:(Integer gt 10) 5` is flagged at check time
+			// with the byte-identical runtime message (and a passing literal
+			// binds the same value in both engines, so it stays compilable).
 			if es := r.Check.Emit; es != nil && es.Active() {
 				es.MarkUncompilable("typed-def `" + name + "`: DepScalar predicate validation is interpreter-only")
 			}

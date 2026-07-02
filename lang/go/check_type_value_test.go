@@ -160,3 +160,233 @@ func TestMiniLangRegisterCheck(t *testing.T) {
 		t.Errorf("minilang register then use: expected 0 errors, got %d", n)
 	}
 }
+
+// A fn whose analysed body residual is PROVABLY DISJOINT from its declared
+// return type is flagged at check time with the byte-identical runtime
+// type_error (checkBodyReturnConformance, eng/go/core_helpers.go) — the
+// check-mode mirror of the RET check. Only impossibility flags; every
+// value-dependent or under-modeled shape stays with the runtime check.
+func TestDeclaredReturnBodyConformance(t *testing.T) {
+	flagged := []string{
+		`def f fn [[a:Integer] [String] [42]] f 1`,      // constant body, wrong family
+		`def f fn [[a:Integer] [String] [a add 1]] f 1`, // computed body, wrong family
+	}
+	for _, src := range flagged {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("impossible declared return must be flagged: %q", src)
+		}
+	}
+	clean := []string{
+		`def f fn [[a:Integer] [String] ["ok"]] f 1`, // conforming body
+		// value-dependent subset return: Integer residual against a
+		// DepScalar refine of Integer — runtime may accept, stays clean.
+		`def Big (Integer gt 10) def f fn [[n:Big] [Big] [n add 1]] f 50`,
+		// disjunct residual with a conforming alternative (branch join).
+		`def f fn [[a:Integer] [Integer] [if (a gt 0) [a] ["neg"]]] f 1`,
+		// mutual recursion: the sibling is undefined at install-time
+		// analysis; the memoized residual is not evidence.
+		`def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isev 10`,
+		// fn-value frontier: apply leaves an unapplied Function residual.
+		`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/r) 5`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}
+
+// A typed-def whose DepScalar constraint is violated by a CONCRETE literal is
+// flagged at check time (the lenient base-conformance install is gated to
+// abstract bodies; a concrete body falls through to Unify, which runs the
+// self-contained predicate) — native_definition.go's DepScalar branch.
+func TestTypedDefDepScalarCheck(t *testing.T) {
+	flagged := []string{
+		`def Big (Integer gt 10) def x:Big 5 x`,
+		`def x:(Integer gt 10) 5 x`,
+	}
+	for _, src := range flagged {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("failing DepScalar literal must be flagged: %q", src)
+		}
+	}
+	clean := []string{
+		`def Big (Integer gt 10) def x:Big 50 x`,
+		`def x:(Integer gt 10) 50 x`,
+		// abstract (computed) body: value unknown, stays with the runtime.
+		`def Big (Integer gt 10) def g fn [[a:Integer] [Integer] [a]] def x:Big (g 50) x`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}
+
+// A `make` whose target resolves to a class / Resource schema and whose
+// construction map is CONCRETE is validated at check time — unknown field,
+// missing non-defaulted field, concrete field-value type — with the
+// byte-identical runtime messages (eng.CheckMakeConstruction via
+// makeObjReturns). Value-dependent shapes stay with the runtime constructor.
+func TestMakeConstructionCheck(t *testing.T) {
+	flagged := []string{
+		`def P class {x:1} end make P {z:9}`,                // unknown field
+		`def P class {x:Integer} end make P {x:"s"}`,        // field type mismatch
+		`def P class {x:Integer} end make P {}`,             // missing non-defaulted field
+		`make Entity {nope:1 kind:"k" spec:"s" entity:"e"}`, // Resource unknown field
+	}
+	for _, src := range flagged {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("bad construction must be flagged: %q", src)
+		}
+	}
+	clean := []string{
+		`def P class {x:1} end make P {x:5}`, // valid override
+		`def P class {x:1} end make P {}`,    // defaulted field omitted
+		`make Entity {kind:"k" spec:"s" entity:"e"}`,
+		// computed field value: value unknown, stays with the runtime.
+		`def P class {x:Integer} end def g fn [[v:Integer] [Integer] [v]] make P {x:(g 5)}`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}
+
+// A HETEROGENEOUS concrete collection's element carrier is the lattice JOIN
+// of its element types (ElementCarrierFromValue): distant cousins stay a
+// strict Disjunct so the body dispatch distributes per alternative, exactly
+// as the runtime dispatches per element — not the common ancestor, which
+// failed no_signature on bodies every element actually satisfies.
+func TestHeterogeneousElementBodyCheck(t *testing.T) {
+	clean := []string{
+		`[1 2 "s"] each [1 add]`,    // add has Integer AND String overloads
+		`[1 "s"] fold [add] 0`,      // fold body over mixed elements
+		`[1 2 "s"] each [true and]`, // connective accepts both
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("heterogeneous body should check clean (%d errors): %q", n, src)
+		}
+	}
+	// NEGATIVE: a genuinely-bad body still flags (undefined word).
+	if n := checkErrs(t, `[1 2 "s"] each [nosuchword9]`); n == 0 {
+		t.Errorf("undefined body word must still be flagged")
+	}
+	// NEGATIVE: a statically-empty no-init fold is fold's own guaranteed
+	// runtime error, flagged with the byte-identical message.
+	for _, src := range []string{`fold [add] []`, `fold [add] {}`} {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("statically-empty no-init fold must be flagged: %q", src)
+		}
+	}
+}
+
+// The DISTRIBUTE-OVER-DISPATCH invariant (checker-accuracy-review.10.md §3):
+// any carrier that can denote two or more concrete types must dispatch as
+// the JOIN of its per-alternative dispatches — never fail no_signature
+// against a slot some alternative satisfies, never commit to one
+// alternative. Each carrier shape that can denote multiple types is pinned:
+// (1) a payload-bearing strict Disjunct (a branch join of distant cousins),
+// (2) a NAMED-union declared return (`[T]` with `def T (Integer tor
+// String)`) — the shape that historically carried only the T tag and failed
+// to distribute, (3) a dynamic carrier (reachable-overload union), and
+// (4) a union-typed param inside the body. A NEW multi-denotation carrier
+// shape must be added here when introduced.
+func TestDistributeOverDispatchInvariant(t *testing.T) {
+	clean := []string{
+		// (1) branch-join disjunct into an overloaded word (both alternatives
+		// have add overloads; runtime takes one, checker joins both).
+		`def f fn [[x:Integer] [Boolean] [x lt 2]] def v (if (f 1) [1] ["s"]) v add 1`,
+		`def f fn [[x:Integer] [Boolean] [x lt 2]] def v (if (f 1) [1] ["s"]) v add v`,
+		// (2) named-union declared return distributes downstream.
+		`def T (Integer tor String) def id fn [[x:T] [T] [x]] (id 1) add 1`,
+		`def T (Integer tor String) def id fn [[x:T] [T] [x]] (id 1) add (id 1)`,
+		// (3) dynamic carrier (map get) into a typed word.
+		`def m {a:1} (m get "a") add 1`,
+		// (4) union param used with an overload every alternative satisfies.
+		`def T (Integer tor String) def g fn [[x:T] [Any] [x add x]] g 1`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("multi-denotation dispatch must distribute (%d errors): %q", n, src)
+		}
+	}
+	// NEGATIVE: a word NO alternative satisfies still fails loudly.
+	if n := checkErrs(t, `def T (Integer tor String) def id fn [[x:T] [T] [x]] (id 1) nosuchword8`); n == 0 {
+		t.Errorf("an undefined word after a union result must still be flagged")
+	}
+}
+
+// A DECLARED-union parameter (`x:T`, `def T (A tor B)`) claims every
+// alternative is a valid input, so a body dispatch with NO overload for one
+// alternative is an ERROR — the fn breaks its own contract for a valid
+// argument (`g true` raises no_signature at runtime). An ANALYSIS-join
+// disjunct (if/else branch join) keeps the partial_dispatch WARNING: the
+// runtime materialises one alternative, so the failing path may be dead.
+// disjunctPartitionReturns severity by DisjunctInfo.Declared provenance.
+func TestDeclaredUnionParamPartialDispatchError(t *testing.T) {
+	if n := checkErrs(t, `def T (Integer tor Boolean) def g fn [[x:T] [Any] [x add 1]] g 1`); n == 0 {
+		t.Errorf("partial dispatch over a declared union param must be an error")
+	}
+	clean := []string{
+		// branch-join disjunct: same partial shape, stays a warning.
+		`def y if (1 gt 0) [1] ["s"] mod y 2`,
+		// a guard discharges the failing alternative — no partial at all.
+		`def T (Integer tor Boolean) def g fn [[x:T] [Any] [if (x is Integer) [x add 1] [0]]] g 2`,
+		// every alternative dispatches — no partial.
+		`def T (Integer tor String) def g fn [[x:T] [Any] [x add x]] g 1`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}
+
+// The undefined-forward-ref skip in checkBodyReturnConformance is scoped to
+// the analysed body's SOURCE SPAN: an undefined word inside one overload /
+// earlier definition of `f` must not shield a DIFFERENT `f` body whose
+// declared return is provably wrong (the runtime raises the same type_error).
+func TestBodyConformanceScopedToRedefinition(t *testing.T) {
+	src := `def f fn [[a:Integer] [String] [g a]] def f fn [[a:Integer] [String] [42]] def g fn [[a:Integer] [String] ["ok"]] f 1`
+	if n := checkErrs(t, src); n == 0 {
+		t.Errorf("redefined f with impossible return must be flagged despite the first f's rescued forward ref")
+	}
+	// The forward-ref shape itself (mutual recursion) still skips cleanly —
+	// pinned here alongside the positive so the span scoping never regresses it.
+	clean := `def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isod 3`
+	if n := checkErrs(t, clean); n != 0 {
+		t.Errorf("mutual recursion must stay clean (%d errors)", n)
+	}
+}
+
+// SetStrictCheck invalidates the fn-body analysis memo when the mode
+// changes: a summary cached by a NON-strict Check on the same instance
+// would skip re-analysis, so the body's dynamic_dispatch advisories would
+// never surface in the later strict pass.
+func TestStrictToggleInvalidatesFnSummaries(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	src := `def f fn [[x:Any] [Any] [x add 1]] f 1`
+	if _, err := a.Check(src); err != nil {
+		t.Fatalf("non-strict check: %v", err)
+	}
+	a.SetStrictCheck(true)
+	res, err := a.Check(src)
+	if err != nil {
+		t.Fatalf("strict check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "dynamic_dispatch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("strict re-check on a reused instance must re-analyse the fn body and report dynamic_dispatch; diagnostics: %+v", res.Diagnostics)
+	}
+}

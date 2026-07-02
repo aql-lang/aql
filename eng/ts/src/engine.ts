@@ -767,6 +767,19 @@ export class Engine {
         detail: `no matching signature for ${name}; assuming best-fit candidate for analysis`,
         word: name,
       })
+      // The assumed dispatch analyses the body under args the real match
+      // REJECTED — its dispatch failures are cascade noise (mirrors the Go
+      // checkModeAssumeSig suppression); the no_signature above is the one
+      // honest diagnostic.
+      this.registry.check.suppressBodyErrors++
+      try {
+        const out = this.analyseFnBody(name, chosen, args)
+        this.stack.splice(replaceFrom, replaceCount, ...out)
+        this.pointer = replaceFrom + out.length
+        return
+      } finally {
+        this.registry.check.suppressBodyErrors--
+      }
     }
 
     const sig = chosen

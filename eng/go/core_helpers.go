@@ -433,6 +433,258 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 	return out
 }
 
+// checkBodyReturnConformance is the check-mode mirror of the runtime RET
+// check (validateReturnTypes): the analysed body residual's top K values are
+// compared slot-wise against the K declared return types, and a mismatch is
+// reported as the SAME type_error the runtime raises (returnTypeErrorText, so
+// the two surfaces are byte-identical). Unlike the runtime's membership check
+// (`got.Is(exp)`), only a PROVABLY IMPOSSIBLE return flags here: the residual
+// type neither conforms to the declaration nor the declaration to it, and
+// their tand meet is Never — the same disjointness proof the gradual param
+// match uses (sigTypeMatches). A subtype/refine declaration stays
+// value-dependent (`[n add 1]` against a declared `Big (Integer gt 10)` may
+// pass at runtime) and is left to the RET check. Dynamic residuals are the
+// gradual contract; a short residual (recursion bail, zero-net body shape),
+// a None placeholder, and a bare type node are left to the runtime arity /
+// membership errors; a disjunct flags only when EVERY alternative is
+// impossible. Deduped by detail — the ReturnsFn runs once per analysed call
+// shape, but shapes repeat across call sites.
+func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk []Value, pos, bodyEnd SrcPos) {
+	if len(declared) == 0 || len(stk) < len(declared) || !r.Check.IsActive() {
+		return
+	}
+	// A residual computed while this body contained an UNDEFINED word is not
+	// evidence: a mutually-recursive sibling defined later (`def isod … isev
+	// … def isev …`) makes the install-time analysis see an incomplete world,
+	// and the FnSummaries memo then serves that broken residual to every
+	// later call. The undefined_word diagnostic tagged with this fn's name is
+	// still in the list here (RescueForwardRefDiagnostics drops it only at
+	// end of pass), so its presence is the reliable "analysis ran early"
+	// signal — skip; the runtime RET check still guards these bodies.
+	//
+	// Scoped to THIS body's source span [pos, bodyEnd]: an undefined forward
+	// ref in a DIFFERENT overload/redefinition of the same name must not
+	// shield this body's conformance check (`def f fn [… [g a]] def f fn
+	// [… [String] [42]] …` — the second f's Integer return is provably
+	// wrong regardless of the first f's rescued `g`). An unattributed
+	// diagnostic (Row 0) or an unpositioned body keeps the name-wide skip —
+	// conservative, never a new false positive.
+	for _, d := range r.Check.Diagnostics {
+		if d.Code != "undefined_word" || d.FnName != name {
+			continue
+		}
+		if d.Row != 0 && (bodyEnd.Row != 0 || bodyEnd.Col != 0) &&
+			(posBefore(d.Row, d.Col, pos) || posBefore(bodyEnd.Row, bodyEnd.Col, SrcPos{Row: d.Row, Col: d.Col})) {
+			continue // attributed outside this body — not this body's signal
+		}
+		return
+	}
+	extra := len(stk) - len(declared)
+	for k, exp := range declared {
+		if exp == nil || exp.Equal(TAny) {
+			continue
+		}
+		got := stk[extra+k]
+		if got.Dynamic || got.Parent == nil || IsBareTypeNode(got) || got.Parent.Equal(TNone) {
+			continue
+		}
+		if !residualProvablyDisjoint(got, exp) {
+			continue
+		}
+		detail, _ := returnTypeErrorText(name, k+1, exp, got)
+		dup := false
+		for _, d := range r.Check.Diagnostics {
+			if d.Code == "type_error" && d.Detail == detail {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code:   "type_error",
+				Detail: detail,
+				Word:   name,
+				Row:    pos.Row,
+				Col:    pos.Col,
+			})
+		}
+	}
+}
+
+// posBefore reports whether source position (row, col) strictly precedes p
+// in reading order. Used to test a diagnostic's attribution against a fn
+// body's source span.
+func posBefore(row, col int, p SrcPos) bool {
+	return row < p.Row || (row == p.Row && col < p.Col)
+}
+
+// bodySpanEnd walks a parsed fn body's tokens (paren exprs, reaches, lists,
+// map values — the exprRefsCarrier shapes) and returns the maximum source
+// position seen, i.e. the start of the body's LAST token at any depth.
+// Together with the first token's position it bounds the body's source span
+// for diagnostic attribution. Zero when no token carries a position.
+func bodySpanEnd(body []Value) SrcPos {
+	var end SrcPos
+	var walk func(vs []Value)
+	walk = func(vs []Value) {
+		for _, v := range vs {
+			if posBefore(end.Row, end.Col, v.Pos) {
+				end = v.Pos
+			}
+			if IsParenExpr(v) {
+				if toks, err := AsParenExpr(v); err == nil {
+					walk(toks)
+				}
+				continue
+			}
+			if IsReach(v) {
+				if ri, err := AsReach(v); err == nil {
+					walk(ri.Receiver)
+					for i := range ri.Segments {
+						if ri.Segments[i].Computed {
+							walk(ri.Segments[i].KeyExpr)
+						}
+					}
+				}
+				continue
+			}
+			if lst, err := AsList(v); err == nil && !lst.IsNil() {
+				walk(lst.Slice())
+				continue
+			}
+			if mp, err := AsMap(v); err == nil && mp != nil {
+				for _, k := range mp.Keys() {
+					mv, _ := mp.Get(k)
+					walk([]Value{mv})
+				}
+			}
+		}
+	}
+	walk(body)
+	return end
+}
+
+// residualProvablyDisjoint reports whether a body-residual value's type can
+// NEVER inhabit the declared return type: no conformance in either direction
+// AND a Never tand meet. The either-direction conformance mirrors
+// sigTypeMatches' gradual rule (tand wrongly reports two container-family
+// types as disjoint when one conforms to the other). A disjunct residual is
+// disjoint only if every alternative is.
+func residualProvablyDisjoint(got Value, exp *Type) bool {
+	if IsDisjunct(got) {
+		di, err := AsDisjunct(got)
+		if err != nil || len(di.Alternatives) == 0 {
+			return false
+		}
+		for _, alt := range di.Alternatives {
+			probe := alt
+			if IsBareTypeNode(alt) {
+				probe = carrierOfLiteral(alt)
+			}
+			if !residualProvablyDisjoint(probe, exp) {
+				return false
+			}
+		}
+		return true
+	}
+	p := got.Parent
+	if p == nil || p.ConformsTo(exp) || exp.ConformsTo(p) {
+		return false
+	}
+	// An OPAQUE union residual (Parent=Disjunct with no readable
+	// alternatives — the payload was stripped upstream) denotes "one of
+	// several types" — nothing is provable about it. And a Function/FnDef
+	// residual sits on the fn-value-call frontier: `v f/r apply` leaves an
+	// UNAPPLIED Function in the abstract residual where the runtime calls
+	// it (the "fn-value-call boundary" imprecision class), so a Function
+	// residual routinely means "not modeled", not "returns a function".
+	// Both stay with the runtime RET check.
+	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) || p.ConformsTo(TFnDef) {
+		return false
+	}
+	// A declared type that admits values by VALUE-level membership — a
+	// disjunct/enum (`def T (Integer tor String)`), a negation, a predicate
+	// type, a Go member type — accepts residuals whose TAG does not
+	// nominally conform: the runtime `v.Is(T)` runs the membership, so
+	// `[x]` against a declared T passes for an Integer x ∈ T. A nominal
+	// disjointness proof says nothing there — skip. The carrier-Is probe is
+	// the backstop for wrapped behaviors (a behave-augmented union still
+	// answers membership through its Match chain).
+	if membershipBeyondNominal(exp) || NewCarrier(p).Is(exp) {
+		return false
+	}
+	return isNeverShape(TandValues(NewCarrier(p), NewCarrier(exp)))
+}
+
+// membershipBeyondNominal reports whether t's installed Behavior admits
+// values by VALUE-level membership rather than nominal tag conformance —
+// the unifier families whose Match can accept a value from a foreign
+// lattice family. Bare refines stay nominal (provable); DepScalar nodes
+// are parented at their base scalar, so the conformance shortcut above
+// already skips them — listed here as a belt.
+func membershipBeyondNominal(t *Type) bool {
+	if t == nil {
+		return false
+	}
+	switch t.Behavior.(type) {
+	case *disjunctUnifier, *negationUnifier, *predicateUnifier, memberBehavior, *depScalarUnifier:
+		return true
+	}
+	return false
+}
+
+// checkRecordShapeArgs is the pattern / record-shape check for one analysed
+// call: for each declared record-typed param, verify the arg map carries each
+// declared field key with a conforming type. Skips calls whose arg is empty
+// or whose key set doesn't overlap the pattern at all (that shape is
+// typically the synthetic/default arg map used during fn body analysis, not
+// a real user call).
+func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args []Value) {
+	for i, pat := range paramPatterns {
+		if pat == nil || i >= len(args) {
+			continue
+		}
+		val := args[i]
+		if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
+			!IsConcrete(*pat) || !IsConcrete(val) {
+			continue
+		}
+		pMap, _ := AsMap(*pat)
+		vMap, _ := AsMap(val)
+		if pMap == nil || vMap == nil || vMap.Len() == 0 {
+			continue
+		}
+		overlap := 0
+		for _, k := range pMap.Keys() {
+			if _, ok := vMap.Get(k); ok {
+				overlap++
+			}
+		}
+		if overlap == 0 {
+			continue
+		}
+		for _, key := range pMap.Keys() {
+			pv, _ := pMap.Get(key)
+			av, hasKey := vMap.Get(key)
+			if !hasKey {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "record_shape_mismatch",
+					Detail: "argument to " + name + " missing field: " + key,
+					Word:   name,
+				})
+				continue
+			}
+			if IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(TAny) {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "record_shape_mismatch",
+					Detail: "argument to " + name + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
+					Word:   name,
+				})
+			}
+		}
+	}
+}
+
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -450,60 +702,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	genSpec := fnDef.Gen
 	sigParams := append([]FnParam(nil), s.Params...)
 	return func(args []Value, _ *Registry) []Value {
-		// Pattern / record-shape check: for each declared
-		// record-typed param, verify the arg map carries each
-		// declared field key. Skip calls whose arg is empty or
-		// whose key set doesn't overlap the pattern at all
-		// (that pattern is typically the one used during fn
-		// body analysis, not a real user call).
-		for i, pat := range paramPatterns {
-			if pat == nil || i >= len(args) {
-				continue
-			}
-			val := args[i]
-			if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
-				!IsConcrete(*pat) || !IsConcrete(val) {
-				continue
-			}
-			pMap, _ := AsMap(*pat)
-			vMap, _ := AsMap(val)
-			if pMap == nil || vMap == nil || vMap.Len() == 0 {
-				continue
-			}
-			// Overlap gate: only emit if val's keys intersect
-			// the pattern at all. This avoids false positives
-			// when analysing with synthetic/default arg maps.
-			overlap := 0
-			for _, k := range pMap.Keys() {
-				if _, ok := vMap.Get(k); ok {
-					overlap++
-				}
-			}
-			if overlap == 0 {
-				continue
-			}
-			for _, key := range pMap.Keys() {
-				pv, _ := pMap.Get(key)
-				av, hasKey := vMap.Get(key)
-				if !hasKey {
-					r.Check.AddDiagnostic(CheckDiagnostic{
-						Code:     "record_shape_mismatch",
-						Detail:   "argument to " + nameCopy + " missing field: " + key,
-						Word:     nameCopy,
-						Severity: SeverityError,
-					})
-					continue
-				}
-				if IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(TAny) {
-					r.Check.AddDiagnostic(CheckDiagnostic{
-						Code:     "record_shape_mismatch",
-						Detail:   "argument to " + nameCopy + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
-						Word:     nameCopy,
-						Severity: SeverityError,
-					})
-				}
-			}
-		}
+		checkRecordShapeArgs(r, nameCopy, paramPatterns, args)
 		// Generic fns (Phase 5): infer the parameter bindings from the
 		// call's arg carriers and install them around the body
 		// analysis, so body-internal `of [T]` / `make (Box of [T])`
@@ -672,6 +871,13 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
 		}
+		if genSpec == nil {
+			var retPos SrcPos
+			if len(bodyCopy) > 0 {
+				retPos = bodyCopy[0].Pos
+			}
+			checkBodyReturnConformance(r, nameCopy, declaredReturns, stk, retPos, bodySpanEnd(bodyCopy))
+		}
 		if len(declaredReturns) > 0 {
 			out := make([]Value, len(declaredReturns))
 			for i, t := range declaredReturns {
@@ -753,6 +959,20 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						out[i] = CloneValue(bv)
 						continue
 					}
+				}
+				// A declared USER-UNION return (`def id fn [[x:T] [T] [x]]`
+				// with `def T (Integer tor String)`) must DISTRIBUTE over
+				// downstream dispatch: a bare carrier TAGGED T carries no
+				// DisjunctInfo, so sigTypeMatches' strict-disjunct branch
+				// never fires and `(id 1) add 1` failed no_signature against
+				// add's Number slot — the THIRD multi-denotation carrier shape
+				// after dynamic and payload-bearing disjuncts (the distribute-
+				// over-dispatch invariant, checker-accuracy-review.10.md §3).
+				// Surface the alternatives so disjunctPartitionReturns joins
+				// the per-alternative dispatches, like an inline `tor` result.
+				if dv, ok := UnionCarrierForType(CanonicalType(r, t)); ok {
+					out[i] = dv
+					continue
 				}
 				c := NewCarrier(t)
 				// A declared `Any` return is "statically unknown", not "the Any
