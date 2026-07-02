@@ -560,6 +560,9 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// lenient under analysis (the value may be a gradual carrier) and raises
 	// for real at runtime — the check-mode diagnostic is a hint, not a gate.
 	"illegal_ref": SeverityInfo,
+	// A8: a macro/DSL expansion the checker cannot run statically degrades
+	// to a dynamic value; the advisory makes the precision loss visible.
+	"macro_not_expandable": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

@@ -25,10 +25,13 @@ var ErrNoUnifier = &UnifyError{Reason: "no unifier in this Behavior"}
 // trigger Pos's predicate Unifier even though the LCA is Integer.
 //
 // When neither type is a subtype of the other, fall back to the LCA
-// walk (same as Comparer). Predicate intersection across sibling
-// refinement types is a known limitation — only the more specific
-// of the two chains is walked; combining `Pos` and `Even` requires
-// `(Pos tand Even)` rather than implicit Unify.
+// walk (same as Comparer). Sibling DEPSCALAR refinements meet
+// implicitly — `Unify((Integer gt 10), (Integer lt 20))` produces the
+// interval intersection via unifyDepScalar/combineDepScalars, named or
+// inline (pinned in user-types.tsv). The residual limitation is scoped
+// to OPAQUE PREDICATE bodies (fn-shaped refinements): their
+// intersection cannot be computed, so combining them stays explicit —
+// `(Pos tand Even)` — by design.
 //
 // Bare type literals participate via denotedType so unifying a refined
 // type's type literal with a value still triggers the type's Unifier.

@@ -359,6 +359,15 @@ func toCarrier(v Value) Value {
 	if _, ok := v.Data.(DisjunctInfo); ok {
 		return v
 	}
+	// Keep DEPSCALAR constraints concrete: their DepScalarInfo (the bounds)
+	// IS the type definition. Stripping to a bare base-scalar carrier loses
+	// the constraint, so a type-algebra meet over named refinements
+	// (`A tand B`) degraded to a plain Integer and a typed-def annotation
+	// built from a tand/tor expression lost its bounds in check mode. Same
+	// rationale as the Disjunct / Enum preservation above.
+	if _, ok := v.Data.(DepScalarInfo); ok {
+		return v
+	}
 	// Keep generic SCHEMA values concrete: their *TypeSchemaInfo IS the type
 	// definition (the parameters + body `of` instantiates). Stripping it to a
 	// bare carrier loses the schema, so IsTypeSchema goes false and `of`
