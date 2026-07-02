@@ -198,6 +198,16 @@ func (a *AQL) Policy() Policy {
 //
 // The returned CheckResult holds the residual carrier stack (as type
 // path strings) and any diagnostics the checker collected.
+// SetStrictCheck toggles STRICT check mode for subsequent Check calls:
+// every committed dispatch over a dynamic operand emits a non-gating
+// dynamic_dispatch info diagnostic, making the gradual frontier loud —
+// the Typed-Racket-style migration surface
+// (design/checker-accuracy-review.10.md). Persistent on the instance
+// until toggled off.
+func (a *AQL) SetStrictCheck(on bool) {
+	a.registry.Check.Strict = on
+}
+
 func (a *AQL) Check(src string) (CheckResult, error) {
 	values, err := parser.Parse(src)
 	if err != nil {

@@ -709,3 +709,24 @@ func TestCheckStrictExitZeroOnClean(t *testing.T) {
 			stderr.String(), stdout.String())
 	}
 }
+
+// TestCheckStrictReportsDynamicDispatch verifies that `aql check --strict`
+// surfaces the non-gating dynamic_dispatch advisory for a dispatch over a
+// dynamic operand, and that the same program is silent without the flag.
+func TestCheckStrictReportsDynamicDispatch(t *testing.T) {
+	src := `def f fn [[x:Any] [Any] [x]] (f 1) add 1`
+	var stdout, stderr bytes.Buffer
+	code := execute([]string{"check", "--strict", "-e", src}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("--strict advisory must not gate: exit %d, stderr %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "dynamic_dispatch") {
+		t.Errorf("--strict must report dynamic_dispatch, got: %s", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	code = execute([]string{"check", "-e", src}, nil, &stdout, &stderr)
+	if code != 0 || strings.Contains(stderr.String(), "dynamic_dispatch") {
+		t.Errorf("without --strict the advisory must be absent (exit %d): %s", code, stderr.String())
+	}
+}

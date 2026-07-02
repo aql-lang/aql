@@ -221,6 +221,7 @@ aql check script.aql
 aql check -e '1 add "x"'
 aql check --json script.aql        # machine-readable output
 aql check --soft script.aql        # exit 0 even on errors
+aql check --strict script.aql      # surface every dynamic dispatch
 ```
 
 Flags:
@@ -228,6 +229,10 @@ Flags:
 * `-e EXPR` — type-check an inline expression.
 * `--json` — emit JSON diagnostics.
 * `--soft` — return exit code 0 even when diagnostics are reported.
+* `--strict` — additionally report (as non-gating info) every dispatch
+  over a dynamic operand: the points where the checker matched
+  optimistically and the runtime re-verifies. The gradual-typing
+  migration surface — tighten these and the diagnostics disappear.
 * `-r PATH`, `-s SEED` — same as `aql run`.
 
 **What it catches** (full list in the language reference's diagnostics

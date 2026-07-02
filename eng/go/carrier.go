@@ -535,7 +535,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		return out
 	}
 	out := declaredReturnCarriers(r, word, sig, args, pos)
-	out = applyGradualContagion(r, word, args, out, tailConsumed)
+	out = applyGradualContagion(r, word, args, out, pos, tailConsumed)
 	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)
 	return out
 }
@@ -675,7 +675,7 @@ func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Val
 // and a 0-return mutator over a dynamic receiver optimistically models one
 // value where a value-returning sibling overload is reachable (gated to
 // consumed results under a real compile — see carrierResults' doc).
-func applyGradualContagion(r *Registry, word string, args []Value, out []Value, tailConsumed bool) []Value {
+func applyGradualContagion(r *Registry, word string, args []Value, out []Value, pos SrcPos, tailConsumed bool) []Value {
 	// Gradual contagion (design/dynamic-modality-report.10.md): a result
 	// derived from a dynamic carrier is itself dynamic, so the modality
 	// flows downstream instead of dying after one dispatch. The bound is
@@ -685,6 +685,29 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 	// back to strict. ReturnsFn results that are already dynamic (e.g.
 	// ReturnsIdentity of a dynamic input) stay so via toCarrier.
 	if anyDynamicCarrier(args) {
+		// STRICT mode (`aql check --strict`): make the gradual frontier
+		// loud — every committed dispatch over a dynamic operand is a
+		// point the checker matched optimistically and the runtime will
+		// re-verify. Non-gating info; deduped by word+position (the same
+		// dispatch can be re-analysed under several call shapes).
+		if r.Check.Strict {
+			dup := false
+			for _, d := range r.Check.Diagnostics {
+				if d.Code == "dynamic_dispatch" && d.Word == word && d.Row == pos.Row && d.Col == pos.Col {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code:   "dynamic_dispatch",
+					Detail: "strict: " + word + " dispatched over a dynamic operand — matched optimistically, re-checked at runtime",
+					Word:   word,
+					Row:    pos.Row,
+					Col:    pos.Col,
+				})
+			}
+		}
 		for i := range out {
 			out[i].Carrier = true
 			out[i].Dynamic = true

@@ -1,4 +1,4 @@
-// Package check implements `aql check [--json] [--soft] [script.aql]`
+// Package check implements `aql check [--json] [--soft] [--strict] [script.aql]`
 // — run the static type-checker over an AQL source file or -e
 // expression and report diagnostics.
 //
@@ -36,6 +36,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	jsonOut := false
 	soft := false
 	emit := false
+	strict := false
 	for len(args) > 0 {
 		switch args[0] {
 		case "--json", "-json":
@@ -43,6 +44,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			args = args[1:]
 		case "--soft", "-soft":
 			soft = true
+			args = args[1:]
+		case "--strict", "-strict":
+			strict = true
 			args = args[1:]
 		case "--emit", "-emit":
 			emit = true
@@ -81,7 +85,7 @@ done:
 		}
 		return 0
 	}
-	if err := Run(stdout, stderr, source, "", 0, jsonOut, soft); err != nil {
+	if err := Run(stdout, stderr, source, "", 0, jsonOut, soft, strict); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}
@@ -153,12 +157,15 @@ func atPos(row, col int) string {
 // non-zero exit code. Passing soft=true downgrades every diagnostic
 // to advisory: Run returns nil as long as the underlying analysis
 // completes.
-func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft bool) error {
+func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft, strict bool) error {
 	a, err := lang.New(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
 
+	if strict {
+		a.SetStrictCheck(true)
+	}
 	res, err := a.Check(source)
 	if jsonOut {
 		out, jerr := json.MarshalIndent(res, "", "  ")

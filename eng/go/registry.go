@@ -383,6 +383,13 @@ type CheckState struct {
 	// by the compile entry points after Begin; nil for plain checks.
 	Emit *EmitState
 
+	// Strict enables the STRICT-MODE advisory surface (`aql check
+	// --strict`): every committed dispatch over a dynamic operand emits a
+	// non-gating dynamic_dispatch info, making the gradual frontier loud
+	// (checker-accuracy-review.10.md "--strict mode"). Persistent config —
+	// set by the caller BEFORE Begin (which must not reset it).
+	Strict bool
+
 	// Compiling marks a REAL compile pass (CompileCheck / RunCompiled),
 	// whose recorded events become an executed Program. A plain `aql check`
 	// leaves it false even though fn-body analysis arms transient Emit
@@ -563,6 +570,8 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// A8: a macro/DSL expansion the checker cannot run statically degrades
 	// to a dynamic value; the advisory makes the precision loss visible.
 	"macro_not_expandable": SeverityInfo,
+	// Strict-mode advisory: a committed dispatch over a dynamic operand.
+	"dynamic_dispatch": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

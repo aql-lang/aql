@@ -29,6 +29,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"CurCallPos":  "transient cursor overwritten per dispatch",
 		"FnSummaries": "caller-managed memo: (*AQL).Check/CompileCheck nil it so summaries never cross an emit-pass boundary; a bare Begin reuses them intentionally",
 		"FnInflight":  "caller-managed alongside FnSummaries",
+		"Strict":      "strict-mode configuration set by the caller before Begin",
 	}
 
 	st := reflect.TypeOf(CheckState{})
