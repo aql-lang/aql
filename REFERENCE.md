@@ -411,9 +411,10 @@ Any
 │   │   └── ProperString
 │   ├── Path
 │   └── Time
-│       ├── Date, DateTime, Instant, TimeOfDay
-│       ├── Duration (CalDuration | ClkDuration)
-│       └── Timezone
+│       ├── Date, DateTime, Instant
+│       └── (aql:time-util owns TimeOfDay, Duration
+│            with CalDuration | ClkDuration, and Timezone —
+│            module-minted per import, e.g. TimeUtil.CalDuration)
 ├── Node
 │   ├── List
 │   │   └── FlexList                 -- mutable list (see Flex nodes)

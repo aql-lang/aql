@@ -132,3 +132,31 @@ import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUt
 import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	deq agrees with eq on a Time scalar — content equality, never container identity
 import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	unequal Dates are deq-unequal
 import "aql:time-util"  [(TimeUtil.to-date (TimeUtil.unix 1577836800))] deq [(TimeUtil.to-date (TimeUtil.unix 1577836800))]	true	deq recurses into Nodes holding Time scalars
+#
+# ─────────────────────────────────────────────────────────────────────
+# §21  temporal arithmetic — word extensions of core add/sub (open words)
+# The duration/timezone/time-of-day types are module-owned per-import
+# mints (no global registration), and the temporal overloads ride the
+# module's exported word extensions: import transplants them onto the
+# importer's bare add/sub (design/OPEN-WORDS.0.md §2.4, migration 1).
+import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	Date + CalDuration dispatches on bare add via the transplanted extension
+import "aql:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	Date - CalDuration via the transplanted extension
+import "aql:time-util"  add (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T23:13:20Z	Instant + ClkDuration
+import "aql:time-util"  sub (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T21:13:20Z	Instant - ClkDuration
+import "aql:time-util"  add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))) (TimeUtil.hours 5)	2023-11-14T05:00:00	DateTime + ClkDuration
+import "aql:time-util"  TimeUtil.add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	the namespaced form works alongside the transplant (§4.9)
+import "aql:time-util"  add 1 2	3	the locked numeric add is untouched by the transplant
+import "aql:time-util"  undef add  add 1 2	3	undef pops the module's extension; core add intact
+import "aql:time-util"  undef add  import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	re-import restores the extension (idempotent by origin)
+add 1 2	3	an engine that never imports the module has plain numeric add — nothing temporal leaks (negative twin)
+#
+# §22  module-owned temporal types — per-import mints, exported literals
+import "aql:time-util"  typeof (TimeUtil.days 3)	CalDuration	duration values carry the module-minted type
+import "aql:time-util"  (TimeUtil.days 3) is TimeUtil.CalDuration	true	the minted type is exported and testable with is
+import "aql:time-util"  (TimeUtil.days 3) is TimeUtil.Duration	true	CalDuration sits under the module's Duration node
+import "aql:time-util"  (TimeUtil.hours 1) is TimeUtil.CalDuration	false	sibling duration leaves stay distinct
+import "aql:time-util"  typeof (TimeUtil.tz-utc)	Timezone	Timezone is module-minted too
+import "aql:time-util"  TimeUtil.sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	the namespaced sub extension works alongside the transplant
+import "aql:time-util"  (TimeUtil.hours 2) is TimeUtil.ClkDuration	true	clock durations carry the module-minted ClkDuration type
+import "aql:time-util"  (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) is TimeUtil.TimeOfDay	true	TimeOfDay is module-minted and exported
+import "aql:time-util"  (TimeUtil.tz-utc) is TimeUtil.Timezone	true	Timezone is module-minted and exported

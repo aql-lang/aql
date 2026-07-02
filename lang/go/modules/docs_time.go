@@ -83,6 +83,10 @@ func init() {
 		"start-of": "First instant of the given unit of a Date.",
 		"end-of":   "Last instant of the given unit of a Date.",
 
+		// arithmetic word extensions (transplanted onto core add/sub at import)
+		"add": "Date/DateTime/Instant plus a CalDuration/ClkDuration (word extension of core add).",
+		"sub": "Date/DateTime/Instant minus a CalDuration/ClkDuration (word extension of core sub).",
+
 		// conversions
 		"to-date":        "Date part of a DateTime/Instant.",
 		"to-datetime":    "Date to DateTime at midnight.",

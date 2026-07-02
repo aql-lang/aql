@@ -232,6 +232,33 @@ func sigTupleString(s *Signature) string {
 	return out + "]"
 }
 
+// NewWordExtension builds a HOST-authored word-extension clone — the
+// shape a Go module builder exports so `import` transplants extra
+// overloads onto a core word (aql:time-util's temporal add/sub). Each
+// signature is normalised (Args→Params) and barrier-resolved at
+// construction, so the clone dispatches identically whether it is
+// reached as a VALUE (namespaced `TimeUtil.add …` dot-access, which
+// compiles the authored sigs directly) or merged into the importer's
+// base word by TransplantExtension.
+func NewWordExtension(name string, sigs []Signature) FnDefInfo {
+	compiled := make([]Signature, len(sigs))
+	for i := range sigs {
+		s := sigs[i]
+		normalizeSig(&s)
+		if s.BarrierPos == BarrierAllForward {
+			s.BarrierPos = s.TotalArgs()
+		}
+		compiled[i] = s
+	}
+	SortSignatures(compiled)
+	return FnDefInfo{
+		Name:           name,
+		Signatures:     compiled,
+		MaxForwardArgs: calcMaxForwardArgs(compiled),
+		Extends:        name,
+	}
+}
+
 // InstallWordExtension performs the def-merge for `def name fn […]`
 // where name resolves to a locked-bearing word: it constructs the word
 // clone — the base word's full dispatch list merged with ext's
@@ -325,6 +352,15 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
 		s := ext.Signatures[i]
 		if s.Locked || s.Fallback {
 			continue
+		}
+		// Normalise host-authored clones: a Go module builder writes the
+		// Args/BarrierPos constructor-convenience form (e.g. aql:time-util's
+		// arithmetic extensions), while a def-merge clone arrives already
+		// compiled. normalizeSig is idempotent, and the sentinel resolution
+		// mirrors upsertFnDef's so the sig dispatches like any registered one.
+		normalizeSig(&s)
+		if s.BarrierPos == BarrierAllForward {
+			s.BarrierPos = s.TotalArgs()
 		}
 		incoming = append(incoming, s)
 	}

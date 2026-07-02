@@ -391,6 +391,7 @@ var (
 	IsWordExtension           = eng.IsWordExtension
 	IsSealedWord              = eng.IsSealedWord
 	HasLockedSigs             = eng.HasLockedSigs
+	NewWordExtension          = eng.NewWordExtension
 	IsBareTypeNode            = eng.IsBareTypeNode
 	IsCapitalisedName         = eng.IsCapitalisedName
 	IsConcrete                = eng.IsConcrete

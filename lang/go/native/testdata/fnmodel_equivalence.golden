@@ -12,10 +12,6 @@ WORD __varundef
   [Scalar/Atom] barrier=1 runcheck quote={0}
 WORD add
   [Node/Map Any Ideal/Patrun] barrier=3
-  [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
-  [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
-  [Scalar/Time/Date Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
-  [Scalar/Time/Date Scalar/Time/Duration/CalDuration] barrier=2 returns=[Scalar/Time/Date]
   [Scalar/Bytes Scalar/Bytes] barrier=2 returns=[Scalar/Bytes]
   [Scalar/String Scalar] barrier=2 +returnsfn
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
@@ -592,9 +588,6 @@ WORD stdin
 WORD stdout
   [] barrier=0 returns=[Scalar/Atom/StreamKind]
 WORD sub
-  [Scalar/Time/Instant Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/Instant]
-  [Scalar/Time/DateTime Scalar/Time/Duration/ClkDuration] barrier=2 returns=[Scalar/Time/DateTime]
-  [Scalar/Time/Date Scalar/Time/Duration/CalDuration] barrier=2 returns=[Scalar/Time/Date]
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD surface
   [Node/Map] barrier=1 runcheck returns=[Type]

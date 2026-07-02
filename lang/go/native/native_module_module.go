@@ -599,7 +599,11 @@ func resolveNativeMod(r *Registry, path string) error {
 		// keeps repeated top-level imports from stacking shadow bindings.
 		// See §11b.1 in the DX report.
 		ensureExportsBound(r, desc)
-		return nil
+		// Re-run the word-extension transplant too: an `undef add` may
+		// have popped the module's extension, and a re-import is the
+		// natural way to restore it. Idempotent by origin, so a plain
+		// repeated import installs nothing.
+		return transplantWordExtensions(r, desc)
 	}
 	if r.Modules.Resolver == nil {
 		return fmt.Errorf("import: native module resolver not configured (cannot import %q)", path)

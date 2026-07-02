@@ -119,18 +119,19 @@ func TestFixedIDStability(t *testing.T) {
 		"Type/GenSpec":   106,
 		"Type/GenParam":  107,
 		// --- Externally-registered types (Step 8 migration) ---
-		"Scalar/Time":                      1000, // time family — lang/go/engine/native_temporal.go
-		"Scalar/Time/Date":                 1001,
-		"Scalar/Time/DateTime":             1002,
-		"Scalar/Time/Instant":              1003,
-		"Scalar/Time/TimeOfDay":            1004,
-		"Scalar/Time/Duration":             1005,
-		"Scalar/Time/Duration/CalDuration": 1006,
-		"Scalar/Time/Duration/ClkDuration": 1007,
-		"Scalar/Time/Timezone":             1008,
-		"Ideal/Timeout":                    4000, // timer types — lang/go/engine/native_misc.go
-		"Ideal/Interval":                   4001,
-		"Scalar/Bytes":                     1009, // byte-string leaf — lang/go/native/native_bytes.go
+		// Time family — lang/go/native/native_temporal.go. Only the
+		// family root and the three instant-bearing leaves are global;
+		// TimeOfDay / Duration / CalDuration / ClkDuration / Timezone
+		// (former FixedIDs 1004-1008) moved to aql:time-util as
+		// per-import module mints with no FixedID — see
+		// MintTemporalModuleTypes and design/OPEN-WORDS.0.md.
+		"Scalar/Time":          1000,
+		"Scalar/Time/Date":     1001,
+		"Scalar/Time/DateTime": 1002,
+		"Scalar/Time/Instant":  1003,
+		"Ideal/Timeout":        4000, // timer types — lang/go/engine/native_misc.go
+		"Ideal/Interval":       4001,
+		"Scalar/Bytes":         1009, // byte-string leaf — lang/go/native/native_bytes.go
 	}
 
 	for path, want := range expected {

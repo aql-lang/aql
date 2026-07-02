@@ -444,11 +444,19 @@ transplant as defence in depth. Top-level programs are unrestricted
 not apply to extending module-provided words (wrapper rebindings),
 which are versioned with the dependency that owns them.
 
-Consequence for the §6 migrations: the temporal `add`/`sub` and
-`MatrixUtil` moves cannot ride the AQL transplant path (their tuples
-are all builtin types) — they go through the HOST registration layer
-(Go-side `Register`, locked signatures) exactly where they live
-today, just relocated into the owning module's Go builder.
+Consequence for the §6 migrations: a migration qualifies for the
+transplant path exactly when the module also takes ownership of the
+TYPES. Migration 1 is DONE this way: TimeOfDay / Duration /
+CalDuration / ClkDuration / Timezone moved out of the global builtin
+table (former FixedIDs 1004-1008) into aql:time-util as per-import
+mints (`MintTemporalModuleTypes`, the StreamKind pattern), and the
+temporal add/sub overloads ride the module's exported word-extension
+clones (`TemporalArithmeticExtensions` + `NewWordExtension`) — the
+minted duration types are what satisfy the user-type rule. Only Date /
+DateTime / Instant (and the Scalar/Time root) remain core. A migration
+whose types must STAY global builtins (`Matrix`) cannot ride the
+transplant; it would go through the host registration layer (Go-side
+`Register`, locked signatures) in the owning module's builder.
 
 Two properties the batteries pin
 (`lang/go/test/module_extend_test.go`, open-words.tsv §6–§7): file
