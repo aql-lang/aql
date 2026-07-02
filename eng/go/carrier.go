@@ -138,6 +138,69 @@ func NewElementCarrier(t *Type) Value {
 	return c
 }
 
+// ElementCarrierFromValue is the check-mode carrier a higher-order body sees
+// for one element of data. For a CONCRETE heterogeneous list (or map, whose
+// value-bodies see the values) the element is the lattice JOIN of the element
+// types — built via JoinCarriers, the same join branch merges use: direct
+// siblings collapse to the shared parent, DISTANT cousins stay a strict
+// Disjunct, so the body dispatch distributes per alternative
+// (disjunctPartitionReturns) exactly as the runtime dispatches per element —
+// `[1 2 "s"] each [1 add]` matches add's Integer AND String overloads instead
+// of failing no_signature against the Scalar ancestor. Every other shape
+// (typed lists, empty/single-typed collections, carriers) keeps
+// NewElementCarrier(DataListElemTypeFromValue(data)) — an untyped element
+// stays a dynamic Any.
+func ElementCarrierFromValue(data Value) Value {
+	if IsConcrete(data) {
+		if joined, ok := joinedElementCarrier(data); ok {
+			return joined
+		}
+	}
+	return NewElementCarrier(DataListElemTypeFromValue(data))
+}
+
+// joinedElementCarrier joins the element types of a concrete plain list (or
+// the value types of a concrete map) via JoinCarriers. ok=false when the
+// collection is empty, single-typed (the plain-type path is already precise),
+// or not a plain list/map payload.
+func joinedElementCarrier(data Value) (Value, bool) {
+	var elems []Value
+	switch p := data.Data.(type) {
+	case ListPayload:
+		elems = p.Elems
+	case MapPayload:
+		if p.M == nil {
+			return Value{}, false
+		}
+		for _, k := range p.M.Keys() {
+			v, _ := p.M.Get(k)
+			elems = append(elems, v)
+		}
+	default:
+		return Value{}, false
+	}
+	if len(elems) < 2 || elems[0].Parent == nil {
+		return Value{}, false
+	}
+	mixed := false
+	for i := 1; i < len(elems); i++ {
+		if elems[i].Parent == nil {
+			return Value{}, false
+		}
+		if !elems[i].Parent.Equal(elems[0].Parent) {
+			mixed = true
+		}
+	}
+	if !mixed {
+		return Value{}, false
+	}
+	out := NewCarrier(elems[0].Parent)
+	for i := 1; i < len(elems); i++ {
+		out = JoinCarriers(out, NewCarrier(elems[i].Parent))
+	}
+	return out, true
+}
+
 // ParamInputCarrier builds the check-mode carrier for a fn parameter declared of
 // type t. An EXPLICITLY-Any (or untyped) parameter binds a DYNAMIC carrier: the
 // author wrote "accepts anything", which is the gradual-dispatch intent — a body

@@ -433,6 +433,7 @@ var (
 	// NewCalDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = eng.NewCarrier
 	NewElementCarrier        = eng.NewElementCarrier
+	ElementCarrierFromValue  = eng.ElementCarrierFromValue
 	NewCarrierTypedList      = eng.NewCarrierTypedList
 	NewCarrierTypedListValue = eng.NewCarrierTypedListValue
 	NewDynamicCarrier        = eng.NewDynamicCarrier

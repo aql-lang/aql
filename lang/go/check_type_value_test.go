@@ -253,3 +253,32 @@ func TestMakeConstructionCheck(t *testing.T) {
 		}
 	}
 }
+
+// A HETEROGENEOUS concrete collection's element carrier is the lattice JOIN
+// of its element types (ElementCarrierFromValue): distant cousins stay a
+// strict Disjunct so the body dispatch distributes per alternative, exactly
+// as the runtime dispatches per element — not the common ancestor, which
+// failed no_signature on bodies every element actually satisfies.
+func TestHeterogeneousElementBodyCheck(t *testing.T) {
+	clean := []string{
+		`[1 2 "s"] each [1 add]`,    // add has Integer AND String overloads
+		`[1 "s"] fold [add] 0`,      // fold body over mixed elements
+		`[1 2 "s"] each [true and]`, // connective accepts both
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("heterogeneous body should check clean (%d errors): %q", n, src)
+		}
+	}
+	// NEGATIVE: a genuinely-bad body still flags (undefined word).
+	if n := checkErrs(t, `[1 2 "s"] each [nosuchword9]`); n == 0 {
+		t.Errorf("undefined body word must still be flagged")
+	}
+	// NEGATIVE: a statically-empty no-init fold is fold's own guaranteed
+	// runtime error, flagged with the byte-identical message.
+	for _, src := range []string{`fold [add] []`, `fold [add] {}`} {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("statically-empty no-init fold must be flagged: %q", src)
+		}
+	}
+}
