@@ -1588,10 +1588,9 @@ func foldNoInitReturnsFn(args []Value, r *Registry) []Value {
 	// dispatch as a no_signature on the body word).
 	if emptyDetail := staticEmptyFoldDetail(args[1]); emptyDetail != "" {
 		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:     "fold_error",
-			Detail:   emptyDetail,
-			Word:     "fold",
-			Severity: SeverityError,
+			Code:   "fold_error",
+			Detail: emptyDetail,
+			Word:   "fold",
 		})
 		return []Value{NewCarrier(TAny)}
 	}

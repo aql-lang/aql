@@ -138,11 +138,10 @@ func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
 				if errors.As(err, &ae) && ae.Code == "incomparable" {
 					pos := args[0].Pos
 					r.Check.AddDiagnostic(CheckDiagnostic{
-						Code:     "incomparable",
-						Detail:   ae.Detail,
-						Severity: SeverityError,
-						Row:      pos.Row,
-						Col:      pos.Col,
+						Code:   "incomparable",
+						Detail: ae.Detail,
+						Row:    pos.Row,
+						Col:    pos.Col,
 					})
 				}
 			}

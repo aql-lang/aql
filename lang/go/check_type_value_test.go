@@ -282,3 +282,39 @@ func TestHeterogeneousElementBodyCheck(t *testing.T) {
 		}
 	}
 }
+
+// The DISTRIBUTE-OVER-DISPATCH invariant (checker-accuracy-review.10.md §3):
+// any carrier that can denote two or more concrete types must dispatch as
+// the JOIN of its per-alternative dispatches — never fail no_signature
+// against a slot some alternative satisfies, never commit to one
+// alternative. Each carrier shape that can denote multiple types is pinned:
+// (1) a payload-bearing strict Disjunct (a branch join of distant cousins),
+// (2) a NAMED-union declared return (`[T]` with `def T (Integer tor
+// String)`) — the shape that historically carried only the T tag and failed
+// to distribute, (3) a dynamic carrier (reachable-overload union), and
+// (4) a union-typed param inside the body. A NEW multi-denotation carrier
+// shape must be added here when introduced.
+func TestDistributeOverDispatchInvariant(t *testing.T) {
+	clean := []string{
+		// (1) branch-join disjunct into an overloaded word (both alternatives
+		// have add overloads; runtime takes one, checker joins both).
+		`def f fn [[x:Integer] [Boolean] [x lt 2]] def v (if (f 1) [1] ["s"]) v add 1`,
+		`def f fn [[x:Integer] [Boolean] [x lt 2]] def v (if (f 1) [1] ["s"]) v add v`,
+		// (2) named-union declared return distributes downstream.
+		`def T (Integer tor String) def id fn [[x:T] [T] [x]] (id 1) add 1`,
+		`def T (Integer tor String) def id fn [[x:T] [T] [x]] (id 1) add (id 1)`,
+		// (3) dynamic carrier (map get) into a typed word.
+		`def m {a:1} (m get "a") add 1`,
+		// (4) union param used with an overload every alternative satisfies.
+		`def T (Integer tor String) def g fn [[x:T] [Any] [x add x]] g 1`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("multi-denotation dispatch must distribute (%d errors): %q", n, src)
+		}
+	}
+	// NEGATIVE: a word NO alternative satisfies still fails loudly.
+	if n := checkErrs(t, `def T (Integer tor String) def id fn [[x:T] [T] [x]] (id 1) nosuchword8`); n == 0 {
+		t.Errorf("an undefined word after a union result must still be flagged")
+	}
+}

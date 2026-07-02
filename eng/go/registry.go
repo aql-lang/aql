@@ -540,6 +540,13 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unbound_param":        SeverityError,
 	"arity_mismatch":       SeverityError,
 	"static_warning":       SeverityWarning,
+	// Housekeeping / structural (previously set inline at the emit sites —
+	// the table is the single source of truth; TestCheckSeverityTableComplete
+	// gates that every emitted code has an entry).
+	"unused_def":            SeverityWarning,
+	"unreachable_branch":    SeverityWarning,
+	"record_shape_mismatch": SeverityError,
+	"fold_error":            SeverityError,
 	// Advisory (non-gating): a readability nudge, not a defect.
 	"forward_strands_operand": SeverityInfo,
 	"mixed_form_call":         SeverityInfo,
@@ -549,6 +556,10 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// `[]` else or `end` makes the intent loud. See
 	// design/FORWARD-COLLECTION-PHASES.10.md.
 	"speculative_forward_commit": SeverityInfo,
+	// Advisory in CHECK mode by design: a ref-family misuse (`usurp 5`) is
+	// lenient under analysis (the value may be a gradual carrier) and raises
+	// for real at runtime — the check-mode diagnostic is a hint, not a gate.
+	"illegal_ref": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

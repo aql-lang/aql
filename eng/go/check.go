@@ -31,6 +31,7 @@ func (c *CheckState) Clone() *CheckState {
 	}
 	cp.FnSummaries = cloneMap(c.FnSummaries)
 	cp.FnInflight = cloneMap(c.FnInflight)
+	cp.FnNameInflight = cloneMap(c.FnNameInflight)
 	cp.FnAnalysisCounts = cloneMap(c.FnAnalysisCounts)
 	cp.DefsInstalled = cloneMap(c.DefsInstalled)
 	cp.DefsUsed = cloneMap(c.DefsUsed)
@@ -273,12 +274,11 @@ func (c *CheckState) EmitUnusedDefDiagnostics() {
 			continue
 		}
 		c.AddDiagnostic(CheckDiagnostic{
-			Code:     "unused_def",
-			Detail:   "def " + name + " is never used",
-			Word:     name,
-			Row:      pos.Row,
-			Col:      pos.Col,
-			Severity: SeverityWarning,
+			Code:   "unused_def",
+			Detail: "def " + name + " is never used",
+			Word:   name,
+			Row:    pos.Row,
+			Col:    pos.Col,
 		})
 	}
 }

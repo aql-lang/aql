@@ -347,10 +347,9 @@ func ofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		for _, a := range argv {
 			if IsBareTypeNode(a) && a.ID == TNever.ID {
 				r.Check.AddDiagnostic(CheckDiagnostic{
-					Code:     "static_warning",
-					Detail:   "of: instantiation with Never is value-uninhabited",
-					Word:     "of",
-					Severity: SeverityWarning,
+					Code:   "static_warning",
+					Detail: "of: instantiation with Never is value-uninhabited",
+					Word:   "of",
 				})
 				break
 			}

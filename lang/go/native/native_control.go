@@ -388,9 +388,8 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 			branch = "then"
 		}
 		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:     "unreachable_branch",
-			Detail:   "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
-			Severity: SeverityWarning,
+			Code:   "unreachable_branch",
+			Detail: "if condition is a constant " + BoolWord(lit) + "; " + branch + "-branch is unreachable",
 		})
 		var stk []Value
 		var defs map[string]Value
@@ -518,9 +517,8 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	es := r.Check
 	if lit, ok := LiteralCondValue(args[0]); ok && !lit {
 		r.Check.AddDiagnostic(CheckDiagnostic{
-			Code:     "unreachable_branch",
-			Detail:   "if condition is a constant false; then-branch is unreachable",
-			Severity: SeverityWarning,
+			Code:   "unreachable_branch",
+			Detail: "if condition is a constant false; then-branch is unreachable",
 		})
 	}
 	condFrag, condStk := analyseCondFragment(r, args[0])

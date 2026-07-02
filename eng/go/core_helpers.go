@@ -536,7 +536,35 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) || p.ConformsTo(TFnDef) {
 		return false
 	}
+	// A declared type that admits values by VALUE-level membership — a
+	// disjunct/enum (`def T (Integer tor String)`), a negation, a predicate
+	// type, a Go member type — accepts residuals whose TAG does not
+	// nominally conform: the runtime `v.Is(T)` runs the membership, so
+	// `[x]` against a declared T passes for an Integer x ∈ T. A nominal
+	// disjointness proof says nothing there — skip. The carrier-Is probe is
+	// the backstop for wrapped behaviors (a behave-augmented union still
+	// answers membership through its Match chain).
+	if membershipBeyondNominal(exp) || NewCarrier(p).Is(exp) {
+		return false
+	}
 	return isNeverShape(TandValues(NewCarrier(p), NewCarrier(exp)))
+}
+
+// membershipBeyondNominal reports whether t's installed Behavior admits
+// values by VALUE-level membership rather than nominal tag conformance —
+// the unifier families whose Match can accept a value from a foreign
+// lattice family. Bare refines stay nominal (provable); DepScalar nodes
+// are parented at their base scalar, so the conformance shortcut above
+// already skips them — listed here as a belt.
+func membershipBeyondNominal(t *Type) bool {
+	if t == nil {
+		return false
+	}
+	switch t.Behavior.(type) {
+	case *disjunctUnifier, *negationUnifier, *predicateUnifier, memberBehavior, *depScalarUnifier:
+		return true
+	}
+	return false
 }
 
 // checkRecordShapeArgs is the pattern / record-shape check for one analysed
@@ -574,19 +602,17 @@ func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args
 			av, hasKey := vMap.Get(key)
 			if !hasKey {
 				r.Check.AddDiagnostic(CheckDiagnostic{
-					Code:     "record_shape_mismatch",
-					Detail:   "argument to " + name + " missing field: " + key,
-					Word:     name,
-					Severity: SeverityError,
+					Code:   "record_shape_mismatch",
+					Detail: "argument to " + name + " missing field: " + key,
+					Word:   name,
 				})
 				continue
 			}
 			if IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(TAny) {
 				r.Check.AddDiagnostic(CheckDiagnostic{
-					Code:     "record_shape_mismatch",
-					Detail:   "argument to " + name + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
-					Word:     name,
-					Severity: SeverityError,
+					Code:   "record_shape_mismatch",
+					Detail: "argument to " + name + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
+					Word:   name,
 				})
 			}
 		}
@@ -867,6 +893,20 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						out[i] = CloneValue(bv)
 						continue
 					}
+				}
+				// A declared USER-UNION return (`def id fn [[x:T] [T] [x]]`
+				// with `def T (Integer tor String)`) must DISTRIBUTE over
+				// downstream dispatch: a bare carrier TAGGED T carries no
+				// DisjunctInfo, so sigTypeMatches' strict-disjunct branch
+				// never fires and `(id 1) add 1` failed no_signature against
+				// add's Number slot — the THIRD multi-denotation carrier shape
+				// after dynamic and payload-bearing disjuncts (the distribute-
+				// over-dispatch invariant, checker-accuracy-review.10.md §3).
+				// Surface the alternatives so disjunctPartitionReturns joins
+				// the per-alternative dispatches, like an inline `tor` result.
+				if dv, ok := UnionCarrierForType(CanonicalType(r, t)); ok {
+					out[i] = dv
+					continue
 				}
 				c := NewCarrier(t)
 				// A declared `Any` return is "statically unknown", not "the Any

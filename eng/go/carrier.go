@@ -213,7 +213,35 @@ func ParamInputCarrier(t *Type) Value {
 	if t == nil || t.Equal(TAny) {
 		return NewDynamicCarrier(TAny)
 	}
+	// A named-union param (`x:T` with `def T (Integer tor String)`) binds
+	// the DISTRIBUTING disjunct carrier, not a bare T-tagged one — the same
+	// multi-denotation rule as the declared-return side (UnionCarrierForType):
+	// install-time body analysis then dispatches `x add x` per alternative.
+	if dv, ok := UnionCarrierForType(t); ok {
+		return dv
+	}
 	return NewCarrier(t)
+}
+
+// UnionCarrierForType returns the DISTRIBUTING carrier for a user-defined
+// union/enum type — a strict Disjunct of the type's alternatives, the exact
+// shape a branch join of distant cousins produces (JoinCarriers), so
+// sigTypeMatches' strict-disjunct branch and disjunctPartitionReturns treat
+// it identically. ok=false for any type without a disjunctUnifier Behavior.
+// This is the third multi-denotation carrier shape (after dynamic carriers
+// and payload-bearing joins); the distribute-over-dispatch invariant
+// (TestDistributeOverDispatchInvariant) pins all of them.
+func UnionCarrierForType(t *Type) (Value, bool) {
+	if t == nil {
+		return Value{}, false
+	}
+	du, ok := t.Behavior.(*disjunctUnifier)
+	if !ok || len(du.alternatives) == 0 {
+		return Value{}, false
+	}
+	dv := NewDisjunct(SimplifyDisjunctAlts(du.alternatives))
+	dv.Carrier = true
+	return dv, true
 }
 
 // DataListElemTypeFromValue is a package-level duplicate of
@@ -1443,10 +1471,9 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 				Code: "partial_dispatch",
 				Detail: word + " has no overload for alternative (" +
 					comboTypeNames(combo) + ") of a disjunct input — that path would fail dispatch at runtime",
-				Word:     word,
-				Row:      pos.Row,
-				Col:      pos.Col,
-				Severity: SeverityWarning,
+				Word: word,
+				Row:  pos.Row,
+				Col:  pos.Col,
 			})
 			continue
 		}
@@ -2910,8 +2937,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 				Code: "analysis_truncated",
 				Detail: "fn " + quotaKey + " was analysed for more than " +
 					strconv.Itoa(FnAnalysisQuota) + " distinct call shapes; later shapes are typed from the declaration (or dynamic Any) without body re-analysis",
-				Word:     name,
-				Severity: SeverityInfo,
+				Word: name,
 			})
 		}
 		if len(declared) > 0 {
