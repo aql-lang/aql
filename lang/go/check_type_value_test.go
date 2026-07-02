@@ -222,3 +222,34 @@ func TestTypedDefDepScalarCheck(t *testing.T) {
 		}
 	}
 }
+
+// A `make` whose target resolves to a class / Resource schema and whose
+// construction map is CONCRETE is validated at check time — unknown field,
+// missing non-defaulted field, concrete field-value type — with the
+// byte-identical runtime messages (eng.CheckMakeConstruction via
+// makeObjReturns). Value-dependent shapes stay with the runtime constructor.
+func TestMakeConstructionCheck(t *testing.T) {
+	flagged := []string{
+		`def P class {x:1} end make P {z:9}`,                // unknown field
+		`def P class {x:Integer} end make P {x:"s"}`,        // field type mismatch
+		`def P class {x:Integer} end make P {}`,             // missing non-defaulted field
+		`make Entity {nope:1 kind:"k" spec:"s" entity:"e"}`, // Resource unknown field
+	}
+	for _, src := range flagged {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("bad construction must be flagged: %q", src)
+		}
+	}
+	clean := []string{
+		`def P class {x:1} end make P {x:5}`, // valid override
+		`def P class {x:1} end make P {}`,    // defaulted field omitted
+		`make Entity {kind:"k" spec:"s" entity:"e"}`,
+		// computed field value: value unknown, stays with the runtime.
+		`def P class {x:Integer} end def g fn [[v:Integer] [Integer] [v]] make P {x:(g 5)}`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}
