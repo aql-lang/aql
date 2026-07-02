@@ -167,27 +167,30 @@ func mergeExtensionSigs(r *Registry, name string, base *FnDefInfo, incoming []Si
 	return merged, changed, nil
 }
 
-// isKernelType reports whether t is a KERNEL-declared builtin — a type
-// core owns and the parser can produce (FixedID inside the eng ranges,
-// below 1000). External-builtin domain types (Date, Matrix, Fetch,
-// Timeout — FixedID >= 1000, registered via RegisterExternalBuiltin by
-// their owning module) and runtime-minted user types are NOT kernel
-// types. nil (an untyped Any slot) counts as kernel.
-func isKernelType(t *Type) bool {
-	return t == nil || (t.Origin == OriginBuiltin && t.FixedID < 1000)
+// isUserType reports whether t is a RUNTIME-MINTED type — one user
+// code created with `refine` / `class` (Origin == OriginUserDef).
+// Everything registered as a builtin is excluded: the kernel types the
+// parser can produce (Integer, Map, …) AND the external-builtin domain
+// types the aql: modules and host plugins register globally (Date,
+// Matrix, Fetch, Timeout — RegisterExternalBuiltin). A type alias
+// (`def MyDate Date`) does not mint, so it cannot launder a builtin
+// through this check; a refine of a builtin (`def MyDate (refine
+// Date)`) is a genuine user identity and qualifies.
+func isUserType(t *Type) bool {
+	return t != nil && t.Origin == OriginUserDef
 }
 
 // sigHasUserType reports whether at least one of the signature's
-// argument types is a non-kernel type. The module-scope safety rule
-// for extending CORE words: an all-kernel tuple is refused — it would
-// surprise importers (`add 1 {}` suddenly working from an import) and
-// breaks forward compatibility the day core claims the tuple as a
-// locked signature. A user-minted type or an external-builtin domain
-// type (Matrix, Date, …) anchors the signature to the module's own
-// domain, which is the intended use.
+// argument types is user-minted. The module-scope safety rule for
+// extending CORE words: a tuple built only from builtin types —
+// kernel or aql:-module-registered — is refused. It would surprise
+// importers (`add 1 {}` suddenly working from an import) and breaks
+// forward compatibility the day core or a first-party module claims
+// the tuple as a locked signature. A minted type anchors the
+// signature to the module's own domain, which is the intended use.
 func sigHasUserType(s *Signature) bool {
 	for i := 0; i < s.TotalArgs(); i++ {
-		if !isKernelType(sigArgType(s, i)) {
+		if isUserType(sigArgType(s, i)) {
 			return true
 		}
 	}
@@ -204,10 +207,10 @@ func requireUserTypedSigs(r *Registry, name, word string, sigs []Signature) erro
 			continue
 		}
 		return r.AqlErrorHint("extend_user_type",
-			fmt.Sprintf("%s %s: a module may extend a core word only with at least one user-defined argument type per signature — %s is all core types",
+			fmt.Sprintf("%s %s: a module may extend a core word only with at least one user-defined argument type per signature — %s has only built-in types",
 				word, name, sigTupleString(&sigs[i])),
 			word,
-			"an all-core tuple would change what core calls mean for every importer and breaks when a future core version claims it; anchor the signature with a named type (refine / class) from your module")
+			"a built-in-only tuple (kernel or aql:-module types) would change what core calls mean for every importer and breaks when a future version claims it; anchor the signature with a type your module mints (refine / class)")
 	}
 	return nil
 }

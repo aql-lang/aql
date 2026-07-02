@@ -1016,11 +1016,13 @@ restricted words refuse. See
 > be extended at all. A module exports its merged word like any fn
 > (`export "M" {add: add/r}`) and importing the module transplants the
 > extension one level into the importer. A **module** may extend a core
-> word only with at least one user-defined (or external domain)
-> argument type per signature — an all-core tuple like
-> `[Integer Map]` raises `[aql/extend_user_type]`, so `add 1 {}` can
-> never start working because of an import (top-level programs are
-> unrestricted). See
+> word only with at least one **user-minted** argument type per
+> signature — a type the module creates with `refine` or `class`.
+> Built-in types don't qualify, whether kernel (`Integer`, `Map`, …)
+> or registered by `aql:` modules (`Date`, `Matrix`, …): a
+> builtin-only tuple like `[Integer Map]` raises
+> `[aql/extend_user_type]`, so `add 1 {}` can never start working
+> because of an import (top-level programs are unrestricted). See
 > `lang/spec/open-words.tsv` and `design/OPEN-WORDS.0.md`.
 > Re-`def`ing your **own** words still shadows as before (`def x 1; def
 > x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
@@ -2016,7 +2018,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `reserved_word` | `def`/`undef` targeted a built-in word's value binding, a sealed word (`def`/`make`/`word`), or the literal `true`/`false`/`none`. |
 | `locked_signature` | A word extension's signature tuple exactly matches a locked (built-in) signature — locked signatures can never be replaced. |
 | `extend_conflict` | Two different modules transplanted the same signature tuple onto one word at import. |
-| `extend_user_type` | A module extended a core word with an all-core argument tuple — at least one user-defined (or external domain) type is required per signature. |
+| `extend_user_type` | A module extended a core word with a builtin-only argument tuple — at least one user-minted type (`refine` / `class`) is required per signature; kernel and `aql:`-module types don't qualify. |
 | `constraint_violation` | A generic type argument does not satisfy its `extends` bound. |
 | `arity_mismatch` | `of` received the wrong number of type arguments (defaults fill only the tail). |
 | `unbound_param` | A generic parameter could not be inferred and has no default. |

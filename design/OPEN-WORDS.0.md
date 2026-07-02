@@ -423,31 +423,44 @@ binding exists alongside the transplant.
 
 **Module-scope user-type rule (added post-rev-1, maintainer
 instruction).** A MODULE may extend a CORE word only with at least one
-user-defined argument type per signature — an all-kernel tuple
-(`add [Boolean Boolean]`, `add [Integer Map]`) raises
-`[aql/extend_user_type]`. Rationale: an all-core tuple would change
-what core calls mean for every importer (`add 1 {}` suddenly working
-because of an import) and breaks forward compatibility the day core
-claims the tuple as a locked signature. "User type" means any
-non-KERNEL type: a runtime mint (refine / class) or an
-external-builtin domain type (`Date`, `Matrix`, FixedID ≥ 1000) — the
-latter is what keeps the §6 migrations (`add [Date CalDuration]`,
-`add [Matrix Matrix]`) expressible. Enforced at the module-body `def`
-(`Registry.ModuleScope`, set by `RunModuleBody`) so the module author
-sees the refusal immediately — even a module-PRIVATE all-core
-extension is refused, since it breaks on the same future core claim —
-and re-checked at transplant as defence in depth. Top-level programs
-are unrestricted (the author is standing at the point of change), and
-the rule does not apply to extending module-provided words (wrapper
-rebindings), which are versioned with the dependency that owns them.
+USER-MINTED argument type per signature — a type the module creates
+with `refine` / `class` (`Origin == OriginUserDef`). Builtin types do
+NOT qualify, neither the kernel ones (`add [Boolean Boolean]`,
+`add [Integer Map]`) nor the external builtins the aql: modules and
+host plugins register globally (`Date`, `Matrix`, `Fetch`, `Timeout`);
+a builtin-only tuple raises `[aql/extend_user_type]`. Rationale: such
+a tuple would change what core calls mean for every importer
+(`add 1 {}` suddenly working because of an import) and breaks forward
+compatibility the day core or a first-party module claims the tuple
+as a locked signature. A type ALIAS (`def MyDate Date`) does not mint
+and cannot launder a builtin past the rule; a refine of a builtin
+(`def MyDate (refine Date)`) is a genuine user identity and
+qualifies. Enforced at the module-body `def` (`Registry.ModuleScope`,
+set by `RunModuleBody`) so the module author sees the refusal
+immediately — even a module-PRIVATE builtin-only extension is
+refused, since it breaks on the same future claim — and re-checked at
+transplant as defence in depth. Top-level programs are unrestricted
+(the author is standing at the point of change), and the rule does
+not apply to extending module-provided words (wrapper rebindings),
+which are versioned with the dependency that owns them.
 
-A per-import subtlety the file battery pins
-(`lang/go/test/module_extend_test.go`): file modules re-RUN per import
-(no module cache), so a re-imported module re-mints its user types —
-only shared-type tuples (external builtins like `Date`) can actually
-collide across importers or dedupe across diamond imports. User-typed
-tuples from two modules are distinct by construction (per-tree mintID,
-§5.2), so they coexist rather than conflict.
+Consequence for the §6 migrations: the temporal `add`/`sub` and
+`MatrixUtil` moves cannot ride the AQL transplant path (their tuples
+are all builtin types) — they go through the HOST registration layer
+(Go-side `Register`, locked signatures) exactly where they live
+today, just relocated into the owning module's Go builder.
+
+Two properties the batteries pin
+(`lang/go/test/module_extend_test.go`, open-words.tsv §6–§7): file
+modules re-RUN per import (no module cache), so a re-imported module
+re-mints its user types — a diamond import appends a fresh-minted
+tuple quietly, and two modules' same-shaped user-typed extensions
+COEXIST (each anchored to its own mint, per-tree mintID §5.2) rather
+than conflict. `[aql/extend_conflict]` is therefore unreachable from
+AQL source today; the guard is pinned at the API level
+(TestModuleExtendTransplantConflictDirect) because it must hold for a
+future module cache (shared mints across importers) and for
+host-constructed clones.
 
 §4.5 sealed inventory as audited: `def` (`bindsReferent`, forward-hint
 and macro-expander name checks), `make` (`autoEvalMap` gating keys on

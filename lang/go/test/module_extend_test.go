@@ -3,6 +3,9 @@ package test
 import (
 	"strings"
 	"testing"
+
+	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // File-module battery for open words (design/OPEN-WORDS.0.md): the
@@ -49,22 +52,19 @@ func TestModuleExtendFileTransplant(t *testing.T) {
 	assertResult(t, result, "42")
 }
 
-// TestModuleExtendFileDiamond pins diamond-import idempotence: the same
-// module file imported twice carries the same ref, so the second
-// transplant of an identical tuple installs nothing and errors nothing.
-// The tuple must be built from a SHARED type (the external builtin
-// Date): a re-run of the module body re-mints its own user types (there
-// is no module cache), so only shared-type tuples can collide at all.
+// TestModuleExtendFileDiamond pins diamond-import behaviour: importing
+// the same module file twice neither errors nor breaks dispatch. A
+// re-run of the module body re-mints its user types (there is no
+// module cache), so the second import's tuple is anchored to a fresh
+// mint and coexists with the first; the rebound namespace's
+// constructor produces values that dispatch the second instance's
+// signature.
 func TestModuleExtendFileDiamond(t *testing.T) {
-	files := map[string]string{
-		"dates.aql": `def add fn [[a:Date b:Date] [Boolean] [true]]
-export "DateExt" {add: add/r}`,
-	}
+	files := map[string]string{"ext.aql": flagExtModule}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./dates.aql"`,
-		`import "./dates.aql"`,
-		`import "aql:time-util"`,
-		`add TimeUtil.today TimeUtil.today`,
+		`import "./ext.aql"`,
+		`import "./ext.aql"`,
+		`add (FlagExt.mk true) (FlagExt.mk false)`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -72,22 +72,51 @@ export "DateExt" {add: add/r}`,
 	assertResult(t, result, "true")
 }
 
-// TestModuleExtendFileConflict pins the §4.4 collision: two DIFFERENT
-// module files extending `add` with the same shared-type tuple raise
-// [aql/extend_conflict] at the second import.
-func TestModuleExtendFileConflict(t *testing.T) {
-	files := map[string]string{
-		"d1.aql": `def add fn [[a:Date b:Date] [Boolean] [true]]
-export "D1" {add: add/r}`,
-		"d2.aql": `def add fn [[a:Date b:Date] [Boolean] [false]]
-export "D2" {add: add/r}`,
+// TestModuleExtendTransplantConflictDirect pins the §4.4 collision
+// machinery at the API level: the same unlocked tuple transplanted
+// from two DIFFERENT module refs raises [aql/extend_conflict], while
+// the same ref re-arriving is idempotent and quiet. Unreachable from
+// AQL source today — a user-typed tuple is anchored to a per-import
+// mint, so two source modules can never build the identical tuple —
+// but the guard must hold for a future module cache (shared mints
+// across importers) and for host-constructed clones.
+func TestModuleExtendTransplantConflictDirect(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
 	}
-	_, err := runMemFSModuleSteps(t, files, []string{
-		`import "./d1.aql"`,
-		`import "./d2.aql"`,
-	})
+	reg.SetParseFunc(parser.Parse)
+
+	// Build a real word-extension clone by running a top-level merge
+	// (unrestricted scope), then pop it so the registry is back to the
+	// pristine base — the clone value is the transplant payload.
+	src := `def Money (refine Integer)  def add fn [[a:Money b:Money] [Boolean] [true]]`
+	vals, err := parser.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := native.New(reg).Run(vals); err != nil {
+		t.Fatal(err)
+	}
+	top, ok := reg.Defs.Top("add")
+	if !ok {
+		t.Fatal("add unbound after merge")
+	}
+	clone, ok := native.IsWordExtension(top)
+	if !ok {
+		t.Fatal("top of add is not a word-extension clone")
+	}
+	native.UninstallDef(reg, "add")
+
+	if err := native.TransplantExtension(reg, clone, "./mod-a.aql"); err != nil {
+		t.Fatalf("first transplant: %v", err)
+	}
+	if err := native.TransplantExtension(reg, clone, "./mod-a.aql"); err != nil {
+		t.Fatalf("diamond re-transplant (same ref) must be idempotent, got %v", err)
+	}
+	err = native.TransplantExtension(reg, clone, "./mod-b.aql")
 	if err == nil {
-		t.Fatal("expected [aql/extend_conflict], got no error")
+		t.Fatal("expected [aql/extend_conflict] for the same tuple from a different module, got no error")
 	}
 	if !strings.Contains(err.Error(), "extend_conflict") {
 		t.Fatalf("expected extend_conflict, got %v", err)
