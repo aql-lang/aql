@@ -217,7 +217,14 @@ func ParamInputCarrier(t *Type) Value {
 	// the DISTRIBUTING disjunct carrier, not a bare T-tagged one — the same
 	// multi-denotation rule as the declared-return side (UnionCarrierForType):
 	// install-time body analysis then dispatches `x add x` per alternative.
+	// Marked Declared: the param annotation claims every alternative is a
+	// valid input, so a body dispatch that fails for one is an ERROR
+	// (disjunctPartitionReturns), not the analysis-join partial warning.
 	if dv, ok := UnionCarrierForType(t); ok {
+		if di, isDi := dv.Data.(DisjunctInfo); isDi {
+			di.Declared = true
+			dv.Data = di
+		}
 		return dv
 	}
 	return NewCarrier(t)
@@ -1509,9 +1516,13 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 		return nil, false
 	}
 	hasStrictDisjunct := false
+	declaredDomain := true // every strict disjunct arg is a declared-union param binding
 	for _, a := range args {
 		if IsDisjunct(a) && a.Carrier && !a.Dynamic {
 			hasStrictDisjunct = true
+			if di, err := AsDisjunct(a); err != nil || !di.Declared {
+				declaredDomain = false
+			}
 		}
 		// Body-running ReturnsFns (if, each, fold, do, …) take
 		// concrete list/map operands; re-running them per alternative
@@ -1543,14 +1554,27 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 	for _, combo := range combos {
 		comboSig := firstMatchingSig(fn, combo)
 		if comboSig == nil {
-			r.Check.AddDiagnostic(CheckDiagnostic{
+			// Severity by disjunct PROVENANCE: when every disjunct arg is a
+			// DECLARED union param (DisjunctInfo.Declared), the failing
+			// alternative is a valid input of the fn's own annotation — the
+			// body is broken for part of its declared domain, an error. An
+			// analysis-join disjunct (branch join, element join) stays a
+			// warning: the runtime materialises one alternative, so the
+			// failing path may be dead (the fuzz corpus' dead-branch class).
+			d := CheckDiagnostic{
 				Code: "partial_dispatch",
 				Detail: word + " has no overload for alternative (" +
 					comboTypeNames(combo) + ") of a disjunct input — that path would fail dispatch at runtime",
 				Word: word,
 				Row:  pos.Row,
 				Col:  pos.Col,
-			})
+			}
+			if declaredDomain {
+				d.Severity = SeverityError
+				d.Detail = word + " has no overload for alternative (" +
+					comboTypeNames(combo) + ") of a declared union parameter — a valid argument of the declared type would fail dispatch at runtime"
+			}
+			r.Check.AddDiagnostic(d)
 			continue
 		}
 		switch {

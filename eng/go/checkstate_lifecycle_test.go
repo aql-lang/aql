@@ -27,7 +27,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"Mode":        "set true by Begin itself; cleared by the returned done()",
 		"StepBudget":  "configuration with the -1 sentinel, resolved per run",
 		"CurCallPos":  "transient cursor overwritten per dispatch",
-		"FnSummaries": "caller-managed memo: (*AQL).Check/CompileCheck nil it so summaries never cross an emit-pass boundary; a bare Begin reuses them intentionally",
+		"FnSummaries": "caller-managed memo: CompileCheck nils it per emit pass and SetStrictCheck nils it on a mode change; a plain Check / bare Begin reuses them intentionally",
 		"FnInflight":  "caller-managed alongside FnSummaries",
 		"Strict":      "strict-mode configuration set by the caller before Begin",
 	}

@@ -632,6 +632,16 @@ type ReturnCheckInfo struct {
 // A disjunct unifies if any of its alternatives unifies with the target.
 type DisjunctInfo struct {
 	Alternatives []Value
+	// Declared marks a check-mode carrier disjunct denoting a DECLARED
+	// union domain — a named-union fn parameter binding
+	// (ParamInputCarrier), where every alternative is an author-claimed
+	// valid input. A body dispatch that fails for such an alternative is
+	// an ERROR (the fn breaks its contract for a valid argument), where
+	// the same partial failure on an ANALYSIS-join disjunct (an if/else
+	// branch join, a heterogeneous element join) stays a warning — there
+	// the runtime materialises only one alternative, so the failing path
+	// may be dead. Never set on runtime disjunct values.
+	Declared bool
 }
 
 // NegationInfo holds the inner type of a negation (complement) type. A

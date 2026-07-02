@@ -318,3 +318,75 @@ func TestDistributeOverDispatchInvariant(t *testing.T) {
 		t.Errorf("an undefined word after a union result must still be flagged")
 	}
 }
+
+// A DECLARED-union parameter (`x:T`, `def T (A tor B)`) claims every
+// alternative is a valid input, so a body dispatch with NO overload for one
+// alternative is an ERROR — the fn breaks its own contract for a valid
+// argument (`g true` raises no_signature at runtime). An ANALYSIS-join
+// disjunct (if/else branch join) keeps the partial_dispatch WARNING: the
+// runtime materialises one alternative, so the failing path may be dead.
+// disjunctPartitionReturns severity by DisjunctInfo.Declared provenance.
+func TestDeclaredUnionParamPartialDispatchError(t *testing.T) {
+	if n := checkErrs(t, `def T (Integer tor Boolean) def g fn [[x:T] [Any] [x add 1]] g 1`); n == 0 {
+		t.Errorf("partial dispatch over a declared union param must be an error")
+	}
+	clean := []string{
+		// branch-join disjunct: same partial shape, stays a warning.
+		`def y if (1 gt 0) [1] ["s"] mod y 2`,
+		// a guard discharges the failing alternative — no partial at all.
+		`def T (Integer tor Boolean) def g fn [[x:T] [Any] [if (x is Integer) [x add 1] [0]]] g 2`,
+		// every alternative dispatches — no partial.
+		`def T (Integer tor String) def g fn [[x:T] [Any] [x add x]] g 1`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}
+
+// The undefined-forward-ref skip in checkBodyReturnConformance is scoped to
+// the analysed body's SOURCE SPAN: an undefined word inside one overload /
+// earlier definition of `f` must not shield a DIFFERENT `f` body whose
+// declared return is provably wrong (the runtime raises the same type_error).
+func TestBodyConformanceScopedToRedefinition(t *testing.T) {
+	src := `def f fn [[a:Integer] [String] [g a]] def f fn [[a:Integer] [String] [42]] def g fn [[a:Integer] [String] ["ok"]] f 1`
+	if n := checkErrs(t, src); n == 0 {
+		t.Errorf("redefined f with impossible return must be flagged despite the first f's rescued forward ref")
+	}
+	// The forward-ref shape itself (mutual recursion) still skips cleanly —
+	// pinned here alongside the positive so the span scoping never regresses it.
+	clean := `def isod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [isev (n sub 1)]]] def isev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [isod (n sub 1)]]] isod 3`
+	if n := checkErrs(t, clean); n != 0 {
+		t.Errorf("mutual recursion must stay clean (%d errors)", n)
+	}
+}
+
+// SetStrictCheck invalidates the fn-body analysis memo when the mode
+// changes: a summary cached by a NON-strict Check on the same instance
+// would skip re-analysis, so the body's dynamic_dispatch advisories would
+// never surface in the later strict pass.
+func TestStrictToggleInvalidatesFnSummaries(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	src := `def f fn [[x:Any] [Any] [x add 1]] f 1`
+	if _, err := a.Check(src); err != nil {
+		t.Fatalf("non-strict check: %v", err)
+	}
+	a.SetStrictCheck(true)
+	res, err := a.Check(src)
+	if err != nil {
+		t.Fatalf("strict check: %v", err)
+	}
+	found := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "dynamic_dispatch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("strict re-check on a reused instance must re-analyse the fn body and report dynamic_dispatch; diagnostics: %+v", res.Diagnostics)
+	}
+}

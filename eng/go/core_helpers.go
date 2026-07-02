@@ -449,7 +449,7 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 // membership errors; a disjunct flags only when EVERY alternative is
 // impossible. Deduped by detail — the ReturnsFn runs once per analysed call
 // shape, but shapes repeat across call sites.
-func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk []Value, pos SrcPos) {
+func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk []Value, pos, bodyEnd SrcPos) {
 	if len(declared) == 0 || len(stk) < len(declared) || !r.Check.IsActive() {
 		return
 	}
@@ -461,10 +461,23 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk 
 	// still in the list here (RescueForwardRefDiagnostics drops it only at
 	// end of pass), so its presence is the reliable "analysis ran early"
 	// signal — skip; the runtime RET check still guards these bodies.
+	//
+	// Scoped to THIS body's source span [pos, bodyEnd]: an undefined forward
+	// ref in a DIFFERENT overload/redefinition of the same name must not
+	// shield this body's conformance check (`def f fn [… [g a]] def f fn
+	// [… [String] [42]] …` — the second f's Integer return is provably
+	// wrong regardless of the first f's rescued `g`). An unattributed
+	// diagnostic (Row 0) or an unpositioned body keeps the name-wide skip —
+	// conservative, never a new false positive.
 	for _, d := range r.Check.Diagnostics {
-		if d.Code == "undefined_word" && d.FnName == name {
-			return
+		if d.Code != "undefined_word" || d.FnName != name {
+			continue
 		}
+		if d.Row != 0 && (bodyEnd.Row != 0 || bodyEnd.Col != 0) &&
+			(posBefore(d.Row, d.Col, pos) || posBefore(bodyEnd.Row, bodyEnd.Col, SrcPos{Row: d.Row, Col: d.Col})) {
+			continue // attributed outside this body — not this body's signal
+		}
+		return
 	}
 	extra := len(stk) - len(declared)
 	for k, exp := range declared {
@@ -496,6 +509,59 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk 
 			})
 		}
 	}
+}
+
+// posBefore reports whether source position (row, col) strictly precedes p
+// in reading order. Used to test a diagnostic's attribution against a fn
+// body's source span.
+func posBefore(row, col int, p SrcPos) bool {
+	return row < p.Row || (row == p.Row && col < p.Col)
+}
+
+// bodySpanEnd walks a parsed fn body's tokens (paren exprs, reaches, lists,
+// map values — the exprRefsCarrier shapes) and returns the maximum source
+// position seen, i.e. the start of the body's LAST token at any depth.
+// Together with the first token's position it bounds the body's source span
+// for diagnostic attribution. Zero when no token carries a position.
+func bodySpanEnd(body []Value) SrcPos {
+	var end SrcPos
+	var walk func(vs []Value)
+	walk = func(vs []Value) {
+		for _, v := range vs {
+			if posBefore(end.Row, end.Col, v.Pos) {
+				end = v.Pos
+			}
+			if IsParenExpr(v) {
+				if toks, err := AsParenExpr(v); err == nil {
+					walk(toks)
+				}
+				continue
+			}
+			if IsReach(v) {
+				if ri, err := AsReach(v); err == nil {
+					walk(ri.Receiver)
+					for i := range ri.Segments {
+						if ri.Segments[i].Computed {
+							walk(ri.Segments[i].KeyExpr)
+						}
+					}
+				}
+				continue
+			}
+			if lst, err := AsList(v); err == nil && !lst.IsNil() {
+				walk(lst.Slice())
+				continue
+			}
+			if mp, err := AsMap(v); err == nil && mp != nil {
+				for _, k := range mp.Keys() {
+					mv, _ := mp.Get(k)
+					walk([]Value{mv})
+				}
+			}
+		}
+	}
+	walk(body)
+	return end
 }
 
 // residualProvablyDisjoint reports whether a body-residual value's type can
@@ -810,7 +876,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if len(bodyCopy) > 0 {
 				retPos = bodyCopy[0].Pos
 			}
-			checkBodyReturnConformance(r, nameCopy, declaredReturns, stk, retPos)
+			checkBodyReturnConformance(r, nameCopy, declaredReturns, stk, retPos, bodySpanEnd(bodyCopy))
 		}
 		if len(declaredReturns) > 0 {
 			out := make([]Value, len(declaredReturns))
