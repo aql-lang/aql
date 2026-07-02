@@ -54,25 +54,25 @@ var accessorNatives = []NativeFunc{
 		// over the baked container + key — the VM runs the same pure handler.
 		CompileEffect: CompileModuleFold | CompileQuoteInert,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// [Key | Node] — Map, List, Options, record-shape
-			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: hasNodeHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(hasNodeHandler), Returns: []*Type{TBoolean}},
 			// [Key | Class instance]
-			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: hasObjectHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TResource}, BarrierPos: 1, Impl: Go(hasObjectHandler), Returns: []*Type{TBoolean}},
 			// [Key | Store]
-			{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: hasStoreHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasStoreHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TStore}, BarrierPos: 1, Impl: Go(hasStoreHandler), Returns: []*Type{TBoolean}},
 			// [Key | None] — total: an absent parent answers false.
 			// The Atom/q overload captures a bare-word key (`none has
 			// a`, `(m get sub) has k`), going one better than get/getr,
 			// whose None sigs take only an evaluated key.
-			{Args: []*Type{TAtom, TNone}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: hasNoneHandler, Returns: []*Type{TBoolean}},
-			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: hasNoneHandler, Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TNone}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasNoneHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(hasNoneHandler), Returns: []*Type{TBoolean}},
 		},
 	},
 }
@@ -82,27 +82,27 @@ var accessorNatives = []NativeFunc{
 // literal field — the `!.` sugar); `getr` uses the stripQuoteArgs variant
 // (same overloads, QuoteArgs cleared: an evaluated Atom key still matches; a
 // bare WORD is evaluated). One source keeps the two words from drifting.
-func accessorGetrSignatures() []NativeSig {
-	return []NativeSig{
+func accessorGetrSignatures() []Signature {
+	return []Signature{
 		// [Key | Node] — key forward, container from stack
-		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrMapHandler},
-		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getrMapHandler},
-		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getrMapHandler, ReturnsFn: returnsGetrIndexChecked},
+		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMapHandler)},
+		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler)},
+		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: returnsGetrIndexChecked},
 		// [Key | Class instance] — strict field read (mirrors get's TClass
 		// sigs; getrObjectHandler resolves the flat instance via
 		// AsClassInstance and raises on a missing field). Field type
 		// narrows from the schema via getObjectReturns, as get does.
-		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
-		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getrObjectHandler, ReturnsFn: getObjectReturns},
-		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrObjectHandler, Returns: []*Type{TAny}},
-		{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: getrObjectHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrObjectHandler), ReturnsFn: getObjectReturns},
+		{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(getrObjectHandler), ReturnsFn: getObjectReturns},
+		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrObjectHandler), Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TResource}, BarrierPos: 1, Impl: Go(getrObjectHandler), Returns: []*Type{TAny}},
 		// [Key | ModuleExport] / [Key | Module]
-		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
-		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getrModuleExportHandler, ReturnsFn: moduleExportGetrReturns},
-		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getrModuleInstHandler},
-		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getrModuleInstHandler},
+		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleExportHandler), ReturnsFn: moduleExportGetrReturns},
+		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getrModuleExportHandler), ReturnsFn: moduleExportGetrReturns},
+		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleInstHandler)},
+		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getrModuleInstHandler)},
 		// [Key | None]
-		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getrNoneHandler},
+		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getrNoneHandler)},
 	}
 }
 

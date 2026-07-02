@@ -42,18 +42,18 @@ var typeNatives = []NativeFunc{
 		// (a following `def` / `behave` / `;`) comes next.
 		Name: "refine",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
-				Args:           []*Type{TAny, TNode},
-				Handler:        refineHandler,
-				Returns:        []*Type{TType},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAny, TNode},
+				Impl:       Go(refineHandler, RunInCheck()),
+				Returns:    []*Type{TType},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAny},
-				Handler:        refineBareHandler,
-				Returns:        []*Type{TType},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAny},
+				Impl:       Go(refineBareHandler, RunInCheck()),
+				Returns:    []*Type{TType},
+				BarrierPos: -1,
 			},
 		},
 	},
@@ -68,11 +68,11 @@ var typeNatives = []NativeFunc{
 		// `def Bar refine Foo {…}`. See design/CLASS-OBJECT.10.md.
 		Name: "class",
 
-		Signatures: []NativeSig{{
-			Args:           []*Type{TMap},
-			Handler:        classHandler,
-			Returns:        []*Type{TType},
-			RunInCheckMode: true, BarrierPos: -1,
+		Signatures: []Signature{{
+			Args:       []*Type{TMap},
+			Impl:       Go(classHandler, RunInCheck()),
+			Returns:    []*Type{TType},
+			BarrierPos: -1,
 		}},
 	},
 	{
@@ -83,11 +83,11 @@ var typeNatives = []NativeFunc{
 		// loudly checks) conformance. See design/SURFACES.10.md.
 		Name: "surface",
 
-		Signatures: []NativeSig{{
-			Args:           []*Type{TMap},
-			Handler:        surfaceHandler,
-			Returns:        []*Type{TType},
-			RunInCheckMode: true, BarrierPos: -1,
+		Signatures: []Signature{{
+			Args:       []*Type{TMap},
+			Impl:       Go(surfaceHandler, RunInCheck()),
+			Returns:    []*Type{TType},
+			BarrierPos: -1,
 		}},
 	},
 	{
@@ -98,32 +98,32 @@ var typeNatives = []NativeFunc{
 		// (surface_unsatisfied lists every gap), idempotent.
 		Name: "exposes",
 
-		Signatures: []NativeSig{{
-			Args:           []*Type{TAny, TAny},
-			Handler:        exposesHandler,
-			Returns:        []*Type{},
-			RunInCheckMode: true, BarrierPos: 1,
+		Signatures: []Signature{{
+			Args:       []*Type{TAny, TAny},
+			Impl:       Go(exposesHandler, RunInCheck()),
+			Returns:    []*Type{},
+			BarrierPos: 1,
 		}},
 	},
 	{
 		Name: "pathof",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:     []*Type{TAny},
 			TypeArgs: map[int]bool{0: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{eng.PathOf(args[0])}, nil
-			},
+			}),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "enum",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    enumHandler,
+			Impl:       Go(enumHandler),
 			Returns:    []*Type{TEnum},
 			ReturnsFn:  enumReturns, BarrierPos: -1,
 		}},
@@ -132,9 +132,9 @@ var typeNatives = []NativeFunc{
 		Name:          "typeof",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TAny},
-			Handler:   typeofHandler,
+			Impl:      Go(typeofHandler),
 			Returns:   []*Type{TType},
 			ReturnsFn: typeofReturns, BarrierPos: -1,
 			CompileEffect: CompileReadsFn, // reads a fn value's type, never invokes it
@@ -144,10 +144,10 @@ var typeNatives = []NativeFunc{
 		Name:          "is",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
 			BarrierPos: 1,
-			Handler:    isHandler,
+			Impl:       Go(isHandler),
 			Returns:    []*Type{TBoolean},
 		}},
 	},
@@ -155,10 +155,10 @@ var typeNatives = []NativeFunc{
 		Name:          "teq",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
-			Handler:       teqHandler,
+			Impl:          Go(teqHandler),
 			Returns:       []*Type{TBoolean},
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
@@ -167,10 +167,10 @@ var typeNatives = []NativeFunc{
 		Name:          "tis",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
-			Handler:       tisHandler,
+			Impl:          Go(tisHandler),
 			Returns:       []*Type{TBoolean},
 			CompileEffect: CompileReadsFn, // reads the operands' lattice tags, never invokes
 		}},
@@ -178,18 +178,18 @@ var typeNatives = []NativeFunc{
 	{
 		Name: "guard",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TBoolean},
 			BarrierPos: 1,
-			Handler:    guardHandler,
+			Impl:       Go(guardHandler),
 			ReturnsFn:  guardReturns,
 		}}},
 	{
 		Name: "base",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TAny},
-			Handler:   baseHandler,
+			Impl:      Go(baseHandler),
 			ReturnsFn: ReturnsIdentity(0), BarrierPos: -1,
 		}},
 	},
@@ -201,10 +201,10 @@ var typeNatives = []NativeFunc{
 		Name:          "tor",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
-			Handler:       eng.TorHandler,
+			Impl:          Go(eng.TorHandler),
 			ReturnsFn:     eng.TorReturnsFn,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
@@ -213,10 +213,10 @@ var typeNatives = []NativeFunc{
 		Name:          "tand",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny, TAny},
 			BarrierPos:    1,
-			Handler:       eng.TandHandler,
+			Impl:          Go(eng.TandHandler),
 			ReturnsFn:     eng.TandReturnsFn,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
@@ -228,10 +228,10 @@ var typeNatives = []NativeFunc{
 		Name:          "tnot",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:          []*Type{TAny},
 			BarrierPos:    -1,
-			Handler:       eng.TnotHandler,
+			Impl:          Go(eng.TnotHandler),
 			ReturnsFn:     eng.TnotReturnsFn,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
@@ -239,27 +239,27 @@ var typeNatives = []NativeFunc{
 	{
 		Name: "tany",
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: tanyHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TList}, Impl: Go(tanyHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "tall",
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TList}, Handler: tallHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TList}, Impl: Go(tallHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name:          "convert",
 		CompileEffect: CompileModuleFold,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// Ideal → Map / List (per-type IdealConverter; base Ideal → {} / [])
 			{
 				Args:     []*Type{TNode, TIdeal},
 				TypeArgs: map[int]bool{0: true},
-				Handler:  convertIdealHandler,
+				Impl:     Go(convertIdealHandler),
 				// convert yields a VALUE of the target type (like make), not the
 				// target type literal — ReturnsFreshInstance mints a carrier OF
 				// arg0's type so a downstream consumer (e.g. arithmetic on a
@@ -270,14 +270,14 @@ var typeNatives = []NativeFunc{
 				Args:     []*Type{TScalar, TMap, TScalar},
 				TypeArgs: map[int]bool{0: true},
 				Patterns: map[int]Value{1: convertOptsPattern()},
-				Handler:  convert3Handler,
+				Impl:     Go(convert3Handler),
 				// See the Ideal sig above: a VALUE of arg0's type, not the literal.
 				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
 			},
 			{
 				Args:     []*Type{TScalar, TScalar},
 				TypeArgs: map[int]bool{0: true},
-				Handler:  convert2Handler,
+				Impl:     Go(convert2Handler),
 				// See the Ideal sig above: a VALUE of arg0's type, not the literal.
 				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
 			},
@@ -784,9 +784,9 @@ func tisNode(v Value) *Type {
 var TPartialModuleNatives = []NativeFunc{
 	{
 		Name: "tpartial",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny},
-			Handler: tpartialHandler,
+			Impl:    Go(tpartialHandler),
 			Returns: []*Type{TType}, BarrierPos: -1,
 		}},
 	},

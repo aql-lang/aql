@@ -123,7 +123,7 @@ func makeQueryFnDef(w qWord, subReg *native.Registry) native.Value {
 		Signatures: []native.FnSig{{
 			Params:     params,
 			Returns:    []*native.Type{native.TList},
-			Body:       []native.Value{native.NewWord(w.internal)},
+			Impl:       native.AQL([]native.Value{native.NewWord(w.internal)}),
 			NoEvalArgs: noEvalMap,
 			BarrierPos: -1,
 		}},

@@ -191,24 +191,24 @@ func TestMultipleSignaturesDispatch(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "describe",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TInteger},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					n, _ := AsInteger(args[0])
 					if n == 0 {
 						return []Value{NewString("zero-int")}, nil
 					}
 					return []Value{NewString("nonzero-int")}, nil
-				},
+				}),
 				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TString},
-				Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					s, _ := AsString(args[0])
 					return []Value{NewString("string:" + s)}, nil
-				},
+				}),
 				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 		},
@@ -244,21 +244,21 @@ func TestSignatureDispatchFavoursSpecificity(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "tag",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TAny},
-				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					hits["any"]++
 					return []Value{NewString("any")}, nil
-				},
+				}),
 				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TInteger},
-				Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					hits["int"]++
 					return []Value{NewString("int")}, nil
-				},
+				}),
 				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 		},
@@ -292,13 +292,13 @@ func TestOutputCapture(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "emit",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TString},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				s, _ := AsString(args[0])
 				reg.Output.Write([]byte(s))
 				return nil, nil
-			},
+			}),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	})
@@ -321,11 +321,11 @@ func TestAqlErrorPropagation(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "bork",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger},
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				return nil, reg.AqlError("test_failure", "always fails", "bork")
-			}, BarrierPos: -1,
+			}), BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()

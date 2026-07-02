@@ -101,10 +101,10 @@ var mathNatives = []NativeFunc{
 	{
 		Name: "add",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TNumber, TNumber},
-				Handler: numericBinaryHandler(towerOps{
+				Impl: Go(numericBinaryHandler(towerOps{
 					intFn: func(a, b int64) (Value, error) {
 						c, ok := checkedAddInt(b, a)
 						if !ok {
@@ -115,7 +115,7 @@ var mathNatives = []NativeFunc{
 					bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Add(b, a)), nil },
 					decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Add, b, a) },
 					fltFn: func(a, b float64) (Value, error) { return NewFloat(b + a), nil },
-				}),
+				})),
 				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 			},
 			// String concatenation requires AT LEAST ONE String operand;
@@ -125,21 +125,21 @@ var mathNatives = []NativeFunc{
 			// system expresses "string-or-bust" directly rather than
 			// silently stringifying any Scalar pair. See
 			// design/WAT-AUDIT.5.md §G.
-			{Args: []*Type{TString, TScalar}, Handler: addConcatHandler, ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
-			{Args: []*Type{TScalar, TString}, Handler: addConcatHandler, ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
-			{Args: []*Type{TDate, TCalDuration}, Handler: addDateCalHandler, Returns: []*Type{TDate}, BarrierPos: -1},
-			{Args: []*Type{TDateTime, TClkDuration}, Handler: addDateTimeClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
-			{Args: []*Type{TInstant, TClkDuration}, Handler: addInstantClkHandler, Returns: []*Type{TInstant}, BarrierPos: -1},
-			{Args: []*Type{TDate, TClkDuration}, Handler: addDateClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
+			{Args: []*Type{TString, TScalar}, Impl: Go(addConcatHandler), ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
+			{Args: []*Type{TScalar, TString}, Impl: Go(addConcatHandler), ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
+			{Args: []*Type{TDate, TCalDuration}, Impl: Go(addDateCalHandler), Returns: []*Type{TDate}, BarrierPos: -1},
+			{Args: []*Type{TDateTime, TClkDuration}, Impl: Go(addDateTimeClkHandler), Returns: []*Type{TDateTime}, BarrierPos: -1},
+			{Args: []*Type{TInstant, TClkDuration}, Impl: Go(addInstantClkHandler), Returns: []*Type{TInstant}, BarrierPos: -1},
+			{Args: []*Type{TDate, TClkDuration}, Impl: Go(addDateClkHandler), Returns: []*Type{TDateTime}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "sub",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TNumber, TNumber},
-				Handler: numericBinaryHandler(towerOps{
+				Impl: Go(numericBinaryHandler(towerOps{
 					intFn: func(a, b int64) (Value, error) {
 						c, ok := checkedSubInt(b, a)
 						if !ok {
@@ -150,20 +150,20 @@ var mathNatives = []NativeFunc{
 					bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Sub(b, a)), nil },
 					decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Sub, b, a) },
 					fltFn: func(a, b float64) (Value, error) { return NewFloat(b - a), nil },
-				}),
+				})),
 				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 			},
-			{Args: []*Type{TDate, TCalDuration}, Handler: subDateCalHandler, Returns: []*Type{TDate}, BarrierPos: -1},
-			{Args: []*Type{TDateTime, TClkDuration}, Handler: subDateTimeClkHandler, Returns: []*Type{TDateTime}, BarrierPos: -1},
-			{Args: []*Type{TInstant, TClkDuration}, Handler: subInstantClkHandler, Returns: []*Type{TInstant}, BarrierPos: -1},
+			{Args: []*Type{TDate, TCalDuration}, Impl: Go(subDateCalHandler), Returns: []*Type{TDate}, BarrierPos: -1},
+			{Args: []*Type{TDateTime, TClkDuration}, Impl: Go(subDateTimeClkHandler), Returns: []*Type{TDateTime}, BarrierPos: -1},
+			{Args: []*Type{TInstant, TClkDuration}, Impl: Go(subInstantClkHandler), Returns: []*Type{TInstant}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "mul",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
-			Handler: numericBinaryHandler(towerOps{
+			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
 					c, ok := checkedMulInt(b, a)
 					if !ok {
@@ -174,16 +174,16 @@ var mathNatives = []NativeFunc{
 				bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Mul(b, a)), nil },
 				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Mul, b, a) },
 				fltFn: func(a, b float64) (Value, error) { return NewFloat(b * a), nil },
-			}),
+			})),
 			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "div",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
-			Handler: numericBinaryHandler(towerOps{
+			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
 					// Integer division by zero has no defined result
 					// (there is no integer infinity) — it stays a hard
@@ -212,16 +212,16 @@ var mathNatives = []NativeFunc{
 					// these, so we do NOT special-case a == 0.
 					return NewFloat(b / a), nil
 				},
-			}),
+			})),
 			ReturnsFn: returnsDivMod(), BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "mod",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
-			Handler: numericBinaryHandler(towerOps{
+			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
 					// Integer modulo by zero stays a hard error (no
 					// integer infinity / NaN). The Float path is IEEE.
@@ -242,16 +242,16 @@ var mathNatives = []NativeFunc{
 					// returns NaN. No special-case error.
 					return NewFloat(math.Mod(b, a)), nil
 				},
-			}),
+			})),
 			ReturnsFn: returnsDivMod(), BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "pow",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TNumber, TNumber},
-			Handler: numericBinaryHandler(towerOps{
+			Impl: Go(numericBinaryHandler(towerOps{
 				intFn: func(a, b int64) (Value, error) {
 					// Compute b ** a under §1.4 swap-form preference.
 					if a < 0 {
@@ -271,7 +271,7 @@ var mathNatives = []NativeFunc{
 				},
 				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Pow, b, a) },
 				fltFn: func(a, b float64) (Value, error) { return NewFloat(math.Pow(b, a)), nil },
-			}),
+			})),
 			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
 		}},
 	},
@@ -284,9 +284,9 @@ var mathNatives = []NativeFunc{
 		Callable: &CallableSpec{BodyPos: 1, BodyOut: 1, Inputs: func(_ []Value) []Value {
 			return []Value{}
 		}},
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TMap, TList},
-			Handler:    withDecimalHandler,
+			Impl:       Go(withDecimalHandler),
 			NoEvalArgs: map[int]bool{1: true},
 			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},

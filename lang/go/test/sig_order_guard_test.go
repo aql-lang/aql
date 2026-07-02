@@ -1,4 +1,4 @@
-// Guard tests for the FnSig/NativeSig argument-ordering unification
+// Guard tests for the FnSig/Signature argument-ordering unification
 // (design/SIG-ORDER-REFACTOR.10.md). These pin behavior that must
 // survive the refactor (top-first via matchSignature) and lock in the
 // fix for the module-closure branch in execFnDefLiteral.
@@ -122,7 +122,7 @@ func TestSigOrder_UnnamedAqlFn_TopFirst(t *testing.T) {
 
 // TestSigOrder_ModuleWrapper_NaturalParams pins module-wrapper
 // dispatch on top-first sig order. The wrapper's FnSig.Params match
-// the inner native's NativeSig.Args order (top-first per the
+// the inner native's Signature.Args order (top-first per the
 // canonical forward call form `Rand.string CHARSET LENGTH`).
 // execFnDefLiteral's trivial-delegation short-circuit routes the call
 // straight to the inner native via execMatch.

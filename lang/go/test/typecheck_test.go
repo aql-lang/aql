@@ -10,6 +10,50 @@ import (
 	"github.com/aql-lang/aql/lang/go"
 )
 
+// TestCheckLoopResidualSpread pins the check-mode residual of a
+// statically-counted `for`: it leaves the SPREAD of its per-iteration
+// residual on the stack (matching the runtime, which splices each
+// iteration's values as separate entries), not a single List carrier.
+// The List remains the variadic model on the bytecode recording path;
+// this precision applies to plain `Check` only.
+func TestCheckLoopResidualSpread(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	seedAQL(a)
+
+	cases := []struct {
+		src  string
+		want int // expected residual length
+	}{
+		{"for 3 ['x']", 3},     // count form: 3 iterations × 1 value
+		{"for [1 4] [7 8]", 6}, // range [1,4) = 3 iterations × 2 values
+		{"for 0 ['x']", 0},     // statically-empty loop leaves nothing
+		{"for 2 [7 8 9]", 6},   // 2 × 3
+	}
+	for _, tc := range cases {
+		res, err := a.Check(tc.src)
+		if err != nil {
+			t.Fatalf("check %q: %v", tc.src, err)
+		}
+		if len(res.Stack) != tc.want {
+			t.Errorf("loop %q: want %d residual carriers, got %d: %v", tc.src, tc.want, len(res.Stack), res.Stack)
+		}
+	}
+
+	// A NON-static count (an abstract carrier — here the fn param `n`) keeps the
+	// single-List variadic approximation; the exact iteration count is unknown
+	// statically, so no spread. The fn returns the loop residual unchanged.
+	res, err := a.Check(`def f fn [[n:Integer] [List] [for n ['x']]] f 3`)
+	if err != nil {
+		t.Fatalf("check dynamic-count: %v", err)
+	}
+	if len(res.Stack) != 1 {
+		t.Errorf("dynamic-count loop: want 1 List carrier, got %d: %v", len(res.Stack), res.Stack)
+	}
+}
+
 // TestCheckAddIntegerPrecision validates intra-signature value-
 // dependent return propagation: `1 add 2` matches [Number,Number] but
 // because both carriers are Integer the result should refine to
@@ -826,13 +870,21 @@ func TestCheckForLoopAnalysis(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	seedAQL(a)
-	// Body returns Integer per iteration → TList<Integer>.
+	// Body returns one Integer per iteration. A statically-counted loop leaves
+	// the SPREAD of its per-iteration residual (matching the runtime, which
+	// splices each iteration's value onto the stack): `for 5 [i dup add]` →
+	// five Integers, not a single List.
 	res, err := a.Check("for 5 [i dup add]")
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(res.Stack) != 1 || res.Stack[0] != "List" {
-		t.Fatalf("expected List, got %v", res.Stack)
+	if len(res.Stack) != 5 {
+		t.Fatalf("expected 5 Integer carriers, got %v", res.Stack)
+	}
+	for _, s := range res.Stack {
+		if s != "Integer" {
+			t.Fatalf("expected every residual Integer, got %v", res.Stack)
+		}
 	}
 	for _, d := range res.Diagnostics {
 		if d.Code == "no_signature" {

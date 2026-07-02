@@ -25,7 +25,7 @@ func optSig(pattern Value) FnSig {
 			Optional: true,
 		}},
 		Returns: []*Type{TMap},
-		Body:    []Value{NewWord("m")},
+		Impl:    AQL([]Value{NewWord("m")}),
 	}
 }
 
@@ -60,12 +60,12 @@ func TestExpandOptionalKeepsSatisfiableDefault(t *testing.T) {
 		t.Fatalf("expansion has %d params, want 0", len(zero.Params))
 	}
 	// Body must be [Word(f), {x:1}] — the argument must NOT be dropped.
-	if len(zero.Body) != 2 {
-		t.Fatalf("expansion body has %d tokens, want 2 (word + default): %v", len(zero.Body), zero.Body)
+	if len(zero.body()) != 2 {
+		t.Fatalf("expansion body has %d tokens, want 2 (word + default): %v", len(zero.body()), zero.body())
 	}
-	m, err := AsMap(zero.Body[1])
+	m, err := AsMap(zero.body()[1])
 	if err != nil || m == nil {
-		t.Fatalf("expansion body[1] is not the default map: %v", zero.Body[1])
+		t.Fatalf("expansion body[1] is not the default map: %v", zero.body()[1])
 	}
 	if v, ok := m.Get("x"); !ok {
 		t.Error("default map lost field x")

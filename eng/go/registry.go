@@ -872,7 +872,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 	if len(entries) == 1 {
 		hasBody := false
 		for i := range top.Signatures {
-			if len(top.Signatures[i].Body) > 0 {
+			if len(top.Signatures[i].body()) > 0 {
 				hasBody = true
 				break
 			}
@@ -890,7 +890,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 				continue
 			}
 			sigs = append(sigs, s)
-			if len(s.Body) > 0 {
+			if len(s.body()) > 0 {
 				hasAQL = true
 			}
 		}
@@ -919,7 +919,7 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 	return Signature{
 		Fallback:   true,
 		BarrierPos: 0,
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			top, ok := r.Defs.Top(name)
 			if !ok {
 				return nil, fmt.Errorf("undefined: %s", name)
@@ -933,8 +933,8 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 				if fn := r.Lookup(name); fn != nil {
 					for i := range fn.Signatures {
 						sig := &fn.Signatures[i]
-						if sig.TotalArgs() == 0 && sig.Handler != nil && !sig.Fallback {
-							return sig.Handler(nil, nil, nil, r)
+						if sig.TotalArgs() == 0 && sig.dispatchHandler() != nil && !sig.Fallback {
+							return sig.dispatchHandler()(nil, nil, nil, r)
 						}
 						if sig.TotalArgs() > 0 {
 							hasForwardSig = true
@@ -957,7 +957,7 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 						"`end` / `;` only ends the statement — it does NOT turn a following word into a nested call.")
 			}
 			return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
-		},
+		}),
 	}
 }
 
@@ -1028,9 +1028,9 @@ func UnaryNumOpNative(name string, op func(float64) float64) NativeFunc {
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TInteger}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -1051,10 +1051,10 @@ func BinaryNumOpNative(name string, op func(a, b float64) (float64, error)) Nati
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TFloat, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TNumber, TFloat}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
-			{Args: []*Type{TFloat, TNumber}, Handler: handler, Returns: []*Type{TFloat}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TFloat, TFloat}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TNumber, TFloat}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
+			{Args: []*Type{TFloat, TNumber}, Impl: Go(handler), Returns: []*Type{TFloat}, BarrierPos: -1},
 		},
 	}
 }
@@ -1075,8 +1075,8 @@ func BinaryIntOpNative(name string, op func(a, b int64) (int64, error)) NativeFu
 	return NativeFunc{
 		Name: name,
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TInteger}, Handler: handler, Returns: []*Type{TInteger}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TInteger, TInteger}, Impl: Go(handler), Returns: []*Type{TInteger}, BarrierPos: -1},
 		},
 	}
 }
@@ -1228,7 +1228,7 @@ func StoreKey(v Value) string {
 }
 
 // RegisterNativeFunc installs a NativeFunc into the registry, converts
-// NativeSig to Signature, and registers with the appropriate precedence.
+// native-authored Signature, and registers with the appropriate precedence.
 //
 // The function name is validated against the language-fundamental
 // word-name rule (ValidateWordName in word_name.go): must begin with
@@ -1241,44 +1241,17 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		return
 	}
 	for _, sig := range fn.Signatures {
-		// Synthesize the unified Params descriptor from the native sig's
-		// positional Args (+ any structural Patterns). Native sigs have
-		// no param names, so Name stays empty — Params[i].Type carries
-		// the per-position type that readers are migrating to.
-		params := make([]FnParam, len(sig.Args))
-		for i, t := range sig.Args {
-			params[i] = FnParam{Type: t}
-			if sig.Patterns != nil {
-				if pat, ok := sig.Patterns[i]; ok {
-					p := pat
-					params[i].Pattern = &p
-				}
-			}
+		// The native author fills a plain Signature (positional Args + a Go
+		// Handler); Register → upsertFnDef → normalizeSig synthesizes the
+		// authoritative Params from Args+Patterns. Only the WORD-level fields
+		// (CompileEffect, Callable) fold onto each sig here. `BarrierAllForward`
+		// (-1) is the "default all-forward" sentinel; `0` is explicit all-stack —
+		// upsertFnDef resolves it once.
+		s := sig
+		s.CompileEffect |= fn.CompileEffect
+		if s.Callable == nil {
+			s.Callable = fn.Callable
 		}
-		//nolint:staticcheck // S1016: explicit field-by-field copy keeps any NativeSig↔Signature divergence visible
-		s := Signature{
-			Params:           params,
-			Handler:          sig.Handler,
-			FullStack:        sig.FullStack,
-			QuoteArgs:        sig.QuoteArgs,
-			NoEvalArgs:       sig.NoEvalArgs,
-			RawParens:        sig.RawParens,
-			FormArgs:         sig.FormArgs,
-			NoEvalMapArgs:    sig.NoEvalMapArgs,
-			TypeArgs:         sig.TypeArgs,
-			BarrierPos:       sig.BarrierPos,
-			Fallback:         sig.Fallback,
-			Returns:          sig.Returns,
-			ReturnsFn:        sig.ReturnsFn,
-			RunInCheckMode:   sig.RunInCheckMode,
-			CheckFullStackFn: sig.CheckFullStackFn,
-			ParkResult:       sig.ParkResult,
-			CompileEffect:    sig.CompileEffect | fn.CompileEffect,
-			Callable:         fn.Callable,
-		}
-		// One path. `BarrierAllForward` (-1) on a NativeSig is the
-		// "default all-forward" sentinel; `0` is explicit all-stack.
-		// upsertFnDef resolves the sentinel once.
 		r.Register(fn.Name, s)
 	}
 }
@@ -1342,8 +1315,8 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			tokens = append(tokens, args[i])
 		}
 	}
-	body := make([]Value, len(sig.Body))
-	copy(body, sig.Body)
+	body := make([]Value, len(sig.body()))
+	copy(body, sig.body())
 	tokens = append(tokens, body...)
 
 	// Snapshot DefStacks lengths before body execution so we can

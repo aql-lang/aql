@@ -35,13 +35,13 @@ func registerAdd(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "add",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger, TInteger},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, _ := AsInteger(args[0])
 				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a + b)}, nil
-			},
+			}),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
@@ -53,13 +53,13 @@ func registerMul(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "mul",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger, TInteger},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				a, _ := AsInteger(args[0])
 				b, _ := AsInteger(args[1])
 				return []Value{NewInteger(a * b)}, nil
-			},
+			}),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
@@ -70,12 +70,12 @@ func registerMul(r *Registry) {
 func registerNeg(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "neg",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(-n)}, nil
-			},
+			}),
 			Returns: []*Type{TInteger}, BarrierPos: 0,
 		}},
 	})

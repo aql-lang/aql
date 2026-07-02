@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 )
 
 // OriginKind classifies where a *Type was registered. Every *Type
@@ -186,7 +187,7 @@ type TypeTable struct {
 	bypath    map[string]*Type  // builtin-only path index (dynamic types can collide on path)
 	rootSet   map[string]bool   // roots, for fast IsRoot checks
 	leafIndex map[string]string // builtin leaf-name → full path; "" if ambiguous
-	seq       int               // counter for minting dynamic IDs
+	seq       *atomic.Int64     // minted-ID counter, one per registry TREE (shared by forks/modules, copied by rollback clones) — see mintID
 }
 
 // dynamicIDBase is the starting point for minted IDs, chosen well above
@@ -246,14 +247,47 @@ func NewDynamicTypeTable() *TypeTable {
 		byID:   make(map[string]*Type),
 		byName: make(map[string]*Type),
 		parts:  make(map[string]bool),
+		seq:    new(atomic.Int64),
 	}
 }
 
-// mintID generates a fresh ID for a dynamically registered Type.
-// The prefix mirrors the builtin convention (S_/N_/W_/T_) so dynamic
-// IDs carry the same root-category signal as builtins.
+// mintID generates a fresh ID for a dynamically registered Type. The
+// prefix mirrors the builtin convention (S_/N_/W_/T_) so dynamic IDs
+// carry the same root-category signal as builtins.
+//
+// The counter (TypeTable.seq) is a SHARED POINTER across every table
+// whose minted types can reach the same program — one counter per
+// registry TREE, not per table. Type identity (`teq`, the nominal
+// `is` walk, dispatch) is ID-based, and a per-table counter gave the
+// Nth mint in any two sibling tables the same ID: a `refine Integer`
+// minted in one inline module was teq-identical to a `refine String`
+// minted in another, and to the first top-level mint after the
+// import (design/OPEN-WORDS.0.md §4.2; pinned in mintid_test.go and
+// lang/spec/module-instance.tsv §7). Who shares:
+//
+//   - CloneDynamic (concurrent forks — await results escape): SHARES.
+//   - Module sub-registries (exports escape): adopt the importing
+//     tree's counter via AdoptSeqFrom (RunModuleBody, BuildIOModule).
+//   - Clone (rollback sandboxes): COPIES. Sandbox mints are discarded
+//     on restore, so the parent's later mints must reproduce the same
+//     IDs as if the sandbox never minted — that copy is what keeps a
+//     check-mode engine and a plain run of the same program minting
+//     identical IDs (the type-soundness ratchet compares the two by
+//     identity).
+//
+// One counter per tree — rather than per process — keeps dynamic IDs
+// a deterministic function of the program: two engines running the
+// same source mint the same IDs. Two UNRELATED engines in one process
+// can still mint colliding IDs; hosts exchanging Values across
+// engines is out of scope (and was never sound). Atomic because
+// await forks mint concurrently.
 func (tt *TypeTable) mintID(parent *Type) string {
-	tt.seq++
+	if tt.seq == nil {
+		// Tables constructed as bare literals (the package Builtin
+		// table, test fixtures) get a counter on first mint.
+		tt.seq = new(atomic.Int64)
+	}
+	n := tt.seq.Add(1)
 	prefix := "T_"
 	if parent != nil {
 		switch parent.Root().Name {
@@ -265,7 +299,22 @@ func (tt *TypeTable) mintID(parent *Type) string {
 			prefix = "W_"
 		}
 	}
-	return fmt.Sprintf("%s%012x", prefix, dynamicIDBase+tt.seq)
+	return fmt.Sprintf("%s%012x", prefix, dynamicIDBase+n)
+}
+
+// AdoptSeqFrom makes tt draw minted-type IDs from src's counter, so
+// types minted in tt can never collide with types minted anywhere in
+// src's registry tree. Every sub-registry whose minted types can
+// escape to the parent program (module bodies — their exports carry
+// minted types) must adopt the importing tree's counter; see mintID.
+func (tt *TypeTable) AdoptSeqFrom(src *TypeTable) {
+	if src == nil {
+		return
+	}
+	if src.seq == nil {
+		src.seq = new(atomic.Int64)
+	}
+	tt.seq = src.seq
 }
 
 // MintType creates a fresh *Type with Origin=OriginUserDef and
@@ -508,7 +557,16 @@ func (tt *TypeTable) Clone() *TypeTable {
 		byID:   make(map[string]*Type, len(tt.byID)),
 		byName: make(map[string]*Type, len(tt.byName)),
 		parts:  make(map[string]bool, len(tt.parts)),
-		seq:    tt.seq,
+		// COPY the mint counter, don't share it: Clone is the rollback
+		// snapshot (predicate / compile sandboxes), whose mints are
+		// discarded on restore. The parent's later mints must reproduce
+		// the same IDs as if the sandbox never minted — that is what
+		// keeps a check-mode pass and a plain run of the same program
+		// minting identical IDs. See mintID.
+		seq: new(atomic.Int64),
+	}
+	if tt.seq != nil {
+		nt.seq.Store(tt.seq.Load())
 	}
 	for k, v := range tt.byID {
 		nt.byID[k] = v
@@ -971,7 +1029,11 @@ func (tt *TypeTable) CloneDynamic() *TypeTable {
 		byID:   make(map[string]*Type, len(tt.byID)),
 		byName: make(map[string]*Type, len(tt.byName)),
 		parts:  make(map[string]bool, len(tt.parts)),
-		seq:    tt.seq,
+		// SHARE the mint counter: a concurrent fork's values (await
+		// branch results) escape back to the parent, so a mint in the
+		// fork must never collide with a mint anywhere else in the
+		// tree. See mintID.
+		seq: tt.seq,
 	}
 	for k, v := range tt.byID {
 		cp.byID[k] = v

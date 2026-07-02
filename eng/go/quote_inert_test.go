@@ -17,11 +17,11 @@ func TestQuoteOperandInertOKFlag(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:          "probe-qi",
 		CompileEffect: CompileQuoteInert,
-		Signatures:    []NativeSig{{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, BarrierPos: -1}},
+		Signatures:    []Signature{{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, BarrierPos: -1}},
 	})
 	r.RegisterNativeFunc(NativeFunc{
 		Name:       "probe-plainq",
-		Signatures: []NativeSig{{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, BarrierPos: -1}},
+		Signatures: []Signature{{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, BarrierPos: -1}},
 	})
 
 	ownSig := func(name string) *Signature {

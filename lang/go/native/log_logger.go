@@ -58,7 +58,7 @@ func wrapLoggerFnDef(n NativeFunc, subReg *Registry) Value {
 		sigs[i] = FnSig{
 			Params:     params,
 			Returns:    s.Returns,
-			Body:       []Value{NewWord(n.Name)},
+			Impl:       AQL([]Value{NewWord(n.Name)}),
 			BarrierPos: -1,
 		}
 	}
@@ -89,24 +89,24 @@ func loggerNatives(st *loggerState) []NativeFunc {
 func loggerLevelNative(st *loggerState, word string, level LogLevel) NativeFunc {
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TMap},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					emitWith(st.lsr, r, level, args[0], mergeAttrs(st.attrs, args[1]), st.name)
 					return nil, nil
-				},
+				}),
 			},
 			{
 				Args:       []*Type{TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					emitWith(st.lsr, r, level, args[0], mergeAttrs(st.attrs, Value{}), st.name)
 					return nil, nil
-				},
+				}),
 			},
 		},
 	}
@@ -117,18 +117,18 @@ func loggerLevelNative(st *loggerState, word string, level LogLevel) NativeFunc 
 func loggerChildNative(st *loggerState) NativeFunc {
 	return NativeFunc{
 		Name: "logger-child",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TMap},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				merged := asConcreteOrderedMap(mergeAttrs(st.attrs, args[0]))
 				inst, err := buildLoggerInstance(&loggerState{name: st.name, attrs: merged, lsr: st.lsr})
 				if err != nil {
 					return nil, r.AqlError("log_error", "child logger: "+err.Error(), "Logger.child")
 				}
 				return []Value{NewMap(inst)}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -138,12 +138,12 @@ func loggerChildNative(st *loggerState) NativeFunc {
 func logLoggerNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-logger",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TString},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,
 			ReturnsFn:  loggerShapeReturns(lsr),
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, r.AqlError("log_error", "logger name must be a string", "Log.logger")
@@ -153,7 +153,7 @@ func logLoggerNative(lsr *LogSinkRegistry) NativeFunc {
 					return nil, r.AqlError("log_error", err.Error(), "Log.logger")
 				}
 				return []Value{NewMap(inst)}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -163,12 +163,12 @@ func logLoggerNative(lsr *LogSinkRegistry) NativeFunc {
 func logWithNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-with",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TString, TMap},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,
 			ReturnsFn:  loggerShapeReturns(lsr),
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, r.AqlError("log_error", "logger name must be a string", "Log.with")
@@ -182,7 +182,7 @@ func logWithNative(lsr *LogSinkRegistry) NativeFunc {
 					return nil, r.AqlError("log_error", err.Error(), "Log.with")
 				}
 				return []Value{NewMap(inst)}, nil
-			},
+			}),
 		}},
 	}
 }

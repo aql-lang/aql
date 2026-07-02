@@ -91,7 +91,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		sigs = append(sigs, FnSig{
 			Params:     params,
 			Returns:    returns,
-			Body:       bodyElems,
+			Impl:       AQL(bodyElems),
 			BarrierPos: barrierPos,
 			QuoteArgs:  QuoteArgsFromParams(params),
 		})

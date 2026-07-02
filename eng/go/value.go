@@ -231,7 +231,6 @@ const BarrierAllForward = -1
 type FnSig struct {
 	Params  []FnParam
 	Returns []*Type // declared return types (nil = unchecked)
-	Body    []Value
 	// BarrierPos is the forward/stack boundary expressed by `|` in
 	// an AQL fn parameter list. Three values carry distinct meaning:
 	//
@@ -254,7 +253,7 @@ type FnSig struct {
 	BarrierPos int
 	// NoEvalArgs lists per-sig-position the list-shaped args that
 	// must NOT be auto-evaluated when consumed by this fn. Mirrors
-	// NativeSig.NoEvalArgs so module FnDef wrappers can preserve
+	// Signature.NoEvalArgs so module FnDef wrappers can preserve
 	// quoted code bodies passed at unnamed-param positions (e.g.
 	// `rand.list-of [body] N` — body is code, not data).
 	//
@@ -269,7 +268,7 @@ type FnSig struct {
 	NoEvalMapArgs map[int]bool
 	// RawParens marks arg positions where a forward ParenExpr is captured
 	// RAW (not pre-evaluated) so the handler receives the paren as code.
-	// Opt-in; see NativeSig.RawParens and design/PAREN-REPRESENTATION.9.md.
+	// Opt-in; see Signature.RawParens and design/PAREN-REPRESENTATION.9.md.
 	RawParens map[int]bool
 	// FormArgs marks arg positions captured as a raw FORM — a generalization
 	// of RawParens (don't pre-eval a paren) and QuoteArgs (capture a bare word
@@ -279,55 +278,35 @@ type FnSig struct {
 	// receives its operands as code. See design/MACROS-PHASE1.10.md §3.
 	FormArgs map[int]bool
 
-	// --- Dispatch fields (folded in from the former Signature struct;
-	// the two are now ONE type via `type Signature = FnSig`). Body
-	// (above) vs Handler (below) is the sole Go-vs-AQL distinction: an
-	// AQL sig carries Body tokens, a native sig carries a Go Handler.
-	// Empty/nil on a freshly-parsed AQL FnSig; populated by the install/
-	// compile boundary (compileFnDef / RegisterNativeFunc shim). ---
+	// --- Run implementation + dispatch metadata. ---
 
-	// Handler is the Go implementation for a native sig (nil for an
-	// un-compiled AQL sig; the compile boundary attaches one).
-	Handler Handler
-	// FnFrame marks this sig as an AQL fn-body overload whose dispatch
-	// splices a tape frame (buildFnBodyHandler). Attached at the same
-	// compile boundary as the body-splicing Handler; nil on natives and
-	// un-compiled sigs. The SAME pointer is stamped on the frame-open
-	// paren of every frame this sig splices (FrameOpenInfo.Meta), so
-	// frame provenance is pointer-comparable — see eng/go/fn_frame.go.
-	FnFrame *FnFrameMeta
+	// Impl is the signature's run implementation as a sealed sum
+	// (GoImpl | AQLImpl) — the SINGLE representation every reader consults
+	// through the Signature accessors (dispatchHandler / body / fnFrame /
+	// fullStack / checkFullStackFn / parkResult / runInCheckMode in
+	// sigimpl.go). Native words and internal Go sites author `Go(handler,
+	// opts...)`; module refs / un-installed lambdas author `AQL(body)`;
+	// InstallFnDef / compileFnDefLiteral build the installed-fn `AQLImpl`
+	// (with a derived body-splicer + frame meta) directly. A Signature with
+	// a nil Impl has no implementation (a check-mode shape synth, a raw
+	// match-only test fixture) and dispatchHandler() returns nil.
+	Impl SigImpl
 	// Args / Patterns are the exported positional constructor-convenience
 	// mirrors of Params (see signature.go; kernel reads Params).
 	Args     []*Type
 	Patterns map[int]Value
-	// FullStack passes the full resolved stack to the handler.
-	FullStack bool
 	// QuoteArgs / TypeArgs are per-position dispatch modifiers.
 	QuoteArgs map[int]bool
 	TypeArgs  map[int]bool
 	// Fallback marks the synthesized 0-arg catch-all sig.
 	Fallback bool
-	// ReturnsFn / RunInCheckMode / CheckFullStackFn are the check-mode
-	// hooks (see signature.go for full docs).
-	ReturnsFn        ReturnsFunc
-	RunInCheckMode   bool
-	CheckFullStackFn CheckFullStackFunc
-	// ParkResult, when true, makes execMatch advance the pointer PAST the
-	// spliced handler result rather than leaving the pointer on it to be
-	// re-stepped. A re-stepped unquoted Function value auto-dispatches
-	// (and a 0-arg fn fires immediately); parking instead leaves the
-	// result as inert data at the call site — exactly what the `/r`
-	// word-suffix does in stepWord. This is what makes `ref f` behave
-	// identically to `f/r`: a bare reference never fires, even for a
-	// 0-arg fn, while the SAME value still dispatches when it is later
-	// re-stepped elsewhere (retrieved from a map, unwrapped from a paren).
-	// Used by `ref`; apply/usurp deliberately leave it false so they
-	// re-step and invoke.
-	ParkResult bool
+	// ReturnsFn is the check-mode return computer (native-authored or
+	// AQL-derived); orthogonal to the run implementation in Impl.
+	ReturnsFn ReturnsFunc
 	// CompileEffect declares the word's compile-relevant semantics for the
 	// bytecode recorder, so it can classify the word WITHOUT a name-keyed table
 	// in eng (which couples the engine to specific, often module, word names).
-	// The zero value is CompileDefault (an ordinary word). Set on the NativeSig
+	// The zero value is CompileDefault (an ordinary word). Set on the Signature
 	// at registration; copied here by RegisterNativeFunc.
 	CompileEffect CompileEffect
 	// Callable, when non-nil, declares this word as a code-body higher-order

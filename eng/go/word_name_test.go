@@ -108,11 +108,11 @@ func TestRegisterNativeFuncRejectsBadName(t *testing.T) {
 	}
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "Integer", // uppercase — invalid
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger},
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, nil
-			}, BarrierPos: 0,
+			}), BarrierPos: 0,
 		}},
 	})
 	if r.Err() == nil {
@@ -132,18 +132,18 @@ func TestDefRejectsBadName(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "def",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom, TAny},
 			QuoteArgs:  map[int]bool{0: true},
 			NoEvalArgs: map[int]bool{1: true},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				name, _ := args[0].AsConcreteAtom()
 				if err := ValidateWordName(name); err != nil {
 					return nil, err
 				}
 				reg.Defs.Push(name, args[1])
 				return nil, nil
-			},
+			}),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	})

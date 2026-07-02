@@ -18,9 +18,9 @@ func TestListEvalAsArg(t *testing.T) {
 	// Register a word that takes a list and returns it unchanged.
 	r.Register("passlist", Signature{
 		Args: []*Type{TList},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		}, BarrierPos:
+		}), BarrierPos:
 
 		// def c1 10
 		// def c2 20
@@ -62,9 +62,9 @@ func TestListEvalArithmetic(t *testing.T) {
 
 	r.Register("passlist", Signature{
 		Args: []*Type{TList},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		}, BarrierPos:
+		}), BarrierPos:
 
 		// [1 add 2] passlist → [3]
 		-1,
@@ -95,9 +95,9 @@ func TestListEvalQuotedSkipped(t *testing.T) {
 
 	r.Register("passlist", Signature{
 		Args: []*Type{TList},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		}, BarrierPos:
+		}), BarrierPos:
 
 		// quote [1 add 2] passlist → [1, word(add), 2] (not evaluated)
 		-1,
@@ -158,10 +158,10 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 	// via a module function (FnDef with captured registry).
 	r.Register("listlen", Signature{
 		Args: []*Type{TList},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			lst, _ := AsList(args[0])
 			return []Value{NewInteger(int64(lst.Len()))}, nil
-		}, BarrierPos:
+		}), BarrierPos:
 
 		// def a 10
 		// def b 20
@@ -195,16 +195,16 @@ func TestListEvalRuntimeListNotEvaluated(t *testing.T) {
 
 	// Register a word that produces a list with words in it (Eval=false).
 	r.Register("makelist", Signature{
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewList([]Value{NewWord("add"), NewInteger(1)})}, nil
-		}, BarrierPos: -1,
+		}), BarrierPos: -1,
 	})
 
 	r.Register("passlist", Signature{
 		Args: []*Type{TList},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{args[0]}, nil
-		}, BarrierPos:
+		}), BarrierPos:
 
 		// makelist passlist → [word(add), 1] (not evaluated, runtime-created)
 		-1,

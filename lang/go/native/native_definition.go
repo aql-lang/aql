@@ -17,7 +17,7 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "def",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				// Typed-name binding: def name:*Type body. Sorts first
 				// because TMap is more specific than TString / TAtom
@@ -25,56 +25,56 @@ var definitionNatives = []NativeFunc{
 				// The body is auto-evaluated like any value argument: a
 				// list binds like a map (`def xs [1 add 2]` → `[3]`). For a
 				// raw / spliced body use `def name word value`.
-				Args:           []*Type{TMap, TAny},
-				NoEvalMapArgs:  map[int]bool{0: true},
-				Handler:        defTypedHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:          []*Type{TMap, TAny},
+				NoEvalMapArgs: map[int]bool{0: true},
+				Impl:          Go(defTypedHandler, RunInCheck()),
+				Returns:       []*Type{},
+				BarrierPos:    -1,
 			},
 			{
-				Args:           []*Type{TString, TAny},
-				Handler:        defHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TString, TAny},
+				Impl:       Go(defHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAtom, TAny},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        defHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAtom, TAny},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(defHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 		},
 	},
 	{
 		Name: "undef",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
-				Args:           []*Type{TString},
-				Handler:        undefHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TString},
+				Impl:       Go(undefHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAtom},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        undefHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAtom},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(undefHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TString, TFnUndef},
-				Handler:        undefFnHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TString, TFnUndef},
+				Impl:       Go(undefFnHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAtom, TFnUndef},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        undefFnHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAtom, TFnUndef},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(undefFnHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 		},
 	},
@@ -92,19 +92,19 @@ var definitionNatives = []NativeFunc{
 		// the property the compiled `each`/`fold`/… var-body closure needs. Reuses
 		// undefHandler so the unbind behaviour is byte-identical to `undef name`.
 		Name: "__varundef",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
-				Args:           []*Type{TString},
-				Handler:        undefHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TString},
+				Impl:       Go(undefHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			{
-				Args:           []*Type{TAtom},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        undefHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true, BarrierPos: -1,
+				Args:       []*Type{TAtom},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(undefHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 		},
 	},
@@ -119,23 +119,22 @@ var definitionNatives = []NativeFunc{
 		// recorder cannot lower marks the program uncompilable through the same
 		// path it does anywhere else, so a refusing body REFUSES rather than
 		// producing a silent empty unit.
-		Signatures: []NativeSig{{
-			Args:           []*Type{TList},
-			NoEvalArgs:     map[int]bool{0: true},
-			Handler:        varHandler,
-			RunInCheckMode: true,
-			Returns:        []*Type{TAny}, BarrierPos: -1,
+		Signatures: []Signature{{
+			Args:       []*Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Impl:       Go(varHandler, RunInCheck()),
+			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "fn",
 
-		Signatures: []NativeSig{{
-			Args:           []*Type{TList},
-			NoEvalArgs:     map[int]bool{0: true},
-			Handler:        fnHandler,
-			Returns:        []*Type{TFunction},
-			RunInCheckMode: true, BarrierPos: -1,
+		Signatures: []Signature{{
+			Args:       []*Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Impl:       Go(fnHandler, RunInCheck()),
+			Returns:    []*Type{TFunction},
+			BarrierPos: -1,
 		}},
 	},
 	{
@@ -154,44 +153,43 @@ var definitionNatives = []NativeFunc{
 		// paren body reference params at all: `x:Integer => (x mul 2)`.
 		Name: "afn",
 
-		Signatures: []NativeSig{{
-			Args:           []*Type{TAny, TAny},
-			NoEvalArgs:     map[int]bool{0: true, 1: true},
-			RawParens:      map[int]bool{0: true},
-			Handler:        afnHandler,
-			Returns:        []*Type{TFunction},
-			RunInCheckMode: true, BarrierPos: -1,
+		Signatures: []Signature{{
+			Args:       []*Type{TAny, TAny},
+			NoEvalArgs: map[int]bool{0: true, 1: true},
+			RawParens:  map[int]bool{0: true},
+			Impl:       Go(afnHandler, RunInCheck()),
+			Returns:    []*Type{TFunction},
+			BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "fnsig",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Handler:    fnsigHandler,
+			Impl:       Go(fnsigHandler, RunInCheck()),
 			// Pure construction — runs in check mode too, so surface
 			// schemas carry REAL shapes statically and `exposes` is
 			// fully static-checkable (design/SURFACES.10.md S2). A
 			// pending gen spec turns the result into a generic
 			// fn-shape schema (see the handler).
-			RunInCheckMode: true,
-			Returns:        []*Type{TFnUndef}, BarrierPos: -1,
+			Returns: []*Type{TFnUndef}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "args",
 
-		Signatures: []NativeSig{{
-			Handler: argsHandler,
+		Signatures: []Signature{{
+			Impl:    Go(argsHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "__pa",
 
-		Signatures: []NativeSig{{
-			Handler: popArgsHandler,
+		Signatures: []Signature{{
+			Impl:    Go(popArgsHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
@@ -815,7 +813,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		PushGenBindings(r, genSpec)
 		for i := range fnDef.Signatures {
 			s := &fnDef.Signatures[i]
-			if len(s.Body) == 0 {
+			if len(s.Body()) == 0 {
 				continue
 			}
 			paramNames := make([]string, len(s.Params))
@@ -846,7 +844,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 					carrierArgs[j] = NewCarrier(t)
 				}
 			}
-			eng.AnalyseFnBody(r, "", paramNames, s.Body, carrierArgs, fnDef.Captured, s.Returns)
+			eng.AnalyseFnBody(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns)
 		}
 		PopGenBindings(r, genSpec)
 	}
@@ -919,7 +917,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	sig := FnSig{
 		Params:     params,
 		Returns:    []*Type{TAny},
-		Body:       bodyElems,
+		Impl:       AQL(bodyElems),
 		BarrierPos: barrierPos,
 		QuoteArgs:  eng.QuoteArgsFromParams(params),
 	}

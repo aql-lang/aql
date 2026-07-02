@@ -23,22 +23,22 @@ package native
 var NetModuleNatives = []NativeFunc{
 	{
 		Name: "fetch",
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TMap}, Handler: fetchStringMapHandler, BarrierPos: -1},
-			{Args: []*Type{TMap}, Handler: fetchMapHandler, BarrierPos: -1},
-			{Args: []*Type{TString}, Handler: fetchStringHandler, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TString, TMap}, Impl: Go(fetchStringMapHandler), BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(fetchMapHandler), BarrierPos: -1},
+			{Args: []*Type{TString}, Impl: Go(fetchStringHandler), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "prepare",
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: prepareAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "direct",
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: directAPIHandler, Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
 		},
 	},
 }

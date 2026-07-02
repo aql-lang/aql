@@ -25,19 +25,19 @@ var storageNatives = []NativeFunc{
 	{
 		Name: "set",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// Store (copy-on-write)
 
 			{
 				Args:      []*Type{TString, TAny, TStore},
-				Handler:   setStoreHandler,
+				Impl:      Go(setStoreHandler),
 				Returns:   []*Type{},
 				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TStore},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   setStoreHandler,
+				Impl:      Go(setStoreHandler),
 				Returns:   []*Type{},
 				ReturnsFn: setStoreReturnsFn, BarrierPos: -1,
 			},
@@ -48,13 +48,13 @@ var storageNatives = []NativeFunc{
 			// untouched — the same contract as push / StructUtil.setpath.
 			{
 				Args:    []*Type{TString, TAny, TMap},
-				Handler: setMapHandler,
+				Impl:    Go(setMapHandler),
 				Returns: []*Type{TMap}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TMap},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   setMapHandler,
+				Impl:      Go(setMapHandler),
 				Returns:   []*Type{TMap}, BarrierPos: -1,
 			},
 
@@ -62,7 +62,7 @@ var storageNatives = []NativeFunc{
 			// rule: Map and List both return the updated copy).
 			{
 				Args:    []*Type{TInteger, TAny, TList},
-				Handler: setListHandler,
+				Impl:    Go(setListHandler),
 				Returns: []*Type{TList}, BarrierPos: -1,
 			},
 
@@ -72,26 +72,26 @@ var storageNatives = []NativeFunc{
 			// design/CLASS-OBJECT.10.md §3.3.
 			{
 				Args:    []*Type{TString, TAny, TClass},
-				Handler: setClassInstanceHandler,
+				Impl:    Go(setClassInstanceHandler),
 				Returns: []*Type{}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TClass},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   setClassInstanceHandler,
+				Impl:      Go(setClassInstanceHandler),
 				Returns:   []*Type{}, BarrierPos: -1,
 			},
 
 			// FlexMap (in-place key set; returns the node for chaining)
 			{
 				Args:    []*Type{TString, TAny, TFlexMap},
-				Handler: setFlexMapHandler,
+				Impl:    Go(setFlexMapHandler),
 				Returns: []*Type{TFlexMap}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TFlexMap},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   setFlexMapHandler,
+				Impl:      Go(setFlexMapHandler),
 				Returns:   []*Type{TFlexMap}, BarrierPos: -1,
 			},
 
@@ -99,7 +99,7 @@ var storageNatives = []NativeFunc{
 			// an error, growth is append's job)
 			{
 				Args:    []*Type{TInteger, TAny, TFlexList},
-				Handler: setFlexListHandler,
+				Impl:    Go(setFlexListHandler),
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
 
@@ -107,13 +107,13 @@ var storageNatives = []NativeFunc{
 			// setAttribute. Children grow via `append`.)
 			{
 				Args:    []*Type{TString, TAny, TFlexXml},
-				Handler: setFlexXmlHandler,
+				Impl:    Go(setFlexXmlHandler),
 				Returns: []*Type{TFlexXml}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TFlexXml},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   setFlexXmlHandler,
+				Impl:      Go(setFlexXmlHandler),
 				Returns:   []*Type{TFlexXml}, BarrierPos: -1,
 			},
 		},
@@ -138,9 +138,9 @@ var storageNatives = []NativeFunc{
 	{
 		Name: "context",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{},
-			Handler: contextHandler,
+			Impl:    Go(contextHandler),
 			Returns: []*Type{TStore}, BarrierPos: -1,
 		}},
 	},
@@ -153,42 +153,42 @@ var storageNatives = []NativeFunc{
 // bare WORD is evaluated but an already-evaluated Atom key still matches).
 // Keeping ONE
 // source for both words prevents the two from drifting apart.
-func accessorGetSignatures() []NativeSig {
-	return []NativeSig{
+func accessorGetSignatures() []Signature {
+	return []Signature{
 		// [Key | Node] — covers Map, List, Options, record-shape. The
 		// atom / string key sigs narrow a concrete map FIELD read via
 		// getNodeReturns; the integer-key sig stays Any because an
 		// integer key is a LIST index (handled precisely downstream by
 		// tryFoldStaticIndex) or a stringified map key — getNodeReturns
 		// must not stringify-and-miss an integer over a list.
-		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
-		{Args: []*Type{TString, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getNodeReturns},
-		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Handler: getNodeHandler, ReturnsFn: getIntKeyReturns},
+		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
+		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
+		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getIntKeyReturns},
 		// [Key | ModuleExport] — transparent export access + $module/$name
-		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
-		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Handler: getModuleExportHandler, ReturnsFn: moduleExportGetReturns},
+		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
+		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
 		// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
-		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
-		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Handler: getModuleInstHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleInstHandler), Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getModuleInstHandler), Returns: []*Type{TAny}},
 		// [Key | Class instance] — flat field read (no prototype
 		// chain; class instances resolve every field at make). Field
 		// type resolved from the schema (getObjectReturns).
-		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
-		{Args: []*Type{TString, TClass}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getObjectReturns},
+		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getObjectReturns},
+		{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getObjectReturns},
 		// Resource/Entity instances (SDK object hierarchy) — flat field
 		// read. Field type resolved from the Resource schema (getResourceReturns).
-		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getResourceReturns},
-		{Args: []*Type{TString, TResource}, BarrierPos: 1, Handler: getObjectHandler, ReturnsFn: getResourceReturns},
+		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getResourceReturns},
+		{Args: []*Type{TString, TResource}, BarrierPos: 1, Impl: Go(getObjectHandler), ReturnsFn: getResourceReturns},
 		// [Key | None] — chained-read propagation
-		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Handler: getNoneHandler, Returns: []*Type{TNone}},
+		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getNoneHandler), Returns: []*Type{TNone}},
 		// [Key | Store] — check-mode-aware ReturnsFn picks up a
 		// typed carrier from a previously-set key.
 		{
-			Args: []*Type{TString, TStore}, BarrierPos: 1, Handler: getStoreHandler,
+			Args: []*Type{TString, TStore}, BarrierPos: 1, Impl: Go(getStoreHandler),
 			ReturnsFn: getStoreReturnsFn,
 		},
 		{
-			Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getStoreHandler,
+			Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getStoreHandler),
 			ReturnsFn: getStoreReturnsFn,
 		},
 		// [Key | Node/Xml] — well-known field read: 'tag' / 'attr' /
@@ -196,8 +196,8 @@ func accessorGetSignatures() []NativeSig {
 		// [Key | Node] sigs above, so it wins for an XML receiver and
 		// keeps getNodeHandler off the non-map XML payload. Covers
 		// FlexXml too (it conforms to Node/Xml).
-		{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
-		{Args: []*Type{TString, TXml}, BarrierPos: 1, Handler: getXmlHandler, Returns: []*Type{TAny}},
+		{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getXmlHandler), Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TXml}, BarrierPos: 1, Impl: Go(getXmlHandler), Returns: []*Type{TAny}},
 	}
 }
 
@@ -210,8 +210,8 @@ func accessorGetSignatures() []NativeSig {
 // no overload, and errors, which is the split's intent. `dot`/`dotr` keep the
 // QuoteArgs versions (literal bare-word keys). Sigs are copied so the shared
 // accessorGetSignatures slice (used by `dot`) keeps its QuoteArgs.
-func stripQuoteArgs(sigs []NativeSig) []NativeSig {
-	out := make([]NativeSig, len(sigs))
+func stripQuoteArgs(sigs []Signature) []Signature {
+	out := make([]Signature, len(sigs))
 	for i, s := range sigs {
 		s.QuoteArgs = nil
 		out[i] = s

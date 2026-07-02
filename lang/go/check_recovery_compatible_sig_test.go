@@ -55,3 +55,33 @@ def _ (need-map "not-a-map")`
 		t.Errorf("a provable concrete mismatch (String → Map param) must still be flagged")
 	}
 }
+
+// TestRecoveryConcreteMismatchAlongsideAny pins PR #211 review #1: the recovery
+// suppression must attribute the unmatched dispatch SOLELY to the Any-typed
+// operand. A multi-arg single-overload call with one unknown (Any) operand AND
+// one provably-wrong CONCRETE operand is a genuine error — the concrete arg can
+// never satisfy its param at run time — so it must stay flagged, not be
+// suppressed just because some OTHER operand is an Any carrier.
+func TestRecoveryConcreteMismatchAlongsideAny(t *testing.T) {
+	// x is a dynamic (Any) carrier that satisfies a:Integer at run time, but the
+	// literal 123 can never satisfy b:String. `aql run` raises signature_error, so
+	// `aql check` must report it (concreteArgsMatch requires every NON-Any arg to
+	// match the sole sig before the diagnostic is withheld).
+	const src = `def g fn [ [a:Integer b:String] [Integer] [ a add 1 ] ]
+def m (flex {k:5})
+def x (m get "k")
+def _ (g x 123)`
+	a, _ := New()
+	res, _ := a.Check(src)
+	flagged := false
+	for _, d := range res.Diagnostics {
+		if d.Code == "no_signature" || d.Code == "signature_error" ||
+			strings.Contains(d.Detail, "no matching signature") {
+			flagged = true
+			break
+		}
+	}
+	if !flagged {
+		t.Error("a concrete arg that misses its param must stay flagged even alongside an Any carrier")
+	}
+}

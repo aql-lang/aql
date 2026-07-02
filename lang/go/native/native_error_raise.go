@@ -29,26 +29,26 @@ var errorNatives = []NativeFunc{
 		// compiles with no RET — the error propagates and the catcher wraps it.
 		CompileEffect: CompileQuoteInert | CompileDiverges,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// raise <code> <message> — the /q'd Atom position lets a
 			// bare word name the code (raise bad_input "…").
 			{
 				Args:      []*Type{TAtom, TString},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   raiseCodeMessageHandler,
+				Impl:      Go(raiseCodeMessageHandler),
 				Returns:   []*Type{}, BarrierPos: -1,
 			},
 			// raise <message> — code defaults to user_error.
 			{
 				Args:    []*Type{TString},
-				Handler: raiseMessageHandler,
+				Impl:    Go(raiseMessageHandler),
 				Returns: []*Type{}, BarrierPos: -1,
 			},
 			// raise <spec> — {code:… message:…} required; remaining
 			// keys are preserved on the Error value for the handler.
 			{
 				Args:    []*Type{TMap},
-				Handler: raiseSpecHandler,
+				Impl:    Go(raiseSpecHandler),
 				Returns: []*Type{}, BarrierPos: -1,
 			},
 		},
@@ -64,9 +64,9 @@ var errorNatives = []NativeFunc{
 		Name:          "get",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAtom, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -75,9 +75,9 @@ var errorNatives = []NativeFunc{
 		Name:          "dot",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TString, TError}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Handler: getErrorFieldHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 }

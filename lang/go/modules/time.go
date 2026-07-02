@@ -146,7 +146,7 @@ func makeTimeFnDef(wordName string, params []native.FnParam, returns []*native.T
 			{
 				Params:  params,
 				Returns: returns,
-				Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 			},
 		},
 		Registry: subReg,
@@ -199,11 +199,11 @@ func dateToIntNative(name string, fn func(time.Time) int64) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TDate},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				return []native.Value{native.NewInteger(fn(extractTime(args[0])))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	}
@@ -215,11 +215,11 @@ func dateToStringNative(name string, fn func(time.Time) string) native.NativeFun
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TDate},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				return []native.Value{native.NewString(fn(extractTime(args[0])))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	}
@@ -231,16 +231,16 @@ func intToCalDurationNative(name string, returnType *native.Type, fn func(int) (
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
 				}
 				y, m, d := fn(int(n))
 				return []native.Value{native.NewCalDuration(y, m, d)}, nil
-			},
+			}),
 			Returns: []*native.Type{returnType}, BarrierPos: -1,
 		}},
 	}
@@ -252,15 +252,15 @@ func numToClkDurationNative(name string, unit time.Duration) native.NativeFunc {
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TNumber},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := native.AsNumber(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewClkDuration(time.Duration(n * float64(unit)))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 		}},
 	}
@@ -274,12 +274,12 @@ func clkDurationToFloatNative(name string, returnType *native.Type, fn func(time
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TClkDuration},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				d, _ := native.AsClkDuration(args[0])
 				return []native.Value{native.NewFloat(fn(d))}, nil
-			},
+			}),
 			Returns: []*native.Type{returnType}, BarrierPos: -1,
 		}},
 	}
@@ -291,12 +291,12 @@ func calDurationToIntNative(name string, fn func(native.CalDurationData) int64) 
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TCalDuration},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				cd, _ := native.AsCalDuration(args[0])
 				return []native.Value{native.NewInteger(fn(cd))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	}
@@ -309,9 +309,9 @@ func addDateNative(name string, build func(n int) (years, months, days int)) nat
 	return native.NativeFunc{
 		Name: name,
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TDate},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -319,7 +319,7 @@ func addDateNative(name string, build func(n int) (years, months, days int)) nat
 				t := extractTime(args[1])
 				y, m, d := build(int(n))
 				return []native.Value{native.NewDate(t.AddDate(y, m, d))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 		}},
 	}
@@ -340,9 +340,9 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "time-tz",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					s, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -352,52 +352,52 @@ var TimeNatives = func() []native.NativeFunc {
 						return nil, fmt.Errorf("tz: unknown timezone: %q", s)
 					}
 					return []native.Value{native.NewTimezone(loc)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TTimezone}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "time-unix",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInteger},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					n, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
 					return []native.Value{native.NewInstant(time.Unix(n, 0))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "time-unix-ms",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInteger},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					n, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
 					return []native.Value{native.NewInstant(time.UnixMilli(n))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "time-unix-ns",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInteger},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					n, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
 					return []native.Value{native.NewInstant(time.Unix(0, n))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
@@ -405,37 +405,37 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "time-now-local",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewDateTime(native.EffectiveClock(r).Now())}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TDateTime}, BarrierPos: 0,
 			}},
 		},
 		{
 			Name: "time-today",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					now := native.EffectiveClock(r).Now()
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 					return []native.Value{native.NewDate(d)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TDate}, BarrierPos: 0,
 			}},
 		},
 		{
 			Name: "time-today-utc",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					now := native.EffectiveClock(r).Now().UTC()
 					d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 					return []native.Value{native.NewDate(d)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TDate}, BarrierPos: 0,
 			}},
 		},
@@ -475,13 +475,13 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "is-leap-year",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					y := extractTime(args[0]).Year()
 					leap := y%4 == 0 && (y%100 != 0 || y%400 == 0)
 					return []native.Value{native.NewBoolean(leap)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
@@ -489,22 +489,22 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "to-unix",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewInteger(extractTime(args[0]).Unix())}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "to-unix-ms",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewInteger(extractTime(args[0]).UnixMilli())}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			}},
 		},
@@ -512,33 +512,33 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "is-before",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewBoolean(extractTime(args[1]).Before(extractTime(args[0])))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "is-after",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewBoolean(extractTime(args[1]).After(extractTime(args[0])))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "is-equal",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewBoolean(extractTime(args[0]).Equal(extractTime(args[1])))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
@@ -546,37 +546,37 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "to-string",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "format",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					layout, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
 					}
 					return []native.Value{native.NewString(extractTime(args[1]).Format(layout))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "to-iso",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewString(extractTime(args[0]).Format("2006-01-02"))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
@@ -600,9 +600,9 @@ var TimeNatives = func() []native.NativeFunc {
 			// cal-dur 1 6 15 → args[0]=15 (nearest), args[1]=6, args[2]=1 (deepest)
 			Name: "cal-dur",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInteger, native.TInteger, native.TInteger},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					y, err := args[2].AsConcreteInteger()
 					if err != nil {
 						return nil, err
@@ -616,7 +616,7 @@ var TimeNatives = func() []native.NativeFunc {
 						return nil, err
 					}
 					return []native.Value{native.NewCalDuration(int(y), int(m), int(d))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TCalDuration}, BarrierPos: -1,
 			}},
 		},
@@ -635,10 +635,10 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "dur-sign",
 
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TCalDuration},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						cd, _ := native.AsCalDuration(args[0])
 						total := cd.Years*365 + cd.Months*30 + cd.Days
 						switch {
@@ -649,12 +649,12 @@ var TimeNatives = func() []native.NativeFunc {
 						default:
 							return []native.Value{native.NewInteger(0)}, nil
 						}
-					},
+					}),
 					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 				{
 					Args: []*native.Type{native.TClkDuration},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						d, _ := native.AsClkDuration(args[0])
 						switch {
 						case d < 0:
@@ -664,7 +664,7 @@ var TimeNatives = func() []native.NativeFunc {
 						default:
 							return []native.Value{native.NewInteger(0)}, nil
 						}
-					},
+					}),
 					Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 				},
 			},
@@ -674,14 +674,14 @@ var TimeNatives = func() []native.NativeFunc {
 			// d1 d2 until → args[0]=d2 (nearest), args[1]=d1
 			Name: "until",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					from := extractTime(args[1])
 					to := extractTime(args[0])
 					cd := dateDiffCalDuration(from, to)
 					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TCalDuration}, BarrierPos: -1,
 			}},
 		},
@@ -689,14 +689,14 @@ var TimeNatives = func() []native.NativeFunc {
 			// d1 d2 since → args[0]=d2 (nearest), args[1]=d1
 			Name: "since",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					from := extractTime(args[0])
 					to := extractTime(args[1])
 					cd := dateDiffCalDuration(from, to)
 					return []native.Value{native.NewCalDuration(cd.Years, cd.Months, cd.Days)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TCalDuration}, BarrierPos: -1,
 			}},
 		},
@@ -704,25 +704,25 @@ var TimeNatives = func() []native.NativeFunc {
 			// ins1 ins2 diff → args[0]=ins2 (nearest), args[1]=ins1
 			Name: "diff",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInstant, native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
 					return []native.Value{native.NewClkDuration(t2.Sub(t1))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "elapsed",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					start := extractTime(args[0])
 					return []native.Value{native.NewClkDuration(time.Since(start))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TClkDuration}, BarrierPos: -1,
 			}},
 		},
@@ -730,9 +730,9 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "time-compare",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
 					switch {
@@ -743,7 +743,7 @@ var TimeNatives = func() []native.NativeFunc {
 					default:
 						return []native.Value{native.NewInteger(0)}, nil
 					}
-				},
+				}),
 				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			}},
 		},
@@ -751,46 +751,46 @@ var TimeNatives = func() []native.NativeFunc {
 			// d start end is-between → args[0]=end (nearest), args[1]=start, args[2]=d (deepest)
 			Name: "is-between",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					d := extractTime(args[2])
 					start := extractTime(args[1])
 					end := extractTime(args[0])
 					return []native.Value{native.NewBoolean(!d.Before(start) && !d.After(end))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "earliest",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
 					if t1.Before(t2) {
 						return []native.Value{native.NewDate(t1)}, nil
 					}
 					return []native.Value{native.NewDate(t2)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "latest",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t1 := extractTime(args[1])
 					t2 := extractTime(args[0])
 					if t1.After(t2) {
 						return []native.Value{native.NewDate(t1)}, nil
 					}
 					return []native.Value{native.NewDate(t2)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
@@ -799,21 +799,21 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "to-date",
 
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TDateTime},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
 						return []native.Value{native.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()))}, nil
-					},
+					}),
 					Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 				},
 				{
 					Args: []*native.Type{native.TInstant},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
 						return []native.Value{native.NewDate(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC))}, nil
-					},
+					}),
 					Returns: []*native.Type{native.TDate}, BarrierPos: -1,
 				},
 			},
@@ -822,25 +822,25 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "to-time-of-day",
 
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TDateTime},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
 						d := time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute +
 							time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
 						return []native.Value{native.NewTimeOfDay(d)}, nil
-					},
+					}),
 					Returns: []*native.Type{native.TTimeOfDay}, BarrierPos: -1,
 				},
 				{
 					Args: []*native.Type{native.TInstant},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						t := extractTime(args[0])
 						d := time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute +
 							time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond())
 						return []native.Value{native.NewTimeOfDay(d)}, nil
-					},
+					}),
 					Returns: []*native.Type{native.TTimeOfDay}, BarrierPos: -1,
 				},
 			},
@@ -848,12 +848,12 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "to-datetime",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[0])
 					return []native.Value{native.NewDateTime(t)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
 			}},
 		},
@@ -861,9 +861,9 @@ var TimeNatives = func() []native.NativeFunc {
 			// dt tz to-instant → args[0]=tz (nearest), args[1]=dt
 			Name: "to-instant",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TTimezone, native.TDateTime},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					dt := extractTime(args[1])
 					loc := native.AsTimezone(args[0])
 					if loc == nil {
@@ -871,7 +871,7 @@ var TimeNatives = func() []native.NativeFunc {
 					}
 					t := time.Date(dt.Year(), dt.Month(), dt.Day(), dt.Hour(), dt.Minute(), dt.Second(), dt.Nanosecond(), loc)
 					return []native.Value{native.NewInstant(t)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TInstant}, BarrierPos: -1,
 			}},
 		},
@@ -879,28 +879,28 @@ var TimeNatives = func() []native.NativeFunc {
 			// ins tz to-local → args[0]=tz (nearest), args[1]=ins
 			Name: "to-local",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TTimezone, native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[1])
 					loc := native.AsTimezone(args[0])
 					if loc == nil {
 						loc = time.UTC
 					}
 					return []native.Value{native.NewDateTime(t.In(loc))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "to-utc",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[0])
 					return []native.Value{native.NewDateTime(t.UTC())}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TDateTime}, BarrierPos: -1,
 			}},
 		},
@@ -908,9 +908,9 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "start-of",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					unit, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -939,16 +939,16 @@ var TimeNatives = func() []native.NativeFunc {
 						return nil, fmt.Errorf("start-of: unknown unit %q", unit)
 					}
 					return []native.Value{native.NewDate(result)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "end-of",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TDate},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					unit, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -979,7 +979,7 @@ var TimeNatives = func() []native.NativeFunc {
 						return nil, fmt.Errorf("end-of: unknown unit %q", unit)
 					}
 					return []native.Value{native.NewDate(result)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 			}},
 		},
@@ -987,37 +987,37 @@ var TimeNatives = func() []native.NativeFunc {
 		{
 			Name: "tz-utc",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewTimezone(time.UTC)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TTimezone}, BarrierPos: 0,
 			}},
 		},
 		{
 			Name: "tz-local",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{native.NewTimezone(time.Local)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TTimezone}, BarrierPos: 0,
 			}},
 		},
 		{
 			Name: "tz-name",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TTimezone},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					loc := native.AsTimezone(args[0])
 					if loc == nil {
 						return []native.Value{native.NewString("UTC")}, nil
 					}
 					return []native.Value{native.NewString(loc.String())}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
@@ -1025,9 +1025,9 @@ var TimeNatives = func() []native.NativeFunc {
 			// ins tz tz-offset → args[0]=tz (nearest), args[1]=ins
 			Name: "tz-offset",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TTimezone, native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[1])
 					loc := native.AsTimezone(args[0])
 					if loc == nil {
@@ -1045,7 +1045,7 @@ var TimeNatives = func() []native.NativeFunc {
 						h = -h
 					}
 					return []native.Value{native.NewString(fmt.Sprintf("%s%02d:%02d", sign, h, m))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
@@ -1053,9 +1053,9 @@ var TimeNatives = func() []native.NativeFunc {
 			// ins tz is-dst → args[0]=tz (nearest), args[1]=ins
 			Name: "is-dst",
 
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TTimezone, native.TInstant},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					t := extractTime(args[1])
 					loc := native.AsTimezone(args[0])
 					if loc == nil {
@@ -1080,7 +1080,7 @@ var TimeNatives = func() []native.NativeFunc {
 						stdOff = julOff // Southern hemisphere
 					}
 					return []native.Value{native.NewBoolean(curOff != stdOff)}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TBoolean}, BarrierPos: -1,
 			}},
 		},

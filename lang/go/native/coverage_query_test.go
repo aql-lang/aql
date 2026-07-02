@@ -1020,7 +1020,7 @@ func TestMatchSignaturePatternReject(t *testing.T) {
 	sig := Signature{
 		Args:     []*Type{TMap},
 		Patterns: map[int]Value{0: patternVal},
-		Handler:  func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil }, BarrierPos:
+		Impl:     Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return args, nil }), BarrierPos:
 
 		// Matching map: {x:99}
 		-1,
@@ -1055,15 +1055,15 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 	specificSig := Signature{
 		Args:     []*Type{TMap},
 		Patterns: map[int]Value{0: patternVal},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewString("specific")}, nil
-		}, BarrierPos: -1,
+		}), BarrierPos: -1,
 	}
 	fallbackSig := Signature{
 		Args: []*Type{TMap},
-		Handler: func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewString("fallback")}, nil
-		}, BarrierPos:
+		}), BarrierPos:
 
 		// Non-matching map should fall through to fallback.
 		-1,
@@ -1077,7 +1077,7 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected fallback match")
 	}
-	out, _ := result.Sig.Handler(result.Args, nil, nil, nil)
+	out, _ := result.Sig.DispatchHandler()(result.Args, nil, nil, nil)
 	_as65, _ := AsString(out[0])
 	if _as65 != "fallback" {
 		_as66, _ := AsString(out[0])
@@ -1106,7 +1106,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 			{
 				Params:  []FnParam{{Name: "x", Type: TMap, Pattern: &patternVal}},
 				Returns: []*Type{TString},
-				Body:    []Value{NewString("yes")}, BarrierPos: -1,
+				Impl:    AQL([]Value{NewString("yes")}), BarrierPos: -1,
 			},
 		},
 	}

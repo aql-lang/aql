@@ -892,7 +892,7 @@ func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
 func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
 	es := r.Check.Emit
 	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileModuleFold) || len(outs) != 1 ||
-		sig.Handler == nil || len(sig.NoEvalArgs) > 0 {
+		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	sawModule := false
@@ -942,7 +942,7 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	return true
 }
 
-// concreteHandlerEval runs sig.Handler on the already-resolved args with check
+// concreteHandlerEval runs sig.dispatchHandler() on the already-resolved args with check
 // mode OFF, so a pure reader produces its REAL value rather than the declared-
 // type carrier the check-mode ReturnsFn emits. Nothing is recorded (the handler
 // is called directly, off the emit path) and the def stack is snapshotted /
@@ -954,7 +954,7 @@ func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
 	r.Check.Mode = false
-	res, err := sig.Handler(args, nil, nil, r)
+	res, err := sig.dispatchHandler()(args, nil, nil, r)
 	r.Check.Mode = prev
 	r.Defs.Restore(snap)
 	if err != nil || len(res) != 1 {
@@ -990,7 +990,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	}
 	// Meta / re-stepping shapes never bake (RecordCall refuses them regardless;
 	// screen here so they don't slip through forceDynOut).
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.QuoteArgs) > 0 {
+	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.QuoteArgs) > 0 {
 		return false
 	}
 	// A code-body (NoEvalArgs) native bakes only when its bodies are INERT consts
@@ -1003,7 +1003,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	if len(sig.NoEvalArgs) > 0 && !noEvalBodiesInert(sig, args) {
 		return false
 	}
-	for _, t := range sig.Args {
+	for _, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			return false
 		}
@@ -1013,7 +1013,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 			return false
 		}
 	}
-	// The VM bakes this exact sig and calls sig.Handler DIRECTLY, so it must be
+	// The VM bakes this exact sig and calls sig.dispatchHandler() DIRECTLY, so it must be
 	// a REAL native binding: the word's own main-registry BUILTIN sig, OR a
 	// trivial-delegation module inner-native sig reached via dot-access
 	// (`StructUtil.clone …`). Both are sound to bake with the main registry —
@@ -1057,7 +1057,7 @@ func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value)
 	}
 	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
 	// regardless; screen here so they cannot slip through this exemption).
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	// A word that DECLARES CompileQuoteInert (quote / codequote / raise / timeout
@@ -1181,7 +1181,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// quoted/meta operands, user-fn frames, full-stack words, compile-time
 	// words. (a CompileIslandPure get passes these — get's key is its only
 	// QuoteArg and is handled below.)
-	if sig.FnFrame != nil || sig.FullStack || sig.RunInCheckMode || len(sig.NoEvalArgs) > 0 {
+	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	// get/getr/set carry exactly ONE QuoteArg — the inert Atom key — which bakes
@@ -1196,7 +1196,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// A fn-valued operand or result means a fn-invoking / fn-returning word
 	// (apply/usurp, an atom-keyed method get): the value would need dynamic
 	// INVOCATION (the fn-value-call boundary, P4). Keep those out of poly.
-	for _, t := range sig.Args {
+	for _, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			return false
 		}
@@ -1393,8 +1393,8 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 		return false
 	}
 	barrier := sig.BarrierPos
-	if barrier < 0 || barrier > len(sig.Args) {
-		barrier = len(sig.Args)
+	if barrier < 0 || barrier > sig.TotalArgs() {
+		barrier = sig.TotalArgs()
 	}
 	// Span faithfulness for a BARRIERED sig (e.g. `get`: key forward,
 	// receiver stack). The forward-form span `word arg0 arg1 …` can only
@@ -1644,12 +1644,12 @@ func joinReturnRows(rows [][]Value) ([]Value, bool) {
 func firstMatchingSig(fn *FnDefInfo, args []Value) *Signature {
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
-		if len(s.Args) != len(args) {
+		if s.TotalArgs() != len(args) {
 			continue
 		}
 		ok := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				ok = false
 				break
 			}
@@ -1699,12 +1699,12 @@ func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 	n := 0
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
-		if len(s.Args) != len(args) {
+		if s.TotalArgs() != len(args) {
 			continue
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1725,12 +1725,12 @@ func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Typ
 	seen := map[string]bool{}
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
-		if len(s.Args) != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
+		if s.TotalArgs() != len(args) || len(s.Returns) != 1 || s.Returns[0] == nil {
 			continue
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1779,12 +1779,12 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 		// receiver) instead of the `String|List` disjunct, so a String consumer
 		// of the result then failed no_signature (radix's edge splitter, where
 		// the sliced label is a get-result of unknown type).
-		if len(s.Args) != len(args) {
+		if s.TotalArgs() != len(args) {
 			continue
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1911,10 +1911,10 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 	}
 	for k := range fn.Signatures {
 		s := &fn.Signatures[k]
-		if s.Fallback || len(s.Args) != len(args) || i >= len(s.Args) {
+		if s.Fallback || s.TotalArgs() != len(args) || i >= s.TotalArgs() {
 			continue
 		}
-		st := s.Args[i]
+		st := sigArgType(s, i)
 		if st == nil || st.Equal(matchedSlot) {
 			continue
 		}
@@ -1929,7 +1929,7 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 				}
 				continue
 			}
-			if !sigTypeMatches(args[j], s.Args[j]) {
+			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -2124,8 +2124,8 @@ func objectMakeSig(r *Registry) *Signature {
 	}
 	for i := range fd.Signatures {
 		s := &fd.Signatures[i]
-		if len(s.Args) == 2 && s.Args[0] != nil && s.Args[1] != nil &&
-			s.Args[0].Equal(TIdeal) && s.Args[1].Equal(TMap) {
+		if s.TotalArgs() == 2 && sigArgType(s, 0) != nil && sigArgType(s, 1) != nil &&
+			sigArgType(s, 0).Equal(TIdeal) && sigArgType(s, 1).Equal(TMap) {
 			return s
 		}
 	}
@@ -3226,7 +3226,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 // since no fn unit was compiled. Returns true when it claimed the dispatch.
 func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
 	es := r.Check.Emit
-	if es == nil || !es.active() || sig == nil || sig.FnFrame == nil || len(outs) != 1 {
+	if es == nil || !es.active() || sig == nil || sig.fnFrame() == nil || len(outs) != 1 {
 		return false
 	}
 	return isDeferredWordList(outs[0])

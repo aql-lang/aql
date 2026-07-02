@@ -38,12 +38,12 @@ var inspectNatives = []NativeFunc{
 	{
 		Name: "inspect",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// /q captures the upcoming Word as an Atom; the same sig
 			// also matches an explicit Atom on the stack (per
 			// signature.go §1.5 — Atom/q subsumes Atom).
-			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Handler: inspectAtomHandler, Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn | CompileQuoteInert}, // bare-word inspect (`inspect foo/q`) bakes the inert Atom const + CALL_NATIVE
-			{Args: []*Type{TAny}, Handler: inspectTypeHandler, Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn},                                                        // reads a fn value, never invokes
+			{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, Impl: Go(inspectAtomHandler), Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn | CompileQuoteInert}, // bare-word inspect (`inspect foo/q`) bakes the inert Atom const + CALL_NATIVE
+			{Args: []*Type{TAny}, Impl: Go(inspectTypeHandler), Returns: []*Type{TInspect}, BarrierPos: -1, CompileEffect: CompileReadsFn},                                                        // reads a fn value, never invokes
 		},
 	},
 
@@ -60,8 +60,8 @@ var inspectNatives = []NativeFunc{
 	{
 		Name: "canon",
 
-		Signatures: []NativeSig{
-			{Args: []*Type{TAny}, Handler: canonHandler, Returns: []*Type{TString}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TAny}, Impl: Go(canonHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 }
@@ -115,7 +115,7 @@ func buildInspection(r *Registry, name string) Value {
 	ownSigs := fn.OwnSigs()
 	isDefined := false
 	for i := range ownSigs {
-		if len(ownSigs[i].Body) > 0 {
+		if len(ownSigs[i].Body()) > 0 {
 			isDefined = true
 			break
 		}

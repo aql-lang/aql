@@ -30,9 +30,9 @@ var flexNatives = []NativeFunc{
 	{
 		Name: "flex",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TNode},
-			Handler:   flexHandler,
+			Impl:      Go(flexHandler),
 			Returns:   []*Type{TNode},
 			ReturnsFn: flexReturns, BarrierPos: -1,
 		}},
@@ -40,9 +40,9 @@ var flexNatives = []NativeFunc{
 	{
 		Name: "node",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TNode},
-			Handler:   nodeHandler,
+			Impl:      Go(nodeHandler),
 			Returns:   []*Type{TNode},
 			ReturnsFn: nodeReturns, BarrierPos: -1,
 		}},
@@ -50,31 +50,31 @@ var flexNatives = []NativeFunc{
 	{
 		Name: "append",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// List source: concatenate its elements. More specific
 			// than the Any sig, so it wins whenever the argument is a
 			// list (including another FlexList, which conforms to List).
 			{
 				Args:    []*Type{TList, TFlexList},
-				Handler: appendListHandler,
+				Impl:    Go(appendListHandler),
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
 			// Any other value: append as a single element.
 			{
 				Args:    []*Type{TAny, TFlexList},
-				Handler: appendElemHandler,
+				Impl:    Go(appendElemHandler),
 				Returns: []*Type{TFlexList}, BarrierPos: -1,
 			},
 			// FlexXml: append child nodes (elements or text) in place.
 			// A List splices its elements; any other value is one child.
 			{
 				Args:    []*Type{TList, TFlexXml},
-				Handler: appendXmlListHandler,
+				Impl:    Go(appendXmlListHandler),
 				Returns: []*Type{TFlexXml}, BarrierPos: -1,
 			},
 			{
 				Args:    []*Type{TAny, TFlexXml},
-				Handler: appendXmlChildHandler,
+				Impl:    Go(appendXmlChildHandler),
 				Returns: []*Type{TFlexXml}, BarrierPos: -1,
 			},
 		},

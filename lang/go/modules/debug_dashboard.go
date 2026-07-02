@@ -31,11 +31,11 @@ func dashboardNatives() []native.NativeFunc {
 		{
 			// Render a one-shot snapshot of a list of widget maps.
 			Name: "debug-dashboard",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					widgets, err := native.RequireConcreteList(args[0], "Debug.dashboard")
 					if err != nil {
 						return nil, err
@@ -43,18 +43,18 @@ func dashboardNatives() []native.NativeFunc {
 					rendered := renderDashboard(r, widgets.Slice())
 					fmt.Fprint(r.Output, rendered)
 					return []native.Value{native.NewString(strings.TrimRight(rendered, "\n"))}, nil
-				},
+				}),
 			}},
 		},
 		{
 			// Construct a widget map from a title and a sample source string.
 			Name: "debug-widget",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				// Canonical forward form: `Debug.widget TITLE SAMPLE-SOURCE`.
 				Args:       []*native.Type{native.TString, native.TString},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					title, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -67,7 +67,7 @@ func dashboardNatives() []native.NativeFunc {
 					om.Set("title", native.NewString(title))
 					om.Set("sample", native.NewString(sample))
 					return []native.Value{native.NewMap(om)}, nil
-				},
+				}),
 			}},
 		},
 	}

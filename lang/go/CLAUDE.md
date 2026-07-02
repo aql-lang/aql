@@ -779,7 +779,7 @@ the silent-dispatch-failure mode).
 ### Wrapper FnSig.Params order
 
 `FnSig.Params` on a module wrapper MUST be declared in the same
-order as the inner native's `NativeSig.Args` — **top-first, sig
+order as the inner native's `Signature.Args` — **top-first, sig
 order**: `Params[0]` describes the type of the value at sig
 position 0 (= top of stack under matchSignature).
 

@@ -47,37 +47,34 @@ import (
 var unpackNatives = []NativeFunc{
 	{
 		Name: "unpack",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// `unpack [names] map`: explicit names list. NoEvalArgs[0]
 			// keeps the bare words un-evaluated so they survive as names.
 			{
-				Args:           []*Type{TList, TMap},
-				NoEvalArgs:     map[int]bool{0: true},
-				Handler:        unpackHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-				BarrierPos:     -1,
+				Args:       []*Type{TList, TMap},
+				NoEvalArgs: map[int]bool{0: true},
+				Impl:       Go(unpackHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			// `unpack {renames} map`: the first map's entries drive the
 			// bindings (srcKey → localName). NoEvalMapArgs[0] keeps the
 			// target names un-evaluated so they survive as bare words.
 			{
-				Args:           []*Type{TMap, TMap},
-				NoEvalMapArgs:  map[int]bool{0: true},
-				Handler:        unpackRenameHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-				BarrierPos:     -1,
+				Args:          []*Type{TMap, TMap},
+				NoEvalMapArgs: map[int]bool{0: true},
+				Impl:          Go(unpackRenameHandler, RunInCheck()),
+				Returns:       []*Type{},
+				BarrierPos:    -1,
 			},
 			// `unpack all map`: the `all` keyword (captured as an atom via
 			// /q even though it is a registered word) binds every key.
 			{
-				Args:           []*Type{TAtom, TMap},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        unpackAllHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-				BarrierPos:     -1,
+				Args:       []*Type{TAtom, TMap},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(unpackAllHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			// `unpack 'aql:time-util'`: import a module and bind every word
 			// of every export namespace as a bare local — `now`, `sleep`, …
@@ -90,22 +87,20 @@ var unpackNatives = []NativeFunc{
 			// effect; only the module-NAME string must survive carrier-stripping,
 			// see checkModeLiteralWords).
 			{
-				Args:           []*Type{TString},
-				Handler:        unpackModuleHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-				BarrierPos:     -1,
+				Args:       []*Type{TString},
+				Impl:       Go(unpackModuleHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			// `unpack ExportName 'aql:mod'`: import the module and unpack only
 			// the named export namespace (for multi-export modules). The name
 			// is captured as an atom via /q.
 			{
-				Args:           []*Type{TAtom, TString},
-				QuoteArgs:      map[int]bool{0: true},
-				Handler:        unpackModuleExportHandler,
-				Returns:        []*Type{},
-				RunInCheckMode: true,
-				BarrierPos:     -1,
+				Args:       []*Type{TAtom, TString},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(unpackModuleExportHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 		},
 	},

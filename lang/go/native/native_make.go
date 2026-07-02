@@ -35,24 +35,24 @@ var makeNatives = []NativeFunc{
 		Name:          "make",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// make is an IMPURE constructor: each call mints a fresh
 			// instance at run time (NewValueRaw), so its check-mode result
 			// carrier must also be fresh-identity per call — ReturnsIdentity
 			// would return the SAME type-literal value (one Value.ID), which
 			// collapses two `make P {}` operands onto one in the bytecode
 			// lowerer's per-value provenance. See ReturnsFreshInstance.
-			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarOptsHandler, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeObjHandler, ReturnsFn: makeObjReturns(), BarrierPos: -1},
+			{Args: []*Type{TScalar, TMap, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarOptsHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TIdeal, TMap}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeObjHandler), ReturnsFn: makeObjReturns(), BarrierPos: -1},
 			// Node-family targets: make FlexMap/FlexList (mutable deep
 			// copy) and make Map/List (deep immutable conversion — the
 			// inverse). Structural type bodies that land in the Node
 			// TypeArgs slot are deferred back to MakeHandler inside
 			// the handler.
-			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeNodeHandler, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Handler: eng.MakeScalarHandler, ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
-			{Args: []*Type{TAny, TAny, TMap}, Handler: eng.MakeWithOpts, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: eng.MakeHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeNodeHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TAny, TAny, TMap}, Impl: Go(eng.MakeWithOpts), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(eng.MakeHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 }

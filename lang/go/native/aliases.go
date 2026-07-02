@@ -72,7 +72,10 @@ type (
 	ModuleDesc           = eng.ModuleDesc
 	MoveInfo             = eng.MoveInfo
 	NativeFunc           = eng.NativeFunc
-	NativeSig            = eng.NativeSig
+	SigImpl              = eng.SigImpl // sealed run-impl sum (GoImpl | AQLImpl)
+	GoImpl               = eng.GoImpl  // native / internal Go-handler implementation
+	AQLImpl              = eng.AQLImpl // AQL body implementation (module ref / lambda / installed fn)
+	GoOpt                = eng.GoOpt   // optional dispatch knob for Go(...)
 	CompileEffect        = eng.CompileEffect
 	CallableSpec         = eng.CallableSpec
 	ClassInstanceInfo    = eng.ClassInstanceInfo
@@ -208,7 +211,7 @@ const (
 	DepLTE = eng.DepLTE
 
 	// Compile-effect classifications (eng.CompileEffect) for the bytecode
-	// recorder — declared on a NativeSig instead of a name-keyed eng table.
+	// recorder — declared on a Signature instead of a name-keyed eng table.
 	CompileDefault      = eng.CompileDefault
 	CompileReadsFn      = eng.CompileReadsFn
 	CompileStoresFn     = eng.CompileStoresFn
@@ -502,6 +505,12 @@ var (
 	NewTypedMap            = eng.NewTypedMap
 	NewWord                = eng.NewWord
 	NewWordModified        = eng.NewWordModified
+	Go                     = eng.Go
+	AQL                    = eng.AQL
+	RunInCheck             = eng.RunInCheck
+	Park                   = eng.Park
+	FullStack              = eng.FullStack
+	CheckFullStack         = eng.CheckFullStack
 	NextMarkID             = eng.NextMarkID
 	OpenUnifyMap           = eng.OpenUnifyMap
 	RankSignatures         = eng.RankSignatures

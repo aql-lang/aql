@@ -21,32 +21,32 @@ import "strings"
 var xmlNatives = []NativeFunc{
 	{
 		Name: "xml-elem",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TXml},
-			Handler: elemHandler,
+			Impl:    Go(elemHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "xml-text",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TXml},
-			Handler: textHandler,
+			Impl:    Go(textHandler),
 			Returns: []*Type{TString}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "xml-attr",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:    []*Type{TString, TXml},
-				Handler: xmlAttrHandler,
+				Impl:    Go(xmlAttrHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TXml},
 				QuoteArgs: map[int]bool{0: true},
-				Handler:   xmlAttrHandler,
+				Impl:      Go(xmlAttrHandler),
 				Returns:   []*Type{TAny}, BarrierPos: -1,
 			},
 		},

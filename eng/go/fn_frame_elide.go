@@ -61,7 +61,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// teardown/Retire interaction is not yet proven under elision —
 	// decline when either the enclosing frame or the callee is
 	// generic.
-	if scan.Meta.HasGen || sig.FnFrame.HasGen {
+	if scan.Meta.HasGen || sig.fnFrame().HasGen {
 		return false
 	}
 	// Arg auto-evaluation ran code (evaluated list/map args) between
@@ -78,7 +78,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// exactly. Each name must ALSO be one the callee immediately
 	// reinstalls (see coverage below).
 	covered := func(name string) bool {
-		for _, n := range sig.FnFrame.InstallNames {
+		for _, n := range sig.fnFrame().InstallNames {
 			if n == name {
 				return true
 			}

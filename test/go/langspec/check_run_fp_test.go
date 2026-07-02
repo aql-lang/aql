@@ -12,6 +12,7 @@ package langspec
 
 import (
 	"math/rand"
+	"os"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -57,6 +58,9 @@ func TestCheckRunFalsePositive(t *testing.T) {
 			ai := newDifferentialInstance(t)
 			if _, err := ai.Run(src); err == nil {
 				divergent++
+				if os.Getenv("AQL_LOG_DIVERGENT") != "" {
+					t.Logf("DIVERGENT s%d i%d: %s", seed, i, src)
+				}
 				if len(samples) < 5 {
 					samples = append(samples, src)
 				}

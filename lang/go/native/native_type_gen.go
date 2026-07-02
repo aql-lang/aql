@@ -27,12 +27,12 @@ var genNatives = []NativeFunc{
 	{
 		Name: "gen",
 
-		Signatures: []NativeSig{{
-			Args:           []*Type{TList},
-			NoEvalArgs:     map[int]bool{0: true},
-			Handler:        genHandler,
-			Returns:        []*Type{},
-			RunInCheckMode: true, BarrierPos: -1,
+		Signatures: []Signature{{
+			Args:       []*Type{TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Impl:       Go(genHandler, RunInCheck()),
+			Returns:    []*Type{},
+			BarrierPos: -1,
 		}},
 	},
 	{
@@ -42,7 +42,7 @@ var genNatives = []NativeFunc{
 		// stack.
 		Name: "extends",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			// Slot 0 (the bound) is an ORDINARY TAny slot: TAny admits
 			// both type literals (rejectsTypeLiteral carves out TAny)
 			// and payload-carrying bounds (DepScalar, surface, class,
@@ -50,11 +50,11 @@ var genNatives = []NativeFunc{
 			// a word token via the word-as-Atom guess and then flunk a
 			// DepScalar at collection. Slot 1 (the placeholder) is the
 			// TypeArgs slot — it is always a bare placeholder literal.
-			Args:           []*Type{TAny, TType},
-			TypeArgs:       map[int]bool{1: true},
-			Handler:        extendsHandler,
-			Returns:        []*Type{TGenParam},
-			RunInCheckMode: true, BarrierPos: 1,
+			Args:       []*Type{TAny, TType},
+			TypeArgs:   map[int]bool{1: true},
+			Impl:       Go(extendsHandler, RunInCheck()),
+			Returns:    []*Type{TGenParam},
+			BarrierPos: 1,
 		}},
 	},
 	{
@@ -62,21 +62,21 @@ var genNatives = []NativeFunc{
 		// chains off the GenParam `extends` produced.
 		Name: "default",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				// Chains off the GenParam `extends` produced. Slot 0
 				// (the default value) is ordinary TAny — see extends.
-				Args:           []*Type{TAny, TGenParam},
-				Handler:        defaultChainHandler,
-				Returns:        []*Type{TGenParam},
-				RunInCheckMode: true, BarrierPos: 1,
+				Args:       []*Type{TAny, TGenParam},
+				Impl:       Go(defaultChainHandler, RunInCheck()),
+				Returns:    []*Type{TGenParam},
+				BarrierPos: 1,
 			},
 			{
-				Args:           []*Type{TAny, TType},
-				TypeArgs:       map[int]bool{1: true},
-				Handler:        defaultBareHandler,
-				Returns:        []*Type{TGenParam},
-				RunInCheckMode: true, BarrierPos: 1,
+				Args:       []*Type{TAny, TType},
+				TypeArgs:   map[int]bool{1: true},
+				Impl:       Go(defaultBareHandler, RunInCheck()),
+				Returns:    []*Type{TGenParam},
+				BarrierPos: 1,
 			},
 		},
 	},
@@ -85,17 +85,17 @@ var genNatives = []NativeFunc{
 		// collected forward, the schema comes from the stack.
 		Name: "of",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:     []*Type{TList, TAny},
 			TypeArgs: map[int]bool{1: true},
-			Handler:  ofHandler,
+			Impl:     Go(ofHandler, RunInCheck()),
 			Returns:  []*Type{TType},
 			// BarrierPos 1: the arg LIST forward-collects, the schema
 			// head always comes from the stack (the tor/tand/is swap
 			// pattern). All-forward (-1) let a trailing-context `of`
 			// defer and steal a LATER stack value at end-of-run
 			// resolution.
-			RunInCheckMode: true, BarrierPos: 1,
+			BarrierPos: 1,
 		}},
 	},
 }

@@ -305,7 +305,7 @@ func canonFnDef(fd FnDefInfo) string {
 			}
 		}
 		b.WriteString("][")
-		for j, t := range sig.Body {
+		for j, t := range sig.body() {
 			if j > 0 {
 				b.WriteByte(' ')
 			}

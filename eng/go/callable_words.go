@@ -147,7 +147,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// closure's captures — resolved here in the enclosing scope, bound into
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
-	captures := ComputeCaptures(r, &FnSig{Body: bodyToks})
+	captures := ComputeCaptures(r, &FnSig{Impl: AQL(bodyToks)})
 	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, outs, pos)
 }
 
@@ -161,7 +161,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 // compile.
 func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Signature, args []Value, fd *FnDefInfo, outs []Value, pos SrcPos) bool {
 	lam, ok := fd.FirstOwnSig()
-	if !ok || len(lam.Body) == 0 {
+	if !ok || len(lam.body()) == 0 {
 		return false
 	}
 	// An OVERLOADED fn value (more than one own signature) is dispatched by
@@ -183,7 +183,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	if len(fd.Captured) > 0 {
 		return false
 	}
-	if bodyToksHaveSentinel(lam.Body) {
+	if bodyToksHaveSentinel(lam.body()) {
 		return false
 	}
 	inputs, shape, ok := lambdaCallbackInputs(r, word, spec, args)
@@ -231,7 +231,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	for i := range lam.Params {
 		names[i] = lam.Params[i].Name
 	}
-	return recordClosureDispatch(r, word, spec, sig, args, lam.Body, inputs, names, nil, shape, outs, pos)
+	return recordClosureDispatch(r, word, spec, sig, args, lam.body(), inputs, names, nil, shape, outs, pos)
 }
 
 // recordClosureDispatch is the shared tail of the token and lambda closure

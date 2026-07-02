@@ -2476,7 +2476,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// before arg auto-evaluation: the TCO eligibility gate declines
 	// eager teardown when the auto-eval below touched any binding.
 	var defMutsBefore int64
-	if match.Sig.FnFrame != nil {
+	if match.Sig.fnFrame() != nil {
 		defMutsBefore = e.registry.Defs.Mutations()
 	}
 	for i := range match.Args {
@@ -2554,7 +2554,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Signatures marked RunInCheckMode opt out of this intercept —
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
-	if e.registry.Check.IsActive() && !match.Sig.RunInCheckMode {
+	if e.registry.Check.IsActive() && !match.Sig.runInCheckMode() {
 		// The dispatch name: the word at the pointer, or — for a
 		// VALUE dispatch (a module wrapper's trivial-delegation
 		// short-circuit steps the Function literal, not a Word) — the
@@ -2576,7 +2576,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// covers both the word itself and any forward-collected
 		// arg positions so the splice consumes every token the
 		// call actually bound.
-		if match.Sig.FullStack && match.Sig.CheckFullStackFn != nil {
+		if match.Sig.fullStack() && match.Sig.checkFullStackFn() != nil {
 			base := 0
 			for i := e.pointer - 1; i >= 0; i-- {
 				if IsOpenParen(e.tape.At(i)) {
@@ -2591,7 +2591,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				}
 			}
 			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
-			results := match.Sig.CheckFullStackFn(match.Args, preserved, e.registry)
+			results := match.Sig.checkFullStackFn()(match.Args, preserved, e.registry)
 			e.tape.Splice(base, end+1-base, results...)
 			e.pointer = base
 			return nil
@@ -2619,7 +2619,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	ctx := e.registry.Contexts.TopData()
 
 	var fullStack []Value
-	if match.Sig.FullStack {
+	if match.Sig.fullStack() {
 		// Find the nearest open-paren barrier so that FullStack handlers
 		// only replace within the current paren scope, not below it.
 		base := 0
@@ -2632,7 +2632,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// Collect the full resolved stack before the pointer (from base),
 		// excluding the matched args and forwards.
 		fullStack = e.resolvedStackBeforeFrom(base, sortedIndices)
-		results, err := match.Sig.Handler(match.Args, ctx, fullStack, e.registry)
+		results, err := match.Sig.dispatchHandler()(match.Args, ctx, fullStack, e.registry)
 		if err != nil {
 			return e.stampErrPos(err)
 		}
@@ -2664,7 +2664,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// exactly as under nesting. A declined call nests as before —
 	// correctness never depends on firing.
 	var fullReplace *frameTailScan
-	if match.Sig.FnFrame != nil {
+	if match.Sig.fnFrame() != nil {
 		if scan, ok := e.probeTailCall(sortedIndices, n); ok {
 			e.registry.TCO.Detected++
 			if e.tcoEligible(scan, match.Sig, defMutsBefore) {
@@ -2687,7 +2687,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 	}
 
-	results, err := match.Sig.Handler(match.Args, ctx, nil, e.registry)
+	results, err := match.Sig.dispatchHandler()(match.Args, ctx, nil, e.registry)
 	if err != nil {
 		return e.stampErrPos(e.maybeAddFnShapeHint(err))
 	}
@@ -2724,7 +2724,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// spliced result so an unquoted Function value does NOT auto-dispatch
 	// here (matching the `/r` word-suffix). The value still dispatches when
 	// re-stepped elsewhere — retrieved from a map, unwrapped from a paren.
-	if match.Sig.ParkResult {
+	if match.Sig.parkResult() {
 		e.pointer += len(results)
 	}
 	return nil
@@ -4094,7 +4094,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// back here with fwdCount == 0 and dispatching via the stack
 	// path. Macro values are excluded: they stay on the legacy path
 	// (data — applied only by name; MACROS-PHASE1.10.md §5).
-	if sig == nil || (sig.Handler == nil && !fnDef.Anonymous && (fwdCount == 0 || fnDef.Macro)) {
+	if sig == nil || (sig.dispatchHandler() == nil && !fnDef.Anonymous && (fwdCount == 0 || fnDef.Macro)) {
 		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
 	}
 
@@ -4130,7 +4130,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// All args resolved on the stack. Anonymous FnDefs (no Go
 	// Handler) take the legacy stack-match path, which splices the
 	// body via execFnDefSig and binds named params via def-stack.
-	if sig.Handler == nil {
+	if sig.dispatchHandler() == nil {
 		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
 	}
 
@@ -4141,7 +4141,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	//     a single Word referencing the inner native of the same name
 	//     (e.g. rand.string's wrapper body `[Word(rand-string)]`).
 	//     matchSignature already found and matched that inner native;
-	//     its handler is `sig.Handler`. Direct-call it via execMatch
+	//     its handler is `sig.dispatchHandler()`. Direct-call it via execMatch
 	//     so args flow straight through in sig order — no body
 	//     execution, no token splicing, no push reordering.
 	//
@@ -4174,7 +4174,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 		// the fallback when no exact correspondence is found.
 		var arityPick *FnSig
 		for i := range ownSigs {
-			if len(ownSigs[i].Body) == 0 {
+			if len(ownSigs[i].body()) == 0 {
 				continue // native ref sig — not a wrapper/preamble body
 			}
 			if wrapperSig == nil {
@@ -4216,7 +4216,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			// emit so RecordUserCall references it (else "user fn call (Stage 3)"). A
 			// no-op outside check mode — interpret runs the matched handler in the
 			// sub-registry it was installed in, exactly as before.
-			if sig.Handler != nil {
+			if sig.dispatchHandler() != nil {
 				match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name, Reg: fnDef.Registry}
 				if len(positions) > 0 {
 					match.Args = make([]Value, len(positions))
@@ -4302,7 +4302,7 @@ func isRecordableLiteral(v Value) bool {
 // word still names the original inner native to look up in the
 // sub-registry. See InstallDef's module-wrapper rebinding branch.
 func trivialDelegationTarget(sig *FnSig) (string, bool) {
-	if len(sig.Body) != 1 {
+	if len(sig.body()) != 1 {
 		return "", false
 	}
 	for _, p := range sig.Params {
@@ -4310,10 +4310,10 @@ func trivialDelegationTarget(sig *FnSig) (string, bool) {
 			return "", false
 		}
 	}
-	if !IsWord(sig.Body[0]) {
+	if !IsWord(sig.body()[0]) {
 		return "", false
 	}
-	w, err := AsWord(sig.Body[0])
+	w, err := AsWord(sig.body()[0])
 	if err != nil {
 		return "", false
 	}
@@ -4373,7 +4373,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 			if checkMode {
 				return e.spliceAnonCheckResult(valIdx, 0, sig, nil, fnDef.Captured)
 			}
-			if checkFnValue && len(sig.Body) > 0 {
+			if checkFnValue && len(sig.body()) > 0 {
 				return e.spliceFnValueCheckResult(valIdx, 0, fnDef, sig, nil)
 			}
 			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
@@ -4424,7 +4424,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkMode {
 					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
 				}
-				if checkFnValue && len(sig.Body) > 0 {
+				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
@@ -4462,7 +4462,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkMode {
 					return e.spliceAnonCheckResult(valIdx, nArgs, sig, args, fnDef.Captured)
 				}
-				if checkFnValue && len(sig.Body) > 0 {
+				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
@@ -4532,7 +4532,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.Body, args, captures, sig.Returns)
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
@@ -4654,8 +4654,11 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 				HasGen:       fnDef.Gen != nil,
 				InstallNames: fnInstallNames(sig, fnDef.Captured),
 			}
-			compiled.FnFrame = meta
-			compiled.Handler = buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta)
+			compiled.Impl = &AQLImpl{
+				Body:     sig.body(),
+				FnFrame:  meta,
+				dispatch: buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta),
+			}
 			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
 		}
 		normalizeSig(&compiled)
@@ -4848,8 +4851,8 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// AppendFrameTail now, so the two splice paths cannot diverge.)
 	defSnapshot := e.registry.Defs.Snapshot()
 
-	body := make([]Value, len(sig.Body))
-	copy(body, sig.Body)
+	body := make([]Value, len(sig.body()))
+	copy(body, sig.body())
 	tokens = append(tokens, body...)
 
 	tokens = AppendFrameTail(tokens, FrameTailSpec{
@@ -6650,27 +6653,84 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 // raises == the interpreter's fallback raise). Returns true — and splices the
 // recovered returns — when it records; false leaves the caller's refusal to stand
 // (multi-overload → Cluster C). The L4 leaf: design/VOXGIG-COMPILE-LEAVES.1.md.
-func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
-	if sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
+// singleOverloadRecoverable reports whether fn is a user fn with EXACTLY ONE
+// real (arg-bearing, non-fallback) overload — the shape whose dispatch over an
+// Any/disjunct-carrier arg is RECOVERABLE: runtime dispatch is unambiguous, and
+// the VM's CALL_USER param contract raises exactly as the interpreter would if
+// the concrete value misses the sole sig. Used both to RECORD a guarded call on
+// an armed (compile) pass — tryRecordRecoveredUserFn below — and to SUPPRESS the
+// no_signature diagnostic on a plain check pass (Emit inactive), so a plain
+// check agrees with a compile pass instead of flagging what compile silently
+// recovers (the `engine-known engine` FP: an `is String`-guarded Options-`get`
+// value whose type the plain-check pass leaves a strict-Any carrier).
+func singleOverloadRecoverable(sig *Signature, fn *FnDefInfo) bool {
+	if fn == nil || sig == nil || sig.ReturnsFn == nil || sig.Fallback || sig.TotalArgs() == 0 {
 		return false
 	}
 	realOverloads := 0
 	has0ArgReal := false
+	var sole *Signature
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
 		if s.Fallback {
 			continue // synthetic 0-arg catch-all: raises for an arg-bearing fn
 		}
 		realOverloads++
+		sole = s
 		if s.TotalArgs() == 0 {
 			has0ArgReal = true
 		}
 	}
-	if realOverloads != 1 || has0ArgReal {
+	if realOverloads != 1 || has0ArgReal || sole == nil {
+		return false
+	}
+	// AQL-BODIED user fn ONLY (Codex PR #211 review #2). A core native (one-sig
+	// with a ReturnsFn, e.g. `enum`) and a trivial-delegation module wrapper
+	// (body = [Word(inner)] short-circuiting to an inner native) do NOT get the
+	// guarded CALL_USER param contract, so their unmatched dispatch is not
+	// deferrable. The discriminator is a real AQL body (len(Body) > 0), NOT a nil
+	// Handler: an AQL fn defined in a module preamble carries a synthesized CallAQL
+	// Handler yet is genuinely AQL-bodied (the `engine-known` case) — gating on
+	// Handler==nil wrongly excludes it. Core natives have an empty Body; delegation
+	// wrappers are caught by trivialDelegationTarget.
+	if _, isDelegation := trivialDelegationTarget(sole); isDelegation {
+		return false
+	}
+	return len(sole.body()) > 0
+}
+
+func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []Value, nStack int, positions []int) bool {
+	if !singleOverloadRecoverable(sig, fn) {
 		return false
 	}
 	recovered := sig.ReturnsFn(sigOrderArgs(args, nStack), e.registry)
 	e.spliceCheckResults(positions, recovered)
+	return true
+}
+
+// concreteArgsMatch reports whether every NON-Any-carrier operand still MATCHES
+// its sole-sig param position — so the failed dispatch is attributable SOLELY to
+// the Any-typed (statically-unknown) operand(s), not a provably-wrong concrete
+// arg. Guards the multi-arg case `g x 123` (g[a:Integer b:String]; x:Any->a ok,
+// but 123->b:String wrong): the concrete mismatch stays a genuine error and must
+// NOT be suppressed alongside the deferrable Any (Codex PR #211 review #1). Used
+// only to gate the plain-check no_signature diagnostic; the armed recovery records
+// a guarded CALL_USER that raises == interpreter regardless, so it needs no such check.
+func concreteArgsMatch(sig *Signature, args []Value, nStack int) bool {
+	window := sigOrderArgs(args, nStack)
+	n := sig.TotalArgs()
+	if len(window) < n {
+		return false // arity shortfall — a genuine mismatch, do not suppress
+	}
+	for i := 0; i < n; i++ {
+		v := window[i]
+		if v.Carrier && v.Parent != nil && v.Parent.Equal(TAny) {
+			continue // the deferrable unknown operand
+		}
+		if !sigArgMatches(sig, i, v) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -6900,7 +6960,26 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// recursive `f` whose `next` holds a List where the sig wants an Integer —
 	// which `signature_error`s at run time, NOT a false positive). The
 	// `!Compiling` guard alone is the correct condition.
-	if !e.registry.Check.Compiling {
+	// EXCEPTION to the "!Compiling alone" rule: a SINGLE-overload user fn
+	// dispatched over an Any/disjunct-CARRIER arg (a value of statically-unknown
+	// type, not a concrete mismatch) is NOT a genuine unmatched dispatch — it is
+	// the exact shape the armed (compile) pass RECOVERS as a guarded CALL_USER
+	// above (singleOverloadRecoverable), where the VM's param contract raises ==
+	// the interpreter iff the runtime value misses the sole sig. A plain check
+	// pass reaches HERE (Emit inactive, so the recovery block was skipped) and
+	// would otherwise flag what compile silently recovers — the `engine-known
+	// engine` false positive (`is String`-guarded Options-`get`). Suppressing is
+	// SOUND and narrower than the rejected bestMatch>=0 gate: it fires only on an
+	// unknown-TYPE carrier (never a concrete/type-literal operand) AND a one-
+	// overload user fn, so it cannot drop the concrete-mismatch error rows.
+	// anyAnyCarrier ONLY, NOT anyDisjunctCarrier: a DISJUNCT's members are
+	// statically known, so a disjunct that misses the param in EVERY member
+	// (Integer|String -> Map, String|List -> Integer) is a GENUINE error the
+	// interpreter always raises on and must stay flagged (TestJoinCarriersDynamicArm
+	// / TestSliceDynamicReceiverRefines). Only the fully-unknown Any carrier is
+	// deferrable to the runtime CALL_USER contract.
+	recoverableUnknownType := anyAnyCarrier(args) && singleOverloadRecoverable(sig, fn) && concreteArgsMatch(sig, args, nStack)
+	if !e.registry.Check.Compiling && !recoverableUnknownType {
 		// Expected-vs-actual: name the operand types the dispatch saw and
 		// the nearest candidate's declared types, so the user can see the
 		// mismatch without reconstructing the stack ("got (Map, Integer);
