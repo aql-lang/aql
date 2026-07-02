@@ -103,6 +103,15 @@ def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 10 g	ERROR:signature	B
 def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 5 g	ERROR:signature	Big rejects 5 (below the bound)
 def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 'hi' g	ERROR:signature	Big rejects String (wrong base type)
 
+# Typed-def against a DepScalar: a CONCRETE literal body runs the
+# predicate at bind time (and, symmetrically, at CHECK time — a failing
+# literal is a static type_error, a passing one binds the value in both
+# engines); a computed (abstract) body defers to the runtime check.
+def Big (Integer gt 10) def x:Big 50 x	50	typed-def binds a passing literal
+def Big (Integer gt 10) def x:Big 5 x	ERROR:does not unify	typed-def rejects a failing literal (statically flagged too)
+def x:(Integer gt 10) 50 x	50	inline DepScalar typed-def binds a passing literal
+def x:(Integer gt 10) 5 x	ERROR:does not unify	inline DepScalar typed-def rejects a failing literal
+
 # Lower-bounded refinement.
 def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] -5 g	99	Small accepts negative
 def Small (Integer lt 0) def g fn [[n:Small] [Integer] [99]] 5 g	ERROR:signature	Small rejects positive

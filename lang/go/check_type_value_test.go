@@ -195,3 +195,30 @@ func TestDeclaredReturnBodyConformance(t *testing.T) {
 		}
 	}
 }
+
+// A typed-def whose DepScalar constraint is violated by a CONCRETE literal is
+// flagged at check time (the lenient base-conformance install is gated to
+// abstract bodies; a concrete body falls through to Unify, which runs the
+// self-contained predicate) — native_definition.go's DepScalar branch.
+func TestTypedDefDepScalarCheck(t *testing.T) {
+	flagged := []string{
+		`def Big (Integer gt 10) def x:Big 5 x`,
+		`def x:(Integer gt 10) 5 x`,
+	}
+	for _, src := range flagged {
+		if n := checkErrs(t, src); n == 0 {
+			t.Errorf("failing DepScalar literal must be flagged: %q", src)
+		}
+	}
+	clean := []string{
+		`def Big (Integer gt 10) def x:Big 50 x`,
+		`def x:(Integer gt 10) 50 x`,
+		// abstract (computed) body: value unknown, stays with the runtime.
+		`def Big (Integer gt 10) def g fn [[a:Integer] [Integer] [a]] def x:Big (g 50) x`,
+	}
+	for _, src := range clean {
+		if n := checkErrs(t, src); n != 0 {
+			t.Errorf("must stay clean (%d errors): %q", n, src)
+		}
+	}
+}
