@@ -151,7 +151,7 @@ func makeArrayFnDef(internalName string, sigs []arrSig, noEval []int, subReg *na
 		fnSigs[i] = native.FnSig{
 			Params:     params,
 			Returns:    s.returns,
-			Body:       []native.Value{native.NewWord(internalName)},
+			Impl:       native.AQL([]native.Value{native.NewWord(internalName)}),
 			NoEvalArgs: noEvalMap,
 			BarrierPos: -1,
 		}

@@ -125,24 +125,24 @@ func instrumentNative(word string, st *instrumentState) NativeFunc {
 	}
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TMap},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					record(r, args[0], args[1])
 					return nil, nil
-				},
+				}),
 			},
 			{
 				Args:       []*Type{TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					record(r, args[0], NewMap(NewOrderedMap()))
 					return nil, nil
-				},
+				}),
 			},
 		},
 	}
@@ -160,12 +160,12 @@ func instrumentCtor(word, kind string, lsr *LogSinkRegistry) NativeFunc {
 	}
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TString},
 			Returns:    []*Type{TMap},
 			BarrierPos: -1,
 			ReturnsFn:  shape,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
 					return nil, r.AqlError("log_error", "instrument name must be a string", word)
@@ -175,7 +175,7 @@ func instrumentCtor(word, kind string, lsr *LogSinkRegistry) NativeFunc {
 					return nil, r.AqlError("log_error", err.Error(), word)
 				}
 				return []Value{NewMap(inst)}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -197,18 +197,18 @@ func logHistogramNative(lsr *LogSinkRegistry) NativeFunc {
 func logMeasurementsNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-measurements",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				ms := lsr.Measurements()
 				out := make([]Value, len(ms))
 				for i, m := range ms {
 					out[i] = measurementToMap(m)
 				}
 				return []Value{NewList(out)}, nil
-			},
+			}),
 		}},
 	}
 }

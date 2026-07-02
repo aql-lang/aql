@@ -96,10 +96,10 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 	var flag atomic.Int32
 	reg.Register("testflag", Signature{
 		Args: []*Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			flag.Store(1)
 			return nil, nil
-		}, BarrierPos: 0,
+		}), BarrierPos: 0,
 	})
 
 	e := NewTop(reg)
@@ -130,10 +130,10 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 	var flag atomic.Int32
 	reg.Register("testflag", Signature{
 		Args: []*Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			flag.Store(1)
 			return nil, nil
-		}, BarrierPos: 0,
+		}), BarrierPos: 0,
 	})
 
 	e := NewTop(reg)
@@ -204,10 +204,10 @@ func TestIntervalCallbackRepeats(t *testing.T) {
 	var counter atomic.Int32
 	reg.Register("testinc", Signature{
 		Args: []*Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			counter.Add(1)
 			return nil, nil
-		}, BarrierPos: 0,
+		}), BarrierPos: 0,
 	})
 
 	e := NewTop(reg)
@@ -259,10 +259,10 @@ func TestCancelTimeout(t *testing.T) {
 	var flag atomic.Int32
 	reg.Register("testflag", Signature{
 		Args: []*Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			flag.Store(1)
 			return nil, nil
-		}, BarrierPos: 0,
+		}), BarrierPos: 0,
 	})
 
 	e := NewTop(reg)
@@ -296,10 +296,10 @@ func TestCancelInterval(t *testing.T) {
 	var counter atomic.Int32
 	reg.Register("testinc", Signature{
 		Args: []*Type{},
-		Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			counter.Add(1)
 			return nil, nil
-		}, BarrierPos: 0,
+		}), BarrierPos: 0,
 	})
 
 	e := NewTop(reg)

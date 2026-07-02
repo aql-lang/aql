@@ -73,14 +73,16 @@ func renderSig(s *Signature) string {
 	}
 	b.WriteByte(']')
 	fmt.Fprintf(&b, " barrier=%d", s.BarrierPos)
-	if s.FullStack {
-		b.WriteString(" fullstack")
+	if g, ok := s.Impl.(*GoImpl); ok {
+		if g.FullStack {
+			b.WriteString(" fullstack")
+		}
+		if g.RunInCheckMode {
+			b.WriteString(" runcheck")
+		}
 	}
 	if s.Fallback {
 		b.WriteString(" fallback")
-	}
-	if s.RunInCheckMode {
-		b.WriteString(" runcheck")
 	}
 	if m := renderIntSet("noeval", s.NoEvalArgs); m != "" {
 		b.WriteString(" " + m)

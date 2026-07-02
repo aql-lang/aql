@@ -97,8 +97,8 @@ func init() {
 		{
 			Name: "help",
 
-			Signatures: []NativeSig{
-				{Args: []*Type{}, Handler: helpOverviewHandler, BarrierPos: -1},
+			Signatures: []Signature{
+				{Args: []*Type{}, Impl: Go(helpOverviewHandler), BarrierPos: -1},
 			},
 		},
 
@@ -106,16 +106,16 @@ func init() {
 		{
 			Name: "describe",
 
-			Signatures: []NativeSig{
-				{Args: []*Type{TString}, Handler: describeWordHandler, BarrierPos: -1},
-				{Args: []*Type{TAtom}, Handler: describeWordHandler, BarrierPos: -1},
+			Signatures: []Signature{
+				{Args: []*Type{TString}, Impl: Go(describeWordHandler), BarrierPos: -1},
+				{Args: []*Type{TAtom}, Impl: Go(describeWordHandler), BarrierPos: -1},
 				{
 					Args:      []*Type{TAtom},
 					QuoteArgs: map[int]bool{0: true},
-					Handler:   describeWordHandler,
+					Impl:      Go(describeWordHandler),
 					Returns:   []*Type{}, BarrierPos: -1,
 				},
-				{Args: []*Type{}, Handler: describeSelfHandler, BarrierPos: -1},
+				{Args: []*Type{}, Impl: Go(describeSelfHandler), BarrierPos: -1},
 			},
 		},
 
@@ -123,8 +123,8 @@ func init() {
 		{
 			Name: "referent",
 
-			Signatures: []NativeSig{
-				{Args: []*Type{TAtom}, Handler: referentHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+			Signatures: []Signature{
+				{Args: []*Type{TAtom}, Impl: Go(referentHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 
@@ -132,23 +132,23 @@ func init() {
 		{
 			Name: "module",
 
-			Signatures: []NativeSig{{
-				Args:           []*Type{TList},
-				NoEvalArgs:     map[int]bool{0: true},
-				Handler:        moduleHandler,
-				Returns:        []*Type{TModuleInst},
-				RunInCheckMode: true, BarrierPos: -1,
+			Signatures: []Signature{{
+				Args:       []*Type{TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Impl:       Go(moduleHandler, RunInCheck()),
+				Returns:    []*Type{TModuleInst},
+				BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "import",
 
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{
-					Args:           []*Type{TModuleInst},
-					Handler:        importAllHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TModuleInst},
+					Impl:       Go(importAllHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 				{
 					// The leading list holds export *names* to rename
@@ -156,56 +156,56 @@ func init() {
 					// not evaluable expressions. NoEvalArgs keeps them raw
 					// (bare words never degrade to data, so without this
 					// the unbound names would raise undefined_word).
-					Args:           []*Type{TList, TModuleInst},
-					NoEvalArgs:     map[int]bool{0: true},
-					Handler:        importRenameHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TList, TModuleInst},
+					NoEvalArgs: map[int]bool{0: true},
+					Impl:       Go(importRenameHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 				{
-					Args:           []*Type{TAtom, TModuleInst},
-					Handler:        importSingleRenameHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TAtom, TModuleInst},
+					Impl:       Go(importSingleRenameHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 				{
-					Args:           []*Type{TString},
-					Handler:        importFileHandler,
-					Returns:        []*Type{TModuleInst},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TString},
+					Impl:       Go(importFileHandler, RunInCheck()),
+					Returns:    []*Type{TModuleInst},
+					BarrierPos: -1,
 				},
 				{
-					Args:           []*Type{TList, TString},
-					NoEvalArgs:     map[int]bool{0: true},
-					Handler:        importFileRenameHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TList, TString},
+					NoEvalArgs: map[int]bool{0: true},
+					Impl:       Go(importFileRenameHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 				// Inline module forms: use /q to capture "module" as a quoted word
 				// instead of executing it as a function.
 				{
-					Args:           []*Type{TAtom, TList},
-					QuoteArgs:      map[int]bool{0: true},
-					NoEvalArgs:     map[int]bool{1: true},
-					Handler:        importInlineHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TAtom, TList},
+					QuoteArgs:  map[int]bool{0: true},
+					NoEvalArgs: map[int]bool{1: true},
+					Impl:       Go(importInlineHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 				{
-					Args:           []*Type{TList, TAtom, TList},
-					QuoteArgs:      map[int]bool{1: true},
-					NoEvalArgs:     map[int]bool{0: true, 2: true},
-					Handler:        importInlineRenameHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TList, TAtom, TList},
+					QuoteArgs:  map[int]bool{1: true},
+					NoEvalArgs: map[int]bool{0: true, 2: true},
+					Impl:       Go(importInlineRenameHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 				{
-					Args:           []*Type{TAtom, TAtom, TList},
-					QuoteArgs:      map[int]bool{1: true},
-					NoEvalArgs:     map[int]bool{2: true},
-					Handler:        importInlineSingleRenameHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TAtom, TAtom, TList},
+					QuoteArgs:  map[int]bool{1: true},
+					NoEvalArgs: map[int]bool{2: true},
+					Impl:       Go(importInlineSingleRenameHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 			},
 		},
@@ -223,18 +223,18 @@ func init() {
 		{
 			Name: "export",
 
-			Signatures: []NativeSig{
+			Signatures: []Signature{
 				{
-					Args:           []*Type{TAtom, TMap},
-					Handler:        exportNoopHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TAtom, TMap},
+					Impl:       Go(exportNoopHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 				{
-					Args:           []*Type{TString, TMap},
-					Handler:        exportNoopHandler,
-					Returns:        []*Type{},
-					RunInCheckMode: true, BarrierPos: -1,
+					Args:       []*Type{TString, TMap},
+					Impl:       Go(exportNoopHandler, RunInCheck()),
+					Returns:    []*Type{},
+					BarrierPos: -1,
 				},
 			},
 		},

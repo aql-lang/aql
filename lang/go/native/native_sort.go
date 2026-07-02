@@ -31,15 +31,15 @@ import (
 var sortNative = NativeFunc{
 	Name: "sort",
 
-	Signatures: []NativeSig{
+	Signatures: []Signature{
 		{
 			Args:    []*Type{TList},
-			Handler: sortListHandler,
+			Impl:    Go(sortListHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		},
 		{
 			Args:    []*Type{TMap},
-			Handler: sortMapHandler,
+			Impl:    Go(sortMapHandler),
 			Returns: []*Type{TMap}, BarrierPos: -1,
 		},
 	},

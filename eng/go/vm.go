@@ -279,7 +279,7 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 		window[i] = stack[len(stack)-1-i]
 	}
 	mr := MatchSignature(sigs, window, WordInfo{ArgCount: n})
-	if mr == nil || mr.Sig == nil || mr.Sig.Handler == nil {
+	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
 		// No runtime match. The interpreter's signature_error is built from its
 		// live tape / forward-collection state (engine.go sigError) — available
 		// signatures, a reorder hint, the nearby stack types — which the VM
@@ -291,7 +291,7 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 		// and so reaches the same no-match.
 		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
 	}
-	results, err := mr.Sig.Handler(mr.Args, r.Contexts.TopData(), nil, r)
+	results, err := mr.Sig.dispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
@@ -535,10 +535,10 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 		return nil, false, nil
 	}
 	mr := MatchSignature(sigs, args, WordInfo{ArgCount: len(args)})
-	if mr == nil || mr.Sig == nil || mr.Sig.Handler == nil {
+	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
 		return nil, false, nil
 	}
-	results, err := mr.Sig.Handler(mr.Args, reg.Contexts.TopData(), nil, reg)
+	results, err := mr.Sig.dispatchHandler()(mr.Args, reg.Contexts.TopData(), nil, reg)
 	return results, true, err
 }
 
@@ -764,7 +764,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
-			n := len(s.Sig.Args)
+			n := s.Sig.TotalArgs()
 			if len(stack) < n {
 				return nil, vmErrAt(curDebug, pc, "CALL_NATIVE underflow at "+s.Word)
 			}
@@ -802,7 +802,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 					return nil, stampAt(err, curDebug, pc, r)
 				}
 			}
-			results, err := s.Sig.Handler(args, r.Contexts.TopData(), nil, r)
+			results, err := s.Sig.dispatchHandler()(args, r.Contexts.TopData(), nil, r)
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
@@ -1177,17 +1177,17 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 // checkNativeParamContract enforces a GUARDED CALL_NATIVE's committed sig at run
 // time — the native twin of checkParamContract (CALL_USER). args[i] is sig
 // position i (top-of-stack first, as OpCallNative built them). Each must satisfy
-// s.Sig.Args[i] via sigTypeMatches — the SAME runtime param match the interpreter's
+// sigArgType(s.Sig, i) via sigTypeMatches — the SAME runtime param match the interpreter's
 // matchSignature applies, so a concrete value that the interpreter's sole-overload
 // dispatch would accept passes here and one it rejects raises the byte-identical
 // signature_error. Sound only for a single-overload word (the recorder's gate): no
 // sibling exists for a missing arg to fall through to, so raise == the interpreter.
 func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 	for i := range args {
-		if i >= len(s.Sig.Args) {
+		if i >= s.Sig.TotalArgs() {
 			break
 		}
-		at := s.Sig.Args[i]
+		at := sigArgType(s.Sig, i)
 		if at == nil || at.Equal(TAny) {
 			continue // an Any slot is a guaranteed pass
 		}

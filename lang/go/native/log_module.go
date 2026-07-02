@@ -620,24 +620,24 @@ func asConcreteOrderedMap(v Value) *OrderedMap {
 func levelNative(lsr *LogSinkRegistry, word string, level LogLevel) NativeFunc {
 	return NativeFunc{
 		Name: word,
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TMap},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					emitRecord(lsr, r, level, args[0], args[1])
 					return nil, nil
-				},
+				}),
 			},
 			{
 				Args:       []*Type{TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					emitRecord(lsr, r, level, args[0], Value{})
 					return nil, nil
-				},
+				}),
 			},
 		},
 	}
@@ -648,32 +648,32 @@ func levelNative(lsr *LogSinkRegistry, word string, level LogLevel) NativeFunc {
 func logGenericNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-log",
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAtom, TAny, TMap},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					lvl, err := levelArg(r, args[0], "Log.log")
 					if err != nil {
 						return nil, err
 					}
 					emitRecord(lsr, r, lvl, args[1], args[2])
 					return nil, nil
-				},
+				}),
 			},
 			{
 				Args:       []*Type{TAtom, TAny},
 				Returns:    []*Type{},
 				BarrierPos: -1,
-				Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					lvl, err := levelArg(r, args[0], "Log.log")
 					if err != nil {
 						return nil, err
 					}
 					emitRecord(lsr, r, lvl, args[1], Value{})
 					return nil, nil
-				},
+				}),
 			},
 		},
 	}
@@ -696,18 +696,18 @@ func levelArg(r *Registry, v Value, word string) (LogLevel, error) {
 func logSetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-set-level",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				lvl, err := levelArg(r, args[0], "Log.set-level")
 				if err != nil {
 					return nil, err
 				}
 				lsr.SetLevel(lvl)
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }
@@ -715,13 +715,13 @@ func logSetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 func logGetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-get-level",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TAtom},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewAtom(lsr.Level().Name())}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -729,11 +729,11 @@ func logGetLevelNative(lsr *LogSinkRegistry) NativeFunc {
 func logEnabledNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-enabled",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{TBoolean},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				lvl, err := levelArg(r, args[0], "Log.enabled")
 				if err != nil {
 					return nil, err
@@ -748,7 +748,7 @@ func logEnabledNative(lsr *LogSinkRegistry) NativeFunc {
 					policyAllowsEmit(r, policy.Args{"level": lvl.Name()}) &&
 					lsr.anyAttachedAdmits(lvl)
 				return []Value{NewBoolean(ok)}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -756,11 +756,11 @@ func logEnabledNative(lsr *LogSinkRegistry) NativeFunc {
 func logSetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-set-format",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteAtom()
 				if err != nil {
 					return nil, r.AqlError("log_error", "format must be an atom (text/json)", "Log.set-format")
@@ -770,7 +770,7 @@ func logSetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 				}
 				lsr.SetFormat(name)
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }
@@ -778,13 +778,13 @@ func logSetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 func logGetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-get-format",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TAtom},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return []Value{NewAtom(lsr.Format())}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -792,11 +792,11 @@ func logGetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 func logAddSinkNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-add-sink",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteAtom()
 				if err != nil {
 					return nil, r.AqlError("log_error", "sink name must be an atom", "Log.add-sink")
@@ -809,7 +809,7 @@ func logAddSinkNative(lsr *LogSinkRegistry) NativeFunc {
 				}
 				lsr.Attach(name)
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }
@@ -817,11 +817,11 @@ func logAddSinkNative(lsr *LogSinkRegistry) NativeFunc {
 func logRemoveSinkNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-remove-sink",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteAtom()
 				if err != nil {
 					return nil, r.AqlError("log_error", "sink name must be an atom", "Log.remove-sink")
@@ -831,7 +831,7 @@ func logRemoveSinkNative(lsr *LogSinkRegistry) NativeFunc {
 				}
 				lsr.Detach(name)
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }
@@ -853,18 +853,18 @@ func checkLogInstall(r *Registry, word, sink string) error {
 func logSinksNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-sinks",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				names := lsr.Attached()
 				out := make([]Value, len(names))
 				for i, n := range names {
 					out[i] = NewAtom(n)
 				}
 				return []Value{NewList(out)}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -872,18 +872,18 @@ func logSinksNative(lsr *LogSinkRegistry) NativeFunc {
 func logDumpNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-dump",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{TList},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				recs := lsr.Captured()
 				out := make([]Value, len(recs))
 				for i, rec := range recs {
 					out[i] = rec.toMap()
 				}
 				return []Value{NewList(out)}, nil
-			},
+			}),
 		}},
 	}
 }
@@ -891,14 +891,14 @@ func logDumpNative(lsr *LogSinkRegistry) NativeFunc {
 func logClearNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-clear",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{},
 			Returns:    []*Type{},
 			BarrierPos: -1,
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				lsr.ClearCaptured()
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }

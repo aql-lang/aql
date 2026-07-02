@@ -103,21 +103,21 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.Defs.Delete("export")
 	modReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "export",
-		Signatures: []native.NativeSig{
+		Signatures: []native.Signature{
 			{
 				Args: []*native.Type{native.TAtom, native.TMap},
-				Handler: func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					name, _ := eargs[0].AsConcreteAtom()
 					return resolveExport(modReg, exports, name, eargs[1])
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			},
 			{
 				Args: []*native.Type{native.TString, native.TMap},
-				Handler: func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					name, _ := eargs[0].AsConcreteString()
 					return resolveExport(modReg, exports, name, eargs[1])
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			},
 		},
@@ -232,10 +232,10 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Callable: &native.CallableSpec{BodyPos: 1, BodyOut: 0, Inputs: func(_ []native.Value) []native.Value {
 				return []native.Value{}
 			}},
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString, native.TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
 					run := activeRun(parent)
 					// Run the grouping body with the group name pushed on the path.
@@ -265,7 +265,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, runErr
 					}
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
@@ -279,10 +279,10 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Callable: &native.CallableSpec{BodyPos: 1, BodyOut: 0, Inputs: func(_ []native.Value) []native.Value {
 				return []native.Value{}
 			}},
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString, native.TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
 					run := activeRun(parent)
 					// Compiled path: the body arrived as a compiled CLOSURE (the
@@ -308,27 +308,27 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 						return e
 					})
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
 		// Test.results — return the accumulated TestResult Table.
 		{
 			Name: "test-results",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{activeRun(parent).asTable()}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TList}, BarrierPos: -1,
 			}},
 		},
 		// Test.reset — clear the active TestRun.
 		{
 			Name: "test-reset",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					run := activeRun(parent)
 					run.mu.Lock()
 					run.results = nil
@@ -336,18 +336,18 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 					run.path = nil
 					run.mu.Unlock()
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
 		// Test.summary — return a Record with pass/fail/total counts.
 		{
 			Name: "test-summary",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{activeRun(parent).summary()}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TMap}, BarrierPos: -1,
 			}},
 		},
@@ -356,26 +356,26 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// alternative to the verbose Test.results table.
 		{
 			Name: "test-report",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{activeRun(parent).report()}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TString}, BarrierPos: -1,
 			}},
 		},
 		// Test.fail-count — return the failure count as an integer.
 		{
 			Name: "test-fail-count",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{},
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					run := activeRun(parent)
 					run.mu.Lock()
 					n := run.failures
 					run.mu.Unlock()
 					return []native.Value{native.NewInteger(int64(n))}, nil
-				},
+				}),
 				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 			}},
 		},
@@ -386,9 +386,9 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// handler catches the error and records the case as failed.
 		{
 			Name: "assert-equal",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny, native.TAny},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					// args[0] is the forward / first arg (expected),
 					// args[1] is the second (actual). Print order:
 					// "expected X, got Y".
@@ -401,15 +401,15 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 							"Assert.equal")
 					}
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "assert-not-equal",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny, native.TAny},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					if native.ValuesEqual(args[0], args[1]) {
 						return nil, r.AqlError("assertion_failure",
 							fmt.Sprintf("Assert.not-equal: both sides equal %s",
@@ -417,31 +417,31 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 							"Assert.not-equal")
 					}
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "assert-ok",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					if !isTruthy(args[0]) {
 						return nil, r.AqlError("assertion_failure",
 							fmt.Sprintf("Assert.ok: value is falsy: %s", native.FormatForPrint(args[0])),
 							"Assert.ok")
 					}
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "assert-throws",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Assert.throws")
 					if err != nil {
 						return nil, err
@@ -453,15 +453,15 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 							"Assert.throws")
 					}
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "assert-match",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					sub, _ := args[0].AsConcreteString()
 					s, _ := args[1].AsConcreteString()
 					if !strings.Contains(s, sub) {
@@ -470,7 +470,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 							"Assert.match")
 					}
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
@@ -484,21 +484,21 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// in the caller's scope.
 		{
 			Name: "test-invoke",
-			Signatures: []native.NativeSig{
+			Signatures: []native.Signature{
 				{
 					Args: []*native.Type{native.TAtom, native.TList},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						name, _ := args[0].AsConcreteAtom()
 						return invokeSubject(parent, name, args[1])
-					},
+					}),
 					Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 				},
 				{
 					Args: []*native.Type{native.TString, native.TList},
-					Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 						name, _ := args[0].AsConcreteString()
 						return invokeSubject(parent, name, args[1])
-					},
+					}),
 					Returns: []*native.Type{native.TAny}, BarrierPos: -1,
 				},
 			},
@@ -509,12 +509,12 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		//   imperative API.
 		{
 			Name: "test-record",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{
 					native.TString, native.TList, native.TBoolean,
 					native.TAny, native.TAny, native.TAny, native.TInteger,
 				},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					// Side-effect suppression (design/module-fn-checkstate-ownership.1.md
 					// §5c): test-record accumulates pass/fail outcomes into the run. Once
 					// a module-fn body (run-case) runs IN CHECK MODE under the parent pass
@@ -542,7 +542,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 						run.failures++
 					}
 					return nil, nil
-				},
+				}),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
@@ -555,12 +555,12 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		//   bodies intact for the Stage-5 reducer / Stage-3 runner.
 		{
 			Name: "test-prop",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString, native.TList, native.TList},
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
 					gen := args[1]
 					prop := args[2]
@@ -579,7 +579,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 					m.Set("seed", native.NewInteger(1))
 					m.Set("max-shrinks", native.NewInteger(200))
 					return []native.Value{native.NewMap(m)}, nil
-				},
+				}),
 			}},
 		},
 		// Test.check-prop name gen property runs seed max-shrinks
@@ -596,7 +596,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// failing input verbatim.
 		{
 			Name: "test-check-prop",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{
 					native.TString,  // name
 					native.TList,    // gen body (quoted)
@@ -608,9 +608,9 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return runCheckProp(parent, args)
-				},
+				}),
 			}},
 		},
 		// Test.skip — a drop-in replacement for Test.check-prop that does
@@ -621,7 +621,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// park it while iterating, instead of commenting it out (§11b.4).
 		{
 			Name: "test-skip",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{
 					native.TString,  // name
 					native.TList,    // gen body (quoted, ignored)
@@ -633,9 +633,9 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return runSkipProp(parent, args)
-				},
+				}),
 			}},
 		},
 	}
@@ -707,7 +707,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		genSig := native.FnSig{
 			Params:     []native.FnParam{{Name: "r", Type: native.TMap}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), genBody...),
+			Impl:       native.AQL(append([]native.Value(nil), genBody...)),
 			BarrierPos: -1,
 		}
 		genResults, err := parent.CallAQL(&genSig, []native.Value{native.NewMap(randMap)}, nil)
@@ -734,7 +734,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), propBody...),
+			Impl:       native.AQL(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
 		propResults, err := parent.CallAQL(&propSig, []native.Value{input}, nil)
@@ -888,7 +888,7 @@ func shrinkFailingProgram(
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), propBody...),
+			Impl:       native.AQL(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
 		res, err := parent.CallAQL(&propSig, []native.Value{candidateValue}, nil)
@@ -984,7 +984,7 @@ func shrinkFailingInput(
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       append([]native.Value(nil), propBody...),
+			Impl:       native.AQL(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
 		res, err := parent.CallAQL(&propSig, []native.Value{candidateValue}, nil)

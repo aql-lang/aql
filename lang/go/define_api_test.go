@@ -65,9 +65,9 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 	// accepts an Even and returns it; the type constraint is enforced.
 	a.Register("only-even", lang.Signature{
 		Args: []*lang.Type{even},
-		Handler: func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
+		Impl: native.Go(func(args []lang.Value, _ map[string]lang.Value, _ []lang.Value, _ *native.Registry) ([]lang.Value, error) {
 			return []lang.Value{args[0]}, nil
-		}, BarrierPos: -1,
+		}), BarrierPos: -1,
 	})
 	if out, err := a.Run(`only-even 8`); err != nil {
 		t.Errorf("only-even 8: %v", err)

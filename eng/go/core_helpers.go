@@ -295,8 +295,8 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			InstallGenCallBindings(r, fnDefCopy.Gen, s.Params, args)
 		}
 
-		body := make([]Value, len(s.Body))
-		copy(body, s.Body)
+		body := make([]Value, len(s.body()))
+		copy(body, s.body())
 		result = append(result, body...)
 		// The canonical cleanup tail: DefCleanup (undoes body-local
 		// defs), __pa (pops Args + FnBaseline), the undef pairs for
@@ -444,7 +444,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	if fnDef.Anonymous {
 		declaredReturns = nil
 	}
-	bodyCopy := append([]Value(nil), s.Body...)
+	bodyCopy := append([]Value(nil), s.body()...)
 	nameCopy := name
 	capturesCopy := fnDef.Captured
 	genSpec := fnDef.Gen
@@ -837,25 +837,28 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 			barrier = len(s.Params)
 		}
 
-		cs := s // keep Params (names), Returns, Body, NoEval*, Handler
-		// AQL-bodied sigs get the body-splicing runner. A sig that already
-		// carries its own Handler with NO AQL Body is a pre-compiled /
+		cs := s // keep Params (names), Returns, NoEval*, Impl
+		// AQL-bodied sigs get the body-splicing runner in a fresh AQLImpl. A sig
+		// that already carries a Go handler with NO AQL Body is a pre-compiled /
 		// synthetic overload — a `usurp` wrapper (whose handler re-dispatches
 		// the wrapped fn through a paren) or a captured native fn value bound
 		// to a name. Wrapping the body-runner around its empty Body would
-		// emit zero values and fail the return check, so preserve the
-		// existing Handler/ReturnsFn instead; the fn it forwards to performs
-		// its own arg-binding and return validation. (An already-compiled AQL
-		// fn re-bound by name still has Body>0, so it correctly gets a fresh
+		// emit zero values and fail the return check, so preserve the existing
+		// Impl/ReturnsFn instead; the fn it forwards to performs its own
+		// arg-binding and return validation. (An already-compiled AQL fn
+		// re-bound by name still has Body>0, so it correctly gets a fresh
 		// body-runner — only Body-less handler sigs are preserved.)
-		if s.Handler == nil || len(s.Body) > 0 {
+		if s.dispatchHandler() == nil || len(s.body()) > 0 {
 			meta := &FnFrameMeta{
 				Name:         name,
 				HasGen:       fnDefCopy.Gen != nil,
 				InstallNames: fnInstallNames(s, fnDefCopy.Captured),
 			}
-			cs.FnFrame = meta
-			cs.Handler = buildFnBodyHandler(r, name, s, fnDefCopy, meta)
+			cs.Impl = &AQLImpl{
+				Body:     s.body(),
+				FnFrame:  meta,
+				dispatch: buildFnBodyHandler(r, name, s, fnDefCopy, meta),
+			}
 			cs.ReturnsFn = buildFnBodyReturnsFn(r, name, s, fnDefCopy)
 		}
 		cs.BarrierPos = barrier
@@ -898,7 +901,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 	}
 	for i := range fnDef.Signatures {
 		s := &fnDef.Signatures[i]
-		if s.Fallback || len(s.Body) == 0 {
+		if s.Fallback || len(s.body()) == 0 {
 			continue
 		}
 		paramNames := make([]string, len(s.Params))
@@ -924,7 +927,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		// advisory) live on r.Check.Diagnostics and are unaffected — exactly the
 		// diagnostics-only contract this pass needs.
 		restore := r.Check.IsolateEmit()
-		AnalyseFnBody(r, name, paramNames, s.Body, genArgs, fnDef.Captured, declared)
+		AnalyseFnBody(r, name, paramNames, s.body(), genArgs, fnDef.Captured, declared)
 		restore()
 	}
 }
@@ -1523,7 +1526,7 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 			expanded = append(expanded, FnSig{
 				Params:     reducedParams,
 				Returns:    sig.Returns,
-				Body:       body,
+				Impl:       AQL(body),
 				BarrierPos: expandedBarrier,
 			})
 		}

@@ -18,9 +18,9 @@ var LogicModuleNatives = []NativeFunc{
 	boolBinaryNative("xnor", func(a, b bool) bool { return a == b }),
 	{
 		Name: "implies",
-		Signatures: []NativeSig{
-			{Args: []*Type{TBoolean, TBoolean}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Handler: impliesHandler, Returns: []*Type{TBoolean}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TBoolean, TBoolean}, Impl: Go(impliesHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(impliesHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 }

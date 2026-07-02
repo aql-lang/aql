@@ -16,11 +16,11 @@ var controlNatives = []NativeFunc{
 			return []Value{}
 		}},
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    doListHandler,
+				Impl:       Go(doListHandler),
 				ReturnsFn:  doListReturnsFn, BarrierPos: -1,
 				// Only the LIST (code-body) sig islands — its NoEvalArgs body
 				// re-enters the interpreter. The Map sig is a pure value eval
@@ -30,7 +30,7 @@ var controlNatives = []NativeFunc{
 			},
 			{
 				Args:    []*Type{TMap},
-				Handler: doMapHandler,
+				Impl:    Go(doMapHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 		},
@@ -38,17 +38,17 @@ var controlNatives = []NativeFunc{
 	{
 		Name: "if",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TAny, TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
-				Handler:    if3Handler,
+				Impl:       Go(if3Handler),
 				ReturnsFn:  if3ReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
-				Handler:    if2Handler,
+				Impl:       Go(if2Handler),
 				ReturnsFn:  if2ReturnsFn, BarrierPos:
 
 				// Clause-list form: `if [c1 b1 c2 b2 … else]`. Even elements
@@ -66,7 +66,7 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    ifListHandler,
+				Impl:       Go(ifListHandler),
 				ReturnsFn:  ifListReturnsFn, BarrierPos: -1,
 			},
 		},
@@ -88,7 +88,7 @@ var controlNatives = []NativeFunc{
 		Name:          "case",
 		CompileEffect: CompileFallbackBody,
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			// One Any/Any sig; the handler disambiguates the two call
 			// shapes (forward `case v [clauses]` vs stack-value
 			// `v case [clauses]`) by which arg is the clause list —
@@ -97,7 +97,7 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
-				Handler:    caseHandler,
+				Impl:       Go(caseHandler),
 				ReturnsFn:  caseReturnsFn,
 				Returns:    []*Type{TAny}, BarrierPos: -1,
 			},
@@ -110,9 +110,9 @@ var controlNatives = []NativeFunc{
 		// newtype (`Pos`) matches structurally exactly as case does — which
 		// the `is` word (nominal) would not. Not user-facing.
 		Name: "__casematch",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
-			Handler:    caseMatchHandler,
+			Impl:       Go(caseMatchHandler),
 			Returns:    []*Type{TBoolean},
 			BarrierPos: 0,
 		}},
@@ -120,17 +120,17 @@ var controlNatives = []NativeFunc{
 	{
 		Name: "for",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Handler:    forCountHandler,
+				Impl:       Go(forCountHandler),
 				ReturnsFn:  forIntegerListReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Handler:    forRangeHandler,
+				Impl:       Go(forRangeHandler),
 				ReturnsFn:  forListListReturnsFn, BarrierPos: -1,
 			},
 		},
@@ -141,21 +141,21 @@ var controlNatives = []NativeFunc{
 	// loop's flow-control resolver.
 	{
 		Name: "break",
-		Signatures: []NativeSig{{
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		Signatures: []Signature{{
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				r.FlowCtrl = FlowBreak
 				return nil, nil
-			},
+			}),
 			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
 	{
 		Name: "continue",
-		Signatures: []NativeSig{{
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		Signatures: []Signature{{
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				r.FlowCtrl = FlowContinue
 				return nil, nil
-			},
+			}),
 			Returns: []*Type{}, BarrierPos: 0,
 		}},
 	},
@@ -180,11 +180,11 @@ var controlNatives = []NativeFunc{
 		// the pass-through sig even when the runtime value is an Error. One sig
 		// with a runtime IsError branch keeps dispatch mono (so the handler body
 		// compiles as a closure) and correct on both paths.
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args:       []*Type{TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},
-				Handler:    errorHandler,
+				Impl:       Go(errorHandler),
 				// BarrierPos 1: the handler list is forward-collected, but the
 				// do-result (position 1) MUST come from the stack — never a trailing
 				// token. The former TError sig filtered a following `3` by type; the
@@ -785,7 +785,44 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		frag := es.TakeFragment()
 		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[countArg].Pos)
 	}
+	// Plain check (no bytecode recording): a STATICALLY-COUNTED loop leaves the
+	// SPREAD of its per-iteration residual on the stack, not one List value
+	// (`for 3 ['x']` leaves `'x' 'x' 'x'`; `for [1 4] [7 8]` leaves six ints).
+	// Model that exactly so the residual's arity and element types match the
+	// runtime — the List above is a variadic APPROXIMATION the bytecode lowerer
+	// requires, kept for the recording path (which never reaches here, es!=nil).
+	// The per-iteration residual is the loop's fixed-point join, so repeating it
+	// count times is a sound over-approximation: a break/continue loop runs
+	// FEWER iterations, and a shorter runtime stack is still covered by the
+	// longer checked one. Bounded to keep the residual small; past the cap the
+	// List approximation stands.
+	if !es.Active() && lowerable && len(stk) > 0 {
+		if n := loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)); n >= 0 && n*int64(len(stk)) <= loopSpreadResidualCap {
+			spread := make([]Value, 0, int(n)*len(stk))
+			for i := int64(0); i < n; i++ {
+				spread = append(spread, stk...)
+			}
+			return spread
+		}
+	}
 	return []Value{out}
+}
+
+// loopSpreadResidualCap bounds the check-mode spread of a statically-counted
+// loop's residual (native_control forCarrierAnalyse). A loop with more total
+// residual values than this keeps the single-List approximation rather than
+// materialising a large residual stack — the exact arity of a big loop is not
+// worth the memory, and such loops rarely leave a consumed residual.
+const loopSpreadResidualCap = 256
+
+// asInt64Or returns v's integer value, or def when v is not a concrete integer.
+func asInt64Or(v Value, def int64) int64 {
+	if IsConcrete(v) && v.Parent.ConformsTo(TInteger) {
+		if n, err := AsInteger(v); err == nil {
+			return n
+		}
+	}
+	return def
 }
 
 // ---- error handler ----

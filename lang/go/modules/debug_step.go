@@ -30,41 +30,41 @@ func stepNatives() []native.NativeFunc {
 		{
 			// Run a quoted body under interactive single-step control.
 			Name: "debug-step",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
 				Returns:    []*native.Type{native.TAny},
 				NoEvalArgs: map[int]bool{0: true},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					body, err := native.RequireConcreteList(args[0], "Debug.step")
 					if err != nil {
 						return nil, err
 					}
 					return runStepped(r, append([]native.Value(nil), body.Slice()...))
-				},
+				}),
 			}},
 		},
 		{
 			// A breakpoint: pause here when a controller is attached; else a no-op.
 			Name: debugBreakWord,
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{},
 				Returns:    []*native.Type{},
 				BarrierPos: -1,
-				Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					pauseAtBreak(r)
 					return nil, nil
-				},
+				}),
 			}},
 		},
 		{
 			// A conditional breakpoint: pause only when the condition is true.
 			Name: "debug-break-when",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TBoolean},
 				Returns:    []*native.Type{},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					cond, err := args[0].AsConcreteBoolean()
 					if err != nil {
 						return nil, err
@@ -73,17 +73,17 @@ func stepNatives() []native.NativeFunc {
 						pauseAtBreak(r)
 					}
 					return nil, nil
-				},
+				}),
 			}},
 		},
 		{
 			// Parse a source string and step it (the REPL/CLI entry point).
 			Name: "debug-run-stepped",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					src, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -96,7 +96,7 @@ func stepNatives() []native.NativeFunc {
 						return nil, r.AqlError("parse_error", fmt.Sprintf("Debug.run-stepped: %v", perr), "Debug.run-stepped")
 					}
 					return runStepped(r, tokens)
-				},
+				}),
 			}},
 		},
 	}

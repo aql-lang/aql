@@ -17,17 +17,17 @@ package native
 var TimeAsyncModuleNatives = []NativeFunc{
 	{
 		Name: "now",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{},
-			Handler: nowHandler,
+			Impl:    Go(nowHandler),
 			Returns: []*Type{TInstant}, BarrierPos: 0,
 		}},
 	},
 	{
 		Name: "sleep",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger},
-			Handler: sleepHandler,
+			Impl:    Go(sleepHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
@@ -41,9 +41,9 @@ var TimeAsyncModuleNatives = []NativeFunc{
 		// via the module wrapper's trivial delegation, which runs execMatch on
 		// THIS sig — would sub-Run the body eagerly instead of storing it.
 		CompileEffect: CompileQuoteInert,
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Handler: timeoutListHandler, Returns: []*Type{TTimeout}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: timeoutWordHandler, Returns: []*Type{TTimeout}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(timeoutListHandler), Returns: []*Type{TTimeout}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Impl: Go(timeoutWordHandler), Returns: []*Type{TTimeout}, BarrierPos: -1},
 		},
 	},
 	{
@@ -51,23 +51,23 @@ var TimeAsyncModuleNatives = []NativeFunc{
 		// Like timeout: the /q'd body is inert data stored in the Interval, and
 		// the list body is NoEvalArgs so the wrapper does not eagerly sub-Run it.
 		CompileEffect: CompileQuoteInert,
-		Signatures: []NativeSig{
-			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Handler: intervalListHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Handler: intervalAtomHandler, Returns: []*Type{TInterval}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(intervalListHandler), Returns: []*Type{TInterval}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Impl: Go(intervalAtomHandler), Returns: []*Type{TInterval}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "await",
-		Signatures: []NativeSig{
-			{Args: []*Type{TOptions, TList}, NoEvalArgs: map[int]bool{1: true}, Handler: awaitWithOptsHandler, Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, NoEvalArgs: map[int]bool{0: true}, Handler: awaitDefaultHandler, Returns: []*Type{TAny}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TOptions, TList}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(awaitWithOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TList}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(awaitDefaultHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "cancel",
-		Signatures: []NativeSig{
-			{Args: []*Type{TTimeout}, Handler: cancelTimeoutHandler, Returns: []*Type{}, BarrierPos: -1},
-			{Args: []*Type{TInterval}, Handler: cancelIntervalHandler, Returns: []*Type{}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TTimeout}, Impl: Go(cancelTimeoutHandler), Returns: []*Type{}, BarrierPos: -1},
+			{Args: []*Type{TInterval}, Impl: Go(cancelIntervalHandler), Returns: []*Type{}, BarrierPos: -1},
 		},
 	},
 }

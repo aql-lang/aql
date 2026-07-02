@@ -32,11 +32,11 @@ import (
 var constNative = NativeFunc{
 	Name: "const",
 
-	Signatures: []NativeSig{{
-		Args:           []*Type{TAny},
-		Handler:        constHandler,
-		Returns:        []*Type{TAny},
-		RunInCheckMode: true, BarrierPos: -1,
+	Signatures: []Signature{{
+		Args:       []*Type{TAny},
+		Impl:       Go(constHandler, RunInCheck()),
+		Returns:    []*Type{TAny},
+		BarrierPos: -1,
 	}},
 }
 

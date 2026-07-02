@@ -278,7 +278,7 @@ func makeListToMatrixFnDef(wordName string, subReg *native.Registry) native.Valu
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -289,7 +289,7 @@ func makeIntIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Va
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -300,7 +300,7 @@ func makeIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -311,7 +311,7 @@ func makeIntIntNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -322,7 +322,7 @@ func makeMatrixToIntFnDef(wordName string, subReg *native.Registry) native.Value
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TInteger},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -338,7 +338,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TFloat},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -349,7 +349,7 @@ func makeMatrixIntToListFnDef(wordName string, subReg *native.Registry) native.V
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TList},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -360,7 +360,7 @@ func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *native.Registry) nat
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -371,7 +371,7 @@ func makeMatrixNumToMatrixFnDef(wordName string, subReg *native.Registry) native
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TNumber}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -382,7 +382,7 @@ func makeUnaryMatrixFnDef(wordName string, subReg *native.Registry) native.Value
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{TMatrix},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -393,7 +393,7 @@ func makeMatrixToListFnDef(wordName string, subReg *native.Registry) native.Valu
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TList},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -404,7 +404,7 @@ func makeMatrixToDecFnDef(wordName string, subReg *native.Registry) native.Value
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: TMatrix}},
 			Returns: []*native.Type{native.TFloat},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -415,7 +415,7 @@ func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Val
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}, {Type: native.TList}},
 			Returns: []*native.Type{native.TFloat},
-			Body:    []native.Value{native.NewWord(wordName)}, BarrierPos: -1,
+			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
@@ -432,15 +432,15 @@ var MatrixNatives = []native.NativeFunc{
 	{
 		Name: "matrix-make",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TList},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				td, err := matrixFromRows(args[0])
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{tensorValue(TMatrix, td)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
@@ -448,9 +448,9 @@ var MatrixNatives = []native.NativeFunc{
 		// rows cols zeros → args[0]=cols (top), args[1]=rows (deeper)
 		Name: "matrix-zeros",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				r64, err := args[1].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -465,7 +465,7 @@ var MatrixNatives = []native.NativeFunc{
 				}
 				data := make([]float64, rows*cols)
 				return []native.Value{newMatrix(rows, cols, data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
@@ -473,9 +473,9 @@ var MatrixNatives = []native.NativeFunc{
 		// rows cols ones → args[0]=cols (top), args[1]=rows (deeper)
 		Name: "matrix-ones",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				r64, err := args[1].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -493,16 +493,16 @@ var MatrixNatives = []native.NativeFunc{
 					data[i] = 1.0
 				}
 				return []native.Value{newMatrix(rows, cols, data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-eye",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				n64, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -516,16 +516,16 @@ var MatrixNatives = []native.NativeFunc{
 					data[i*n+i] = 1.0
 				}
 				return []native.Value{newMatrix(n, n, data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-fill",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, native.TInteger, native.TNumber},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				r64, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -547,7 +547,7 @@ var MatrixNatives = []native.NativeFunc{
 					data[i] = val
 				}
 				return []native.Value{newMatrix(rows, cols, data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
@@ -555,36 +555,36 @@ var MatrixNatives = []native.NativeFunc{
 	{
 		Name: "matrix-rows",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Rows()))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-cols",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Cols()))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-size",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				return []native.Value{native.NewInteger(int64(m.Rows() * m.Cols()))}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
@@ -592,12 +592,12 @@ var MatrixNatives = []native.NativeFunc{
 	{
 		Name: "matrix-at",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			// Data-last: [col, row, mat]. Under §1.4 stack-top-first matching,
 			// `mat row col matrix-at` binds sig[0]=col (top), sig[1]=row,
 			// sig[2]=mat (deepest).
 			Args: []*native.Type{native.TInteger, native.TInteger, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				c64, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -612,16 +612,16 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows(), m.Cols())
 				}
 				return []native.Value{native.NewFloat(m.Data[row*m.Cols()+col])}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-row",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				r64, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -636,16 +636,16 @@ var MatrixNatives = []native.NativeFunc{
 					elems[j] = native.NewFloat(m.Data[row*m.Cols()+j])
 				}
 				return []native.Value{native.NewList(elems)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-col",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TInteger, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				c64, err := args[0].AsConcreteInteger()
 				if err != nil {
 					return nil, err
@@ -660,7 +660,7 @@ var MatrixNatives = []native.NativeFunc{
 					elems[i] = native.NewFloat(m.Data[i*m.Cols()+col])
 				}
 				return []native.Value{native.NewList(elems)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
@@ -668,9 +668,9 @@ var MatrixNatives = []native.NativeFunc{
 	{
 		Name: "matrix-mat-add",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a := AsTensor(args[0])
 				b := AsTensor(args[1])
 				if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
@@ -681,7 +681,7 @@ var MatrixNatives = []native.NativeFunc{
 					data[i] = a.Data[i] + b.Data[i]
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
@@ -689,9 +689,9 @@ var MatrixNatives = []native.NativeFunc{
 		// a b mat-sub → args[0]=b (top), args[1]=a
 		Name: "matrix-mat-sub",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a := AsTensor(args[1])
 				b := AsTensor(args[0])
 				if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
@@ -702,7 +702,7 @@ var MatrixNatives = []native.NativeFunc{
 					data[i] = a.Data[i] - b.Data[i]
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
@@ -710,9 +710,9 @@ var MatrixNatives = []native.NativeFunc{
 		// a b mat-mul → args[0]=b (top), args[1]=a
 		Name: "matrix-mat-mul",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a := AsTensor(args[1])
 				b := AsTensor(args[0])
 				result, err := matMul(a, b)
@@ -720,16 +720,16 @@ var MatrixNatives = []native.NativeFunc{
 					return nil, err
 				}
 				return []native.Value{tensorValue(TMatrix, result)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-scale",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TNumber, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				s, err := native.AsNumber(args[0])
 				if err != nil {
 					return nil, err
@@ -740,16 +740,16 @@ var MatrixNatives = []native.NativeFunc{
 					data[i] = m.Data[i] * s
 				}
 				return []native.Value{newMatrix(m.Rows(), m.Cols(), data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-mat-emul",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix, TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a := AsTensor(args[0])
 				b := AsTensor(args[1])
 				if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
@@ -760,7 +760,7 @@ var MatrixNatives = []native.NativeFunc{
 					data[i] = a.Data[i] * b.Data[i]
 				}
 				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
@@ -768,9 +768,9 @@ var MatrixNatives = []native.NativeFunc{
 	{
 		Name: "matrix-transpose",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				data := make([]float64, len(m.Data))
 				for i := 0; i < m.Rows(); i++ {
@@ -779,23 +779,23 @@ var MatrixNatives = []native.NativeFunc{
 					}
 				}
 				return []native.Value{newMatrix(m.Cols(), m.Rows(), data)}, nil
-			},
+			}),
 			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-flatten",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				elems := make([]native.Value, len(m.Data))
 				for i, v := range m.Data {
 					elems[i] = native.NewFloat(v)
 				}
 				return []native.Value{native.NewList(elems)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TList}, BarrierPos: -1,
 		}},
 	},
@@ -803,25 +803,25 @@ var MatrixNatives = []native.NativeFunc{
 	{
 		Name: "matrix-sum",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				s := 0.0
 				for _, v := range m.Data {
 					s += v
 				}
 				return []native.Value{native.NewFloat(s)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-trace",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				if m.Rows() != m.Cols() {
 					return nil, fmt.Errorf("trace: not square (%dx%d)", m.Rows(), m.Cols())
@@ -831,23 +831,23 @@ var MatrixNatives = []native.NativeFunc{
 					s += m.Data[i*m.Cols()+i]
 				}
 				return []native.Value{native.NewFloat(s)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "matrix-det",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{TMatrix},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				m := AsTensor(args[0])
 				d, err := matDet(m)
 				if err != nil {
 					return nil, err
 				}
 				return []native.Value{native.NewFloat(d)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},
@@ -855,9 +855,9 @@ var MatrixNatives = []native.NativeFunc{
 	{
 		Name: "matrix-dot",
 
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args: []*native.Type{native.TList, native.TList},
-			Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 				a, _ := native.AsList(args[0])
 				b, _ := native.AsList(args[1])
 				if a.IsNil() || b.IsNil() {
@@ -879,7 +879,7 @@ var MatrixNatives = []native.NativeFunc{
 					s += av * bv
 				}
 				return []native.Value{native.NewFloat(s)}, nil
-			},
+			}),
 			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 		}},
 	},

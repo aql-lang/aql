@@ -4,8 +4,14 @@ package eng
 // signatures. All predefined words (core and extension) use this type
 // for registration.
 //
+// The signatures are plain `Signature` values — the SAME unified dispatch
+// struct AQL `def fn […]` produces. A native author fills the positional
+// `Signature.Args` (+ optional `Patterns`) construction-convenience fields
+// and a Go `Handler`; `RegisterNativeFunc` → `normalizeSig` derives the
+// authoritative `Params` from them. There is no separate native-sig type.
+//
 // There is no "ForwardArgs" / "stack-only" flag at this level — that
-// distinction lives entirely in each `NativeSig.BarrierPos`:
+// distinction lives entirely in each `Signature.BarrierPos`:
 //
 //   - `BarrierPos: BarrierAllForward` (-1)  — default all-forward;
 //     resolved to `len(Args)` at registration. The common case for
@@ -16,14 +22,14 @@ package eng
 //   - `BarrierPos: N`  — explicit barrier at position N (`|`).
 type NativeFunc struct {
 	Name       string
-	Signatures []NativeSig
+	Signatures []Signature
 
 	// CompileEffect is a WORD-level compile-effect declaration OR'd into every
 	// one of this word's signatures at registration. Use it for per-word
 	// classifications that apply to all overloads (a pure module reader, an
 	// island-pure dispatch word, a code-body higher-order word) so the bytecode
 	// recorder reads sig.CompileEffect instead of a name-keyed eng table. A
-	// single overload that needs an extra flag can still set NativeSig.CompileEffect.
+	// single overload that needs an extra flag can still set Signature.CompileEffect.
 	CompileEffect CompileEffect
 
 	// Callable, when non-nil, declares this word as a code-body higher-order
@@ -33,76 +39,4 @@ type NativeFunc struct {
 	// sig.Callable instead of a name-keyed eng table — eng then names no
 	// specific (often module) word. nil = not closure-eligible.
 	Callable *CallableSpec
-}
-
-// NativeSig describes one overload of a native function.
-type NativeSig struct {
-	Args    []*Type
-	Handler Handler
-
-	// FullStack, when true, causes the engine to pass the full resolved
-	// stack (excluding matched args) and to splice the results as a
-	// complete replacement for base..pointer.
-	FullStack bool
-
-	// Patterns holds optional structural patterns for arguments.
-	Patterns map[int]Value
-
-	// QuoteArgs marks arg positions with the /q modifier ("implicit quote").
-	QuoteArgs map[int]bool
-
-	// NoEvalArgs marks arg positions where list auto-evaluation should be
-	// suppressed.
-	NoEvalArgs map[int]bool
-
-	// RawParens marks arg positions where a forward ParenExpr must be
-	// captured RAW (not pre-evaluated), so the handler receives the paren
-	// as code/data. Opt-in (currently only `codequote`); distinct from
-	// NoEvalArgs, which control words use on conditions/bodies that must
-	// still pre-evaluate a paren. See design/PAREN-REPRESENTATION.9.md
-	// Step 4.
-	RawParens map[int]bool
-
-	// FormArgs marks arg positions captured as a raw FORM (word stays a
-	// Word; paren/list/literal captured unevaluated; no resolution, dispatch,
-	// or Word→Atom coercion). See Signature.FormArgs and
-	// design/MACROS-PHASE1.10.md §3.
-	FormArgs map[int]bool
-
-	// NoEvalMapArgs marks arg positions where map auto-evaluation
-	// should be suppressed. See Signature.NoEvalMapArgs.
-	NoEvalMapArgs map[int]bool
-
-	// TypeArgs marks arg positions that must receive a type literal
-	// rather than a concrete value. See Signature.TypeArgs.
-	TypeArgs map[int]bool
-
-	// BarrierPos is the arg index where forward collection must stop.
-	BarrierPos int
-
-	// Fallback marks this as the generic 0-arg fallback handler.
-	Fallback bool
-
-	// Returns lists the declared return types for static type-checking.
-	// See Signature.Returns for details.
-	Returns []*Type
-
-	// ReturnsFn computes the carrier return values for a signature in
-	// static type-check mode. See Signature.ReturnsFn for details.
-	ReturnsFn ReturnsFunc
-
-	// RunInCheckMode runs the Handler even under CheckMode. See
-	// Signature.RunInCheckMode for details.
-	RunInCheckMode bool
-
-	// CheckFullStackFn — see Signature.CheckFullStackFn.
-	CheckFullStackFn CheckFullStackFunc
-
-	// ParkResult, when true, advances the pointer past the handler's
-	// spliced result instead of re-stepping it. See Signature.ParkResult.
-	ParkResult bool
-
-	// CompileEffect declares the word's compile-relevant semantics for the
-	// bytecode recorder. See Signature.CompileEffect.
-	CompileEffect CompileEffect
 }

@@ -208,9 +208,9 @@ func TestCapabilityAvailableToHandler(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "scale",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{TInteger},
-			Handler: func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				c, ok, err := Cap[*calc](reg, "scaler")
 				if err != nil {
 					return nil, err
@@ -220,7 +220,7 @@ func TestCapabilityAvailableToHandler(t *testing.T) {
 				}
 				n, _ := AsInteger(args[0])
 				return []Value{NewInteger(n * c.factor)}, nil
-			},
+			}),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	})
@@ -244,9 +244,9 @@ func TestCapabilityMissingIsNotFatal(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "needs-cap",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args: []*Type{},
-			Handler: func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 				_, ok, err := Cap[string](reg, "ghost")
 				if err != nil {
 					return nil, err
@@ -255,7 +255,7 @@ func TestCapabilityMissingIsNotFatal(t *testing.T) {
 					t.Fatal("missing capability should not be ok")
 				}
 				return []Value{NewString("absent")}, nil
-			}, BarrierPos: -1,
+			}), BarrierPos: -1,
 		}},
 	})
 	r.InitRootContext()

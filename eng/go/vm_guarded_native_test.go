@@ -24,12 +24,12 @@ func TestGuardedNativeCallContract(t *testing.T) {
 		// A single-overload native: dbl [[Integer][Integer]] → n*2.
 		r.RegisterNativeFunc(NativeFunc{
 			Name: "dbl",
-			Signatures: []NativeSig{{
+			Signatures: []Signature{{
 				Args: []*Type{TInteger},
-				Handler: func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					n, _ := AsInteger(a[0])
 					return []Value{NewInteger(n * 2)}, nil
-				},
+				}),
 				Returns: []*Type{TInteger}, BarrierPos: -1,
 			}},
 		})

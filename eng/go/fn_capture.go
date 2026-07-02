@@ -167,9 +167,9 @@ func ComputeCaptures(r *Registry, sig *FnSig) []CapturedBinding {
 	// body-local-value-def leaf: an each body `[def j (cur get 0) j]` must capture
 	// only `cur` (the genuine enclosing binding), not its own `j`.
 	bodyLocals := map[string]bool{}
-	collectBodyLocalDefs(sig.Body, bodyLocals)
+	collectBodyLocalDefs(sig.body(), bodyLocals)
 	seen := map[string]Value{}
-	WalkBodyWords(sig.Body, func(w WordInfo, _ Value) {
+	WalkBodyWords(sig.body(), func(w WordInfo, _ Value) {
 		if w.Name == "" || paramNames[w.Name] || bodyLocals[w.Name] {
 			return
 		}

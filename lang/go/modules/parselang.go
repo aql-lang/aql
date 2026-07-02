@@ -61,13 +61,13 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// prefix [source:(String|Any) opts:Map …]. Mirrors MiniLang.register.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-register",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:          []*native.Type{native.TAtom, native.TFunction},
 			QuoteArgs:     map[int]bool{0: true},
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       parseRegisterHandler(exports, registerIdents),
+			Impl:          native.Go(parseRegisterHandler(exports, registerIdents)),
 			// Check-mode install so `ParseLang.parse_<name>` is statically
 			// resolvable; idempotent on the source-call identity so the compiled
 			// program's runtime re-run does not raise parse_kind_exists.
@@ -81,11 +81,11 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- out-of-band: kinds -------------------------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-kinds",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
-			Handler:    parseKindsHandler(exports),
+			Impl:       native.Go(parseKindsHandler(exports)),
 		}},
 	})
 	exports.Set("kinds", wrapMiniFnDef("parselang-kinds", [][]native.FnParam{{}},
@@ -97,11 +97,11 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// parsers get automatically).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-source",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAny},
 			Returns:    []*native.Type{native.TString},
 			BarrierPos: -1,
-			Handler:    parseSourceHandler,
+			Impl:       native.Go(parseSourceHandler),
 		}},
 	})
 	exports.Set("source", wrapMiniFnDef("parselang-source", [][]native.FnParam{
@@ -305,11 +305,11 @@ func installHostParser(exports *native.OrderedMap, subReg *native.Registry, spec
 	inner := "parselang-host-" + spec.Name
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: inner,
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAny, native.TMap},
 			Returns:    spec.Returns,
 			BarrierPos: -1,
-			Handler:    shell,
+			Impl:       native.Go(shell),
 		}},
 	})
 	params := []native.FnParam{{Type: native.TAny}, {Type: native.TMap}}

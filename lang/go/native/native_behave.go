@@ -31,11 +31,11 @@ import (
 var behaveNative = NativeFunc{
 	Name: "behave",
 
-	Signatures: []NativeSig{
+	Signatures: []Signature{
 		{
 			Args:      []*Type{TAtom, TFunction},
 			QuoteArgs: map[int]bool{0: true},
-			Handler:   behaveHandler,
+			Impl:      Go(behaveHandler),
 			Returns:   []*Type{}, BarrierPos:
 
 			// String form for the behavior name (`behave "compare" fn […]`).
@@ -44,7 +44,7 @@ var behaveNative = NativeFunc{
 
 		{
 			Args:    []*Type{TString, TFunction},
-			Handler: behaveHandler,
+			Impl:    Go(behaveHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		},
 	},
@@ -137,7 +137,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("behave %s: cannot install on builtin type %s", name, target.Leaf())
 	}
 
-	body := append([]Value{}, sig.Body...)
+	body := append([]Value{}, sig.Body()...)
 
 	// Reuse an existing userBehavior wrapper if one is already
 	// installed — adding a new capability (canon on top of compare)

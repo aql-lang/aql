@@ -23,26 +23,26 @@ func freshRegistry(t *testing.T) *eng.Registry {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "add",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TInteger, eng.TInteger},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := eng.AsInteger(args[1])
 				b, _ := eng.AsInteger(args[0])
 				return []eng.Value{eng.NewInteger(a + b)}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 		}},
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "mul",
 
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args: []*eng.Type{eng.TInteger, eng.TInteger},
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				a, _ := eng.AsInteger(args[1])
 				b, _ := eng.AsInteger(args[0])
 				return []eng.Value{eng.NewInteger(a * b)}, nil
-			},
+			}),
 			Returns: []*eng.Type{eng.TInteger}, BarrierPos: -1,
 		}},
 	})

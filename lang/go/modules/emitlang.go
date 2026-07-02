@@ -53,13 +53,13 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// [value:Any opts:Map …] and return a value.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-register",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:          []*native.Type{native.TAtom, native.TFunction},
 			QuoteArgs:     map[int]bool{0: true},
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Handler:       emitRegisterHandler(exports, registerIdents),
+			Impl:          native.Go(emitRegisterHandler(exports, registerIdents)),
 			// Check-mode install so `emit <name>` is statically resolvable;
 			// idempotent on the source-call identity so the compiled program's
 			// runtime re-run does not raise emit_kind_exists. Mirrors
@@ -74,11 +74,11 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- out-of-band: kinds -------------------------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-kinds",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{native.TList},
 			BarrierPos: -1,
-			Handler:    emitKindsHandler(exports),
+			Impl:       native.Go(emitKindsHandler(exports)),
 		}},
 	})
 	exports.Set("kinds", wrapMiniFnDef("emitlang-kinds", [][]native.FnParam{{}},
@@ -87,11 +87,11 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- emit_auto: the natural-format dispatcher ---------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-auto",
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAny, native.TMap},
 			Returns:    []*native.Type{native.TString},
 			BarrierPos: -1,
-			Handler:    emitAutoHandler,
+			Impl:       native.Go(emitAutoHandler),
 		}},
 	})
 	exports.Set("emit_auto", wrapMiniFnDef("emitlang-auto", [][]native.FnParam{
@@ -211,11 +211,11 @@ func installHostEmitter(exports *native.OrderedMap, subReg *native.Registry, spe
 	inner := "emitlang-host-" + spec.Name
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: inner,
-		Signatures: []native.NativeSig{{
+		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAny, native.TMap},
 			Returns:    returns,
 			BarrierPos: -1,
-			Handler:    spec.Handler,
+			Impl:       native.Go(spec.Handler),
 		}},
 	})
 	params := []native.FnParam{{Type: native.TAny}, {Type: native.TMap}}

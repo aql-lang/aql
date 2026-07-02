@@ -81,9 +81,9 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 	return []native.NativeFunc{
 		{
 			Name: "vm-run",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -93,16 +93,16 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run: load sandbox: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "vm-run-sandbox",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -112,16 +112,16 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run-sandbox: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "vm-run-compute",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -131,7 +131,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run-compute: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
@@ -146,9 +146,9 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// design/PARSING.10.md §3. Parse errors raise
 			// [aql/parse_error] with the same message the CLI prints.
 			Name: "vm-parse",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -161,16 +161,16 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					lst := native.NewList(tokens)
 					lst.Quoted = true
 					return []native.Value{lst}, nil
-				},
+				}),
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
 			}},
 		},
 		{
 			Name: "vm-run-with",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TMap},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -180,7 +180,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, fmt.Errorf("running Vm.run-with: %w", err)
 					}
 					return runInSubEngine(parent, code, pol)
-				},
+				}),
 				Returns:    []*native.Type{native.TAny},
 				BarrierPos: -1,
 			}},
@@ -192,9 +192,9 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// (a syntax error rides back as one error-severity diagnostic), so
 			// callers get one uniform shape to inspect.
 			Name: "vm-check",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -204,7 +204,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, err
 					}
 					return []native.Value{res}, nil
-				},
+				}),
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
 			}},
@@ -217,9 +217,9 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// poly / dynamic / meta). Like vm-check it never raises for
 			// uncompilable or malformed input — refusal is data, not an error.
 			Name: "vm-compile",
-			Signatures: []native.NativeSig{{
+			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString},
-				Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -229,7 +229,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, err
 					}
 					return []native.Value{res}, nil
-				},
+				}),
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
 			}},
@@ -499,7 +499,7 @@ func makeRunFnDef(wordName string, subReg *native.Registry) native.Value {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TString}},
 			Returns:    []*native.Type{native.TAny},
-			Body:       []native.Value{native.NewWord(wordName)},
+			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
 			BarrierPos: -1,
 		}},
 		Registry: subReg,
@@ -524,7 +524,7 @@ func makeRunWithFnDef(wordName string, subReg *native.Registry) native.Value {
 				{Type: native.TAny},
 			},
 			Returns:    []*native.Type{native.TAny},
-			Body:       []native.Value{native.NewWord(wordName)},
+			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
 			BarrierPos: 0,
 		}},
 		Registry: subReg,

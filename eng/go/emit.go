@@ -806,7 +806,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 		}
 	}
 	lam, hasOwn := fd.FirstOwnSig()
-	if own != 1 || !hasOwn || len(lam.Body) == 0 || bodyToksHaveSentinel(lam.Body) {
+	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
 		return emitOperand{}, false
 	}
 	inputs := make([]Value, len(lam.Params))
@@ -826,13 +826,13 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit.reg = r
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body, inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		return emitOperand{}, false
 	}
@@ -2130,7 +2130,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 	// returns a single Any approximation instead (len(outs)==1), so it falls
 	// through to recordCallRefusal and the program falls back. Only the compiled
 	// case reaches here with an empty residual.
-	if sig != nil && sig.FnFrame != nil && len(outs) == 0 {
+	if sig != nil && sig.fnFrame() != nil && len(outs) == 0 {
 		return true
 	}
 	// `apply` of a fn VALUE (`…args fn apply`): apply's ReturnsFn returns the
@@ -2176,13 +2176,13 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// calls): the callee is a runtime value, Stage 3 territory.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("anonymous function dispatch (Stage 3)")
-	case sig.RunInCheckMode:
+	case sig.runInCheckMode():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("compile-time word " + word)
-	case sig.FnFrame != nil:
+	case sig.fnFrame() != nil:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("user fn call " + word + " (Stage 3)")
-	case sig.FullStack:
+	case sig.fullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
 	case word == "args" || word == "__pa":
@@ -2282,7 +2282,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Value) ([]emitOperand, bool) {
 	introspect := sig.CompileEffect.Has(CompileReadsFn)
 	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
-	for _, t := range sig.Args {
+	for _, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
 			if inertFn {
 				continue

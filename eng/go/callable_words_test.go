@@ -19,7 +19,7 @@ func TestRegisterNativeFuncCopiesCallable(t *testing.T) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name:     "probe-callable",
 		Callable: spec,
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{Args: []*Type{TList}, BarrierPos: -1},
 			{Args: []*Type{TList, TMap}, BarrierPos: -1},
 		},
@@ -55,7 +55,7 @@ func TestRegisterNativeFuncCopiesCallable(t *testing.T) {
 	// signature — the recorder then refuses a fn-valued body at this word.
 	r.RegisterNativeFunc(NativeFunc{
 		Name:       "probe-plain",
-		Signatures: []NativeSig{{Args: []*Type{TList}, BarrierPos: -1}},
+		Signatures: []Signature{{Args: []*Type{TList}, BarrierPos: -1}},
 	})
 	plain := r.Lookup("probe-plain")
 	if plain == nil {

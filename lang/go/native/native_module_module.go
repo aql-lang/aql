@@ -126,10 +126,10 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.RegisterNativeFunc(NativeFunc{
 		Name: "export",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			{
 				Args: []*Type{TAtom, TMap},
-				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
 						return nil, parent.AqlError("export_error", "export: value must be a concrete map, got type literal", "export")
 					}
@@ -137,12 +137,12 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					_m, _ := AsMap(eargs[1])
 					exportHandler(_as1, _m)
 					return nil, nil
-				},
+				}),
 				Returns: []*Type{}, BarrierPos: -1,
 			},
 			{
 				Args: []*Type{TString, TMap},
-				Handler: func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				Impl: Go(func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
 						return nil, parent.AqlError("export_error", "export: value must be a concrete map, got type literal", "export")
 					}
@@ -150,7 +150,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 					_m, _ := AsMap(eargs[1])
 					exportHandler(_as2, _m)
 					return nil, nil
-				},
+				}),
 				Returns: []*Type{}, BarrierPos: -1,
 			},
 		},

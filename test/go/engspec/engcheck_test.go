@@ -100,12 +100,12 @@ func runCheckRow(input string) (string, error) {
 func registerCheckExtras(r *eng.Registry) {
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "noretq",
-		Signatures: []eng.NativeSig{{
+		Signatures: []eng.Signature{{
 			Args:       []*eng.Type{eng.TInteger},
 			BarrierPos: -1,
-			Handler: func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				return []eng.Value{args[0]}, nil
-			},
+			}),
 			// Deliberately no Returns / ReturnsFn.
 		}},
 	})

@@ -24,63 +24,63 @@ var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "band",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
-			Handler: bandHandler,
+			Impl:    Go(bandHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "bor",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
-			Handler: borHandler,
+			Impl:    Go(borHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "bxor",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
-			Handler: bxorHandler,
+			Impl:    Go(bxorHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "bnot",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger},
-			Handler: bnotHandler,
+			Impl:    Go(bnotHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "bsl",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
-			Handler: bslHandler,
+			Impl:    Go(bslHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "bsr",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
-			Handler: bsrHandler,
+			Impl:    Go(bsrHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "busr",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TInteger, TInteger},
-			Handler: busrHandler,
+			Impl:    Go(busrHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}},
 	},

@@ -212,11 +212,11 @@ func (lsr *LogSinkRegistry) registerFnSink(name string, min LogLevel, fn Value) 
 func logRegisterNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
 		Name: "log-register",
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:       []*Type{TFunction, TAtom, TAtom},
 			Returns:    []*Type{},
 			BarrierPos: -1,
-			Handler: func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[1].AsConcreteAtom()
 				if err != nil {
 					return nil, r.AqlError("log_error", "sink name must be an atom", "Log.register")
@@ -232,7 +232,7 @@ func logRegisterNative(lsr *LogSinkRegistry) NativeFunc {
 					return nil, r.AqlError("sink-exists", err.Error(), "Log.register")
 				}
 				return nil, nil
-			},
+			}),
 		}},
 	}
 }

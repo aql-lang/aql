@@ -33,11 +33,11 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "lt",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("lt", eng.DepLT),
 			{
 				Args:      []*Type{TAny, TAny},
-				Handler:   eng.LtHandler,
+				Impl:      Go(eng.LtHandler),
 				Returns:   []*Type{TBoolean},
 				ReturnsFn: eng.OrderingReturnsFn(eng.LtHandler, TBoolean), BarrierPos: -1,
 			},
@@ -46,11 +46,11 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "gt",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("gt", eng.DepGT),
 			{
 				Args:      []*Type{TAny, TAny},
-				Handler:   eng.GtHandler,
+				Impl:      Go(eng.GtHandler),
 				Returns:   []*Type{TBoolean},
 				ReturnsFn: eng.OrderingReturnsFn(eng.GtHandler, TBoolean), BarrierPos: -1,
 			},
@@ -59,11 +59,11 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "lte",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("lte", eng.DepLTE),
 			{
 				Args:      []*Type{TAny, TAny},
-				Handler:   eng.LteHandler,
+				Impl:      Go(eng.LteHandler),
 				Returns:   []*Type{TBoolean},
 				ReturnsFn: eng.OrderingReturnsFn(eng.LteHandler, TBoolean), BarrierPos: -1,
 			},
@@ -72,11 +72,11 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "gte",
 
-		Signatures: []NativeSig{
+		Signatures: []Signature{
 			eng.MakeDepScalarSig("gte", eng.DepGTE),
 			{
 				Args:      []*Type{TAny, TAny},
-				Handler:   eng.GteHandler,
+				Impl:      Go(eng.GteHandler),
 				Returns:   []*Type{TBoolean},
 				ReturnsFn: eng.OrderingReturnsFn(eng.GteHandler, TBoolean), BarrierPos: -1,
 			},
@@ -89,9 +89,9 @@ var comparisonNatives = []NativeFunc{
 		// [aql/incomparable]; use tcmp for a cross-type total order.
 		Name: "cmp",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:      []*Type{TAny, TAny},
-			Handler:   eng.CmpHandler,
+			Impl:      Go(eng.CmpHandler),
 			Returns:   []*Type{TInteger},
 			ReturnsFn: eng.OrderingReturnsFn(eng.CmpHandler, TInteger), BarrierPos: -1,
 		}},
@@ -105,9 +105,9 @@ var comparisonNatives = []NativeFunc{
 		Name:          "tcmp",
 		CompileEffect: CompileIslandPure,
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Handler: eng.TcmpHandler,
+			Impl:    Go(eng.TcmpHandler),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 			CompileEffect: CompileReadsFn, // type-algebra reads fn-value types, never invokes
 		}},
@@ -115,38 +115,38 @@ var comparisonNatives = []NativeFunc{
 	{
 		Name: "between",
 
-		Signatures: []NativeSig{{
-			Args:           []*Type{TScalar, TScalar, TScalar},
-			TypeArgs:       map[int]bool{2: true},
-			Handler:        eng.BetweenHandler,
-			Returns:        []*Type{TScalar},
-			RunInCheckMode: true, BarrierPos: -1,
+		Signatures: []Signature{{
+			Args:       []*Type{TScalar, TScalar, TScalar},
+			TypeArgs:   map[int]bool{2: true},
+			Impl:       Go(eng.BetweenHandler, RunInCheck()),
+			Returns:    []*Type{TScalar},
+			BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "eq",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Handler: eng.EqHandler,
+			Impl:    Go(eng.EqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "neq",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Handler: eng.NeqHandler,
+			Impl:    Go(eng.NeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "deq",
 
-		Signatures: []NativeSig{{
+		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
-			Handler: eng.DeqHandler,
+			Impl:    Go(eng.DeqHandler),
 			Returns: []*Type{TBoolean}, BarrierPos: -1,
 		}},
 	},

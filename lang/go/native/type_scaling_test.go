@@ -515,15 +515,15 @@ func TestUnifyNoneWithNoneSucceeds(t *testing.T) {
 func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 	// Register signatures at different specificity levels
 	sigs := []Signature{
-		{Args: []*Type{mustTestType(t, "Data")}, Handler: dummyHandler, BarrierPos: -1},                 // depth 1
-		{Args: []*Type{mustTestType(t, "Data/Num")}, Handler: dummyHandler, BarrierPos: -1},             // depth 2
-		{Args: []*Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler, BarrierPos: -1},         // depth 3
-		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler, BarrierPos: -1},     // depth 4
-		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed")}, Handler: dummyHandler, BarrierPos: - // depth 5
+		{Args: []*Type{mustTestType(t, "Data")}, Impl: Go(dummyHandler), BarrierPos: -1},                 // depth 1
+		{Args: []*Type{mustTestType(t, "Data/Num")}, Impl: Go(dummyHandler), BarrierPos: -1},             // depth 2
+		{Args: []*Type{mustTestType(t, "Data/Num/Int")}, Impl: Go(dummyHandler), BarrierPos: -1},         // depth 3
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32")}, Impl: Go(dummyHandler), BarrierPos: -1},     // depth 4
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed")}, Impl: Go(dummyHandler), BarrierPos: - // depth 5
 		1},
-		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Handler: dummyHandler, BarrierPos: // depth 6
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big")}, Impl: Go(dummyHandler), BarrierPos: // depth 6
 		-1},
-		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Handler: dummyHandler, BarrierPos: // depth 7
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32/Signed/Big/Huge")}, Impl: Go(dummyHandler), BarrierPos: // depth 7
 		-1},
 	}
 	SortSignatures(sigs)
@@ -543,10 +543,10 @@ func TestMatchSignatureDeepTypeHierarchy(t *testing.T) {
 func TestMatchSignatureMidLevelType(t *testing.T) {
 	// Only register signatures up to depth 4
 	sigs := []Signature{
-		{Args: []*Type{mustTestType(t, "Data")}, Handler: dummyHandler, BarrierPos: -1},
-		{Args: []*Type{mustTestType(t, "Data/Num")}, Handler: dummyHandler, BarrierPos: -1},
-		{Args: []*Type{mustTestType(t, "Data/Num/Int")}, Handler: dummyHandler, BarrierPos: -1},
-		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32")}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{mustTestType(t, "Data")}, Impl: Go(dummyHandler), BarrierPos: -1},
+		{Args: []*Type{mustTestType(t, "Data/Num")}, Impl: Go(dummyHandler), BarrierPos: -1},
+		{Args: []*Type{mustTestType(t, "Data/Num/Int")}, Impl: Go(dummyHandler), BarrierPos: -1},
+		{Args: []*Type{mustTestType(t, "Data/Num/Int/I32")}, Impl: Go(dummyHandler), BarrierPos: -1},
 	}
 	SortSignatures(sigs)
 
@@ -729,7 +729,7 @@ func TestMatchSignatureEfficiencyThousandsOfSiblings(t *testing.T) {
 	parent := mustTestType(t, "A/B")
 
 	sigs := []Signature{
-		{Args: []*Type{parent}, Handler: dummyHandler, BarrierPos: -1},
+		{Args: []*Type{parent}, Impl: Go(dummyHandler), BarrierPos: -1},
 	}
 
 	start := time.Now()

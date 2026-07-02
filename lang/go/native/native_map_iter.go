@@ -328,14 +328,14 @@ func valsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 var mapNatives = []NativeFunc{
 	{
 		Name: "keys",
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: keysHandler, Returns: []*Type{TList}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TMap}, Impl: Go(keysHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "vals",
-		Signatures: []NativeSig{
-			{Args: []*Type{TMap}, Handler: valsHandler, Returns: []*Type{TList}, BarrierPos: -1},
+		Signatures: []Signature{
+			{Args: []*Type{TMap}, Impl: Go(valsHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 }
