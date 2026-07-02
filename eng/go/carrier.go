@@ -503,6 +503,40 @@ func isLiteralWord(v Value) bool {
 // free statement-position residual would be collected by the NEXT word
 // and corrupt its arity. The dynamic-recovery callers pass false.
 func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value {
+	if out, ok := specialWordResults(r, word, args, pos); ok {
+		return out
+	}
+	narrowDynamicUses(r, word, sig, args)
+	// Per-alternative dispatch for strict disjunct inputs
+	// (design/checker-accuracy-review.10.md A1). matchSignature tested
+	// the disjunct as a single value, so the matched sig may not be
+	// the one runtime dispatch takes for every alternative — e.g.
+	// Integer|String reaches add's [Scalar Scalar]→String catch-all
+	// although the Integer path takes [Number Number]. Resolve each
+	// alternative independently and join the per-alternative returns.
+	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
+		// A strict-disjunct straddle is a runtime-dispatch case, not an
+		// inherent refusal: if the word is a safe poly candidate (core builtin,
+		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
+		// OpCallNativePoly so the VM re-matches the one concrete alternative at
+		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
+		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false) {
+			r.Check.Emit.RecordPoly(word)
+		}
+		return out
+	}
+	out := declaredReturnCarriers(r, word, sig, args, pos)
+	out = applyGradualContagion(r, word, args, out, tailConsumed)
+	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)
+	return out
+}
+
+// specialWordResults handles the words carrierResults special-cases before
+// ordinary return resolution: the `args` frame projection, the `word` splice
+// marker, and compile-time `macroexpand` folding. ok=false falls through to
+// the normal path (including macroexpand's error/trap fall-through, which
+// must still resolve returns and refuse).
+func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]Value, bool) {
 	// `args` inside a compiled fn body projects the frame's params (pushed by
 	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
 	// then folds to param N — a frame local — via tryFoldStaticIndex; bare
@@ -510,7 +544,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// r.Args is empty so `args` falls through to RecordCall's refusal.
 	if word == "args" {
 		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
-			return []Value{top}
+			return []Value{top}, true
 		}
 	}
 	// `word [body]` is a compile-time macro splice: produce the __SP marker as a
@@ -519,7 +553,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// compiles in place — late binding and all. (The `def NAME word …` that binds
 	// the marker emits nothing either; the marker has no runtime existence.)
 	if word == "word" && len(args) == 1 {
-		return []Value{NewSplice(args[0])}
+		return []Value{NewSplice(args[0])}, true
 	}
 	// `macroexpand (mac args…)` is Lisp-style compile-time expansion: the macro
 	// and its operands are static, so run the expansion NOW and bake the
@@ -545,7 +579,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 				toks2, err2 := ExpandMacroForm(r, args[0])
 				r.Defs.Restore(snap)
 				if err2 == nil && constFoldAgrees(NewList(toks2), lst) {
-					return []Value{lst}
+					return []Value{lst}, true
 				}
 			}
 		} else {
@@ -566,25 +600,15 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
-	narrowDynamicUses(r, word, sig, args)
-	// Per-alternative dispatch for strict disjunct inputs
-	// (design/checker-accuracy-review.10.md A1). matchSignature tested
-	// the disjunct as a single value, so the matched sig may not be
-	// the one runtime dispatch takes for every alternative — e.g.
-	// Integer|String reaches add's [Scalar Scalar]→String catch-all
-	// although the Integer path takes [Number Number]. Resolve each
-	// alternative independently and join the per-alternative returns.
-	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
-		// A strict-disjunct straddle is a runtime-dispatch case, not an
-		// inherent refusal: if the word is a safe poly candidate (core builtin,
-		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
-		// OpCallNativePoly so the VM re-matches the one concrete alternative at
-		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
-		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false) {
-			r.Check.Emit.RecordPoly(word)
-		}
-		return out
-	}
+	return nil, false
+}
+
+// declaredReturnCarriers is carrierResults' three-way return resolution:
+// ReturnsFn (invoked with the carrier args), declared Returns (one fresh
+// carrier per type, declared Any riding dynamic), or the missing_returns
+// fallback (a dynamic Any so one unannotated word does not cascade false
+// no_signature errors downstream).
+func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
 	var out []Value
 	switch {
 	case sig.ReturnsFn != nil:
@@ -633,6 +657,16 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			out[i] = c
 		}
 	}
+	return out
+}
+
+// applyGradualContagion widens results derived from dynamic args: the
+// modality flows downstream (a guard discharges it), a single result widens
+// to the union of all reachable overload returns (first-match partition),
+// and a 0-return mutator over a dynamic receiver optimistically models one
+// value where a value-returning sibling overload is reachable (gated to
+// consumed results under a real compile — see carrierResults' doc).
+func applyGradualContagion(r *Registry, word string, args []Value, out []Value, tailConsumed bool) []Value {
 	// Gradual contagion (design/dynamic-modality-report.10.md): a result
 	// derived from a dynamic carrier is itself dynamic, so the modality
 	// flows downstream instead of dying after one dispatch. The bound is
@@ -702,6 +736,17 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			}
 		}
 	}
+	return out
+}
+
+// recordDispatchOutcome is the ONE seam where the check pass hands a
+// resolved dispatch to the bytecode recorder — every check-mode dispatch
+// records through exactly one of the fold/closure/poly/fallback specialists
+// or the generic RecordCall. Pure type analysis lives above this call;
+// everything below it is compile-pass machinery (emit.go). Keeping the
+// boundary to a single named call is the first step of the Emit/check
+// decoupling (checker review, Tier 2).
+func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out []Value, pos SrcPos, ownerReg *Registry) {
 	if !tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordDeferredList(r, sig, out) &&
@@ -712,7 +757,6 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		r.Check.Emit.RecordCall(word, sig, args, out, pos,
 			dynOutNativeOK(r, word, sig, args, out) || quoteInertOK, quoteInertOK)
 	}
-	return out
 }
 
 // tryFoldStaticIndex folds a `get` / `getr` over a CONCRETE list with a STATIC,
@@ -2862,6 +2906,108 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 	return sb.String()
 }
 
+// declaredReturnBail synthesizes the result carriers for an analysis that
+// cannot (or need not) run the body: one fresh carrier per declared return
+// type, or a single dynamic Any when nothing is declared. Shared by the
+// quota and in-flight-recursion short circuits.
+func declaredReturnBail(declared []*Type) []Value {
+	if len(declared) > 0 {
+		out := make([]Value, len(declared))
+		for i, t := range declared {
+			out[i] = NewCarrier(t)
+		}
+		return out
+	}
+	return []Value{NewDynamicCarrier(TAny)}
+}
+
+// refineRecursiveSummary is AnalyseFnBody's bounded Kleene refinement (A2):
+// the first run consumed an Any in-flight bail, so the summary was computed
+// under the weakest hypothesis. Seed the memo with it and re-analyse — the
+// recursive call now reads the seeded hypothesis from the cache — joining
+// each round's result into the hypothesis until stable, up to two extra
+// rounds. Only the final round's diagnostics are kept.
+func refineRecursiveSummary(r *Registry, key string, diagBase int, result []Value, runOnce func() []Value) []Value {
+	for round := 0; round < 2; round++ {
+		r.Check.FnSummaries[key] = result
+		r.Check.TruncateDiagnostics(diagBase)
+		next := runOnce()
+		joined := JoinCarrierStacks(result, next)
+		if carrierStacksEqual(joined, result) {
+			break
+		}
+		result = joined
+	}
+	return result
+}
+
+// runFnBodyOnce performs one full body analysis for AnalyseFnBody: snapshot
+// def-stack depths so any defs the body, captures, or parameter bindings
+// created unwind afterwards. The same snapshot is pushed as the fn-entry
+// baseline so any inner fn/afn construction inside the body sees this scope
+// as its enclosing-fn baseline — without it, ComputeCaptures would treat
+// outer params as if they lived at module/global scope and miss the capture.
+func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []Value, captures []CapturedBinding) []Value {
+	snapshot := r.Defs.Snapshot()
+	r.PushFnBaseline(snapshot)
+	defer r.PopFnBaseline()
+
+	// Expose the params as the per-call args list so a body that reads
+	// `args` / `args.N` resolves them in check mode. The params ARE the
+	// frame's leading locals (0..n-1), so `args.N` folds to that local — at
+	// lowering it becomes PUSH_LOCAL N, no runtime args stack needed
+	// (carrierResults' `args` projection + tryFoldStaticIndex). Pushed
+	// alongside the FnBaseline; popped together.
+	_ = r.Args.Push(NewList(append([]Value(nil), args...)))
+	defer func() { _, _ = r.Args.Pop() }()
+
+	// Install lexical captures first so params (installed below)
+	// shadow same-named captures — innermost binding wins,
+	// matching runtime dispatch.
+	for _, cb := range captures {
+		r.Defs.Push(cb.Name, cb.Value)
+	}
+
+	// Bind named parameters as simple defs (carrier-typed).
+	// Unnamed parameters flow through the stack — push them
+	// before the body.
+	var input []Value
+	for i, arg := range args {
+		if i < len(paramNames) && paramNames[i] != "" {
+			r.Defs.Push(paramNames[i], arg)
+		} else {
+			input = append(input, arg)
+		}
+	}
+	input = append(input, body...)
+
+	sub := New(r)
+	result, err := sub.Run(input)
+	if err != nil {
+		r.Check.AddDiagnostic(CheckDiagnostic{
+			Code:   "fn_body_error",
+			Detail: "fn body analysis error for " + name + ": " + err.Error(),
+			Word:   name,
+		})
+		// A body that ERRORS under an ARMED recording (this analysis is being
+		// compiled into an open fn/closure unit) cannot be faithfully lowered:
+		// the unit would close EMPTY (the error aborted the body before its
+		// residual recorded), and an empty unit SILENTLY DIVERGES from the
+		// interpreter (a `var`-let or higher-order body whose check-mode error
+		// is mere imprecision — e.g. `get` on an element carrier — runs fine at
+		// runtime, so the VM's empty closure raises `body produced no result`
+		// where the interpreter succeeds). Refuse so the program falls back to
+		// the interpreter instead. Only when active: a SUSPENDED (plain) nested
+		// analysis records nothing anyway and must not latch the program.
+		if es := r.Check.Emit; es != nil && es.active() {
+			es.MarkUncompilable("fn body analysis error in " + name + ": " + err.Error())
+		}
+		result = nil
+	}
+	r.Defs.Restore(snapshot)
+	return result
+}
+
 // AnalyseFnBody runs a user-defined fn body through a sub-engine in
 // check mode, treating named parameters as deffed values bound to
 // their arg carriers and unnamed parameters as pre-pushed stack
@@ -2940,14 +3086,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 				Word: name,
 			})
 		}
-		if len(declared) > 0 {
-			out := make([]Value, len(declared))
-			for i, t := range declared {
-				out[i] = NewCarrier(t)
-			}
-			return out
-		}
-		return []Value{NewDynamicCarrier(TAny)}
+		return declaredReturnBail(declared)
 	}
 	if r.Check.FnInflight[key] {
 		// Recursion detected. With declared returns, the declaration
@@ -2956,11 +3095,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		// it, break the cycle with an Any carrier and count the bail
 		// so the enclosing analysis knows its result needs refinement.
 		if len(declared) > 0 {
-			out := make([]Value, len(declared))
-			for i, t := range declared {
-				out[i] = NewCarrier(t)
-			}
-			return out
+			return declaredReturnBail(declared)
 		}
 		r.Check.InflightBails++
 		return []Value{NewCarrier(TAny)}
@@ -3018,66 +3153,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// body sees this scope as its enclosing-fn baseline — without it,
 	// ComputeCaptures would treat outer params as if they lived at
 	// module/global scope and miss the capture.
-	runOnce := func() []Value {
-		snapshot := r.Defs.Snapshot()
-		r.PushFnBaseline(snapshot)
-		defer r.PopFnBaseline()
-
-		// Expose the params as the per-call args list so a body that reads
-		// `args` / `args.N` resolves them in check mode. The params ARE the
-		// frame's leading locals (0..n-1), so `args.N` folds to that local — at
-		// lowering it becomes PUSH_LOCAL N, no runtime args stack needed
-		// (carrierResults' `args` projection + tryFoldStaticIndex). Pushed
-		// alongside the FnBaseline; popped together.
-		_ = r.Args.Push(NewList(append([]Value(nil), args...)))
-		defer func() { _, _ = r.Args.Pop() }()
-
-		// Install lexical captures first so params (installed below)
-		// shadow same-named captures — innermost binding wins,
-		// matching runtime dispatch.
-		for _, cb := range captures {
-			r.Defs.Push(cb.Name, cb.Value)
-		}
-
-		// Bind named parameters as simple defs (carrier-typed).
-		// Unnamed parameters flow through the stack — push them
-		// before the body.
-		var input []Value
-		for i, arg := range args {
-			if i < len(paramNames) && paramNames[i] != "" {
-				r.Defs.Push(paramNames[i], arg)
-			} else {
-				input = append(input, arg)
-			}
-		}
-		input = append(input, body...)
-
-		sub := New(r)
-		result, err := sub.Run(input)
-		if err != nil {
-			r.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "fn_body_error",
-				Detail: "fn body analysis error for " + name + ": " + err.Error(),
-				Word:   name,
-			})
-			// A body that ERRORS under an ARMED recording (this analysis is being
-			// compiled into an open fn/closure unit) cannot be faithfully lowered:
-			// the unit would close EMPTY (the error aborted the body before its
-			// residual recorded), and an empty unit SILENTLY DIVERGES from the
-			// interpreter (a `var`-let or higher-order body whose check-mode error
-			// is mere imprecision — e.g. `get` on an element carrier — runs fine at
-			// runtime, so the VM's empty closure raises `body produced no result`
-			// where the interpreter succeeds). Refuse so the program falls back to
-			// the interpreter instead. Only when active: a SUSPENDED (plain) nested
-			// analysis records nothing anyway and must not latch the program.
-			if es := r.Check.Emit; es != nil && es.active() {
-				es.MarkUncompilable("fn body analysis error in " + name + ": " + err.Error())
-			}
-			result = nil
-		}
-		r.Defs.Restore(snapshot)
-		return result
-	}
+	runOnce := func() []Value { return runFnBodyOnce(r, name, paramNames, body, args, captures) }
 
 	bailsBefore := r.Check.InflightBails
 	diagBase := len(r.Check.Diagnostics)
@@ -3100,16 +3176,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// suspended by fnBodyGuard, so active() is true only for the armed compile.)
 	armed := r.Check.Emit != nil && r.Check.Emit.active()
 	if r.Check.InflightBails > bailsBefore && len(result) > 0 && !armed {
-		for round := 0; round < 2; round++ {
-			r.Check.FnSummaries[key] = result
-			r.Check.TruncateDiagnostics(diagBase)
-			next := runOnce()
-			joined := JoinCarrierStacks(result, next)
-			if carrierStacksEqual(joined, result) {
-				break
-			}
-			result = joined
-		}
+		result = refineRecursiveSummary(r, key, diagBase, result, runOnce)
 	}
 
 	result = stripZeroOutResiduals(r, result)
