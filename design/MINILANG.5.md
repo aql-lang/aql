@@ -688,8 +688,18 @@ over for free: a stack subject, a trailing `{opts}` map (collected by mini's
   its escapes without doubling — `+re/\d+/` is the pattern `\d+`, versus the
   quoted form's `'\\d+'` (the F3 escaping wart, gone for this surface).
 - **Trigger** is `+` immediately followed by a lowercase letter, a non-space
-  delimiter, and a closing delimiter. `+0d5` (a signed bignum) and a bare `+`
-  are left to normal lexing; an unterminated `+re/…` falls through too.
+  delimiter, and at least one source char. `+0d5` (a signed bignum) and a bare
+  `+` are left to normal lexing, as is an empty unterminated source (`+re:`
+  before whitespace).
+- **The closing delimiter is optional** when the source does not contain the
+  delimiter char: an unclosed literal ends at the first whitespace or end of
+  source — `+email:alice@example.com` ≡ `mini email 'alice@example.com'`. The
+  open form's source cannot contain whitespace (close the literal explicitly
+  for that: `+hb/de ad be ef/`). Two bounds keep an unclosed literal from
+  being captured by a stray delimiter char elsewhere: a literal never spans
+  lines, and once the source spans whitespace a closing delimiter only counts
+  at a token end (followed by whitespace / end of line) — so
+  `+re:\d {limit:2}` stays open with source `\d` despite the map's `:`.
 - **Sugar only, opts-less in the literal** — for options, the trailing map
   rides the desugared call (`+re/\d/ {limit:2}`). There is no first-class
   compiled-pattern *value* yet; that remains the Phase-3 compile-hook /

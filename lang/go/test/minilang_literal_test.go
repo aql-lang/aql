@@ -138,6 +138,80 @@ func TestMiniLitNeedsImport(t *testing.T) {
 	}
 }
 
+// --- the OPEN form ----------------------------------------------------------
+
+// TestMiniLitOpenForm: the closing delimiter is optional when the source does
+// not contain the delimiter char — an unclosed literal ends at the first
+// whitespace or end of source (`+email:alice@example.com` shape).
+func TestMiniLitOpenForm(t *testing.T) {
+	cases := []struct{ lit, expl string }{
+		{`+hb:deadbeef`, `mini hb 'deadbeef'`},                                    // end of source terminates
+		{`("a1b2c3" +re:\d {limit:2}).n`, `("a1b2c3" mini re '\\d' {limit:2}).n`}, // whitespace terminates; backslash raw
+		{`("alice@example.com" +re:@example ).fst.m`, `("alice@example.com" mini re '@example').fst.m`},
+		{`("xa:by" +re:a\:b ).fst.m`, `("xa:by" mini re 'a:b').fst.m`}, // escaped delim keeps the open form open
+	}
+	for _, c := range cases {
+		lit, expl := litRun(t, c.lit), litRun(t, c.expl)
+		if lit != expl {
+			t.Errorf("%s = %v but %s = %v (must agree)", c.lit, lit, c.expl, expl)
+		}
+	}
+}
+
+// TestMiniLitOpenFormClosedPrecedence: a source char equal to the delimiter
+// CLOSES the literal (first occurrence wins) — the open form only exists when
+// the line has no closing delimiter. The whitespace-grouped closed sources
+// (`+hb/de ad be ef/`) keep working for the same reason.
+func TestMiniLitOpenFormClosedPrecedence(t *testing.T) {
+	if got := litRun(t, `("aXbXc" +re:X:).n`); got != int64(2) {
+		t.Errorf("+re:X: must be the closed form with src 'X': n = %v, want 2", got)
+	}
+}
+
+// TestMiniLitOpenFormWhitespaceStops: the open source ends at the first
+// whitespace — what follows is lexed normally (here, an undefined word).
+func TestMiniLitOpenFormWhitespaceStops(t *testing.T) {
+	a, _ := lang.New()
+	if _, err := a.Run(miniImp + `+hb:dead beef`); err == nil {
+		t.Fatal("expected undefined_word for the stranded `beef`, got nil")
+	} else if !strings.Contains(err.Error(), "undefined_word") {
+		t.Fatalf("error = %v, want undefined_word", err)
+	}
+}
+
+// TestMiniLitOpenFormNewlineStops: a literal never spans lines — the open
+// source also ends at a newline, and an unclosed literal is NOT captured by a
+// stray delimiter char on a later line.
+func TestMiniLitOpenFormNewlineStops(t *testing.T) {
+	lit := litRun(t, "+hb:dead\ntypeof")
+	expl := litRun(t, "mini hb 'dead'\ntypeof")
+	if lit != expl {
+		t.Errorf("newline-terminated open form = %v, explicit = %v (must agree)", lit, expl)
+	}
+	// A `:` on a LATER line must not close this line's literal into a giant
+	// closed source — the scan is line-bounded, so the literal stays open.
+	lit2 := litRun(t, "+hb:deadbeef drop\ndef m {a:1} m.a")
+	if lit2 != int64(1) {
+		t.Errorf("open form captured across lines: got %v, want 1", lit2)
+	}
+}
+
+// TestMiniLitOpenFormEmpty: an empty open source (`+name:` before whitespace /
+// end of source) is NOT a literal — it falls to normal lexing rather than
+// expanding to `mini name ”`. Concretely, `+re: 'x'` is jsonic's implicit
+// pair (a map with key `+re`), and a bare `+re:` is a plain syntax error.
+func TestMiniLitOpenFormEmpty(t *testing.T) {
+	if got := litRun(t, `+re: 'x'`); got != "{+re:'x'}" {
+		t.Errorf("+re: 'x' = %v, want the implicit-pair map {+re:'x'} (not a mini literal)", got)
+	}
+	a, _ := lang.New()
+	if _, err := a.Run(miniImp + `+re:`); err == nil {
+		t.Fatal("expected a syntax error from a bare `+re:`, got nil")
+	} else if strings.Contains(err.Error(), "mini_") {
+		t.Fatalf("`+re:` reached the mini machinery (%v); an empty open source must fall to normal lexing", err)
+	}
+}
+
 // TestMiniLitNotTriggered: a bare `+` not followed by a name+delimiter is left
 // to normal lexing (no false trigger).
 func TestMiniLitNotTriggered(t *testing.T) {

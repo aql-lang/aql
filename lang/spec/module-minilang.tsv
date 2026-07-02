@@ -82,6 +82,21 @@ import "aql:minilang"  +bb/0100110/	ERROR:mini_parse_error	a non-multiple-of-8 b
 import "aql:minilang"  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the same expansion-time error as `mini nope`
 +re/[a-z]+/	ERROR:mini_unknown_lang	the shortcut needs the import too (no auto-import)
 #
+# §6b  the OPEN form — the closing delimiter is optional when the source does not
+#      contain the delimiter char: an unclosed literal ends at the first whitespace
+#      (or end of source), so `+email:alice@example.com` ≡ `mini email 'alice@example.com'`.
+#      An open source cannot contain whitespace (close the literal explicitly for that —
+#      `+hb/de ad be ef/` needs its delimiters); a source char equal to the delimiter
+#      CLOSES there (first occurrence wins) unless backslash-escaped. A literal never
+#      spans lines.
+import "aql:minilang"  +hb:deadbeef	Bytes<de ad be ef>	open form: no closing delimiter needed at end of source
+import "aql:minilang"  ("a1b2c3" +re:\d {limit:2}).n	2	open form ends at whitespace — the opts map still collects, backslashes still raw
+import "aql:minilang"  def r ("alice@example.com" +re:@example ) end  r.fst.m	'@example'	the motivating shape: a source full of punctuation, no delimiter collision
+import "aql:minilang"  ("xa:by" +re:a\:b ).fst.m	'a:b'	an escaped delimiter keeps the open form open
+import "aql:minilang"  ("aXbXc" +re:X:).n	2	a source char equal to the delimiter closes the literal — this is the CLOSED form, src 'X'
+import "aql:minilang"  +hb:dead beef	ERROR:undefined_word	the open source ends at whitespace: `beef` is a separate (undefined) word
+import "aql:minilang"  +re:	ERROR:syntax_error	an empty open source is not a literal — `+re:` falls to normal lexing
+#
 # §7  compiled mini-languages — an optional expansion-time compile hook (design §13).
 #     A kind keeps its transducer (the semantic reference + fallback) and adds a
 #     compiler that runs at the `mini` site when src is concrete, splicing tokens
