@@ -159,13 +159,13 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TAny}, nil, subReg))
 
-	// ---- kind: m — traditional maths formula evaluator -----------------
+	// ---- kind: math — traditional maths formula evaluator --------------
 	// [src opts] → [Number]. Evaluate a formula like `x*y-z^2` (operators
 	// + - * / % ^, unary +/-, parens) whose variables are bound by the
 	// named params (opts). Backed by the tabnas/expr Pratt parser; numeric
 	// coercion follows AQL's integer/float domain rules. See minilang_math.go.
 	subReg.RegisterNativeFunc(native.NativeFunc{
-		Name: "minilang-m",
+		Name: "minilang-math",
 		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TNumber},
@@ -173,7 +173,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniMathHandler),
 		}},
 	})
-	exports.Set("lang_m", wrapMiniFnDef("minilang-m", [][]native.FnParam{stdPrefix},
+	exports.Set("lang_math", wrapMiniFnDef("minilang-math", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TNumber}, nil, subReg))
 
 	// ---- kind: hb — hex Bytes literal ----------------------------------

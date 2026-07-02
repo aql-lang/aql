@@ -21,14 +21,14 @@ func TestMiniMathEval(t *testing.T) {
 		expr string
 		want any
 	}{
-		{`mini m 'x*y-z^2' {x:3 y:4 z:2}`, int64(8)}, // 12 - 4
-		{`mini m 'x*y-z^2' {x:3 y:4 z:2.0}`, "8.0"},  // a Float param → Float result
-		{`mini m '2^3^2' {}`, int64(512)},            // right-assoc: 2^(3^2)
-		{`mini m '-z^2' {z:3}`, int64(-9)},           // ^ tighter than unary -: -(9)
-		{`mini m '(x+y)*z' {x:1 y:2 z:3}`, int64(9)}, // parens
-		{`mini m 'x/y' {x:5 y:2}`, int64(2)},         // integer division truncates
-		{`mini m 'x/y' {x:5.0 y:2}`, "2.5"},          // a Float operand → real division
-		{`mini m 'x' {x:42}`, int64(42)},             // bare variable
+		{`mini math 'x*y-z^2' {x:3 y:4 z:2}`, int64(8)}, // 12 - 4
+		{`mini math 'x*y-z^2' {x:3 y:4 z:2.0}`, "8.0"},  // a Float param → Float result
+		{`mini math '2^3^2' {}`, int64(512)},            // right-assoc: 2^(3^2)
+		{`mini math '-z^2' {z:3}`, int64(-9)},           // ^ tighter than unary -: -(9)
+		{`mini math '(x+y)*z' {x:1 y:2 z:3}`, int64(9)}, // parens
+		{`mini math 'x/y' {x:5 y:2}`, int64(2)},         // integer division truncates
+		{`mini math 'x/y' {x:5.0 y:2}`, "2.5"},          // a Float operand → real division
+		{`mini math 'x' {x:42}`, int64(42)},             // bare variable
 	}
 	for _, c := range cases {
 		t.Run(c.expr, func(t *testing.T) {
@@ -43,14 +43,14 @@ func TestMiniMathEval(t *testing.T) {
 	}
 }
 
-// TestMiniMathDesugar proves `mini m` is sugar for the standard call.
+// TestMiniMathDesugar proves `mini math` is sugar for the standard call.
 func TestMiniMathDesugar(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	sugar := runLast(t, a, mImp+`mini m 'x*y-z^2' {x:3 y:4 z:2}`)
-	desugared := runLast(t, a, mImp+`MiniLang.lang_m 'x*y-z^2' {x:3 y:4 z:2} end`)
+	sugar := runLast(t, a, mImp+`mini math 'x*y-z^2' {x:3 y:4 z:2}`)
+	desugared := runLast(t, a, mImp+`MiniLang.lang_math 'x*y-z^2' {x:3 y:4 z:2} end`)
 	if sugar != desugared || sugar != int64(8) {
 		t.Fatalf("sugar=%v desugared=%v must agree (8)", sugar, desugared)
 	}
@@ -61,11 +61,11 @@ func TestMiniMathDesugar(t *testing.T) {
 // own evaluator hits on a degenerate AST.
 func TestMiniMathErrors(t *testing.T) {
 	cases := []struct{ name, src, want string }{
-		{"unknown variable", `mini m 'x+q' {x:1}`, "mini_eval_error"},
-		{"division by zero", `mini m 'x/y' {x:1 y:0}`, "mini_eval_error"},
-		{"trailing operator", `mini m 'x +' {x:1}`, "mini_syntax_error"},
-		{"unbalanced paren", `mini m '(x+y' {x:1 y:2}`, "mini_syntax_error"},
-		{"non-numeric var", `mini m 'x' {x:'hi'}`, "mini_error"},
+		{"unknown variable", `mini math 'x+q' {x:1}`, "mini_eval_error"},
+		{"division by zero", `mini math 'x/y' {x:1 y:0}`, "mini_eval_error"},
+		{"trailing operator", `mini math 'x +' {x:1}`, "mini_syntax_error"},
+		{"unbalanced paren", `mini math '(x+y' {x:1 y:2}`, "mini_syntax_error"},
+		{"non-numeric var", `mini math 'x' {x:'hi'}`, "mini_error"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -10,7 +10,7 @@ func init() {
 			"anchored whole-subject match (`*` any run, `?` one char, `**`/`*?` literal `*`/`?`). " +
 			"Returns the stack subject if it matches else None; filters a List to matching " +
 			"elements and a Map to entries whose key matches.",
-		"lang_m": "Traditional maths formula: `mini m '<formula>' {vars}` — evaluate an " +
+		"lang_math": "Traditional maths formula: `mini math '<formula>' {vars}` — evaluate an " +
 			"arithmetic expression (operators + - * / % ^, unary +/-, parens; ^ is " +
 			"right-associative and binds tighter than * /) whose variables are bound by the " +
 			"named params. Numeric coercion follows AQL: all-integer operands stay Integer " +

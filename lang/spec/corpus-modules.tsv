@@ -99,7 +99,7 @@ import "aql:minilang" end MiniLang.lang_bf 'a' {a:1,b:2} 'b'	''	minilang:lang_bf
 import "aql:minilang" end MiniLang.lang_bf 'c' {c:3,d:4}	''	minilang:lang_bf
 import "aql:minilang" end MiniLang.lang_gex 'a' {a:1,b:2} 2	None	minilang:lang_gex
 import "aql:minilang" end MiniLang.lang_jp 'a' {a:1,b:2} 2	[]	minilang:lang_jp
-import "aql:minilang" end MiniLang.lang_m 'a' {a:1,b:2}	1	minilang:lang_m
+import "aql:minilang" end MiniLang.lang_math 'a' {a:1,b:2}	1	minilang:lang_math
 import "aql:minilang" end MiniLang.lang_re 'a' {a:1,b:2} 'b'	{ok:false ms:[] n:0}	minilang:lang_re
 import "aql:query" end Query.select ['a','b']	[]	query:select
 import "aql:rand" end Rand.int 2 3	2	rand:int

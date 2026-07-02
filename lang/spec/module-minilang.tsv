@@ -27,7 +27,7 @@ import "aql:minilang"  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
 import "aql:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  register / kinds — out-of-band exports (not mini-callable)
-import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q m/q hb/q bb/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
+import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
 import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
 # Memoising an AQL kind: built-in re/xp cache their compiled artifact in a private
@@ -139,20 +139,20 @@ import "aql:minilang"  if ("bx" +gex/a*/) ['Y'] ['N']	'N'	None is falsy, so a no
 #     bound by the named params; operators + - * / % ^ (power, right-assoc),
 #     unary +/-, and parens. Numeric coercion follows AQL: all-integer operands
 #     stay Integer (division truncates like `div`), any Float promotes to Float.
-import "aql:minilang"  mini m 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
-import "aql:minilang"  mini m 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (AQL coercion)
-import "aql:minilang"  mini m '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
-import "aql:minilang"  mini m '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
-import "aql:minilang"  mini m '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
-import "aql:minilang"  mini m 'x/y' {x:5 y:2}	2	integer operands → truncating integer division, like `div`
-import "aql:minilang"  mini m 'x/y' {x:5.0 y:2}	2.5	a Float operand → real division
-import "aql:minilang"  mini m 'x' {x:42}	42	a bare variable resolves to its param
-import "aql:minilang"  (MiniLang.lang_m 'x*y-z^2' {x:3 y:4 z:2} end)	8	mini is sugar — the desugared standard call is equivalent
+import "aql:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
+import "aql:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (AQL coercion)
+import "aql:minilang"  mini math '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
+import "aql:minilang"  mini math '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
+import "aql:minilang"  mini math '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
+import "aql:minilang"  mini math 'x/y' {x:5 y:2}	2	integer operands → truncating integer division, like `div`
+import "aql:minilang"  mini math 'x/y' {x:5.0 y:2}	2.5	a Float operand → real division
+import "aql:minilang"  mini math 'x' {x:42}	42	a bare variable resolves to its param
+import "aql:minilang"  (MiniLang.lang_math 'x*y-z^2' {x:3 y:4 z:2} end)	8	mini is sugar — the desugared standard call is equivalent
 #
 # §m  negatives
-import "aql:minilang"  mini m 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
-import "aql:minilang"  mini m 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
-import "aql:minilang"  mini m 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error
+import "aql:minilang"  mini math 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
+import "aql:minilang"  mini math 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
+import "aql:minilang"  mini math 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error
 #
 # §jpq  jp — JSONPath (github.com/ohler55/ojg) — and jq — jq filter
 #       (github.com/itchyny/gojq). The document is the stack subject and may be
@@ -192,3 +192,4 @@ import "aql:minilang"  <r><a/></r> MiniLang.lang_xp '//a' {} end	[<a/>]	mini is 
 # §xp  negatives
 import "aql:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPath is a loud parse error
 import "aql:minilang"  {a:1} mini xp '//a' {}	ERROR:uncalled_function	the document must be a Node/Xml — a Map subject does not match the xp signature, so the call is left uncalled
+import "aql:minilang"  mini m 'x' {x:1}	ERROR:mini_unknown_lang	the maths kind was renamed: `m` is gone, use `mini math` (negative twin)
