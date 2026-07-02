@@ -288,27 +288,6 @@ func init() {
 	TUrlon.Behavior = micronBehavior{kind: TUrlon}
 }
 
-// MicronFromString parses a Micron literal: each builtin leaf's string
-// constructor is tried in turn — Emailon, Urlon, then Pathon — and the
-// FIRST match wins. The order is most-specific-first: Pathon's string
-// form accepts any whitespace-free source, so it is the catch-all and
-// the parse never fails on a non-empty source. The `+m:…` minilang
-// literal (aql:minilang, kind micron / short form m) routes here.
-func MicronFromString(s string) (Value, error) {
-	src := NewString(s)
-	if out, err := makeEmailon(src); err == nil {
-		return out[0], nil
-	}
-	if out, err := makeUrlon(src); err == nil {
-		return out[0], nil
-	}
-	out, err := makePathon(src, false)
-	if err != nil {
-		return Value{}, err
-	}
-	return out[0], nil
-}
-
 // MicronProperty reads a named property of a Micron instance: the
 // primary fields, plus the synthesized derived properties — Pathon's
 // parts/abs, Emailon's address, Urlon's href. Derived values are

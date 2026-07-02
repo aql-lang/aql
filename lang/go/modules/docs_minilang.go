@@ -36,8 +36,8 @@ func init() {
 			"Whitespace and `_` are ignored. A non-binary digit or a non-multiple-of-8 length " +
 			"raises mini_parse_error.",
 		"lang_micron": "Micron literal: `+m:alice@example.com` (≡ mini micron '…' ≡ mini m '…') — " +
-			"parse the source with each builtin Micron leaf's string constructor in turn " +
-			"(Emailon, then Urlon, then Pathon) and return the first match. Pathon accepts any " +
+			"parse the source with the ONE merged tabnas grammar built from each builtin Micron leaf's literal grammar " +
+			"(Emailon, then Urlon, then Pathon) — the matching shape decides the type. Pathon accepts any " +
 			"whitespace-free source, so it is the catch-all (`+m:a/b` is a Pathon). URL sources " +
 			"contain `:` and `/` — pick a delimiter outside the source: `+m|https://x.com/a`.",
 		"lang_m": "Short form of the micron kind — see lang_micron. `+m:alice@example.com` " +

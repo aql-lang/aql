@@ -56,6 +56,8 @@ github.com/tabnas/multisource/go v0.3.1 h1:1xiT4usHGXJFoZqly7lyf4INjevgOKAmQPV6M
 github.com/tabnas/multisource/go v0.3.1/go.mod h1:1jwWdrNmfu2KqYgfP5gkQcj9G6i/2TTKZFL4MqqJfFo=
 github.com/tabnas/parser/go v0.2.0 h1:jpnX0kXTCX/1EKnL242UYhVcNVCdFq8JN54BNrz8nTg=
 github.com/tabnas/parser/go v0.2.0/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
+github.com/tabnas/parser/go v0.2.1-0.20260702232222-51f10e97d367 h1:5wnOQxa6HwTThMUG3LO00UwC0IpeCNjXnNgamxHnU+8=
+github.com/tabnas/parser/go v0.2.1-0.20260702232222-51f10e97d367/go.mod h1:WrlfEVyZ1QjEIowWiyEu3K1iHj7wxuPut5zoH9Trehk=
 github.com/tabnas/path/go v0.2.0 h1:WQ3Wep8tD5KHl5nu3M6zYE3zODRJxxaa+FbXAJF3Uz0=
 github.com/tabnas/path/go v0.2.0/go.mod h1:BX3CmO21Rhno8DxJnWMXNc9hlqoV1cmuG6efI7QZIio=
 github.com/tabnas/toml/go v0.2.0 h1:L4AUX7T+SZrctda4fwCrNJ1QsBOucKp231aMisARpYM=

@@ -210,11 +210,13 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// ---- kind: micron (short form: m) — Micron literal ------------------
 	// [src opts] → [Micron]. `+m:alice@example.com` (≡ mini m
-	// 'alice@example.com') parses the source with each builtin Micron
-	// leaf's STRING constructor in turn — Emailon, Urlon, then Pathon —
-	// and the first match wins (eng.MicronFromString). Pathon's string
-	// form accepts any whitespace-free source, so it is the catch-all:
-	// `+m:a/b` is a Pathon, and a micron literal never fails to parse.
+	// 'alice@example.com') parses the source with the ONE merged tabnas
+	// grammar (eng.MicronFromString): each builtin Micron leaf owns a
+	// tabnas literal grammar and the (*Tabnas).Merge combination
+	// dispatches on shape — Emailon, then Urlon, then Pathon — so the
+	// literal returns the appropriate type. Pathon's grammar accepts any
+	// whitespace-free source, so it is the catch-all: `+m:a/b` is a
+	// Pathon, and a micron literal never fails to parse.
 	// URL sources contain `:` and `/`, so pick a delimiter outside the
 	// source — `+m|https://x.com/a` — or the first `:`/`/` closes the
 	// literal early (the standard closed-form rule).
@@ -588,8 +590,9 @@ func miniDropGrouping(s string) string {
 }
 
 // miniMicronHandler — args[0]=src, args[1]=opts (none defined). Parses
-// the source with each builtin Micron leaf's string constructor in
-// turn — Emailon, Urlon, then Pathon — first match wins.
+// the source with the merged Micron literal grammar (each leaf's
+// tabnas grammar, merged — eng/go/micron_grammar.go): the matching
+// shape decides the type — Emailon, then Urlon, then Pathon.
 func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
