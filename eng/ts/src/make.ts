@@ -12,7 +12,7 @@ import {
   TFloat,
   TInteger,
   TNumber,
-  TPath,
+  TPathon,
   TString,
 } from './type.ts'
 import {
@@ -55,16 +55,16 @@ export function valToString(v: Value): string {
 /**
  * Build a path value from a string (slash-separated) or a list of
  * parts. Slash runs collapse, a leading slash means absolute, and an
- * explicit `abs` override wins. Mirrors makePath in eng/go.
+ * explicit `abs` override wins. Mirrors makePathon in eng/go.
  */
-export function makePath(src: Value, absOverride: boolean | undefined): Value[] {
+export function makePathon(src: Value, absOverride: boolean | undefined): Value[] {
   let text: string
   if (Array.isArray(src.data)) {
     text = (src.data as Value[]).map((p) => valToString(p)).join('/')
   } else if (src.vType.matches(TString)) {
     text = valToString(src)
   } else {
-    throw new AqlError('type_error', `make: Path source must be a list or string, got ${src.toString()}`)
+    throw new AqlError('type_error', `make: Pathon source must be a list or string, got ${src.toString()}`)
   }
   let abs = text.startsWith('/')
   const segments = text.split('/').filter((s) => s !== '')
@@ -74,8 +74,8 @@ export function makePath(src: Value, absOverride: boolean | undefined): Value[] 
 
 /** Convert a source value to a target scalar type. Mirrors MakeConvert. */
 export function makeConvert(src: Value, targetType: AqlType): Value {
-  if (targetType.equal(TPath)) {
-    return makePath(src, undefined)[0]!
+  if (targetType.equal(TPathon)) {
+    return makePathon(src, undefined)[0]!
   }
   if (targetType.matches(TString)) {
     return newString(valToString(src))
@@ -126,7 +126,7 @@ export function makeScalarHandler(args: Value[]): Value[] {
     throw new AqlError('type_error', `make: expected a type literal, got ${target.toString()}`)
   }
   const targetType = target.vType
-  if (targetType.equal(TPath)) return makePath(src, undefined)
+  if (targetType.equal(TPathon)) return makePathon(src, undefined)
   if (src.vType.matches(targetType)) return [src]
   return [makeConvert(src, targetType)]
 }
@@ -140,13 +140,13 @@ export function makeScalarOptsHandler(args: Value[]): Value[] {
   const target = args[0]!
   const opts = args[1]!
   const src = args[2]!
-  if (target.data === null && target.vType.equal(TPath)) {
+  if (target.data === null && target.vType.equal(TPathon)) {
     let abs: boolean | undefined
     if (opts.data instanceof OrderedMap) {
       const a = opts.asMap().get('abs')
       if (a !== undefined && a.vType.matches(TBoolean)) abs = a.asBoolean()
     }
-    return makePath(src, abs)
+    return makePathon(src, abs)
   }
   return makeScalarHandler([target, src])
 }

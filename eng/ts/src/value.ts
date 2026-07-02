@@ -23,7 +23,7 @@ import {
   TList,
   TMap,
   TMark,
-  TPath,
+  TPathon,
   TMove,
   TNone,
   TParenExpr,
@@ -457,14 +457,14 @@ export function newXmlInterp(t: XmlTmpl): Value {
 }
 
 /** Path payload: normalised segments + absolute flag. */
-export interface PathInfo {
+export interface PathonInfo {
   segments: string[]
   abs: boolean
 }
 
-/** Construct a path value (VType Scalar/Path). */
+/** Construct a path value (VType Scalar/Micron/Pathon). */
 export function newPath(segments: string[], abs: boolean): Value {
-  return new Value(TPath, { segments, abs } satisfies PathInfo)
+  return new Value(TPathon, { segments, abs } satisfies PathonInfo)
 }
 
 export function newWord(name: string): Value {

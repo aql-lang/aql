@@ -134,16 +134,16 @@ func (m *OrderedMap) Delete(key string) bool {
 	return true
 }
 
-// PathInfo holds the data for a Scalar/Path value.
+// PathonInfo holds the data for a Scalar/Micron/Pathon value.
 // A Path represents a filesystem path as a sequence of parts.
 // Absolute paths start from the root (Abs = true).
-type PathInfo struct {
+type PathonInfo struct {
 	Parts []string // path segments (e.g. ["usr", "local", "bin"])
 	Abs   bool     // true for absolute paths (e.g. /usr/local/bin)
 }
 
 // String returns the OS path string for this path.
-func (p PathInfo) String() string {
+func (p PathonInfo) String() string {
 	joined := strings.Join(p.Parts, "/")
 	if p.Abs {
 		return "/" + joined
@@ -1413,11 +1413,11 @@ func SetAtomReferent(v Value, ref Value) Value {
 	return v
 }
 
-// NewPath creates a Path value from parts and an absolute flag.
-func NewPath(parts []string, abs bool) Value {
+// NewPathon creates a Pathon value from parts and an absolute flag.
+func NewPathon(parts []string, abs bool) Value {
 	p := make([]string, len(parts))
 	copy(p, parts)
-	return NewValueRaw(TPath, PathPayload{Info: PathInfo{Parts: p, Abs: abs}})
+	return NewValueRaw(TPathon, PathonPayload{Info: PathonInfo{Parts: p, Abs: abs}})
 }
 
 // NewTypeLiteral returns the type t expressed as a Value. After the
@@ -2228,18 +2228,18 @@ func flatInstanceParts(v Value) (fields *OrderedMap, schemaKeys []string, ok boo
 }
 
 // IsAtom reports whether this value is an atom.
-// IsPath reports whether this value is a Path.
-func IsPath(v Value) bool {
-	_, ok := v.Data.(PathPayload)
-	return ok && v.Parent.Equal(TPath)
+// IsPathon reports whether this value is a Path.
+func IsPathon(v Value) bool {
+	_, ok := v.Data.(PathonPayload)
+	return ok && v.Parent.Equal(TPathon)
 }
 
-// AsPath returns the PathInfo, or an error if the value is not a path.
-func AsPath(v Value) (PathInfo, error) {
-	if pp, ok := v.Data.(PathPayload); ok {
+// AsPathon returns the PathonInfo, or an error if the value is not a path.
+func AsPathon(v Value) (PathonInfo, error) {
+	if pp, ok := v.Data.(PathonPayload); ok {
 		return pp.Info, nil
 	}
-	return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
+	return PathonInfo{}, fmt.Errorf("AsPathon: not a path value (got %T)", v.Data)
 }
 
 func IsAtom(v Value) bool {
@@ -2771,8 +2771,8 @@ func kernelFormatDefault(v Value) string {
 	// via their per-Type Behavior installed by
 	// coretype_format_behaviors.go and dispatched at the top of this
 	// function. Their old switch arms have been removed.
-	case IsPath(v):
-		_as6, _ := AsPath(v)
+	case IsPathon(v):
+		_as6, _ := AsPathon(v)
 		return _as6.String()
 	// TList rendering moved to listFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function

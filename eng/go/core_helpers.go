@@ -1460,7 +1460,7 @@ func PredicateInputType(v Value) *Type {
 
 // IsLiteralTypeBody reports whether v can be installed as a "value-
 // is-a-type" type body — the singleton-type interpretation. Scalar
-// literals (Integer / Float / String / Boolean / Atom / Path / the
+// literals (Integer / Float / String / Boolean / Atom / Pathon / the
 // `none` value), and concrete lists / maps qualify. Used by
 // installType to relax the strict IsTypeBody check in a way that
 // doesn't pollute the inspect / fn-shape paths.
@@ -1475,7 +1475,7 @@ func IsLiteralTypeBody(v Value) bool {
 		v.Parent.ConformsTo(TString),
 		v.Parent.ConformsTo(TBoolean),
 		v.Parent.ConformsTo(TAtom),
-		v.Parent.Equal(TPath):
+		v.Parent.Equal(TPathon):
 		return v.Data != nil
 	}
 	if v.Parent.Equal(TList) && v.Data != nil {

@@ -650,7 +650,7 @@ func TestCheckDisjunctWidthCap(t *testing.T) {
 	}
 	scalars := map[string]bool{
 		"Scalar": true, "Number": true, "Integer": true, "Float": true,
-		"String": true, "Boolean": true, "Atom": true, "Path": true,
+		"String": true, "Boolean": true, "Atom": true, "Micron": true, "Pathon": true,
 	}
 	if !scalars[got] {
 		t.Fatalf("expected Scalar-family ancestor, got %q", got)

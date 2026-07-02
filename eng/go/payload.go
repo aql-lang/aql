@@ -90,8 +90,8 @@ type AtomPayload struct {
 	Referent *Value
 }
 
-// PathPayload wraps a PathInfo for a Scalar/Path value.
-type PathPayload struct{ Info PathInfo }
+// PathonPayload wraps a PathonInfo for a Scalar/Micron/Pathon value.
+type PathonPayload struct{ Info PathonInfo }
 
 // ListPayload carries the standard []Value payload for a Node/List
 // value. Constructed by NewList. Wrapping []Value rather than
@@ -306,7 +306,7 @@ func (HostTypeBody) hostTypeBody() {}
 //
 // Wrapper variants:
 //   IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
-//   PathPayload, ListPayload, MapPayload, ParenExprPayload,
+//   PathonPayload, ListPayload, MapPayload, ParenExprPayload,
 //   InterpStringPayload, TimePayload, DurationPayload,
 //   TimezonePayload, NonePayload, ExtensionPayload.
 //
@@ -336,7 +336,7 @@ func (DecimalPayload) payloadMarker()      {}
 func (StrPayload) payloadMarker()          {}
 func (BoolPayload) payloadMarker()         {}
 func (AtomPayload) payloadMarker()         {}
-func (PathPayload) payloadMarker()         {}
+func (PathonPayload) payloadMarker()       {}
 func (ListPayload) payloadMarker()         {}
 func (MapPayload) payloadMarker()          {}
 func (ParenExprPayload) payloadMarker()    {}
@@ -388,7 +388,7 @@ func (ErrorInfo) payloadMarker()            {}
 func (CalDurationData) payloadMarker()      {}
 func (DepScalarInfo) payloadMarker()        {}
 func (ClosurePayload) payloadMarker()       {}
-func (PathInfo) payloadMarker()             {} // legacy; replaced by PathPayload at Step 5b but may still flow through some paths
+func (PathonInfo) payloadMarker()           {} // legacy; replaced by PathonPayload at Step 5b but may still flow through some paths
 
 // noneSentinel is kept for backward compat with code that reads it
 // directly. NewNone() now produces NonePayload below.

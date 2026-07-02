@@ -11,7 +11,7 @@ import (
 // type-construction shapes:
 //
 //	make ScalarType data            cast / parse a scalar
-//	make ScalarType {opts} data     scalar with options (Path abs flag)
+//	make ScalarType {opts} data     scalar with options (Pathon abs flag)
 //	make ClassType data             instantiate a class (flat, sealed)
 //	make *Type *Type {opts}           three-arg shape with arbitrary options
 //	make *Type Any                   two-arg fallback
@@ -471,14 +471,14 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 	return unified, nil
 }
 
-// makePath creates a Path value from a source: a string ("a/b") or a
+// makePathon creates a Pathon value from a source: a string ("a/b") or a
 // list of segments (["a" "b"]). Slashes are normalised — every "/"
 // separates segments and empty segments (from a "//" run, or a
 // leading/trailing "/") are dropped, so "a//b" and ["a/" "b"] both
 // yield ["a" "b"]. A leading "/" on the source — the string, or the
 // first list element — marks the path absolute; the abs argument
 // (from a `{ abs:… }` option map) forces it absolute regardless.
-func makePath(srcVal Value, abs bool) ([]Value, error) {
+func makePathon(srcVal Value, abs bool) ([]Value, error) {
 	var raw []string
 	switch {
 	case srcVal.Parent.ConformsTo(TList) && srcVal.Data != nil:
@@ -491,7 +491,7 @@ func makePath(srcVal Value, abs bool) ([]Value, error) {
 		s, _ := AsString(srcVal)
 		raw = []string{s}
 	default:
-		return nil, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: Path source must be a list or string, got %s", srcVal.String())}
+		return nil, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: Pathon source must be a list or string, got %s", srcVal.String())}
 	}
 
 	if len(raw) > 0 && strings.HasPrefix(raw[0], "/") {
@@ -505,7 +505,7 @@ func makePath(srcVal Value, abs bool) ([]Value, error) {
 			}
 		}
 	}
-	return []Value{NewPath(parts, abs)}, nil
+	return []Value{NewPathon(parts, abs)}, nil
 }
 
 // MakeHandler is the position-agnostic 2-arg make dispatcher.
@@ -541,8 +541,8 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		}
 	}
 
-	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
-		return makePath(srcVal, false)
+	if IsBareTypeNode(targetVal) && targetVal.Equal(TPathon) {
+		return makePathon(srcVal, false)
 	}
 
 	if targetVal.Equal(TOptions) && IsBareTypeNode(targetVal) {
@@ -809,14 +809,14 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return MakeRecordR(recType, srcVal, useBase, reg)
 	}
 
-	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
+	if IsBareTypeNode(targetVal) && targetVal.Equal(TPathon) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.Parent.ConformsTo(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
 		}
-		return makePath(srcVal, abs)
+		return makePathon(srcVal, abs)
 	}
 
 	// Pass reg through so the Ideal-registry dispatch in MakeHandler
@@ -831,8 +831,8 @@ func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
 	}
 	targetType := &targetVal
-	if targetType.Equal(TPath) {
-		return makePath(srcVal, false)
+	if targetType.Equal(TPathon) {
+		return makePathon(srcVal, false)
 	}
 	if srcVal.Parent.ConformsTo(targetType) {
 		return []Value{srcVal}, nil
@@ -972,14 +972,14 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 // MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
 func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	targetVal, optsVal, srcVal := args[0], args[1], args[2]
-	if IsBareTypeNode(targetVal) && targetVal.Equal(TPath) {
+	if IsBareTypeNode(targetVal) && targetVal.Equal(TPathon) {
 		abs := false
 		if optsMap, _ := AsMap(optsVal); optsMap != nil {
 			if v, ok := optsMap.Get("abs"); ok && v.Parent.ConformsTo(TBoolean) {
 				abs, _ = AsBoolean(v)
 			}
 		}
-		return makePath(srcVal, abs)
+		return makePathon(srcVal, abs)
 	}
 	return MakeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
 }

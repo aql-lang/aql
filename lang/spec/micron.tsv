@@ -1,0 +1,20 @@
+# AQL Language Specification: Scalar/Micron — structured scalars
+# Format: input<TAB>expected<TAB>description
+#
+# Scalar/Micron is the structured-scalar family: values that behave as
+# scalars (content equality, immutable, orderable) yet are object-like,
+# exposing named read-only properties. Pathon (formerly Scalar/Path),
+# Emailon, and Urlon are the builtin leaves; user Microns mint via
+# `def Baron refine Micron {fields}`. Every type under Micron must have
+# a name ending in the suffix "on" (one-directional rule — existing -on
+# names elsewhere in the lattice are untouched).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §0  Hard rename guard — the bare `Path` name is GONE. `Scalar/Path`
+#     was moved into the family as `Scalar/Micron/Pathon` (keeping
+#     FixedID 47; wire-identical). The old name must not resolve.
+make Path 'a/b'	ERROR:undefined_word	Path was hard-renamed to Pathon
+typeof Pathon	Micron
+typeof Micron	Scalar
+pathof Pathon	[Scalar Micron Pathon]
+make Pathon 'a/b' typeof	Pathon

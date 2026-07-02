@@ -15,7 +15,7 @@
 #      unified lattice Rank — no Comparer applies, so compareTypes
 #      orders by Rank → depth → name → ID.
 #   2. Same-family pairs settle through the family Comparer (Number,
-#      String, Boolean, Atom, Path). Within a family:
+#      String, Boolean, Atom, Pathon). Within a family:
 #      a. Type literal vs concrete: type literal sorts FIRST.
 #         (`Integer tcmp 0 → -1`, `String tcmp '' → -1`, etc.)
 #      b. Type literal vs type literal: by lattice Rank
@@ -37,7 +37,7 @@
 5 tcmp true	1
 5 tcmp false	1
 5 tcmp cat/q	1
-5 tcmp (make Path ['a' 'b'])	-1
+5 tcmp (make Pathon ['a' 'b'])	-1
 5 tcmp Scalar	1
 5 tcmp Atom	1
 5 tcmp Boolean	1
@@ -47,7 +47,7 @@
 5 tcmp String	-1
 5 tcmp EmptyString	-1
 5 tcmp ProperString	-1
-5 tcmp Path	-1
+5 tcmp Pathon	-1
 
 # a = -2
 -2 tcmp 5	-1
@@ -58,7 +58,7 @@
 -2 tcmp true	1
 -2 tcmp false	1
 -2 tcmp cat/q	1
--2 tcmp (make Path ['a' 'b'])	-1
+-2 tcmp (make Pathon ['a' 'b'])	-1
 -2 tcmp Scalar	1
 -2 tcmp Atom	1
 -2 tcmp Boolean	1
@@ -68,7 +68,7 @@
 -2 tcmp String	-1
 -2 tcmp EmptyString	-1
 -2 tcmp ProperString	-1
--2 tcmp Path	-1
+-2 tcmp Pathon	-1
 
 # a = 3.5
 3.5 tcmp 5	-1
@@ -79,7 +79,7 @@
 3.5 tcmp true	1
 3.5 tcmp false	1
 3.5 tcmp cat/q	1
-3.5 tcmp (make Path ['a' 'b'])	-1
+3.5 tcmp (make Pathon ['a' 'b'])	-1
 3.5 tcmp Scalar	1
 3.5 tcmp Atom	1
 3.5 tcmp Boolean	1
@@ -89,7 +89,7 @@
 3.5 tcmp String	-1
 3.5 tcmp EmptyString	-1
 3.5 tcmp ProperString	-1
-3.5 tcmp Path	-1
+3.5 tcmp Pathon	-1
 
 # a = ''
 '' tcmp 5	1
@@ -100,7 +100,7 @@
 '' tcmp true	1
 '' tcmp false	1
 '' tcmp cat/q	1
-'' tcmp (make Path ['a' 'b'])	-1
+'' tcmp (make Pathon ['a' 'b'])	-1
 '' tcmp Scalar	1
 '' tcmp Atom	1
 '' tcmp Boolean	1
@@ -110,7 +110,7 @@
 '' tcmp String	1
 '' tcmp EmptyString	1
 '' tcmp ProperString	1
-'' tcmp Path	-1
+'' tcmp Pathon	-1
 
 # a = 'hi'
 'hi' tcmp 5	1
@@ -121,7 +121,7 @@
 'hi' tcmp true	1
 'hi' tcmp false	1
 'hi' tcmp cat/q	1
-'hi' tcmp (make Path ['a' 'b'])	-1
+'hi' tcmp (make Pathon ['a' 'b'])	-1
 'hi' tcmp Scalar	1
 'hi' tcmp Atom	1
 'hi' tcmp Boolean	1
@@ -131,7 +131,7 @@
 'hi' tcmp String	1
 'hi' tcmp EmptyString	1
 'hi' tcmp ProperString	1
-'hi' tcmp Path	-1
+'hi' tcmp Pathon	-1
 
 # a = true
 true tcmp 5	-1
@@ -142,7 +142,7 @@ true tcmp 'hi'	-1
 true tcmp true	0
 true tcmp false	1
 true tcmp cat/q	1
-true tcmp (make Path ['a' 'b'])	-1
+true tcmp (make Pathon ['a' 'b'])	-1
 true tcmp Scalar	1
 true tcmp Atom	1
 true tcmp Boolean	1
@@ -152,7 +152,7 @@ true tcmp Float	-1
 true tcmp String	-1
 true tcmp EmptyString	-1
 true tcmp ProperString	-1
-true tcmp Path	-1
+true tcmp Pathon	-1
 
 # a = false
 false tcmp 5	-1
@@ -163,7 +163,7 @@ false tcmp 'hi'	-1
 false tcmp true	-1
 false tcmp false	0
 false tcmp cat/q	1
-false tcmp (make Path ['a' 'b'])	-1
+false tcmp (make Pathon ['a' 'b'])	-1
 false tcmp Scalar	1
 false tcmp Atom	1
 false tcmp Boolean	1
@@ -173,7 +173,7 @@ false tcmp Float	-1
 false tcmp String	-1
 false tcmp EmptyString	-1
 false tcmp ProperString	-1
-false tcmp Path	-1
+false tcmp Pathon	-1
 
 # a = cat/q
 cat/q tcmp 5	-1
@@ -184,7 +184,7 @@ cat/q tcmp 'hi'	-1
 cat/q tcmp true	-1
 cat/q tcmp false	-1
 cat/q tcmp cat/q	0
-cat/q tcmp (make Path ['a' 'b'])	-1
+cat/q tcmp (make Pathon ['a' 'b'])	-1
 cat/q tcmp Scalar	1
 cat/q tcmp Atom	1
 cat/q tcmp Boolean	-1
@@ -194,28 +194,28 @@ cat/q tcmp Float	-1
 cat/q tcmp String	-1
 cat/q tcmp EmptyString	-1
 cat/q tcmp ProperString	-1
-cat/q tcmp Path	-1
+cat/q tcmp Pathon	-1
 
-# a = (make Path ['a' 'b'])
-(make Path ['a' 'b']) tcmp 5	1
-(make Path ['a' 'b']) tcmp -2	1
-(make Path ['a' 'b']) tcmp 3.5	1
-(make Path ['a' 'b']) tcmp ''	1
-(make Path ['a' 'b']) tcmp 'hi'	1
-(make Path ['a' 'b']) tcmp true	1
-(make Path ['a' 'b']) tcmp false	1
-(make Path ['a' 'b']) tcmp cat/q	1
-(make Path ['a' 'b']) tcmp (make Path ['a' 'b'])	0
-(make Path ['a' 'b']) tcmp Scalar	1
-(make Path ['a' 'b']) tcmp Atom	1
-(make Path ['a' 'b']) tcmp Boolean	1
-(make Path ['a' 'b']) tcmp Number	1
-(make Path ['a' 'b']) tcmp Integer	1
-(make Path ['a' 'b']) tcmp Float	1
-(make Path ['a' 'b']) tcmp String	1
-(make Path ['a' 'b']) tcmp EmptyString	1
-(make Path ['a' 'b']) tcmp ProperString	1
-(make Path ['a' 'b']) tcmp Path	1
+# a = (make Pathon ['a' 'b'])
+(make Pathon ['a' 'b']) tcmp 5	1
+(make Pathon ['a' 'b']) tcmp -2	1
+(make Pathon ['a' 'b']) tcmp 3.5	1
+(make Pathon ['a' 'b']) tcmp ''	1
+(make Pathon ['a' 'b']) tcmp 'hi'	1
+(make Pathon ['a' 'b']) tcmp true	1
+(make Pathon ['a' 'b']) tcmp false	1
+(make Pathon ['a' 'b']) tcmp cat/q	1
+(make Pathon ['a' 'b']) tcmp (make Pathon ['a' 'b'])	0
+(make Pathon ['a' 'b']) tcmp Scalar	1
+(make Pathon ['a' 'b']) tcmp Atom	1
+(make Pathon ['a' 'b']) tcmp Boolean	1
+(make Pathon ['a' 'b']) tcmp Number	1
+(make Pathon ['a' 'b']) tcmp Integer	1
+(make Pathon ['a' 'b']) tcmp Float	1
+(make Pathon ['a' 'b']) tcmp String	1
+(make Pathon ['a' 'b']) tcmp EmptyString	1
+(make Pathon ['a' 'b']) tcmp ProperString	1
+(make Pathon ['a' 'b']) tcmp Pathon	1
 
 # a = Scalar
 Scalar tcmp 5	-1
@@ -226,7 +226,7 @@ Scalar tcmp 'hi'	-1
 Scalar tcmp true	-1
 Scalar tcmp false	-1
 Scalar tcmp cat/q	-1
-Scalar tcmp (make Path ['a' 'b'])	-1
+Scalar tcmp (make Pathon ['a' 'b'])	-1
 Scalar tcmp Scalar	0
 Scalar tcmp Atom	-1
 Scalar tcmp Boolean	-1
@@ -236,7 +236,7 @@ Scalar tcmp Float	-1
 Scalar tcmp String	-1
 Scalar tcmp EmptyString	-1
 Scalar tcmp ProperString	-1
-Scalar tcmp Path	-1
+Scalar tcmp Pathon	-1
 
 # a = Atom
 Atom tcmp 5	-1
@@ -247,7 +247,7 @@ Atom tcmp 'hi'	-1
 Atom tcmp true	-1
 Atom tcmp false	-1
 Atom tcmp cat/q	-1
-Atom tcmp (make Path ['a' 'b'])	-1
+Atom tcmp (make Pathon ['a' 'b'])	-1
 Atom tcmp Scalar	1
 Atom tcmp Atom	0
 Atom tcmp Boolean	-1
@@ -257,7 +257,7 @@ Atom tcmp Float	-1
 Atom tcmp String	-1
 Atom tcmp EmptyString	-1
 Atom tcmp ProperString	-1
-Atom tcmp Path	-1
+Atom tcmp Pathon	-1
 
 # a = Boolean
 Boolean tcmp 5	-1
@@ -268,7 +268,7 @@ Boolean tcmp 'hi'	-1
 Boolean tcmp true	-1
 Boolean tcmp false	-1
 Boolean tcmp cat/q	1
-Boolean tcmp (make Path ['a' 'b'])	-1
+Boolean tcmp (make Pathon ['a' 'b'])	-1
 Boolean tcmp Scalar	1
 Boolean tcmp Atom	1
 Boolean tcmp Boolean	0
@@ -278,7 +278,7 @@ Boolean tcmp Float	-1
 Boolean tcmp String	-1
 Boolean tcmp EmptyString	-1
 Boolean tcmp ProperString	-1
-Boolean tcmp Path	-1
+Boolean tcmp Pathon	-1
 
 # a = Number
 Number tcmp 5	-1
@@ -289,7 +289,7 @@ Number tcmp 'hi'	-1
 Number tcmp true	1
 Number tcmp false	1
 Number tcmp cat/q	1
-Number tcmp (make Path ['a' 'b'])	-1
+Number tcmp (make Pathon ['a' 'b'])	-1
 Number tcmp Scalar	1
 Number tcmp Atom	1
 Number tcmp Boolean	1
@@ -299,7 +299,7 @@ Number tcmp Float	-1
 Number tcmp String	-1
 Number tcmp EmptyString	-1
 Number tcmp ProperString	-1
-Number tcmp Path	-1
+Number tcmp Pathon	-1
 
 # a = Integer
 Integer tcmp 5	-1
@@ -310,7 +310,7 @@ Integer tcmp 'hi'	-1
 Integer tcmp true	1
 Integer tcmp false	1
 Integer tcmp cat/q	1
-Integer tcmp (make Path ['a' 'b'])	-1
+Integer tcmp (make Pathon ['a' 'b'])	-1
 Integer tcmp Scalar	1
 Integer tcmp Atom	1
 Integer tcmp Boolean	1
@@ -320,7 +320,7 @@ Integer tcmp Float	-1
 Integer tcmp String	-1
 Integer tcmp EmptyString	-1
 Integer tcmp ProperString	-1
-Integer tcmp Path	-1
+Integer tcmp Pathon	-1
 
 # a = Float
 Float tcmp 5	-1
@@ -331,7 +331,7 @@ Float tcmp 'hi'	-1
 Float tcmp true	1
 Float tcmp false	1
 Float tcmp cat/q	1
-Float tcmp (make Path ['a' 'b'])	-1
+Float tcmp (make Pathon ['a' 'b'])	-1
 Float tcmp Scalar	1
 Float tcmp Atom	1
 Float tcmp Boolean	1
@@ -341,7 +341,7 @@ Float tcmp Float	0
 Float tcmp String	-1
 Float tcmp EmptyString	-1
 Float tcmp ProperString	-1
-Float tcmp Path	-1
+Float tcmp Pathon	-1
 
 # a = String
 String tcmp 5	1
@@ -352,7 +352,7 @@ String tcmp 'hi'	-1
 String tcmp true	1
 String tcmp false	1
 String tcmp cat/q	1
-String tcmp (make Path ['a' 'b'])	-1
+String tcmp (make Pathon ['a' 'b'])	-1
 String tcmp Scalar	1
 String tcmp Atom	1
 String tcmp Boolean	1
@@ -362,7 +362,7 @@ String tcmp Float	1
 String tcmp String	0
 String tcmp EmptyString	-1
 String tcmp ProperString	-1
-String tcmp Path	-1
+String tcmp Pathon	-1
 
 # a = EmptyString
 EmptyString tcmp 5	1
@@ -373,7 +373,7 @@ EmptyString tcmp 'hi'	-1
 EmptyString tcmp true	1
 EmptyString tcmp false	1
 EmptyString tcmp cat/q	1
-EmptyString tcmp (make Path ['a' 'b'])	-1
+EmptyString tcmp (make Pathon ['a' 'b'])	-1
 EmptyString tcmp Scalar	1
 EmptyString tcmp Atom	1
 EmptyString tcmp Boolean	1
@@ -383,7 +383,7 @@ EmptyString tcmp Float	1
 EmptyString tcmp String	1
 EmptyString tcmp EmptyString	0
 EmptyString tcmp ProperString	-1
-EmptyString tcmp Path	-1
+EmptyString tcmp Pathon	-1
 
 # a = ProperString
 ProperString tcmp 5	1
@@ -394,7 +394,7 @@ ProperString tcmp 'hi'	-1
 ProperString tcmp true	1
 ProperString tcmp false	1
 ProperString tcmp cat/q	1
-ProperString tcmp (make Path ['a' 'b'])	-1
+ProperString tcmp (make Pathon ['a' 'b'])	-1
 ProperString tcmp Scalar	1
 ProperString tcmp Atom	1
 ProperString tcmp Boolean	1
@@ -404,28 +404,28 @@ ProperString tcmp Float	1
 ProperString tcmp String	1
 ProperString tcmp EmptyString	1
 ProperString tcmp ProperString	0
-ProperString tcmp Path	-1
+ProperString tcmp Pathon	-1
 
-# a = Path
-Path tcmp 5	1
-Path tcmp -2	1
-Path tcmp 3.5	1
-Path tcmp ''	1
-Path tcmp 'hi'	1
-Path tcmp true	1
-Path tcmp false	1
-Path tcmp cat/q	1
-Path tcmp (make Path ['a' 'b'])	-1
-Path tcmp Scalar	1
-Path tcmp Atom	1
-Path tcmp Boolean	1
-Path tcmp Number	1
-Path tcmp Integer	1
-Path tcmp Float	1
-Path tcmp String	1
-Path tcmp EmptyString	1
-Path tcmp ProperString	1
-Path tcmp Path	0
+# a = Pathon
+Pathon tcmp 5	1
+Pathon tcmp -2	1
+Pathon tcmp 3.5	1
+Pathon tcmp ''	1
+Pathon tcmp 'hi'	1
+Pathon tcmp true	1
+Pathon tcmp false	1
+Pathon tcmp cat/q	1
+Pathon tcmp (make Pathon ['a' 'b'])	-1
+Pathon tcmp Scalar	1
+Pathon tcmp Atom	1
+Pathon tcmp Boolean	1
+Pathon tcmp Number	1
+Pathon tcmp Integer	1
+Pathon tcmp Float	1
+Pathon tcmp String	1
+Pathon tcmp EmptyString	1
+Pathon tcmp ProperString	1
+Pathon tcmp Pathon	0
 
 # =============================================================================
 # Cross-numeric magnitude — traditional arithmetic order survives the
@@ -662,16 +662,16 @@ EmptyString tcmp ProperString	-1	# EmptyStr 20.41 < ProperStr 20.42
 EmptyString tcmp String	1	# EmptyStr 20.41 > String 20.4
 ProperString tcmp String	1	# ProperStr 20.42 > String 20.4
 
-# Atom and Path follow the same rule.
+# Atom and Pathon follow the same rule.
 Atom tcmp foo/q	-1	# Atom literal < every concrete atom
 Atom tcmp Atom	0	# self-equal
-Path tcmp (make Path ['a'])	-1	# Path literal < every concrete path
-Path tcmp Path	0	# self-equal
+Pathon tcmp (make Pathon ['a'])	-1	# Pathon literal < every concrete path
+Pathon tcmp Pathon	0	# self-equal
 
 # =============================================================================
 # DepScalar ordering — canonical-form lex when paired with itself;
 # numeric Comparer signals ErrNoComparer for DepScalar inputs so the
-# fall-through reaches Scalar/comparePaths.
+# fall-through reaches Scalar/comparePathons.
 # =============================================================================
 
 (Integer gt 10) tcmp (Integer gt 10)	0

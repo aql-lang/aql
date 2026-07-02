@@ -31,16 +31,16 @@ func TestWriteWithPath(t *testing.T) {
 	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"data", "test.txt"}, false)
+	path := NewPathon([]string{"data", "test.txt"}, false)
 	result := runAQL(t, r, []Value{
 		NewWord("write"), path, NewString("hello world"),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path result, got %v", result)
 	}
-	_as0, _ := AsPath(result[0])
+	_as0, _ := AsPathon(result[0])
 	if _as0.String() != "data/test.txt" {
-		_as1, _ := AsPath(result[0])
+		_as1, _ := AsPathon(result[0])
 		t.Errorf("got %q, want %q", _as1.String(), "data/test.txt")
 	}
 	// Verify content in mem FS
@@ -55,11 +55,11 @@ func TestWriteWithAbsPath(t *testing.T) {
 	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"tmp", "out.txt"}, true)
+	path := NewPathon([]string{"tmp", "out.txt"}, true)
 	result := runAQL(t, r, []Value{
 		NewWord("write"), path, NewString("abs content"),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path result, got %v", result)
 	}
 	if string(mem.Files["/tmp/out.txt"]) != "abs content" {
@@ -75,7 +75,7 @@ func TestReadWithPath(t *testing.T) {
 	mem := setupMemFSForIO(t, r)
 	mem.Files["greeting.txt"] = []byte("hello")
 
-	path := NewPath([]string{"greeting.txt"}, false)
+	path := NewPathon([]string{"greeting.txt"}, false)
 	result := runAQL(t, r, []Value{
 		NewWord("read"), path,
 	})
@@ -91,7 +91,7 @@ func TestReadWithAbsPath(t *testing.T) {
 	mem := setupMemFSForIO(t, r)
 	mem.Files["/etc/config"] = []byte("key=val")
 
-	path := NewPath([]string{"etc", "config"}, true)
+	path := NewPathon([]string{"etc", "config"}, true)
 	result := runAQL(t, r, []Value{
 		NewWord("read"), path,
 	})
@@ -108,7 +108,7 @@ func TestWriteReadRoundtripPath(t *testing.T) {
 	registerIOWords(r)
 	setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"roundtrip.txt"}, false)
+	path := NewPathon([]string{"roundtrip.txt"}, false)
 	runAQL(t, r, []Value{
 		NewWord("write"), path, NewString("round and round"),
 	})
@@ -128,13 +128,13 @@ func TestWriteWithPathAndOptions(t *testing.T) {
 	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 
-	path := NewPath([]string{"log.txt"}, false)
+	path := NewPathon([]string{"log.txt"}, false)
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("write"))
 	result := runAQL(t, r, []Value{
 		NewWord("write"), path, NewString("line1"), NewMap(opts),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("log.txt")
@@ -151,7 +151,7 @@ func TestReadWithPathAndOptions(t *testing.T) {
 	mem := setupMemFSForIO(t, r)
 	mem.Files["data.txt"] = []byte("content here")
 
-	path := NewPath([]string{"data.txt"}, false)
+	path := NewPathon([]string{"data.txt"}, false)
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
 	result := runAQL(t, r, []Value{

@@ -80,7 +80,8 @@ typeof String	Scalar
 typeof ProperString	String
 typeof EmptyString	String	
 typeof Boolean	Scalar	
-typeof Path	Scalar	
+typeof Micron	Scalar
+typeof Pathon	Micron
 typeof Atom	Scalar	
 		
 # --- node family ---
@@ -161,7 +162,8 @@ pathof ProperString	[Scalar String ProperString]
 pathof EmptyString	[Scalar String EmptyString]	
 pathof Boolean	[Scalar Boolean]	
 pathof Atom	[Scalar Atom]	
-pathof Path	[Scalar Path]	
+pathof Micron	[Scalar Micron]
+pathof Pathon	[Scalar Micron Pathon]
 		
 # --- node family ---		
 pathof Node	[Node]	

@@ -22,7 +22,7 @@ var fileInfoNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:    []*Type{},
 			Impl:    Go(srcFolderHandler),
-			Returns: []*Type{TPath}, BarrierPos: 0,
+			Returns: []*Type{TPathon}, BarrierPos: 0,
 		}},
 	},
 	{
@@ -45,11 +45,11 @@ func srcFolderHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		dir = r.BaseDir
 	}
 	if dir == "" {
-		return []Value{NewPath(nil, false)}, nil
+		return []Value{NewPathon(nil, false)}, nil
 	}
 	abs := filepath.IsAbs(dir)
 	parts := splitPathSegments(dir)
-	return []Value{NewPath(parts, abs)}, nil
+	return []Value{NewPathon(parts, abs)}, nil
 }
 
 // srcFileHandler returns the current file's base name as a String. With no

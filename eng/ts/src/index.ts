@@ -96,7 +96,7 @@ export {
   TClass,
   TOpenParen,
   TOptions,
-  TPath,
+  TPathon,
   TReach,
   TRecord,
   TScalar,

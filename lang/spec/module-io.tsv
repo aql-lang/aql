@@ -45,9 +45,9 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.read (IO.write "mem:/
 #     fileio_test.go (they return Any / raise runtime-only errors, which do
 #     not belong on the static-checker spec surface).
 #
-# §7  folder — create a directory, returning its Path. IO.folder mutates the
+# §7  folder — create a directory, returning its Pathon. IO.folder mutates the
 #     HOST filesystem via EffectiveFileOps: the in-memory-FS toggle does not
-#     engage through a spec row's context layering, and `make Path` collapses
+#     engage through a spec row's context layering, and `make Pathon` collapses
 #     a "mem://" scheme so the scheme-routed mem backing can't catch it
 #     either. There is therefore no hermetic, deterministic spec surface for
 #     it, so it is the one ADR-003 hermetic exemption (see coverage_test.go)

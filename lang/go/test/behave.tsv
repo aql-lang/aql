@@ -67,7 +67,7 @@ green/q red/q lt	true	green < red lex
 red/q red/q lt	false	same atom
 
 # Cross-branch scalars order by branch precedence
-# (Atom < Boolean < Number < String < Path). lt is family-restricted, so
+# (Atom < Boolean < Number < String < Pathon). lt is family-restricted, so
 # cross-branch pairs use tcmp — the unrestricted total order.
 1 'a' lt	ERROR:incomparable	cross-branch lt is rejected
 1 'a' tcmp	-1	cross-branch: Integer ranks below String

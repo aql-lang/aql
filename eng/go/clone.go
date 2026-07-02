@@ -15,7 +15,7 @@ package eng
 //     graphs (Store/FlexList/Object via their prototype or element
 //     links) are cloned cycle-safely — a self-referential or shared node
 //     is reproduced with the SAME sharing, never expanded infinitely.
-//   - Immutable, shared: Integer/Float/Big*/String/Boolean/Atom/Path/
+//   - Immutable, shared: Integer/Float/Big*/String/Boolean/Atom/Pathon/
 //     None, the Time family, every type body / descriptor, functions
 //     (FnDef/FnUndef), and control markers. Sharing them is correct
 //     because AQL never mutates them in place.

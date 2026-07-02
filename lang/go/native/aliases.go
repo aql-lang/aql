@@ -34,7 +34,7 @@ type (
 	StrPayload           = eng.StrPayload
 	BoolPayload          = eng.BoolPayload
 	AtomPayload          = eng.AtomPayload
-	PathPayload          = eng.PathPayload
+	PathonPayload        = eng.PathonPayload
 	ListPayload          = eng.ListPayload
 	FlexListData         = eng.FlexListData
 	MapPayload           = eng.MapPayload
@@ -90,7 +90,7 @@ type (
 	SchemaKind           = eng.SchemaKind
 	OptionsTypeInfo      = eng.OptionsTypeInfo
 	OrderedMap           = eng.OrderedMap
-	PathInfo             = eng.PathInfo
+	PathonInfo           = eng.PathonInfo
 	ReadList             = eng.ReadList
 	ReadMap              = eng.ReadMap
 	RecordTypeInfo       = eng.RecordTypeInfo
@@ -165,7 +165,7 @@ var (
 	TOptions        = eng.TOptions
 	TParenExpr      = eng.TParenExpr
 	TReach          = eng.TReach
-	TPath           = eng.TPath
+	TPathon         = eng.TPathon
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
 	TResourceEntity = eng.TResourceEntity
@@ -291,7 +291,7 @@ var (
 	NewReach                  = eng.NewReach
 	NewReachFromKeys          = eng.NewReachFromKeys
 	ApplyReach                = eng.ApplyReach
-	IsPath                    = eng.IsPath
+	IsPathon                  = eng.IsPathon
 	IsRecordType              = eng.IsRecordType
 	IsReturnCheck             = eng.IsReturnCheck
 	IsStore                   = eng.IsStore
@@ -312,7 +312,7 @@ var (
 	AsFloatApprox             = eng.AsFloatApprox
 	AsBigInteger              = eng.AsBigInteger
 	AsBigDecimal              = eng.AsBigDecimal
-	AsPath                    = eng.AsPath
+	AsPathon                  = eng.AsPathon
 	AsString                  = eng.AsString
 	AsWord                    = eng.AsWord
 	BaseValue                 = eng.BaseValue
@@ -488,7 +488,7 @@ var (
 	NewOptionsType        = eng.NewOptionsType
 	NewOrderedMap         = eng.NewOrderedMap
 	NewParenExpr          = eng.NewParenExpr
-	NewPath               = eng.NewPath
+	NewPathon             = eng.NewPathon
 	NewRecordType         = eng.NewRecordType
 	NewRegistry           = eng.NewRegistry
 	NewReturnCheck        = eng.NewReturnCheck

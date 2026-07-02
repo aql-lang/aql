@@ -410,7 +410,10 @@ Any
 │   ├── String
 │   │   ├── EmptyString
 │   │   └── ProperString
-│   ├── Path
+│   ├── Micron                       -- structured scalars: content-equal, immutable
+│   │   ├── Pathon                   -- filesystem-style path (was `Path`)
+│   │   ├── Emailon                  -- email address
+│   │   └── Urlon                    -- absolute URL
 │   └── Time
 │       ├── Date, DateTime, Instant
 │       └── (aql:time-util owns TimeOfDay, Duration
@@ -1605,7 +1608,7 @@ type:
 | Atom | length of the name | `foo/q size` returns `3` |
 | Integer / Float | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
 | Boolean | `1` for `true`, `0` for `false` | `true size` returns `1` |
-| Path | segment count | `(make Path "a/b/c") size` returns `3` |
+| Pathon | segment count | `(make Pathon "a/b/c") size` returns `3` |
 | class instance / Store / Table | field / entry / row count | `(make Pt {x:1 y:2}) size` returns `2` |
 | `None`, a Date, a bare scalar, or any non-concrete value (e.g. a bare type literal) | `0` (never errors) | `None size` returns `0`, `List size` returns `0` |
 

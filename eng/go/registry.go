@@ -1143,8 +1143,8 @@ func ValToString(v Value) string {
 			return "true"
 		}
 		return "false"
-	case IsPath(v):
-		_as13, _ := AsPath(v)
+	case IsPathon(v):
+		_as13, _ := AsPathon(v)
 		return _as13.String()
 	case IsWord(v):
 		_as14, _ := AsWord(v)

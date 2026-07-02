@@ -98,7 +98,7 @@ func TestCompareValuesAtoms(t *testing.T) {
 func TestCompareValuesCrossScalar(t *testing.T) {
 	// Cross-branch scalar pairs are ordered by the Scalar root's
 	// Comparer: Atom < Boolean < Number < String < Path.
-	path := NewPath([]string{"a"}, false)
+	path := NewPathon([]string{"a"}, false)
 	tests := []struct {
 		name string
 		a, b Value
@@ -132,12 +132,12 @@ func TestCompareValuesPaths(t *testing.T) {
 	// orders paths by segment count (shortest first), then segment
 	// by segment in reverse lexical order, then a relative path
 	// before an absolute one.
-	abc := NewPath([]string{"a", "b", "c"}, false) // 3 segments
-	ab := NewPath([]string{"a", "b"}, false)       // 2 segments
-	ac := NewPath([]string{"a", "c"}, false)       // 2 segments
-	zzz := NewPath([]string{"z", "z", "z"}, false) // 3 segments
-	aDashA := NewPath([]string{"a-", "a"}, false)  // 2 segments
-	absAB := NewPath([]string{"a", "b"}, true)     // /a/b — absolute
+	abc := NewPathon([]string{"a", "b", "c"}, false) // 3 segments
+	ab := NewPathon([]string{"a", "b"}, false)       // 2 segments
+	ac := NewPathon([]string{"a", "c"}, false)       // 2 segments
+	zzz := NewPathon([]string{"z", "z", "z"}, false) // 3 segments
+	aDashA := NewPathon([]string{"a-", "a"}, false)  // 2 segments
+	absAB := NewPathon([]string{"a", "b"}, true)     // /a/b — absolute
 	tests := []struct {
 		name string
 		a, b Value
@@ -440,22 +440,22 @@ func (revPathBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equ
 
 func (revPathBehavior) Compare(a, b Value) (int, error) {
 	pa, pb := a, b
-	pa.Parent = TPath
-	pb.Parent = TPath
+	pa.Parent = TPathon
+	pb.Parent = TPathon
 	n, err := CompareValues(pa, pb)
 	return -n, err
 }
 
 // TestRevPathComparator exercises the behavior system: it defines
 // RevPath, a subtype of Path, and installs a Comparer that is the
-// reverse of the normal Path comparator. RevPath values must compare
-// in reversed order, while plain Path values keep the normal order —
+// reverse of the normal Pathon comparator. RevPath values must compare
+// in reversed order, while plain Pathon values keep the normal order —
 // proving a subtype can override an inherited capability and that
 // CompareValues' lattice walk picks the most-specific Comparer.
 func TestRevPathComparator(t *testing.T) {
-	revPath := &Type{Name: "RevPath", Parent: TPath, Behavior: revPathBehavior{}}
+	revPath := &Type{Name: "RevPath", Parent: TPathon, Behavior: revPathBehavior{}}
 	rev := func(parts ...string) Value {
-		p := NewPath(parts, false)
+		p := NewPathon(parts, false)
 		p.Parent = revPath
 		return p
 	}
@@ -472,7 +472,7 @@ func TestRevPathComparator(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Plain Path keeps the normal order.
-			got, err := CompareValues(NewPath(tt.a, false), NewPath(tt.b, false))
+			got, err := CompareValues(NewPathon(tt.a, false), NewPathon(tt.b, false))
 			if err != nil || got != tt.normalWant {
 				t.Fatalf("plain Path: got %d, %v; want %d", got, err, tt.normalWant)
 			}

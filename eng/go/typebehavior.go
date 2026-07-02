@@ -79,7 +79,7 @@ type Walker interface {
 
 // Sizer is an optional capability interface. Types implementing it
 // report a natural size — the length of a dominant collection (a
-// List's elements, a Map's keys, a Path's segments, an Object's
+// List's elements, a Map's keys, a Pathon's segments, an Object's
 // fields), a number's floored magnitude, a string's length. SizeOf
 // consults it; a type with no Sizer in its lattice sizes to 0.
 type Sizer interface {

@@ -238,8 +238,8 @@ func extractPath(v Value) string {
 	if sentinel, ok := streamSentinel(v); ok {
 		return sentinel
 	}
-	if IsPath(v) {
-		_as5, _ := AsPath(v)
+	if IsPathon(v) {
+		_as5, _ := AsPathon(v)
 		return _as5.String()
 	}
 	_as6, _ := AsString(v)
@@ -252,7 +252,7 @@ func returnPath(v Value, pathStr string) Value {
 	if _, ok := streamSentinel(v); ok {
 		return v
 	}
-	if IsPath(v) {
+	if IsPathon(v) {
 		return v
 	}
 	return NewString(pathStr)

@@ -536,7 +536,7 @@ Number neq Number	false
 {x:1} deq {x:1,y:2}	false
 None deq None	true
 
-# Comparison - cross-branch scalars order Atom < Boolean < Number < String < Path.
+# Comparison - cross-branch scalars order Atom < Boolean < Number < String < Pathon.
 # lt/gt/cmp are family-restricted (cross-family → [aql/incomparable]);
 # the cross-branch total order is reached via tcmp.
 1 lt "a"	ERROR:incomparable
@@ -780,6 +780,6 @@ size 7.9	7
 size 42	42
 size true	1
 size false	0
-size (make Path "a/b/c")	3
+size (make Pathon "a/b/c")	3
 size None	0
 def Pt (class {x:Integer y:Integer}); size (make Pt {x:1 y:2})	2

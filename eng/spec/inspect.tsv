@@ -111,7 +111,7 @@ inspect String	{type:'Type' struct:'String' kind:literal}
 inspect ProperString	{type:'Type' struct:'ProperString' kind:literal}	
 inspect EmptyString	{type:'Type' struct:'EmptyString' kind:literal}	
 inspect Boolean	{type:'Type' struct:'Boolean' kind:literal}	
-inspect Path	{type:'Type' struct:'Path' kind:literal}	
+inspect Pathon	{type:'Type' struct:'Pathon' kind:literal}	
 inspect Atom	{type:'Type' struct:'Atom' kind:literal}	
 inspect Node	{type:'Type' struct:'Node' kind:literal}	
 inspect List	{type:'Type' struct:'List' kind:literal}	

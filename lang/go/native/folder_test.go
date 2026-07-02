@@ -33,14 +33,14 @@ func TestFolderCreatesDir(t *testing.T) {
 	mem := setupMemFS(t, r)
 
 	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewPath([]string{"a", "b", "c"}, false),
+		NewWord("folder"), NewPathon([]string{"a", "b", "c"}, false),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path result, got %v", result)
 	}
-	_as0, _ := AsPath(result[0])
+	_as0, _ := AsPathon(result[0])
 	if _as0.String() != "a/b/c" {
-		_as1, _ := AsPath(result[0])
+		_as1, _ := AsPathon(result[0])
 		t.Errorf("got %q, want %q", _as1.String(), "a/b/c")
 	}
 	// Check that the directory was created in mem FS
@@ -56,14 +56,14 @@ func TestFolderAbsolutePath(t *testing.T) {
 	mem := setupMemFS(t, r)
 
 	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewPath([]string{"tmp", "data"}, true),
+		NewWord("folder"), NewPathon([]string{"tmp", "data"}, true),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
-	_as2, _ := AsPath(result[0])
+	_as2, _ := AsPathon(result[0])
 	if _as2.String() != "/tmp/data" {
-		_as3, _ := AsPath(result[0])
+		_as3, _ := AsPathon(result[0])
 		t.Errorf("got %q, want %q", _as3.String(), "/tmp/data")
 	}
 	if !mem.Dirs["/tmp/data"] {
@@ -76,11 +76,11 @@ func TestFolderIdempotent(t *testing.T) {
 	registerIOWords(r)
 	setupMemFS(t, r)
 
-	path := NewPath([]string{"x", "y"}, false)
+	path := NewPathon([]string{"x", "y"}, false)
 	// Create twice — should not error
 	runAQL(t, r, []Value{NewWord("folder"), path})
 	result := runAQL(t, r, []Value{NewWord("folder"), path})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("idempotent call failed: got %v", result)
 	}
 }
@@ -95,9 +95,9 @@ func TestFolderWithParentsTrue(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("parents", NewBoolean(true))
 	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewOptionsType(opts), NewPath([]string{"deep", "nested", "dir"}, false),
+		NewWord("folder"), NewOptionsType(opts), NewPathon([]string{"deep", "nested", "dir"}, false),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("deep/nested/dir")
@@ -115,9 +115,9 @@ func TestFolderWithParentsFalse(t *testing.T) {
 	opts.Set("parents", NewBoolean(false))
 	// Even with parents=false, MkdirAll is used (idempotent single dir)
 	result := runAQL(t, r, []Value{
-		NewWord("folder"), NewOptionsType(opts), NewPath([]string{"single"}, false),
+		NewWord("folder"), NewOptionsType(opts), NewPathon([]string{"single"}, false),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 }
@@ -132,11 +132,11 @@ func TestFolderWithMakePath(t *testing.T) {
 	result := runAQL(t, r, []Value{
 		NewWord("folder"),
 		NewOpenParen(),
-		NewWord("make"), NewWord("Path"),
+		NewWord("make"), NewWord("Pathon"),
 		NewList([]Value{NewString("foo"), NewString("bar")}),
 		NewCloseParen(),
 	})
-	if len(result) != 1 || !IsPath(result[0]) {
+	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("expected Path, got %v", result)
 	}
 	resolved, _ := mem.ResolvePath("foo/bar")
@@ -153,7 +153,7 @@ func TestFolderCreatesParentDirs(t *testing.T) {
 	mem := setupMemFS(t, r)
 
 	runAQL(t, r, []Value{
-		NewWord("folder"), NewPath([]string{"a", "b", "c"}, false),
+		NewWord("folder"), NewPathon([]string{"a", "b", "c"}, false),
 	})
 	// Parent dirs should also be recorded
 	resolvedA, _ := mem.ResolvePath("a")

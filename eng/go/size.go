@@ -10,7 +10,7 @@ import "math"
 // chain so a descendant inherits its branch's Sizer. The kernel
 // Sizers follow one rule — a value sizes to the length of the
 // collection it stands for: a List's elements, a Map's keys, a
-// Path's segments, an Object's fields, a Table's rows. A number
+// Pathon's segments, an Object's fields, a Table's rows. A number
 // sizes to its floored magnitude, a string or atom to its character
 // length. A type with no Sizer in its lattice — None, a Date, a
 // bare scalar — sizes 0.
@@ -61,12 +61,12 @@ func (atomCompareBehavior) Size(v Value) int {
 	return len(a)
 }
 
-// Size on the Scalar root is reached only by Path — its branch has
-// no Sizer of its own — so a Path sizes to its segment count, the
+// Size on the Scalar root is reached only by Pathon — its branch has
+// no Sizer of its own — so a Pathon sizes to its segment count, the
 // length of its dominant list. Any other value that walks here has
 // no size rule and sizes 0.
 func (scalarCompareBehavior) Size(v Value) int {
-	if p, err := AsPath(v); err == nil {
+	if p, err := AsPathon(v); err == nil {
 		return len(p.Parts)
 	}
 	return 0

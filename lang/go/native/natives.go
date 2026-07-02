@@ -512,7 +512,7 @@ func wordHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 func folderOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	optsVal := args[0]
 	pathVal := args[1]
-	if !IsPath(pathVal) {
+	if !IsPathon(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.Parent.String())
 	}
 	parents := true
@@ -521,23 +521,23 @@ func folderOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 			parents, _ = AsBoolean(v)
 		}
 	}
-	_as0, _ := AsPath(pathVal)
+	_as0, _ := AsPathon(pathVal)
 	return doFolder(_as0, parents, reg)
 }
 
 // folderHandler implements `folder` with a single Path arg (parents=true).
 func folderHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	pathVal := args[0]
-	if !IsPath(pathVal) {
+	if !IsPathon(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.Parent.String())
 	}
-	_as1, _ := AsPath(pathVal)
+	_as1, _ := AsPathon(pathVal)
 	return doFolder(_as1, true, reg)
 }
 
 // doFolder is the shared body for both folder signatures; resolves and
 // creates a directory via the configured FileOps.
-func doFolder(p PathInfo, parents bool, reg *Registry) ([]Value, error) {
+func doFolder(p PathonInfo, parents bool, reg *Registry) ([]Value, error) {
 	ops := EffectiveFileOps(reg)
 	pathStr := p.String()
 
@@ -555,7 +555,7 @@ func doFolder(p PathInfo, parents bool, reg *Registry) ([]Value, error) {
 		}
 	}
 
-	return []Value{NewPath(p.Parts, p.Abs)}, nil
+	return []Value{NewPathon(p.Parts, p.Abs)}, nil
 }
 
 // stackCollectHandler runs at execution time: wraps the top N stack

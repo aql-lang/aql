@@ -2991,7 +2991,7 @@ func isInertConst(v Value) bool {
 	}
 	switch d := v.Data.(type) {
 	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
-		PathPayload, NonePayload, BigIntPayload, DecimalPayload,
+		PathonPayload, NonePayload, BigIntPayload, DecimalPayload,
 		TimePayload, DurationPayload, TimezonePayload:
 		return true
 	case DepScalarInfo:
