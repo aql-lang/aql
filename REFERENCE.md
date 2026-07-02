@@ -401,6 +401,7 @@ Any
 ├── Scalar
 │   ├── Atom
 │   ├── Boolean                     -- false | true
+│   ├── Bytes                       -- byte string (`0x…` literals)
 │   ├── Number
 │   │   ├── Integer                  -- signed int64 (overflow → error)
 │   │   ├── Float                    -- IEEE-754 binary64
