@@ -122,12 +122,16 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 				return 1
 			}
 			sess, err = authenticateWith(s, homeDir, vaultPass)
-			// A slotless file keyring only proves its passphrase on the
-			// first decrypt, so probe one stored secret now — a typo must
-			// fail at the prompt, not deep inside the child's nested
-			// vault calls. An empty vault has nothing to check against
-			// (and nothing to leak).
-			if err == nil && len(s.Aliases) > 0 {
+			// An envelope vault validates the passphrase cryptographically
+			// against its slot verifiers inside authenticateWith. A legacy
+			// slotless file keyring does not — it only proves the
+			// passphrase on the first decrypt — so probe one stored secret
+			// now: a typo must fail at the prompt, not deep inside the
+			// child's nested vault calls. (The probe must not run for
+			// slotted vaults: a namespace-scoped password may legitimately
+			// be unable to read the probe alias.) An empty vault has
+			// nothing to check against (and nothing to leak).
+			if err == nil && !s.HasPasswordSlots() && len(s.Aliases) > 0 {
 				probe := s.Aliases[0].Name
 				ns, _ := splitAlias(probe)
 				if _, perr := sess.getValue(probe, ns); perr != nil {

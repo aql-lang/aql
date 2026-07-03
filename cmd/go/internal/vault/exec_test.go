@@ -674,3 +674,30 @@ func TestExecAskCombinesWithVaultAliases(t *testing.T) {
 		t.Errorf("got %q, want %q", out, "vaulted-secret:manual-secret")
 	}
 }
+
+func TestExecAskPassphraseAcceptsScopedSlotPassword(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	// A root-namespace secret the scoped slot cannot read: the slot
+	// verifier, not a decrypt probe, must validate the passphrase.
+	if code, _, e := runVault(t, "root-secret\n", "add", "--from-stdin", "root_token"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// Migrate to envelope format with a read-scoped slot on another
+	// namespace (admin passphrase from env, then the new slot password).
+	if code, _, e := runVault(t, "slot-pass\nslot-pass\n",
+		"password", "add", "--scope=read", "--namespaces=vxg", "agent"); code != 0 {
+		t.Fatalf("password add: %s", e)
+	}
+
+	t.Setenv(EnvPassphrase, "")
+	code, out, errOut := runVault(t, "slot-pass\n",
+		"exec", "--ask-passphrase", "--", "sh", "-c", "printf %s \"$AQL_VAULT_PASSPHRASE\"")
+	if code != 0 {
+		t.Fatalf("exec --ask-passphrase with scoped slot password: %s", errOut)
+	}
+	if out != "slot-pass" {
+		t.Errorf("child env mismatch: got %q, want %q", out, "slot-pass")
+	}
+}
