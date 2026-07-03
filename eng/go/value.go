@@ -343,7 +343,7 @@ type FnSig struct {
 // It is a BITFIELD: the flags are orthogonal and a word may carry several (e.g.
 // `typeof` reads a fn value AND is a pure module reader AND re-dispatches as an
 // island-pure word). The zero value, CompileDefault, is an ordinary word.
-type CompileEffect uint8
+type CompileEffect uint16
 
 const (
 	// CompileReadsFn marks an INTROSPECTION word that READS a fn value's
@@ -408,6 +408,24 @@ const (
 	// compilable body words (each / fold / do — they declare a CallableSpec) take
 	// the closure path before reaching the refusal, so they do NOT set this.
 	CompileExecutesBody
+	// CompileRunsBodyIsolated marks a word whose NoEvalArgs body(ies) are NEITHER
+	// spliced onto the tape NOR const-baked and re-run in the enclosing sub-engine.
+	// Instead the handler executes each body via a fresh, ISOLATED CallAQL frame
+	// against a registry the word CAPTURED at registration (not the passed-in `r`),
+	// binding only that body's own parameters. Test.check-prop is the canonical
+	// case: runCheckProp runs the generator body (param `r` = a seeded rand
+	// instance) and the property body (one unnamed param) each through
+	// parent.CallAQL, so name resolution inside a body is IDENTICAL under the
+	// interpreter and the VM -- it never touches a compiled frame local, because the
+	// CallAQL frame binds only the body's params and resolves everything else
+	// against the captured parent (module / global scope), exactly as it does when
+	// the interpreter drives the same handler. So a plain CALL_NATIVE bake is sound
+	// even when the body is a DYNAMIC value (a map get, `p get "gen"`) whose tokens
+	// are not statically inert -- the VM evaluates the operand to the same List value
+	// and hands it to the same handler. The flag exempts ONLY the inert-scoped
+	// disjunct of the code-body refusal; a word that ALSO splices its body
+	// (CompileExecutesBody) or declares a body-executing CallableSpec still refuses.
+	CompileRunsBodyIsolated
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A

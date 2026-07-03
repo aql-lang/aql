@@ -229,6 +229,11 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// lowerer: a named value may be referenced in any order, so its producing
 	// event is stored to a frame local rather than left on the simulated stack.
 	r.Check.Emit.MarkValueDef(value)
+	// A rebind of a LOOP-CARRIED def (a pre-loop binding an armed for-body
+	// rebinds — eng.AnalyseLoopBody registered it via NoteLoopCarried) stores
+	// the new value into its frame slot at THIS site, so a conditional rebind
+	// updates the cell exactly when its arm runs. No-op for every other def.
+	r.Check.Emit.RecordDefRebind(name, value, pos)
 	return nil, nil
 }
 
@@ -702,6 +707,10 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		}
 		return nil, nil
 	}
+	// An undef of a LOOP-CARRIED def exposes the previous binding while the
+	// carried frame slot still holds the rebound value — compiled reads would
+	// diverge; refuse and let the interpreter own the shape.
+	r.Check.Emit.RefuseCarriedUndef(name)
 	UninstallDef(r, name)
 	return nil, nil
 }

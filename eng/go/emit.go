@@ -237,6 +237,31 @@ type emitLoop struct {
 	hasBodyOut       bool // false: the body nets no value per iteration (or diverges)
 	iterSlot         int
 	pos              SrcPos
+	// carried seeds the loop-carried def slots (a pre-loop `def` the body
+	// REBINDS, read on a later iteration or after the loop) with their
+	// pre-loop values — lowered right after FOR_SETUP, before the first
+	// FOR_NEXT, so a zero-iteration loop leaves each cell at its pre-loop
+	// value. See NoteLoopCarried.
+	carried []carriedInit
+}
+
+// carriedInit seeds one loop-carried def slot: the unit frame slot and the
+// operand holding the pre-loop value stored into it before the loop runs.
+type carriedInit struct {
+	slot int
+	init emitOperand
+}
+
+// emitStore is a recorded frame-local store — the loop-carried def REBIND
+// (`def found true` inside a for arm, read on a later iteration or after
+// the loop). src resolves in the recording scope; the lowering pushes a
+// const/local/type source (or pops an event source off the sim top) into
+// locals[slot] via OpStoreLocal. A store produces no values, so a rebind
+// nets 0 exactly like the interpreter's def.
+type emitStore struct {
+	src  emitOperand
+	slot int
+	pos  SrcPos
 }
 
 const (
@@ -248,6 +273,7 @@ const (
 	evCallUser
 	evFallback
 	evTrap
+	evStore
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
@@ -307,14 +333,15 @@ type emitTrap struct {
 // the small payloads stay inline. Every consumer is kind-guarded, so a nil
 // br/loop on a non-matching event is never dereferenced.
 type emitEvent struct {
-	seq  int
-	kind int
-	call emitCall
-	br   *emitBranch
-	loop *emitLoop
-	uc   emitUserCall
-	fb   emitFallback
-	trap emitTrap
+	seq   int
+	kind  int
+	call  emitCall
+	br    *emitBranch
+	loop  *emitLoop
+	uc    emitUserCall
+	fb    emitFallback
+	trap  emitTrap
+	store *emitStore
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -402,6 +429,23 @@ type EmitState struct {
 	// Finalize ends the program at the trap. seqs start at 1, so 0 is a safe
 	// "none" sentinel.
 	trapAt int
+	// loopCarried is the stack of OPEN armed-loop carried-def scopes (one per
+	// nested AnalyseLoopBody running with loop capture). Each maps a rebound
+	// pre-loop def NAME to the unit frame slot carrying it across iterations;
+	// RecordDefRebind consults the stack at `def` sites, innermost-first.
+	loopCarried []*loopCarriedScope
+	// pendingCarried is the just-closed loop analysis's carried-slot init
+	// list (EndLoopCarried), consumed by the RecordLoop that follows.
+	pendingCarried []carriedInit
+}
+
+// loopCarriedScope is one armed loop's carried-def registrations: the unit
+// depth the loop records in (defs inside a nested fn compilation must not
+// match), the name→slot map, and the slot inits queued for RecordLoop.
+type loopCarriedScope struct {
+	unitDepth int
+	slots     map[string]int
+	inits     []carriedInit
 }
 
 // emitUnit scopes local-slot numbering to one code unit (the
@@ -748,8 +792,14 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		// A type operand whose ID matches a producing event whose own
 		// output was NOT a type is an ID collision (a `make` result
 		// inheriting the type literal's ID): resolve it as its own type
-		// operand / const below, not the unrelated event.
-		if !IsTypeBody(v) || es.eventInfo[pr.seq].typeOut {
+		// operand / const below, not the unrelated event. A DYNAMIC
+		// carrier is exempt: it is the checker's gradual stand-in for a
+		// runtime VALUE, never a type body the program manipulates as
+		// data — narrowing-through-use rebinds a dynamic Any def to a
+		// typed-list/typed-map bound ([:Any]) that trips IsTypeBody, but
+		// its ID-matched event genuinely produced it (the identity-
+		// preserving rebind in narrowDynamicUses).
+		if !IsTypeBody(v) || v.Dynamic || es.eventInfo[pr.seq].typeOut {
 			return eventOperand(pr.seq, pr.idx), true
 		}
 	}
@@ -1083,6 +1133,31 @@ type BranchRecord struct {
 // form (HasElse=false) has a VARIADIC result (0 or 1 values), which
 // only the program residual may absorb. Any shape Stage 2 cannot
 // lower marks the program uncompilable.
+// stripZeroOutPhantoms drops 0-output statement guards' phantom (None)
+// results from a residual stack. The program and fn-body residual
+// reconciliations skip zeroOut phantoms; arm residuals (RecordBranch) and a
+// loop body's per-iteration residual (RecordLoop) must too — otherwise the
+// phantom reads as the merge / body-out value and the lowerer refuses with
+// "branch leaves extra values" (out=opEvent, vm=0).
+func (es *EmitState) stripZeroOutPhantoms(stk []Value) []Value {
+	kept := stk
+	for i, rv := range stk {
+		pr, ok := es.producedBy[rv.ID]
+		if ok && es.eventInfo[pr.seq].zeroOut {
+			// First phantom found: copy the prefix and filter the rest.
+			kept = append([]Value(nil), stk[:i]...)
+			for _, r := range stk[i:] {
+				if p, o := es.producedBy[r.ID]; o && es.eventInfo[p.seq].zeroOut {
+					continue
+				}
+				kept = append(kept, r)
+			}
+			break
+		}
+	}
+	return kept
+}
+
 func (es *EmitState) RecordBranch(b BranchRecord) {
 	if !es.active() {
 		return
@@ -1096,26 +1171,8 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	// "branch leaves extra values" (out=opEvent, vm=0). Stripping here keeps
 	// resolveArm, residualN, and branchVariadicResult consistent, and lets the
 	// both-arms-net-zero → zeroOut marking cascade through nested guards.
-	stripPhantoms := func(stk []Value) []Value {
-		kept := stk
-		for i, rv := range stk {
-			pr, ok := es.producedBy[rv.ID]
-			if ok && es.eventInfo[pr.seq].zeroOut {
-				// First phantom found: copy the prefix and filter the rest.
-				kept = append([]Value(nil), stk[:i]...)
-				for _, r := range stk[i:] {
-					if p, o := es.producedBy[r.ID]; o && es.eventInfo[p.seq].zeroOut {
-						continue
-					}
-					kept = append(kept, r)
-				}
-				break
-			}
-		}
-		return kept
-	}
-	b.ThenStk = stripPhantoms(b.ThenStk)
-	b.ElsStk = stripPhantoms(b.ElsStk)
+	b.ThenStk = es.stripZeroOutPhantoms(b.ThenStk)
+	b.ElsStk = es.stripZeroOutPhantoms(b.ElsStk)
 	ev := emitEvent{kind: evBranch, br: &emitBranch{
 		constCond: b.ConstCond, hasElse: b.HasElse, pos: b.Pos,
 	}}
@@ -1425,6 +1482,157 @@ func (es *EmitState) RegisterLocal(id string) int {
 	u.numLocals++
 	u.localByID[id] = slot
 	return slot
+}
+
+// BeginLoopCarried opens a carried-def scope for one armed loop analysis
+// (AnalyseLoopBody with loop capture active). Pairs with EndLoopCarried.
+func (es *EmitState) BeginLoopCarried() {
+	if es == nil {
+		return
+	}
+	es.loopCarried = append(es.loopCarried, &loopCarriedScope{
+		unitDepth: len(es.units),
+		slots:     map[string]int{},
+	})
+}
+
+// EndLoopCarried closes the innermost carried-def scope, exposing its slot
+// inits to the RecordLoop that follows the analysis.
+func (es *EmitState) EndLoopCarried() {
+	if es == nil || len(es.loopCarried) == 0 {
+		return
+	}
+	top := es.loopCarried[len(es.loopCarried)-1]
+	es.loopCarried = es.loopCarried[:len(es.loopCarried)-1]
+	es.pendingCarried = top.inits
+}
+
+// NoteLoopCarried registers one loop-body REBIND of a pre-existing def as
+// loop-carried: the name gets a unit frame slot (reusing an enclosing armed
+// loop's slot for the same name, so nested loops over one def share one
+// cell), each round's JOINED binding ID resolves to that slot, and — for a
+// fresh slot — the pre-loop value is queued as the slot's init, stored
+// before the loop's first iteration. Called by AnalyseLoopBody at the end
+// of every analysis round; the init operand is re-resolved each round
+// because a discarded round's Rollback truncates the const pool the prior
+// resolution interned into. A name whose pre-loop value cannot resolve, or
+// whose value is function-shaped, is left unregistered — its
+// cross-iteration reads then refuse at resolveOperand exactly as before
+// (sound interpreter fallback).
+func (es *EmitState) NoteLoopCarried(name string, joined, pre Value) {
+	if !es.active() || len(es.loopCarried) == 0 {
+		return
+	}
+	scope := es.loopCarried[len(es.loopCarried)-1]
+	if scope.unitDepth != len(es.units) {
+		return
+	}
+	u := es.units[len(es.units)-1]
+	slot, seen := scope.slots[name]
+	if !seen {
+		// An enclosing armed loop already carrying this name owns the cell —
+		// reuse it (the outer slot is live and current at inner-loop entry;
+		// a fresh inner slot with its own init would RESET the accumulation
+		// every outer iteration). No init recorded on reuse.
+		reused := false
+		for i := len(es.loopCarried) - 2; i >= 0; i-- {
+			outer := es.loopCarried[i]
+			if outer.unitDepth != scope.unitDepth {
+				break
+			}
+			if s, ok := outer.slots[name]; ok {
+				slot, reused = s, true
+				break
+			}
+		}
+		if !reused {
+			if isFnValueResidual(pre) || isFnValueResidual(joined) {
+				return
+			}
+			init, ok := es.resolveOperand(pre)
+			if !ok {
+				return
+			}
+			slot = u.numLocals
+			u.numLocals++
+			scope.inits = append(scope.inits, carriedInit{slot: slot, init: init})
+		}
+		scope.slots[name] = slot
+	} else {
+		// Re-resolve the init on a repeat round so its const index targets
+		// the pool that survives (a non-final round's Rollback truncated the
+		// earlier interning). The pre-loop value is round-invariant, so a
+		// resolution that now fails is a recording inconsistency — refuse
+		// rather than bake a dangling operand.
+		for i := range scope.inits {
+			if scope.inits[i].slot != slot {
+				continue
+			}
+			init, ok := es.resolveOperand(pre)
+			if !ok {
+				es.MarkUncompilable("loop-carried def `" + name + "`: pre-loop value no longer resolves")
+				return
+			}
+			scope.inits[i].init = init
+			break
+		}
+	}
+	u.localByID[joined.ID] = slot
+}
+
+// RecordDefRebind records a `def` dispatch of a loop-carried name: the
+// rebind STORES its value into the name's carried frame slot at the rebind
+// site, so a conditional rebind updates the cell exactly when its arm runs
+// and a break/continue skips it exactly as the interpreter skips the def.
+// A def of a name no active armed loop carries records nothing. Once a
+// name IS carried, every rebind must store or the cell goes stale — an
+// unresolvable or function-shaped rebind value refuses the program (sound
+// interpreter fallback, never a stale read).
+func (es *EmitState) RecordDefRebind(name string, v Value, pos SrcPos) {
+	if !es.active() || len(es.loopCarried) == 0 {
+		return
+	}
+	slot, found := -1, false
+	for i := len(es.loopCarried) - 1; i >= 0; i-- {
+		scope := es.loopCarried[i]
+		if scope.unitDepth != len(es.units) {
+			continue
+		}
+		if s, ok := scope.slots[name]; ok {
+			slot, found = s, true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	if isFnValueResidual(v) {
+		es.MarkUncompilable("loop-carried def `" + name + "` rebound to a function value (Stage 3)")
+		return
+	}
+	src, ok := es.resolveOperand(v)
+	if !ok {
+		es.MarkUncompilable("loop-carried def `" + name + "` rebind of unknown provenance")
+		return
+	}
+	es.appendEvent(emitEvent{kind: evStore, store: &emitStore{src: src, slot: slot, pos: pos}})
+}
+
+// RefuseCarriedUndef marks the program uncompilable when `undef` targets a
+// name an active armed loop carries: the undef exposes the PREVIOUS binding
+// while the carried slot still holds the rebound value, so compiled reads
+// would diverge from the interpreter. An undef of any other name is
+// untouched.
+func (es *EmitState) RefuseCarriedUndef(name string) {
+	if !es.active() {
+		return
+	}
+	for i := len(es.loopCarried) - 1; i >= 0; i-- {
+		if _, ok := es.loopCarried[i].slots[name]; ok {
+			es.MarkUncompilable("undef of the loop-carried def `" + name + "` (Stage 3)")
+			return
+		}
+	}
 }
 
 // emitCheckpoint snapshots the append-only recording pools and counters so a
@@ -1924,6 +2132,10 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	if !es.active() {
 		return
 	}
+	// Claim the just-closed analysis's carried-def slot inits (EndLoopCarried)
+	// up front so an early refusal below never leaks them to a LATER loop.
+	carried := es.pendingCarried
+	es.pendingCarried = nil
 	if body == nil {
 		es.MarkUncompilable("for: body not captured")
 		return
@@ -1939,7 +2151,12 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 		es.MarkUncompilable("for: computed range start/step (Stage 2 follow-on)")
 		return
 	}
-	lp := &emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos}
+	lp := &emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos, carried: carried}
+	// A body ending in a 0-output statement guard (`if c [def …] []` — the
+	// loop-carried conditional-rebind shape) leaves only the guard's phantom
+	// None; stripping it classifies the body as the SIDE-EFFECT (zeroOut)
+	// loop it is at run time, exactly like the arm/fn residual strips.
+	bodyStk = es.stripZeroOutPhantoms(bodyStk)
 	if len(bodyStk) > 0 && !fragDiverges(body) {
 		if es.setLoopBodyApply(body, bodyStk) {
 			// A per-iteration dynamic apply (`(mk2 i) 10`): the body nets one applied
@@ -2144,6 +2361,9 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	if es.recordCallElided(word, sig, args, outs) {
 		return
 	}
+	if es.recordShuffleElided(word, sig, args, outs) {
+		return
+	}
 	if es.recordCallRefusal(word, sig, args, outs, pos, forceDynOut, quoteInertOK) {
 		return
 	}
@@ -2251,6 +2471,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 // the enclosing loop's lowering turns these into jumps). It returns false for an
 // ordinary lowerable call, which RecordCall then records.
 func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) bool {
+	shuffleOK := es.dynamicStackShuffleOK(word, sig)
 	switch {
 	case sig == nil:
 		es.MarkUncompilable("dispatch without a signature at " + word)
@@ -2276,9 +2497,13 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !es.noEvalBodiesInertScoped(sig, args)):
+	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || (!sig.CompileEffect.Has(CompileRunsBodyIsolated) && !es.noEvalBodiesInertScoped(sig, args))):
 		// A code-body word is refused when:
-		//   - its body is not inert data; OR
+		//   - its body is not inert data (UNLESS the word runs the body in an
+		//     ISOLATED CallAQL frame — CompileRunsBodyIsolated — where name
+		//     resolution is identical under interpreter and VM: Test.check-prop's
+		//     dynamic gen/property bodies bake as CALL_NATIVE operands and run
+		//     through the same captured-parent handler in both modes); OR
 		//   - it SPLICES the body onto the tape (CompileExecutesBody, e.g. `var`):
 		//     the handler returns tape-coupled tokens the VM cannot run, so baking a
 		//     CALL_NATIVE (which an inert word-list body would otherwise permit)
@@ -2317,10 +2542,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
-	case anyDynamicCarrier(args):
+	case anyDynamicCarrier(args) && !shuffleOK && !es.dynInputsProven(sig, args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
-	case anyDynamicCarrier(outs) && !forceDynOut:
+	case anyDynamicCarrier(outs) && !forceDynOut && !shuffleOK:
 		// Dynamic outputs mean the checker could not type the word
 		// (missing annotations, opaque wrappers like a def-bound
 		// usurp value): the recorded signature is a best guess, not a
@@ -2344,6 +2569,76 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		es.MarkUncompilable("for: computed range list (Stage 2 follow-on)")
 	default:
 		return false
+	}
+	return true
+}
+
+// recordShuffleElided reports whether a dispatch is a pure ID-PRESERVING stack
+// shuffle (swap / rot / swap2 — a permutation, no duplication or drop) over
+// gradual (dynamic) operands, in which case NOTHING is recorded: the outputs
+// ARE the inputs by identity (ReturnsIdentity keeps each value's ID), so every
+// downstream consumer resolves the same IDs to their ORIGINAL producers
+// (params, captures, consts, prior events) and the lowerer re-derives any
+// stack motion from dataflow (swapTop2 / spillSeat). Baking a CALL_NATIVE
+// instead strands the pass-through copy of a frame-local operand on the
+// simulated stack — the local re-pushes at its consumer, so the shuffle's
+// output for it is never popped and the unit refuses "body leaves extra
+// values" (the `input swap eval-pred` each-body shape). Gated to DYNAMIC
+// operands — the case that refused outright before — so already-compiling
+// concrete shuffles keep their existing CALL_NATIVE layout, byte-identical.
+// A duplicating shuffle (dup/over/…) mints fresh output IDs (ReturnsIdentity),
+// fails the multiset check, and falls through to the normal bake.
+func (es *EmitState) recordShuffleElided(word string, sig *Signature, args, outs []Value) bool {
+	if !anyDynamicCarrier(args) || !es.dynamicStackShuffleOK(word, sig) {
+		return false
+	}
+	if len(outs) != len(args) {
+		return false
+	}
+	remaining := make(map[string]int, len(args))
+	for _, a := range args {
+		remaining[a.ID]++
+	}
+	for _, o := range outs {
+		if remaining[o.ID] == 0 {
+			return false
+		}
+		remaining[o.ID]--
+	}
+	return true
+}
+
+// dynamicStackShuffleOK reports whether a dispatch with dynamic (gradual-Any)
+// operands is still sound to bake as a plain CALL_NATIVE: the word is one of
+// the kernel's pure stack-shuffle primitives. Their ONE signature is all-Any,
+// so every runtime value matches it — there is no sibling overload the checker
+// could have mis-committed against (the hazard the anyDynamicCarrier refusal
+// guards) — and the handler moves values without inspecting them
+// (ReturnsIdentity / empty returns), so the outputs ARE the inputs and KEEP
+// their dynamic modality: every downstream typed dispatch still sees Dynamic
+// and gates itself (poly re-match, guarded CALL_USER, or refusal) exactly as
+// before. This is the `input swap eval-pred` shape inside an each body over an
+// untyped list. Guarded on pointer identity with the registry's own binding so
+// a shadowed name (a user `def swap …`, whose sig has an fnFrame anyway) never
+// rides the exemption. depth/pick/roll are full-stack words and refused earlier.
+func (es *EmitState) dynamicStackShuffleOK(word string, sig *Signature) bool {
+	switch word {
+	case "dup", "swap", "drop", "over", "rot", "nip", "tuck",
+		"dup2", "swap2", "drop2", "over2":
+	default:
+		return false
+	}
+	if es == nil || es.reg == nil || sig == nil {
+		return false
+	}
+	fn := es.reg.Lookup(word)
+	if fn == nil || len(fn.Signatures) != 1 || &fn.Signatures[0] != sig {
+		return false
+	}
+	for _, t := range sig.ArgTypes() {
+		if t == nil || !t.Equal(TAny) {
+			return false
+		}
 	}
 	return true
 }
@@ -2734,6 +3029,51 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool 
 			return false
 		}
 		if bodyHasSentinel(args[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// dynInputsProven reports whether a dynamic-operand dispatch is nonetheless a
+// PROVEN sig match — safe to bake a plain CALL_NATIVE despite the dynamic
+// carriers — for a word that runs its bodies in ISOLATED CallAQL frames
+// (CompileRunsBodyIsolated, i.e. Test.check-prop). The dynamic-input refusal
+// defends against a WIDENED sig: a gradual-Any operand (Parent=Any) matched a
+// concrete sig position only by the Any→anything rule, so the runtime value
+// could violate it and the compiled CALL_NATIVE would not raise where the
+// interpreter's re-match would. That widening is visible as a bare-Any carrier.
+// A dynamic operand whose CONCRETE Parent type strictly conforms to its sig
+// position matched by REAL type membership, not widening — it is a runtime-
+// valued value of a statically PROVEN type (e.g. `p get "runs"` over a
+// `p:PropertySpec` param, an Integer guaranteed by the record contract the VM's
+// guarded CALL_USER enforces at run-property's entry). So the runtime value
+// conforms, the VM invokes the same single sig the interpreter matches, and the
+// bodies run through the same captured-parent handler in both modes. The gate is
+// deliberately strict: EVERY operand must conform by a non-Any concrete type, so
+// a single genuinely-widened (Any) operand keeps the whole call refused.
+func (es *EmitState) dynInputsProven(sig *Signature, args []Value) bool {
+	if sig == nil || !sig.CompileEffect.Has(CompileRunsBodyIsolated) {
+		return false
+	}
+	sigArgs := sig.ArgTypes()
+	if len(sigArgs) != len(args) {
+		return false
+	}
+	for i, a := range args {
+		if !a.Dynamic {
+			continue
+		}
+		// A widened gradual-Any operand: Parent conforms to nothing concrete,
+		// so this is exactly the unproven case the guard defends — refuse.
+		if a.Parent == nil || a.Parent.Equal(TAny) {
+			return false
+		}
+		pt := sigArgs[i]
+		if pt == nil {
+			return false
+		}
+		if !a.Parent.ConformsTo(pt) {
 			return false
 		}
 	}
@@ -3754,6 +4094,13 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			ops = append(ops, eventOperand(pr.seq, pr.idx))
 			continue
 		}
+		// A frame-0 local (a loop-carried def's slot — the post-loop read of a
+		// module-scope rebind resolves the joined binding to its cell). Events
+		// first, mirroring resolveOperand's precedence.
+		if slot, okLoc := es.units[0].localByID[rv.ID]; okLoc {
+			ops = append(ops, localOperand(slot))
+			continue
+		}
 		if IsBareTypeNode(rv) && rv.ID != "" {
 			ops = append(ops, typeOperand(es.internType(rv)))
 			continue
@@ -3929,6 +4276,8 @@ func eventPos(ev emitEvent) SrcPos {
 		return ev.uc.pos
 	case evTrap:
 		return ev.trap.pos
+	case evStore:
+		return ev.store.pos
 	}
 	return ev.br.pos
 }

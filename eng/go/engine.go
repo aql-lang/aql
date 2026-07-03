@@ -4252,8 +4252,21 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	}
 
 	// Pure-stack match: dispatch via execMatch the same way a bare
-	// word with no forward args would.
+	// word with no forward args would. A NATIVE REFERENCE into a module
+	// sub-registry (`assert-equal/r` in an export map — body-less sigs, a
+	// real Go handler, so the wrapper branch above deliberately skips it)
+	// still carries its owning registry on match.Reg, exactly like the
+	// trivial-delegation dispatch: the recorder's poly re-match
+	// (tryRecordPoly) validates the matched sig against THAT registry's
+	// own binding and the VM re-matches over it (PolyRef.Reg). Without it
+	// a dynamic-operand dispatch of a module native refused as "dynamic
+	// input at <word>" although the runtime re-match over the sub-registry
+	// IS the interpreter's dispatch. Interpretation is unchanged — Reg is
+	// read only at the check-mode carrierResults seam (execMatch:2625).
 	match := &MatchResult{Sig: sig, Positions: positions, Name: fnDef.Name}
+	if fnDef.Registry != nil && fnDef.Registry != e.registry {
+		match.Reg = fnDef.Registry
+	}
 	if len(positions) > 0 {
 		match.Args = make([]Value, len(positions))
 		for i, pos := range positions {

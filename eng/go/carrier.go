@@ -2,6 +2,7 @@ package eng
 
 import (
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -793,8 +794,14 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
-		r.Check.Emit.RecordCall(word, sig, args, out, pos,
-			dynOutNativeOK(r, word, sig, args, out) || quoteInertOK, quoteInertOK)
+		// A CompileRunsBodyIsolated word (Test.check-prop) whose dynamic operands
+		// all conform to its single sig (dynInputsProven) bakes a faithful CALL_
+		// NATIVE; its declared-Map return rides as a dynamic (declared-Any) output
+		// exactly as dynOutNativeOK admits for concrete-arg builtins — the handler
+		// produces the real result value in both modes.
+		forceDynOut := dynOutNativeOK(r, word, sig, args, out) || quoteInertOK ||
+			r.Check.Emit.dynInputsProven(sig, args)
+		r.Check.Emit.RecordCall(word, sig, args, out, pos, forceDynOut, quoteInertOK)
 	}
 }
 
@@ -1914,6 +1921,17 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		if narrowed.Parent == nil {
 			continue
 		}
+		// Identity-preserving rebind: the narrowing refines the STATIC bound
+		// of the SAME runtime value — no new value exists at run time.
+		// TandValues assembles the intersection as a fresh Value (fresh ID),
+		// which would orphan the binding from its producing event: a
+		// `def nodes (tree get "nodes")` narrowed to List at its first typed
+		// use lost the get event's provenance, so every LATER read of the
+		// name refused ("fn call operand of unknown provenance" — the
+		// decision eval-tree walkers). Re-stamp the current binding's ID so
+		// the recorder's producedBy still resolves the rebound name to its
+		// original producer.
+		narrowed.ID = cur.ID
 		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
 	}
 }
@@ -2672,6 +2690,15 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 		for _, v := range bindVals {
 			es.RegisterLocal(v.ID)
 		}
+		// Loop-carried def rebinds: a pre-loop `def` the body REBINDS gets a
+		// unit frame slot (NoteLoopCarried per round below), a store at each
+		// rebind site (RecordDefRebind, from the def handler), and a slot
+		// resolution for every round's joined binding — so a read on a later
+		// iteration or after the loop compiles instead of refusing "operand
+		// of unknown provenance". EndLoopCarried exposes the slot inits to
+		// the RecordLoop that follows this analysis.
+		es.BeginLoopCarried()
+		defer es.EndLoopCarried()
 	}
 	var stk []Value
 	var installed []string
@@ -2704,15 +2731,31 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 		}
 		installed = installed[:0]
 		joined := map[string]Value{}
-		for k, v := range adds {
+		// Deterministic name order: carried-slot allocation and the joined
+		// installs must not depend on Go map iteration (slot numbering and
+		// the emit goldens would jitter run to run).
+		names := make([]string, 0, len(adds))
+		for k := range adds {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		for _, k := range names {
+			v := adds[k]
 			if pre, ok := r.Defs.Top(k); ok {
-				joined[k] = JoinCarriers(v, pre)
+				j := JoinCarriers(v, pre)
+				joined[k] = j
+				if loopCapture {
+					// A rebind of a PRE-EXISTING binding is loop-carried:
+					// register (or refresh) its slot and alias this round's
+					// joined ID so the next round's / post-loop reads resolve.
+					es.NoteLoopCarried(k, j, pre)
+				}
 			} else {
 				joined[k] = v
 			}
 		}
-		for k, v := range joined {
-			r.Defs.Push(k, v)
+		for _, k := range names {
+			r.Defs.Push(k, joined[k])
 			installed = append(installed, k)
 		}
 		// Stabilised when the body adds no bindings (the common single-round

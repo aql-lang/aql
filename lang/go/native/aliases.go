@@ -215,15 +215,16 @@ const (
 
 	// Compile-effect classifications (eng.CompileEffect) for the bytecode
 	// recorder — declared on a Signature instead of a name-keyed eng table.
-	CompileDefault      = eng.CompileDefault
-	CompileReadsFn      = eng.CompileReadsFn
-	CompileStoresFn     = eng.CompileStoresFn
-	CompileModuleFold   = eng.CompileModuleFold
-	CompileIslandPure   = eng.CompileIslandPure
-	CompileFallbackBody = eng.CompileFallbackBody
-	CompileQuoteInert   = eng.CompileQuoteInert
-	CompileDiverges     = eng.CompileDiverges
-	CompileExecutesBody = eng.CompileExecutesBody
+	CompileDefault          = eng.CompileDefault
+	CompileReadsFn          = eng.CompileReadsFn
+	CompileStoresFn         = eng.CompileStoresFn
+	CompileModuleFold       = eng.CompileModuleFold
+	CompileIslandPure       = eng.CompileIslandPure
+	CompileFallbackBody     = eng.CompileFallbackBody
+	CompileQuoteInert       = eng.CompileQuoteInert
+	CompileDiverges         = eng.CompileDiverges
+	CompileExecutesBody     = eng.CompileExecutesBody
+	CompileRunsBodyIsolated = eng.CompileRunsBodyIsolated
 )
 
 // Flow-control signal values exposed by the engine. These travel
