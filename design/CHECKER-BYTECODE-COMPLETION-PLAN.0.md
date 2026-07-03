@@ -432,6 +432,27 @@ from everything; 7 is gated on 6's exit criteria.
   eng suites ok. Landing test TestPredicateGuardNarrowing (2 clean
   forms, 2 gating negatives, runtime parity, advisory positive + 2
   advisory negatives).
+- **2026-07-03 — Phase 3.1 (Stage A) verified ALREADY LANDED; gate
+  re-run green; one soundness negative pinned.** The stageA design doc
+  and the completeness audit were stale: commit 31f02f3 (2026-06-28,
+  ancestor of this branch) implemented variadic branch-result modeling
+  — resolveArm + fragMulti multi-value arm accounting, allowVariadic
+  fragment propagation, the variadic CALL_USER sentinel with a seeded
+  FnSummaries hypothesis for recursive convergence, and
+  seatResults/reconcileResults tail-position acceptance (VM unchanged,
+  per the doc's own Correction 1). recursion.tsv:53 compiles natively
+  and RunCompiled == Run == [6 4 2]; the m 0/1/3/5 convergence and the
+  soundness gate are pinned by TestStageAVariadicBranchResult /
+  TestStageAVariadicSoundnessGate, to which the missing paren-form
+  negative `add (m 3) 1` was added (the only diff). Full battery
+  green: VERIFY PASSED, make test exit 0, differential 0 divergences,
+  census 3472/153/250 with the "branch leaves extra values" and
+  "if-branch lowering [scheduling]" buckets both at 0. Residual noted:
+  `def p fn [[n:Integer] [Integer Integer] [n n add 1]]` refuses as
+  "result above a literal (Stage 3)" — a Stage-3 seating gap, tracked
+  under Phase 3.5/6. recursion.tsv:53 stays among the 7 soundness pins
+  as a checker-PRECISION straggler (static spread modeling), distinct
+  from the compile-coverage gap Stage A closed.
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

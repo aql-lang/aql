@@ -3046,6 +3046,8 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 		`def f fn [[n:Integer] [] [if (n lte 0) [] [n mul 2]]]  f 3 add 1`,
 		// The recursive variadic result consumed by add.
 		`def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]  m 3 add 1`,
+		// Same, paren form: the variadic result as a forward-collected fixed arg.
+		`def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]  add (m 3) 1`,
 		// A multi-value arm built from inert consts cannot be reconstructed.
 		`if true [1 2 3] [4]`,
 		// A value after the variadic recursive call inside the arm.
