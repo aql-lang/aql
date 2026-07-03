@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/aql-lang/aql/cmd/go/internal/auth"
 )
 
 // runExec implements `aql vault exec`. It resolves the listed
@@ -33,6 +35,17 @@ import (
 // git tag to GitHub from the same `make publish`:
 //
 //	aql vault exec --for=npm=npm --for=github=vxg:github -- make publish
+//
+// `--ask=ENV_NAME` prompts on the terminal (echo suppressed) and injects
+// the typed value as ENV_NAME in the child — for a secret that is not in
+// the vault. It needs no vault at all, and the value never touches disk,
+// argv, or the audit log. `--ask-passphrase` prompts once for the vault
+// passphrase, validates it against the store, and injects it as
+// AQL_VAULT_PASSPHRASE so nested `aql vault` calls in the child run
+// without re-prompting — one prompt for a whole multi-target deploy:
+//
+//	aql vault exec --ask GITHUB_TOKEN -- make tag-push-ts
+//	aql vault exec --ask-passphrase -- make deploy-ts deploy-py deploy-go
 func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Split the args at the first `--` separator: everything before
 	// is parsed by our flag set; everything after is the child
@@ -49,15 +62,20 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	fs.Var(&forRecipes, "for", "present an alias as a tool's credential env: `recipe` (alias from the positional arg) or `recipe=alias`; repeatable to target several tools at once (npm, yarn, pnpm, bun, pypi, uv, poetry, hatch, flit, cargo, gem, hex, swift, cocoapods, composer, github, gitlab, terraform)")
 	registry := fs.String("registry", "", "registry/host for registry-scoped recipes (npm, pnpm, composer, terraform); default per recipe")
 	dryRun := fs.Bool("dry-run", false, "inject a filler value instead of the real secret (no passphrase needed); for testing the plumbing, e.g. `npm publish --dry-run`")
+	var askVars repeatedFlag
+	fs.Var(&askVars, "ask", "prompt for a value on the terminal (echo suppressed) and inject it as this env var: `ENV_NAME`; repeatable. For secrets that are not in the vault — no vault needed")
+	askPass := fs.Bool("ask-passphrase", false, "prompt once for the vault passphrase, validate it, and inject it as AQL_VAULT_PASSPHRASE so nested `aql vault` calls in the child run without re-prompting")
 	if err := fs.Parse(preArgs); err != nil {
 		return 1
 	}
 
 	// In --for mode the secrets can be named inside the flags
-	// (`--for=recipe=alias`), so a positional alias spec is optional.
+	// (`--for=recipe=alias`), so a positional alias spec is optional —
+	// as it is when --ask/--ask-passphrase provide the credentials.
 	forMode := len(forRecipes) > 0
-	if fs.NArg() < 1 && !forMode {
-		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--dry-run] [--for=RECIPE[=alias] ...] [--registry=HOST] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
+	askMode := len(askVars) > 0 || *askPass
+	if fs.NArg() < 1 && !forMode && !askMode {
+		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--dry-run] [--for=RECIPE[=alias] ...] [--registry=HOST] [--ask=ENV_NAME ...] [--ask-passphrase] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
 		return 1
 	}
 	if !sawSep || len(cmdArgs) == 0 {
@@ -65,10 +83,18 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 
-	s, err := requireStore(homeDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
+	// The vault store is only opened when something actually needs it:
+	// alias resolution, or --ask-passphrase validation. A pure `--ask`
+	// invocation works with no vault at all.
+	needAliases := forMode || fs.NArg() >= 1
+	var s *Store
+	if needAliases || (*askPass && !*dryRun) {
+		st, err := requireStore(homeDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		s = st
 	}
 	// In --dry-run we never unlock the vault: no passphrase is read and no
 	// real secret value is touched, so a locked vault is fine and so is a
@@ -78,12 +104,41 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	// callers exercise the env-injection and child-command plumbing —
 	// `npm publish --dry-run` and friends — without real credentials.
 	var sess *Session
-	if !*dryRun {
+	var vaultPass string
+	if !*dryRun && s != nil {
 		if s.Locked {
 			fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 			return 1
 		}
-		sess, err = authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
+		var err error
+		if *askPass {
+			// Source the passphrase (env or prompt) and validate it up
+			// front — a typo fails here, not deep inside the child.
+			// Prompt on stderr: stdout belongs to the child (it may be
+			// piped), and interactive prompts conventionally go to stderr.
+			vaultPass, err = readPassphrase(stdin, stderr, "Vault passphrase: ")
+			if err != nil {
+				fmt.Fprintf(stderr, "error: %s\n", err)
+				return 1
+			}
+			sess, err = authenticateWith(s, homeDir, vaultPass)
+			// A slotless file keyring only proves its passphrase on the
+			// first decrypt, so probe one stored secret now — a typo must
+			// fail at the prompt, not deep inside the child's nested
+			// vault calls. An empty vault has nothing to check against
+			// (and nothing to leak).
+			if err == nil && len(s.Aliases) > 0 {
+				probe := s.Aliases[0].Name
+				ns, _ := splitAlias(probe)
+				if _, perr := sess.getValue(probe, ns); perr != nil {
+					fmt.Fprintf(stderr, "error: vault passphrase validation failed: %s\n", perr)
+					sess.Close()
+					return 1
+				}
+			}
+		} else {
+			sess, err = authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
+		}
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
@@ -150,7 +205,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			}
 			_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: alias, Outcome: "ok", Reason: auditReason(*dryRun, "for="+b.rec.name+" cmd="+filepath.Base(bin))})
 		}
-	} else {
+	} else if fs.NArg() >= 1 {
 		mappings, err := parseExecAliases(fs.Arg(0), *prefix, *upper)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
@@ -190,6 +245,54 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 				Reason:  auditReason(*dryRun, "env="+m.envName+" cmd="+filepath.Base(bin)),
 			})
 		}
+	}
+
+	// --ask: values typed by the operator at exec time. Prompted with echo
+	// suppressed, injected only into the child's environment block, and
+	// audited by env NAME only — the value never touches disk, argv, or
+	// the audit log. --dry-run injects the filler without prompting.
+	if len(askVars) > 0 {
+		ir := auth.NewInputReader(stdin)
+		for _, name := range askVars {
+			if !validEnvName(name) {
+				fmt.Fprintf(stderr, "error: --ask %q: not a valid environment variable name\n", name)
+				return 1
+			}
+			if _, dup := overrides[name]; dup {
+				fmt.Fprintf(stderr, "error: --ask %s collides with another injected env var\n", name)
+				return 1
+			}
+			v := dryRunFiller
+			if !*dryRun {
+				read, err := ir.ReadPassword(name+" (input not echoed): ", stderr)
+				if err != nil {
+					fmt.Fprintf(stderr, "error: reading %s: %s\n", name, err)
+					return 1
+				}
+				if read == "" {
+					fmt.Fprintf(stderr, "error: empty value for --ask %s\n", name)
+					return 1
+				}
+				v = read
+			}
+			overrides[name] = v
+			_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: "(ask)", Outcome: "ok", Reason: auditReason(*dryRun, "ask env="+name+" cmd="+filepath.Base(bin))})
+		}
+	}
+
+	// --ask-passphrase: hand the passphrase (already validated above) to
+	// the child so nested `aql vault` calls authenticate without prompting.
+	if *askPass {
+		if _, dup := overrides[EnvPassphrase]; dup {
+			fmt.Fprintf(stderr, "error: --ask-passphrase collides with an injected $%s\n", EnvPassphrase)
+			return 1
+		}
+		v := dryRunFiller
+		if !*dryRun {
+			v = vaultPass
+		}
+		overrides[EnvPassphrase] = v
+		_ = appendAudit(homeDir, AuditEvent{Action: "vault.exec", Alias: "(passphrase)", Outcome: "ok", Reason: auditReason(*dryRun, "ask-passphrase cmd="+filepath.Base(bin))})
 	}
 
 	env := buildExecEnv(*clearEnv, overrides)
