@@ -2144,6 +2144,9 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	if es.recordCallElided(word, sig, args, outs) {
 		return
 	}
+	if es.recordShuffleElided(word, sig, args, outs) {
+		return
+	}
 	if es.recordCallRefusal(word, sig, args, outs, pos, forceDynOut, quoteInertOK) {
 		return
 	}
@@ -2251,6 +2254,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 // the enclosing loop's lowering turns these into jumps). It returns false for an
 // ordinary lowerable call, which RecordCall then records.
 func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) bool {
+	shuffleOK := es.dynamicStackShuffleOK(word, sig)
 	switch {
 	case sig == nil:
 		es.MarkUncompilable("dispatch without a signature at " + word)
@@ -2317,10 +2321,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
-	case anyDynamicCarrier(args):
+	case anyDynamicCarrier(args) && !shuffleOK:
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
-	case anyDynamicCarrier(outs) && !forceDynOut:
+	case anyDynamicCarrier(outs) && !forceDynOut && !shuffleOK:
 		// Dynamic outputs mean the checker could not type the word
 		// (missing annotations, opaque wrappers like a def-bound
 		// usurp value): the recorded signature is a best guess, not a
@@ -2344,6 +2348,76 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		es.MarkUncompilable("for: computed range list (Stage 2 follow-on)")
 	default:
 		return false
+	}
+	return true
+}
+
+// recordShuffleElided reports whether a dispatch is a pure ID-PRESERVING stack
+// shuffle (swap / rot / swap2 — a permutation, no duplication or drop) over
+// gradual (dynamic) operands, in which case NOTHING is recorded: the outputs
+// ARE the inputs by identity (ReturnsIdentity keeps each value's ID), so every
+// downstream consumer resolves the same IDs to their ORIGINAL producers
+// (params, captures, consts, prior events) and the lowerer re-derives any
+// stack motion from dataflow (swapTop2 / spillSeat). Baking a CALL_NATIVE
+// instead strands the pass-through copy of a frame-local operand on the
+// simulated stack — the local re-pushes at its consumer, so the shuffle's
+// output for it is never popped and the unit refuses "body leaves extra
+// values" (the `input swap eval-pred` each-body shape). Gated to DYNAMIC
+// operands — the case that refused outright before — so already-compiling
+// concrete shuffles keep their existing CALL_NATIVE layout, byte-identical.
+// A duplicating shuffle (dup/over/…) mints fresh output IDs (ReturnsIdentity),
+// fails the multiset check, and falls through to the normal bake.
+func (es *EmitState) recordShuffleElided(word string, sig *Signature, args, outs []Value) bool {
+	if !anyDynamicCarrier(args) || !es.dynamicStackShuffleOK(word, sig) {
+		return false
+	}
+	if len(outs) != len(args) {
+		return false
+	}
+	remaining := make(map[string]int, len(args))
+	for _, a := range args {
+		remaining[a.ID]++
+	}
+	for _, o := range outs {
+		if remaining[o.ID] == 0 {
+			return false
+		}
+		remaining[o.ID]--
+	}
+	return true
+}
+
+// dynamicStackShuffleOK reports whether a dispatch with dynamic (gradual-Any)
+// operands is still sound to bake as a plain CALL_NATIVE: the word is one of
+// the kernel's pure stack-shuffle primitives. Their ONE signature is all-Any,
+// so every runtime value matches it — there is no sibling overload the checker
+// could have mis-committed against (the hazard the anyDynamicCarrier refusal
+// guards) — and the handler moves values without inspecting them
+// (ReturnsIdentity / empty returns), so the outputs ARE the inputs and KEEP
+// their dynamic modality: every downstream typed dispatch still sees Dynamic
+// and gates itself (poly re-match, guarded CALL_USER, or refusal) exactly as
+// before. This is the `input swap eval-pred` shape inside an each body over an
+// untyped list. Guarded on pointer identity with the registry's own binding so
+// a shadowed name (a user `def swap …`, whose sig has an fnFrame anyway) never
+// rides the exemption. depth/pick/roll are full-stack words and refused earlier.
+func (es *EmitState) dynamicStackShuffleOK(word string, sig *Signature) bool {
+	switch word {
+	case "dup", "swap", "drop", "over", "rot", "nip", "tuck",
+		"dup2", "swap2", "drop2", "over2":
+	default:
+		return false
+	}
+	if es == nil || es.reg == nil || sig == nil {
+		return false
+	}
+	fn := es.reg.Lookup(word)
+	if fn == nil || len(fn.Signatures) != 1 || &fn.Signatures[0] != sig {
+		return false
+	}
+	for _, t := range sig.ArgTypes() {
+		if t == nil || !t.Equal(TAny) {
+			return false
+		}
 	}
 	return true
 }
