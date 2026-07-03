@@ -630,6 +630,140 @@ distrusted case) and a manifest that is a *proof for the AQL-source portion of
 the graph*. Native modules can only be *attested*, not verified (§9) — which is
 why the trust boundary matters.
 
+### 7.3 Feasibility of capability inference
+
+The verification story in §7.2 rests on a claim — that a module's *actual*
+reachable capability footprint is statically computable — that deserves a
+sober assessment rather than optimism. It splits into two questions of very
+different difficulty:
+
+- **(a) The reachability / purity verdict** — "does this module and its
+  transitives reach *any* capability-bearing word, or any dynamic-eval escape
+  hatch?" This is **soundly decidable and the load-bearing case** (it backs "a
+  sorting library is pure" and lets an importer default-deny all transitives).
+- **(b) The precise effect *set*** — "*exactly which* capabilities, with what
+  `where`-constraints?" **Feasible, with a soundness/precision trade-off**: some
+  modules over-approximate unless annotated.
+
+**Why AQL is unusually favorable.** Doing this in Rust/JS is hard because the
+escape hatch is *every pointer and every dynamic call*. In AQL the surface is
+small, named, and finite, and the analyzer substrate already exists:
+
+- **Closed effect alphabet + no ambient authority.** Effects enter *only*
+  through the ~9 host accessors (§3.5) and the enumerable set of
+  capability-bearing words. "Reaches none of them ⇒ pure" is therefore *sound*,
+  not hopeful.
+- **The carrier checker already computes this shape of analysis.** It walks the
+  call graph with memoised per-`def` summaries (`FnSummaries`, keyed by
+  scope + name + arg-shape + body; `FnAnalysisQuota = 64` per fn, with an
+  `analysis_truncated` diagnostic on blow-up), already walks literal quotation
+  bodies (`RunCarrierBodyWithDefs`), and already carries an *effect facet* on
+  signatures — `CompileEffect` with flags like `CompileIslandPure` and
+  `CompileFallbackBody` (`eng/go/value.go`, `carrier.go`) that classify a word's
+  purity for the compiler. A **capability-effect set** is a *new facet on the
+  same struct plus a union pass up the same fixpoint*, not a new analyzer.
+
+**The soundness boundary is a short, nameable list of escape hatches** — all of
+them specific words the analyzer already knows about:
+
+| Escape hatch | Why hard | Conservative handling |
+|---|---|---|
+| `do`/`call`/`each`/`fold`/`scan` of a **computed / received** body (not a source literal) | body not statically known | over-approx to the ambient grant, or require an effect annotation |
+| `word`-splice (`__SP`) of a computed body | same | same |
+| `import` of a **computed** name | breaks transitive enumeration | over-approx / forbid computed import |
+| `Vm.run` / `Vm.run-with` of an arbitrary **string** | parses + runs anything | already runs under a *sub-policy*, so bounded to that composed grant |
+| Macros | compile-time codegen | analyse **post-expansion** (`macro_expand.go` runs before the checker walks) |
+| computed `get` / dot-access of a word by computed key | dynamic dispatch | over-approx / annotation |
+
+Literal quotations, literal word refs, literal imports, and
+lambdas-with-literal-bodies (closures the checker already handles via capture
+analysis) are all walkable — the common case, and the *only* case pure `-util`
+libraries exercise. `do [add 1 1]` is fully analysable *because the body is an
+inert-const literal*; the compiler already draws exactly this line, baking a
+code-body word "only when its bodies are INERT consts" (`carrier.go`). See §7.4
+for the `do` case in full.
+
+**Two properties make the trade-off acceptable:**
+
+1. **Analyzability is itself a capability.** Every escape hatch is a
+   capability-gated word, so a grant that withholds `do`-of-nonliteral /
+   `call` / `vm` / computed-`import` *makes the analysis both sound and
+   precise* by removing the hard cases. You need not soundly analyse `Vm.run`
+   in a module that cannot call it. A strict `pure`/`deterministic` profile
+   denies the reflective words and collapses the dynamic surface to zero.
+2. **The grant is the backstop — the security property never depends on the
+   analysis.** Even an *opaque* `do <computed>` can only dispatch words in the
+   current registry, so its reach is bounded by the module's *effective grant*,
+   not by "anything." In a module granted `{}`, an opaque `do` still reaches
+   `{}` — every capability word it might name is denied at runtime regardless.
+   Dynamic dispatch therefore degrades only the *tightness of the inferred
+   manifest*, never the confinement. Inference exists to *verify a declared set
+   is tight* (a DX/audit benefit); it is not what enforces the boundary.
+
+**Transitivity** is enumerable iff imports resolve statically — literal import
+string ⇒ walk it; computed import ⇒ over-approximate or forbid; data-file
+imports (`.json`/`.csv`) contribute no code and are trivially pure. **Native
+modules are inference leaves:** their Go cannot be inferred from AQL, so each
+carries a *trusted, attested capability summary* (once — the native set is
+small, fixed, and compile-time-sealed, §9.1). The AQL-source interior is
+inferred; the native leaves are labelled; the fixpoint closes. This
+presupposes a *pinned* dependency graph, which today's registry does not yet
+provide (§9.3).
+
+**Static vs. dynamic.** A dynamic capability trace (run under a recording
+policy that logs every `Check` — the dry-run mode of PERMISSIONS.10) discovers
+a *tight* candidate set for exercised paths, but is **unsound** (covers only
+executed paths). The productive pattern is: dynamic trace to *propose* a
+manifest, static analysis to *prove it is an over-approximation*.
+
+**Verdict.** The purity/reachability verdict is highly feasible, sound, and
+buildable on shipped machinery — a real guarantee for the AQL-source graph.
+Precise effect sets are best-effort: dynamic-eval-heavy code either annotates
+or over-approximates to its grant, which the design tolerates because the
+importer gates the actual grant regardless. The design should therefore lead
+with reachability/purity, treat precise inference as best-effort-with-
+annotations, and expose "analyzable" as a capability a strict profile can
+require.
+
+### 7.4 Worked case: when is `do [body]` analysable?
+
+`do` is the clearest lens on §7.3 because it is AQL's general "run this code"
+word, and the intuition "`do [add 1 1]` is obviously fine" is exactly right —
+the question is *where the line falls*. `do`'s code-body signature is
+`{Args:[TList], NoEvalArgs:{0:true}, ReturnsFn: doListReturnsFn,
+CompileEffect: CompileFallbackBody}` (`native_control.go`): the body is *not*
+evaluated before `do` sees it, the checker computes `do`'s result by walking
+the body (`doListReturnsFn` → `RunCarrierBody`), and the compiler islands the
+body **only when it is an inert const**. Both the type result and the
+capability set fall out of the same body walk — so analysability is governed by
+one question: *can the analyzer see the body as a known sequence of resolvable
+words?*
+
+The knowability lattice, most-to-least analysable:
+
+| Form | Example | Analysable? |
+|---|---|---|
+| Syntactic inert-const literal | `do [add 1 1]` | **Yes, precisely** — identical to inlining `add 1 1`; body walked, effect set = `{}` |
+| Literal referencing in-scope names | `do [x add 1]`, `do [IO.read p]` | **Yes** — names resolve in the checker's scope; effects = union of the resolved words (here `{fileops.read}`) |
+| Literal with its own locals/params | `do [def y 5  y add 1]` | **Yes** — self-contained; walked as a carrier body |
+| Name bound once to a literal | `def b [add 1 1]  do b` | **Usually** — needs def-substitution: feasible when the checker tracks `b`'s concrete value and `b` is not reassigned / shadowed / a parameter; degrades to "List of unknown code" otherwise |
+| Computed list | `do (concat [add] [1 1])` | **Only if constant-foldable** — a pure fold to a known list is analysable; a general computation is not |
+| Received / opaque value | `do (args.0)`, `do (read "x.aql" …)` | **No** — only the *type* (`List`) is known, not the *code*; over-approximate to the module's grant |
+
+`do [add 1 1]` is trivial precisely because the body is `[Word(add), 1, 1]` —
+an inert const whose single word is a pure core arithmetic op — so
+`doListReturnsFn` infers `Integer` and the capability walk yields `{}`. The
+boundary is **not** "is the argument written as `[...]`?" but "**can the
+analyzer prove the body is an inert constant whose element words are all
+statically resolvable?**" — the exact predicate the compiler already applies
+for `CompileFallbackBody` islanding. Cases 1–3 satisfy it; cases 4–6 are the
+degradation, and per §7.3 they degrade the inferred manifest to the ambient
+grant, not the confinement. Note the analyzer cannot tell `do [literal]` from
+`do computed` at the *signature* level (both match `[TList]`); the distinction
+is made by the body walk, and "a `do` whose body I could not prove inert-const"
+is precisely the diagnostic a strict profile turns into a
+declare-or-fail requirement.
+
 ---
 
 ## 8. AQL-specific resource limits — the quantitative capability axis
