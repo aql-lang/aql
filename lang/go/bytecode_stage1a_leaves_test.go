@@ -85,3 +85,43 @@ outs`)
 func TestDeferredResidualListStaysSound(t *testing.T) {
 	stage1aSound(t, `def f fn [[y:Integer] [] [ [y y] ]] (f 5)`)
 }
+
+// The cross-NESTED-fragment reference shape (trie-insert recompiled under the
+// unit-spec cascade): `def kid (user-call …)` produced inside the OUTER if's
+// else-arm, referenced as the INNER if's arm-out. The boolean fragInternal
+// conflated "same fragment" with "same-or-ancestor", so the producer was never
+// promoted and the inner arm refused "branch leaves extra values" (out=opEvent,
+// vm=0, fragEvents=0). crossFragRef (fragment-identity tracking in
+// collectPromotableEvents) now promotes it to a unit-frame local.
+func TestCrossNestedFragmentUserCallPromotes(t *testing.T) {
+	stage1aCompiles(t, `def seek9 fn [[k:String m:Map] [Any] [ (m get k) ]]
+def pick9 fn [
+  [k:String m:Map] [Any] [
+    if ((k size) eq 0) [
+      "empty"
+    ] [
+      def kid (seek9 k m)
+      def kidnode (if (kid eq none) ["fresh"] [kid])
+      kidnode
+    ]
+  ]
+]
+(pick9 "a" {a: 42})`)
+}
+
+// All three runtime paths of the nested guard (found / missing / empty key).
+func TestCrossNestedFragmentAllPathsSound(t *testing.T) {
+	for _, call := range []string{`(pick9 "a" {a: 42})`, `(pick9 "z" {a: 42})`, `(pick9 "" {a: 42})`} {
+		stage1aSound(t, `def seek9 fn [[k:String m:Map] [Any] [ (m get k) ]]
+def pick9 fn [
+  [k:String m:Map] [Any] [
+    if ((k size) eq 0) [ "empty" ] [
+      def kid (seek9 k m)
+      def kidnode (if (kid eq none) ["fresh"] [kid])
+      kidnode
+    ]
+  ]
+]
+`+call)
+	}
+}

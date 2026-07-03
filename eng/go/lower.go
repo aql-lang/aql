@@ -601,16 +601,30 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 // binary op refuses "operands of <op> not adjacent on top". (Ref-counting via
 // forEachFragmentOperand and rewriting via rewritePromotedRefs already recurse
 // into fragments; only the promotion decision did not.)
-func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool) {
+func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool, map[int]bool) {
 	var out []*emitEvent
 	fragInternal := map[int]bool{}
-	var walk func(evs []emitEvent, inFrag bool)
-	walk = func(evs []emitEvent, inFrag bool) {
+	// fragID assigns each event the serial id of the fragment it lives in
+	// (0 = the unit's top level; each recursed fragment gets a fresh id).
+	// crossFragRef marks a producer referenced from a DIFFERENT fragment than
+	// the one it lives in — the cross-NESTED-fragment reference lowerFragment
+	// cannot seat from the sim (each fragment's vm starts empty): `def kid
+	// (find-kid …)` produced inside the OUTER arm, referenced as the INNER
+	// if's arm-out. The boolean fragInternal alone conflates "same fragment"
+	// with "same-or-ancestor", so the promotion decision needs this second
+	// signal to store such producers in a unit-frame local (visible across
+	// every nested fragment).
+	fragID := map[int]int{}
+	crossFragRefSet := map[int]bool{}
+	nextID := 0
+	var walk func(evs []emitEvent, id int)
+	walk = func(evs []emitEvent, id int) {
 		for i := range evs {
 			out = append(out, &evs[i])
-			if inFrag {
+			if id != 0 {
 				fragInternal[evs[i].seq] = true
 			}
+			fragID[evs[i].seq] = id
 			for _, frag := range childFragments(&evs[i]) {
 				// Only recurse into a SINGLE-result fragment (a single-value branch
 				// arm residualN==1, or a loop body / condition residualN==0). A
@@ -619,13 +633,107 @@ func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool) {
 				// would wrongly store or drop one of them ("branch leaves extra
 				// values") — leave those untouched.
 				if frag != nil && frag.residualN <= 1 {
-					walk(frag.events, true)
+					nextID++
+					walk(frag.events, nextID)
 				}
 			}
 		}
 	}
-	walk(events, false)
-	return out, fragInternal
+	walk(events, 0)
+	// Second pass: record references whose consuming fragment differs from the
+	// producer's. An event's plain operands consume on ITS fragment's sim; a
+	// child fragment's OUT operand must be present on the CHILD's sim, so its
+	// consumer is the child fragment. Fragment ids are assigned identically to
+	// the first pass (same traversal order).
+	nextID = 0
+	ref := func(op emitOperand, consumerFrag int) {
+		if op.kind == opEvent && fragID[op.idx] != consumerFrag {
+			crossFragRefSet[op.idx] = true
+		}
+	}
+	var walk2 func(evs []emitEvent, id int)
+	walk2 = func(evs []emitEvent, id int) {
+		for i := range evs {
+			ev := &evs[i]
+			// Enclosing-scope operands ONLY (mirroring rewritePromotedRefs's
+			// field set). forEachOperand would ALSO visit a branch's
+			// thenOut/elsOut — but those are the CHILD fragments' outs, refed
+			// below at the child's id; visiting them here at the parent's id
+			// falsely marked every arm's own result as cross-fragment
+			// (`if c (1 add 2) [9]` promoted its then-arm add, shifting the
+			// emit goldens).
+			switch ev.kind {
+			case evCall:
+				for _, op := range ev.call.ops {
+					ref(op, id)
+				}
+			case evCallUser:
+				for _, op := range ev.uc.ops {
+					ref(op, id)
+				}
+			case evFallback:
+				for _, op := range ev.fb.ins {
+					ref(op, id)
+				}
+			case evBranch:
+				ref(ev.br.cond, id)
+				ref(ev.br.thenVal, id)
+				ref(ev.br.elsVal, id)
+			case evLoop:
+				ref(ev.loop.end, id)
+			}
+			frags := childFragments(ev)
+			// Child fragments recurse with fresh ids in the same order; each
+			// fragment's OUT consumes on that child's sim.
+			fi := 0
+			outsFor := fragmentOuts(ev)
+			for _, frag := range frags {
+				if frag != nil && frag.residualN <= 1 {
+					nextID++
+					childID := nextID
+					if fi < len(outsFor) && outsFor[fi] != nil {
+						ref(*outsFor[fi], childID)
+					}
+					walk2(frag.events, childID)
+				}
+				fi++
+			}
+		}
+	}
+	walk2(events, 0)
+	return out, fragInternal, crossFragRefSet
+}
+
+// fragmentOuts returns, per childFragments slot, the OUT operand that must be
+// present on that fragment's sim at its close (nil for a fragment with no
+// out). Order matches childFragments: [condFrag, then, els] for a branch,
+// [body] for a loop.
+func fragmentOuts(ev *emitEvent) []*emitOperand {
+	switch ev.kind {
+	case evBranch:
+		if ev.br == nil {
+			return nil
+		}
+		outs := make([]*emitOperand, 3)
+		outs[0] = &ev.br.condOut
+		if ev.br.hasThenOut {
+			outs[1] = &ev.br.thenOut
+		}
+		if ev.br.hasElsOut {
+			outs[2] = &ev.br.elsOut
+		}
+		return outs
+	case evLoop:
+		// hasBodyOut gates a SIDE-EFFECT loop's stale bodyOut operand: the body
+		// nets no value per iteration, so its recorded operand must not count
+		// as a fragment-out reference (it falsely promoted the body's last
+		// event in `for 3 [i add 10]`, shifting the for-loop golden).
+		if ev.loop == nil || !ev.loop.hasBodyOut {
+			return nil
+		}
+		return []*emitOperand{&ev.loop.bodyOut}
+	}
+	return nil
 }
 
 // fragmentResultSeqs collects the event seqs that ARE a fragment's residual —
@@ -713,7 +821,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	}
 	var promoted map[int]int
 	var dead map[int]bool
-	allEvents, fragInternal := collectPromotableEvents(events)
+	allEvents, fragInternal, crossFragRef := collectPromotableEvents(events)
 	fragResult := fragmentResultSeqs(allEvents)
 	// captured marks producers referenced by a CLOSURE CAPTURE (an each/fold/scan
 	// body's lexical capture of an enclosing value-def). The capture resolves to a
@@ -743,7 +851,12 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// promoted to a frame local — the arm then re-pushes the slot (lowerFragment
 		// re-resolves its captured opEvent `out` to the local). Without this the arm
 		// refused "branch leaves extra values" (out=opEvent, len(lw.vm)==0).
-		if fragResult[ev.seq] && fragInternal[ev.seq] {
+		// A cross-NESTED-fragment reference (crossFragRef) is exempt: the
+		// producer lives in one fragment and a DIFFERENT fragment's arm/out
+		// consumes it — lowerFragment resets the sim per fragment, so the only
+		// sound delivery is a unit-frame local (the trie-insert `def kid
+		// (find-kid …)` in the outer arm, referenced as the inner if's arm-out).
+		if fragResult[ev.seq] && fragInternal[ev.seq] && !crossFragRef[ev.seq] {
 			continue
 		}
 		// A DEAD branch value-def — `def _ (if c [t] [e])` whose merge result is never
@@ -847,7 +960,8 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// anonymous single-use harness feeds on the Stage-3 stack layout.
 		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 ||
 			(captured[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
-			(fragRef[ev.seq] && !fragInternal[ev.seq] && es.eventInfo[ev.seq].valueDef))
+			(fragRef[ev.seq] && !fragInternal[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
+			(crossFragRef[ev.seq] && es.eventInfo[ev.seq].valueDef))
 		// A DEAD value-def — `def _ (f …)` bound to a name referenced ZERO times —
 		// drops its result for a USER call too, not only a native. The interpreter
 		// binds the result to that name OFF the residual stack (the binding is the
@@ -873,7 +987,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				dead = map[int]bool{}
 			}
 			dead[ev.seq] = true
-		case refs[ev.seq] >= 2 || es.eventInfo[ev.seq].valueDef || (fragRef[ev.seq] && !fragInternal[ev.seq]) || forceOrder[ev.seq]:
+		case refs[ev.seq] >= 2 || es.eventInfo[ev.seq].valueDef || (fragRef[ev.seq] && !fragInternal[ev.seq]) || crossFragRef[ev.seq] || forceOrder[ev.seq]:
 			// Promote to a frame slot (store now, re-push per reference) when the
 			// result is referenced more than once, OR it is a NAMED value-def
 			// (`def x (expr)`, marked via MarkValueDef), OR it is a UNIT-level producer
