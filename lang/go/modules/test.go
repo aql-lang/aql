@@ -608,6 +608,16 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
 				BarrierPos: -1,
+				// runCheckProp runs BOTH bodies (the generator, param `r`; the
+				// property, one unnamed param) through parent.CallAQL in fresh
+				// isolated frames against the module-captured parent registry — the
+				// SAME Go handler in interpreter and compiled mode. So the bodies
+				// never couple to the VM tape or a compiled frame local: a plain
+				// CALL_NATIVE bake is sound even when the bodies arrive as DYNAMIC
+				// values (the declarative `_prop_spec` surface fetches them via
+				// `p get "gen"` / `p get "property"`). Without this the NoEvalArgs
+				// dynamic-body refusal blocked every `_prop_spec` file.
+				CompileEffect: native.CompileRunsBodyIsolated,
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return runCheckProp(parent, args)
 				}),
@@ -1373,7 +1383,7 @@ def spec-with-subs fn [[subs:List cases:List subject:Any name:String] [Map] [
 # Uses FORWARD form for the test-check-prop call so each arg fills
 # the corresponding sig position directly (sig[0]=String, sig[1..2]
 # =List, sig[3..5]=Integer).
-def run-property fn [[| p:Map] [Map] [
+def run-property fn [[| p:PropertySpec] [Map] [
   test-check-prop
     (p get "name")
     (p get "gen")

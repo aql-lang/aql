@@ -2497,9 +2497,13 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// program falls back to the interpreter.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("context-dependent word " + word)
-	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || !es.noEvalBodiesInertScoped(sig, args)):
+	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || (!sig.CompileEffect.Has(CompileRunsBodyIsolated) && !es.noEvalBodiesInertScoped(sig, args))):
 		// A code-body word is refused when:
-		//   - its body is not inert data; OR
+		//   - its body is not inert data (UNLESS the word runs the body in an
+		//     ISOLATED CallAQL frame — CompileRunsBodyIsolated — where name
+		//     resolution is identical under interpreter and VM: Test.check-prop's
+		//     dynamic gen/property bodies bake as CALL_NATIVE operands and run
+		//     through the same captured-parent handler in both modes); OR
 		//   - it SPLICES the body onto the tape (CompileExecutesBody, e.g. `var`):
 		//     the handler returns tape-coupled tokens the VM cannot run, so baking a
 		//     CALL_NATIVE (which an inert word-list body would otherwise permit)
@@ -2538,7 +2542,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
-	case anyDynamicCarrier(args) && !shuffleOK:
+	case anyDynamicCarrier(args) && !shuffleOK && !es.dynInputsProven(sig, args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
 	case anyDynamicCarrier(outs) && !forceDynOut && !shuffleOK:
@@ -3025,6 +3029,51 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool 
 			return false
 		}
 		if bodyHasSentinel(args[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// dynInputsProven reports whether a dynamic-operand dispatch is nonetheless a
+// PROVEN sig match — safe to bake a plain CALL_NATIVE despite the dynamic
+// carriers — for a word that runs its bodies in ISOLATED CallAQL frames
+// (CompileRunsBodyIsolated, i.e. Test.check-prop). The dynamic-input refusal
+// defends against a WIDENED sig: a gradual-Any operand (Parent=Any) matched a
+// concrete sig position only by the Any→anything rule, so the runtime value
+// could violate it and the compiled CALL_NATIVE would not raise where the
+// interpreter's re-match would. That widening is visible as a bare-Any carrier.
+// A dynamic operand whose CONCRETE Parent type strictly conforms to its sig
+// position matched by REAL type membership, not widening — it is a runtime-
+// valued value of a statically PROVEN type (e.g. `p get "runs"` over a
+// `p:PropertySpec` param, an Integer guaranteed by the record contract the VM's
+// guarded CALL_USER enforces at run-property's entry). So the runtime value
+// conforms, the VM invokes the same single sig the interpreter matches, and the
+// bodies run through the same captured-parent handler in both modes. The gate is
+// deliberately strict: EVERY operand must conform by a non-Any concrete type, so
+// a single genuinely-widened (Any) operand keeps the whole call refused.
+func (es *EmitState) dynInputsProven(sig *Signature, args []Value) bool {
+	if sig == nil || !sig.CompileEffect.Has(CompileRunsBodyIsolated) {
+		return false
+	}
+	sigArgs := sig.ArgTypes()
+	if len(sigArgs) != len(args) {
+		return false
+	}
+	for i, a := range args {
+		if !a.Dynamic {
+			continue
+		}
+		// A widened gradual-Any operand: Parent conforms to nothing concrete,
+		// so this is exactly the unproven case the guard defends — refuse.
+		if a.Parent == nil || a.Parent.Equal(TAny) {
+			return false
+		}
+		pt := sigArgs[i]
+		if pt == nil {
+			return false
+		}
+		if !a.Parent.ConformsTo(pt) {
 			return false
 		}
 	}

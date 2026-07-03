@@ -794,8 +794,14 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
-		r.Check.Emit.RecordCall(word, sig, args, out, pos,
-			dynOutNativeOK(r, word, sig, args, out) || quoteInertOK, quoteInertOK)
+		// A CompileRunsBodyIsolated word (Test.check-prop) whose dynamic operands
+		// all conform to its single sig (dynInputsProven) bakes a faithful CALL_
+		// NATIVE; its declared-Map return rides as a dynamic (declared-Any) output
+		// exactly as dynOutNativeOK admits for concrete-arg builtins — the handler
+		// produces the real result value in both modes.
+		forceDynOut := dynOutNativeOK(r, word, sig, args, out) || quoteInertOK ||
+			r.Check.Emit.dynInputsProven(sig, args)
+		r.Check.Emit.RecordCall(word, sig, args, out, pos, forceDynOut, quoteInertOK)
 	}
 }
 
