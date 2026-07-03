@@ -51,6 +51,28 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	lw.pushOperand(lp.start, lp.pos)
 	lw.emit(OpForSetup, lp.iterSlot, lp.pos)
 	lw.vm = lw.vm[:len(lw.vm)-3] // start, end, step consumed
+	// Seed the loop-carried def slots with their pre-loop values — once,
+	// before the first FOR_NEXT, so a zero-iteration loop leaves each cell
+	// at its pre-loop value (the "loop may run zero times" join). An
+	// event-sourced init pops off the sim top (reverse production order —
+	// orderedCarried; a promoted producer was already rewritten to a local
+	// operand); any other layout refuses, a sound interpreter fallback.
+	for _, c := range orderedCarried(lp.carried) {
+		if c.init.kind == opEvent {
+			if lw.variadic[c.init.idx] {
+				return "for: carried init is a variadic result (Stage 2)"
+			}
+			if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], c.init) {
+				return "for: carried init is not on top of the stack"
+			}
+			lw.emit(OpStoreLocal, c.slot, lp.pos)
+			lw.vm = lw.vm[:len(lw.vm)-1]
+			continue
+		}
+		lw.pushOperand(c.init, lp.pos)
+		lw.emit(OpStoreLocal, c.slot, lp.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+	}
 	head := len(*lw.code)
 	fn := lw.emit(OpForNext, 0, lp.pos)
 	endHoles := []int{}
@@ -79,6 +101,61 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 		lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 		lw.variadic[ev.seq] = true
 	}
+	lw.note()
+	return ""
+}
+
+// orderedCarried orders a loop's carried-slot inits for lowering:
+// event-sourced inits pop off the simulated stack top-first (reverse
+// production order), then the freely re-pushable const/local/type inits
+// in registration order. Small n — a simple insertion sort avoids an
+// import in this file.
+func orderedCarried(carried []carriedInit) []carriedInit {
+	if len(carried) < 2 {
+		return carried
+	}
+	evs := make([]carriedInit, 0, len(carried))
+	rest := make([]carriedInit, 0, len(carried))
+	for _, c := range carried {
+		if c.init.kind == opEvent {
+			evs = append(evs, c)
+		} else {
+			rest = append(rest, c)
+		}
+	}
+	for i := 1; i < len(evs); i++ {
+		for j := i; j > 0 && evs[j].init.idx > evs[j-1].init.idx; j-- {
+			evs[j], evs[j-1] = evs[j-1], evs[j]
+		}
+	}
+	return append(evs, rest...)
+}
+
+// lowerStore lowers a recorded loop-carried def REBIND: the source value is
+// stored into the name's carried frame slot (OpStoreLocal pops the top), so
+// the store runs exactly when its recording site runs — inside a branch arm
+// only when that arm is taken, skipped by break/continue exactly as the
+// interpreter skips the def. An event source must sit on the sim top (the
+// def site immediately follows the producing dispatch; a promoted producer
+// was rewritten to a local operand); any other layout refuses — a sound
+// interpreter fallback, never a wrong store.
+func (lw *lowerer) lowerStore(ev *emitEvent) string {
+	st := ev.store
+	if st.src.kind == opEvent {
+		if lw.variadic[st.src.idx] {
+			return "loop-carried store of a variadic result (Stage 3)"
+		}
+		if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], st.src) {
+			return "loop-carried store source is not on top of the stack"
+		}
+		lw.emit(OpStoreLocal, st.slot, st.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+		lw.note()
+		return ""
+	}
+	lw.pushOperand(st.src, st.pos)
+	lw.emit(OpStoreLocal, st.slot, st.pos)
+	lw.vm = lw.vm[:len(lw.vm)-1]
 	lw.note()
 	return ""
 }
@@ -335,6 +412,8 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerFallback(ev)
 		case evTrap:
 			reason = lw.lowerTrap(ev)
+		case evStore:
+			reason = lw.lowerStore(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -397,6 +476,9 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		visit(ev.loop.end)
 		visit(ev.loop.step)
 		visit(ev.loop.bodyOut)
+		for _, c := range ev.loop.carried {
+			visit(c.init)
+		}
 	case evBreak, evContinue, evTrap:
 		// no operands
 	case evCallUser:
@@ -407,6 +489,8 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		for _, op := range ev.fb.ins {
 			visit(op)
 		}
+	case evStore:
+		visit(ev.store.src)
 	default: // evBranch
 		// thenVal / elsVal are the value-arm operands — meaningful only when
 		// thenIsVal / elsIsVal, and an opEvent only for the computed-arm shapes
@@ -586,6 +670,11 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 		promoteOperand(&ev.br.elsVal, promoted)
 	case evLoop:
 		promoteOperand(&ev.loop.end, promoted)
+		for i := range ev.loop.carried {
+			promoteOperand(&ev.loop.carried[i].init, promoted)
+		}
+	case evStore:
+		promoteOperand(&ev.store.src, promoted)
 	}
 	for _, frag := range childFragments(ev) {
 		if frag == nil {
@@ -685,6 +774,13 @@ func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool, ma
 				ref(ev.br.elsVal, id)
 			case evLoop:
 				ref(ev.loop.end, id)
+				// Carried-slot inits store in the loop EVENT's own scope
+				// (lowerLoop, right after FOR_SETUP — the enclosing sim).
+				for _, c := range ev.loop.carried {
+					ref(c.init, id)
+				}
+			case evStore:
+				ref(ev.store.src, id)
 			}
 			frags := childFragments(ev)
 			// Child fragments recurse with fresh ids in the same order; each

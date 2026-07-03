@@ -237,6 +237,31 @@ type emitLoop struct {
 	hasBodyOut       bool // false: the body nets no value per iteration (or diverges)
 	iterSlot         int
 	pos              SrcPos
+	// carried seeds the loop-carried def slots (a pre-loop `def` the body
+	// REBINDS, read on a later iteration or after the loop) with their
+	// pre-loop values — lowered right after FOR_SETUP, before the first
+	// FOR_NEXT, so a zero-iteration loop leaves each cell at its pre-loop
+	// value. See NoteLoopCarried.
+	carried []carriedInit
+}
+
+// carriedInit seeds one loop-carried def slot: the unit frame slot and the
+// operand holding the pre-loop value stored into it before the loop runs.
+type carriedInit struct {
+	slot int
+	init emitOperand
+}
+
+// emitStore is a recorded frame-local store — the loop-carried def REBIND
+// (`def found true` inside a for arm, read on a later iteration or after
+// the loop). src resolves in the recording scope; the lowering pushes a
+// const/local/type source (or pops an event source off the sim top) into
+// locals[slot] via OpStoreLocal. A store produces no values, so a rebind
+// nets 0 exactly like the interpreter's def.
+type emitStore struct {
+	src  emitOperand
+	slot int
+	pos  SrcPos
 }
 
 const (
@@ -248,6 +273,7 @@ const (
 	evCallUser
 	evFallback
 	evTrap
+	evStore
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
@@ -307,14 +333,15 @@ type emitTrap struct {
 // the small payloads stay inline. Every consumer is kind-guarded, so a nil
 // br/loop on a non-matching event is never dereferenced.
 type emitEvent struct {
-	seq  int
-	kind int
-	call emitCall
-	br   *emitBranch
-	loop *emitLoop
-	uc   emitUserCall
-	fb   emitFallback
-	trap emitTrap
+	seq   int
+	kind  int
+	call  emitCall
+	br    *emitBranch
+	loop  *emitLoop
+	uc    emitUserCall
+	fb    emitFallback
+	trap  emitTrap
+	store *emitStore
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -402,6 +429,23 @@ type EmitState struct {
 	// Finalize ends the program at the trap. seqs start at 1, so 0 is a safe
 	// "none" sentinel.
 	trapAt int
+	// loopCarried is the stack of OPEN armed-loop carried-def scopes (one per
+	// nested AnalyseLoopBody running with loop capture). Each maps a rebound
+	// pre-loop def NAME to the unit frame slot carrying it across iterations;
+	// RecordDefRebind consults the stack at `def` sites, innermost-first.
+	loopCarried []*loopCarriedScope
+	// pendingCarried is the just-closed loop analysis's carried-slot init
+	// list (EndLoopCarried), consumed by the RecordLoop that follows.
+	pendingCarried []carriedInit
+}
+
+// loopCarriedScope is one armed loop's carried-def registrations: the unit
+// depth the loop records in (defs inside a nested fn compilation must not
+// match), the name→slot map, and the slot inits queued for RecordLoop.
+type loopCarriedScope struct {
+	unitDepth int
+	slots     map[string]int
+	inits     []carriedInit
 }
 
 // emitUnit scopes local-slot numbering to one code unit (the
@@ -1083,6 +1127,31 @@ type BranchRecord struct {
 // form (HasElse=false) has a VARIADIC result (0 or 1 values), which
 // only the program residual may absorb. Any shape Stage 2 cannot
 // lower marks the program uncompilable.
+// stripZeroOutPhantoms drops 0-output statement guards' phantom (None)
+// results from a residual stack. The program and fn-body residual
+// reconciliations skip zeroOut phantoms; arm residuals (RecordBranch) and a
+// loop body's per-iteration residual (RecordLoop) must too — otherwise the
+// phantom reads as the merge / body-out value and the lowerer refuses with
+// "branch leaves extra values" (out=opEvent, vm=0).
+func (es *EmitState) stripZeroOutPhantoms(stk []Value) []Value {
+	kept := stk
+	for i, rv := range stk {
+		pr, ok := es.producedBy[rv.ID]
+		if ok && es.eventInfo[pr.seq].zeroOut {
+			// First phantom found: copy the prefix and filter the rest.
+			kept = append([]Value(nil), stk[:i]...)
+			for _, r := range stk[i:] {
+				if p, o := es.producedBy[r.ID]; o && es.eventInfo[p.seq].zeroOut {
+					continue
+				}
+				kept = append(kept, r)
+			}
+			break
+		}
+	}
+	return kept
+}
+
 func (es *EmitState) RecordBranch(b BranchRecord) {
 	if !es.active() {
 		return
@@ -1096,26 +1165,8 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	// "branch leaves extra values" (out=opEvent, vm=0). Stripping here keeps
 	// resolveArm, residualN, and branchVariadicResult consistent, and lets the
 	// both-arms-net-zero → zeroOut marking cascade through nested guards.
-	stripPhantoms := func(stk []Value) []Value {
-		kept := stk
-		for i, rv := range stk {
-			pr, ok := es.producedBy[rv.ID]
-			if ok && es.eventInfo[pr.seq].zeroOut {
-				// First phantom found: copy the prefix and filter the rest.
-				kept = append([]Value(nil), stk[:i]...)
-				for _, r := range stk[i:] {
-					if p, o := es.producedBy[r.ID]; o && es.eventInfo[p.seq].zeroOut {
-						continue
-					}
-					kept = append(kept, r)
-				}
-				break
-			}
-		}
-		return kept
-	}
-	b.ThenStk = stripPhantoms(b.ThenStk)
-	b.ElsStk = stripPhantoms(b.ElsStk)
+	b.ThenStk = es.stripZeroOutPhantoms(b.ThenStk)
+	b.ElsStk = es.stripZeroOutPhantoms(b.ElsStk)
 	ev := emitEvent{kind: evBranch, br: &emitBranch{
 		constCond: b.ConstCond, hasElse: b.HasElse, pos: b.Pos,
 	}}
@@ -1425,6 +1476,157 @@ func (es *EmitState) RegisterLocal(id string) int {
 	u.numLocals++
 	u.localByID[id] = slot
 	return slot
+}
+
+// BeginLoopCarried opens a carried-def scope for one armed loop analysis
+// (AnalyseLoopBody with loop capture active). Pairs with EndLoopCarried.
+func (es *EmitState) BeginLoopCarried() {
+	if es == nil {
+		return
+	}
+	es.loopCarried = append(es.loopCarried, &loopCarriedScope{
+		unitDepth: len(es.units),
+		slots:     map[string]int{},
+	})
+}
+
+// EndLoopCarried closes the innermost carried-def scope, exposing its slot
+// inits to the RecordLoop that follows the analysis.
+func (es *EmitState) EndLoopCarried() {
+	if es == nil || len(es.loopCarried) == 0 {
+		return
+	}
+	top := es.loopCarried[len(es.loopCarried)-1]
+	es.loopCarried = es.loopCarried[:len(es.loopCarried)-1]
+	es.pendingCarried = top.inits
+}
+
+// NoteLoopCarried registers one loop-body REBIND of a pre-existing def as
+// loop-carried: the name gets a unit frame slot (reusing an enclosing armed
+// loop's slot for the same name, so nested loops over one def share one
+// cell), each round's JOINED binding ID resolves to that slot, and — for a
+// fresh slot — the pre-loop value is queued as the slot's init, stored
+// before the loop's first iteration. Called by AnalyseLoopBody at the end
+// of every analysis round; the init operand is re-resolved each round
+// because a discarded round's Rollback truncates the const pool the prior
+// resolution interned into. A name whose pre-loop value cannot resolve, or
+// whose value is function-shaped, is left unregistered — its
+// cross-iteration reads then refuse at resolveOperand exactly as before
+// (sound interpreter fallback).
+func (es *EmitState) NoteLoopCarried(name string, joined, pre Value) {
+	if !es.active() || len(es.loopCarried) == 0 {
+		return
+	}
+	scope := es.loopCarried[len(es.loopCarried)-1]
+	if scope.unitDepth != len(es.units) {
+		return
+	}
+	u := es.units[len(es.units)-1]
+	slot, seen := scope.slots[name]
+	if !seen {
+		// An enclosing armed loop already carrying this name owns the cell —
+		// reuse it (the outer slot is live and current at inner-loop entry;
+		// a fresh inner slot with its own init would RESET the accumulation
+		// every outer iteration). No init recorded on reuse.
+		reused := false
+		for i := len(es.loopCarried) - 2; i >= 0; i-- {
+			outer := es.loopCarried[i]
+			if outer.unitDepth != scope.unitDepth {
+				break
+			}
+			if s, ok := outer.slots[name]; ok {
+				slot, reused = s, true
+				break
+			}
+		}
+		if !reused {
+			if isFnValueResidual(pre) || isFnValueResidual(joined) {
+				return
+			}
+			init, ok := es.resolveOperand(pre)
+			if !ok {
+				return
+			}
+			slot = u.numLocals
+			u.numLocals++
+			scope.inits = append(scope.inits, carriedInit{slot: slot, init: init})
+		}
+		scope.slots[name] = slot
+	} else {
+		// Re-resolve the init on a repeat round so its const index targets
+		// the pool that survives (a non-final round's Rollback truncated the
+		// earlier interning). The pre-loop value is round-invariant, so a
+		// resolution that now fails is a recording inconsistency — refuse
+		// rather than bake a dangling operand.
+		for i := range scope.inits {
+			if scope.inits[i].slot != slot {
+				continue
+			}
+			init, ok := es.resolveOperand(pre)
+			if !ok {
+				es.MarkUncompilable("loop-carried def `" + name + "`: pre-loop value no longer resolves")
+				return
+			}
+			scope.inits[i].init = init
+			break
+		}
+	}
+	u.localByID[joined.ID] = slot
+}
+
+// RecordDefRebind records a `def` dispatch of a loop-carried name: the
+// rebind STORES its value into the name's carried frame slot at the rebind
+// site, so a conditional rebind updates the cell exactly when its arm runs
+// and a break/continue skips it exactly as the interpreter skips the def.
+// A def of a name no active armed loop carries records nothing. Once a
+// name IS carried, every rebind must store or the cell goes stale — an
+// unresolvable or function-shaped rebind value refuses the program (sound
+// interpreter fallback, never a stale read).
+func (es *EmitState) RecordDefRebind(name string, v Value, pos SrcPos) {
+	if !es.active() || len(es.loopCarried) == 0 {
+		return
+	}
+	slot, found := -1, false
+	for i := len(es.loopCarried) - 1; i >= 0; i-- {
+		scope := es.loopCarried[i]
+		if scope.unitDepth != len(es.units) {
+			continue
+		}
+		if s, ok := scope.slots[name]; ok {
+			slot, found = s, true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+	if isFnValueResidual(v) {
+		es.MarkUncompilable("loop-carried def `" + name + "` rebound to a function value (Stage 3)")
+		return
+	}
+	src, ok := es.resolveOperand(v)
+	if !ok {
+		es.MarkUncompilable("loop-carried def `" + name + "` rebind of unknown provenance")
+		return
+	}
+	es.appendEvent(emitEvent{kind: evStore, store: &emitStore{src: src, slot: slot, pos: pos}})
+}
+
+// RefuseCarriedUndef marks the program uncompilable when `undef` targets a
+// name an active armed loop carries: the undef exposes the PREVIOUS binding
+// while the carried slot still holds the rebound value, so compiled reads
+// would diverge from the interpreter. An undef of any other name is
+// untouched.
+func (es *EmitState) RefuseCarriedUndef(name string) {
+	if !es.active() {
+		return
+	}
+	for i := len(es.loopCarried) - 1; i >= 0; i-- {
+		if _, ok := es.loopCarried[i].slots[name]; ok {
+			es.MarkUncompilable("undef of the loop-carried def `" + name + "` (Stage 3)")
+			return
+		}
+	}
 }
 
 // emitCheckpoint snapshots the append-only recording pools and counters so a
@@ -1924,6 +2126,10 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	if !es.active() {
 		return
 	}
+	// Claim the just-closed analysis's carried-def slot inits (EndLoopCarried)
+	// up front so an early refusal below never leaks them to a LATER loop.
+	carried := es.pendingCarried
+	es.pendingCarried = nil
 	if body == nil {
 		es.MarkUncompilable("for: body not captured")
 		return
@@ -1939,7 +2145,12 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 		es.MarkUncompilable("for: computed range start/step (Stage 2 follow-on)")
 		return
 	}
-	lp := &emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos}
+	lp := &emitLoop{start: startOp, end: endOp, step: stepOp, iterSlot: -1, pos: pos, carried: carried}
+	// A body ending in a 0-output statement guard (`if c [def …] []` — the
+	// loop-carried conditional-rebind shape) leaves only the guard's phantom
+	// None; stripping it classifies the body as the SIDE-EFFECT (zeroOut)
+	// loop it is at run time, exactly like the arm/fn residual strips.
+	bodyStk = es.stripZeroOutPhantoms(bodyStk)
 	if len(bodyStk) > 0 && !fragDiverges(body) {
 		if es.setLoopBodyApply(body, bodyStk) {
 			// A per-iteration dynamic apply (`(mk2 i) 10`): the body nets one applied
@@ -3810,6 +4021,13 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			ops = append(ops, eventOperand(pr.seq, pr.idx))
 			continue
 		}
+		// A frame-0 local (a loop-carried def's slot — the post-loop read of a
+		// module-scope rebind resolves the joined binding to its cell). Events
+		// first, mirroring resolveOperand's precedence.
+		if slot, okLoc := es.units[0].localByID[rv.ID]; okLoc {
+			ops = append(ops, localOperand(slot))
+			continue
+		}
 		if IsBareTypeNode(rv) && rv.ID != "" {
 			ops = append(ops, typeOperand(es.internType(rv)))
 			continue
@@ -3985,6 +4203,8 @@ func eventPos(ev emitEvent) SrcPos {
 		return ev.uc.pos
 	case evTrap:
 		return ev.trap.pos
+	case evStore:
+		return ev.store.pos
 	}
 	return ev.br.pos
 }

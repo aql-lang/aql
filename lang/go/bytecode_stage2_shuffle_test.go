@@ -102,10 +102,12 @@ func TestDynamicSwapTwoNetBodyStaysSound(t *testing.T) {
 (two [1 2 3])`)
 }
 
-// NEGATIVE: the loop-carried def rebind (decision.aql eval-table-first's
-// `def found true` inside a for-arm, read as `found not` next iteration) is
-// the smoke file's NEXT leaf — it must keep refusing/falling back soundly.
+// The loop-carried def rebind (decision.aql eval-table-first's `def found
+// true` inside a for-arm, read as `found not` next iteration) COMPILES since
+// the loop-persistent frame slots landed (NoteLoopCarried / RecordDefRebind /
+// evStore — see bytecode_stage2_loopcarried_test.go for the full battery).
+// Flipped from the sound-fallback pin to a compile+parity pin.
 func TestLoopCarriedDefRebindStaysSound(t *testing.T) {
-	stage1aSound(t, `def first-big fn [[xs:List] [Integer] [def found false def result 0 for (xs size) [def idx i def x (xs idx get) if (found not) [if (x 10 gt) [def result x def found true] []] []] end result]]
+	stage1aCompiles(t, `def first-big fn [[xs:List] [Integer] [def found false def result 0 for (xs size) [def idx i def x (xs idx get) if (found not) [if (x 10 gt) [def result x def found true] []] []] end result]]
 (first-big [3 12 40])`)
 }
