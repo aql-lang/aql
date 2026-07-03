@@ -510,6 +510,15 @@ type CallableSpec struct {
 	// body never reaches this — it matches only the single TFunction overload, so
 	// the ≥2-reachable ambiguity gate never fires for it.
 	CrossCollectionTokenShape bool
+	// LambdaSharesTokenShape marks a word that presents a LAMBDA callback the
+	// SAME per-invocation inputs as a token-quotation body — Inputs(args) is the
+	// single callback convention (walk's `{key value path parent depth}` payload
+	// map, handed to a quotation on the stack and to a lambda as its one named
+	// param). The recorder then compiles a lambda body against Inputs(args)
+	// directly (ClosureInValue), instead of consulting the per-word
+	// lambdaCallbackInputs table whose shapes (pair maps, KeyVals) only fit the
+	// words that present DIFFERENT views to lambdas vs quotations.
+	LambdaSharesTokenShape bool
 }
 
 // FnDefInfo holds the function specification for a def-defined function.

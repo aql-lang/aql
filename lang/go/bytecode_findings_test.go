@@ -3574,3 +3574,116 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 		}
 	}
 }
+
+// Stage E landing (corpus-core.tsv:50, the last tier-2 row) — core `walk`'s
+// hooks compile through the closure seam. The descend hook (quotation or
+// lambda — LambdaSharesTokenShape, one `{key value path parent depth}` payload
+// input) compiles to a closure unit walkClassifyHook drives via InvokeBody; a
+// module-scope flex accumulator read in the hook body rides as a closure
+// capture (moduleScopeMutableCaptures, now applied to LAMBDA bodies too), so
+// the compiled body mutates the SAME pointer-backed FlexList cell the frame
+// local holds. The optional ASCEND slot admits exactly one value-operand
+// shape: a flex proven EMPTY at dispatch (emptyFlexHookOperand), whose
+// classify-time token snapshot is a zero-length list forever — every other
+// ascend shape keeps its refusal (sound interpreter fallback).
+func TestWalkHookClosureCompiles(t *testing.T) {
+	parity := []struct{ name, src, want string }{
+		{"tier-2 corpus row (empty-flex ascend consumed as 4th arg)",
+			`def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc`,
+			"[{a:1 b:[2 3]}]"},
+		{"mutation then read-back (second acc reads the mutated cell)",
+			`def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc  acc`,
+			"[{a:1 b:[2 3]} ['' 'a' 'b' 'b.0' 'b.1']]"},
+		{"paren-bounded 3-arg walk, then read the mutated cell",
+			`def acc (flex [])  (walk {mode: "breadth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append]))  acc`,
+			"[{a:1 b:[2 3]} ['' 'a' 'b' 'b.0' 'b.1']]"},
+		{"loop-iteration mutation accumulates across iterations",
+			`def acc (flex [])  for 2 [ (walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append])) drop ]  acc`,
+			"[['' 'a' '' 'a']]"},
+		{"token-quotation hook compiles as a closure",
+			`walk {mode: "depth"} {a:1} [drop]`,
+			"[{a:1}]"},
+		{"each map-lambda with a module-scope flex capture (shared admission)",
+			`def acc (flex [])  each ([kv:Any] => [acc (kv.v) append]) {a:1 b:2}  drop  acc`,
+			"[[1 2]]"},
+	}
+	for _, c := range parity {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%s: check error %v", c.name, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%s: refused: %s", c.name, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%s: expected no island:\n%s", c.name, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: did not run compiled", c.name)
+		}
+		if errC != nil || errI != nil {
+			t.Fatalf("%s: run errs compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%s: compiled=%v interp=%v want %s", c.name, gotC, gotI, c.want)
+		}
+	}
+
+	// A flex MAP admitted as the ascend slot ({} is empty too) reaches the
+	// handler, whose classification raises walk_error — the compiled path
+	// surfaces the byte-identical taxonomy from the VM, no fallback mask.
+	{
+		src := `def acc (flex {})  walk {mode: "depth"} {a:1} (m:Any => [m.path drop])  acc`
+		_, compiled, errC := mustNew(t).RunCompiled(src)
+		_, errI := mustNew(t).Run(src)
+		if !compiled {
+			t.Errorf("flex-map ascend: did not run compiled")
+		}
+		if codeOf(errC) != "walk_error" || codeOf(errC) != codeOf(errI) {
+			t.Errorf("flex-map ascend: compiled err=[%s] interp err=[%s]; want walk_error on both", codeOf(errC), codeOf(errI))
+		}
+	}
+
+	// NEGATIVES — every neighbouring ascend shape whose runtime tokens are NOT
+	// provably empty must still REFUSE (the sound interpreter fallback), and
+	// the fallback must agree with the interpreter.
+	refusals := []struct{ name, src, want string }{
+		{"non-empty flex ascend (tokens not provably empty)",
+			`def acc (flex ["s"])  walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append])  acc`,
+			"code-body word walk"},
+		{"mutated-before-walk flex ascend (an event since construction)",
+			`def acc (flex [])  def z (push "x" acc)  walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append])  acc`,
+			"code-body word walk"},
+		{"loop-nested flex ascend (iteration 2 sees iteration 1's appends)",
+			`def acc (flex [])  for 2 [ walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append]) acc drop ]  acc`,
+			"code-body word walk"},
+		{"lambda ascend (a CallAQL-run fn value, not a compiled closure)",
+			`walk {mode: "depth"} {a:{x:1}} (m:Any => [m.path drop]) (m:Any => [m.path drop])`,
+			"function value reaches walk"},
+		{"hook param type rejects the payload (runtime raises, compile refuses)",
+			`walk {mode: "depth"} {a:1} (s:String => [s drop])`,
+			"function value reaches walk"},
+	}
+	for _, c := range refusals {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog != nil {
+			t.Fatalf("%s: compiled; want refusal", c.name)
+		}
+		if !strings.Contains(reason, c.want) {
+			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
+		}
+		if (errC == nil) != (errI == nil) || codeOf(errC) != codeOf(errI) {
+			t.Fatalf("%s: fallback err=[%s] interp err=[%s] (should agree)", c.name, codeOf(errC), codeOf(errI))
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: fallback=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+}

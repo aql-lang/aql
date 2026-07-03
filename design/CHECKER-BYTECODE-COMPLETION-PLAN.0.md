@@ -453,6 +453,27 @@ from everything; 7 is gated on 6's exit criteria.
   under Phase 3.5/6. recursion.tsv:53 stays among the 7 soundness pins
   as a checker-PRECISION straggler (static spread modeling), distinct
   from the compile-coverage gap Stage A closed.
+- **2026-07-03 — Phase 3.2/3.3 landed: tier-2 → 0 (the P7 tier-2
+  floor).** Live-state verification showed the docs stale AGAIN: the
+  doc-named Stage E flex rows and ALL three Stage D rows already
+  compile on this branch. The REAL remaining tier-2 row was
+  corpus-core.tsv:50 — core `walk` (visit-only traversal) had no
+  closure model ("code-body word walk (Stage 2)"). Landed: a
+  Callable spec for walk with LambdaSharesTokenShape, a
+  provenance-proven empty-flex ascend-hook admission (main-registry
+  `flex` sig identity + empty const containers + top-level scope + no
+  intervening event → the classify-time token snapshot stays empty,
+  byte-identical), and moduleScopeMutableCaptures threading for
+  lambda bodies so the flex accumulator mutates the same cell in both
+  engines. reducibleCeiling ratcheted 1 → 0 with rationale;
+  refusals 153 → 151; compute frontier 70 → 69. Landing test
+  TestWalkHookClosureCompiles (6 positives incl. loop-iteration
+  mutation + 5 refusal negatives). Full battery green on the final
+  tree (VERIFY PASSED, make test exit 0, differential 0 divergences);
+  orchestrator spot-checked the corpus row parity via CLI. Residuals:
+  the two-lambda 4-arg walk stays a sound Stage-3 refusal; the last
+  "dynamic input" row is module-parse.tsv:15, not a Stage-D shape;
+  the stale next-stages/finish-line doc sections are noted, unedited.
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

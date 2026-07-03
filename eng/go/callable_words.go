@@ -176,6 +176,17 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	body := args[spec.BodyPos]
 
+	// A SECOND NoEvalArgs hook slot (walk's optional ASCEND hook — the only
+	// such slot on a Callable word today) rides as a plain VALUE operand next
+	// to the compiled body closure, and the driving handler runs it as a token
+	// QUOTATION through a sub-engine at run time. That is sound only for the
+	// one provably-name-free shape extraNoEvalHookSlotsOK admits; anything else
+	// declines here so the Stage-2 refusal (the sound interpreter fallback)
+	// stands.
+	if !es.extraNoEvalHookSlotsOK(sig, spec.BodyPos, args) {
+		return false
+	}
+
 	// A gradual-Any (Dynamic) DATA arg to a higher-order word whose overloads
 	// differ on that arg's type (each/fold/scan: TList vs TMap) is an AMBIGUOUS
 	// dispatch: the checker optimistically committed to ONE overload, but the
@@ -267,9 +278,11 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	if own > 1 {
 		return false
 	}
-	// A capturing lambda would need its captures resolved in this scope and
-	// threaded onto the closure; the spec lambda rows are capture-free, so
-	// defer that and keep a capturing lambda on the refusal path.
+	// A LEXICALLY capturing lambda would need its construction-time captures
+	// resolved in this scope and threaded onto the closure; the spec lambda
+	// rows are capture-free, so defer that and keep it on the refusal path.
+	// (MODULE-SCOPE mutable-instance reads are not lexical captures — they are
+	// admitted below via moduleScopeMutableCaptures, same as token bodies.)
 	if len(fd.Captured) > 0 {
 		return false
 	}
@@ -321,7 +334,16 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	for i := range lam.Params {
 		names[i] = lam.Params[i].Name
 	}
-	return recordClosureDispatch(r, word, spec, sig, args, lam.body(), inputs, names, nil, shape, outs, pos)
+	// Module-scope MUTABLE-INSTANCE reads in the lambda body (the flex
+	// accumulator `def acc (flex [])  walk … (m => [acc (m.path) append])`)
+	// ride as closure captures, exactly as the token-body path admits them:
+	// the binding's identity is fixed for the dispatch (a compiled body cannot
+	// rebind a module-scope name), so the value threaded at OpPushClosure
+	// equals every per-run lookup the interpreter's CallAQL makes, and the
+	// pointer-backed instance shares mutations across the boundary. See
+	// moduleScopeMutableCaptures.
+	captures := moduleScopeMutableCaptures(r, lam.body(), nil)
+	return recordClosureDispatch(r, word, spec, sig, args, lam.body(), inputs, names, captures, shape, outs, pos)
 }
 
 // recordClosureDispatch is the shared tail of the token and lambda closure
@@ -385,6 +407,19 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 // a no-init map fold, and for-each (whose check-mode output count does not match
 // its 0-result runtime) all stay on the refusal path.
 func lambdaCallbackInputs(r *Registry, word string, spec CallableSpec, args []Value) ([]Value, ClosureInShape, bool) {
+	// A word whose lambda callback sees the SAME inputs as its token form
+	// (walk's payload map) declares LambdaSharesTokenShape: Inputs(args) IS the
+	// lambda convention, no per-word shape below — and no data-follows-body
+	// operand layout is assumed (walk's data PRECEDES its hooks).
+	if spec.LambdaSharesTokenShape {
+		if spec.Inputs == nil {
+			return nil, ClosureInValue, false
+		}
+		if ins := spec.Inputs(args); ins != nil {
+			return ins, ClosureInValue, true
+		}
+		return nil, ClosureInValue, false
+	}
 	if spec.BodyPos+1 >= len(args) {
 		return nil, ClosureInValue, false
 	}
@@ -454,6 +489,121 @@ func keyValCarrier(r *Registry, elem *Type) Value {
 		}
 	}
 	return NewValueRaw(t, MapPayload{M: om})
+}
+
+// extraNoEvalHookSlotsOK reports whether every NON-body NoEvalArgs operand of
+// a Callable word (walk's optional ASCEND hook — the only such slot today) is
+// sound to ride as a plain value operand next to the compiled body closure.
+// The driving handler classifies such a hook at run time and, for a concrete
+// list, runs its element snapshot as a token QUOTATION in a sub-engine
+// (walkClassifyHook → runQuotationBody), where a NAME resolves against the
+// REGISTRY — but the compiled program holds top-level value defs as VM frame
+// locals, so a name-bearing hook would diverge (the same registry asymmetry
+// execBodyRefsNames defends the body slot against). Admit exactly ONE shape,
+// whose runtime tokens are PROVABLY EMPTY: see emptyFlexHookOperand. Anything
+// else declines — the caller then leaves the Stage-2 refusal standing (an
+// INERT token hook needs no admission here: when the closure path declines,
+// the existing noEvalBodiesInertScoped const bake still applies).
+func (es *EmitState) extraNoEvalHookSlotsOK(sig *Signature, bodyPos int, args []Value) bool {
+	for i := range args {
+		if i == bodyPos || !sig.NoEvalArgs[i] {
+			continue
+		}
+		if !es.emptyFlexHookOperand(args[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// emptyFlexHookOperand reports whether v is a flex reference that is PROVABLY
+// EMPTY when the word being recorded dispatches, so its classify-time hook
+// snapshot (`bl.Slice()` at handler entry, before any traversal) is a
+// zero-length token list — and stays zero-length for the whole call: the
+// descend closure's in-traversal appends land beyond the snapshot's length.
+// Every hook invocation over it then runs ZERO tokens, byte-identical to the
+// interpreter classifying the SAME (empty) flex through the same handler —
+// this is the `def acc (flex [])  walk … (m => [acc … append])  acc` corpus
+// shape, where the trailing accumulator reference is collected as the ascend
+// hook. The proof obligations, all conservative:
+//
+//   - flex-typed operand (list or map family; an empty flex MAP hook raises
+//     the same handler-side walk_error in both engines);
+//   - produced by the MAIN-registry `flex` native over EMPTY const containers
+//     (sig pointer identity, so a module/user shadow never matches);
+//   - recorded at TOP-LEVEL straight-line scope (one unit, one frame):
+//     recording order IS runtime order and the dispatch runs exactly once —
+//     inside a loop/branch/fn a later-recorded (or unrecorded-iteration)
+//     mutator could precede this dispatch at run time;
+//   - NO event recorded since the construction (pr.seq == es.seq): every
+//     runtime effect between the two — a mutator call, a user call, a branch,
+//     an island — records an event or refuses, so the flex still holds its
+//     constructed (empty) contents when the word dispatches.
+func (es *EmitState) emptyFlexHookOperand(v Value) bool {
+	if len(es.units) != 1 || len(es.frames) != 1 {
+		return false
+	}
+	p := v.Parent
+	if p == nil || (!p.ConformsTo(TFlexList) && !p.ConformsTo(TFlexMap)) {
+		return false
+	}
+	pr, ok := es.producedBy[v.ID]
+	if !ok || pr.seq != es.seq || pr.idx != 0 {
+		return false
+	}
+	evs := es.frames[0]
+	if len(evs) == 0 {
+		return false
+	}
+	last := evs[len(evs)-1]
+	if last.seq != pr.seq || last.kind != evCall || last.call.word != "flex" {
+		return false
+	}
+	// The matched sig must be the MAIN registry's `flex` binding (pointer
+	// identity into its sig backing array) — a same-named module inner native
+	// or user fn must never satisfy this proof.
+	if es.reg == nil {
+		return false
+	}
+	fn := es.reg.Lookup("flex")
+	if fn == nil {
+		return false
+	}
+	sigOK := false
+	for i := range fn.Signatures {
+		if &fn.Signatures[i] == last.call.sig {
+			sigOK = true
+			break
+		}
+	}
+	if !sigOK || len(last.call.ops) == 0 {
+		return false
+	}
+	for _, op := range last.call.ops {
+		if op.kind != opConst || op.idx < 0 || op.idx >= len(es.consts) {
+			return false
+		}
+		if !emptyContainerConst(es.consts[op.idx]) {
+			return false
+		}
+	}
+	return true
+}
+
+// emptyContainerConst reports whether v is a concrete container literal with
+// ZERO members ([] or {}) — the only construction input emptyFlexHookOperand
+// accepts, so the flex provably starts with no elements.
+func emptyContainerConst(v Value) bool {
+	if !IsConcrete(v) {
+		return false
+	}
+	if lst, err := AsList(v); err == nil && !lst.IsNil() {
+		return lst.Len() == 0
+	}
+	if m, err := AsMap(v); err == nil && m != nil {
+		return m.Len() == 0
+	}
+	return false
 }
 
 // bodyToksHaveSentinel reports whether a lambda body's token slice contains a
