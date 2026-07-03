@@ -9,12 +9,12 @@ Corpus: **3875** spec value rows (**3627** compilable, 248 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 3475 |
+| compiled natively (fallback-free) | 3473 |
 | compiled with an interpreter island | 1 |
-| refused (whole-program fallback) | 151 |
+| refused (whole-program fallback) | 153 |
 | static check-error (invalid in both engines) | 248 |
 
-**3476 / 3627** compilable rows produce a Program (95% — 3475 of those fully native).
+**3474 / 3627** compilable rows produce a Program (95% — 3473 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,11 +22,11 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 151 | 0 | → 0 |
+| refusals (whole-program fallback) | 153 | 0 | → 0 |
 | interpreter islands (OpFallback) | 1 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 1 | 1 | → 0 |
-| compute frontier | 68 | 86 | → 0 |
+| compute frontier | 70 | 86 | → 0 |
 
 ## Refusals by reason
 
@@ -36,8 +36,9 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | 22 | operand provenance | soundness |
 | 12 | function value reaches word (Stage 3) | soundness |
 | 12 | other: typed-def `v`: dynamic refinement reparent/validate is interpreter-only (no compiled store-with-reparent) | coverage |
-| 9 | fn-value-call boundary | soundness |
+| 7 | fn-value-call boundary | soundness |
 | 5 | function-valued operand (Stage 3) | coverage |
+| 4 | other: fn value read from a container auto-dispatches (Stage 3) | coverage |
 | 4 | user fn call (Stage 3) | coverage |
 | 3 | other: unconsumed fn-value carrier in residual (closure render) | coverage |
 | 1 | code-body word (NoEvalArgs) | coverage |
@@ -47,14 +48,14 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 125 |
+| soundness | 123 |
 | scheduling | 0 |
 | opcode | 0 |
-| coverage | 26 |
+| coverage | 30 |
 
 ## Re-scoped P7 partition
 
-Over the 152 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **83** allowlisted error rows, **68** compute-frontier gaps.
+Over the 154 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **1** reducible (tier 2, TODO), **83** allowlisted error rows, **70** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -72,9 +73,10 @@ _None._
 | ---: | --- |
 | 22 | operand provenance |
 | 12 | function value reaches word (Stage 3) |
-| 9 | fn-value-call boundary |
 | 9 | other: typed-def `v`: dynamic refinement reparent/validate is interpreter-only (no compiled store-with-reparent) |
+| 7 | fn-value-call boundary |
 | 4 | function-valued operand (Stage 3) |
+| 4 | other: fn value read from a container auto-dispatches (Stage 3) |
 | 4 | user fn call (Stage 3) |
 | 3 | other: unconsumed fn-value carrier in residual (closure render) |
 | 2 | dispatch recovery (best guess) |

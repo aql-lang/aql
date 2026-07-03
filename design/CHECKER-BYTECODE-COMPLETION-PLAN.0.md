@@ -355,3 +355,33 @@ from everything; 7 is gated on 6's exit criteria.
     environment that carries the corpus (also gates Phase 5.3).
   - 0.4 headroom policy in force as written (no ceiling raise; Phase
     2.1/2.2 before large corpus batches).
+- **2026-07-03 — Phase 1.1 (M1) landed** (`fix(compile): per-call
+  identity for fn-body container literals`): OpPushConstFresh +
+  ID-pooled compound interning + escaping-multi-read refusal; probe
+  matrix 5 divergent shapes → parity, sharing/deq preserved; census
+  unchanged (zero coverage cost); VERIFY PASSED + full suite green.
+- **2026-07-03 — Phase 1.2 (M2) landed**: both Mechanism-E remainders
+  now refuse soundly. Deferred-field auto-invoke: get-family reads
+  from containers holding a GENUINELY 0-param fn member refuse at both
+  record sites (receiver-keyed; concrete keys inspect only the read
+  member; the parked phantom 0-arg sig is discounted, so applied
+  member calls `m.b 2` and multi-param member reads keep compiling —
+  pinned by TestEmitFnValueFieldCallCompiles). Nested-factory curried
+  chain: statically-recovered closure arity vs tail-arg count refuses
+  the chain, single-apply factories keep compiling. Census cost:
+  2 rows (3474/153 vs 3476/151), both previously divergence-exposed.
+  Landing test TestFnValueAutoApplyRefusals (4 refusals with
+  fallback-parity + 4 preserved).
+- **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
+  (a) `checkParamContract` already routes through `sigTypeMatches` —
+  the interpreter's own runtime param match (deliberately NOT `v.Is`,
+  which over-raises on Options/structural params) — plus
+  `OpenUnifyMap`/`Unify` for ParamPatterns; the flagged asymmetry was
+  closed by the param-guard fix. (b) RET enforcement uses `v.Is` (the
+  membership rule); tail marking's static `ConformsTo` in
+  `tailCompatibleReturns` is sound because callee→caller conformance
+  is checked in the subset direction and nested predicate refines are
+  CONJUNCTIVE — probe: `3 is (Big lt 5)` → false (Big's bound still
+  applies) — so a lattice child's membership is always a subset of
+  its ancestor's, and the eliminated caller check is implied by the
+  callee's own RET check.

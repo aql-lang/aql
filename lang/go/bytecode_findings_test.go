@@ -3513,3 +3513,62 @@ func TestFnBodyContainerLiteralIdentity(t *testing.T) {
 		t.Errorf("refusal reason = %q; want the multi-site identity reason", reason)
 	}
 }
+
+// Mechanism E remainders (design/MISCOMPILE-HUNT-FINDINGS.0.md) — the
+// deferred-field auto-invoke and the nested-factory curried chain. Both
+// REFUSE (sound fallback): the interpreter auto-applies at the paren
+// collapse / per closure arity, which one OpCallDynamic cannot model.
+func TestFnValueAutoApplyRefusals(t *testing.T) {
+	refusals := []struct{ name, src, want string }{
+		{"deferred-field dot auto-invoke", `def make42 fn [[] [Integer] [42]]  {f:make42/r}.f`, "auto-dispatches"},
+		{"paren get auto-invoke", `def make42 fn [[] [Integer] [42]]  def m {f:make42/r}  (m get f/q)`, "auto-dispatches"},
+		{"bare read auto-invokes too", `def f fn [[] [Integer] [7]]  {b:f/r} dot b`, "auto-dispatches"},
+		{"nested-factory curried chain", `def mk fn [[a:Integer] [Function] [([b:Integer] => [([c:Integer] => [a add b add c])])]]  (((mk 1) 2) 3)`, "arity mismatch"},
+	}
+	for _, c := range refusals {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog != nil {
+			t.Errorf("%s: compiled; want refusal", c.name)
+			continue
+		}
+		if !strings.Contains(reason, c.want) {
+			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
+		}
+		// The silent-fallback path must produce the interpreter's value.
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
+		}
+		if errC != nil || errI != nil {
+			t.Fatalf("%s: run errs compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: fallback=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+
+	// PRESERVED coverage: fn-free container reads (paren or bare), APPLIED
+	// member calls (a multi-param member fed its args — the method-through-map
+	// pattern, whose phantom parked 0-arg sig must NOT read as auto-dispatch
+	// risk), and the single-apply factory keep compiling.
+	preserved := []string{
+		`({a:1 b:2} get b/q) add 1`,
+		`{a:1 b:2} dot b`,
+		`def add1 fn [[x:Integer] [Integer] [x add 1]]  {f:add1/r}.f 5`,
+		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  ((mk 5) 10)`,
+	}
+	for _, src := range preserved {
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		if errC != nil || !compiled {
+			t.Fatalf("preserved %q: compiled=%v err=%v", src, compiled, errC)
+		}
+		gotI, errI := mustNew(t).Run(src)
+		if errI != nil {
+			t.Fatalf("preserved %q: interp err=%v", src, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("preserved %q: compiled=%v interp=%v", src, gotC, gotI)
+		}
+	}
+}

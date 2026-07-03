@@ -2613,6 +2613,17 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 	case sig.fullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
+	case isGetFamilyWord(word) && containerFnAutoDispatchRisk(args):
+		// A get/dot/getr/dotr read from a container HOLDING a function member
+		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
+		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
+		// → 42; bare `{b:f/r} dot b` → 7; `… dot b add 1` → 8 — it even
+		// collects forward args). The VM would push it as inert data — a
+		// silent wrong value (miscompile mechanism E, the deferred-field
+		// auto-invoke, design/MISCOMPILE-HUNT-FINDINGS.0.md). Refuse on the
+		// RECEIVER signal: reads from fn-free containers are unaffected.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 	case word == "args" || word == "__pa":
 		// `args` reads the interpreter's per-call args stack, which the
 		// VM's CALL_USER frame does not maintain (it binds params to
@@ -2832,6 +2843,14 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	if !es.active() || len(outs) > 1 {
 		return false
 	}
+	if isGetFamilyWord(word) && containerFnAutoDispatchRisk(args) {
+		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
+		// the interpreter invokes a container-read fn value as it lands; the
+		// VM would push it as data. Refuse the program (sound fallback).
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
+		return true
+	}
 	ops := make([]emitOperand, len(args))
 	for i := range args {
 		op, ok := es.resolveOperand(args[i])
@@ -2850,6 +2869,117 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	return true
 }
 
+// containerFnAutoDispatchRisk reports whether a get-family dispatch may
+// surface a container member the interpreter could AUTO-DISPATCH after it
+// lands: a function value carrying a 0-arg-satisfiable signature. Probe-
+// verified divergences: `{f:make42/r}.f` → 42, bare `{b:f/r} dot b` → 7,
+// and `{f:add1/r}.f 5` → 6 (a landed fn even collects forward args), while
+// the VM would push the fn as inert data (miscompile mechanism E). NOTE:
+// parked user-fn values structurally carry a 0-arg Signature alongside
+// their declared overloads, so in practice every user-fn member READ
+// refuses — the safe side, since landing-then-forward-collecting makes even
+// multi-param members invocable. The precision that pays is the KEY
+// resolution: when another concrete arg resolves as the read key, only that
+// member is inspected, so reads of NON-fn keys from fn-carrying containers
+// keep compiling; an unresolvable (computed) key inspects every member
+// conservatively. The receiver signal behind the get-family auto-dispatch
+// refusals (recordCallRefusal, RecordPolyCall). Census cost at landing:
+// 2 rows (3,875-row corpus), both previously divergence-exposed.
+func containerFnAutoDispatchRisk(args []Value) bool {
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		switch d := a.Data.(type) {
+		case ListPayload:
+			if idx, ok := concreteIntKey(args); ok {
+				if idx >= 0 && idx < int64(len(d.Elems)) && fnValueZeroArg(d.Elems[idx]) {
+					return true
+				}
+				continue
+			}
+			for _, e := range d.Elems {
+				if fnValueZeroArg(e) {
+					return true
+				}
+			}
+		case MapPayload:
+			if d.M == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := d.M.Get(key); hit && fnValueZeroArg(mv) {
+					return true
+				}
+				continue
+			}
+			for _, k := range d.M.Keys() {
+				mv, _ := d.M.Get(k)
+				if fnValueZeroArg(mv) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// fnValueZeroArg reports whether v is a function VALUE with a GENUINE
+// zero-param overload — the shape the interpreter auto-dispatches the moment
+// it lands with no operands (containerFnAutoDispatchRisk). A parked user fn
+// structurally carries ONE phantom 0-arg Signature alongside its declared
+// overloads (probe-verified: 0-param make42 parks as [0 0], 2-param cmp2 as
+// [2 0], a 0+1-overload fn as [1 0 0], while builtins park phantom-free —
+// `add` is [3 2 2 2 2]). So a genuine 0-param overload shows as EITHER two
+// 0-arg sigs (real + phantom) OR a single sig that is 0-arg (phantom-free
+// value). A lone 0-arg sig among others is just the phantom — the fn needs
+// args, reads as data in both engines, and the applied member-call shapes
+// (`m.b 2`, pinned by TestEmitFnValueFieldCallCompiles) keep compiling.
+func fnValueZeroArg(v Value) bool {
+	d, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return false
+	}
+	zeros := 0
+	for i := range d.Signatures {
+		if d.Signatures[i].TotalArgs() == 0 {
+			zeros++
+		}
+	}
+	return zeros >= 2 || (zeros == 1 && len(d.Signatures) == 1)
+}
+
+// concreteMapKey returns the map-key string a get-family dispatch reads,
+// when one of the args is a concrete Atom or String key.
+func concreteMapKey(args []Value) (string, bool) {
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		switch k := a.Data.(type) {
+		case AtomPayload:
+			return k.Name, true
+		case StrPayload:
+			return k.S, true
+		}
+	}
+	return "", false
+}
+
+// concreteIntKey returns the list index a get-family dispatch reads, when
+// one of the args is a concrete Integer key.
+func concreteIntKey(args []Value) (int64, bool) {
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		if k, ok := a.Data.(IntPayload); ok {
+			return k.N, true
+		}
+	}
+	return 0, false
+}
+
 // producerWord returns the word of the event that produced value id, when id
 // resolves to a recorded event (not a const / local / unproduced value). Used to
 // gate makelist on its elements being core-builtin (deterministic) results.
@@ -2866,6 +2996,52 @@ func (es *EmitState) producerWord(id string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// isGetFamilyWord reports whether word is a container member accessor
+// (get/dot and their r-variants) — the words whose read of a FUNCTION value
+// auto-dispatches it in the interpreter (recordCallRefusal).
+func isGetFamilyWord(w string) bool {
+	return w == "get" || w == "dot" || w == "getr" || w == "dotr"
+}
+
+// producerReturnedClosureArity resolves the declared arity of the closure a
+// leading fn-typed CARRIER holds, when its producer is a compiled user call
+// whose fn returns exactly one anonymous closure (the factory pattern).
+// Recoverable arity lets resolveDynamicApply distinguish the single N-arg
+// apply `(mk 5) 10 20` from a curried CHAIN `((mk 1) 2) 3` — the flattened
+// residual is identical for both, and committing one OpCallDynamic over a
+// chain leaks the intermediate closure (miscompile mechanism E,
+// nested-factory apply, design/MISCOMPILE-HUNT-FINDINGS.0.md).
+func (es *EmitState) producerReturnedClosureArity(id string) (int, bool) {
+	pr, ok := es.producedBy[id]
+	if !ok {
+		return 0, false
+	}
+	for _, fr := range es.frames {
+		for i := range fr {
+			if fr[i].seq != pr.seq {
+				continue
+			}
+			if fr[i].kind != evCallUser {
+				return 0, false
+			}
+			unit := fr[i].uc.unit
+			if unit < 0 || unit >= len(es.fnRecs) {
+				return 0, false
+			}
+			rec := es.fnRecs[unit]
+			if len(rec.outOps) != 1 || rec.outOps[0].kind != opClosure {
+				return 0, false
+			}
+			cu := rec.outOps[0].closureUnit
+			if cu < 0 || cu >= len(es.fnRecs) {
+				return 0, false
+			}
+			return es.fnRecs[cu].nParams, true
+		}
+	}
+	return 0, false
 }
 
 // makeListRange reports whether any of a dispatch's args was produced by an
@@ -3999,6 +4175,17 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
 	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
+		// When the carrier's closure arity is statically recoverable (its
+		// producer is a compiled factory fn returning one anonymous closure),
+		// a tail-arg count that disagrees is a curried CHAIN (`((mk 1) 2) 3`)
+		// or a partial apply — one OpCallDynamic would leak the intermediate
+		// closure (miscompile mechanism E). Refuse; the interpreter applies
+		// the chain faithfully.
+		if applyDynamic {
+			if arity, known := es.producerReturnedClosureArity(residual[0].ID); known && arity != len(residual)-1 {
+				return residual, 0, "fn-value apply arity mismatch — curried chain or partial apply (Stage 3)"
+			}
+		}
 	}
 	// Leading BRANCH result that MAY be a fn (an arm is an fn value, so the
 	// merge produced a value that is sometimes callable — `if c [99]
