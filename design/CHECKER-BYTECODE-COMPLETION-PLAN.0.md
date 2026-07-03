@@ -396,6 +396,22 @@ from everything; 7 is gated on 6's exit criteria.
   type is unknowable by design); class.tsv:85 (const-singleton field
   widened by set) and corpus-core.tsv:61 (enum identity) remain
   triage candidates for Phase 2/4.
+- **2026-07-03 — Phase 2.1 landed: static return-value membership.**
+  `checkBodyReturnConformance` now asks `got.Is(exp)` for a
+  compile-time-known SCALAR body residual — the mkbad predicate-return
+  hole is closed statically (probe: check exit 1 with the
+  byte-identical runtime type_error) and the nominal newtype-return
+  hole with it; reparented (`def x:UserId 42  x`) and good-predicate
+  bodies stay clean; abstract/value-dependent residuals keep the
+  runtime RET check by design. pinnedUnflaggedErrorRows lowered
+  172 → 170. ALSO fix-forward for 31913df: the scalar fold now KEEPS
+  recording the dispatch (`folded.ID = out[0].ID`) instead of eliding
+  the event — event elision stranded every lowering that anchors on a
+  condition event (emit goldens, computed-arm if, variadic-else
+  claims; the 31913df battery was red). With recording preserved all
+  pinned lowering tests pass, the 4-row census dip reversed, and the
+  2 newly-flagged rows reclassified compiled → check-error
+  (3472 compiled / 153 refused / 250 check-errors).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

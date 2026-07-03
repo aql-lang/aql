@@ -545,13 +545,16 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	out := declaredReturnCarriers(r, word, sig, args, pos)
 	if folded, ok := tryFoldScalarConst(r, sig, args); ok && len(out) == 1 {
 		// Concrete-condition folding (CompileScalarFold): the comparison ran
-		// for real over inert consts, so the concrete result replaces the
-		// declared-type carrier — `(n eq 0)` with const n becomes a concrete
-		// boolean and `if` analysis sees a statically-determined branch. Like
-		// tryFoldModuleConst, the fold emits NO event: the result rides as an
-		// inert const, so the compiled program pushes it from the pool.
+		// for real over compile-time-known scalars, so the concrete result
+		// replaces the declared-type carrier — `(n eq 0)` with a const n
+		// reads as a known false downstream (return-membership conformance,
+		// future static branch commitment). Unlike tryFoldModuleConst the
+		// dispatch still RECORDS below: the VM re-runs the comparison
+		// faithfully at run time, and eliding the event would strand every
+		// lowering that anchors on a condition EVENT (computed-arm `if`,
+		// variadic-else claims — the emit goldens pin this).
+		folded.ID = out[0].ID // keep the recorder's result identity
 		out[0] = folded
-		return out
 	}
 	out = applyGradualContagion(r, word, args, out, pos, tailConsumed)
 	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)

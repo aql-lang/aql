@@ -511,7 +511,24 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk 
 			continue
 		}
 		if !residualProvablyDisjoint(got, exp) {
-			continue
+			// Value-level membership for a compile-time-known scalar residual:
+			// the runtime RET boundary asks got.Is(exp) on this SAME value, so
+			// a concrete scalar that fails membership NOW is a guaranteed
+			// runtime type_error — flag it statically. This closes the
+			// smart-constructor holes the disjointness test cannot see:
+			//   - predicate returns: `def mkbad fn [[] [Big] [5]]` (Big =
+			//     Integer gt 10; 5 fails the predicate) — previously
+			//     check-clean, runtime-only;
+			//   - nominal newtype returns: `def mk fn [[] [UserId] [42]]`
+			//     (a raw Integer is not a UserId; a reparented `def x:UserId
+			//     42  x` residual carries the UserId tag and passes).
+			// Restricted to scalarFoldOperand shapes (concrete scalar
+			// payloads — literals and folded comparisons), where the checked
+			// value provably equals the runtime value; abstract carriers keep
+			// the runtime check (value-dependent returns bail by design).
+			if !scalarFoldOperand(got) || got.Is(exp) {
+				continue
+			}
 		}
 		detail, _ := returnTypeErrorText(name, k+1, exp, got)
 		dup := false
