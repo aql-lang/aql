@@ -704,6 +704,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 		switch in.Op {
 		case OpPushConst:
 			stack = append(stack, p.Consts[in.Arg])
+		case OpPushConstFresh:
+			// Mint a fresh container identity for a compound literal the
+			// enclosing fn unit re-evaluates per call — interpreter parity
+			// for `(mk) eq (mk)` (see OpPushConstFresh in bytecode.go).
+			stack = append(stack, CloneValue(p.Consts[in.Arg]))
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
 		case OpStoreLocal:

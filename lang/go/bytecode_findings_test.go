@@ -3469,3 +3469,47 @@ func TestOuterCompilesNoIsland(t *testing.T) {
 		t.Errorf("outer over a type-literal list: compiled err=%v interp err=%v (should agree)", eBad, eBadI)
 	}
 }
+
+// Mechanism A (design/MISCOMPILE-HUNT-FINDINGS.0.md §A) — a compound VALUE
+// literal in a fn body is re-constructed per call by the interpreter, so
+// compiled code must not leak one pooled identity across calls
+// (OpPushConstFresh). Reads of one per-call binding still share within a
+// call; an enclosing binding's value keeps its one shared instance; an
+// escaping multi-read literal refuses (sound fallback).
+func TestFnBodyContainerLiteralIdentity(t *testing.T) {
+	parity := []struct{ name, src string }{
+		{"list literal returned", `def mk fn [[] [List] [[1]]] ((mk) eq (mk))`},
+		{"map literal returned", `def mk fn [[] [Map] [{}]] ((mk) eq (mk))`},
+		{"def-bound literal returned", `def mk fn [[] [List] [def a [1] a]] ((mk) eq (mk))`},
+		{"branch-arm literal returned", `def mk fn [[b:Boolean] [List] [if b [[1]] [[2]]]] ((mk true) eq (mk true))`},
+		{"nested literal inner identity", `def mk fn [[] [List] [[[1]]]] (((mk) get 0) eq ((mk) get 0))`},
+		{"enclosing binding stays shared", `def c [9]  def get fn [[] [List] [c]]  ((get) eq (get))`},
+		{"within-call reads share", `def mk fn [[] [Boolean] [def a [1] (a eq a)]] (mk)`},
+		{"value equality unchanged", `def mk fn [[] [List] [[1]]] ((mk) deq (mk))`},
+	}
+	for _, c := range parity {
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if errC != nil || !compiled {
+			t.Fatalf("%s: compiled run: compiled=%v err=%v", c.name, compiled, errC)
+		}
+		gotI, errI := mustNew(t).Run(c.src)
+		if errI != nil {
+			t.Fatalf("%s: interp run: %v", c.name, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: compiled=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+
+	// NEGATIVE: the one shape per-call identity cannot yet model — a
+	// multi-read body literal that may escape — must REFUSE (sound
+	// interpreter fallback), never compile with shared identity.
+	const escaping = `def mk fn [[] [List] [def a [1] (a eq a) drop a]] (mk)`
+	prog, reason, _, _ := mustNew(t).CompileCheck(escaping)
+	if prog != nil {
+		t.Fatalf("escaping multi-read literal compiled; want refusal")
+	}
+	if !strings.Contains(reason, "multiple sites") {
+		t.Errorf("refusal reason = %q; want the multi-site identity reason", reason)
+	}
+}

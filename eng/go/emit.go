@@ -411,6 +411,15 @@ type EmitState struct {
 	// reconciliation reads it back to lower the apply to OpCallDynTrailTop — the
 	// flattened residual cannot otherwise recover the apply's arity.
 	trailingApplies map[string]int
+	// freshenConst marks const-pool indices holding a compound VALUE literal
+	// that was materialised while recording a FN UNIT and whose ID is not an
+	// enclosing binding's — i.e. a literal written in the body, which the
+	// interpreter re-constructs per call. finalize's freshenFnUnitConsts pass
+	// rewrites a single-push-site marked const to OpPushConstFresh (per-call
+	// identity), keeps a multi-push-site one shared when nothing compound can
+	// escape the fn, and refuses otherwise. See OpPushConstFresh (bytecode.go)
+	// and design/MISCOMPILE-HUNT-FINDINGS.0.md §A.
+	freshenConst map[int]bool
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -420,10 +429,17 @@ type EmitState struct {
 	eventInfo map[int]eventFlags
 	consts    []Value
 	constIdx  map[string]int // CanonValue → Consts index
-	types     []TypeRef
-	typeIdx   map[string]int   // type ID → Types index
-	fallbacks []FallbackSpan   // Stage 5 interpreter islands
-	origByID  map[string]Value // stripped literal ID → original value
+	// constIDIdx pools COMPOUND consts by value ID: the same materialised
+	// List/Map value (same ID, same payload pointer — already identity-
+	// aliased) reuses one Consts slot, so freshenFnUnitConsts' push-site
+	// counting sees reads of one binding as pushes of ONE const. Distinct
+	// source literals keep distinct IDs, so the never-CanonValue-dedup rule
+	// (gotcha #13) is untouched.
+	constIDIdx map[string]int
+	types      []TypeRef
+	typeIdx    map[string]int   // type ID → Types index
+	fallbacks  []FallbackSpan   // Stage 5 interpreter islands
+	origByID   map[string]Value // stripped literal ID → original value
 	// trapAt is the seq of a recorded TOP-LEVEL terminal trap (a check-mode-
 	// suppressed runtime error compiled as OpTrap), or 0 for none. When set,
 	// Finalize ends the program at the trap. seqs start at 1, so 0 is a safe
@@ -465,6 +481,17 @@ type emitUnit struct {
 	// (forEachOperand / promoteOperand closureCaps handling), which makes the
 	// closureCaps operand a re-pushable LOCAL so the captured VALUE is correct.
 	capID map[string]bool
+	// enclosingIDs snapshots, at unit open, the value IDs of every compound
+	// (List/Map) binding visible in the DefTable — i.e. values an ENCLOSING
+	// scope already constructed. A compound const whose ID is in this set was
+	// read from a binding (one shared instance per binding, interpreter
+	// semantics), so it must NOT be freshened per call; a compound const whose
+	// ID is absent was minted by evaluating a literal written in THIS body, so
+	// the interpreter constructs it fresh per call and the VM must match
+	// (OpPushConstFresh; miscompile mechanism A). Body-local defs bind their
+	// IDs only DURING body analysis, after this snapshot — so they correctly
+	// classify as body-fresh.
+	enclosingIDs map[string]bool
 }
 
 // fnUnitRec is one compiled fn body awaiting (or holding) its
@@ -826,7 +853,94 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
 		return emitOperand{}, false
 	}
-	return constOperand(es.intern(lit)), true
+	idx := es.intern(lit)
+	// A compound VALUE literal materialised inside a fn unit gets per-call
+	// identity treatment (OpPushConstFresh / share / refuse — see
+	// freshenFnUnitConsts) unless its ID was already a binding's value at
+	// unit open, i.e. an enclosing scope constructed it once and the body
+	// merely reads it. Compounds are never pooled (intern), so idx belongs
+	// to exactly this materialise context.
+	if len(es.units) > 1 && freshenableConst(lit) &&
+		!es.units[len(es.units)-1].enclosingIDs[v.ID] {
+		if es.freshenConst == nil {
+			es.freshenConst = map[int]bool{}
+		}
+		es.freshenConst[idx] = true
+	}
+	return constOperand(idx), true
+}
+
+// freshenFnUnitConsts gives fn-unit compound body literals per-call identity
+// (miscompile mechanism A — see OpPushConstFresh, bytecode.go). For each
+// marked const (freshenConst) pushed by this unit's finished code:
+//   - one push site → rewritten IN PLACE to OpPushConstFresh (no instruction
+//     insertion, so jump targets are untouched): the interpreter constructs
+//     the literal fresh on every call — and on every loop iteration, which a
+//     single re-executed site models exactly;
+//   - several push sites → the pushes stand for reads of ONE per-call
+//     binding, so they must share within a call; the shared pooled const is
+//     indistinguishable from that unless an instance escapes the fn. When
+//     every declared return conforms to Scalar nothing compound can escape,
+//     and the shared const is exact parity — keep it. Otherwise refuse:
+//     cross-call identity of an escaping multi-read literal needs a per-call
+//     local seat (a deferred lowering), and refusal is the sound fallback.
+func freshenFnUnitConsts(cf *CompiledFn, es *EmitState, rec *fnUnitRec) string {
+	if len(es.freshenConst) == 0 {
+		return ""
+	}
+	counts := map[int]int{}
+	last := map[int]int{}
+	for pc, in := range cf.Code {
+		if in.Op == OpPushConst && es.freshenConst[int(in.Arg)] {
+			counts[int(in.Arg)]++
+			last[int(in.Arg)] = pc
+		}
+	}
+	for idx, n := range counts {
+		if n == 1 {
+			cf.Code[last[idx]].Op = OpPushConstFresh
+			continue
+		}
+		if !returnsAllScalar(rec.returns) {
+			return "fn " + rec.name + ": compound body literal read at multiple sites may escape (per-call identity needs a local seat)"
+		}
+	}
+	return ""
+}
+
+// returnsAllScalar reports whether every declared return conforms to Scalar
+// — the cheap sufficient condition that no container instance can escape a
+// fn, making a shared multi-read compound const exact within-call parity
+// (freshenFnUnitConsts). Unchecked or absent returns assume escape.
+func returnsAllScalar(returns []*Type) bool {
+	if len(returns) == 0 {
+		return false
+	}
+	for _, t := range returns {
+		if t == nil || !t.ConformsTo(TScalar) {
+			return false
+		}
+	}
+	return true
+}
+
+// snapshotCompoundBindingIDs collects the value IDs of every compound
+// (List/Map) binding currently visible in the DefTable — the values a fn
+// unit opening NOW would read from ENCLOSING scope. See
+// emitUnit.enclosingIDs for the semantics.
+func (es *EmitState) snapshotCompoundBindingIDs() map[string]bool {
+	ids := map[string]bool{}
+	if es.reg == nil || es.reg.Defs == nil {
+		return ids
+	}
+	for _, name := range es.reg.Defs.Names() {
+		for _, bv := range es.reg.Defs.Stack(name) {
+			if freshenableConst(bv) && bv.ID != "" {
+				ids[bv.ID] = true
+			}
+		}
+	}
+	return ids
 }
 
 // tryReturnedClosure compiles a fn VALUE that a body RETURNS — the factory
@@ -1690,6 +1804,16 @@ func (es *EmitState) Rollback(cp emitCheckpoint) {
 			delete(es.constIdx, k)
 		}
 	}
+	for k, i := range es.constIDIdx {
+		if i >= cp.consts {
+			delete(es.constIDIdx, k)
+		}
+	}
+	for i := range es.freshenConst {
+		if i >= cp.consts {
+			delete(es.freshenConst, i)
+		}
+	}
 	es.consts = es.consts[:cp.consts]
 	for k, i := range es.typeIdx {
 		if i >= cp.types {
@@ -1757,7 +1881,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs()}
 	es.units = append(es.units, u)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
@@ -3236,8 +3360,24 @@ func (es *EmitState) intern(v Value) int {
 	}
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) || IsParenExpr(v) {
 		// Compounds, structural type bodies, and codequote'd ParenExprs are never
-		// deduped: like the list/map identity rule, two source codequotes stay two
-		// distinct const values rather than CanonValue-merging into one.
+		// CanonValue-deduped: like the list/map identity rule, two source
+		// codequotes stay two distinct const values rather than merging into one.
+		// The SAME materialised value (same non-empty ID) is one logical
+		// instance though — its payload pointer is already identity-aliased —
+		// so it pools by ID: semantics-preserving, and it keeps
+		// freshenFnUnitConsts' push-site counting truthful (two reads of one
+		// binding count as pushes of ONE const, never two slots).
+		if v.ID != "" {
+			if i, ok := es.constIDIdx[v.ID]; ok {
+				return i
+			}
+			es.consts = append(es.consts, v)
+			if es.constIDIdx == nil {
+				es.constIDIdx = map[string]int{}
+			}
+			es.constIDIdx[v.ID] = len(es.consts) - 1
+			return len(es.consts) - 1
+		}
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
@@ -3413,6 +3553,33 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 // copy-returning. Keep this whitelist free of mutable instance types: adding
 // one would let a pooled compound const reach an in-place mutator and corrupt
 // it across iterations.
+// freshenableConst reports whether a value belongs to the compound
+// VALUE-literal class whose interpreter evaluation CONSTRUCTS a fresh
+// instance per evaluation, making per-call container identity observable
+// through `eq` (miscompile mechanism A,
+// design/MISCOMPILE-HUNT-FINDINGS.0.md §A). That is ListPayload and
+// MapPayload — sameContainer (compare.go) identifies them by backing array /
+// *OrderedMap pointer, and CloneValue mints both fresh. Everything else
+// stays shared: scalars and Microns compare by value; type bodies, fn
+// values, and surfaces are identity-inert descriptors; XML literals are
+// parse-time constants in the INTERPRETER too (the same element instance is
+// spliced per call — probe-verified `(mk) eq (mk)` → true interpreted), so
+// sharing the pooled const IS parity there. The empty-list case needs no
+// exclusion: sameContainer treats all empty lists as the single empty list,
+// so interp (fresh empties, eq true) and VM (cloned empty, eq true) agree.
+// Consumed by the resolveOperand fn-unit marking (freshenConst) and the
+// enclosing-binding snapshot (snapshotCompoundBindingIDs).
+func freshenableConst(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return false
+	}
+	switch v.Data.(type) {
+	case ListPayload, MapPayload:
+		return true
+	}
+	return false
+}
+
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -4198,6 +4365,9 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		// A fully diverging body (every path tail-calls) emits no RET —
 		// control leaves via the callee's eventual RET.
+		if reason := freshenFnUnitConsts(&cf, es, rec); reason != "" {
+			return nil, reason, false
+		}
 		p.Fns = append(p.Fns, cf)
 	}
 

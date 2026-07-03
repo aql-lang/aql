@@ -29,9 +29,28 @@ advisory axis — never trade soundness for it.
   but not nested levels nor the deferred-field auto-invoke). Fix: extend
   resolveDynamicApply to nested/deferred shapes, or refuse a MAIN residual that
   ends with an unconsumed Function the program did not declare.
-- **A — DOCUMENTED / DEFERRED** (see below): narrowed to identity-`eq` only.
+- **A — FIXED (2026-07-03)**: per-call identity for fn-body compound literals.
+  `intern` now pools compound consts by value ID (same materialised value = one
+  slot; distinct source literals keep distinct IDs, so gotcha #13 is untouched),
+  `resolveOperand` marks fn-unit compound-literal consts whose ID is NOT an
+  enclosing binding's (an `emitUnit.enclosingIDs` DefTable snapshot at unit
+  open), and `freshenFnUnitConsts` (finalize) rewrites a single-push-site marked
+  const IN PLACE to the new `OpPushConstFresh` (pushes `CloneValue(const)` —
+  fresh identity per call, and per loop iteration). Multi-push-site marked
+  consts are reads of ONE per-call binding: they stay shared when every
+  declared return conforms to Scalar (nothing compound escapes — exact
+  within-call parity), and REFUSE otherwise ("compound body literal read at
+  multiple sites may escape") — the sound fallback until a per-call local-seat
+  lowering exists. Landing test: `lang/go/bytecode_findings_test.go::
+  TestFnBodyContainerLiteralIdentity` (8 parity shapes + the refusal).
+  Enclosing-binding reads (`def c [9] … [c]`) keep shared identity — probe-
+  verified `(get) eq (get)` stays true in both engines.
 
 ## A. Const-pool aliasing of a fn-returned container literal (4 cases) — SILENT wrong value
+
+> **FIXED 2026-07-03** — see the STATUS block above (OpPushConstFresh +
+> ID-pooled compound interning + the multi-site escape refusal). The analysis
+> below is the historical record that scoped the fix.
 
 UPDATE after scoping: the practical impact is NARROWER than first thought, and the
 fix is the riskiest. A fn body `[1]` bakes as a WHOLE const (`PUSH_CONST k0; RET`),

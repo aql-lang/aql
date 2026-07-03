@@ -243,6 +243,24 @@ const (
 	// (engine.go) where the arity is known, since the flattened residual cannot
 	// recover the paren-group size.
 	OpCallDynTrailTop
+
+	// OpPushConstFresh pushes a deep clone of Consts[Arg] with fresh container
+	// identity (CloneValue) instead of the pooled instance. A compound VALUE
+	// literal written in a fn body is re-EVALUATED per call by the interpreter,
+	// constructing a fresh List/Map each time — so a pooled const pushed from a
+	// compiled fn unit must not leak one shared identity across calls
+	// (`def mk fn [[] [List] [[1]]]  (mk) eq (mk)` must stay false; miscompile
+	// mechanism A, design/MISCOMPILE-HUNT-FINDINGS.0.md §A). The finalize pass
+	// rewrites OpPushConst → OpPushConstFresh in place (freshenFnUnitConsts,
+	// emit.go) exactly for fn-unit consts that (a) materialised from a literal
+	// written in the body — an ENCLOSING binding's value read by name keeps the
+	// shared push, matching the interpreter's one-instance-per-binding
+	// semantics — and (b) have a single push site, so within-call reads of one
+	// binding still share one instance. Main-unit pushes stay bare: top-level
+	// straight-line code evaluates each literal once, and loop-spread
+	// consumption refuses before lowering. Captured containers arrive through
+	// capture slots (locals), never consts, so closure identity is preserved.
+	OpPushConstFresh
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -283,6 +301,7 @@ var opcodeNames = [...]string{
 	OpInterp:              "INTERP",
 	OpCallUserPoly:        "CALL_USER_POLY",
 	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
+	OpPushConstFresh:      "PUSH_CONST_FRESH",
 }
 
 func (o Opcode) String() string {
