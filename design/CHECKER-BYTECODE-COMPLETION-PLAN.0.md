@@ -412,6 +412,26 @@ from everything; 7 is gated on 6's exit criteria.
   pinned lowering tests pass, the 4-row census dip reversed, and the
   2 newly-flagged rows reclassified compiled → check-error
   (3472 compiled / 153 refused / 250 check-errors).
+- **2026-07-03 — Phase 2.2 + 2.3 landed: predicate guard narrowing +
+  redundant_guard.** extractGuardClauses now admits DepScalar-bodied
+  guard types, narrowing to the MINTED lattice node
+  (DefEntry.TypeDef; the constraint value's Parent is only the base
+  family), whose depScalarUnifier admits tag-conforming abstract
+  carriers nominally. Validate-then-call (`if (x is Big) [g x] [0]`,
+  paren AND list guard forms) checks clean — the off-corpus FP class
+  and named check-by-default blocker is legalized; unguarded and
+  else-branch misuse still gate; runtime parity verified both
+  directions. ApplyGuardNarrowing additionally emits the non-gating
+  `redundant_guard` info when the guarded binding is a NON-CONCRETE
+  strict carrier whose tag already entails the guard (`if (n is Big)`
+  with n:Big) — concrete per-shape bindings and dynamic bindings stay
+  quiet (a dynamic guard discharges the modality; value-level interval
+  entailment is future work). New severity-table entry (Info tier).
+  All pins hold (FP 0, unflagged 170, soundness 7, frontier 381, fuzz
+  104); census/differential/partition unchanged-green; full lang and
+  eng suites ok. Landing test TestPredicateGuardNarrowing (2 clean
+  forms, 2 gating negatives, runtime parity, advisory positive + 2
+  advisory negatives).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

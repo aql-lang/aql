@@ -601,6 +601,11 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"macro_not_expandable": SeverityInfo,
 	// Strict-mode advisory: a committed dispatch over a dynamic operand.
 	"dynamic_dispatch": SeverityInfo,
+	// Advisory (non-gating): an `x is T` guard whose binding's static type
+	// already entails T — the check cannot fail, and the dead guard misleads
+	// readers about reachable states (completion plan 2.3; the article's
+	// "unnecessary defensive check" residue). Emitted by ApplyGuardNarrowing.
+	"redundant_guard": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

@@ -2955,19 +2955,34 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 			continue
 		}
 		tv := elems[i+2]
+		var minted *Type
 		if tv.Data != nil && tv.Parent.Equal(TWord) {
 			inner, _ := AsWord(tv)
-			if v, ok := r.Defs.Top(inner.Name); ok {
-				tv = v
+			if e, ok := r.Defs.TopEntry(inner.Name); ok {
+				tv = e.Body
+				minted = e.TypeDef
 			}
 		}
-		if tv.Data != nil && !IsClassType(tv) {
+		if tv.Data != nil && !IsClassType(tv) && !(tv.IsDepScalar() && minted != nil) {
 			continue
 		}
 		// A bare type-literal clause IS its type; an ObjectType keeps
-		// its type at Parent (the minted object-type node).
+		// its type at Parent (the minted object-type node); a PREDICATE
+		// refine (DepScalar body) narrows to its MINTED lattice node
+		// (DefEntry.TypeDef — the body value's Parent is only the base
+		// family), whose depScalarUnifier admits an abstract carrier
+		// tagged with it nominally. The one membership rule makes the
+		// guard exactly the test every downstream boundary re-asks, so
+		// the then-branch may treat the name as the refined type. This
+		// legalizes validate-then-call (`if (x is Big) [g x] [0]` with
+		// x:Integer), previously a gating no_signature false positive
+		// while the program ran correctly — the named blocker for
+		// check-by-default (completion plan 2.2).
 		guardType := tv.Parent
-		if tv.Data == nil {
+		switch {
+		case tv.IsDepScalar() && minted != nil:
+			guardType = CanonicalType(r, minted)
+		case tv.Data == nil:
 			gt := tv
 			guardType = &gt
 		}
@@ -3047,6 +3062,42 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 		// binding, so no value-passing half is needed (unlike a closure capture).
 		if cur, ok := r.Defs.Top(c.Name); ok {
 			narrowed.ID = cur.ID
+			// Advisory (non-gating): the binding's STATIC type already
+			// entails the guard, so the check cannot fail — the residue the
+			// local-reasoning report calls the misleading defensive check
+			// (`if (n is Big) …` where n:Big is already in the signature).
+			// Non-concrete STRICT carriers only: a dynamic binding genuinely
+			// needs the guard (it DISCHARGES the modality); a CONCRETE
+			// binding is a per-shape analysis artifact (an `[x:Any]` param
+			// analysed for the call `f 5` binds the literal 5, whose Integer
+			// tag would flag a guard the fn's OTHER callers rely on) and its
+			// lattice tag under-approximates predicate membership anyway
+			// (value-level entailment — interval reasoning — is future
+			// work). A non-concrete strict carrier IS the declared-type
+			// record, so tag conformance is shape-independent. Dedup: fn
+			// bodies re-analyse per shape and fixpoint round.
+			if cur.Carrier && !IsConcrete(cur) && !cur.Dynamic &&
+				cur.Parent != nil && c.Type != nil &&
+				cur.Parent.ConformsTo(c.Type) {
+				detail := "guard is always true: " + c.Name + " is already " +
+					c.Type.String() + " — drop the check or make it an assertion"
+				dup := false
+				for _, d := range r.Check.Diagnostics {
+					if d.Code == "redundant_guard" && d.Detail == detail {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:   "redundant_guard",
+						Detail: detail,
+						Word:   "is",
+						Row:    condList.Pos.Row,
+						Col:    condList.Pos.Col,
+					})
+				}
+			}
 		}
 		r.Defs.Push(c.Name, narrowed)
 	}
