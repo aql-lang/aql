@@ -41,7 +41,18 @@ type Engine struct {
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	source    string          // original source text for error reporting
 	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
-	reuseTape bool            // when set, Run reloads the existing tape in place instead of allocating (the VM's reusable island engine)
+	// elemEvalRecordable marks a SUB-engine spawned by autoEvalList/autoEvalMap
+	// to evaluate CONTAINER ELEMENTS of a recordable container eval (top-level or
+	// consumed): a map/list literal ELEMENT inside it is residual-evaluated
+	// (consumed=false) yet its assembly is anchored by the enclosing recordable
+	// container, so its OpMakeMap/OpMakeList may record — this is what lets a
+	// nested spec literal (`def specs [ {…cases:[{…in:[(make …)]}…]…} … ]`, the
+	// voxgig bloom class-instance spec list) resolve level by level instead of
+	// breaking at the first map-in-list layer. The fn-body deferred-residual
+	// hazard (a frame that already popped) cannot occur here: the enclosing
+	// container eval runs in-frame at its own recordable site.
+	elemEvalRecordable bool
+	reuseTape          bool // when set, Run reloads the existing tape in place instead of allocating (the VM's reusable island engine)
 	// voidGroups records the candidate consumers of paren groups that
 	// resolved to ZERO values in the current statement: the pending
 	// word names sitting below such a group when it closed. A
@@ -3195,6 +3206,7 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 		return val, nil
 	}
 	sub := New(e.registry)
+	sub.elemEvalRecordable = e.isTop || consumed || e.elemEvalRecordable
 	input := make([]Value, elems.Len())
 	copy(input, elems.Slice())
 	result, err := sub.Run(input)
@@ -3213,7 +3225,7 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 			case e.isTop:
 				// Top-level (frames==1): the canonical case, evaluated once.
 				es.RecordMakeList(e.registry, result, out, val.Pos)
-			case consumed:
+			case consumed || e.elemEvalRecordable:
 				// A CONSUMED computed list ARG inside a fn body / closure
 				// (`make Array [i 99]`, `f [j (g x)]`): the interpreter auto-evaluates
 				// it against the LIVE def stack here, so its element locals/params
@@ -3661,7 +3673,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 					// eval below — its make event records, and RecordMakeMap re-assembles
 					// the map per run. A SCHEMA default (dataMap=false) still folds + bakes
 					// as a template that make's FreshenDefault copies, unchanged.
-					if !dataMap || !containsSharedMutable(folded) {
+					if (!dataMap && !e.elemEvalRecordable) || !containsSharedMutable(folded) {
 						out.Set(resolvedKey, folded)
 						continue
 					}
@@ -3707,7 +3719,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		if es := e.registry.Check.Emit; e.registry.Check.IsActive() &&
 			(es == nil || len(es.frames) == 1) && !e.exprRefsCarrier([]Value{v}) {
 			if folded, ok := e.constFoldContainerVal([]Value{v}); ok {
-				if !dataMap || !containsSharedMutable(folded) {
+				if (!dataMap && !e.elemEvalRecordable) || !containsSharedMutable(folded) {
 					out.Set(resolvedKey, folded)
 					continue
 				}
@@ -3716,6 +3728,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 
 		// Evaluate each value in a sub-engine.
 		sub := New(e.registry)
+		sub.elemEvalRecordable = e.isTop || consumed || e.elemEvalRecordable
 		result, err := sub.Run([]Value{v})
 		if err != nil {
 			return Value{}, err
@@ -3737,7 +3750,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// re-assembles from its operands per run, so it never freezes a per-call
 		// binding. recordMakeListInner declines (leaving es untouched) for an
 		// unresolvable / stateful / type-pattern element, so the map then falls back.
-		if consumed && e.registry.Check.IsActive() {
+		if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
 			if es := e.registry.Check.Emit; es != nil {
 				if lv, _ := out.Get(resolvedKey); lv.Parent.Equal(TList) && !isInertConst(lv) {
 					if lp, isList := lv.Data.(ListPayload); isList {
@@ -3774,7 +3787,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 	// stays an unresolvable residual and the program falls back faithfully.
 	// Gated on `consumed`: a DEFERRED residual (end-of-run autoEvalStack) is
 	// evaluated after its frame pops, so recording it in-frame would diverge.
-	if consumed && e.registry.Check.IsActive() {
+	if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
 		if es := e.registry.Check.Emit; es != nil && !isInertConst(res) {
 			keys := out.Keys()
 			vals := make([]Value, len(keys))

@@ -68,6 +68,69 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	return unit, es.Compilable
 }
 
+// mutableInstanceRef reports whether v is (or stands in for) a MUTABLE
+// instance — a concrete flex node / class instance, or a check-mode CARRIER
+// typed at one (the binding a `def acc (flex […])` holds during analysis is a
+// TFlexList carrier, not the concrete store). Bare type nodes are excluded:
+// a class/flex TYPE literal is not an instance.
+func mutableInstanceRef(v Value) bool {
+	if IsBareTypeNode(v) {
+		return false
+	}
+	if IsFlexNode(v) || IsClassInstance(v) {
+		return true
+	}
+	p := v.Parent
+	if p == nil {
+		return false
+	}
+	if p.ConformsTo(TFlexMap) || p.ConformsTo(TFlexList) || p.ConformsTo(TFlexXml) {
+		return true
+	}
+	return v.Carrier && p.ConformsTo(TClass)
+}
+
+// moduleScopeMutableCaptures extends a closure body's lexical captures with
+// MODULE-SCOPE bindings the body reads whose values are MUTABLE INSTANCES
+// (flex nodes, class instances). Per the language these references are
+// DYNAMIC — module scope sits below the fn baseline, so ComputeCaptures
+// excludes them — and for const-bakeable data the compiled body's const bake
+// IS the dynamic read. A mutable instance cannot bake (materialise refuses;
+// the body then refused "code-body word … (Stage 2)"), but its IDENTITY is
+// fixed for the whole dispatch: a compiled body cannot rebind a module-scope
+// name (body defs are body-local and module-mutating meta words refuse
+// compilation), so the value passed at OpPushClosure equals every per-run
+// lookup the interpreter makes — a capture is exact. This is the accumulator
+// shape: `def acc (flex [0])  … each [ var [[x] (acc set 0 …)] ]`.
+// Scoped to mutable instances ONLY — fn values, module exports, and bakeable
+// consts keep their existing paths.
+func moduleScopeMutableCaptures(r *Registry, bodyToks []Value, existing []CapturedBinding) []CapturedBinding {
+	have := map[string]bool{}
+	for _, cb := range existing {
+		have[cb.Name] = true
+	}
+	bodyLocals := map[string]bool{}
+	collectBodyLocalDefs(bodyToks, bodyLocals)
+	out := existing
+	seen := map[string]bool{}
+	WalkBodyWords(bodyToks, func(w WordInfo, _ Value) {
+		name := w.Name
+		if name == "" || have[name] || bodyLocals[name] || seen[name] {
+			return
+		}
+		seen[name] = true
+		v, ok := r.Defs.Top(name)
+		if !ok {
+			return
+		}
+		if !mutableInstanceRef(v) {
+			return
+		}
+		out = append(out, CapturedBinding{Name: name, Value: v})
+	})
+	return out
+}
+
 // tryRecordClosure attempts to compile a code-body higher-order word's body to
 // a closure unit and record a normal dispatch (the body operand lowering to
 // OpPushClosure). Returns true on success. A body that does not compile leaves
@@ -147,7 +210,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// closure's captures — resolved here in the enclosing scope, bound into
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
-	captures := ComputeCaptures(r, &FnSig{Impl: AQL(bodyToks)})
+	captures := moduleScopeMutableCaptures(r, bodyToks, ComputeCaptures(r, &FnSig{Impl: AQL(bodyToks)}))
 	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, outs, pos)
 }
 
