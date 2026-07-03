@@ -897,6 +897,71 @@ The one hatch you cannot statically analyse is the one that shows how dynamic
 code *should* enter — which is why the design generalises it to every import
 edge.
 
+### 7.7 The milder hatches
+
+The three worked cases above are AQL's general dispatch primitives; the
+remaining ways source can run code the analyzer cannot see are milder — each
+either reduces to a case above or is narrower.
+
+**(a) Higher-order collection words** — `each` / `fold` / `scan` / `filter` /
+`map` / `select` / `group` / … Each accepts *either* a `NoEvalArgs` code body
+*or* a `TFunction` value: `filter`, for instance, carries both
+`{TList, TAny}` (NoEvalArgs body → `filterBodyHandler`) and `{TFunction, TAny}`
+(fn value → `filterHandler`), sharing one `ReturnsFn: filterReturnsFn` and
+`CompileEffect: CompileFallbackBody` (`natives.go`). So they are **hybrids of
+`do` and `apply`**: the body form is the §7.4 case (walked with the
+element/accumulator type threaded onto the body stack), the fn-value form is the
+§7.5 provenance lattice. Idiomatically the argument is *always* a source literal
+(`each [body]`, `filter [pred]`) — you rarely write `each storedBody` — so they
+are analysable by construction even more reliably than `do`. No new surface;
+just the union of the two prior cases, precise in the common case.
+
+**(b) Computed `import`** — the transitivity-specific hatch. `import` evaluates
+its argument (`AsConcreteString` / `AsConcreteAtom`), so `import "aql:math"`
+(literal — the universal idiom) is a statically resolvable *edge*, while
+`import <computed>` defeats static enumeration of the transitive graph. Two
+mitigations: (i) it is still gated at runtime by the `modules` import scope, so
+`import <computed>` resolving to a non-allowlisted module is denied — *security*
+is preserved, only static *enumeration* is lost; (ii) require literal imports in
+analysable/strict modules — a trivial syntactic check (is the import argument a
+source literal?) that removes the hatch for any module wanting a verified
+transitive manifest. This is the transitivity analogue of
+"analyzability is a capability."
+
+**(c) Macros** — analysed post-expansion, so no runtime blind spot. AQL macros
+are a *quote-template* surface (`defmacro` = `fn` + auto-`NoEvalArgs` +
+expand-time splice; the template is a `quote […]` region with `unquote` /
+`splice`), expanded by a deterministic, hygiene-renaming walker whose output
+tokens are spliced into the call site (`macro_expand.go`). Because expansion
+runs at parse/compile time *before* the effect walk, **the checker analyses the
+expanded code** — a macro expanding to `IO.read` contributes `{fileops.read}`
+to the site. The one wrinkle is *expand-time* effects: an `unquote
+(effectful-expr)` runs during expansion — a compile-time surface distinct from
+runtime, and the AQL analogue of the build-script attacks Tratt cites (the
+"install every Python library" experiment). It is rare, discouraged, gated the
+same way if expansion runs under a policy, and a strict profile can additionally
+require macro unquotes to be pure. Macros do not defeat *runtime* capability
+inference.
+
+**(d) Computed `get` / dynamic field dispatch** — collapses into `apply`.
+`m get k` with a computed key is *data access*, not effect dispatch — unless the
+retrieved value is a capability-bearing fn that is then `apply`d, or a module
+export selected by computed key (`IO get name`). Both are bounded: you can only
+`get` exports of a module you have already (gated) imported, and applying the
+result is the §7.5 case under the applier's grant. No new surface.
+
+**Why the taxonomy being *closed* is the whole point.** Every way AQL source can
+dispatch code the analyzer cannot statically see reduces to a **finite, named,
+individually gate-able list**: `do`-body, `apply`-value, `Vm.run`-string,
+computed-`import`, macro-expand, computed-`get`. Each has a conservative
+handling (§7.3) and each is reachable only through a capability a strict profile
+can withhold. This closedness is precisely what makes *sound over-approximation
+achievable* — and it is the structural difference from a native language, where
+Tratt's escape hatch is *every pointer and every instruction*, an open set no
+analysis can enumerate. In AQL the dynamic surface is small enough to list on
+one line, which is why "prove this module reaches no capability" is a decidable
+question rather than a hopeful one.
+
 ---
 
 ## 8. AQL-specific resource limits — the quantitative capability axis
