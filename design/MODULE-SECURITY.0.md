@@ -668,7 +668,7 @@ them specific words the analyzer already knows about:
 
 | Escape hatch | Why hard | Conservative handling |
 |---|---|---|
-| `do`/`call`/`each`/`fold`/`scan` of a **computed / received** body (not a source literal) | body not statically known | over-approx to the ambient grant, or require an effect annotation |
+| `do`/`each`/`fold`/`scan` of a **computed / received body**, or `apply` of a **non-lexical Function value** | body/callee not statically known | over-approx to the ambient grant, or require an effect annotation |
 | `word`-splice (`__SP`) of a computed body | same | same |
 | `import` of a **computed** name | breaks transitive enumeration | over-approx / forbid computed import |
 | `Vm.run` / `Vm.run-with` of an arbitrary **string** | parses + runs anything | already runs under a *sub-policy*, so bounded to that composed grant |
@@ -687,9 +687,10 @@ for the `do` case in full.
 
 1. **Analyzability is itself a capability.** Every escape hatch is a
    capability-gated word, so a grant that withholds `do`-of-nonliteral /
-   `call` / `vm` / computed-`import` *makes the analysis both sound and
-   precise* by removing the hard cases. You need not soundly analyse `Vm.run`
-   in a module that cannot call it. A strict `pure`/`deterministic` profile
+   `apply`-of-opaque / `vm` / computed-`import` *makes the analysis both sound
+   and precise* by removing the hard cases. You need not soundly analyse
+   `Vm.run` in a module that cannot call it. A strict `pure`/`deterministic`
+   profile
    denies the reflective words and collapses the dynamic surface to zero.
 2. **The grant is the backstop — the security property never depends on the
    analysis.** Even an *opaque* `do <computed>` can only dispatch words in the
@@ -763,6 +764,66 @@ grant, not the confinement. Note the analyzer cannot tell `do [literal]` from
 is made by the body walk, and "a `do` whose body I could not prove inert-const"
 is precisely the diagnostic a strict profile turns into a
 declare-or-fail requirement.
+
+### 7.5 Worked case: `apply` and higher-order dispatch
+
+`apply` is the sharper sibling of `do`. Where `do`'s argument is *code as
+data* (a list, often literally visible), `apply`'s argument is a **first-class
+Function value** taken off the stack and invoked against the preceding args
+(`args… fn/r apply`, `native_ref.go`). A Function value carries its whole
+`FnDefInfo` — signature, body, and captured bindings — so *if the analyzer
+holds the concrete value, it holds everything needed to compute the callee's
+effects*. The analysis question is therefore pure **provenance**: does the
+analyzer know *which* fn reaches this `apply`?
+
+The checker already answers this for the lexical cases. `apply`'s `[TFunction]`
+signature carries `ReturnsFn: ReturnsIdentity(0)`: in check mode it re-steps the
+concrete fn value *exactly as runtime would*, recording an ordinary `CALL_USER`
+— done specifically so the bytecode compiler can lower higher-order dispatch. So
+a known callee is analysed as a direct call, effects and all.
+
+The provenance lattice:
+
+| Callee source | Example | Analysable? |
+|---|---|---|
+| `/r`-ref to a named fn / lambda literal | `5 inc/r apply`, `f/r apply` | **Yes, precisely** — re-stepped as a direct call to `inc`; effects = `inc`'s |
+| Locally-built closure to a nearby `apply` | `def g (x => [x IO.read]) … g/r apply` | **Yes** — the closure's body + captures travel with the value (capture analysis) |
+| Branch over a bounded set of refs | `(if c a/r b/r) apply` | **Yes, by join** — union the candidate callees' effects (`a` ∪ `b`) |
+| Fn from a dispatch table | `ops.handler/r apply` | **Only if the table is statically known** (literal map of lambdas ✓; populated at runtime ✗) |
+| Fn received as a parameter / from an opaque module | `[f:Function] … f apply` | **No** — callee identity unknown; over-approximate to the grant |
+
+The crucial difference from `do`: an *opaque* `apply` is not exotic
+metaprogramming, it is the **ordinary higher-order idiom** — callbacks,
+comparators threaded through `sort`, strategy tables, visitors. First-class
+functions exist precisely to be passed, stored, and selected at runtime, so the
+unknown-callee case is common, not a corner. Reachability/purity analysis must
+treat any module that `apply`s a non-lexical value as "reaches its full grant"
+unless the value's provenance is annotated.
+
+**The higher-order twist unique to `apply` — capability leakage via closures.**
+A Function value can be *constructed in one capability context and applied in
+another*: a privileged module builds a closure that captures a fileops-reaching
+word and hands it to a `pure` module, which does `cb/r apply`. Whose authority
+does the closure run with — the constructor's or the applier's? Because dispatch
+and capability-gating happen against the **live (applying) registry**
+(`execFnDefLiteral` runs the body's words there, and the capability slots /
+`HostPolicy` consulted are that registry's), the governing rule is **the
+applier's effective grant, not the captured authority**. That is the sound
+object-capability result — no ambient authority leaks through a passed value —
+**but only if the applying registry's slots are attenuated to the applier's
+grant**. Under the proposed per-edge attenuation (§5–§6) a privileged closure
+applied inside a `pure` module reaches `{}` and the capture is inert. Under
+today's inherit-all behaviour (§3.4), the child inherited the parent's wrapped
+slots and `CapPolicy` was not propagated, so an applied closure *can* reach the
+parent's capabilities — authority leaks. `apply` is the natural vector for that
+leak, which makes it a concrete, security-motivated argument for prioritising
+per-edge attenuation.
+
+As with `do`, the confinement backstop still holds for the *analysis*: an opaque
+`apply` in a module granted `{}` reaches `{}` regardless of the callee, so
+dynamic dispatch degrades manifest *tightness*, not the boundary — the one
+caveat being the closure-leakage vector above, which is about getting the
+*slot attenuation* right, not the inference.
 
 ---
 
@@ -983,8 +1044,9 @@ small sealed native TCB underneath.
    host-registration allowlist) rather than trust the declaration; surface it in
    `describe` so importers see which deps are native (unverifiable) vs.
    AQL-source (verifiable).
-4. **Effect-inference precision.** Dynamic dispatch, `do`/`call` of computed
-   code, and reflection-like words bound how precisely `actual` capabilities can
+4. **Effect-inference precision.** Dynamic dispatch, `do` of computed code /
+   `apply` of an opaque Function value, and reflection-like words bound how
+   precisely `actual` capabilities can
    be inferred. Over-approximate (a computed call reaches its declared bound) and
    require an explicit declaration where inference is imprecise.
 5. **Shared mutable payloads (§9.4).** Are by-reference `Store`/`Array` exports
