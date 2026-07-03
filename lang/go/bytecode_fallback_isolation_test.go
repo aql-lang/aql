@@ -61,11 +61,15 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
 	cases := []string{
-		// type mint + undef, then reuse — a re-mint would clash. A flex default now
-		// bakes (make freshens it per instance), so a plain read compiles; a
-		// MUTATION tail (`p.x push 1` then `size p.x`) keeps the whole row on the
-		// fallback path, so the undef-C side effect must still be rolled back.
-		`def C class {x:(flex [])} def p (make C {}) undef C end (p.x push 1) (size p.x)`,
+		// type mint + undef, then reuse — a re-mint would clash. A flex default
+		// bakes (make freshens it per instance) AND a mutation of the flex field
+		// (`p.x push 1`) now compiles too (the class field's declared List type
+		// rides strict through gradual contagion — cross-module element typing),
+		// so this pairs the class-mint + `undef C` with a still-uncompilable
+		// predicate-fn `is` (the VM cannot re-step a fn body) to keep the whole
+		// row on the fallback path: the undef-C side effect must still be rolled
+		// back before the whole-program interpreter fallback re-runs.
+		`def C class {x:(flex [])} def p (make C {}) undef C end def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] (p.x push 1) (5 is Positive)`,
 		// fn registration under a capitalised name — a re-register clashes.
 		// `is` over the predicate fn INVOKES it (the VM cannot re-step a fn
 		// body), so this stays uncompilable even though `typeof`/`tcmp` over a
