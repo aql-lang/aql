@@ -123,12 +123,39 @@ func moduleScopeMutableCaptures(r *Registry, bodyToks []Value, existing []Captur
 		if !ok {
 			return
 		}
-		if !mutableInstanceRef(v) {
+		if !mutableInstanceRef(v) && !moduleScopeInstanceCarrier(v) {
 			return
 		}
 		out = append(out, CapturedBinding{Name: name, Value: v})
 	})
 	return out
+}
+
+// moduleScopeInstanceCarrier reports whether v is an IMMUTABLE module-scope
+// INSTANCE carrier — a non-concrete carrier that a module-scope `def` binds (a
+// persistent TrieMap/TstMap, a built collection, any instance a module
+// constructor returns; its declared type may be Map/List or an under-annotated
+// Any). Module scope sits below the fn baseline, so ComputeCaptures excludes
+// it, and it is NOT const-bakeable (materialise refuses a non-concrete carrier)
+// — yet it IS produced by a module-scope event, so it resolves at the call site
+// (the closure's construction, at module scope) while its event is unreachable
+// inside the body. Riding it as a capture slot is exact for the same reason the
+// mutable-accumulator capture is: a compiled body cannot rebind a module-scope
+// name (body defs are body-local; module-mutating meta words refuse), so the
+// value threaded at OpPushClosure equals every per-run lookup the interpreter
+// makes. An unreachable carrier declines later in recordClosureDispatch (capOps
+// resolveOperand) — sound fallback.
+//
+// A concrete value still const-bakes (excluded here); a bare type node is a
+// type, never a carried instance (excluded). A Dynamic (gradual-Any) carrier is
+// INCLUDED: an under-annotated module constructor (TstMap.make) binds its
+// instance as a Dynamic Any, yet the binding is still fixed for the program.
+// The capture only makes the value reachable in the body; any downstream
+// dispatch on it (an `each` over a gradual collection) still refuses at its own
+// ambiguity gate, so admitting the capture never introduces an unsound dispatch
+// — it just resolves the operand.
+func moduleScopeInstanceCarrier(v Value) bool {
+	return !IsBareTypeNode(v) && !IsConcrete(v) && v.Carrier
 }
 
 // tryRecordClosure attempts to compile a code-body higher-order word's body to

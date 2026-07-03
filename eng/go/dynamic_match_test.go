@@ -63,25 +63,51 @@ func TestDynamicCarrierMatch(t *testing.T) {
 	}
 }
 
-// TestDynamicResultContagion pins gradual contagion: a result derived
-// from a dynamic carrier is itself dynamic (so the modality flows
-// downstream), with the sig's declared return as its bound — while a
-// result from only strict args stays strict.
+// TestDynamicResultContagion pins gradual contagion and its refinement: a
+// result derived from a dynamic carrier is dynamic EXCEPT when its declared
+// return is a CONCRETE, single-reachable CONTAINER (List/Map) — that type is
+// fixed by the word's contract regardless of which runtime value flowed in,
+// so a downstream `each`/`fold`/accessor can commit on it (the cross-module
+// element-typing flip). A concrete SCALAR return (Integer) still rides
+// dynamic (keeping it strict gains no consumer and can trip the forward/stack
+// split detector), as does a genuinely input-dependent Any return. Strict
+// args always yield a strict result.
 func TestDynamicResultContagion(t *testing.T) {
 	r, _ := NewRegistry()
-	sig := &Signature{Returns: []*Type{TInteger}}
+	listSig := &Signature{Returns: []*Type{TList}}
 
-	strict := carrierResults(r, "w", sig, []Value{NewCarrier(TString)}, SrcPos{}, nil, false)
+	strict := carrierResults(r, "w", listSig, []Value{NewCarrier(TString)}, SrcPos{}, nil, false)
 	if len(strict) != 1 || strict[0].Dynamic {
 		t.Errorf("strict args must yield a strict result, got Dynamic=%v", strict[0].Dynamic)
 	}
 
-	dyn := carrierResults(r, "w", sig, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, nil, false)
-	if len(dyn) != 1 || !dyn[0].Dynamic {
-		t.Fatalf("a dynamic arg must make the result dynamic, got Dynamic=%v", dyn[0].Dynamic)
+	// A dynamic input + a CONCRETE, single-reachable CONTAINER return: the
+	// result type is statically known (List), so it stays STRICT — a
+	// downstream `each` over such a declared-List return can now commit
+	// instead of refusing "dynamic input at each".
+	cont := carrierResults(r, "w", listSig, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, nil, false)
+	if len(cont) != 1 || cont[0].Dynamic {
+		t.Fatalf("a concrete container return stays strict over a dynamic input, got Dynamic=%v", cont[0].Dynamic)
 	}
-	if !dyn[0].Parent.Equal(TInteger) {
-		t.Errorf("contagion result bound = %s, want the declared return Integer", dyn[0].Parent)
+	if !cont[0].Parent.Equal(TList) {
+		t.Errorf("result bound = %s, want the declared return List", cont[0].Parent)
+	}
+
+	// A dynamic input + a concrete SCALAR return stays dynamic (contagion is
+	// scoped to containers; a strict scalar gains nothing and can trip the
+	// forward/stack split detector).
+	intSig := &Signature{Returns: []*Type{TInteger}}
+	sc := carrierResults(r, "w", intSig, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, nil, false)
+	if len(sc) != 1 || !sc[0].Dynamic {
+		t.Fatalf("a dynamic input + scalar return must stay dynamic, got Dynamic=%v", sc[0].Dynamic)
+	}
+
+	// A dynamic input + a declared ANY return IS input-dependent (the type
+	// is genuinely unknown), so the modality flows downstream as dynamic.
+	anySig := &Signature{Returns: []*Type{TAny}}
+	dyn := carrierResults(r, "w", anySig, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, nil, false)
+	if len(dyn) != 1 || !dyn[0].Dynamic {
+		t.Fatalf("a dynamic input + Any return must stay dynamic, got Dynamic=%v", dyn[0].Dynamic)
 	}
 }
 

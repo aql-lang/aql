@@ -677,6 +677,21 @@ func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Val
 	return out
 }
 
+// isConcreteContainerReturn reports whether a declared-return carrier is a
+// fully-determined List/Map container (not the Any root, not a dynamic
+// carrier). Such a return type is fixed by the word's contract independent of
+// the runtime input value, so gradual contagion need not mark it dynamic — a
+// downstream `each` / `fold` / accessor can then commit on the known container
+// and derive an element carrier. Scoped to containers because that is the only
+// consumer that needs the concrete type; scalar returns gain nothing and their
+// strict form can spuriously trip the forward/stack split detector.
+func isConcreteContainerReturn(v Value) bool {
+	if v.Dynamic || v.Parent == nil {
+		return false
+	}
+	return v.Parent.ConformsTo(TList) || v.Parent.ConformsTo(TMap)
+}
+
 // applyGradualContagion widens results derived from dynamic args: the
 // modality flows downstream (a guard discharges it), a single result widens
 // to the union of all reachable overload returns (first-match partition),
@@ -716,8 +731,39 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 				})
 			}
 		}
+		// A CONCRETE, fully-determined declared CONTAINER return type does not
+		// become statically-unknown just because an input was dynamic: the
+		// word's contract fixes the RESULT TYPE regardless of which runtime
+		// value flowed in (`StructUtil.items` always returns a `List`). The
+		// dynamic input only decides whether the call SUCCEEDS or RAISES — and
+		// the call itself is baked as a runtime-faithful guarded dispatch
+		// (CALL_NATIVE / poly) that raises exactly as the interpreter on a bad
+		// receiver, so a compiled program never observes a wrongly-typed
+		// result. Keeping such a List/Map output STRICT lets a downstream
+		// `each` / `fold` / accessor commit on the KNOWN container instead of
+		// refusing "dynamic input at each" — the cross-module element-typing
+		// flip. Scoped to CONTAINER returns on purpose: a downstream
+		// higher-order/accessor word needs the concrete container to derive an
+		// element carrier, whereas keeping a SCALAR return strict has no such
+		// consumer and merely turns a formerly-dynamic if-arm join into a
+		// non-dynamic disjunct that trips the conservative forward/stack split
+		// detector (the trie/burst `String|Integer` fold-body regression).
+		// Guarded to the single-reachable-return case (`keepStrict`): a
+		// multi-overload word whose reachable overloads return DIVERGENT types
+		// must still ride the dynamic union below (the runtime could take a
+		// sibling overload's return), and a genuinely input-dependent return
+		// (declared Any / a ReturnsFn that produced a dynamic carrier) stays
+		// dynamic — those arrive here already flagged Dynamic and are untouched.
+		var reachable []*Type
+		if len(out) == 1 {
+			reachable = dynamicReachableReturns(r, word, args)
+		}
+		keepStrict := len(out) == 1 && len(reachable) < 2
 		for i := range out {
 			out[i].Carrier = true
+			if keepStrict && !out[i].Dynamic && isConcreteContainerReturn(out[i]) {
+				continue
+			}
 			out[i].Dynamic = true
 		}
 		// First-match partition (design/dynamic-modality-report.10.md): a
@@ -728,9 +774,9 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 		// of all reachable returns. No-op for the common case (one
 		// reachable return), so unobservable with return-uniform words.
 		if len(out) == 1 {
-			if rets := dynamicReachableReturns(r, word, args); len(rets) >= 2 {
-				alts := make([]Value, len(rets))
-				for i, t := range rets {
+			if len(reachable) >= 2 {
+				alts := make([]Value, len(reachable))
+				for i, t := range reachable {
 					alts[i] = NewTypeLiteral(t)
 				}
 				out[0] = NewDynamicCarrierValue(NewDisjunct(alts))
