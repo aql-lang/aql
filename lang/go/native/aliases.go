@@ -220,6 +220,7 @@ const (
 	CompileStoresFn         = eng.CompileStoresFn
 	CompileModuleFold       = eng.CompileModuleFold
 	CompileIslandPure       = eng.CompileIslandPure
+	CompileScalarFold       = eng.CompileScalarFold
 	CompileFallbackBody     = eng.CompileFallbackBody
 	CompileQuoteInert       = eng.CompileQuoteInert
 	CompileDiverges         = eng.CompileDiverges

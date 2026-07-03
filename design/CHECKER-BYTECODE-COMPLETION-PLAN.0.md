@@ -372,6 +372,30 @@ from everything; 7 is gated on 6's exit criteria.
   2 rows (3474/153 vs 3476/151), both previously divergence-exposed.
   Landing test TestFnValueAutoApplyRefusals (4 refusals with
   fallback-parity + 4 preserved).
+- **2026-07-03 — Phase 1.4a landed: comparison concrete folding
+  (CompileScalarFold).** eq/neq/deq/cmp/tcmp/lt/lte/gt/gte over
+  compile-time-known scalars now fold to their CONCRETE result in
+  check mode (tryFoldScalarConst — double-eval agreement guard like
+  the module fold; check-mode literals ride as concrete-payload
+  carriers, admitted by scalarFoldOperand). A/B-verified: `5 eq 0`
+  was a bare Boolean carrier before, concrete `false` after. This is
+  the named PREREQUISITE for the forward-barrier.tsv:83 pin
+  ("needs comparison ops to fold concretes"); the pin itself stays
+  until the `if` analysis COMMITS statically-determined branches —
+  probe shows even `if false [1] [2]` joins both arms today — which
+  belongs with Phase 3.1 (Stage A branch-result modeling). All
+  ratchets hold (FP 0, unflagged 172, soundness 7, frontier 381,
+  fuzz FP 104); census cost 4 rows, all one new bucket
+  ("if-branch lowering [scheduling]" — branch lowering meeting const
+  conds where it expected events), reclaimed by Phase 3.1. Landing
+  test TestScalarConstFold (5 folds + param-carrier and
+  cross-family negatives). Soundness pin stays 7: recursion.tsv:53
+  needs recursion unrolling (Phase 3/6 territory);
+  patrun.tsv:40 + module-rand.tsv:37 are the irreducible
+  dynamic-dispatch core (a Patrun/seeded-instance member's static
+  type is unknowable by design); class.tsv:85 (const-singleton field
+  widened by set) and corpus-core.tsv:61 (enum identity) remain
+  triage candidates for Phase 2/4.
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

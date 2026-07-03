@@ -543,9 +543,73 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		return out
 	}
 	out := declaredReturnCarriers(r, word, sig, args, pos)
+	if folded, ok := tryFoldScalarConst(r, sig, args); ok && len(out) == 1 {
+		// Concrete-condition folding (CompileScalarFold): the comparison ran
+		// for real over inert consts, so the concrete result replaces the
+		// declared-type carrier — `(n eq 0)` with const n becomes a concrete
+		// boolean and `if` analysis sees a statically-determined branch. Like
+		// tryFoldModuleConst, the fold emits NO event: the result rides as an
+		// inert const, so the compiled program pushes it from the pool.
+		out[0] = folded
+		return out
+	}
 	out = applyGradualContagion(r, word, args, out, pos, tailConsumed)
 	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)
 	return out
+}
+
+// tryFoldScalarConst const-folds a CompileScalarFold dispatch whose operands
+// are ALL inert consts, by running the real handler concretely — twice, with
+// the same determinism-agreement guard tryFoldModuleConst uses — and
+// returning the concrete result when it is itself an inert const. An
+// erroring dispatch (family-restricted ordering over cross-family operands)
+// declines, keeping the ordinary diagnostic path. See CompileScalarFold
+// (value.go) for the motivation (concrete-condition folding).
+func tryFoldScalarConst(r *Registry, sig *Signature, args []Value) (Value, bool) {
+	if sig == nil || !sig.CompileEffect.Has(CompileScalarFold) ||
+		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 || len(args) == 0 {
+		return Value{}, false
+	}
+	for _, a := range args {
+		if !scalarFoldOperand(a) {
+			return Value{}, false
+		}
+	}
+	one, ok := concreteHandlerEval(r, sig, args)
+	if !ok {
+		return Value{}, false
+	}
+	two, ok := concreteHandlerEval(r, sig, args)
+	if !ok || !constFoldAgrees(one, two) {
+		return Value{}, false
+	}
+	if !isInertConst(one) {
+		return Value{}, false
+	}
+	return one, true
+}
+
+// scalarFoldOperand reports whether a check-mode dispatch operand carries a
+// compile-time-known SCALAR value a CompileScalarFold dispatch may fold
+// over: an inert const, or a check-mode literal — which rides as a
+// concrete-PAYLOAD carrier (Carrier=true, Data set; the same shape the
+// DepScalar predicate evaluation reads for `f 5`), so the isInertConst
+// carrier guard alone would reject it. The carrier-tolerant arm admits only
+// value-scalar payloads: a compound carrier's payload is structural
+// (ChildTypeInfo) and a dynamic carrier's value is unknown — both decline.
+func scalarFoldOperand(v Value) bool {
+	if isInertConst(v) {
+		return true
+	}
+	if v.Dynamic || v.Data == nil {
+		return false
+	}
+	switch v.Data.(type) {
+	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
+		BigIntPayload, DecimalPayload:
+		return true
+	}
+	return false
 }
 
 // specialWordResults handles the words carrierResults special-cases before

@@ -426,6 +426,20 @@ const (
 	// disjunct of the code-body refusal; a word that ALSO splices its body
 	// (CompileExecutesBody) or declares a body-executing CallableSpec still refuses.
 	CompileRunsBodyIsolated
+
+	// CompileScalarFold marks a PURE value-level word (the comparison family:
+	// eq/neq/deq/cmp/tcmp/lt/lte/gt/gte) whose dispatch over ALL-inert-const
+	// operands the check pass may CONST-FOLD by running the real handler
+	// (tryFoldScalarConst, carrier.go): the concrete result replaces the
+	// declared-type carrier, so a literal condition like `(n eq 0)` with a
+	// const-bound n folds to a concrete boolean and downstream `if` analysis
+	// sees a statically-determined branch instead of a Disjunct residual
+	// (the forward-barrier.tsv:83 soundness pin). Folding is double-evaluated
+	// with an agreement guard exactly like CompileModuleFold, so a
+	// non-deterministic handler never freezes; an erroring dispatch (the
+	// family-restricted `lt` on cross-family operands) declines the fold and
+	// keeps today's diagnostic path.
+	CompileScalarFold
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
