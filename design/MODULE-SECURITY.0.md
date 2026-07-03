@@ -64,7 +64,9 @@ together.
      — a **`pure`** subset (`{}`), plus `deterministic`, `read-only`, `client`,
      … Because all host access funnels through ~9 accessors and AQL has a static
      checker, a module's *declared* footprint can be *statically verified*
-     against its *actual* reachable footprint (§7) — the reliable, re-runnable
+     against its *actual* reachable footprint (§7; feasibility worked through in
+     detail in §7.3–7.8, where the dynamic-dispatch surface reduces to a closed,
+     gate-able list) — the reliable, re-runnable
      whitelisting Tratt calls "incredibly difficult to do."
 
 - **AQL-specific axis.** Resource bounds (step budget, wall-clock, **tape
@@ -962,6 +964,45 @@ analysis can enumerate. In AQL the dynamic surface is small enough to list on
 one line, which is why "prove this module reaches no capability" is a decidable
 question rather than a hopeful one.
 
+### 7.8 Operationalizing it: the `analyzable` constraint
+
+§7.3–7.7 establish that AQL's dynamic surface is a closed, gate-able list. This
+subsection turns that into a concrete constraint an importer can *require* of a
+dependency — **`analyzable`**: a static / publish-time mode under which a
+module's capability footprint is *provably* inferable because every escape hatch
+is either resolved or forbidden. A module built under `analyzable`:
+
+- **may not import `aql:vm`** (removes `Vm.run` / `run-with`, §7.6), enforced by
+  the `modules` import allowlist;
+- **must use literal `import` arguments** (removes computed import, §7.7b) — a
+  syntactic checker rule;
+- **must let the checker prove every `do` / `apply` / `each` / `fold` /
+  `filter` body-or-callee inert-const-or-lexical** (§7.4/7.5/7.7a); an
+  unresolvable one is a *declare-or-fail* diagnostic — the module either makes
+  it analysable or declares the widened footprint;
+- **must keep macro `unquote`s pure** (removes expand-time effects, §7.7c).
+
+A module that passes carries a **statically-verified** manifest
+(`declared ⊇ inferred`, tightly). Compose that with the **`pure`** grant (`{}`)
+and the module is *provably* capability-free — the strongest guarantee, and
+exactly what an importer wants of a transitive dependency it will not audit.
+
+Three clarities keep it honest:
+
+- **`analyzable` is orthogonal to the capability subsets** (§7.1). It is not a
+  runtime scope like `fileops`; it constrains the *shape of the code* so the
+  effect set is inferable, and is enforced at `aql check` / publish, not at the
+  `Check()` gate. The subsets say *what* a module may do; `analyzable` says
+  *that we can prove what it does*. A module can be `analyzable` yet non-`pure`
+  (it verifiably uses `{fileops.read}`).
+- **You do not need `analyzable` for safety.** The runtime grant confines a
+  non-analysable module to its grant regardless (§7.3, the backstop);
+  `analyzable` buys *tightness and verification* — a diffable manifest (§4.3)
+  and the confidence to default-deny transitives instead of over-granting.
+- **It composes.** An importer can require "every transitive dependency is
+  `analyzable` and granted ⊆ `read-only`" — the practical policy for an
+  untrusted subtree.
+
 ---
 
 ## 8. AQL-specific resource limits — the quantitative capability axis
@@ -1128,10 +1169,13 @@ shippable, matching the PERMISSIONS-PLAN.10 discipline.
   install) install `effective`-parameterized wrappers instead of inheriting;
   propagate `CapPolicy` to child sub-registries; importer `with { … }` override
   and/or a per-dep grant block. Reuse `aql:vm`'s `Compose` path.
-- **Phase 3 — static verification.** `Effects []string` on signatures; union
-  fixpoint in the carrier checker (EOP idea #1); `aql check` verifies declared ⊇
-  inferred; `--emit-capabilities` writes the manifest; publish-time gate;
-  `-util` purity as a checked invariant.
+- **Phase 3 — static verification** (feasibility analysed in §7.3–7.8).
+  `Effects []string` on signatures; union fixpoint in the carrier checker
+  (EOP idea #1, on the existing `FnSummaries` / `CompileEffect` machinery);
+  `aql check` verifies declared ⊇ inferred; `--emit-capabilities` writes the
+  manifest; the escape-hatch handling of §7.4–7.7 (over-approximate or
+  declare-or-fail at `do`/`apply`/`Vm.run`/computed-`import`/macro sites); the
+  `analyzable` publish-mode of §7.8; `-util` purity as a checked invariant.
 - **Phase 4 — well-known subsets.** Named per-module subset vocabulary
   (`pure`/`deterministic`/`read-only`/`compute`/`client`); importer
   default-subset-for-all-transitive-deps policy.
@@ -1181,11 +1225,14 @@ small sealed native TCB underneath.
    host-registration allowlist) rather than trust the declaration; surface it in
    `describe` so importers see which deps are native (unverifiable) vs.
    AQL-source (verifiable).
-4. **Effect-inference precision.** Dynamic dispatch, `do` of computed code /
-   `apply` of an opaque Function value, and reflection-like words bound how
-   precisely `actual` capabilities can
-   be inferred. Over-approximate (a computed call reaches its declared bound) and
-   require an explicit declaration where inference is imprecise.
+4. **Effect-inference precision** (analysed in depth in §7.3–7.8). The dynamic
+   surface is a closed, gate-able list — `do`-body, `apply`-value,
+   `Vm.run`-string, computed-`import`, macro-expand, computed-`get` — each with
+   a conservative handling and a runtime-grant backstop. The residual open
+   question is narrower: *which* of these the default `analyzable` mode should
+   forbid outright versus over-approximate-with-annotation, and how aggressively
+   to invest in def-value tracking (the `do name` / `apply name` case,
+   §7.4/7.5) before falling back to the grant bound.
 5. **Shared mutable payloads (§9.4).** Are by-reference `Store`/`Array` exports
    a capability in their own right (a "mutate-parent-state" grant)? Possibly they
    should be copied at attenuated edges despite the cost.
