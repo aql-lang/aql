@@ -825,6 +825,78 @@ dynamic dispatch degrades manifest *tightness*, not the boundary — the one
 caveat being the closure-leakage vector above, which is about getting the
 *slot attenuation* right, not the inference.
 
+### 7.6 Worked case: `Vm.run` — the hatch that inverts the trade-off
+
+`Vm.run` is the maximal escape hatch on the *code-analyzability* axis and the
+**minimal** one on the *risk* axis — and understanding why is the clearest
+statement of this whole section's thesis. Its argument is a **`String`**
+(`vm-run` sig `{Args:[TString]}`), parsed and executed at runtime, so there is
+not even an AST to walk: the code is opaque *by construction*, strictly less
+analyzable than `do`'s list or `apply`'s Function value.
+
+But `Vm.run` is the only one of the three hatches that **carries its own
+capability boundary**. `runInSubEngine` (`modules/vm.go`) does not run the
+string in the current registry — it builds a **fresh** registry under
+`effective = Compose(parentPolicy, childProfile)` and runs the code there:
+
+```go
+effective := pol                                   // pol = built-in "sandbox" for Vm.run
+if parentPol := native.HostPolicy(parent); parentPol != nil {
+    effective = policy.Compose(parentPol, pol)     // ⊆ parent, structurally
+}
+subReg, _ := newSubEngineRegistry(parent, effective)
+```
+
+So the site's capability footprint is a function of the **policy** (data the
+analyzer can often read), *not* the **code** (text it never can). This inverts
+the intuition: the most dynamic hatch is the one you reason about most cleanly,
+and it degrades to something *tighter than the ambient grant* rather than up to
+it. Contrast the three:
+
+| Hatch | Runs in | Opaque-input footprint |
+|---|---|---|
+| `do <opaque>` | current registry | up to the **full module grant** |
+| `apply <opaque>` | current registry | up to the **full module grant** |
+| `Vm.run <any string>` | fresh sub-registry under `Compose(grant, sandbox)` | at most **`sandbox ∩ grant`** — strictly tighter |
+
+Precision by variant:
+
+| Variant | Sub-policy | Site footprint |
+|---|---|---|
+| `Vm.run` / `-sandbox` / `-compute` | fixed built-in profile | **precise** — `Compose(grant, sandbox|compute)`, regardless of the string |
+| `Vm.run-with code {literal policy}` | literal map in source | **precise** — `Compose(grant, literal)`; the literal policy is an *inline capability manifest for the dynamic sub-program* |
+| `Vm.run-with code {computed policy}` | computed | over-approximate to `grant` (Compose caps at the parent regardless) — same worst case as `do`/`apply`, still ⊆ grant, never ⊤ |
+| `Vm.parse` / `Vm.check` / `Vm.compile` | — (analyse, don't run) | **`{}`** — check mode suppresses every side-effecting handler, so these are effect-free whatever the string |
+
+Two further points close it:
+
+- **Analyzability-as-capability, in its sharpest form.** `Vm.run` requires the
+  module to have imported `aql:vm`, which the `modules` import scope gates. A
+  `pure`/`deterministic` profile that denies `aql:vm` makes the entire hatch
+  *unreachable* — there is nothing to analyse because the module cannot call it.
+- **A dangerous *string* is itself gated.** An interesting string (one that
+  drives I/O) generally has to be obtained via `read`/`fetch` — separate,
+  analyzable, gated capabilities. The content is opaque; the provenance of a
+  *harmful* string is not free.
+
+**Residual risk (honest).** The sub-engine inherits the kernel governors (step
+limit, tape ceiling), so a runaway body is bounded — but `MaxSubEngineDepth` is
+unenforced (§3.6) and `newSubEngineRegistry` does not read `pol.Limits()`, so
+**nested `Vm.run` is unbounded** (a Go-stack DoS vector) and a
+`Vm.run-with {limits:…}` declares budgets that do not bite. Closing this is the
+depth-counter + limits-wiring work of §6.1/§8.2. And, per §9.2, this is
+in-process attenuation, not OS isolation against truly hostile code.
+
+**The synthesis.** `Vm.run` is not merely a hatch to worry about — it is the
+*template* for the entire per-edge model. Importing a dependency and running it
+under `Compose(importer, dep-grant)` (§5–§6) **is** `Vm.run-with` applied at the
+dependency boundary. The right posture for genuinely untrusted dynamic code is
+therefore not `do`/`apply` at ambient authority, but the `Vm.run` model: run
+arbitrary code under a *declared, reduced, composed* grant that travels with it.
+The one hatch you cannot statically analyse is the one that shows how dynamic
+code *should* enter — which is why the design generalises it to every import
+edge.
+
 ---
 
 ## 8. AQL-specific resource limits — the quantitative capability axis
