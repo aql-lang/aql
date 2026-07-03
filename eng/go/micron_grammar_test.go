@@ -1,6 +1,14 @@
 package eng
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
+
+// micronTestOrder is the no-extras token order the standalone-grammar
+// tests build with — the same order MicronGrammarWith computes when no
+// user shapes are registered.
+var micronTestOrder = []string{"#EMAILON", "#URLON", "#PATHON"}
 
 // TestMicronMergedGrammarDispatch pins the merged literal grammar's
 // type dispatch: each builtin leaf contributes its own tabnas grammar,
@@ -60,7 +68,7 @@ func TestMicronMergedGrammarValues(t *testing.T) {
 // dispatch comes from combining single-shape grammars, not from one
 // grammar that happened to accept everything).
 func TestMicronLeafGrammarsIndependent(t *testing.T) {
-	em := micronEmailonGrammar()
+	em := micronEmailonGrammar(micronTestOrder)
 	if _, err := em.Parse("alice@example.com"); err != nil {
 		t.Errorf("emailon grammar rejected its own literal: %v", err)
 	}
@@ -71,7 +79,7 @@ func TestMicronLeafGrammarsIndependent(t *testing.T) {
 		t.Error("emailon grammar accepted a URL literal")
 	}
 
-	ur := micronUrlonGrammar()
+	ur := micronUrlonGrammar(micronTestOrder)
 	if _, err := ur.Parse("https://x.com/a"); err != nil {
 		t.Errorf("urlon grammar rejected its own literal: %v", err)
 	}
@@ -79,7 +87,7 @@ func TestMicronLeafGrammarsIndependent(t *testing.T) {
 		t.Error("urlon grammar accepted an email literal")
 	}
 
-	pt := micronPathonGrammar()
+	pt := micronPathonGrammar(micronTestOrder)
 	if _, err := pt.Parse("a/b"); err != nil {
 		t.Errorf("pathon grammar rejected its own literal: %v", err)
 	}
@@ -90,19 +98,19 @@ func TestMicronLeafGrammarsIndependent(t *testing.T) {
 // (the shared micronTokenOrder carries the lexer precedence through
 // the commutative option merge).
 func TestMicronMergeCommutative(t *testing.T) {
-	ab, err := micronEmailonGrammar().Merge(micronUrlonGrammar())
+	ab, err := micronEmailonGrammar(micronTestOrder).Merge(micronUrlonGrammar(micronTestOrder))
 	if err != nil {
 		t.Fatalf("merge e~u: %v", err)
 	}
-	abc, err := ab.Merge(micronPathonGrammar())
+	abc, err := ab.Merge(micronPathonGrammar(micronTestOrder))
 	if err != nil {
 		t.Fatalf("merge (e~u)~p: %v", err)
 	}
-	cb, err := micronPathonGrammar().Merge(micronUrlonGrammar())
+	cb, err := micronPathonGrammar(micronTestOrder).Merge(micronUrlonGrammar(micronTestOrder))
 	if err != nil {
 		t.Fatalf("merge p~u: %v", err)
 	}
-	cba, err := cb.Merge(micronEmailonGrammar())
+	cba, err := cb.Merge(micronEmailonGrammar(micronTestOrder))
 	if err != nil {
 		t.Fatalf("merge (p~u)~e: %v", err)
 	}
@@ -124,5 +132,71 @@ func TestMicronMergeCommutative(t *testing.T) {
 				t.Errorf("merged parse %q → %v, want %s", src, node, kind.Name)
 			}
 		}
+	}
+}
+
+// TestMicronGrammarWithExtras pins the opt-in hook: an extra shape
+// merges BETWEEN the builtin leaves and the Pathon catch-all — it
+// claims spans Pathon would otherwise catch, never spans the builtin
+// leaves own, and a builder error is loud (the pattern claimed the
+// span), unlike the builtin RFC-edge Pathon fallback.
+func TestMicronGrammarWithExtras(t *testing.T) {
+	buildCalls := 0
+	ticket := MicronLiteralSpec{
+		Tag:     "Ticketon",
+		Token:   "#U0TICKETON",
+		Pattern: regexp.MustCompile(`\AT-[0-9]+\z`),
+		Build: func(s string) (Value, error) {
+			buildCalls++
+			fields := NewOrderedMap()
+			fields.Set("id", NewString(s))
+			return NewValueRaw(TMicron, MicronPayload{Fields: fields}), nil
+		},
+	}
+	m, err := MicronGrammarWith(ticket)
+	if err != nil {
+		t.Fatalf("MicronGrammarWith: %v", err)
+	}
+
+	node, err := m.Parse("T-123")
+	if err != nil {
+		t.Fatalf("parse T-123: %v", err)
+	}
+	v, ok := node.(Value)
+	if !ok || !IsMicronValue(v) {
+		t.Fatalf("T-123 → %v, want the extra's Micron value", node)
+	}
+	if got, _ := MicronProperty(v, "id"); !ValuesEqual(got, NewString("T-123")) {
+		t.Fatalf("T-123 id property = %v", got)
+	}
+	if buildCalls != 1 {
+		t.Fatalf("builder ran %d times, want 1", buildCalls)
+	}
+
+	// Builtin leaves keep their spans — the extra sits AFTER them.
+	for src, kind := range map[string]*Type{
+		"alice@example.com": TEmailon,
+		"https://x.com/a":   TUrlon,
+		"plain/path":        TPathon,
+		"T-notanumber":      TPathon, // gate mismatch → catch-all
+	} {
+		node, err := m.Parse(src)
+		if err != nil {
+			t.Errorf("parse %q: %v", src, err)
+			continue
+		}
+		v, ok := node.(Value)
+		if !ok || !v.Parent.Equal(kind) {
+			t.Errorf("parse %q → %v, want %s", src, node, kind.Name)
+		}
+	}
+
+	// No extras ≡ the builtin merged grammar.
+	base, err := MicronGrammarWith()
+	if err != nil {
+		t.Fatalf("MicronGrammarWith(): %v", err)
+	}
+	if _, err := base.Parse("T-123"); err != nil {
+		t.Fatalf("base grammar should catch T-123 as a Pathon: %v", err)
 	}
 }

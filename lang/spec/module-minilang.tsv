@@ -214,3 +214,23 @@ import "aql:minilang"  <r><a/></r> MiniLang.lang_xp '//a' {} end	[<a/>]	mini is 
 import "aql:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPath is a loud parse error
 import "aql:minilang"  {a:1} mini xp '//a' {}	ERROR:uncalled_function	the document must be a Node/Xml — a Map subject does not match the xp signature, so the call is left uncalled
 import "aql:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed to `math`; `m` is now the MICRON short form, so a formula-looking source is just a Pathon literal — use `mini math`
+#
+# §mi2  MiniLang.micron — the OPT-IN user-Micron literal hook. A user kind
+#       registers an anchored shape pattern + a builder fn; the shape merges
+#       into the +m grammar BETWEEN the builtin leaves and the Pathon
+#       catch-all (registration order). Builtins keep their spans; unclaimed
+#       spans still fall to Pathon; one shape per kind, per registry.
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon 'T-[0-9]+' ([s:String] => [make Ticketon {id:s}])  end  +m:T-123 typeof	Ticketon	a registered user shape claims its span
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon 'T-[0-9]+' ([s:String] => [make Ticketon {id:s}])  end  (+m:T-123:).id	'T-123'	the builder's instance is a full Micron — properties work
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon 'T-[0-9]+' ([s:String] => [make Ticketon {id:s}])  end  mini m 'T-77' typeof	Ticketon	the explicit mini form routes through the same merged grammar
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon 'T-[0-9]+' ([s:String] => [make Ticketon {id:s}])  end  +m:alice@example.com typeof	Emailon	builtin leaves keep their spans — user shapes merge AFTER them
+import "aql:minilang"  def Corpon refine Micron {who:String}  MiniLang.micron Corpon '.+@corp[.]io' ([s:String] => [make Corpon {who:s}])  end  +m:x@corp.io typeof	Emailon	even an overlapping user pattern cannot claim an email span
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon 'T-[0-9]+' ([s:String] => [make Ticketon {id:s}])  end  +m:T-nope typeof	Pathon	a gate mismatch falls through to the catch-all
+import "aql:minilang"  def Ticketon refine Micron {id:String}  def Depton refine Micron {d:String}  MiniLang.micron Ticketon 'T-[0-9]+' ([s:String] => [make Ticketon {id:s}])  MiniLang.micron Depton 'D/[a-z]+' ([s:String] => [make Depton {d:s}])  end  [(+m:T-9 typeof) (+m:D/ops typeof) (+m:zz typeof)]	[Ticketon Depton Pathon]	multiple user shapes merge in registration order
+# §mi2  negatives
+import "aql:minilang"  MiniLang.micron Emailon 'x' ([s:String] => [1])	ERROR:micron_literal	a builtin Micron's literal shape is fixed
+import "aql:minilang"  MiniLang.micron Integer 'x' ([s:String] => [1])	ERROR:micron_literal	the kind must be a Micron
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron '[[' ([s:String] => [make Baron {v:1}])	ERROR:micron_literal	an invalid pattern is refused at registration
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron 'B[0-9]+' ([s:String] => [make Baron {v:7}])  MiniLang.micron Baron 'C[0-9]+' ([s:String] => [make Baron {v:8}])	ERROR:already registered	one shape per kind
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron 'B[0-9]+' ([s:String] => [s])  end  +m:B7	ERROR:must return one Baron instance	a wrong-typed builder result is loud — the pattern claimed the span
+import "aql:minilang"  def Failon refine Micron {x:String}  MiniLang.micron Failon 'F[0-9]+' ([s:String] => [make Failon {}])  end  +m:F1	ERROR:missing field	a failing builder is loud, not a silent Pathon fallback

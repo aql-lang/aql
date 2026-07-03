@@ -36,23 +36,17 @@ import (
 	tabnas "github.com/tabnas/parser/go"
 )
 
-// micronTokenOrder fixes the lexer's match-token precedence — most
-// specific shape first, the Pathon catch-all last. Every leaf grammar
-// carries this SAME value so the merge's commutative option check
-// unifies rather than conflicts.
-var micronTokenOrder = []string{"#EMAILON", "#URLON", "#PATHON"}
-
 // micronLiteralGrammar builds one leaf's literal grammar: a match
 // token gating the shape, and a val alternate whose action runs the
 // leaf's constructor. build returns the constructed Value or an error;
 // on error the action falls back to a Pathon (the family catch-all),
 // preserving first-match-wins across the merge.
-func micronLiteralGrammar(tag, token, pattern string, build func(s string) (Value, error)) *tabnas.Tabnas {
+func micronLiteralGrammar(tag, token string, pattern *regexp.Regexp, order []string, build func(s string) (Value, error)) *tabnas.Tabnas {
 	j := tabnas.Make(tabnas.Options{
 		Tag: tag,
 		Match: &tabnas.MatchOptions{
-			Token:      map[string]*regexp.Regexp{token: regexp.MustCompile(pattern)},
-			TokenOrder: micronTokenOrder,
+			Token:      map[string]*regexp.Regexp{token: pattern},
+			TokenOrder: order,
 		},
 	})
 	tin := j.Token(token)
@@ -79,9 +73,9 @@ func micronLiteralGrammar(tag, token, pattern string, build func(s string) (Valu
 // micronEmailonGrammar is Emailon's literal grammar: a plain
 // user@host span (no whitespace, no display-name angle brackets, one
 // unquoted @) — the same shapes emailonFromString accepts.
-func micronEmailonGrammar() *tabnas.Tabnas {
+func micronEmailonGrammar(order []string) *tabnas.Tabnas {
 	return micronLiteralGrammar("Emailon", "#EMAILON",
-		`\A[^@\s<>]+@[^@\s<>]+\z`,
+		regexp.MustCompile(`\A[^@\s<>]+@[^@\s<>]+\z`), order,
 		func(s string) (Value, error) {
 			out, err := makeEmailon(NewString(s))
 			if err != nil {
@@ -93,9 +87,9 @@ func micronEmailonGrammar() *tabnas.Tabnas {
 
 // micronUrlonGrammar is Urlon's literal grammar: an absolute URL
 // (scheme://…), matching urlonFromString's absolute-only rule.
-func micronUrlonGrammar() *tabnas.Tabnas {
+func micronUrlonGrammar(order []string) *tabnas.Tabnas {
 	return micronLiteralGrammar("Urlon", "#URLON",
-		`\A[A-Za-z][A-Za-z0-9+.-]*://\S+\z`,
+		regexp.MustCompile(`\A[A-Za-z][A-Za-z0-9+.-]*://\S+\z`), order,
 		func(s string) (Value, error) {
 			out, err := makeUrlon(NewString(s))
 			if err != nil {
@@ -107,9 +101,9 @@ func micronUrlonGrammar() *tabnas.Tabnas {
 
 // micronPathonGrammar is Pathon's literal grammar: any whitespace-free
 // span — the family catch-all, so it merges LAST in micronTokenOrder.
-func micronPathonGrammar() *tabnas.Tabnas {
+func micronPathonGrammar(order []string) *tabnas.Tabnas {
 	return micronLiteralGrammar("Pathon", "#PATHON",
-		`\A\S+\z`,
+		regexp.MustCompile(`\A\S+\z`), order,
 		func(s string) (Value, error) {
 			out, err := makePathon(NewString(s), false)
 			if err != nil {
@@ -119,17 +113,64 @@ func micronPathonGrammar() *tabnas.Tabnas {
 		})
 }
 
-// micronMergedGrammar memoizes the ONE merged literal grammar:
-// Emailon ~ Urlon ~ Pathon. Built on first use; the build cannot fail
-// (the three grammars carry distinct tags and identical options), but
-// any error is kept and surfaced per parse rather than panicking
-// (ADR-005).
-var micronMergedGrammar = sync.OnceValues(func() (*tabnas.Tabnas, error) {
-	m, err := micronEmailonGrammar().Merge(micronUrlonGrammar())
+// MicronLiteralSpec describes one EXTRA literal shape merged into the
+// Micron grammar — the opt-in hook that lets a user-defined Micron
+// kind join the `+m:…` literal (MiniLang.micron in aql:minilang wraps
+// this for AQL registrations; hosts can call MicronGrammarWith
+// directly). The pattern gates the shape; Build constructs the value.
+type MicronLiteralSpec struct {
+	// Tag identifies the shape's grammar in the merge — the kind's
+	// name. Merge requires it distinct from Emailon/Urlon/Pathon and
+	// from every other extra.
+	Tag string
+	// Token is the match-token name (e.g. "#U0TICKETON"); it must be
+	// unique across the merge set and slots into the computed
+	// TokenOrder between the builtin leaves and the Pathon catch-all.
+	Token string
+	// Pattern is the anchored shape gate.
+	Pattern *regexp.Regexp
+	// Build constructs the value from the matched span. On error the
+	// grammar action falls back to the Pathon catch-all (the uniform
+	// family rule); a caller that wants a LOUD failure instead records
+	// the error out-of-band in its Build wrapper and checks it after
+	// the parse — the aql:minilang bridge does exactly that, because a
+	// user-registered shape that matched has CLAIMED the span.
+	Build func(s string) (Value, error)
+}
+
+// MicronGrammarWith builds the merged Micron literal grammar with the
+// given extra shapes spliced between the builtin leaves and the Pathon
+// catch-all: Emailon, Urlon, extras (in order), Pathon. Every grammar
+// in the set carries the SAME computed TokenOrder, so the commutative
+// merge unifies the lexer precedence without conflict. With no extras
+// this is exactly the builtin merged grammar.
+func MicronGrammarWith(extras ...MicronLiteralSpec) (*tabnas.Tabnas, error) {
+	order := make([]string, 0, 3+len(extras))
+	order = append(order, "#EMAILON", "#URLON")
+	for _, e := range extras {
+		order = append(order, e.Token)
+	}
+	order = append(order, "#PATHON")
+
+	m, err := micronEmailonGrammar(order).Merge(micronUrlonGrammar(order))
 	if err != nil {
 		return nil, err
 	}
-	return m.Merge(micronPathonGrammar())
+	for _, e := range extras {
+		g := micronLiteralGrammar(e.Tag, e.Token, e.Pattern, order, e.Build)
+		if m, err = m.Merge(g); err != nil {
+			return nil, err
+		}
+	}
+	return m.Merge(micronPathonGrammar(order))
+}
+
+// micronMergedGrammar memoizes the ONE builtin merged literal grammar:
+// Emailon ~ Urlon ~ Pathon (no extras). Built on first use; the build
+// cannot fail (distinct tags, identical options), but any error is
+// kept and surfaced per parse rather than panicking (ADR-005).
+var micronMergedGrammar = sync.OnceValues(func() (*tabnas.Tabnas, error) {
+	return MicronGrammarWith()
 })
 
 // micronParseMu serializes merged-grammar parses — the tabnas instance

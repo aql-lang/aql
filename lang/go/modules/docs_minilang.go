@@ -38,10 +38,18 @@ func init() {
 		"lang_micron": "Micron literal: `+m:alice@example.com` (≡ mini micron '…' ≡ mini m '…') — " +
 			"parse the source with the ONE merged tabnas grammar built from each builtin Micron leaf's literal grammar " +
 			"(Emailon, then Urlon, then Pathon) — the matching shape decides the type. Pathon accepts any " +
-			"whitespace-free source, so it is the catch-all (`+m:a/b` is a Pathon). URL sources " +
+			"whitespace-free source, so it is the catch-all (`+m:a/b` is a Pathon). User Microns join " +
+			"the merge via MiniLang.micron (see micron). URL sources " +
 			"contain `:` and `/` — pick a delimiter outside the source: `+m|https://x.com/a`.",
 		"lang_m": "Short form of the micron kind — see lang_micron. `+m:alice@example.com` " +
 			"parses as an Emailon; `+m|https://x.com/a` as an Urlon; `+m:a/b` as a Pathon.",
+		"micron": "OPT-IN user-Micron literal hook: `MiniLang.micron <Kind> '<pattern>' <fn>` registers " +
+			"a literal shape for a USER-defined Micron kind (def Nameon refine Micron {\u2026}). The " +
+			"anchored Go-regexp pattern gates the shape and the fn ([String] \u2192 a Kind instance) " +
+			"constructs the value; the shape merges into the `+m` grammar BETWEEN the builtin leaves " +
+			"and the Pathon catch-all (registration order), so Emailon/Urlon keep their spans and " +
+			"unclaimed spans still fall to Pathon. One shape per kind; a builder failure or a " +
+			"wrong-typed result is a loud mini_parse_error at the literal.",
 		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
 			"Every fn signature must start with the standard prefix [src:String opts:Map …].",
 		"kinds": "List the registered mini-language kind atoms.",

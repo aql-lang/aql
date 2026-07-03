@@ -2,6 +2,7 @@ package modules
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
+	tabnas "github.com/tabnas/parser/go"
 )
 
 // The aql:minilang module — the MiniLang namespace of embedded
@@ -226,13 +228,41 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TString, native.TMap},
 			Returns:    []*native.Type{native.TMicron},
 			BarrierPos: -1,
-			Impl:       native.Go(miniMicronHandler),
+			Impl:       native.Go(miniMicronHandlerFor(parent)),
 		}},
 	})
 	micronFnDef := wrapMiniFnDef("minilang-micron", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TMicron}, nil, subReg)
 	exports.Set("lang_micron", micronFnDef)
 	exports.Set("lang_m", micronFnDef)
+
+	// ---- out-of-band: micron — the OPT-IN user-Micron literal hook ------
+	// `MiniLang.micron <Kind> '<pattern>' <fn>` registers a literal shape
+	// for a USER-defined Micron kind: the anchored pattern gates the
+	// shape, the fn ([String] → a Kind instance) constructs the value,
+	// and the shape merges into the `+m` grammar BETWEEN the builtin
+	// leaves and the Pathon catch-all (registration order) — Emailon and
+	// Urlon keep their spans; anything the user shapes don't claim still
+	// falls to Pathon. Registrations are per-registry and permanent,
+	// like MiniLang.register kinds.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "minilang-micron-lit",
+		Signatures: []native.Signature{{
+			Args:          []*native.Type{native.TAny, native.TString, native.TFunction},
+			Returns:       []*native.Type{},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn, // the fn is stored, not invoked on the tape
+			Impl:          native.Go(miniMicronLitHandlerFor(parent)),
+			// Check-mode hook: the kind/pattern/fn shape rules are
+			// value-decidable — a dry pass flags them during analysis
+			// (registry-state rules like the duplicate check stay
+			// with the runtime handler).
+			ReturnsFn: miniMicronLitReturns,
+		}},
+	})
+	exports.Set("micron", wrapMiniFnDef("minilang-micron-lit", [][]native.FnParam{
+		{{Type: native.TAny}, {Type: native.TString}, {Type: native.TFunction}},
+	}, []*native.Type{}, nil, subReg))
 
 	// ---- kind: jp — JSONPath query (github.com/ohler55/ojg) -------------
 	// [src opts doc:Any] → [List]. Run a JSONPath query over the stack
@@ -589,15 +619,206 @@ func miniDropGrouping(s string) string {
 	}, s)
 }
 
-// miniMicronHandler — args[0]=src, args[1]=opts (none defined). Parses
-// the source with the merged Micron literal grammar (each leaf's
-// tabnas grammar, merged — eng/go/micron_grammar.go): the matching
-// shape decides the type — Emailon, then Urlon, then Pathon.
-func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	src, err := args[0].AsConcreteString()
-	if err != nil {
-		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: src: %v", err), "lang_micron")
+// capMicronLits is the registry capability slot holding the user-Micron
+// literal registrations (MiniLang.micron) and their memoized merged
+// grammar. Scoped to the registry instance, like capMiniLangHost.
+const capMicronLits = "engine.minilang.micron-literals"
+
+// micronLitState is the per-registry record of user-Micron literal
+// shapes. specs is the source of truth in registration order; grammar
+// is the memoized eng.MicronGrammarWith merge (nil = rebuild). r and
+// firstErr bridge one Parse call: the grammar actions dispatch the
+// registered AQL fns re-entrantly through r, and a builder failure is
+// recorded here so the handler can raise it LOUDLY (a registered shape
+// that matched has claimed the span — the eng-side action would
+// otherwise fall back to Pathon). Single-threaded under mu.
+type micronLitState struct {
+	mu       sync.Mutex
+	specs    []eng.MicronLiteralSpec
+	kinds    map[string]bool
+	grammar  *tabnas.Tabnas
+	r        *native.Registry
+	firstErr error
+}
+
+// micronLitStateFor returns the user-Micron literal state on r,
+// creating it when create is true.
+func micronLitStateFor(r *native.Registry, create bool) *micronLitState {
+	if s, ok, _ := eng.Cap[*micronLitState](r, capMicronLits); ok && s != nil {
+		return s
 	}
+	if !create {
+		return nil
+	}
+	s := &micronLitState{kinds: map[string]bool{}}
+	_ = r.Capabilities.Set(capMicronLits, s)
+	return s
+}
+
+// miniMicronLitHandlerFor builds the `MiniLang.micron` handler —
+// args[0]=the user Micron kind, args[1]=the shape pattern (a Go
+// regexp, auto-anchored to the whole span), args[2]=the builder fn
+// ([String] → a Kind instance). Registrations key on the IMPORTING
+// registry (captured at module build, like Parse.register).
+// miniMicronLitValidate is the shared kind/pattern/fn validation for
+// the runtime handler and the check-mode dry pass. In lenient mode a
+// non-concrete value is skipped, never flagged. Returns the resolved
+// kind and compiled (anchored) pattern; either may be nil in lenient
+// mode when the corresponding arg was a carrier.
+func miniMicronLitValidate(args []native.Value, r *native.Registry, lenient bool) (*native.Type, *regexp.Regexp, native.Value, error) {
+	kindV := args[0]
+	var kind *native.Type
+	switch {
+	case eng.IsMicronType(kindV):
+		info, _ := eng.AsMicronType(kindV)
+		kind = info.Type
+	case native.IsBareTypeNode(kindV):
+		kind = native.CanonicalType(r, &kindV)
+	}
+	if kind == nil || !kind.ConformsTo(native.TMicron) {
+		if lenient && !native.IsConcrete(kindV) && !native.IsBareTypeNode(kindV) {
+			kind = nil // a carrier — the runtime handler decides
+		} else {
+			return nil, nil, native.Value{}, r.AqlError("micron_literal",
+				fmt.Sprintf("MiniLang.micron: expected a Micron kind, got %s", kindV.String()), "micron")
+		}
+	}
+	if kind != nil && kind.Origin != eng.OriginUserDef {
+		return nil, nil, native.Value{}, r.AqlErrorHint("micron_literal",
+			fmt.Sprintf("MiniLang.micron: %s is a builtin Micron — its literal shape is fixed", kind.Name),
+			"micron",
+			"register shapes for USER kinds only (def Nameon refine Micron {…})")
+	}
+	var re *regexp.Regexp
+	if !lenient || native.IsConcrete(args[1]) {
+		pat, err := args[1].AsConcreteString()
+		if err != nil {
+			return nil, nil, native.Value{}, r.AqlError("micron_literal",
+				fmt.Sprintf("MiniLang.micron: pattern: %v", err), "micron")
+		}
+		var rerr error
+		re, rerr = miniCompiledPattern(`\A(?:` + pat + `)\z`)
+		if rerr != nil {
+			return nil, nil, native.Value{}, r.AqlError("micron_literal",
+				fmt.Sprintf("MiniLang.micron: invalid pattern %q: %v", pat, rerr), "micron")
+		}
+	}
+	fn := args[2]
+	if !isCallableValue(fn) && !(lenient && !native.IsConcrete(fn)) {
+		return nil, nil, native.Value{}, r.AqlError("micron_literal",
+			fmt.Sprintf("MiniLang.micron: the builder must be a Function, got %s", fn.String()), "micron")
+	}
+	return kind, re, fn, nil
+}
+
+// miniMicronLitReturns is MiniLang.micron's check-mode hook: the
+// kind/pattern/fn shape rules are value-decidable, so a lenient dry
+// pass flags them during analysis with the byte-identical runtime
+// message. Registry-state rules (the duplicate-kind check) stay with
+// the runtime handler.
+func miniMicronLitReturns(args []native.Value, r *native.Registry) []native.Value {
+	if r != nil && r.Check.IsActive() && len(args) == 3 {
+		if _, _, _, err := miniMicronLitValidate(args, r, true); err != nil {
+			code, detail := "micron_literal", err.Error()
+			var ae *eng.AqlError
+			if errors.As(err, &ae) {
+				code, detail = ae.Code, ae.Detail
+			}
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "micron", args[0].Pos)
+		}
+	}
+	return []native.Value{}
+}
+
+func miniMicronLitHandlerFor(parent *native.Registry) native.Handler {
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+		kind, re, fn, err := miniMicronLitValidate(args, parent, false)
+		if err != nil {
+			return nil, err
+		}
+
+		st := micronLitStateFor(parent, true)
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if st.kinds[kind.Name] {
+			return nil, r.AqlError("micron_literal",
+				fmt.Sprintf("MiniLang.micron: a literal shape for %s is already registered", kind.Name), "micron")
+		}
+		st.kinds[kind.Name] = true
+		kindT := kind
+		st.specs = append(st.specs, eng.MicronLiteralSpec{
+			Tag:     kind.Name,
+			Token:   fmt.Sprintf("#U%d%s", len(st.specs), strings.ToUpper(kind.Name)),
+			Pattern: re,
+			Build: func(s string) (native.Value, error) {
+				out, berr := callParseFn(st.r, fn, []native.Value{native.NewString(s)})
+				if berr == nil && (len(out) != 1 || !out[0].Parent.ConformsTo(kindT)) {
+					berr = fmt.Errorf("the %s builder must return one %s instance", kindT.Name, kindT.Name)
+				}
+				if berr != nil {
+					st.firstErr = fmt.Errorf("%s literal %q: %v", kindT.Name, s, berr)
+					return native.Value{}, berr
+				}
+				return out[0], nil
+			},
+		})
+		st.grammar = nil // rebuild on next parse
+		return nil, nil
+	}
+}
+
+// miniMicronHandlerFor builds the micron/m transducer — args[0]=src,
+// args[1]=opts (none defined). With no MiniLang.micron registrations
+// it parses with the builtin merged grammar (eng.MicronFromString);
+// otherwise with the per-registry merge that splices the user shapes
+// between the builtin leaves and the Pathon catch-all.
+func miniMicronHandlerFor(parent *native.Registry) native.Handler {
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+		src, err := args[0].AsConcreteString()
+		if err != nil {
+			return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: src: %v", err), "lang_micron")
+		}
+		st := micronLitStateFor(parent, false)
+		if st == nil {
+			return miniMicronBuiltin(src, r)
+		}
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if len(st.specs) == 0 {
+			return miniMicronBuiltin(src, r)
+		}
+		if src == "" {
+			return miniMicronBuiltin(src, r) // the empty relative path, as eng handles it
+		}
+		if st.grammar == nil {
+			g, gerr := eng.MicronGrammarWith(st.specs...)
+			if gerr != nil {
+				return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: grammar merge: %v", gerr), "lang_micron")
+			}
+			st.grammar = g
+		}
+		st.r, st.firstErr = r, nil
+		node, perr := st.grammar.Parse(src)
+		st.r = nil
+		if st.firstErr != nil {
+			return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: %v", st.firstErr), "lang_micron")
+		}
+		if perr != nil {
+			return nil, r.AqlError("mini_parse_error",
+				fmt.Sprintf("micron: cannot parse literal %q: %v", src, native.FirstCleanLine(perr.Error())), "lang_micron")
+		}
+		v, ok := node.(native.Value)
+		if !ok {
+			return nil, r.AqlError("mini_parse_error",
+				fmt.Sprintf("micron: literal %q did not produce a value", src), "lang_micron")
+		}
+		return []native.Value{v}, nil
+	}
+}
+
+// miniMicronBuiltin is the no-registrations fast path: the builtin
+// merged grammar via eng.MicronFromString.
+func miniMicronBuiltin(src string, r *native.Registry) ([]native.Value, error) {
 	v, merr := eng.MicronFromString(src)
 	if merr != nil {
 		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: %v", merr), "lang_micron")
