@@ -44,3 +44,46 @@ def r (mk {} {})`
 		t.Error("a generic-record instance returned against [Integer] must stay flagged")
 	}
 }
+
+// PR #218 review (Codex P2s): the faithful Map tag must not swallow a
+// CONCRETE construction the runtime rejects. With fully-literal data the
+// checker validates statically (infer + instantiate + MakeRecordR) and a
+// failure keeps the schema-node carrier, whose failed Map conformance flags
+// the enclosing [Map] return.
+func TestGenericRecordConcreteConstructionFailuresFlag(t *testing.T) {
+	cases := []struct{ name, src string }{
+		{"uninferable param", `def Pair gen [K V] refine Record [key:K value:V]
+def mk fn [[m:Map] [Map] [make Pair {key:"a"}]]
+(mk {})`},
+		{"unknown extra field", `def Pair gen [K] refine Record [key:K]
+def mk fn [[m:Map] [Map] [make Pair {key:"a" extra:1}]]
+(mk {})`},
+	}
+	for _, c := range cases {
+		a, _ := New()
+		res, _ := a.Check(c.src)
+		flagged := false
+		for _, d := range res.Diagnostics {
+			if d.Severity == "error" {
+				flagged = true
+				break
+			}
+		}
+		if !flagged {
+			t.Errorf("%s: a concrete generic-record construction the runtime rejects must flag", c.name)
+		}
+	}
+
+	// Carrier-bearing construction data (field values statically unknown —
+	// the decision with-policy shape) stays on the optimistic Map carrier.
+	const gradual = `def DT gen [R] refine Record [kind:String hp:R]
+def wp fn [[p:String t:Map] [Map] [make DT {kind:(t get "kind") hp:p}]]
+(wp "first" {kind:"table"})`
+	b, _ := New()
+	res2, _ := b.Check(gradual)
+	for _, d := range res2.Diagnostics {
+		if d.Severity == "error" {
+			t.Errorf("carrier-bearing generic-record construction must stay unflagged: %s", d.Detail)
+		}
+	}
+}
