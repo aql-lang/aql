@@ -927,6 +927,15 @@ type ModuleDesc struct {
 	Kind   string // "native" | "file" | "inline"
 	File   string // source file path ("" for native/inline)
 	Folder string // source folder ("" for native/inline)
+	// Src is the module's OWN registry — the sub-registry a native
+	// builder registered its words/types/ideals into, or the body
+	// registry an inline/file module ran in. Import uses it to
+	// transport ESCAPED type machinery to the importer: each exported
+	// bare type literal adopts its canonical node into the importer's
+	// TypeTable (the compiled OpPushType path) and brings its matching
+	// Ideal across, so a facade module re-exporting a constructible
+	// type keeps `make` working. In-process only — never serialized.
+	Src *Registry
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.

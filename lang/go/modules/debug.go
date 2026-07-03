@@ -56,6 +56,7 @@ func BuildDebugModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 
 	return native.ModuleDesc{
+		Src:     subReg,
 		ID:      parent.Modules.NextID(),
 		Exports: map[string]*native.OrderedMap{"Debug": exports},
 	}, nil

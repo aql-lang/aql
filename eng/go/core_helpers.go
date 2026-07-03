@@ -71,21 +71,37 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// new name so bare-word dispatch behaves exactly like pkg.word.
 		if reg := fnDef.Registry; reg != nil && reg != r {
 			own := fnDef.OwnSigs()
-			if len(own) == 1 {
-				if innerName, ok := trivialDelegationTarget(&own[0]); ok {
-					if inner := reg.Lookup(innerName); inner != nil && len(inner.Signatures) > 0 {
-						rebound := FnDefInfo{
-							Name:           name,
-							Signatures:     append([]Signature(nil), inner.Signatures...),
-							MaxForwardArgs: inner.MaxForwardArgs,
-							Registry:       reg,
-						}
-						r.Defs.Push(name, NewFnDef(rebound))
-						if r.ready && r.OnRegisterHook != nil {
-							r.OnRegisterHook(name)
-						}
-						return
+			// EVERY own sig must be a trivial delegation to the SAME
+			// inner native — a multi-overload wrapper (e.g. IO.write)
+			// carries one delegation FnSig per overload. Requiring only
+			// a single sig here used to drop multi-sig wrappers onto the
+			// body-splice path below, where the wrapper's own UNLOCKED
+			// FnSigs were installed — so a later overlapping `def` could
+			// silently replace a module word instead of raising
+			// locked_signature (the inner native's sigs are locked).
+			innerName := ""
+			allTrivial := len(own) > 0
+			for i := range own {
+				target, ok := trivialDelegationTarget(&own[i])
+				if !ok || (innerName != "" && target != innerName) {
+					allTrivial = false
+					break
+				}
+				innerName = target
+			}
+			if allTrivial {
+				if inner := reg.Lookup(innerName); inner != nil && len(inner.Signatures) > 0 {
+					rebound := FnDefInfo{
+						Name:           name,
+						Signatures:     append([]Signature(nil), inner.Signatures...),
+						MaxForwardArgs: inner.MaxForwardArgs,
+						Registry:       reg,
 					}
+					r.Defs.Push(name, NewFnDef(rebound))
+					if r.ready && r.OnRegisterHook != nil {
+						r.OnRegisterHook(name)
+					}
+					return
 				}
 			}
 		}

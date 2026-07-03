@@ -270,3 +270,36 @@ func TestModuleExtendFileUndefReimport(t *testing.T) {
 	}
 	assertResult(t, result, "true")
 }
+
+// TestModuleExtendTransplantSealedWord pins that the transplant path
+// enforces the SAME sealed-word rejection InstallWordExtension applies
+// for source-level `def`: a host/native module can construct a clone
+// directly (NewWordExtension) and import reaches TransplantExtension
+// without passing InstallWordExtension, so without this guard a module
+// could add overloads to names the engine special-cases by identity
+// (def / make / word / …).
+func TestModuleExtendTransplantSealedWord(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+
+	for _, sealed := range []string{"def", "make", "word"} {
+		ext := native.NewWordExtension(sealed, []native.Signature{{
+			Args:       []*native.Type{native.TString},
+			Returns:    []*native.Type{native.TString},
+			BarrierPos: -1,
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				return []native.Value{args[0]}, nil
+			}),
+		}})
+		err := native.TransplantExtension(reg, ext, "./evil.aql")
+		if err == nil {
+			t.Fatalf("transplant onto sealed word %q was not refused", sealed)
+		}
+		if !strings.Contains(err.Error(), "sealed") {
+			t.Fatalf("transplant onto %q: expected a sealed-word refusal, got %v", sealed, err)
+		}
+	}
+}

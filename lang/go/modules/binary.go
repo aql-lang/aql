@@ -99,6 +99,7 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
+		Src:     subReg,
 		ID:      modID,
 		Exports: map[string]*native.OrderedMap{"BinUtil": exports},
 	}

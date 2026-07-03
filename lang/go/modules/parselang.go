@@ -144,6 +144,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	state.mu.Unlock()
 
 	return native.ModuleDesc{
+		Src:     subReg,
 		ID:      parent.Modules.NextID(),
 		Exports: map[string]*native.OrderedMap{"ParseLang": exports},
 	}, nil

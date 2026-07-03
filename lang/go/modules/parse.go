@@ -313,6 +313,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("RuleSpec", parseRuleSpecType())
 
 	return native.ModuleDesc{
+		Src:     subReg,
 		ID:      parent.Modules.NextID(),
 		Exports: map[string]*native.OrderedMap{"Parse": exports},
 	}, nil

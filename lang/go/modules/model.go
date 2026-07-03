@@ -126,6 +126,7 @@ func BuildModelModule(parent *native.Registry) (native.ModuleDesc, error) {
 		[]*native.Type{}, nil, subReg))
 
 	return native.ModuleDesc{
+		Src:     subReg,
 		ID:      parent.Modules.NextID(),
 		Exports: map[string]*native.OrderedMap{"Model": exports},
 	}, nil

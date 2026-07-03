@@ -302,6 +302,22 @@ func (tt *TypeTable) mintID(parent *Type) string {
 	return fmt.Sprintf("%s%012x", prefix, dynamicIDBase+n)
 }
 
+// Adopt registers an EXISTING minted type in tt's ID index without
+// re-minting — the canonical pointer travels as-is. Escaped module
+// types (a module's exported type literals, the Parent tag on values
+// its words produce) need this so the compiled OpPushType path
+// (Registry.Types.LookupByID) resolves them in the IMPORTING registry,
+// not only in the module sub-registry that minted them. Idempotent;
+// a same-ID re-adoption keeps the first pointer (canonical identity).
+func (tt *TypeTable) Adopt(t *Type) {
+	if tt == nil || t == nil || t.ID == "" {
+		return
+	}
+	if _, exists := tt.byID[t.ID]; !exists {
+		tt.byID[t.ID] = t
+	}
+}
+
 // AdoptSeqFrom makes tt draw minted-type IDs from src's counter, so
 // types minted in tt can never collide with types minted anywhere in
 // src's registry tree. Every sub-registry whose minted types can

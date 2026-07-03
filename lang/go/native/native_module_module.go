@@ -187,6 +187,11 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		ID:      modID,
 		Exports: exports,
 		Kind:    "inline", // overridden by loadFileModule / Resolve
+		// The body registry — import transports escaped type machinery
+		// (adopted type nodes, constructing ideals) from here, which is
+		// what lets a FACADE module re-export another module's type
+		// literal and keep it constructible (adoptEscapedTypes).
+		Src: modReg,
 	}
 	return desc, nil
 }
@@ -422,6 +427,7 @@ func installExports(r *Registry, desc ModuleDesc, names []string) error {
 // handlers remain closed over the module's sub-registry, so module-
 // private helpers keep resolving.
 func transplantWordExtensions(r *Registry, desc ModuleDesc) error {
+	adoptEscapedTypes(r, desc)
 	origin := desc.Ref
 	if origin == "" {
 		// An inline module has no ref; its per-import instance ID is its
@@ -441,6 +447,55 @@ func transplantWordExtensions(r *Registry, desc ModuleDesc) error {
 		}
 	}
 	return nil
+}
+
+// adoptEscapedTypes walks a module's exports for BARE TYPE LITERALS —
+// module-minted types the importer can now reference (`make
+// MatrixUtil.Matrix …`, `x is TimeUtil.Timezone`) — and transports each
+// one's escaped machinery into the importing registry:
+//
+//   - the canonical *Type node is ADOPTED into r's TypeTable (same
+//     pointer, no re-mint), so the compiled OpPushType path
+//     (r.Types.LookupByID) resolves it — without this every
+//     force-compiled program using an exported module type aborts with
+//     "unresolvable type operand";
+//   - the type's constructing IDEAL, when the module's own registry
+//     has one and the importer has neither a matching nor a same-named
+//     ideal, is registered in r — so `make` keeps working when the
+//     literal arrives through a FACADE module that re-exports it (the
+//     facade's body registry acquired the ideal when IT imported the
+//     defining module, so the transport chains one level per import).
+//
+// Both steps are idempotent per type: re-adoption of a known ID is a
+// no-op and an already-satisfied ideal is left alone. desc.Src is nil
+// for descriptors that predate the field (host tests) — nothing to
+// transport then.
+func adoptEscapedTypes(r *Registry, desc ModuleDesc) {
+	if desc.Src == nil {
+		return
+	}
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			if !IsBareTypeNode(v) {
+				continue
+			}
+			canonical := desc.Src.Types.LookupByID(v.ID)
+			if canonical == nil {
+				continue // a builtin literal — the VM's Builtin fallback covers it
+			}
+			r.Types.Adopt(canonical)
+			lit := NewTypeLiteral(canonical)
+			if r.Ideals.Match(lit) != nil {
+				continue // the importer can already construct it
+			}
+			ideal := desc.Src.Ideals.Match(lit)
+			if ideal == nil || r.Ideals.Get(ideal.Name) != nil {
+				continue // nothing to transport / a same-named ideal owns the slot
+			}
+			r.Ideals.Register(ideal)
+		}
+	}
 }
 
 // installRenamedExports applies a rename list to module exports and installs them.

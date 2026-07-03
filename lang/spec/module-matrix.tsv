@@ -74,5 +74,6 @@ import "aql:matrix-util"  typeof (MatrixUtil.eye 2)	Matrix	matrices carry the mo
 import "aql:matrix-util"  (MatrixUtil.eye 2) is MatrixUtil.Matrix	true	the minted type is exported and testable with is
 import "aql:matrix-util"  (MatrixUtil.eye 2) is MatrixUtil.Tensor	true	Matrix sits under the module's Tensor node
 import "aql:matrix-util"  make MatrixUtil.Matrix [[1 2][3 4]]	Matrix(2x2)	make instantiates through the exported literal
+import module [import "aql:matrix-util"  export "M" {Matrix: MatrixUtil.Matrix}]  make M.Matrix [[1 2][3 4]]	Matrix(2x2)	a FACADE re-export stays constructible — import transports the type's ideal alongside the adopted literal
 import "aql:matrix-util"  make MatrixUtil.Vector [1 2 3] is MatrixUtil.Matrix	false	sibling tensor kinds stay distinct
 import "aql:matrix-util"  typeof (make MatrixUtil.Vector [1 2 3])	Vector	Vector is module-minted too

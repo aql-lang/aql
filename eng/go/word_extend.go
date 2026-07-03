@@ -341,6 +341,15 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 // nothing new arrives.
 func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
 	name := ext.Extends
+	// The same sealed-word rejection InstallWordExtension applies for
+	// source-level `def`: a host/native module can construct a clone
+	// directly (NewWordExtension) and import reaches the transplant
+	// without passing through InstallWordExtension, so the guard must
+	// hold here too — the engine relies on these words' identity.
+	if IsSealedWord(name) {
+		return r.AqlError("reserved_word",
+			fmt.Sprintf("import: '%s' is a sealed word — the engine relies on its identity and it cannot be extended", name), "import")
+	}
 	base := r.Lookup(name)
 	if base == nil {
 		// §4.9: the base name doesn't resolve in the importer —
