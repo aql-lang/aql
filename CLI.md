@@ -549,6 +549,8 @@ aql vault restore 7                     # restore metadata to generation 7 (admi
 aql vault proxy                         # run local credential broker (loopback only)
 aql vault mcp                           # stdio MCP server over aliases
 aql vault exec gh,openai -- mycmd       # run mycmd with secrets in env
+aql vault exec --ask GITHUB_TOKEN -- make tag-push   # prompt (echo off) for a value not in the vault, inject as $GITHUB_TOKEN
+aql vault exec --ask-passphrase -- make deploy-ts deploy-py  # prompt once, validate, inject AQL_VAULT_PASSPHRASE for nested aql calls
 aql vault folder                        # list known vault folders (discovered + recorded by init)
 aql vault folder add ~/.othervault      # register an already-existing vault into the index
 

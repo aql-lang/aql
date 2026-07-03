@@ -556,3 +556,174 @@ func TestValidEnvName(t *testing.T) {
 		}
 	}
 }
+
+func TestExecAskInjectsPromptedValue(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	// Deliberately NO vault init: --ask alone must not need a store.
+
+	code, out, errOut := runVault(t, "typed-by-hand\n",
+		"exec", "--ask", "GITHUB_TOKEN", "--", "sh", "-c", "printf %s \"$GITHUB_TOKEN\"")
+	if code != 0 {
+		t.Fatalf("exec --ask: %s", errOut)
+	}
+	if out != "typed-by-hand" {
+		t.Errorf("child env mismatch: got %q, want %q", out, "typed-by-hand")
+	}
+}
+
+func TestExecAskDryRunInjectsFillerWithoutPrompt(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+
+	// Empty stdin: --dry-run must not read a value at all.
+	code, out, errOut := runVault(t, "",
+		"exec", "--dry-run", "--ask", "GITHUB_TOKEN", "--", "sh", "-c", "printf %s \"$GITHUB_TOKEN\"")
+	if code != 0 {
+		t.Fatalf("exec --dry-run --ask: %s", errOut)
+	}
+	if out != "AQL-DRY-RUN-FILLER-NOT-A-REAL-SECRET" {
+		t.Errorf("expected filler, got %q", out)
+	}
+}
+
+func TestExecAskRejectsBadEnvName(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+
+	code, _, errOut := runVault(t, "value\n",
+		"exec", "--ask", "BAD-NAME", "--", "sh", "-c", "true")
+	if code == 0 {
+		t.Fatal("expected failure for invalid env name")
+	}
+	if !strings.Contains(errOut, "not a valid environment variable name") {
+		t.Errorf("unexpected error: %q", errOut)
+	}
+}
+
+func TestExecAskRejectsEmptyValue(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+
+	code, _, errOut := runVault(t, "\n",
+		"exec", "--ask", "GITHUB_TOKEN", "--", "sh", "-c", "true")
+	if code == 0 {
+		t.Fatal("expected failure for empty value")
+	}
+	if !strings.Contains(errOut, "empty value") {
+		t.Errorf("unexpected error: %q", errOut)
+	}
+}
+
+func TestExecAskPassphraseInjectsValidatedPassphrase(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+
+	// Passphrase comes from the prompt (env cleared), is validated against
+	// the store, and lands in the child env for nested aql calls.
+	t.Setenv(EnvPassphrase, "")
+	code, out, errOut := runVault(t, "test-pass\n",
+		"exec", "--ask-passphrase", "--", "sh", "-c", "printf %s \"$AQL_VAULT_PASSPHRASE\"")
+	if code != 0 {
+		t.Fatalf("exec --ask-passphrase: %s", errOut)
+	}
+	if out != "test-pass" {
+		t.Errorf("child env mismatch: got %q, want %q", out, "test-pass")
+	}
+}
+
+func TestExecAskPassphraseRejectsWrongPassphrase(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	// A stored secret gives the validation probe something to decrypt —
+	// a slotless file keyring only proves its passphrase on first read.
+	if code, _, e := runVault(t, "canary-value\n", "add", "--from-stdin", "canary"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+
+	t.Setenv(EnvPassphrase, "")
+	code, _, errOut := runVault(t, "wrong-pass\n",
+		"exec", "--ask-passphrase", "--", "sh", "-c", "true")
+	if code == 0 {
+		t.Fatal("expected failure for wrong passphrase")
+	}
+	if errOut == "" {
+		t.Error("expected an error message")
+	}
+}
+
+func TestExecAskPassphraseThenAskShareOneReader(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	// A stored secret gives the passphrase-validation probe something to
+	// decrypt (slotless file keyring proves the passphrase on first read).
+	if code, _, e := runVault(t, "canary-value\n", "add", "--from-stdin", "canary"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+
+	// --ask-passphrase reads the first stdin line, then --ask reads the
+	// second from the SAME reader. A fresh reader for the second prompt
+	// would see EOF (the first read buffers past its newline) and fail with
+	// "reading TOKEN: no input".
+	t.Setenv(EnvPassphrase, "")
+	code, out, errOut := runVault(t, "test-pass\ntoken-value\n",
+		"exec", "--ask-passphrase", "--ask", "TOKEN", "--",
+		"sh", "-c", "printf %s:%s \"$AQL_VAULT_PASSPHRASE\" \"$TOKEN\"")
+	if code != 0 {
+		t.Fatalf("exec --ask-passphrase --ask: %s", errOut)
+	}
+	if out != "test-pass:token-value" {
+		t.Errorf("child env = %q, want %q", out, "test-pass:token-value")
+	}
+}
+
+func TestExecAskCombinesWithVaultAliases(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "vaulted-secret\n", "add", "--from-stdin", "npm_token"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+
+	// Vault alias resolves from the store (passphrase via env);
+	// --ask value comes from the prompt on stdin.
+	code, out, errOut := runVault(t, "manual-secret\n",
+		"exec", "--ask", "EXTRA_TOKEN", "npm_token", "--",
+		"sh", "-c", "printf %s:%s \"$npm_token\" \"$EXTRA_TOKEN\"")
+	if code != 0 {
+		t.Fatalf("exec: %s", errOut)
+	}
+	if out != "vaulted-secret:manual-secret" {
+		t.Errorf("got %q, want %q", out, "vaulted-secret:manual-secret")
+	}
+}
+
+func TestExecAskPassphraseAcceptsScopedSlotPassword(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	// A root-namespace secret the scoped slot cannot read: the slot
+	// verifier, not a decrypt probe, must validate the passphrase.
+	if code, _, e := runVault(t, "root-secret\n", "add", "--from-stdin", "root_token"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// Migrate to envelope format with a read-scoped slot on another
+	// namespace (admin passphrase from env, then the new slot password).
+	if code, _, e := runVault(t, "slot-pass\nslot-pass\n",
+		"password", "add", "--scope=read", "--namespaces=vxg", "agent"); code != 0 {
+		t.Fatalf("password add: %s", e)
+	}
+
+	t.Setenv(EnvPassphrase, "")
+	code, out, errOut := runVault(t, "slot-pass\n",
+		"exec", "--ask-passphrase", "--", "sh", "-c", "printf %s \"$AQL_VAULT_PASSPHRASE\"")
+	if code != 0 {
+		t.Fatalf("exec --ask-passphrase with scoped slot password: %s", errOut)
+	}
+	if out != "slot-pass" {
+		t.Errorf("child env mismatch: got %q, want %q", out, "slot-pass")
+	}
+}
