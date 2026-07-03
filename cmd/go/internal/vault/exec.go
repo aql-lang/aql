@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/term"
+
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 )
 
@@ -83,6 +85,15 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 
+	// One reader backs every interactive prompt in this exec — the vault
+	// passphrase (--ask-passphrase) and each --ask value. Sharing it is not
+	// cosmetic: InputReader buffers, so a throwaway reader per prompt can
+	// read past its own newline and strand the next prompt's input at EOF.
+	// It also decides *where* to prompt (terminal vs the child's stdin);
+	// see promptSource.
+	prompts := newPromptSource(stdin)
+	defer prompts.close()
+
 	// The vault store is only opened when something actually needs it:
 	// alias resolution, or --ask-passphrase validation. A pure `--ask`
 	// invocation works with no vault at all.
@@ -116,7 +127,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			// front — a typo fails here, not deep inside the child.
 			// Prompt on stderr: stdout belongs to the child (it may be
 			// piped), and interactive prompts conventionally go to stderr.
-			vaultPass, err = readPassphrase(stdin, stderr, "Vault passphrase: ")
+			vaultPass, err = readPassphraseVia(prompts, stderr, "Vault passphrase: ")
 			if err != nil {
 				fmt.Fprintf(stderr, "error: %s\n", err)
 				return 1
@@ -256,7 +267,6 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	// audited by env NAME only — the value never touches disk, argv, or
 	// the audit log. --dry-run injects the filler without prompting.
 	if len(askVars) > 0 {
-		ir := auth.NewInputReader(stdin)
 		for _, name := range askVars {
 			if !validEnvName(name) {
 				fmt.Fprintf(stderr, "error: --ask %q: not a valid environment variable name\n", name)
@@ -268,6 +278,11 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			}
 			v := dryRunFiller
 			if !*dryRun {
+				ir, err := prompts.reader()
+				if err != nil {
+					fmt.Fprintf(stderr, "error: %s\n", err)
+					return 1
+				}
 				read, err := ir.ReadPassword(name+" (input not echoed): ", stderr)
 				if err != nil {
 					fmt.Fprintf(stderr, "error: reading %s: %s\n", name, err)
@@ -315,6 +330,82 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 		return 1
 	}
 	return 0
+}
+
+// promptSource lazily provides the single InputReader shared by every
+// interactive prompt in one exec — the vault passphrase and each --ask
+// value — so no prompt's buffered read-ahead can strand the next prompt's
+// input at EOF.
+//
+// It also decides *where* to prompt. The child inherits our stdin
+// (child.Stdin == stdin), so when that stdin is a redirected file or pipe,
+// reading a prompt from it would steal a line meant for the child — e.g.
+// `aql vault exec --ask TOKEN -- cat < payload` would swallow payload's
+// first line. In that case we prompt on the controlling terminal instead,
+// and fail if there is none. A terminal stdin, or any non-file reader
+// (tests, programmatic callers), is prompted on directly.
+type promptSource struct {
+	stdin  io.Reader
+	ir     *auth.InputReader
+	closer func()
+	err    error
+	opened bool
+}
+
+func newPromptSource(stdin io.Reader) *promptSource { return &promptSource{stdin: stdin} }
+
+// reader returns the shared InputReader, opening it (and, if needed, the
+// controlling terminal) on first use so a prompt-free run touches no tty.
+func (p *promptSource) reader() (*auth.InputReader, error) {
+	if !p.opened {
+		p.opened = true
+		p.ir, p.closer, p.err = openPromptReader(p.stdin)
+	}
+	return p.ir, p.err
+}
+
+func (p *promptSource) close() {
+	if p.closer != nil {
+		p.closer()
+	}
+}
+
+// openPromptReader picks the prompt input: the controlling terminal when
+// stdin is a redirected file/pipe the child will consume, otherwise stdin
+// itself. The returned closer releases the terminal handle if one was opened.
+func openPromptReader(stdin io.Reader) (*auth.InputReader, func(), error) {
+	if f, ok := stdin.(*os.File); ok && !term.IsTerminal(int(f.Fd())) {
+		// Redirected stdin belongs to the child; prompt on the tty so we
+		// don't consume the child's input.
+		tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if err != nil {
+			return nil, nil, errors.New("cannot prompt: stdin is redirected to the child and no controlling terminal is available (pass the value via the environment, or use --dry-run)")
+		}
+		return auth.NewInputReader(tty), func() { _ = tty.Close() }, nil
+	}
+	return auth.NewInputReader(stdin), func() {}, nil
+}
+
+// readPassphraseVia sources the vault passphrase from AQL_VAULT_PASSPHRASE
+// or, failing that, an interactive prompt on the shared reader. It mirrors
+// readPassphrase but reuses the exec's prompt source so a following --ask
+// prompt is not stranded by the passphrase read's buffering.
+func readPassphraseVia(p *promptSource, w io.Writer, prompt string) (string, error) {
+	if v := os.Getenv(EnvPassphrase); v != "" {
+		return v, nil
+	}
+	ir, err := p.reader()
+	if err != nil {
+		return "", err
+	}
+	pw, err := ir.ReadPassword(prompt, w)
+	if err != nil {
+		return "", err
+	}
+	if pw == "" {
+		return "", errors.New("empty passphrase")
+	}
+	return pw, nil
 }
 
 // dryRunFiller is the placeholder injected for every alias in --dry-run
