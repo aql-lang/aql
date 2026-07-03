@@ -50,15 +50,19 @@ func TestSingleOverloadUserFnRecovery(t *testing.T) {
 		})
 	}
 
-	// MUST still refuse → fall back (compile==interpret). A MULTI-overload fn or one
-	// with a FALLBACK sig can't bake one overload soundly — the interpreter
-	// runtime-dispatches a sibling / the catch-all where a baked call would raise.
-	refuse := []struct{ name, src string }{
+	// A MULTI-overload fn (or one with an Any catch-all sibling) used to REFUSE
+	// here — baking ONE overload was unsound (the interpreter runtime-dispatches
+	// a sibling where the baked guard would raise). OpCallUserPoly now bakes
+	// EVERY same-arity arm and re-runs the interpreter's MatchSignature at
+	// entry, so these shapes COMPILE STRICTLY and must match the interpreter —
+	// a strictly stronger pin than the old refusal (arm-direction / no-match /
+	// drift-fallback pins live in bytecode_user_poly_test.go).
+	poly := []struct{ name, src string }{
 		{"multi-overload over Any (Cluster C)", `def f fn [[s:String][Integer][1] [n:Integer][Integer][2]] (f ({b:2} getr "b"))`},
 		{"fn with Any catch-all overload", `def g fn [[n:Integer][String]["i"] [x:Any][String]["fb"]] (g ({b:2} getr "b"))`},
 	}
-	for _, c := range refuse {
-		t.Run("refuse/"+c.name, func(t *testing.T) {
+	for _, c := range poly {
+		t.Run("poly/"+c.name, func(t *testing.T) {
 			a, _ := New()
 			got, _, err := a.RunCompiled(c.src) // fallback allowed
 			if err != nil {
@@ -72,9 +76,13 @@ func TestSingleOverloadUserFnRecovery(t *testing.T) {
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v", got, want)
 			}
-			// And it must NOT compile strictly (proves the refusal stands).
-			if _, serr := a.RunCompiledStrict(c.src); serr == nil {
-				t.Errorf("%s must refuse strict compilation (soundness)", c.name)
+			// And it must now compile strictly, with the SAME result — the
+			// user-poly re-match owns the dispatch the old refusal deferred.
+			sgot, serr := a.RunCompiledStrict(c.src)
+			if serr != nil {
+				t.Errorf("%s must compile strictly under the user-poly re-match, got: %v", c.name, serr)
+			} else if fmt.Sprint(sgot) != fmt.Sprint(want) {
+				t.Errorf("strict-compiled %v != interpreter %v", sgot, want)
 			}
 		})
 	}

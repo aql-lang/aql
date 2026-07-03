@@ -761,8 +761,19 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// OpCallNativePoly; user-fn overloads have NO poly path. Refuse → fall back.
 		clusterCRefuse := es != nil && es.active() && anyDynamicCarrier(args) &&
 			dynamicReachableOverloadCount(r, nameCopy, args) >= 2
+		var polyPlan *userPolyPlan
 		if clusterCRefuse {
-			es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
+			// OpCallUserPoly (zero-refusals Stage 2): instead of refusing, try to
+			// bake EVERY same-arity overload's body unit and let the VM re-run
+			// MatchSignature at entry — the sound user-fn mirror of callPoly.
+			// declaredReturns is the committed sig's contract (nil for an
+			// anonymous fn, which the poly gate then refuses).
+			polyPlan = tryCompileUserPolyArms(r, es, nameCopy, args, declaredReturns)
+			if polyPlan == nil {
+				// All-or-nothing: any arm the poly compile cannot own keeps the
+				// original refusal, byte-identical.
+				es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
+			}
 		}
 		if es != nil && !clusterCRefuse {
 			// The body unit must be compiled against GENERALISED args
@@ -993,6 +1004,17 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					pos = args[0].Pos
 				}
 				es.RecordUserCall(fnUnit, args, out, pos)
+			} else if polyPlan != nil {
+				// Ambiguous multi-overload dispatch with every arm baked: record
+				// the runtime-re-matched poly call (OpCallUserPoly). The out
+				// carriers are the committed sig's declared returns — identical
+				// across arms by the poly gate, so downstream typing is sound
+				// whichever arm the VM selects.
+				pos := SrcPos{}
+				if len(args) > 0 {
+					pos = args[0].Pos
+				}
+				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, args, out, pos)
 			}
 			return out
 		}

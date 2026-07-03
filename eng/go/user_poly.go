@@ -1,0 +1,229 @@
+package eng
+
+// User-fn poly dispatch (OpCallUserPoly) — the recorder side.
+//
+// A gradual-Any arg to a MULTI-overload user fn is an ambiguous dispatch: the
+// checker cannot statically commit an overload, and the interpreter re-matches
+// at run time. Natives already have a sound runtime re-match (OpCallNativePoly
+// / vm.callPoly); this file gives user fns the mirror: bake EVERY same-arity
+// overload's body unit and let the VM re-run the interpreter's MatchSignature
+// at entry to select the arm. Parity argument: the interpreter's dispatch
+// takes the same MatchSignature first-match over the same (live) table, so the
+// arm the VM enters is the arm the interpreter splices; any drift or no-match
+// defers to the interpreter through the whole-program fallback.
+//
+// Everything here is ALL-OR-NOTHING: if any same-arity overload cannot be
+// compiled under these rules, the caller keeps the original refusal
+// (MarkUncompilable) and the interpreter owns the program. If in doubt,
+// refuse — compile == interpret is non-negotiable.
+
+// userPolyPlan is the compiled arm table of one poly user call, handed from
+// tryCompileUserPolyArms to the RecordUserPolyCall site: parallel slices of
+// the arm's index in the word's aggregated dispatch table, its compiled body
+// unit, and its run-implementation identity (the VM's drift guard).
+type userPolyPlan struct {
+	sigIdx []int
+	units  []int
+	impls  []SigImpl
+}
+
+// tryCompileUserPolyArms attempts the poly compile for one ambiguous
+// multi-overload user-fn dispatch: it collects EVERY non-fallback overload of
+// `word` whose arity matches the call, gates the set to the shapes the VM's
+// runtime re-match handles faithfully, and compiles each arm's body to its
+// own unit. Returns nil — leaving the caller to keep the original refusal —
+// when any gate fails or any arm does not compile.
+//
+// Gates (each keeps compile == interpret):
+//   - >= 2 same-arity arms (else the single-overload path already handles it);
+//   - every arm is an AQL-bodied overload with plain (un-quoted, non-form,
+//     non-type-literal) params — the runtime window re-match assumes plain
+//     value args, exactly like OpCallNativePoly;
+//   - every arm declares the IDENTICAL Returns as the committed overload: the
+//     checker's downstream typing rides the committed return carriers, so an
+//     arm returning a different type could bake a wrong downstream dispatch;
+//   - every arm's owning def entry is capture-free, named, and non-macro —
+//     captures ride as hidden trailing CALL_USER operands resolved per call
+//     site, which the fixed-arity poly window cannot carry;
+//   - no arm is a deferred-param-list body (compiled units cannot model the
+//     interpreter's module-scope late binding — see buildFnBodyReturnsFn);
+//   - no arm's unit is variadic-returning (the call site bakes a fixed nout).
+func tryCompileUserPolyArms(r *Registry, es *EmitState, word string, args []Value, committedReturns []*Type) *userPolyPlan {
+	if es == nil || !es.active() || len(args) == 0 || len(committedReturns) == 0 {
+		return nil
+	}
+	// A word bound INSIDE an enclosing fn body (Depth above the innermost fn
+	// baseline — the same test closure capture uses) is popped before the VM
+	// runs, so the runtime Lookup could never resolve it: the poly call would
+	// ALWAYS defer mid-program. Keep the refusal instead — the interpreter
+	// owns body-local multi-overload fns.
+	if baseline := r.TopFnBaseline(); baseline != nil && r.Defs.Depth(word) > baseline[word] {
+		return nil
+	}
+	agg := r.Lookup(word)
+	if agg == nil {
+		return nil
+	}
+	var sigIdx []int
+	for i := range agg.Signatures {
+		s := &agg.Signatures[i]
+		if s.Fallback || s.TotalArgs() != len(args) {
+			continue
+		}
+		sigIdx = append(sigIdx, i)
+	}
+	if len(sigIdx) < 2 {
+		return nil
+	}
+	plan := &userPolyPlan{
+		sigIdx: sigIdx,
+		units:  make([]int, 0, len(sigIdx)),
+		impls:  make([]SigImpl, 0, len(sigIdx)),
+	}
+	for _, si := range sigIdx {
+		s := &agg.Signatures[si]
+		if !userPolyArmShapeOK(s, committedReturns) {
+			return nil
+		}
+		owner, ok := findOwningFnDef(r, word, s.Impl)
+		if !ok || owner.Anonymous || owner.Macro || len(owner.Captured) != 0 {
+			return nil
+		}
+		unit, ok := compileUserPolyArm(r, es, word, s, owner)
+		if !ok {
+			return nil
+		}
+		plan.units = append(plan.units, unit)
+		plan.impls = append(plan.impls, s.Impl)
+	}
+	return plan
+}
+
+// userPolyArmShapeOK gates one arm's SIGNATURE shape: an AQL body, plain
+// value params (no quote / raw-form / no-eval / type-literal slots — the
+// runtime window re-match binds plain values only), and Returns identical to
+// the committed overload's (both position-wise nil, or Equal types).
+func userPolyArmShapeOK(s *Signature, committedReturns []*Type) bool {
+	if len(s.body()) == 0 {
+		return false
+	}
+	if len(s.QuoteArgs) != 0 || len(s.TypeArgs) != 0 ||
+		len(s.NoEvalArgs) != 0 || len(s.NoEvalMapArgs) != 0 ||
+		len(s.RawParens) != 0 || len(s.FormArgs) != 0 {
+		return false
+	}
+	for i := range s.Params {
+		if s.Params[i].Quote {
+			return false
+		}
+	}
+	if len(s.Returns) != len(committedReturns) {
+		return false
+	}
+	for i, t := range s.Returns {
+		c := committedReturns[i]
+		if (t == nil) != (c == nil) {
+			return false
+		}
+		if t != nil && !t.Equal(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// findOwningFnDef locates the def-stack entry whose own overloads include the
+// signature with the given run-implementation identity (Signature.Impl is a
+// stable pointer per installed overload, surviving aggregateDispatch's value
+// copies). The entry carries the per-def metadata the arm compile needs (Gen,
+// Captured, Anonymous, Macro) that the aggregate view drops or takes from the
+// newest entry only. ok=false when no entry owns it (a synthetic sig).
+func findOwningFnDef(r *Registry, word string, impl SigImpl) (FnDefInfo, bool) {
+	if impl == nil {
+		return FnDefInfo{}, false
+	}
+	stack := r.Defs.Stack(word)
+	for i := len(stack) - 1; i >= 0; i-- {
+		fnDef, ok := stack[i].Data.(FnDefInfo)
+		if !ok {
+			continue
+		}
+		for j := range fnDef.Signatures {
+			if fnDef.Signatures[j].Impl == impl {
+				return fnDef, true
+			}
+		}
+	}
+	return FnDefInfo{}, false
+}
+
+// compileUserPolyArm compiles ONE overload's body as its own code unit,
+// exactly as the single-overload path in buildFnBodyReturnsFn does
+// (StartFnCompile keyed on the arm's generalised args, SetUnitParamTypes with
+// the arm's declared params, AnalyseFnBody + finish) — but against carriers
+// of the arm's DECLARED param types rather than the call's args: the call's
+// gradual args say nothing about which arm runs, while the declared types are
+// the contract the VM's entry guard (checkParamContract) and the runtime
+// re-match both enforce. A generic arm installs its gen bindings around the
+// analysis (the placeholder nodes are parented at their bounds, so the body
+// dispatches against the constraint — sound: the entry guard re-checks the
+// runtime value against the same placeholder membership). Returns ok=false on
+// any refusal, leaving the caller to keep the original MarkUncompilable.
+func compileUserPolyArm(r *Registry, es *EmitState, word string, s *Signature, owner FnDefInfo) (int, bool) {
+	body := append([]Value(nil), s.body()...)
+	if len(body) == 0 {
+		return -1, false
+	}
+	sigParams := append([]FnParam(nil), s.Params...)
+	paramNames := make([]string, len(sigParams))
+	genArgs := make([]Value, len(sigParams))
+	pts := make([]*Type, len(sigParams))
+	pats := make([]*Value, len(sigParams))
+	for i, p := range sigParams {
+		paramNames[i] = p.Name
+		genArgs[i] = ParamInputCarrier(p.Type)
+		pts[i] = p.Type
+		pats[i] = p.Pattern
+	}
+	// A deferred-param-list body returns its raw list for MODULE-scope late
+	// evaluation (see buildFnBodyReturnsFn) — a unit's call-time result cannot
+	// model that, so the arm (and with it the whole poly set) refuses.
+	if _, deferred := deferredParamListResidual(body, paramNames); deferred {
+		return -1, false
+	}
+	declared := append([]*Type(nil), s.Returns...)
+	var genNames []string
+	if owner.Gen != nil {
+		genNames = InstallGenBindingMap(r, owner.Gen, InferGenBindings(owner.Gen, sigParams, genArgs))
+	}
+	defer func() {
+		for i := len(genNames) - 1; i >= 0; i-- {
+			r.Defs.Pop(genNames[i])
+		}
+	}()
+	key := FnAnalysisKey(r.AnalysisScopeID(), word, genArgs, owner.Captured, body)
+	fnPos := body[0].Pos
+	unit, finishFn, ok := es.StartFnCompile(key, word, genArgs, declared, paramNames, owner.Captured, owner.Gen != nil, fnPos)
+	if !ok || unit < 0 {
+		return -1, false
+	}
+	// Declared PARAM types/patterns: the VM enforces them at entry (the same
+	// guard OpCallUser runs), so the runtime re-match's pick is double-checked
+	// against the arm's own contract.
+	es.SetUnitParamTypes(unit, pts, pats)
+	if finishFn != nil {
+		// Drop any summary cached by a prior plain analysis so AnalyseFnBody
+		// re-runs and records the body into THIS unit (the same memo-key
+		// discipline as the single-overload path).
+		delete(r.Check.FnSummaries, key)
+		stk := AnalyseFnBody(r, word, paramNames, body, genArgs, owner.Captured, declared)
+		finishFn(stk)
+	}
+	if !es.active() {
+		return -1, false
+	}
+	if es.fnRecs[unit].variadic {
+		return -1, false
+	}
+	return unit, true
+}

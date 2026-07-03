@@ -2051,6 +2051,31 @@ func ReturnsIdentity(mapping ...int) ReturnsFunc {
 	}
 }
 
+// valueTreeHasCarriers reports whether v or any nested map value / list
+// element is a carrier or dynamic — i.e. statically unknown. Used to scope
+// the static generic-record construction validation to fully-literal data;
+// carrier-bearing data defers to the runtime constructor.
+func valueTreeHasCarriers(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return true
+	}
+	if m, err := AsMap(v); err == nil && m.Len() > 0 {
+		for _, k := range m.Keys() {
+			if mv, ok := m.Get(k); ok && valueTreeHasCarriers(mv) {
+				return true
+			}
+		}
+	}
+	if l, err := AsList(v); err == nil && l.Len() > 0 {
+		for _, e := range l.Slice() {
+			if valueTreeHasCarriers(e) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ReturnsFreshInstance is a ReturnsFunc for IMPURE constructors (make):
 // each result is a fresh VALUE carrier of the TYPE named by args[mapping[i]],
 // mirroring the runtime where every construction mints a new value
@@ -2090,6 +2115,54 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 				// ClassTypeInfo/RecordTypeInfo payload). ValueType yields the
 				// made *Type in both cases (the node itself, or the body's
 				// Parent); a fresh carrier of it is the per-call instance.
+				//
+				// EXCEPTION — a GENERIC RECORD SCHEMA target (`make Rule {…}`
+				// where Rule is `gen [R] refine Record […]`): the schema node
+				// is minted in the Ideal branch (parent Ideal/Record), but the
+				// runtime instance is built by MakeRecordR and carries the
+				// TMap tag — a schema-node carrier fails the Map conformance
+				// the runtime accepts (the voxgig decision `make-rule … [Map]`
+				// return-check false positive). Type the carrier faithfully to
+				// the runtime tag: instantiate statically when the data is
+				// concrete (the instantiated record body's ValueType sits in
+				// the Map branch and keeps the field schema reachable), else
+				// fall back to a plain TMap carrier.
+				if info, serr := AsTypeSchema(args[m]); serr == nil && info.Kind == SchemaRecord {
+					if r != nil && len(args) == 2 && IsConcrete(args[1-m]) && !valueTreeHasCarriers(args[1-m]) {
+						// CONCRETE construction data: validate statically, exactly as the
+						// runtime will — infer + instantiate, then run the record
+						// constructor. On SUCCESS the carrier takes the instantiated
+						// body's Map-branch type. On FAILURE (uninferable params —
+						// unbound_param — or a construction error like an unknown field)
+						// the runtime RAISES, so fall through to the pre-exception
+						// schema-node carrier below: its failed Map conformance is what
+						// FLAGS the enclosing [Map] return (Codex PR #218 review — a
+						// silent TMap carrier here read clean where the runtime raises;
+						// pinned by lang/spec/generics.tsv:81 and the stage0 pins).
+						validated := false
+						if inst, ierr := InferAndInstantiateSchema(r, args[m], args[1-m]); ierr == nil {
+							if rt, rerr := AsRecordType(inst); rerr == nil {
+								if _, mkErr := MakeRecordR(rt, args[1-m], false, r); mkErr == nil {
+									out[i] = NewCarrier(CanonicalType(r, ValueType(inst)))
+									validated = true
+								}
+							}
+						}
+						if validated {
+							continue
+						}
+						// fall through to the schema-node carrier (flags the return)
+					} else {
+						// Non-concrete data, or a concrete map holding CARRIER members
+						// (`{kind:(table.kind) …}` — field values statically unknown):
+						// whether construction succeeds is unknowable, so the optimistic
+						// Map carrier is the gradual posture — matching the runtime tag
+						// on success. The pre-fix schema-node carrier flagged EVERY such
+						// make (the voxgig decision make-rule / with-policy FPs).
+						out[i] = NewCarrier(TMap)
+						continue
+					}
+				}
 				t := ValueType(args[m])
 				if r != nil {
 					t = CanonicalType(r, t)

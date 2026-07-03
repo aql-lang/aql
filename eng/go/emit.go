@@ -261,6 +261,26 @@ type emitUserCall struct {
 	nout int
 	tail bool
 	pos  SrcPos
+	// poly, when non-nil, marks a runtime-dispatched MULTI-OVERLOAD user call
+	// (OpCallUserPoly): the checker could not commit to one same-arity overload
+	// (a gradual-Any arg reached two or more), so EVERY arm's body compiled to
+	// its own unit and the VM re-runs MatchSignature at entry to pick the arm.
+	// unit is -1 for a poly call (there is no single committed unit); ops/nout
+	// keep the ordinary CALL_USER operand accounting, so every generic
+	// evCallUser consumer (promotion, provenance, fragment residuals) works
+	// unchanged. A poly call is never tail-marked (markTailCalls skips it).
+	poly *emitUserPolySpec
+}
+
+// emitUserPolySpec is the recorded arm table of one poly user call — the
+// word, the registry the check pass dispatched it against, and the parallel
+// sigIdx/units/impls arm slices lowered verbatim into a UserPolyRef.
+type emitUserPolySpec struct {
+	word   string
+	reg    *Registry
+	sigIdx []int
+	units  []int
+	impls  []SigImpl
 }
 
 // emitFallback is a recorded interpreter-island fallback (Stage 5): a
@@ -1067,6 +1087,35 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	if !es.active() {
 		return
 	}
+	// Strip 0-output statement guards' phantom (None) results from the arm
+	// residuals BEFORE any counting. A nested both-arms-void `if` (the welford
+	// `if … [set … s] [if … [set … s] []]` shape) registers a phantom result the
+	// lowerer never seats; the program and fn-body residual reconciliations
+	// already skip zeroOut phantoms, and an ARM must too — otherwise resolveArm
+	// reads the phantom as the arm's merge value and the lowerer refuses with
+	// "branch leaves extra values" (out=opEvent, vm=0). Stripping here keeps
+	// resolveArm, residualN, and branchVariadicResult consistent, and lets the
+	// both-arms-net-zero → zeroOut marking cascade through nested guards.
+	stripPhantoms := func(stk []Value) []Value {
+		kept := stk
+		for i, rv := range stk {
+			pr, ok := es.producedBy[rv.ID]
+			if ok && es.eventInfo[pr.seq].zeroOut {
+				// First phantom found: copy the prefix and filter the rest.
+				kept = append([]Value(nil), stk[:i]...)
+				for _, r := range stk[i:] {
+					if p, o := es.producedBy[r.ID]; o && es.eventInfo[p.seq].zeroOut {
+						continue
+					}
+					kept = append(kept, r)
+				}
+				break
+			}
+		}
+		return kept
+	}
+	b.ThenStk = stripPhantoms(b.ThenStk)
+	b.ElsStk = stripPhantoms(b.ElsStk)
 	ev := emitEvent{kind: evBranch, br: &emitBranch{
 		constCond: b.ConstCond, hasElse: b.HasElse, pos: b.Pos,
 	}}
@@ -1771,6 +1820,40 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos Sr
 		f.variadicResult = true
 		es.eventInfo[seq] = f
 	}
+	for i := range outs {
+		es.setProducedAt(outs[i], seq, i)
+	}
+}
+
+// RecordUserPolyCall records one runtime-dispatched MULTI-OVERLOAD user-fn
+// call (the user-fn mirror of RecordPolyCall): the checker could not commit
+// to one same-arity overload (a gradual-Any arg reached two or more), every
+// arm's body already compiled to its own unit (tryCompileUserPolyArms), and
+// the call lowers to OpCallUserPoly, which re-runs MatchSignature over the
+// recorded arm subset at run time — the SAME first-match the interpreter
+// takes. args are in signature order; outs are the committed dispatch's
+// result carriers (every arm declares the identical Returns, gated by the
+// recorder). Captures are gated empty by the recorder, so no hidden trailing
+// operands ride here. An operand of unknown provenance marks the program
+// uncompilable, exactly as RecordUserCall does.
+func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos) {
+	if !es.active() {
+		return
+	}
+	ops := make([]emitOperand, len(args))
+	for i, a := range args {
+		op, ok := es.resolveOperand(a)
+		if !ok {
+			es.MarkUncompilable("fn call operand of unknown provenance")
+			return
+		}
+		ops[i] = op
+	}
+	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{
+		unit: -1, ops: ops, nout: len(outs), pos: pos,
+		poly: &emitUserPolySpec{word: word, reg: ownerReg, sigIdx: sigIdx, units: units, impls: impls},
+	}})
+	es.SiteCounts[SiteDynamic]++
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}

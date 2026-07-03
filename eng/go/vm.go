@@ -320,6 +320,65 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	return append(stack[:len(stack)-n], results...), nil
 }
 
+// matchUserPoly resolves one OpCallUserPoly dispatch: it re-derives the
+// recorded same-arity overload subset of pr.Word from the word's LIVE
+// dispatch table, verifies each arm's run-implementation identity against the
+// recorded Impls (any drift — a re-def between the compile and the run —
+// defers to the interpreter rather than running a stale body unit), then runs
+// the kernel's own MatchSignature over the subset against the top Arity stack
+// values — the SAME first-match the interpreter's dispatch takes. Returns the
+// matched arm's compiled unit and the args in sig order (position 0 = top of
+// stack, exactly the window OpCallUser binds). A no-match defers to the
+// interpreter through the whole-program fallback, which raises the canonical
+// signature_error — sound because the interpreter takes the same first-match
+// and so reaches the same no-match (mirroring callPoly's no-match path).
+func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []SrcPos, pc int) (int, []Value, error) {
+	n := pr.Arity
+	if len(stack) < n {
+		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY underflow at "+pr.Word)
+	}
+	lookupReg := vc.r
+	if pr.Reg != nil {
+		lookupReg = pr.Reg
+	}
+	fd := lookupReg.Lookup(pr.Word)
+	if fd == nil {
+		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY unresolved fn "+pr.Word+"; deferring to interpreter")
+	}
+	subset := make([]Signature, 0, len(pr.SigIdx))
+	units := make([]int, 0, len(pr.SigIdx))
+	for k, si := range pr.SigIdx {
+		if k >= len(pr.Units) || k >= len(pr.Impls) ||
+			si < 0 || si >= len(fd.Signatures) ||
+			fd.Signatures[si].Impl != pr.Impls[k] ||
+			fd.Signatures[si].TotalArgs() != n {
+			return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY signature drift at "+pr.Word+"; deferring to interpreter")
+		}
+		u := pr.Units[k]
+		if u < 0 || u >= len(vc.p.Fns) || vc.p.Fns[u].NParams != n {
+			return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY unit shape mismatch at "+pr.Word)
+		}
+		subset = append(subset, fd.Signatures[si])
+		units = append(units, u)
+	}
+	// Build the args in sig order (position 0 = top of stack, as OpCallUser
+	// binds them), then match — identical to callPoly's window.
+	window := make([]Value, n)
+	for i := 0; i < n; i++ {
+		window[i] = stack[len(stack)-1-i]
+	}
+	mr := MatchSignature(subset, window, WordInfo{ArgCount: n})
+	if mr == nil || mr.Sig == nil {
+		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
+	}
+	for j := range subset {
+		if mr.Sig == &subset[j] {
+			return units[j], mr.Args, nil
+		}
+	}
+	return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY matched signature outside the recorded arm set at "+pr.Word)
+}
+
 // callDynamic applies a runtime fn VALUE (sitting below n trailing args) to
 // those args — the fn-value-call boundary (plan P4). A compiled closure runs
 // VM-native via the re-entrant runner; any other callable (an FnDef method
@@ -863,6 +922,28 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				}
 				pc = int(in.Arg) - 1
 			}
+		case OpCallUserPoly:
+			// Runtime-dispatched multi-overload user call: pick the arm via the
+			// kernel's own MatchSignature (matchUserPoly), then enter its unit
+			// exactly as OpCallUser does — pop the args into frame locals (the
+			// match window IS the popped window, sig position 0 = top of stack),
+			// re-check the param contract, push a frame.
+			unit, sigArgs, err := vc.matchUserPoly(&p.UserPolys[in.Arg], stack, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			fn := &p.Fns[unit]
+			stack = stack[:len(stack)-fn.NParams]
+			nl := make([]Value, fn.NLocals)
+			copy(nl, sigArgs)
+			if err := checkParamContract(r, fn, nl); err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack)})
+			vc.frameDepth++ // balanced by the matching RET, like OpCallUser
+			locals = nl
+			enterUnit(unit)
+			pc = -1
 		case OpCallUser, OpTailCallUser:
 			fn := &p.Fns[in.Arg]
 			if len(stack) < fn.NParams {

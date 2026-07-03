@@ -329,8 +329,14 @@ func sigTypeMatches(v Value, t *Type) bool {
 			return true
 		}
 		// ConformsTo (not Equal) so a FlexMap also passes where an
-		// Options map is expected.
-		if v.Parent.ConformsTo(TMap) && IsConcrete(v) {
+		// Options map is expected. A Map-typed CARRIER also matches: it is
+		// check mode's stand-in for a value that IS a concrete map at run
+		// time, and the runtime rule above accepts that value — without
+		// this the check-mode dispatch refuses what the interpreter runs
+		// (the template `{…} render` → Options-arm → tpl-render-opts
+		// refusal). A bare Map type literal (Data==nil, not a carrier)
+		// stays excluded.
+		if v.Parent.ConformsTo(TMap) && (IsConcrete(v) || v.Carrier) {
 			return true
 		}
 	}
