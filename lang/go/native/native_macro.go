@@ -396,17 +396,99 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 				if herr != nil {
 					return nil, herr
 				}
+				if partial, pok := miniPartialFn(r, kind, target, hookToks); pok {
+					return []Value{NewSplice(NewList([]Value{partial, NewEnd()}))}, nil
+				}
 				return []Value{NewSplice(NewList(hookToks))}, nil
 			}
 		}
 	}
 
-	toks := []Value{
+	// Standard call tail. For a FILTER kind (every sig takes exactly one
+	// input beyond the [src opts] prefix) the expansion produces a
+	// PARTIALLY-APPLIED anonymous Function instead of a stranded call:
+	// src and opts are bound, the subject is the remaining parameter.
+	// Standard anonymous-function semantics then do the rest — the fn
+	// auto-dispatches when a matching subject is on the stack (today's
+	// filter behaviour, unchanged) and stays DATA when not, so it can
+	// be bound with def or parked with /r and applied later. Value
+	// kinds (hb / bb / math / micron — no input beyond the prefix) and
+	// mixed kinds (bf, whose generator form must run bare) keep the
+	// immediate call splice: conceptually every mini expansion is a
+	// function in place; theirs is called on the spot.
+	callTail := []Value{
 		NewWord("MiniLang"), NewWord("dot"), NewWord(target),
 		args[1], opts, NewEnd(),
 	}
-	return []Value{NewSplice(NewList(toks))}, nil
+	if partial, pok := miniPartialFn(r, kind, target, callTail); pok {
+		return []Value{NewSplice(NewList([]Value{partial, NewEnd()}))}, nil
+	}
+	return []Value{NewSplice(NewList(callTail))}, nil
 }
+
+// miniSubjParam is the synthetic parameter name a mini partial binds
+// its subject to — the body pushes it under the embedded standard call
+// so the call's stack slot is filled exactly as an inline subject
+// would fill it.
+const miniSubjParam = "__mini_subject"
+
+// miniKindExport returns the kind's wrapper FnDef from the bound
+// MiniLang namespace.
+func miniKindExport(r *Registry, target string) (Value, bool) {
+	top, ok := r.Defs.Top("MiniLang")
+	if !ok {
+		return Value{}, false
+	}
+	info, ok := asModuleExportInfo(top)
+	if !ok || info.Fields == nil {
+		return Value{}, false
+	}
+	return info.Fields.Get(target)
+}
+
+// miniPartialFn builds the partially-applied Function for a FILTER
+// kind: an anonymous FnDef with one sig per wrapper overload, whose
+// single parameter is the wrapper's subject slot and whose body pushes
+// the subject then re-steps the expansion tail (the standard call or a
+// compile hook's tokens). ok=false when the kind is not filter-shaped
+// (any sig without exactly one post-prefix input), in which case the
+// caller splices the plain call — today's behaviour.
+func miniPartialFn(r *Registry, kind, target string, tail []Value) (Value, bool) {
+	wrapper, ok := miniKindExport(r, target)
+	if !ok {
+		return Value{}, false
+	}
+	info, ok := wrapper.Data.(FnDefInfo)
+	if !ok || len(info.Signatures) == 0 {
+		return Value{}, false
+	}
+	for _, ws := range info.Signatures {
+		if len(ws.Params) != 3 {
+			return Value{}, false
+		}
+	}
+	body := append([]Value{NewWord(miniSubjParam)}, tail...)
+	sigs := make([]FnSig, 0, len(info.Signatures))
+	for _, ws := range info.Signatures {
+		sigs = append(sigs, FnSig{
+			Params:     []FnParam{{Name: miniSubjParam, Type: ws.Params[2].Type}},
+			Returns:    ws.Returns,
+			Impl:       AQL(body),
+			BarrierPos: -1,
+		})
+	}
+	// Uniquely named per expansion: two partials of the same kind carry
+	// different bound sources, and downstream identity keys on the name.
+	miniPartialSeq++
+	return NewFunction(FnDefInfo{
+		Name:       fmt.Sprintf("mini-%s#%d", kind, miniPartialSeq),
+		Signatures: sigs,
+		Anonymous:  true,
+	}), true
+}
+
+// miniPartialSeq disambiguates partial names process-wide.
+var miniPartialSeq int
 
 // miniCompileExport returns kind's AQL compile-hook fn (the `compile_<kind>`
 // export of the bound MiniLang namespace), if present.

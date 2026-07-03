@@ -66,13 +66,16 @@ func init() {
 	register(&Entry{
 		Word:    "mini",
 		Summary: "Call an embedded mini-language: mini <kind> <src> <opts?>.",
-		Description: "Expands to the standard call `MiniLang.lang_<kind> <src> <opts> end` at the call site — " +
-			"kind-declared inputs come from the stack, results are whatever the kind leaves. Kinds live in the " +
-			"aql:minilang module (import it first; MiniLang.kinds lists them; register your own with " +
-			"MiniLang.register). An unknown kind is an expansion-time error. Note backslashes in quoted strings " +
-			"need doubling ('\\\\d'); backtick strings are backslash-safe.",
+		Description: "Conceptually every mini expansion produces a FUNCTION in place with src and opts bound. " +
+			"A value kind's function is called on the spot (+hb, math, micron, bf's generator form); a FILTER " +
+			"kind's function auto-dispatches when a matching subject is on the stack — and stays a storable " +
+			"VALUE when not, so `def f (+re/[a-z]+/)` binds a reusable matcher (`\"AbcD\" f`), and /r parks it " +
+			"deliberately. Kinds live in the aql:minilang module (import it first; MiniLang.kinds lists them; " +
+			"register your own with MiniLang.register). An unknown kind is an expansion-time error. Note " +
+			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
 			`import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
+			`import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m          ;# => 'bc' — a stored matcher`,
 			`import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
 		},
 	})

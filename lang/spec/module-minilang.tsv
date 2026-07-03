@@ -146,7 +146,7 @@ import "aql:minilang"  "bx" +gex/a*/	None	+literal, no match → None
 import "aql:minilang"  "xab" +gex/a*/	None	anchored: the whole subject must match, not a substring
 import "aql:minilang"  ["ab" "zz" "ac"] +gex/a*/	['ab' 'ac']	a List subject is filtered to matching elements
 import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ {}	{ab:1 ac:3}	a Map subject is filtered by key — needs an explicit {} (mini's opts is a Map, so a bare map subject is claimed as opts)
-import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/	ERROR:uncalled_function	without the {} the map IS the opts, leaving no subject — the gotcha the {} above avoids
+import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ typeof	Function	without the {} the map IS the opts, leaving no subject — the partial stays a storable Function value (see §fn)
 import "aql:minilang"  "a*b" +gex/a**b/	'a*b'	`**` is a literal `*` (matches the star verbatim)
 import "aql:minilang"  "axb" +gex/a**b/	None	`**` is literal, so the wildcard reading does not apply
 import "aql:minilang"  "axc" +gex/a?c/	'axc'	`?` matches exactly one character
@@ -212,7 +212,10 @@ import "aql:minilang"  <r><a/></r> MiniLang.lang_xp '//a' {} end	[<a/>]	mini is 
 #
 # §xp  negatives
 import "aql:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPath is a loud parse error
-import "aql:minilang"  {a:1} mini xp '//a' {}	ERROR:uncalled_function	the document must be a Node/Xml — a Map subject does not match the xp signature, so the call is left uncalled
+# (a non-Xml subject leaves the partial as a VALUE next to the untouched subject —
+# pinned in lang/go/test as TestMiniXPathNonXmlSubject / TestMiniPartialParked; the
+# parked shapes are Go tests, not spec rows, because the compiled pipeline does not
+# lower an UNCONSUMED spliced partial yet)
 import "aql:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed to `math`; `m` is now the MICRON short form, so a formula-looking source is just a Pathon literal — use `mini math`
 #
 # §mi2  MiniLang.micron — the OPT-IN user-Micron literal hook. A user kind
@@ -234,3 +237,20 @@ import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baro
 import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron 'B[0-9]+' ([s:String] => [make Baron {v:7}])  MiniLang.micron Baron 'C[0-9]+' ([s:String] => [make Baron {v:8}])	ERROR:already registered	one shape per kind
 import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron 'B[0-9]+' ([s:String] => [s])  end  +m:B7	ERROR:must return one Baron instance	a wrong-typed builder result is loud — the pattern claimed the span
 import "aql:minilang"  def Failon refine Micron {x:String}  MiniLang.micron Failon 'F[0-9]+' ([s:String] => [make Failon {}])  end  +m:F1	ERROR:missing field	a failing builder is loud, not a silent Pathon fallback
+#
+# §fn  minilangs are FUNCTIONS in place. Conceptually every mini expansion
+#      produces a partially-applied function (src and opts bound); a value
+#      kind's function is called on the spot (+hb, +bb, math, micron, bf's
+#      generator form), while a FILTER kind's function auto-dispatches when
+#      a matching subject is on the stack — and stays a VALUE when not, so
+#      it can be bound with def (or parked with /r) and applied later.
+import "aql:minilang"  +re/[a-z]+/ typeof	Function	a bare filter literal IS a function value
+import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m	'bc'	store the partial, apply it later — the pattern rides inside
+import "aql:minilang"  def f (+re/[a-z]+/)  ("zQr" f).n	2	the stored partial is reusable across subjects ('z' and 'r' both match)
+import "aql:minilang"  def sel (mini gex 'a*')  ['aa' 'b' 'ab'] sel	['aa' 'ab']	the explicit mini form produces the same storable partial (gex select)
+import "aql:minilang"  def q (mini jp '$.a')  ({a:7} q) get 0	7	a stored JSONPath query
+# (/r parks the partial even with a subject on the stack — pinned in lang/go/test as
+# TestMiniPartialParked, not as a spec row: the compiled pipeline does not model a
+# /r-parked spliced partial yet)
+import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  def c (mini count 'an')  "banana" c	2	an AQL-registered filter kind gets the same storable-partial semantics
+import "aql:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is called in place — the literal is the value, not a Function
