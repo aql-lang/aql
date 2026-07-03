@@ -333,3 +333,25 @@ from everything; 7 is gated on 6's exit criteria.
   (Phase 4) move refusal buckets for free, but any carrier change can
   move compiled behaviour; every Phase 2/4 item must run
   `make verify-bytecode`, not just the checker ratchets.
+
+---
+
+## Execution log
+
+- **2026-07-03 — Phase 0 executed.**
+  - 0.1 `pinnedTypeSoundnessViolations` lowered 8 → 7 (generics.tsv:75
+    left the violation set; the remaining 7 verified live:
+    class.tsv:85, corpus-core.tsv:61, forward-barrier.tsv:83,
+    module-rand.tsv:37, patrun.tsv:40, recursion.tsv:53,
+    user-types.tsv:124).
+  - 0.2 `make status` — `COMPILED_STATUS.md` regenerated to the live
+    3,875-row census (3,475 native + 1 island, 151 refused, 248
+    check-error).
+  - 0.3 **voxgig sweep: blocked-external in this environment** — the
+    client corpus is a separate repository not present here; the
+    35/48 figure from PR #224's message remains unverified. The
+    `make test` half of the re-gate debt is covered (full suite green
+    on this tree). The sweep re-run stays owed at the next
+    environment that carries the corpus (also gates Phase 5.3).
+  - 0.4 headroom policy in force as written (no ceiling raise; Phase
+    2.1/2.2 before large corpus batches).
