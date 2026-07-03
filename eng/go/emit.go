@@ -1067,6 +1067,35 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	if !es.active() {
 		return
 	}
+	// Strip 0-output statement guards' phantom (None) results from the arm
+	// residuals BEFORE any counting. A nested both-arms-void `if` (the welford
+	// `if … [set … s] [if … [set … s] []]` shape) registers a phantom result the
+	// lowerer never seats; the program and fn-body residual reconciliations
+	// already skip zeroOut phantoms, and an ARM must too — otherwise resolveArm
+	// reads the phantom as the arm's merge value and the lowerer refuses with
+	// "branch leaves extra values" (out=opEvent, vm=0). Stripping here keeps
+	// resolveArm, residualN, and branchVariadicResult consistent, and lets the
+	// both-arms-net-zero → zeroOut marking cascade through nested guards.
+	stripPhantoms := func(stk []Value) []Value {
+		kept := stk
+		for i, rv := range stk {
+			pr, ok := es.producedBy[rv.ID]
+			if ok && es.eventInfo[pr.seq].zeroOut {
+				// First phantom found: copy the prefix and filter the rest.
+				kept = append([]Value(nil), stk[:i]...)
+				for _, r := range stk[i:] {
+					if p, o := es.producedBy[r.ID]; o && es.eventInfo[p.seq].zeroOut {
+						continue
+					}
+					kept = append(kept, r)
+				}
+				break
+			}
+		}
+		return kept
+	}
+	b.ThenStk = stripPhantoms(b.ThenStk)
+	b.ElsStk = stripPhantoms(b.ElsStk)
 	ev := emitEvent{kind: evBranch, br: &emitBranch{
 		constCond: b.ConstCond, hasElse: b.HasElse, pos: b.Pos,
 	}}

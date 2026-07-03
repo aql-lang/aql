@@ -2090,6 +2090,28 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 				// ClassTypeInfo/RecordTypeInfo payload). ValueType yields the
 				// made *Type in both cases (the node itself, or the body's
 				// Parent); a fresh carrier of it is the per-call instance.
+				//
+				// EXCEPTION — a GENERIC RECORD SCHEMA target (`make Rule {…}`
+				// where Rule is `gen [R] refine Record […]`): the schema node
+				// is minted in the Ideal branch (parent Ideal/Record), but the
+				// runtime instance is built by MakeRecordR and carries the
+				// TMap tag — a schema-node carrier fails the Map conformance
+				// the runtime accepts (the voxgig decision `make-rule … [Map]`
+				// return-check false positive). Type the carrier faithfully to
+				// the runtime tag: instantiate statically when the data is
+				// concrete (the instantiated record body's ValueType sits in
+				// the Map branch and keeps the field schema reachable), else
+				// fall back to a plain TMap carrier.
+				if info, serr := AsTypeSchema(args[m]); serr == nil && info.Kind == SchemaRecord {
+					if r != nil && len(args) == 2 && IsConcrete(args[1-m]) {
+						if inst, ierr := InferAndInstantiateSchema(r, args[m], args[1-m]); ierr == nil {
+							out[i] = NewCarrier(CanonicalType(r, ValueType(inst)))
+							continue
+						}
+					}
+					out[i] = NewCarrier(TMap)
+					continue
+				}
 				t := ValueType(args[m])
 				if r != nil {
 					t = CanonicalType(r, t)
