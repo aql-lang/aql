@@ -516,6 +516,12 @@ type FnDefInfo struct {
 	Module string
 	Export string
 	Doc    string
+	// MiniKind names the mini-language kind whose expansion produced
+	// this partially-applied Function ("" for everything else). The
+	// per-kind member types the aql:minilang module exports
+	// (MiniLang.Re, MiniLang.Gex, …) match on it, so a typed fn param
+	// can require a specific kind's partial (e.g. a regexp matcher).
+	MiniKind string
 	// Anonymous is true iff the FnDef was produced by the `afn` word (i.e.
 	// via the `=>` lambda sugar). The flag is read only in check mode: an
 	// anonymous fn's static Returns is the conservative [Any], and the

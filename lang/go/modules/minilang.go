@@ -69,6 +69,35 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	tMini := subReg.Types.MintType("MiniLangCompiled", native.TIdeal)
 	exports := native.NewOrderedMap()
 
+	// mintMiniFnType mints the NAMED member type for a filter kind's
+	// partially-applied Function and exports it under the capitalized
+	// kind name (`MiniLang.Re`, `MiniLang.Gex`, …). The member
+	// predicate matches any Function whose FnDefInfo carries the
+	// kind's MiniKind tag — Parent stays TFunction, so every existing
+	// fn-value code path is untouched, while `is` and typed fn params
+	// ([m:Rex] after `def Rex MiniLang.Re`) dispatch on the specific
+	// kind. Per-import mint, like MiniLangCompiled above (and the
+	// aql:io StreamKind precedent for exported member types). typeof
+	// still reports Function — the member type is a constraint, the
+	// same convention DepScalar types follow.
+	mintMiniFnType := func(kind string) {
+		name := strings.ToUpper(kind[:1]) + kind[1:]
+		if _, exists := exports.Get(name); exists {
+			return // idempotent (check-mode install + runtime re-run)
+		}
+		// MintTypeWithBehavior + a bare MemberBehavior rather than
+		// MintMemberType: the auto parent gate would reject a
+		// DEF-BOUND partial, which lives under Word/__FN (FnDef), not
+		// Type/Function — function values have two lattice homes, and
+		// the FnDefInfo-payload probe covers both.
+		t := subReg.Types.MintTypeWithBehavior(name, native.TFunction,
+			eng.MemberBehavior(func(v native.Value) bool {
+				info, ok := v.Data.(native.FnDefInfo)
+				return ok && info.MiniKind == kind
+			}))
+		exports.Set(name, native.NewTypeLiteral(t))
+	}
+
 	// Wrapper params are UNNAMED — the trivial-delegation short-circuit in
 	// execFnDefLiteral requires Body=[Word(inner)] with all-unnamed Params
 	// (named params would route through CallAQL name-binding and starve
@@ -113,6 +142,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: tMini}, {Type: native.TMap}, {Type: native.TString}},
 	}, []*native.Type{native.TMap}, nil, subReg))
 	native.RegisterMiniCompileGoHook(parent, "re", miniReCompileFor(tMini))
+	mintMiniFnType("re")
 
 	// ---- kind: bf — brainfuck ------------------------------------------
 	// Filter form  [src opts input:String] → [String]: the stack value is
@@ -160,6 +190,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("lang_gex", wrapMiniFnDef("minilang-gex", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TAny}, nil, subReg))
+	mintMiniFnType("gex")
 
 	// ---- kind: math — traditional maths formula evaluator --------------
 	// [src opts] → [Number]. Evaluate a formula like `x*y-z^2` (operators
@@ -280,6 +311,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("lang_jp", wrapMiniFnDef("minilang-jp", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TList}, nil, subReg))
+	mintMiniFnType("jp")
 
 	// ---- kind: jq — jq filter (github.com/itchyny/gojq) ----------------
 	// [src opts doc:Any] → [List]. Run a jq filter over the stack subject
@@ -296,6 +328,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("lang_jq", wrapMiniFnDef("minilang-jq", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TList}, nil, subReg))
+	mintMiniFnType("jq")
 
 	// ---- kind: xp — XPath query (github.com/antchfx/xpath) -------------
 	// [src opts doc:Xml] → [List]. Run an XPath expression over the stack
@@ -315,6 +348,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("lang_xp", wrapMiniFnDef("minilang-xp", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TXml}),
 	}, []*native.Type{native.TList}, nil, subReg))
+	mintMiniFnType("xp")
 
 	// ---- out-of-band: register -----------------------------------------
 	// MiniLang.register <name> <fn> installs an AQL function as the
@@ -336,12 +370,12 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Impl:          native.Go(miniRegisterHandler(exports, miniRegisterIdents)),
+			Impl:          native.Go(miniRegisterHandler(exports, miniRegisterIdents, mintMiniFnType)),
 			// Check-mode install so a later `mini <name> …` resolves the
 			// statically-registered kind (the fn is provided literally) instead
 			// of flagging "no mini-language is registered" — the minilang twin
 			// of parselang-register's check-mode ReturnsFn.
-			ReturnsFn: miniRegisterReturns(exports, miniRegisterIdents),
+			ReturnsFn: miniRegisterReturns(exports, miniRegisterIdents, mintMiniFnType),
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("minilang-register", [][]native.FnParam{
@@ -1128,9 +1162,9 @@ func miniValidKindName(name string) string {
 // miniRegisterHandler validates and installs an AQL fn as lang_<name>.
 // The handler closes over the module's export map; the stored value is
 // the raw Function, which dispatches like a word post the fn-value fix.
-func miniRegisterHandler(exports *native.OrderedMap, idents map[string]registerIdent) native.Handler {
+func miniRegisterHandler(exports *native.OrderedMap, idents map[string]registerIdent, mint func(kind string)) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		if err := miniRegisterInstall(exports, idents, args, r); err != nil {
+		if err := miniRegisterInstall(exports, idents, args, r, mint); err != nil {
 			return nil, err
 		}
 		return nil, nil
@@ -1142,7 +1176,7 @@ func miniRegisterHandler(exports *native.OrderedMap, idents map[string]registerI
 // ReturnsFn so both apply the exact same contract — mirrors
 // parseRegisterInstall; the collision / idempotency rule lives in
 // registerCollisionInstall (shared with ParseLang / EmitLang).
-func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerIdent, args []native.Value, r *native.Registry) error {
+func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerIdent, args []native.Value, r *native.Registry, mint func(kind string)) error {
 	name, err := args[0].AsConcreteAtom()
 	if err != nil {
 		return r.AqlError("mini_bad_name", fmt.Sprintf("register: %v", err), "register")
@@ -1154,6 +1188,7 @@ func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerI
 	if !ok || len(fnDef.Signatures) == 0 {
 		return r.AqlError("mini_bad_signature", "register: expected a function value", "register")
 	}
+	filterShaped := true
 	for _, sig := range fnDef.Signatures {
 		if len(sig.Params) < 2 ||
 			sig.Params[0].Type == nil || !sig.Params[0].Type.ConformsTo(native.TString) ||
@@ -1163,12 +1198,26 @@ func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerI
 				"register",
 				"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
 		}
+		if len(sig.Params) != 3 {
+			filterShaped = false
+		}
 	}
 	key := "lang_" + name
-	return registerCollisionInstall(exports, idents, key, args[1], r.Check.IsActive(), func() error {
+	if err := registerCollisionInstall(exports, idents, key, args[1], r.Check.IsActive(), func() error {
 		return r.AqlError("mini_kind_exists",
 			fmt.Sprintf("register: minilang %q is already registered", name), "register")
-	})
+	}); err != nil {
+		return err
+	}
+	// A FILTER-shaped kind (every sig exactly [src opts subject]) expands
+	// to a MiniKind-tagged partial, so it gets the same named member type
+	// the builtin filter kinds have (`MiniLang.Poly` for kind `poly`) —
+	// usable in `is` and typed fn params. Other shapes never produce a
+	// tagged partial, so a type would be uninhabited: skip the mint.
+	if filterShaped && mint != nil {
+		mint(name)
+	}
+	return nil
 }
 
 // miniRegisterReturns is the check-mode counterpart of miniRegisterHandler: it
@@ -1178,7 +1227,7 @@ func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerI
 // so the compiled program's runtime re-run is a no-op rather than
 // mini_kind_exists. A non-concrete name or fn value leaves the kind
 // unregistered (the downstream `mini` degrades as before).
-func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerIdent) native.ReturnsFunc {
+func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerIdent, mint func(kind string)) native.ReturnsFunc {
 	return func(args []native.Value, r *native.Registry) []native.Value {
 		// PURE-CHECK ONLY. Under a REAL compile (CompileCheck) the kind must NOT
 		// be installed here: a kind that ALSO has a `register-compiled` macro
@@ -1196,7 +1245,7 @@ func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerI
 		if _, ok := args[1].Data.(native.FnDefInfo); !ok {
 			return nil
 		}
-		if err := miniRegisterInstall(exports, idents, args, r); err != nil {
+		if err := miniRegisterInstall(exports, idents, args, r, mint); err != nil {
 			surfaceRegisterCheckError(r, err, args[0])
 		}
 		return nil

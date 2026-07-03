@@ -51,7 +51,22 @@ func init() {
 			"unclaimed spans still fall to Pathon. One shape per kind; a builder failure or a " +
 			"wrong-typed result is a loud mini_parse_error at the literal.",
 		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
-			"Every fn signature must start with the standard prefix [src:String opts:Map …].",
+			"Every fn signature must start with the standard prefix [src:String opts:Map …]. " +
+			"A FILTER-shaped kind (exactly [src opts subject]) also exports a named member type " +
+			"for its partials (kind poly → MiniLang.Poly) — see MiniLang.Re for the convention.",
+		"Re": "The named type of a `re` partial — the Function a parked `+re/…/` (or " +
+			"`def f (+re/…/)`) produces. `typeof` still reports Function (a member type is a " +
+			"constraint, like a DepScalar); use `is` (`f/r is (MiniLang.Re)`) or a typed fn param " +
+			"(`fn [[m:(MiniLang.Re) s:String] …]`) to require specifically a regexp matcher. " +
+			"Every filter kind has one: Re, Gex, Jp, Jq, Xp, plus user kinds via MiniLang.register.",
+		"Gex": "The named type of a `gex` partial (a stored glob-expression matcher) — " +
+			"see MiniLang.Re for the convention.",
+		"Jp": "The named type of a `jp` partial (a stored JSONPath query) — " +
+			"see MiniLang.Re for the convention.",
+		"Jq": "The named type of a `jq` partial (a stored jq filter) — " +
+			"see MiniLang.Re for the convention.",
+		"Xp": "The named type of an `xp` partial (a stored XPath query) — " +
+			"see MiniLang.Re for the convention.",
 		"kinds": "List the registered mini-language kind atoms.",
 		"register-compiled": "Add an expansion-time compile hook (a macro) to a kind: " +
 			"MiniLang.register-compiled <name> (macro [[src opts] [ quote [ … ] ]]). The kind must " +

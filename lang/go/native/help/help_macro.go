@@ -70,7 +70,10 @@ func init() {
 			"A value kind's function is called on the spot (+hb, math, micron, bf's generator form); a FILTER " +
 			"kind's function auto-dispatches when a matching subject is on the stack — and stays a storable " +
 			"VALUE when not, so `def f (+re/[a-z]+/)` binds a reusable matcher (`\"AbcD\" f`), and /r parks it " +
-			"deliberately. Kinds live in the aql:minilang module (import it first; MiniLang.kinds lists them; " +
+			"deliberately. Each filter kind's partial has a NAMED member type (MiniLang.Re, MiniLang.Gex, " +
+			"MiniLang.Jp, MiniLang.Jq, MiniLang.Xp — user kinds too) for `is` checks and typed fn params " +
+			"(`fn [[m:(MiniLang.Re) s:String] …]`); typeof still reports Function. " +
+			"Kinds live in the aql:minilang module (import it first; MiniLang.kinds lists them; " +
 			"register your own with MiniLang.register). An unknown kind is an expansion-time error. Note " +
 			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{

@@ -254,3 +254,25 @@ import "aql:minilang"  def q (mini jp '$.a')  ({a:7} q) get 0	7	a stored JSONPat
 # /r-parked spliced partial yet)
 import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  def c (mini count 'an')  "banana" c	2	an AQL-registered filter kind gets the same storable-partial semantics
 import "aql:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is called in place — the literal is the value, not a Function
+#
+# §fnty  every filter kind's partial has a NAMED member type, exported under
+#        the capitalized kind name (MiniLang.Re, MiniLang.Gex, MiniLang.Jp,
+#        MiniLang.Jq, MiniLang.Xp; a filter-shaped MiniLang.register kind gets
+#        one too). typeof still reports Function — the member type is a
+#        CONSTRAINT (the DepScalar convention): use `is`, or a typed fn param
+#        (`fn [[m:(MiniLang.Re) …] …]`), to require a specific kind's partial.
+import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Re)	true	a re partial inhabits its named type
+import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)	false	…and NOT a sibling kind's type
+import "aql:minilang"  (+gex/a*/) is (MiniLang.Gex)	true	each filter kind has its own
+import "aql:minilang"  (+re/[a-z]+/) is Function	true	the partial is still a plain Function to every existing check
+import "aql:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Re)	true	a def-bound partial keeps its kind tag through the binding
+import "aql:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Jq)	false	…and still refuses the wrong kind
+import "aql:minilang"  +jp/$.a/ is (MiniLang.Jp)	true	a stored JSONPath query has its named type
+import "aql:minilang"  +xp|//book/title| is (MiniLang.Xp)	true	an XPath partial too (| delimiter: the path contains /)
+import "aql:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)	false	an ordinary lambda is a Function but NOT a re partial
+import "aql:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex	true	the exported type literal works as a def'd name too
+import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+re/[a-z]+/) "AbcD"	'AbcD'	the point: a typed fn param that requires specifically a regexp matcher (calling the partial inside the body is pinned in lang/go/test TestMiniPartialTypedParam — the checker's fn-value-call frontier)
+import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+gex/a*/) "AbcD"	ERROR:signature_error	a gex partial is refused by the m:(MiniLang.Re) slot
+import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  def f (+poly/x/)  f/r is (MiniLang.Poly)	true	a filter-shaped user kind mints its member type at register time
+import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  (+poly/x/) is (MiniLang.Re)	false	the user kind's partial is not a builtin kind's
+import "aql:minilang"  MiniLang.register gen (fn [[src:String opts:Map] [Integer] [1]]) end  MiniLang.Gen	None	a non-filter kind never produces a tagged partial, so no type is minted

@@ -58,6 +58,37 @@ func TestMiniPartialParked(t *testing.T) {
 	}
 }
 
+// TestMiniPartialTypedParam pins the full typed-param flow: a fn whose
+// param is the per-kind member type MiniLang.Re receives a re partial
+// and CALLS it in the body. The spec row (module-minilang.tsv §fnty)
+// keeps a non-calling body because the static checker does not yet
+// model a call on a param-bound Function carrier (the fn-value-call
+// frontier); the runtime flow is pinned here instead.
+func TestMiniPartialTypedParam(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	got, err := a.Run(miniImp +
+		`def find-with fn [[m:(MiniLang.Re) s:String] [String] [(s m).fst.m]]  ` +
+		`find-with (+re/[a-z]+/) "AbcD"`)
+	if err != nil {
+		t.Fatalf("typed-param call: %v", err)
+	}
+	if len(got) != 1 || got[0] != "bc" {
+		t.Fatalf("typed-param call: expected ['bc'], got %v", got)
+	}
+
+	// The negative half: a gex partial is refused by the Re slot.
+	b, _ := lang.New()
+	_, err = b.Run(miniImp +
+		`def find-with fn [[m:(MiniLang.Re) s:String] [String] [(s m).fst.m]]  ` +
+		`find-with (+gex/a*/) "AbcD"`)
+	if err == nil || !strings.Contains(err.Error(), "signature") {
+		t.Fatalf("typed-param negative: expected a signature error, got %v", err)
+	}
+}
+
 // TestMiniPartialStoredReuse pins that a parked partial is a real,
 // reusable function: bind it, apply it to several subjects, and the
 // bound pattern rides inside — with the negative half that a stored

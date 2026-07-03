@@ -397,7 +397,11 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 					return nil, herr
 				}
 				if partial, pok := miniPartialFn(r, kind, target, hookToks); pok {
-					return []Value{NewSplice(NewList([]Value{partial, NewEnd()}))}, nil
+					// No trailing End: the partial's sigs are STACK-ONLY
+					// (BarrierPos 0), so it cannot steal following tokens —
+					// and a spliced End LEAKS out of a paren group, ending
+					// the OUTER word's statement (see miniPartialFn).
+					return []Value{NewSplice(NewList([]Value{partial}))}, nil
 				}
 				return []Value{NewSplice(NewList(hookToks))}, nil
 			}
@@ -421,7 +425,8 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		args[1], opts, NewEnd(),
 	}
 	if partial, pok := miniPartialFn(r, kind, target, callTail); pok {
-		return []Value{NewSplice(NewList([]Value{partial, NewEnd()}))}, nil
+		// No trailing End — see the hook-path comment above.
+		return []Value{NewSplice(NewList([]Value{partial}))}, nil
 	}
 	return []Value{NewSplice(NewList(callTail))}, nil
 }
@@ -467,14 +472,29 @@ func miniPartialFn(r *Registry, kind, target string, tail []Value) (Value, bool)
 			return Value{}, false
 		}
 	}
+	// The tail's trailing End is the bare-splice statement terminator;
+	// inside a SIG BODY it instead ends the CALLER's statement when the
+	// partial dispatches within an enclosing fn body (dropping pending
+	// tokens like a trailing dot-chain), and the body list is already
+	// self-delimiting — so strip it.
+	for len(tail) > 0 && IsEnd(tail[len(tail)-1]) {
+		tail = tail[:len(tail)-1]
+	}
 	body := append([]Value{NewWord(miniSubjParam)}, tail...)
 	sigs := make([]FnSig, 0, len(info.Signatures))
 	for _, ws := range info.Signatures {
 		sigs = append(sigs, FnSig{
-			Params:     []FnParam{{Name: miniSubjParam, Type: ws.Params[2].Type}},
-			Returns:    ws.Returns,
-			Impl:       AQL(body),
-			BarrierPos: -1,
+			Params:  []FnParam{{Name: miniSubjParam, Type: ws.Params[2].Type}},
+			Returns: ws.Returns,
+			Impl:    AQL(body),
+			// STACK-ONLY: a filter's subject comes from the stack (the
+			// documented semantics), and a stack-only partial never
+			// forward-collects the tokens after it — which is what lets
+			// the splice drop the trailing End guard. A spliced End is
+			// harmless at top level but LEAKS out of a paren group
+			// (`(+re/…/) is T`, `apply (+re/…/) x`), ending the OUTER
+			// word's statement and silently killing its dispatch.
+			BarrierPos: 0,
 		})
 	}
 	// Uniquely named per expansion: two partials of the same kind carry
@@ -484,6 +504,9 @@ func miniPartialFn(r *Registry, kind, target string, tail []Value) (Value, bool)
 		Name:       fmt.Sprintf("mini-%s#%d", kind, miniPartialSeq),
 		Signatures: sigs,
 		Anonymous:  true,
+		// The kind tag the per-kind member types (MiniLang.Re, …)
+		// match on — the partial's NAMED type for fn params.
+		MiniKind: kind,
 	}), true
 }
 

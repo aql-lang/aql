@@ -652,7 +652,12 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			}
 		}
 	}
-	if b.Parent.Equal(TFnDef) || b.Parent.Equal(TFunction) {
+	// A concrete function RHS is a PREDICATE (`3 is even?`). A bare
+	// type node whose Parent happens to be TFunction is NOT — it is a
+	// minted subtype of Function (the aql:minilang partial kinds,
+	// MiniLang.Re / …) and must fall through to the type-literal
+	// branch below, where a.Is(bNode) runs its member predicate.
+	if (b.Parent.Equal(TFnDef) || b.Parent.Equal(TFunction)) && !IsBareTypeNode(b) {
 		_, matched, err := r.RunPredicate(b, a)
 		if err != nil {
 			return []Value{NewBoolean(false)}, nil
@@ -680,9 +685,13 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		if bNode.ConformsTo(TType) {
 			// Type/-rooted subtype RHS (`Function` / `Disjunct` / `Enum`
-			// / `FunctionSignature`): plain subtype check on the
-			// value's Parent.
-			return []Value{NewBoolean(a.Parent.ConformsTo(bNode))}, nil
+			// / `FunctionSignature`): route through the one-predicate
+			// doctrine, a.Is(bNode) — for the default-behavior kernel
+			// nodes this IS the old plain a.Parent.ConformsTo(bNode)
+			// subtype check (DefaultBehavior.Match delegates there),
+			// and a MEMBER type under the branch (the aql:minilang
+			// partial kinds, MiniLang.Re / …) runs its predicate.
+			return []Value{NewBoolean(a.Is(bNode))}, nil
 		}
 		// A const singleton RHS (and every other membership type) answers
 		// `is` through the shared Unify path below — `1 is (const 1)` →

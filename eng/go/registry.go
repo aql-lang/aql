@@ -952,6 +952,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		Anonymous:      top.Anonymous,
 		Macro:          top.Macro,
 		Captured:       top.Captured,
+		MiniKind:       top.MiniKind,
 		// A word-extension clone's provenance marker rides the aggregate:
 		// when the newest entry is a clone the walk stopped there, so the
 		// aggregate IS the clone's view — a `name/r` reference (ResolveRef

@@ -4672,6 +4672,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 		Registry:       fnDef.Registry,
 		Anonymous:      fnDef.Anonymous,
 		Captured:       fnDef.Captured,
+		MiniKind:       fnDef.MiniKind,
 	}
 }
 
