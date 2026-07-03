@@ -654,6 +654,32 @@ func TestExecAskPassphraseRejectsWrongPassphrase(t *testing.T) {
 	}
 }
 
+func TestExecAskPassphraseThenAskShareOneReader(t *testing.T) {
+	requireSh(t)
+	testHome(t)
+	mustInit(t)
+	// A stored secret gives the passphrase-validation probe something to
+	// decrypt (slotless file keyring proves the passphrase on first read).
+	if code, _, e := runVault(t, "canary-value\n", "add", "--from-stdin", "canary"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+
+	// --ask-passphrase reads the first stdin line, then --ask reads the
+	// second from the SAME reader. A fresh reader for the second prompt
+	// would see EOF (the first read buffers past its newline) and fail with
+	// "reading TOKEN: no input".
+	t.Setenv(EnvPassphrase, "")
+	code, out, errOut := runVault(t, "test-pass\ntoken-value\n",
+		"exec", "--ask-passphrase", "--ask", "TOKEN", "--",
+		"sh", "-c", "printf %s:%s \"$AQL_VAULT_PASSPHRASE\" \"$TOKEN\"")
+	if code != 0 {
+		t.Fatalf("exec --ask-passphrase --ask: %s", errOut)
+	}
+	if out != "test-pass:token-value" {
+		t.Errorf("child env = %q, want %q", out, "test-pass:token-value")
+	}
+}
+
 func TestExecAskCombinesWithVaultAliases(t *testing.T) {
 	requireSh(t)
 	testHome(t)
