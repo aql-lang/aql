@@ -67,6 +67,11 @@ var accessorNatives = []NativeFunc{
 			// [Key | Store]
 			{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasStoreHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TStore}, BarrierPos: 1, Impl: Go(hasStoreHandler), Returns: []*Type{TBoolean}},
+			// [Key | Micron] — property presence, including the
+			// derived properties (address/href/parts/abs) and the
+			// optional Urlon fields (an absent port answers false).
+			{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasMicronHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(hasMicronHandler), Returns: []*Type{TBoolean}},
 			// [Key | None] — total: an absent parent answers false.
 			// The Atom/q overload captures a bare-word key (`none has
 			// a`, `(m get sub) has k`), going one better than get/getr,
@@ -101,6 +106,11 @@ func accessorGetrSignatures() []Signature {
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getrModuleExportHandler), ReturnsFn: moduleExportGetrReturns},
 		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleInstHandler)},
 		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getrModuleInstHandler)},
+		// [Key | Micron] — strict structured-scalar property read
+		// (mirrors get's TMicron sigs; a miss raises not_found instead
+		// of reading none).
+		{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
+		{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
 		// [Key | None]
 		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getrNoneHandler)},
 	}

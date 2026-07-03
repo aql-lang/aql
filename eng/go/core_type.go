@@ -319,7 +319,23 @@ func InstallType(r *Registry, name string, body Value) error {
 	if err := validateTypeName(r, name); err != nil {
 		return err
 	}
-	if IsClassType(body) {
+	if IsMicronType(body) {
+		// `def Baron refine Micron {foo:String}` route: the Micron
+		// Ideal's Construct produced a MicronTypeInfo body; mint the
+		// kind under Scalar/Micron, install the family Behavior (with
+		// the schema attached so `make` can find it through the parent
+		// walk), and enforce the naming rule — every type under Micron
+		// must have a name ending in "on".
+		info, _ := AsMicronType(body)
+		if err := requireMicronName(name); err != nil {
+			return err
+		}
+		def := r.Types.MintType(name, TMicron)
+		info.Name = name
+		info.Type = def
+		def.Behavior = micronBehavior{kind: def, info: &info}
+		r.Defs.PushType(name, def, NewValueRaw(def, info))
+	} else if IsClassType(body) {
 		info, _ := AsClassType(body)
 		// Object types are class types now — sealed nominal records rooted
 		// under Ideal/Class (the open Object container was removed).
@@ -411,6 +427,14 @@ func InstallType(r *Registry, name string, body Value) error {
 				Detail: "type " + name + ": refine prefab missing from lattice",
 			}
 		}
+		// A bare nominal refine of a Micron kind (`def Workon refine
+		// Emailon`) is a newtype inside the family — the naming rule
+		// applies.
+		if def.Parent != nil && def.Parent.ConformsTo(TMicron) {
+			if err := requireMicronName(name); err != nil {
+				return err
+			}
+		}
 		def.Name = name
 		body.Name = name
 		// Attach a bareRefineUnifier so dispatch admits any value
@@ -472,6 +496,13 @@ func InstallType(r *Registry, name string, body Value) error {
 				Detail: "type " + name + ": DepScalar body unreadable: " + err.Error(),
 			}
 		}
+		// Defensive: a dependent scalar over a Micron base would still
+		// mint under the family, so the naming rule applies.
+		if body.Parent != nil && body.Parent.ConformsTo(TMicron) {
+			if err := requireMicronName(name); err != nil {
+				return err
+			}
+		}
 		def := r.Types.MintType(name, body.Parent)
 		installDepScalarUnifier(def, body.Parent, di, name)
 		r.Defs.PushType(name, def, body)
@@ -485,6 +516,14 @@ func InstallType(r *Registry, name string, body Value) error {
 		parent := body.Parent
 		if IsBareTypeNode(body) {
 			parent = CanonicalType(r, &body)
+		}
+		// Aliases mint a node under the aliased type, so `def Mail
+		// Emailon` would put Mail inside the Micron family — the
+		// naming rule applies (`def Mailon Emailon` passes).
+		if parent != nil && parent.ConformsTo(TMicron) {
+			if err := requireMicronName(name); err != nil {
+				return err
+			}
 		}
 		def := r.Types.MintType(name, parent)
 		r.Defs.PushType(name, def, body)

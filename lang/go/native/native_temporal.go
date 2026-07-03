@@ -7,37 +7,76 @@ import (
 	"github.com/aql-lang/aql/eng/go"
 )
 
-// The Scalar/Time type family is owned by the lang/go/engine package
-// post Step 8. The kernel (eng) no longer declares these types in
-// its builtinDecls or carries their constructors / format Behaviors.
-// They live in lang/go/engine because date-arithmetic handlers in
-// native_math.go reference them at package-init time — colocating
-// the declarations with the handlers avoids the cross-package
-// import cycle that blocked an earlier nativemod-based migration.
+// The Scalar/Time type family splits across two owners:
 //
-// FixedIDs 1000-1008 come from the documented
-// lang/go/internal/nativemod/time range (1000-1999) reused here; the
-// types could later move to nativemod if the date-arithmetic
-// handlers also move (a separate restructure).
+//   - CORE (global external builtins, wire-stable FixedIDs 1000-1003):
+//     the family root Scalar/Time and the three instant-bearing
+//     leaves Date / DateTime / Instant. These stay global because
+//     cross-module producers construct them (IO mtime is an Instant),
+//     they order chronologically through the Scalar/Time Comparer,
+//     and their identities are baked into serialised Value IDs.
+//
+//   - aql:time-util (per-import module mints, no FixedIDs): TimeOfDay,
+//     Duration and its CalendarDuration / ClockDuration leaves, and Timezone.
+//     BuildTimeModule mints them per import via
+//     MintTemporalModuleTypes below — the StreamKind pattern
+//     (io_stream.go) — so a program that never imports the module
+//     doesn't see the types at all. They are reachable as
+//     `TimeUtil.CalendarDuration` etc. The temporal add/sub overloads ride
+//     the module's word-extension exports (TemporalArithmeticExtensions,
+//     native_math.go), and the minted types are what satisfy the
+//     module-scope user-type rule for those extensions.
 //
 // Registration uses var-initialiser form so any other var that
-// references these types — notably mathNatives' date-arithmetic
-// signatures — sees a non-nil pointer at slice-init time. Go's
-// init order resolves dependencies before declaration order.
-//
-// Parents (Scalar/Time and Scalar/Time/Duration) register first so
-// children's parent paths resolve.
+// references the core types — notably signatures built at
+// package-init time — sees a non-nil pointer at slice-init time.
+// Go's init order resolves dependencies before declaration order.
 var (
-	TTime        = registerTemporalType("Scalar/Time", 1000, timeCompareBehavior{})
-	TDate        = registerTemporalType("Scalar/Time/Date", 1001, dateFormatBehavior{})
-	TDateTime    = registerTemporalType("Scalar/Time/DateTime", 1002, dateTimeFormatBehavior{})
-	TInstant     = registerTemporalType("Scalar/Time/Instant", 1003, instantFormatBehavior{})
-	TTimeOfDay   = registerTemporalType("Scalar/Time/TimeOfDay", 1004, timeOfDayFormatBehavior{})
-	TDuration    = registerTemporalType("Scalar/Time/Duration", 1005, nil)
-	TCalDuration = registerTemporalType("Scalar/Time/Duration/CalDuration", 1006, calDurationFormatBehavior{})
-	TClkDuration = registerTemporalType("Scalar/Time/Duration/ClkDuration", 1007, clkDurationFormatBehavior{})
-	TTimezone    = registerTemporalType("Scalar/Time/Timezone", 1008, timezoneFormatBehavior{})
+	TTime     = registerTemporalType("Scalar/Time", 1000, timeCompareBehavior{})
+	TDate     = registerTemporalType("Scalar/Time/Date", 1001, dateFormatBehavior{})
+	TDateTime = registerTemporalType("Scalar/Time/DateTime", 1002, dateTimeFormatBehavior{})
+	TInstant  = registerTemporalType("Scalar/Time/Instant", 1003, instantFormatBehavior{})
 )
+
+// TemporalModuleTypes are the Scalar/Time leaves owned by
+// aql:time-util, minted per import into the module's sub-registry by
+// MintTemporalModuleTypes. Their values escape to the importer (a
+// `TimeUtil.days 3` result is a CalendarDuration), so the mints draw IDs
+// from the importing tree's counter — BuildTimeModule adopts the
+// parent's sequence before minting (see eng TypeTable.mintID and the
+// BuildIOModule / StreamKind precedent).
+type TemporalModuleTypes struct {
+	TimeOfDay        *Type
+	Duration         *Type
+	CalendarDuration *Type
+	ClockDuration    *Type
+	Timezone         *Type
+	// The timer handle types (former global FixedIDs 4000-4001) —
+	// their words (timeout / interval / await / cancel) are module
+	// words already; the handles they return carry these mints.
+	Timeout  *Type
+	Interval *Type
+}
+
+// MintTemporalModuleTypes mints the module-owned temporal types into
+// r's type table (r is aql:time-util's sub-registry) and returns the
+// nodes. Parents mint first so the children's Parent chains resolve;
+// the whole set hangs under the global Scalar/Time root, so the
+// family Comparer and lattice ordering see them exactly where the
+// former global registrations sat.
+func MintTemporalModuleTypes(r *Registry) TemporalModuleTypes {
+	timeOfDay := r.Types.MintTypeWithBehavior("TimeOfDay", TTime, timeOfDayFormatBehavior{})
+	duration := r.Types.MintType("Duration", TTime)
+	return TemporalModuleTypes{
+		TimeOfDay:        timeOfDay,
+		Duration:         duration,
+		CalendarDuration: r.Types.MintTypeWithBehavior("CalendarDuration", duration, calDurationFormatBehavior{}),
+		ClockDuration:    r.Types.MintTypeWithBehavior("ClockDuration", duration, clkDurationFormatBehavior{}),
+		Timezone:         r.Types.MintTypeWithBehavior("Timezone", TTime, timezoneFormatBehavior{}),
+		Timeout:          r.Types.MintTypeWithBehavior("Timeout", eng.TIdeal, timeoutFormatBehavior{}),
+		Interval:         r.Types.MintTypeWithBehavior("Interval", eng.TIdeal, intervalFormatBehavior{}),
+	}
+}
 
 func registerTemporalType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
@@ -65,20 +104,24 @@ func NewInstant(t time.Time) Value {
 	return eng.NewValueRaw(TInstant, eng.TimePayload{T: t.UTC()})
 }
 
-func NewTimeOfDay(d time.Duration) Value {
-	return eng.NewValueRaw(TTimeOfDay, eng.DurationPayload{D: d})
+// The module-owned constructors are methods on TemporalModuleTypes:
+// the Parent tag comes from that import's mints, so every value a
+// module instance produces carries the instance's own type identity.
+
+func (tt TemporalModuleTypes) NewTimeOfDay(d time.Duration) Value {
+	return eng.NewValueRaw(tt.TimeOfDay, eng.DurationPayload{D: d})
 }
 
-func NewCalDuration(years, months, days int) Value {
-	return eng.NewValueRaw(TCalDuration, eng.CalDurationData{Years: years, Months: months, Days: days})
+func (tt TemporalModuleTypes) NewCalendarDuration(years, months, days int) Value {
+	return eng.NewValueRaw(tt.CalendarDuration, eng.CalDurationData{Years: years, Months: months, Days: days})
 }
 
-func NewClkDuration(d time.Duration) Value {
-	return eng.NewValueRaw(TClkDuration, eng.DurationPayload{D: d})
+func (tt TemporalModuleTypes) NewClockDuration(d time.Duration) Value {
+	return eng.NewValueRaw(tt.ClockDuration, eng.DurationPayload{D: d})
 }
 
-func NewTimezone(loc *time.Location) Value {
-	return eng.NewValueRaw(TTimezone, eng.TimezonePayload{Loc: loc})
+func (tt TemporalModuleTypes) NewTimezone(loc *time.Location) Value {
+	return eng.NewValueRaw(tt.Timezone, eng.TimezonePayload{Loc: loc})
 }
 
 // As* accessors for the time-family types. Moved from
@@ -128,16 +171,16 @@ func AsTimeOfDay(v Value) time.Duration {
 	return 0
 }
 
-// AsCalDuration extracts the CalDurationData payload.
-func AsCalDuration(v Value) (eng.CalDurationData, bool) {
+// AsCalendarDuration extracts the CalDurationData payload.
+func AsCalendarDuration(v Value) (eng.CalDurationData, bool) {
 	if d, ok := v.Data.(eng.CalDurationData); ok {
 		return d, true
 	}
 	return eng.CalDurationData{}, false
 }
 
-// AsClkDuration extracts the time.Duration payload for a ClkDuration value.
-func AsClkDuration(v Value) (time.Duration, bool) {
+// AsClockDuration extracts the time.Duration payload for a ClockDuration value.
+func AsClockDuration(v Value) (time.Duration, bool) {
 	if dp, ok := v.Data.(eng.DurationPayload); ok {
 		if d, ok := dp.D.(time.Duration); ok {
 			return d, true
@@ -333,7 +376,7 @@ func (calDurationFormatBehavior) Format(v Value) string {
 	if cd, ok := v.Data.(eng.CalDurationData); ok {
 		return fmt.Sprintf("P%dY%dM%dD", cd.Years, cd.Months, cd.Days)
 	}
-	return "CalDuration(nil)"
+	return "CalendarDuration(nil)"
 }
 
 type clkDurationFormatBehavior struct{}
@@ -348,7 +391,7 @@ func (clkDurationFormatBehavior) Format(v Value) string {
 			return d.String()
 		}
 	}
-	return "ClkDuration(nil)"
+	return "ClockDuration(nil)"
 }
 
 func (clkDurationFormatBehavior) Compare(a, b Value) (int, error) {

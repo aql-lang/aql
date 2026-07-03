@@ -71,7 +71,6 @@ func TestMiniXPathErrors(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{"bad xpath", `<r/> mini xp '//['`, "mini_parse_error"},
 		{"unterminated fn", `<r/> mini xp 'count('`, "mini_parse_error"},
-		{"non-xml subject", `{a:1} mini xp '//a' {}`, "uncalled_function"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -85,6 +84,29 @@ func TestMiniXPathErrors(t *testing.T) {
 				t.Fatalf("%s: error %q should contain %q", c.name, err.Error(), c.want)
 			}
 		})
+	}
+}
+
+// TestMiniXPathNonXmlSubject pins the partial-function semantics for a
+// mismatched subject: a non-Xml value does not match xp's signature, so
+// the expansion's partial stays a VALUE next to the untouched subject
+// instead of raising (store it, or feed a Node/Xml). Interpreter-level
+// (see minilang_partial_test.go for why the parked shapes are not spec
+// rows).
+func TestMiniXPathNonXmlSubject(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	got, err := a.Run(xpImp + `{a:1} mini xp '//a' {} typeof`)
+	if err != nil {
+		t.Fatalf("expected the partial to stay data, got error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected [subject, typeof(partial)] residual, got %v", got)
+	}
+	if s, _ := got[1].(string); s != "Function" {
+		t.Fatalf("expected a Function partial on top, got %v", got[1])
 	}
 }
 

@@ -54,15 +54,15 @@ List lt Map	ERROR:incomparable	two cross-branch type literals
 true tcmp 5	-1	Boolean ranks below Number
 1 tcmp 1.0	0	cross-leaf magnitude ties
 
-# ── Path: content equality — eq/deq agree with cmp on the Path scalar ─
-(make Path ["a" "b"]) eq (make Path ["a" "b"])	true	identical Paths are eq — content (segments + abs flag), not container identity
-(make Path ["a" "b"]) deq (make Path ["a" "b"])	true	deq agrees with eq on the Path scalar
-(make Path ["a" "b"]) cmp (make Path ["a" "b"])	0	and cmp agrees with both
-(make Path ["a" "b"]) eq (make Path ["a" "c"])	false	different segments are not equal
-(make Path "/a/b") eq (make Path ["a" "b"])	false	absolute vs relative differ even with equal segments
-(make Path ["a"]) eq (make Path ["a" "b"])	false	different segment counts are not equal
-(make Path ["a"]) eq "a"	false	cross-type eq is false, never an error
-[(make Path ["a"])] deq [(make Path ["a"])]	true	deq recurses into Nodes holding Paths
+# ── Pathon: content equality — eq/deq agree with cmp on the Pathon scalar ─
+(make Pathon ["a" "b"]) eq (make Pathon ["a" "b"])	true	identical Paths are eq — content (segments + abs flag), not container identity
+(make Pathon ["a" "b"]) deq (make Pathon ["a" "b"])	true	deq agrees with eq on the Pathon scalar
+(make Pathon ["a" "b"]) cmp (make Pathon ["a" "b"])	0	and cmp agrees with both
+(make Pathon ["a" "b"]) eq (make Pathon ["a" "c"])	false	different segments are not equal
+(make Pathon "/a/b") eq (make Pathon ["a" "b"])	false	absolute vs relative differ even with equal segments
+(make Pathon ["a"]) eq (make Pathon ["a" "b"])	false	different segment counts are not equal
+(make Pathon ["a"]) eq "a"	false	cross-type eq is false, never an error
+[(make Pathon ["a"])] deq [(make Pathon ["a"])]	true	deq recurses into Nodes holding Paths
 
 # ── Bytes: an external Scalar leaf obeys the same rules ───────────────
 (convert Bytes "a") lt "b"	ERROR:incomparable	Bytes vs String — different families, no shared comparer

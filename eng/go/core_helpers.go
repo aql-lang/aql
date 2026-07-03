@@ -71,21 +71,37 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// new name so bare-word dispatch behaves exactly like pkg.word.
 		if reg := fnDef.Registry; reg != nil && reg != r {
 			own := fnDef.OwnSigs()
-			if len(own) == 1 {
-				if innerName, ok := trivialDelegationTarget(&own[0]); ok {
-					if inner := reg.Lookup(innerName); inner != nil && len(inner.Signatures) > 0 {
-						rebound := FnDefInfo{
-							Name:           name,
-							Signatures:     append([]Signature(nil), inner.Signatures...),
-							MaxForwardArgs: inner.MaxForwardArgs,
-							Registry:       reg,
-						}
-						r.Defs.Push(name, NewFnDef(rebound))
-						if r.ready && r.OnRegisterHook != nil {
-							r.OnRegisterHook(name)
-						}
-						return
+			// EVERY own sig must be a trivial delegation to the SAME
+			// inner native — a multi-overload wrapper (e.g. IO.write)
+			// carries one delegation FnSig per overload. Requiring only
+			// a single sig here used to drop multi-sig wrappers onto the
+			// body-splice path below, where the wrapper's own UNLOCKED
+			// FnSigs were installed — so a later overlapping `def` could
+			// silently replace a module word instead of raising
+			// locked_signature (the inner native's sigs are locked).
+			innerName := ""
+			allTrivial := len(own) > 0
+			for i := range own {
+				target, ok := trivialDelegationTarget(&own[i])
+				if !ok || (innerName != "" && target != innerName) {
+					allTrivial = false
+					break
+				}
+				innerName = target
+			}
+			if allTrivial {
+				if inner := reg.Lookup(innerName); inner != nil && len(inner.Signatures) > 0 {
+					rebound := FnDefInfo{
+						Name:           name,
+						Signatures:     append([]Signature(nil), inner.Signatures...),
+						MaxForwardArgs: inner.MaxForwardArgs,
+						Registry:       reg,
 					}
+					r.Defs.Push(name, NewFnDef(rebound))
+					if r.ready && r.OnRegisterHook != nil {
+						r.OnRegisterHook(name)
+					}
+					return
 				}
 			}
 		}
@@ -102,12 +118,18 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 		// Dropping the outer entry here is the per-call cleanup over-pop bug
 		// (design/ACCESSOR-SPLIT-AND-CLEANUP-BUG.md): the colliding outer
 		// param vanishes, then the frame's undef tail pops the wrong level.
+		// Entries carrying LOCKED signatures (native registrations, module-
+		// wrapper rebindings) are never dropped: locked sigs can never be
+		// replaced or removed (design/OPEN-WORDS.0.md §2.3). The def-merge
+		// path (BuildWordExtension) intercepts fn defs over locked-bearing
+		// words before InstallDef, so this guard is defence in depth for
+		// direct InstallDef callers.
 		if stack := r.Defs.Stack(name); !shadow && len(stack) > 0 {
 			filtered := stack[:0:0]
 			changed := false
 			for _, entry := range stack {
 				oldFn, ok := entry.Data.(FnDefInfo)
-				if ok && FnDefsOverlap(oldFn, fnDef) {
+				if ok && !hasLockedSig(oldFn.Signatures) && FnDefsOverlap(oldFn, fnDef) {
 					changed = true
 					continue
 				}
@@ -1061,6 +1083,36 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 // authored unit for targeted undef and overlap detection.
 func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) {
 	isStackOnly := len(stackOnly) > 0 && stackOnly[0]
+	entry := fnDef
+	entry.Name = name
+	entry.Signatures = compileFnSigs(r, name, fnDef, isStackOnly)
+	SortSignatures(entry.Signatures)
+	entry.MaxForwardArgs = calcMaxForwardArgs(entry.Signatures)
+	r.Defs.Push(name, NewFnDef(entry))
+	// Construction-time body check (first-class, post-binding). Replaces the
+	// dynamic-help example eval's accidental side-channel: that eval ran each fn
+	// body against SYNTHETIC example args ({a:1,b:2}), producing false positives
+	// (decision.aql), and is now hermetic. Here we analyse each AQL-bodied
+	// overload ONCE against CARRIER args (NewCarrier(param) — an abstract Map/List
+	// reads dynamic(Any)), post-binding so recursive self-refs resolve, so a fn
+	// that is DEFINED BUT NEVER CALLED still has its body statically checked
+	// (an undefined word, an in-body forward strand). Bytecode recording is
+	// suspended (a registration is not part of the program's straight line; the
+	// armed compile at first dispatch deletes this suspended summary and re-records).
+	checkFnBodyAtConstruction(r, name, entry)
+	if r.ready && r.OnRegisterHook != nil {
+		r.OnRegisterHook(name)
+	}
+}
+
+// compileFnSigs turns a definition's authored overloads into dispatch-
+// ready Signatures: optional params expand into extra sigs, AQL-bodied
+// sigs get the body-splicing runner (buildFnBodyHandler) plus the
+// check-mode ReturnsFn, and the BarrierPos sentinel resolves. Shared by
+// InstallFnDef (ordinary `def name fn […]`) and BuildWordExtension
+// (`def <locked word> fn […]` — the open-words merge), so an added
+// signature dispatches byte-identically to an installed fn's.
+func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) []Signature {
 	// Expand optional parameters into additional signatures.
 	sigs := ExpandOptionalSigs(name, fnDef.OwnSigs())
 	compiled := make([]Signature, 0, len(sigs))
@@ -1107,27 +1159,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 		normalizeSig(&cs)
 		compiled = append(compiled, cs)
 	}
-
-	entry := fnDef
-	entry.Name = name
-	entry.Signatures = compiled
-	SortSignatures(entry.Signatures)
-	entry.MaxForwardArgs = calcMaxForwardArgs(entry.Signatures)
-	r.Defs.Push(name, NewFnDef(entry))
-	// Construction-time body check (first-class, post-binding). Replaces the
-	// dynamic-help example eval's accidental side-channel: that eval ran each fn
-	// body against SYNTHETIC example args ({a:1,b:2}), producing false positives
-	// (decision.aql), and is now hermetic. Here we analyse each AQL-bodied
-	// overload ONCE against CARRIER args (NewCarrier(param) — an abstract Map/List
-	// reads dynamic(Any)), post-binding so recursive self-refs resolve, so a fn
-	// that is DEFINED BUT NEVER CALLED still has its body statically checked
-	// (an undefined word, an in-body forward strand). Bytecode recording is
-	// suspended (a registration is not part of the program's straight line; the
-	// armed compile at first dispatch deletes this suspended summary and re-records).
-	checkFnBodyAtConstruction(r, name, entry)
-	if r.ready && r.OnRegisterHook != nil {
-		r.OnRegisterHook(name)
-	}
+	return compiled
 }
 
 // checkFnBodyAtConstruction runs a static body pass for each AQL-bodied overload
@@ -1191,6 +1223,13 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 		for j := len(stack) - 1; j >= 0; j-- {
 			fnDef, ok := stack[j].Data.(FnDefInfo)
 			if !ok {
+				continue
+			}
+			// Locked signatures can never be removed — a targeted undef
+			// spec matching a native registration (or a word-extension
+			// clone, which carries the locked base sigs) must not drop
+			// the entry (design/OPEN-WORDS.0.md §2.3).
+			if hasLockedSig(fnDef.Signatures) {
 				continue
 			}
 			matched := false
@@ -1415,6 +1454,10 @@ func IsTypeBody(v Value) bool {
 	if v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction) {
 		return true
 	}
+	// Micron type body (`refine Micron {fields}`)
+	if IsMicronType(v) {
+		return true
+	}
 	// Host-Ideal constructed type (ExtensionPayload + HostTypeBody).
 	if IsHostTypeBody(v) {
 		return true
@@ -1459,7 +1502,7 @@ func PredicateInputType(v Value) *Type {
 
 // IsLiteralTypeBody reports whether v can be installed as a "value-
 // is-a-type" type body — the singleton-type interpretation. Scalar
-// literals (Integer / Float / String / Boolean / Atom / Path / the
+// literals (Integer / Float / String / Boolean / Atom / Pathon / the
 // `none` value), and concrete lists / maps qualify. Used by
 // installType to relax the strict IsTypeBody check in a way that
 // doesn't pollute the inspect / fn-shape paths.
@@ -1474,7 +1517,7 @@ func IsLiteralTypeBody(v Value) bool {
 		v.Parent.ConformsTo(TString),
 		v.Parent.ConformsTo(TBoolean),
 		v.Parent.ConformsTo(TAtom),
-		v.Parent.Equal(TPath):
+		v.Parent.ConformsTo(TMicron):
 		return v.Data != nil
 	}
 	if v.Parent.Equal(TList) && v.Data != nil {

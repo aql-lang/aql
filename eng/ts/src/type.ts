@@ -53,7 +53,13 @@ const builtinDecls: BuiltinDecl[] = [
   { path: 'Scalar/String' },
   { path: 'Scalar/String/EmptyString' },
   { path: 'Scalar/String/ProperString' },
-  { path: 'Scalar/Path' },
+  // Scalar/Micron — structured-scalar family (mirrors eng/go). The TS
+  // port carries the lattice rows only; Emailon/Urlon construction and
+  // property access live in the Go engine.
+  { path: 'Scalar/Micron' },
+  { path: 'Scalar/Micron/Pathon' },
+  { path: 'Scalar/Micron/Emailon' },
+  { path: 'Scalar/Micron/Urlon' },
 
   // Node branch.
   { path: 'Node/List' },
@@ -220,7 +226,10 @@ export const TFloat = newType('Scalar/Number/Float')
 export const TBigInteger = newType('Scalar/Number/BigInteger')
 export const TBigDecimal = newType('Scalar/Number/BigDecimal')
 export const TBoolean = newType('Scalar/Boolean')
-export const TPath = newType('Scalar/Path')
+export const TMicron = newType('Scalar/Micron')
+export const TPathon = newType('Scalar/Micron/Pathon')
+export const TEmailon = newType('Scalar/Micron/Emailon')
+export const TUrlon = newType('Scalar/Micron/Urlon')
 export const TAtom = newType('Scalar/Atom')
 export const TNode = newType('Node')
 export const TIdeal = newType('Ideal')

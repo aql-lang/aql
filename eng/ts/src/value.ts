@@ -23,7 +23,9 @@ import {
   TList,
   TMap,
   TMark,
-  TPath,
+  TEmailon,
+  TPathon,
+  TUrlon,
   TMove,
   TNone,
   TParenExpr,
@@ -457,14 +459,48 @@ export function newXmlInterp(t: XmlTmpl): Value {
 }
 
 /** Path payload: normalised segments + absolute flag. */
-export interface PathInfo {
+export interface PathonInfo {
   segments: string[]
   abs: boolean
 }
 
-/** Construct a path value (VType Scalar/Path). */
+/** Construct a path value (VType Scalar/Micron/Pathon). */
 export function newPath(segments: string[], abs: boolean): Value {
-  return new Value(TPath, { segments, abs } satisfies PathInfo)
+  return new Value(TPathon, { segments, abs } satisfies PathonInfo)
+}
+
+/** Emailon payload: primary fields (address is derived at render). */
+export interface EmailonInfo {
+  user: string
+  host: string
+}
+
+export function newEmailon(user: string, host: string): Value {
+  return new Value(TEmailon, { user, host } satisfies EmailonInfo)
+}
+
+/** Urlon payload: primary fields (href is derived at render). */
+export interface UrlonInfo {
+  scheme: string
+  host: string
+  port?: number
+  path?: string
+  query?: string
+  fragment?: string
+}
+
+export function newUrlon(info: UrlonInfo): Value {
+  return new Value(TUrlon, info)
+}
+
+/** Canonical Urlon render: scheme://host[:port][path][?query][#fragment]. */
+export function urlonHref(u: UrlonInfo): string {
+  let out = `${u.scheme}://${u.host}`
+  if (u.port !== undefined) out += `:${u.port}`
+  if (u.path) out += u.path
+  if (u.query) out += `?${u.query}`
+  if (u.fragment) out += `#${u.fragment}`
+  return out
 }
 
 export function newWord(name: string): Value {

@@ -40,9 +40,12 @@ go 1.24
 
 require github.com/aql-lang/aql/eng/go v0.0.0
 
-require github.com/jsonicjs/jsonic/go v0.1.6 // indirect
+require (
+	github.com/tabnas/jsonic/go v0.2.0 // indirect
+	github.com/tabnas/parser/go v0.2.1 // indirect
+)
 
-replace github.com/aql-lang/aql/eng/go v0.0.0 => ../eng/go
+replace github.com/aql-lang/aql/eng/go => ../eng/go
 ```
 
 The `replace` line points at the local copy of `eng/go`. In a

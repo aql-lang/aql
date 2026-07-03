@@ -512,7 +512,7 @@ func wordHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 func folderOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	optsVal := args[0]
 	pathVal := args[1]
-	if !IsPath(pathVal) {
+	if !IsPathon(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.Parent.String())
 	}
 	parents := true
@@ -521,23 +521,23 @@ func folderOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 			parents, _ = AsBoolean(v)
 		}
 	}
-	_as0, _ := AsPath(pathVal)
+	_as0, _ := AsPathon(pathVal)
 	return doFolder(_as0, parents, reg)
 }
 
 // folderHandler implements `folder` with a single Path arg (parents=true).
 func folderHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	pathVal := args[0]
-	if !IsPath(pathVal) {
+	if !IsPathon(pathVal) {
 		return nil, fmt.Errorf("folder: expected Path, got %s", pathVal.Parent.String())
 	}
-	_as1, _ := AsPath(pathVal)
+	_as1, _ := AsPathon(pathVal)
 	return doFolder(_as1, true, reg)
 }
 
 // doFolder is the shared body for both folder signatures; resolves and
 // creates a directory via the configured FileOps.
-func doFolder(p PathInfo, parents bool, reg *Registry) ([]Value, error) {
+func doFolder(p PathonInfo, parents bool, reg *Registry) ([]Value, error) {
 	ops := EffectiveFileOps(reg)
 	pathStr := p.String()
 
@@ -555,7 +555,7 @@ func doFolder(p PathInfo, parents bool, reg *Registry) ([]Value, error) {
 		}
 	}
 
-	return []Value{NewPath(p.Parts, p.Abs)}, nil
+	return []Value{NewPathon(p.Parts, p.Abs)}, nil
 }
 
 // stackCollectHandler runs at execution time: wraps the top N stack
@@ -605,15 +605,15 @@ func sleepHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 
 // intervalListHandler / intervalAtomHandler schedule a repeated callback
 // (a quoted code list or word) at the given millisecond interval.
-func intervalListHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	return startInterval(args, r, true)
+func (tt TemporalModuleTypes) intervalListHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	return tt.startInterval(args, r, true)
 }
 
-func intervalAtomHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	return startInterval(args, r, false)
+func (tt TemporalModuleTypes) intervalAtomHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	return tt.startInterval(args, r, false)
 }
 
-func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
+func (tt TemporalModuleTypes) startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms <= 0 {
 		return nil, r.AqlError("interval_error", fmt.Sprintf("interval: milliseconds must be positive, got %d", ms), "interval")
@@ -646,7 +646,7 @@ func startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 		Ticker: ticker,
 		Done:   done,
 	}
-	return []Value{NewInterval(info)}, nil
+	return []Value{tt.NewInterval(info)}, nil
 }
 
 // cancelTimeoutHandler stops a pending Timeout timer.

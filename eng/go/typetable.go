@@ -302,6 +302,22 @@ func (tt *TypeTable) mintID(parent *Type) string {
 	return fmt.Sprintf("%s%012x", prefix, dynamicIDBase+n)
 }
 
+// Adopt registers an EXISTING minted type in tt's ID index without
+// re-minting — the canonical pointer travels as-is. Escaped module
+// types (a module's exported type literals, the Parent tag on values
+// its words produce) need this so the compiled OpPushType path
+// (Registry.Types.LookupByID) resolves them in the IMPORTING registry,
+// not only in the module sub-registry that minted them. Idempotent;
+// a same-ID re-adoption keeps the first pointer (canonical identity).
+func (tt *TypeTable) Adopt(t *Type) {
+	if tt == nil || t == nil || t.ID == "" {
+		return
+	}
+	if _, exists := tt.byID[t.ID]; !exists {
+		tt.byID[t.ID] = t
+	}
+}
+
 // AdoptSeqFrom makes tt draw minted-type IDs from src's counter, so
 // types minted in tt can never collide with types minted anywhere in
 // src's registry tree. Every sub-registry whose minted types can
@@ -656,7 +672,21 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/String", FixedID: 4, Rank: 20_400_000_000},
 	{Path: "Scalar/String/EmptyString", FixedID: 6, Rank: 20_410_000_000},
 	{Path: "Scalar/String/ProperString", FixedID: 5, Rank: 20_420_000_000},
-	{Path: "Scalar/Path", FixedID: 47, Rank: 20_500_000_000},
+	// Scalar/Micron — the structured-scalar family root (content
+	// equality, immutable, object-like named properties read via
+	// dot/get). Micron takes the positional slot Scalar/Path held
+	// before it moved into the family as Pathon; the family sits
+	// between String and the external Scalar band, so cross-family
+	// ordering is unchanged by the move. Every Micron subtype's name
+	// MUST end in the suffix "on" (Pathon / Emailon / Urlon / user
+	// mints) — enforced at bind time by requireMicronName
+	// (core_type.go). Pathon keeps Path's historical FixedID 47:
+	// formatFixedID derives serialised IDs from the path ROOT only,
+	// so the rename is byte-identical on the wire.
+	{Path: "Scalar/Micron", FixedID: 111, Rank: 20_500_000_000},
+	{Path: "Scalar/Micron/Pathon", FixedID: 47, Rank: 20_510_000_000},
+	{Path: "Scalar/Micron/Emailon", FixedID: 112, Rank: 20_520_000_000},
+	{Path: "Scalar/Micron/Urlon", FixedID: 113, Rank: 20_530_000_000},
 	// Scalar/Time and descendants live in lang/go/native/native_temporal.go.
 
 	// Node branch.

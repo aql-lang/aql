@@ -8,48 +8,36 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// TTensor, TMatrix and TVector are the Node/Tensor[/Matrix | /Vector]
-// type identities. They live under Node, the container family — a
-// tensor is a structured collection, not a scalar — which also keeps a
-// bare Matrix / Vector type literal from matching `make`'s scalar-cast
-// overload. Matrix and Vector are lattice children of Tensor — a
-// Matrix is a rank-2 tensor, a Vector a rank-1 tensor — so `is Tensor`
-// holds for both. The matrix native module owns them; the
-// var initialiser below registers them into the global eng.Builtin
-// table so any package-level var referencing them (MatrixNatives,
-// whose signatures embed TMatrix) sees non-nil pointers at slice-init
-// time — Go resolves var-init dependencies before declaration order.
-//
-// FixedIDs 2000-2002 come from the documented matrix-module range
-// (2000-2999); TMatrix keeps its historical 2000 so serialised Value
-// IDs stay wire-compatible.
-var TTensor, TMatrix, TVector = registerTensorTypes()
+// TensorModuleTypes are the tensor types owned by aql:matrix-util,
+// minted per import into the module's sub-registry by MintTensorTypes
+// (the StreamKind / TemporalModuleTypes pattern — see
+// design/OPEN-WORDS.0.md). Tensor values escape to the importer, so
+// the mints draw IDs from the importing tree's counter —
+// BuildMatrixModule adopts the parent's sequence before minting. The
+// former global registrations (FixedIDs 2000-2002) are retired; the
+// types are reachable after import as MatrixUtil.Tensor /
+// MatrixUtil.Matrix / MatrixUtil.Vector, and they are what anchors
+// the module's add / sub / mul word extensions under the module-scope
+// user-type rule. Matrix and Vector are lattice children of Tensor —
+// a Matrix is a rank-2 tensor, a Vector a rank-1 tensor — so
+// `is MatrixUtil.Tensor` holds for both.
+type TensorModuleTypes struct {
+	Tensor *native.Type
+	Matrix *native.Type
+	Vector *native.Type
+}
 
-// tensorTypeInitErr records any error from the init-time tensor-type
-// registration. It can only be a programmer error (duplicate FixedID or
-// malformed path); per ADR-005 it is recorded here and surfaced by
-// BuildMatrixModule rather than panicked at package import.
-var tensorTypeInitErr error
-
-func registerTensorTypes() (*eng.Type, *eng.Type, *eng.Type) {
-	// Tensor first — Matrix and Vector register as its lattice
-	// children and so need it present in eng.Builtin.
-	tensor, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor", 2001, tensorFormatBehavior{})
-	if err != nil {
-		tensorTypeInitErr = fmt.Errorf("matrix: register TTensor: %w", err)
+// MintTensorTypes mints the tensor family into r's type table (r is
+// aql:matrix-util's sub-registry) and returns the nodes. Tensor hangs
+// under the global Ideal branch — the same lattice position the
+// former global registrations occupied.
+func MintTensorTypes(r *native.Registry) TensorModuleTypes {
+	tensor := r.Types.MintTypeWithBehavior("Tensor", native.TIdeal, tensorFormatBehavior{})
+	return TensorModuleTypes{
+		Tensor: tensor,
+		Matrix: r.Types.MintTypeWithBehavior("Matrix", tensor, tensorFormatBehavior{}),
+		Vector: r.Types.MintTypeWithBehavior("Vector", tensor, tensorFormatBehavior{}),
 	}
-	// Tensor inherits Ideal's unified Rank from RegisterExternalBuiltin
-	// (external types take no positional slot — see builtinDecls in
-	// eng/go/typetable.go); Matrix and Vector inherit it in turn.
-	matrix, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Matrix", 2000, tensorFormatBehavior{})
-	if err != nil && tensorTypeInitErr == nil {
-		tensorTypeInitErr = fmt.Errorf("matrix: register TMatrix: %w", err)
-	}
-	vector, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Tensor/Vector", 2002, tensorFormatBehavior{})
-	if err != nil && tensorTypeInitErr == nil {
-		tensorTypeInitErr = fmt.Errorf("matrix: register TVector: %w", err)
-	}
-	return tensor, matrix, vector
 }
 
 // TensorData is a concrete tensor value: a dense float64 array stored
@@ -123,18 +111,19 @@ func (tensorFormatBehavior) Size(v native.Value) int {
 	return len(AsTensor(v).Data)
 }
 
-// tensorKindName names the tensor kind a type belongs to.
+// tensorKindName names the tensor kind a type belongs to — by
+// walking the parent chain for the kind names, so it needs no access
+// to a particular import's mints (the format Behavior carries no
+// state) and user refines (`def UMat refine (MatrixUtil.Matrix)`)
+// report their kind through their ancestry.
 func tensorKindName(vt *eng.Type) string {
-	switch {
-	case vt == nil:
-		return "Tensor"
-	case vt.ConformsTo(TVector):
-		return "Vector"
-	case vt.ConformsTo(TMatrix):
-		return "Matrix"
-	default:
-		return "Tensor"
+	for t := vt; t != nil; t = t.Parent {
+		switch t.Name {
+		case "Vector", "Matrix", "Tensor":
+			return t.Name
+		}
 	}
+	return "Tensor"
 }
 
 // shapeString renders a shape as "d0xd1x…".
@@ -173,9 +162,9 @@ func tensorValue(vt *eng.Type, td TensorData) native.Value {
 	return eng.NewExtension(vt, td)
 }
 
-// newMatrix builds a rank-2 tensor — a Matrix value.
-func newMatrix(rows, cols int, data []float64) native.Value {
-	return tensorValue(TMatrix, TensorData{Shape: []int{rows, cols}, Data: data})
+// newMatrix builds a rank-2 tensor — a Matrix value of this import's mint.
+func (tt TensorModuleTypes) newMatrix(rows, cols int, data []float64) native.Value {
+	return tensorValue(tt.Matrix, TensorData{Shape: []int{rows, cols}, Data: data})
 }
 
 // maxMatrixElems caps the number of entries a constructor will allocate
@@ -203,68 +192,89 @@ func validDims(rows, cols int) error {
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
 func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
-	// Surface any init-time tensor-type registration error (recorded
-	// instead of panicked — see registerTensorTypes / ADR-005).
-	if tensorTypeInitErr != nil {
-		return native.ModuleDesc{}, tensorTypeInitErr
-	}
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
+	// The tensor types escape to the importer (exported type literals,
+	// the Parent tag on every tensor value, and the add/sub/mul word-
+	// extension signatures), so they draw IDs from the importing tree's
+	// counter — see eng TypeTable.mintID and the BuildIOModule /
+	// StreamKind precedent.
+	subReg.Types.AdoptSeqFrom(parent.Types)
+	tt := MintTensorTypes(subReg)
 
-	for _, n := range MatrixNatives {
+	for _, n := range matrixNatives(tt) {
 		subReg.RegisterNativeFunc(n)
 	}
 
 	// Install the Tensor/Matrix/Vector type-kinds into the importing
-	// registry so `type` constructs and `make` instantiates them.
-	registerTensorIdeals(parent)
+	// registry so `refine` constructs shaped types and `make`
+	// instantiates them (via the exported literals — e.g.
+	// `make MatrixUtil.Matrix [[1 2][3 4]]`).
+	registerTensorIdeals(parent, tt)
 
 	exports := native.NewOrderedMap()
 
 	// Construction
-	exports.Set("create", makeListToMatrixFnDef("matrix-make", subReg))
-	exports.Set("zeros", makeIntIntToMatrixFnDef("matrix-zeros", subReg))
-	exports.Set("ones", makeIntIntToMatrixFnDef("matrix-ones", subReg))
-	exports.Set("eye", makeIntToMatrixFnDef("matrix-eye", subReg))
-	exports.Set("fill", makeIntIntNumToMatrixFnDef("matrix-fill", subReg))
+	exports.Set("create", makeListToMatrixFnDef(tt, "matrix-make", subReg))
+	exports.Set("zeros", makeIntIntToMatrixFnDef(tt, "matrix-zeros", subReg))
+	exports.Set("ones", makeIntIntToMatrixFnDef(tt, "matrix-ones", subReg))
+	exports.Set("eye", makeIntToMatrixFnDef(tt, "matrix-eye", subReg))
+	exports.Set("fill", makeIntIntNumToMatrixFnDef(tt, "matrix-fill", subReg))
 
 	// Shape. No `size` export: the core `size` word already reports a
 	// tensor's entry count via the Sizer behavior (TensorData), so a
 	// MatrixUtil.size would only shadow it — see ADR-001.
-	exports.Set("rows", makeMatrixToIntFnDef("matrix-rows", subReg))
-	exports.Set("cols", makeMatrixToIntFnDef("matrix-cols", subReg))
+	exports.Set("rows", makeMatrixToIntFnDef(tt, "matrix-rows", subReg))
+	exports.Set("cols", makeMatrixToIntFnDef(tt, "matrix-cols", subReg))
 
 	// Access
-	exports.Set("elem", makeMatrixIntIntToDecFnDef("matrix-at", subReg))
-	exports.Set("row", makeMatrixIntToListFnDef("matrix-row", subReg))
-	exports.Set("col", makeMatrixIntToListFnDef("matrix-col", subReg))
+	exports.Set("elem", makeMatrixIntIntToDecFnDef(tt, "matrix-at", subReg))
+	exports.Set("row", makeMatrixIntToListFnDef(tt, "matrix-row", subReg))
+	exports.Set("col", makeMatrixIntToListFnDef(tt, "matrix-col", subReg))
 
 	// Arithmetic
-	exports.Set("mat-add", makeMatrixMatrixToMatrixFnDef("matrix-mat-add", subReg))
-	exports.Set("mat-sub", makeMatrixMatrixToMatrixFnDef("matrix-mat-sub", subReg))
-	exports.Set("mat-mul", makeMatrixMatrixToMatrixFnDef("matrix-mat-mul", subReg))
-	exports.Set("scale", makeMatrixNumToMatrixFnDef("matrix-scale", subReg))
-	exports.Set("mat-emul", makeMatrixMatrixToMatrixFnDef("matrix-mat-emul", subReg))
+	exports.Set("mat-add", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-add", subReg))
+	exports.Set("mat-sub", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-sub", subReg))
+	exports.Set("mat-mul", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-mul", subReg))
+	exports.Set("scale", makeMatrixNumToMatrixFnDef(tt, "matrix-scale", subReg))
+	exports.Set("mat-emul", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-emul", subReg))
 
 	// Transform. The flat row-major list of entries is exported as
 	// `values`, not `flatten`, so it does not shadow the core `flatten`
 	// word (ADR-001). `transpose` is an aql:array module word, not a
 	// core word, so MatrixUtil.transpose is fine.
-	exports.Set("transpose", makeUnaryMatrixFnDef("matrix-transpose", subReg))
-	exports.Set("values", makeMatrixToListFnDef("matrix-flatten", subReg))
+	exports.Set("transpose", makeUnaryMatrixFnDef(tt, "matrix-transpose", subReg))
+	exports.Set("values", makeMatrixToListFnDef(tt, "matrix-flatten", subReg))
 
 	// Aggregation
-	exports.Set("sum", makeMatrixToDecFnDef("matrix-sum", subReg))
-	exports.Set("tr", makeMatrixToDecFnDef("matrix-trace", subReg))
-	exports.Set("det", makeMatrixToDecFnDef("matrix-det", subReg))
+	exports.Set("sum", makeMatrixToDecFnDef(tt, "matrix-sum", subReg))
+	exports.Set("tr", makeMatrixToDecFnDef(tt, "matrix-trace", subReg))
+	exports.Set("det", makeMatrixToDecFnDef(tt, "matrix-det", subReg))
 
 	// Vector
 	exports.Set("dot", makeListListToDecFnDef("matrix-dot", subReg))
 
+	// The module-owned tensor types, exported as type literals so the
+	// importer can reference them — `make MatrixUtil.Matrix [[1 2][3 4]]`,
+	// `x is MatrixUtil.Tensor` — mirroring IO.StreamKind.
+	exports.Set("Tensor", native.NewTypeLiteral(tt.Tensor))
+	exports.Set("Matrix", native.NewTypeLiteral(tt.Matrix))
+	exports.Set("Vector", native.NewTypeLiteral(tt.Vector))
+
+	// The matrix arithmetic, exported as WORD EXTENSIONS: import
+	// transplants [Matrix Matrix] overloads onto the importer's bare
+	// add / sub / mul (and MatrixUtil.add etc. work namespaced). The
+	// minted Matrix type is what satisfies the module-scope user-type
+	// rule; mat-add / mat-sub / mat-mul stay as aliases.
+	for _, ext := range TensorArithmeticExtensions(tt) {
+		exports.Set(ext.Extends, native.NewFnDef(ext))
+	}
+
 	modID := parent.Modules.NextID()
 	desc := native.ModuleDesc{
+		Src:     subReg,
 		ID:      modID,
 		Exports: map[string]*native.OrderedMap{"MatrixUtil": exports},
 	}
@@ -273,54 +283,54 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 // --- FnDef helpers ---
 
-func makeListToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeListToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TList}},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{tt.Matrix},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-func makeIntIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeIntIntToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{tt.Matrix},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-func makeIntToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeIntToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{tt.Matrix},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-func makeIntIntNumToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeIntIntNumToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TNumber}},
-			Returns: []*native.Type{TMatrix},
+			Returns: []*native.Type{tt.Matrix},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-func makeMatrixToIntFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeMatrixToIntFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}},
+			Params:  []native.FnParam{{Type: tt.Matrix}},
 			Returns: []*native.Type{native.TInteger},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
@@ -328,7 +338,7 @@ func makeMatrixToIntFnDef(wordName string, subReg *native.Registry) native.Value
 	})
 }
 
-func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeMatrixIntIntToDecFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	// FnDef.Params is matched deepest-first against the user stack. Keep the
 	// user-facing positional order `mat row col` (deepest→top) so the
 	// wrapper resolves correctly; the underlying NativeFunc sig is the
@@ -336,7 +346,7 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 	// "data-last" by virtue of mat being deepest.
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}, {Type: native.TInteger}},
+			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: native.TInteger}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TFloat},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
@@ -344,10 +354,10 @@ func makeMatrixIntIntToDecFnDef(wordName string, subReg *native.Registry) native
 	})
 }
 
-func makeMatrixIntToListFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeMatrixIntToListFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TInteger}},
+			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: native.TInteger}},
 			Returns: []*native.Type{native.TList},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
@@ -355,43 +365,43 @@ func makeMatrixIntToListFnDef(wordName string, subReg *native.Registry) native.V
 	})
 }
 
-func makeMatrixMatrixToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeMatrixMatrixToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}, {Type: TMatrix}},
-			Returns: []*native.Type{TMatrix},
+			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: tt.Matrix}},
+			Returns: []*native.Type{tt.Matrix},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-func makeMatrixNumToMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeMatrixNumToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}, {Type: native.TNumber}},
-			Returns: []*native.Type{TMatrix},
+			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: native.TNumber}},
+			Returns: []*native.Type{tt.Matrix},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-func makeUnaryMatrixFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeUnaryMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}},
-			Returns: []*native.Type{TMatrix},
+			Params:  []native.FnParam{{Type: tt.Matrix}},
+			Returns: []*native.Type{tt.Matrix},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})
 }
 
-func makeMatrixToListFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeMatrixToListFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}},
+			Params:  []native.FnParam{{Type: tt.Matrix}},
 			Returns: []*native.Type{native.TList},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
@@ -399,10 +409,10 @@ func makeMatrixToListFnDef(wordName string, subReg *native.Registry) native.Valu
 	})
 }
 
-func makeMatrixToDecFnDef(wordName string, subReg *native.Registry) native.Value {
+func makeMatrixToDecFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
 	return native.NewFnDef(native.FnDefInfo{Name: wordName,
 		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: TMatrix}},
+			Params:  []native.FnParam{{Type: tt.Matrix}},
 			Returns: []*native.Type{native.TFloat},
 			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
 		}},
@@ -427,462 +437,497 @@ func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Val
 // module's Go-implemented words. Replaces the per-word
 // registerMatrix* functions and the master registerAllMatrixWords
 // aggregator.
-var MatrixNatives = []native.NativeFunc{
-	// Construction.
-	{
-		Name: "matrix-make",
+// matrixNatives builds the module's Go-implemented words,
+// parameterised by the per-import tensor mints.
+func matrixNatives(tt TensorModuleTypes) []native.NativeFunc {
+	return []native.NativeFunc{
+		// Construction.
+		{
+			Name: "matrix-make",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TList},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				td, err := matrixFromRows(args[0])
-				if err != nil {
-					return nil, err
-				}
-				return []native.Value{tensorValue(TMatrix, td)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		// rows cols zeros → args[0]=cols (top), args[1]=rows (deeper)
-		Name: "matrix-zeros",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TList},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					td, err := matrixFromRows(args[0])
+					if err != nil {
+						return nil, err
+					}
+					return []native.Value{tensorValue(tt.Matrix, td)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			// rows cols zeros → args[0]=cols (top), args[1]=rows (deeper)
+			Name: "matrix-zeros",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TInteger, native.TInteger},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				r64, err := args[1].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				c64, err := args[0].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				rows, cols := int(r64), int(c64)
-				if err := validDims(rows, cols); err != nil {
-					return nil, err
-				}
-				data := make([]float64, rows*cols)
-				return []native.Value{newMatrix(rows, cols, data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		// rows cols ones → args[0]=cols (top), args[1]=rows (deeper)
-		Name: "matrix-ones",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TInteger, native.TInteger},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					r64, err := args[1].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					c64, err := args[0].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					rows, cols := int(r64), int(c64)
+					if err := validDims(rows, cols); err != nil {
+						return nil, err
+					}
+					data := make([]float64, rows*cols)
+					return []native.Value{tt.newMatrix(rows, cols, data)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			// rows cols ones → args[0]=cols (top), args[1]=rows (deeper)
+			Name: "matrix-ones",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TInteger, native.TInteger},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				r64, err := args[1].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				c64, err := args[0].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				rows, cols := int(r64), int(c64)
-				if err := validDims(rows, cols); err != nil {
-					return nil, err
-				}
-				data := make([]float64, rows*cols)
-				for i := range data {
-					data[i] = 1.0
-				}
-				return []native.Value{newMatrix(rows, cols, data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-eye",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TInteger, native.TInteger},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					r64, err := args[1].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					c64, err := args[0].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					rows, cols := int(r64), int(c64)
+					if err := validDims(rows, cols); err != nil {
+						return nil, err
+					}
+					data := make([]float64, rows*cols)
+					for i := range data {
+						data[i] = 1.0
+					}
+					return []native.Value{tt.newMatrix(rows, cols, data)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-eye",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TInteger},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				n64, err := args[0].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				n := int(n64)
-				if err := validDims(n, n); err != nil {
-					return nil, err
-				}
-				data := make([]float64, n*n)
-				for i := 0; i < n; i++ {
-					data[i*n+i] = 1.0
-				}
-				return []native.Value{newMatrix(n, n, data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-fill",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TInteger},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					n64, err := args[0].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					n := int(n64)
+					if err := validDims(n, n); err != nil {
+						return nil, err
+					}
+					data := make([]float64, n*n)
+					for i := 0; i < n; i++ {
+						data[i*n+i] = 1.0
+					}
+					return []native.Value{tt.newMatrix(n, n, data)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-fill",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TInteger, native.TInteger, native.TNumber},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				r64, err := args[0].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				c64, err := args[1].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				val, err := native.AsNumber(args[2])
-				if err != nil {
-					return nil, err
-				}
-				rows, cols := int(r64), int(c64)
-				if err := validDims(rows, cols); err != nil {
-					return nil, err
-				}
-				data := make([]float64, rows*cols)
-				for i := range data {
-					data[i] = val
-				}
-				return []native.Value{newMatrix(rows, cols, data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	// Shape.
-	{
-		Name: "matrix-rows",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TInteger, native.TInteger, native.TNumber},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					r64, err := args[0].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					c64, err := args[1].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					val, err := native.AsNumber(args[2])
+					if err != nil {
+						return nil, err
+					}
+					rows, cols := int(r64), int(c64)
+					if err := validDims(rows, cols); err != nil {
+						return nil, err
+					}
+					data := make([]float64, rows*cols)
+					for i := range data {
+						data[i] = val
+					}
+					return []native.Value{tt.newMatrix(rows, cols, data)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		// Shape.
+		{
+			Name: "matrix-rows",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				return []native.Value{native.NewInteger(int64(m.Rows()))}, nil
-			}),
-			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-cols",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					return []native.Value{native.NewInteger(int64(m.Rows()))}, nil
+				}),
+				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-cols",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				return []native.Value{native.NewInteger(int64(m.Cols()))}, nil
-			}),
-			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-size",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					return []native.Value{native.NewInteger(int64(m.Cols()))}, nil
+				}),
+				Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-size",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				return []native.Value{native.NewInteger(int64(m.Rows() * m.Cols()))}, nil
-			}),
-			Returns: []*native.Type{native.TList}, BarrierPos: -1,
-		}},
-	},
-	// Access.
-	{
-		Name: "matrix-at",
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					return []native.Value{native.NewInteger(int64(m.Rows() * m.Cols()))}, nil
+				}),
+				Returns: []*native.Type{native.TList}, BarrierPos: -1,
+			}},
+		},
+		// Access.
+		{
+			Name: "matrix-at",
 
-		Signatures: []native.Signature{{
-			// Data-last: [col, row, mat]. Under §1.4 stack-top-first matching,
-			// `mat row col matrix-at` binds sig[0]=col (top), sig[1]=row,
-			// sig[2]=mat (deepest).
-			Args: []*native.Type{native.TInteger, native.TInteger, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				c64, err := args[0].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				r64, err := args[1].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				m := AsTensor(args[2])
-				row, col := int(r64), int(c64)
-				if row < 0 || row >= m.Rows() || col < 0 || col >= m.Cols() {
-					return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows(), m.Cols())
-				}
-				return []native.Value{native.NewFloat(m.Data[row*m.Cols()+col])}, nil
-			}),
-			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-row",
+			Signatures: []native.Signature{{
+				// Data-last: [col, row, mat]. Under §1.4 stack-top-first matching,
+				// `mat row col matrix-at` binds sig[0]=col (top), sig[1]=row,
+				// sig[2]=mat (deepest).
+				Args: []*native.Type{native.TInteger, native.TInteger, tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					c64, err := args[0].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					r64, err := args[1].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					m := AsTensor(args[2])
+					row, col := int(r64), int(c64)
+					if row < 0 || row >= m.Rows() || col < 0 || col >= m.Cols() {
+						return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows(), m.Cols())
+					}
+					return []native.Value{native.NewFloat(m.Data[row*m.Cols()+col])}, nil
+				}),
+				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-row",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TInteger, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				r64, err := args[0].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				m := AsTensor(args[1])
-				row := int(r64)
-				if row < 0 || row >= m.Rows() {
-					return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows())
-				}
-				elems := make([]native.Value, m.Cols())
-				for j := 0; j < m.Cols(); j++ {
-					elems[j] = native.NewFloat(m.Data[row*m.Cols()+j])
-				}
-				return []native.Value{native.NewList(elems)}, nil
-			}),
-			Returns: []*native.Type{native.TList}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-col",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TInteger, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				c64, err := args[0].AsConcreteInteger()
-				if err != nil {
-					return nil, err
-				}
-				m := AsTensor(args[1])
-				col := int(c64)
-				if col < 0 || col >= m.Cols() {
-					return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols())
-				}
-				elems := make([]native.Value, m.Rows())
-				for i := 0; i < m.Rows(); i++ {
-					elems[i] = native.NewFloat(m.Data[i*m.Cols()+col])
-				}
-				return []native.Value{native.NewList(elems)}, nil
-			}),
-			Returns: []*native.Type{native.TList}, BarrierPos: -1,
-		}},
-	},
-	// Arithmetic.
-	{
-		Name: "matrix-mat-add",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				a := AsTensor(args[0])
-				b := AsTensor(args[1])
-				if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
-					return nil, fmt.Errorf("mat-add: dimension mismatch %dx%d vs %dx%d", a.Rows(), a.Cols(), b.Rows(), b.Cols())
-				}
-				data := make([]float64, len(a.Data))
-				for i := range data {
-					data[i] = a.Data[i] + b.Data[i]
-				}
-				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		// a b mat-sub → args[0]=b (top), args[1]=a
-		Name: "matrix-mat-sub",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				a := AsTensor(args[1])
-				b := AsTensor(args[0])
-				if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
-					return nil, fmt.Errorf("mat-sub: dimension mismatch %dx%d vs %dx%d", a.Rows(), a.Cols(), b.Rows(), b.Cols())
-				}
-				data := make([]float64, len(a.Data))
-				for i := range data {
-					data[i] = a.Data[i] - b.Data[i]
-				}
-				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		// a b mat-mul → args[0]=b (top), args[1]=a
-		Name: "matrix-mat-mul",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				a := AsTensor(args[1])
-				b := AsTensor(args[0])
-				result, err := matMul(a, b)
-				if err != nil {
-					return nil, err
-				}
-				return []native.Value{tensorValue(TMatrix, result)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-scale",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TNumber, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				s, err := native.AsNumber(args[0])
-				if err != nil {
-					return nil, err
-				}
-				m := AsTensor(args[1])
-				data := make([]float64, len(m.Data))
-				for i := range data {
-					data[i] = m.Data[i] * s
-				}
-				return []native.Value{newMatrix(m.Rows(), m.Cols(), data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-mat-emul",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix, TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				a := AsTensor(args[0])
-				b := AsTensor(args[1])
-				if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
-					return nil, fmt.Errorf("mat-emul: dimension mismatch %dx%d vs %dx%d", a.Rows(), a.Cols(), b.Rows(), b.Cols())
-				}
-				data := make([]float64, len(a.Data))
-				for i := range data {
-					data[i] = a.Data[i] * b.Data[i]
-				}
-				return []native.Value{newMatrix(a.Rows(), a.Cols(), data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	// Transform.
-	{
-		Name: "matrix-transpose",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				data := make([]float64, len(m.Data))
-				for i := 0; i < m.Rows(); i++ {
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TInteger, tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					r64, err := args[0].AsConcreteInteger()
+					if err != nil {
+						return nil, err
+					}
+					m := AsTensor(args[1])
+					row := int(r64)
+					if row < 0 || row >= m.Rows() {
+						return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows())
+					}
+					elems := make([]native.Value, m.Cols())
 					for j := 0; j < m.Cols(); j++ {
-						data[j*m.Rows()+i] = m.Data[i*m.Cols()+j]
+						elems[j] = native.NewFloat(m.Data[row*m.Cols()+j])
 					}
-				}
-				return []native.Value{newMatrix(m.Cols(), m.Rows(), data)}, nil
-			}),
-			Returns: []*native.Type{TMatrix}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-flatten",
+					return []native.Value{native.NewList(elems)}, nil
+				}),
+				Returns: []*native.Type{native.TList}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-col",
 
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				elems := make([]native.Value, len(m.Data))
-				for i, v := range m.Data {
-					elems[i] = native.NewFloat(v)
-				}
-				return []native.Value{native.NewList(elems)}, nil
-			}),
-			Returns: []*native.Type{native.TList}, BarrierPos: -1,
-		}},
-	},
-	// Aggregation.
-	{
-		Name: "matrix-sum",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				s := 0.0
-				for _, v := range m.Data {
-					s += v
-				}
-				return []native.Value{native.NewFloat(s)}, nil
-			}),
-			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-trace",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				if m.Rows() != m.Cols() {
-					return nil, fmt.Errorf("trace: not square (%dx%d)", m.Rows(), m.Cols())
-				}
-				s := 0.0
-				for i := 0; i < m.Rows(); i++ {
-					s += m.Data[i*m.Cols()+i]
-				}
-				return []native.Value{native.NewFloat(s)}, nil
-			}),
-			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
-		}},
-	},
-	{
-		Name: "matrix-det",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{TMatrix},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				m := AsTensor(args[0])
-				d, err := matDet(m)
-				if err != nil {
-					return nil, err
-				}
-				return []native.Value{native.NewFloat(d)}, nil
-			}),
-			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
-		}},
-	},
-	// Vector.
-	{
-		Name: "matrix-dot",
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TList, native.TList},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				a, _ := native.AsList(args[0])
-				b, _ := native.AsList(args[1])
-				if a.IsNil() || b.IsNil() {
-					return nil, fmt.Errorf("dot: expected two lists")
-				}
-				if a.Len() != b.Len() {
-					return nil, fmt.Errorf("dot: length mismatch %d vs %d", a.Len(), b.Len())
-				}
-				s := 0.0
-				for i := 0; i < a.Len(); i++ {
-					av, err := native.AsNumber(a.Get(i))
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TInteger, tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					c64, err := args[0].AsConcreteInteger()
 					if err != nil {
 						return nil, err
 					}
-					bv, err := native.AsNumber(b.Get(i))
+					m := AsTensor(args[1])
+					col := int(c64)
+					if col < 0 || col >= m.Cols() {
+						return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols())
+					}
+					elems := make([]native.Value, m.Rows())
+					for i := 0; i < m.Rows(); i++ {
+						elems[i] = native.NewFloat(m.Data[i*m.Cols()+col])
+					}
+					return []native.Value{native.NewList(elems)}, nil
+				}),
+				Returns: []*native.Type{native.TList}, BarrierPos: -1,
+			}},
+		},
+		// Arithmetic.
+		{
+			Name: "matrix-mat-add",
+
+			Signatures: []native.Signature{{
+				Args:    []*native.Type{tt.Matrix, tt.Matrix},
+				Impl:    native.Go(tt.matAddHandler),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			// a b mat-sub → args[0]=b (top), args[1]=a
+			Name: "matrix-mat-sub",
+
+			Signatures: []native.Signature{{
+				Args:    []*native.Type{tt.Matrix, tt.Matrix},
+				Impl:    native.Go(tt.matSubHandler),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			// a b mat-mul → args[0]=b (top), args[1]=a
+			Name: "matrix-mat-mul",
+
+			Signatures: []native.Signature{{
+				Args:    []*native.Type{tt.Matrix, tt.Matrix},
+				Impl:    native.Go(tt.matMulHandler),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-scale",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TNumber, tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					s, err := native.AsNumber(args[0])
 					if err != nil {
 						return nil, err
 					}
-					s += av * bv
-				}
-				return []native.Value{native.NewFloat(s)}, nil
-			}),
-			Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
-		}},
-	},
+					m := AsTensor(args[1])
+					data := make([]float64, len(m.Data))
+					for i := range data {
+						data[i] = m.Data[i] * s
+					}
+					return []native.Value{tt.newMatrix(m.Rows(), m.Cols(), data)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-mat-emul",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix, tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					a := AsTensor(args[0])
+					b := AsTensor(args[1])
+					if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
+						return nil, fmt.Errorf("mat-emul: dimension mismatch %dx%d vs %dx%d", a.Rows(), a.Cols(), b.Rows(), b.Cols())
+					}
+					data := make([]float64, len(a.Data))
+					for i := range data {
+						data[i] = a.Data[i] * b.Data[i]
+					}
+					return []native.Value{tt.newMatrix(a.Rows(), a.Cols(), data)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		// Transform.
+		{
+			Name: "matrix-transpose",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					data := make([]float64, len(m.Data))
+					for i := 0; i < m.Rows(); i++ {
+						for j := 0; j < m.Cols(); j++ {
+							data[j*m.Rows()+i] = m.Data[i*m.Cols()+j]
+						}
+					}
+					return []native.Value{tt.newMatrix(m.Cols(), m.Rows(), data)}, nil
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-flatten",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					elems := make([]native.Value, len(m.Data))
+					for i, v := range m.Data {
+						elems[i] = native.NewFloat(v)
+					}
+					return []native.Value{native.NewList(elems)}, nil
+				}),
+				Returns: []*native.Type{native.TList}, BarrierPos: -1,
+			}},
+		},
+		// Aggregation.
+		{
+			Name: "matrix-sum",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					s := 0.0
+					for _, v := range m.Data {
+						s += v
+					}
+					return []native.Value{native.NewFloat(s)}, nil
+				}),
+				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-trace",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					if m.Rows() != m.Cols() {
+						return nil, fmt.Errorf("trace: not square (%dx%d)", m.Rows(), m.Cols())
+					}
+					s := 0.0
+					for i := 0; i < m.Rows(); i++ {
+						s += m.Data[i*m.Cols()+i]
+					}
+					return []native.Value{native.NewFloat(s)}, nil
+				}),
+				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+			}},
+		},
+		{
+			Name: "matrix-det",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					m := AsTensor(args[0])
+					d, err := matDet(m)
+					if err != nil {
+						return nil, err
+					}
+					return []native.Value{native.NewFloat(d)}, nil
+				}),
+				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+			}},
+		},
+		// Vector.
+		{
+			Name: "matrix-dot",
+
+			Signatures: []native.Signature{{
+				Args: []*native.Type{native.TList, native.TList},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					a, _ := native.AsList(args[0])
+					b, _ := native.AsList(args[1])
+					if a.IsNil() || b.IsNil() {
+						return nil, fmt.Errorf("dot: expected two lists")
+					}
+					if a.Len() != b.Len() {
+						return nil, fmt.Errorf("dot: length mismatch %d vs %d", a.Len(), b.Len())
+					}
+					s := 0.0
+					for i := 0; i < a.Len(); i++ {
+						av, err := native.AsNumber(a.Get(i))
+						if err != nil {
+							return nil, err
+						}
+						bv, err := native.AsNumber(b.Get(i))
+						if err != nil {
+							return nil, err
+						}
+						s += av * bv
+					}
+					return []native.Value{native.NewFloat(s)}, nil
+				}),
+				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+			}},
+		},
+	}
+}
+
+// matAddHandler / matSubHandler / matMulHandler are the shared
+// matrix-arithmetic handlers: each backs BOTH the namespaced mat-*
+// word and the module's add / sub / mul word extension, so the two
+// surfaces cannot drift. Arg order follows the kernel convention —
+// args[1] op args[0] for the non-commutative ops, matching mat-sub /
+// mat-mul's historical stack reading (`a b mat-sub` → a-b).
+func (tt TensorModuleTypes) matAddHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+	a := AsTensor(args[0])
+	b := AsTensor(args[1])
+	if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
+		return nil, fmt.Errorf("mat-add: dimension mismatch %dx%d vs %dx%d", a.Rows(), a.Cols(), b.Rows(), b.Cols())
+	}
+	data := make([]float64, len(a.Data))
+	for i := range data {
+		data[i] = a.Data[i] + b.Data[i]
+	}
+	return []native.Value{tt.newMatrix(a.Rows(), a.Cols(), data)}, nil
+}
+
+func (tt TensorModuleTypes) matSubHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+	a := AsTensor(args[1])
+	b := AsTensor(args[0])
+	if a.Rows() != b.Rows() || a.Cols() != b.Cols() {
+		return nil, fmt.Errorf("mat-sub: dimension mismatch %dx%d vs %dx%d", a.Rows(), a.Cols(), b.Rows(), b.Cols())
+	}
+	data := make([]float64, len(a.Data))
+	for i := range data {
+		data[i] = a.Data[i] - b.Data[i]
+	}
+	return []native.Value{tt.newMatrix(a.Rows(), a.Cols(), data)}, nil
+}
+
+func (tt TensorModuleTypes) matMulHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+	a := AsTensor(args[1])
+	b := AsTensor(args[0])
+	result, err := matMul(a, b)
+	if err != nil {
+		return nil, err
+	}
+	return []native.Value{tensorValue(tt.Matrix, result)}, nil
+}
+
+// TensorArithmeticExtensions builds the add / sub / mul WORD-EXTENSION
+// clones the module exports (design/OPEN-WORDS.0.md §6 migration 2):
+// import transplants [Matrix Matrix] overloads onto the importer's
+// bare add / sub / mul, anchored by the module's minted Matrix type.
+// The mat-* words remain as aliases backed by the same handlers.
+func TensorArithmeticExtensions(tt TensorModuleTypes) []native.FnDefInfo {
+	return []native.FnDefInfo{
+		native.NewWordExtension("add", []native.Signature{
+			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matAddHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
+		}),
+		native.NewWordExtension("sub", []native.Signature{
+			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matSubHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
+		}),
+		native.NewWordExtension("mul", []native.Signature{
+			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matMulHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
+		}),
+	}
 }
 
 // --- Internal helpers ---

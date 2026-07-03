@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -131,22 +132,12 @@ func composeAltActions(acts []tabnasabnf.ActionFn) tabnas.AltAction {
 	}
 }
 
-// parseTypeInitErr records a type-registration failure (ADR-005: recorded,
-// not panicked) for BuildParseModule to surface.
-var parseTypeInitErr error
-
-// TParseGrammar is the carrier type for a Parse.grammar builder: it wraps the
-// *tabnas.Tabnas engine + callbacks in an ExtensionPayload the kernel never
-// inspects.
-var TParseGrammar = registerParseGrammarType()
-
-func registerParseGrammarType() *native.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/ParseGrammar", 5005, nil)
-	if err != nil {
-		parseTypeInitErr = fmt.Errorf("parse: register Ideal/ParseGrammar: %w", err)
-	}
-	return t
-}
+// The ParseGrammar carrier type — wrapping the *tabnas.Tabnas engine +
+// callbacks in an ExtensionPayload the kernel never inspects — is a
+// per-import module mint (former global FixedID 5005, retired):
+// BuildParseModule mints it into the sub-registry and threads it to
+// the grammar constructor. See MintTemporalModuleTypes /
+// MintTensorTypes for the pattern.
 
 // asParseGrammar unwraps a Grammar carrier, or errors with a clear message.
 func asParseGrammar(v native.Value, word string, r *native.Registry) (*parseGrammar, error) {
@@ -163,16 +154,16 @@ func asParseGrammar(v native.Value, word string, r *native.Registry) (*parseGram
 
 // BuildParseModule creates the "aql:parse" native module.
 func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
-	if parseTypeInitErr != nil {
-		return native.ModuleDesc{}, parseTypeInitErr
-	}
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 	exports := native.NewOrderedMap()
 
-	gT := TParseGrammar
+	// Grammar values escape to the importer, so the mint draws its ID
+	// from the importing tree's counter.
+	subReg.Types.AdoptSeqFrom(parent.Types)
+	gT := subReg.Types.MintType("ParseGrammar", native.TIdeal)
 
 	// ---- grammar — mint a fresh builder --------------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
@@ -181,7 +172,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{},
 			Returns:    []*native.Type{gT},
 			BarrierPos: -1,
-			Impl:       native.Go(parseGrammarHandler),
+			Impl:       native.Go(parseGrammarHandlerFor(gT)),
 		}},
 	})
 	exports.Set("grammar", wrapMiniFnDef("parse-grammar", [][]native.FnParam{{}},
@@ -224,6 +215,25 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("rule", wrapMiniFnDef("parse-rule", [][]native.FnParam{
 		{{Type: gT}, {Type: native.TAtom, Quote: true}, {Type: native.TMap}},
 	}, []*native.Type{}, map[int]bool{1: true}, subReg))
+
+	// ---- spec — the WHOLE grammar as one declarative map ----------------
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "parse-spec",
+		Signatures: []native.Signature{{
+			Args:          []*native.Type{gT, native.TMap},
+			Returns:       []*native.Type{},
+			BarrierPos:    -1,
+			CompileEffect: native.CompileStoresFn, // action/matcher fns in the map are stored, not invoked
+			Impl:          native.Go(parseSpecHandler),
+			// Check-mode hook: the map's section/shape rules are
+			// map-decidable, so a dry pass validates a concrete spec map
+			// during analysis (parseSpecReturns).
+			ReturnsFn: parseSpecReturns,
+		}},
+	})
+	exports.Set("spec", wrapMiniFnDef("parse-spec", [][]native.FnParam{
+		{{Type: gT}, {Type: native.TMap}},
+	}, []*native.Type{}, nil, subReg))
 
 	// ---- token — register a fixed lexer token --------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
@@ -303,6 +313,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("RuleSpec", parseRuleSpecType())
 
 	return native.ModuleDesc{
+		Src:     subReg,
 		ID:      parent.Modules.NextID(),
 		Exports: map[string]*native.OrderedMap{"Parse": exports},
 	}, nil
@@ -318,9 +329,12 @@ func parseAltSpecType() native.Value {
 	f.Set("p", native.NewTypeLiteral(native.TString)) // push rule
 	f.Set("r", native.NewTypeLiteral(native.TString)) // replace rule
 	f.Set("b", native.NewTypeLiteral(native.TAny))    // backtrack (Integer or rule ref)
-	f.Set("a", native.NewTypeLiteral(native.TAny))    // action: a Function or a "@ref" String
+	f.Set("a", native.NewTypeLiteral(native.TAny))    // action: a Function, a "@ref" String, or a list of either
 	f.Set("g", native.NewTypeLiteral(native.TString)) // group tags
 	f.Set("n", native.NewTypeLiteral(native.TMap))    // counter increments
+	f.Set("c", native.NewTypeLiteral(native.TMap))    // declarative condition ({'counter':n} → $eq)
+	f.Set("u", native.NewTypeLiteral(native.TMap))    // custom props
+	f.Set("k", native.NewTypeLiteral(native.TMap))    // propagated custom props
 	return native.NewOptionsType(f)
 }
 
@@ -335,12 +349,14 @@ func parseRuleSpecType() native.Value {
 
 // ---- handlers --------------------------------------------------------
 
-func parseGrammarHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-	g := &parseGrammar{
-		j:           tabnas.Make(), // bare engine — the user's grammar is the whole grammar
-		markActions: tabnasabnf.ActionsMap{},
+func parseGrammarHandlerFor(gT *native.Type) native.Handler {
+	return func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+		g := &parseGrammar{
+			j:           tabnas.Make(), // bare engine — the user's grammar is the whole grammar
+			markActions: tabnasabnf.ActionsMap{},
+		}
+		return []native.Value{eng.NewExtension(gT, g)}, nil
 	}
-	return []native.Value{eng.NewExtension(TParseGrammar, g)}, nil
 }
 
 // parseAbnfHandler — args[0]=grammar, args[1]=src, args[2]=opts (optional).
@@ -360,7 +376,14 @@ func parseAbnfHandler(args []native.Value, _ map[string]native.Value, _ []native
 	if len(args) > 2 {
 		opts = args[2]
 	}
-	o := abnfOptsFrom(opts)
+	g.addAbnfStep(src, abnfOptsFrom(opts))
+	return nil, nil
+}
+
+// addAbnfStep defers an ABNF install to Parse.register (when every mark
+// action is known). Shared by Parse.abnf and the abnf section of
+// Parse.spec.
+func (g *parseGrammar) addAbnfStep(src string, o *tabnasabnf.AbnfConvertOptions) {
 	g.steps = append(g.steps, func() error {
 		var acts tabnasabnf.ActionsMap
 		if len(g.markActions) > 0 {
@@ -371,7 +394,264 @@ func parseAbnfHandler(args []native.Value, _ map[string]native.Value, _ []native
 		}
 		return nil
 	})
-	return nil, nil
+}
+
+// parseSpecHandler — args[0]=grammar, args[1]=the WHOLE grammar as one
+// declarative map, mirroring the tabnas GrammarSpec document shape
+// (grammarspec.go: {options, rule, ref, v}) plus the two AQL-side
+// extension sections tabnas has no JSON home for:
+//
+//	Parse.spec g {
+//	  options: {fixed:{token:{'#PL':'+'}} rule:{start:'op'} …}  # tabnas OptionsMap (MapToOptions)
+//	  ref:     {'@op:o:INC': (…)}                # name → fn, or a LIST of fns (run in order)
+//	  rule:    {extra:{open:[{s:'#PL'}]}}        # name → GrammarRuleSpec map (Parse.rule shape)
+//	  v:       1                                 # optional builtin config-schema version gate
+//	  abnf:    {src:'op = "inc"' start:'op'}     # EXTENSION: String | {src:… +abnf opts} | a LIST of either
+//	  matcher: {skip:{priority:1000000 fn:(…)}}  # EXTENSION: name → {priority fn} custom lex matchers
+//	}
+//
+// Every section is optional; an unknown section key is a loud error.
+// Sections apply in tabnas' order — options (with v) first, then refs,
+// rules, ABNF — regardless of key order, and matchers are collected
+// for the apply-last pass Parse.register runs (exactly as with the
+// chained builder words, which this form is equivalent to and composes
+// with). ref entries feed the same named-action table Parse.action
+// fills, so they serve both ABNF marks ('@rule:phase' /
+// '@rule:o|c:MARK') and rule-alt `a:'@name'` references. Fixed tokens
+// have no section of their own — they are tabnas options
+// (options.fixed.token), exactly as in a serialized tabnas grammar.
+func parseSpecHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	g, err := asParseGrammar(args[0], "Parse.spec", r)
+	if err != nil {
+		return nil, err
+	}
+	if err := g.ensureOpen("Parse.spec", r); err != nil {
+		return nil, err
+	}
+	return nil, applySpecMap(g, args[1], r, false)
+}
+
+// parseSpecReturns is Parse.spec's check-mode hook: the map argument is
+// usually CONCRETE under analysis (the grammar carrier is not), and its
+// section/shape rules are map-decidable — so a dry validation pass runs
+// against a scratch builder and surfaces each shape error as a check
+// diagnostic with the byte-identical runtime message. The pass is
+// LENIENT: a non-concrete section or field value (a carrier riding in
+// the map) is skipped, never flagged.
+func parseSpecReturns(args []native.Value, r *native.Registry) []native.Value {
+	if r != nil && r.Check.IsActive() && len(args) == 2 && native.IsConcrete(args[1]) {
+		scratch := &parseGrammar{j: tabnas.Make(), markActions: tabnasabnf.ActionsMap{}}
+		if err := applySpecMap(scratch, args[1], r, true); err != nil {
+			code, detail := "parse_bad_spec", err.Error()
+			var ae *eng.AqlError
+			if errors.As(err, &ae) {
+				code, detail = ae.Code, ae.Detail
+			}
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "Parse.spec", args[1].Pos)
+		}
+	}
+	return []native.Value{}
+}
+
+// applySpecMap decomposes a whole-grammar map onto a builder. In
+// lenient mode (the check-mode dry pass) a non-concrete value is
+// skipped where the strict (runtime) mode requires a concrete shape.
+func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenient bool) error {
+	m, merr := native.RequireConcreteMap(specV, "Parse.spec")
+	if merr != nil {
+		return r.AqlError("parse_bad_spec", fmt.Sprintf("Parse.spec: %v", merr), "Parse.spec")
+	}
+	for _, k := range m.Keys() {
+		switch k {
+		case "options", "ref", "rule", "v", "abnf", "matcher":
+		default:
+			return r.AqlErrorHint("parse_bad_spec",
+				fmt.Sprintf("Parse.spec: unknown section %q", k), "Parse.spec",
+				"sections: options, ref, rule, v (the tabnas GrammarSpec shape), plus abnf and matcher")
+		}
+	}
+	// A section whose value is not a concrete map is a shape error at
+	// runtime and a skip under the lenient dry pass.
+	section := func(key, want string) (native.ReadMap, error) {
+		v, ok := m.Get(key)
+		if !ok {
+			return nil, nil
+		}
+		if lenient && !native.IsConcrete(v) {
+			return nil, nil
+		}
+		sm, _ := native.AsMap(v)
+		if sm == nil {
+			return nil, r.AqlError("parse_bad_spec",
+				fmt.Sprintf("Parse.spec: the %s section must be a map of %s", key, want), "Parse.spec")
+		}
+		return sm, nil
+	}
+
+	// options (+ v): the tabnas OptionsMap, applied FIRST — exactly as
+	// tabnas.Grammar applies a GrammarSpec's options before its rules.
+	// Fixed tokens ride here (options.fixed.token), the start rule too
+	// (options.rule.start), so a fully declarative grammar needs no
+	// section beyond options + rule + ref. The optional v key is the
+	// builtin config-schema version gate, passed through verbatim.
+	om, err := section("options", "tabnas options (fixed / rule / space / …)")
+	if err != nil {
+		return err
+	}
+	schemaV := 0
+	if vv, ok := m.Get("v"); ok && !(lenient && !native.IsConcrete(vv)) {
+		n, verr := vv.AsConcreteInteger()
+		if verr != nil {
+			return r.AqlError("parse_bad_spec",
+				fmt.Sprintf("Parse.spec: v must be an Integer, got %s", vv.String()), "Parse.spec")
+		}
+		schemaV = int(n)
+		// The version gate is map-decidable — enforce it here (fail
+		// fast, and the check-mode dry pass flags it) rather than at
+		// the deferred register replay. Mirrors tabnas.Grammar's gate.
+		if schemaV < 0 || schemaV > tabnas.BUILTIN_SCHEMA_VERSION {
+			return r.AqlError("parse_bad_spec",
+				fmt.Sprintf("Parse.spec: v requires builtin schema version %d, but this engine supports up to %d", schemaV, tabnas.BUILTIN_SCHEMA_VERSION), "Parse.spec")
+		}
+	}
+	if om != nil || schemaV != 0 {
+		gs := &tabnas.GrammarSpec{V: schemaV}
+		if om != nil {
+			gs.OptionsMap = specAnyMap(om)
+		}
+		g.steps = append(g.steps, func() error {
+			if gerr := g.j.Grammar(gs); gerr != nil {
+				return fmt.Errorf("options: %v", gerr)
+			}
+			return nil
+		})
+	}
+
+	// ref: {'@name': fn | [fn …]} — the named-action table, before the
+	// rules/abnf that reference the entries. Feeds the same table
+	// Parse.action fills, so a ref serves both ABNF marks and rule-alt
+	// a:'@name' references.
+	am, err := section("ref", "'@name' → Function")
+	if err != nil {
+		return err
+	}
+	for _, ref := range tmKeys(am) {
+		if !strings.HasPrefix(ref, "@") {
+			return r.AqlErrorHint("parse_bad_action",
+				fmt.Sprintf("Parse.spec: ref %q must start with '@'", ref), "Parse.spec",
+				"use @name (rule-alt a: reference), @rule:phase (bo/ao/bc/ac) or @rule:o|c:MARK")
+		}
+		fv, _ := am.Get(ref)
+		fns := []native.Value{fv}
+		if fv.Parent.ConformsTo(native.TList) && native.IsConcrete(fv) {
+			lst, _ := native.AsList(fv)
+			fns = lst.Slice()
+		}
+		for _, fn := range fns {
+			if lenient && !native.IsConcrete(fn) {
+				continue
+			}
+			if !isCallableValue(fn) {
+				return r.AqlError("parse_bad_action",
+					fmt.Sprintf("Parse.spec: ref %s: the value must be a Function (or a list of Functions), got %s", ref, fn.String()), "Parse.spec")
+			}
+			g.markActions[ref] = append(g.markActions[ref], g.wrapAction(fn))
+		}
+	}
+
+	// rule: {name: {open:[…] close:[…]}} — the Parse.rule shape per entry.
+	rm, err := section("rule", "name → {open:[…] close:[…]}")
+	if err != nil {
+		return err
+	}
+	for _, name := range tmKeys(rm) {
+		specEntry, _ := rm.Get(name)
+		if lenient && !native.IsConcrete(specEntry) {
+			continue
+		}
+		gs, rerr := ruleMapToSpec(g, name, specEntry, r)
+		if rerr != nil {
+			return rerr
+		}
+		name := name
+		g.steps = append(g.steps, func() error {
+			if gerr := g.j.Grammar(gs); gerr != nil {
+				return fmt.Errorf("rule %q: %v", name, gerr)
+			}
+			return nil
+		})
+	}
+
+	// abnf: String | {src:… start:… tag:… builtins:… marks:…} | [entry …]
+	if v, ok := m.Get("abnf"); ok && !(lenient && !native.IsConcrete(v)) {
+		entries := []native.Value{v}
+		if v.Parent.ConformsTo(native.TList) && native.IsConcrete(v) {
+			lst, _ := native.AsList(v)
+			entries = lst.Slice()
+		}
+		for _, e := range entries {
+			if lenient && !native.IsConcrete(e) {
+				continue
+			}
+			var src string
+			var opts native.Value
+			switch {
+			case e.Parent.ConformsTo(native.TString) && native.IsConcrete(e):
+				src, _ = e.AsConcreteString()
+			case e.Parent.ConformsTo(native.TMap) && native.IsConcrete(e):
+				em, _ := native.AsMap(e)
+				s, ok := native.MapFieldString(em, "src")
+				if em == nil || !ok {
+					return r.AqlError("parse_bad_abnf",
+						"Parse.spec: an abnf entry map must carry a src:String field (plus optional start/tag/builtins/marks)", "Parse.spec")
+				}
+				src = s
+				opts = e // start/tag/builtins/marks read off the same map
+			default:
+				return r.AqlError("parse_bad_abnf",
+					fmt.Sprintf("Parse.spec: the abnf section must be a String, a {src:…} map, or a list of those, got %s", e.String()), "Parse.spec")
+			}
+			g.addAbnfStep(src, abnfOptsFrom(opts))
+		}
+	}
+
+	// matcher: {name: {priority fn}} — collected here; the builder
+	// applies matchers LAST at register, after every grammar step.
+	mm, err := section("matcher", "name → {priority:Integer fn:Function}")
+	if err != nil {
+		return err
+	}
+	for _, name := range tmKeys(mm) {
+		ev, _ := mm.Get(name)
+		if lenient && !native.IsConcrete(ev) {
+			continue
+		}
+		em, _ := native.AsMap(ev)
+		if em == nil {
+			return r.AqlError("parse_bad_matcher",
+				fmt.Sprintf("Parse.spec: matcher %s: the entry must be a {priority fn} map", name), "Parse.spec")
+		}
+		prio, ok := native.MapFieldInteger(em, "priority")
+		if !ok {
+			return r.AqlError("parse_bad_matcher",
+				fmt.Sprintf("Parse.spec: matcher %s: priority must be an Integer", name), "Parse.spec")
+		}
+		fn, ok := em.Get("fn")
+		if !ok || (!isCallableValue(fn) && !(lenient && !native.IsConcrete(fn))) {
+			return r.AqlError("parse_bad_matcher",
+				fmt.Sprintf("Parse.spec: matcher %s: fn must be a Function", name), "Parse.spec")
+		}
+		g.matchers = append(g.matchers, pendingMatcher{name: name, prio: int(prio), fn: fn})
+	}
+	return nil
+}
+
+// tmKeys is the nil-tolerant key walk for the optional sections.
+func tmKeys(m native.ReadMap) []string {
+	if m == nil {
+		return nil
+	}
+	return m.Keys()
 }
 
 // parseRuleHandler — args[0]=grammar, args[1]=name (atom), args[2]=spec map.
@@ -789,9 +1069,107 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 			if acts, ok := g.markActions[s]; ok && len(acts) > 0 {
 				gs.Ref[s] = composeAltActions(acts)
 			}
+		case av.Parent.ConformsTo(native.TList) && native.IsConcrete(av):
+			// The tabnas list-of-actions form: refs and inline fns run
+			// in order, each seeing the previous action's node.
+			lst, _ := native.AsList(av)
+			refs := make([]any, 0, lst.Len())
+			for i := 0; i < lst.Len(); i++ {
+				el := lst.Get(i)
+				switch {
+				case isCallableValue(el):
+					ref := fmt.Sprintf("@__inline_%d", g.inlineSeq)
+					g.inlineSeq++
+					gs.Ref[ref] = g.wrapAction(el)
+					refs = append(refs, ref)
+				case el.Parent.ConformsTo(native.TString) && native.IsConcrete(el):
+					s, _ := el.AsConcreteString()
+					if acts, ok := g.markActions[s]; ok && len(acts) > 0 {
+						gs.Ref[s] = composeAltActions(acts)
+					}
+					refs = append(refs, s)
+				default:
+					return nil, r.AqlError("parse_bad_rule",
+						fmt.Sprintf("Parse.rule %q: a: each action must be a Function or a '@ref' String, got %s", rule, el.String()), "Parse.rule")
+				}
+			}
+			alt.A = refs
 		}
 	}
+	// c — a DECLARATIVE condition map ({'counter':n} / {'counter.sub':n}
+	// entries, matched by $eq). The FuncRef condition form takes
+	// parser-internal types (tabnas.AltCond) and is not expressible from
+	// AQL; the declarative map is.
+	if cv, ok := m.Get("c"); ok {
+		cm, ok := specDataMap(cv)
+		if !ok {
+			return nil, r.AqlError("parse_bad_rule",
+				fmt.Sprintf("Parse.rule %q: c: the condition must be a declarative map", rule), "Parse.rule")
+		}
+		alt.C = cm
+	}
+	// u / k — custom (and propagated-custom) props: plain data maps.
+	if uv, ok := m.Get("u"); ok {
+		um, ok := specDataMap(uv)
+		if !ok {
+			return nil, r.AqlError("parse_bad_rule",
+				fmt.Sprintf("Parse.rule %q: u: custom props must be a map", rule), "Parse.rule")
+		}
+		alt.U = um
+	}
+	if kv, ok := m.Get("k"); ok {
+		km, ok := specDataMap(kv)
+		if !ok {
+			return nil, r.AqlError("parse_bad_rule",
+				fmt.Sprintf("Parse.rule %q: k: propagated props must be a map", rule), "Parse.rule")
+		}
+		alt.K = km
+	}
 	return alt, nil
+}
+
+// specDataMap converts a concrete AQL map to a plain map[string]any for
+// the declarative alt fields (c / u / k). Integers convert to int at
+// every depth — the width tabnas' declarative normalizers (conditions,
+// MapToOptions) match on.
+func specDataMap(v native.Value) (map[string]any, bool) {
+	m, _ := native.AsMap(v)
+	if m == nil {
+		return nil, false
+	}
+	return specAnyMap(m), true
+}
+
+// specAnyMap is the deep ReadMap → map[string]any conversion behind
+// specDataMap and the Parse.spec options section.
+func specAnyMap(m native.ReadMap) map[string]any {
+	out := make(map[string]any, m.Len())
+	for _, k := range m.Keys() {
+		fv, _ := m.Get(k)
+		out[k] = specAnyValue(fv)
+	}
+	return out
+}
+
+func specAnyValue(v native.Value) any {
+	switch {
+	case v.Parent.ConformsTo(native.TInteger) && native.IsConcrete(v):
+		n, _ := v.AsConcreteInteger()
+		return int(n)
+	case v.Parent.ConformsTo(native.TMap) && native.IsConcrete(v):
+		if m, _ := native.AsMap(v); m != nil {
+			return specAnyMap(m)
+		}
+	case v.Parent.ConformsTo(native.TList) && native.IsConcrete(v):
+		if l, err := native.AsList(v); err == nil {
+			out := make([]any, l.Len())
+			for i := 0; i < l.Len(); i++ {
+				out[i] = specAnyValue(l.Get(i))
+			}
+			return out
+		}
+	}
+	return eng.ToNative(v)
 }
 
 // isCallableValue reports whether v is a function-like value (a Function or an

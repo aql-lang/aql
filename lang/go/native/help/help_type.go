@@ -28,11 +28,17 @@ func init() {
 		Word:    "make",
 		Summary: "Create a value conforming to a type.",
 		Description: "Constructs a value of the given type from the provided data. " +
-			"For tables, creates table rows from list data.",
+			"For tables, creates table rows from list data. The Scalar/Micron " +
+			"structured scalars (Pathon / Emailon / Urlon and user Microns) " +
+			"construct from a validated string OR a map of named fields — " +
+			"`make Emailon 'a@b.co'` ≡ `make Emailon {user:'a' host:'b.co'}` — " +
+			"and expose read-only properties via dot (`e.host`, `u.port`).",
 		Examples: []string{
 			`make Point {}          ;# fresh instance, all fields at their defaults`,
 			`make Point {x: 3 y: 4} ;# instance with field overrides`,
 			`(make Counter {}).count ;# parenthesise to read a field off a fresh make`,
+			`make Emailon 'alice@example.com'   ;# validated structured scalar (Micron)`,
+			`(make Urlon 'https://x.com/a').host ;# 'x.com' — Microns have properties`,
 		},
 	})
 
@@ -42,7 +48,12 @@ func init() {
 		Description: "Builds a (sub)type: `refine ParentClass {fields}` a subclass " +
 			"(classes are defined with `class {fields}`), `refine Record [pairs]` " +
 			"a record type, `refine Table recordtype` a table type, `refine List` " +
-			"a bare nominal subtype. Pair with `def Name (refine …)` to bind it.",
+			"a bare nominal subtype. Pair with `def Name (refine …)` to bind it. " +
+			"`def Baron refine Micron {foo:String}` mints a user structured scalar " +
+			"(content-equal, immutable, property-readable); every name bound under " +
+			"Scalar/Micron must end in the suffix 'on'. A Micron LEAF (Emailon, " +
+			"Urlon, Pathon) only refines nominally (`def Workon refine Emailon`) — " +
+			"its field set is its validation contract.",
 	})
 
 	register(&Entry{

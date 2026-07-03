@@ -2110,7 +2110,7 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 				out[i] = NewCarrier(TAny)
 			case !args[m].Carrier && !args[m].Dynamic:
 				// A concrete constructor target — a bare type node
-				// (`make Path …`, `make Foo …`) or a structural type body
+				// (`make Pathon …`, `make Foo …`) or a structural type body
 				// (`make P {}` for a class/record, whose literal carries an
 				// ClassTypeInfo/RecordTypeInfo payload). ValueType yields the
 				// made *Type in both cases (the node itself, or the body's

@@ -20,25 +20,29 @@ package native
 // prepare/direct carry the shared API-descriptor pattern on arg 0 (the inner
 // native's signature drives dot-access dispatch, so the pattern is preserved
 // even though the wrapper FnSig does not copy it).
-var NetModuleNatives = []NativeFunc{
-	{
-		Name: "fetch",
-		Signatures: []Signature{
-			{Args: []*Type{TString, TMap}, Impl: Go(fetchStringMapHandler), BarrierPos: -1},
-			{Args: []*Type{TMap}, Impl: Go(fetchMapHandler), BarrierPos: -1},
-			{Args: []*Type{TString}, Impl: Go(fetchStringHandler), BarrierPos: -1},
+// Parameterised by the per-import Fetch mints (ft) — the Response
+// values fetch returns carry that import's types.
+func NetModuleNatives(ft FetchModuleTypes) []NativeFunc {
+	return []NativeFunc{
+		{
+			Name: "fetch",
+			Signatures: []Signature{
+				{Args: []*Type{TString, TMap}, Impl: Go(ft.fetchStringMapHandler), BarrierPos: -1},
+				{Args: []*Type{TMap}, Impl: Go(ft.fetchMapHandler), BarrierPos: -1},
+				{Args: []*Type{TString}, Impl: Go(ft.fetchStringHandler), BarrierPos: -1},
+			},
 		},
-	},
-	{
-		Name: "prepare",
-		Signatures: []Signature{
-			{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+		{
+			Name: "prepare",
+			Signatures: []Signature{
+				{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			},
 		},
-	},
-	{
-		Name: "direct",
-		Signatures: []Signature{
-			{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+		{
+			Name: "direct",
+			Signatures: []Signature{
+				{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+			},
 		},
-	},
+	}
 }

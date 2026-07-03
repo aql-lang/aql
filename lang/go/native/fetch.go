@@ -87,29 +87,29 @@ func hostPortFromURL(rawURL string) (string, int) {
 	return host, 0
 }
 
-// Object/Fetch / Object/Fetch/Request / Object/Fetch/Response are
-// owned by the lang/go/native package — they're consumed only by the
-// fetch handler and tests in this package. Registration goes
-// through eng.Builtin.RegisterExternalBuiltin in the var
-// initialisers below so that any other package-level var
-// referencing TFetch* (signature slices in natives.go) sees a
-// non-nil pointer at slice-init time. FixedIDs come from the
-// documented lang/go/native/fetch range (3000-3999) — see
-// eng.TypeTable.RegisterExternalBuiltin for the allocation policy.
-var (
-	TFetchFunction = registerFetchType("Ideal/Fetch", 3000, nil)
-	TFetchRequest  = registerFetchType("Ideal/Fetch/Request", 3001, fetchConvertBehavior{})
-	TFetchResponse = registerFetchType("Ideal/Fetch/Response", 3002, fetchConvertBehavior{})
-)
+// The Fetch family — the Fetch root and its Request / Response leaves
+// — is owned by aql:net as per-import module mints (former global
+// FixedIDs 3000-3002, retired): BuildNetModule mints them via
+// MintFetchTypes and threads them to the fetch handlers, whose
+// Response values escape to the importer. Reachable after import as
+// Net.Fetch / Net.Request / Net.Response.
 
-func registerFetchType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
-	if err != nil {
-		// Init-time registration error — recorded, not panicked.
-		// See ADR-005 and typeinit.go.
-		recordTypeInitErr(fmt.Errorf("fetch: register %s: %w", path, err))
+// FetchModuleTypes are aql:net's minted types.
+type FetchModuleTypes struct {
+	Fetch    *Type
+	Request  *Type
+	Response *Type
+}
+
+// MintFetchTypes mints the Fetch family into r's type table (r is
+// aql:net's sub-registry) and returns the nodes.
+func MintFetchTypes(r *Registry) FetchModuleTypes {
+	fetch := r.Types.MintType("Fetch", eng.TIdeal)
+	return FetchModuleTypes{
+		Fetch:    fetch,
+		Request:  r.Types.MintTypeWithBehavior("Request", fetch, fetchConvertBehavior{}),
+		Response: r.Types.MintTypeWithBehavior("Response", fetch, fetchConvertBehavior{}),
 	}
-	return t
 }
 
 const defaultFetchTimeout = 30 * time.Second
@@ -129,15 +129,15 @@ const defaultFetchTimeout = 30 * time.Second
 //
 // fetchStringHandler handles fetch with a single URL string argument.
 // Performs a GET request to the given URL.
-func fetchStringHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+func (ft FetchModuleTypes) fetchStringHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	reqOM := NewOrderedMap()
 	reqOM.Set("url", args[0])
-	return doFetch(reqOM, r)
+	return ft.doFetch(reqOM, r)
 }
 
 // fetchStringMapHandler handles fetch with a URL string and an options map.
 // The URL is merged into the options map as the "url" field.
-func fetchStringMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+func (ft FetchModuleTypes) fetchStringMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	opts, _ := AsMap(args[1])
 	if opts == nil {
 		return nil, r.AqlError("fetch_error", "fetch: expected map for options, got nil", "fetch")
@@ -152,17 +152,17 @@ func fetchStringMapHandler(args []Value, ctx map[string]Value, stack []Value, r 
 		val, _ := opts.Get(key)
 		reqOM.Set(key, val)
 	}
-	return doFetch(reqOM, r)
+	return ft.doFetch(reqOM, r)
 }
 
 // fetchMapHandler handles fetch with a full request map.
 // The map must contain a "url" field.
-func fetchMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+func (ft FetchModuleTypes) fetchMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	m, _ := AsMap(args[0])
 	if m == nil {
 		return nil, r.AqlError("fetch_error", "fetch: expected map argument, got nil", "fetch")
 	}
-	return doFetch(m, r)
+	return ft.doFetch(m, r)
 }
 
 // doFetch performs a synchronous HTTP request from the given request map
@@ -179,7 +179,7 @@ func fetchMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Regis
 //   - headers (map, optional) — request headers
 //   - body    (string, optional) — request body
 //   - timeout (integer, optional, default 30000) — timeout in milliseconds
-func doFetch(reqOM ReadMap, r *Registry) ([]Value, error) {
+func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) {
 	// Extract url (required).
 	urlVal, ok := reqOM.Get("url")
 	if !ok {
@@ -277,7 +277,7 @@ func doFetch(reqOM ReadMap, r *Registry) ([]Value, error) {
 	respOM.Set("body", NewString(string(bodyBytes)))
 	respOM.Set("url", NewString(resp.Request.URL.String()))
 
-	return []Value{{Parent: TFetchResponse, Data: MapPayload{M: respOM}}}, nil
+	return []Value{{Parent: ft.Response, Data: MapPayload{M: respOM}}}, nil
 }
 
 // fetchConvertBehavior projects a Fetch Request/Response (map-backed

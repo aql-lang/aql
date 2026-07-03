@@ -82,7 +82,7 @@ ProperString	ProperString	String subtype: type of every non-empty string
 EmptyString	EmptyString	String subtype: unique inhabitant is the empty string
 Boolean	Boolean	
 Atom	Atom	
-Path	Path	
+Pathon	Pathon	
 Node	Node	node-family root
 List	List	
 Map	Map	
@@ -355,7 +355,7 @@ false is Boolean	true
 ( quote red ) is Atom	true	exact type
 ( quote red ) is Scalar	true	Atom's parent
 ( quote red ) is Any	true	
-( quote red ) is Path	false	sibling under Scalar
+( quote red ) is Pathon	false	sibling under Scalar
 ( quote red ) is String	false	atoms are NOT strings
 ( quote red ) is Number	false	
 		
@@ -480,7 +480,7 @@ String is Type	true
 ProperString is Type	true	
 EmptyString is Type	true	
 Boolean is Type	true	
-Path is Type	true	
+Pathon is Type	true	
 Atom is Type	true	
 		
 # --- builtin type literals: node family ---		

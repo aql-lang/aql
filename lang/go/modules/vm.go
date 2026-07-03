@@ -69,6 +69,7 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	modID := parent.Modules.NextID()
 	return native.ModuleDesc{
+		Src:     subReg,
 		ID:      modID,
 		Exports: map[string]*native.OrderedMap{"Vm": exports},
 	}, nil

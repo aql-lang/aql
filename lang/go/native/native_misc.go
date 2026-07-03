@@ -9,39 +9,24 @@ import (
 	"github.com/aql-lang/aql/lang/go/native/help"
 )
 
-// TTimeout / TInterval are owned by the lang/go/engine package — the
-// timeout/interval handlers live in this file. Registered via
-// eng.Builtin.RegisterExternalBuiltin in the var initialisers so
-// any package-level vars (signature slices) that reference them
-// see a non-nil pointer at slice-init time. FixedIDs 4000-4001
-// come from the documented lang/go/engine range (4000-4999).
-var (
-	TTimeout  = registerTimerType("Ideal/Timeout", 4000, timeoutFormatBehavior{})
-	TInterval = registerTimerType("Ideal/Interval", 4001, intervalFormatBehavior{})
-)
-
-func registerTimerType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
-	if err != nil {
-		// Init-time registration error (duplicate FixedID / malformed
-		// path) — record it for NewRegistry/DefaultRegistry to surface
-		// rather than panicking. See ADR-005 and typeinit.go.
-		recordTypeInitErr(fmt.Errorf("native_misc: register %s: %w", path, err))
-	}
-	return t
-}
+// The Timeout / Interval timer types are owned by aql:time-util — the
+// timeout/interval handlers live in this file, and the types are
+// per-import module mints (former global FixedIDs 4000-4001, retired)
+// minted alongside the temporal leaves by MintTemporalModuleTypes
+// (native_temporal.go). The constructors are methods on
+// TemporalModuleTypes so every timer handle carries its import's own
+// type identity.
 
 // NewTimeout constructs a Timeout value carrying the given
-// TimeoutInfo payload. Moved out of eng at Step 8 — the kernel
-// no longer carries a constructor for a type it doesn't own.
-func NewTimeout(info *TimeoutInfo) Value {
-	return eng.NewValueRaw(TTimeout, info)
+// TimeoutInfo payload.
+func (tt TemporalModuleTypes) NewTimeout(info *TimeoutInfo) Value {
+	return eng.NewValueRaw(tt.Timeout, info)
 }
 
 // NewInterval constructs an Interval value carrying the given
 // IntervalInfo payload. See NewTimeout.
-func NewInterval(info *IntervalInfo) Value {
-	return eng.NewValueRaw(TInterval, info)
+func (tt TemporalModuleTypes) NewInterval(info *IntervalInfo) Value {
+	return eng.NewValueRaw(tt.Interval, info)
 }
 
 // timeoutFormatBehavior renders a Timeout as "Timeout(id,Nms)".
@@ -253,8 +238,8 @@ func extractPath(v Value) string {
 	if sentinel, ok := streamSentinel(v); ok {
 		return sentinel
 	}
-	if IsPath(v) {
-		_as5, _ := AsPath(v)
+	if IsPathon(v) {
+		_as5, _ := AsPathon(v)
 		return _as5.String()
 	}
 	_as6, _ := AsString(v)
@@ -267,7 +252,7 @@ func returnPath(v Value, pathStr string) Value {
 	if _, ok := streamSentinel(v); ok {
 		return v
 	}
-	if IsPath(v) {
+	if IsPathon(v) {
 		return v
 	}
 	return NewString(pathStr)
@@ -557,8 +542,7 @@ func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 
 func importAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	desc, _ := asModuleDesc(args[0])
-	installExports(r, desc, nil)
-	return nil, nil
+	return nil, installExports(r, desc, nil)
 }
 
 func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -613,8 +597,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		if err != nil {
 			return nil, err
 		}
-		installExports(r, desc, nil)
-		return nil, nil
+		return nil, installExports(r, desc, nil)
 	}
 	if isDataFile(r, path) {
 		return loadDataFile(r, path)
@@ -623,8 +606,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, err
 	}
-	installExports(r, desc, nil)
-	return nil, nil
+	return nil, installExports(r, desc, nil)
 }
 
 // loadImportForCheck resolves an import in check mode for its export
@@ -652,8 +634,7 @@ func loadImportForCheck(r *Registry, path string) error {
 	if err != nil {
 		return err
 	}
-	installExports(r, desc, nil)
-	return nil
+	return installExports(r, desc, nil)
 }
 
 func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -703,8 +684,7 @@ func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if err != nil {
 		return nil, fmt.Errorf("import module: %w", err)
 	}
-	installExports(r, desc, nil)
-	return nil, nil
+	return nil, installExports(r, desc, nil)
 }
 
 func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -745,15 +725,15 @@ func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value
 
 // ---- temporal handlers ----
 
-func timeoutListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return doTimeout(r, args, true)
+func (tt TemporalModuleTypes) timeoutListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return tt.doTimeout(r, args, true)
 }
 
-func timeoutWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return doTimeout(r, args, false)
+func (tt TemporalModuleTypes) timeoutWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return tt.doTimeout(r, args, false)
 }
 
-func doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
+func (tt TemporalModuleTypes) doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms < 0 {
 		return nil, r.AqlError("timeout_error", fmt.Sprintf("timeout: milliseconds must be non-negative, got %d", ms), "timeout")
@@ -774,7 +754,7 @@ func doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
 		Ms:    ms,
 		Timer: timer,
 	}
-	return []Value{NewTimeout(info)}, nil
+	return []Value{tt.NewTimeout(info)}, nil
 }
 
 func awaitWithOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

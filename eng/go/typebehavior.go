@@ -39,12 +39,12 @@ type TypeBehavior interface {
 	// Format renders v as a string. The canonical default
 	// delegates to Value.String (which uses the kernel's
 	// existing switch). Domain types override to produce a
-	// type-specific rendering (e.g. CalDuration → "P1Y2M3D").
+	// type-specific rendering (e.g. CalendarDuration → "P1Y2M3D").
 	Format(v Value) string
 
 	// Equal reports semantic equality. The canonical default is
 	// the existing ValuesEqual deep-compare. Types with
-	// normalisation semantics (CalDuration, DepScalar) override
+	// normalisation semantics (CalendarDuration, DepScalar) override
 	// to do their type-specific compare.
 	Equal(a, b Value) bool
 }
@@ -79,7 +79,7 @@ type Walker interface {
 
 // Sizer is an optional capability interface. Types implementing it
 // report a natural size — the length of a dominant collection (a
-// List's elements, a Map's keys, a Path's segments, an Object's
+// List's elements, a Map's keys, a Pathon's segments, an Object's
 // fields), a number's floored magnitude, a string's length. SizeOf
 // consults it; a type with no Sizer in its lattice sizes to 0.
 type Sizer interface {

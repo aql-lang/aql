@@ -30,7 +30,7 @@ require (
 	github.com/tabnas/jsonic/go v0.2.0 // indirect
 	github.com/tabnas/markdown/go v0.2.0 // indirect
 	github.com/tabnas/multisource/go v0.3.1 // indirect
-	github.com/tabnas/parser/go v0.2.0 // indirect
+	github.com/tabnas/parser/go v0.2.1-0.20260702232222-51f10e97d367 // indirect
 	github.com/tabnas/path/go v0.2.0 // indirect
 	github.com/tabnas/toml/go v0.2.0 // indirect
 	github.com/tabnas/xml/go v0.2.0 // indirect

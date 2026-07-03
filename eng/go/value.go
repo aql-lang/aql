@@ -134,16 +134,16 @@ func (m *OrderedMap) Delete(key string) bool {
 	return true
 }
 
-// PathInfo holds the data for a Scalar/Path value.
+// PathonInfo holds the data for a Scalar/Micron/Pathon value.
 // A Path represents a filesystem path as a sequence of parts.
 // Absolute paths start from the root (Abs = true).
-type PathInfo struct {
+type PathonInfo struct {
 	Parts []string // path segments (e.g. ["usr", "local", "bin"])
 	Abs   bool     // true for absolute paths (e.g. /usr/local/bin)
 }
 
 // String returns the OS path string for this path.
-func (p PathInfo) String() string {
+func (p PathonInfo) String() string {
 	joined := strings.Join(p.Parts, "/")
 	if p.Abs {
 		return "/" + joined
@@ -317,6 +317,24 @@ type FnSig struct {
 	// names no specific (often module) word. Copied from NativeFunc.Callable
 	// onto every signature at registration. nil = not closure-eligible.
 	Callable *CallableSpec
+
+	// Locked marks a signature registered through the Go registration
+	// layer (Registry.Register — every native / kernel word plus host
+	// words). Locked signatures can never be replaced or removed by a
+	// def-merge (design/OPEN-WORDS.0.md §2.3), and they sort FIRST in
+	// match order (CompareSignatures), so an unlocked merged addition
+	// can never pre-empt a locked match — no previously-valid call
+	// changes its dispatch. Locking is a property of the Go layer, not
+	// an AQL language ability; InstallFnDef (user `def … fn`) never
+	// sets it.
+	Locked bool
+	// Origin records which module contributed this signature via an
+	// export transplant (the module ref, e.g. "./ext.aql" or
+	// "aql:time-util"). Empty for native registrations and direct user
+	// defs. Read by the transplant collision check: the same tuple
+	// arriving from a DIFFERENT module raises [aql/extend_conflict],
+	// while identical provenance (diamond re-import) is idempotent.
+	Origin string
 }
 
 // CompileEffect is a set of compile-relevant capability flags a word declares
@@ -498,6 +516,12 @@ type FnDefInfo struct {
 	Module string
 	Export string
 	Doc    string
+	// MiniKind names the mini-language kind whose expansion produced
+	// this partially-applied Function ("" for everything else). The
+	// per-kind member types the aql:minilang module exports
+	// (MiniLang.Re, MiniLang.Gex, …) match on it, so a typed fn param
+	// can require a specific kind's partial (e.g. a regexp matcher).
+	MiniKind string
 	// Anonymous is true iff the FnDef was produced by the `afn` word (i.e.
 	// via the `=>` lambda sugar). The flag is read only in check mode: an
 	// anonymous fn's static Returns is the conservative [Any], and the
@@ -533,6 +557,18 @@ type FnDefInfo struct {
 	// fn whose body references only params, module-global names, or
 	// forward refs. See lang/go/CLAUDE.md "Closures and Capture".
 	Captured []CapturedBinding
+	// Extends marks this FnDefInfo as a WORD-EXTENSION CLONE: the result
+	// of `def <word> fn […]` on a word that carries locked signatures
+	// (design/OPEN-WORDS.0.md §2.1). The value is the base word's name.
+	// A clone carries the base word's COMPLETE signature list plus the
+	// merge, so Registry.Lookup stops aggregating at a clone — deeper
+	// def-stack entries for the name are occluded, which is what makes
+	// an unlocked-tuple REPLACEMENT effective and `undef` restore the
+	// exact previous state. Detected via IsWordExtension (the named-
+	// helper protocol — never probe the field inline); recognised at
+	// module import for the export transplant. Empty for every ordinary
+	// fn / native registration.
+	Extends string
 }
 
 // CapturedBinding is one lexically-captured name in a closure. The
@@ -891,6 +927,15 @@ type ModuleDesc struct {
 	Kind   string // "native" | "file" | "inline"
 	File   string // source file path ("" for native/inline)
 	Folder string // source folder ("" for native/inline)
+	// Src is the module's OWN registry — the sub-registry a native
+	// builder registered its words/types/ideals into, or the body
+	// registry an inline/file module ran in. Import uses it to
+	// transport ESCAPED type machinery to the importer: each exported
+	// bare type literal adopts its canonical node into the importer's
+	// TypeTable (the compiled OpPushType path) and brings its matching
+	// Ideal across, so a facade module re-exporting a constructible
+	// type keeps `make` working. In-process only — never serialized.
+	Src *Registry
 }
 
 // WordInfo carries the name and optional modifiers for a function reference.
@@ -1383,11 +1428,11 @@ func SetAtomReferent(v Value, ref Value) Value {
 	return v
 }
 
-// NewPath creates a Path value from parts and an absolute flag.
-func NewPath(parts []string, abs bool) Value {
+// NewPathon creates a Pathon value from parts and an absolute flag.
+func NewPathon(parts []string, abs bool) Value {
 	p := make([]string, len(parts))
 	copy(p, parts)
-	return NewValueRaw(TPath, PathPayload{Info: PathInfo{Parts: p, Abs: abs}})
+	return NewValueRaw(TPathon, PathonPayload{Info: PathonInfo{Parts: p, Abs: abs}})
 }
 
 // NewTypeLiteral returns the type t expressed as a Value. After the
@@ -2198,18 +2243,18 @@ func flatInstanceParts(v Value) (fields *OrderedMap, schemaKeys []string, ok boo
 }
 
 // IsAtom reports whether this value is an atom.
-// IsPath reports whether this value is a Path.
-func IsPath(v Value) bool {
-	_, ok := v.Data.(PathPayload)
-	return ok && v.Parent.Equal(TPath)
+// IsPathon reports whether this value is a Path.
+func IsPathon(v Value) bool {
+	_, ok := v.Data.(PathonPayload)
+	return ok && v.Parent.Equal(TPathon)
 }
 
-// AsPath returns the PathInfo, or an error if the value is not a path.
-func AsPath(v Value) (PathInfo, error) {
-	if pp, ok := v.Data.(PathPayload); ok {
+// AsPathon returns the PathonInfo, or an error if the value is not a path.
+func AsPathon(v Value) (PathonInfo, error) {
+	if pp, ok := v.Data.(PathonPayload); ok {
 		return pp.Info, nil
 	}
-	return PathInfo{}, fmt.Errorf("AsPath: not a path value (got %T)", v.Data)
+	return PathonInfo{}, fmt.Errorf("AsPathon: not a path value (got %T)", v.Data)
 }
 
 func IsAtom(v Value) bool {
@@ -2736,14 +2781,21 @@ func kernelFormatDefault(v Value) string {
 			return "true"
 		}
 		return "false"
-	// Domain types (Instant, DateTime, Date, TimeOfDay, CalDuration,
-	// ClkDuration, Timezone, Matrix, Timeout, Interval) now render
+	// Domain types (Instant, DateTime, Date, TimeOfDay, CalendarDuration,
+	// ClockDuration, Timezone, Matrix, Timeout, Interval) now render
 	// via their per-Type Behavior installed by
 	// coretype_format_behaviors.go and dispatched at the top of this
 	// function. Their old switch arms have been removed.
-	case IsPath(v):
-		_as6, _ := AsPath(v)
+	case IsPathon(v):
+		_as6, _ := AsPathon(v)
 		return _as6.String()
+	case IsMicronValue(v):
+		// Backstop for Micron instances whose minted node carries a
+		// wrapper Behavior that delegates Format to the kernel default
+		// (a bare-nominal newtype's bareRefineUnifier wraps the fresh
+		// mint's DefaultBehavior) — without this arm they would fall
+		// to the %v branch and render the payload struct.
+		return micronRender(v)
 	// TList rendering moved to listFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes List values there.

@@ -116,6 +116,25 @@ var storageNatives = []NativeFunc{
 				Impl:      Go(setFlexXmlHandler),
 				Returns:   []*Type{TFlexXml}, BarrierPos: -1,
 			},
+
+			// Micron (IMMUTABLE — always errors): the explicit erroring
+			// sig pins "set: <Kind> values are immutable" where
+			// sig-absence would raise an opaque dispatch failure.
+			// isInertConst's MicronPayload arm relies on this staying
+			// an error — see eng/go/emit.go.
+			{
+				Args:      []*Type{TString, TAny, TMicron},
+				Impl:      Go(setMicronHandler),
+				Returns:   []*Type{},
+				ReturnsFn: setMicronReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TMicron},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(setMicronHandler),
+				Returns:   []*Type{},
+				ReturnsFn: setMicronReturns, BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -191,6 +210,13 @@ func accessorGetSignatures() []Signature {
 			Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getStoreHandler),
 			ReturnsFn: getStoreReturnsFn,
 		},
+		// [Key | Micron] — structured-scalar property read: primary
+		// fields plus the derived properties (Pathon parts/abs,
+		// Emailon address, Urlon href). A miss reads none; the strict
+		// twin is in accessorGetrSignatures. Microns sit under Scalar,
+		// so these don't overlap the [Key | Node] rows above.
+		{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getMicronHandler), ReturnsFn: getMicronReturns},
+		{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(getMicronHandler), ReturnsFn: getMicronReturns},
 		// [Key | Node/Xml] — well-known field read: 'tag' / 'attr' /
 		// 'cren' (any other key → none). More specific than the
 		// [Key | Node] sigs above, so it wins for an XML receiver and

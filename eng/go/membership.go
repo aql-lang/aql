@@ -36,6 +36,21 @@ func baseCompare(prev TypeBehavior, a, b Value) (int, error) {
 // value) — defers to the lattice walk; a concrete value is put to member.
 func matchMembership(v Value, t *Type, prev TypeBehavior, member func(Value) bool) bool {
 	if !IsConcrete(v) {
+		// A check-mode CARRIER carrying a real closure payload (the
+		// concrete-closure residual buildFnBodyReturnsFn / toCarrier
+		// preserve) is payload-decidable: the FnDefInfo IS the value
+		// that runs, so the predicate can answer now. Without this, a
+		// member type over Function (the aql:minilang partial kinds,
+		// MiniLang.Re / …) false-flags at check time — the strict
+		// lattice walk rejects Parent=Function even though the payload
+		// proves membership. Other carrier payloads (ChildTypeInfo on
+		// list/map carriers, …) stay on the abstract path: they
+		// describe a SHAPE, not the value itself.
+		if v.Carrier {
+			if _, ok := v.Data.(FnDefInfo); ok {
+				return member(v)
+			}
+		}
 		return baseBehavior(prev).Match(v, t)
 	}
 	return member(v)

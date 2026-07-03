@@ -70,10 +70,10 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal":                      48,
 		// FixedID 30 retired with Ideal/Object (the bare open container);
 		// class instances live under Ideal/Class. Not recycled.
-		"Node/Map/Inspect":      31,
-		"Ideal/Fetch":           3000,
-		"Ideal/Fetch/Request":   3001,
-		"Ideal/Fetch/Response":  3002,
+		"Node/Map/Inspect": 31,
+		// 3000-3002 (Fetch / Request / Response) retired — per-import
+		// aql:net mints now (MintFetchTypes).
+
 		"Ideal/Resource":        36,
 		"Ideal/Resource/Entity": 37,
 		"Ideal/Options":         38,
@@ -84,23 +84,23 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Store":        42,
 		"Ideal/Store/System": 43,
 		// FixedID 44 retired with Ideal/Array (removed); not recycled.
-		"Ideal/Error":            45,
-		"Scalar/Path":            47,
-		"Ideal/Tensor":           2001, // matrix module range (2000-2999)
-		"Ideal/Tensor/Matrix":    2000, // historical Matrix FixedID, kept
-		"Ideal/Tensor/Vector":    2002,
-		"Ideal/Module":           5000,
-		"Ideal/ModuleExport":     5001,
-		"Node/Map/KeyVal":        5002, // map-iteration entry — lang/go/native/native_keyval.go
-		"Ideal/MiniLangCompiled": 5003, // compiled-minilang carrier — lang/go/modules/minilang.go
-		"Ideal/Patrun":           5004, // pattern-dispatch table — lang/go/native/native_patrun.go
-		"Ideal/ParseGrammar":     5005, // custom-parser builder — lang/go/modules/parse.go
-		"Ideal/Model":            5006, // voxgig/model handle — lang/go/modules/model.go
-		"Word/__IS":              51,
-		"Word/__XI":              109, // interpolated XML literal skeleton
-		"Type/Disjunct/Enum":     62,
-		"Word/__PE":              63,
-		"Word/__IN/__DC":         64,
+		"Ideal/Error":          45,
+		"Scalar/Micron/Pathon": 47,
+		// Tensor family (former FixedIDs 2000-2002) moved to
+		// aql:matrix-util as per-import module mints with no FixedID —
+		// see MintTensorTypes and design/OPEN-WORDS.0.md.
+		"Ideal/Module":       5000,
+		"Ideal/ModuleExport": 5001,
+		"Node/Map/KeyVal":    5002, // map-iteration entry — lang/go/native/native_keyval.go
+		// 5003 (MiniLangCompiled), 5005 (ParseGrammar), 5006 (Model)
+		// retired — per-import module mints now (aql:minilang /
+		// aql:parse / aql:model own them; see design/OPEN-WORDS.0.md).
+		"Ideal/Patrun":       5004, // pattern-dispatch table — lang/go/native/native_patrun.go
+		"Word/__IS":          51,
+		"Word/__XI":          109, // interpolated XML literal skeleton
+		"Type/Disjunct/Enum": 62,
+		"Word/__PE":          63,
+		"Word/__IN/__DC":     64,
 		// FixedIDs 65-71 retired with the Type/Dependent subtree;
 		// DepScalar values now carry their base scalar type directly
 		// (typeof (Integer gte 0) → Integer) with the constraint in
@@ -119,18 +119,19 @@ func TestFixedIDStability(t *testing.T) {
 		"Type/GenSpec":   106,
 		"Type/GenParam":  107,
 		// --- Externally-registered types (Step 8 migration) ---
-		"Scalar/Time":                      1000, // time family — lang/go/engine/native_temporal.go
-		"Scalar/Time/Date":                 1001,
-		"Scalar/Time/DateTime":             1002,
-		"Scalar/Time/Instant":              1003,
-		"Scalar/Time/TimeOfDay":            1004,
-		"Scalar/Time/Duration":             1005,
-		"Scalar/Time/Duration/CalDuration": 1006,
-		"Scalar/Time/Duration/ClkDuration": 1007,
-		"Scalar/Time/Timezone":             1008,
-		"Ideal/Timeout":                    4000, // timer types — lang/go/engine/native_misc.go
-		"Ideal/Interval":                   4001,
-		"Scalar/Bytes":                     1009, // byte-string leaf — lang/go/native/native_bytes.go
+		// Time family — lang/go/native/native_temporal.go. Only the
+		// family root and the three instant-bearing leaves are global;
+		// TimeOfDay / Duration / CalendarDuration / ClockDuration / Timezone
+		// (former FixedIDs 1004-1008) moved to aql:time-util as
+		// per-import module mints with no FixedID — see
+		// MintTemporalModuleTypes and design/OPEN-WORDS.0.md.
+		"Scalar/Time":          1000,
+		"Scalar/Time/Date":     1001,
+		"Scalar/Time/DateTime": 1002,
+		"Scalar/Time/Instant":  1003,
+		// 4000 (Timeout) / 4001 (Interval) retired — per-import
+		// aql:time-util mints now (MintTemporalModuleTypes).
+		"Scalar/Bytes": 1009, // byte-string leaf — lang/go/native/native_bytes.go
 	}
 
 	for path, want := range expected {

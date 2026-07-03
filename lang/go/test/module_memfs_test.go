@@ -210,13 +210,13 @@ export "Strings" {greet:greet/r}`,
 func TestMemFSModuleFolderWriteImport(t *testing.T) {
 	// Start with empty FS — use folder and write to create everything from AQL.
 	result, err := runMemFSModuleSteps(t, nil, []string{
-		// Create module directory structure using Path
-		`folder (make Path ["mymod"])`,
-		`folder (make Path ["mymod" ".aql"])`,
-		// Write aql.json using Path
-		`write (make Path ["mymod" ".aql" "aql.json"]) "{\"name\":\"mymod\",\"main\":\"index.aql\"}"`,
-		// Write module source using Path
-		`write (make Path ["mymod" "index.aql"]) "export \"API\" {answer:42}"`,
+		// Create module directory structure using Pathon
+		`folder (make Pathon ["mymod"])`,
+		`folder (make Pathon ["mymod" ".aql"])`,
+		// Write aql.json using Pathon
+		`write (make Pathon ["mymod" ".aql" "aql.json"]) "{\"name\":\"mymod\",\"main\":\"index.aql\"}"`,
+		// Write module source using Pathon
+		`write (make Pathon ["mymod" "index.aql"]) "export \"API\" {answer:42}"`,
 		// Import and use
 		`import "./mymod"`,
 		`API.answer`,

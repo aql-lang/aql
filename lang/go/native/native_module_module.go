@@ -20,6 +20,11 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
 	}
+	// Mark this registry as MODULE scope: a module body may extend a
+	// core word only with user-typed signatures (the open-words
+	// module-scope safety rule — see Registry.ModuleScope and
+	// design/OPEN-WORDS.0.md). Top-level programs are unrestricted.
+	modReg.ModuleScope = true
 	// The module's minted types (refine newtypes, classes) escape to the
 	// importer through its exports, so they must draw IDs from the
 	// importing tree's counter — a fresh counter would let the module's
@@ -182,6 +187,11 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		ID:      modID,
 		Exports: exports,
 		Kind:    "inline", // overridden by loadFileModule / Resolve
+		// The body registry — import transports escaped type machinery
+		// (adopted type nodes, constructing ideals) from here, which is
+		// what lets a FACADE module re-export another module's type
+		// literal and keep it constructible (adoptEscapedTypes).
+		Src: modReg,
 	}
 	return desc, nil
 }
@@ -382,18 +392,108 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 // installExports installs all exports from a module descriptor as defs.
 // If names is nil, all exports are installed using their original names.
 // Each export is bound as a ModuleExport whose $module points at the shared
-// Module instance.
-func installExports(r *Registry, desc ModuleDesc, names []string) {
+// Module instance. Word-extension clones found in the export maps are
+// additionally transplanted into r (see transplantWordExtensions) —
+// the only error path.
+func installExports(r *Registry, desc ModuleDesc, names []string) error {
 	mod := NewModuleInstance(desc)
 	if names == nil {
 		for name, exportMap := range desc.Exports {
 			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
-		return
+		return transplantWordExtensions(r, desc)
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
 			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
+		}
+	}
+	return transplantWordExtensions(r, desc)
+}
+
+// transplantWordExtensions scans a module's exports for word-extension
+// clones (`def <locked word> fn […]` in the module body, exported like
+// any other fn) and merges each one's unlocked signatures into the
+// importing registry's same-named word — the implicit top-level def
+// the importer consented to by importing (design/OPEN-WORDS.0.md
+// §2.4). One level only: the transplant lands in r and stops; only a
+// re-export propagates further (the re-exporting module's clone then
+// carries the signatures under ITS origin — it takes ownership).
+// Provenance is the module ref, so a diamond re-import is idempotent
+// and quiet, while two different modules extending the same unlocked
+// tuple raise [aql/extend_conflict]. When the base word does not
+// resolve in r, nothing transplants and the export stays a plain
+// namespaced binding (§4.9 — M.word still works). The transplanted
+// handlers remain closed over the module's sub-registry, so module-
+// private helpers keep resolving.
+func transplantWordExtensions(r *Registry, desc ModuleDesc) error {
+	adoptEscapedTypes(r, desc)
+	origin := desc.Ref
+	if origin == "" {
+		// An inline module has no ref; its per-import instance ID is its
+		// provenance (each inline `import module […]` is a distinct module).
+		origin = "inline#" + desc.ID
+	}
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			ext, ok := IsWordExtension(v)
+			if !ok {
+				continue
+			}
+			if err := TransplantExtension(r, ext, origin); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// adoptEscapedTypes walks a module's exports for BARE TYPE LITERALS —
+// module-minted types the importer can now reference (`make
+// MatrixUtil.Matrix …`, `x is TimeUtil.Timezone`) — and transports each
+// one's escaped machinery into the importing registry:
+//
+//   - the canonical *Type node is ADOPTED into r's TypeTable (same
+//     pointer, no re-mint), so the compiled OpPushType path
+//     (r.Types.LookupByID) resolves it — without this every
+//     force-compiled program using an exported module type aborts with
+//     "unresolvable type operand";
+//   - the type's constructing IDEAL, when the module's own registry
+//     has one and the importer has neither a matching nor a same-named
+//     ideal, is registered in r — so `make` keeps working when the
+//     literal arrives through a FACADE module that re-exports it (the
+//     facade's body registry acquired the ideal when IT imported the
+//     defining module, so the transport chains one level per import).
+//
+// Both steps are idempotent per type: re-adoption of a known ID is a
+// no-op and an already-satisfied ideal is left alone. desc.Src is nil
+// for descriptors that predate the field (host tests) — nothing to
+// transport then.
+func adoptEscapedTypes(r *Registry, desc ModuleDesc) {
+	if desc.Src == nil {
+		return
+	}
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			if !IsBareTypeNode(v) {
+				continue
+			}
+			canonical := desc.Src.Types.LookupByID(v.ID)
+			if canonical == nil {
+				continue // a builtin literal — the VM's Builtin fallback covers it
+			}
+			r.Types.Adopt(canonical)
+			lit := NewTypeLiteral(canonical)
+			if r.Ideals.Match(lit) != nil {
+				continue // the importer can already construct it
+			}
+			ideal := desc.Src.Ideals.Match(lit)
+			if ideal == nil || r.Ideals.Get(ideal.Name) != nil {
+				continue // nothing to transport / a same-named ideal owns the slot
+			}
+			r.Ideals.Register(ideal)
 		}
 	}
 }
@@ -433,7 +533,10 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		}
 		InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
 	}
-	return nil
+	// Renaming the namespace does not opt out of the module's word
+	// extensions — the extension targets the base word, not the
+	// namespace name. The firewall idiom is the opt-out.
+	return transplantWordExtensions(r, desc)
 }
 
 // installSingleRename renames the single export in a module to newName.
@@ -449,7 +552,7 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 	for name, exportMap := range desc.Exports {
 		InstallDef(r, newName, NewModuleExport(name, exportMap, mod))
 	}
-	return nil
+	return transplantWordExtensions(r, desc)
 }
 
 // resolveModuleExport resolves an export map value through the module's
@@ -551,7 +654,11 @@ func resolveNativeMod(r *Registry, path string) error {
 		// keeps repeated top-level imports from stacking shadow bindings.
 		// See §11b.1 in the DX report.
 		ensureExportsBound(r, desc)
-		return nil
+		// Re-run the word-extension transplant too: an `undef add` may
+		// have popped the module's extension, and a re-import is the
+		// natural way to restore it. Idempotent by origin, so a plain
+		// repeated import installs nothing.
+		return transplantWordExtensions(r, desc)
 	}
 	if r.Modules.Resolver == nil {
 		return fmt.Errorf("import: native module resolver not configured (cannot import %q)", path)
@@ -560,7 +667,9 @@ func resolveNativeMod(r *Registry, path string) error {
 	if err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
-	installExports(r, desc, nil)
+	if err := installExports(r, desc, nil); err != nil {
+		return err
+	}
 	r.Modules.MarkLoaded(name, desc)
 	return nil
 }

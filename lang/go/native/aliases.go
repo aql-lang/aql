@@ -34,7 +34,7 @@ type (
 	StrPayload           = eng.StrPayload
 	BoolPayload          = eng.BoolPayload
 	AtomPayload          = eng.AtomPayload
-	PathPayload          = eng.PathPayload
+	PathonPayload        = eng.PathonPayload
 	ListPayload          = eng.ListPayload
 	FlexListData         = eng.FlexListData
 	MapPayload           = eng.MapPayload
@@ -90,7 +90,7 @@ type (
 	SchemaKind           = eng.SchemaKind
 	OptionsTypeInfo      = eng.OptionsTypeInfo
 	OrderedMap           = eng.OrderedMap
-	PathInfo             = eng.PathInfo
+	PathonInfo           = eng.PathonInfo
 	ReadList             = eng.ReadList
 	ReadMap              = eng.ReadMap
 	RecordTypeInfo       = eng.RecordTypeInfo
@@ -117,7 +117,7 @@ var (
 	TAny            = eng.TAny
 	TAtom           = eng.TAtom
 	TBoolean        = eng.TBoolean
-	// TCalDuration / TClkDuration / TDate / TDateTime / TDuration
+	// TCalendarDuration / TClockDuration / TDate / TDateTime / TDuration
 	// moved to lang/go/engine/native_temporal.go (Step 8) — declared
 	// directly in this package, no eng alias needed.
 	TFloat      = eng.TFloat
@@ -165,7 +165,10 @@ var (
 	TOptions        = eng.TOptions
 	TParenExpr      = eng.TParenExpr
 	TReach          = eng.TReach
-	TPath           = eng.TPath
+	TPathon         = eng.TPathon
+	TMicron         = eng.TMicron
+	TEmailon        = eng.TEmailon
+	TUrlon          = eng.TUrlon
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
 	TResourceEntity = eng.TResourceEntity
@@ -291,7 +294,7 @@ var (
 	NewReach                  = eng.NewReach
 	NewReachFromKeys          = eng.NewReachFromKeys
 	ApplyReach                = eng.ApplyReach
-	IsPath                    = eng.IsPath
+	IsPathon                  = eng.IsPathon
 	IsRecordType              = eng.IsRecordType
 	IsReturnCheck             = eng.IsReturnCheck
 	IsStore                   = eng.IsStore
@@ -312,7 +315,7 @@ var (
 	AsFloatApprox             = eng.AsFloatApprox
 	AsBigInteger              = eng.AsBigInteger
 	AsBigDecimal              = eng.AsBigDecimal
-	AsPath                    = eng.AsPath
+	AsPathon                  = eng.AsPathon
 	AsString                  = eng.AsString
 	AsWord                    = eng.AsWord
 	BaseValue                 = eng.BaseValue
@@ -386,6 +389,12 @@ var (
 	ReparentValue             = eng.ReparentValue
 	InstallDef                = eng.InstallDef
 	InstallFnDef              = eng.InstallFnDef
+	InstallWordExtension      = eng.InstallWordExtension
+	TransplantExtension       = eng.TransplantExtension
+	IsWordExtension           = eng.IsWordExtension
+	IsSealedWord              = eng.IsSealedWord
+	HasLockedSigs             = eng.HasLockedSigs
+	NewWordExtension          = eng.NewWordExtension
 	IsBareTypeNode            = eng.IsBareTypeNode
 	IsCapitalisedName         = eng.IsCapitalisedName
 	IsConcrete                = eng.IsConcrete
@@ -433,7 +442,7 @@ var (
 	AtomReferent              = eng.AtomReferent
 	SetAtomReferent           = eng.SetAtomReferent
 	NewBoolean                = eng.NewBoolean
-	// NewCalDuration moved to lang/go/engine/native_temporal.go (Step 8).
+	// NewCalendarDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = eng.NewCarrier
 	NewElementCarrier        = eng.NewElementCarrier
 	ElementCarrierFromValue  = eng.ElementCarrierFromValue
@@ -441,7 +450,7 @@ var (
 	NewCarrierTypedListValue = eng.NewCarrierTypedListValue
 	NewDynamicCarrier        = eng.NewDynamicCarrier
 	NewDynamicCarrierValue   = eng.NewDynamicCarrierValue
-	// NewClkDuration moved to lang/go/engine/native_temporal.go (Step 8).
+	// NewClockDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	// NewDate / NewDateTime moved to lang/go/engine/native_temporal.go (Step 8).
 	NewFloat       = eng.NewFloat
 	NewDefCleanup  = eng.NewDefCleanup
@@ -482,7 +491,7 @@ var (
 	NewOptionsType        = eng.NewOptionsType
 	NewOrderedMap         = eng.NewOrderedMap
 	NewParenExpr          = eng.NewParenExpr
-	NewPath               = eng.NewPath
+	NewPathon             = eng.NewPathon
 	NewRecordType         = eng.NewRecordType
 	NewRegistry           = eng.NewRegistry
 	NewReturnCheck        = eng.NewReturnCheck

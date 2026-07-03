@@ -3039,6 +3039,11 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		// field types are. The canonical *Type rides the body's payload
 		// pointer (shared, not copied), like every structural body.
 		return allFieldsInert(d.Record.Fields, memberOK)
+	case MicronTypeInfo:
+		// A Micron type body (`refine Micron {fields}`): field schema
+		// like a record's — const-safe when every constraint/default is
+		// inert. The canonical *Type rides the payload pointer.
+		return allFieldsInert(d.Fields, memberOK)
 	}
 	return false
 }
@@ -3074,9 +3079,22 @@ func isInertConst(v Value) bool {
 	}
 	switch d := v.Data.(type) {
 	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
-		PathPayload, NonePayload, BigIntPayload, DecimalPayload,
+		PathonPayload, NonePayload, BigIntPayload, DecimalPayload,
 		TimePayload, DurationPayload, TimezonePayload:
 		return true
+	case MicronPayload:
+		// A Micron instance (Emailon / Urlon / user kind) is inert ONLY
+		// because the family is immutable — `set` on a Micron is an
+		// explicit error (the erroring set signatures in the language
+		// layer). The payload's OrderedMap is pointer-backed, so if
+		// mutation were ever allowed, pooled consts would corrupt
+		// across loop iterations and this arm must be removed.
+		return true
+	case MicronTypeInfo:
+		// A Micron type body (`refine Micron {fields}`): structural
+		// descriptor like the RecordTypeInfo arm below — sound when its
+		// field map is carrier-free.
+		return typeBodyConstOK(v)
 	case DepScalarInfo:
 		// A predicate / refinement type (`Integer gt 10`): self-contained
 		// (base family + bound, no registry, no canonical-pointer hazard per

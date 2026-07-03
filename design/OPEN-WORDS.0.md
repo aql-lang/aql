@@ -1,9 +1,17 @@
 # Open Words — scoped `def` extension of existing words
 
-Status: **PROPOSAL, rev 1**. Design only — nothing here is landed
-except the §5.2 mintID prerequisite fix. Discussion artifact per the
-ADR rule (design notes capture discovery; no ADR entry without
-explicit maintainer instruction).
+Status: **IMPLEMENTED (rev 1 model)**. Landed as described in §2, with
+the open questions resolved to their leans; see "Implementation notes"
+at the end for the decisions, the mechanism as built, and where each
+piece lives. Pinned by `lang/spec/open-words.tsv` and
+`lang/go/test/reserved_words_test.go`. §6 migration 1 is DONE — the
+temporal add/sub overloads (and the duration/timezone/time-of-day
+TYPES, renamed CalendarDuration / ClockDuration) moved to
+aql:time-util via the transplant path; the MatrixUtil migration
+remains follow-up work (host-registration route — see the
+Implementation notes). Discussion artifact per the ADR rule (design
+notes capture discovery; no ADR entry without explicit maintainer
+instruction).
 
 Rev 1 replaces rev 0's dedicated `extend`/`overload` word with plain
 **`def` on an existing word**, scoped like every other `def`, plus an
@@ -38,7 +46,7 @@ temporal ones). Nothing at the AQL level can:
   `mat-` prefix is the workaround made visible.
 - `design/BEHAVIORS.10.md` §"Single dispatch on the LCA" already
   concedes the gap, naming this exact example: cross-type addition
-  (Date + CalDuration) "would need either a multimethod-style
+  (Date + CalendarDuration) "would need either a multimethod-style
   extension or the user attaching the impl to the LCA themselves."
 
 The temporal overloads on core `add`/`sub` live in `native_math.go`
@@ -372,6 +380,143 @@ Per the paired-negative discipline:
    undef-ing an import's contribution deserves a look.)
 5. Should the namespaced form (`Foo.add`) exist alongside the
    transplant (§4.9)? Lean yes.
+
+## Implementation notes (as landed)
+
+The mechanism turned out lighter than §2 assumed, because the kernel
+already had the load-bearing pieces: natives and user defs share ONE
+binding store (`Registry.Defs`), and `Registry.Lookup` already unions
+signatures across a name's def stack (`aggregateDispatch`). So a "word
+clone" is an ordinary def-stack entry:
+
+- **`Signature.Locked`** (`eng/go/value.go`) — stamped on every sig in
+  `Registry.Register` (the native/host path; user `def`s never reach
+  it). `CompareSignatures` sorts locked strictly first — the §3.3
+  theorem holds by ordering alone, across arity too (a longer unlocked
+  tuple never pre-empts a shorter locked prefix match). Locked entries
+  are also exempt from `InstallDef`'s overlap-drop and from targeted
+  `undef … fnsig` removal.
+- **`FnDefInfo.Extends`** — the clone's provenance marker (base word
+  name), detected only via `IsWordExtension`. `Lookup` stops
+  aggregating at a clone (it carries the full base list), which is what
+  makes unlocked-tuple replacement effective and `undef` restore the
+  exact previous state. `aggregateDispatch` propagates the marker so a
+  `name/r` reference stays recognisable at export.
+- **`eng/go/word_extend.go`** — sealed set + `InstallWordExtension`
+  (the def-merge; compiles added sigs through the same
+  `compileFnSigs` pipeline `InstallFnDef` uses) +
+  `TransplantExtension` (the import-side merge; `Signature.Origin`
+  carries the module ref for the §4.4 conflict/idempotence rules).
+- **lang wiring** — `defWordExtension` in
+  `lang/go/native/native_definition.go` (merge trigger: target's
+  aggregate has a locked sig AND the body is an fn — §4.1's lean,
+  which includes module-wrapper rebindings); `undef` pops a clone but
+  still refuses the bare native; `transplantWordExtensions` in
+  `native_module_module.go` runs in every export-install path.
+
+Resolved open questions: **4.1** locked-sig-bearing words only (module
+wrappers count — their rebindings carry locked sigs); **4.3** closures
+capture clones (uniform rule, pinned); **4.4** loud
+`[aql/extend_conflict]` module-vs-module, silent shadowing for direct
+user defs, diamond re-import idempotent by module-ref provenance
+(inline modules get a per-instance `inline#<id>` origin, so two inline
+modules collide loudly); **Q4** `undef` unwinds in reverse install
+order, no import/local distinction; **Q5** the namespaced `Foo.add`
+binding exists alongside the transplant.
+
+**Module-scope user-type rule (added post-rev-1, maintainer
+instruction).** A MODULE may extend a CORE word only with at least one
+USER-MINTED argument type per signature — a type the module creates
+with `refine` / `class` (`Origin == OriginUserDef`). Builtin types do
+NOT qualify, neither the kernel ones (`add [Boolean Boolean]`,
+`add [Integer Map]`) nor the external builtins the aql: modules and
+host plugins register globally (`Date`, `Matrix`, `Fetch`, `Timeout`);
+a builtin-only tuple raises `[aql/extend_user_type]`. Rationale: such
+a tuple would change what core calls mean for every importer
+(`add 1 {}` suddenly working because of an import) and breaks forward
+compatibility the day core or a first-party module claims the tuple
+as a locked signature. A type ALIAS (`def MyDate Date`) does not mint
+and cannot launder a builtin past the rule; a refine of a builtin
+(`def MyDate (refine Date)`) is a genuine user identity and
+qualifies. Enforced at the module-body `def` (`Registry.ModuleScope`,
+set by `RunModuleBody`) so the module author sees the refusal
+immediately — even a module-PRIVATE builtin-only extension is
+refused, since it breaks on the same future claim — and re-checked at
+transplant as defence in depth. Top-level programs are unrestricted
+(the author is standing at the point of change), and the rule does
+not apply to extending module-provided words (wrapper rebindings),
+which are versioned with the dependency that owns them.
+
+Consequence for the §6 migrations: a migration qualifies for the
+transplant path exactly when the module also takes ownership of the
+TYPES. Both are DONE this way:
+
+- Migration 1: TimeOfDay / Duration / CalendarDuration /
+  ClockDuration / Timezone moved out of the global builtin table
+  (former FixedIDs 1004-1008) into aql:time-util as per-import mints
+  (`MintTemporalModuleTypes`, the StreamKind pattern), and the
+  temporal add/sub overloads ride the module's exported word-extension
+  clones (`TemporalArithmeticExtensions` + `NewWordExtension`). Only
+  Date / DateTime / Instant (and the Scalar/Time root) remain core.
+- Migration 2: the Tensor family (Tensor / Matrix / Vector, former
+  FixedIDs 2000-2002) moved into aql:matrix-util the same way
+  (`MintTensorTypes` + `TensorArithmeticExtensions`): import
+  transplants [Matrix Matrix] overloads onto bare add / sub / mul,
+  with mat-add / mat-sub / mat-mul kept as aliases backed by the same
+  handlers. The Ideal-kind surface is namespaced now — `make
+  MatrixUtil.Matrix [[1 2][3 4]]`, `refine MatrixUtil.Matrix {rows:R
+  cols:C}` — since the bare names left the builtin index with the
+  types.
+
+In both cases the minted types are what satisfy the user-type rule. A
+future migration whose types must STAY global builtins would instead
+go through the host registration layer (Go-side `Register`, locked
+signatures) in the owning module's builder.
+
+The remaining module-owned globals followed (no word extensions
+needed — pure type moves): the Fetch family (3000-3002) →
+aql:net (`MintFetchTypes`, exported as Net.Fetch / Net.Request /
+Net.Response); Timeout / Interval (4000-4001) → aql:time-util
+(joined `MintTemporalModuleTypes`, exported as TimeUtil.Timeout /
+TimeUtil.Interval); and the three self-registered module carriers
+MiniLangCompiled (5003) / ParseGrammar (5005) / Model (5006) →
+per-import mints in their own builders. Still global by necessity:
+Bytes and Node/Xml (parser-produced), Date / DateTime / Instant
+(cross-module producers), Module / ModuleExport / KeyVal (core
+machinery), and Patrun (its words — including a locked overload on
+core add — are core vocabulary; moving it is a feature decision).
+
+Two properties the batteries pin
+(`lang/go/test/module_extend_test.go`, open-words.tsv §6–§7): file
+modules re-RUN per import (no module cache), so a re-imported module
+re-mints its user types — a diamond import appends a fresh-minted
+tuple quietly, and two modules' same-shaped user-typed extensions
+COEXIST (each anchored to its own mint, per-tree mintID §5.2) rather
+than conflict. `[aql/extend_conflict]` is therefore unreachable from
+AQL source today; the guard is pinned at the API level
+(TestModuleExtendTransplantConflictDirect) because it must hold for a
+future module cache (shared mints across importers) and for
+host-constructed clones.
+
+§4.5 sealed inventory as audited: `def` (`bindsReferent`, forward-hint
+and macro-expander name checks), `make` (`autoEvalMap` gating keys on
+`match.Name`), `word` (splice-paren expansion in `carrier.go`).
+`true`/`false`/`none`/`inf`/`nan` stay covered by `reservedLiterals`.
+
+§4.6 clone fidelity is free: the clone copies whole `Signature`
+structs, so `BarrierPos`/`QuoteArgs`/`NoEvalArgs`/`RawParens`/
+`FormArgs`/handlers ride along by value.
+
+§4.7 as observed: the checker follows scope through the ordinary
+registry lookup (a merged call type-checks in scope, flags out of
+scope); the bytecode recorder treats an added sig like any AQL fn —
+local merges compile with interpreter parity, and a transplanted
+(foreign-registry) sig REFUSES under `-force-compile` ("user fn call")
+and falls back to the interpreter under `-compile`, which is exactly
+the §4.7 contract.
+
+§4.8 stands as designed: the clone is rebuilt per `def` execution —
+extend at module/top level rather than in a hot fn body.
 
 ## Appendix A — rev 0 (superseded): the `extend` word
 

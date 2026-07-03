@@ -70,14 +70,14 @@ import "aql:time-util"  TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 17
 import "aql:time-util"  TimeUtil.add-months 2 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2024-01-14	add months
 import "aql:time-util"  TimeUtil.add-years 3 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2026-11-14	add years
 #
-# §12  duration constructors — calendar (Integer → CalDuration)
-import "aql:time-util"  TimeUtil.years 2	P2Y0M0D	n years as a CalDuration
-import "aql:time-util"  TimeUtil.months 6	P0Y6M0D	n months as a CalDuration
+# §12  duration constructors — calendar (Integer → CalendarDuration)
+import "aql:time-util"  TimeUtil.years 2	P2Y0M0D	n years as a CalendarDuration
+import "aql:time-util"  TimeUtil.months 6	P0Y6M0D	n months as a CalendarDuration
 import "aql:time-util"  TimeUtil.weeks 2	P0Y0M14D	n weeks (→ days)
 import "aql:time-util"  TimeUtil.days 30	P0Y0M30D	n days
-import "aql:time-util"  TimeUtil.cal-dur 1 6 15	P15Y6M1D	years/months/days → CalDuration
+import "aql:time-util"  TimeUtil.cal-dur 1 6 15	P15Y6M1D	years/months/days → CalendarDuration
 #
-# §13  duration constructors — clock (Number → ClkDuration)
+# §13  duration constructors — clock (Number → ClockDuration)
 import "aql:time-util"  TimeUtil.hours 3	3h0m0s	n hours
 import "aql:time-util"  TimeUtil.minutes 90	1h30m0s	n minutes
 import "aql:time-util"  TimeUtil.seconds 30	30s	n seconds
@@ -86,14 +86,14 @@ import "aql:time-util"  TimeUtil.us 250	250µs	n microseconds
 import "aql:time-util"  TimeUtil.ns 1000	1µs	n nanoseconds
 #
 # §14  duration extraction
-import "aql:time-util"  TimeUtil.total-hours (TimeUtil.minutes 90)	1.5	ClkDuration → total hours (Float)
+import "aql:time-util"  TimeUtil.total-hours (TimeUtil.minutes 90)	1.5	ClockDuration → total hours (Float)
 import "aql:time-util"  TimeUtil.total-minutes (TimeUtil.hours 2)	120.0	→ total minutes
 import "aql:time-util"  TimeUtil.total-seconds (TimeUtil.minutes 1)	60.0	→ total seconds
 import "aql:time-util"  TimeUtil.total-ms (TimeUtil.seconds 2)	2000.0	→ total milliseconds
-import "aql:time-util"  TimeUtil.dur-years (TimeUtil.cal-dur 1 6 15)	15	CalDuration years field
-import "aql:time-util"  TimeUtil.dur-months (TimeUtil.cal-dur 1 6 15)	6	CalDuration months field
-import "aql:time-util"  TimeUtil.dur-days (TimeUtil.cal-dur 1 6 15)	1	CalDuration days field
-import "aql:time-util"  TimeUtil.dur-sign (TimeUtil.cal-dur 1 0 0)	1	sign of a CalDuration
+import "aql:time-util"  TimeUtil.dur-years (TimeUtil.cal-dur 1 6 15)	15	CalendarDuration years field
+import "aql:time-util"  TimeUtil.dur-months (TimeUtil.cal-dur 1 6 15)	6	CalendarDuration months field
+import "aql:time-util"  TimeUtil.dur-days (TimeUtil.cal-dur 1 6 15)	1	CalendarDuration days field
+import "aql:time-util"  TimeUtil.dur-sign (TimeUtil.cal-dur 1 0 0)	1	sign of a CalendarDuration
 #
 # §15  date/instant differences
 import "aql:time-util"  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	P-54Y1M18D	calendar span from→to
@@ -132,3 +132,33 @@ import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUt
 import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	deq agrees with eq on a Time scalar — content equality, never container identity
 import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	unequal Dates are deq-unequal
 import "aql:time-util"  [(TimeUtil.to-date (TimeUtil.unix 1577836800))] deq [(TimeUtil.to-date (TimeUtil.unix 1577836800))]	true	deq recurses into Nodes holding Time scalars
+#
+# ─────────────────────────────────────────────────────────────────────
+# §21  temporal arithmetic — word extensions of core add/sub (open words)
+# The duration/timezone/time-of-day types are module-owned per-import
+# mints (no global registration), and the temporal overloads ride the
+# module's exported word extensions: import transplants them onto the
+# importer's bare add/sub (design/OPEN-WORDS.0.md §2.4, migration 1).
+import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	Date + CalendarDuration dispatches on bare add via the transplanted extension
+import "aql:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	Date - CalendarDuration via the transplanted extension
+import "aql:time-util"  add (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T23:13:20Z	Instant + ClockDuration
+import "aql:time-util"  sub (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T21:13:20Z	Instant - ClockDuration
+import "aql:time-util"  add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))) (TimeUtil.hours 5)	2023-11-14T05:00:00	DateTime + ClockDuration
+import "aql:time-util"  TimeUtil.add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	the namespaced form works alongside the transplant (§4.9)
+import "aql:time-util"  add 1 2	3	the locked numeric add is untouched by the transplant
+import "aql:time-util"  undef add  add 1 2	3	undef pops the module's extension; core add intact
+import "aql:time-util"  undef add  import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	re-import restores the extension (idempotent by origin)
+add 1 2	3	an engine that never imports the module has plain numeric add — nothing temporal leaks (negative twin)
+#
+# §22  module-owned temporal types — per-import mints, exported literals
+import "aql:time-util"  typeof (TimeUtil.days 3)	CalendarDuration	duration values carry the module-minted type
+import "aql:time-util"  (TimeUtil.days 3) is TimeUtil.CalendarDuration	true	the minted type is exported and testable with is
+import "aql:time-util"  (TimeUtil.days 3) is TimeUtil.Duration	true	CalendarDuration sits under the module's Duration node
+import "aql:time-util"  (TimeUtil.hours 1) is TimeUtil.CalendarDuration	false	sibling duration leaves stay distinct
+import "aql:time-util"  typeof (TimeUtil.tz-utc)	Timezone	Timezone is module-minted too
+import "aql:time-util"  TimeUtil.sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	the namespaced sub extension works alongside the transplant
+import "aql:time-util"  (TimeUtil.hours 2) is TimeUtil.ClockDuration	true	clock durations carry the module-minted ClockDuration type
+import "aql:time-util"  (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) is TimeUtil.TimeOfDay	true	TimeOfDay is module-minted and exported
+import "aql:time-util"  (TimeUtil.tz-utc) is TimeUtil.Timezone	true	Timezone is module-minted and exported
+import "aql:time-util"  (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) (TimeUtil.timeout 900 [1]) is TimeUtil.Timeout	true	timer handles carry the module-minted Timeout type (exported literal)
+import "aql:time-util"  (TimeUtil.cancel (TimeUtil.interval 1000 [1 add 2])) (TimeUtil.interval 900 [1]) is TimeUtil.Interval	true	interval handles carry the module-minted Interval type (exported literal)

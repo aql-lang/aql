@@ -27,7 +27,7 @@ import "aql:minilang"  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
 import "aql:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  register / kinds — out-of-band exports (not mini-callable)
-import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q m/q hb/q bb/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
+import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
 import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
 # Memoising an AQL kind: built-in re/xp cache their compiled artifact in a private
@@ -101,6 +101,27 @@ import "aql:minilang"  +hb:dead beef	ERROR:undefined_word	the open source ends a
 import "aql:minilang"  +hb/de ad be ef/	ERROR:undefined_word	whitespace no longer spans a literal — use `_` grouping, `\ ` escapes, or the quoted form
 import "aql:minilang"  +re:	ERROR:syntax_error	an empty open source is not a literal — `+re:` falls to normal lexing
 #
+# §mi  micron (short form: m) — Micron literals. The source parses through each
+#      ONE merged tabnas grammar (eng.MicronFromString): each builtin Micron
+#      leaf owns a tabnas literal grammar, and the (*Tabnas).Merge combination
+#      dispatches on shape — Emailon, then Urlon, then Pathon. Pathon's grammar
+#      accepts any whitespace-free source, so it is the catch-all and a micron
+#      literal never fails to parse. URL sources contain `:` and `/`, so
+#      pick a delimiter outside the source (`+m|https://…`) or the first
+#      occurrence closes the literal early (the standard closed-form rule).
+import "aql:minilang"  +m:alice@example.com typeof	Emailon	an email source parses first as Emailon
+import "aql:minilang"  +m:alice@example.com	alice@example.com
+import "aql:minilang"  (+m:alice@example.com:).host	'example.com'	a micron literal is a full Micron — properties work
+import "aql:minilang"  +m:bob@x.io eq (make Emailon 'bob@x.io')	true	the literal and the make form build the SAME value
+import "aql:minilang"  +m|https://x.com/a?q=1 typeof	Urlon	not an email → next constructor in turn: Urlon
+import "aql:minilang"  +m|https://x.com/a?q=1	https://x.com/a?q=1
+import "aql:minilang"  +m:a/b typeof	Pathon	neither email nor URL → the Pathon catch-all
+import "aql:minilang"  +m:9000 typeof	Pathon	any whitespace-free source is a valid (single-segment) Pathon
+import "aql:minilang"  +micron:bob@corp.io typeof	Emailon	the full kind name is the same transducer
+import "aql:minilang"  mini m 'bob@corp.io' typeof	Emailon	the explicit mini form is equivalent
+import "aql:minilang"  (MiniLang.lang_micron 'bob@corp.io' {} end) typeof	Emailon	as is the desugared standard call
+import "aql:minilang"  mini micron 5	ERROR:signature_error	the source must be a String
+#
 # §7  compiled mini-languages — an optional expansion-time compile hook (design §13).
 #     A kind keeps its transducer (the semantic reference + fallback) and adds a
 #     compiler that runs at the `mini` site when src is concrete, splicing tokens
@@ -125,7 +146,7 @@ import "aql:minilang"  "bx" +gex/a*/	None	+literal, no match → None
 import "aql:minilang"  "xab" +gex/a*/	None	anchored: the whole subject must match, not a substring
 import "aql:minilang"  ["ab" "zz" "ac"] +gex/a*/	['ab' 'ac']	a List subject is filtered to matching elements
 import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ {}	{ab:1 ac:3}	a Map subject is filtered by key — needs an explicit {} (mini's opts is a Map, so a bare map subject is claimed as opts)
-import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/	ERROR:uncalled_function	without the {} the map IS the opts, leaving no subject — the gotcha the {} above avoids
+import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ typeof	Function	without the {} the map IS the opts, leaving no subject — the partial stays a storable Function value (see §fn)
 import "aql:minilang"  "a*b" +gex/a**b/	'a*b'	`**` is a literal `*` (matches the star verbatim)
 import "aql:minilang"  "axb" +gex/a**b/	None	`**` is literal, so the wildcard reading does not apply
 import "aql:minilang"  "axc" +gex/a?c/	'axc'	`?` matches exactly one character
@@ -139,20 +160,20 @@ import "aql:minilang"  if ("bx" +gex/a*/) ['Y'] ['N']	'N'	None is falsy, so a no
 #     bound by the named params; operators + - * / % ^ (power, right-assoc),
 #     unary +/-, and parens. Numeric coercion follows AQL: all-integer operands
 #     stay Integer (division truncates like `div`), any Float promotes to Float.
-import "aql:minilang"  mini m 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
-import "aql:minilang"  mini m 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (AQL coercion)
-import "aql:minilang"  mini m '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
-import "aql:minilang"  mini m '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
-import "aql:minilang"  mini m '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
-import "aql:minilang"  mini m 'x/y' {x:5 y:2}	2	integer operands → truncating integer division, like `div`
-import "aql:minilang"  mini m 'x/y' {x:5.0 y:2}	2.5	a Float operand → real division
-import "aql:minilang"  mini m 'x' {x:42}	42	a bare variable resolves to its param
-import "aql:minilang"  (MiniLang.lang_m 'x*y-z^2' {x:3 y:4 z:2} end)	8	mini is sugar — the desugared standard call is equivalent
+import "aql:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
+import "aql:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (AQL coercion)
+import "aql:minilang"  mini math '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
+import "aql:minilang"  mini math '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
+import "aql:minilang"  mini math '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
+import "aql:minilang"  mini math 'x/y' {x:5 y:2}	2	integer operands → truncating integer division, like `div`
+import "aql:minilang"  mini math 'x/y' {x:5.0 y:2}	2.5	a Float operand → real division
+import "aql:minilang"  mini math 'x' {x:42}	42	a bare variable resolves to its param
+import "aql:minilang"  (MiniLang.lang_math 'x*y-z^2' {x:3 y:4 z:2} end)	8	mini is sugar — the desugared standard call is equivalent
 #
 # §m  negatives
-import "aql:minilang"  mini m 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
-import "aql:minilang"  mini m 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
-import "aql:minilang"  mini m 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error
+import "aql:minilang"  mini math 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
+import "aql:minilang"  mini math 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
+import "aql:minilang"  mini math 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error
 #
 # §jpq  jp — JSONPath (github.com/ohler55/ojg) — and jq — jq filter
 #       (github.com/itchyny/gojq). The document is the stack subject and may be
@@ -191,4 +212,109 @@ import "aql:minilang"  <r><a/></r> MiniLang.lang_xp '//a' {} end	[<a/>]	mini is 
 #
 # §xp  negatives
 import "aql:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPath is a loud parse error
-import "aql:minilang"  {a:1} mini xp '//a' {}	ERROR:uncalled_function	the document must be a Node/Xml — a Map subject does not match the xp signature, so the call is left uncalled
+# (a non-Xml subject leaves the partial as a VALUE next to the untouched subject —
+# pinned in lang/go/test as TestMiniXPathNonXmlSubject / TestMiniPartialParked; the
+# parked shapes are Go tests, not spec rows, because the compiled pipeline does not
+# lower an UNCONSUMED spliced partial yet)
+import "aql:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed to `math`; `m` is now the MICRON short form, so a formula-looking source is just a Pathon literal — use `mini math`
+#
+# §mi2  MiniLang.micron — the OPT-IN user-Micron literal hook. A user kind
+#       registers its literal shape as a GRAMMAR — a declarative spec Map
+#       (the tabnas GrammarSpec document Parse.spec accepts) or an aql:parse
+#       Parse.grammar builder value — plus a builder fn (the grammar's parse
+#       result → a Kind instance, applied AFTER the parse). The grammar's
+#       declared match token(s) gate the shape (the merged +m dispatch is
+#       token-driven) and the grammar merges into the +m grammar BETWEEN the
+#       builtin leaves and the Pathon catch-all (registration order).
+#       Builtins keep their spans; unclaimed spans still fall to Pathon; a
+#       token-only grammar's gates are auto-anchored to the whole literal;
+#       one shape per kind, per registry.
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  end  +m:T-123 typeof	Ticketon	a registered user grammar claims its span — the gate token decides
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  end  (+m:T-123:).id	'T-123'	the builder's instance is a full Micron — properties work
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  end  mini m 'T-77' typeof	Ticketon	the explicit mini form routes through the same merged grammar
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  end  +m:alice@example.com typeof	Emailon	builtin leaves keep their spans — user grammars merge AFTER them
+import "aql:minilang"  def Corpon refine Micron {who:String}  MiniLang.micron Corpon {options:{match:{token:{'#CP':'@/.+@corp[.]io/'}}}} ([s:String] => [make Corpon {who:s}])  end  +m:x@corp.io typeof	Emailon	even an overlapping user gate cannot claim an email span
+import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  end  +m:T-nope typeof	Pathon	a gate mismatch falls through to the catch-all (token-only gates are whole-literal anchored)
+import "aql:minilang"  def Ticketon refine Micron {id:String}  def Depton refine Micron {d:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  MiniLang.micron Depton {options:{match:{token:{'#DP':'@/D[/][a-z]+/'}}}} ([s:String] => [make Depton {d:s}])  end  [(+m:T-9 typeof) (+m:D/ops typeof) (+m:zz typeof)]	[Ticketon Depton Pathon]	multiple user grammars merge in registration order
+import "aql:minilang"  def Depton refine Micron {team:String}  MiniLang.micron Depton {options:{match:{token:{'#DP':'@/D-[a-z]+/'}}} rule:{val:{open:[{s:'#DP' a:'@team'}]}} ref:{'@team': ([nd:Any] => ['ops'])}} ([t:String] => [make Depton {team:t}])  end  (+m:D-x:).team	'ops'	a RULED grammar: the author's val alternate + ref action produce the node the builder receives
+import "aql:minilang"  def Depton refine Micron {team:String}  MiniLang.micron Depton {options:{match:{token:{'#DP':'@/D-[a-z]+/'}}} rule:{val:{open:[{s:'#DP'}]}}} ([s:String] => [make Depton {team:s}])  end  (+m:D-ops:).team	'D-ops'	a plain gated alternate defaults to the matched span as the node
+import "aql:minilang"  import "aql:parse"  def Baron refine Micron {v:String}  def g (Parse.grammar)  Parse.spec g {options:{match:{token:{'#BX':'@/B[0-9]+/'}}}}  MiniLang.micron Baron g ([s:String] => [make Baron {v:s}])  end  +m:B77 typeof	Baron	the builder form: an aql:parse grammar value, consumed like Parse.register consumes one
+# §mi2  negatives
+import "aql:minilang"  MiniLang.micron Emailon {options:{match:{token:{'#EX':'@/x/'}}}} ([s:String] => [1])	ERROR:micron_literal	a builtin Micron's literal shape is fixed
+import "aql:minilang"  MiniLang.micron Integer {options:{match:{token:{'#IX':'@/x/'}}}} ([s:String] => [1])	ERROR:micron_literal	the kind must be a Micron
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron 'B[0-9]+' ([s:String] => [make Baron {v:1}])	ERROR:micron_literal	the RETIRED regexp-pattern String form is refused with a migration hint — provide a grammar
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron {options:{}} ([s:String] => [make Baron {v:1}])	ERROR:micron_literal	a grammar with no match token can never claim a span — the +m dispatch is token-driven
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron {options:{tag:'zz' match:{token:{'#BX':'@/B[0-9]+/'}}}} ([s:String] => [make Baron {v:1}])	ERROR:micron_literal	the merge tag is the kind's name — options.tag is refused
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron {options:{match:{token:{'#EMAILON':'@/x/'}}}} ([s:String] => [make Baron {v:1}])	ERROR:micron_literal	a gate token colliding with a builtin leaf's is refused (the merge unifies tokens by name)
+import "aql:minilang"  def Aon refine Micron {v:Integer}  def Bon refine Micron {v:Integer}  MiniLang.micron Aon {options:{match:{token:{'#UZ':'@/Z[0-9]+/'}}}} ([s:String] => [make Aon {v:1}])  MiniLang.micron Bon {options:{match:{token:{'#UZ':'@/Y[0-9]+/'}}}} ([s:String] => [make Bon {v:2}])	ERROR:micron_literal	a gate token colliding with another kind's is refused
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron {options:{match:{token:{'#BX':'@/[[/'}}}} ([s:String] => [make Baron {v:1}])	ERROR:micron_literal	an invalid token regexp is refused at registration (the tabnas @/…/ compile is loud)
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron {options:{match:{token:{'#B1':'@/B[0-9]+/'}}}} ([s:String] => [make Baron {v:7}])  MiniLang.micron Baron {options:{match:{token:{'#B2':'@/C[0-9]+/'}}}} ([s:String] => [make Baron {v:8}])	ERROR:already registered	one shape per kind
+import "aql:minilang"  def Baron refine Micron {v:Integer}  MiniLang.micron Baron {options:{match:{token:{'#BX':'@/B[0-9]+/'}}}} ([s:String] => [s])  end  +m:B7	ERROR:must return one Baron instance	a wrong-typed builder result is loud — the gate claimed the span
+import "aql:minilang"  def Failon refine Micron {x:String}  MiniLang.micron Failon {options:{match:{token:{'#FX':'@/F[0-9]+/'}}}} ([s:String] => [make Failon {}])  end  +m:F1	ERROR:missing field	a failing builder is loud, not a silent Pathon fallback
+import "aql:minilang"  def Depton refine Micron {team:String}  MiniLang.micron Depton {options:{match:{token:{'#DP':'@/D-/'}}} rule:{val:{open:[{s:'#DP'}]}}} ([s:String] => [make Depton {team:s}])  end  +m:D-ops!! typeof	ERROR:mini_parse_error	a RULED grammar's prefix gate CLAIMED the span but the rules rejected the rest — loud, per the claimed-span rule
+import "aql:minilang"  import "aql:parse"  def Baron refine Micron {v:String}  def g (Parse.grammar)  Parse.spec g {options:{match:{token:{'#BX':'@/B[0-9]+/'}}}}  MiniLang.micron Baron g ([s:String] => [make Baron {v:s}])  Parse.register bx g	ERROR:parse_grammar_done	a grammar consumed by MiniLang.micron is single-use — Parse.register afterwards is refused
+#
+# §mi3  real-world micron kinds — an IP address, a Luhn-validated credit
+#       card, and a hex color, ALL COMBINED into the one +m grammar. The
+#       hex kind is the plain token-regex gate (the tabnas @/…/ lexer
+#       match defines the format); the card kind's BUILDER enforces the
+#       Luhn checksum, so a claimed span with a bad check digit is LOUD.
+#       Plus the longer `mini micron <var>` form with variable Strings,
+#       and microns inside macros.
+import "aql:minilang"  def Ipon refine Micron {addr:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  end  +m:10.0.0.7 typeof	Ipon	an IP-address micron — dots are ordinary bytes in the +m span
+import "aql:minilang"  def Ipon refine Micron {addr:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  end  (+m:10.0.0.7:).addr	'10.0.0.7'	the built instance is a full Micron — properties work
+import "aql:minilang"  def Ipon refine Micron {addr:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  end  +m:10.0.0 typeof	Pathon	three octets are not an IP shape — the gate mismatch falls to the catch-all
+import "aql:minilang"  def Coloron refine Micron {rgb:String}  MiniLang.micron Coloron {options:{match:{token:{'#UHEX':'@/#[0-9a-fA-F]{6}/'}}}} ([s:String] => [make Coloron {rgb:s}])  end  +m:#ff00aa typeof	Coloron	a hex-color micron: the tabnas token regex (@/#[0-9a-fA-F]{6}/) IS the format definition
+import "aql:minilang"  def Coloron refine Micron {rgb:String}  MiniLang.micron Coloron {options:{match:{token:{'#UHEX':'@/#[0-9a-fA-F]{6}/'}}}} ([s:String] => [make Coloron {rgb:s}])  end  (+m:#ff00aa:).rgb	'#ff00aa'	`#` is an ordinary span byte with the `:` delimiter
+import "aql:minilang"  import "aql:string-util"  def luhn-sum fn [[ds:List] [Integer] [if ((size ds) eq 0) [0] [def a (ds get 0)  def b (if ((size ds) gt 1) [ds get 1] [0])  def b2 (def x (b mul 2)  if (x gt 9) [x sub 9] [x])  a add (b2 add (luhn-sum (shed 2 ds)))]]]  def luhn-ok fn [[num:String] [Boolean] [def ds (reverse (num StringUtil.split '' each [([c:String] => [convert Integer c])]))  ((luhn-sum ds) mod 10) eq 0]]  def Cardon refine Micron {number:String}  MiniLang.micron Cardon {options:{match:{token:{'#UCARD':'@/[0-9]{13,16}/'}}}} ([s:String] => [if (luhn-ok s) [make Cardon {number:s}] [raise bad_card 'fails the Luhn check']])  end  +m:4539578763621486 typeof	Cardon	a credit-card micron: the gate claims 13-16 digit spans and the BUILDER validates the Luhn checksum
+import "aql:minilang"  import "aql:string-util"  def luhn-sum fn [[ds:List] [Integer] [if ((size ds) eq 0) [0] [def a (ds get 0)  def b (if ((size ds) gt 1) [ds get 1] [0])  def b2 (def x (b mul 2)  if (x gt 9) [x sub 9] [x])  a add (b2 add (luhn-sum (shed 2 ds)))]]]  def luhn-ok fn [[num:String] [Boolean] [def ds (reverse (num StringUtil.split '' each [([c:String] => [convert Integer c])]))  ((luhn-sum ds) mod 10) eq 0]]  def Cardon refine Micron {number:String}  MiniLang.micron Cardon {options:{match:{token:{'#UCARD':'@/[0-9]{13,16}/'}}}} ([s:String] => [if (luhn-ok s) [make Cardon {number:s}] [raise bad_card 'fails the Luhn check']])  end  (+m:4111111111111111:).number	'4111111111111111'	a second Luhn-valid vector, with property access
+import "aql:minilang"  import "aql:string-util"  def luhn-sum fn [[ds:List] [Integer] [if ((size ds) eq 0) [0] [def a (ds get 0)  def b (if ((size ds) gt 1) [ds get 1] [0])  def b2 (def x (b mul 2)  if (x gt 9) [x sub 9] [x])  a add (b2 add (luhn-sum (shed 2 ds)))]]]  def luhn-ok fn [[num:String] [Boolean] [def ds (reverse (num StringUtil.split '' each [([c:String] => [convert Integer c])]))  ((luhn-sum ds) mod 10) eq 0]]  def Ipon refine Micron {addr:String}  def Cardon refine Micron {number:String}  def Coloron refine Micron {rgb:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  MiniLang.micron Cardon {options:{match:{token:{'#UCARD':'@/[0-9]{13,16}/'}}}} ([s:String] => [if (luhn-ok s) [make Cardon {number:s}] [raise bad_card 'fails the Luhn check']])  MiniLang.micron Coloron {options:{match:{token:{'#UHEX':'@/#[0-9a-fA-F]{6}/'}}}} ([s:String] => [make Coloron {rgb:s}])  end  [(+m:10.0.0.7 typeof) (+m:#00ff00 typeof) (+m:4111111111111111 typeof) (+m:alice@example.com typeof) (+m:zz typeof)]	[Ipon Coloron Cardon Emailon Pathon]	all three kinds combined in one grammar — user shapes, builtin leaves and the Pathon catch-all all keep their spans
+import "aql:minilang"  def Ipon refine Micron {addr:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  end  def s '10.0.0.7'  mini micron s typeof	Ipon	the longer `mini micron <var>` form: src is an evaluated String, so a def-bound variable works
+import "aql:minilang"  def Coloron refine Micron {rgb:String}  MiniLang.micron Coloron {options:{match:{token:{'#UHEX':'@/#[0-9a-fA-F]{6}/'}}}} ([s:String] => [make Coloron {rgb:s}])  end  def s ('#ff' add '00aa')  mini m s typeof	Coloron	a COMPUTED String src through the short form
+import "aql:minilang"  import "aql:string-util"  def luhn-sum fn [[ds:List] [Integer] [if ((size ds) eq 0) [0] [def a (ds get 0)  def b (if ((size ds) gt 1) [ds get 1] [0])  def b2 (def x (b mul 2)  if (x gt 9) [x sub 9] [x])  a add (b2 add (luhn-sum (shed 2 ds)))]]]  def luhn-ok fn [[num:String] [Boolean] [def ds (reverse (num StringUtil.split '' each [([c:String] => [convert Integer c])]))  ((luhn-sum ds) mod 10) eq 0]]  def Cardon refine Micron {number:String}  MiniLang.micron Cardon {options:{match:{token:{'#UCARD':'@/[0-9]{13,16}/'}}}} ([s:String] => [if (luhn-ok s) [make Cardon {number:s}] [raise bad_card 'fails the Luhn check']])  end  def num '4539578763621486'  mini micron num typeof	Cardon	a variable card number routes through the same Luhn-validating builder
+import "aql:minilang"  def Ipon refine Micron {addr:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  end  def as-ip (macro [[x] [quote [mini m (unquote x)]]])  (as-ip '10.0.0.7') typeof	Ipon	a micron inside a MACRO: the template wraps `mini m` around the operand
+import "aql:minilang"  def Ipon refine Micron {addr:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  end  def home (macro [[u] [quote [mini m '192.168.0.1']]])  home 0 typeof	Ipon	a macro template carrying a fixed micron call expands and dispatches at the call site
+# §mi3  negatives
+import "aql:minilang"  import "aql:string-util"  def luhn-sum fn [[ds:List] [Integer] [if ((size ds) eq 0) [0] [def a (ds get 0)  def b (if ((size ds) gt 1) [ds get 1] [0])  def b2 (def x (b mul 2)  if (x gt 9) [x sub 9] [x])  a add (b2 add (luhn-sum (shed 2 ds)))]]]  def luhn-ok fn [[num:String] [Boolean] [def ds (reverse (num StringUtil.split '' each [([c:String] => [convert Integer c])]))  ((luhn-sum ds) mod 10) eq 0]]  def Cardon refine Micron {number:String}  MiniLang.micron Cardon {options:{match:{token:{'#UCARD':'@/[0-9]{13,16}/'}}}} ([s:String] => [if (luhn-ok s) [make Cardon {number:s}] [raise bad_card 'fails the Luhn check']])  end  +m:4539578763621487	ERROR:fails the Luhn check	the check digit is off by one — the gate CLAIMED the span, the builder rejects it loudly
+import "aql:minilang"  import "aql:string-util"  def luhn-sum fn [[ds:List] [Integer] [if ((size ds) eq 0) [0] [def a (ds get 0)  def b (if ((size ds) gt 1) [ds get 1] [0])  def b2 (def x (b mul 2)  if (x gt 9) [x sub 9] [x])  a add (b2 add (luhn-sum (shed 2 ds)))]]]  def luhn-ok fn [[num:String] [Boolean] [def ds (reverse (num StringUtil.split '' each [([c:String] => [convert Integer c])]))  ((luhn-sum ds) mod 10) eq 0]]  def Cardon refine Micron {number:String}  MiniLang.micron Cardon {options:{match:{token:{'#UCARD':'@/[0-9]{13,16}/'}}}} ([s:String] => [if (luhn-ok s) [make Cardon {number:s}] [raise bad_card 'fails the Luhn check']])  end  +m:1234567812345678	ERROR:fails the Luhn check	a plausible-looking 16-digit number that is not a valid card
+import "aql:minilang"  import "aql:string-util"  def luhn-sum fn [[ds:List] [Integer] [if ((size ds) eq 0) [0] [def a (ds get 0)  def b (if ((size ds) gt 1) [ds get 1] [0])  def b2 (def x (b mul 2)  if (x gt 9) [x sub 9] [x])  a add (b2 add (luhn-sum (shed 2 ds)))]]]  def luhn-ok fn [[num:String] [Boolean] [def ds (reverse (num StringUtil.split '' each [([c:String] => [convert Integer c])]))  ((luhn-sum ds) mod 10) eq 0]]  def Ipon refine Micron {addr:String}  def Cardon refine Micron {number:String}  def Coloron refine Micron {rgb:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  MiniLang.micron Cardon {options:{match:{token:{'#UCARD':'@/[0-9]{13,16}/'}}}} ([s:String] => [if (luhn-ok s) [make Cardon {number:s}] [raise bad_card 'fails the Luhn check']])  MiniLang.micron Coloron {options:{match:{token:{'#UHEX':'@/#[0-9a-fA-F]{6}/'}}}} ([s:String] => [make Coloron {rgb:s}])  end  +m:4539578763621487 typeof	ERROR:fails the Luhn check	the Luhn rejection stays loud in the combined grammar too
+import "aql:minilang"  def Ipon refine Micron {addr:String}  MiniLang.micron Ipon {options:{match:{token:{'#UIP':'@/[0-9]{1,3}([.][0-9]{1,3}){3}/'}}}} ([s:String] => [make Ipon {addr:s}])  end  def home (macro [[u] [quote [+m:192.168.0.1]]])  home 0	ERROR:syntax_error	a raw +m literal cannot ride in a quote template — it desugars to a paren group at parse time; spell the template with `mini m '…'` instead
+#
+# §fn  minilangs are FUNCTIONS in place. Conceptually every mini expansion
+#      produces a partially-applied function (src and opts bound); a value
+#      kind's function is called on the spot (+hb, +bb, math, micron, bf's
+#      generator form), while a FILTER kind's function auto-dispatches when
+#      a matching subject is on the stack — and stays a VALUE when not, so
+#      it can be bound with def (or parked with /r) and applied later.
+import "aql:minilang"  +re/[a-z]+/ typeof	Function	a bare filter literal IS a function value
+import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m	'bc'	store the partial, apply it later — the pattern rides inside
+import "aql:minilang"  def f (+re/[a-z]+/)  ("zQr" f).n	2	the stored partial is reusable across subjects ('z' and 'r' both match)
+import "aql:minilang"  def sel (mini gex 'a*')  ['aa' 'b' 'ab'] sel	['aa' 'ab']	the explicit mini form produces the same storable partial (gex select)
+import "aql:minilang"  def q (mini jp '$.a')  ({a:7} q) get 0	7	a stored JSONPath query
+# (/r parks the partial even with a subject on the stack — pinned in lang/go/test as
+# TestMiniPartialParked, not as a spec row: the compiled pipeline does not model a
+# /r-parked spliced partial yet)
+import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  def c (mini count 'an')  "banana" c	2	an AQL-registered filter kind gets the same storable-partial semantics
+import "aql:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is called in place — the literal is the value, not a Function
+#
+# §fnty  every filter kind's partial has a NAMED member type, exported under
+#        the capitalized kind name (MiniLang.Re, MiniLang.Gex, MiniLang.Jp,
+#        MiniLang.Jq, MiniLang.Xp; a filter-shaped MiniLang.register kind gets
+#        one too). typeof still reports Function — the member type is a
+#        CONSTRAINT (the DepScalar convention): use `is`, or a typed fn param
+#        (`fn [[m:(MiniLang.Re) …] …]`), to require a specific kind's partial.
+import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Re)	true	a re partial inhabits its named type
+import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)	false	…and NOT a sibling kind's type
+import "aql:minilang"  (+gex/a*/) is (MiniLang.Gex)	true	each filter kind has its own
+import "aql:minilang"  (+re/[a-z]+/) is Function	true	the partial is still a plain Function to every existing check
+import "aql:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Re)	true	a def-bound partial keeps its kind tag through the binding
+import "aql:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Jq)	false	…and still refuses the wrong kind
+import "aql:minilang"  +jp/$.a/ is (MiniLang.Jp)	true	a stored JSONPath query has its named type
+import "aql:minilang"  +xp|//book/title| is (MiniLang.Xp)	true	an XPath partial too (| delimiter: the path contains /)
+import "aql:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)	false	an ordinary lambda is a Function but NOT a re partial
+import "aql:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex	true	the exported type literal works as a def'd name too
+import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+re/[a-z]+/) "AbcD"	'AbcD'	the point: a typed fn param that requires specifically a regexp matcher (calling the partial inside the body is pinned in lang/go/test TestMiniPartialTypedParam — the checker's fn-value-call frontier)
+import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+gex/a*/) "AbcD"	ERROR:signature_error	a gex partial is refused by the m:(MiniLang.Re) slot
+import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  def f (+poly/x/)  f/r is (MiniLang.Poly)	true	a filter-shaped user kind mints its member type at register time
+import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  (+poly/x/) is (MiniLang.Re)	false	the user kind's partial is not a builtin kind's
+import "aql:minilang"  MiniLang.register gen (fn [[src:String opts:Map] [Integer] [1]]) end  MiniLang.Gen	None	a non-filter kind never produces a tagged partial, so no type is minted

@@ -41,32 +41,32 @@ func tensorTypeInfo(v native.Value) (TensorTypeInfo, bool) {
 // BuildMatrixModule, so the kinds become available exactly when
 // `aql:matrix` is imported — a host module dynamically extending the
 // type system, the property the Ideal registry exists to provide.
-func registerTensorIdeals(r *native.Registry) {
+func registerTensorIdeals(r *native.Registry, tt TensorModuleTypes) {
 	if r == nil {
 		return
 	}
 	tensor := &eng.Ideal{
 		Name:        "Tensor",
 		Enabled:     true,
-		Accepts:     tensorAccepts(TTensor, "Tensor"),
-		Construct:   tensorConstruct("Tensor", TTensor),
-		Instantiate: tensorInstantiate("Tensor", TTensor),
+		Accepts:     tensorAccepts(tt.Tensor, "Tensor"),
+		Construct:   tensorConstruct("Tensor", tt.Tensor),
+		Instantiate: tensorInstantiate("Tensor", tt.Tensor),
 	}
 	matrix := &eng.Ideal{
 		Name:        "Matrix",
 		Enabled:     true,
 		Refines:     tensor,
-		Accepts:     tensorAccepts(TMatrix, "Matrix"),
-		Construct:   tensorConstruct("Matrix", TMatrix),
-		Instantiate: tensorInstantiate("Matrix", TMatrix),
+		Accepts:     tensorAccepts(tt.Matrix, "Matrix"),
+		Construct:   tensorConstruct("Matrix", tt.Matrix),
+		Instantiate: tensorInstantiate("Matrix", tt.Matrix),
 	}
 	vector := &eng.Ideal{
 		Name:        "Vector",
 		Enabled:     true,
 		Refines:     tensor,
-		Accepts:     tensorAccepts(TVector, "Vector"),
-		Construct:   tensorConstruct("Vector", TVector),
-		Instantiate: tensorInstantiate("Vector", TVector),
+		Accepts:     tensorAccepts(tt.Vector, "Vector"),
+		Construct:   tensorConstruct("Vector", tt.Vector),
+		Instantiate: tensorInstantiate("Vector", tt.Vector),
 	}
 	r.Ideals.Register(tensor)
 	r.Ideals.Register(matrix)

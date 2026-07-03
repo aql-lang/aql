@@ -7,7 +7,8 @@
 // through the current TS engine (none, type literals, scalars, atoms,
 // lists, fn defs). Map / BigInteger / Reach / Flex / DepScalar branches
 // are added by their owning port increments.
-import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TPath, TString } from './type.ts'
+import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TPathon, TString, TEmailon, TUrlon } from './type.ts'
+import { urlonHref, type UrlonInfo } from './value.ts'
 import type { FnDefInfo, XmlElement } from './value.ts'
 import { ChildType, OptionsData, OrderedMap, Value } from './value.ts'
 
@@ -157,9 +158,16 @@ export function canonValue(v: Value): string {
   if (v.vType.equal(TAtom)) {
     return `${v.asAtom()}/q`
   }
-  if (v.vType.equal(TPath) && v.data !== null && typeof v.data === 'object' && 'segments' in v.data) {
+  if (v.vType.equal(TPathon) && v.data !== null && typeof v.data === 'object' && 'segments' in v.data) {
     const p = v.data as { segments: string[]; abs: boolean }
     return (p.abs ? '/' : '') + p.segments.join('/')
+  }
+  if (v.vType.equal(TEmailon) && v.data !== null && typeof v.data === 'object' && 'user' in v.data) {
+    const e = v.data as { user: string; host: string }
+    return `${e.user}@${e.host}`
+  }
+  if (v.vType.equal(TUrlon) && v.data !== null && typeof v.data === 'object' && 'scheme' in v.data) {
+    return urlonHref(v.data as UrlonInfo)
   }
   if (v.data instanceof ChildType) {
     const ct = v.data

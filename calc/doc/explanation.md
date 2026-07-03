@@ -42,8 +42,9 @@ fail at runtime because lang's words would have intruded into
 Two practical consequences for any host you write:
 
 - **`go.mod` is small.** Calc depends on `github.com/aql-lang/aql/eng/go`
-  and transitively on `github.com/jsonicjs/jsonic/go`. That's it.
-  No sqlite, no csv, no struct manipulation toolkit.
+  and transitively on the tabnas parser family (`tabnas/jsonic`,
+  `tabnas/parser`). That's it. No sqlite, no csv, no struct
+  manipulation toolkit.
 - **You own the names.** `add` in calc has nothing to do with
   `add` in lang. They share no signature, no handler, no surface
   guarantees. Calc decided what `add` means for itself.

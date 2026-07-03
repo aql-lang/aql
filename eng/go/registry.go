@@ -62,12 +62,21 @@ type Registry struct {
 	// Contexts is the scoped context stack; top = current engine's context Store. See contextstack.go.
 	Contexts *ContextStack
 	// Args is the per-call args list stack. See argsstack.go.
-	Args           *ArgsStack
-	Manager        any               // external manager (e.g. UniversalManager) for SDK operations
-	SDKCache       map[string]any    // cached SDK instances keyed by spec name
-	BaseDir        string            // base directory for resolving relative file paths (set by loadFileModule)
-	BaseFile       string            // full path of the current source file ("" if none); surfaced by __file/__folder
-	Source         string            // most recent source text for error reporting
+	Args     *ArgsStack
+	Manager  any            // external manager (e.g. UniversalManager) for SDK operations
+	SDKCache map[string]any // cached SDK instances keyed by spec name
+	BaseDir  string         // base directory for resolving relative file paths (set by loadFileModule)
+	BaseFile string         // full path of the current source file ("" if none); surfaced by __file/__folder
+	Source   string         // most recent source text for error reporting
+	// ModuleScope marks a registry that runs a MODULE body (set by the
+	// module-body runner, e.g. RunModuleBody in lang). Read by
+	// InstallWordExtension: a module may extend a CORE word only with
+	// signatures carrying at least one user-defined (non-kernel)
+	// argument type — an all-kernel tuple (`add [Boolean Boolean]`)
+	// would surprise importers (`add 1 {}` suddenly working) and breaks
+	// forward compatibility the day core claims the tuple as a locked
+	// signature. See design/OPEN-WORDS.0.md "Implementation notes".
+	ModuleScope    bool
 	errs           []error           // registration errors accumulated during setup
 	ready          bool              // true after initial setup; triggers dynamic help generation
 	OnRegisterHook func(name string) // called when a function is registered after startup
@@ -542,6 +551,26 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"missing_returns":       SeverityWarning,
 	"step_budget_exceeded":  SeverityWarning,
 	"body_error":            SeverityWarning,
+	// The Micron naming rule: a type bound under Scalar/Micron whose
+	// name does not end in the "on" suffix (micron.go).
+	"micron_name": SeverityError,
+	// A strict read (getr/dotr) whose miss is statically decidable — a
+	// known Micron kind with a concrete unknown key (native_micron.go).
+	"not_found": SeverityError,
+	// Parse.spec's check-mode dry pass (aql:parse): a concrete
+	// whole-grammar map with a decidable shape error — unknown section,
+	// mistyped token/action/matcher/abnf/rule entries.
+	"parse_bad_spec":    SeverityError,
+	"parse_bad_action":  SeverityError,
+	"parse_bad_matcher": SeverityError,
+	"parse_bad_abnf":    SeverityError,
+	"parse_bad_rule":    SeverityError,
+	// MiniLang.micron's check-mode dry pass (aql:minilang): a
+	// value-decidable registration shape error — a non-Micron or
+	// builtin kind, a non-Function builder, or a spec-Map grammar
+	// with a decidable document error (bad sections, no gate token,
+	// a user-set tag).
+	"micron_literal": SeverityError,
 	// Generics (design/GENERICS.10.md §9.2).
 	"constraint_violation": SeverityError,
 	"unbound_param":        SeverityError,
@@ -715,12 +744,19 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	// host-API word-registration path (RegisterNativeFunc and the public
 	// (*AQL).Register both route here); user `def`s install through
 	// InstallFnDef / DefTable.Push and never reach here. So this set is
-	// exactly the core vocabulary that `def` / `undef` must refuse to
-	// redefine — see IsBuiltinWord.
+	// exactly the core vocabulary whose bindings `def` / `undef` must
+	// protect — see IsBuiltinWord. A `def <builtin> fn […]` is not a
+	// redefinition but a MERGE (word extension, design/OPEN-WORDS.0.md);
+	// the Locked flag stamped here is what pins every natively
+	// registered signature against replacement/removal and keeps it
+	// first in match order.
 	if r.builtinWords == nil {
 		r.builtinWords = make(map[string]bool)
 	}
 	r.builtinWords[name] = true
+	for i := range sigs {
+		sigs[i].Locked = true
+	}
 	r.upsertFnDef(name, sigs...)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
@@ -842,10 +878,21 @@ func (r *Registry) Lookup(name string) *FnDefInfo {
 	// Collect every FnDefInfo binding for the name, newest-first. Each
 	// entry holds only its OWN overloads; the dispatch table is the union
 	// across the stack (overloading across stacked defs of one name).
+	//
+	// A word-extension CLONE (Extends != "") carries the base word's
+	// COMPLETE signature list plus its merge, so it OCCLUDES every
+	// deeper entry — unioning past it would resurrect the pre-merge
+	// version of any tuple the clone replaced (the stale overload would
+	// race the replacement at equal score). Stopping here is also what
+	// makes `undef` restore the exact previous state: popping the clone
+	// re-exposes whatever the walk stopped short of.
 	var entries []FnDefInfo
 	for i := len(stack) - 1; i >= 0; i-- {
 		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
 			entries = append(entries, fnDef)
+			if fnDef.Extends != "" {
+				break
+			}
 		}
 	}
 	if len(entries) == 0 {
@@ -907,6 +954,12 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 		Anonymous:      top.Anonymous,
 		Macro:          top.Macro,
 		Captured:       top.Captured,
+		MiniKind:       top.MiniKind,
+		// A word-extension clone's provenance marker rides the aggregate:
+		// when the newest entry is a clone the walk stopped there, so the
+		// aggregate IS the clone's view — a `name/r` reference (ResolveRef
+		// wraps the aggregate) must stay recognisable at export transplant.
+		Extends: top.Extends,
 	}
 }
 
@@ -1111,8 +1164,8 @@ func ValToString(v Value) string {
 			return "true"
 		}
 		return "false"
-	case IsPath(v):
-		_as13, _ := AsPath(v)
+	case IsPathon(v):
+		_as13, _ := AsPathon(v)
 		return _as13.String()
 	case IsWord(v):
 		_as14, _ := AsWord(v)

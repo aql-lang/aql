@@ -17,7 +17,7 @@ import (
 //     by atom-name as appropriate (Integer / Float / String /
 //     Boolean / Atom kernel Comparers).
 //   - Lists of domain values (Date / DateTime / Instant /
-//     ClkDuration) sort chronologically via their native Comparers.
+//     ClockDuration) sort chronologically via their native Comparers.
 //   - Lists of user-typed instances sort using the comparator
 //     installed via `behave compare/q (fn [[T T] [Integer] [body]])`.
 //

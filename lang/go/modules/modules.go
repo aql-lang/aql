@@ -175,6 +175,20 @@ func InstallTimeExports(r *native.Registry) error {
 	for name, exportMap := range desc.Exports {
 		r.Defs.Push(name, native.NewMap(exportMap))
 	}
+	// Transplant the module's word extensions (the temporal add / sub
+	// overloads) like the real import path does — this helper is the
+	// test/host shim for `import "aql:time-util"`, and bare add / sub
+	// must gain the overloads under it too.
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			if ext, ok := native.IsWordExtension(v); ok {
+				if err := native.TransplantExtension(r, ext, "aql:time-util"); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -186,6 +200,18 @@ func InstallMatrixExports(r *native.Registry) error {
 	}
 	for name, exportMap := range desc.Exports {
 		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	// Transplant the module's word extensions (the matrix add / sub /
+	// mul overloads) like the real import path does.
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			if ext, ok := native.IsWordExtension(v); ok {
+				if err := native.TransplantExtension(r, ext, "aql:matrix-util"); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }

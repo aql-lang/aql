@@ -11,7 +11,7 @@ import (
 )
 
 // The `m` mini-language: evaluate a traditional maths formula whose variables
-// are bound by the named params. `mini m 'x*y-z^2' {x:.. y:.. z:..}` parses the
+// are bound by the named params. `mini math 'x*y-z^2' {x:.. y:.. z:..}` parses the
 // formula with the tabnas/expr Pratt-parser plugin and folds the resulting AST
 // to a number. Operators: `+ - * / %`, `^` (power, right-associative, binding
 // tighter than `* /`), unary `+`/`-`, and `( )`.
@@ -55,7 +55,7 @@ func (m mval) asFloat() float64 {
 func miniMathHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", "m: src: "+err.Error(), "lang_m")
+		return nil, r.AqlError("mini_error", "math: src: "+err.Error(), "lang_math")
 	}
 
 	// Variable bindings come from the named params (opts). Each must be numeric.
@@ -67,8 +67,8 @@ func miniMathHandler(args []native.Value, _ map[string]native.Value, _ []native.
 				mv, ok := aqlToMval(v)
 				if !ok {
 					return nil, r.AqlErrorHint("mini_error",
-						fmt.Sprintf("m: variable %q must be a number, got %s", k, v.String()),
-						"lang_m", "bind every formula variable to an Integer or Float param")
+						fmt.Sprintf("math: variable %q must be a number, got %s", k, v.String()),
+						"lang_math", "bind every formula variable to an Integer or Float param")
 				}
 				vars[k] = mv
 			}
@@ -85,17 +85,17 @@ func miniMathHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		},
 	})
 	if perr != nil {
-		return nil, r.AqlErrorHint("mini_syntax_error", "m: "+native.FirstCleanLine(perr.Error()),
-			"lang_m", "write a maths formula like x*y-z^2 with variables bound via opts")
+		return nil, r.AqlErrorHint("mini_syntax_error", "math: "+native.FirstCleanLine(perr.Error()),
+			"lang_math", "write a maths formula like x*y-z^2 with variables bound via opts")
 	}
 
 	out, eerr := evalFormula(ast, vars, 0)
 	if eerr != nil {
 		if errors.Is(eerr, errMalformedFormula) {
-			return nil, r.AqlErrorHint("mini_syntax_error", "m: malformed formula", "lang_m",
+			return nil, r.AqlErrorHint("mini_syntax_error", "math: malformed formula", "lang_math",
 				"write a maths formula like x*y-z^2 with variables bound via opts")
 		}
-		return nil, r.AqlErrorHint("mini_eval_error", "m: "+eerr.Error(), "lang_m",
+		return nil, r.AqlErrorHint("mini_eval_error", "math: "+eerr.Error(), "lang_math",
 			"check the operators and that every variable is bound in opts")
 	}
 	if out.isInt {

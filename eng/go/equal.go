@@ -34,7 +34,7 @@ func nodeFamily(t *Type) *Type {
 // ValuesEqual compares the data payloads of two values with the same type.
 //
 // Routes through Behavior.Equal for the same-Parent case so types
-// with normalisation semantics (CalDuration, DepScalar in a future
+// with normalisation semantics (CalendarDuration, DepScalar in a future
 // step, and plugin types) can supply their own equality. The
 // cross-Parent case falls through to the default switch since
 // equality across types is a matching-strategy concern, not a
@@ -100,6 +100,25 @@ func valuesEqualDefault(a, b Value) bool {
 			return false
 		}
 		return depScalarsEqual(ai, bi)
+	}
+	// Micron instances (Emailon / Urlon / user kinds) and Pathons:
+	// content equality, as a backstop for values whose minted node
+	// carries a wrapper Behavior that delegates Equal here. Without
+	// these branches the default %v-format arm would compare the
+	// OrderedMap POINTER, making equal-content Microns unequal.
+	if am, aok := a.Data.(MicronPayload); aok {
+		bm, bok := b.Data.(MicronPayload)
+		return bok && mapsEqual(am.Fields, bm.Fields)
+	}
+	if _, bok := b.Data.(MicronPayload); bok {
+		return false
+	}
+	if ap, aok := a.Data.(PathonPayload); aok {
+		bp, bok := b.Data.(PathonPayload)
+		return bok && pathonContentEqual(ap.Info, bp.Info)
+	}
+	if _, bok := b.Data.(PathonPayload); bok {
+		return false
 	}
 	switch {
 	case a.Parent.ConformsTo(TString):

@@ -401,6 +401,7 @@ Any
 ├── Scalar
 │   ├── Atom
 │   ├── Boolean                     -- false | true
+│   ├── Bytes                       -- byte string (`0x…` literals)
 │   ├── Number
 │   │   ├── Integer                  -- signed int64 (overflow → error)
 │   │   ├── Float                    -- IEEE-754 binary64
@@ -409,11 +410,15 @@ Any
 │   ├── String
 │   │   ├── EmptyString
 │   │   └── ProperString
-│   ├── Path
+│   ├── Micron                       -- structured scalars: content-equal, immutable
+│   │   ├── Pathon                   -- filesystem-style path (was `Path`)
+│   │   ├── Emailon                  -- email address
+│   │   └── Urlon                    -- absolute URL
 │   └── Time
-│       ├── Date, DateTime, Instant, TimeOfDay
-│       ├── Duration (CalDuration | ClkDuration)
-│       └── Timezone
+│       ├── Date, DateTime, Instant
+│       └── (aql:time-util owns TimeOfDay, Duration
+│            with CalendarDuration | ClockDuration, and Timezone —
+│            module-minted per import, e.g. TimeUtil.CalendarDuration)
 ├── Node
 │   ├── List
 │   │   └── FlexList                 -- mutable list (see Flex nodes)
@@ -425,9 +430,11 @@ Any
 │   ├── Surface                     -- user surfaces (operation contracts)
 │   ├── Record, Options, Error
 │   ├── Store, Table
-│   ├── Fetch (Request | Response)
-│   ├── Timeout, Interval
-│   └── Tensor (Matrix | Vector)
+│   └── (module-minted per import — the owning module exports
+│        the literals: aql:net owns Fetch with Request | Response
+│        (Net.Response); aql:time-util owns Timeout and Interval
+│        (TimeUtil.Timeout); aql:matrix-util owns Tensor with
+│        Matrix | Vector (MatrixUtil.Matrix))
 ├── Word
 │   └── (internal control words)
 └── Type
@@ -591,6 +598,96 @@ sort [Integer 0 5 -3]         # returns [Integer -3 0 5]
 > [`fn` type semantics](#fn-type-semantics)). To ask
 > the ordering question, put the literal on the right (`0 gt Integer`)
 > or use `tcmp` (`(Integer tcmp 0) lt 0` returns `true`).
+
+### Microns — structured scalars
+
+`Scalar/Micron` is the **structured scalar** family: values with the
+identity rules of a scalar — equality by content (two values with the
+same fields *are* equal), immutability, a place in the total order —
+that are nevertheless object-like, exposing named read-only properties
+through `.` / `get`. Three leaves are built in:
+
+| Type | Construct from | Properties (derived in bold) |
+|---|---|---|
+| `Pathon` | a `String` (`'a/b'`) or a `List` of segments | `parts`, `abs` |
+| `Emailon` | a plain `user@host` string, or a `{user host}` map | `user`, `host`, **`address`** |
+| `Urlon` | an absolute-URL string, or a `{scheme host port? path? query? fragment?}` map | `scheme`, `host`, `port`, `path`, `query`, `fragment`, **`href`** |
+
+(`Pathon` is the former `Scalar/Path`, moved into the family under its
+new name — the bare `Path` name no longer resolves; change `make Path`
+to `make Pathon`.)
+
+Both construction forms run the *same* validator — the map form
+re-renders through the string parser — and the derived properties
+(**`address`**, **`href`**) are synthesized at read time, never
+stored, so equality compares primary fields only:
+
+```
+def e (make Emailon 'alice@example.com')
+e.host                                   # returns 'example.com'
+e.address                                # returns 'alice@example.com'
+(make Emailon {user:'alice' host:'example.com'}) eq e   # returns true
+def u (make Urlon 'https://x.com/a?q=1')
+u.scheme                                 # returns 'https'
+u.port                                   # returns None — no explicit port
+u.href                                   # returns 'https://x.com/a?q=1'
+def p (make Pathon '/a/b')
+p.parts                                  # returns ['a' 'b']
+p.abs                                    # returns true
+make Emailon 'not-an-email'              # returns error: invalid email address
+```
+
+Microns are **immutable** — `set` is a loud error rather than a
+missing signature — and the strict readers (`getr` / `!.`) raise on a
+property miss where `.` / `get` read `none`:
+
+```
+def e (make Emailon 'a@b.co')
+e set user/q 'x'                         # returns error: immutable
+e.bogus                                  # returns None
+e!.bogus                                 # returns error: no property
+```
+
+**User Microns** mint with a field schema refined from the *root*:
+`def Baron refine Micron {foo:String}`. Fields validate at `make`
+exactly like class fields (a concrete schema entry is a default). A
+builtin leaf refines *nominally only* (`def Workon refine Emailon` — a
+newtype inheriting the leaf's construction and validation); giving a
+leaf extra fields is an error, because a leaf's field set is its
+validation contract:
+
+```
+def Baron refine Micron {foo:String}
+(make Baron {foo:'hi'}).foo              # returns 'hi'
+(make Baron {foo:'hi'}) eq (make Baron {foo:'hi'})   # returns true
+def Workon (refine Emailon)
+(make Workon 'a@b.co').host              # returns 'b.co'
+refine Emailon {extra:String}            # returns error: validation contract
+```
+
+**The naming rule.** Every type bound under `Scalar/Micron` must have
+a name ending in the suffix `on` (case-sensitive, at least three
+characters): `Pathon`, `Emailon`, `Urlon`, `Baron`. A bind that
+violates it — including an alias like `def Mail Emailon` — raises
+`[aql/micron_name]`. The rule is one-directional: names ending in
+`on` elsewhere in the lattice (`Duration`, `Function`, `Negation`)
+are not Microns.
+
+```
+def Bad refine Micron {x:String}         # returns error: micron_name
+```
+
+**Ordering.** Same-kind Microns order by content (`Pathon` keeps its
+historical segment order; other kinds order by canonical render), and
+newtype-vs-base pairs compare across the nominal tag. Different Micron
+kinds are `cmp`-incomparable — use `tcmp` for the cross-kind total
+order (`Micron` < `Pathon` < `Emailon` < `Urlon` < user kinds).
+
+```
+(make Emailon 'a@b.co') cmp (make Emailon 'b@b.co')   # returns -1
+(make Emailon 'a@b.co') cmp (make Pathon 'a')         # returns error: incomparable
+(make Pathon 'a') tcmp (make Emailon 'a@b.co')        # returns -1
+```
 
 ### Classes
 
@@ -1003,10 +1100,27 @@ restricted words refuse. See
 | `referent` | What a quoted atom's name refers to | `def x 5  (quote x) referent` returns `5` |
 | `word` | Splice marker: spreads a list's elements (any other value: itself) into the token stream | `[0 word [1,2,3] 4]` returns `[0 1 2 3 4]` |
 
-> **Core words are frozen.** `def`/`undef` may not redefine a built-in
-> word, nor the literals `true`/`false`/`none` — `def add …`,
-> `def true …`, `undef if` all raise `[aql/reserved_word]`. Extend the
-> language by defining a **new** word, not by shadowing a built-in.
+> **Core bindings are frozen; core words are open.** `def`/`undef` may
+> not rebind a built-in word to a *value*, nor touch the literals
+> `true`/`false`/`none` — `def add 42`, `def true …`, `undef if` all
+> raise `[aql/reserved_word]`. But `def <built-in> fn […]` **merges**
+> the fn's signatures into the word in the current scope (fn body /
+> module body / top level) — a *word extension*: new argument-type
+> tuples append after the built-in's own (locked) signatures, so no
+> previously-valid call changes its dispatch; a tuple exactly matching
+> a locked signature raises `[aql/locked_signature]`; `undef <word>`
+> pops the extension. The sealed words `def` / `make` / `word` cannot
+> be extended at all. A module exports its merged word like any fn
+> (`export "M" {add: add/r}`) and importing the module transplants the
+> extension one level into the importer. A **module** may extend a core
+> word only with at least one **user-minted** argument type per
+> signature — a type the module creates with `refine` or `class`.
+> Built-in types don't qualify, whether kernel (`Integer`, `Map`, …)
+> or registered by `aql:` modules (`Date`, `Matrix`, …): a
+> builtin-only tuple like `[Integer Map]` raises
+> `[aql/extend_user_type]`, so `add 1 {}` can never start working
+> because of an import (top-level programs are unrestricted). See
+> `lang/spec/open-words.tsv` and `design/OPEN-WORDS.0.md`.
 > Re-`def`ing your **own** words still shadows as before (`def x 1; def
 > x 2` ⇒ `x` is `2`), and a built-in *type* name (`Integer`, …) was
 > already unusable as a `def` target.
@@ -1584,7 +1698,7 @@ type:
 | Atom | length of the name | `foo/q size` returns `3` |
 | Integer / Float | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
 | Boolean | `1` for `true`, `0` for `false` | `true size` returns `1` |
-| Path | segment count | `(make Path "a/b/c") size` returns `3` |
+| Pathon | segment count | `(make Pathon "a/b/c") size` returns `3` |
 | class instance / Store / Table | field / entry / row count | `(make Pt {x:1 y:2}) size` returns `2` |
 | `None`, a Date, a bare scalar, or any non-concrete value (e.g. a bare type literal) | `0` (never errors) | `None size` returns `0`, `List size` returns `0` |
 
@@ -1998,7 +2112,10 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `def_error` | `def`'s value expression produced no value to bind. |
 | `no_value_error` | A parenthesised argument expression produced no value for a call. |
 | `uncalled_function` | A call matched no signature and its function value was never consumed. |
-| `reserved_word` | `def`/`undef` targeted a built-in word or the literal `true`/`false`/`none`. |
+| `reserved_word` | `def`/`undef` targeted a built-in word's value binding, a sealed word (`def`/`make`/`word`), or the literal `true`/`false`/`none`. |
+| `locked_signature` | A word extension's signature tuple exactly matches a locked (built-in) signature — locked signatures can never be replaced. |
+| `extend_conflict` | Two different modules transplanted the same signature tuple onto one word at import. |
+| `extend_user_type` | A module extended a core word with a builtin-only argument tuple — at least one user-minted type (`refine` / `class`) is required per signature; kernel and `aql:`-module types don't qualify. |
 | `constraint_violation` | A generic type argument does not satisfy its `extends` bound. |
 | `arity_mismatch` | `of` received the wrong number of type arguments (defaults fill only the tail). |
 | `unbound_param` | A generic parameter could not be inferred and has no default. |

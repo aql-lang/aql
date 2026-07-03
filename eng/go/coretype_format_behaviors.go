@@ -4,7 +4,7 @@ package eng
 // here have moved to the packages that own their types.
 //
 //   Time-family Behaviors (Date / DateTime / Instant / TimeOfDay /
-//   CalDuration / ClkDuration / Timezone) → lang/go/engine/native_temporal.go.
+//   CalendarDuration / ClockDuration / Timezone) → lang/go/engine/native_temporal.go.
 //
 //   Matrix → lang/go/internal/nativemod/matrix.go.
 //

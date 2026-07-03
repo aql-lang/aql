@@ -327,55 +327,53 @@ func (wordCompareBehavior) Compare(a, b Value) (int, error) {
 // to bail.
 //
 // CompareValues reaches it only for cross-family pairs: the LCA walk
-// stops at a branch root's own Comparer (Number/String/Boolean/Atom)
-// for any same-family pair. The one same-Rank pair that does reach here
-// is Path-vs-Path — Path has no Comparer of its own — so two paths fall
-// through to Scalar, where comparePaths orders them by segment count
-// (shortest first), then segment by segment in reverse lexical order,
-// then relative before absolute.
+// stops at a branch root's own Comparer (Number/String/Boolean/Atom,
+// and the Micron family Comparer for Pathon/Emailon/Urlon pairs) for
+// any same-family pair. The one same-Rank pair that does reach here is
+// DepScalar-vs-DepScalar (their wrapper Comparers opt out), settled by
+// comparePathons' canonical-form branch below.
 type scalarCompareBehavior struct{ defaultBehavior }
 
 func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 	// Cross-family scalar pairs (e.g. Boolean-vs-Integer) and the
-	// Path-vs-Path case both land here. For cross-family pairs the
-	// Rank discriminator must own the result — applying the type-
+	// same-type DepScalar case both land here. For cross-family pairs
+	// the Rank discriminator must own the result — applying the type-
 	// literal-first rule here would override Rank (e.g. `true cmp
 	// Integer` should stay -1 via Rank, not flip to +1 because
-	// Integer is a literal). The Path-vs-Path-literal case is
-	// settled by comparePaths' own litVsConcrete check.
+	// Integer is a literal).
 	if c := compareTypes(ValueType(a), ValueType(b)); c != 0 {
 		return c, nil
 	}
-	// Same scalar type — Path-vs-Path orders by segment count, then
-	// segment by segment, then absolute before relative.
-	return comparePaths(a, b), nil
+	// Same scalar type with no family Comparer of its own — DepScalar
+	// pairs order by canonical form via comparePathons' first branch.
+	return comparePathons(a, b), nil
 }
 
-// comparePaths orders two Path values by three keys in turn: shorter
+// comparePathons orders two Pathon values by three keys in turn: shorter
 // paths (fewer segments) sort first, then segment by segment in
 // reverse lexical order, then a relative path before an absolute one.
-// scalarCompareBehavior routes the Path-vs-Path case here.
-func comparePaths(a, b Value) int {
+// scalarCompareBehavior routes the Pathon-vs-Pathon case here.
+func comparePathons(a, b Value) int {
 	// DepScalar pair: order by canonical form (forward lex on the
 	// rendered "(base op bound)" string). They have no numeric
 	// ordering of their own — their Comparers signal ErrNoComparer
 	// so we land here — and the spec's "tie-breaks on canonical
-	// form" rule wants forward lex, not the Path-reverse rule.
+	// form" rule wants forward lex, not the Pathon-reverse rule.
 	if a.IsDepScalar() && b.IsDepScalar() {
 		return strings.Compare(a.String(), b.String())
 	}
-	// Type-literal-first rule for the Path family: the bare `Path`
+	// Type-literal-first rule for the Pathon family: the bare `Pathon`
 	// type literal sorts strictly below every concrete path value.
 	// Done here (not in scalarCompareBehavior) so the rule applies
-	// only inside the Path family — cross-family scalar pairs route
+	// only inside the Pathon family — cross-family scalar pairs route
 	// through scalarCompareBehavior's Rank-only path.
 	if c, ok := litVsConcreteOrder(a, b); ok {
 		return c
 	}
-	ap, aerr := AsPath(a)
-	bp, berr := AsPath(b)
+	ap, aerr := AsPathon(a)
+	bp, berr := AsPathon(b)
 	if aerr != nil || berr != nil {
-		// Two type literals (both Data==nil) or two non-Path
+		// Two type literals (both Data==nil) or two non-Pathon
 		// concretes — fall back to lattice identity then to
 		// rendered form.
 		if a.Data == nil && b.Data == nil {
@@ -410,38 +408,6 @@ func comparePaths(a, b Value) int {
 	}
 }
 
-// pathEqualBehavior gives the Path family content equality: two
-// concrete Paths are equal iff they have the same segments and the
-// same absolute/relative flag — exactly the pairs comparePaths orders
-// as 0 — so eq/deq agree with cmp on Paths (both route here via
-// scalarSemanticEqual). Without it, Path fell through ExactEqual's
-// and DeepEqual's dispatch to `return false`, making identical
-// concrete Paths eq-unequal while cmp said 0.
-//
-// Compare is deliberately NOT implemented: Path ordering keeps
-// routing through the LCA walk to scalarCompareBehavior →
-// comparePaths, unchanged. Non-concrete operands (the bare `Path`
-// type literal) fall back to the kernel default, which compares
-// lattice identity.
-type pathEqualBehavior struct{ defaultBehavior }
-
-func (pathEqualBehavior) Equal(a, b Value) bool {
-	ap, aerr := AsPath(a)
-	bp, berr := AsPath(b)
-	if aerr != nil || berr != nil {
-		return DefaultBehavior.Equal(a, b)
-	}
-	if ap.Abs != bp.Abs || len(ap.Parts) != len(bp.Parts) {
-		return false
-	}
-	for i := range ap.Parts {
-		if ap.Parts[i] != bp.Parts[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // init attaches the scalar Comparers to their owning kernel types.
 // The Builtin TypeTable has been populated by the typetable.go init
 // at this point (same package, lexicographic file order isn't
@@ -460,5 +426,4 @@ func init() {
 	TAtom.Behavior = atomCompareBehavior{}
 	TScalar.Behavior = scalarCompareBehavior{}
 	TWord.Behavior = wordCompareBehavior{}
-	TPath.Behavior = pathEqualBehavior{}
 }

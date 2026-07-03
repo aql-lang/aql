@@ -1422,7 +1422,11 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	if reason != "" {
 		t.Fatalf("mini expansion uncompilable: %s", reason)
 	}
-	if !strings.Contains(got, "CALL_NATIVE") || strings.Contains(got, "CALL_USER") {
+	// A filter-kind mini now expands to a PARTIAL function (src+opts
+	// bound, subject the remaining param), so the lowering is a compiled
+	// CALL_USER whose body makes the CALL_NATIVE — still fully compiled,
+	// no interpreter island.
+	if !strings.Contains(got, "CALL_NATIVE") {
 		t.Errorf("mini did not lower to a native call:\n%s", got)
 	}
 	// The dynamic-result data accessor now islands (F4); the result
