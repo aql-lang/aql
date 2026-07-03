@@ -515,6 +515,29 @@ func childFragments(ev *emitEvent) []*EmitFragment {
 // local, so planValueDefLocals uses this walk to force such a producer's
 // promotion.
 func forEachFragmentOperand(ev *emitEvent, fn func(emitOperand)) {
+	// A fragment's OUT operand (an arm result / loop body result) is a
+	// cross-floor reference too when it names an ENCLOSING-scope producer —
+	// the `def kid (user-call …); if c [other] [kid]` arm, whose fragment has
+	// NO events of its own, so the frag.events walk below never sees the
+	// reference and the producer is left unpromoted (the arm then refuses
+	// "branch leaves extra values", out=opEvent vm=0). Visit the outs here so
+	// planValueDefLocals counts them as fragment refs; a fragment-INTERNAL out
+	// stays unpromoted regardless via the fragResult && fragInternal gate.
+	switch ev.kind {
+	case evBranch:
+		if ev.br != nil {
+			if ev.br.hasThenOut {
+				fn(ev.br.thenOut)
+			}
+			if ev.br.hasElsOut {
+				fn(ev.br.elsOut)
+			}
+		}
+	case evLoop:
+		if ev.loop != nil {
+			fn(ev.loop.bodyOut)
+		}
+	}
 	for _, frag := range childFragments(ev) {
 		if frag == nil {
 			continue
@@ -812,7 +835,19 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// A user-call value-def captured by a closure (captured) joins the
 		// forceOrder / multi-ref triggers: the capture needs the result in a frame
 		// slot, so it must not be left loose on the sim (the radix list-max leaf).
-		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 || (captured[ev.seq] && es.eventInfo[ev.seq].valueDef))
+		// A NAMED user-call value-def read from INSIDE a branch/loop fragment
+		// (fragRef && !fragInternal) also promotes: the arm's own sim cannot reach
+		// the parent stack, so without a slot the arm refuses "branch leaves extra
+		// values" (out=opEvent, vm=0 — the trie-insert `def kid (nd ch find-kid);
+		// … if … [kid]` shape recompiled under the unit-spec cascade). Storing a
+		// named def once and re-pushing per reference IS the interpreter's
+		// def-evaluates-once semantics, and the fragment read is a COUNTED ref —
+		// unlike the uncounted harness/accumulation feed the single-use exclusion
+		// above guards — so the store never diverges. Gated on valueDef, keeping
+		// anonymous single-use harness feeds on the Stage-3 stack layout.
+		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 ||
+			(captured[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
+			(fragRef[ev.seq] && !fragInternal[ev.seq] && es.eventInfo[ev.seq].valueDef))
 		// A DEAD value-def — `def _ (f …)` bound to a name referenced ZERO times —
 		// drops its result for a USER call too, not only a native. The interpreter
 		// binds the result to that name OFF the residual stack (the binding is the
