@@ -43,13 +43,20 @@ func init() {
 			"contain `:` and `/` — pick a delimiter outside the source: `+m|https://x.com/a`.",
 		"lang_m": "Short form of the micron kind — see lang_micron. `+m:alice@example.com` " +
 			"parses as an Emailon; `+m|https://x.com/a` as an Urlon; `+m:a/b` as a Pathon.",
-		"micron": "OPT-IN user-Micron literal hook: `MiniLang.micron <Kind> '<pattern>' <fn>` registers " +
-			"a literal shape for a USER-defined Micron kind (def Nameon refine Micron {\u2026}). The " +
-			"anchored Go-regexp pattern gates the shape and the fn ([String] \u2192 a Kind instance) " +
-			"constructs the value; the shape merges into the `+m` grammar BETWEEN the builtin leaves " +
-			"and the Pathon catch-all (registration order), so Emailon/Urlon keep their spans and " +
-			"unclaimed spans still fall to Pathon. One shape per kind; a builder failure or a " +
-			"wrong-typed result is a loud mini_parse_error at the literal.",
+		"micron": "OPT-IN user-Micron literal hook: `MiniLang.micron <Kind> <grammar> <fn>` registers " +
+			"a literal shape for a USER-defined Micron kind (def Nameon refine Micron {\u2026}). The shape " +
+			"is a whole tabnas GRAMMAR \u2014 a declarative spec Map (the same GrammarSpec document " +
+			"Parse.spec accepts: `{options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} rule:{\u2026} ref:{\u2026}}`) " +
+			"or an aql:parse Parse.grammar builder value (consumed, single-use). The grammar must " +
+			"declare \u22651 match token \u2014 the merged `+m` dispatch is token-driven, so the gate token(s) " +
+			"claim the kind's literal spans \u2014 and merges into the `+m` grammar BETWEEN the builtin " +
+			"leaves and the Pathon catch-all (registration order): Emailon/Urlon keep their spans, " +
+			"unclaimed spans still fall to Pathon. A token-only grammar's gates are auto-anchored to " +
+			"the whole literal; a grammar with its own val alternates/rules owns recognition verbatim " +
+			"(a claimed-then-rejected span is a loud mini_parse_error). The fn receives the grammar's " +
+			"parse RESULT (the matched span String for a plain gate; whatever the rules/ref actions " +
+			"produced otherwise) and must return one Kind instance \u2014 a failure or wrong-typed result " +
+			"is loud. One shape per kind; token names must be unique across the merge.",
 		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
 			"Every fn signature must start with the standard prefix [src:String opts:Map …]. " +
 			"A FILTER-shaped kind (exactly [src opts subject]) also exports a named member type " +

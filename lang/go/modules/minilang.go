@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
+	tabnasabnf "github.com/tabnas/abnf/go"
 	tabnas "github.com/tabnas/parser/go"
 )
 
@@ -268,31 +270,36 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("lang_m", micronFnDef)
 
 	// ---- out-of-band: micron — the OPT-IN user-Micron literal hook ------
-	// `MiniLang.micron <Kind> '<pattern>' <fn>` registers a literal shape
-	// for a USER-defined Micron kind: the anchored pattern gates the
-	// shape, the fn ([String] → a Kind instance) constructs the value,
-	// and the shape merges into the `+m` grammar BETWEEN the builtin
-	// leaves and the Pathon catch-all (registration order) — Emailon and
-	// Urlon keep their spans; anything the user shapes don't claim still
-	// falls to Pathon. Registrations are per-registry and permanent,
-	// like MiniLang.register kinds.
+	// `MiniLang.micron <Kind> <grammar> <fn>` registers a literal shape
+	// for a USER-defined Micron kind. The shape is a whole tabnas
+	// GRAMMAR — a declarative spec Map (the same GrammarSpec document
+	// Parse.spec accepts, e.g. {options:{match:{token:{'#TK':
+	// '@/T-[0-9]+/'}}}}) or a Parse.grammar builder value (aql:parse) —
+	// whose declared match token(s) gate the shape at the lexer; the fn
+	// (the grammar's parse result → a Kind instance) constructs the
+	// value AFTER the parse. The grammar merges into the `+m` grammar
+	// BETWEEN the builtin leaves and the Pathon catch-all (registration
+	// order) — Emailon and Urlon keep their spans; anything the user
+	// shapes don't claim still falls to Pathon. Registrations are
+	// per-registry and permanent, like MiniLang.register kinds.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-micron-lit",
 		Signatures: []native.Signature{{
-			Args:          []*native.Type{native.TAny, native.TString, native.TFunction},
+			Args:          []*native.Type{native.TAny, native.TAny, native.TFunction},
 			Returns:       []*native.Type{},
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // the fn is stored, not invoked on the tape
 			Impl:          native.Go(miniMicronLitHandlerFor(parent)),
-			// Check-mode hook: the kind/pattern/fn shape rules are
-			// value-decidable — a dry pass flags them during analysis
-			// (registry-state rules like the duplicate check stay
-			// with the runtime handler).
+			// Check-mode hook: the kind/fn shape rules and the Map
+			// form's grammar-document rules are value-decidable — a
+			// dry pass flags them during analysis (registry-state
+			// rules like the duplicate check stay with the runtime
+			// handler).
 			ReturnsFn: miniMicronLitReturns,
 		}},
 	})
 	exports.Set("micron", wrapMiniFnDef("minilang-micron-lit", [][]native.FnParam{
-		{{Type: native.TAny}, {Type: native.TString}, {Type: native.TFunction}},
+		{{Type: native.TAny}, {Type: native.TAny}, {Type: native.TFunction}},
 	}, []*native.Type{}, nil, subReg))
 
 	// ---- kind: jp — JSONPath query (github.com/ohler55/ojg) -------------
@@ -658,20 +665,36 @@ func miniDropGrouping(s string) string {
 // grammar. Scoped to the registry instance, like capMiniLangHost.
 const capMicronLits = "engine.minilang.micron-literals"
 
+// micronLitBuilder is one registered kind's post-parse construction
+// record: the kind (for the one-instance conformance check), the AQL
+// builder fn (called with the GRAMMAR'S parse result node), and the
+// kind's scratch grammar builder — kept so its AQL-fn callbacks (ref
+// actions, custom matchers) can dispatch re-entrantly during a +m
+// parse (their wrapAction/wrapMatcher closures read g.r / g.firstErr).
+type micronLitBuilder struct {
+	kind *native.Type
+	fn   native.Value
+	g    *parseGrammar
+}
+
 // micronLitState is the per-registry record of user-Micron literal
 // shapes. specs is the source of truth in registration order; grammar
-// is the memoized eng.MicronGrammarWith merge (nil = rebuild). r and
-// firstErr bridge one Parse call: the grammar actions dispatch the
-// registered AQL fns re-entrantly through r, and a builder failure is
-// recorded here so the handler can raise it LOUDLY (a registered shape
-// that matched has claimed the span — the eng-side action would
-// otherwise fall back to Pathon). Single-threaded under mu.
+// is the memoized eng.MicronGrammarWith merge (nil = rebuild). r,
+// claimed and firstErr bridge one Parse call: the claim-marker actions
+// record WHICH kind's gate claimed the span (builtins leave it empty),
+// the handler routes the parse node through that kind's builder AFTER
+// the parse, and a callback failure is recorded so the handler raises
+// it LOUDLY (a registered shape that matched has claimed the span).
+// Single-threaded under mu.
 type micronLitState struct {
 	mu       sync.Mutex
 	specs    []eng.MicronLiteralSpec
 	kinds    map[string]bool
+	tokens   map[string]string // gate token name → owning kind (collision check)
+	builders map[string]*micronLitBuilder
 	grammar  *tabnas.Tabnas
 	r        *native.Registry
+	claimed  string
 	firstErr error
 }
 
@@ -684,22 +707,24 @@ func micronLitStateFor(r *native.Registry, create bool) *micronLitState {
 	if !create {
 		return nil
 	}
-	s := &micronLitState{kinds: map[string]bool{}}
+	s := &micronLitState{
+		kinds:    map[string]bool{},
+		tokens:   map[string]string{},
+		builders: map[string]*micronLitBuilder{},
+	}
 	_ = r.Capabilities.Set(capMicronLits, s)
 	return s
 }
 
-// miniMicronLitHandlerFor builds the `MiniLang.micron` handler —
-// args[0]=the user Micron kind, args[1]=the shape pattern (a Go
-// regexp, auto-anchored to the whole span), args[2]=the builder fn
-// ([String] → a Kind instance). Registrations key on the IMPORTING
-// registry (captured at module build, like Parse.register).
-// miniMicronLitValidate is the shared kind/pattern/fn validation for
-// the runtime handler and the check-mode dry pass. In lenient mode a
-// non-concrete value is skipped, never flagged. Returns the resolved
-// kind and compiled (anchored) pattern; either may be nil in lenient
-// mode when the corresponding arg was a carrier.
-func miniMicronLitValidate(args []native.Value, r *native.Registry, lenient bool) (*native.Type, *regexp.Regexp, native.Value, error) {
+// miniMicronLitValidate is the shared kind/fn validation for the
+// runtime handler and the check-mode dry pass — args[0]=the user
+// Micron kind, args[2]=the builder fn. The GRAMMAR arg (args[1]) is
+// validated separately per form (micronSpecMapCheck for the Map form;
+// the builder form is registry state, runtime-only). In lenient mode
+// a non-concrete value is skipped, never flagged. Registrations key
+// on the IMPORTING registry (captured at module build, like
+// Parse.register).
+func miniMicronLitValidate(args []native.Value, r *native.Registry, lenient bool) (*native.Type, native.Value, error) {
 	kindV := args[0]
 	var kind *native.Type
 	switch {
@@ -713,46 +738,336 @@ func miniMicronLitValidate(args []native.Value, r *native.Registry, lenient bool
 		if lenient && !native.IsConcrete(kindV) && !native.IsBareTypeNode(kindV) {
 			kind = nil // a carrier — the runtime handler decides
 		} else {
-			return nil, nil, native.Value{}, r.AqlError("micron_literal",
+			return nil, native.Value{}, r.AqlError("micron_literal",
 				fmt.Sprintf("MiniLang.micron: expected a Micron kind, got %s", kindV.String()), "micron")
 		}
 	}
 	if kind != nil && kind.Origin != eng.OriginUserDef {
-		return nil, nil, native.Value{}, r.AqlErrorHint("micron_literal",
+		return nil, native.Value{}, r.AqlErrorHint("micron_literal",
 			fmt.Sprintf("MiniLang.micron: %s is a builtin Micron — its literal shape is fixed", kind.Name),
 			"micron",
 			"register shapes for USER kinds only (def Nameon refine Micron {…})")
 	}
-	var re *regexp.Regexp
-	if !lenient || native.IsConcrete(args[1]) {
-		pat, err := args[1].AsConcreteString()
-		if err != nil {
-			return nil, nil, native.Value{}, r.AqlError("micron_literal",
-				fmt.Sprintf("MiniLang.micron: pattern: %v", err), "micron")
-		}
-		var rerr error
-		re, rerr = miniCompiledPattern(`\A(?:` + pat + `)\z`)
-		if rerr != nil {
-			return nil, nil, native.Value{}, r.AqlError("micron_literal",
-				fmt.Sprintf("MiniLang.micron: invalid pattern %q: %v", pat, rerr), "micron")
-		}
-	}
 	fn := args[2]
 	if !isCallableValue(fn) && !(lenient && !native.IsConcrete(fn)) {
-		return nil, nil, native.Value{}, r.AqlError("micron_literal",
+		return nil, native.Value{}, r.AqlError("micron_literal",
 			fmt.Sprintf("MiniLang.micron: the builder must be a Function, got %s", fn.String()), "micron")
 	}
-	return kind, re, fn, nil
+	return kind, fn, nil
+}
+
+// micronSpecMapCheck validates the Map (declarative GrammarSpec) form
+// of a MiniLang.micron shape: the whole-grammar map must be a valid
+// Parse.spec document, must declare at least one match token (the
+// merged +m dispatch is TOKEN-driven — a shape claims a span via its
+// gate token, so a token-less grammar could never fire), and must not
+// set options.tag (the bridge owns the merge tag: the kind name).
+// Shared by the runtime handler and the check-mode dry pass; in
+// lenient mode a non-concrete section is skipped, never flagged.
+func micronSpecMapCheck(spec native.Value, r *native.Registry, lenient bool) error {
+	m, merr := native.RequireConcreteMap(spec, "MiniLang.micron")
+	if merr != nil {
+		return r.AqlError("micron_literal", "MiniLang.micron: grammar: "+merr.Error(), "micron")
+	}
+	// Full section/shape validation via the Parse.spec machinery on a
+	// throwaway builder (nothing survives — the real build happens in
+	// the runtime handler with the kind's tag).
+	scratch := &parseGrammar{j: tabnas.Make(), markActions: tabnasabnf.ActionsMap{}}
+	if err := applySpecMap(scratch, spec, r, lenient); err != nil {
+		return err
+	}
+	if lenient {
+		// Dry-replay the scratch steps so a decidable grammar-build
+		// error (an invalid @/…/ token regexp, a malformed ABNF)
+		// flags at CHECK time with the runtime's message. AQL-fn
+		// callbacks are inert here (their wrappers no-op without a
+		// live registry), so the replay is side-effect free. The
+		// strict (runtime) path skips this — the real build in
+		// micronGrammarFinalize raises the same errors.
+		for _, step := range scratch.steps {
+			if serr := step(); serr != nil {
+				return r.AqlErrorHint("micron_literal",
+					"MiniLang.micron: "+serr.Error(), "micron",
+					"check the grammar is well-formed")
+			}
+		}
+	}
+	gates := 0
+	if optV, ok := m.Get("options"); ok {
+		if !native.IsConcrete(optV) {
+			if lenient {
+				return nil
+			}
+			return r.AqlError("micron_literal",
+				"MiniLang.micron: the grammar's options section must be a concrete map", "micron")
+		}
+		om, oerr := native.RequireConcreteMap(optV, "MiniLang.micron")
+		if oerr != nil {
+			return r.AqlError("micron_literal", "MiniLang.micron: options: "+oerr.Error(), "micron")
+		}
+		if _, has := om.Get("tag"); has {
+			return r.AqlErrorHint("micron_literal",
+				"MiniLang.micron: the grammar must not set options.tag", "micron",
+				"the merge tag is the Micron kind's name — the bridge sets it")
+		}
+		if matchV, has := om.Get("match"); has && native.IsConcrete(matchV) {
+			if mm, mmerr := native.RequireConcreteMap(matchV, "MiniLang.micron"); mmerr == nil {
+				if tokV, has := mm.Get("token"); has {
+					if !native.IsConcrete(tokV) {
+						if lenient {
+							return nil
+						}
+					} else if tm, terr := native.RequireConcreteMap(tokV, "MiniLang.micron"); terr == nil {
+						gates = len(tm.Keys())
+						// Builtin-leaf token collisions are decidable
+						// from the map alone (the builtin names are
+						// static); cross-KIND collisions stay with the
+						// runtime handler (registry state).
+						for _, name := range []string{"#EMAILON", "#URLON", "#PATHON"} {
+							if _, clash := tm.Get(name); clash {
+								return r.AqlError("micron_literal",
+									fmt.Sprintf("MiniLang.micron: token %s collides with a builtin leaf's (the merge unifies tokens by name)", name),
+									"micron")
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if gates == 0 {
+		return r.AqlErrorHint("micron_literal",
+			"MiniLang.micron: the grammar must declare at least one match token (options.match.token)",
+			"micron",
+			"the merged +m dispatch is token-driven — the kind's gate token(s) claim its literal spans, e.g. {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}}")
+	}
+	return nil
+}
+
+// micronGrammarFor resolves the shape argument (args[1]) into the
+// kind's grammar builder: a concrete Map is the declarative
+// GrammarSpec form (applied via the Parse.spec machinery onto a fresh
+// builder tagged with the kind name); a ParseGrammar carrier is the
+// aql:parse builder form, consumed here exactly as Parse.register
+// consumes it. Anything else — including the RETIRED regexp-pattern
+// String — is a loud error with a migration hint.
+func micronGrammarFor(kind *native.Type, shape native.Value, r *native.Registry) (*parseGrammar, error) {
+	if native.IsConcrete(shape) {
+		if _, ok := shape.Data.(eng.ExtensionPayload); ok {
+			g, err := asParseGrammar(shape, "MiniLang.micron", r)
+			if err != nil {
+				return nil, err
+			}
+			if err := g.ensureOpen("MiniLang.micron", r); err != nil {
+				return nil, err
+			}
+			if g.j.Options().Tag != "" {
+				return nil, r.AqlErrorHint("micron_literal",
+					"MiniLang.micron: the grammar must not set options.tag", "micron",
+					"the merge tag is the Micron kind's name — the bridge sets it")
+			}
+			g.j.SetOptions(tabnas.Options{Tag: kind.Name})
+			return g, nil
+		}
+		if shape.Parent.ConformsTo(native.TMap) {
+			if err := micronSpecMapCheck(shape, r, false); err != nil {
+				return nil, err
+			}
+			g := &parseGrammar{
+				j:           tabnas.Make(tabnas.Options{Tag: kind.Name}),
+				markActions: tabnasabnf.ActionsMap{},
+			}
+			if err := applySpecMap(g, shape, r, false); err != nil {
+				return nil, err
+			}
+			return g, nil
+		}
+	}
+	return nil, micronNotAGrammarErr(shape, r)
+}
+
+// micronNotAGrammarErr is the shape-arg refusal — shared by the
+// runtime handler and the check-mode dry pass so the migration hint
+// (the RETIRED regexp-pattern String form) flags byte-identically at
+// check time.
+func micronNotAGrammarErr(shape native.Value, r *native.Registry) error {
+	return r.AqlErrorHint("micron_literal",
+		fmt.Sprintf("MiniLang.micron: expected a grammar, got %s", shape.String()), "micron",
+		"provide the kind's literal GRAMMAR — a declarative spec Map "+
+			"({options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} …) or a Parse.grammar value (aql:parse); "+
+			"the old regexp-pattern String form was retired")
+}
+
+// micronGrammarFinalize replays and seals a kind's grammar builder,
+// then wires it into the +m merge protocol:
+//
+//   - gate tokens are read from the built grammar's options and
+//     validated (present; unique across builtin leaves and every
+//     previously registered kind — the tabnas merge unifies custom
+//     tokens BY NAME, so a collision would silently alias two shapes);
+//   - the grammar must carry NO TokenOrder and its tag must still be
+//     the kind name (the +m merge owns both);
+//   - every val open-alternate gated on the kind's tokens is wrapped
+//     with a CLAIM MARKER (st.claimed = kind at match time — before
+//     any child rules run), and a child-node hoist rides val's BC so
+//     P-pushing shapes surface their node;
+//   - a TOKEN-ONLY grammar (no val alternate references a gate token)
+//     gets the standard treatment: each gate pattern auto-anchored
+//     \A(?:…)\z — the whole-literal contract simple registrations rely
+//     on for the gate-mismatch→Pathon fallthrough — plus a default
+//     val alternate per gate (claim + the matched span as the node).
+//
+// The parse-result node is NOT constructed here: the +m handler routes
+// it through the kind's builder fn AFTER the parse (post-parse Build),
+// keyed on the claim marker.
+func micronGrammarFinalize(st *micronLitState, kind *native.Type, g *parseGrammar, r *native.Registry) ([]string, error) {
+	for _, step := range g.steps {
+		if serr := step(); serr != nil {
+			return nil, r.AqlErrorHint("micron_literal",
+				fmt.Sprintf("MiniLang.micron %s: %s", kind.Name, serr.Error()),
+				"micron", "check the grammar is well-formed")
+		}
+	}
+	g.applyMatchers()
+	g.registered = true // consumed — single-use, like Parse.register
+
+	opts := g.j.Options()
+	if opts.Tag != kind.Name {
+		return nil, r.AqlErrorHint("micron_literal",
+			"MiniLang.micron: the grammar must not set options.tag", "micron",
+			"the merge tag is the Micron kind's name — the bridge sets it")
+	}
+	if opts.Match != nil && len(opts.Match.TokenOrder) > 0 {
+		return nil, r.AqlError("micron_literal",
+			"MiniLang.micron: the grammar must not set a token order — the +m merge owns the precedence", "micron")
+	}
+	if opts.Match == nil || len(opts.Match.Token) == 0 {
+		return nil, r.AqlErrorHint("micron_literal",
+			"MiniLang.micron: the grammar must declare at least one match token (options.match.token)",
+			"micron",
+			"the merged +m dispatch is token-driven — the kind's gate token(s) claim its literal spans")
+	}
+	tokens := make([]string, 0, len(opts.Match.Token))
+	for tok := range opts.Match.Token {
+		tokens = append(tokens, tok)
+	}
+	sort.Strings(tokens)
+	builtin := map[string]string{"#EMAILON": "Emailon", "#URLON": "Urlon", "#PATHON": "Pathon"}
+	for _, tok := range tokens {
+		owner := builtin[tok]
+		if owner == "" {
+			owner = st.tokens[tok]
+		}
+		if owner != "" {
+			return nil, r.AqlError("micron_literal",
+				fmt.Sprintf("MiniLang.micron: token %s collides with %s's (the merge unifies tokens by name)",
+					tok, owner), "micron")
+		}
+	}
+
+	gateTins := map[tabnas.Tin]bool{}
+	for _, tok := range tokens {
+		gateTins[g.j.Token(tok)] = true // idempotent by name
+	}
+	kindName := kind.Name
+	ruled := false
+	g.j.Rule("val", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
+		for _, alt := range rs.OpenAlts() {
+			if len(alt.S) == 0 || len(alt.S[0]) == 0 {
+				continue
+			}
+			gated := false
+			for _, t := range alt.S[0] {
+				if gateTins[t] {
+					gated = true
+					break
+				}
+			}
+			if !gated {
+				continue
+			}
+			ruled = true
+			userA := alt.A
+			// A plain gated alternate (no action, no child push) gets
+			// the default span node — installing the claim wrapper
+			// marks the alt as action-bearing, which suppresses the
+			// val-ac token-value restore the bare alt would have relied
+			// on. A child-pushing alt leaves the node to its child (the
+			// BC hoist below).
+			pushesChild := alt.P != "" || alt.R != "" || alt.PF != nil || alt.RF != nil
+			alt.A = func(rr *tabnas.Rule, ctx *tabnas.Context) {
+				st.claimed = kindName // claim at MATCH time, before child rules run
+				switch {
+				case userA != nil:
+					userA(rr, ctx)
+				case !pushesChild:
+					rr.Node = fmt.Sprintf("%v", rr.O0.ResolveVal(rr, ctx))
+				}
+			}
+		}
+		if ruled {
+			// Hoist a P-pushed child's node into val when the author's
+			// alternates left val's own node unset — the same hoist the
+			// tabnas merge tests ride; a no-op when val already has one.
+			rs.AddBC(func(rr *tabnas.Rule, _ *tabnas.Context) {
+				if (rr.Node == nil || tabnas.IsUndefined(rr.Node)) &&
+					rr.Child != nil && rr.Child.Node != nil && !tabnas.IsUndefined(rr.Child.Node) {
+					rr.Node = rr.Child.Node
+				}
+			})
+		}
+	})
+
+	if !ruled {
+		// Token-only: anchor the gates to the whole literal and add
+		// the standard claim-and-span alternates.
+		anchored := map[string]*regexp.Regexp{}
+		for _, tok := range tokens {
+			re, rerr := regexp.Compile(`\A(?:` + opts.Match.Token[tok].String() + `)\z`)
+			if rerr != nil {
+				return nil, r.AqlError("micron_literal",
+					fmt.Sprintf("MiniLang.micron: token %s: cannot anchor pattern: %v", tok, rerr), "micron")
+			}
+			anchored[tok] = re
+		}
+		g.j.SetOptions(tabnas.Options{Match: &tabnas.MatchOptions{Token: anchored}})
+		g.j.Rule("val", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
+			for _, tok := range tokens {
+				tin := g.j.Token(tok)
+				rs.AddOpen(&tabnas.AltSpec{
+					S: [][]tabnas.Tin{{tin}},
+					A: func(rr *tabnas.Rule, ctx *tabnas.Context) {
+						st.claimed = kindName
+						rr.Node = fmt.Sprintf("%v", rr.O0.ResolveVal(rr, ctx))
+					},
+				})
+			}
+		})
+	}
+	return tokens, nil
 }
 
 // miniMicronLitReturns is MiniLang.micron's check-mode hook: the
-// kind/pattern/fn shape rules are value-decidable, so a lenient dry
-// pass flags them during analysis with the byte-identical runtime
-// message. Registry-state rules (the duplicate-kind check) stay with
-// the runtime handler.
+// kind/fn shape rules and the Map form's grammar-document rules are
+// value-decidable, so a lenient dry pass flags them during analysis
+// with the byte-identical runtime message. Registry-state rules (the
+// duplicate-kind check, token collisions with earlier registrations,
+// the builder-carrier form) stay with the runtime handler.
 func miniMicronLitReturns(args []native.Value, r *native.Registry) []native.Value {
 	if r != nil && r.Check.IsActive() && len(args) == 3 {
-		if _, _, _, err := miniMicronLitValidate(args, r, true); err != nil {
+		_, _, err := miniMicronLitValidate(args, r, true)
+		if err == nil && native.IsConcrete(args[1]) {
+			if _, isBuilder := args[1].Data.(eng.ExtensionPayload); !isBuilder {
+				if args[1].Parent.ConformsTo(native.TMap) {
+					err = micronSpecMapCheck(args[1], r, true)
+				} else {
+					// A concrete non-map, non-builder shape — notably
+					// the RETIRED regexp-pattern String form.
+					err = micronNotAGrammarErr(args[1], r)
+				}
+			}
+		}
+		if err != nil {
 			code, detail := "micron_literal", err.Error()
 			var ae *eng.AqlError
 			if errors.As(err, &ae) {
@@ -764,9 +1079,13 @@ func miniMicronLitReturns(args []native.Value, r *native.Registry) []native.Valu
 	return []native.Value{}
 }
 
+// miniMicronLitHandlerFor builds the `MiniLang.micron` handler —
+// args[0]=the user Micron kind, args[1]=the kind's literal GRAMMAR (a
+// declarative spec Map, or a Parse.grammar builder value), args[2]=the
+// builder fn (the grammar's parse result → a Kind instance).
 func miniMicronLitHandlerFor(parent *native.Registry) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		kind, re, fn, err := miniMicronLitValidate(args, parent, false)
+		kind, fn, err := miniMicronLitValidate(args, parent, false)
 		if err != nil {
 			return nil, err
 		}
@@ -778,23 +1097,27 @@ func miniMicronLitHandlerFor(parent *native.Registry) native.Handler {
 			return nil, r.AqlError("micron_literal",
 				fmt.Sprintf("MiniLang.micron: a literal shape for %s is already registered", kind.Name), "micron")
 		}
+		g, err := micronGrammarFor(kind, args[1], r)
+		if err != nil {
+			return nil, err
+		}
+		tokens, err := micronGrammarFinalize(st, kind, g, r)
+		if err != nil {
+			return nil, err
+		}
+
 		st.kinds[kind.Name] = true
-		kindT := kind
+		for _, tok := range tokens {
+			st.tokens[tok] = kind.Name
+		}
+		st.builders[kind.Name] = &micronLitBuilder{kind: kind, fn: fn, g: g}
 		st.specs = append(st.specs, eng.MicronLiteralSpec{
-			Tag:     kind.Name,
-			Token:   fmt.Sprintf("#U%d%s", len(st.specs), strings.ToUpper(kind.Name)),
-			Pattern: re,
-			Build: func(s string) (native.Value, error) {
-				out, berr := callParseFn(st.r, fn, []native.Value{native.NewString(s)})
-				if berr == nil && (len(out) != 1 || !out[0].Parent.ConformsTo(kindT)) {
-					berr = fmt.Errorf("the %s builder must return one %s instance", kindT.Name, kindT.Name)
-				}
-				if berr != nil {
-					st.firstErr = fmt.Errorf("%s literal %q: %v", kindT.Name, s, berr)
-					return native.Value{}, berr
-				}
-				return out[0], nil
-			},
+			Tag:    kind.Name,
+			Tokens: tokens,
+			// The grammar is pre-built and carries NO TokenOrder of its
+			// own — the merge adopts the builtin leaves' computed order,
+			// which slots these tokens between #URLON and #PATHON.
+			Grammar: func(_ []string) (*tabnas.Tabnas, error) { return g.j, nil },
 		})
 		st.grammar = nil // rebuild on next parse
 		return nil, nil
@@ -831,15 +1154,50 @@ func miniMicronHandlerFor(parent *native.Registry) native.Handler {
 			}
 			st.grammar = g
 		}
-		st.r, st.firstErr = r, nil
+		// Thread the live registry into every kind's grammar builder so
+		// its AQL-fn callbacks (ref actions, custom matchers) dispatch
+		// re-entrantly during this one parse; collect their first error
+		// afterwards (the loud claimed-span rule).
+		st.r, st.firstErr, st.claimed = r, nil, ""
+		for _, b := range st.builders {
+			b.g.r, b.g.firstErr = r, nil
+		}
 		node, perr := st.grammar.Parse(src)
 		st.r = nil
+		for _, b := range st.builders {
+			if st.firstErr == nil && b.g.firstErr != nil {
+				st.firstErr = b.g.firstErr
+			}
+			b.g.r = nil
+		}
 		if st.firstErr != nil {
 			return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: %v", st.firstErr), "lang_micron")
 		}
 		if perr != nil {
+			// Covers a user gate that CLAIMED the span but whose rules
+			// then rejected it — loud, per the claimed-span rule.
 			return nil, r.AqlError("mini_parse_error",
 				fmt.Sprintf("micron: cannot parse literal %q: %v", src, native.FirstCleanLine(perr.Error())), "lang_micron")
+		}
+		// Post-parse Build: a user gate claimed the span — route the
+		// grammar's result node through that kind's builder fn and
+		// require one conforming instance back. Builtins leave the
+		// claim empty and their actions already produced the value.
+		if st.claimed != "" {
+			b := st.builders[st.claimed]
+			if b == nil {
+				return nil, r.AqlError("mini_parse_error",
+					fmt.Sprintf("micron: literal %q claimed by unknown kind %s", src, st.claimed), "lang_micron")
+			}
+			out, berr := callParseFn(r, b.fn, []native.Value{native.AnyToValue(node)})
+			if berr == nil && (len(out) != 1 || !out[0].Parent.ConformsTo(b.kind)) {
+				berr = fmt.Errorf("the %s builder must return one %s instance", b.kind.Name, b.kind.Name)
+			}
+			if berr != nil {
+				return nil, r.AqlError("mini_parse_error",
+					fmt.Sprintf("micron: %s literal %q: %v", b.kind.Name, src, berr), "lang_micron")
+			}
+			return []native.Value{out[0]}, nil
 		}
 		v, ok := node.(native.Value)
 		if !ok {

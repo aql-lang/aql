@@ -117,38 +117,54 @@ func micronPathonGrammar(order []string) *tabnas.Tabnas {
 // Micron grammar — the opt-in hook that lets a user-defined Micron
 // kind join the `+m:…` literal (MiniLang.micron in aql:minilang wraps
 // this for AQL registrations; hosts can call MicronGrammarWith
-// directly). The pattern gates the shape; Build constructs the value.
+// directly). The kind's shape is a whole tabnas GRAMMAR, not a bare
+// regexp: its declared match token(s) gate the shape at the lexer
+// (the merged dispatch is token-driven), and its rules/actions own
+// recognition and node construction. The value the grammar leaves as
+// the parse node is the shape's result; the caller (the aql:minilang
+// bridge) routes it through the kind's builder AFTER the parse.
 type MicronLiteralSpec struct {
 	// Tag identifies the shape's grammar in the merge — the kind's
 	// name. Merge requires it distinct from Emailon/Urlon/Pathon and
 	// from every other extra.
 	Tag string
-	// Token is the match-token name (e.g. "#U0TICKETON"); it must be
-	// unique across the merge set and slots into the computed
-	// TokenOrder between the builtin leaves and the Pathon catch-all.
-	Token string
-	// Pattern is the anchored shape gate.
-	Pattern *regexp.Regexp
-	// Build constructs the value from the matched span. On error the
-	// grammar action falls back to the Pathon catch-all (the uniform
-	// family rule); a caller that wants a LOUD failure instead records
-	// the error out-of-band in its Build wrapper and checks it after
-	// the parse — the aql:minilang bridge does exactly that, because a
-	// user-registered shape that matched has CLAIMED the span.
-	Build func(s string) (Value, error)
+	// Tokens are the shape's gate match-token names, in the order they
+	// slot into the computed TokenOrder between the builtin leaves and
+	// the Pathon catch-all. Each must be unique across the merge set
+	// (the tabnas merge unifies custom tokens BY NAME — a collision
+	// would silently alias two shapes).
+	Tokens []string
+	// Grammar builds or returns the kind's literal grammar. It
+	// receives the computed TokenOrder for callers that rebuild per
+	// merge (the builtin leaves do); a pre-built user grammar ignores
+	// it — such a grammar must carry NO TokenOrder of its own, so the
+	// commutative merge adopts the builtins' computed order and
+	// re-allocates the user tokens into their precedence slot.
+	Grammar func(order []string) (*tabnas.Tabnas, error)
 }
 
 // MicronGrammarWith builds the merged Micron literal grammar with the
 // given extra shapes spliced between the builtin leaves and the Pathon
-// catch-all: Emailon, Urlon, extras (in order), Pathon. Every grammar
-// in the set carries the SAME computed TokenOrder, so the commutative
-// merge unifies the lexer precedence without conflict. With no extras
-// this is exactly the builtin merged grammar.
+// catch-all: Emailon, Urlon, extras (in order), Pathon. The builtin
+// leaves carry the SAME computed TokenOrder (which includes the
+// extras' gate tokens), so the commutative merge unifies the lexer
+// precedence without conflict. Extra token names are validated unique
+// against the builtin tokens and each other. With no extras this is
+// exactly the builtin merged grammar.
 func MicronGrammarWith(extras ...MicronLiteralSpec) (*tabnas.Tabnas, error) {
 	order := make([]string, 0, 3+len(extras))
 	order = append(order, "#EMAILON", "#URLON")
+	seen := map[string]string{"#EMAILON": "Emailon", "#URLON": "Urlon", "#PATHON": "Pathon"}
 	for _, e := range extras {
-		order = append(order, e.Token)
+		for _, tok := range e.Tokens {
+			if owner, dup := seen[tok]; dup {
+				return nil, fmt.Errorf(
+					"micron grammar: token %s of %s collides with %s (the merge unifies tokens by name)",
+					tok, e.Tag, owner)
+			}
+			seen[tok] = e.Tag
+			order = append(order, tok)
+		}
 	}
 	order = append(order, "#PATHON")
 
@@ -157,7 +173,10 @@ func MicronGrammarWith(extras ...MicronLiteralSpec) (*tabnas.Tabnas, error) {
 		return nil, err
 	}
 	for _, e := range extras {
-		g := micronLiteralGrammar(e.Tag, e.Token, e.Pattern, order, e.Build)
+		g, gerr := e.Grammar(order)
+		if gerr != nil {
+			return nil, fmt.Errorf("micron grammar: %s: %w", e.Tag, gerr)
+		}
 		if m, err = m.Merge(g); err != nil {
 			return nil, err
 		}
