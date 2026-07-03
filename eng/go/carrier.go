@@ -1915,6 +1915,17 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		if narrowed.Parent == nil {
 			continue
 		}
+		// Identity-preserving rebind: the narrowing refines the STATIC bound
+		// of the SAME runtime value — no new value exists at run time.
+		// TandValues assembles the intersection as a fresh Value (fresh ID),
+		// which would orphan the binding from its producing event: a
+		// `def nodes (tree get "nodes")` narrowed to List at its first typed
+		// use lost the get event's provenance, so every LATER read of the
+		// name refused ("fn call operand of unknown provenance" — the
+		// decision eval-tree walkers). Re-stamp the current binding's ID so
+		// the recorder's producedBy still resolves the rebound name to its
+		// original producer.
+		narrowed.ID = cur.ID
 		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
 	}
 }

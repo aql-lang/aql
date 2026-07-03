@@ -792,8 +792,14 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		// A type operand whose ID matches a producing event whose own
 		// output was NOT a type is an ID collision (a `make` result
 		// inheriting the type literal's ID): resolve it as its own type
-		// operand / const below, not the unrelated event.
-		if !IsTypeBody(v) || es.eventInfo[pr.seq].typeOut {
+		// operand / const below, not the unrelated event. A DYNAMIC
+		// carrier is exempt: it is the checker's gradual stand-in for a
+		// runtime VALUE, never a type body the program manipulates as
+		// data — narrowing-through-use rebinds a dynamic Any def to a
+		// typed-list/typed-map bound ([:Any]) that trips IsTypeBody, but
+		// its ID-matched event genuinely produced it (the identity-
+		// preserving rebind in narrowDynamicUses).
+		if !IsTypeBody(v) || v.Dynamic || es.eventInfo[pr.seq].typeOut {
 			return eventOperand(pr.seq, pr.idx), true
 		}
 	}
