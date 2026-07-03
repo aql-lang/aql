@@ -326,7 +326,11 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 		case evContinue:
 			reason = lw.lowerContinue(ev)
 		case evCallUser:
-			reason = lw.lowerUserCall(ev)
+			if ev.uc.poly != nil {
+				reason = lw.lowerUserPolyCall(ev)
+			} else {
+				reason = lw.lowerUserCall(ev)
+			}
 		case evFallback:
 			reason = lw.lowerFallback(ev)
 		case evTrap:
@@ -1555,6 +1559,53 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 	return ""
 }
 
+// lowerUserPolyCall lowers a runtime-dispatched MULTI-OVERLOAD user call
+// (emitUserCall with poly set): the args are pushed exactly as lowerUserCall
+// lays them out (sig position 0 on top), and OpCallUserPoly re-runs
+// MatchSignature over the recorded arm subset at run time to pick the body
+// unit. Never a tail call (markTailCalls skips poly calls); never variadic
+// (the recorder gates every arm to a fixed, identical return count).
+func (lw *lowerer) lowerUserPolyCall(ev *emitEvent) string {
+	uc := &ev.uc
+	n := len(uc.ops)
+	if reason := lw.layoutOperands(uc.ops, uc.pos, layoutMsgs{
+		loopResults:  "loop results as fn args (Stage 3)",
+		resultNotTop: "stack discipline: fn arg result is not on top (poly call of " + uc.poly.word + ")",
+		reorder:      "fn arg shape needs reordering beyond Stage 3",
+		shapeBeyond:  "fn arg shape beyond Stage 3",
+		notAdjacent:  "stack discipline: fn args not adjacent on top",
+	}); reason != "" {
+		return reason
+	}
+	pi := len(lw.p.UserPolys)
+	lw.p.UserPolys = append(lw.p.UserPolys, UserPolyRef{
+		Word:   uc.poly.word,
+		Arity:  n,
+		Reg:    uc.poly.reg,
+		SigIdx: uc.poly.sigIdx,
+		Units:  uc.poly.units,
+		Impls:  uc.poly.impls,
+	})
+	lw.emit(OpCallUserPoly, pi, uc.pos)
+	lw.vm = lw.vm[:len(lw.vm)-n]
+	// Promotion / dead-result / result-slot accounting mirrors lowerUserCall.
+	if slot, ok := lw.promoted[ev.seq]; ok {
+		lw.emit(OpStoreLocal, slot, uc.pos)
+		lw.note()
+		return ""
+	}
+	if lw.dead[ev.seq] {
+		lw.emit(OpDrop, 0, uc.pos)
+		lw.note()
+		return ""
+	}
+	for i := 0; i < uc.nout; i++ {
+		lw.vm = append(lw.vm, vmSlot{seq: ev.seq, idx: i})
+	}
+	lw.note()
+	return ""
+}
+
 // lowerFallback emits OpFallback. A fully-baked island (no threaded
 // inputs) just runs its span; a single threaded input is the computed
 // data arg (a "computed receiver" like `(iota 5) each […]`): its
@@ -1681,7 +1732,10 @@ func (es *EmitState) markTailCalls(frag *EmitFragment, out *emitOperand, hasOut 
 	last := &frag.events[len(frag.events)-1]
 	switch last.kind {
 	case evCallUser:
-		if last.seq == out.idx && fragSingleResidual(frag) && es.tailCompatibleReturns(last.uc.unit, callerReturns) {
+		// A POLY user call (uc.poly != nil, unit -1) is never tail-marked: the
+		// arm is only known at run time, and OpCallUserPoly always pushes a
+		// frame (the caller's RET check must still run over the arm's result).
+		if last.uc.poly == nil && last.seq == out.idx && fragSingleResidual(frag) && es.tailCompatibleReturns(last.uc.unit, callerReturns) {
 			// Tail position requires the call's result to be the fragment's WHOLE
 			// residual — nothing left BELOW it. A multi-value arm (`[n mul 2 m (n
 			// sub 1)]`, where n*2 sits below the recursive call) is NOT tail: a

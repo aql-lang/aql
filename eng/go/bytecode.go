@@ -214,6 +214,20 @@ const (
 	// (`${1 add 2}`, `${x}` for a fn param, `${typeof x}`); a fully literal or
 	// pure-binding-fold template stays a pooled const and never needs this.
 	OpInterp
+	// OpCallUserPoly dispatches a MULTI-OVERLOAD user fn at RUN time: it runs
+	// the kernel's own MatchSignature over the recorded same-arity overload
+	// subset of UserPolys[Arg].Word against the Arity values on top of the
+	// stack — the SAME first-match the interpreter takes — then enters the
+	// matched overload's compiled body unit exactly as OpCallUser would
+	// (pop the args into frame locals, checkParamContract, push a frame).
+	// The user-fn mirror of OpCallNativePoly: used where a gradual-Any arg
+	// made the dispatch ambiguous at check time (two or more same-arity
+	// overloads reachable), so the VM selects the arm faithfully at run time
+	// instead of refusing the whole program. A no-match (or any drift between
+	// the recorded overload set and the word's live dispatch table) defers to
+	// the interpreter through the whole-program fallback, which raises the
+	// canonical signature_error / runs the live definition.
+	OpCallUserPoly
 	// OpCallDynTrailTop applies a runtime FUNCTION value sitting ON TOP of its Arg
 	// args to those args — the TRAILING fn-value-call boundary BOUNDED BY A PAREN
 	// (`(prev key comp)`, a captured/param comparator applied to two computed args).
@@ -267,6 +281,7 @@ var opcodeNames = [...]string{
 	OpPopMark:             "POP_MARK",
 	OpCallDynamicMixed:    "CALL_DYNAMIC_MIXED",
 	OpInterp:              "INTERP",
+	OpCallUserPoly:        "CALL_USER_POLY",
 	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
 }
 
@@ -289,6 +304,29 @@ type PolyRef struct {
 	// is the same sub-registry the check pass created on the shared registry, so
 	// it stays valid for the compiled run (RunProgram runs on that registry).
 	Reg *Registry
+}
+
+// UserPolyRef names one runtime-dispatched multi-overload USER-FN call: the
+// word, the arity the checker fixed at the call site, and the recorded
+// same-arity overload arms — SigIdx[i] indexes the word's aggregated dispatch
+// table (Registry.Lookup(Word).Signatures), Units[i] is the arm's compiled
+// body unit in Program.Fns, and Impls[i] is the arm's run-implementation
+// identity (Signature.Impl is a stable pointer per installed overload). The VM
+// re-derives the arm subset from the LIVE table at run time and verifies each
+// entry's Impl against Impls — any drift (a re-def between the compile and the
+// run) defers to the interpreter rather than running a stale body unit.
+// The user-fn mirror of PolyRef (OpCallNativePoly).
+type UserPolyRef struct {
+	Word  string
+	Arity int
+	// Reg is the registry the check pass dispatched the word against (a module
+	// fn re-matches over its own sub-registry). Nil means the VM's registry.
+	// Like PolyRef.Reg, the pointer is the same registry the check pass ran on,
+	// so it stays valid for the compiled run.
+	Reg    *Registry
+	SigIdx []int
+	Units  []int
+	Impls  []SigImpl
 }
 
 // ClosureInShape tags HOW a higher-order word must present each per-invocation
@@ -445,6 +483,7 @@ type Program struct {
 	Types     []TypeRef
 	Sigs      []SigRef
 	PolyRefs  []PolyRef
+	UserPolys []UserPolyRef
 	Fallbacks []FallbackSpan
 	MakeMaps  []MakeMapSpec
 	Interps   []InterpSpec
@@ -544,6 +583,11 @@ func (p *Program) Disassemble() string {
 	if len(p.PolyRefs) > 0 {
 		fmt.Fprintf(&sb, " polyrefs=%d", len(p.PolyRefs))
 	}
+	// userpolys likewise appears only when present, keeping the common summary
+	// (and every golden asserting it) byte-identical.
+	if len(p.UserPolys) > 0 {
+		fmt.Fprintf(&sb, " userpolys=%d", len(p.UserPolys))
+	}
 	sb.WriteByte('\n')
 	return sb.String()
 }
@@ -582,6 +626,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		case OpCallNativePoly:
 			pr := p.PolyRefs[in.Arg]
 			fmt.Fprintf(sb, " p%-3d ; %s/%d (poly)", in.Arg, pr.Word, pr.Arity)
+		case OpCallUserPoly:
+			up := p.UserPolys[in.Arg]
+			fmt.Fprintf(sb, " u%-3d ; %s/%d (user poly, %d arms)", in.Arg, up.Word, up.Arity, len(up.Units))
 		case OpCallDynamic:
 			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
 		case OpCallDynamicTrailing:
