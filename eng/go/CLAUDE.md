@@ -248,7 +248,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
    `payloadMarker()` added in payload.go: `WordInfo`,
    `ForwardInfo`, `MarkInfo`, `MoveInfo`, `ReturnCheckInfo`,
    `DefCleanupInfo`, `FrameOpenInfo`, `ModuleDesc`, `FnDefInfo`, `FnUndefInfo`,
-   `DisjunctInfo`, `ChildTypeInfo`, `RecordTypeInfo`,
+   `DisjunctInfo`, `ChildTypeInfo`, `CodeEffectInfo`, `RecordTypeInfo`,
    `OptionsTypeInfo`, `TableTypeInfo`, `TableData`,
    `ClassTypeInfo`, `ClassInstanceInfo`, `*StoreInstanceInfo`,
    `ResourceTypeInfo`, `ResourceInstanceInfo`,

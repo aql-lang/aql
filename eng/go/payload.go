@@ -313,7 +313,7 @@ func (HostTypeBody) hostTypeBody() {}
 // Direct (eng-defined struct or pointer types):
 //   WordInfo, ForwardInfo, MarkInfo, MoveInfo, ReturnCheckInfo,
 //   DefCleanupInfo, ModuleDesc, FnDefInfo, FnUndefInfo,
-//   DisjunctInfo, ChildTypeInfo, RecordTypeInfo, OptionsTypeInfo,
+//   DisjunctInfo, ChildTypeInfo, CodeEffectInfo, RecordTypeInfo, OptionsTypeInfo,
 //   TableTypeInfo, TableData, ClassTypeInfo, ClassInstanceInfo,
 //   *StoreInstanceInfo, *TimeoutInfo,
 //   *IntervalInfo, ErrorInfo, CalDurationData,
@@ -366,6 +366,7 @@ func (FnUndefInfo) payloadMarker()          {}
 func (DisjunctInfo) payloadMarker()         {}
 func (NegationInfo) payloadMarker()         {}
 func (ChildTypeInfo) payloadMarker()        {}
+func (CodeEffectInfo) payloadMarker()       {}
 func (RecordTypeInfo) payloadMarker()       {}
 func (OptionsTypeInfo) payloadMarker()      {}
 func (TableTypeInfo) payloadMarker()        {}

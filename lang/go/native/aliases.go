@@ -24,6 +24,7 @@ type (
 	CheckSeverity      = eng.CheckSeverity
 	CheckState         = eng.CheckState
 	ChildTypeInfo      = eng.ChildTypeInfo
+	CodeEffectInfo     = eng.CodeEffectInfo
 	ReachInfo          = eng.ReachInfo
 	ReachSeg           = eng.ReachSeg
 	ChildEntry         = eng.ChildEntry
@@ -545,6 +546,7 @@ var (
 	CheckAtIndices         = eng.CheckAtIndices
 	NewCarrierTypedListLen = eng.NewCarrierTypedListLen
 	RunCarrierBody         = eng.RunCarrierBody
+	AnalyseCodeEffect      = eng.AnalyseCodeEffectCarrier
 	SetIDSeed              = eng.SetIDSeed
 	SeverityFor            = eng.SeverityFor
 	CompareSignatures      = eng.CompareSignatures

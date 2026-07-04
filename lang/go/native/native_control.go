@@ -220,6 +220,29 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 			body = v
 		}
 	}
+	// A non-literal body carrier CARRYING an analysed stack effect — a
+	// quoted code list read out of data, converted by the stage-1
+	// typed-code-value producer (AnalyseCodeEffect, design/
+	// checker-precision-fronts.0.md §1) — types as the effect's Out
+	// instead of falling to the dynamic(Any) hatch below. The outs stay
+	// DYNAMIC (bounded dynamic(T), never strict T): the effect was
+	// computed at the READ site and the body's free words re-resolve
+	// against the runtime environment at `do` time, so it is a best
+	// static bound, not a proof. Gated to !Compiling (mirroring the
+	// producer, which never attaches during a compile pass): the
+	// recording pass keeps the dynamic(Any) hatch so a `do` over a
+	// computed body carrier keeps REFUSING to lower (whole-program
+	// interpreter fallback) — checker precision must not imply compile
+	// coverage (lang/go/code_effect_test.go pins the refusal).
+	if body.Carrier && !r.Check.Compiling {
+		if eff, ok := body.Data.(CodeEffectInfo); ok && eff.Analysed && len(eff.In) == 0 && len(eff.Out) > 0 {
+			out := make([]Value, len(eff.Out))
+			for i, t := range eff.Out {
+				out[i] = NewDynamicCarrier(t)
+			}
+			return out
+		}
+	}
 	// Escape hatch: a computed body the checker cannot run statically (a
 	// list carrier rather than concrete tokens) has a genuinely unknown
 	// residual, so emit a bounded gradual dynamic(Any) — optimistically

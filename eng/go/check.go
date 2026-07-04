@@ -110,6 +110,7 @@ func (c *CheckState) Begin() func() {
 	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
 	c.Emit = nil
+	c.CodeEffectDepth = 0
 	c.FnBodyDepth = 0
 	// Compiling marks a REAL compile pass; the compile entry points
 	// (CompileCheck / RunCompiled) set it true AFTER this Begin. Reset it here so

@@ -519,6 +519,28 @@ from everything; 7 is gated on 6's exit criteria.
   TestTypedDefBindCompiles (6 positives, 3 byte-identical FAILs,
   2 negatives). Full battery green (VERIFY PASSED, make test exit 0,
   0 divergences).
+- **2026-07-04 — Phase 4.1 (stage 1) landed: CodeEffectInfo typed code
+  values — and a leverage recalibration.** The producer
+  (AnalyseCodeEffectCarrier: dry-pass RunCarrierBody over concrete
+  word-bearing list elements at the get-index read site, diagnostics
+  truncated, compile-pass-gated) and the `do` consumer (effect Out
+  surfaced as BOUNDED dynamic(T) — deliberately not strict, since the
+  body's free words re-resolve at do time; a bound, not a proof) are
+  in, with payload-discipline registration, a recursion guard, and 5
+  landing tests incl. compile-refusal pins (checker precision must
+  not imply compile coverage — verified nothing mis-lowers). All
+  ratchets byte-identical (FP 0, unflagged 170, soundness 7, frontier
+  381 = 11.52%, census 3547/78, VERIFY PASSED, make test 0).
+  RECALIBRATION (live-verified): the spec's "do-hatch dominates the
+  frontier" estimate is stale — the 381 frontier rows contain ZERO
+  get-index→do rows; the real feeders are G7-class declared-Any DSL
+  parser returns (minilang 47, struct 32, parselang 31) and G5
+  stores. The 12→10 ratio-ceiling step therefore hangs on Phase 4.3
+  (Returns coverage) and 4.2 (StoreShapeInfo), which move ahead of
+  CodeEffectInfo stages 2–3 in leverage order. Stage 2/3 scope
+  recorded by the agent (op-table ChildTypeInfo join with loud decay;
+  higher-order consumers; fn-param boundary currently strips the
+  effect).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

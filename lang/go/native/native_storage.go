@@ -542,7 +542,7 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 // element keeps dynamic(Any). Restricting to LISTS is deliberate: an integer
 // key over a list is an INDEX, never a stringified map key (the bug that
 // mistyped a parselang `get 1` over a list as None).
-func getIntKeyReturns(args []Value, _ *Registry) []Value {
+func getIntKeyReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	if len(args) != 2 || !IsConcrete(args[0]) || !IsConcrete(args[1]) ||
 		!args[1].Parent.ConformsTo(TList) {
@@ -564,6 +564,16 @@ func getIntKeyReturns(args []Value, _ *Registry) []Value {
 	if el.Parent.ConformsTo(TFunction) || el.Parent.ConformsTo(TFnDef) ||
 		IsReach(el) || IsSplice(el) {
 		return dyn
+	}
+	// A QUOTED CODE element (a dispatch-table entry — `def ops [quote [1
+	// add 2] …] (ops get 0)`) carries its analysed stack effect on the
+	// carrier, so a downstream `do` types its result instead of the
+	// dynamic(Any) hatch (design/checker-precision-fronts.0.md §1 stage 1).
+	// The helper self-gates to plain (non-Compiling) check mode and
+	// declines anything it cannot analyse cleanly, so this only ever
+	// NARROWS the plain-carrier fallback below.
+	if c, ok := AnalyseCodeEffect(r, el); ok {
+		return []Value{c}
 	}
 	return []Value{NewCarrier(el.Parent)}
 }

@@ -479,6 +479,15 @@ type CheckState struct {
 	// "one context store" usage pattern.
 	ContextTypes map[string]Value
 
+	// CodeEffectDepth counts nested code-effect body analyses
+	// (AnalyseCodeEffectCarrier — the typed-code-value producer). A
+	// stored code body that itself reads stored code (`quote [ops get
+	// 0 do]`) would recurse through the element-read producer
+	// unboundedly, so the producer declines past depth 1 — nested code
+	// stays dynamic(Any), a stage-2/3 precision
+	// (design/checker-precision-fronts.0.md §1).
+	CodeEffectDepth int
+
 	// FnBodyDepth counts the AnalyseFnBody nesting around the
 	// current dispatch. Diagnostics emitted while it is positive
 	// come from a fn BODY — code that runs at call time, not at the

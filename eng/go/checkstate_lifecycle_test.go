@@ -20,7 +20,8 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"FnBinders": true, "FnCallGraph": true, "ContextTypes": true,
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,
 		"FnAnalysisCounts": true, "Emit": true, "FnBodyDepth": true,
-		"Compiling": true,
+		"CodeEffectDepth": true,
+		"Compiling":       true,
 	}
 	// Fields Begin() deliberately does NOT reset.
 	persistent := map[string]string{
