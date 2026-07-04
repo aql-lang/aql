@@ -19,9 +19,13 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"DefsInstalled": true, "DefsUsed": true, "FnNameStack": true,
 		"FnBinders": true, "FnCallGraph": true, "ContextTypes": true, "CtxShapes": true,
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,
-		"FnAnalysisCounts": true, "Emit": true, "FnBodyDepth": true,
+		"FnAnalysisCounts": true, "FnBodyDepth": true,
 		"CodeEffectDepth": true,
 		"Compiling":       true,
+	}
+	// Fields Begin() resets to a canonical NON-zero per-pass value.
+	resetByBeginToCanonical := map[string]string{
+		"Emit": "reset to the inactive no-op recorder (never nil) — a compile pass installs a real *EmitState after Begin",
 	}
 	// Fields Begin() deliberately does NOT reset.
 	persistent := map[string]string{
@@ -37,11 +41,12 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 	for i := 0; i < st.NumField(); i++ {
 		name := st.Field(i).Name
 		_, isReset := resetByBegin[name]
+		_, isCanonical := resetByBeginToCanonical[name]
 		_, isPersistent := persistent[name]
 		switch {
-		case isReset && isPersistent:
-			t.Errorf("CheckState.%s classified BOTH reset-by-Begin and persistent — pick one", name)
-		case !isReset && !isPersistent:
+		case (isReset && isPersistent) || (isReset && isCanonical) || (isCanonical && isPersistent):
+			t.Errorf("CheckState.%s classified in more than one lifecycle bucket — pick one", name)
+		case !isReset && !isCanonical && !isPersistent:
 			t.Errorf("CheckState.%s is UNCLASSIFIED: add it to Begin()'s reset list (check.go) "+
 				"and resetByBegin here, or document why it persists across passes in the "+
 				"persistent list here — an unclassified field is a silent cross-pass leak", name)
@@ -52,6 +57,11 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 			t.Errorf("resetByBegin lists %s which is no longer a CheckState field — prune it", name)
 		}
 	}
+	for name := range resetByBeginToCanonical {
+		if _, ok := st.FieldByName(name); !ok {
+			t.Errorf("resetByBeginToCanonical lists %s which is no longer a CheckState field — prune it", name)
+		}
+	}
 	for name := range persistent {
 		if _, ok := st.FieldByName(name); !ok {
 			t.Errorf("persistent lists %s which is no longer a CheckState field — prune it", name)
@@ -60,7 +70,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 
 	// Behavioral half: Begin() must actually zero every reset-classified
 	// field. Populate a CheckState with non-zero values, Begin, and compare.
-	c := &CheckState{}
+	c := &CheckState{Emit: NewEmitState()}
 	populateNonZero(reflect.ValueOf(c).Elem())
 	done := c.Begin()
 	defer done()
@@ -74,10 +84,15 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 			t.Errorf("Begin() does not reset CheckState.%s (classified reset-by-Begin) — add it to Begin's reset list", name)
 		}
 	}
+	// The canonical-reset field: Begin must swap any armed recorder back to
+	// the inactive no-op (never nil, never a leftover *EmitState).
+	if c.Emit != theInactiveEmit {
+		t.Errorf("Begin() must reset CheckState.Emit to the inactive no-op recorder, got %T", c.Emit)
+	}
 
 	// Clone() must deep-copy every map/slice field: mutating the original
-	// after cloning must not change the clone. (Emit is a shared pointer by
-	// design — the recorder is per-pass, nilled by Begin.)
+	// after cloning must not change the clone. (Emit is a shared recorder
+	// reference by design — per-pass, reset to the inactive no-op by Begin.)
 	orig := &CheckState{}
 	populateNonZero(reflect.ValueOf(orig).Elem())
 	clone := orig.Clone()

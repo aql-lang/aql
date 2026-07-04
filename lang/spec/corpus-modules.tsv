@@ -44,10 +44,10 @@ import "aql:bin-util" end BinUtil.set 2 3	7	bin-util:set
 import "aql:bin-util" end BinUtil.swap 2	144115188075855872	bin-util:swap
 import "aql:bin-util" end BinUtil.test 2 3	false	bin-util:test
 import "aql:bin-util" end BinUtil.toggle 2 3	7	bin-util:toggle
-import "aql:emitlang" end EmitLang.emit_auto 2 {a:1,b:2}	'2'	emitlang:emit_auto
-import "aql:emitlang" end EmitLang.emit_json 2 {a:1,b:2}	'2'	emitlang:emit_json
-import "aql:emitlang" end EmitLang.emit_jsonic 2 {a:1,b:2}	'2'	emitlang:emit_jsonic
-import "aql:emitlang" end EmitLang.emit_yaml 2 {a:1,b:2}	'2'	emitlang:emit_yaml
+import "aql:emitlang" end EmitLang.emit_auto 2 {}	'2'	emitlang:emit_auto
+import "aql:emitlang" end EmitLang.emit_json 2 {}	'2'	emitlang:emit_json
+import "aql:emitlang" end EmitLang.emit_jsonic 2 {}	'2'	emitlang:emit_jsonic
+import "aql:emitlang" end EmitLang.emit_yaml 2 {}	'2'	emitlang:emit_yaml
 import "aql:io" end IO.write 'a' 'b' {a:1,b:2}	'a'	io:write
 import "aql:io" end IO.write 'c' 2 {c:3,d:4}	'c'	io:write
 import "aql:io" end IO.write 'd' 'e'	'd'	io:write

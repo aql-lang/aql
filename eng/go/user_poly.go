@@ -48,8 +48,8 @@ type userPolyPlan struct {
 //   - no arm is a deferred-param-list body (compiled units cannot model the
 //     interpreter's module-scope late binding — see buildFnBodyReturnsFn);
 //   - no arm's unit is variadic-returning (the call site bakes a fixed nout).
-func tryCompileUserPolyArms(r *Registry, es *EmitState, word string, args []Value, committedReturns []*Type) *userPolyPlan {
-	if es == nil || !es.active() || len(args) == 0 || len(committedReturns) == 0 {
+func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Value, committedReturns []*Type) *userPolyPlan {
+	if !es.active() || len(args) == 0 || len(committedReturns) == 0 {
 		return nil
 	}
 	// A word bound INSIDE an enclosing fn body (Depth above the innermost fn
@@ -169,7 +169,7 @@ func findOwningFnDef(r *Registry, word string, impl SigImpl) (FnDefInfo, bool) {
 // dispatches against the constraint — sound: the entry guard re-checks the
 // runtime value against the same placeholder membership). Returns ok=false on
 // any refusal, leaving the caller to keep the original MarkUncompilable.
-func compileUserPolyArm(r *Registry, es *EmitState, word string, s *Signature, owner FnDefInfo) (int, bool) {
+func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature, owner FnDefInfo) (int, bool) {
 	body := append([]Value(nil), s.body()...)
 	if len(body) == 0 {
 		return -1, false
@@ -222,7 +222,7 @@ func compileUserPolyArm(r *Registry, es *EmitState, word string, s *Signature, o
 	if !es.active() {
 		return -1, false
 	}
-	if es.fnRecs[unit].variadic {
+	if es.unitVariadic(unit) {
 		return -1, false
 	}
 	return unit, true

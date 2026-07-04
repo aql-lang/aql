@@ -538,7 +538,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		// OpCallNativePoly so the VM re-matches the one concrete alternative at
 		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
 		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false) {
-			r.Check.Emit.RecordPoly(word)
+			r.Check.Recorder().RecordPoly(word)
 		}
 		return out
 	}
@@ -679,7 +679,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 			// interpreter surfaces it.
 			var ae *AqlError
 			if errors.As(err, &ae) && ae.Code == "macroexpand_error" {
-				r.Check.Emit.RecordTrap("macroexpand_error", ae.Detail,
+				r.Check.Recorder().RecordTrap("macroexpand_error", ae.Detail,
 					"macroexpand", ae.Hint, pos)
 			}
 		}
@@ -913,8 +913,8 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		// exactly as dynOutNativeOK admits for concrete-arg builtins — the handler
 		// produces the real result value in both modes.
 		forceDynOut := dynOutNativeOK(r, word, sig, args, out) || quoteInertOK ||
-			r.Check.Emit.dynInputsProven(sig, args)
-		r.Check.Emit.RecordCall(word, sig, args, out, pos, forceDynOut, quoteInertOK)
+			r.Check.Recorder().dynInputsProven(sig, args)
+		r.Check.Recorder().RecordCall(word, sig, args, out, pos, forceDynOut, quoteInertOK)
 	}
 }
 
@@ -928,7 +928,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 // declines and the normal poly/get path stands. outs[0] is rewritten to the
 // element carrier so the value flowing on has the element's identity.
 func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || (!isGetWord(word) && !isGetrWord(word)) || len(args) != 2 || len(outs) != 1 {
 		return false
 	}
@@ -1017,7 +1017,7 @@ func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
 // compile-time constant (an inert const or a type node) — a runtime operand
 // never folds.
 func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileModuleFold) || len(outs) != 1 ||
 		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 {
 		return false
@@ -1103,7 +1103,7 @@ func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool
 // tryRecordPoly's safety (core sig, no meta/fn-value), and is the escape hatch
 // RecordCall's anyDynamicCarrier(outs) refusal consults via forceDynOut.
 func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || sig == nil || len(outs) == 0 {
 		return false
 	}
@@ -1267,7 +1267,7 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // (core builtin, no meta/fn-value/code-body sig, sig identity, resolvable
 // operands) still applies.
 func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	// 0 outputs (a side-effect word like the test framework's `test-record`) or
 	// 1 output (the common get/size/is shape). A multi-result poly is beyond
 	// this path — the residual layout would need per-result seating.
@@ -1404,7 +1404,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 // value, and the island's dynamic result still refuses any downstream
 // TYPED dispatch via anyDynamicCarrier.
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileFallbackBody|CompileIslandPure) || len(outs) != 1 {
 		return false
 	}
@@ -1424,7 +1424,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	// would DOUBLE-record (the island fallback PLUS the structured event),
 	// leaving the extra event unconsumed on the simulated stack. Skip it; the
 	// generic RecordCall path that follows likewise early-returns.
-	if _, done := es.producedBy[outs[0].ID]; done {
+	if es.alreadyProduced(outs[0].ID) {
 		return false
 	}
 	// A pure typed word (get/make/is/typeof/size/type-algebra) is
@@ -2362,8 +2362,8 @@ func RecordTypedDefMake(r *Registry, typeArg, body Value, pos SrcPos) (Value, bo
 	if r == nil {
 		return Value{}, false
 	}
-	es := r.Check.Emit
-	if es == nil || !es.active() {
+	es := r.Check.Recorder()
+	if !es.active() {
 		return Value{}, false
 	}
 	sig := objectMakeSig(r)
@@ -2687,7 +2687,7 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	// line: pause bytecode recording — unless a branch-lowering hook
 	// armed fragment capture (the `if` ReturnsFn), in which case the
 	// body's events record into a fragment for structured lowering.
-	defer r.Check.Emit.bodyAnalysisGuard()()
+	defer r.Check.Recorder().bodyAnalysisGuard()()
 
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()
@@ -2832,7 +2832,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 	// bindings as VM locals and capture each round's events as a
 	// fragment — the final round's capture (the stable one) is what
 	// the caller's RecordLoop consumes via TakeFragment.
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	loopCapture := es.ConsumeLoopArm()
 	if loopCapture {
 		for _, v := range bindVals {
@@ -3370,7 +3370,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 		// where the interpreter succeeds). Refuse so the program falls back to
 		// the interpreter instead. Only when active: a SUSPENDED (plain) nested
 		// analysis records nothing anyway and must not latch the program.
-		if es := r.Check.Emit; es != nil && es.active() {
+		if es := r.Check.Recorder(); es.active() {
 			es.MarkUncompilable("fn body analysis error in " + name + ": " + err.Error())
 		}
 		result = nil
@@ -3410,7 +3410,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// mis-consume it and leak that body's events into the live fn
 	// fragment). Mirrors how captureArm/loopArm are consumed at the top
 	// of their analysis functions.
-	defer r.Check.Emit.fnBodyGuard()()
+	defer r.Check.Recorder().fnBodyGuard()()
 	if len(body) == 0 {
 		return nil
 	}
@@ -3545,7 +3545,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// the in-flight bail, and its return is unconstrained. So a single clean
 	// recording is both sound and sufficient. (A non-armed nested analysis is
 	// suspended by fnBodyGuard, so active() is true only for the armed compile.)
-	armed := r.Check.Emit != nil && r.Check.Emit.active()
+	armed := r.Check.Recorder().active()
 	if r.Check.InflightBails > bailsBefore && len(result) > 0 && !armed {
 		result = refineRecursiveSummary(r, key, diagBase, result, runOnce)
 	}
@@ -3564,8 +3564,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 // this the user-fn dispatch would hit recordCallRefusal ("user fn call … Stage 3")
 // since no fn unit was compiled. Returns true when it claimed the dispatch.
 func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
-	es := r.Check.Emit
-	if es == nil || !es.active() || sig == nil || sig.fnFrame() == nil || len(outs) != 1 {
+	if !r.Check.Recorder().active() || sig == nil || sig.fnFrame() == nil || len(outs) != 1 {
 		return false
 	}
 	return isDeferredWordList(outs[0])
@@ -3645,13 +3644,13 @@ func deferredParamListResidual(body []Value, paramNames []string) (Value, bool) 
 // skips the same zeroOut events) on the CALL side. Recording-active only: the
 // zeroOut flag is set during the compile pass.
 func stripZeroOutResiduals(r *Registry, stk []Value) []Value {
-	es := r.Check.Emit
-	if es == nil || !es.active() || len(stk) == 0 {
+	es := r.Check.Recorder()
+	if !es.active() || len(stk) == 0 {
 		return stk
 	}
 	filtered := make([]Value, 0, len(stk))
 	for _, v := range stk {
-		if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
+		if es.zeroOutProduced(v.ID) {
 			continue
 		}
 		filtered = append(filtered, v)

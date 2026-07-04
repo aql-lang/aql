@@ -29,7 +29,11 @@ package eng
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
 func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, takesTop bool, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
-	es := r.Check.Emit
+	// Closure compilation is emit-cluster machinery: it writes recording
+	// internals (fnRecs), so it needs the CONCRETE EmitState. A pass without
+	// one (the inactive recorder) declines exactly as the nil field did —
+	// the typed-nil receiver's StartFnCompile returns !ok below.
+	es, _ := r.Check.Recorder().(*EmitState)
 	// A side-effect body word (bodyOut 0 — a test case body) declares NO returns,
 	// so its 0-value residual is taken as-is rather than count-refused against the
 	// default single [TAny]. The fn-VALUE factory path (word "fnval") passes
@@ -168,7 +172,9 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 		return false
 	}
 	spec := *sig.Callable
-	es := r.Check.Emit
+	// Concrete EmitState needed (extraNoEvalHookSlotsOK reads recording
+	// internals); the inactive recorder falls to the !active() decline.
+	es, _ := r.Check.Recorder().(*EmitState)
 	// 0 or 1 outputs (a side-effect case body nets 0; a map/transform body nets
 	// 1) — RecordClosureCall lowers both; a multi-output word is beyond this path.
 	if !es.active() || len(outs) > 1 || spec.BodyPos >= len(args) {
@@ -353,9 +359,16 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 // OpPushClosure). paramNames is nil for the token form (stack-consumed inputs)
 // and the lambda's param names for the lambda form.
 func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, outs []Value, pos SrcPos) bool {
+	// The probe fork below needs the CONCRETE EmitState; both callers only
+	// reach here through an active recording state, so a non-EmitState
+	// recorder (the inactive no-op) declining is the unreachable belt.
+	real, isReal := r.Check.Recorder().(*EmitState)
+	if !isReal || real == nil {
+		return false
+	}
 	capOps := make([]emitOperand, len(captures))
 	for i, cb := range captures {
-		op, ok := r.Check.Emit.resolveOperand(cb.Value)
+		op, ok := real.resolveOperand(cb.Value)
 		if !ok {
 			return false // an unreachable capture — keep the island path
 		}
@@ -375,7 +388,6 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	// (which re-hits the same closure and fails its own residual). The REAL
 	// compile below resolves the recursion naturally (the enclosing unit's key is
 	// already in the real state).
-	real := r.Check.Emit
 	r.Check.Emit = real.forkForProbe()
 	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	r.Check.Emit = real

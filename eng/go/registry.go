@@ -385,12 +385,16 @@ type CheckState struct {
 	// before being cached (design/checker-accuracy-review.10.md A2).
 	InflightBails int
 
-	// Emit, when non-nil, turns the check pass into the bytecode
-	// recording pass (Stage 1 of design/aql-bytecode-plan.0.md): every
-	// dispatch through carrierResults records a classified call event
-	// and EmitState.Finalize linearises the trace into a Program. Set
-	// by the compile entry points after Begin; nil for plain checks.
-	Emit *EmitState
+	// Emit is the bytecode recorder seam (EmitRecorder). A real
+	// *EmitState — installed by the compile entry points after Begin —
+	// turns the check pass into the bytecode recording pass (Stage 1 of
+	// design/aql-bytecode-plan.0.md): every dispatch through
+	// carrierResults records a classified call event and Finalize
+	// linearises the trace into a Program. A plain check runs against
+	// the inactive no-op recorder (Begin installs it). READ through
+	// CheckState.Recorder(), which substitutes the no-op for a nil
+	// field; write only from the pass entry points / probe forks.
+	Emit EmitRecorder
 
 	// Strict enables the STRICT-MODE advisory surface (`aql check
 	// --strict`): every committed dispatch over a dynamic operand emits a
@@ -629,6 +633,19 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// readers about reachable states (completion plan 2.3; the article's
 	// "unnecessary defensive check" residue). Emitted by ApplyGuardNarrowing.
 	"redundant_guard": SeverityInfo,
+	// RESERVED — no emit site yet (completion plan 4.4 / G6). The general
+	// "options-looking map literal flows into a slot with no Options schema"
+	// lint is BLOCKED ON PRECISION: atom-spelled and string-spelled map keys
+	// are indistinguishable post-parse (`{a:1} cmp {'a':1}` → 0 — OrderedMap
+	// keys are plain strings), so EVERY concrete map argument would qualify
+	// and the rule cannot separate an options idiom from a data map (merge /
+	// inject / make inputs) — far below the ~100% on-corpus advisory bar.
+	// The per-family remedy shipped instead: option-consuming words declare
+	// an Options schema on their opts slot (`convert`'s convertOptsPattern;
+	// the emit family's EmitOptsSchema), which turns an unknown key into a
+	// hard dispatch rejection at check AND run time. Classified here so a
+	// future precise emitter inherits the intended severity.
+	"options_key_unchecked": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a
@@ -683,7 +700,10 @@ func NewRegistry() (*Registry, error) {
 		// step" so callers who want that have an unambiguous way to
 		// express it; callers who omit the field get the default
 		// without the historical zero-as-magic overload.
-		Check: &CheckState{StepBudget: -1},
+		// Emit starts as the inactive no-op recorder — never nil — so
+		// recorder calls are always safe (CheckState.Recorder() covers
+		// registries constructed without NewRegistry).
+		Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit},
 	}
 	// Mint a process-stable scope id so fn-analysis memo keys can be
 	// namespaced per registry (parent vs module sub-registry). A

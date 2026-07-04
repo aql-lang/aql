@@ -237,7 +237,7 @@ func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Va
 			// non-check branch below) instead of refusing; if the trap can't be
 			// recorded (a nested unpack), keep the blanket-refusal flag so the
 			// program falls back.
-			if !r.Check.Emit.RecordTrap("unpack_error",
+			if !r.Check.Recorder().RecordTrap("unpack_error",
 				"unpack: key "+srcKey+" not found in source", "unpack", "", pos) {
 				r.Check.SuppressedRuntimeError = true
 			}

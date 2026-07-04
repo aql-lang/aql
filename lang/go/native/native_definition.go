@@ -228,12 +228,12 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// Mark a computed binding for value-def-local promotion in the bytecode
 	// lowerer: a named value may be referenced in any order, so its producing
 	// event is stored to a frame local rather than left on the simulated stack.
-	r.Check.Emit.MarkValueDef(value)
+	r.Check.Recorder().MarkValueDef(value)
 	// A rebind of a LOOP-CARRIED def (a pre-loop binding an armed for-body
 	// rebinds — eng.AnalyseLoopBody registered it via NoteLoopCarried) stores
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
-	r.Check.Emit.RecordDefRebind(name, value, pos)
+	r.Check.Recorder().RecordDefRebind(name, value, pos)
 	return nil, nil
 }
 
@@ -336,7 +336,7 @@ func markRefineDefUncompilable(r *Registry, name string, body Value) {
 	if IsConcrete(body) {
 		return
 	}
-	if es := r.Check.Emit; es != nil && es.Active() {
+	if es := r.Check.Recorder(); es.Active() {
 		es.MarkUncompilable("typed-def `" + name + "`: dynamic refinement reparent/validate is interpreter-only (no compiled store-with-reparent)")
 	}
 }
@@ -354,7 +354,7 @@ func markRefineDefUncompilable(r *Registry, name string, body Value) {
 // (its Describe renders the constraint) is only built when a bind is actually
 // recorded — a plain interpreter run pays nothing it did not pay before.
 func recordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
-	if es := r.Check.Emit; es.Active() && !IsConcrete(body) {
+	if es := r.Check.Recorder(); es.Active() && !IsConcrete(body) {
 		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
 			return out
 		}
@@ -635,7 +635,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 					Kind: eng.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
 				}
 			}, body, body, args[0].Pos, func() {
-				if es := r.Check.Emit; es != nil && es.Active() {
+				if es := r.Check.Recorder(); es.Active() {
 					es.MarkUncompilable("typed-def `" + name + "`: DepScalar predicate validation is interpreter-only")
 				}
 			})
@@ -764,7 +764,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// An undef of a LOOP-CARRIED def exposes the previous binding while the
 	// carried frame slot still holds the rebound value — compiled reads would
 	// diverge; refuse and let the interpreter own the shape.
-	r.Check.Emit.RefuseCarriedUndef(name)
+	r.Check.Recorder().RefuseCarriedUndef(name)
 	UninstallDef(r, name)
 	return nil, nil
 }

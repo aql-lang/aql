@@ -788,7 +788,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// code unit (params as frame locals) and record the call site.
 		// The memo key mirrors AnalyseFnBody's so the unit is compiled
 		// exactly when the body is analysed.
-		es := r.Check.Emit
+		es := r.Check.Recorder()
 		fnUnit := -1
 		var finishFn func([]Value)
 		// Cluster C (broad miscompile hunt): a gradual-Any arg to a MULTI-overload
@@ -798,7 +798,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// the sibling — `def g fn [[a:Integer]['i'] [a:String]['s']] (g (id 5))`
 		// returned 'i' interpreted but signature_error compiled. Natives re-match via
 		// OpCallNativePoly; user-fn overloads have NO poly path. Refuse → fall back.
-		clusterCRefuse := es != nil && es.active() && anyDynamicCarrier(args) &&
+		clusterCRefuse := es.active() && anyDynamicCarrier(args) &&
 			dynamicReachableOverloadCount(r, nameCopy, args) >= 2
 		var polyPlan *userPolyPlan
 		if clusterCRefuse {
@@ -814,7 +814,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
 			}
 		}
-		if es != nil && !clusterCRefuse {
+		if es.Armed() && !clusterCRefuse {
 			// The body unit must be compiled against GENERALISED args
 			// — pure carriers of the call's arg types. The call's
 			// kept-concrete values would constant-fold inside the body

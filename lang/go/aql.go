@@ -311,9 +311,9 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	a.registry.Check.EmitUnusedDefDiagnostics()
 
 	res := CheckResult{Diagnostics: a.registry.Check.Diagnostics}
-	if es := a.registry.Check.Emit; es != nil && len(es.SiteCounts) > 0 {
-		res.SiteCounts = make(map[string]int, len(es.SiteCounts))
-		for k, v := range es.SiteCounts {
+	if sites := a.registry.Check.Recorder().Sites(); len(sites) > 0 {
+		res.SiteCounts = make(map[string]int, len(sites))
+		for k, v := range sites {
 			res.SiteCounts[k] = v
 		}
 	}
@@ -343,7 +343,7 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	if a.registry.Check.AmbiguousGradualSplit {
 		return nil, "forward/stack split depends on a gradual operand (uncompilable)", res, nil
 	}
-	prog, reason, ok := a.registry.Check.Emit.Finalize(residual)
+	prog, reason, ok := a.registry.Check.Recorder().Finalize(residual)
 	if !ok {
 		return nil, reason, res, nil
 	}

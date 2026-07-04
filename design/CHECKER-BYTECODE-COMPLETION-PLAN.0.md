@@ -620,6 +620,75 @@ from everything; 7 is gated on 6's exit criteria.
   unshaped (the call-boundary carrier is fresh), ContextTypes retire
   blocked on those readers, and replace-on-write flow-sensitivity
   stays deferred (join-only keeps sandbox leaks monotone).
+- **2026-07-04 — Phase 4.4 landed: G6 options-typo hardening via
+  emit-family Options schemas; the GENERAL options-map lint is
+  documented blocked-on-precision.** Live probe reproduced the symptom
+  (`emit json {prety:true} {a:1}` checked clean under --strict and
+  emitted compact JSON). The deciding precision finding: atom-spelled
+  and string-spelled map keys are INDISTINGUISHABLE post-parse
+  (`{a:1} cmp {'a':1}` → 0 — OrderedMap keys are plain strings), so
+  the plan's "atom-keyed map literal" signal does not exist at the
+  dispatch seam; every concrete map argument would qualify and the
+  advisory would fire on legitimate data maps (merge/inject/make
+  inputs) — far below the ~100% advisory bar. Landed the sanctioned
+  fallback instead: per-kind Options schemas on the built-in
+  emitters' opts slot (native.EmitOptsSchema — json/jsonic/yaml
+  {pretty,indent}, csv {separation}, xml {pretty}, tsv/toml/ini
+  EMPTY; indent typed Number, mirroring optIndent's int64/float64
+  tolerance; emit_auto carries the natural-kind union), riding
+  Signature.Patterns exactly like `convert`'s convertOptsPattern —
+  a typo'd or wrong-typed key is now a HARD dispatch rejection at
+  check AND run time, while a dynamic opts map still matches
+  (Options vs non-concrete Map keeps the schema). Host-
+  (RegisterHostEmitter) and AQL-registered (EmitLang.register)
+  emitters keep a plain-Map opts slot — their key sets are their
+  own. The data slot is untouched (`emit json {prety:true}` still
+  emits `{"prety":true}`). The reserved `options_key_unchecked`
+  severity-table entry (Info, registry.go) documents the
+  blocked-on-precision state. Four corpus smoke rows
+  (corpus-modules.tsv:47-50) had encoded the hole itself — raw
+  exported-emitter calls passing junk `{a:1,b:2}` opts and relying
+  on silent ignoring; updated to the valid `{}` opts (intent
+  preserved), restoring every ratchet number byte-identical. Landing
+  tests: TestEmitOptsSchemaTypoRejected (8 rejections incl. auto /
+  tsv-any-key / wrong value types; 4 accepteds incl. data-slot and
+  registered-emitter arbitrary keys), TestEmitHostEmitterOptsUnchecked.
+- **2026-07-04 — Phase 4.5 landed: emit/check decoupling — CheckState
+  holds the EmitRecorder interface; the checker runs with no
+  *EmitState knowledge.** The check side's real surface (grepping
+  Check.Emit usages outside the emit cluster) is ~50 recorder
+  operations — beyond the plan's ~25 bar, but a record*-only subset
+  would have forced KEEPING the concrete field, so the full coherent
+  interface landed in one pass: EmitRecorder
+  (eng/go/emit_recorder.go) with the exported record / branch / loop
+  / fn-unit / lifecycle families plus an unexported eng-only tail
+  (unexported members mean no out-of-package implementations, by
+  design). CheckState.Emit is now EmitRecorder; product reads go
+  through the never-nil CheckState.Recorder() accessor; Begin resets
+  to the inactive no-op recorder (inactiveEmit — every method
+  mirrors the historical nil-receiver answer), so a PLAIN check pass
+  touches no EmitState code at all. Recorder internals that had
+  leaked into check-side files became narrow methods: Armed() (the
+  historical `Emit != nil` probe — bare nil-guards map 1:1, no
+  site-by-site behavior audit needed), bindRegistry, topFrameOnly,
+  suspendedNow, Sites, zeroOutProduced, alreadyProduced,
+  unitVariadic. The emit cluster (emit.go / lower.go /
+  callable_words.go) owns the concrete type: compileClosureBody,
+  tryRecordClosure and recordClosureDispatch type-assert (declining
+  exactly as the nil field did), and IsolateEmit's fresh-state
+  construction moved behind emit.go's newIsolatedEmit. user_poly.go
+  now takes EmitRecorder (the fnRecs variadic read → unitVariadic).
+  The CheckState lifecycle gate grew a third bucket
+  (reset-to-canonical-non-zero) for Emit. Landing tests:
+  TestPlainCheckUsesInactiveRecorder (a compile-free pass never arms
+  an EmitState) and TestPlainCheckRunsAgainstRecorderInterface (a
+  counting NON-EmitState fake runs the pass with identical
+  diagnostics — interface-only coupling proven). ZERO behavior
+  change: every ratchet / census / frontier / differential number
+  byte-identical (FP 0/3313, unflagged 170/485, soundness 7,
+  frontier 195 pin 195, census 3547 compiled / 250 check-errors /
+  78 refused / 1 islanded, differential 3299/0, fallback 3522/0,
+  ceilings 3/0/66).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

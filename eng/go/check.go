@@ -111,7 +111,7 @@ func (c *CheckState) Begin() func() {
 	c.FnNameInflight = nil
 	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
-	c.Emit = nil
+	c.Emit = theInactiveEmit
 	c.CodeEffectDepth = 0
 	c.FnBodyDepth = 0
 	// Compiling marks a REAL compile pass; the compile entry points
@@ -185,11 +185,7 @@ func (c *CheckState) IsolateEmit() func() {
 		return func() {}
 	}
 	saved := c.Emit
-	fresh := NewEmitState()
-	if saved != nil {
-		fresh.reg = saved.reg
-	}
-	c.Emit = fresh
+	c.Emit = newIsolatedEmit(c.Recorder())
 	return func() { c.Emit = saved }
 }
 

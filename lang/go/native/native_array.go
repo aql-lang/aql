@@ -1438,7 +1438,7 @@ func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value 
 	// Higher-order bodies run nested sub-engines — pause bytecode
 	// recording for their duration (they are not part of the
 	// enclosing straight line).
-	defer r.Check.Emit.Suspend()()
+	defer r.Check.Recorder().Suspend()()
 	if !IsConcrete(body) {
 		return nil
 	}

@@ -406,10 +406,8 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 	subReg.Check.EmitUnusedDefDiagnostics()
 
 	sites := map[string]int{}
-	if es := subReg.Check.Emit; es != nil {
-		for k, v := range es.SiteCounts {
-			sites[k] = v
-		}
+	for k, v := range subReg.Check.Recorder().Sites() {
+		sites[k] = v
 	}
 
 	switch {
@@ -421,7 +419,7 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 		return compileResultValue(false,
 			"check-mode suppressed a runtime error (uncompilable)", sites), nil
 	}
-	_, reason, ok := subReg.Check.Emit.Finalize(residual)
+	_, reason, ok := subReg.Check.Recorder().Finalize(residual)
 	if !ok {
 		return compileResultValue(false, reason, sites), nil
 	}

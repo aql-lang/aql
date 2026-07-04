@@ -269,7 +269,7 @@ func moduleExportGetrReturns(args []Value, r *Registry) []Value {
 		if val, ok := moduleExportGet(args[1], k); ok {
 			return []Value{val}
 		}
-		r.Check.Emit.RecordTrap("not_found",
+		r.Check.Recorder().RecordTrap("not_found",
 			fmt.Sprintf("getr: export %q not found in module", k), "getr",
 			"", args[0].Pos)
 	}

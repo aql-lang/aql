@@ -85,10 +85,15 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		[]*native.Type{native.TList}, nil, subReg))
 
 	// ---- emit_auto: the natural-format dispatcher ---------------------
+	// The opts slot carries the UNION Options schema of auto's natural-target
+	// kinds (json / csv / xml), so an unknown opts key is a hard dispatch
+	// rejection rather than a silently ignored option (G6) — see
+	// installHostEmitter for the per-kind rule.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-auto",
 		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TAny, native.TMap},
+			Patterns:   map[int]native.Value{1: native.EmitAutoOptsSchema()},
 			Returns:    []*native.Type{native.TString},
 			BarrierPos: -1,
 			Impl:       native.Go(emitAutoHandler),
@@ -138,6 +143,16 @@ type EmitLangSpec struct {
 	Returns []*native.Type
 	// Handler implements the emitter. Required. Receives the value and opts.
 	Handler native.Handler
+
+	// optsSchema, when set (an Options type literal), rides the inner
+	// native's opts slot as a dispatch Pattern: a CONCRETE opts map with a
+	// key outside the schema is a hard signature rejection at check and run
+	// time — the G6 options-typo fix (`emit json {prety:true}` must not
+	// silently emit compact JSON). Unexported: only the BUILT-IN kinds
+	// declare it (builtinEmitSpecs, from native.EmitOptsSchema — the exact
+	// key set each Encode reads). Host- and AQL-registered emitters own
+	// their key sets, so their opts stay an unchecked plain Map.
+	optsSchema native.Value
 }
 
 // capEmitLangHost is the registry capability slot holding host-registered
@@ -210,14 +225,20 @@ func installHostEmitter(exports *native.OrderedMap, subReg *native.Registry, spe
 		returns = []*native.Type{native.TString}
 	}
 	inner := "emitlang-host-" + spec.Name
+	sig := native.Signature{
+		Args:       []*native.Type{native.TAny, native.TMap},
+		Returns:    returns,
+		BarrierPos: -1,
+		Impl:       native.Go(spec.Handler),
+	}
+	// A built-in kind's known opts keys ride as an Options-schema Pattern so
+	// dispatch rejects a typo'd key outright (see EmitLangSpec.optsSchema).
+	if native.IsOptionsType(spec.optsSchema) {
+		sig.Patterns = map[int]native.Value{1: spec.optsSchema}
+	}
 	subReg.RegisterNativeFunc(native.NativeFunc{
-		Name: inner,
-		Signatures: []native.Signature{{
-			Args:       []*native.Type{native.TAny, native.TMap},
-			Returns:    returns,
-			BarrierPos: -1,
-			Impl:       native.Go(spec.Handler),
-		}},
+		Name:       inner,
+		Signatures: []native.Signature{sig},
 	})
 	params := []native.FnParam{{Type: native.TAny}, {Type: native.TMap}}
 	exports.Set(key, wrapMiniFnDef(inner, [][]native.FnParam{params}, returns, nil, subReg))
@@ -231,10 +252,12 @@ func builtinEmitSpecs() []EmitLangSpec {
 	kinds := native.EmitKinds()
 	specs := make([]EmitLangSpec, len(kinds))
 	for i, k := range kinds {
+		schema, _ := native.EmitOptsSchema(k.Name)
 		specs[i] = EmitLangSpec{
-			Name:    k.Name,
-			Returns: []*native.Type{native.TString},
-			Handler: emitKindHandler(k.Name, k.Encode),
+			Name:       k.Name,
+			Returns:    []*native.Type{native.TString},
+			Handler:    emitKindHandler(k.Name, k.Encode),
+			optsSchema: schema,
 		}
 	}
 	return specs

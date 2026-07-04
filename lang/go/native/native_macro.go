@@ -356,7 +356,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			// compiled program then raises the byte-identical error instead of
 			// refusing on the dynamic carrier downstream. A nested call declines
 			// the trap and keeps the lenient fallback.
-			r.Check.Emit.RecordTrap("mini_unknown_lang",
+			r.Check.Recorder().RecordTrap("mini_unknown_lang",
 				fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
 				`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`,
 				args[0].Pos)
@@ -606,7 +606,7 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// (top-level only) so the compiled program raises the byte-identical
 			// parse_unknown_lang the interpreter raises here; a nested call
 			// declines and keeps the lenient fallback.
-			r.Check.Emit.RecordTrap("parse_unknown_lang",
+			r.Check.Recorder().RecordTrap("parse_unknown_lang",
 				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
 				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`,
 				args[0].Pos)
@@ -740,7 +740,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// {a:1}`) is DATA/OPTS, not a kind, and falls through to the auto form.
 	if leadingKind && !explicit && !r.Defs.Has(kind) {
 		if r.Check.IsActive() && !emitNamespaceBound(r) {
-			r.Check.Emit.RecordTrap("emit_unknown_lang",
+			r.Check.Recorder().RecordTrap("emit_unknown_lang",
 				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
 				`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`,
 				args[0].Pos)

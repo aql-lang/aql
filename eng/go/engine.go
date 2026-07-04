@@ -791,14 +791,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
 	if e.registry.Check.IsActive() {
-		if es := e.registry.Check.Emit; es != nil {
-			es.reg = e.registry // back-pointer for returned-closure compilation
-			pre := input
-			input = StripToCarriers(input)
-			es.RememberStrippedOriginals(pre, input)
-		} else {
-			input = StripToCarriers(input)
-		}
+		es := e.registry.Check.Recorder()
+		es.bindRegistry(e.registry) // back-pointer for returned-closure compilation
+		pre := input
+		input = StripToCarriers(input)
+		es.RememberStrippedOriginals(pre, input)
 	}
 
 	// Post-parse referent resolution: stamp each /q-style atom in the
@@ -1075,7 +1072,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// (orphan gen errors at end-of-run, exactly where this fires)
 			// instead of refusing; if the trap can't be recorded (nested), keep
 			// the blanket-refusal flag so the program falls back.
-			if !e.registry.Check.Emit.RecordTrap("gen_without_constructor",
+			if !e.registry.Check.Recorder().RecordTrap("gen_without_constructor",
 				"gen: parameter spec was not consumed by a type constructor", "gen",
 				"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]",
 				e.currentPos()) {
@@ -1852,7 +1849,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			// instead of refusing on the downstream Undefined placeholder. Only a
 			// top-level trap is recordable; a nested /u keeps the placeholder path
 			// and refuses (falls back) as before.
-			e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
+			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
 			placeholder.Pos = val.Pos
 			placeholder.Undefined = true
@@ -1947,7 +1944,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			// instead of refusing on the downstream Undefined placeholder. Only a
 			// top-level trap is recordable; a nested /r keeps the placeholder path
 			// and refuses (falls back) as before.
-			e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
+			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
 			placeholder.Pos = val.Pos
 			placeholder.Undefined = true
@@ -3220,7 +3217,7 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	// the list is an unresolvable residual and the program falls back. A
 	// fully-literal list (`[1 2 3]`) stays inert and bakes as a pooled const.
 	if e.registry.Check.IsActive() {
-		if es := e.registry.Check.Emit; es != nil && !isInertConst(out) {
+		if es := e.registry.Check.Recorder(); es.Armed() && !isInertConst(out) {
 			switch {
 			case e.isTop:
 				// Top-level (frames==1): the canonical case, evaluated once.
@@ -3268,7 +3265,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 		// the rare unlowerable shape (a hole producing 0 or >1 values) refuse and
 		// fall back. Mirrors RecordMakeMap — re-assembled per run, no const bake.
 		out := NewCarrier(TString)
-		if es := e.registry.Check.Emit; es != nil && es.active() {
+		if es := e.registry.Check.Recorder(); es.active() {
 			if !holesOK || !es.RecordInterp(parts, holes, out, val.Pos) {
 				es.MarkUncompilable("interpolated string with a runtime-computed part")
 			}
@@ -3364,7 +3361,7 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 		// refuse — the VM has no XML-interpolation op, so the program falls back
 		// to the interpreter (mirrors evalInterpString). At run time there are no
 		// carriers, so this never fires and the concrete element below is returned.
-		if es := e.registry.Check.Emit; es != nil && es.active() {
+		if es := e.registry.Check.Recorder(); es.active() {
 			es.MarkUncompilable("interpolated XML with a runtime-computed part")
 			return NewCarrier(TXml), nil
 		}
@@ -3662,8 +3659,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			// concrete fold coerces the carrier (e.g. to 0) and freezes a WRONG value
 			// (the determinism check sees the same coerced 0 twice). exprRefsCarrier
 			// catches that; a user TYPE binding (Carrier=false) still folds.
-			es := e.registry.Check.Emit
-			topFrame := es == nil || len(es.frames) == 1
+			topFrame := e.registry.Check.Recorder().topFrameOnly()
 			if e.registry.Check.IsActive() && topFrame && !e.exprRefsCarrier(items) {
 				if folded, ok := e.constFoldContainerVal(items); ok {
 					// Bake the computed value as a const EXCEPT in a `make`
@@ -3716,8 +3712,8 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// binding, fold it to its concrete result (identical to the sub-engine
 		// eval the interpreter runs) so the map bakes as a const. Same gating and
 		// mutation-safety screen as the ParenExpr branch.
-		if es := e.registry.Check.Emit; e.registry.Check.IsActive() &&
-			(es == nil || len(es.frames) == 1) && !e.exprRefsCarrier([]Value{v}) {
+		if e.registry.Check.IsActive() &&
+			e.registry.Check.Recorder().topFrameOnly() && !e.exprRefsCarrier([]Value{v}) {
 			if folded, ok := e.constFoldContainerVal([]Value{v}); ok {
 				if (!dataMap && !e.elemEvalRecordable) || !containsSharedMutable(folded) {
 					out.Set(resolvedKey, folded)
@@ -3751,7 +3747,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// binding. recordMakeListInner declines (leaving es untouched) for an
 		// unresolvable / stateful / type-pattern element, so the map then falls back.
 		if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
-			if es := e.registry.Check.Emit; es != nil {
+			if es := e.registry.Check.Recorder(); es.Armed() {
 				if lv, _ := out.Get(resolvedKey); lv.Parent.Equal(TList) && !isInertConst(lv) {
 					if lp, isList := lv.Data.(ListPayload); isList {
 						es.recordMakeListInner(e.registry, lp.Elems, lv, lv.Pos)
@@ -3788,7 +3784,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 	// Gated on `consumed`: a DEFERRED residual (end-of-run autoEvalStack) is
 	// evaluated after its frame pops, so recording it in-frame would diverge.
 	if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
-		if es := e.registry.Check.Emit; es != nil && !isInertConst(res) {
+		if es := e.registry.Check.Recorder(); es.Armed() && !isInertConst(res) {
 			keys := out.Keys()
 			vals := make([]Value, len(keys))
 			for i, k := range keys {
@@ -4390,7 +4386,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// sub-registry branch handles them) and macros.
 	checkFnValue := e.registry != nil && e.registry.Check.Mode && !fnDef.Anonymous && !fnDef.Macro &&
 		(fnDef.Registry == nil || fnDef.Registry == e.registry) &&
-		e.registry.Check.Emit != nil && e.registry.Check.Emit.active()
+		e.registry.Check.Recorder().active()
 	ownSigs := fnDef.OwnSigs()
 	for i := range ownSigs {
 		sig := &ownSigs[i]
@@ -5676,7 +5672,7 @@ func (e *Engine) stepCloseParen() error {
 	// argument — `((m.g 3) add 1)` compiled m.g(3 add 1)=8 instead of
 	// (m.g 3) add 1=7. The interpreter dispatches the concrete fn AT the paren,
 	// so refuse here and let the faithful interpreter fallback run it.
-	if es := e.registry.Check.Emit; es != nil && es.active() {
+	if es := e.registry.Check.Recorder(); es.active() {
 		first, count, lastIdx := -1, 0, -1
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if isRecordableLiteral(e.tape.At(i)) {
@@ -6657,7 +6653,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 		return false, nil
 	}
 	spec := SubstituteSelf(undef.Sigs[0], sinfo.Type)
-	e.registry.Check.Emit.MarkUncompilable("surface-shape typed dispatch at " + w.Name)
+	e.registry.Check.Recorder().MarkUncompilable("surface-shape typed dispatch at " + w.Name)
 	synth := &Signature{Params: spec.Params, Returns: spec.Returns}
 	normalizeSig(synth)
 
@@ -6900,7 +6896,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
-		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		e.spliceCheckResults(positions, out)
 		return nil
 	}
@@ -6915,7 +6911,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// are computed with recording suspended so the program records ONLY the poly
 	// call, never a duplicate CALL_NATIVE for the same dispatch. Concrete (non-
 	// Any) operands that reach here are a genuine type error and still refuse.
-	es := e.registry.Check.Emit
+	es := e.registry.Check.Recorder()
 	if es.active() && (anyAnyCarrier(args) || anyDisjunctCarrier(args)) {
 		resume := es.Suspend()
 		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
@@ -6980,7 +6976,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// transient String-carrier alternative. Skip the latch (and its diagnostic)
 	// under suspend; still splice the analysis result so the enclosing probe
 	// reads a residual.
-	if es == nil || es.suspended == 0 {
+	if !es.suspendedNow() {
 		// A STATICALLY-DEFINITE unmatched dispatch — every value the failed
 		// match examined is identical at run time — compiles to a terminal
 		// OpTrap raising the interpreter's byte-identical error instead of
@@ -6989,7 +6985,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// Ineligible shapes (a carrier operand whose runtime tag could match, a
 		// nested frame/unit, a plain check pass) keep the blanket refusal.
 		if !e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
-			e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+			e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		}
 	}
 	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile pass
@@ -7106,7 +7102,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 // refusal. Returns true when the trap now owns the program's tail; false
 // leaves the caller's MarkUncompilable refusal to stand.
 func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos SrcPos) bool {
-	es := e.registry.Check.Emit
+	es := e.registry.Check.Recorder()
 	if !es.active() || !e.registry.Check.Compiling {
 		return false
 	}

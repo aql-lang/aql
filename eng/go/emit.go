@@ -630,6 +630,90 @@ func (es *EmitState) active() bool {
 // uncompilable check must net 0, like the runtime.
 func (es *EmitState) Active() bool { return es.active() }
 
+// armed reports that a REAL recording state exists (a compile pass installed
+// one), whether or not it is currently live — the EmitRecorder twin of the
+// historical `Check.Emit != nil` probe (an EmitState may be armed yet
+// suspended or already uncompilable; the inactive no-op recorder is never
+// armed).
+func (es *EmitState) Armed() bool { return es != nil }
+
+// bindRegistry installs the registry back-pointer used by returned-closure
+// compilation (tryReturnedClosure) and the flex-hook sig-identity proof.
+func (es *EmitState) bindRegistry(r *Registry) {
+	if es == nil {
+		return
+	}
+	es.reg = r
+}
+
+// topFrameOnly reports whether recording sits at the top event frame (no
+// open branch/loop/fn capture) — the const-fold gate for computed container
+// elements. A missing recorder counts as top-frame (nothing is being
+// captured), matching the historical `es == nil || len(es.frames) == 1`.
+func (es *EmitState) topFrameOnly() bool {
+	return es == nil || len(es.frames) == 1
+}
+
+// suspendedNow reports whether an ARMED recorder is currently suspended —
+// the "analysis probe is reading an enclosing dispatch's result" state the
+// unmatched-dispatch recovery consults before latching a refusal.
+func (es *EmitState) suspendedNow() bool {
+	return es != nil && es.suspended > 0
+}
+
+// Sites returns the per-site-class dispatch tally (live map; read-only for
+// callers). Nil when recording never started.
+func (es *EmitState) Sites() map[string]int {
+	if es == nil {
+		return nil
+	}
+	return es.SiteCounts
+}
+
+// zeroOutProduced reports whether the value id was produced by an event
+// whose outputs were zeroed (the 0-output `if` phantom None) — the residual
+// strip probe (stripZeroOutResiduals).
+func (es *EmitState) zeroOutProduced(id string) bool {
+	if es == nil {
+		return false
+	}
+	pr, ok := es.producedBy[id]
+	return ok && es.eventInfo[pr.seq].zeroOut
+}
+
+// alreadyProduced reports whether the value id already has a recorded
+// producer event — the double-record guard (a structured ReturnsFn hook may
+// have recorded the dispatch before the generic path sees it).
+func (es *EmitState) alreadyProduced(id string) bool {
+	if es == nil {
+		return false
+	}
+	_, ok := es.producedBy[id]
+	return ok
+}
+
+// unitVariadic reports whether the fn unit's recorded body is
+// variadic-returning — the user-poly gate (a poly call site bakes a fixed
+// nout, so no arm may be variadic).
+func (es *EmitState) unitVariadic(unit int) bool {
+	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
+		return false
+	}
+	return es.fnRecs[unit].variadic
+}
+
+// newIsolatedEmit returns the FRESH EmitState IsolateEmit swaps in for a
+// hermetic throwaway evaluation, inheriting only the registry back-pointer
+// from the saved recorder. Construction knowledge stays in this file: the
+// checker side (CheckState.IsolateEmit) sees only EmitRecorder values.
+func newIsolatedEmit(saved EmitRecorder) EmitRecorder {
+	fresh := NewEmitState()
+	if prev, ok := saved.(*EmitState); ok && prev != nil {
+		fresh.reg = prev.reg
+	}
+	return fresh
+}
+
 // RegisterTrailingApply records that the Function VALUE `fnID` is the trailing
 // fn-value of a paren-bounded apply over `arity` preceding args (`(prev key comp)`),
 // captured at the paren-collapse boundary where the group size is known. The body
@@ -1014,8 +1098,9 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r := es.reg
 	// PROBE in a throwaway emit state (mirrors recordClosureDispatch), so a body
 	// that refuses leaves THIS program untouched and the value stays unresolved.
-	r.Check.Emit = NewEmitState()
-	r.Check.Emit.reg = r
+	probe := NewEmitState()
+	probe.reg = r
+	r.Check.Emit = probe
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
 	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
