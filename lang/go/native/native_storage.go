@@ -565,6 +565,20 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	}
 	if val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef) ||
 		IsReach(val) || IsSplice(val) {
+		// Shaped-instance-method annotation (Stage M2c, eng/method_shape.go):
+		// a NON-closure delegation wrapper member (`l.info`, `c.add`, `r.int`)
+		// stays dynamic — the runtime instance carries per-call state, so the
+		// member must never bake (freeze-gate) — but the fresh carrier is
+		// NOTED with the resolved member so the compile pass can model the
+		// interpreter's auto-dispatch mid-stream as a guarded OpCallDynMethod.
+		// NoteMethodShape vets the member (delegation wrapper only, never a
+		// genuine 0-arg overload — the miscompile-E auto-dispatch class stays
+		// refused); everything it declines keeps the bare dynamic Any.
+		if r != nil && (val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef)) {
+			out := NewDynamicCarrier(TAny)
+			r.Check.NoteMethodShape(out, val)
+			return []Value{out}
+		}
 		return dyn
 	}
 	// A concrete LIST / MAP field folds to the stored CONTAINER value, not

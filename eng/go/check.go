@@ -37,6 +37,7 @@ func (c *CheckState) Clone() *CheckState {
 	cp.DefsUsed = cloneMap(c.DefsUsed)
 	cp.ContextTypes = cloneMap(c.ContextTypes)
 	cp.CtxShapes = cloneMap(c.CtxShapes)
+	cp.MethodShapes = cloneMap(c.MethodShapes)
 	cp.FnBinders = cloneNestedSet(c.FnBinders)
 	cp.FnCallGraph = cloneNestedSet(c.FnCallGraph)
 	if c.FnNameStack != nil {
@@ -107,6 +108,8 @@ func (c *CheckState) Begin() func() {
 	c.FnCallGraph = nil
 	c.ContextTypes = nil
 	c.CtxShapes = nil
+	c.MethodShapes = nil
+	c.PendingMethodApply = nil
 	c.InflightBails = 0
 	c.FnNameInflight = nil
 	c.SuppressBodyErrors = 0

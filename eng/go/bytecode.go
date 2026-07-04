@@ -292,6 +292,25 @@ const (
 	// A STATIC (concrete) typed-def body never emits this — its reparent rides
 	// the const pool, unchanged.
 	OpBindTyped
+
+	// OpCallDynMethod is the GUARDED mid-stream shaped-instance-method apply
+	// (Stage M2c): a method read from a shape-instance container (a logger /
+	// span / instrument / rand handle, whose check-mode ReturnsFn instance
+	// resolves the member's SIGNATURES but whose runtime instance carries
+	// per-call state — the freeze-gate) is applied to a statically-known
+	// window of inert args at the exact point the interpreter auto-dispatches
+	// it. Stack layout is the LEADING boundary's ([fn, a1..aN] with aN on
+	// top, forward order); Arg indexes Program.DynMethods, whose spec pins
+	// the claimed arity AND the claimed result count. Unlike OpCallDynamic
+	// (residual position, count-unchecked, non-callable stays data), the
+	// program CONTINUES past this op with NOut results committed downstream,
+	// so every shape-claim failure — a non-callable/quoted runtime value, or
+	// a result count differing from the claim — raises internal_error, which
+	// RunCompiled resolves by re-running the interpreter (slow, not wrong;
+	// runtimeShouldFallback) and --force-compile surfaces loudly. A genuine
+	// AQL error raised by the method surfaces as-is (the interpreter raises
+	// the same at the same point, prior side effects included).
+	OpCallDynMethod
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -335,6 +354,7 @@ var opcodeNames = [...]string{
 	OpCallDynApplyTop:     "CALL_DYN_APPLY_TOP",
 	OpPushConstFresh:      "PUSH_CONST_FRESH",
 	OpBindTyped:           "BIND_TYPED",
+	OpCallDynMethod:       "CALL_DYN_METHOD",
 }
 
 func (o Opcode) String() string {
@@ -567,6 +587,17 @@ type TrapSpec struct {
 	Hint   string
 }
 
+// DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member
+// word name (diagnostics only — dispatch is over the runtime VALUE, never the
+// name), the arity the check-mode match consumed, and the result count the
+// matched member signature declares. The VM enforces both halves of the claim
+// and defers to the interpreter via internal_error when either fails.
+type DynMethodSpec struct {
+	Word  string
+	NArgs int
+	NOut  int
+}
+
 // Program is a compiled unit: code, interned constants, the signature
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
@@ -581,6 +612,7 @@ type Program struct {
 	Interps    []InterpSpec
 	Traps      []TrapSpec
 	TypedBinds []TypedBindSpec
+	DynMethods []DynMethodSpec
 	Fns        []CompiledFn
 	Debug      []SrcPos // 1:1 with Code
 	MaxStack   int      // a floor when the program loops (results accumulate)
@@ -740,6 +772,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		case OpBindTyped:
 			tb := p.TypedBinds[in.Arg]
 			fmt.Fprintf(sb, " y%-3d ; typed bind %s:%s", in.Arg, tb.Name, tb.Describe)
+		case OpCallDynMethod:
+			dm := p.DynMethods[in.Arg]
+			fmt.Fprintf(sb, " d%-3d ; %s/%d -> %d (shaped method)", in.Arg, dm.Word, dm.NArgs, dm.NOut)
 		}
 		sb.WriteByte('\n')
 	}

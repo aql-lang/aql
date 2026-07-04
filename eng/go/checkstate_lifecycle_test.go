@@ -18,6 +18,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"SuppressedRuntimeError": true, "AmbiguousGradualSplit": true,
 		"DefsInstalled": true, "DefsUsed": true, "FnNameStack": true,
 		"FnBinders": true, "FnCallGraph": true, "ContextTypes": true, "CtxShapes": true,
+		"MethodShapes": true, "PendingMethodApply": true,
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,
 		"FnAnalysisCounts": true, "FnBodyDepth": true,
 		"CodeEffectDepth": true,

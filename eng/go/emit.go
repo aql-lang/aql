@@ -160,6 +160,13 @@ type emitCall struct {
 	// machinery (operand provenance, value-def promotion, dead-drop, fragment
 	// walks) working unchanged for the bind result.
 	typedBind *TypedBindSpec
+	// dynMethod, when non-nil, marks this event as a GUARDED shaped-instance-
+	// method apply (Stage M2c, OpCallDynMethod): ops[0] is the runtime method
+	// value (the dynamic dot-read result), ops[1..] the inert statement-window
+	// args, and the spec pins the claimed arity + result count the VM enforces
+	// (claim failure → internal_error → interpreter re-run). Riding emitCall
+	// keeps the generic evCall machinery working unchanged for the result.
+	dynMethod *DynMethodSpec
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -3130,6 +3137,42 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	return true
 }
 
+// RecordDynMethod records a GUARDED shaped-instance-method apply (Stage M2c):
+// fn is the dynamic method-read carrier (its producing event supplies the
+// RUNTIME value — nothing of the check-mode shape instance is baked, the
+// freeze-gate), args the inert statement-window operands the check-mode match
+// consumed, outs the matched member signature's declared results. Lowers to
+// OpCallDynMethod with the arity + result-count claim the VM enforces (claim
+// failure → internal_error → interpreter re-run). Returns false, leaving es
+// untouched, when an operand has no compiled home — the caller then refuses.
+func (es *EmitState) RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	fnOp, ok := es.resolveOperand(fn)
+	if !ok {
+		return false
+	}
+	ops := make([]emitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := range args {
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops = append(ops, op)
+	}
+	es.SiteCounts[SiteDynamic]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: word, ops: ops, nout: len(outs), pos: pos,
+		dynMethod: &DynMethodSpec{Word: word, NArgs: len(args), NOut: len(outs)},
+	}})
+	for i := range outs {
+		es.setProducedAt(outs[i], seq, i)
+	}
+	return true
+}
+
 // containerFnAutoDispatchRisk reports whether a get-family dispatch may
 // surface a container member the interpreter could AUTO-DISPATCH after it
 // lands: a function value carrying a 0-arg-satisfiable signature. Probe-
@@ -4537,9 +4580,12 @@ func inertReachMember(v Value) bool {
 // args shape, and any unconsumed fn-value carrier, refuses.
 func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value, Opcode, string) {
 	// Leading dynamic value (statically Any — the checker cannot tell a Function
-	// from data) with every following arg static.
+	// from data) with every following arg static. An ANNOTATED method-read
+	// carrier is excluded: the statement-window model (method_shape.go) owns
+	// its apply, and a decline there means the residual tail may cross the
+	// value's statement boundary — see methodShapeAnnotated.
 	applyDynamic := false
-	if len(residual) >= 2 && residual[0].Dynamic {
+	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) {
 		applyDynamic = !anyDynamicTail(residual)
 	}
 	// Leading Function/FnDef CARRIER (the factory pattern: a returned closure now
@@ -4711,6 +4757,14 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 	}
 	if dynIdx <= 0 || dynIdx >= len(residual)-1 {
 		return 0, false // not strictly interior (leading / trailing are separate)
+	}
+	// An ANNOTATED method-read carrier declines the mixed island too: its
+	// after-args are the statement-window model's territory, and the island's
+	// forward collection would cross the value's statement End boundary
+	// (`3 c.add 2 ; {a:1} …` — the island could bind the NEXT statement's map
+	// as the method's 2-arg overload's field arg). See methodShapeAnnotated.
+	if es.methodShapeAnnotated(residual[dynIdx].ID) {
+		return 0, false
 	}
 	if pr, ok := es.producedBy[residual[dynIdx].ID]; !ok || pr.idx != 0 {
 		return 0, false // not event-produced — cannot promote to a local

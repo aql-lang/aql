@@ -584,6 +584,79 @@ func (vc *vmContext) callDynApplyTop(n int, stack []Value, curDebug []SrcPos, pc
 	return append(stack[:base], results...), nil
 }
 
+// callDynMethod is the GUARDED mid-stream shaped-instance-method apply
+// (Stage M2c, OpCallDynMethod): the runtime method value sits ON TOP of
+// its spec.NArgs args (the recorder lays operands in sig order, ops[0] on
+// top — fn at top, first arg at top-1, exactly callDynTrailTop's
+// reversed-window forward bind), and the program CONTINUES past this op
+// with spec.NOut results committed downstream. So unlike callDynamic —
+// where a non-callable value soundly stays as the residual — EVERY
+// shape-claim failure here defers to the interpreter via internal_error
+// (runtimeShouldFallback): a non-callable or /r-parked (Quoted) value, or
+// a result count differing from the claim. The apply itself is the proven
+// boundary machinery: a compiled closure runs VM-native, a
+// trivial-delegation method dispatches its inner native directly, and any
+// other callable islands [fn, a1..aN] — byte-identical to the
+// interpreter's forward auto-dispatch of the same window. A genuine AQL
+// error from the method surfaces as-is (the interpreter raises the same,
+// prior side effects included).
+func (vc *vmContext) callDynMethod(spec *DynMethodSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	r := vc.r
+	n := spec.NArgs
+	if len(stack) < n+1 {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYN_METHOD underflow at "+spec.Word)
+	}
+	top := len(stack) - 1
+	fnVal := stack[top]
+	base := top - n
+	args := make([]Value, n)
+	for i := 0; i < n; i++ {
+		args[i] = stack[top-1-i]
+	}
+	guard := func(results []Value) ([]Value, error) {
+		if len(results) != spec.NOut {
+			return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+				"shaped method apply %s: result count %d differs from the shape claim %d; deferring to the interpreter",
+				spec.Word, len(results), spec.NOut))
+		}
+		if err := vc.screenResults(results, "shaped method result at "+spec.Word, curDebug, pc); err != nil {
+			return nil, err
+		}
+		return append(stack[:base], results...), nil
+	}
+	if _, ok := fnVal.Data.(ClosurePayload); ok && !fnVal.Quoted {
+		results, err := vc.invokeClosure(fnVal, args)
+		if err != nil {
+			return nil, stampAt(err, curDebug, pc, r)
+		}
+		return guard(results)
+	}
+	if !isAppliableFn(fnVal) || fnVal.Quoted {
+		// The shape claim failed outright: the read did not surface a live
+		// method value. The interpreter would leave it as data and continue
+		// with a DIFFERENT stack shape, which this program cannot express —
+		// defer wholesale.
+		return nil, vmErrAt(curDebug, pc, "shaped method apply "+spec.Word+
+			": value is not an appliable function at run time; deferring to the interpreter")
+	}
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
+		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+			if err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			return guard(results)
+		}
+	}
+	island := make([]Value, 0, n+1)
+	island = append(island, fnVal)
+	island = append(island, args...)
+	results, err := vc.island().Run(island)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, r)
+	}
+	return guard(results)
+}
+
 // callDynamicMixed handles the MIXED fn-value-call boundary (`3 m.f 2`): a
 // dynamic / fn value sits INTERIOR to a window of static args (some below it,
 // some above). The window of `w` stack values is the same token sequence the
@@ -652,7 +725,17 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
 		return nil, false, nil
 	}
-	results, err := mr.Sig.dispatchHandler()(mr.Args, reg.Contexts.TopData(), nil, reg)
+	// The handler runs against the DISPATCHING registry (vc.r), not the
+	// fn's owning sub-registry: the interpreter's execMatch passes
+	// e.registry (the engine the value dispatched on) to every native
+	// handler, and the island backstop equally runs on vc.r — so host
+	// state read through r (the clock, policy, output, context stack)
+	// resolves identically on all three paths. Name RESOLUTION stays in
+	// fnDef.Registry above, mirroring execFnDefLiteral's lookup. (The
+	// prior form passed the sub-registry, which silently dropped
+	// host-installed state — a frozen clock stamped wall time on the
+	// compiled fast path only; caught by TestShapedMethodEffectOrdering.)
+	results, err := mr.Sig.dispatchHandler()(mr.Args, vc.r.Contexts.TopData(), nil, vc.r)
 	return results, true, err
 }
 
@@ -984,6 +1067,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = ns
 		case OpCallDynApplyTop:
 			ns, err := vc.callDynApplyTop(int(in.Arg), stack, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			stack = ns
+		case OpCallDynMethod:
+			ns, err := vc.callDynMethod(&p.DynMethods[in.Arg], stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}

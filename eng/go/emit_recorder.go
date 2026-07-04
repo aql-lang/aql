@@ -51,6 +51,7 @@ type EmitRecorder interface {
 	RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos)
 	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos)
 	RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool
+	RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
 	RecordTrap(code, detail, word, hint string, pos SrcPos) bool
 	RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool)
@@ -136,7 +137,10 @@ func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry) 
 func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos)                        {}
 func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Value, []Value, SrcPos) {
 }
-func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool        { return false }
+func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return false }
+func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) bool {
+	return false
+}
 func (inactiveEmit) RecordFallback(FallbackSpan, []Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RecordTrap(string, string, string, string, SrcPos) bool   { return false }
 func (inactiveEmit) RecordTypedBind(_ TypedBindSpec, _, out Value, _ SrcPos) (Value, bool) {

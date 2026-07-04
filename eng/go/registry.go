@@ -497,6 +497,29 @@ type CheckState struct {
 	// a sandbox leak can only widen — see store_shape.go).
 	CtxShapes map[*StoreInstanceInfo]Value
 
+	// MethodShapes maps a dynamic method-read carrier's value ID to the
+	// resolved MEMBER value — the trivial-delegation wrapper FnDef a
+	// get-family read surfaced from a shape-instance container (a logger /
+	// span / instrument / rand handle whose check-mode ReturnsFn instance
+	// resolves method SIGNATURES; the runtime instance carries per-call
+	// state, so the member itself must never bake — the freeze-gate).
+	// Minted by the accessor ReturnsFn via NoteMethodShape (which vets the
+	// member: delegation wrapper, named, foreign sub-registry, no genuine
+	// 0-arg overload — the miscompile-E auto-dispatch guard's class stays
+	// out); consumed by the compile pass's shaped-method model
+	// (tryShapedMethodDispatch, method_shape.go). Per-pass state — reset by
+	// Begin, header-cloned by Clone (members are immutable values).
+	MethodShapes map[string]Value
+
+	// PendingMethodApply threads ONE modelled shaped-method dispatch from
+	// tryShapedMethodDispatch into recordDispatchOutcome (set immediately
+	// before the model's carrierResults call, consumed by
+	// tryRecordMethodApply — the first specialist in the outcome chain — so
+	// the member's native never records as a check-time CALL_NATIVE, which
+	// would bake the shape instance's state: the freeze-gate). Transient
+	// within a single dispatch; reset by Begin.
+	PendingMethodApply *PendingMethodApply
+
 	// CodeEffectDepth counts nested code-effect body analyses
 	// (AnalyseCodeEffectCarrier — the typed-code-value producer). A
 	// stored code body that itself reads stored code (`quote [ops get

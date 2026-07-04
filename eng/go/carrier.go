@@ -909,7 +909,8 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 // boundary to a single named call is the first step of the Emit/check
 // decoupling (checker review, Tier 2).
 func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out []Value, pos SrcPos, ownerReg *Registry) {
-	if !tryFoldStaticIndex(r, word, args, out) &&
+	if !tryRecordMethodApply(r, word, args, out, pos) &&
+		!tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordDeferredList(r, sig, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&

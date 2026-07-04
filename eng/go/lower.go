@@ -1370,6 +1370,17 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 			op = OpCallDynApplyTop
 		}
 		lw.emit(op, c.dynApply, c.pos)
+	} else if c.dynMethod != nil {
+		// Guarded shaped-instance-method apply (Stage M2c): the layout above
+		// placed [fn, a1..aN] with the fn at the base (source order — the
+		// leading-boundary stack shape). OpCallDynMethod pops N+1, applies the
+		// runtime fn to the N args exactly as the interpreter's forward
+		// auto-dispatch, and enforces the spec's claimed result count; a claim
+		// failure raises internal_error → interpreter re-run (never a wrong
+		// stack). The spec rides in DynMethods like a trap/map spec.
+		di := len(lw.p.DynMethods)
+		lw.p.DynMethods = append(lw.p.DynMethods, *c.dynMethod)
+		lw.emit(OpCallDynMethod, di, c.pos)
 	} else if c.makeList {
 		// Assemble the n laid-out operands into a list (a computed list literal,
 		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.

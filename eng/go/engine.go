@@ -3037,6 +3037,15 @@ func (e *Engine) stepLiteral() error {
 			e.tape.Remove(valIdx)
 			return nil
 		}
+		// Shaped-instance-method model (Stage M2c, method_shape.go): a DYNAMIC
+		// method-read carrier at the pointer — where the interpreter would
+		// auto-dispatch the concrete member — models that dispatch on the
+		// compile pass and records a guarded mid-stream OpCallDynMethod.
+		// Declines (leaving today's paths untouched) outside a live compile
+		// pass and for any window/match shape it cannot prove.
+		if e.registry.Check.IsActive() && e.tryShapedMethodDispatch(valIdx) {
+			return nil
+		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.tape.At(valIdx)

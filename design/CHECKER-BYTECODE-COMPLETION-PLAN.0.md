@@ -338,6 +338,100 @@ from everything; 7 is gated on 6's exit criteria.
 
 ## Execution log
 
+- **2026-07-04 — Phase 6 Stage M2c landed (shaped-instance-method dispatch):
+  refusals 19 → 11, native 3605 → 3613; census deltas ONLY in the 8 targeted
+  rows.** The M2 execution log's sketch, implemented with these recorded
+  corrections (eng/go/method_shape.go is the feature's home):
+  - **Sketch correction 1 — the stall was mis-attributed.** Live probes show
+    the statement-position method apply ALREADY compiled when it sat at the
+    program residual's tail (`l.info "req" ; 42` compiled natively via the
+    leading OpCallDynamic window). The 8 rows refused because the call sits
+    MID-PROGRAM: the unmodelled auto-dispatch stranded [dyn, args] on the
+    check stack under the NEXT statements' events. So the feature is exactly
+    the sketch's remaining two limbs: check-mode modelling at the point the
+    interpreter dispatches, and the mid-stream guarded event.
+  - **Sketch correction 2 — the "method-shape annotation" carries the MEMBER,
+    not sigs+counts.** getNodeReturns' fn-member branch NOTES the resolved
+    trivial-delegation wrapper against the read's fresh dynamic carrier
+    (CheckState.MethodShapes, ID-keyed side table — the fnRiskFields/CtxShapes
+    precedent; Begin-reset, Clone-copied). The carrier itself stays
+    dynamic(Any), byte-identical to before — every checker ratchet
+    (FP 0/3313, unflagged 170, soundness 7, frontier 195, fuzz 104) is
+    unchanged. NoteMethodShape vets centrally: named delegation wrapper with
+    a foreign sub-registry only, never a macro, and NEVER a member with a
+    genuine 0-arg overload — the miscompile-E auto-dispatch class
+    (module-log:72,73 span.finish; module-rand:14,15 bool/float) cannot be
+    annotated, and their reads still refuse at the get-family guards first;
+    all four rows verified refusing with the identical reason.
+  - **The model reuses the interpreter's own machinery, not a mirror.** When
+    the compile pass steps the annotated carrier at the pointer (stepLiteral —
+    where execFnDefLiteral would dispatch the concrete member),
+    tryShapedMethodDispatch runs the ENGINE'S OWN matchSignature over the
+    same tape and commits only when the match is PURE-FORWARD over a
+    contiguous, inert, evaluation-fixed statement window (concrete scalars /
+    atoms / literal containers with no words, parens, interps, reaches,
+    computed keys) — so the compiled window is the exact token sequence the
+    interpreter's End-bounded forward collection consumes; any stack-reaching
+    or partial match declines to today's paths. The dispatch then models
+    through the SAME carrierResults (declared returns, folds, contagion),
+    with the outcome seam routed by CheckState.PendingMethodApply to the new
+    RecordDynMethod — first in recordDispatchOutcome's chain, so the member's
+    inner native can never record as a check-time CALL_NATIVE (which would
+    bake the shape instance's sub-registry: the freeze-gate).
+  - **The guarded op.** OpCallDynMethod (spec table DynMethods: word, NArgs,
+    NOut) lays out [args…, fn-on-top] (sig order — callDynTrailTop's proven
+    reversed-window forward bind); the fn operand is the dot-read EVENT (the
+    runtime value; nothing of the shape instance bakes), args are interned
+    consts. The VM applies via the delegation fast path or the island and
+    enforces BOTH claim halves: a non-callable/quoted runtime value or a
+    result-count mismatch raises internal_error → RunCompiled re-runs the
+    interpreter (runtimeShouldFallback — slow, not wrong; loud under
+    --force-compile). Pinned both ways by TestShapedMethodClaimViolationDefers
+    (a registered lying shape: Returns [] declared, 1 value returned →
+    fallback with the correct [7 42], internal_error under force) and
+    TestShapedMethodRegisteredShapeCompiles (the honest twin runs compiled).
+  - **Row 55's second half needed one shape addition:** logger-child now
+    declares ReturnsFn loggerShapeReturns (state-independent, like the
+    parent constructors), so `def c (l.child {y:2})` binds a shape instance
+    and `c.info` resolves — the paren-bounded row rides the same model (the
+    model runs inside paren frames unchanged).
+  - **Two adjacent pre-existing defects found by the landing battery, both
+    fixed:** (a) tryNativeFnApply (the CALL_DYNAMIC-family fast path) handed
+    the HANDLER the fn's sub-registry where the interpreter's execMatch hands
+    the dispatching engine's registry — host state installed on the instance
+    (a frozen clock, policy, output) was silently dropped on the compiled
+    fast path only (a frozen-clock logger stamped WALL time compiled; name
+    resolution keeps using fnDef.Registry). Fixed to vc.r; pinned by
+    TestShapedMethodEffectOrdering (byte-identical print/sink interleaving
+    under a frozen clock). (b) The residual LEADING/MIXED dynamic-apply
+    windows absorb values across statement boundaries — probe-confirmed
+    live miscompile on the committed tree: `c.add (1 add 2) ;
+    Log.measurements size` compiled to [3] where the interpreter gives [1]
+    (the window fed the NEXT statement's results to the method as args).
+    Fixed for the class this feature owns: an ANNOTATED method-read carrier
+    now declines the leading and mixed residual windows outright
+    (methodShapeAnnotated — the statement-window model is the only owner of
+    its apply; trailing shapes draw from the STACK, the interpreter's own
+    cross-statement stack-form dispatch, and stay). The narrowing cost ZERO
+    corpus rows; the divergent shape is pinned refusing with fallback parity
+    (TestShapedMethodComputedArgStaysRefused). The UNANNOTATED instances of
+    the same hazard (plain fn-value maps mid-stream) remain a latent
+    pre-existing corner — flagged for the M-stage review beside the M2 log's
+    OpCallDynTrailTop quoted-fn note.
+  - Census: refusals 19 → 11 (fn-value-call boundary 7 → 0, paren-bounded
+    1 → 0; dispatch recovery 5, container auto-dispatch 4, operand provenance
+    2 all byte-identical); native 3605 → 3613; islands still 1 (none added);
+    tier-1/2 0; error rows 3 unchanged; computeRefusalCeiling 17 → 9 with
+    rationale (remainder: auto-dispatch guard 4, flex G5 2, dynamic-scope
+    M6 2, island 1). Differential 3356/0, or-fallback 3589/0. Landing tests
+    lang/go/bytecode_methodshape_test.go (8 positives incl. the paren-bounded
+    child row, effect-order pin, 4 guard-row refusal pins, capturing-member
+    and computed-arg negatives with fallback parity, claim-violation
+    defer + honest-shape positive). Phase 7's entry now reads: 11 refusals =
+    4 auto-dispatch guard (permanent unless a runtime model is built) +
+    2 flex G5 + 2 recursion M6 tier + 3 sound non-definite error rows, plus
+    the 1 compute-frontier island.
+
 - **2026-07-04 — Phase 6 Stages M3 + M4 landed (DSL registration + definite
   traps): refusals 40 → 19, native 3584 → 3605, error allowlist 12 → 3;
   census deltas ONLY in the targeted rows.** Per
