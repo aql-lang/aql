@@ -90,8 +90,11 @@ var accessorNatives = []NativeFunc{
 func accessorGetrSignatures() []Signature {
 	return []Signature{
 		// [Key | Node] — key forward, container from stack
-		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMapHandler)},
-		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler)},
+		// Field type narrows exactly as get's twin does (getNodeReturns); the
+		// strict-read difference is only the miss behaviour (raise vs none),
+		// which is the runtime's job.
+		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: getNodeReturns},
+		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: getNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: returnsGetrIndexChecked},
 		// [Key | Class instance] — strict field read (mirrors get's TClass
 		// sigs; getrObjectHandler resolves the flat instance via
@@ -104,15 +107,16 @@ func accessorGetrSignatures() []Signature {
 		// [Key | ModuleExport] / [Key | Module]
 		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleExportHandler), ReturnsFn: moduleExportGetrReturns},
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getrModuleExportHandler), ReturnsFn: moduleExportGetrReturns},
-		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleInstHandler)},
-		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getrModuleInstHandler)},
+		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleInstHandler), ReturnsFn: moduleInstGetReturns},
+		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getrModuleInstHandler), ReturnsFn: moduleInstGetReturns},
 		// [Key | Micron] — strict structured-scalar property read
 		// (mirrors get's TMicron sigs; a miss raises not_found instead
 		// of reading none).
 		{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
 		{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
 		// [Key | None]
-		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getrNoneHandler)},
+		// Always raises not_found — never produces a value.
+		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getrNoneHandler), Returns: []*Type{}},
 	}
 }
 

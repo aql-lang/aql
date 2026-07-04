@@ -187,8 +187,8 @@ func accessorGetSignatures() []Signature {
 		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
 		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
 		// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
-		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleInstHandler), Returns: []*Type{TAny}},
-		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getModuleInstHandler), Returns: []*Type{TAny}},
+		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleInstHandler), ReturnsFn: moduleInstGetReturns},
+		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getModuleInstHandler), ReturnsFn: moduleInstGetReturns},
 		// [Key | Class instance] — flat field read (no prototype
 		// chain; class instances resolve every field at make). Field
 		// type resolved from the schema (getObjectReturns).
@@ -442,6 +442,35 @@ func isClosureBearingWrapper(v Value) bool {
 // Object / Class instances are abstract type carriers in check mode (no
 // field payload), so they keep their own Any sigs until schema resolution
 // lands. Mirrors getNodeHandler's map branch so check and run agree.
+// recordSchemaFieldReturns is getNodeReturns' record-schema field rule,
+// shared by the direct RecordTypeInfo-payload branch (a record-typed
+// param's schema carrier, a shaped ReturnsFn result) and the minted-node
+// branch (a carrier whose Parent record type carries its body). The result
+// is GRADUAL, never strict: a field absent at run time (an open map) or a
+// value the schema did not pin reads optimistically and is discharged by a
+// guard. A field outside the schema, or a dispatch-bearing
+// (Function/FnDef) field, keeps dynamic Any.
+func recordSchemaFieldReturns(rt RecordTypeInfo, key Value) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	fv, ok := rt.Fields.Get(getKey(key))
+	if !ok {
+		return dyn
+	}
+	// A field whose declared value itself bears a record schema (a
+	// nested RecordTypeInfo — e.g. the fst/lst match sub-shape of a
+	// `mini re` result carrier) propagates the nested schema so a
+	// chained read (`r.fst.m`) narrows too. Same gradual modality as
+	// the flat field case: dynamic, discharged by a guard at run time.
+	if nested, ok := fv.Data.(RecordTypeInfo); ok && nested.Fields != nil {
+		return []Value{NewDynamicCarrierValue(NewRecordType(nested.Fields))}
+	}
+	ft := ValueType(fv)
+	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+		return dyn
+	}
+	return []Value{NewDynamicCarrier(ft)}
+}
+
 func getNodeReturns(args []Value, _ *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	if len(args) != 2 {
@@ -461,15 +490,16 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 	// Array<T> OOB→None lesson). A field outside the schema, or a dispatch-
 	// bearing (Function/FnDef) field, keeps dynamic Any.
 	if rt, ok := container.Data.(RecordTypeInfo); ok && rt.Fields != nil {
-		fv, ok := rt.Fields.Get(getKey(key))
-		if !ok {
-			return dyn
+		return recordSchemaFieldReturns(rt, key)
+	}
+	// A CARRIER of a minted record type (`make Test.TestCase {…}`, a module
+	// fn declared `[TestCase]`): `type Type = Value`, and the record-refine
+	// lattice node carries its RecordTypeInfo body — recover the field
+	// schema from the canonical node so instance field reads narrow too.
+	if container.Carrier && container.Parent != nil {
+		if rt, ok := container.Parent.Data.(RecordTypeInfo); ok && rt.Fields != nil {
+			return recordSchemaFieldReturns(rt, key)
 		}
-		ft := ValueType(fv)
-		if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
-			return dyn
-		}
-		return []Value{NewDynamicCarrier(ft)}
 	}
 	if !IsConcrete(container) || !container.Parent.ConformsTo(TMap) {
 		return dyn

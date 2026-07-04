@@ -1,0 +1,131 @@
+// Landing tests for the Phase-4.3 G7 return-annotation sweep
+// (design/CHECKER-BYTECODE-COMPLETION-PLAN.0.md): per-family positive
+// pins (a precise Returns/ReturnsFn flows downstream, so a former
+// declared-Any frontier row now checks clean with a NARROW residual) and
+// negative pins (the same precision makes a wrong-typed downstream use
+// FLAG where the old dynamic(Any) silently matched everything). Plus the
+// unit pins for Signature.DeclaresCheckReturns, the predicate the
+// coverage gate (check_returns_gate_test.go) is built on.
+package langspec
+
+import (
+	"testing"
+
+	"github.com/aql-lang/aql/eng/go"
+)
+
+func TestReturnsAnnotationNarrowing(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		// wantFlagged: the checker reports an error-severity diagnostic.
+		wantFlagged bool
+		// wantFrontier: a clean row's residual still ends at an
+		// Any-bounded carrier (the metric TestCheckAnyFrontier gates).
+		// Only meaningful when wantFlagged is false.
+		wantFrontier bool
+	}{
+		// ---- mini re: record-shaped ReturnsFn ({ok ms fst lst n}) ----
+		{"re-n-narrows", `import "aql:minilang"  ("a1b2c3" mini re '\\d').n`, false, false},
+		{"re-nested-fst-m-narrows", `import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m`, false, false},
+		{"re-compiled-hook-narrows", `import "aql:minilang"  ("a1b2c3" +re/\d/).n`, false, false},
+		// dynamic(Boolean) is now PROVABLY disjoint from add's operands —
+		// the old dynamic(Any) result matched silently.
+		{"re-ok-into-add-flags", `import "aql:minilang"  ("a1b2c3" mini re '\\d').ok add 1`, true, false},
+
+		// ---- mini gex: subject-shaped ReturnsFn ----
+		{"gex-scalar-narrows", `import "aql:minilang"  "ax" mini gex 'a*'`, false, false},
+		{"gex-list-narrows", `import "aql:minilang"  ["ab" "zz" "ac"] +gex/a*/`, false, false},
+
+		// ---- parselang: pure concrete-source fold ----
+		{"parse-json-field-narrows", `import "aql:parselang"  (parse json '{"a":1,"b":"hi"}') get 'b'`, false, false},
+		{"parse-aontu-field-narrows", `import "aql:parselang"  (parse aontu 'a:1 b:2') get 'b'`, false, false},
+		{"parse-json-field-into-keys-flags", `import "aql:parselang"  ((parse json '{"a":1}') get 'a') keys`, true, false},
+
+		// ---- StructUtil: shaped/annotated returns ----
+		{"struct-parse-folds", `import "aql:struct-util" (StructUtil.parse "{a:1, b:[2,3]}") get 'a'`, false, false},
+		{"struct-merge-maps-narrows", `import "aql:struct-util" StructUtil.merge {a:1 b:2} {b:3 c:4}`, false, false},
+		{"struct-reify-class-field-narrows", `import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) dot y`, false, false},
+		{"struct-setpath-keeps-map", `import "aql:struct-util" StructUtil.setpath {a:1} "b" 99`, false, false},
+		// getpath is genuinely unknowable — the declared Any must STAY
+		// gradual (no false precision).
+		{"struct-getpath-stays-gradual", `import "aql:struct-util" StructUtil.getpath "a.b" {a:{b:42}}`, false, true},
+
+		// ---- make over a record type: schema rides the instance carrier ----
+		{"make-record-field-narrows", `import "aql:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "name"`, false, false},
+		// The `out` field is DECLARED Any in the TestCase schema — the
+		// honest bound stays dynamic(Any).
+		{"make-record-any-field-stays", `import "aql:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "out"`, false, true},
+
+		// ---- Vm.check / Vm.compile report shapes ----
+		{"vm-check-ok-narrows", `import "aql:vm" (Vm.check "1 add 2").ok`, false, false},
+		{"vm-compile-reason-narrows", `import "aql:vm" (Vm.compile "1 add (((").reason`, false, false},
+		{"vm-check-ok-into-add-flags", `import "aql:vm" (Vm.check "1 add 2").ok add 1`, true, false},
+
+		// ---- module descriptor reads ----
+		{"module-inst-name-narrows", `import "aql:math-util"  MathUtil.$module.name`, false, false},
+
+		// ---- pop/shift edge-element narrowing ----
+		{"pop-elem-narrows", `pop [1 2 3]`, false, false},
+		{"pop-elem-into-keys-flags", `pop [1 2 3] keys`, true, false},
+
+		// ---- unify / tany concrete folds ----
+		{"unify-fail-folds", `unify 2 3`, false, false},
+		{"tany-folds-dynamic-disjunct", `tany ['a','b']`, false, false},
+
+		// ---- istype annotation ----
+		{"istype-boolean", `istype 5`, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			checked, flagged := checkRow(t, tc.src)
+			if flagged != tc.wantFlagged {
+				t.Fatalf("flagged=%v want %v for %q (stack %s)",
+					flagged, tc.wantFlagged, tc.src, stackTypes(checked))
+			}
+			if !flagged {
+				if got := residualHasAnyFrontier(checked); got != tc.wantFrontier {
+					t.Fatalf("frontier=%v want %v for %q (stack %s)",
+						got, tc.wantFrontier, tc.src, stackTypes(checked))
+				}
+			}
+		})
+	}
+}
+
+// TestDeclaresCheckReturnsPredicate pins the four annotation surfaces the
+// coverage gate accepts — and that an unannotated Go sig is refused.
+func TestDeclaresCheckReturnsPredicate(t *testing.T) {
+	noop := func(_ []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
+		return nil, nil
+	}
+	unannotated := eng.Signature{Args: []*eng.Type{eng.TAny}, Impl: eng.Go(noop)}
+	if unannotated.DeclaresCheckReturns() {
+		t.Fatalf("unannotated Go sig must NOT declare check returns")
+	}
+	declared := eng.Signature{Args: []*eng.Type{eng.TAny}, Impl: eng.Go(noop),
+		Returns: []*eng.Type{eng.TInteger}}
+	if !declared.DeclaresCheckReturns() {
+		t.Fatalf("declared Returns must count")
+	}
+	nothing := eng.Signature{Impl: eng.Go(noop), Returns: []*eng.Type{}}
+	if !nothing.DeclaresCheckReturns() {
+		t.Fatalf("empty non-nil Returns (produces nothing) must count")
+	}
+	withFn := eng.Signature{Impl: eng.Go(noop),
+		ReturnsFn: func(_ []eng.Value, _ *eng.Registry) []eng.Value { return nil }}
+	if !withFn.DeclaresCheckReturns() {
+		t.Fatalf("ReturnsFn must count")
+	}
+	fullStack := eng.Signature{Impl: eng.Go(noop, eng.FullStack(),
+		eng.CheckFullStack(func(_ []eng.Value, stack []eng.Value, _ *eng.Registry) []eng.Value {
+			return stack
+		}))}
+	if !fullStack.DeclaresCheckReturns() {
+		t.Fatalf("CheckFullStack shape fn must count")
+	}
+	aqlBody := eng.Signature{Impl: eng.AQL([]eng.Value{eng.NewWord("dup")})}
+	if !aqlBody.DeclaresCheckReturns() {
+		t.Fatalf("an AQL body (analyser-derived returns) must count")
+	}
+}

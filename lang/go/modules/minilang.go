@@ -119,6 +119,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap, native.TString},
 			Returns:    []*native.Type{native.TMap},
+			ReturnsFn:  miniReShapeReturns,
 			BarrierPos: -1,
 			Impl:       native.Go(miniReHandler),
 		}},
@@ -136,6 +137,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		Signatures: []native.Signature{{
 			Args:       []*native.Type{tMini, native.TMap, native.TString},
 			Returns:    []*native.Type{native.TMap},
+			ReturnsFn:  miniReShapeReturns,
 			BarrierPos: -1,
 			Impl:       native.Go(miniRunReHandler),
 		}},
@@ -185,6 +187,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		Signatures: []native.Signature{{
 			Args:       []*native.Type{native.TString, native.TMap, native.TAny},
 			Returns:    []*native.Type{native.TAny},
+			ReturnsFn:  miniGexShapeReturns,
 			BarrierPos: -1,
 			Impl:       native.Go(miniGexHandler),
 		}},
@@ -1289,6 +1292,65 @@ func miniReHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 			"fix the pattern — note backslashes in '…'/\"…\" strings need doubling ('\\\\d'); backtick strings are backslash-safe")
 	}
 	return []native.Value{reMatchResult(re, subject, limit)}, nil
+}
+
+// miniReShapeReturns is the check-mode ReturnsFn for the `re` kind (and
+// its compiled `run-re` consumer): the handler ALWAYS builds the standard
+// match structure {ok:Boolean ms:List fst:<match> lst:<match> n:Integer},
+// with each match shaped {m:String i:Integer e:Integer g:List} — see
+// reMatchResult. Surfacing that shape as a record-schema carrier lets a
+// field read (`r.n`, `r.ok`, `r.fst.m`) narrow via getNodeReturns instead
+// of ending dynamic(Any). GRADUAL by construction: every carrier is
+// dynamic, so a run-time absence (fst/lst are unset when nothing matched)
+// is discharged by a guard, never a committed strict read.
+func miniReShapeReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	match := func() native.Value {
+		m := native.NewOrderedMap()
+		m.Set("m", native.NewTypeLiteral(native.TString))
+		m.Set("i", native.NewTypeLiteral(native.TInteger))
+		m.Set("e", native.NewTypeLiteral(native.TInteger))
+		m.Set("g", native.NewTypeLiteral(native.TList))
+		return native.NewDynamicCarrierValue(native.NewRecordType(m))
+	}
+	fields := native.NewOrderedMap()
+	fields.Set("ok", native.NewTypeLiteral(native.TBoolean))
+	fields.Set("ms", native.NewTypeLiteral(native.TList))
+	fields.Set("fst", match())
+	fields.Set("lst", match())
+	fields.Set("n", native.NewTypeLiteral(native.TInteger))
+	return []native.Value{native.NewDynamicCarrierValue(native.NewRecordType(fields))}
+}
+
+// miniGexShapeReturns is the check-mode ReturnsFn for the `gex` kind:
+// the handler is subject-shape-driven (see miniGexHandler) — a List
+// subject filters to a List, a Map filters to a Map, and a scalar
+// returns ITSELF when it matches or None otherwise. Only what the
+// handler guarantees is declared: a statically-List/Map subject yields
+// a dynamic carrier of that container type; a scalar-typed subject
+// yields dynamic(<subject-type> tor None); anything unknown (dynamic /
+// Any-bounded) stays dynamic(Any).
+func miniGexShapeReturns(args []native.Value, _ *native.Registry) []native.Value {
+	dyn := []native.Value{native.NewDynamicCarrier(native.TAny)}
+	if len(args) != 3 {
+		return dyn
+	}
+	subject := args[2]
+	st := native.ValueType(subject)
+	if st == nil || subject.Dynamic || st.Equal(native.TAny) {
+		return dyn
+	}
+	switch {
+	case st.ConformsTo(native.TList):
+		return []native.Value{native.NewDynamicCarrier(native.TList)}
+	case st.ConformsTo(native.TMap):
+		return []native.Value{native.NewDynamicCarrier(native.TMap)}
+	case st.ConformsTo(native.TScalar):
+		return []native.Value{native.NewDynamicCarrierValue(native.NewDisjunct([]native.Value{
+			native.NewTypeLiteral(st), native.NewTypeLiteral(native.TNone),
+		}))}
+	default:
+		return dyn
+	}
 }
 
 // reMatchResult builds the standard re match structure {ok ms fst lst n} —

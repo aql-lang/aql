@@ -207,6 +207,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					return []native.Value{res}, nil
 				}),
 				Returns:    []*native.Type{native.TMap},
+				ReturnsFn:  vmCheckReportReturns,
 				BarrierPos: -1,
 			}},
 		},
@@ -232,10 +233,34 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					return []native.Value{res}, nil
 				}),
 				Returns:    []*native.Type{native.TMap},
+				ReturnsFn:  vmCompileReportReturns,
 				BarrierPos: -1,
 			}},
 		},
 	}
+}
+
+// vmCheckReportReturns / vmCompileReportReturns surface the FIXED report
+// shapes the two words always build (checkResultValue / compileResultValue)
+// as record-schema carriers, so field reads (`(Vm.check src).ok`) narrow
+// instead of ending dynamic(Any). All claims are dynamic (gradual);
+// diagnostics stays a plain List and sites a plain Map — their interiors
+// are value-dependent.
+func vmCheckReportReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	fields := native.NewOrderedMap()
+	fields.Set("ok", native.NewTypeLiteral(native.TBoolean))
+	fields.Set("errors", native.NewTypeLiteral(native.TInteger))
+	fields.Set("warnings", native.NewTypeLiteral(native.TInteger))
+	fields.Set("diagnostics", native.NewTypeLiteral(native.TList))
+	return []native.Value{native.NewDynamicCarrierValue(native.NewRecordType(fields))}
+}
+
+func vmCompileReportReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	fields := native.NewOrderedMap()
+	fields.Set("ok", native.NewTypeLiteral(native.TBoolean))
+	fields.Set("reason", native.NewTypeLiteral(native.TString))
+	fields.Set("sites", native.NewTypeLiteral(native.TMap))
+	return []native.Value{native.NewDynamicCarrierValue(native.NewRecordType(fields))}
 }
 
 // runInSubEngine builds a fresh registry under pol, parses src via

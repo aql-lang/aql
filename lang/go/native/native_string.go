@@ -195,8 +195,8 @@ var StringModuleNatives = []NativeFunc{
 		Signatures: []Signature{
 			{Args: []*Type{TInteger, TMap, TString}, Impl: Go(padOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			{Args: []*Type{TInteger, TString}, Impl: Go(padHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TAny}, Impl: Go(padWidthHandler), BarrierPos: -1},
-			{Args: []*Type{TAny}, Impl: Go(padDefaultHandler), BarrierPos: -1},
+			{Args: []*Type{TInteger, TAny}, Impl: Go(padWidthHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			{Args: []*Type{TAny}, Impl: Go(padDefaultHandler), Returns: []*Type{TString}, BarrierPos: -1},
 		},
 	},
 	{

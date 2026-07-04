@@ -348,7 +348,8 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return []native.Value{activeRun(parent).summary()}, nil
 				}),
-				Returns: []*native.Type{native.TMap}, BarrierPos: -1,
+				Returns:   []*native.Type{native.TMap},
+				ReturnsFn: testSummaryShapeReturns, BarrierPos: -1,
 			}},
 		},
 		// Test.report — return a one-line-per-property pass/fail/skip
@@ -559,6 +560,13 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				Args:       []*native.Type{native.TString, native.TList, native.TList},
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
+				// NO shape ReturnsFn here, deliberately: Test.prop's result
+				// flows into run-property's `p:PropertySpec` PARAM, and a
+				// record-schema carrier (RecordTypeInfo payload) does not
+				// pass a record-refine param's pattern unify — the shape
+				// claim would silently kill that dispatch (a check-accuracy
+				// FP). The result stays a plain Map carrier; the
+				// PropertyResult/summary shapes below feed only field READS.
 				BarrierPos: -1,
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					name, _ := args[0].AsConcreteString()
@@ -607,6 +615,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				},
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
+				ReturnsFn:  testPropResultShapeReturns,
 				BarrierPos: -1,
 				// runCheckProp runs BOTH bodies (the generator, param `r`; the
 				// property, one unnamed param) through parent.CallAQL in fresh
@@ -642,6 +651,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				},
 				NoEvalArgs: map[int]bool{1: true, 2: true},
 				Returns:    []*native.Type{native.TMap},
+				ReturnsFn:  testPropResultShapeReturns,
 				BarrierPos: -1,
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 					return runSkipProp(parent, args)
@@ -649,6 +659,35 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			}},
 		},
 	}
+}
+
+// ---- check-mode shape ReturnsFns -------------------------------------
+//
+// The PBT surfaces build FIXED map shapes (check-prop/skip a
+// PropertyResult, Test.summary the tally); surfacing the
+// shapes as record-schema carriers lets field reads (`p get "runs"`,
+// `(… check-prop …) get "ok"`) narrow instead of ending dynamic(Any). All
+// claims are dynamic (gradual, guard-discharged); value-dependent fields
+// (failing-input / shrunk-input / error — Any by the PropertyResult decl)
+// stay dynamic(Any) via the schema's own Any constraint.
+
+func testPropResultShapeReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	fields := native.NewOrderedMap()
+	fields.Set("name", native.NewTypeLiteral(native.TString))
+	fields.Set("ok", native.NewTypeLiteral(native.TBoolean))
+	fields.Set("skipped", native.NewTypeLiteral(native.TBoolean))
+	fields.Set("runs", native.NewTypeLiteral(native.TInteger))
+	fields.Set("shrunk-source", native.NewTypeLiteral(native.TString))
+	fields.Set("shrunk-cost", native.NewTypeLiteral(native.TInteger))
+	return []native.Value{native.NewDynamicCarrierValue(native.NewRecordType(fields))}
+}
+
+func testSummaryShapeReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	fields := native.NewOrderedMap()
+	fields.Set("total", native.NewTypeLiteral(native.TInteger))
+	fields.Set("passed", native.NewTypeLiteral(native.TInteger))
+	fields.Set("failed", native.NewTypeLiteral(native.TInteger))
+	return []native.Value{native.NewDynamicCarrierValue(native.NewRecordType(fields))}
 }
 
 // runSkipProp records a skipped property result without running the

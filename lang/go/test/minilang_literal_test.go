@@ -112,8 +112,19 @@ func TestMiniLitCheckParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
-	if len(cr.Stack) != 1 || cr.Stack[0] != "Map" {
-		t.Fatalf("check stack = %v, want [Map]", cr.Stack)
+	// dynamic(Map): the re kinds' check-mode ReturnsFn (miniReShapeReturns)
+	// surfaces the {ok ms fst lst n} record shape as a GRADUAL Map carrier
+	// so field reads narrow — Phase 4.3 G7. Parity with the explicit call
+	// is asserted below.
+	if len(cr.Stack) != 1 || cr.Stack[0] != "dynamic(Map)" {
+		t.Fatalf("check stack = %v, want [dynamic(Map)]", cr.Stack)
+	}
+	crExplicit, err := a.Check(miniImp + `MiniLang.lang_re '[a-z]+' {} "AbcD" end`)
+	if err != nil {
+		t.Fatalf("check explicit: %v", err)
+	}
+	if len(crExplicit.Stack) != 1 || crExplicit.Stack[0] != cr.Stack[0] {
+		t.Fatalf("explicit-call check stack = %v, want %v (shortcut parity)", crExplicit.Stack, cr.Stack)
 	}
 }
 

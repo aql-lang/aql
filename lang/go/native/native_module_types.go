@@ -159,6 +159,25 @@ func moduleGet(v Value, key string) (Value, bool) {
 	return Value{}, false
 }
 
+// moduleInstGetReturns is the check-mode return computer for a Module
+// descriptor read (get/getr/dot/dotr on `X.$module`): the field set is
+// CLOSED (moduleGet) — name/kind/file/folder are always Strings, exports
+// is always a List of export-name Strings. An unknown or non-concrete key
+// stays dynamic(Any) (get reads none, getr raises — the runtime's job).
+func moduleInstGetReturns(args []Value, _ *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 2 || !IsConcrete(args[0]) {
+		return dyn
+	}
+	switch getKey(args[0]) {
+	case "name", "kind", "file", "folder":
+		return []Value{NewCarrier(TString)}
+	case "exports":
+		return []Value{NewCarrier(TList)}
+	}
+	return dyn
+}
+
 // moduleTypeBehavior renders Module / ModuleExport values and matches
 // nominally (DefaultBehavior semantics for Match/Equal).
 type moduleTypeBehavior struct {

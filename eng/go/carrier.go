@@ -2274,7 +2274,19 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						if inst, ierr := InferAndInstantiateSchema(r, args[m], args[1-m]); ierr == nil {
 							if rt, rerr := AsRecordType(inst); rerr == nil {
 								if _, mkErr := MakeRecordR(rt, args[1-m], false, r); mkErr == nil {
-									out[i] = NewCarrier(CanonicalType(r, ValueType(inst)))
+									c := NewCarrier(CanonicalType(r, ValueType(inst)))
+									// Ride the instantiated FIELD SCHEMA on the
+									// instance carrier (the recordSchemaCarrier
+									// shape: dynamic + RecordTypeInfo payload) so a
+									// downstream field read narrows via the
+									// accessor ReturnsFns instead of ending
+									// dynamic(Any) — `(make Test.TestCase {…}) get
+									// "out"`. Gradual, guard-discharged.
+									if rt.Fields != nil {
+										c.Data = rt
+										c.Dynamic = true
+									}
+									out[i] = c
 									validated = true
 								}
 							}
@@ -2290,7 +2302,20 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						// Map carrier is the gradual posture — matching the runtime tag
 						// on success. The pre-fix schema-node carrier flagged EVERY such
 						// make (the voxgig decision make-rule / with-policy FPs).
-						out[i] = NewCarrier(TMap)
+						c := NewCarrier(TMap)
+						// A PARAMETERLESS record schema's field TYPES are static
+						// regardless of the construction data — ride them so a
+						// module constructor's `make TestCase {name:name …}`
+						// (carrier-membered data) still narrows downstream field
+						// reads. Generic schemas with unresolved params keep the
+						// plain Map carrier.
+						if len(info.Params) == 0 {
+							if rt, rerr := AsRecordType(info.Body); rerr == nil && rt.Fields != nil {
+								c.Data = rt
+								c.Dynamic = true
+							}
+						}
+						out[i] = c
 						continue
 					}
 				}
@@ -2298,7 +2323,17 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 				if r != nil {
 					t = CanonicalType(r, t)
 				}
-				out[i] = NewCarrier(t)
+				c := NewCarrier(t)
+				// A plain RECORD BODY target (`def TC refine Record […]` —
+				// the binding is the body value, Parent TMap, RecordTypeInfo
+				// payload): ride the declared field schema on the instance
+				// carrier so downstream field reads narrow (same shape and
+				// rationale as the schema-record branches above).
+				if rt, ok := args[m].Data.(RecordTypeInfo); ok && rt.Fields != nil {
+					c.Data = rt
+					c.Dynamic = true
+				}
+				out[i] = c
 			default:
 				// Dynamic / computed target (a carrier already): keep the
 				// prior identity behaviour.

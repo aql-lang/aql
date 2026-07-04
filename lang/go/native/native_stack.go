@@ -238,3 +238,40 @@ func rollCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
 	out[len(out)-1] = NewCarrier(t)
 	return out
 }
+
+// listEdgeElemReturns is the check-mode narrower for pop (last=true) and
+// shift (last=false) over a plain List: the removed ELEMENT's type is the
+// statically-known edge element's type when the list is concrete —
+// `pop [1 2 3]` yields (…, Integer) instead of (…, dynamic(Any)). The
+// remaining-list slot keeps the declared List carrier. A non-concrete or
+// statically-empty list (the runtime raises on empty) falls back to the
+// declared shape.
+func listEdgeElemReturns(last bool) ReturnsFunc {
+	return func(args []Value, _ *Registry) []Value {
+		fallback := []Value{NewCarrier(TList), NewDynamicCarrier(TAny)}
+		if len(args) != 1 || !IsConcrete(args[0]) {
+			return fallback
+		}
+		list, err := AsList(args[0])
+		if err != nil || list.IsNil() || list.Len() == 0 {
+			return fallback
+		}
+		elem := list.Get(0)
+		if last {
+			elem = list.Get(list.Len() - 1)
+		}
+		if elem.Undefined {
+			return fallback
+		}
+		et := ValueType(elem)
+		if et == nil || et.Equal(TAny) {
+			return fallback
+		}
+		c := NewCarrier(et)
+		// A carrier / dynamic element propagates its own gradual claim.
+		if elem.Dynamic {
+			c.Dynamic = true
+		}
+		return []Value{NewCarrier(TList), c}
+	}
+}

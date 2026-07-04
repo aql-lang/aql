@@ -541,6 +541,27 @@ from everything; 7 is gated on 6's exit criteria.
   recorded by the agent (op-table ChildTypeInfo join with loud decay;
   higher-order consumers; fn-param boundary currently strips the
   effect).
+- **2026-07-04 — Phase 4.3 landed: declared-Any burn-down + the
+  Returns-coverage gate — Any-frontier 381 → 220 (11.52% → 6.65%),
+  ratio ceiling 12 → 8, missing_returns 87 → 0.** Truthful
+  Returns/ReturnsFn annotations across the real feeder families
+  (minilang 47→10 via record-shape returns; struct 32→6 with
+  handler-mirrored container kinds; parselang 31→9 via PURE
+  concrete-source folds through the real handlers; corpus-core 23→4;
+  module-test 21→9; Vm 19→8; + make's record FIELD SCHEMA riding
+  instance carriers with nested propagation enabling r.fst.m). The
+  new TestNativeReturnsCoverage gate enumerates the default registry
+  AND every aql: module sub-registry: every sig must declare check
+  returns — allowlist EMPTY (512 raw shapes all annotated).
+  pinnedAnyFrontierRows 345 → 220. Two incidents resolved per
+  discipline (annotation fixed, never the pin): a tany Disjunct fold
+  read as a union carrier (soundness 7→8 transient — Disjunct/Enum
+  fold results now ride dynamic); a Test.prop shape claim starving
+  run-property dispatch (withdrawn, documented). All other ratchets
+  byte-identical; census unchanged; VERIFY PASSED; make test 0.
+  Residuals: patrun/flex/log stores (G5 → Phase 4.2), error .code
+  (sound Any), user-registered DSL fns (G4-adjacent), Vm.run*
+  (honestly Any), the module-fn return-seam schema loss (follow-up).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

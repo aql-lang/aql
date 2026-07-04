@@ -240,14 +240,14 @@ var typeNatives = []NativeFunc{
 		Name: "tany",
 
 		Signatures: []Signature{
-			{Args: []*Type{TList}, Impl: Go(tanyHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(tanyHandler), Returns: []*Type{TAny}, ReturnsFn: typeAlgebraListFold(tanyHandler), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "tall",
 
 		Signatures: []Signature{
-			{Args: []*Type{TList}, Impl: Go(tallHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(tallHandler), Returns: []*Type{TAny}, ReturnsFn: typeAlgebraListFold(tallHandler), BarrierPos: -1},
 		},
 	},
 	{
@@ -909,6 +909,44 @@ func baseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 // tand's `tall` reduction (below) calls eng.TandValues directly.
 
 // ---- tany / tall ----
+
+// typeAlgebraListFold is the check-mode fold for tany/tall: both are PURE
+// type computations (FlattenDisjunctAlts / SimplifyDisjunctAlts /
+// TandValues) over a concrete list, so when every element is statically
+// known — a concrete value, a bare type node, a DepScalar constraint, a
+// disjunct — the checked result IS the runtime result. Any carrier /
+// dynamic / undefined element falls back to the declared dynamic(Any).
+func typeAlgebraListFold(handler Handler) ReturnsFunc {
+	return func(args []Value, r *Registry) []Value {
+		dyn := []Value{NewDynamicCarrier(TAny)}
+		if len(args) != 1 || !IsConcrete(args[0]) {
+			return dyn
+		}
+		list, err := AsList(args[0])
+		if err != nil || list.IsNil() {
+			return dyn
+		}
+		for i := 0; i < list.Len(); i++ {
+			e := list.Get(i)
+			if e.Carrier || e.Dynamic || e.Undefined {
+				return dyn
+			}
+		}
+		out, herr := handler(args, nil, nil, r)
+		if herr != nil || len(out) != 1 {
+			return dyn
+		}
+		// A Disjunct/Enum RESULT is a type-as-VALUE; left concrete, every
+		// carrier-side consumer (and the soundness comparator) reads a
+		// checked disjunct as a union CARRIER of its alternatives instead.
+		// Ride it as a dynamic carrier bound to the disjunct — same value
+		// knowledge, gradual modality.
+		if IsDisjunct(out[0]) {
+			return []Value{NewDynamicCarrierValue(out[0])}
+		}
+		return out
+	}
+}
 
 func tanyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {

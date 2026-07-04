@@ -334,8 +334,8 @@ var allArrayNatives = []NativeFunc{
 				ReturnsFn:  forEachReturnsFn, BarrierPos: -1,
 			},
 			// Map forms — iterate entries for side effects, produce nothing.
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(forEachMapHandler), BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Impl: Go(forEachMapHandler), BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(forEachMapHandler), Returns: []*Type{}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Impl: Go(forEachMapHandler), Returns: []*Type{}, BarrierPos: -1},
 		},
 	},
 	{

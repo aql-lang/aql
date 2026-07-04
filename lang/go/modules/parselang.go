@@ -163,6 +163,14 @@ type ParseLangSpec struct {
 	// Handler implements the parser. Required. Receives the resolved source
 	// String and the opts Map.
 	Handler native.Handler
+	// Pure declares the handler a PURE function of (source, opts): no
+	// registry mutation, no I/O, deterministic output. A pure parser's
+	// result over a fully-concrete source + opts is folded at CHECK time
+	// (pureParseFoldReturns), so a literal-source `parse <kind> '<text>'`
+	// types as its actual parse result instead of dynamic(Any). Only the
+	// built-in kinds set this — host parsers are unknown code and stay
+	// unfolded unless the host opts in.
+	Pure bool
 }
 
 // capParseLangHost is the registry capability slot holding host-registered
@@ -304,18 +312,95 @@ func installHostParser(exports *native.OrderedMap, subReg *native.Registry, spec
 		return handler(resolved, named, stack, r)
 	}
 	inner := "parselang-host-" + spec.Name
+	sig := native.Signature{
+		Args:       []*native.Type{native.TAny, native.TMap},
+		Returns:    spec.Returns,
+		BarrierPos: -1,
+		Impl:       native.Go(shell),
+	}
+	if spec.Pure {
+		sig.ReturnsFn = pureParseFoldReturns(spec.Returns, shell)
+	}
 	subReg.RegisterNativeFunc(native.NativeFunc{
-		Name: inner,
-		Signatures: []native.Signature{{
-			Args:       []*native.Type{native.TAny, native.TMap},
-			Returns:    spec.Returns,
-			BarrierPos: -1,
-			Impl:       native.Go(shell),
-		}},
+		Name:       inner,
+		Signatures: []native.Signature{sig},
 	})
 	params := []native.FnParam{{Type: native.TAny}, {Type: native.TMap}}
 	exports.Set(key, wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg))
 	return nil
+}
+
+// pureParseFoldReturns is the check-mode ReturnsFn for a PURE parser kind:
+// when the source and opts operands are fully concrete data, it runs the
+// real handler (a pure function of its inputs) and surfaces the CONCRETE
+// parse result, so a literal-source `parse json '{"a":1}'` types field
+// reads precisely instead of ending dynamic(Any). Anything non-concrete —
+// a computed source, a carrier-bearing opts map — falls back to the
+// declared-Returns dynamic carriers, exactly what declaredReturnCarriers
+// would have produced (declared Any rides dynamic). A handler ERROR also
+// falls back, silently: the raise is the runtime's job (and may be caught
+// by an enclosing `do`), so the check pass must not flag it here.
+func pureParseFoldReturns(returns []*native.Type, handler native.Handler) native.ReturnsFunc {
+	return func(args []native.Value, r *native.Registry) []native.Value {
+		fallback := make([]native.Value, len(returns))
+		for i, t := range returns {
+			c := native.NewCarrier(t)
+			if t.Equal(native.TAny) {
+				c.Dynamic = true
+			}
+			fallback[i] = c
+		}
+		if len(args) != 2 || !parseFoldableValue(args[0]) || !parseFoldableValue(args[1]) {
+			return fallback
+		}
+		out, err := handler(args, nil, nil, r)
+		if err != nil || len(out) != len(returns) {
+			return fallback
+		}
+		return out
+	}
+}
+
+// parseFoldableValue reports v is fully-concrete INERT DATA — a concrete
+// scalar (String/Number/Boolean/Atom family, or none), or a concrete
+// list/map whose members are recursively so. Only such a value may be fed
+// to a pure parse handler at check time: a carrier or dynamic anywhere
+// inside (e.g. a computed opts field that defaults during the fold but is
+// real at run time) could make the folded result diverge from the runtime
+// call, which would be an unsound commitment. Identity-bearing payloads
+// (stores, class instances, fn values, timers) are NOT inert — their
+// check-time state is not their runtime state — so they refuse the fold.
+func parseFoldableValue(v native.Value) bool {
+	if v.Carrier || v.Dynamic || v.Undefined || !native.IsConcrete(v) {
+		return false
+	}
+	switch {
+	case v.Parent.ConformsTo(native.TList):
+		l, err := native.AsList(v)
+		if err != nil || l.IsNil() {
+			return false
+		}
+		for i := 0; i < l.Len(); i++ {
+			if !parseFoldableValue(l.Get(i)) {
+				return false
+			}
+		}
+		return true
+	case v.Parent.ConformsTo(native.TMap):
+		m, err := native.AsMap(v)
+		if err != nil || m == nil {
+			return false
+		}
+		for _, k := range m.Keys() {
+			e, _ := m.Get(k)
+			if !parseFoldableValue(e) {
+				return false
+			}
+		}
+		return true
+	default:
+		return v.Parent.ConformsTo(native.TScalar) || v.Parent.Equal(native.TNone)
+	}
 }
 
 // resolveParseSource normalises a `parse` source argument to its String
@@ -474,6 +559,10 @@ func tabnasParserSpecs() []ParseLangSpec {
 			Name:    k.Name,
 			Returns: []*native.Type{k.Returns},
 			Handler: tabnasParseHandler(k.Name, k.Parse, k.Convert),
+			// The tabnas decoders are pure functions of (source, opts) —
+			// no registry state, no I/O — so a literal source folds at
+			// check time.
+			Pure: true,
 		}
 	}
 	return specs
@@ -502,6 +591,9 @@ func aontuParserSpec() ParseLangSpec {
 	return ParseLangSpec{
 		Name:    "aontu",
 		Returns: []*native.Type{native.TAny},
+		// AontuParse is a pure decode + unification over the source text —
+		// same fold contract as the tabnas family.
+		Pure: true,
 		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 			src, err := args[0].AsConcreteString() // resolved by the framework
 			if err != nil {

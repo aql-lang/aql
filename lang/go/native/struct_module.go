@@ -34,47 +34,51 @@ var StructModuleNatives = []NativeFunc{
 	{
 		Name: "transform",
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TAny}, Impl: Go(transformHandler), BarrierPos: -1},
+			// The result is shaped by the SPEC (an arbitrary template), so
+			// its static type is genuinely unknowable: declared Any.
+			{Args: []*Type{TMap, TAny}, Impl: Go(transformHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "merge",
 		Signatures: []Signature{
-			{Args: []*Type{TList, TMap}, Impl: Go(mergeListMapHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(mergeMapListHandler), BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Impl: Go(mergeHandler), BarrierPos: -1},
+			// Both index-merge forms always build a NewList.
+			{Args: []*Type{TList, TMap}, Impl: Go(mergeListMapHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(mergeMapListHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(mergeHandler), Returns: []*Type{TAny}, ReturnsFn: mergeReturns, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "validate",
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TAny}, Impl: Go(validateHandler), BarrierPos: -1},
+			{Args: []*Type{TMap, TAny}, Impl: Go(validateHandler), Returns: []*Type{TAny}, ReturnsFn: structDataShapeReturns(1), BarrierPos: -1},
 		},
 	},
 	{
 		Name: "getpath",
 		Signatures: []Signature{
-			{Args: []*Type{TString, TAny}, Impl: Go(getpathHandler), BarrierPos: -1},
+			// A path read out of an arbitrary structure: genuinely Any.
+			{Args: []*Type{TString, TAny}, Impl: Go(getpathHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			// Lens form: `getpath $.a.b m` reads through a Reach (honors
 			// per-segment getr strictness + computed keys, natively).
-			{Args: []*Type{TReach, TAny}, Impl: Go(getpathReachHandler), BarrierPos: -1},
+			{Args: []*Type{TReach, TAny}, Impl: Go(getpathReachHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "setpath",
 		Signatures: []Signature{
-			{Args: []*Type{TString, TAny, TAny}, Impl: Go(setpathHandler), BarrierPos: -1},
-			{Args: []*Type{TAny, TString, TAny}, Impl: Go(setpathHandler), BarrierPos: -1},
+			{Args: []*Type{TString, TAny, TAny}, Impl: Go(setpathHandler), Returns: []*Type{TAny}, ReturnsFn: setpathReturns, BarrierPos: -1},
+			{Args: []*Type{TAny, TString, TAny}, Impl: Go(setpathHandler), Returns: []*Type{TAny}, ReturnsFn: setpathReturns, BarrierPos: -1},
 			// Lens forms: a Reach path in the leading or middle slot
 			// (`setpath $.a.b 9 m` / `setpath m $.a.b 9`).
-			{Args: []*Type{TReach, TAny, TAny}, Impl: Go(setpathHandler), BarrierPos: -1},
-			{Args: []*Type{TAny, TReach, TAny}, Impl: Go(setpathHandler), BarrierPos: -1},
+			{Args: []*Type{TReach, TAny, TAny}, Impl: Go(setpathHandler), Returns: []*Type{TAny}, ReturnsFn: setpathReturns, BarrierPos: -1},
+			{Args: []*Type{TAny, TReach, TAny}, Impl: Go(setpathHandler), Returns: []*Type{TAny}, ReturnsFn: setpathReturns, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "inject",
 		Signatures: []Signature{
-			{Args: []*Type{TAny, TAny}, Impl: Go(injectHandler), BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(injectHandler), Returns: []*Type{TAny}, ReturnsFn: structDataShapeReturns(0), BarrierPos: -1},
 		},
 	},
 	{
@@ -86,15 +90,19 @@ var StructModuleNatives = []NativeFunc{
 	{
 		Name: "walk",
 		Signatures: []Signature{
-			{Args: []*Type{TFunction, TFunction, TAny}, Impl: Go(walkBeforeAfterHandler), BarrierPos: -1},
-			{Args: []*Type{TFunction, TAny}, Impl: Go(walkBeforeHandler), BarrierPos: -1},
-			{Args: []*Type{TAny}, Impl: Go(walkHandler), BarrierPos: -1},
+			// The callback forms return the TRANSFORMED tree — the callback
+			// may replace any node including the root, so the type is Any.
+			{Args: []*Type{TFunction, TFunction, TAny}, Impl: Go(walkBeforeAfterHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TAny}, Impl: Go(walkBeforeHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			// The 1-arg form always builds the List of {path value} leaf rows.
+			{Args: []*Type{TAny}, Impl: Go(walkHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "selector",
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TAny}, Impl: Go(selectorHandler), BarrierPos: -1},
+			// Select result depends on the queried structure: Any.
+			{Args: []*Type{TMap, TAny}, Impl: Go(selectorHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -118,7 +126,7 @@ var StructModuleNatives = []NativeFunc{
 		// input raises [aql/parse_error]. See design/PARSING.10.md §2.
 		Name: "parse",
 		Signatures: []Signature{
-			{Args: []*Type{TString}, Impl: Go(parseTextHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TString}, Impl: Go(parseTextHandler), Returns: []*Type{TAny}, ReturnsFn: parseTextReturns, BarrierPos: -1},
 		},
 	},
 	{
@@ -128,14 +136,154 @@ var StructModuleNatives = []NativeFunc{
 		// selects the member). See reify.go + design/CLASS-OBJECT.10.md §3e.
 		Name: "reify",
 		Signatures: []Signature{
-			{Args: []*Type{TAny, TMap}, Impl: Go(reifyHandler), BarrierPos: -1},
-			{Args: []*Type{TAny, TString}, Impl: Go(reifyHandler), BarrierPos: -1},
+			{Args: []*Type{TAny, TMap}, Impl: Go(reifyHandler), Returns: []*Type{TAny}, ReturnsFn: reifyReturns, BarrierPos: -1},
+			{Args: []*Type{TAny, TString}, Impl: Go(reifyHandler), Returns: []*Type{TAny}, ReturnsFn: reifyReturns, BarrierPos: -1},
 		},
 	},
 	{
 		Name: "nodify",
 		Signatures: []Signature{
-			{Args: []*Type{TAny}, Impl: Go(nodifyHandler), BarrierPos: -1},
+			{Args: []*Type{TAny}, Impl: Go(nodifyHandler), Returns: []*Type{TAny}, ReturnsFn: structDataShapeReturns(0), BarrierPos: -1},
 		},
 	},
+}
+
+// ---- check-mode ReturnsFns for the StructUtil words -------------------
+//
+// Every claim below is a DYNAMIC carrier — a gradual bound, discharged by
+// a guard at run time — so an exotic runtime shape (a user `behave`
+// nodify hook, a spec-driven transform) can never be unsoundly committed.
+// Only what the handler guarantees structurally is claimed; anything
+// value-dependent stays dynamic(Any).
+
+// structDataShapeReturns claims the container KIND of the data operand at
+// sig position i: the voxgig words validate/inject/nodify return a
+// structure of the same top-level kind as their data input (validate
+// returns the defaulted data, inject the reference-resolved copy, nodify
+// the Node projection). A non-container or unknown-typed input stays
+// dynamic(Any).
+func structDataShapeReturns(i int) ReturnsFunc {
+	return func(args []Value, _ *Registry) []Value {
+		dyn := []Value{NewDynamicCarrier(TAny)}
+		if i >= len(args) {
+			return dyn
+		}
+		return []Value{dynamicContainerKind(args[i])}
+	}
+}
+
+// dynamicContainerKind is the shared claim: dynamic(Map) for a Map-typed
+// value, dynamic(List) for a List, dynamic(Any) otherwise.
+func dynamicContainerKind(v Value) Value {
+	t := ValueType(v)
+	switch {
+	case t == nil || v.Dynamic && t.Equal(TAny):
+		return NewDynamicCarrier(TAny)
+	case t.ConformsTo(TMap):
+		return NewDynamicCarrier(TMap)
+	case t.ConformsTo(TList):
+		return NewDynamicCarrier(TList)
+	default:
+		return NewDynamicCarrier(TAny)
+	}
+}
+
+// mergeReturns: voxgigstruct.Merge over two same-kind containers yields
+// that kind; a mixed or scalar pair is value-dependent (later node wins)
+// and stays dynamic(Any).
+func mergeReturns(args []Value, _ *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 2 {
+		return dyn
+	}
+	a, b := ValueType(args[0]), ValueType(args[1])
+	if a == nil || b == nil {
+		return dyn
+	}
+	switch {
+	case a.ConformsTo(TMap) && b.ConformsTo(TMap):
+		return []Value{NewDynamicCarrier(TMap)}
+	case a.ConformsTo(TList) && b.ConformsTo(TList):
+		return []Value{NewDynamicCarrier(TList)}
+	}
+	return dyn
+}
+
+// setpathReturns mirrors setpathHandler's data-operand selection (the
+// position-agnostic path/data/newVal heuristic) and claims the data
+// container's kind — setReachNative always returns an updated copy of the
+// SAME top-level container.
+func setpathReturns(args []Value, _ *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	pathIdx := -1
+	for i := range args {
+		if args[i].Parent.ConformsTo(TString) || IsReach(args[i]) {
+			pathIdx = i
+			break
+		}
+	}
+	if pathIdx < 0 || len(args) != 3 {
+		return dyn
+	}
+	var others []int
+	for i := range args {
+		if i != pathIdx {
+			others = append(others, i)
+		}
+	}
+	a, b := args[others[0]], args[others[1]]
+	data := a
+	if !(a.Parent.ConformsTo(TMap) || a.Parent.ConformsTo(TList)) &&
+		(b.Parent.ConformsTo(TMap) || b.Parent.ConformsTo(TList)) {
+		data = b
+	}
+	return []Value{dynamicContainerKind(data)}
+}
+
+// reifyReturns claims the hydrated instance's type from the TARGET
+// operand: a bare type literal yields dynamic(<that type>), a tor union
+// (Disjunct — `$class` selects the member at run time) yields the dynamic
+// disjunct, anything else stays dynamic(Any).
+func reifyReturns(args []Value, _ *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 2 {
+		return dyn
+	}
+	target := args[0]
+	if target.Carrier || target.Dynamic {
+		return dyn // computed target — the class is unknown statically
+	}
+	if IsDisjunct(target) {
+		return []Value{NewDynamicCarrierValue(target)}
+	}
+	// A bare type node (`reify Foo …`) or a structural type body (`reify
+	// Point …` where Point's binding pushes its ClassTypeInfo body):
+	// ValueType yields the minted *Type in both cases, exactly as
+	// ReturnsFreshInstance resolves make's target.
+	if !IsBareTypeNode(target) && !IsTypeBody(target) {
+		return dyn
+	}
+	t := ValueType(target)
+	if t == nil || t.Equal(TAny) {
+		return dyn
+	}
+	return []Value{NewDynamicCarrier(t)}
+}
+
+// parseTextReturns folds a CONCRETE-source `parse` at check time: the
+// jsonic decode is a pure function of the text, so the checked result is
+// the runtime result. A non-concrete source, or a text the decoder
+// rejects (the raise is the runtime's job — it may be caught by an
+// enclosing `do`), falls back to dynamic(Any), exactly the declared-Any
+// carrier this sig produced before.
+func parseTextReturns(args []Value, r *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 1 || !IsConcrete(args[0]) || !args[0].Parent.ConformsTo(TString) {
+		return dyn
+	}
+	out, err := parseTextHandler(args, nil, nil, r)
+	if err != nil || len(out) != 1 {
+		return dyn
+	}
+	return out
 }
