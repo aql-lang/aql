@@ -4494,6 +4494,24 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	// language's tail-call guarantee carries into compiled mode).
 	for _, rec := range es.fnRecs {
 		if !rec.finished {
+			if es.trapAt != 0 {
+				// The program ends at a terminal top-level trap, and an
+				// UNFINISHED unit is unreachable from the kept prefix: a
+				// CALL_USER event only records against a unit whose body
+				// compile already finished, so no event at or before the trap
+				// can enter this one (the unit was opened by a `def` whose
+				// body compile the trapping dispatch cut short — e.g. `{f}`
+				// evaluating a 1-arg fn with no args). Emit a defensive trap
+				// stub so unit indices stay aligned and any future reach of
+				// the stub fails loudly instead of silently returning nothing.
+				ti := len(p.Traps)
+				p.Traps = append(p.Traps, TrapSpec{Code: "internal_error",
+					Detail: "unreachable fn unit " + rec.name + " entered after terminal trap", Word: rec.name})
+				p.Fns = append(p.Fns, CompiledFn{Name: rec.name,
+					Code:  []Instr{{Op: OpTrap, Arg: int32(ti)}},
+					Debug: []SrcPos{rec.pos}})
+				continue
+			}
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
 		diverged := fragDiverges(rec.frag)

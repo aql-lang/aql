@@ -6963,7 +6963,16 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// under suspend; still splice the analysis result so the enclosing probe
 	// reads a residual.
 	if es == nil || es.suspended == 0 {
-		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		// A STATICALLY-DEFINITE unmatched dispatch — every value the failed
+		// match examined is identical at run time — compiles to a terminal
+		// OpTrap raising the interpreter's byte-identical error instead of
+		// refusing the whole program (the error-row doctrine: a spec ERROR row
+		// yields a Program that raises the same taxonomy at the same point).
+		// Ineligible shapes (a carrier operand whose runtime tag could match, a
+		// nested frame/unit, a plain check pass) keep the blanket refusal.
+		if !e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
+			e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		}
 	}
 	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile pass
 	// (!Compiling), where it is the genuine static report of an unmatched dispatch.
@@ -7038,6 +7047,91 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	e.registry.Check.SuppressBodyErrors--
 	e.spliceCheckResults(positions, results)
 	return nil
+}
+
+// tryRecordUnmatchedDispatchTrap compiles a STATICALLY-DEFINITE unmatched
+// dispatch to a terminal OpTrap raising the interpreter's byte-identical
+// error, so a spec ERROR row still yields a Program instead of falling back.
+// Reached from checkModeAssumeSig's no-carrier fall-through, i.e. after
+// matchSignature failed every candidate AND the disjunct-partition / Any-
+// carrier poly recoveries declined.
+//
+// Definiteness is the soundness condition: the run-time dispatch must fail at
+// this same point with the same error on EVERY run. That holds exactly when
+// every value any candidate signature could examine is identical at run time —
+// a concrete const, a bare type literal, or a raw word token (matchSignature
+// is deterministic over identical inputs, and the check pass mirrors the
+// interpreter's tape step-for-step over concrete values). It does NOT hold
+// for:
+//   - a CARRIER operand: its static tag is a declared type, but the runtime
+//     value may carry a refined subtype tag (a fn declared [Integer] can
+//     return a Pos-reparented value) or satisfy a value-sensitive predicate
+//     param — the runtime match can succeed where the static one failed;
+//   - a DYNAMIC operand (no static type at all);
+//   - an UNDEFINED-word placeholder (the interpreter raises undefined_word,
+//     a different taxonomy — and the pass already carries an error diagnostic
+//     that refuses the program before Finalize);
+//   - a 0-arg real (non-fallback) signature on the word: matchSignature's
+//     fallback scan and the synthetic-fallback courtesy dispatch can run it
+//     at run time instead of raising.
+//
+// The trap error mirrors the interpreter's raise at this point exactly: the
+// void-argument-group override (def_error / no_value_error — voidArgErrorFor,
+// whose void-group records the check pass populates identically) when a paren
+// arg produced no value, else the plain "no matching signature" signature
+// mismatch. Hints ride along verbatim where the interpreter's are static;
+// sigError's stack-snapshot hint is advisory DX text, not part of the error
+// taxonomy (code + detail + position) the differential gates.
+//
+// RecordTrap's own guard keeps this top-level-only (frames and units both at
+// depth 1): a trap inside a branch arm or fn unit is conditional and stays a
+// refusal. Returns true when the trap now owns the program's tail; false
+// leaves the caller's MarkUncompilable refusal to stand.
+func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos SrcPos) bool {
+	es := e.registry.Check.Emit
+	if !es.active() || !e.registry.Check.Compiling {
+		return false
+	}
+	maxN := 0
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.Fallback {
+			continue
+		}
+		n := s.TotalArgs()
+		if n == 0 {
+			return false // courtesy-dispatchable at run time — not a definite failure
+		}
+		if n > maxN {
+			maxN = n
+		}
+	}
+	for _, p := range e.checkModeFallbackPositions(maxN) {
+		v := e.tape.At(p)
+		if IsWord(v) {
+			if wi, werr := AsWord(v); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok {
+					v = top // the binding is what matchSignature examined
+				}
+			}
+		}
+		if v.Carrier || v.Dynamic || v.Undefined {
+			return false
+		}
+		// A deferred-expression token (a reach path, an unexpanded paren
+		// expr, a template string, a word splice) EXPANDS at dispatch/step
+		// time, and its expansion can read state the check pass models only
+		// abstractly — a reach over a mutated flex cell resolved at run time
+		// where the static match saw the raw Reach token (flex.tsv L88/L95).
+		// Its presence makes the failure non-definite; decline.
+		if IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) {
+			return false
+		}
+	}
+	if verr := e.voidArgErrorFor(w.Name, pos); verr != nil {
+		return es.RecordTrap(verr.Code, verr.Detail, w.Name, verr.Hint, pos)
+	}
+	return es.RecordTrap("signature_error", "no matching signature for "+w.Name, w.Name, "", pos)
 }
 
 // argTypeSummary renders the operand types of a failed dispatch for the

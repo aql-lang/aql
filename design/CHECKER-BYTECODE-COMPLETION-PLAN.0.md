@@ -474,6 +474,28 @@ from everything; 7 is gated on 6's exit criteria.
   the two-lambda 4-arg walk stays a sound Stage-3 refusal; the last
   "dynamic input" row is module-parse.tsv:15, not a Stage-D shape;
   the stale next-stages/finish-line doc sections are noted, unedited.
+- **2026-07-04 — Phase 3.4 landed: unmatched-dispatch trap programs —
+  error rows 83 → 13, refusals 151 → 81.** The dominant class (70
+  rows) was the check-mode dispatch-recovery fall-through DISCARDING a
+  failure it had proven: tryRecordUnmatchedDispatchTrap (engine.go)
+  now records a terminal OpTrap with the byte-identical taxonomy
+  (plain signature_error and the void-arg def_error/no_value_error
+  variants via the interpreter's own voidArgErrorFor), gated on
+  definiteness — declines on any carrier / dynamic / deferred-token
+  operand (Reach/ParenExpr/InterpString/Splice; the flex-Reach
+  soundness counterexample found mid-development is pinned as a
+  negative) and stays top-level-only via RecordTrap's existing guard.
+  Finalize lowers a trap-truncated unfinished fn unit as an
+  unreachable defensive stub. Landing tests: 10 trap positives with
+  code+Detail+position parity, prior-effect ordering
+  (`print 'a' raise 42`), and carrier/splice/flex-Reach negatives.
+  Census: native 3473 → 3543. Partition now 0 tier-1 / 0 tier-2 /
+  13 error-row / 69 compute. Residual 13: 7 need carrier-disjointness
+  proofs, 1 branch-arm trap modeling, 3 unblock via typed-def
+  compilation (cluster 3), 2 legitimately non-definite. Full battery
+  green (VERIFY PASSED, make test exit 0, differential + fallback 0
+  divergences); orchestrator spot-checked taxonomy + effect-order
+  parity via CLI.
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

@@ -3687,3 +3687,150 @@ func TestWalkHookClosureCompiles(t *testing.T) {
 		}
 	}
 }
+
+// Error-row trap programs (finish-line cluster 1, the 83-row burn-down): a
+// STATICALLY-DEFINITE unmatched dispatch — matchSignature failed and every
+// value any candidate signature examined is identical at run time (concrete
+// consts, bare type literals, raw word tokens; no carrier / dynamic /
+// deferred-expression operand) — compiles to a terminal OpTrap raising the
+// interpreter's byte-identical error instead of refusing the whole program
+// (engine.go tryRecordUnmatchedDispatchTrap). The trap mirrors the
+// interpreter's raise exactly: the void-argument-group override (def_error /
+// no_value_error) when a paren arg produced no value, else the plain
+// signature_error "no matching signature for <word>".
+func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
+	cases := []struct {
+		name, src, code string
+	}{
+		{"native concrete mismatch", `add true 1`, "signature_error"},
+		{"zero-operand dispatch", `canon`, "signature_error"},
+		{"user fn class-param mismatch", `def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] 42 g`, "signature_error"},
+		{"predicate refine boundary value", `def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 10 g`, "signature_error"},
+		{"arity modifier misses every sig", `add/3 2 3`, "signature_error"},
+		{"bare type-literal operand", `get 'a' Map`, "signature_error"},
+		{"undef leaves no overload", `def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add true false`, "signature_error"},
+		{"map-literal member dispatch (unfinished unit stubbed)", `def f fn [[x:Integer] [Integer] [add x 1]] {f}`, "signature_error"},
+		{"void arg group at def", `def f fn [[x:Integer] [] []] def r (f 1)`, "def_error"},
+		{"void arg group at consumer", `def f fn [[x:Integer] [] []] 3 add (f 1)`, "no_value_error"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%s: check error %v", c.name, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%s: expected a trap program, refused: %s", c.name, reason)
+		}
+		if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: expected a terminal TRAP, no island:\n%s", c.name, dis)
+		}
+		_, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if !compiled {
+			t.Errorf("%s: trap program did not run compiled (fell back)", c.name)
+		}
+		_, errI := mustNew(t).Run(c.src)
+		if codeOf(errC) != c.code || codeOf(errI) != c.code {
+			t.Fatalf("%s: compiled=[%s] interp=[%s], want both %s", c.name, codeOf(errC), codeOf(errI), c.code)
+		}
+		// Byte-identical taxonomy: code (above) AND detail; position present
+		// whenever the interpreter's is (the full-corpus error lane's contract).
+		var aeC, aeI *eng.AqlError
+		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
+			t.Fatalf("%s: non-AQL error: compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if aeC.Detail != aeI.Detail {
+			t.Errorf("%s: detail divergence:\n  compiled=%q\n  interp=%q", c.name, aeC.Detail, aeI.Detail)
+		}
+		if aeI.Row > 0 && aeC.Row == 0 {
+			t.Errorf("%s: position lost in compiled mode (interp at %d:%d)", c.name, aeI.Row, aeI.Col)
+		}
+	}
+}
+
+// Side-effect ordering across a dispatch trap: the trap fires at the SAME
+// execution point as the interpreter's raise, so an effect BEFORE the failing
+// dispatch (a print) must still run in compiled mode — the kept event prefix
+// executes, then the TRAP raises.
+func TestUnmatchedDispatchTrapPreservesPriorEffects(t *testing.T) {
+	const src = `print 'a' raise 42`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("expected a trap program: reason=%q err=%v", reason, cerr)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") {
+		t.Fatalf("expected a TRAP after the print:\n%s", dis)
+	}
+	var outC, outI strings.Builder
+	ac := mustNew(t)
+	ac.SetOutput(&outC)
+	_, compiled, errC := ac.RunCompiled(src)
+	if !compiled {
+		t.Fatalf("trap program did not run compiled")
+	}
+	ai := mustNew(t)
+	ai.SetOutput(&outI)
+	_, errI := ai.Run(src)
+	if codeOf(errC) != "signature_error" || codeOf(errI) != "signature_error" {
+		t.Fatalf("compiled=[%s] interp=[%s], want both signature_error", codeOf(errC), codeOf(errI))
+	}
+	if outC.String() != outI.String() || !strings.Contains(outC.String(), "a") {
+		t.Errorf("effect ordering: compiled output %q, interp output %q (print must run before the trap)", outC.String(), outI.String())
+	}
+}
+
+// Negatives for the dispatch trap: a NON-definite failure keeps the blanket
+// refusal and falls back to the interpreter — the trap must never claim a
+// dispatch whose runtime outcome can differ from the static one.
+func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
+	refusals := []struct{ name, src, want string }{
+		// A CARRIER operand: the fn result's runtime tag may be a refined
+		// subtype / satisfy a value-sensitive param, so the failure is not
+		// statically definite (and here the interpreter DOES raise — via the
+		// fallback, faithfully).
+		{"carrier operand declines",
+			`def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply`,
+			"unmatched dispatch recovered at apply"},
+		// A deferred-expression token (a word splice) expands at dispatch/step
+		// time; its expansion is not statically modelled, so decline.
+		{"splice operand declines",
+			`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`,
+			"unmatched dispatch recovered at f"},
+	}
+	for _, c := range refusals {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog != nil {
+			t.Fatalf("%s: compiled; want refusal (disasm:\n%s)", c.name, prog.Disassemble())
+		}
+		if !strings.Contains(reason, c.want) {
+			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
+		}
+		_, compiled, errC := mustNew(t).RunCompiled(c.src)
+		_, errI := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
+		}
+		if codeOf(errC) != codeOf(errI) {
+			t.Errorf("%s: fallback err=[%s] interp err=[%s] (should agree)", c.name, codeOf(errC), codeOf(errI))
+		}
+	}
+
+	// The soundness pin that shaped the deferred-token decline: a reach over a
+	// MUTATED flex cell fails the STATIC match at `drop` (the raw Reach token)
+	// but resolves and dispatches fine at run time — a trap here raised where
+	// the interpreter returns a value (flex.tsv L88's divergence). The row must
+	// not trap; compiled and interpreted results must agree.
+	const flexReach = `def m {a:{b:1}} def f (flex m) set b/q 9 f.a drop f.a.b`
+	if prog, _, _, _ := mustNew(t).CompileCheck(flexReach); prog != nil {
+		if strings.Contains(prog.Disassemble(), "TRAP") {
+			t.Fatalf("flex-reach row must not trap:\n%s", prog.Disassemble())
+		}
+	}
+	gotC, _, errC := mustNew(t).RunCompiled(flexReach)
+	gotI, errI := mustNew(t).Run(flexReach)
+	if errC != nil || errI != nil {
+		t.Fatalf("flex-reach row errored: compiled=%v interp=%v", errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("flex-reach parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
