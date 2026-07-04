@@ -54,7 +54,8 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	registry := fs.String("r", "", "registry path")
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
-	checkFirst := fs.Bool("check", false, "run static type-check before execution; abort on error")
+	checkFirst := fs.Bool("check", false, "verbose pre-flight: print ALL check diagnostics (the pre-flight itself runs by default; this flag adds the advisory tiers to stderr)")
+	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before execution (also enabled by AQL_NO_CHECK)")
 	compileFlag := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (also enabled by AQL_COMPILE; AQL_NO_COMPILE disables)")
 	forceCompileFlag := fs.Bool("force-compile", false, "EXPERIMENTAL: REQUIRE the bytecode compiler — abort with the refusal reason if the program is not compilable, instead of falling back to the interpreter (also enabled by AQL_FORCE_COMPILE; AQL_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
@@ -97,13 +98,16 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if hasSource {
-		if *checkFirst {
-			// Pre-flight gate: print diagnostics to stderr, abort on any
-			// Error-severity finding before executing (the point of
-			// --check — surface real bugs in the run loop). stdout is
-			// left clean for the program. For advisory-only output, use
-			// the standalone `aql check --soft`.
-			if err := check.Preflight(stderr, source, reg, *seed); err != nil {
+		// CHECK-BY-DEFAULT (completion plan Phase 5.2): every run
+		// pre-flights unless --no-check / AQL_NO_CHECK. The default gate is
+		// QUIET — diagnostics print only when an Error-severity finding
+		// aborts the run, so a clean program's stderr stays empty and the
+		// advisory tiers don't become per-run noise. An explicit --check
+		// keeps the verbose behavior (all diagnostics, every severity).
+		// Sequenced after the guard-narrowing legalization per the plan's
+		// FP-honesty rule; `aql check --soft` remains the advisory surface.
+		if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
+			if err := check.Preflight(stderr, source, reg, *seed, *checkFirst); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
 				return 1
 			}

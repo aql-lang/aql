@@ -222,13 +222,18 @@ func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic) {
 // non-nil error when an Error-severity diagnostic is present, so the
 // caller aborts before executing. Unlike Run it prints no summary or
 // result-stack line — stdout is left entirely for the program.
-func Preflight(stderr io.Writer, source, registry string, seed int64) error {
+func Preflight(stderr io.Writer, source, registry string, seed int64, verbose bool) error {
 	a, err := lang.New(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
 	res, cerr := a.Check(source)
-	printDiagnostics(stderr, res.Diagnostics)
+	// Quiet by default (check-by-default runs this on EVERY execution):
+	// diagnostics surface only when the run is about to abort, or when
+	// the caller asked for the verbose pre-flight (--check).
+	if verbose || cerr != nil || res.Summary.Errors > 0 {
+		printDiagnostics(stderr, res.Diagnostics)
+	}
 	if cerr != nil {
 		return fmt.Errorf("check error: %s", cerr)
 	}
