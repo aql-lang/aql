@@ -80,30 +80,33 @@ func TestEvalForceCompile(t *testing.T) {
 // best-effort form); and AQL_NO_COMPILE is the kill switch that wins over all.
 func TestResolveCompileMode(t *testing.T) {
 	cases := []struct {
-		compileFlag, forceFlag    bool
-		compile, force, noCompile string
-		want                      CompileMode
+		compileFlag, forceFlag, noCompileFlag bool
+		compile, force, noCompile             string
+		want                                  CompileMode
 	}{
-		{false, false, "", "", "", CompileTry},     // P7 default: compiled with silent sound fallback (design/P7-ENDGAME.10.md)
-		{true, false, "", "", "", CompileTry},      // --compile flag
-		{false, true, "", "", "", CompileForce},    // --force-compile flag
-		{false, false, "1", "", "", CompileTry},    // AQL_COMPILE=1
-		{false, false, "true", "", "", CompileTry}, // AQL_COMPILE=true
-		{false, false, "0", "", "", CompileTry},    // AQL_COMPILE=0: legacy opt-in var is inert post-flip; AQL_NO_COMPILE is the control
-		{false, false, "no", "", "", CompileTry},   // same — the legacy opt-in var no longer disables
-		{false, false, "", "1", "", CompileForce},  // AQL_FORCE_COMPILE=1
-		{true, true, "", "", "", CompileForce},     // force wins over try (flags)
-		{true, false, "", "1", "", CompileForce},   // force env wins over try flag
-		{true, false, "", "", "1", CompileOff},     // AQL_NO_COMPILE wins over the flag
-		{false, true, "", "", "1", CompileOff},     // AQL_NO_COMPILE wins over force
-		{false, false, "1", "1", "1", CompileOff},  // AQL_NO_COMPILE wins over both envs
-		{true, false, "", "", "0", CompileTry},     // AQL_NO_COMPILE=0 does not disable
+		{false, false, false, "", "", "", CompileOff},     // default: interpreter (maintainer decision — compiled mode is opt-in)
+		{true, false, false, "", "", "", CompileTry},      // --compile flag
+		{false, true, false, "", "", "", CompileForce},    // --force-compile flag
+		{false, false, false, "1", "", "", CompileTry},    // AQL_COMPILE=1
+		{false, false, false, "true", "", "", CompileTry}, // AQL_COMPILE=true
+		{false, false, false, "0", "", "", CompileOff},    // AQL_COMPILE=0 is off
+		{false, false, false, "no", "", "", CompileOff},   // AQL_COMPILE=no is off
+		{false, false, false, "", "1", "", CompileForce},  // AQL_FORCE_COMPILE=1
+		{true, true, false, "", "", "", CompileForce},     // force wins over try (flags)
+		{true, false, false, "", "1", "", CompileForce},   // force env wins over try flag
+		{true, false, false, "", "", "1", CompileOff},     // AQL_NO_COMPILE wins over the flag
+		{false, true, false, "", "", "1", CompileOff},     // AQL_NO_COMPILE wins over force
+		{false, false, false, "1", "1", "1", CompileOff},  // AQL_NO_COMPILE wins over both envs
+		{true, false, false, "", "", "0", CompileTry},     // AQL_NO_COMPILE=0 does not disable
+		{true, false, true, "", "", "", CompileOff},       // --no-compile wins over --compile (checker-style twin)
+		{false, true, true, "", "", "", CompileOff},       // --no-compile wins over --force-compile
+		{false, false, true, "1", "1", "", CompileOff},    // --no-compile wins over both envs
 	}
 	for _, c := range cases {
 		t.Setenv("AQL_COMPILE", c.compile)
 		t.Setenv("AQL_FORCE_COMPILE", c.force)
 		t.Setenv("AQL_NO_COMPILE", c.noCompile)
-		if got := ResolveCompileMode(c.compileFlag, c.forceFlag); got != c.want {
+		if got := ResolveCompileMode(c.compileFlag, c.forceFlag, c.noCompileFlag); got != c.want {
 			t.Errorf("ResolveCompileMode(compile=%v, force=%v, AQL_COMPILE=%q, AQL_FORCE_COMPILE=%q, AQL_NO_COMPILE=%q) = %v, want %v",
 				c.compileFlag, c.forceFlag, c.compile, c.force, c.noCompile, got, c.want)
 		}

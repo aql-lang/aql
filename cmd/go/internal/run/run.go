@@ -56,7 +56,8 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "verbose pre-flight: print ALL check diagnostics (the pre-flight itself runs by default; this flag adds the advisory tiers to stderr)")
 	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before execution (also enabled by AQL_NO_CHECK)")
-	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler (now the DEFAULT; kept for compatibility); silent interpreter fallback when not compilable; AQL_NO_COMPILE disables")
+	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (also enabled by AQL_COMPILE)")
+	noCompileFlag := fs.Bool("no-compile", false, "disable the bytecode compiler even if --compile/--force-compile or their env vars are set (also enabled by AQL_NO_COMPILE)")
 	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — abort with the refusal reason instead of falling back to the interpreter (also enabled by AQL_FORCE_COMPILE; AQL_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	var pf permsflags.Flags
@@ -129,7 +130,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
-		if err := EvalOptionsMode(stdout, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag)); err != nil {
+		if err := EvalOptionsMode(stdout, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag)); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -190,26 +191,32 @@ const (
 	CompileForce = buildrt.CompileForce
 )
 
-// ResolveCompileMode applies the bytecode-mode rollout contract
-// (design/aql-bytecode-plan.0.md "Developer experience"; the Stage-7 flip is
-// recorded in design/P7-ENDGAME.10.md): compiled mode is the DEFAULT — every
-// run takes the bytecode path when the emitter can lower the program and
-// silently falls back to the interpreter otherwise ("slow, not wrong"; the
-// differential gates hold compile == interpret byte-identical across the
-// corpus, the combination matrix, and the property fuzz). `AQL_NO_COMPILE`
-// is the kill switch that wins over everything, exactly as the rollout
-// contract reserved; `--force-compile` / `AQL_FORCE_COMPILE` still upgrade a
-// refusal from silent fallback to a loud error; the historical `--compile` /
-// `AQL_COMPILE` opt-ins remain accepted as no-ops of the new default.
-func ResolveCompileMode(compile, force bool) CompileMode {
-	if envEnabled("AQL_NO_COMPILE") {
+// ResolveCompileMode applies the bytecode-mode control contract, styled
+// exactly like the checker's flag family (--check / --no-check /
+// AQL_NO_CHECK): a positive opt-in flag, a force variant, and a --no twin
+// that wins over everything. Compiled mode is OFF by default (maintainer
+// decision, design/P7-ENDGAME.10.md addendum — the Stage-7 default flip was
+// landed and then reverted to opt-in):
+//
+//	--compile        / AQL_COMPILE        → TRY: bytecode when compilable,
+//	                                        silent sound fallback otherwise
+//	--force-compile  / AQL_FORCE_COMPILE  → FORCE: refusal is a loud error
+//	--no-compile     / AQL_NO_COMPILE     → OFF, wins over all of the above
+//
+// FORCE wins over TRY when both are requested. Results are identical to the
+// interpreter either way; the differential gates hold compile == interpret
+// byte-identical across the corpus, combinations, and property fuzz.
+func ResolveCompileMode(compile, force, noCompile bool) CompileMode {
+	if noCompile || envEnabled("AQL_NO_COMPILE") {
 		return CompileOff
 	}
 	if force || envEnabled("AQL_FORCE_COMPILE") {
 		return CompileForce
 	}
-	_ = compile // accepted for compatibility; TRY is the default
-	return CompileTry
+	if compile || envEnabled("AQL_COMPILE") {
+		return CompileTry
+	}
+	return CompileOff
 }
 
 // envEnabled reports whether an env var is set to a truthy value

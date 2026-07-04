@@ -1006,6 +1006,12 @@ from everything; 7 is gated on 6's exit criteria.
   full battery (VERIFY PASSED, make test 0, differential 0
   divergences) and pushed as 581f143 / 8651c5f / 40a92b7; both
   review threads answered.
+- **2026-07-04 — maintainer direction: compiled-mode default reverted
+  to OPT-IN.** ResolveCompileMode returns CompileOff bare again; the
+  flag family now mirrors the checker exactly (--compile /
+  --force-compile / --no-compile + env twins, --no-compile winning
+  over all). P7-ENDGAME.10.md carries the addendum; the frontier gate
+  and perf baseline stand.
 - **2026-07-04 — Phase 7 executed; program closed.** Compiled mode
   flipped to default (ResolveCompileMode → CompileTry bare;
   AQL_NO_COMPILE the kill switch, per the rollout contract's reserved

@@ -28,6 +28,16 @@ compile-or-fallback **0 divergences** at every landing, `VERIFY
 PASSED` (including `-race`, combinations, property-fuzz, and
 `aqldebug` lanes) and full `make test` before every commit.
 
+> **Addendum (2026-07-04, maintainer direction):** the default flip in
+> action 1 was landed and then **reverted to opt-in** — compiled mode
+> is OFF by default, controlled by the checker-style flag family
+> `--compile` / `--force-compile` / `--no-compile` (+ `AQL_COMPILE` /
+> `AQL_FORCE_COMPILE` / `AQL_NO_COMPILE`, the `--no` twin winning over
+> everything). The safety case below still holds and the flip remains
+> a one-line change whenever the maintainer chooses to take it; the
+> other two endgame actions (the gated frontier, the standing
+> perf/alloc baseline) are unaffected.
+
 ## The three endgame actions
 
 1. **Compiled mode is the default.** `ResolveCompileMode` returns
