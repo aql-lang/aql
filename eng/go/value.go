@@ -298,6 +298,15 @@ type FnSig struct {
 	// QuoteArgs / TypeArgs are per-position dispatch modifiers.
 	QuoteArgs map[int]bool
 	TypeArgs  map[int]bool
+	// FnInertArgs marks per-position slots where a FN-VALUED operand is INERT
+	// DATA for the bytecode recorder — read or compared, never invoked — on a
+	// word that is NOT wholesale CompileReadsFn because ANOTHER slot does
+	// invoke a fn. The one holder today is `is` (Stage M2d): its VALUE slot
+	// only reads the operand's lattice tag (`(+re/…/) is (MiniLang.Re)`),
+	// while a Function in its TYPE slot is a predicate the handler INVOKES
+	// (`5 is Positive` — RunPredicate) and must keep refusing. Read by
+	// recordCallOperands alongside CompileReadsFn/CompileStoresFn.
+	FnInertArgs map[int]bool
 	// Fallback marks the synthesized 0-arg catch-all sig.
 	Fallback bool
 	// ReturnsFn is the check-mode return computer (native-authored or
@@ -426,6 +435,20 @@ const (
 	// disjunct of the code-body refusal; a word that ALSO splices its body
 	// (CompileExecutesBody) or declares a body-executing CallableSpec still refuses.
 	CompileRunsBodyIsolated
+
+	// CompileScalarFold marks a PURE value-level word (the comparison family:
+	// eq/neq/deq/cmp/tcmp/lt/lte/gt/gte) whose dispatch over ALL-inert-const
+	// operands the check pass may CONST-FOLD by running the real handler
+	// (tryFoldScalarConst, carrier.go): the concrete result replaces the
+	// declared-type carrier, so a literal condition like `(n eq 0)` with a
+	// const-bound n folds to a concrete boolean and downstream `if` analysis
+	// sees a statically-determined branch instead of a Disjunct residual
+	// (the forward-barrier.tsv:83 soundness pin). Folding is double-evaluated
+	// with an agreement guard exactly like CompileModuleFold, so a
+	// non-deterministic handler never freezes; an erroring dispatch (the
+	// family-restricted `lt` on cross-family operands) declines the fold and
+	// keeps today's diagnostic path.
+	CompileScalarFold
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
@@ -496,6 +519,15 @@ type CallableSpec struct {
 	// body never reaches this — it matches only the single TFunction overload, so
 	// the ≥2-reachable ambiguity gate never fires for it.
 	CrossCollectionTokenShape bool
+	// LambdaSharesTokenShape marks a word that presents a LAMBDA callback the
+	// SAME per-invocation inputs as a token-quotation body — Inputs(args) is the
+	// single callback convention (walk's `{key value path parent depth}` payload
+	// map, handed to a quotation on the stack and to a lambda as its one named
+	// param). The recorder then compiles a lambda body against Inputs(args)
+	// directly (ClosureInValue), instead of consulting the per-word
+	// lambdaCallbackInputs table whose shapes (pair maps, KeyVals) only fit the
+	// words that present DIFFERENT views to lambdas vs quotations.
+	LambdaSharesTokenShape bool
 }
 
 // FnDefInfo holds the function specification for a def-defined function.

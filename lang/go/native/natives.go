@@ -130,14 +130,15 @@ var Natives = []NativeFunc{
 		Name: "list",
 
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(listEntityOptsHandler), BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Impl: Go(listEntityHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(listAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Impl: Go(listAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(listFilterHandler), BarrierPos: -1},
-			{Args: []*Type{TList}, Impl: Go(listAllHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(listRecordFilterHandler), BarrierPos: -1},
-			{Args: []*Type{TMap}, Impl: Go(listRecordAllHandler), BarrierPos: -1},
+			// Every form — entity, API, table, record — builds a NewList.
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(listEntityOptsHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(listEntityHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(listAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(listAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(listFilterHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(listAllHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(listRecordFilterHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(listRecordAllHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 
@@ -146,12 +147,14 @@ var Natives = []NativeFunc{
 		Name: "create",
 
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(createEntityOptsHandler), BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Impl: Go(createEntityHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(createAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Impl: Go(createAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(createHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(createRecordHandler), BarrierPos: -1},
+			// Entity / API forms return whatever the SDK yields (convertResultItem): Any.
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(createEntityOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(createEntityHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(createAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(createAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			// Table / record forms always build a NewList.
+			{Args: []*Type{TMap, TList}, Impl: Go(createHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(createRecordHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 
@@ -160,12 +163,15 @@ var Natives = []NativeFunc{
 		Name: "load",
 
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(loadEntityOptsHandler), BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Impl: Go(loadEntityHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(loadAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Impl: Go(loadAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(loadHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(loadRecordHandler), BarrierPos: -1},
+			// Entity / API forms return whatever the SDK yields (convertResultItem): Any.
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(loadEntityOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(loadEntityHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(loadAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(loadAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			// The table form returns the matched Map row (non-map rows are
+			// skipped; no match raises); the record form an empty Map.
+			{Args: []*Type{TMap, TList}, Impl: Go(loadHandler), Returns: []*Type{TMap}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(loadRecordHandler), Returns: []*Type{TMap}, BarrierPos: -1},
 		},
 	},
 
@@ -174,12 +180,14 @@ var Natives = []NativeFunc{
 		Name: "update",
 
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(updateEntityOptsHandler), BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Impl: Go(updateEntityHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(updateAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Impl: Go(updateAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(updateHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(updateRecordHandler), BarrierPos: -1},
+			// Entity / API forms return whatever the SDK yields (convertResultItem): Any.
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(updateEntityOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(updateEntityHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(updateAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(updateAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			// Table / record forms always build a NewList.
+			{Args: []*Type{TMap, TList}, Impl: Go(updateHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(updateRecordHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 
@@ -188,12 +196,14 @@ var Natives = []NativeFunc{
 		Name: "remove",
 
 		Signatures: []Signature{
-			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(removeEntityOptsHandler), BarrierPos: -1},
-			{Args: []*Type{TResourceEntity}, Impl: Go(removeEntityHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(removeAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap}, Impl: Go(removeAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(removeHandler), BarrierPos: -1},
-			{Args: []*Type{TMap, TMap}, Impl: Go(removeRecordHandler), BarrierPos: -1},
+			// Entity / API forms return whatever the SDK yields (convertResultItem): Any.
+			{Args: []*Type{TMap, TResourceEntity}, Impl: Go(removeEntityOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TResourceEntity}, Impl: Go(removeEntityHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(removeAPIOptsHandler), Patterns: map[int]Value{1: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(removeAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
+			// Table / record forms always build a NewList.
+			{Args: []*Type{TMap, TList}, Impl: Go(removeHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap, TMap}, Impl: Go(removeRecordHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 
@@ -217,8 +227,8 @@ var Natives = []NativeFunc{
 		Name: "flatten",
 
 		Signatures: []Signature{
-			{Args: []*Type{TInteger, TList}, Impl: Go(flattenDepthHandler), BarrierPos: -1},
-			{Args: []*Type{TList}, Impl: Go(flattenDefaultHandler), BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, Impl: Go(flattenDepthHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(flattenDefaultHandler), Returns: []*Type{TList}, BarrierPos: -1},
 		},
 	},
 
@@ -278,7 +288,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []Signature{
 			{Args: []*Type{TFlexList}, Impl: Go(popFlexHandler), Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Impl: Go(popHandler), Returns: []*Type{TList, TAny}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(popHandler), Returns: []*Type{TList, TAny}, ReturnsFn: listEdgeElemReturns(true), BarrierPos: -1},
 		},
 	},
 	{
@@ -294,7 +304,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []Signature{
 			{Args: []*Type{TFlexList}, Impl: Go(shiftFlexHandler), Returns: []*Type{TFlexList, TAny}, BarrierPos: -1},
-			{Args: []*Type{TList}, Impl: Go(shiftHandler), Returns: []*Type{TList, TAny}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(shiftHandler), Returns: []*Type{TList, TAny}, ReturnsFn: listEdgeElemReturns(false), BarrierPos: -1},
 		},
 	},
 
@@ -303,7 +313,7 @@ var Natives = []NativeFunc{
 		Name: "istype",
 
 		Signatures: []Signature{
-			{Args: []*Type{TAny}, Impl: Go(istypeHandler), BarrierPos: -1},
+			{Args: []*Type{TAny}, Impl: Go(istypeHandler), Returns: []*Type{TBoolean}, BarrierPos: -1},
 		},
 	},
 
@@ -314,6 +324,19 @@ var Natives = []NativeFunc{
 	// happens in the handler. See walk_core.go.
 	{
 		Name: "walk",
+		// The DESCEND hook (sig position 2) compiles to a closure unit the
+		// handler drives through InvokeBody (walkClassifyHook already
+		// classifies a compiled closure). Visit-only: hook results are
+		// DISCARDED (callWalkHook ignores the residual), so BodyOut 0 keeps
+		// the closure count-agnostic. Quotation and lambda hooks both receive
+		// the ONE `{key value path parent depth}` payload
+		// (LambdaSharesTokenShape). The optional ASCEND slot (position 3) is
+		// guarded recorder-side (extraNoEvalHookSlotsOK): only a
+		// provably-empty flex reference rides as a value operand; every other
+		// ascend shape keeps today's refusal/bake behaviour.
+		Callable: &CallableSpec{BodyPos: 2, BodyOut: 0, LambdaSharesTokenShape: true, Inputs: func(_ []Value) []Value {
+			return []Value{walkHookArgCarrier()}
+		}},
 
 		Signatures: []Signature{
 			{

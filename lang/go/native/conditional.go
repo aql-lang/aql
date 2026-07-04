@@ -170,7 +170,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		//     scrutinee seating and is sound for ANY body (no recompute). Any other
 		//     shape (multi-clause, code-body blocks, no default) keeps the island.
 		// Plain check (no emit) keeps the prior dynAny.
-		if es := r.Check.Emit; es != nil && es.Active() {
+		if es := r.Check.Recorder(); es.Active() {
 			nDiag := len(r.Check.Diagnostics)
 			_, stk := analyseCondFragment(r, v)
 			r.Check.TruncateDiagnostics(nDiag)
@@ -203,11 +203,9 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		// trap keeps the events before it, drops the case dispatch (which would
 		// otherwise island), and aborts exactly where the interpreter does. A
 		// nested case (RecordTrap declines, frames/units != 1) keeps the island.
-		if es := r.Check.Emit; es != nil {
-			es.RecordTrap("case_error",
-				"case: clause list must be a concrete list of match/block pairs (optional trailing default)",
-				"case", "", args[0].Pos)
-		}
+		r.Check.Recorder().RecordTrap("case_error",
+			"case: clause list must be a concrete list of match/block pairs (optional trailing default)",
+			"case", "", args[0].Pos)
 		return dynAny
 	}
 	lst, _ := AsList(clauses)
@@ -230,7 +228,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	// planValueDefLocals then promotes to a frame local once the fragment reads
 	// are recorded. if3ReturnsFn returns the branch-join type AND records the
 	// lowering.
-	if r.Check.Emit != nil && r.Check.Emit.CanSeatAcrossFragment(v) {
+	if r.Check.Recorder().CanSeatAcrossFragment(v) {
 		cond := NewList(caseGuardTokens(v, elems[0]))
 		then := NewList(caseBlockTokens(v, elems[1]))
 		rest := buildCaseChain(v, elems, 2)

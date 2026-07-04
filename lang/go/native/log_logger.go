@@ -113,13 +113,18 @@ func loggerLevelNative(st *loggerState, word string, level LogLevel) NativeFunc 
 }
 
 // loggerChildNative builds `child FIELDS` — a new logger with the same
-// name whose defaults are the parent's overlaid with FIELDS.
+// name whose defaults are the parent's overlaid with FIELDS. Its
+// check-mode shape is a logger instance like the parent's
+// (loggerShapeReturns — the method SHAPE is state-independent), so a
+// derived child's own method reads resolve statically too
+// (`def c (l.child {y:2}) ; c.info "m"`, module-log.tsv:55).
 func loggerChildNative(st *loggerState) NativeFunc {
 	return NativeFunc{
 		Name: "logger-child",
 		Signatures: []Signature{{
 			Args:       []*Type{TMap},
 			Returns:    []*Type{TMap},
+			ReturnsFn:  loggerShapeReturns(st.lsr),
 			BarrierPos: -1,
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				merged := asConcreteOrderedMap(mergeAttrs(st.attrs, args[0]))

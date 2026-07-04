@@ -32,6 +32,29 @@ func runEmit(t *testing.T, src string) (string, error) {
 
 const emitImp = `import "aql:emitlang"  `
 
+// runEmitTop is runEmit through a TOP-LEVEL engine (native.NewTop — the CLI /
+// spec-runner shape), where an unfired FnDef left on the stack raises
+// uncalled_function in the end-of-run drain. The dispatch-rejection pins need
+// this surface; a plain sub-engine leaves the unmatched fn as data.
+func runEmitTop(t *testing.T, src string) (string, error) {
+	t.Helper()
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	InstallResolver(reg)
+	values, perr := parser.Parse(src)
+	if perr != nil {
+		return "", perr
+	}
+	out, rerr := native.NewTop(reg).Run(values)
+	if rerr != nil {
+		return "", rerr
+	}
+	return native.Canon(out), nil
+}
+
 // TestEmitBuiltins pins the canonical walk-based emitters end-to-end through
 // the `emit` word: auto json, explicit kinds, opts, and the desugared form.
 func TestEmitBuiltins(t *testing.T) {
@@ -109,6 +132,96 @@ func TestEmitNegatives(t *testing.T) {
 		if !strings.Contains(err.Error(), c.wantCode) {
 			t.Errorf("%s: error %q does not contain %q", c.src, err.Error(), c.wantCode)
 		}
+	}
+}
+
+// TestEmitOptsSchemaTypoRejected pins the G6 options-typo fix: the built-in
+// emit kinds declare an Options schema on their opts slot (EmitOptsSchema),
+// so a CONCRETE opts map with an unknown key — or a known key with the wrong
+// value type — is a hard dispatch rejection instead of a silently ignored
+// option. The negative half pins what must stay ACCEPTED: every real key, a
+// map with "options-looking" keys in the DATA slot, and custom emitters
+// (host- or AQL-registered), whose key sets are their own.
+func TestEmitOptsSchemaTypoRejected(t *testing.T) {
+	rejected := []string{
+		// the motivating shape: a typo'd key silently emitted compact JSON
+		emitImp + `emit json {prety:true} {a:1}`,
+		// the auto (kind-less) form carries the union schema
+		emitImp + `emit {prety:true} {a:1}`,
+		// a kind that reads NO keys rejects every key
+		emitImp + `emit tsv {pretty:true} [{a:1}]`,
+		emitImp + `emit toml {pretty:true} {a:1}`,
+		// a key another kind owns is still unknown here
+		emitImp + `emit csv {pretty:true} [{a:1}]`,
+		emitImp + `emit xml {indent:2} <r>1</r>`,
+		// a known key with the wrong value type
+		emitImp + `emit json {indent:"x"} {a:1}`,
+		emitImp + `emit json {pretty:1} {a:1}`,
+	}
+	for _, src := range rejected {
+		if got, err := runEmitTop(t, src); err == nil {
+			t.Errorf("%s: expected a dispatch rejection, got %q", src, got)
+		} else if !strings.Contains(err.Error(), "uncalled_function") &&
+			!strings.Contains(err.Error(), "signature") {
+			t.Errorf("%s: error %q is not a dispatch rejection", src, err.Error())
+		}
+	}
+
+	accepted := []struct{ src, want string }{
+		// every real key still dispatches (pretty/indent pinned in
+		// TestEmitBuiltins; separation here) — and indent tolerates a Float,
+		// mirroring optIndent's int64/float64 tolerance
+		{emitImp + `emit csv {separation:";"} [{a:1 b:2}]`, `'a;b\n1;2\n'`},
+		{emitImp + `emit json {indent:1.0} {a:1}`, "'{\\n \"a\": 1\\n}'"},
+		// {prety:…} in the DATA slot is plain data, never options
+		{emitImp + `emit json {prety:true}`, `'{"prety":true}'`},
+		// an AQL-registered emitter owns its key set — arbitrary keys pass
+		{emitImp + `EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]]) end  emit up {whatever:1} {a:1}`, `'UP'`},
+	}
+	for _, c := range accepted {
+		got, err := runEmit(t, c.src)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", c.src, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%s: got %q, want %q", c.src, got, c.want)
+		}
+	}
+}
+
+// TestEmitHostEmitterOptsUnchecked pins that a HOST-registered emitter
+// (RegisterHostEmitter) keeps a plain-Map opts slot: its key set belongs to
+// the host handler, so arbitrary keys must dispatch.
+func TestEmitHostEmitterOptsUnchecked(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	InstallResolver(reg)
+	if err := RegisterHostEmitter(reg, EmitLangSpec{
+		Name: "hostfmt",
+		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			opts := native.OptsToMap(args[1])
+			if _, ok := opts["custom"]; ok {
+				return []native.Value{native.NewString("CUSTOM")}, nil
+			}
+			return []native.Value{native.NewString("PLAIN")}, nil
+		},
+	}); err != nil {
+		t.Fatalf("RegisterHostEmitter: %v", err)
+	}
+	values, perr := parser.Parse(emitImp + `emit hostfmt {custom:1} {a:1}`)
+	if perr != nil {
+		t.Fatalf("parse: %v", perr)
+	}
+	out, rerr := native.New(reg).Run(values)
+	if rerr != nil {
+		t.Fatalf("host emitter with custom opts key must dispatch: %v", rerr)
+	}
+	if got := native.Canon(out); got != `'CUSTOM'` {
+		t.Fatalf("got %q, want 'CUSTOM'", got)
 	}
 }
 

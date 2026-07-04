@@ -27,21 +27,24 @@ func NetModuleNatives(ft FetchModuleTypes) []NativeFunc {
 		{
 			Name: "fetch",
 			Signatures: []Signature{
-				{Args: []*Type{TString, TMap}, Impl: Go(ft.fetchStringMapHandler), BarrierPos: -1},
-				{Args: []*Type{TMap}, Impl: Go(ft.fetchMapHandler), BarrierPos: -1},
-				{Args: []*Type{TString}, Impl: Go(ft.fetchStringHandler), BarrierPos: -1},
+				// Every form returns this import's Fetch/Response value (doFetch).
+				{Args: []*Type{TString, TMap}, Impl: Go(ft.fetchStringMapHandler), Returns: []*Type{ft.Response}, BarrierPos: -1},
+				{Args: []*Type{TMap}, Impl: Go(ft.fetchMapHandler), Returns: []*Type{ft.Response}, BarrierPos: -1},
+				{Args: []*Type{TString}, Impl: Go(ft.fetchStringHandler), Returns: []*Type{ft.Response}, BarrierPos: -1},
 			},
 		},
 		{
 			Name: "prepare",
 			Signatures: []Signature{
-				{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+				// The SDK's prepared fetch definition (anyToValue): Any.
+				{Args: []*Type{TMap}, Impl: Go(prepareAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 		{
 			Name: "direct",
 			Signatures: []Signature{
-				{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, BarrierPos: -1},
+				// The SDK's raw response (anyToValue): Any.
+				{Args: []*Type{TMap}, Impl: Go(directAPIHandler), Patterns: map[int]Value{0: apiPatternValue()}, Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 	}

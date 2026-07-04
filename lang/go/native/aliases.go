@@ -24,6 +24,7 @@ type (
 	CheckSeverity      = eng.CheckSeverity
 	CheckState         = eng.CheckState
 	ChildTypeInfo      = eng.ChildTypeInfo
+	CodeEffectInfo     = eng.CodeEffectInfo
 	ReachInfo          = eng.ReachInfo
 	ReachSeg           = eng.ReachSeg
 	ChildEntry         = eng.ChildEntry
@@ -220,6 +221,7 @@ const (
 	CompileStoresFn         = eng.CompileStoresFn
 	CompileModuleFold       = eng.CompileModuleFold
 	CompileIslandPure       = eng.CompileIslandPure
+	CompileScalarFold       = eng.CompileScalarFold
 	CompileFallbackBody     = eng.CompileFallbackBody
 	CompileQuoteInert       = eng.CompileQuoteInert
 	CompileDiverges         = eng.CompileDiverges
@@ -382,6 +384,7 @@ var (
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
+	ResetModuleExportGrowth   = eng.ResetModuleExportGrowth
 	MakeClassFieldValue       = eng.MakeClassFieldValue
 	MakeClassInstance         = eng.MakeClassInstance
 	MakeResource              = eng.MakeResource
@@ -544,6 +547,7 @@ var (
 	CheckAtIndices         = eng.CheckAtIndices
 	NewCarrierTypedListLen = eng.NewCarrierTypedListLen
 	RunCarrierBody         = eng.RunCarrierBody
+	AnalyseCodeEffect      = eng.AnalyseCodeEffectCarrier
 	SetIDSeed              = eng.SetIDSeed
 	SeverityFor            = eng.SeverityFor
 	CompareSignatures      = eng.CompareSignatures

@@ -1349,14 +1349,38 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	}); reason != "" {
 		return reason
 	}
-	if c.dynApply > 0 {
+	if c.typedBind != nil {
+		// A typed value-def's runtime validate/reparent step: pop the body
+		// operand (laid out above), run the interpreter-mirroring RunTypedBind,
+		// push the bound value. The spec rides in TypedBinds like a trap/map spec.
+		ti := len(lw.p.TypedBinds)
+		lw.p.TypedBinds = append(lw.p.TypedBinds, *c.typedBind)
+		lw.emit(OpBindTyped, ti, c.pos)
+	} else if c.dynApply > 0 {
 		// Apply the TOP operand (a runtime fn VALUE) to the `dynApply` trailing args
 		// laid out below it — a paren-bounded trailing fn-value apply (`(a b comp)`)
 		// recorded as an event (RecordDynApply) so it seats like any computed result:
 		// a def-local, an if operand, a list member, OR the body residual. The layout
 		// above placed the operands [args…, fn] with the fn on top, exactly the stack
-		// OpCallDynTrailTop reads (fn = top, its dynApply args below).
-		lw.emit(OpCallDynTrailTop, c.dynApply, c.pos)
+		// OpCallDynTrailTop reads (fn = top, its dynApply args below). An event that
+		// came through the `apply` WORD lowers to OpCallDynApplyTop instead — the
+		// applyHandler's unquote-then-apply (Stage M2a).
+		op := OpCallDynTrailTop
+		if c.dynApplyUnquote {
+			op = OpCallDynApplyTop
+		}
+		lw.emit(op, c.dynApply, c.pos)
+	} else if c.dynMethod != nil {
+		// Guarded shaped-instance-method apply (Stage M2c): the layout above
+		// placed [fn, a1..aN] with the fn at the base (source order — the
+		// leading-boundary stack shape). OpCallDynMethod pops N+1, applies the
+		// runtime fn to the N args exactly as the interpreter's forward
+		// auto-dispatch, and enforces the spec's claimed result count; a claim
+		// failure raises internal_error → interpreter re-run (never a wrong
+		// stack). The spec rides in DynMethods like a trap/map spec.
+		di := len(lw.p.DynMethods)
+		lw.p.DynMethods = append(lw.p.DynMethods, *c.dynMethod)
+		lw.emit(OpCallDynMethod, di, c.pos)
 	} else if c.makeList {
 		// Assemble the n laid-out operands into a list (a computed list literal,
 		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.

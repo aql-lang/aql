@@ -315,7 +315,16 @@ func DataListElemTypeFromValue(data Value) *Type {
 func toCarrier(v Value) Value {
 	if IsWord(v) || IsForward(v) || IsMark(v) || IsMove(v) ||
 		IsOpenParen(v) || IsParenExpr(v) || IsInterpString(v) || IsXmlInterp(v) ||
-		IsReturnCheck(v) || IsDefCleanup(v) {
+		IsReturnCheck(v) || IsDefCleanup(v) || IsDispatchMod(v) {
+		// A `/r`/`/q` dispatch-modifier marker (Word/__DM, parser-emitted right
+		// after a paren / dotted-path group) is a control token too: stripping
+		// it to a payload-less carrier made check mode UNABLE to consume it
+		// (execFnDefLiteral's peek reads the DispatchModInfo) or drop it
+		// standalone (stepLiteral's IsDispatchMod drop) — the marker then
+		// leaked into the check stack as a phantom value the runtime never
+		// has (`([x:Any] => [x])/r is T` bound `is` to the marker instead of
+		// the lambda). Kept verbatim, check mode parks/drops it exactly as
+		// the interpreter does (Stage M2d).
 		return v
 	}
 	// A dynamic carrier already IS a carrier; its Parent/Data is the
@@ -538,14 +547,81 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		// OpCallNativePoly so the VM re-matches the one concrete alternative at
 		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
 		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false) {
-			r.Check.Emit.RecordPoly(word)
+			r.Check.Recorder().RecordPoly(word)
 		}
 		return out
 	}
 	out := declaredReturnCarriers(r, word, sig, args, pos)
+	if folded, ok := tryFoldScalarConst(r, sig, args); ok && len(out) == 1 {
+		// Concrete-condition folding (CompileScalarFold): the comparison ran
+		// for real over compile-time-known scalars, so the concrete result
+		// replaces the declared-type carrier — `(n eq 0)` with a const n
+		// reads as a known false downstream (return-membership conformance,
+		// future static branch commitment). Unlike tryFoldModuleConst the
+		// dispatch still RECORDS below: the VM re-runs the comparison
+		// faithfully at run time, and eliding the event would strand every
+		// lowering that anchors on a condition EVENT (computed-arm `if`,
+		// variadic-else claims — the emit goldens pin this).
+		folded.ID = out[0].ID // keep the recorder's result identity
+		out[0] = folded
+	}
 	out = applyGradualContagion(r, word, args, out, pos, tailConsumed)
 	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)
 	return out
+}
+
+// tryFoldScalarConst const-folds a CompileScalarFold dispatch whose operands
+// are ALL inert consts, by running the real handler concretely — twice, with
+// the same determinism-agreement guard tryFoldModuleConst uses — and
+// returning the concrete result when it is itself an inert const. An
+// erroring dispatch (family-restricted ordering over cross-family operands)
+// declines, keeping the ordinary diagnostic path. See CompileScalarFold
+// (value.go) for the motivation (concrete-condition folding).
+func tryFoldScalarConst(r *Registry, sig *Signature, args []Value) (Value, bool) {
+	if sig == nil || !sig.CompileEffect.Has(CompileScalarFold) ||
+		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 || len(args) == 0 {
+		return Value{}, false
+	}
+	for _, a := range args {
+		if !scalarFoldOperand(a) {
+			return Value{}, false
+		}
+	}
+	one, ok := concreteHandlerEval(r, sig, args)
+	if !ok {
+		return Value{}, false
+	}
+	two, ok := concreteHandlerEval(r, sig, args)
+	if !ok || !constFoldAgrees(one, two) {
+		return Value{}, false
+	}
+	if !isInertConst(one) {
+		return Value{}, false
+	}
+	return one, true
+}
+
+// scalarFoldOperand reports whether a check-mode dispatch operand carries a
+// compile-time-known SCALAR value a CompileScalarFold dispatch may fold
+// over: an inert const, or a check-mode literal — which rides as a
+// concrete-PAYLOAD carrier (Carrier=true, Data set; the same shape the
+// DepScalar predicate evaluation reads for `f 5`), so the isInertConst
+// carrier guard alone would reject it. The carrier-tolerant arm admits only
+// value-scalar payloads: a compound carrier's payload is structural
+// (ChildTypeInfo) and a dynamic carrier's value is unknown — both decline.
+func scalarFoldOperand(v Value) bool {
+	if isInertConst(v) {
+		return true
+	}
+	if v.Dynamic || v.Data == nil {
+		return false
+	}
+	switch v.Data.(type) {
+	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
+		BigIntPayload, DecimalPayload:
+		return true
+	}
+	return false
 }
 
 // specialWordResults handles the words carrierResults special-cases before
@@ -612,7 +688,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 			// interpreter surfaces it.
 			var ae *AqlError
 			if errors.As(err, &ae) && ae.Code == "macroexpand_error" {
-				r.Check.Emit.RecordTrap("macroexpand_error", ae.Detail,
+				r.Check.Recorder().RecordTrap("macroexpand_error", ae.Detail,
 					"macroexpand", ae.Hint, pos)
 			}
 		}
@@ -833,7 +909,8 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 // boundary to a single named call is the first step of the Emit/check
 // decoupling (checker review, Tier 2).
 func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out []Value, pos SrcPos, ownerReg *Registry) {
-	if !tryFoldStaticIndex(r, word, args, out) &&
+	if !tryRecordMethodApply(r, word, args, out, pos) &&
+		!tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordDeferredList(r, sig, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
@@ -846,8 +923,8 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		// exactly as dynOutNativeOK admits for concrete-arg builtins — the handler
 		// produces the real result value in both modes.
 		forceDynOut := dynOutNativeOK(r, word, sig, args, out) || quoteInertOK ||
-			r.Check.Emit.dynInputsProven(sig, args)
-		r.Check.Emit.RecordCall(word, sig, args, out, pos, forceDynOut, quoteInertOK)
+			r.Check.Recorder().dynInputsProven(sig, args)
+		r.Check.Recorder().RecordCall(word, sig, args, out, pos, forceDynOut, quoteInertOK)
 	}
 }
 
@@ -861,7 +938,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 // declines and the normal poly/get path stands. outs[0] is rewritten to the
 // element carrier so the value flowing on has the element's identity.
 func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || (!isGetWord(word) && !isGetrWord(word)) || len(args) != 2 || len(outs) != 1 {
 		return false
 	}
@@ -950,7 +1027,7 @@ func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
 // compile-time constant (an inert const or a type node) — a runtime operand
 // never folds.
 func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileModuleFold) || len(outs) != 1 ||
 		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 {
 		return false
@@ -988,7 +1065,15 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	// registered key). Decline the fold so the get stays dynamic and the
 	// program falls back / islands faithfully. A PRESENT key (any non-None
 	// value) folds as before; this only blocks the absent-key case.
-	if isGetWord(word) && IsNoneShape(one) {
+	//
+	// EXCEPTION (Phase 6 M3): a receiver whose export map carries a growth
+	// LEDGER — every program-reachable runtime grower is check-modelled — and
+	// whose ledger proves the requested key is NOT among this pass's possible
+	// installs folds the stable absence (`MiniLang.Gen` after registering a
+	// non-filter kind `gen` is None on every run, because a non-filter kind
+	// mints no member type). An unregistered map, a poisoned ledger, or a key
+	// a grower may add keeps the decline. See module_export_growth.go.
+	if isGetWord(word) && IsNoneShape(one) && !moduleExportAbsenceStable(r, args) {
 		return false
 	}
 	switch {
@@ -1036,7 +1121,7 @@ func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool
 // tryRecordPoly's safety (core sig, no meta/fn-value), and is the escape hatch
 // RecordCall's anyDynamicCarrier(outs) refusal consults via forceDynOut.
 func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || sig == nil || len(outs) == 0 {
 		return false
 	}
@@ -1200,7 +1285,7 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // (core builtin, no meta/fn-value/code-body sig, sig identity, resolvable
 // operands) still applies.
 func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	// 0 outputs (a side-effect word like the test framework's `test-record`) or
 	// 1 output (the common get/size/is shape). A multi-result poly is beyond
 	// this path — the residual layout would need per-result seating.
@@ -1337,7 +1422,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 // value, and the island's dynamic result still refuses any downstream
 // TYPED dispatch via anyDynamicCarrier.
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileFallbackBody|CompileIslandPure) || len(outs) != 1 {
 		return false
 	}
@@ -1357,7 +1442,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	// would DOUBLE-record (the island fallback PLUS the structured event),
 	// leaving the extra event unconsumed on the simulated stack. Skip it; the
 	// generic RecordCall path that follows likewise early-returns.
-	if _, done := es.producedBy[outs[0].ID]; done {
+	if es.alreadyProduced(outs[0].ID) {
 		return false
 	}
 	// A pure typed word (get/make/is/typeof/size/type-algebra) is
@@ -2207,7 +2292,19 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						if inst, ierr := InferAndInstantiateSchema(r, args[m], args[1-m]); ierr == nil {
 							if rt, rerr := AsRecordType(inst); rerr == nil {
 								if _, mkErr := MakeRecordR(rt, args[1-m], false, r); mkErr == nil {
-									out[i] = NewCarrier(CanonicalType(r, ValueType(inst)))
+									c := NewCarrier(CanonicalType(r, ValueType(inst)))
+									// Ride the instantiated FIELD SCHEMA on the
+									// instance carrier (the recordSchemaCarrier
+									// shape: dynamic + RecordTypeInfo payload) so a
+									// downstream field read narrows via the
+									// accessor ReturnsFns instead of ending
+									// dynamic(Any) — `(make Test.TestCase {…}) get
+									// "out"`. Gradual, guard-discharged.
+									if rt.Fields != nil {
+										c.Data = rt
+										c.Dynamic = true
+									}
+									out[i] = c
 									validated = true
 								}
 							}
@@ -2223,7 +2320,20 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						// Map carrier is the gradual posture — matching the runtime tag
 						// on success. The pre-fix schema-node carrier flagged EVERY such
 						// make (the voxgig decision make-rule / with-policy FPs).
-						out[i] = NewCarrier(TMap)
+						c := NewCarrier(TMap)
+						// A PARAMETERLESS record schema's field TYPES are static
+						// regardless of the construction data — ride them so a
+						// module constructor's `make TestCase {name:name …}`
+						// (carrier-membered data) still narrows downstream field
+						// reads. Generic schemas with unresolved params keep the
+						// plain Map carrier.
+						if len(info.Params) == 0 {
+							if rt, rerr := AsRecordType(info.Body); rerr == nil && rt.Fields != nil {
+								c.Data = rt
+								c.Dynamic = true
+							}
+						}
+						out[i] = c
 						continue
 					}
 				}
@@ -2231,7 +2341,17 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 				if r != nil {
 					t = CanonicalType(r, t)
 				}
-				out[i] = NewCarrier(t)
+				c := NewCarrier(t)
+				// A plain RECORD BODY target (`def TC refine Record […]` —
+				// the binding is the body value, Parent TMap, RecordTypeInfo
+				// payload): ride the declared field schema on the instance
+				// carrier so downstream field reads narrow (same shape and
+				// rationale as the schema-record branches above).
+				if rt, ok := args[m].Data.(RecordTypeInfo); ok && rt.Fields != nil {
+					c.Data = rt
+					c.Dynamic = true
+				}
+				out[i] = c
 			default:
 				// Dynamic / computed target (a carrier already): keep the
 				// prior identity behaviour.
@@ -2260,8 +2380,8 @@ func RecordTypedDefMake(r *Registry, typeArg, body Value, pos SrcPos) (Value, bo
 	if r == nil {
 		return Value{}, false
 	}
-	es := r.Check.Emit
-	if es == nil || !es.active() {
+	es := r.Check.Recorder()
+	if !es.active() {
 		return Value{}, false
 	}
 	sig := objectMakeSig(r)
@@ -2585,7 +2705,7 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	// line: pause bytecode recording — unless a branch-lowering hook
 	// armed fragment capture (the `if` ReturnsFn), in which case the
 	// body's events record into a fragment for structured lowering.
-	defer r.Check.Emit.bodyAnalysisGuard()()
+	defer r.Check.Recorder().bodyAnalysisGuard()()
 
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()
@@ -2730,7 +2850,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 	// bindings as VM locals and capture each round's events as a
 	// fragment — the final round's capture (the stable one) is what
 	// the caller's RecordLoop consumes via TakeFragment.
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 	loopCapture := es.ConsumeLoopArm()
 	if loopCapture {
 		for _, v := range bindVals {
@@ -2888,19 +3008,34 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 			continue
 		}
 		tv := elems[i+2]
+		var minted *Type
 		if tv.Data != nil && tv.Parent.Equal(TWord) {
 			inner, _ := AsWord(tv)
-			if v, ok := r.Defs.Top(inner.Name); ok {
-				tv = v
+			if e, ok := r.Defs.TopEntry(inner.Name); ok {
+				tv = e.Body
+				minted = e.TypeDef
 			}
 		}
-		if tv.Data != nil && !IsClassType(tv) {
+		if tv.Data != nil && !IsClassType(tv) && !(tv.IsDepScalar() && minted != nil) {
 			continue
 		}
 		// A bare type-literal clause IS its type; an ObjectType keeps
-		// its type at Parent (the minted object-type node).
+		// its type at Parent (the minted object-type node); a PREDICATE
+		// refine (DepScalar body) narrows to its MINTED lattice node
+		// (DefEntry.TypeDef — the body value's Parent is only the base
+		// family), whose depScalarUnifier admits an abstract carrier
+		// tagged with it nominally. The one membership rule makes the
+		// guard exactly the test every downstream boundary re-asks, so
+		// the then-branch may treat the name as the refined type. This
+		// legalizes validate-then-call (`if (x is Big) [g x] [0]` with
+		// x:Integer), previously a gating no_signature false positive
+		// while the program ran correctly — the named blocker for
+		// check-by-default (completion plan 2.2).
 		guardType := tv.Parent
-		if tv.Data == nil {
+		switch {
+		case tv.IsDepScalar() && minted != nil:
+			guardType = CanonicalType(r, minted)
+		case tv.Data == nil:
 			gt := tv
 			guardType = &gt
 		}
@@ -2980,6 +3115,42 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 		// binding, so no value-passing half is needed (unlike a closure capture).
 		if cur, ok := r.Defs.Top(c.Name); ok {
 			narrowed.ID = cur.ID
+			// Advisory (non-gating): the binding's STATIC type already
+			// entails the guard, so the check cannot fail — the residue the
+			// local-reasoning report calls the misleading defensive check
+			// (`if (n is Big) …` where n:Big is already in the signature).
+			// Non-concrete STRICT carriers only: a dynamic binding genuinely
+			// needs the guard (it DISCHARGES the modality); a CONCRETE
+			// binding is a per-shape analysis artifact (an `[x:Any]` param
+			// analysed for the call `f 5` binds the literal 5, whose Integer
+			// tag would flag a guard the fn's OTHER callers rely on) and its
+			// lattice tag under-approximates predicate membership anyway
+			// (value-level entailment — interval reasoning — is future
+			// work). A non-concrete strict carrier IS the declared-type
+			// record, so tag conformance is shape-independent. Dedup: fn
+			// bodies re-analyse per shape and fixpoint round.
+			if cur.Carrier && !IsConcrete(cur) && !cur.Dynamic &&
+				cur.Parent != nil && c.Type != nil &&
+				cur.Parent.ConformsTo(c.Type) {
+				detail := "guard is always true: " + c.Name + " is already " +
+					c.Type.String() + " — drop the check or make it an assertion"
+				dup := false
+				for _, d := range r.Check.Diagnostics {
+					if d.Code == "redundant_guard" && d.Detail == detail {
+						dup = true
+						break
+					}
+				}
+				if !dup {
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:   "redundant_guard",
+						Detail: detail,
+						Word:   "is",
+						Row:    condList.Pos.Row,
+						Col:    condList.Pos.Col,
+					})
+				}
+			}
 		}
 		r.Defs.Push(c.Name, narrowed)
 	}
@@ -3217,7 +3388,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 		// where the interpreter succeeds). Refuse so the program falls back to
 		// the interpreter instead. Only when active: a SUSPENDED (plain) nested
 		// analysis records nothing anyway and must not latch the program.
-		if es := r.Check.Emit; es != nil && es.active() {
+		if es := r.Check.Recorder(); es.active() {
 			es.MarkUncompilable("fn body analysis error in " + name + ": " + err.Error())
 		}
 		result = nil
@@ -3257,7 +3428,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// mis-consume it and leak that body's events into the live fn
 	// fragment). Mirrors how captureArm/loopArm are consumed at the top
 	// of their analysis functions.
-	defer r.Check.Emit.fnBodyGuard()()
+	defer r.Check.Recorder().fnBodyGuard()()
 	if len(body) == 0 {
 		return nil
 	}
@@ -3392,7 +3563,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// the in-flight bail, and its return is unconstrained. So a single clean
 	// recording is both sound and sufficient. (A non-armed nested analysis is
 	// suspended by fnBodyGuard, so active() is true only for the armed compile.)
-	armed := r.Check.Emit != nil && r.Check.Emit.active()
+	armed := r.Check.Recorder().active()
 	if r.Check.InflightBails > bailsBefore && len(result) > 0 && !armed {
 		result = refineRecursiveSummary(r, key, diagBase, result, runOnce)
 	}
@@ -3411,8 +3582,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 // this the user-fn dispatch would hit recordCallRefusal ("user fn call … Stage 3")
 // since no fn unit was compiled. Returns true when it claimed the dispatch.
 func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
-	es := r.Check.Emit
-	if es == nil || !es.active() || sig == nil || sig.fnFrame() == nil || len(outs) != 1 {
+	if !r.Check.Recorder().active() || sig == nil || sig.fnFrame() == nil || len(outs) != 1 {
 		return false
 	}
 	return isDeferredWordList(outs[0])
@@ -3492,13 +3662,13 @@ func deferredParamListResidual(body []Value, paramNames []string) (Value, bool) 
 // skips the same zeroOut events) on the CALL side. Recording-active only: the
 // zeroOut flag is set during the compile pass.
 func stripZeroOutResiduals(r *Registry, stk []Value) []Value {
-	es := r.Check.Emit
-	if es == nil || !es.active() || len(stk) == 0 {
+	es := r.Check.Recorder()
+	if !es.active() || len(stk) == 0 {
 		return stk
 	}
 	filtered := make([]Value, 0, len(stk))
 	for _, v := range stk {
-		if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
+		if es.zeroOutProduced(v.ID) {
 			continue
 		}
 		filtered = append(filtered, v)

@@ -791,14 +791,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
 	if e.registry.Check.IsActive() {
-		if es := e.registry.Check.Emit; es != nil {
-			es.reg = e.registry // back-pointer for returned-closure compilation
-			pre := input
-			input = StripToCarriers(input)
-			es.RememberStrippedOriginals(pre, input)
-		} else {
-			input = StripToCarriers(input)
-		}
+		es := e.registry.Check.Recorder()
+		es.bindRegistry(e.registry) // back-pointer for returned-closure compilation
+		pre := input
+		input = StripToCarriers(input)
+		es.RememberStrippedOriginals(pre, input)
 	}
 
 	// Post-parse referent resolution: stamp each /q-style atom in the
@@ -1075,7 +1072,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// (orphan gen errors at end-of-run, exactly where this fires)
 			// instead of refusing; if the trap can't be recorded (nested), keep
 			// the blanket-refusal flag so the program falls back.
-			if !e.registry.Check.Emit.RecordTrap("gen_without_constructor",
+			if !e.registry.Check.Recorder().RecordTrap("gen_without_constructor",
 				"gen: parameter spec was not consumed by a type constructor", "gen",
 				"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]",
 				e.currentPos()) {
@@ -1852,7 +1849,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			// instead of refusing on the downstream Undefined placeholder. Only a
 			// top-level trap is recordable; a nested /u keeps the placeholder path
 			// and refuses (falls back) as before.
-			e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
+			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
 			placeholder.Pos = val.Pos
 			placeholder.Undefined = true
@@ -1947,7 +1944,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			// instead of refusing on the downstream Undefined placeholder. Only a
 			// top-level trap is recordable; a nested /r keeps the placeholder path
 			// and refuses (falls back) as before.
-			e.registry.Check.Emit.RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
+			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
 			placeholder.Pos = val.Pos
 			placeholder.Undefined = true
@@ -3040,6 +3037,15 @@ func (e *Engine) stepLiteral() error {
 			e.tape.Remove(valIdx)
 			return nil
 		}
+		// Shaped-instance-method model (Stage M2c, method_shape.go): a DYNAMIC
+		// method-read carrier at the pointer — where the interpreter would
+		// auto-dispatch the concrete member — models that dispatch on the
+		// compile pass and records a guarded mid-stream OpCallDynMethod.
+		// Declines (leaving today's paths untouched) outside a live compile
+		// pass and for any window/match shape it cannot prove.
+		if e.registry.Check.IsActive() && e.tryShapedMethodDispatch(valIdx) {
+			return nil
+		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.tape.At(valIdx)
@@ -3220,7 +3226,7 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	// the list is an unresolvable residual and the program falls back. A
 	// fully-literal list (`[1 2 3]`) stays inert and bakes as a pooled const.
 	if e.registry.Check.IsActive() {
-		if es := e.registry.Check.Emit; es != nil && !isInertConst(out) {
+		if es := e.registry.Check.Recorder(); es.Armed() && !isInertConst(out) {
 			switch {
 			case e.isTop:
 				// Top-level (frames==1): the canonical case, evaluated once.
@@ -3268,7 +3274,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 		// the rare unlowerable shape (a hole producing 0 or >1 values) refuse and
 		// fall back. Mirrors RecordMakeMap — re-assembled per run, no const bake.
 		out := NewCarrier(TString)
-		if es := e.registry.Check.Emit; es != nil && es.active() {
+		if es := e.registry.Check.Recorder(); es.active() {
 			if !holesOK || !es.RecordInterp(parts, holes, out, val.Pos) {
 				es.MarkUncompilable("interpolated string with a runtime-computed part")
 			}
@@ -3364,7 +3370,7 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 		// refuse — the VM has no XML-interpolation op, so the program falls back
 		// to the interpreter (mirrors evalInterpString). At run time there are no
 		// carriers, so this never fires and the concrete element below is returned.
-		if es := e.registry.Check.Emit; es != nil && es.active() {
+		if es := e.registry.Check.Recorder(); es.active() {
 			es.MarkUncompilable("interpolated XML with a runtime-computed part")
 			return NewCarrier(TXml), nil
 		}
@@ -3662,8 +3668,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			// concrete fold coerces the carrier (e.g. to 0) and freezes a WRONG value
 			// (the determinism check sees the same coerced 0 twice). exprRefsCarrier
 			// catches that; a user TYPE binding (Carrier=false) still folds.
-			es := e.registry.Check.Emit
-			topFrame := es == nil || len(es.frames) == 1
+			topFrame := e.registry.Check.Recorder().topFrameOnly()
 			if e.registry.Check.IsActive() && topFrame && !e.exprRefsCarrier(items) {
 				if folded, ok := e.constFoldContainerVal(items); ok {
 					// Bake the computed value as a const EXCEPT in a `make`
@@ -3716,8 +3721,8 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// binding, fold it to its concrete result (identical to the sub-engine
 		// eval the interpreter runs) so the map bakes as a const. Same gating and
 		// mutation-safety screen as the ParenExpr branch.
-		if es := e.registry.Check.Emit; e.registry.Check.IsActive() &&
-			(es == nil || len(es.frames) == 1) && !e.exprRefsCarrier([]Value{v}) {
+		if e.registry.Check.IsActive() &&
+			e.registry.Check.Recorder().topFrameOnly() && !e.exprRefsCarrier([]Value{v}) {
 			if folded, ok := e.constFoldContainerVal([]Value{v}); ok {
 				if (!dataMap && !e.elemEvalRecordable) || !containsSharedMutable(folded) {
 					out.Set(resolvedKey, folded)
@@ -3751,7 +3756,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// binding. recordMakeListInner declines (leaving es untouched) for an
 		// unresolvable / stateful / type-pattern element, so the map then falls back.
 		if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
-			if es := e.registry.Check.Emit; es != nil {
+			if es := e.registry.Check.Recorder(); es.Armed() {
 				if lv, _ := out.Get(resolvedKey); lv.Parent.Equal(TList) && !isInertConst(lv) {
 					if lp, isList := lv.Data.(ListPayload); isList {
 						es.recordMakeListInner(e.registry, lp.Elems, lv, lv.Pos)
@@ -3788,7 +3793,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 	// Gated on `consumed`: a DEFERRED residual (end-of-run autoEvalStack) is
 	// evaluated after its frame pops, so recording it in-frame would diverge.
 	if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
-		if es := e.registry.Check.Emit; es != nil && !isInertConst(res) {
+		if es := e.registry.Check.Recorder(); es.Armed() && !isInertConst(res) {
 			keys := out.Keys()
 			vals := make([]Value, len(keys))
 			for i, k := range keys {
@@ -4390,7 +4395,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// sub-registry branch handles them) and macros.
 	checkFnValue := e.registry != nil && e.registry.Check.Mode && !fnDef.Anonymous && !fnDef.Macro &&
 		(fnDef.Registry == nil || fnDef.Registry == e.registry) &&
-		e.registry.Check.Emit != nil && e.registry.Check.Emit.active()
+		e.registry.Check.Recorder().active()
 	ownSigs := fnDef.OwnSigs()
 	for i := range ownSigs {
 		sig := &ownSigs[i]
@@ -4713,13 +4718,28 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 // (§5a), so a module fn and a parent fn of the same name cannot alias. See
 // design/module-fn-checkstate-ownership.1.md §5b.
 func (e *Engine) shareCheckState(capturedReg *Registry) func() {
-	if capturedReg == nil || e.registry == nil ||
-		capturedReg == e.registry || !e.registry.Check.IsActive() {
+	return shareCheckStateFrom(capturedReg, e.registry)
+}
+
+// shareCheckStateFrom is the registry-level mechanism behind shareCheckState:
+// it points owner's Check at caller's for the duration (restore via the
+// returned func), no-op when the registries coincide, either is nil, or the
+// caller is not in check mode. Split out so the MERGED-WORD seam can share at
+// the ReturnsFn boundary itself (buildFnBodyReturnsFn — Stage M1,
+// design/STAGE3-INLINING-DESIGN-ROUND.0.md §5): a transplanted word-extension
+// sig dispatches as a BARE word on the importer's engine, where no
+// execFnDefLiteral wrapper exists to share around the call, and the sig's
+// owning registry is known only to the ReturnsFn closure (the transplant
+// clone's FnDefInfo.Registry is deliberately nil — see TransplantExtension).
+// Idempotent under nesting: when an enclosing dispatch already shared, the
+// swap is pointer-equal and the restore puts back the same shared state.
+func shareCheckStateFrom(owner, caller *Registry) func() {
+	if owner == nil || caller == nil || owner == caller || !caller.Check.IsActive() {
 		return func() {}
 	}
-	saved := capturedReg.Check
-	capturedReg.Check = e.registry.Check
-	return func() { capturedReg.Check = saved }
+	saved := owner.Check
+	owner.Check = caller.Check
+	return func() { owner.Check = saved }
 }
 
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
@@ -5676,7 +5696,7 @@ func (e *Engine) stepCloseParen() error {
 	// argument — `((m.g 3) add 1)` compiled m.g(3 add 1)=8 instead of
 	// (m.g 3) add 1=7. The interpreter dispatches the concrete fn AT the paren,
 	// so refuse here and let the faithful interpreter fallback run it.
-	if es := e.registry.Check.Emit; es != nil && es.active() {
+	if es := e.registry.Check.Recorder(); es.active() {
 		first, count, lastIdx := -1, 0, -1
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if isRecordableLiteral(e.tape.At(i)) {
@@ -6657,7 +6677,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 		return false, nil
 	}
 	spec := SubstituteSelf(undef.Sigs[0], sinfo.Type)
-	e.registry.Check.Emit.MarkUncompilable("surface-shape typed dispatch at " + w.Name)
+	e.registry.Check.Recorder().MarkUncompilable("surface-shape typed dispatch at " + w.Name)
 	synth := &Signature{Params: spec.Params, Returns: spec.Returns}
 	normalizeSig(synth)
 
@@ -6810,15 +6830,33 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			bestHasFn = hasFn
 		}
 	}
-	// Fallback pass: if no compatible sig was found at all, prefer
-	// a sig with a ReturnsFn over one without (all else equal).
+	// Fallback pass: if no compatible sig was found at all, prefer a
+	// sig with a ReturnsFn over one without (all else equal), at a
+	// SATISFIABLE arity. The fallback (first-ranked candidate) may be
+	// a wider overload than this call site can even supply positions
+	// for — specificity ranking puts the 3-arg patrun `add` above the
+	// 2-arg math adds — and a fallback that merely CARRIES a ReturnsFn
+	// must not win on that alone: assuming the wider sig swallows an
+	// unrelated operand into the recovery window (corrupting the
+	// disjunct rescue for `add` over two disjuncts) or feeds its
+	// ReturnsFn a short args slice (an index-out-of-range panic
+	// class). So when the current best is Fn-less OR arity-
+	// unsatisfiable, move to the first ReturnsFn-bearing sig whose
+	// full window EXISTS; if none does, the fallback stands (its
+	// ReturnsFn sees the short window — ReturnsFns are len-guarded).
 	if bestMatch < 0 {
-		for i := range fn.Signatures {
-			s := &fn.Signatures[i]
-			if s.Fallback {
-				continue
-			}
-			if s.ReturnsFn != nil && !bestHasFn {
+		fbn := best.TotalArgs()
+		bestSat := len(e.checkModeFallbackPositions(fbn)) == fbn
+		if !bestHasFn || !bestSat {
+			for i := range fn.Signatures {
+				s := &fn.Signatures[i]
+				if s.Fallback || s.ReturnsFn == nil {
+					continue
+				}
+				n := s.TotalArgs()
+				if len(e.checkModeFallbackPositions(n)) != n {
+					continue
+				}
 				best = s
 				break
 			}
@@ -6882,7 +6920,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
-		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		e.spliceCheckResults(positions, out)
 		return nil
 	}
@@ -6897,7 +6935,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// are computed with recording suspended so the program records ONLY the poly
 	// call, never a duplicate CALL_NATIVE for the same dispatch. Concrete (non-
 	// Any) operands that reach here are a genuine type error and still refuse.
-	es := e.registry.Check.Emit
+	es := e.registry.Check.Recorder()
 	if es.active() && (anyAnyCarrier(args) || anyDisjunctCarrier(args)) {
 		resume := es.Suspend()
 		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
@@ -6962,8 +7000,17 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// transient String-carrier alternative. Skip the latch (and its diagnostic)
 	// under suspend; still splice the analysis result so the enclosing probe
 	// reads a residual.
-	if es == nil || es.suspended == 0 {
-		e.registry.Check.Emit.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+	if !es.suspendedNow() {
+		// A STATICALLY-DEFINITE unmatched dispatch — every value the failed
+		// match examined is identical at run time — compiles to a terminal
+		// OpTrap raising the interpreter's byte-identical error instead of
+		// refusing the whole program (the error-row doctrine: a spec ERROR row
+		// yields a Program that raises the same taxonomy at the same point).
+		// Ineligible shapes (a carrier operand whose runtime tag could match, a
+		// nested frame/unit, a plain check pass) keep the blanket refusal.
+		if !e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
+			e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		}
 	}
 	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile pass
 	// (!Compiling), where it is the genuine static report of an unmatched dispatch.
@@ -7038,6 +7085,342 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	e.registry.Check.SuppressBodyErrors--
 	e.spliceCheckResults(positions, results)
 	return nil
+}
+
+// tryRecordUnmatchedDispatchTrap compiles a STATICALLY-DEFINITE unmatched
+// dispatch to a terminal OpTrap raising the interpreter's byte-identical
+// error, so a spec ERROR row still yields a Program instead of falling back.
+// Reached from checkModeAssumeSig's no-carrier fall-through, i.e. after
+// matchSignature failed every candidate AND the disjunct-partition / Any-
+// carrier poly recoveries declined.
+//
+// Definiteness is the soundness condition: the run-time dispatch must fail at
+// this same point with the same error on EVERY run. That holds exactly when
+// every value any candidate signature could examine is identical at run time —
+// a concrete const, a bare type literal, or a raw word token (matchSignature
+// is deterministic over identical inputs, and the check pass mirrors the
+// interpreter's tape step-for-step over concrete values). It does NOT hold
+// for:
+//   - a CARRIER operand — UNLESS the carrier-disjointness extension proves
+//     the failure anyway (Phase 6 M4, design/STAGE3-INLINING-DESIGN-ROUND.0.md
+//     §6 Stage M4). The base hazard: a carrier's static tag is a declared
+//     type, but the runtime value may carry a refined subtype tag (a fn
+//     declared [Integer] can return a Pos-reparented value) or satisfy a
+//     value-sensitive predicate param — the runtime match can succeed where
+//     the static one failed. The extension re-admits exactly the shapes where
+//     that cannot happen: for EVERY non-fallback overload, every carrier in
+//     the overload's own candidate window is provably disjoint from EVERY
+//     slot type of that overload (sigDefinitelyUnmatched) — the runtime
+//     value's tag conforms to the carrier's static tag, so a Never meet with
+//     no value-level membership admits no runtime refinement either (the
+//     same proof checkBodyReturnConformance rides, residualProvablyDisjoint).
+//     An overload whose window holds no carrier saw only runtime-identical
+//     values, so its static failure replays verbatim; one whose window
+//     cannot even fill (arity shortfall over the same tape) fails
+//     deterministically too;
+//   - a DYNAMIC operand (no static type at all);
+//   - an UNDEFINED-word placeholder (the interpreter raises undefined_word,
+//     a different taxonomy — and the pass already carries an error diagnostic
+//     that refuses the program before Finalize);
+//   - a 0-arg real (non-fallback) signature on the word: matchSignature's
+//     fallback scan and the synthetic-fallback courtesy dispatch can run it
+//     at run time instead of raising.
+//
+// The trap error mirrors the interpreter's raise at this point exactly: the
+// void-argument-group override (def_error / no_value_error — voidArgErrorFor,
+// whose void-group records the check pass populates identically) when a paren
+// arg produced no value, else the plain "no matching signature" signature
+// mismatch. Hints ride along verbatim where the interpreter's are static;
+// sigError's stack-snapshot hint is advisory DX text, not part of the error
+// taxonomy (code + detail + position) the differential gates.
+//
+// RecordTrap's own guard keeps this top-level-only (frames and units both at
+// depth 1): a trap inside a branch arm or fn unit is conditional and stays a
+// refusal. Returns true when the trap now owns the program's tail; false
+// leaves the caller's MarkUncompilable refusal to stand.
+func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos SrcPos) bool {
+	es := e.registry.Check.Recorder()
+	if !es.active() || !e.registry.Check.Compiling {
+		return false
+	}
+	maxN := 0
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.Fallback {
+			continue
+		}
+		n := s.TotalArgs()
+		if n == 0 {
+			return false // courtesy-dispatchable at run time — not a definite failure
+		}
+		if n > maxN {
+			maxN = n
+		}
+	}
+	window := e.checkModeFallbackPositions(maxN)
+	// The forward walk can collect positions INSIDE a not-yet-evaluated paren
+	// group (checkModeFallbackPositions depth-tracks rather than stopping at
+	// an open paren). The interpreter pre-evaluates the paren before its
+	// match runs, so in-paren tokens are NOT the values the runtime match
+	// examines — never definite. (`add 100 (for 4 [add i 1])`: the static
+	// window holds the raw `for` word where the runtime sees the loop's
+	// value; latent under the pre-M4 screens only because such programs
+	// still refused at Finalize's residual seating, which the trap
+	// truncation now legitimately skips.)
+	for i := e.pointer + 1; i < e.tape.Len(); i++ {
+		inWindow := false
+		for _, p := range window {
+			if p >= i {
+				inWindow = true
+				break
+			}
+		}
+		if !inWindow {
+			break
+		}
+		if IsOpenParen(e.tape.At(i)) {
+			return false
+		}
+	}
+	carriers := false
+	for _, p := range window {
+		v := e.tape.At(p)
+		if IsWord(v) {
+			if wi, werr := AsWord(v); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok {
+					v = top // the binding is what matchSignature examined
+				}
+			}
+		}
+		if v.Dynamic || v.Undefined {
+			return false
+		}
+		// A deferred-expression token (a reach path, an unexpanded paren
+		// expr, a template string, a word splice) EXPANDS at dispatch/step
+		// time, and its expansion can read state the check pass models only
+		// abstractly — a reach over a mutated flex cell resolved at run time
+		// where the static match saw the raw Reach token (flex.tsv L88/L95).
+		// Its presence makes the failure non-definite; decline.
+		if IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) {
+			return false
+		}
+		if v.Carrier {
+			carriers = true // judged per-overload below (Phase 6 M4)
+		}
+	}
+	if carriers {
+		// Carrier-disjointness extension (Phase 6 M4): a strict carrier in
+		// the window is admissible only when EVERY non-fallback overload
+		// still fails DEFINITELY — see sigDefinitelyUnmatched for the
+		// per-overload proof obligations.
+		for i := range fn.Signatures {
+			s := &fn.Signatures[i]
+			if s.Fallback {
+				continue
+			}
+			if !e.sigDefinitelyUnmatched(s, window) {
+				return false
+			}
+		}
+	}
+	if verr := e.voidArgErrorFor(w.Name, pos); verr != nil {
+		return es.RecordTrap(verr.Code, verr.Detail, w.Name, verr.Hint, pos)
+	}
+	return es.RecordTrap("signature_error", "no matching signature for "+w.Name, w.Name, "", pos)
+}
+
+// sigDefinitelyUnmatched reports whether overload s of an already
+// statically-failed dispatch PROVABLY fails at run time too (the Phase 6 M4
+// carrier-disjointness extension; reached only from
+// tryRecordUnmatchedDispatchTrap after the shared window screens passed —
+// no dynamics, no deferred-expression tokens, no undefined placeholders
+// anywhere a candidate could look, and window(k) ⊆ window(maxN) for every
+// overload arity k, so the shared screens cover every value any overload can
+// examine). The proof is per-overload,
+// the assignment-FEASIBILITY argument: the runtime match, whatever
+// forward/stack split it takes (the split may shift when a carrier's runtime
+// value changes which type tests pass, so no single pairing may be assumed),
+// fills s's n slots with n DISTINCT values drawn from the shared window —
+// the window is the complete candidate pool (the stack side reaches at most
+// arity-many nearest values and the forward side stops at boundaries the
+// window walk also honours, both ⊆ window(maxN)). Model "slot j could accept
+// candidate i" as a bipartite edge (the NEGATION of definiteSlotFail, which
+// answers true only for PROVABLY-failing pairs); if no perfect matching over
+// the slots exists, s can never complete at run time. This subsumes the
+// arity shortfall (fewer candidates than slots), the zero-edge slot (every
+// candidate definitely fails some slot), and the counting cases (two Point
+// slots but only one Point-compatible candidate — open-words:100).
+//
+// Per-pair definiteness: a concrete value / resolved binding / raw token
+// fails j deterministically when the matcher's own per-value test rejects it
+// (definiteSlotFail mirrors the scan's branch chain over runtime-identical
+// inputs); a strict carrier fails j when it is provably disjoint from j's
+// slot type — the runtime value's tag conforms to the carrier's static tag,
+// so a Never meet with no value-level membership admits no runtime
+// refinement either (the residualProvablyDisjoint proof, extended for the
+// matcher's structural carves in carrierSlotProvablyDisjoint).
+func (e *Engine) sigDefinitelyUnmatched(s *Signature, window []int) bool {
+	n := s.TotalArgs()
+	// Edge matrix: canTake[j][i] — slot j could accept window candidate i.
+	canTake := make([][]bool, n)
+	for j := 0; j < n; j++ {
+		canTake[j] = make([]bool, len(window))
+		for i, p := range window {
+			canTake[j][i] = !e.definiteSlotFail(s, j, e.tape.At(p))
+		}
+	}
+	// Augmenting-path maximum bipartite matching, slots → candidates (n and
+	// the window are dispatch-arity-sized, so the quadratic walk is trivial).
+	matchedSlot := make([]int, len(window))
+	for i := range matchedSlot {
+		matchedSlot[i] = -1
+	}
+	var assign func(j int, seen []bool) bool
+	assign = func(j int, seen []bool) bool {
+		for i := range window {
+			if !canTake[j][i] || seen[i] {
+				continue
+			}
+			seen[i] = true
+			if matchedSlot[i] == -1 || assign(matchedSlot[i], seen) {
+				matchedSlot[i] = j
+				return true
+			}
+		}
+		return false
+	}
+	for j := 0; j < n; j++ {
+		if !assign(j, make([]bool, len(window))) {
+			return true // slot j cannot be filled by any candidate — definite failure
+		}
+	}
+	return false
+}
+
+// definiteSlotFail reports whether candidate value v PROVABLY fails slot j of
+// signature s on every run. Mirrors matchSignature's per-value admission
+// branches over runtime-identical inputs and uses the carrier-disjointness
+// proof for strict carriers; anything it cannot mirror exactly answers false
+// (the sound direction — the trap then declines).
+func (e *Engine) definiteSlotFail(s *Signature, j int, v Value) bool {
+	t := sigArgType(s, j)
+	if t == nil || t.Equal(TAny) {
+		return false // an Any slot admits everything
+	}
+	// Slot kinds whose admission is not the plain per-value type test.
+	if (s.QuoteArgs != nil && s.QuoteArgs[j]) || (s.FormArgs != nil && s.FormArgs[j]) {
+		return false
+	}
+	typeSlot := s.TypeArgs != nil && s.TypeArgs[j]
+	if IsWord(v) {
+		wi, werr := AsWord(v)
+		if werr != nil {
+			return false
+		}
+		// The scan's word-resolution chain, in its order; every branch is
+		// deterministic over the same registry state at this dispatch point.
+		if top, ok := e.registry.Defs.Top(wi.Name); ok {
+			return e.definiteSlotFail(s, j, top)
+		}
+		if tv, ok := e.registry.TopTypeBody(wi.Name); ok {
+			return !sigArgMatches(s, j, tv)
+		}
+		if e.registry.Lookup(wi.Name) != nil {
+			return true // a function word is a scan BOUNDARY — it never fills a slot
+		}
+		if wi.Name == "true" || wi.Name == "false" {
+			return !sigArgMatches(s, j, Value{Parent: TBoolean})
+		}
+		if tn, isType := typeNames[wi.Name]; isType {
+			return !sigArgMatches(s, j, NewTypeLiteral(tn))
+		}
+		if tn, isType := ResolveTypePath(wi.Name); isType {
+			return !sigArgMatches(s, j, NewTypeLiteral(tn))
+		}
+		// Undefined word: the scan resolves it to an Atom.
+		return !sigArgMatches(s, j, Value{Parent: TAtom})
+	}
+	if v.Carrier {
+		if v.Dynamic || typeSlot {
+			// Dynamics are screened upstream (belt here); a TypeArgs slot's
+			// admission (sigTypeMatchesAsType over a possible runtime type
+			// node) is not a tag test — decline.
+			return false
+		}
+		// A carrier whose runtime value could itself be a raw Word re-enters
+		// the word-resolution branches above; require Word-disjointness
+		// alongside the slot proof.
+		return carrierSlotProvablyDisjoint(v, t) && carrierSlotProvablyDisjoint(v, TWord)
+	}
+	// A runtime-identical value (concrete const, bare type literal): the
+	// matcher's own per-position test, replayed.
+	return !sigArgMatches(s, j, v)
+}
+
+// carrierSlotProvablyDisjoint reports whether a strict carrier can NEVER
+// satisfy a signature slot of type t at run time: no runtime value whose tag
+// conforms to the carrier's static tag passes sigTypeMatches against t. The
+// core is residualProvablyDisjoint's proof (no conformance either direction,
+// no value-level membership, Never tand meet), extended with declines for
+// sigTypeMatches' structural carves — an Options slot admits any concrete
+// map, and a Map/Node-family slot admits Options/Record-tagged values — so
+// the disjointness claim matches the runtime matcher, not just the nominal
+// lattice. A disjunct carrier is disjoint only if every alternative is.
+func carrierSlotProvablyDisjoint(v Value, t *Type) bool {
+	if t == nil || !v.Carrier || v.Dynamic {
+		return false
+	}
+	if IsDisjunct(v) {
+		di, err := AsDisjunct(v)
+		if err != nil || len(di.Alternatives) == 0 {
+			return false // opaque union — nothing provable
+		}
+		for _, alt := range di.Alternatives {
+			probe := alt
+			if IsBareTypeNode(alt) {
+				probe = carrierOfLiteral(alt)
+			}
+			probe.Carrier = true
+			if !carrierSlotProvablyDisjoint(probe, t) {
+				return false
+			}
+		}
+		return true
+	}
+	p := v.Parent
+	if p == nil || p.ConformsTo(t) || t.ConformsTo(p) {
+		return false
+	}
+	// A Function/FnDef-tagged carrier sits on the fn-value modelling
+	// frontier (routinely "not modeled", per residualProvablyDisjoint) and
+	// an opaque Disjunct tag denotes "one of several types" — decline both.
+	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) || p.ConformsTo(TFnDef) {
+		return false
+	}
+	// A container-family carrier can stand for a SPLICED runtime sequence,
+	// not a single value: a check-mode `for` records its value-body residue
+	// as ONE typed-list carrier where the runtime leaves the loose
+	// per-iteration values (`add 100 (for 4 [add i 1])` — the
+	// combination-parity counterexample: the Integers match Number slots the
+	// list "tag" is disjoint from). The tag-conformance premise does not
+	// hold for such stand-ins, so nothing is provable — decline.
+	if p.ConformsTo(TList) || p.ConformsTo(TMap) {
+		return false
+	}
+	// Value-level membership (predicate / disjunct / negation / member /
+	// DepScalar slots) admits by value, not tag — nothing nominal is provable.
+	if membershipBeyondNominal(t) || NewCarrier(p).Is(t) {
+		return false
+	}
+	// sigTypeMatches' structural carves: an Options slot accepts any concrete
+	// map value; a slot at-or-above Map accepts Options/Record-tagged values.
+	if t.Equal(TOptions) && !isNeverShape(TandValues(NewCarrier(p), NewCarrier(TMap))) {
+		return false
+	}
+	if TMap.ConformsTo(t) && (p.ConformsTo(TOptions) || p.ConformsTo(TRecord)) {
+		return false
+	}
+	return isNeverShape(TandValues(NewCarrier(p), NewCarrier(t)))
 }
 
 // argTypeSummary renders the operand types of a failed dispatch for the

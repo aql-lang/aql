@@ -83,7 +83,8 @@ func init() {
 			Name: "help",
 
 			Signatures: []Signature{
-				{Args: []*Type{}, Impl: Go(helpOverviewHandler), BarrierPos: -1},
+				// Prints the overview to r.Output; produces no value.
+				{Args: []*Type{}, Impl: Go(helpOverviewHandler), Returns: []*Type{}, BarrierPos: -1},
 			},
 		},
 
@@ -92,15 +93,16 @@ func init() {
 			Name: "describe",
 
 			Signatures: []Signature{
-				{Args: []*Type{TString}, Impl: Go(describeWordHandler), BarrierPos: -1},
-				{Args: []*Type{TAtom}, Impl: Go(describeWordHandler), BarrierPos: -1},
+				// Prints the documentation to r.Output; produces no value.
+				{Args: []*Type{TString}, Impl: Go(describeWordHandler), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TAtom}, Impl: Go(describeWordHandler), Returns: []*Type{}, BarrierPos: -1},
 				{
 					Args:      []*Type{TAtom},
 					QuoteArgs: map[int]bool{0: true},
 					Impl:      Go(describeWordHandler),
 					Returns:   []*Type{}, BarrierPos: -1,
 				},
-				{Args: []*Type{}, Impl: Go(describeSelfHandler), BarrierPos: -1},
+				{Args: []*Type{}, Impl: Go(describeSelfHandler), Returns: []*Type{}, BarrierPos: -1},
 			},
 		},
 

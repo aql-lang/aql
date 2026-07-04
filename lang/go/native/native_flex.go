@@ -88,12 +88,31 @@ var flexNatives = []NativeFunc{
 // its `Flex*` sig and failed no_signature (flex.tsv). An unknown node shape
 // (a dynamic Any / bare Node receiver) stays a DYNAMIC Node so a Flex* slot
 // still matches optimistically rather than failing on a strict supertype.
-func flexReturns(args []Value, _ *Registry) []Value {
+//
+// In PLAIN check mode a concrete map source additionally mints the
+// container's abstract StoreShapeInfo (design/checker-precision-fronts.0.md
+// §2 stage 1 — `flex` is a store-creating word: one shape per creation
+// site), so downstream `set`/`get`/`dot` over the result read/write ITS
+// key types instead of degrading to dynamic(Any). A flex-of-flex source
+// CLONES the source's shape (runtime FlexDeepCopy disconnects aliasing).
+// Compile passes keep the legacy bare carriers (byte-identical lowering).
+func flexReturns(args []Value, r *Registry) []Value {
 	if len(args) != 1 || args[0].Parent == nil {
 		return []Value{NewDynamicCarrier(TNode)}
 	}
+	shapes := r != nil && r.Check.IsActive() && !r.Check.Compiling
 	switch p := args[0].Parent; {
 	case p.ConformsTo(TMap):
+		if shapes {
+			if ss, ok := eng.StoreShapeOf(args[0]); ok {
+				v := NewCarrier(TFlexMap)
+				v.Data = ss.CloneShape()
+				return []Value{v}
+			}
+			if v, ok := eng.MintFlexShapeCarrier(args[0], 0); ok {
+				return []Value{v}
+			}
+		}
 		return []Value{NewCarrier(TFlexMap)}
 	case p.ConformsTo(TList):
 		return []Value{NewCarrier(TFlexList)}

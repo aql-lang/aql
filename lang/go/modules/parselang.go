@@ -91,6 +91,39 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("kinds", wrapMiniFnDef("parselang-kinds", [][]native.FnParam{{}},
 		[]*native.Type{native.TList}, nil, subReg))
 
+	// ---- out-of-band: deferred dispatch (compile-pass seam, NOT exported) ----
+	// parselang-deferred-dispatch is the RUNTIME twin of the `parse` macro's
+	// deferred-kind branch (Phase 6 M3, design/STAGE3-INLINING-DESIGN-ROUND.0.md
+	// §6 Stage M3). An aql:parse kind (`Parse.register op g`) is installed only
+	// at RUN time — the grammar is built by Parse builder words whose result is
+	// not concrete under analysis — so the check pass cannot expand
+	// `parse op 'src'` to the `ParseLang.parse_op` wrapper call it expands to
+	// at run time. Instead the compile pass records ONE call to this word
+	// (kind, source, opts), and at run time it resolves `parse_<kind>` against
+	// the LIVE export map (which the compiled Parse.register call has by then
+	// populated) and dispatches the registered parser through the same
+	// callParseFn invoke the grammar's own callbacks use. A kind that is STILL
+	// missing at run time (a runtime-conditional registration that did not
+	// execute) raises the byte-identical parse_unknown_lang the `parse` macro
+	// raises — the lookup is the dynamic proof, never a baked guess. The word
+	// is NOT exported: the surface stays `parse <kind>`, and the check-only
+	// deferred-kind table (native.MarkParseKindDeferred) is the only producer
+	// of recorded calls. No check-pass state is installed into the export map
+	// (the reverted register-ReturnsFn leak, aql-bytecode-stage3-inlining-plan
+	// §"register-ReturnsFn attempt", stays closed).
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "parselang-deferred-dispatch",
+		Signatures: []native.Signature{{
+			Args:       []*native.Type{native.TAtom, native.TAny, native.TMap},
+			Returns:    []*native.Type{native.TAny},
+			BarrierPos: -1,
+			Impl:       native.Go(parseDeferredDispatchHandler(exports, subReg)),
+		}},
+	})
+	if fn := subReg.Lookup("parselang-deferred-dispatch"); fn != nil && len(fn.Signatures) == 1 {
+		native.InstallParseDeferredDispatch(parent, &fn.Signatures[0])
+	}
+
 	// ---- out-of-band: source ------------------------------------------
 	// ParseLang.source <source> resolves a String or {src:…} Source map to
 	// a String (so AQL parsers can opt into the same normalisation host
@@ -163,6 +196,14 @@ type ParseLangSpec struct {
 	// Handler implements the parser. Required. Receives the resolved source
 	// String and the opts Map.
 	Handler native.Handler
+	// Pure declares the handler a PURE function of (source, opts): no
+	// registry mutation, no I/O, deterministic output. A pure parser's
+	// result over a fully-concrete source + opts is folded at CHECK time
+	// (pureParseFoldReturns), so a literal-source `parse <kind> '<text>'`
+	// types as its actual parse result instead of dynamic(Any). Only the
+	// built-in kinds set this — host parsers are unknown code and stay
+	// unfolded unless the host opts in.
+	Pure bool
 }
 
 // capParseLangHost is the registry capability slot holding host-registered
@@ -304,18 +345,95 @@ func installHostParser(exports *native.OrderedMap, subReg *native.Registry, spec
 		return handler(resolved, named, stack, r)
 	}
 	inner := "parselang-host-" + spec.Name
+	sig := native.Signature{
+		Args:       []*native.Type{native.TAny, native.TMap},
+		Returns:    spec.Returns,
+		BarrierPos: -1,
+		Impl:       native.Go(shell),
+	}
+	if spec.Pure {
+		sig.ReturnsFn = pureParseFoldReturns(spec.Returns, shell)
+	}
 	subReg.RegisterNativeFunc(native.NativeFunc{
-		Name: inner,
-		Signatures: []native.Signature{{
-			Args:       []*native.Type{native.TAny, native.TMap},
-			Returns:    spec.Returns,
-			BarrierPos: -1,
-			Impl:       native.Go(shell),
-		}},
+		Name:       inner,
+		Signatures: []native.Signature{sig},
 	})
 	params := []native.FnParam{{Type: native.TAny}, {Type: native.TMap}}
 	exports.Set(key, wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg))
 	return nil
+}
+
+// pureParseFoldReturns is the check-mode ReturnsFn for a PURE parser kind:
+// when the source and opts operands are fully concrete data, it runs the
+// real handler (a pure function of its inputs) and surfaces the CONCRETE
+// parse result, so a literal-source `parse json '{"a":1}'` types field
+// reads precisely instead of ending dynamic(Any). Anything non-concrete —
+// a computed source, a carrier-bearing opts map — falls back to the
+// declared-Returns dynamic carriers, exactly what declaredReturnCarriers
+// would have produced (declared Any rides dynamic). A handler ERROR also
+// falls back, silently: the raise is the runtime's job (and may be caught
+// by an enclosing `do`), so the check pass must not flag it here.
+func pureParseFoldReturns(returns []*native.Type, handler native.Handler) native.ReturnsFunc {
+	return func(args []native.Value, r *native.Registry) []native.Value {
+		fallback := make([]native.Value, len(returns))
+		for i, t := range returns {
+			c := native.NewCarrier(t)
+			if t.Equal(native.TAny) {
+				c.Dynamic = true
+			}
+			fallback[i] = c
+		}
+		if len(args) != 2 || !parseFoldableValue(args[0]) || !parseFoldableValue(args[1]) {
+			return fallback
+		}
+		out, err := handler(args, nil, nil, r)
+		if err != nil || len(out) != len(returns) {
+			return fallback
+		}
+		return out
+	}
+}
+
+// parseFoldableValue reports v is fully-concrete INERT DATA — a concrete
+// scalar (String/Number/Boolean/Atom family, or none), or a concrete
+// list/map whose members are recursively so. Only such a value may be fed
+// to a pure parse handler at check time: a carrier or dynamic anywhere
+// inside (e.g. a computed opts field that defaults during the fold but is
+// real at run time) could make the folded result diverge from the runtime
+// call, which would be an unsound commitment. Identity-bearing payloads
+// (stores, class instances, fn values, timers) are NOT inert — their
+// check-time state is not their runtime state — so they refuse the fold.
+func parseFoldableValue(v native.Value) bool {
+	if v.Carrier || v.Dynamic || v.Undefined || !native.IsConcrete(v) {
+		return false
+	}
+	switch {
+	case v.Parent.ConformsTo(native.TList):
+		l, err := native.AsList(v)
+		if err != nil || l.IsNil() {
+			return false
+		}
+		for i := 0; i < l.Len(); i++ {
+			if !parseFoldableValue(l.Get(i)) {
+				return false
+			}
+		}
+		return true
+	case v.Parent.ConformsTo(native.TMap):
+		m, err := native.AsMap(v)
+		if err != nil || m == nil {
+			return false
+		}
+		for _, k := range m.Keys() {
+			e, _ := m.Get(k)
+			if !parseFoldableValue(e) {
+				return false
+			}
+		}
+		return true
+	default:
+		return v.Parent.ConformsTo(native.TScalar) || v.Parent.Equal(native.TNone)
+	}
 }
 
 // resolveParseSource normalises a `parse` source argument to its String
@@ -458,6 +576,48 @@ func parseRegisterReturns(exports *native.OrderedMap, idents map[string]register
 	}
 }
 
+// parseDeferredDispatchHandler builds the runtime resolver behind the
+// compiled `parse <kind>` deferred dispatch (see the registration comment in
+// BuildParseLangModule). args are [kind:Atom source:Any opts:Map]. The
+// resolution mirrors the `parse` macro's own runtime behaviour exactly: a
+// registered kind REPLAYS the macro's expansion tail — the resolved parser
+// value followed by `source opts end`, stepped in a sub-engine over the
+// calling registry, which is the token sequence the interpreter itself
+// re-steps after `ParseLang dot parse_<kind>` resolves — and a missing kind
+// raises the parse macro's byte-identical parse_unknown_lang (code, detail,
+// hint). The export-map read at run time IS the dynamic registration proof:
+// a runtime-conditional Parse.register that did not execute leaves the kind
+// missing here exactly as it does for the interpreter's expansion.
+func parseDeferredDispatchHandler(exports *native.OrderedMap, _ *native.Registry) native.Handler {
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+		kind, err := args[0].AsConcreteAtom()
+		if err != nil {
+			return nil, r.AqlErrorHint("parse_error",
+				"parse: the kind must be a literal name", "parse",
+				"write the kind as a bare word: parse calc 'x + y'")
+		}
+		v, ok := exports.Get("parse_" + kind)
+		if !ok {
+			return nil, r.AqlErrorHint("parse_unknown_lang",
+				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
+				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`)
+		}
+		sub := native.NewTop(r)
+		res, err := sub.Run([]native.Value{v, args[1], args[2], native.NewEnd()})
+		if err != nil {
+			return nil, err
+		}
+		if len(res) != 1 {
+			// Defensive: every Parse.register kind declares Returns [Any] and
+			// its handler yields exactly one value; a drifted registration must
+			// fail loudly rather than corrupt the operand stack.
+			return nil, r.AqlError("internal_error",
+				fmt.Sprintf("parse %s: expected one result, got %d", kind, len(res)), "parse")
+		}
+		return res, nil
+	}
+}
+
 // tabnasParserSpecs returns the parser kinds backed by the tabnas parser
 // family, built from the shared native.TabnasKinds() core (which read also
 // consumes — see lang/go/native/tabnas.go). Every kind ships built-in —
@@ -474,6 +634,10 @@ func tabnasParserSpecs() []ParseLangSpec {
 			Name:    k.Name,
 			Returns: []*native.Type{k.Returns},
 			Handler: tabnasParseHandler(k.Name, k.Parse, k.Convert),
+			// The tabnas decoders are pure functions of (source, opts) —
+			// no registry state, no I/O — so a literal source folds at
+			// check time.
+			Pure: true,
 		}
 	}
 	return specs
@@ -502,6 +666,9 @@ func aontuParserSpec() ParseLangSpec {
 	return ParseLangSpec{
 		Name:    "aontu",
 		Returns: []*native.Type{native.TAny},
+		// AontuParse is a pure decode + unification over the source text —
+		// same fold contract as the tabnas family.
+		Pure: true,
 		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 			src, err := args[0].AsConcreteString() // resolved by the framework
 			if err != nil {

@@ -385,12 +385,16 @@ type CheckState struct {
 	// before being cached (design/checker-accuracy-review.10.md A2).
 	InflightBails int
 
-	// Emit, when non-nil, turns the check pass into the bytecode
-	// recording pass (Stage 1 of design/aql-bytecode-plan.0.md): every
-	// dispatch through carrierResults records a classified call event
-	// and EmitState.Finalize linearises the trace into a Program. Set
-	// by the compile entry points after Begin; nil for plain checks.
-	Emit *EmitState
+	// Emit is the bytecode recorder seam (EmitRecorder). A real
+	// *EmitState — installed by the compile entry points after Begin —
+	// turns the check pass into the bytecode recording pass (Stage 1 of
+	// design/aql-bytecode-plan.0.md): every dispatch through
+	// carrierResults records a classified call event and Finalize
+	// linearises the trace into a Program. A plain check runs against
+	// the inactive no-op recorder (Begin installs it). READ through
+	// CheckState.Recorder(), which substitutes the no-op for a nil
+	// field; write only from the pass entry points / probe forks.
+	Emit EmitRecorder
 
 	// Strict enables the STRICT-MODE advisory surface (`aql check
 	// --strict`): every committed dispatch over a dynamic operand emits a
@@ -475,9 +479,55 @@ type CheckState struct {
 	// on repeated writes. Used by get's ReturnsFn so subsequent
 	// reads can produce a typed carrier rather than falling back to
 	// Any. Shared across the entire check run — not keyed by store
-	// identity — to keep the model simple for the common
-	// "one context store" usage pattern.
+	// identity. It remains the COMPATIBILITY FALLBACK for any store
+	// the shape minting misses (design/checker-precision-fronts.0.md
+	// §2 stage 3 retires it only when every reader is store-shaped);
+	// store-identity-keyed typing lives on StoreShapeInfo carriers
+	// (store_shape.go).
 	ContextTypes map[string]Value
+
+	// CtxShapes maps a LIVE context-store layer to its abstract
+	// StoreShapeInfo carrier, minted lazily by the `context` word's
+	// check-mode ReturnsFn (CheckState.ContextShape). Pointer-keyed
+	// deliberately: check mode never runs the runtime COW replace, so
+	// a layer's pointer is stable for its scope, and holding it as a
+	// key keeps the layer reachable (no recycled-allocation aliasing).
+	// Per-pass state — reset by Begin, header-cloned by Clone (the
+	// shape pointees stay shared; all shape mutation is join-only, so
+	// a sandbox leak can only widen — see store_shape.go).
+	CtxShapes map[*StoreInstanceInfo]Value
+
+	// MethodShapes maps a dynamic method-read carrier's value ID to the
+	// resolved MEMBER value — the trivial-delegation wrapper FnDef a
+	// get-family read surfaced from a shape-instance container (a logger /
+	// span / instrument / rand handle whose check-mode ReturnsFn instance
+	// resolves method SIGNATURES; the runtime instance carries per-call
+	// state, so the member itself must never bake — the freeze-gate).
+	// Minted by the accessor ReturnsFn via NoteMethodShape (which vets the
+	// member: delegation wrapper, named, foreign sub-registry, no genuine
+	// 0-arg overload — the miscompile-E auto-dispatch guard's class stays
+	// out); consumed by the compile pass's shaped-method model
+	// (tryShapedMethodDispatch, method_shape.go). Per-pass state — reset by
+	// Begin, header-cloned by Clone (members are immutable values).
+	MethodShapes map[string]Value
+
+	// PendingMethodApply threads ONE modelled shaped-method dispatch from
+	// tryShapedMethodDispatch into recordDispatchOutcome (set immediately
+	// before the model's carrierResults call, consumed by
+	// tryRecordMethodApply — the first specialist in the outcome chain — so
+	// the member's native never records as a check-time CALL_NATIVE, which
+	// would bake the shape instance's state: the freeze-gate). Transient
+	// within a single dispatch; reset by Begin.
+	PendingMethodApply *PendingMethodApply
+
+	// CodeEffectDepth counts nested code-effect body analyses
+	// (AnalyseCodeEffectCarrier — the typed-code-value producer). A
+	// stored code body that itself reads stored code (`quote [ops get
+	// 0 do]`) would recurse through the element-read producer
+	// unboundedly, so the producer declines past depth 1 — nested code
+	// stays dynamic(Any), a stage-2/3 precision
+	// (design/checker-precision-fronts.0.md §1).
+	CodeEffectDepth int
 
 	// FnBodyDepth counts the AnalyseFnBody nesting around the
 	// current dispatch. Diagnostics emitted while it is positive
@@ -601,6 +651,24 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"macro_not_expandable": SeverityInfo,
 	// Strict-mode advisory: a committed dispatch over a dynamic operand.
 	"dynamic_dispatch": SeverityInfo,
+	// Advisory (non-gating): an `x is T` guard whose binding's static type
+	// already entails T — the check cannot fail, and the dead guard misleads
+	// readers about reachable states (completion plan 2.3; the article's
+	// "unnecessary defensive check" residue). Emitted by ApplyGuardNarrowing.
+	"redundant_guard": SeverityInfo,
+	// RESERVED — no emit site yet (completion plan 4.4 / G6). The general
+	// "options-looking map literal flows into a slot with no Options schema"
+	// lint is BLOCKED ON PRECISION: atom-spelled and string-spelled map keys
+	// are indistinguishable post-parse (`{a:1} cmp {'a':1}` → 0 — OrderedMap
+	// keys are plain strings), so EVERY concrete map argument would qualify
+	// and the rule cannot separate an options idiom from a data map (merge /
+	// inject / make inputs) — far below the ~100% on-corpus advisory bar.
+	// The per-family remedy shipped instead: option-consuming words declare
+	// an Options schema on their opts slot (`convert`'s convertOptsPattern;
+	// the emit family's EmitOptsSchema), which turns an unknown key into a
+	// hard dispatch rejection at check AND run time. Classified here so a
+	// future precise emitter inherits the intended severity.
+	"options_key_unchecked": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a
@@ -655,7 +723,10 @@ func NewRegistry() (*Registry, error) {
 		// step" so callers who want that have an unambiguous way to
 		// express it; callers who omit the field get the default
 		// without the historical zero-as-magic overload.
-		Check: &CheckState{StepBudget: -1},
+		// Emit starts as the inactive no-op recorder — never nil — so
+		// recorder calls are always safe (CheckState.Recorder() covers
+		// registries constructed without NewRegistry).
+		Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit},
 	}
 	// Mint a process-stable scope id so fn-analysis memo keys can be
 	// namespaced per registry (parent vs module sub-registry). A

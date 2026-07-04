@@ -3046,6 +3046,8 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 		`def f fn [[n:Integer] [] [if (n lte 0) [] [n mul 2]]]  f 3 add 1`,
 		// The recursive variadic result consumed by add.
 		`def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]  m 3 add 1`,
+		// Same, paren form: the variadic result as a forward-collected fixed arg.
+		`def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]  add (m 3) 1`,
 		// A multi-value arm built from inert consts cannot be reconstructed.
 		`if true [1 2 3] [4]`,
 		// A value after the variadic recursive call inside the arm.
@@ -3467,5 +3469,550 @@ func TestOuterCompilesNoIsland(t *testing.T) {
 	_, eBadI := mustNew(t).Run(`outer [mul] List [3 4]`)
 	if (eBad == nil) != (eBadI == nil) {
 		t.Errorf("outer over a type-literal list: compiled err=%v interp err=%v (should agree)", eBad, eBadI)
+	}
+}
+
+// Mechanism A (design/MISCOMPILE-HUNT-FINDINGS.0.md §A) — a compound VALUE
+// literal in a fn body is re-constructed per call by the interpreter, so
+// compiled code must not leak one pooled identity across calls
+// (OpPushConstFresh). Reads of one per-call binding still share within a
+// call; an enclosing binding's value keeps its one shared instance; an
+// escaping multi-read literal refuses (sound fallback).
+func TestFnBodyContainerLiteralIdentity(t *testing.T) {
+	parity := []struct{ name, src string }{
+		{"list literal returned", `def mk fn [[] [List] [[1]]] ((mk) eq (mk))`},
+		{"map literal returned", `def mk fn [[] [Map] [{}]] ((mk) eq (mk))`},
+		{"def-bound literal returned", `def mk fn [[] [List] [def a [1] a]] ((mk) eq (mk))`},
+		{"branch-arm literal returned", `def mk fn [[b:Boolean] [List] [if b [[1]] [[2]]]] ((mk true) eq (mk true))`},
+		{"nested literal inner identity", `def mk fn [[] [List] [[[1]]]] (((mk) get 0) eq ((mk) get 0))`},
+		{"enclosing binding stays shared", `def c [9]  def get fn [[] [List] [c]]  ((get) eq (get))`},
+		{"within-call reads share", `def mk fn [[] [Boolean] [def a [1] (a eq a)]] (mk)`},
+		{"value equality unchanged", `def mk fn [[] [List] [[1]]] ((mk) deq (mk))`},
+	}
+	for _, c := range parity {
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if errC != nil || !compiled {
+			t.Fatalf("%s: compiled run: compiled=%v err=%v", c.name, compiled, errC)
+		}
+		gotI, errI := mustNew(t).Run(c.src)
+		if errI != nil {
+			t.Fatalf("%s: interp run: %v", c.name, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: compiled=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+
+	// NEGATIVE: the one shape per-call identity cannot yet model — a
+	// multi-read body literal that may escape — must REFUSE (sound
+	// interpreter fallback), never compile with shared identity.
+	const escaping = `def mk fn [[] [List] [def a [1] (a eq a) drop a]] (mk)`
+	prog, reason, _, _ := mustNew(t).CompileCheck(escaping)
+	if prog != nil {
+		t.Fatalf("escaping multi-read literal compiled; want refusal")
+	}
+	if !strings.Contains(reason, "multiple sites") {
+		t.Errorf("refusal reason = %q; want the multi-site identity reason", reason)
+	}
+}
+
+// Mechanism E remainders (design/MISCOMPILE-HUNT-FINDINGS.0.md) — the
+// deferred-field auto-invoke and the nested-factory curried chain. Both
+// REFUSE (sound fallback): the interpreter auto-applies at the paren
+// collapse / per closure arity, which one OpCallDynamic cannot model.
+func TestFnValueAutoApplyRefusals(t *testing.T) {
+	refusals := []struct{ name, src, want string }{
+		{"deferred-field dot auto-invoke", `def make42 fn [[] [Integer] [42]]  {f:make42/r}.f`, "auto-dispatches"},
+		{"paren get auto-invoke", `def make42 fn [[] [Integer] [42]]  def m {f:make42/r}  (m get f/q)`, "auto-dispatches"},
+		{"bare read auto-invokes too", `def f fn [[] [Integer] [7]]  {b:f/r} dot b`, "auto-dispatches"},
+		{"nested-factory curried chain", `def mk fn [[a:Integer] [Function] [([b:Integer] => [([c:Integer] => [a add b add c])])]]  (((mk 1) 2) 3)`, "arity mismatch"},
+	}
+	for _, c := range refusals {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog != nil {
+			t.Errorf("%s: compiled; want refusal", c.name)
+			continue
+		}
+		if !strings.Contains(reason, c.want) {
+			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
+		}
+		// The silent-fallback path must produce the interpreter's value.
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
+		}
+		if errC != nil || errI != nil {
+			t.Fatalf("%s: run errs compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: fallback=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+
+	// PRESERVED coverage: fn-free container reads (paren or bare), APPLIED
+	// member calls (a multi-param member fed its args — the method-through-map
+	// pattern, whose phantom parked 0-arg sig must NOT read as auto-dispatch
+	// risk), and the single-apply factory keep compiling.
+	preserved := []string{
+		`({a:1 b:2} get b/q) add 1`,
+		`{a:1 b:2} dot b`,
+		`def add1 fn [[x:Integer] [Integer] [x add 1]]  {f:add1/r}.f 5`,
+		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]]  ((mk 5) 10)`,
+	}
+	for _, src := range preserved {
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		if errC != nil || !compiled {
+			t.Fatalf("preserved %q: compiled=%v err=%v", src, compiled, errC)
+		}
+		gotI, errI := mustNew(t).Run(src)
+		if errI != nil {
+			t.Fatalf("preserved %q: interp err=%v", src, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("preserved %q: compiled=%v interp=%v", src, gotC, gotI)
+		}
+	}
+}
+
+// Stage E landing (corpus-core.tsv:50, the last tier-2 row) — core `walk`'s
+// hooks compile through the closure seam. The descend hook (quotation or
+// lambda — LambdaSharesTokenShape, one `{key value path parent depth}` payload
+// input) compiles to a closure unit walkClassifyHook drives via InvokeBody; a
+// module-scope flex accumulator read in the hook body rides as a closure
+// capture (moduleScopeMutableCaptures, now applied to LAMBDA bodies too), so
+// the compiled body mutates the SAME pointer-backed FlexList cell the frame
+// local holds. The optional ASCEND slot admits exactly one value-operand
+// shape: a flex proven EMPTY at dispatch (emptyFlexHookOperand), whose
+// classify-time token snapshot is a zero-length list forever — every other
+// ascend shape keeps its refusal (sound interpreter fallback).
+func TestWalkHookClosureCompiles(t *testing.T) {
+	parity := []struct{ name, src, want string }{
+		{"tier-2 corpus row (empty-flex ascend consumed as 4th arg)",
+			`def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc`,
+			"[{a:1 b:[2 3]}]"},
+		{"mutation then read-back (second acc reads the mutated cell)",
+			`def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc  acc`,
+			"[{a:1 b:[2 3]} ['' 'a' 'b' 'b.0' 'b.1']]"},
+		{"paren-bounded 3-arg walk, then read the mutated cell",
+			`def acc (flex [])  (walk {mode: "breadth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append]))  acc`,
+			"[{a:1 b:[2 3]} ['' 'a' 'b' 'b.0' 'b.1']]"},
+		{"loop-iteration mutation accumulates across iterations",
+			`def acc (flex [])  for 2 [ (walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append])) drop ]  acc`,
+			"[['' 'a' '' 'a']]"},
+		{"token-quotation hook compiles as a closure",
+			`walk {mode: "depth"} {a:1} [drop]`,
+			"[{a:1}]"},
+		{"two-lambda 4-arg walk (ascend LAMBDA compiles to its own closure unit — Stage M2d, corpus-core.tsv:134)",
+			`def acc (flex [])  walk {mode: "depth"} {a:{x:1}} (m:Any => [acc (m.path) append]) (m:Any => [acc (m.path) append])  acc`,
+			"[{a:{x:1}} ['' 'a' 'a.x' 'a.x' 'a' '']]"},
+		{"each map-lambda with a module-scope flex capture (shared admission)",
+			`def acc (flex [])  each ([kv:Any] => [acc (kv.v) append]) {a:1 b:2}  drop  acc`,
+			"[[1 2]]"},
+	}
+	for _, c := range parity {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%s: check error %v", c.name, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%s: refused: %s", c.name, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%s: expected no island:\n%s", c.name, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: did not run compiled", c.name)
+		}
+		if errC != nil || errI != nil {
+			t.Fatalf("%s: run errs compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
+			t.Errorf("%s: compiled=%v interp=%v want %s", c.name, gotC, gotI, c.want)
+		}
+	}
+
+	// A flex MAP admitted as the ascend slot ({} is empty too) reaches the
+	// handler, whose classification raises walk_error — the compiled path
+	// surfaces the byte-identical taxonomy from the VM, no fallback mask.
+	{
+		src := `def acc (flex {})  walk {mode: "depth"} {a:1} (m:Any => [m.path drop])  acc`
+		_, compiled, errC := mustNew(t).RunCompiled(src)
+		_, errI := mustNew(t).Run(src)
+		if !compiled {
+			t.Errorf("flex-map ascend: did not run compiled")
+		}
+		if codeOf(errC) != "walk_error" || codeOf(errC) != codeOf(errI) {
+			t.Errorf("flex-map ascend: compiled err=[%s] interp err=[%s]; want walk_error on both", codeOf(errC), codeOf(errI))
+		}
+	}
+
+	// NEGATIVES — every neighbouring ascend shape whose runtime tokens are NOT
+	// provably empty must still REFUSE (the sound interpreter fallback), and
+	// the fallback must agree with the interpreter.
+	refusals := []struct{ name, src, want string }{
+		{"non-empty flex ascend (tokens not provably empty)",
+			`def acc (flex ["s"])  walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append])  acc`,
+			"code-body word walk"},
+		{"mutated-before-walk flex ascend (an event since construction)",
+			`def acc (flex [])  def z (push "x" acc)  walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append])  acc`,
+			"code-body word walk"},
+		{"loop-nested flex ascend (iteration 2 sees iteration 1's appends)",
+			`def acc (flex [])  for 2 [ walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append]) acc drop ]  acc`,
+			"code-body word walk"},
+		// (The two-lambda ascend shape moved to the PARITY table above at
+		// Stage M2d: the ascend lambda now compiles to its own closure unit,
+		// per design/STAGE3-INLINING-DESIGN-ROUND.0.md M2d.)
+		{"capturing ascend lambda (lexical capture — stays refused)",
+			`def f fn [[p:String] [Map] [walk {mode: "depth"} {a:1} (m:Any => [m.path drop]) (m:Any => [p drop])]] f "s"`,
+			"code-body word walk"},
+		{"hook param type rejects the payload (runtime raises, compile refuses)",
+			`walk {mode: "depth"} {a:1} (s:String => [s drop])`,
+			"function value reaches walk"},
+	}
+	for _, c := range refusals {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog != nil {
+			t.Fatalf("%s: compiled; want refusal", c.name)
+		}
+		if !strings.Contains(reason, c.want) {
+			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
+		}
+		if (errC == nil) != (errI == nil) || codeOf(errC) != codeOf(errI) {
+			t.Fatalf("%s: fallback err=[%s] interp err=[%s] (should agree)", c.name, codeOf(errC), codeOf(errI))
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: fallback=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+}
+
+// Error-row trap programs (finish-line cluster 1, the 83-row burn-down): a
+// STATICALLY-DEFINITE unmatched dispatch — matchSignature failed and every
+// value any candidate signature examined is identical at run time (concrete
+// consts, bare type literals, raw word tokens; no carrier / dynamic /
+// deferred-expression operand) — compiles to a terminal OpTrap raising the
+// interpreter's byte-identical error instead of refusing the whole program
+// (engine.go tryRecordUnmatchedDispatchTrap). The trap mirrors the
+// interpreter's raise exactly: the void-argument-group override (def_error /
+// no_value_error) when a paren arg produced no value, else the plain
+// signature_error "no matching signature for <word>".
+func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
+	cases := []struct {
+		name, src, code string
+	}{
+		{"native concrete mismatch", `add true 1`, "signature_error"},
+		{"zero-operand dispatch", `canon`, "signature_error"},
+		{"user fn class-param mismatch", `def Foo (class {}) def g fn [[f:Foo] [Integer] [99]] 42 g`, "signature_error"},
+		{"predicate refine boundary value", `def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 10 g`, "signature_error"},
+		{"arity modifier misses every sig", `add/3 2 3`, "signature_error"},
+		{"bare type-literal operand", `get 'a' Map`, "signature_error"},
+		{"undef leaves no overload", `def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add true false`, "signature_error"},
+		{"map-literal member dispatch (unfinished unit stubbed)", `def f fn [[x:Integer] [Integer] [add x 1]] {f}`, "signature_error"},
+		{"void arg group at def", `def f fn [[x:Integer] [] []] def r (f 1)`, "def_error"},
+		{"void arg group at consumer", `def f fn [[x:Integer] [] []] 3 add (f 1)`, "no_value_error"},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%s: check error %v", c.name, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%s: expected a trap program, refused: %s", c.name, reason)
+		}
+		if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
+			t.Errorf("%s: expected a terminal TRAP, no island:\n%s", c.name, dis)
+		}
+		_, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if !compiled {
+			t.Errorf("%s: trap program did not run compiled (fell back)", c.name)
+		}
+		_, errI := mustNew(t).Run(c.src)
+		if codeOf(errC) != c.code || codeOf(errI) != c.code {
+			t.Fatalf("%s: compiled=[%s] interp=[%s], want both %s", c.name, codeOf(errC), codeOf(errI), c.code)
+		}
+		// Byte-identical taxonomy: code (above) AND detail; position present
+		// whenever the interpreter's is (the full-corpus error lane's contract).
+		var aeC, aeI *eng.AqlError
+		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
+			t.Fatalf("%s: non-AQL error: compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if aeC.Detail != aeI.Detail {
+			t.Errorf("%s: detail divergence:\n  compiled=%q\n  interp=%q", c.name, aeC.Detail, aeI.Detail)
+		}
+		if aeI.Row > 0 && aeC.Row == 0 {
+			t.Errorf("%s: position lost in compiled mode (interp at %d:%d)", c.name, aeI.Row, aeI.Col)
+		}
+	}
+}
+
+// Side-effect ordering across a dispatch trap: the trap fires at the SAME
+// execution point as the interpreter's raise, so an effect BEFORE the failing
+// dispatch (a print) must still run in compiled mode — the kept event prefix
+// executes, then the TRAP raises.
+func TestUnmatchedDispatchTrapPreservesPriorEffects(t *testing.T) {
+	const src = `print 'a' raise 42`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("expected a trap program: reason=%q err=%v", reason, cerr)
+	}
+	if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") {
+		t.Fatalf("expected a TRAP after the print:\n%s", dis)
+	}
+	var outC, outI strings.Builder
+	ac := mustNew(t)
+	ac.SetOutput(&outC)
+	_, compiled, errC := ac.RunCompiled(src)
+	if !compiled {
+		t.Fatalf("trap program did not run compiled")
+	}
+	ai := mustNew(t)
+	ai.SetOutput(&outI)
+	_, errI := ai.Run(src)
+	if codeOf(errC) != "signature_error" || codeOf(errI) != "signature_error" {
+		t.Fatalf("compiled=[%s] interp=[%s], want both signature_error", codeOf(errC), codeOf(errI))
+	}
+	if outC.String() != outI.String() || !strings.Contains(outC.String(), "a") {
+		t.Errorf("effect ordering: compiled output %q, interp output %q (print must run before the trap)", outC.String(), outI.String())
+	}
+}
+
+// Negatives for the dispatch trap: a NON-definite failure keeps the blanket
+// refusal and falls back to the interpreter — the trap must never claim a
+// dispatch whose runtime outcome can differ from the static one.
+func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
+	// (The former "carrier operand declines" negative — `5 inc apply` —
+	// became a POSITIVE with the Phase 6 M4 carrier-disjointness extension:
+	// an Integer carrier is provably disjoint from apply's Function slot, so
+	// that failure IS definite; see TestUnmatchedDispatchTrapCarrierDisjoint.
+	// The negatives below pin the shapes the extension must keep declining.)
+	refusals := []struct{ name, src, want string }{
+		// The REFINEMENT ESCAPE (the original carrier hazard, in its live
+		// form): mkb's declared return is Boolean but the runtime value
+		// carries the Flag-reparented tag, so the merged [Flag Flag] overload
+		// MATCHES at run time (the fallback computes true below). Boolean is
+		// not disjoint from Flag (Flag ⊑ Boolean), so the disjointness proof
+		// must decline — a trap here would raise where the interpreter
+		// computes.
+		{"refined-subtype carrier declines",
+			`import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`,
+			"unmatched dispatch recovered at add"},
+		// A value-sensitive predicate param (membershipBeyondNominal): the
+		// carrier's runtime VALUE decides membership, so nothing nominal is
+		// provable — and this variant PASSES at run time (f 5 → 11 ∈ Big).
+		{"predicate-param carrier declines (runtime pass)",
+			`def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] def f fn [[x:Integer] [Integer] [x add 6]] g (f 5)`,
+			"unmatched dispatch recovered at g"},
+		// A disjunct carrier with a MATCHING alternative (forward-barrier:80's
+		// shape): the if result is Integer|List and each's List overload could
+		// take the List arm, so the failure is not definite (this run's 99
+		// arm does raise — via the fallback, faithfully).
+		{"disjunct matching-alternative declines",
+			`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`,
+			"unmatched dispatch recovered at each"},
+		// A deferred-expression token (a word splice) expands at dispatch/step
+		// time; its expansion is not statically modelled, so decline.
+		{"splice operand declines",
+			`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`,
+			"unmatched dispatch recovered at f"},
+	}
+	for _, c := range refusals {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog != nil {
+			t.Fatalf("%s: compiled; want refusal (disasm:\n%s)", c.name, prog.Disassemble())
+		}
+		if !strings.Contains(reason, c.want) {
+			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
+		}
+		if codeOf(errC) != codeOf(errI) {
+			t.Errorf("%s: fallback err=[%s] interp err=[%s] (should agree)", c.name, codeOf(errC), codeOf(errI))
+		}
+		if errC == nil && errI == nil && fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: fallback value=%v interp value=%v (should agree)", c.name, gotC, gotI)
+		}
+	}
+
+	// The soundness pin that shaped the deferred-token decline: a reach over a
+	// MUTATED flex cell fails the STATIC match at `drop` (the raw Reach token)
+	// but resolves and dispatches fine at run time — a trap here raised where
+	// the interpreter returns a value (flex.tsv L88's divergence). The row must
+	// not trap; compiled and interpreted results must agree.
+	const flexReach = `def m {a:{b:1}} def f (flex m) set b/q 9 f.a drop f.a.b`
+	if prog, _, _, _ := mustNew(t).CompileCheck(flexReach); prog != nil {
+		if strings.Contains(prog.Disassemble(), "TRAP") {
+			t.Fatalf("flex-reach row must not trap:\n%s", prog.Disassemble())
+		}
+	}
+	gotC, _, errC := mustNew(t).RunCompiled(flexReach)
+	gotI, errI := mustNew(t).Run(flexReach)
+	if errC != nil || errI != nil {
+		t.Fatalf("flex-reach row errored: compiled=%v interp=%v", errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("flex-reach parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// Typed-def store-with-reparent (the compiled closure of miscompile B,
+// design/MISCOMPILE-HUNT-FINDINGS.0.md §B): a typed value-def whose refinement
+// constraint guards a DYNAMIC body (`def v:Flag b` over a param / computed
+// carrier) compiles to an OpBindTyped that runs the interpreter's own
+// validate/reparent (RunTypedBind) at run time instead of refusing the whole
+// program — pass stores the (reparented) value, FAIL raises the byte-identical
+// plain error, typeof renders the newtype, and sig dispatch keys off the
+// reparented tag.
+func TestTypedDefBindCompiles(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"predicate validate-pass stores and reads back (multi-read forces the frame local)",
+			`def Positive fn [[n:Integer] [Boolean] [n gt 0]] def f fn [[x:Integer] [Integer] [def v:Positive x (v add v)]] f 5`},
+		{"predicate reparent: typeof renders the predicate type",
+			`def Positive fn [[n:Integer] [Boolean] [n gt 0]] def f fn [[x:Integer] [Integer] [def v:Positive x v]] typeof (f 5)`},
+		{"newtype reparent: typeof renders the newtype in compiled mode (the §B divergence)",
+			`def Flag (refine Boolean) def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] typeof (mk true)`},
+		{"sig-dispatch on the reparented local",
+			`def Pos (refine Integer) def need-pos fn [[p:Pos] [Integer] [p add 100]] def f fn [[n:Integer] [Integer] [def x:Pos n need-pos x]] f 5`},
+		{"top-level dynamic refine def (the other live class)",
+			`def Pos (refine Integer) def g fn [[] [Integer] [41]] def n (g) def x:Pos (add n 1) typeof x`},
+		{"named DepScalar dynamic pass keeps the base tag (no reparent: typeof stays Integer)",
+			`def Big (Integer gt 10) def f fn [[x:Integer] [Type] [def v:Big x typeof v]] f 50`},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%s: did not compile: reason=%q err=%v", c.name, reason, cerr)
+		}
+		if !strings.Contains(prog.Disassemble(), "BIND_TYPED") {
+			t.Errorf("%s: no BIND_TYPED in the program (the dynamic bind must run at the VM):\n%s",
+				c.name, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%s: compiled run failed: compiled=%v err=%v", c.name, compiled, errC)
+		}
+		gotI, errI := mustNew(t).Run(c.src)
+		if errI != nil {
+			t.Fatalf("%s: interp run failed: %v", c.name, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: compiled=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+
+	// Validation failures raise the byte-identical error — the interpreter's
+	// defTypedHandler raises a PLAIN position-less error (fmt.Errorf; probe:
+	// stampErrPos only positions AqlErrors), so byte-identical INCLUDING
+	// position means the full rendered text matches exactly, with no position
+	// added by either engine. Asserted through RunCompiledStrict so the error
+	// provably comes from the VM's OpBindTyped, not from a silent interpreter
+	// fallback re-run.
+	fails := []struct {
+		name string
+		src  string
+	}{
+		{"predicate validate-FAIL",
+			`def Positive fn [[n:Integer] [Boolean] [n gt 0]] def f fn [[x:Integer] [Integer] [def v:Positive x v]] f 0`},
+		{"inline DepScalar validate-FAIL",
+			`def f fn [[x:Integer] [Integer] [def v:(Integer gt 10) x v]] f 5`},
+		{"newtype validate-FAIL on a laundered gradual value",
+			`def Pos (refine Integer) def g fn [[] [Any] ['nope']] def f fn [[x:Any] [Integer] [def v:Pos x 1]] f (g)`},
+	}
+	for _, c := range fails {
+		_, errC := mustNew(t).RunCompiledStrict(c.src)
+		_, errI := mustNew(t).Run(c.src)
+		if errC == nil || errI == nil {
+			t.Fatalf("%s: expected both engines to raise: compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if errC.Error() != errI.Error() {
+			t.Errorf("%s: error divergence:\n  compiled: %s\n  interp:   %s", c.name, errC, errI)
+		}
+	}
+
+	// Negatives — what must NOT change:
+	// (a) a STATIC (concrete) typed-def body keeps the proven const-pool
+	//     reparent — no BIND_TYPED is emitted;
+	// (b) a statically-failing typed-def stays a check-diagnostics row (no
+	//     Program, flagged in both engines), never a compiled bind.
+	staticSrc := `def Pt (refine Integer) def p:Pt 5 typeof p`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(staticSrc)
+	if cerr != nil || prog == nil {
+		t.Fatalf("static typed-def did not compile: reason=%q err=%v", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "BIND_TYPED") {
+		t.Errorf("static typed-def must ride the const pool, not BIND_TYPED:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(staticSrc)
+	gotI, errI := mustNew(t).Run(staticSrc)
+	if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("static typed-def parity: compiled=%v/%v/%v interp=%v/%v", gotC, compiled, errC, gotI, errI)
+	}
+	if prog, _, _, _ := mustNew(t).CompileCheck(`def x:(Integer gt 10) 5 x`); prog != nil {
+		t.Errorf("statically-failing DepScalar typed-def must stay a check-diagnostics row, got a Program:\n%s",
+			prog.Disassemble())
+	}
+}
+
+// PR #225 P1 review findings — two auto-dispatch/identity escapes, both
+// probe-confirmed divergences before the fix, both now sound refusals.
+func TestPR225P1Refusals(t *testing.T) {
+	// (1) A fn-body literal EMBEDDING an enclosing binding's container:
+	// interp = fresh spine + SHARED member, which neither a deep-clone
+	// freshen nor a shared const models — must refuse; fallback restores
+	// parity (true).
+	const embeds = `def c [9] def mk fn [[] [List] [[c]]] ((mk) get 0) eq c`
+	prog, reason, _, _ := mustNew(t).CompileCheck(embeds)
+	if prog != nil {
+		t.Fatalf("embedded-binding literal compiled; want refusal")
+	}
+	if !strings.Contains(reason, "embeds an enclosing binding") {
+		t.Errorf("refusal reason = %q; want the embedded-binding identity reason", reason)
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(embeds)
+	gotI, errI := mustNew(t).Run(embeds)
+	if compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[true]" {
+		t.Errorf("fallback parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want [true])",
+			compiled, errC, errI, gotC, gotI)
+	}
+
+	// (2) A class-instance field holding a genuinely-0-param fn: the
+	// interpreter auto-dispatches the read (42); the instance receiver is a
+	// schema CARRIER at record time, so the hazard is tracked at make time
+	// by instance ID (noteFnRiskFields) — the read must refuse.
+	const classFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function} def o (make C {f:make42/r}) o.f`
+	prog2, reason2, _, _ := mustNew(t).CompileCheck(classFn)
+	if prog2 != nil {
+		t.Fatalf("class fn-field read compiled; want refusal")
+	}
+	if !strings.Contains(reason2, "auto-dispatches") {
+		t.Errorf("refusal reason = %q; want the auto-dispatch reason", reason2)
+	}
+	gotC2, compiled2, errC2 := mustNew(t).RunCompiled(classFn)
+	gotI2, errI2 := mustNew(t).Run(classFn)
+	if compiled2 || errC2 != nil || errI2 != nil || fmt.Sprint(gotC2) != fmt.Sprint(gotI2) || fmt.Sprint(gotI2) != "[42]" {
+		t.Errorf("fallback parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want [42])",
+			compiled2, errC2, errI2, gotC2, gotI2)
+	}
+
+	// NEGATIVES: a NON-fn field of the same instance keeps compiling with
+	// parity (key precision), and the applied multi-param member-call
+	// pattern is untouched.
+	const nonFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function x:0} def o (make C {f:make42/r x:5}) o.x`
+	gotC3, compiled3, errC3 := mustNew(t).RunCompiled(nonFn)
+	if !compiled3 || errC3 != nil || fmt.Sprint(gotC3) != "[5]" {
+		t.Errorf("non-fn field read: compiled=%v err=%v got=%v (want compiled [5])", compiled3, errC3, gotC3)
 	}
 }

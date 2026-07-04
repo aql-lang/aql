@@ -84,13 +84,13 @@ func TestResolveCompileMode(t *testing.T) {
 		compile, force, noCompile string
 		want                      CompileMode
 	}{
-		{false, false, "", "", "", CompileOff},     // default: interpreter
+		{false, false, "", "", "", CompileTry},     // P7 default: compiled with silent sound fallback (design/P7-ENDGAME.10.md)
 		{true, false, "", "", "", CompileTry},      // --compile flag
 		{false, true, "", "", "", CompileForce},    // --force-compile flag
 		{false, false, "1", "", "", CompileTry},    // AQL_COMPILE=1
 		{false, false, "true", "", "", CompileTry}, // AQL_COMPILE=true
-		{false, false, "0", "", "", CompileOff},    // AQL_COMPILE=0 is off
-		{false, false, "no", "", "", CompileOff},   // AQL_COMPILE=no is off
+		{false, false, "0", "", "", CompileTry},    // AQL_COMPILE=0: legacy opt-in var is inert post-flip; AQL_NO_COMPILE is the control
+		{false, false, "no", "", "", CompileTry},   // same — the legacy opt-in var no longer disables
 		{false, false, "", "1", "", CompileForce},  // AQL_FORCE_COMPILE=1
 		{true, true, "", "", "", CompileForce},     // force wins over try (flags)
 		{true, false, "", "1", "", CompileForce},   // force env wins over try flag
@@ -107,5 +107,60 @@ func TestResolveCompileMode(t *testing.T) {
 			t.Errorf("ResolveCompileMode(compile=%v, force=%v, AQL_COMPILE=%q, AQL_FORCE_COMPILE=%q, AQL_NO_COMPILE=%q) = %v, want %v",
 				c.compileFlag, c.forceFlag, c.compile, c.force, c.noCompile, got, c.want)
 		}
+	}
+}
+
+// Completion plan Phase 5.2 — check-by-default: every Run pre-flights
+// unless --no-check / AQL_NO_CHECK; the default gate is quiet for clean
+// programs and verbose only under an explicit --check.
+func TestCheckByDefault(t *testing.T) {
+	run := func(args ...string) (int, string, string) {
+		var out, errB bytes.Buffer
+		code := Execute(args, strings.NewReader(""), &out, &errB)
+		return code, out.String(), errB.String()
+	}
+
+	// A clean program runs with ZERO checker noise on stderr.
+	code, out, stderr := run("-e", "add 1 2")
+	if code != 0 || !strings.Contains(out, "3") {
+		t.Fatalf("clean run: code=%d out=%q", code, out)
+	}
+	if stderr != "" {
+		t.Errorf("clean run stderr = %q; want empty (quiet default gate)", stderr)
+	}
+
+	// An Error-severity finding aborts BEFORE execution, diagnostics shown.
+	code, _, stderr = run("-e", "flurble 1 2")
+	if code == 0 {
+		t.Fatal("undefined word ran; want pre-flight abort")
+	}
+	if !strings.Contains(stderr, "undefined_word") || !strings.Contains(stderr, "check failed") {
+		t.Errorf("abort stderr = %q; want the diagnostic + check failed", stderr)
+	}
+
+	// --no-check skips the pre-flight: the failure is a RUNTIME error.
+	code, _, stderr = run("-no-check", "-e", "flurble 1 2")
+	if code == 0 {
+		t.Fatal("--no-check run of undefined word succeeded")
+	}
+	if strings.Contains(stderr, "check failed") {
+		t.Errorf("--no-check stderr = %q; want runtime error, not the pre-flight gate", stderr)
+	}
+
+	// An advisory-only program (forward-strand info) stays QUIET by default…
+	code, _, stderr = run("-e", "1 2 add 3 mul")
+	if code != 0 {
+		t.Fatalf("advisory-only program aborted: %q", stderr)
+	}
+	if strings.Contains(stderr, "forward_strands_operand") {
+		t.Errorf("default gate printed advisory: %q", stderr)
+	}
+	// …and --check surfaces it.
+	code, _, stderr = run("-check", "-e", "1 2 add 3 mul")
+	if code != 0 {
+		t.Fatalf("--check advisory run aborted: %q", stderr)
+	}
+	if !strings.Contains(stderr, "forward_strands_operand") {
+		t.Errorf("--check stderr = %q; want the advisory", stderr)
 	}
 }

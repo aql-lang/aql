@@ -511,7 +511,24 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk 
 			continue
 		}
 		if !residualProvablyDisjoint(got, exp) {
-			continue
+			// Value-level membership for a compile-time-known scalar residual:
+			// the runtime RET boundary asks got.Is(exp) on this SAME value, so
+			// a concrete scalar that fails membership NOW is a guaranteed
+			// runtime type_error — flag it statically. This closes the
+			// smart-constructor holes the disjointness test cannot see:
+			//   - predicate returns: `def mkbad fn [[] [Big] [5]]` (Big =
+			//     Integer gt 10; 5 fails the predicate) — previously
+			//     check-clean, runtime-only;
+			//   - nominal newtype returns: `def mk fn [[] [UserId] [42]]`
+			//     (a raw Integer is not a UserId; a reparented `def x:UserId
+			//     42  x` residual carries the UserId tag and passes).
+			// Restricted to scalarFoldOperand shapes (concrete scalar
+			// payloads — literals and folded comparisons), where the checked
+			// value provably equals the runtime value; abstract carriers keep
+			// the runtime check (value-dependent returns bail by design).
+			if !scalarFoldOperand(got) || got.Is(exp) {
+				continue
+			}
 		}
 		detail, _ := returnTypeErrorText(name, k+1, exp, got)
 		dup := false
@@ -723,7 +740,27 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	capturesCopy := fnDef.Captured
 	genSpec := fnDef.Gen
 	sigParams := append([]FnParam(nil), s.Params...)
-	return func(args []Value, _ *Registry) []Value {
+	return func(args []Value, caller *Registry) []Value {
+		// The MERGED-WORD seam (Stage M1, design/STAGE3-INLINING-DESIGN-ROUND.0.md
+		// §2.4a/§5): a transplanted word-extension sig (open words — a module-
+		// defined `add` merged into the importer's dispatch table) dispatches as a
+		// BARE word on the importer's engine, so no execFnDefLiteral wrapper
+		// shares the check state with this closure's captured registry r. Without
+		// sharing, `es` below read the module's own INACTIVE CheckState:
+		// StartFnCompile declined, RecordUserCall never ran, every merged dispatch
+		// refused "user fn call … (Stage 3)", and the body was ANALYSED
+		// CONCRETELY with its diagnostics stranded on the invisible module Check.
+		// Sharing caller → r at the ReturnsFn boundary itself converts the WHOLE
+		// user-fn seam (every dispatch path that reaches a foreign-registry fn
+		// body records identically — the §2.2 one-recording-path rule): body
+		// diagnostics, the FnSummaries/FnInflight memos (scopeID-disjoint keys)
+		// and the compiled unit all land on the dispatching pass, while name
+		// resolution stays in the module's own Defs/Types. No-op when caller == r
+		// (ordinary same-registry fns), when an enclosing execFnDefLiteral /
+		// execFnDefSig dispatch already shared (pointer-equal swap), and outside
+		// check mode — interpretation is untouched.
+		restoreCheck := shareCheckStateFrom(r, caller)
+		defer restoreCheck()
 		checkRecordShapeArgs(r, nameCopy, paramPatterns, args)
 		// Generic fns (Phase 5): infer the parameter bindings from the
 		// call's arg carriers and install them around the body
@@ -771,7 +808,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// code unit (params as frame locals) and record the call site.
 		// The memo key mirrors AnalyseFnBody's so the unit is compiled
 		// exactly when the body is analysed.
-		es := r.Check.Emit
+		es := r.Check.Recorder()
 		fnUnit := -1
 		var finishFn func([]Value)
 		// Cluster C (broad miscompile hunt): a gradual-Any arg to a MULTI-overload
@@ -781,7 +818,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// the sibling — `def g fn [[a:Integer]['i'] [a:String]['s']] (g (id 5))`
 		// returned 'i' interpreted but signature_error compiled. Natives re-match via
 		// OpCallNativePoly; user-fn overloads have NO poly path. Refuse → fall back.
-		clusterCRefuse := es != nil && es.active() && anyDynamicCarrier(args) &&
+		clusterCRefuse := es.active() && anyDynamicCarrier(args) &&
 			dynamicReachableOverloadCount(r, nameCopy, args) >= 2
 		var polyPlan *userPolyPlan
 		if clusterCRefuse {
@@ -797,7 +834,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
 			}
 		}
-		if es != nil && !clusterCRefuse {
+		if es.Armed() && !clusterCRefuse {
 			// The body unit must be compiled against GENERALISED args
 			// — pure carriers of the call's arg types. The call's
 			// kept-concrete values would constant-fold inside the body

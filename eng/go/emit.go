@@ -44,10 +44,11 @@ const (
 // producerWord / makeListRange read them back, so the two sides must use the
 // same string. Centralised here rather than repeated as literals.
 const (
-	wordMakeList = "[…]"
-	wordMakeMap  = "{…}"
-	wordInterp   = "`…`"
-	wordDynApply = "(…fn)"
+	wordMakeList  = "[…]"
+	wordMakeMap   = "{…}"
+	wordInterp    = "`…`"
+	wordDynApply  = "(…fn)"
+	wordTypedBind = "def:…"
 )
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -136,21 +137,36 @@ type eventFlags struct {
 }
 
 type emitCall struct {
-	word       string
-	sig        *Signature
-	ops        []emitOperand
-	nout       int // number of results the call pushes (0 for a side-effect word, N for multi-result)
-	pos        SrcPos
-	poly       bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
-	polyReg    *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
-	makeList   bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	dynApply   int       // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
-	makeMap    bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
-	mapKeys    []string
-	mapImpl    bool // the source map's Implicit flag
-	interp     bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
-	interpSegs []InterpSeg
-	diverges   bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	word            string
+	sig             *Signature
+	ops             []emitOperand
+	nout            int // number of results the call pushes (0 for a side-effect word, N for multi-result)
+	pos             SrcPos
+	poly            bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg         *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
+	makeList        bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	dynApply        int       // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
+	dynApplyUnquote bool      // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
+	makeMap         bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	mapKeys         []string
+	mapImpl         bool // the source map's Implicit flag
+	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
+	interpSegs      []InterpSeg
+	diverges        bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	// typedBind, when non-nil, marks this event as a typed value-def's runtime
+	// validate/reparent step (OpBindTyped over the single operand) instead of a
+	// word dispatch — recorded by RecordTypedBind from the def handler's
+	// refinement branches. Riding emitCall keeps the whole generic evCall
+	// machinery (operand provenance, value-def promotion, dead-drop, fragment
+	// walks) working unchanged for the bind result.
+	typedBind *TypedBindSpec
+	// dynMethod, when non-nil, marks this event as a GUARDED shaped-instance-
+	// method apply (Stage M2c, OpCallDynMethod): ops[0] is the runtime method
+	// value (the dynamic dot-read result), ops[1..] the inert statement-window
+	// args, and the spec pins the claimed arity + result count the VM enforces
+	// (claim failure → internal_error → interpreter re-run). Riding emitCall
+	// keeps the generic evCall machinery working unchanged for the result.
+	dynMethod *DynMethodSpec
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -411,6 +427,19 @@ type EmitState struct {
 	// reconciliation reads it back to lower the apply to OpCallDynTrailTop — the
 	// flattened residual cannot otherwise recover the apply's arity.
 	trailingApplies map[string]int
+	// freshenConst marks const-pool indices holding a compound VALUE literal
+	// that was materialised while recording a FN UNIT and whose ID is not an
+	// enclosing binding's — i.e. a literal written in the body, which the
+	// interpreter re-constructs per call. finalize's freshenFnUnitConsts pass
+	// rewrites a single-push-site marked const to OpPushConstFresh (per-call
+	// identity), keeps a multi-push-site one shared when nothing compound can
+	// escape the fn, and refuses otherwise. See OpPushConstFresh (bytecode.go)
+	// and design/MISCOMPILE-HUNT-FINDINGS.0.md §A.
+	freshenConst map[int]bool
+	// fnRiskFields maps a constructed INSTANCE's value ID → the field keys
+	// holding genuinely-0-param fn values (noteFnRiskFields /
+	// instanceFnFieldRisk — the carrier-receiver auto-dispatch hazard).
+	fnRiskFields map[string]map[string]bool
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -420,10 +449,17 @@ type EmitState struct {
 	eventInfo map[int]eventFlags
 	consts    []Value
 	constIdx  map[string]int // CanonValue → Consts index
-	types     []TypeRef
-	typeIdx   map[string]int   // type ID → Types index
-	fallbacks []FallbackSpan   // Stage 5 interpreter islands
-	origByID  map[string]Value // stripped literal ID → original value
+	// constIDIdx pools COMPOUND consts by value ID: the same materialised
+	// List/Map value (same ID, same payload pointer — already identity-
+	// aliased) reuses one Consts slot, so freshenFnUnitConsts' push-site
+	// counting sees reads of one binding as pushes of ONE const. Distinct
+	// source literals keep distinct IDs, so the never-CanonValue-dedup rule
+	// (gotcha #13) is untouched.
+	constIDIdx map[string]int
+	types      []TypeRef
+	typeIdx    map[string]int   // type ID → Types index
+	fallbacks  []FallbackSpan   // Stage 5 interpreter islands
+	origByID   map[string]Value // stripped literal ID → original value
 	// trapAt is the seq of a recorded TOP-LEVEL terminal trap (a check-mode-
 	// suppressed runtime error compiled as OpTrap), or 0 for none. When set,
 	// Finalize ends the program at the trap. seqs start at 1, so 0 is a safe
@@ -465,6 +501,28 @@ type emitUnit struct {
 	// (forEachOperand / promoteOperand closureCaps handling), which makes the
 	// closureCaps operand a re-pushable LOCAL so the captured VALUE is correct.
 	capID map[string]bool
+	// enclosingIDs snapshots, at unit open, the value IDs of every compound
+	// (List/Map) binding visible in the DefTable — i.e. values an ENCLOSING
+	// scope already constructed. A compound const whose ID is in this set was
+	// read from a binding (one shared instance per binding, interpreter
+	// semantics), so it must NOT be freshened per call; a compound const whose
+	// ID is absent was minted by evaluating a literal written in THIS body, so
+	// the interpreter constructs it fresh per call and the VM must match
+	// (OpPushConstFresh; miscompile mechanism A). Body-local defs bind their
+	// IDs only DURING body analysis, after this snapshot — so they correctly
+	// classify as body-fresh.
+	enclosingIDs map[string]bool
+	// pendingApply lists the value IDs of Function/FnDef-typed CARRIERS this
+	// unit's body dispatched through the `apply` word (a param/captured
+	// comparator: `v comp/r apply`). The check engine cannot re-step a carrier
+	// the way it re-steps a concrete fn, so the dispatch is elided and the
+	// carrier flows to the body residual; StartFnCompile's finish must either
+	// lower the ONE pending apply as the whole-residual OpCallDynTrailTop
+	// (fn on top, args below — exactly the interpreter's applyHandler re-step
+	// against the preceding stack) or refuse, so an unconsumed pending apply
+	// can never silently compile the fn+args as unapplied data (Stage M2a,
+	// design/STAGE3-INLINING-DESIGN-ROUND.0.md).
+	pendingApply []string
 }
 
 // fnUnitRec is one compiled fn body awaiting (or holding) its
@@ -507,6 +565,12 @@ type fnUnitRec struct {
 	// is captured at the paren-collapse boundary (registerTrailingApply) where the
 	// group size is known; the flattened residual cannot recover it.
 	dynTrailArity int
+	// dynTrailApply marks a dynTrail that came through the `apply` WORD (the
+	// unit's pendingApply, Stage M2a) rather than a paren boundary: the unit
+	// lowering emits OpCallDynApplyTop — applyHandler's unquote-then-apply —
+	// instead of OpCallDynTrailTop (which leaves a Quoted fn as data, the
+	// paren semantics).
+	dynTrailApply bool
 	numLoc        int
 	pos           SrcPos
 	finished      bool
@@ -594,6 +658,90 @@ func (es *EmitState) active() bool {
 // while recording is live (the lowering tracks it); a plain or
 // uncompilable check must net 0, like the runtime.
 func (es *EmitState) Active() bool { return es.active() }
+
+// armed reports that a REAL recording state exists (a compile pass installed
+// one), whether or not it is currently live — the EmitRecorder twin of the
+// historical `Check.Emit != nil` probe (an EmitState may be armed yet
+// suspended or already uncompilable; the inactive no-op recorder is never
+// armed).
+func (es *EmitState) Armed() bool { return es != nil }
+
+// bindRegistry installs the registry back-pointer used by returned-closure
+// compilation (tryReturnedClosure) and the flex-hook sig-identity proof.
+func (es *EmitState) bindRegistry(r *Registry) {
+	if es == nil {
+		return
+	}
+	es.reg = r
+}
+
+// topFrameOnly reports whether recording sits at the top event frame (no
+// open branch/loop/fn capture) — the const-fold gate for computed container
+// elements. A missing recorder counts as top-frame (nothing is being
+// captured), matching the historical `es == nil || len(es.frames) == 1`.
+func (es *EmitState) topFrameOnly() bool {
+	return es == nil || len(es.frames) == 1
+}
+
+// suspendedNow reports whether an ARMED recorder is currently suspended —
+// the "analysis probe is reading an enclosing dispatch's result" state the
+// unmatched-dispatch recovery consults before latching a refusal.
+func (es *EmitState) suspendedNow() bool {
+	return es != nil && es.suspended > 0
+}
+
+// Sites returns the per-site-class dispatch tally (live map; read-only for
+// callers). Nil when recording never started.
+func (es *EmitState) Sites() map[string]int {
+	if es == nil {
+		return nil
+	}
+	return es.SiteCounts
+}
+
+// zeroOutProduced reports whether the value id was produced by an event
+// whose outputs were zeroed (the 0-output `if` phantom None) — the residual
+// strip probe (stripZeroOutResiduals).
+func (es *EmitState) zeroOutProduced(id string) bool {
+	if es == nil {
+		return false
+	}
+	pr, ok := es.producedBy[id]
+	return ok && es.eventInfo[pr.seq].zeroOut
+}
+
+// alreadyProduced reports whether the value id already has a recorded
+// producer event — the double-record guard (a structured ReturnsFn hook may
+// have recorded the dispatch before the generic path sees it).
+func (es *EmitState) alreadyProduced(id string) bool {
+	if es == nil {
+		return false
+	}
+	_, ok := es.producedBy[id]
+	return ok
+}
+
+// unitVariadic reports whether the fn unit's recorded body is
+// variadic-returning — the user-poly gate (a poly call site bakes a fixed
+// nout, so no arm may be variadic).
+func (es *EmitState) unitVariadic(unit int) bool {
+	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
+		return false
+	}
+	return es.fnRecs[unit].variadic
+}
+
+// newIsolatedEmit returns the FRESH EmitState IsolateEmit swaps in for a
+// hermetic throwaway evaluation, inheriting only the registry back-pointer
+// from the saved recorder. Construction knowledge stays in this file: the
+// checker side (CheckState.IsolateEmit) sees only EmitRecorder values.
+func newIsolatedEmit(saved EmitRecorder) EmitRecorder {
+	fresh := NewEmitState()
+	if prev, ok := saved.(*EmitState); ok && prev != nil {
+		fresh.reg = prev.reg
+	}
+	return fresh
+}
 
 // RegisterTrailingApply records that the Function VALUE `fnID` is the trailing
 // fn-value of a paren-bounded apply over `arity` preceding args (`(prev key comp)`),
@@ -826,7 +974,140 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
 		return emitOperand{}, false
 	}
-	return constOperand(es.intern(lit)), true
+	idx := es.intern(lit)
+	// A compound VALUE literal materialised inside a fn unit gets per-call
+	// identity treatment (OpPushConstFresh / share / refuse — see
+	// freshenFnUnitConsts) unless its ID was already a binding's value at
+	// unit open, i.e. an enclosing scope constructed it once and the body
+	// merely reads it. Compounds are never pooled (intern), so idx belongs
+	// to exactly this materialise context.
+	if len(es.units) > 1 && freshenableConst(lit) &&
+		!es.units[len(es.units)-1].enclosingIDs[v.ID] {
+		// A body literal EMBEDDING an enclosing binding's container cannot
+		// be freshened OR shared: the interpreter constructs the OUTER
+		// literal fresh per call while the binding-read MEMBER keeps its
+		// shared instance (`def c [9] def mk fn [[] [List] [[c]]]` —
+		// `((mk) get 0) eq c` stays true, `(mk) eq (mk)` stays false).
+		// A deep-clone freshen breaks the member identity; a shared const
+		// breaks the outer's. Until a selective (spine-only) freshen
+		// exists, refuse — the sound fallback (PR #225 P1).
+		if embedsEnclosingCompound(lit, es.units[len(es.units)-1].enclosingIDs) {
+			es.MarkUncompilable("fn body literal embeds an enclosing binding's container (per-call spine identity over a shared member)")
+			return emitOperand{}, false
+		}
+		if es.freshenConst == nil {
+			es.freshenConst = map[int]bool{}
+		}
+		es.freshenConst[idx] = true
+	}
+	return constOperand(idx), true
+}
+
+// embedsEnclosingCompound reports whether a compound literal (recursively)
+// contains a compound member whose identity is an ENCLOSING binding's value
+// — the shape whose interpreter semantics mix a per-call-fresh spine with a
+// shared member, which neither OpPushConstFresh (deep clone) nor a shared
+// pooled const can model. See the refusal at the resolveOperand marking
+// site (PR #225 P1).
+func embedsEnclosingCompound(v Value, enclosing map[string]bool) bool {
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if !freshenableConst(e) {
+				continue
+			}
+			if enclosing[e.ID] || embedsEnclosingCompound(e, enclosing) {
+				return true
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !freshenableConst(mv) {
+				continue
+			}
+			if enclosing[mv.ID] || embedsEnclosingCompound(mv, enclosing) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// freshenFnUnitConsts gives fn-unit compound body literals per-call identity
+// (miscompile mechanism A — see OpPushConstFresh, bytecode.go). For each
+// marked const (freshenConst) pushed by this unit's finished code:
+//   - one push site → rewritten IN PLACE to OpPushConstFresh (no instruction
+//     insertion, so jump targets are untouched): the interpreter constructs
+//     the literal fresh on every call — and on every loop iteration, which a
+//     single re-executed site models exactly;
+//   - several push sites → the pushes stand for reads of ONE per-call
+//     binding, so they must share within a call; the shared pooled const is
+//     indistinguishable from that unless an instance escapes the fn. When
+//     every declared return conforms to Scalar nothing compound can escape,
+//     and the shared const is exact parity — keep it. Otherwise refuse:
+//     cross-call identity of an escaping multi-read literal needs a per-call
+//     local seat (a deferred lowering), and refusal is the sound fallback.
+func freshenFnUnitConsts(cf *CompiledFn, es *EmitState, rec *fnUnitRec) string {
+	if len(es.freshenConst) == 0 {
+		return ""
+	}
+	counts := map[int]int{}
+	last := map[int]int{}
+	for pc, in := range cf.Code {
+		if in.Op == OpPushConst && es.freshenConst[int(in.Arg)] {
+			counts[int(in.Arg)]++
+			last[int(in.Arg)] = pc
+		}
+	}
+	for idx, n := range counts {
+		if n == 1 {
+			cf.Code[last[idx]].Op = OpPushConstFresh
+			continue
+		}
+		if !returnsAllScalar(rec.returns) {
+			return "fn " + rec.name + ": compound body literal read at multiple sites may escape (per-call identity needs a local seat)"
+		}
+	}
+	return ""
+}
+
+// returnsAllScalar reports whether every declared return conforms to Scalar
+// — the cheap sufficient condition that no container instance can escape a
+// fn, making a shared multi-read compound const exact within-call parity
+// (freshenFnUnitConsts). Unchecked or absent returns assume escape.
+func returnsAllScalar(returns []*Type) bool {
+	if len(returns) == 0 {
+		return false
+	}
+	for _, t := range returns {
+		if t == nil || !t.ConformsTo(TScalar) {
+			return false
+		}
+	}
+	return true
+}
+
+// snapshotCompoundBindingIDs collects the value IDs of every compound
+// (List/Map) binding currently visible in the DefTable — the values a fn
+// unit opening NOW would read from ENCLOSING scope. See
+// emitUnit.enclosingIDs for the semantics.
+func (es *EmitState) snapshotCompoundBindingIDs() map[string]bool {
+	ids := map[string]bool{}
+	if es.reg == nil || es.reg.Defs == nil {
+		return ids
+	}
+	for _, name := range es.reg.Defs.Names() {
+		for _, bv := range es.reg.Defs.Stack(name) {
+			if freshenableConst(bv) && bv.ID != "" {
+				ids[bv.ID] = true
+			}
+		}
+	}
+	return ids
 }
 
 // tryReturnedClosure compiles a fn VALUE that a body RETURNS — the factory
@@ -892,8 +1173,9 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r := es.reg
 	// PROBE in a throwaway emit state (mirrors recordClosureDispatch), so a body
 	// that refuses leaves THIS program untouched and the value stays unresolved.
-	r.Check.Emit = NewEmitState()
-	r.Check.Emit.reg = r
+	probe := NewEmitState()
+	probe.reg = r
+	r.Check.Emit = probe
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
 	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
@@ -1690,6 +1972,16 @@ func (es *EmitState) Rollback(cp emitCheckpoint) {
 			delete(es.constIdx, k)
 		}
 	}
+	for k, i := range es.constIDIdx {
+		if i >= cp.consts {
+			delete(es.constIDIdx, k)
+		}
+	}
+	for i := range es.freshenConst {
+		if i >= cp.consts {
+			delete(es.freshenConst, i)
+		}
+	}
 	es.consts = es.consts[:cp.consts]
 	for k, i := range es.typeIdx {
 		if i >= cp.types {
@@ -1757,7 +2049,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs()}
 	es.units = append(es.units, u)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
@@ -1827,6 +2119,37 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 					if argsOK {
 						dynTrail = a
 					}
+				}
+			}
+			// An `apply`-word pending over a fn CARRIER (Stage M2a): the elided
+			// dispatch left the fn on the residual top with its args below —
+			// the interpreter's applyHandler re-steps the fn against the whole
+			// preceding stack, so the window is the ENTIRE residual. Exactly
+			// one pending apply may lower, and only as that whole-residual
+			// window with no other fn value in it; any other pending shape
+			// (mid-body apply, double apply, apply into a branch join) REFUSES
+			// — never compiles the fn+args as unapplied data, and never drops
+			// an apply the interpreter performed.
+			if pend := u.pendingApply; len(pend) > 0 {
+				if dynTrail == 0 && len(pend) == 1 && len(bodyStk) >= 2 &&
+					bodyStk[len(bodyStk)-1].ID == pend[0] {
+					argsOK := true
+					for _, v := range bodyStk[:len(bodyStk)-1] {
+						if isFnValueResidual(v) {
+							argsOK = false
+							break
+						}
+					}
+					if argsOK {
+						dynTrail = len(bodyStk) - 1
+						// applyHandler unquotes: a /r-parked fn value still
+						// applies (OpCallDynApplyTop), unlike the paren case.
+						rec.dynTrailApply = true
+					}
+				}
+				if dynTrail == 0 {
+					es.MarkUncompilable("fn " + name + ": apply of a dynamic fn value not at the body tail (Stage 3)")
+					return
 				}
 			}
 			// A DECLARED fn must leave exactly len(returns) RUNTIME values; a
@@ -2114,8 +2437,24 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 		}
 		ops = append(ops, op)
 	}
+	// A paren-bounded apply that ALSO dispatched through the `apply` word
+	// (`(v comp/r apply)`) registered a pending unit apply before this event
+	// collapsed the tape — the event now owns the apply, so consume the
+	// pending entry rather than leaving it to refuse the unit at finish, and
+	// lower with the apply word's UNQUOTE semantics (OpCallDynApplyTop).
+	unquote := false
+	if len(es.units) > 0 {
+		u := es.units[len(es.units)-1]
+		for i, id := range u.pendingApply {
+			if id == fn.ID {
+				u.pendingApply = append(u.pendingApply[:i], u.pendingApply[i+1:]...)
+				unquote = true
+				break
+			}
+		}
+	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args)}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
 	es.setProduced(out, seq)
 	return true
 }
@@ -2324,6 +2663,42 @@ func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) boo
 	return true
 }
 
+// RecordTypedBind records the runtime validate/reparent step of a typed
+// value-def (`def x:Pos n`) whose constraint is a refinement and whose body is
+// DYNAMIC — the compiled replacement for the "dynamic refinement
+// reparent/validate is interpreter-only" refusal. The event pops the body
+// operand, runs RunTypedBind (the interpreter-mirroring OpBindTyped), and
+// pushes the value the interpreter binds; `out` is the CHECK-mode binding the
+// def handler is about to install (the reparented carrier / the base-tagged
+// carrier for a DepScalar), returned with a FRESH provenance ID registered
+// against the new event so downstream references to the binding resolve to the
+// bind's RESULT, not to the raw body operand (out shares the body's ID —
+// ReparentValue preserves it — and without the remint a reference would
+// resolve straight to the un-reparented param local: miscompile B's exact
+// mechanism, design/MISCOMPILE-HUNT-FINDINGS.0.md §B).
+//
+// Declines (returning out unchanged and false) when recording is inactive or
+// the body is CONCRETE — a static typed-def's reparent rides the const pool
+// faithfully and must keep today's proven path — or when the body operand has
+// no resolvable provenance; the caller then falls back to the refusal mark,
+// which itself no-ops for the concrete/inactive cases.
+func (es *EmitState) RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool) {
+	if !es.active() || IsConcrete(in) {
+		return out, false
+	}
+	op, ok := es.resolveOperand(in)
+	if !ok {
+		return out, false
+	}
+	sp := spec
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: wordTypedBind, ops: []emitOperand{op}, nout: 1, pos: pos, typedBind: &sp,
+	}})
+	out.ID = GenerateID(IDPrefixForType(out.Parent))
+	es.setProduced(out, seq)
+	return out, true
+}
+
 // RememberStrippedOriginals records the pre-strip original of each value that
 // StripToCarriers actually reduced to a carrier (same preserved ID), so the
 // lowerer can later recover the concrete literal. Values toCarrier kept
@@ -2358,6 +2733,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	if !es.active() {
 		return
 	}
+	es.noteFnRiskFields(word, args, outs)
 	if es.recordCallElided(word, sig, args, outs) {
 		return
 	}
@@ -2446,6 +2822,22 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 		if _, ok := args[0].Data.(FnDefInfo); ok {
 			return true
 		}
+		// `apply` of a Function/FnDef-typed CARRIER (a `comp:Function` param or
+		// captured comparator inside a fn body — `v comp/r apply`, Stage M2a):
+		// the check engine cannot re-step a carrier, so the identity result
+		// flows to the body residual as an fn value. Elide the dispatch and
+		// register the PENDING apply on the enclosing unit; the unit's finish
+		// either lowers it as the whole-residual OpCallDynTrailTop (the fn
+		// applied to every value below it, exactly the interpreter's
+		// applyHandler re-step over the preceding stack) or refuses — a pending
+		// apply can never be silently dropped. Top-level applies (len(units)
+		// == 1) keep today's refusal: the program residual has no equivalent
+		// single-consumer window.
+		if len(es.units) > 1 && sig != nil && sig.fnFrame() == nil && isFnTypedCarrier(args[0]) {
+			u := es.units[len(es.units)-1]
+			u.pendingApply = append(u.pendingApply, args[0].ID)
+			return true
+		}
 	}
 	// Compile-time NAME RESOLUTION: a get/getr whose result is a
 	// statically-known callable or namespace (a module export wrapper,
@@ -2489,6 +2881,17 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 	case sig.fullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
+	case isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
+		// A get/dot/getr/dotr read from a container HOLDING a function member
+		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
+		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
+		// → 42; bare `{b:f/r} dot b` → 7; `… dot b add 1` → 8 — it even
+		// collects forward args). The VM would push it as inert data — a
+		// silent wrong value (miscompile mechanism E, the deferred-field
+		// auto-invoke, design/MISCOMPILE-HUNT-FINDINGS.0.md). Refuse on the
+		// RECEIVER signal: reads from fn-free containers are unaffected.
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 	case word == "args" || word == "__pa":
 		// `args` reads the interpreter's per-call args stack, which the
 		// VM's CALL_USER frame does not maintain (it binds params to
@@ -2660,9 +3063,9 @@ func (es *EmitState) dynamicStackShuffleOK(word string, sig *Signature) bool {
 func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Value) ([]emitOperand, bool) {
 	introspect := sig.CompileEffect.Has(CompileReadsFn)
 	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
-	for _, t := range sig.ArgTypes() {
+	for i, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
-			if inertFn {
+			if inertFn || sig.FnInertArgs[i] {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -2670,9 +3073,9 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 			return nil, false
 		}
 	}
-	for _, a := range args {
+	for i, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
-			if inertFn {
+			if inertFn || sig.FnInertArgs[i] {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -2683,10 +3086,10 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
-		if !ok && introspect && IsConcrete(a) {
+		if !ok && (introspect || sig.FnInertArgs[i]) && IsConcrete(a) {
 			if _, isFn := a.Data.(FnDefInfo); isFn {
 				// Bake the concrete (immutable) fn value as a const the
-				// introspection handler reads at run time.
+				// introspection / fn-inert-slot handler reads at run time.
 				op, ok = constOperand(es.intern(a)), true
 			}
 		}
@@ -2708,6 +3111,14 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	if !es.active() || len(outs) > 1 {
 		return false
 	}
+	if isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
+		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
+		// the interpreter invokes a container-read fn value as it lands; the
+		// VM would push it as data. Refuse the program (sound fallback).
+		es.SiteCounts[SiteMeta]++
+		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
+		return true
+	}
 	ops := make([]emitOperand, len(args))
 	for i := range args {
 		op, ok := es.resolveOperand(args[i])
@@ -2726,6 +3137,259 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	return true
 }
 
+// RecordDynMethod records a GUARDED shaped-instance-method apply (Stage M2c):
+// fn is the dynamic method-read carrier (its producing event supplies the
+// RUNTIME value — nothing of the check-mode shape instance is baked, the
+// freeze-gate), args the inert statement-window operands the check-mode match
+// consumed, outs the matched member signature's declared results. Lowers to
+// OpCallDynMethod with the arity + result-count claim the VM enforces (claim
+// failure → internal_error → interpreter re-run). Returns false, leaving es
+// untouched, when an operand has no compiled home — the caller then refuses.
+func (es *EmitState) RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	fnOp, ok := es.resolveOperand(fn)
+	if !ok {
+		return false
+	}
+	ops := make([]emitOperand, 0, len(args)+1)
+	ops = append(ops, fnOp)
+	for i := range args {
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops = append(ops, op)
+	}
+	es.SiteCounts[SiteDynamic]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: word, ops: ops, nout: len(outs), pos: pos,
+		dynMethod: &DynMethodSpec{Word: word, NArgs: len(args), NOut: len(outs)},
+	}})
+	for i := range outs {
+		es.setProducedAt(outs[i], seq, i)
+	}
+	return true
+}
+
+// containerFnAutoDispatchRisk reports whether a get-family dispatch may
+// surface a container member the interpreter could AUTO-DISPATCH after it
+// lands: a function value carrying a 0-arg-satisfiable signature. Probe-
+// verified divergences: `{f:make42/r}.f` → 42, bare `{b:f/r} dot b` → 7,
+// and `{f:add1/r}.f 5` → 6 (a landed fn even collects forward args), while
+// the VM would push the fn as inert data (miscompile mechanism E). NOTE:
+// parked user-fn values structurally carry a 0-arg Signature alongside
+// their declared overloads, so in practice every user-fn member READ
+// refuses — the safe side, since landing-then-forward-collecting makes even
+// multi-param members invocable. The precision that pays is the KEY
+// resolution: when another concrete arg resolves as the read key, only that
+// member is inspected, so reads of NON-fn keys from fn-carrying containers
+// keep compiling; an unresolvable (computed) key inspects every member
+// conservatively. The receiver signal behind the get-family auto-dispatch
+// refusals (recordCallRefusal, RecordPolyCall). Census cost at landing:
+// 2 rows (3,875-row corpus), both previously divergence-exposed.
+// noteFnRiskFields records, at a construction dispatch (make), which field
+// keys of the produced INSTANCE hold genuinely-0-param fn values — the
+// auto-dispatch-on-read hazard containerFnAutoDispatchRisk cannot see when
+// the later get-family receiver is the instance CARRIER (schema only, no
+// field values; probe: `def C class {f:Function} def o (make C
+// {f:make42/r}) o.f` → 42 interpreted vs the fn value compiled — PR #225
+// P1). The construction MAP is concrete at record time, so the hazard is
+// decidable here and consulted by ID at the get-family guard sites. A field
+// later overwritten with a non-fn value over-refuses (sound, rare —
+// documented trade).
+func (es *EmitState) noteFnRiskFields(word string, args, outs []Value) {
+	if word != "make" || len(outs) == 0 {
+		return
+	}
+	var risky map[string]bool
+	for _, a := range args {
+		mp, ok := a.Data.(MapPayload)
+		if !ok || a.Carrier || mp.M == nil {
+			continue
+		}
+		for _, k := range mp.M.Keys() {
+			mv, _ := mp.M.Get(k)
+			if fnValueZeroArg(mv) {
+				if risky == nil {
+					risky = map[string]bool{}
+				}
+				risky[k] = true
+			}
+		}
+	}
+	if risky == nil {
+		return
+	}
+	if es.fnRiskFields == nil {
+		es.fnRiskFields = map[string]map[string]bool{}
+	}
+	for _, o := range outs {
+		if o.ID != "" {
+			es.fnRiskFields[o.ID] = risky
+		}
+	}
+}
+
+// instanceFnFieldRisk consults noteFnRiskFields' record for a get-family
+// dispatch whose receiver is (a carrier of) a tracked instance: a concrete
+// key inspects only that field, an unresolvable key any tracked field.
+func (es *EmitState) instanceFnFieldRisk(args []Value) bool {
+	if len(es.fnRiskFields) == 0 {
+		return false
+	}
+	for _, a := range args {
+		risky := es.fnRiskFields[a.ID]
+		if risky == nil {
+			continue
+		}
+		if key, ok := concreteMapKey(args); ok {
+			if risky[key] {
+				return true
+			}
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// zeroArgFnOut is the OUT-side backstop to the receiver heuristic: when a
+// get-family dispatch's check-mode result IS a concrete fn value with a
+// genuine 0-param overload, the read demonstrably surfaced an
+// auto-dispatchable member regardless of how the receiver was represented
+// (a class-instance CARRIER receiver dodges the payload inspection —
+// probe: `def C class {f:Function} def o (make C {f:make42/r}) o.f` → 42
+// interpreted vs the fn value compiled; PR #225 P1). Zero FP risk: the out
+// is the very value whose landing diverges.
+func zeroArgFnOut(outs []Value) bool {
+	for _, o := range outs {
+		if !o.Carrier && fnValueZeroArg(o) {
+			return true
+		}
+	}
+	return false
+}
+
+func containerFnAutoDispatchRisk(args []Value) bool {
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		switch d := a.Data.(type) {
+		case ListPayload:
+			if idx, ok := concreteIntKey(args); ok {
+				if idx >= 0 && idx < int64(len(d.Elems)) && fnValueZeroArg(d.Elems[idx]) {
+					return true
+				}
+				continue
+			}
+			for _, e := range d.Elems {
+				if fnValueZeroArg(e) {
+					return true
+				}
+			}
+		case MapPayload:
+			if d.M == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := d.M.Get(key); hit && fnValueZeroArg(mv) {
+					return true
+				}
+				continue
+			}
+			for _, k := range d.M.Keys() {
+				mv, _ := d.M.Get(k)
+				if fnValueZeroArg(mv) {
+					return true
+				}
+			}
+		default:
+			// Flat instances (class / Resource) expose FIELD reads through
+			// the same get family, and the interpreter auto-dispatches a
+			// landed fn field exactly like a map member (probe-verified:
+			// `def C class {f:Function} def o (make C {f:make42/r}) o.f`
+			// -> 42 interpreted, `fn make42` compiled — PR #225 P1).
+			// Same key-precision rule as MapPayload.
+			fields, _, isInst := flatInstanceParts(a)
+			if !isInst || fields == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := fields.Get(key); hit && fnValueZeroArg(mv) {
+					return true
+				}
+				continue
+			}
+			for _, k := range fields.Keys() {
+				mv, _ := fields.Get(k)
+				if fnValueZeroArg(mv) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// fnValueZeroArg reports whether v is a function VALUE with a GENUINE
+// zero-param overload — the shape the interpreter auto-dispatches the moment
+// it lands with no operands (containerFnAutoDispatchRisk). A parked user fn
+// structurally carries ONE phantom 0-arg Signature alongside its declared
+// overloads (probe-verified: 0-param make42 parks as [0 0], 2-param cmp2 as
+// [2 0], a 0+1-overload fn as [1 0 0], while builtins park phantom-free —
+// `add` is [3 2 2 2 2]). So a genuine 0-param overload shows as EITHER two
+// 0-arg sigs (real + phantom) OR a single sig that is 0-arg (phantom-free
+// value). A lone 0-arg sig among others is just the phantom — the fn needs
+// args, reads as data in both engines, and the applied member-call shapes
+// (`m.b 2`, pinned by TestEmitFnValueFieldCallCompiles) keep compiling.
+func fnValueZeroArg(v Value) bool {
+	d, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return false
+	}
+	zeros := 0
+	for i := range d.Signatures {
+		if d.Signatures[i].TotalArgs() == 0 {
+			zeros++
+		}
+	}
+	return zeros >= 2 || (zeros == 1 && len(d.Signatures) == 1)
+}
+
+// concreteMapKey returns the map-key string a get-family dispatch reads,
+// when one of the args is a concrete Atom or String key.
+func concreteMapKey(args []Value) (string, bool) {
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		switch k := a.Data.(type) {
+		case AtomPayload:
+			return k.Name, true
+		case StrPayload:
+			return k.S, true
+		}
+	}
+	return "", false
+}
+
+// concreteIntKey returns the list index a get-family dispatch reads, when
+// one of the args is a concrete Integer key.
+func concreteIntKey(args []Value) (int64, bool) {
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		if k, ok := a.Data.(IntPayload); ok {
+			return k.N, true
+		}
+	}
+	return 0, false
+}
+
 // producerWord returns the word of the event that produced value id, when id
 // resolves to a recorded event (not a const / local / unproduced value). Used to
 // gate makelist on its elements being core-builtin (deterministic) results.
@@ -2742,6 +3406,52 @@ func (es *EmitState) producerWord(id string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// isGetFamilyWord reports whether word is a container member accessor
+// (get/dot and their r-variants) — the words whose read of a FUNCTION value
+// auto-dispatches it in the interpreter (recordCallRefusal).
+func isGetFamilyWord(w string) bool {
+	return w == "get" || w == "dot" || w == "getr" || w == "dotr"
+}
+
+// producerReturnedClosureArity resolves the declared arity of the closure a
+// leading fn-typed CARRIER holds, when its producer is a compiled user call
+// whose fn returns exactly one anonymous closure (the factory pattern).
+// Recoverable arity lets resolveDynamicApply distinguish the single N-arg
+// apply `(mk 5) 10 20` from a curried CHAIN `((mk 1) 2) 3` — the flattened
+// residual is identical for both, and committing one OpCallDynamic over a
+// chain leaks the intermediate closure (miscompile mechanism E,
+// nested-factory apply, design/MISCOMPILE-HUNT-FINDINGS.0.md).
+func (es *EmitState) producerReturnedClosureArity(id string) (int, bool) {
+	pr, ok := es.producedBy[id]
+	if !ok {
+		return 0, false
+	}
+	for _, fr := range es.frames {
+		for i := range fr {
+			if fr[i].seq != pr.seq {
+				continue
+			}
+			if fr[i].kind != evCallUser {
+				return 0, false
+			}
+			unit := fr[i].uc.unit
+			if unit < 0 || unit >= len(es.fnRecs) {
+				return 0, false
+			}
+			rec := es.fnRecs[unit]
+			if len(rec.outOps) != 1 || rec.outOps[0].kind != opClosure {
+				return 0, false
+			}
+			cu := rec.outOps[0].closureUnit
+			if cu < 0 || cu >= len(es.fnRecs) {
+				return 0, false
+			}
+			return es.fnRecs[cu].nParams, true
+		}
+	}
+	return 0, false
 }
 
 // makeListRange reports whether any of a dispatch's args was produced by an
@@ -2926,10 +3636,12 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 // RecordClosureCall records a higher-order word's dispatch where the code BODY
 // at position bodyPos was compiled to closure unit `unit` (plan P2). The body
 // operand lowers to OpPushClosure (the handler invokes it through the VM via
-// the InvokeBody seam); the other operands resolve normally. Returns false,
-// leaving es UNTOUCHED, when an operand is dynamic or of unknown provenance —
-// the caller then keeps the island path.
-func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, outs []Value, pos SrcPos) bool {
+// the InvokeBody seam); the other operands resolve normally, except any slot
+// in extraOps (an extra LAMBDA hook — walk's ASCEND slot, Stage M2d — compiled
+// to its own closure unit by recordClosureDispatch), which rides its prepared
+// opClosure operand. Returns false, leaving es UNTOUCHED, when an operand is
+// dynamic or of unknown provenance — the caller then keeps the island path.
+func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, extraOps map[int]emitOperand, outs []Value, pos SrcPos) bool {
 	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
@@ -2945,6 +3657,10 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	for i := range args {
 		if i == bodyPos {
 			ops[i] = emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}
+			continue
+		}
+		if exOp, isExtra := extraOps[i]; isExtra {
+			ops[i] = exOp
 			continue
 		}
 		op, ok := es.resolveOperand(args[i])
@@ -3236,8 +3952,24 @@ func (es *EmitState) intern(v Value) int {
 	}
 	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) || IsParenExpr(v) {
 		// Compounds, structural type bodies, and codequote'd ParenExprs are never
-		// deduped: like the list/map identity rule, two source codequotes stay two
-		// distinct const values rather than CanonValue-merging into one.
+		// CanonValue-deduped: like the list/map identity rule, two source
+		// codequotes stay two distinct const values rather than merging into one.
+		// The SAME materialised value (same non-empty ID) is one logical
+		// instance though — its payload pointer is already identity-aliased —
+		// so it pools by ID: semantics-preserving, and it keeps
+		// freshenFnUnitConsts' push-site counting truthful (two reads of one
+		// binding count as pushes of ONE const, never two slots).
+		if v.ID != "" {
+			if i, ok := es.constIDIdx[v.ID]; ok {
+				return i
+			}
+			es.consts = append(es.consts, v)
+			if es.constIDIdx == nil {
+				es.constIDIdx = map[string]int{}
+			}
+			es.constIDIdx[v.ID] = len(es.consts) - 1
+			return len(es.consts) - 1
+		}
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
@@ -3413,6 +4145,33 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 // copy-returning. Keep this whitelist free of mutable instance types: adding
 // one would let a pooled compound const reach an in-place mutator and corrupt
 // it across iterations.
+// freshenableConst reports whether a value belongs to the compound
+// VALUE-literal class whose interpreter evaluation CONSTRUCTS a fresh
+// instance per evaluation, making per-call container identity observable
+// through `eq` (miscompile mechanism A,
+// design/MISCOMPILE-HUNT-FINDINGS.0.md §A). That is ListPayload and
+// MapPayload — sameContainer (compare.go) identifies them by backing array /
+// *OrderedMap pointer, and CloneValue mints both fresh. Everything else
+// stays shared: scalars and Microns compare by value; type bodies, fn
+// values, and surfaces are identity-inert descriptors; XML literals are
+// parse-time constants in the INTERPRETER too (the same element instance is
+// spliced per call — probe-verified `(mk) eq (mk)` → true interpreted), so
+// sharing the pooled const IS parity there. The empty-list case needs no
+// exclusion: sameContainer treats all empty lists as the single empty list,
+// so interp (fresh empties, eq true) and VM (cloned empty, eq true) agree.
+// Consumed by the resolveOperand fn-unit marking (freshenConst) and the
+// enclosing-binding snapshot (snapshotCompoundBindingIDs).
+func freshenableConst(v Value) bool {
+	if v.Carrier || v.Dynamic {
+		return false
+	}
+	switch v.Data.(type) {
+	case ListPayload, MapPayload:
+		return true
+	}
+	return false
+}
+
 func isInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
@@ -3821,9 +4580,12 @@ func inertReachMember(v Value) bool {
 // args shape, and any unconsumed fn-value carrier, refuses.
 func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value, Opcode, string) {
 	// Leading dynamic value (statically Any — the checker cannot tell a Function
-	// from data) with every following arg static.
+	// from data) with every following arg static. An ANNOTATED method-read
+	// carrier is excluded: the statement-window model (method_shape.go) owns
+	// its apply, and a decline there means the residual tail may cross the
+	// value's statement boundary — see methodShapeAnnotated.
 	applyDynamic := false
-	if len(residual) >= 2 && residual[0].Dynamic {
+	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) {
 		applyDynamic = !anyDynamicTail(residual)
 	}
 	// Leading Function/FnDef CARRIER (the factory pattern: a returned closure now
@@ -3832,6 +4594,17 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
 	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
+		// When the carrier's closure arity is statically recoverable (its
+		// producer is a compiled factory fn returning one anonymous closure),
+		// a tail-arg count that disagrees is a curried CHAIN (`((mk 1) 2) 3`)
+		// or a partial apply — one OpCallDynamic would leak the intermediate
+		// closure (miscompile mechanism E). Refuse; the interpreter applies
+		// the chain faithfully.
+		if applyDynamic {
+			if arity, known := es.producerReturnedClosureArity(residual[0].ID); known && arity != len(residual)-1 {
+				return residual, 0, "fn-value apply arity mismatch — curried chain or partial apply (Stage 3)"
+			}
+		}
 	}
 	// Leading BRANCH result that MAY be a fn (an arm is an fn value, so the
 	// merge produced a value that is sometimes callable — `if c [99]
@@ -3860,6 +4633,19 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// window verbatim. The promoted entry stays Dynamic in `residual`, so the
 	// in-order ops loop maps it to its local and the window lays out unchanged.
 	if _, ok := es.mixedDynamicApplyShape(residual); ok {
+		return residual, OpCallDynamicMixed, ""
+	}
+	// TRAILING window (Stage M2b): the single dynamic / fn value is LAST over
+	// ≥2 static args (`10 3 m.s/s` → residual [10, 3, wrapper]). The verbatim
+	// window island reproduces the interpreter exactly — the fn value lands ON
+	// TOP of an already-populated stack and dispatches under its OWN barrier
+	// discipline (a stack-args wrapper is BarrierPos 0 and collects nothing
+	// forward, so the trailing-1 rotation contract of OpCallDynamicTrailing /
+	// OpCallDynTrailTop cannot express it), and a non-callable value simply
+	// stays put. The producing event was promoted to a frame local (Finalize's
+	// gate below), so the whole window re-pushes in source order. The 2-entry
+	// trailing shape stays with trailingApply above — landed and pinned.
+	if es.trailingWindowApplyShape(residual) {
 		return residual, OpCallDynamicMixed, ""
 	}
 	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
@@ -3929,6 +4715,26 @@ func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool
 	return []Value{fnv, arg}, true
 }
 
+// trailingWindowApplyShape detects the TRAILING fn-value window (Stage M2b):
+// EXACTLY one residual entry is a dynamic / fn value, it is the LAST entry with
+// ≥2 entries below it, and it is event-produced (so Finalize can promote the
+// producer to a frame local and re-push the whole window in source order for
+// OpCallDynamicMixed). The 2-entry trailing shape is deliberately excluded —
+// that is trailingApply's landed rotation contract (OpCallDynamicTrailing).
+func (es *EmitState) trailingWindowApplyShape(residual []Value) bool {
+	if len(residual) < 3 {
+		return false
+	}
+	last := len(residual) - 1
+	for i, rv := range residual {
+		if (rv.Dynamic || isFnValueResidual(rv)) != (i == last) {
+			return false
+		}
+	}
+	pr, ok := es.producedBy[residual[last].ID]
+	return ok && pr.idx == 0
+}
+
 // mixedDynamicApplyShape detects the MIXED fn-value-call boundary: EXACTLY one
 // residual entry is a dynamic / fn value, it sits STRICTLY INTERIOR (≥1 entry
 // below it AND ≥1 above it), and it is event-produced (so the producing event
@@ -3951,6 +4757,14 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 	}
 	if dynIdx <= 0 || dynIdx >= len(residual)-1 {
 		return 0, false // not strictly interior (leading / trailing are separate)
+	}
+	// An ANNOTATED method-read carrier declines the mixed island too: its
+	// after-args are the statement-window model's territory, and the island's
+	// forward collection would cross the value's statement End boundary
+	// (`3 c.add 2 ; {a:1} …` — the island could bind the NEXT statement's map
+	// as the method's 2-arg overload's field arg). See methodShapeAnnotated.
+	if es.methodShapeAnnotated(residual[dynIdx].ID) {
+		return 0, false
 	}
 	if pr, ok := es.producedBy[residual[dynIdx].ID]; !ok || pr.idx != 0 {
 		return 0, false // not event-produced — cannot promote to a local
@@ -4036,14 +4850,17 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			}
 		}
 	}
-	// MIXED fn-value-call boundary (`3 m.f 2`): the interior fn sits above a
-	// before-arg literal, so the in-order reconciliation would refuse "result
-	// above a literal". Promote EVERY residual event to a frame local so the whole
-	// window (before-args, the fn, after-args) re-pushes in source order, ready for
+	// MIXED fn-value-call boundary (`3 m.f 2`) and its TRAILING-window sibling
+	// (`10 3 m.s/s`, Stage M2b): the fn sits above a before-arg literal, so the
+	// in-order reconciliation would refuse "result above a literal". Promote
+	// EVERY residual event to a frame local so the whole window (before-args,
+	// the fn, any after-args) re-pushes in source order, ready for
 	// OpCallDynamicMixed to island it. (residualHasFnOrDynamic suppressed the
-	// reorder block above; this is the one fn-value shape that DOES reorder, since
-	// the island consumes the window in source order, not the apply-on-top layout.)
-	if _, ok := es.mixedDynamicApplyShape(residual); ok {
+	// reorder block above; these are the fn-value shapes that DO reorder, since
+	// the island consumes the window in source order, not the apply-on-top
+	// layout.)
+	_, mixedOK := es.mixedDynamicApplyShape(residual)
+	if mixedOK || es.trailingWindowApplyShape(residual) {
 		forceOrder = make(map[int]bool, len(residualSeqs))
 		for _, seq := range residualSeqs {
 			forceOrder[seq] = true
@@ -4114,12 +4931,20 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		ops = append(ops, constOperand(es.intern(lit)))
 	}
-	if reason := lw.seatResults(ops, false, false, seatMsgs{
-		aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
-		reordered:    "residual shape beyond Stage 1 (call results reordered)",
-		unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
-	}, lastPos); reason != "" {
-		return nil, reason, false
+	// A trap-truncated program seats nothing: the residual was dropped above,
+	// and results the kept event prefix leaves on the stack are legitimately
+	// dangling — the interpreter aborts at this same point with those values
+	// still on its stack (`5 inc apply`: inc's result is live when apply
+	// raises), and OpTrap aborts before anything could read them. Only a
+	// program that RUNS TO COMPLETION owes the residual seating discipline.
+	if es.trapAt == 0 {
+		if reason := lw.seatResults(ops, false, false, seatMsgs{
+			aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
+			reordered:    "residual shape beyond Stage 1 (call results reordered)",
+			unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
+		}, lastPos); reason != "" {
+			return nil, reason, false
+		}
 	}
 	if dynOp != 0 {
 		// The fn value (leading, or trailing rotated to the front) sits at the
@@ -4140,6 +4965,24 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	// language's tail-call guarantee carries into compiled mode).
 	for _, rec := range es.fnRecs {
 		if !rec.finished {
+			if es.trapAt != 0 {
+				// The program ends at a terminal top-level trap, and an
+				// UNFINISHED unit is unreachable from the kept prefix: a
+				// CALL_USER event only records against a unit whose body
+				// compile already finished, so no event at or before the trap
+				// can enter this one (the unit was opened by a `def` whose
+				// body compile the trapping dispatch cut short — e.g. `{f}`
+				// evaluating a 1-arg fn with no args). Emit a defensive trap
+				// stub so unit indices stay aligned and any future reach of
+				// the stub fails loudly instead of silently returning nothing.
+				ti := len(p.Traps)
+				p.Traps = append(p.Traps, TrapSpec{Code: "internal_error",
+					Detail: "unreachable fn unit " + rec.name + " entered after terminal trap", Word: rec.name})
+				p.Fns = append(p.Fns, CompiledFn{Name: rec.name,
+					Code:  []Instr{{Op: OpTrap, Arg: int32(ti)}},
+					Debug: []SrcPos{rec.pos}})
+				continue
+			}
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
 		diverged := fragDiverges(rec.frag)
@@ -4192,12 +5035,19 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// OpCallDynTrailTop before the RET (the captured/param fn auto-applies to
 			// its args exactly as the interpreter's paren auto-dispatch).
 			if rec.dynTrailArity > 0 {
-				flw.emit(OpCallDynTrailTop, rec.dynTrailArity, rec.pos)
+				op := OpCallDynTrailTop
+				if rec.dynTrailApply {
+					op = OpCallDynApplyTop // the `apply` word's unquote-then-apply
+				}
+				flw.emit(op, rec.dynTrailArity, rec.pos)
 			}
 			flw.emit(OpRet, 0, rec.pos)
 		}
 		// A fully diverging body (every path tail-calls) emits no RET —
 		// control leaves via the callee's eventual RET.
+		if reason := freshenFnUnitConsts(&cf, es, rec); reason != "" {
+			return nil, reason, false
+		}
 		p.Fns = append(p.Fns, cf)
 	}
 

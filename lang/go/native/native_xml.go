@@ -38,16 +38,21 @@ var xmlNatives = []NativeFunc{
 	{
 		Name: "xml-attr",
 		Signatures: []Signature{
+			// An attribute value is always a String (the parser's attr map);
+			// a missing attribute reads as None — so the result is the
+			// gradual String-or-None union, never bare Any.
 			{
-				Args:    []*Type{TString, TXml},
-				Impl:    Go(xmlAttrHandler),
-				Returns: []*Type{TAny}, BarrierPos: -1,
+				Args:      []*Type{TString, TXml},
+				Impl:      Go(xmlAttrHandler),
+				Returns:   []*Type{TAny},
+				ReturnsFn: xmlAttrReturns, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TXml},
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(xmlAttrHandler),
-				Returns:   []*Type{TAny}, BarrierPos: -1,
+				Returns:   []*Type{TAny},
+				ReturnsFn: xmlAttrReturns, BarrierPos: -1,
 			},
 		},
 	},
@@ -89,6 +94,13 @@ func collectXmlText(b *strings.Builder, v Value) {
 	for _, c := range cren {
 		collectXmlText(b, c)
 	}
+}
+
+// xmlAttrReturns: dynamic(String tor None) — see the sig comment.
+func xmlAttrReturns(_ []Value, _ *Registry) []Value {
+	return []Value{NewDynamicCarrierValue(NewDisjunct([]Value{
+		NewTypeLiteral(TString), NewTypeLiteral(TNone),
+	}))}
 }
 
 func xmlAttrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

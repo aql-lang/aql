@@ -203,6 +203,7 @@ func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	wrapped, ok := eng.ForceArityFunction(args[1], int(n))
 	if !ok {
 		if out, gradual := checkModeGradualFn(reg, args[1]); gradual {
+			recordGradualWrap(reg, "force-arity", args, out)
 			return out, nil
 		}
 		detail := "force-arity requires a non-negative arity and a function value"
@@ -243,6 +244,11 @@ func rebarrierResult(wrap func(Value) (Value, bool), v Value, word string, reg *
 	wrapped, ok := wrap(v)
 	if !ok {
 		if out, gradual := checkModeGradualFn(reg, v); gradual {
+			// Sound from the by-name (rebarrierAtom) entry too: the recorded
+			// operand is the RESOLVED value v (a local / event / const), never
+			// the atom, so the compiled program re-supplies the same value the
+			// interpreter wrapped — no runtime name resolution is implied.
+			recordGradualWrap(reg, word, []Value{v}, out)
 			return out, nil
 		}
 		detail := word + " requires a function value, got " + v.Parent.String()
@@ -408,6 +414,7 @@ func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	wrapped, ok := eng.UsurpFunction(args[0])
 	if !ok {
 		if out, gradual := checkModeGradualFn(reg, args[0]); gradual {
+			recordGradualWrap(reg, "usurp", args, out)
 			return out, nil
 		}
 		detail := "usurp requires a function value, got " + args[0].Parent.String()
@@ -417,6 +424,30 @@ func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		return nil, fmt.Errorf("%s", detail)
 	}
 	return []Value{wrapped}, nil
+}
+
+// recordGradualWrap records a dispatch-modifier word's GRADUAL dispatch (a
+// dynamic fn operand the check-mode handler could not wrap — checkModeGradualFn)
+// as an OpCallNativePoly event, so the wrapper is constructed at RUN time by the
+// real handler over the real fn value (`m.a/u 1 2` lowers get → poly usurp →
+// OpCallDynamic; Stage M2b, design/STAGE3-INLINING-DESIGN-ROUND.0.md). The VM's
+// callPoly re-matches the word's own signatures with the kernel's own
+// MatchSignature — the exact dispatch the interpreter takes — so a runtime
+// non-fn value raises the identical illegal_ref. Only the VALUE-form
+// ([Function]-sig) sites record: the by-name Atom forms resolve a registry
+// binding the compiled program does not maintain, so they stay unrecorded
+// (downstream provenance refuses and the program falls back, the status quo).
+// RecordPolyCall declining (an unresolvable operand, inactive recorder) leaves
+// the recorder untouched — the residual then refuses, never miscompiles.
+func recordGradualWrap(reg *Registry, word string, args, outs []Value) {
+	if reg == nil {
+		return
+	}
+	pos := eng.SrcPos{}
+	if len(args) > 0 {
+		pos = args[len(args)-1].Pos
+	}
+	reg.Check.Recorder().RecordPolyCall(word, args, outs, pos, nil)
 }
 
 // checkModeGradualFn handles a dispatch-modifier word (usurp / stack-args /

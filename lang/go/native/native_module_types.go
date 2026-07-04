@@ -59,6 +59,11 @@ type moduleExportInfo struct {
 	Module Value       // the owning Module instance (Ideal/Module)
 }
 
+// ExportFields implements eng.ExportFieldsCarrier so the kernel's
+// module-export growth ledger (eng/go/module_export_growth.go) can key
+// per-export-map state by the Fields pointer without importing this type.
+func (m *moduleExportInfo) ExportFields() *OrderedMap { return m.Fields }
+
 // NewModuleInstance builds an Ideal/Module value wrapping a ModuleDesc. The
 // descriptor metadata (Ref/Kind/File/Folder) and the export names are
 // surfaced as the id/kind/file/folder/exports fields; the carried Exports
@@ -159,6 +164,25 @@ func moduleGet(v Value, key string) (Value, bool) {
 	return Value{}, false
 }
 
+// moduleInstGetReturns is the check-mode return computer for a Module
+// descriptor read (get/getr/dot/dotr on `X.$module`): the field set is
+// CLOSED (moduleGet) — name/kind/file/folder are always Strings, exports
+// is always a List of export-name Strings. An unknown or non-concrete key
+// stays dynamic(Any) (get reads none, getr raises — the runtime's job).
+func moduleInstGetReturns(args []Value, _ *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 2 || !IsConcrete(args[0]) {
+		return dyn
+	}
+	switch getKey(args[0]) {
+	case "name", "kind", "file", "folder":
+		return []Value{NewCarrier(TString)}
+	case "exports":
+		return []Value{NewCarrier(TList)}
+	}
+	return dyn
+}
+
 // moduleTypeBehavior renders Module / ModuleExport values and matches
 // nominally (DefaultBehavior semantics for Match/Equal).
 type moduleTypeBehavior struct {
@@ -250,7 +274,7 @@ func moduleExportGetrReturns(args []Value, r *Registry) []Value {
 		if val, ok := moduleExportGet(args[1], k); ok {
 			return []Value{val}
 		}
-		r.Check.Emit.RecordTrap("not_found",
+		r.Check.Recorder().RecordTrap("not_found",
 			fmt.Sprintf("getr: export %q not found in module", k), "getr",
 			"", args[0].Pos)
 	}

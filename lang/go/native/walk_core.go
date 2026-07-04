@@ -173,6 +173,23 @@ func callWalkHook(r *Registry, h walkHook, arg Value) error {
 	return err
 }
 
+// walkHookArgCarrier builds the GENERALISED `{key value path parent depth}`
+// payload carrier a compiled hook body is analysed against — the closure-unit
+// input mirroring walkBuildHookArg's runtime map (the CallableSpec.Inputs for
+// both the quotation and, via LambdaSharesTokenShape, the lambda form). Field
+// carriers are types, not one call's values: path/depth are always
+// String/Integer; key/value/parent are Any (key and parent are None at the
+// root; value is whatever node is visited).
+func walkHookArgCarrier() Value {
+	om := NewOrderedMap()
+	om.Set("key", NewCarrier(TAny))
+	om.Set("value", NewCarrier(TAny))
+	om.Set("path", NewCarrier(TString))
+	om.Set("parent", NewCarrier(TAny))
+	om.Set("depth", NewCarrier(TInteger))
+	return NewValueRaw(TMap, MapPayload{M: om})
+}
+
 // walkBuildHookArg builds the `{key value path parent depth}` payload map for a
 // frame. The root has key=None, path="", parent=None (presence is tracked by
 // hasKey/hasParent, never by probing Data==nil).

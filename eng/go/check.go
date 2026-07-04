@@ -36,6 +36,8 @@ func (c *CheckState) Clone() *CheckState {
 	cp.DefsInstalled = cloneMap(c.DefsInstalled)
 	cp.DefsUsed = cloneMap(c.DefsUsed)
 	cp.ContextTypes = cloneMap(c.ContextTypes)
+	cp.CtxShapes = cloneMap(c.CtxShapes)
+	cp.MethodShapes = cloneMap(c.MethodShapes)
 	cp.FnBinders = cloneNestedSet(c.FnBinders)
 	cp.FnCallGraph = cloneNestedSet(c.FnCallGraph)
 	if c.FnNameStack != nil {
@@ -105,11 +107,15 @@ func (c *CheckState) Begin() func() {
 	c.FnBinders = nil
 	c.FnCallGraph = nil
 	c.ContextTypes = nil
+	c.CtxShapes = nil
+	c.MethodShapes = nil
+	c.PendingMethodApply = nil
 	c.InflightBails = 0
 	c.FnNameInflight = nil
 	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
-	c.Emit = nil
+	c.Emit = theInactiveEmit
+	c.CodeEffectDepth = 0
 	c.FnBodyDepth = 0
 	// Compiling marks a REAL compile pass; the compile entry points
 	// (CompileCheck / RunCompiled) set it true AFTER this Begin. Reset it here so
@@ -182,11 +188,7 @@ func (c *CheckState) IsolateEmit() func() {
 		return func() {}
 	}
 	saved := c.Emit
-	fresh := NewEmitState()
-	if saved != nil {
-		fresh.reg = saved.reg
-	}
-	c.Emit = fresh
+	c.Emit = newIsolatedEmit(c.Recorder())
 	return func() { c.Emit = saved }
 }
 

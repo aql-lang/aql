@@ -114,6 +114,21 @@ func (s *Signature) DispatchHandler() Handler { return s.dispatchHandler() }
 // field). nil for a Go sig / no impl. body is the internal spelling.
 func (s *Signature) Body() []Value { return s.body() }
 
+// DeclaresCheckReturns reports whether this signature tells the checker
+// what it produces: a declared Returns slice (an empty non-nil slice is a
+// valid "produces nothing"), a check-mode ReturnsFn, a full-stack
+// CheckFullStack shape function, or an AQL body (whose returns the
+// analyser derives itself via AnalyseFnBody / the installed ReturnsFn). A
+// signature declaring NONE of these hits the missing_returns fallback at
+// every call site — the coverage gate
+// (test/go/langspec/check_returns_gate_test.go) enumerates every
+// registered native and fails on such a sig unless it is explicitly
+// allowlisted with a justification.
+func (s *Signature) DeclaresCheckReturns() bool {
+	return s.Returns != nil || s.ReturnsFn != nil ||
+		s.checkFullStackFn() != nil || len(s.body()) > 0
+}
+
 func (s *Signature) dispatchHandler() Handler {
 	if s.Impl == nil {
 		return nil

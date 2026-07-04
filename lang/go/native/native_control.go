@@ -220,6 +220,29 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 			body = v
 		}
 	}
+	// A non-literal body carrier CARRYING an analysed stack effect — a
+	// quoted code list read out of data, converted by the stage-1
+	// typed-code-value producer (AnalyseCodeEffect, design/
+	// checker-precision-fronts.0.md §1) — types as the effect's Out
+	// instead of falling to the dynamic(Any) hatch below. The outs stay
+	// DYNAMIC (bounded dynamic(T), never strict T): the effect was
+	// computed at the READ site and the body's free words re-resolve
+	// against the runtime environment at `do` time, so it is a best
+	// static bound, not a proof. Gated to !Compiling (mirroring the
+	// producer, which never attaches during a compile pass): the
+	// recording pass keeps the dynamic(Any) hatch so a `do` over a
+	// computed body carrier keeps REFUSING to lower (whole-program
+	// interpreter fallback) — checker precision must not imply compile
+	// coverage (lang/go/code_effect_test.go pins the refusal).
+	if body.Carrier && !r.Check.Compiling {
+		if eff, ok := body.Data.(CodeEffectInfo); ok && eff.Analysed && len(eff.In) == 0 && len(eff.Out) > 0 {
+			out := make([]Value, len(eff.Out))
+			for i, t := range eff.Out {
+				out[i] = NewDynamicCarrier(t)
+			}
+			return out
+		}
+	}
 	// Escape hatch: a computed body the checker cannot run statically (a
 	// list carrier rather than concrete tokens) has a genuinely unknown
 	// residual, so emit a bounded gradual dynamic(Any) — optimistically
@@ -398,25 +421,25 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		var defs map[string]Value
 		if lit {
 			restoreThen := ApplyGuardNarrowing(r, args[0])
-			es.Emit.ArmBranchCapture()
+			es.Recorder().ArmBranchCapture()
 			stk, defs = RunCarrierBodyWithDefs(r, args[1])
 			restoreThen()
 			InstallJoinedDefs(r, defs, nil)
 		} else {
 			restoreElse := ApplyComplementNarrowing(r, args[0])
-			es.Emit.ArmBranchCapture()
+			es.Recorder().ArmBranchCapture()
 			stk, defs = RunCarrierBodyWithDefs(r, args[2])
 			restoreElse()
 			InstallJoinedDefs(r, nil, defs)
 		}
-		frag := es.Emit.TakeFragment()
+		frag := es.Recorder().TakeFragment()
 		if len(stk) == 0 {
-			es.Emit.MarkUncompilable("if: branch produces no value (Stage 2 lowers single-result branches)")
+			es.Recorder().MarkUncompilable("if: branch produces no value (Stage 2 lowers single-result branches)")
 			return nil
 		}
 		out := stk[len(stk)-1]
 		taken := lit
-		es.Emit.RecordBranch(BranchRecord{
+		es.Recorder().RecordBranch(BranchRecord{
 			ConstCond: &taken, HasElse: true,
 			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos,
 		})
@@ -439,9 +462,9 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	var thenValue *Value
 	if thenIsBody {
 		restoreThen := ApplyGuardNarrowing(r, args[0])
-		es.Emit.ArmBranchCapture()
+		es.Recorder().ArmBranchCapture()
 		thenStk, thenDefs = RunCarrierBodyWithDefs(r, args[1])
-		thenFrag = es.Emit.TakeFragment()
+		thenFrag = es.Recorder().TakeFragment()
 		restoreThen()
 	} else {
 		v := args[1]
@@ -460,9 +483,9 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	var elseValue *Value
 	if elseIsBody {
 		restoreElse := ApplyComplementNarrowing(r, args[0])
-		es.Emit.ArmBranchCapture()
+		es.Recorder().ArmBranchCapture()
 		elseStk, elseDefs = RunCarrierBodyWithDefs(r, args[2])
-		elseFrag = es.Emit.TakeFragment()
+		elseFrag = es.Recorder().TakeFragment()
 		restoreElse()
 	} else {
 		v := args[2]
@@ -479,7 +502,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		// mirroring the 2-arg if2 guard. The registered result is a phantom None
 		// the residual reconciliation skips.
 		out := NewCarrier(TNone)
-		es.Emit.RecordBranch(BranchRecord{
+		es.Recorder().RecordBranch(BranchRecord{
 			Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
@@ -489,13 +512,13 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		// residual strips it). On a plain or uncompilable check there is no
 		// recorded event to strip, so the if must net 0 like the runtime —
 		// otherwise the None leaks onto CheckResult.Stack.
-		if !es.Emit.Active() {
+		if !es.Recorder().Active() {
 			return nil
 		}
 		return []Value{out}
 	}
 	out := joined[len(joined)-1]
-	es.Emit.RecordBranch(BranchRecord{
+	es.Recorder().RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
@@ -507,8 +530,8 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 // emit fragment (nil when the condition is a pre-evaluated value, or
 // when no bytecode recording is active).
 func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
-	es := r.Check.Emit
-	if es == nil || !IsConcrete(cond) || !cond.Parent.ConformsTo(TList) {
+	es := r.Check.Recorder()
+	if !es.Armed() || !IsConcrete(cond) || !cond.Parent.ConformsTo(TList) {
 		return nil, nil
 	}
 	es.ArmBranchCapture()
@@ -529,9 +552,9 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	}
 	condFrag, condStk := analyseCondFragment(r, args[0])
 	restore := ApplyGuardNarrowing(r, args[0])
-	es.Emit.ArmBranchCapture()
+	es.Recorder().ArmBranchCapture()
 	thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
-	thenFrag := es.Emit.TakeFragment()
+	thenFrag := es.Recorder().TakeFragment()
 	restore()
 	InstallJoinedDefs(r, thenDefs, nil)
 	var out Value
@@ -544,7 +567,7 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	// 2-arg if: a VARIADIC result (0 or 1 values at run time). An empty
 	// then-stack (a 0-value/diverging then) makes it a 0-value statement
 	// guard — RecordBranch lowers that with no merge slot.
-	es.Emit.RecordBranch(BranchRecord{
+	es.Recorder().RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: false,
 		Then: thenFrag, ThenStk: thenStk, Out: out, Pos: args[0].Pos,
 	})
@@ -552,7 +575,7 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	// stack while recording is live (mirrors if3ReturnsFn): a plain or
 	// uncompilable check has no recorded event to strip it, so it must net
 	// 0 like the runtime rather than leak a None onto the residual.
-	if zeroGuard && !es.Emit.Active() {
+	if zeroGuard && !es.Recorder().Active() {
 		return nil
 	}
 	return []Value{out}
@@ -715,7 +738,7 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value, countArg int) []Value {
 	body := args[len(args)-1]
 	iter := NewCarrier(iterType)
-	es := r.Check.Emit
+	es := r.Check.Recorder()
 
 	// Statically-zero loop pruning: a `for` whose count operand is a CONCRETE
 	// non-positive Integer never enters its body — at run time both engines

@@ -334,8 +334,8 @@ var allArrayNatives = []NativeFunc{
 				ReturnsFn:  forEachReturnsFn, BarrierPos: -1,
 			},
 			// Map forms — iterate entries for side effects, produce nothing.
-			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(forEachMapHandler), BarrierPos: -1},
-			{Args: []*Type{TFunction, TMap}, Impl: Go(forEachMapHandler), BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(forEachMapHandler), Returns: []*Type{}, BarrierPos: -1},
+			{Args: []*Type{TFunction, TMap}, Impl: Go(forEachMapHandler), Returns: []*Type{}, BarrierPos: -1},
 		},
 	},
 	{
@@ -1438,7 +1438,7 @@ func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value 
 	// Higher-order bodies run nested sub-engines — pause bytecode
 	// recording for their duration (they are not part of the
 	// enclosing straight line).
-	defer r.Check.Emit.Suspend()()
+	defer r.Check.Recorder().Suspend()()
 	if !IsConcrete(body) {
 		return nil
 	}

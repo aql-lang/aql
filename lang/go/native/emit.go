@@ -108,6 +108,64 @@ func EmitKinds() []EmitKind {
 	}
 }
 
+// EmitOptsSchema returns the Options-schema type literal for a BUILT-IN emit
+// kind's opts slot — the exact key set the kind's Encode handler reads (G6):
+// json/jsonic take {pretty indent}, yaml reads the same pair via optIndent,
+// csv takes {separation}, xml takes {pretty}, and tsv/toml/ini read nothing
+// (an EMPTY schema, so any key is rejected). Every field is optional
+// (Disjunct with None), mirroring the `convert` opts precedent
+// (convertOptsPattern): dispatch unifies a CONCRETE opts map against the
+// schema, so a typo'd key (`{prety:true}`) is a hard signature rejection at
+// check AND run time instead of a silently ignored option, while a dynamic
+// opts map still matches (Options vs a non-concrete Map preserves the
+// schema). ok is false for a kind that is not built in (host- and
+// AQL-registered emitters own their key sets, so their opts stay a plain
+// Map). The schema for emit_auto is EmitAutoOptsSchema.
+func EmitOptsSchema(kind string) (Value, bool) {
+	switch kind {
+	case "json", "jsonic", "yaml":
+		return emitOptsSchema("pretty", "indent"), true
+	case "csv":
+		return emitOptsSchema("separation"), true
+	case "tsv", "toml", "ini":
+		return emitOptsSchema(), true
+	case "xml":
+		return emitOptsSchema("pretty"), true
+	}
+	return Value{}, false
+}
+
+// EmitAutoOptsSchema is the opts schema for emit_auto: the UNION of the keys
+// of the natural-target kinds auto can delegate to (json / csv / xml — see
+// NaturalEmitKind), since the concrete kind is unknown until the value's type
+// is inspected.
+func EmitAutoOptsSchema() Value {
+	return emitOptsSchema("pretty", "indent", "separation")
+}
+
+// emitOptsSchema assembles an Options type literal whose fields are the given
+// keys, each typed per emitOptFieldTypes and optional (Disjunct with None —
+// the missing-key default rule in unifyOptionsFamily).
+func emitOptsSchema(keys ...string) Value {
+	fields := NewOrderedMap()
+	for _, k := range keys {
+		fields.Set(k, NewDisjunct([]Value{
+			NewTypeLiteral(emitOptFieldTypes[k]), NewTypeLiteral(TNone),
+		}))
+	}
+	return NewOptionsType(fields)
+}
+
+// emitOptFieldTypes maps each built-in emit opt key to its value type: the
+// type the opts helpers (optBool / optIndent / optSeparator) actually read.
+// indent is Number, not Integer — optIndent accepts int64 AND float64, so the
+// schema mirrors the handler's real tolerance.
+var emitOptFieldTypes = map[string]*Type{
+	"pretty":     TBoolean,
+	"indent":     TNumber,
+	"separation": TString,
+}
+
 // NaturalEmitKind maps a value's type to the name of its natural emit kind.
 // Map/Record/Options/Object/Store/Error/Scalars → json; List/Array → json;
 // Table → csv; Xml → xml. (json is the broad default.) Returns false for a

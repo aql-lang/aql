@@ -250,14 +250,19 @@ table):
   `record_shape_mismatch`, … — typos, dead bindings, constant `if`
   branches, record-field mismatches.
 
-**Pre-flight a run.** `aql run --check` (or the short `aql --check`)
-runs the checker first and aborts before executing if any error is
-found, so a type bug can't slip into a run; stdout stays clean for the
-program's own output:
+**Every run pre-flights by default.** `aql run` (and `aql -e`) runs
+the checker first and aborts before executing if any error is found,
+so a type bug can't slip into a run. The default gate is quiet: a
+clean program produces no checker output at all (stdout and stderr
+stay clean for the program's own output); diagnostics print only when
+the run is about to abort. `--check` upgrades the pre-flight to
+verbose (all diagnostics, including the advisory tiers);
+`--no-check` (or `AQL_NO_CHECK=1`) skips the pre-flight entirely:
 
 ```bash
-aql --check script.aql       # check, then run; abort on any error
-aql --check -e 'add 1 2'     # one-shot, checked first
+aql script.aql               # checked by default; aborts on any error
+aql --check script.aql       # verbose pre-flight: advisories too
+aql --no-check script.aql    # skip the pre-flight (runtime errors only)
 ```
 
 **In your editor.** `aql lsp` publishes these same diagnostics as you

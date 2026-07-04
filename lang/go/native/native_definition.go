@@ -228,12 +228,12 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// Mark a computed binding for value-def-local promotion in the bytecode
 	// lowerer: a named value may be referenced in any order, so its producing
 	// event is stored to a frame local rather than left on the simulated stack.
-	r.Check.Emit.MarkValueDef(value)
+	r.Check.Recorder().MarkValueDef(value)
 	// A rebind of a LOOP-CARRIED def (a pre-loop binding an armed for-body
 	// rebinds — eng.AnalyseLoopBody registered it via NoteLoopCarried) stores
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
-	r.Check.Emit.RecordDefRebind(name, value, pos)
+	r.Check.Recorder().RecordDefRebind(name, value, pos)
 	return nil, nil
 }
 
@@ -318,29 +318,49 @@ func reservedWordError(r *Registry, op, name string) error {
 }
 
 // markRefineDefUncompilable refuses bytecode compilation of a typed-def whose
-// constraint is a REFINEMENT — a predicate / DepScalar subset (`def x:(Integer gt
-// 10) v`) or a bare-refine newtype (`def x:Pos v`, Pos = refine Integer). The
-// interpreter's defTypedHandler validates the predicate and/or reparents the bound
-// value to the refine type; the bytecode value-def lowering captures NEITHER (it
-// folds `def x:Pos n` to a bare `x≡n` alias keeping the base tag). So a compiled
-// `def x:(Integer gt 10) 5` binds x=5 where the interpreter raises, and `def x:Pos
-// n` then reports typeof Integer / fails a [Pos] return-check (cluster B of the
-// broad miscompile hunt). No store-with-reparent opcode exists, so refuse → fall
-// back to the interpreter. Object / alias / schema typed-defs do not route here.
+// refinement constraint could not be recorded as a typed-bind event — the
+// fallback behind recordTypedBindOrRefuse. The COMMON dynamic refinement
+// shapes (predicate type / bare-refine newtype / DepScalar subset over a
+// param or computed carrier) now compile: RecordTypedBind emits an OpBindTyped
+// that runs the interpreter's own validate/reparent at run time (RunTypedBind,
+// eng/go/typed_bind.go — the closure of miscompile B's sound refusal). This
+// mark remains only for the residual shape RecordTypedBind declines: a dynamic
+// body whose operand has no resolvable provenance, where compiling would have
+// to guess the stack layout. Object / alias / schema typed-defs do not route
+// here.
 func markRefineDefUncompilable(r *Registry, name string, body Value) {
 	// A STATIC (concrete) refinement value's reparent rides the const pool and
 	// compiles faithfully — `def p:Pt 5` (a const) folds to a Pt-tagged const, so
-	// `p is Pt` holds. Only a DYNAMIC value (a param / computed carrier) loses it:
-	// the value-def lowering folds `def x:Pos n` to a bare `x≡n` keeping the base
-	// tag, so the compiled `typeof x` / [Pos] return-check see Integer. Refuse only
-	// the dynamic case → fall back. (DepScalar's failing-static case is handled at
-	// its own branch, since a passing static value needs no reparent.)
+	// `p is Pt` holds; RecordTypedBind declines those to keep the proven path,
+	// and they must not refuse here either.
 	if IsConcrete(body) {
 		return
 	}
-	if es := r.Check.Emit; es != nil && es.Active() {
+	if es := r.Check.Recorder(); es.Active() {
 		es.MarkUncompilable("typed-def `" + name + "`: dynamic refinement reparent/validate is interpreter-only (no compiled store-with-reparent)")
 	}
+}
+
+// recordTypedBindOrRefuse threads a refinement typed-def through the bytecode
+// recorder: on success the returned binding carries a fresh provenance ID
+// registered against a typed-bind event (OpBindTyped re-runs the SAME
+// validate/reparent over the runtime value — RunTypedBind), and the program
+// keeps compiling. When the recorder declines — emit inactive, a CONCRETE body
+// (the static const-pool path stays untouched), or a body operand with no
+// resolvable provenance — the site's refusal mark runs instead, preserving the
+// prior fallback taxonomy (and itself no-oping for the inactive/concrete
+// cases). bound is the CHECK-mode value the def is about to install; body is
+// the raw operand the runtime bind consumes. mkSpec is a THUNK so the spec
+// (its Describe renders the constraint) is only built when a bind is actually
+// recorded — a plain interpreter run pays nothing it did not pay before.
+func recordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
+	if es := r.Check.Recorder(); es.Active() && !IsConcrete(body) {
+		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
+			return out
+		}
+	}
+	refuse()
+	return bound
 }
 
 // resolveResourceTypeInfo returns the ResourceTypeInfo a typed-def
@@ -495,12 +515,25 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// `Type/Function/Bbd({…})` rather than its underlying
 		// scalar). The PredicateInputType check below mirrors the
 		// InstallType decision so the two paths stay aligned.
+		var reparentTo *Type
 		if typeName != "" && eng.PredicateInputType(constraint) != nil {
 			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
 				out = ReparentValue(out, def)
+				reparentTo = def
 			}
 		}
-		markRefineDefUncompilable(r, name, body)
+		// A DYNAMIC body records a typed-bind event (OpBindTyped runs the
+		// predicate + reparent over the runtime value); RunPredicate above
+		// short-circuited on the carrier in check mode, so the runtime bind is
+		// the first real evaluation. reparentTo carries the SAME reparent
+		// decision the interpreter just took, so the two engines agree.
+		out = recordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
+			predCons := constraint
+			return eng.TypedBindSpec{
+				Kind: eng.TypedBindPredicate, Name: name, Describe: describeType(),
+				Def: reparentTo, Cons: &predCons,
+			}
+		}, body, out, args[0].Pos, func() { markRefineDefUncompilable(r, name, body) })
 		return installAndRecordDef(r, name, out, args[0].Pos)
 	}
 
@@ -590,10 +623,23 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// value, so `def x:(Integer gt 10) 5` is flagged at check time
 			// with the byte-identical runtime message (and a passing literal
 			// binds the same value in both engines, so it stays compilable).
-			if es := r.Check.Emit; es != nil && es.Active() {
-				es.MarkUncompilable("typed-def `" + name + "`: DepScalar predicate validation is interpreter-only")
-			}
-			return installAndRecordDef(r, name, body, args[0].Pos)
+			//
+			// The dynamic case records a typed-bind event: OpBindTyped runs the
+			// SAME Unify(value, constraint) — the self-contained DepScalar
+			// predicate, no registry — over the runtime value, raising the
+			// byte-identical unify error on failure and binding Unify's result
+			// (base tag kept, no reparent) on success.
+			bound := recordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
+				depCons := constraint
+				return eng.TypedBindSpec{
+					Kind: eng.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
+				}
+			}, body, body, args[0].Pos, func() {
+				if es := r.Check.Recorder(); es.Active() {
+					es.MarkUncompilable("typed-def `" + name + "`: DepScalar predicate validation is interpreter-only")
+				}
+			})
+			return installAndRecordDef(r, name, bound, args[0].Pos)
 		}
 	}
 	// User-minted bare-refine subtype (`def Foo refine Integer`): the
@@ -625,8 +671,16 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			}
 			parentLit := NewTypeLiteral(root)
 			if _, ok := Unify(body, parentLit); ok {
-				markRefineDefUncompilable(r, name, body)
-				return installAndRecordDef(r, name, ReparentValue(body, def), args[0].Pos)
+				// A DYNAMIC body records a typed-bind event: OpBindTyped re-runs
+				// this exact Unify-against-builtin-ancestor + reparent over the
+				// runtime value, so compiled typeof/sig-dispatch see the newtype.
+				bound := recordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
+					return eng.TypedBindSpec{
+						Kind: eng.TypedBindRefine, Name: name, Describe: describeType(), Def: def,
+					}
+				}, body, ReparentValue(body, def), args[0].Pos,
+					func() { markRefineDefUncompilable(r, name, body) })
+				return installAndRecordDef(r, name, bound, args[0].Pos)
 			}
 			if r.Check.IsActive() {
 				r.Check.AddDiagnostic(CheckDiagnostic{
@@ -710,7 +764,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// An undef of a LOOP-CARRIED def exposes the previous binding while the
 	// carried frame slot still holds the rebound value — compiled reads would
 	// diverge; refuse and let the interpreter own the shape.
-	r.Check.Emit.RefuseCarriedUndef(name)
+	r.Check.Recorder().RefuseCarriedUndef(name)
 	UninstallDef(r, name)
 	return nil, nil
 }

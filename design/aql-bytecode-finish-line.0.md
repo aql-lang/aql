@@ -75,18 +75,47 @@ writing — the work list the clusters below address:
 Each lands gate-clean (see Verification), lowers its ceiling monotonically, and
 is committed with before/after numbers. Gate-clean-or-revert.
 
-1. **Error-row trap programs.** ✅ **PARTIALLY LANDED (26 → 24).** The two
-   `illegal_ref` rows (`def x 5  x/r`, `def x 5  x/u` — a ref-family modifier
-   on a non-fn binding) now compile to a terminal `OpTrap` raising the
-   byte-identical illegal_ref, via a top-level `RecordTrap` at the two
-   `!IsFunctionRef(v)` check-active branches (`eng/go/engine.go` stepWord `/r`
-   + stepWordUsurp `/u`). The x/u row also left tier-2 usurp (reducible 4 → 3).
-   **Remaining (4 error rows):** `MathUtil!.nope` (not_found), the
-   minilang/parselang rows (a dynamic-source parse the checker is lenient on),
-   and the `case [f 1]` 0-value-scrutinee island — each needs its own
-   compile-time error detection + `RecordTrap`. `RecordTrap` only fires
-   top-level today; a nested error row needs the conditional-trap modeling that
-   also unblocks branch error rows.
+1. **Error-row trap programs.** ✅ **LANDED for the dominant class (error-row
+   bucket 83 → 13).** The live bucket (re-counted after the P7 re-scope pulled
+   every refused ERROR row in) was dominated by ONE mechanism: "unmatched
+   dispatch recovered at X" — check-mode dispatch recovery
+   (`checkModeAssumeSig`) knows the dispatch failed but discarded that fact,
+   refusing the program while the interpreter raises the plain
+   `signature_error` / "no matching signature for X" at the same point. A
+   STATICALLY-DEFINITE failure — every value any candidate signature examined
+   is identical at run time (concrete consts, bare type literals, raw word
+   tokens; no carrier / dynamic / undefined-placeholder / deferred-expression
+   operand, no 0-arg courtesy-dispatchable sig) — now compiles to a terminal
+   `OpTrap` raising the byte-identical error
+   (`eng/go/engine.go tryRecordUnmatchedDispatchTrap`), including the
+   void-argument-group taxonomy (`def_error` / `no_value_error` via the same
+   `voidArgErrorFor` the interpreter consults). An unfinished fn unit cut
+   short by the trapping dispatch (`{f}` evaluating a 1-arg fn with no args)
+   lowers as an unreachable defensive stub (`eng/go/emit.go` Finalize).
+   Landing pins: `lang/go/bytecode_findings_test.go`
+   TestUnmatchedDispatchTrap{Compiles,PreservesPriorEffects,Negatives} —
+   the negatives pin the carrier decline, the splice decline, and the
+   flex-reach VALUE row (flex.tsv L88/L95) whose raw-Reach static mismatch
+   resolves fine at run time (the soundness counterexample that shaped the
+   deferred-token decline). Earlier partial landing: the two `illegal_ref`
+   rows (`def x 5  x/r`, `x/u`) via top-level `RecordTrap` at the
+   `!IsFunctionRef(v)` branches.
+   **Remaining (13 error rows), classified:** (a) 7 carrier-operand rows
+   (apply.tsv:37,38; convert-ideal.tsv:30; generics-sugar.tsv:37;
+   generics.tsv:60; open-words.tsv:32,100) — the failing dispatch reads a
+   fn/make result carrier whose runtime tag could refine, so the failure is
+   not statically definite; compiling these means proving the carrier's
+   runtime tag cannot match any sig (type-disjointness over the lattice).
+   (b) 1 disjunct-carrier row (forward-barrier.tsv:80) — a branch-result
+   operand; needs the conditional-trap/arm modeling. (c) 3 rows refused
+   BEFORE the failing dispatch (open-words.tsv:83,84,90 — typed-def `v`
+   store-with-reparent, cluster 3 territory): the trap seam never sees them
+   while the earlier refusal latches. (d) 1 registry-state row
+   (module-log.tsv:83 sink-exists — depends on which sinks are registered)
+   and 1 deferred-splice row (word-splice.tsv:115 — `f p` where p is a
+   `word` splice) — both legitimately non-definite at the trap seam today.
+   `RecordTrap` still fires top-level only; a nested error row needs the
+   conditional-trap modeling that also unblocks branch error rows.
 
 2. **Tier-2 reducible (3 → 0).** `quote`/`word`/`Test/Assert` residuals — each
    a named residual of an already-mostly-compiled feature. Files:

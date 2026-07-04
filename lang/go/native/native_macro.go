@@ -356,7 +356,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			// compiled program then raises the byte-identical error instead of
 			// refusing on the dynamic carrier downstream. A nested call declines
 			// the trap and keeps the lenient fallback.
-			r.Check.Emit.RecordTrap("mini_unknown_lang",
+			r.Check.Recorder().RecordTrap("mini_unknown_lang",
 				fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
 				`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`,
 				args[0].Pos)
@@ -597,6 +597,19 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// NOT raise parse_unknown_lang. The check-mode hook that records the
 			// deferral is aql:parse's parse-register ReturnsFn.
 			macroDegradedAdvisory(r, "parse", "the "+kind+" grammar is built at run time (Parse.register)", args[0].Pos)
+			// COMPILE pass (Phase 6 M3): record the runtime deferred dispatch —
+			// a CALL_NATIVE of parselang-deferred-dispatch — so the parse
+			// result has provenance and the program compiles. At run time the
+			// op resolves parse_<kind> against the LIVE export map (populated
+			// by the compiled Parse.register call) and dispatches it, or
+			// raises the byte-identical parse_unknown_lang when a
+			// runtime-conditional registration did not execute. The check pass
+			// itself installs NOTHING into the export map (the reverted
+			// register-ReturnsFn leak stays closed); pure check keeps the
+			// dynamic degrade below unchanged.
+			if out, ok := recordDeferredParseDispatch(r, args); ok {
+				return []Value{out}, nil
+			}
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		if r.Check.IsActive() && !parseNamespaceBound(r) {
@@ -606,7 +619,7 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// (top-level only) so the compiled program raises the byte-identical
 			// parse_unknown_lang the interpreter raises here; a nested call
 			// declines and keeps the lenient fallback.
-			r.Check.Emit.RecordTrap("parse_unknown_lang",
+			r.Check.Recorder().RecordTrap("parse_unknown_lang",
 				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
 				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`,
 				args[0].Pos)
@@ -693,6 +706,59 @@ func parseKindDeferred(r *Registry, kind string) bool {
 	return ok && m != nil && m[kind]
 }
 
+// capParseDeferredDispatch holds the parselang-deferred-dispatch *Signature —
+// the runtime resolver a compiled `parse <deferred-kind>` call dispatches
+// through. Installed once per registry when aql:parselang is built; static
+// module wiring, so it is NOT reset per check pass (unlike the deferred-kind
+// SET above, which is per-pass state).
+const capParseDeferredDispatch = "engine.parse.deferred-dispatch"
+
+// InstallParseDeferredDispatch records the parselang-side deferred-dispatch
+// signature so the `parse` macro's compile branch can record calls against
+// it. Called from BuildParseLangModule with the importing registry.
+func InstallParseDeferredDispatch(r *Registry, sig *Signature) {
+	if r == nil || sig == nil {
+		return
+	}
+	_ = r.Capabilities.Set(capParseDeferredDispatch, sig)
+}
+
+// recordDeferredParseDispatch records the ONE runtime call a compiled
+// `parse <kind>` deferred dispatch lowers to (Phase 6 M3): CALL_NATIVE
+// parselang-deferred-dispatch(kind, source, opts) with a dynamic(Any) result
+// registered as the event's output, so the parse result reaches downstream
+// consumers (the residual, a def) with provenance instead of refusing
+// "residual value of unknown provenance". Returns (out, true) only when the
+// recording pass is live and the dispatcher is installed; every other case —
+// pure check, suspended analysis, no aql:parselang import — declines and the
+// caller keeps today's unrecorded dynamic degrade. forceDynOut is proven
+// here: the declared return IS Any (the parser's output is genuinely runtime
+// data), and the VM pushes the real dispatched value.
+func recordDeferredParseDispatch(r *Registry, args []Value) (Value, bool) {
+	rec := r.Check.Recorder()
+	if !r.Check.Compiling || !rec.Active() {
+		return Value{}, false
+	}
+	sig, ok, _ := eng.Cap[*Signature](r, capParseDeferredDispatch)
+	if !ok || sig == nil {
+		return Value{}, false
+	}
+	// Same surface→call mapping as the registered-kind expansion below:
+	// source is the required LAST arg, opts the optional middle one.
+	var opts, source Value
+	if len(args) == 3 {
+		opts = args[1]
+		source = args[2]
+	} else {
+		opts = NewMap(NewOrderedMap())
+		source = args[1]
+	}
+	outs := []Value{NewDynamicCarrier(TAny)}
+	rec.RecordCall("parselang-deferred-dispatch", sig,
+		[]Value{args[0], source, opts}, outs, args[0].Pos, true, false)
+	return outs[0], true
+}
+
 func parseKindRegistered(r *Registry, target string) bool {
 	top, ok := r.Defs.Top("ParseLang")
 	if !ok {
@@ -740,7 +806,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// {a:1}`) is DATA/OPTS, not a kind, and falls through to the auto form.
 	if leadingKind && !explicit && !r.Defs.Has(kind) {
 		if r.Check.IsActive() && !emitNamespaceBound(r) {
-			r.Check.Emit.RecordTrap("emit_unknown_lang",
+			r.Check.Recorder().RecordTrap("emit_unknown_lang",
 				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
 				`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`,
 				args[0].Pos)

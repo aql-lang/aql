@@ -31,7 +31,8 @@ import "github.com/aql-lang/aql/eng/go"
 // dispatch wiring.
 var comparisonNatives = []NativeFunc{
 	{
-		Name: "lt",
+		Name:          "lt",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
 			eng.MakeDepScalarSig("lt", eng.DepLT),
@@ -44,7 +45,8 @@ var comparisonNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "gt",
+		Name:          "gt",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
 			eng.MakeDepScalarSig("gt", eng.DepGT),
@@ -57,7 +59,8 @@ var comparisonNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "lte",
+		Name:          "lte",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
 			eng.MakeDepScalarSig("lte", eng.DepLTE),
@@ -70,7 +73,8 @@ var comparisonNatives = []NativeFunc{
 		},
 	},
 	{
-		Name: "gte",
+		Name:          "gte",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{
 			eng.MakeDepScalarSig("gte", eng.DepGTE),
@@ -87,7 +91,8 @@ var comparisonNatives = []NativeFunc{
 		// Integer -1, 0, or 1 for a sorting before / with / after b.
 		// Family-restricted — cross-family operands raise
 		// [aql/incomparable]; use tcmp for a cross-type total order.
-		Name: "cmp",
+		Name:          "cmp",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{{
 			Args:      []*Type{TAny, TAny},
@@ -103,7 +108,7 @@ var comparisonNatives = []NativeFunc{
 		// words use). Reach for it when you want cross-type ordering
 		// that cmp refuses, e.g. `1 tcmp "a"`.
 		Name:          "tcmp",
-		CompileEffect: CompileIslandPure,
+		CompileEffect: CompileIslandPure | CompileScalarFold,
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
@@ -124,7 +129,8 @@ var comparisonNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "eq",
+		Name:          "eq",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
@@ -133,7 +139,8 @@ var comparisonNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "neq",
+		Name:          "neq",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},
@@ -142,7 +149,8 @@ var comparisonNatives = []NativeFunc{
 		}},
 	},
 	{
-		Name: "deq",
+		Name:          "deq",
+		CompileEffect: CompileScalarFold,
 
 		Signatures: []Signature{{
 			Args:    []*Type{TAny, TAny},

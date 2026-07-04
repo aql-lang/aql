@@ -19,19 +19,52 @@ advisory axis — never trade soundness for it.
 - **D, C, B — FIXED** (commits in this session): higher-order over gradual-Any
   collection (refuse), multi-overload user fn + gradual-Any (refuse), typed-def
   refinement validate/reparent (refuse dynamic + DepScalar, keep static newtype).
-- **E — PARTIALLY FIXED**: the fn-body fn-value apply (`(fnv 100)` over a Function
-  PARAM) is fixed — the fn finish refuses a user-fn count mismatch whose residual
-  carries a Function/FnDef value (resolveDynamicApply runs only for the MAIN
-  residual, so a fn-body apply was never lowered; refuse → fall back). REMAINING:
-  the /r-deferred map field auto-invoke (`{f:make42/r}.f`) and the nested-factory
-  apply in the MAIN residual (`(((mk 1) 2) 3)` → leaks a Function) — both separate
-  resolveDynamicApply gaps (it handles the single leading-fn-carrier `(mk 5) 10`
-  but not nested levels nor the deferred-field auto-invoke). Fix: extend
-  resolveDynamicApply to nested/deferred shapes, or refuse a MAIN residual that
-  ends with an unconsumed Function the program did not declare.
-- **A — DOCUMENTED / DEFERRED** (see below): narrowed to identity-`eq` only.
+- **E — CLOSED (2026-07-03)**: the fn-body fn-value apply was already fixed; the
+  two remainders now refuse soundly. (1) **Deferred-field auto-invoke**
+  (`{f:make42/r}.f`, bare `{b:f/r} dot b`, `.f 5`): a get/dot/getr/dotr read
+  from a container holding a 0-arg-satisfiable fn member refuses
+  ("fn value read from a container auto-dispatches (Stage 3)") at both the mono
+  (recordCallRefusal) and poly (RecordPolyCall) record sites, keyed on the
+  RECEIVER (`containerFnAutoDispatchRisk`): a concrete key inspects only the
+  read member, so non-fn keys from fn-carrying containers keep compiling.
+  Probe-verified that the interpreter auto-dispatches a landed fn value in
+  every delivery context (bare, paren, def-bound, list member, and collecting
+  forward args), so compiling the read as data was a silent wrong value.
+  (2) **Nested-factory curried chain** (`(((mk 1) 2) 3)`): when the leading
+  fn-carrier's closure arity is statically recoverable
+  (producerReturnedClosureArity — factory fn returning one anonymous closure),
+  a tail-arg count that disagrees refuses ("fn-value apply arity mismatch —
+  curried chain or partial apply (Stage 3)") instead of committing one
+  OpCallDynamic that leaks the intermediate closure; the single-apply factory
+  `((mk 5) 10)` keeps compiling. Landing test:
+  `lang/go/bytecode_findings_test.go::TestFnValueAutoApplyRefusals`
+  (4 refusal shapes with fallback-parity assertions + 4 preserved rows).
+  Census cost: 2 rows (3,875-row corpus), both previously divergence-exposed
+  (genuinely 0-param members); applied member calls (`m.b 2`) and multi-param
+  member reads keep compiling — the parked phantom 0-arg sig is discounted
+  (fnValueZeroArg).
+- **A — FIXED (2026-07-03)**: per-call identity for fn-body compound literals.
+  `intern` now pools compound consts by value ID (same materialised value = one
+  slot; distinct source literals keep distinct IDs, so gotcha #13 is untouched),
+  `resolveOperand` marks fn-unit compound-literal consts whose ID is NOT an
+  enclosing binding's (an `emitUnit.enclosingIDs` DefTable snapshot at unit
+  open), and `freshenFnUnitConsts` (finalize) rewrites a single-push-site marked
+  const IN PLACE to the new `OpPushConstFresh` (pushes `CloneValue(const)` —
+  fresh identity per call, and per loop iteration). Multi-push-site marked
+  consts are reads of ONE per-call binding: they stay shared when every
+  declared return conforms to Scalar (nothing compound escapes — exact
+  within-call parity), and REFUSE otherwise ("compound body literal read at
+  multiple sites may escape") — the sound fallback until a per-call local-seat
+  lowering exists. Landing test: `lang/go/bytecode_findings_test.go::
+  TestFnBodyContainerLiteralIdentity` (8 parity shapes + the refusal).
+  Enclosing-binding reads (`def c [9] … [c]`) keep shared identity — probe-
+  verified `(get) eq (get)` stays true in both engines.
 
 ## A. Const-pool aliasing of a fn-returned container literal (4 cases) — SILENT wrong value
+
+> **FIXED 2026-07-03** — see the STATUS block above (OpPushConstFresh +
+> ID-pooled compound interning + the multi-site escape refusal). The analysis
+> below is the historical record that scoped the fix.
 
 UPDATE after scoping: the practical impact is NARROWER than first thought, and the
 fix is the riskiest. A fn body `[1]` bakes as a WHOLE const (`PUSH_CONST k0; RET`),
@@ -88,6 +121,20 @@ refine NEWTYPE (`Pos`) — so `typeof`, sig-dispatch (`need fn [[p:Pos]…]`), a
 mirror the interpreter — validate the predicate and reparent to the declared type
 (the value-level check, not just base-lattice membership). Or refuse typed-local
 refinement bindings.
+
+**UPDATE (July 2026) — the refusal is now COMPILED.** The interim sound fix
+(refuse dynamic + DepScalar, keep the static newtype on the const pool) was
+replaced by a compiled store-with-reparent: `defTypedHandler`'s refinement
+branches record an `OpBindTyped` event (`EmitState.RecordTypedBind`) whose VM
+half (`RunTypedBind`, eng/go/typed_bind.go) runs the SAME
+RunPredicate / Unify-against-builtin-ancestor / DepScalar-Unify the interpreter
+runs over the runtime value, raising the byte-identical plain error on failure
+and reparenting via `ReparentValue` where the interpreter reparents. The bound
+value gets a fresh provenance ID registered against the bind event, so
+downstream reads resolve to the bind RESULT — never to the un-reparented body
+operand (this ID aliasing was mechanism (b)'s root). The static/concrete path
+is untouched, and a statically-failing typed def stays a check-diagnostics row.
+Pinned by `lang/go/bytecode_findings_test.go::TestTypedDefBindCompiles`.
 
 ## C. Multi-overload user fn + gradual-Any arg (2 cases) — bakes ONE overload
 

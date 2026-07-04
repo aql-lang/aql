@@ -313,9 +313,9 @@ func (HostTypeBody) hostTypeBody() {}
 // Direct (eng-defined struct or pointer types):
 //   WordInfo, ForwardInfo, MarkInfo, MoveInfo, ReturnCheckInfo,
 //   DefCleanupInfo, ModuleDesc, FnDefInfo, FnUndefInfo,
-//   DisjunctInfo, ChildTypeInfo, RecordTypeInfo, OptionsTypeInfo,
+//   DisjunctInfo, ChildTypeInfo, CodeEffectInfo, RecordTypeInfo, OptionsTypeInfo,
 //   TableTypeInfo, TableData, ClassTypeInfo, ClassInstanceInfo,
-//   *StoreInstanceInfo, *TimeoutInfo,
+//   *StoreInstanceInfo, *StoreShapeInfo, *TimeoutInfo,
 //   *IntervalInfo, ErrorInfo, CalDurationData,
 //   DepScalarInfo, Materializer (interface), noneSentinel
 //   (legacy — to be removed in Step 5f).
@@ -366,6 +366,7 @@ func (FnUndefInfo) payloadMarker()          {}
 func (DisjunctInfo) payloadMarker()         {}
 func (NegationInfo) payloadMarker()         {}
 func (ChildTypeInfo) payloadMarker()        {}
+func (CodeEffectInfo) payloadMarker()       {}
 func (RecordTypeInfo) payloadMarker()       {}
 func (OptionsTypeInfo) payloadMarker()      {}
 func (TableTypeInfo) payloadMarker()        {}
@@ -382,6 +383,7 @@ func (XmlElementPayload) payloadMarker()    {}
 func (XmlInterpPayload) payloadMarker()     {}
 func (*FlexXmlData) payloadMarker()         {}
 func (*StoreInstanceInfo) payloadMarker()   {}
+func (*StoreShapeInfo) payloadMarker()      {}
 func (ResourceTypeInfo) payloadMarker()     {}
 func (ResourceInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()         {}
