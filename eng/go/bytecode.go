@@ -243,6 +243,18 @@ const (
 	// (engine.go) where the arity is known, since the flattened residual cannot
 	// recover the paren-group size.
 	OpCallDynTrailTop
+	// OpCallDynApplyTop is OpCallDynTrailTop with the `apply` WORD's semantics
+	// (Stage M2a): the fn value on top came through `…args fn apply`, whose
+	// interpreter handler (applyHandler) UNQUOTES the value before re-stepping
+	// it — so a /r-parked (Quoted) fn value STILL applies here, where the
+	// paren-bounded OpCallDynTrailTop would leave it as data. The fn is popped,
+	// unquoted, and applied to the Arg args beneath it (top arg → first param,
+	// the same reversed-window forward bind as OpCallDynTrailTop); a compiled
+	// closure runs VM-native. A non-fn payload raises the applyHandler's own
+	// byte-identical error. Emitted for a fn-body-tail `apply` over a
+	// Function-typed carrier (StartFnCompile's pendingApply) and for the
+	// paren-bounded RecordDynApply event when the apply word drove it.
+	OpCallDynApplyTop
 
 	// OpPushConstFresh pushes a deep clone of Consts[Arg] with fresh container
 	// identity (CloneValue) instead of the pooled instance. A compound VALUE
@@ -320,6 +332,7 @@ var opcodeNames = [...]string{
 	OpInterp:              "INTERP",
 	OpCallUserPoly:        "CALL_USER_POLY",
 	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
+	OpCallDynApplyTop:     "CALL_DYN_APPLY_TOP",
 	OpPushConstFresh:      "PUSH_CONST_FRESH",
 	OpBindTyped:           "BIND_TYPED",
 }

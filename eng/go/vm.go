@@ -529,6 +529,61 @@ func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc
 	return append(stack[:base], results...), nil
 }
 
+// callDynApplyTop is callDynTrailTop under the `apply` WORD's semantics
+// (Stage M2a, OpCallDynApplyTop): the interpreter's applyHandler UNQUOTES the
+// fn value and re-steps it against the preceding stack, so a /r-parked
+// (Quoted) fn value applies here where the paren-bounded trailing apply would
+// leave it as data. The n args below the fn bind top-down (top arg → first
+// param), identical to callDynTrailTop's reversed-window forward bind. A
+// non-FnDefInfo, non-closure payload raises applyHandler's own byte-identical
+// error — the same taxonomy the interpreter's dispatch of `apply` yields.
+func (vc *vmContext) callDynApplyTop(n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	r := vc.r
+	if len(stack) < n+1 {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYN_APPLY_TOP underflow")
+	}
+	top := len(stack) - 1
+	fnVal := stack[top]
+	base := top - n
+	args := make([]Value, n)
+	for i := 0; i < n; i++ {
+		args[i] = stack[top-1-i]
+	}
+	if _, ok := fnVal.Data.(ClosurePayload); ok {
+		results, err := vc.invokeClosure(fnVal, args)
+		if err != nil {
+			return nil, stampAt(err, curDebug, pc, r)
+		}
+		return append(stack[:base], results...), nil
+	}
+	fnDef, ok := fnVal.Data.(FnDefInfo)
+	if !ok {
+		// applyHandler's own error, byte-identical (the interpreter dispatches
+		// `apply` over the same runtime value and raises exactly this).
+		return nil, stampAt(fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", fnVal.Data), curDebug, pc, r)
+	}
+	fnVal.Quoted = false // applyHandler: the parked value becomes a live call site
+	if isDelegationFnDef(fnDef) {
+		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
+			if err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			return append(stack[:base], results...), nil
+		}
+	}
+	island := make([]Value, 0, n+1)
+	island = append(island, fnVal)
+	island = append(island, args...)
+	results, err := vc.island().Run(island)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, r)
+	}
+	if err := vc.screenResults(results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil {
+		return nil, err
+	}
+	return append(stack[:base], results...), nil
+}
+
 // callDynamicMixed handles the MIXED fn-value-call boundary (`3 m.f 2`): a
 // dynamic / fn value sits INTERIOR to a window of static args (some below it,
 // some above). The window of `w` stack values is the same token sequence the
@@ -923,6 +978,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			stack = ns
 		case OpCallDynTrailTop:
 			ns, err := vc.callDynTrailTop(int(in.Arg), stack, curDebug, pc)
+			if err != nil {
+				return nil, err
+			}
+			stack = ns
+		case OpCallDynApplyTop:
+			ns, err := vc.callDynApplyTop(int(in.Arg), stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}

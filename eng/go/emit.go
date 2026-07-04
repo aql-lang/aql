@@ -137,21 +137,22 @@ type eventFlags struct {
 }
 
 type emitCall struct {
-	word       string
-	sig        *Signature
-	ops        []emitOperand
-	nout       int // number of results the call pushes (0 for a side-effect word, N for multi-result)
-	pos        SrcPos
-	poly       bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
-	polyReg    *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
-	makeList   bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	dynApply   int       // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
-	makeMap    bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
-	mapKeys    []string
-	mapImpl    bool // the source map's Implicit flag
-	interp     bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
-	interpSegs []InterpSeg
-	diverges   bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	word            string
+	sig             *Signature
+	ops             []emitOperand
+	nout            int // number of results the call pushes (0 for a side-effect word, N for multi-result)
+	pos             SrcPos
+	poly            bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg         *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
+	makeList        bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	dynApply        int       // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
+	dynApplyUnquote bool      // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
+	makeMap         bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	mapKeys         []string
+	mapImpl         bool // the source map's Implicit flag
+	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
+	interpSegs      []InterpSeg
+	diverges        bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 	// typedBind, when non-nil, marks this event as a typed value-def's runtime
 	// validate/reparent step (OpBindTyped over the single operand) instead of a
 	// word dispatch — recorded by RecordTypedBind from the def handler's
@@ -504,6 +505,17 @@ type emitUnit struct {
 	// IDs only DURING body analysis, after this snapshot — so they correctly
 	// classify as body-fresh.
 	enclosingIDs map[string]bool
+	// pendingApply lists the value IDs of Function/FnDef-typed CARRIERS this
+	// unit's body dispatched through the `apply` word (a param/captured
+	// comparator: `v comp/r apply`). The check engine cannot re-step a carrier
+	// the way it re-steps a concrete fn, so the dispatch is elided and the
+	// carrier flows to the body residual; StartFnCompile's finish must either
+	// lower the ONE pending apply as the whole-residual OpCallDynTrailTop
+	// (fn on top, args below — exactly the interpreter's applyHandler re-step
+	// against the preceding stack) or refuse, so an unconsumed pending apply
+	// can never silently compile the fn+args as unapplied data (Stage M2a,
+	// design/STAGE3-INLINING-DESIGN-ROUND.0.md).
+	pendingApply []string
 }
 
 // fnUnitRec is one compiled fn body awaiting (or holding) its
@@ -546,6 +558,12 @@ type fnUnitRec struct {
 	// is captured at the paren-collapse boundary (registerTrailingApply) where the
 	// group size is known; the flattened residual cannot recover it.
 	dynTrailArity int
+	// dynTrailApply marks a dynTrail that came through the `apply` WORD (the
+	// unit's pendingApply, Stage M2a) rather than a paren boundary: the unit
+	// lowering emits OpCallDynApplyTop — applyHandler's unquote-then-apply —
+	// instead of OpCallDynTrailTop (which leaves a Quoted fn as data, the
+	// paren semantics).
+	dynTrailApply bool
 	numLoc        int
 	pos           SrcPos
 	finished      bool
@@ -2096,6 +2114,37 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 					}
 				}
 			}
+			// An `apply`-word pending over a fn CARRIER (Stage M2a): the elided
+			// dispatch left the fn on the residual top with its args below —
+			// the interpreter's applyHandler re-steps the fn against the whole
+			// preceding stack, so the window is the ENTIRE residual. Exactly
+			// one pending apply may lower, and only as that whole-residual
+			// window with no other fn value in it; any other pending shape
+			// (mid-body apply, double apply, apply into a branch join) REFUSES
+			// — never compiles the fn+args as unapplied data, and never drops
+			// an apply the interpreter performed.
+			if pend := u.pendingApply; len(pend) > 0 {
+				if dynTrail == 0 && len(pend) == 1 && len(bodyStk) >= 2 &&
+					bodyStk[len(bodyStk)-1].ID == pend[0] {
+					argsOK := true
+					for _, v := range bodyStk[:len(bodyStk)-1] {
+						if isFnValueResidual(v) {
+							argsOK = false
+							break
+						}
+					}
+					if argsOK {
+						dynTrail = len(bodyStk) - 1
+						// applyHandler unquotes: a /r-parked fn value still
+						// applies (OpCallDynApplyTop), unlike the paren case.
+						rec.dynTrailApply = true
+					}
+				}
+				if dynTrail == 0 {
+					es.MarkUncompilable("fn " + name + ": apply of a dynamic fn value not at the body tail (Stage 3)")
+					return
+				}
+			}
 			// A DECLARED fn must leave exactly len(returns) RUNTIME values; a
 			// different count (measured over real operands, phantom guards
 			// excluded) is a return-COUNT mismatch. For a genuine USER fn that is
@@ -2381,8 +2430,24 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 		}
 		ops = append(ops, op)
 	}
+	// A paren-bounded apply that ALSO dispatched through the `apply` word
+	// (`(v comp/r apply)`) registered a pending unit apply before this event
+	// collapsed the tape — the event now owns the apply, so consume the
+	// pending entry rather than leaving it to refuse the unit at finish, and
+	// lower with the apply word's UNQUOTE semantics (OpCallDynApplyTop).
+	unquote := false
+	if len(es.units) > 0 {
+		u := es.units[len(es.units)-1]
+		for i, id := range u.pendingApply {
+			if id == fn.ID {
+				u.pendingApply = append(u.pendingApply[:i], u.pendingApply[i+1:]...)
+				unquote = true
+				break
+			}
+		}
+	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args)}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
 	es.setProduced(out, seq)
 	return true
 }
@@ -2750,6 +2815,22 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 		if _, ok := args[0].Data.(FnDefInfo); ok {
 			return true
 		}
+		// `apply` of a Function/FnDef-typed CARRIER (a `comp:Function` param or
+		// captured comparator inside a fn body — `v comp/r apply`, Stage M2a):
+		// the check engine cannot re-step a carrier, so the identity result
+		// flows to the body residual as an fn value. Elide the dispatch and
+		// register the PENDING apply on the enclosing unit; the unit's finish
+		// either lowers it as the whole-residual OpCallDynTrailTop (the fn
+		// applied to every value below it, exactly the interpreter's
+		// applyHandler re-step over the preceding stack) or refuses — a pending
+		// apply can never be silently dropped. Top-level applies (len(units)
+		// == 1) keep today's refusal: the program residual has no equivalent
+		// single-consumer window.
+		if len(es.units) > 1 && sig != nil && sig.fnFrame() == nil && isFnTypedCarrier(args[0]) {
+			u := es.units[len(es.units)-1]
+			u.pendingApply = append(u.pendingApply, args[0].ID)
+			return true
+		}
 	}
 	// Compile-time NAME RESOLUTION: a get/getr whose result is a
 	// statically-known callable or namespace (a module export wrapper,
@@ -2975,9 +3056,9 @@ func (es *EmitState) dynamicStackShuffleOK(word string, sig *Signature) bool {
 func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Value) ([]emitOperand, bool) {
 	introspect := sig.CompileEffect.Has(CompileReadsFn)
 	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
-	for _, t := range sig.ArgTypes() {
+	for i, t := range sig.ArgTypes() {
 		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
-			if inertFn {
+			if inertFn || sig.FnInertArgs[i] {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -2985,9 +3066,9 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 			return nil, false
 		}
 	}
-	for _, a := range args {
+	for i, a := range args {
 		if _, ok := a.Data.(FnDefInfo); ok {
-			if inertFn {
+			if inertFn || sig.FnInertArgs[i] {
 				continue
 			}
 			es.SiteCounts[SiteMeta]++
@@ -2998,10 +3079,10 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
-		if !ok && introspect && IsConcrete(a) {
+		if !ok && (introspect || sig.FnInertArgs[i]) && IsConcrete(a) {
 			if _, isFn := a.Data.(FnDefInfo); isFn {
 				// Bake the concrete (immutable) fn value as a const the
-				// introspection handler reads at run time.
+				// introspection / fn-inert-slot handler reads at run time.
 				op, ok = constOperand(es.intern(a)), true
 			}
 		}
@@ -3512,10 +3593,12 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 // RecordClosureCall records a higher-order word's dispatch where the code BODY
 // at position bodyPos was compiled to closure unit `unit` (plan P2). The body
 // operand lowers to OpPushClosure (the handler invokes it through the VM via
-// the InvokeBody seam); the other operands resolve normally. Returns false,
-// leaving es UNTOUCHED, when an operand is dynamic or of unknown provenance —
-// the caller then keeps the island path.
-func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, outs []Value, pos SrcPos) bool {
+// the InvokeBody seam); the other operands resolve normally, except any slot
+// in extraOps (an extra LAMBDA hook — walk's ASCEND slot, Stage M2d — compiled
+// to its own closure unit by recordClosureDispatch), which rides its prepared
+// opClosure operand. Returns false, leaving es UNTOUCHED, when an operand is
+// dynamic or of unknown provenance — the caller then keeps the island path.
+func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, extraOps map[int]emitOperand, outs []Value, pos SrcPos) bool {
 	if !es.active() || sig == nil || len(outs) > 1 {
 		return false
 	}
@@ -3531,6 +3614,10 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	for i := range args {
 		if i == bodyPos {
 			ops[i] = emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}
+			continue
+		}
+		if exOp, isExtra := extraOps[i]; isExtra {
+			ops[i] = exOp
 			continue
 		}
 		op, ok := es.resolveOperand(args[i])
@@ -4502,6 +4589,19 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	if _, ok := es.mixedDynamicApplyShape(residual); ok {
 		return residual, OpCallDynamicMixed, ""
 	}
+	// TRAILING window (Stage M2b): the single dynamic / fn value is LAST over
+	// ≥2 static args (`10 3 m.s/s` → residual [10, 3, wrapper]). The verbatim
+	// window island reproduces the interpreter exactly — the fn value lands ON
+	// TOP of an already-populated stack and dispatches under its OWN barrier
+	// discipline (a stack-args wrapper is BarrierPos 0 and collects nothing
+	// forward, so the trailing-1 rotation contract of OpCallDynamicTrailing /
+	// OpCallDynTrailTop cannot express it), and a non-callable value simply
+	// stays put. The producing event was promoted to a frame local (Finalize's
+	// gate below), so the whole window re-pushes in source order. The 2-entry
+	// trailing shape stays with trailingApply above — landed and pinned.
+	if es.trailingWindowApplyShape(residual) {
+		return residual, OpCallDynamicMixed, ""
+	}
 	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
 	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
 	// FnDefInfo). All refuse so the program falls back faithfully.
@@ -4567,6 +4667,26 @@ func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool
 		return residual, false
 	}
 	return []Value{fnv, arg}, true
+}
+
+// trailingWindowApplyShape detects the TRAILING fn-value window (Stage M2b):
+// EXACTLY one residual entry is a dynamic / fn value, it is the LAST entry with
+// ≥2 entries below it, and it is event-produced (so Finalize can promote the
+// producer to a frame local and re-push the whole window in source order for
+// OpCallDynamicMixed). The 2-entry trailing shape is deliberately excluded —
+// that is trailingApply's landed rotation contract (OpCallDynamicTrailing).
+func (es *EmitState) trailingWindowApplyShape(residual []Value) bool {
+	if len(residual) < 3 {
+		return false
+	}
+	last := len(residual) - 1
+	for i, rv := range residual {
+		if (rv.Dynamic || isFnValueResidual(rv)) != (i == last) {
+			return false
+		}
+	}
+	pr, ok := es.producedBy[residual[last].ID]
+	return ok && pr.idx == 0
 }
 
 // mixedDynamicApplyShape detects the MIXED fn-value-call boundary: EXACTLY one
@@ -4676,14 +4796,17 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			}
 		}
 	}
-	// MIXED fn-value-call boundary (`3 m.f 2`): the interior fn sits above a
-	// before-arg literal, so the in-order reconciliation would refuse "result
-	// above a literal". Promote EVERY residual event to a frame local so the whole
-	// window (before-args, the fn, after-args) re-pushes in source order, ready for
+	// MIXED fn-value-call boundary (`3 m.f 2`) and its TRAILING-window sibling
+	// (`10 3 m.s/s`, Stage M2b): the fn sits above a before-arg literal, so the
+	// in-order reconciliation would refuse "result above a literal". Promote
+	// EVERY residual event to a frame local so the whole window (before-args,
+	// the fn, any after-args) re-pushes in source order, ready for
 	// OpCallDynamicMixed to island it. (residualHasFnOrDynamic suppressed the
-	// reorder block above; this is the one fn-value shape that DOES reorder, since
-	// the island consumes the window in source order, not the apply-on-top layout.)
-	if _, ok := es.mixedDynamicApplyShape(residual); ok {
+	// reorder block above; these are the fn-value shapes that DO reorder, since
+	// the island consumes the window in source order, not the apply-on-top
+	// layout.)
+	_, mixedOK := es.mixedDynamicApplyShape(residual)
+	if mixedOK || es.trailingWindowApplyShape(residual) {
 		forceOrder = make(map[int]bool, len(residualSeqs))
 		for _, seq := range residualSeqs {
 			forceOrder[seq] = true
@@ -4850,7 +4973,11 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// OpCallDynTrailTop before the RET (the captured/param fn auto-applies to
 			// its args exactly as the interpreter's paren auto-dispatch).
 			if rec.dynTrailArity > 0 {
-				flw.emit(OpCallDynTrailTop, rec.dynTrailArity, rec.pos)
+				op := OpCallDynTrailTop
+				if rec.dynTrailApply {
+					op = OpCallDynApplyTop // the `apply` word's unquote-then-apply
+				}
+				flw.emit(op, rec.dynTrailArity, rec.pos)
 			}
 			flw.emit(OpRet, 0, rec.pos)
 		}

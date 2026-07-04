@@ -315,7 +315,16 @@ func DataListElemTypeFromValue(data Value) *Type {
 func toCarrier(v Value) Value {
 	if IsWord(v) || IsForward(v) || IsMark(v) || IsMove(v) ||
 		IsOpenParen(v) || IsParenExpr(v) || IsInterpString(v) || IsXmlInterp(v) ||
-		IsReturnCheck(v) || IsDefCleanup(v) {
+		IsReturnCheck(v) || IsDefCleanup(v) || IsDispatchMod(v) {
+		// A `/r`/`/q` dispatch-modifier marker (Word/__DM, parser-emitted right
+		// after a paren / dotted-path group) is a control token too: stripping
+		// it to a payload-less carrier made check mode UNABLE to consume it
+		// (execFnDefLiteral's peek reads the DispatchModInfo) or drop it
+		// standalone (stepLiteral's IsDispatchMod drop) — the marker then
+		// leaked into the check stack as a phantom value the runtime never
+		// has (`([x:Any] => [x])/r is T` bound `is` to the marker instead of
+		// the lambda). Kept verbatim, check mode parks/drops it exactly as
+		// the interpreter does (Stage M2d).
 		return v
 	}
 	// A dynamic carrier already IS a carrier; its Parent/Data is the

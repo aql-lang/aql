@@ -149,6 +149,16 @@ var typeNatives = []NativeFunc{
 			BarrierPos: 1,
 			Impl:       Go(isHandler),
 			Returns:    []*Type{TBoolean},
+			// Membership reads the VALUE slot's lattice tag / runs the type's
+			// own Match predicate over it — a fn value there (`(+re/…/) is
+			// (MiniLang.Re)`, module-minilang.tsv) is DATA, never invoked
+			// (Stage M2d, design/STAGE3-INLINING-DESIGN-ROUND.0.md). The TYPE
+			// slot (position 0) is deliberately NOT inert: a concrete Function
+			// there is a PREDICATE the handler INVOKES via RunPredicate
+			// (`5 is Positive`), so whole-sig CompileReadsFn would miscompile —
+			// the positional map keeps that slot on the refusal path (pinned by
+			// TestFnValueIntrospectionLowers' invoke negative).
+			FnInertArgs: map[int]bool{1: true},
 		}},
 	},
 	{

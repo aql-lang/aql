@@ -298,6 +298,15 @@ type FnSig struct {
 	// QuoteArgs / TypeArgs are per-position dispatch modifiers.
 	QuoteArgs map[int]bool
 	TypeArgs  map[int]bool
+	// FnInertArgs marks per-position slots where a FN-VALUED operand is INERT
+	// DATA for the bytecode recorder — read or compared, never invoked — on a
+	// word that is NOT wholesale CompileReadsFn because ANOTHER slot does
+	// invoke a fn. The one holder today is `is` (Stage M2d): its VALUE slot
+	// only reads the operand's lattice tag (`(+re/…/) is (MiniLang.Re)`),
+	// while a Function in its TYPE slot is a predicate the handler INVOKES
+	// (`5 is Positive` — RunPredicate) and must keep refusing. Read by
+	// recordCallOperands alongside CompileReadsFn/CompileStoresFn.
+	FnInertArgs map[int]bool
 	// Fallback marks the synthesized 0-arg catch-all sig.
 	Fallback bool
 	// ReturnsFn is the check-mode return computer (native-authored or

@@ -186,10 +186,14 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// such slot on a Callable word today) rides as a plain VALUE operand next
 	// to the compiled body closure, and the driving handler runs it as a token
 	// QUOTATION through a sub-engine at run time. That is sound only for the
-	// one provably-name-free shape extraNoEvalHookSlotsOK admits; anything else
-	// declines here so the Stage-2 refusal (the sound interpreter fallback)
-	// stands.
-	if !es.extraNoEvalHookSlotsOK(sig, spec.BodyPos, args) {
+	// one provably-name-free shape extraNoEvalHookSlotsOK admits, plus — the
+	// Stage M2d extension — a LAMBDA hook on a LambdaSharesTokenShape word,
+	// which compiles to its OWN closure unit inside recordClosureDispatch
+	// (walkClassifyHook already classifies a compiled closure per hook slot).
+	// Anything else declines here so the Stage-2 refusal (the sound
+	// interpreter fallback) stands.
+	extraLamSlots, extrasOK := es.extraNoEvalHookSlots(sig, spec, args)
+	if !extrasOK {
 		return false
 	}
 
@@ -225,7 +229,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// typechecks, then record the dispatch with the body as a closure the
 	// handler drives through InvokeBody.
 	if fd, isFn := body.Data.(FnDefInfo); isFn {
-		return tryRecordLambdaClosure(r, word, spec, sig, args, &fd, outs, pos)
+		return tryRecordLambdaClosure(r, word, spec, sig, args, &fd, extraLamSlots, outs, pos)
 	}
 
 	// A token-list body (`filter [body] data`): the body consumes its inputs
@@ -255,7 +259,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
 	captures := moduleScopeMutableCaptures(r, bodyToks, ComputeCaptures(r, &FnSig{Impl: AQL(bodyToks)}))
-	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, outs, pos)
+	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, pos)
 }
 
 // tryRecordLambdaClosure compiles a higher-order word's LAMBDA argument
@@ -266,75 +270,14 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 // refusal to stand — for a shape the word has no lambda convention for, an
 // arity mismatch, a capturing lambda (deferred), or a body that does not
 // compile.
-func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Signature, args []Value, fd *FnDefInfo, outs []Value, pos SrcPos) bool {
-	lam, ok := fd.FirstOwnSig()
-	if !ok || len(lam.body()) == 0 {
-		return false
-	}
-	// An OVERLOADED fn value (more than one own signature) is dispatched by
-	// MatchFnSig at runtime — FirstOwnSig is not necessarily the matched
-	// overload, so compiling its body could run the wrong one. Refuse and let
-	// the interpreter select the overload.
-	own := 0
-	for i := range fd.Signatures {
-		if !fd.Signatures[i].Fallback {
-			own++
-		}
-	}
-	if own > 1 {
-		return false
-	}
-	// A LEXICALLY capturing lambda would need its construction-time captures
-	// resolved in this scope and threaded onto the closure; the spec lambda
-	// rows are capture-free, so defer that and keep it on the refusal path.
-	// (MODULE-SCOPE mutable-instance reads are not lexical captures — they are
-	// admitted below via moduleScopeMutableCaptures, same as token bodies.)
-	if len(fd.Captured) > 0 {
-		return false
-	}
-	if bodyToksHaveSentinel(lam.body()) {
-		return false
-	}
+func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Signature, args []Value, fd *FnDefInfo, extraLamSlots []int, outs []Value, pos SrcPos) bool {
 	inputs, shape, ok := lambdaCallbackInputs(r, word, spec, args)
-	if !ok || len(lam.Params) != len(inputs) {
+	if !ok {
 		return false
 	}
-	// The callback shape must satisfy each declared param TYPE — the same
-	// membership the runtime MatchFnSig checks at dispatch. A param whose type
-	// rejects the shape (e.g. `[p:String]` against filter's {key,value} pair)
-	// makes the interpreter raise a callback error; compiling the body anyway
-	// would silently keep the element instead. Refuse so the type check stands.
-	for i := range lam.Params {
-		// The callback shape must satisfy each declared param TYPE — the same
-		// membership the runtime MatchFnSig checks at dispatch. A param whose
-		// type rejects the shape (e.g. `[p:String]` against filter's
-		// {key,value} pair, or `[kv:KeyVal]` against a list's plain pair) makes
-		// the interpreter raise a callback error; compiling the body anyway
-		// would silently keep the element. Refuse so the type check stands.
-		pt := lam.Params[i].Type
-		if pt == nil {
-			continue
-		}
-		// A map-iteration ENTRY input is a KeyVal (a Map subtype) that the
-		// carrier conservatively under-types as a plain Map — its concrete type
-		// is not always resolvable here. Accept any Map-family param (Map,
-		// KeyVal, Any, Node) and refuse a param that is neither a sub- nor a
-		// super-type of Map (a scalar like String, or a sibling container),
-		// which the runtime callback dispatch rejects.
-		if shape == ClosureInKeyVal && inputs[i].Parent.ConformsTo(TMap) {
-			if !pt.ConformsTo(TMap) && !TMap.ConformsTo(pt) {
-				return false
-			}
-			continue
-		}
-		// Correctly-typed carriers (the {key,value} pair for the list forms, a
-		// typed accumulator): the param must satisfy the carrier type, the same
-		// membership the runtime MatchFnSig checks at dispatch. A mismatch
-		// (`[p:String]` against filter's Map pair) makes the interpreter raise a
-		// callback error while a compiled body would silently keep the element.
-		if !sigTypeMatches(inputs[i], pt) {
-			return false
-		}
+	lam, ok := lambdaHookCompatible(fd, inputs, shape)
+	if !ok {
+		return false
 	}
 	names := make([]string, len(lam.Params))
 	for i := range lam.Params {
@@ -349,7 +292,70 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	// pointer-backed instance shares mutations across the boundary. See
 	// moduleScopeMutableCaptures.
 	captures := moduleScopeMutableCaptures(r, lam.body(), nil)
-	return recordClosureDispatch(r, word, spec, sig, args, lam.body(), inputs, names, captures, shape, outs, pos)
+	return recordClosureDispatch(r, word, spec, sig, args, lam.body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
+}
+
+// lambdaHookCompatible reports whether a LAMBDA hook value can compile to a
+// closure unit against the word's callback `inputs`, returning its single own
+// signature. The constraints are the landed lambda-body ones, shared by the
+// BODY lambda and the extra hook-slot lambdas (Stage M2d):
+//
+//   - exactly ONE own signature: an OVERLOADED fn value is dispatched by
+//     MatchFnSig at runtime — FirstOwnSig is not necessarily the matched
+//     overload, so compiling its body could run the wrong one;
+//   - no LEXICAL captures (they would need resolving in this scope and
+//     threading onto the closure; MODULE-SCOPE mutable-instance reads are not
+//     lexical captures — the callers admit those via
+//     moduleScopeMutableCaptures);
+//   - no flow-control sentinel in the body;
+//   - param count matches the callback inputs, and every declared param TYPE
+//     accepts its input — the same membership the runtime MatchFnSig checks
+//     at dispatch. A param whose type rejects the shape (`[p:String]` against
+//     filter's {key,value} pair, or `[kv:KeyVal]` against a list's plain
+//     pair) makes the interpreter raise a callback error; compiling the body
+//     anyway would silently keep the element. A map-iteration ENTRY input is
+//     a KeyVal (a Map subtype) the carrier conservatively under-types as a
+//     plain Map, so any Map-family param is accepted there and only a
+//     provably-incompatible param (a scalar, a sibling container) refuses.
+func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape) (*Signature, bool) {
+	lam, ok := fd.FirstOwnSig()
+	if !ok || len(lam.body()) == 0 {
+		return nil, false
+	}
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	if own > 1 {
+		return nil, false
+	}
+	if len(fd.Captured) > 0 {
+		return nil, false
+	}
+	if bodyToksHaveSentinel(lam.body()) {
+		return nil, false
+	}
+	if len(lam.Params) != len(inputs) {
+		return nil, false
+	}
+	for i := range lam.Params {
+		pt := lam.Params[i].Type
+		if pt == nil {
+			continue
+		}
+		if shape == ClosureInKeyVal && inputs[i].Parent.ConformsTo(TMap) {
+			if !pt.ConformsTo(TMap) && !TMap.ConformsTo(pt) {
+				return nil, false
+			}
+			continue
+		}
+		if !sigTypeMatches(inputs[i], pt) {
+			return nil, false
+		}
+	}
+	return lam, true
 }
 
 // recordClosureDispatch is the shared tail of the token and lambda closure
@@ -357,8 +363,12 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 // throwaway state (a refusal leaves the real program untouched), then
 // real-compiles it and records the dispatch (the body operand lowering to
 // OpPushClosure). paramNames is nil for the token form (stack-consumed inputs)
-// and the lambda's param names for the lambda form.
-func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, outs []Value, pos SrcPos) bool {
+// and the lambda's param names for the lambda form. extraLamSlots are the
+// NON-body NoEvalArgs slots holding a LAMBDA hook (walk's ASCEND slot, Stage
+// M2d): each compiles to its OWN closure unit under the SAME shared token
+// shape (extraNoEvalHookSlots only nominates them on a LambdaSharesTokenShape
+// word) and rides as a second opClosure operand.
+func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, extraLamSlots []int, outs []Value, pos SrcPos) bool {
 	// The probe fork below needs the CONCRETE EmitState; both callers only
 	// reach here through an active recording state, so a non-EmitState
 	// recorder (the inactive no-op) declining is the unreachable belt.
@@ -373,6 +383,48 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 			return false // an unreachable capture — keep the island path
 		}
 		capOps[i] = op
+	}
+
+	// Extra LAMBDA hooks (walk's ASCEND slot, Stage M2d): validate each against
+	// the SAME shared token-shape inputs the body uses (the nominating gate is
+	// LambdaSharesTokenShape-only) and resolve its module-scope captures, so
+	// the probe/real passes below compile them alongside the body. Any
+	// incompatibility declines the whole closure path — the refusal stands.
+	type extraHook struct {
+		slot  int
+		toks  []Value
+		names []string
+		caps  []CapturedBinding
+		ops   []emitOperand
+	}
+	extras := make([]extraHook, 0, len(extraLamSlots))
+	for _, slot := range extraLamSlots {
+		fd, isFn := args[slot].Data.(FnDefInfo)
+		if !isFn {
+			return false
+		}
+		hookIns, hookShape, insOK := lambdaCallbackInputs(r, word, spec, args)
+		if !insOK {
+			return false
+		}
+		lam, lamOK := lambdaHookCompatible(&fd, hookIns, hookShape)
+		if !lamOK {
+			return false
+		}
+		names := make([]string, len(lam.Params))
+		for i := range lam.Params {
+			names[i] = lam.Params[i].Name
+		}
+		hookCaps := moduleScopeMutableCaptures(r, lam.body(), nil)
+		hookCapOps := make([]emitOperand, len(hookCaps))
+		for i, cb := range hookCaps {
+			op, ok := real.resolveOperand(cb.Value)
+			if !ok {
+				return false
+			}
+			hookCapOps[i] = op
+		}
+		extras = append(extras, extraHook{slot: slot, toks: lam.body(), names: names, caps: hookCaps, ops: hookCapOps})
 	}
 
 	// The body compile re-runs the body (the ReturnsFn pass already emitted
@@ -390,6 +442,13 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	// already in the real state).
 	r.Check.Emit = real.forkForProbe()
 	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
+	for _, ex := range extras {
+		if !probeOk {
+			break
+		}
+		_, exOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		probeOk = probeOk && exOk
+	}
 	r.Check.Emit = real
 	if !probeOk {
 		return false
@@ -401,7 +460,18 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	if !realOk || unit < 0 {
 		return false
 	}
-	return real.RecordClosureCall(word, sig, args, spec.BodyPos, unit, capOps, outs, pos)
+	var extraOps map[int]emitOperand
+	for _, ex := range extras {
+		exUnit, exOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		if !exOk || exUnit < 0 {
+			return false
+		}
+		if extraOps == nil {
+			extraOps = map[int]emitOperand{}
+		}
+		extraOps[ex.slot] = emitOperand{kind: opClosure, closureUnit: exUnit, closureCaps: ex.ops}
+	}
+	return real.RecordClosureCall(word, sig, args, spec.BodyPos, unit, capOps, extraOps, outs, pos)
 }
 
 // lambdaCallbackInputs returns the representative input carriers a higher-order
@@ -503,29 +573,45 @@ func keyValCarrier(r *Registry, elem *Type) Value {
 	return NewValueRaw(t, MapPayload{M: om})
 }
 
-// extraNoEvalHookSlotsOK reports whether every NON-body NoEvalArgs operand of
-// a Callable word (walk's optional ASCEND hook — the only such slot today) is
-// sound to ride as a plain value operand next to the compiled body closure.
-// The driving handler classifies such a hook at run time and, for a concrete
-// list, runs its element snapshot as a token QUOTATION in a sub-engine
-// (walkClassifyHook → runQuotationBody), where a NAME resolves against the
-// REGISTRY — but the compiled program holds top-level value defs as VM frame
-// locals, so a name-bearing hook would diverge (the same registry asymmetry
-// execBodyRefsNames defends the body slot against). Admit exactly ONE shape,
-// whose runtime tokens are PROVABLY EMPTY: see emptyFlexHookOperand. Anything
-// else declines — the caller then leaves the Stage-2 refusal standing (an
-// INERT token hook needs no admission here: when the closure path declines,
-// the existing noEvalBodiesInertScoped const bake still applies).
-func (es *EmitState) extraNoEvalHookSlotsOK(sig *Signature, bodyPos int, args []Value) bool {
+// extraNoEvalHookSlots classifies every NON-body NoEvalArgs operand of a
+// Callable word (walk's optional ASCEND hook — the only such slot today) for
+// riding next to the compiled body closure. The driving handler classifies
+// such a hook at run time and, for a concrete list, runs its element snapshot
+// as a token QUOTATION in a sub-engine (walkClassifyHook → runQuotationBody),
+// where a NAME resolves against the REGISTRY — but the compiled program holds
+// top-level value defs as VM frame locals, so a name-bearing hook would
+// diverge (the same registry asymmetry execBodyRefsNames defends the body
+// slot against). Two shapes are admitted:
+//
+//   - a flex reference whose runtime tokens are PROVABLY EMPTY
+//     (emptyFlexHookOperand) — it rides as a plain value operand;
+//   - on a LambdaSharesTokenShape word, a LAMBDA (a concrete FnDefInfo) —
+//     returned in `lamSlots` for recordClosureDispatch to compile to its OWN
+//     closure unit (Stage M2d, the two-hook walk row): the handler classifies
+//     a compiled closure per hook slot, so a second closure operand runs
+//     byte-identically to the interpreter's per-node lambda call. The full
+//     lambda constraints (single own sig, capture-free, param-compatible) are
+//     enforced at compile time there; a decline leaves the refusal standing.
+//
+// Anything else declines — the caller then leaves the Stage-2 refusal
+// standing (an INERT token hook needs no admission here: when the closure
+// path declines, the existing noEvalBodiesInertScoped const bake still
+// applies).
+func (es *EmitState) extraNoEvalHookSlots(sig *Signature, spec CallableSpec, args []Value) (lamSlots []int, ok bool) {
 	for i := range args {
-		if i == bodyPos || !sig.NoEvalArgs[i] {
+		if i == spec.BodyPos || !sig.NoEvalArgs[i] {
 			continue
 		}
-		if !es.emptyFlexHookOperand(args[i]) {
-			return false
+		if es.emptyFlexHookOperand(args[i]) {
+			continue
 		}
+		if _, isFn := args[i].Data.(FnDefInfo); isFn && spec.LambdaSharesTokenShape {
+			lamSlots = append(lamSlots, i)
+			continue
+		}
+		return nil, false
 	}
-	return true
+	return lamSlots, true
 }
 
 // emptyFlexHookOperand reports whether v is a flex reference that is PROVABLY

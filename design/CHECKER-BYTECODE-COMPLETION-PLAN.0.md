@@ -338,6 +338,105 @@ from everything; 7 is gated on 6's exit criteria.
 
 ## Execution log
 
+- **2026-07-04 — Phase 6 Stage M2 landed (fn-value frontier, partial-M2c):
+  refusals 68 → 40, native 3556 → 3584; census deltas ONLY in
+  the targeted buckets.** Per design/STAGE3-INLINING-DESIGN-ROUND.0.md §6
+  Stage M2, with these recorded design corrections:
+  - **M2a (3/3: recursion.tsv:90-92).** The design named "route the fn-unit
+    residual through resolveDynamicApply + extend trailingApply to a local
+    fn"; the landed mechanism differs: the `apply` dispatch over a
+    Function-typed CARRIER is ELIDED with a pending-apply ledger on the
+    enclosing unit (recordCallElided → emitUnit.pendingApply), and
+    StartFnCompile's finish lowers the ONE pending as the whole-residual
+    window — the fn's arity is unknowable at the apply site, so only the
+    whole window is faithful to applyHandler's re-step — or refuses ("apply
+    of a dynamic fn value not at the body tail"), so a pending apply can
+    never compile as unapplied data. Correction found by probe: applyHandler
+    UNQUOTES the fn, so a /r-parked (Quoted) callee needs a NEW opcode
+    OpCallDynApplyTop (unquote-then-apply; applyHandler's byte-identical
+    non-fn error) — OpCallDynTrailTop keeps the paren semantics (a quoted fn
+    stays data). RecordDynApply consumes a matching pending and flags the
+    event (dynApplyUnquote) for the same opcode split.
+  - **M2b (12/12: path-modifier.tsv:17-20,23-25,28,52-55).** The real blocker
+    was NOT get-side folding: the modifier words (usurp / stack-args /
+    forward-args / force-arity) are RunInCheck, whose dispatches bypass the
+    check intercept and recorded NOTHING — the wrapper value reached the
+    residual with no provenance. Landed: the gradual branch
+    (checkModeGradualFn) records an OpCallNativePoly (recordGradualWrap →
+    RecordPolyCall; the VM's callPoly re-matches the word's own sigs with
+    the kernel MatchSignature, so a runtime non-fn raises the identical
+    illegal_ref), and the residual applies the runtime-built wrapper via the
+    EXISTING leading OpCallDynamic — plus a new TRAILING-window shape
+    (trailingWindowApplyShape → OpCallDynamicMixed over the whole residual,
+    events promoted to locals): `10 3 m.s/s` islands the window VERBATIM,
+    because a BarrierPos-0 stack-args wrapper collects nothing forward and
+    cannot ride the trailing-1 rotation contract. The by-name Atom forms
+    stay unrecorded when the resolved value is dynamic (no runtime def
+    stack); recording keys on the RESOLVED value, never the name.
+  - **M2c (2/14: module-log.tsv:62,83 — the rest reported below).**
+    Log.register declares CompileStoresFn (the minilang/parselang register
+    precedent): the sink fn is stored and invoked by the Go-side sink
+    machinery through a fresh sub-engine, never on the tape; a pure fn
+    literal bakes as a const, a capturing one refuses. STALLED — the
+    instance-method rows (module-log 53,54,56,77-80 statement-position
+    `l.info "req"` / `c.add 1`, + 55 paren-bounded `(l.child {y:2})`): the
+    method read is deliberately dynamic (loggerShapeReturns' check-mode
+    shape instance must never bake — freeze-gate: the runtime instance
+    carries per-call state), so compiling these needs the shaped
+    instance-method dispatch model the design sketched: a method-shape
+    annotation on the read result (member sigs + return count from the
+    ReturnsFn shape instance), check-mode modelling of the auto-dispatch at
+    the point the interpreter performs it, and a mid-stream CALL_DYNAMIC
+    event with shape-known nout (0 for the log methods) — a guarded opcode
+    can defer to the interpreter via internal_error if the shape claim ever
+    fails at run time. That is a coherent one-session feature but engine
+    surgery beyond this session's gate budget; nothing landed toward it, so
+    the 8 rows are byte-identical refusals. module-log 72,73 +
+    module-rand 14,15 stay on the SOUND miscompile-E auto-dispatch guard
+    (containerFnAutoDispatchRisk / zeroArgFnOut), exactly as the design
+    allows — the guard was not weakened.
+  - **M2d (11/11: module-minilang.tsv:306-315 + corpus-core.tsv:134).** The
+    design's "bake the fn as a const where the consumer treats it as DATA"
+    landed, with a correction: `is` CANNOT take whole-sig CompileReadsFn — a
+    Function in its TYPE slot is a predicate the handler INVOKES
+    (RunPredicate; `5 is Positive`, pinned by TestFnValueIntrospectionLowers
+    and TestRunCompiledFallbackIsolation, both of which caught the blanket
+    attempt). Landed the positional Signature.FnInertArgs{1:true} (value
+    slot only) + the positional gate in recordCallOperands. Second
+    correction: minilang:314's real blocker was StripToCarriers destroying
+    the parser-emitted `/r` dispatch-mod marker (Word/__DM) in check mode —
+    the marker leaked into the check stack as a phantom carrier the runtime
+    never has; toCarrier now exempts it as the control token it is, so an
+    inline `(lambda)/r` parks/drops exactly as the interpreter (pinned:
+    `(1 add 2)/r` → 3 native). corpus-core:134's two-lambda walk landed by
+    compiling the ASCEND-slot lambda to its OWN closure unit
+    (extraNoEvalHookSlots → recordClosureDispatch extras →
+    RecordClosureCall extraOps; walkClassifyHook already classifies a
+    compiled closure per slot); the Phase 3.2/3.3 "lambda ascend stays
+    refused" negative pin was stale against this design and is now the
+    positive two-lambda parity case (a CAPTURING ascend lambda is the new
+    negative).
+  - Stale-doc note: `(3 and "x") add 1` (next-stages Stage H) already
+    compiles natively with the interpreter's operand order on this branch;
+    the M2 revert-criteria pin is now a POSITIVE order pin ('x1', never
+    '1x'). Latent corner observed, unchanged: OpCallDynTrailTop islands an
+    appliable-but-QUOTED fn as [fn, args] where the interpreter's paren
+    residual would be [args, fn] — unreached by the corpus; flagged for the
+    M-stage review.
+  - Census: refusals 68 → 40 (function-valued operand 5 → 0;
+    fn-value-reaches-word 11 → 0; unconsumed carrier 3 → 0; operand
+    provenance 22 → 13; fn-value-call boundary 7, paren-bounded 1 and
+    container auto-dispatch 4 unchanged = the reported M2c stall; dispatch
+    recovery 14 and dynamic input 1 untouched); islands still 1 (none
+    added); tier-2 0; error rows 13 → 12 (module-log:83 left the allowlist
+    the only permitted direction — it now COMPILES to the byte-identical
+    runtime sink-exists error); computeRefusalCeiling 56 → 29 with
+    rationale. Landing tests: bytecode_fnvalue_m2_test.go (4 batteries,
+    positives + order/unquote pins + refusal negatives with fallback
+    parity), TestWalkHookClosureCompiles two-lambda positive + capturing
+    negative. M3 (DSL registration) and M4 (definite traps) are unblocked —
+    neither depends on the M2c stall.
+
 - **2026-07-03 — Phase 0 executed.**
   - 0.1 `pinnedTypeSoundnessViolations` lowered 8 → 7 (generics.tsv:75
     left the violation set; the remaining 7 verified live:

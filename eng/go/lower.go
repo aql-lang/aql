@@ -1362,8 +1362,14 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		// recorded as an event (RecordDynApply) so it seats like any computed result:
 		// a def-local, an if operand, a list member, OR the body residual. The layout
 		// above placed the operands [args…, fn] with the fn on top, exactly the stack
-		// OpCallDynTrailTop reads (fn = top, its dynApply args below).
-		lw.emit(OpCallDynTrailTop, c.dynApply, c.pos)
+		// OpCallDynTrailTop reads (fn = top, its dynApply args below). An event that
+		// came through the `apply` WORD lowers to OpCallDynApplyTop instead — the
+		// applyHandler's unquote-then-apply (Stage M2a).
+		op := OpCallDynTrailTop
+		if c.dynApplyUnquote {
+			op = OpCallDynApplyTop
+		}
+		lw.emit(op, c.dynApply, c.pos)
 	} else if c.makeList {
 		// Assemble the n laid-out operands into a list (a computed list literal,
 		// `[1 add 2]`). No sig, no dispatch — OpMakeList pops the n and pushes one.
