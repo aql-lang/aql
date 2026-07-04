@@ -1,0 +1,100 @@
+# AQL Language Specification: edge-quote-2 — word splice + /q atoms
+# Format: input<TAB>expected<TAB>description
+# =====================================================================
+# Edge cases for the explicit splice (`word` wraps a value in an __SP
+# marker that fires when STEPPED at the pointer, forward-form only)
+# and for the three spellings of atom quotation (name/q, quote name,
+# (quote name)) plus atom identity/ordering. Complements
+# word-splice.tsv (the systematic splice matrix) with the quote-ferry
+# failure modes, container corners, and non-list payloads. See
+# lang/go/CLAUDE.md "def name <node> binds a value; word splices".
+# =====================================================================
+
+# --- §1 word over non-list payloads ------------------------------------
+word (1 add 2)	3	a paren evaluates FIRST; the splice carries the scalar result
+word "abc"	'abc'	a string payload splices as itself
+word foo/q	foo/q	an atom payload splices as itself
+word (quote foo)	foo/q	…also via the paren spelling — the atom is the payload
+word none	none	none splices as itself
+word true	true	a boolean splices as itself
+word {a:1}	{a:1}	a map payload is ONE value — no element spreading for maps
+word {a:(1 add 2)}	{a:3}	the map's paren value evaluates before the splice wraps it
+def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 3]] f (p)	9	parens contain a code splice so its RESULT becomes the argument
+
+# --- §2 def name word <value>: the marker binds, forward form only -----
+def d word [dup mul] 3 d	9	an explicit code splice runs against the live stack
+def n word "hi" n	'hi'	a non-list marker binding splices the single value back
+def m word {a:1} m	{a:1}	a map marker binding yields the map value at reference
+def a word foo/q a	foo/q	an atom rides the marker unchanged
+def w word (2 mul 3) w	6	a paren payload was evaluated at def time — the splice re-plays 6
+def inc word [1 add] 5 inc inc	7	code-splice chain: each replay sees the live stack
+def inc2 word [2 add] 0 inc2 inc2	4	…and a two-token payload chains the same way
+def two word [1,2] two two	1 2 1 2	each reference re-splices the elements
+def two word [1,2] [two two] size	4	inside a list literal both splices flatten — four elements
+
+# --- §3 quote cannot ferry the __SP marker ------------------------------
+quote (word [1,2])	1 2	the splice fires INSIDE the paren before quote can mark it
+quote word [1,2]	word/q [1 2]	quote captures the literal token `word`; the list evaluates apart
+quote (word [dup add])	ERROR:signature_error	a code payload fires in the paren — dup meets an empty stack
+def s word [dup add] quote [s]	(quote [word(s)])	holding a list stops the reference from splicing — s stays a raw word
+def s word [dup add] quote [s] size	1	the held reference is one node, not the payload's two
+def s word [dup add] quote s	s/q	quote captures the NAME of a splice-bound def, binding notwithstanding
+def n word 42 quote n eq n/q	true	…and the captured name is an ordinary atom
+
+# --- §4 splices meeting containers --------------------------------------
+def xs word [1,2] {a: xs}	{a:[1 2]}	a map VALUE position binds the payload list as a value — no spread
+def w word {a:1} {k: w}	{k:{a:1}}	a map payload nests as a map value
+def w word 42 if true [w] [0]	42	a splice reference inside an if branch fires when the branch runs
+def w word 42 if false [w] [0]	0	…and never fires in the untaken branch
+def e word [] [1 e 2]	[1 2]	an empty splice vanishes inside a list literal
+def e word [] [e]	[]	…splicing nothing into an empty literal leaves it empty
+def xs word [2,3] [xs xs] size	4	double reference doubles the elements
+def n word 42 [n n] size	2	a scalar marker contributes one element per reference
+def z word [7] [z] get 0	7	a one-element payload lands as the container's element
+def a word [1,2] def b [a 3] b	[1 2 3]	a def'd LIST body absorbs a splice reference at eval time
+def s word [dup add] def use fn [[x:Integer][Integer][x s]] use 4	8	a code splice replays inside a fn body against the frame stack
+def w word [1,2] quote [0 w 9] size	3	held: the reference is one raw node between the literals
+
+# --- §5 /q atoms and the three quote spellings ---------------------------
+zork/q	zork/q	the suffix form parses straight to an atom
+quote foo	foo/q	the function form captures the upcoming word
+(quote foo)	foo/q	…and the paren form is the same capture, grouped
+foo/q eq quote foo	true	suffix and function form produce the SAME atom
+add/q eq (quote add)	true	quoting a BOUND name still yields the plain atom
+quote mul	mul/q	a registered word quotes to its name — no dispatch
+typeof foo/q	Atom	an atom's type
+typeof (quote foo)	Atom	the function form types identically
+foo/q eq "foo"	false	an atom is NOT its spelling string
+convert String foo/q	'foo'	…conversion is the explicit bridge
+foo/q eq bar/q	false	different names, different atoms
+cmp foo/q foo/q	0	same name orders equal
+a/q cmp b/q	-1	atoms order by name
+foo/q lt goo/q	true	…and the comparison words agree
+sort [c/q a/q b/q]	[a/q b/q c/q]	atoms sort lexically by name
+Atom cmp a/q	-1	the bare type literal sorts below every concrete atom
+foo/q cmp "foo"	ERROR:incomparable	an atom and a string share no ordering — use tcmp
+[foo/q] cmp [foo/q]	0	atom-bearing lists compare structurally
+quote true eq true/q	true	the captured `true` atom is the ordinary atom true/q
+
+# --- §6 atoms as data in containers --------------------------------------
+{k: foo/q}	{k:foo/q}	an atom map value stays an atom
+{a: foo/q, b: bar/q}	{a:foo/q b:bar/q}	multiple atom-valued fields
+def o {mode: fast/q} o.mode	fast/q	an options-style atom flag reads back by dot access
+def o {mode: fast/q} o.mode eq fast/q	true	…and dispatches on eq like any atom
+[foo/q bar/q] size	2	atoms are plain elements in data lists
+[foo/q bar/q] get 0	foo/q	…and read back unevaluated (an atom never re-fires)
+quote [foo/q] size	1	a /q atom inside a HELD list is one node
+{k: (quote foo)}	{k:foo/q}	the paren spelling works in a map value slot
+{a: quote foo}	ERROR:signature_error	…but the bare function form does not — parenthesise it
+`a ${x/q}`	'a x'	an atom interpolates as its bare name
+
+# --- §7 auto-splice at reference: the marker vs the value ----------------
+def xs word [1,2,3] xs	1 2 3	marker binding: reference explodes to elements
+def xs [1,2,3] xs	[1 2 3]	value binding: reference is the one list
+def xs word [1,2,3] [xs] cmp [[1,2,3]]	1	the spread makes a FLAT 3-element list — longer than the nested form
+def xs word [1,2,3] [xs] size	3	the container absorbs the spread
+def xs [1,2,3] [xs] size	1	the value stays one element
+def a word [4,5] def b word [a 6] b	4 5 6	splices chain through other splices and flatten
+def a [4,5] def b [a 6] b	[[4 5] 6]	value bindings nest instead
+def n word 41 n add 1	42	a scalar splice feeds the next word
+def n 41 n add 1	42	…indistinguishable from a value binding for scalars

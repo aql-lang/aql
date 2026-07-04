@@ -1,0 +1,166 @@
+# edge-containers-1.tsv — container IDENTITY edge cases: eq vs deq over
+# compounds, and the per-call literal-identity family (miscompile-A
+# mechanism, design/MISCOMPILE-HUNT-FINDINGS.0.md §A).
+#
+# `eq` on non-scalars is CONTAINER IDENTITY (eng/go/compare.go
+# ExactEqual → sameContainer): a MapPayload identifies by its
+# *OrderedMap pointer, a ListPayload by its backing element array, a
+# flex node by its store pointer, a class/record instance by its
+# Fields map (flatInstanceParts). `deq` is structural. Two literal
+# twins are never eq; a dup/def alias always is. The ONE deliberate
+# exception: an empty list has no backing array to alias by, so ALL
+# empty plain lists are eq (sameContainer treats them as the single
+# empty list). Empty MAPS do NOT unify — each {} is a fresh
+# OrderedMap pointer. Empty FLEX lists do not unify either — the
+# FlexListData store pointer IS the identity.
+#
+# A container literal in a fn body is constructed FRESH per call
+# (per-call identity — the miscompile-A fix): two calls are deq but
+# never eq. A fn body that READS an enclosing binding returns the
+# SHARED container — every call is eq to the source.
+
+# ====================================================================
+# §1  literal twins are never eq — eq is identity, deq is structure
+# ====================================================================
+
+[5] eq [5]	false	two list literals are two containers — eq is identity, not value
+[1 2 3] eq [1 2 3]	false	same for longer lists
+{k:9} eq {k:9}	false	two map literals are two containers
+[[1]] eq [[1]]	false	nested twins: the OUTER containers differ
+[{a:1}] eq [{a:1}]	false	list-of-map twins differ too
+([{a:1}] get 0) eq ([{a:1}] get 0)	false	elements pulled from two separate literals are two maps
+[1] eq 1	false	container vs scalar is never eq
+[] eq {}	false	empty list vs empty map — different families
+[5] deq [5]	true	deq is structural — twins ARE deep-equal
+[1 [2]] deq [1 [2]]	true	deq recurses through nesting
+{a:{b:[1]}} deq {a:{b:[1]}}	true	deep map/list mix
+[1] deq [1.0]	true	deq uses numeric magnitude on leaves (1 == 1.0)
+[1] deq ['1']	false	no cross-family leaf coercion
+[1] deq [2]	false	differing content is not deq
+[] deq {}	false	deq respects the list/map family split
+{k:9} deq {k:9}	true	map twins are deq
+def mk fn [[] [List] [[1]]] ((mk) eq [1])	false	a fn result and a fresh literal are two containers
+
+# ====================================================================
+# §2  the empty-container identity asymmetry (sameContainer special case)
+# ====================================================================
+
+[] eq []	true	ALL empty plain lists are eq — no backing array to alias by
+{} eq {}	false	empty MAPS are NOT unified — each {} is a fresh OrderedMap
+(flex []) eq (flex [])	false	empty FLEX lists are NOT unified — the store pointer is the identity
+(flex {}) eq (flex {})	false	empty flex maps neither
+([[]] get 0) eq ([[]] get 0)	true	empties extracted from two DIFFERENT outer twins are still eq
+({a:[]} get 'a') eq ({b:[]} get 'b')	true	the single-empty-list rule crosses containers
+[] deq []	true	deq agrees on empties
+{} deq {}	true	…and on empty maps (structurally equal even though not eq)
+def mk fn [[] [List] [[]]] ((mk) eq (mk))	true	per-call FRESH empty lists still eq — emptiness overrides freshness
+def mk fn [[] [List] [[]]] ((mk) eq [])	true	…and eq to any other empty list
+def mk fn [[] [Map] [{}]] ((mk) eq (mk))	false	per-call fresh empty MAPS are two containers
+
+# ====================================================================
+# §3  aliases: dup, def bindings, extraction — the SAME container
+# ====================================================================
+
+[1 2] dup eq	true	dup copies the VALUE, not the container — identical
+def l [1 2] def m l (l eq m)	true	two bindings to one list
+def l [1 2] def d (l) (d eq l)	true	a paren re-read binds the same container
+def a [1] (a eq a)	true	a binding read twice is the same container
+def m {a:1} def n m (m eq n)	true	map aliases too
+def m {a:1} (m eq m)	true	same binding, same map
+def l [1] (do [l]) eq l	true	a container returned out of `do` is the same container
+(do [[1]]) eq (do [[1]])	false	…but two do-evaluated literals are two containers
+def l [[1]] (l get 0) eq (l get 0)	true	get twice from ONE list yields the shared element
+def m {a:[1]} (m.a) eq (m.a)	true	dot twice from one map shares the element
+def m {a:{b:1}} (m.a eq m.a)	true	nested map member is shared
+def l [1] ((node l) eq l)	true	node on an already-plain list is identity — same container
+def m {a:1} ((node m) eq m)	true	node on a plain map is identity too
+
+# ====================================================================
+# §4  shallow copy-on-write shares MEMBERS across the copy
+# ====================================================================
+
+def m {a:{b:1}} def m2 (m set c 3) (m.a eq m2.a)	true	map set copies the SPINE only — the untouched member is shared
+def l [[1]] def l2 (push 2 l) ((l get 0) eq (l2 get 0))	true	push copies the spine — element containers are shared
+def m {a:{b:1}} def m2 (m set c 3) (m eq m2)	false	…while the spines themselves are two containers
+def l [2 1] def s (sort l) (s eq l)	false	sort returns a fresh list
+def l [1 2] (reverse (reverse l)) eq l	false	a double reverse is a fresh container, not the source
+def l [1 2] (reverse (reverse l)) deq l	true	…though structurally identical
+def m {a:1} (keys m) eq (keys m)	false	keys builds a fresh list on every call
+def l [1 2] (each [add 0] l) eq l	false	each builds a fresh result list even for an identity body
+def l [1 2] (filter [0 gt] l) eq l	false	filter that keeps everything still returns a fresh list
+def l [1 2 3] (filter [0 gt] l) deq l	true	…deep-equal to the source
+def o {a:1 b:2} (filter ([kv:KeyVal] => [kv.v gt 0]) o) eq o	false	map filter returns a fresh map even when nothing is dropped
+
+# ====================================================================
+# §5  per-call literal identity — a fn-body container literal is
+#     constructed FRESH on every call (miscompile-A / mechanism A)
+# ====================================================================
+
+def mk fn [[] [List] [[1]]] ((mk) eq (mk))	false	two calls, two containers — the body literal does not intern
+def mk fn [[] [Map] [{a:1}]] ((mk) eq (mk))	false	map twin of the mechanism-A shape
+def mk fn [[] [List] [[1]]] ((mk) deq (mk))	true	the two results are structurally equal
+def mk fn [[] [Map] [{a:1}]] ((mk) deq (mk))	true	map results too
+def mk fn [[] [List] [[1]]] def r1 (mk) def r2 (mk) (r1 eq r2)	false	def-bound results from two calls stay distinct
+def mk fn [[] [List] [[1]]] def r (mk) (r eq (mk))	false	a bound result vs a later call — still two containers
+def mk fn [[] [List] [[1]]] def r (mk) (r eq r)	true	one call read twice IS one container
+def mk fn [[b:Boolean] [List] [if b [[1]] [[1]]]] ((mk true) eq (mk true))	false	branch-literal twin: same arm, fresh per call
+def mk fn [[b:Boolean] [List] [if b [[1]] [[1]]]] ((mk true) eq (mk false))	false	different arms are different containers a fortiori
+(if true [[1]] [[1]]) eq (if true [[1]] [[1]])	false	top-level if twins: each evaluation constructs fresh
+def nest fn [[] [List] [[[2]]]] (((nest) get 0) eq ((nest) get 0))	false	NESTED inner literals are fresh per call too
+def nest fn [[] [List] [[[2]]]] def o (nest) ((o get 0) eq (o get 0))	true	…but within ONE call the inner container is shared
+def mk fn [[] [List] [[{a:1}]]] (((mk) get 0) eq ((mk) get 0))	false	map nested in a list body: fresh per call
+def m1 fn [[] [List] [[1]]] def m2 fn [[] [List] [[1]]] ((m1) eq (m2))	false	two fns with identical body literals never share
+def mk fn [[] [List] [[1]]] def r (each [drop (mk)] [0 0]) ((r get 0) eq (r get 1))	false	per-iteration calls inside each yield distinct containers
+def r (each [drop [9]] [0 0]) (r get 0) eq (r get 1)	false	an each BODY literal is fresh per iteration as well
+def rec fn [[n:Integer] [List] [if (n gt 0) [(rec (n sub 1))] [[0]]]] ((rec 2) eq (rec 2))	false	the base-case literal of a recursive fn is fresh per outer call
+def P class {x:1} def mk fn [[] [P] [(make P {})]] ((mk) eq (mk))	false	a body `make` constructs a fresh instance per call
+def P class {x:1} def mk fn [[] [P] [(make P {})]] ((mk) deq (mk))	true	…which is deq to its twin
+
+# ====================================================================
+# §6  closure-captured containers STAY SHARED — reading an enclosing
+#     binding returns the one container, not a copy
+# ====================================================================
+
+def c [9] def get2 fn [[] [List] [c]] ((get2) eq (get2))	true	a body that READS a module binding returns the shared list
+def c [9] def get2 fn [[] [List] [c]] ((get2) eq c)	true	…the very container the binding holds
+def c {k:5} def mk fn [[] [Map] [c]] ((mk) eq c)	true	map capture stays shared too
+def c {k:5} def mk fn [[] [Map] [c]] ((mk) eq (mk))	true	every call returns the same map
+def v 9 def mk fn [[] [Map] [{a:v}]] (mk)	{a:9}	a deferred body map RESOLVES enclosing scalars in module scope
+
+# ====================================================================
+# §7  flex identity — flexness is part of identity; conversion copies
+# ====================================================================
+
+(flex [1]) eq [1]	false	flex vs plain: never the same container
+[1] eq (flex [1])	false	either direction
+def l [1] def f (flex l) (f eq l)	false	flex is a DEEP COPY of its source — a fresh container
+def l [1] def f (flex l) (f deq l)	true	…structurally equal to it
+def f (flex {a:1}) def g f (f eq g)	true	two bindings share one flex node
+def f (flex {a:1}) (f eq (flex f))	false	flex of a flex node copies again
+def f (flex [1]) ((flex f) deq f)	true	…keeping the content
+def f (flex [1]) def n1 (node f) def n2 (node f) (n1 eq n2)	false	two node snapshots are two containers
+def f (flex [1]) ((node f) deq (node f))	true	…deep-equal snapshots
+def m {a:[5]} def f (flex m) (f.a eq m.a)	false	deep flex copy severs member sharing with the source
+(flex []) deq []	true	deq ignores flexness on empties
+(flex {}) deq {}	true	map direction too
+[[1]] deq [(flex [1])]	true	deq normalises flexness at any depth
+
+# ====================================================================
+# §8  instance identity — class/record instances identify by their
+#     field map (flatInstanceParts); Stores have NO eq identity at all
+# ====================================================================
+
+def P class {x:1} def Q refine P {} def q (make Q {}) def r q (q eq r)	true	subclass instance aliases are eq
+def P class {x:1} def Q refine P {} (make P {}) eq (make Q {})	false	parent/child twins never share a field map
+def P class {x:1} def p (make P {}) def l [p] ((l get 0) eq p)	true	an instance stored in a list keeps its identity
+def P class {x:1} def p (make P {}) def m {q:p} (m.q eq p)	true	…and in a map field
+def P class {x:1} def p (make P {x:5}) (convert Map p) eq (convert Map p)	false	convert Map projects a FRESH map each call
+def P class {x:2} def p (make P {}) (convert Map p) deq {x:2}	true	…structurally the flat field map
+def P class {x:1} (make P {x:1}) deq {x:1}	false	an instance is never deq to a bare map, even field-for-field
+def R (refine Record [ { a:Integer } ]) def r (make R {a:1}) (r eq r)	true	record instances alias like class instances
+def R (refine Record [ { a:Integer } ]) def r (make R {a:1}) def s r (r eq s)	true	two bindings, one record
+def R (refine Record [ { a:Integer } ]) (make R {a:1}) eq (make R {a:1})	false	record twins are two instances
+context eq context	false	a Store has NO aliasable identity — context is never eq to itself
+def s context (s eq s)	false	…not even through a binding read twice
+import "aql:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) deq p	true	jsonify→reify round-trips the instance structurally ($class tag)
+import "aql:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) eq p	false	…but reify constructs a NEW instance, not the original

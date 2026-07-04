@@ -1,0 +1,126 @@
+# AQL Language Specification: error-taxonomy edge cases
+# Format: input<TAB>expected<TAB>description
+#
+# Edge-case battery over the error system (design/ERRORS.8.md): the
+# three raise forms and their payloads, do-boundary reification and
+# code routing, taxonomy precision for the native codes, the
+# pattern-match no-op contract of `error`, and the aql:test assertion
+# words. Companion to error.tsv (the §1-§4 basics live there; nothing
+# here duplicates a row from that file). Where a row's natural result
+# would be an Any-bounded carrier (a field read off a caught Error),
+# it is pinned through a concluding `eq` so the residual stays narrow.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  raise forms — codes, payloads, and rejections
+raise user_thing "m"	ERROR:user_thing	any bare word names the code, not just documented ones
+raise io_error/q "disk"	ERROR:io_error	an explicit /q atom names the code like a bare word
+do [raise io_error/q "disk"] error [dot code] eq io_error/q	true	…and the caught code is the same atom
+raise {code: "strcode", message: "m"}	ERROR:strcode	the map form accepts a String code
+do [raise {code: "strcode", message: "m"}] error [dot code] eq strcode/q	true	…which reifies as a code ATOM on the Error value
+raise {code: nope/q, message: "m", got: 42, why: "w"}	ERROR:nope	extra spec-map keys never disturb the code
+def e (do [raise {code: nope/q, message: "m", got: [1 2], ctx: {k: 5}}]) e dot got size	2	a List payload rides the Error intact
+def e (do [raise {code: nope/q, message: "m", got: [1 2], ctx: {k: 5}}]) e.ctx.k eq 5	true	…and a nested Map payload reads through dot chains
+raise {}	ERROR:raise_error	an empty spec map has neither code nor message
+raise {code: aa/q}	ERROR:raise_error	message is required in the map form
+raise {code: 42, message: "m"}	ERROR:raise_error	a numeric code is rejected — atom or string only
+def m "boom" raise m	ERROR:user_error	a bound message binding reads through the String slot
+def c io_error/q def msg "disk" raise c msg	ERROR:aql/c]	GOTCHA: the code slot is /q — a bound word raises code `c`, NOT its atom value
+def f fn [[x:Integer] [Integer] [raise too_big "big"]] do [f 1] error [dot code] eq too_big/q	true	a raise inside a fn body propagates to the caller's do boundary
+do [[1 2 3] each [drop raise aa "boom"]] error [dot code] eq aa/q	true	a raise inside an each body aborts the iteration to the boundary
+[raise "x"]	ERROR:user_error	a deferred list auto-evaluates at the drain — its raise still aborts
+#
+# ─────────────────────────────────────────────────────────────────────
+# §2  do-boundary reification — routing, nesting, pass-through
+#
+# §2a  do WITHOUT error already reifies: the Error is a first-class value
+do [raise aa "x"] is Error	true	do alone reifies a raised error as an Error value
+typeof (do [raise aa "x"])	Error	…of type Error
+def e (do [raise aa "x"]) [e] size	1	an Error value sits in a list like any value
+def e (do [raise aa "x"]) [e] 0 get is Error	true	…and comes back out as an Error
+def e (do [raise aa "x"]) {err: e} dot err dot message eq "x"	true	an Error value stored in a map reads back through dot chains
+def e (do [raise aa "x"]) e dot code typeof	Atom	the code field is an Atom
+def e (do [raise aa "x"]) e.message size	1	the message field is an ordinary String
+#
+# §2b  multi-code routing with default arms
+do [raise aa "A"] error [dot code case [aa/q 1 bb/q 2 3]]	1	route on the first code
+do [raise bb "B"] error [dot code case [aa/q 1 bb/q 2 3]]	2	…the second code takes its own arm
+do [raise cc "C"] error [dot code case [aa/q 1 bb/q 2 3]]	3	…an unknown code falls to the default arm
+do [7] error [dot code case [aa/q 1 bb/q 2 3]]	7	a successful body never reaches the routing chain
+do [raise aa "A"] error [dot code] eq aa/q	true	code comparison is the frontier-free routing primitive
+do [raise bb "B"] error [dot code] eq aa/q	false	…and distinguishes codes exactly
+#
+# §2c  nested do boundaries and rethrow
+do [do [raise aa "x"] error [dot message]] error [drop "outer"] eq "x"	true	the INNER boundary catches; the outer handler never runs
+do [do [raise aa "x"] error [dot code]] error [drop 0] eq aa/q	true	an inner-handled error leaves a plain value the outer error ignores
+do [do [raise aa "x"] error [raise "outer"]] error [dot code] eq user_error/q	true	a handler may rethrow — the OUTER boundary sees the new error
+do [do [raise inner_c "i"]] error [dot code] eq inner_c/q	true	do-without-error reifies; the Error value passes UP as a value, and the outer handler fires on it
+#
+# §2d  handler contract — stack-neutral, consume-or-drop, empty forms
+# (dropped) FOUND MISCOMPILE — `5 do [raise aa "x"] error [drop 9] add 1`: compiled `14 1` vs interpreted `5 10` (forward collection reaches across the error-handler residual boundary). Reproducer in design/EDGE-SPEC-FINDINGS.0.md.
+# (dropped) do/error handler shape compiles with an OpFallback island (sound); kept out of the corpus to hold islandGate=1
+# (dropped) empty-handler error shape islands (sound); same disposition as :60
+do [raise aa "x"] error [var [[e] e.code]] eq aa/q	true	var-binding the caught Error works like any handler read
+do [1 2 3] error [drop 0] add	1 5	a multi-value success residual passes through untouched
+#
+# ─────────────────────────────────────────────────────────────────────
+# §3  taxonomy precision — the native codes fire exactly
+#
+# §3a  integer overflow (REFERENCE: never silently wraps)
+9223372036854775807 add 1	ERROR:integer_overflow	MaxInt + 1
+(0 sub 9223372036854775807) sub 2	ERROR:integer_overflow	below MinInt by subtraction
+9223372036854775807 mul 2	ERROR:integer_overflow	multiplication past MaxInt
+4611686018427387904 add 4611686018427387904	ERROR:integer_overflow	2^62 + 2^62 is exactly 2^63 — one past MaxInt
+0 sub (0 sub 9223372036854775807 sub 1)	ERROR:integer_overflow	negating MinInt overflows (|MinInt| > MaxInt)
+9223372036854775806 add 1	9223372036854775807	…but landing EXACTLY on MaxInt is fine
+1.7976931348623157e308 mul 2.0	inf	Float overflow is IEEE: it goes to inf, never integer_overflow
+1e309	ERROR:float_overflow	an overflowing float LITERAL is rejected at parse — you cannot spell inf by overflow
+#
+# §3b  division / modulo by zero
+1 mod 0	ERROR:modulo by zero	modulo by a static zero is loud
+def z 0 1 div z	ERROR:division by zero	…and a zero through a binding divides just as loudly
+1.0 div 0.0	inf	Float division by zero is IEEE inf, not an error
+-1.0 div 0.0	-inf	…signed
+#
+# §3c  incomparable — cross-family ordering
+none cmp 1	ERROR:incomparable	None does not order against numbers
+aa/q gte "a"	ERROR:incomparable	atoms do not order against strings
+true lt 1	ERROR:incomparable	booleans do not order against numbers
+#
+# §3d  signature / undefined-word
+def f fn [[x:Integer] [Integer] [x]] f true	ERROR:no matching signature	no overload of a typed fn covers a Boolean argument
+def f fn [[x:Integer] [Integer] [x]] f "s"	ERROR:no matching signature	…nor a String one — dispatch failures are loud
+nosuchword 1 2	ERROR:undefined_word	a bare unknown word is undefined
+nope.word 1	ERROR:undefined_word	a dotted chain on an unbound lowercase name blames the root
+#
+# §3e  sealed class fields and return-type enforcement
+def C class {v:Integer} def c (make C {v:1}) c set "w" 9	ERROR:sealed_field	class instances are sealed — an undeclared field cannot be set
+def f fn [[x:Integer] [Integer] ["s"]] f 1	ERROR:type_error	a declared return is enforced — String can never be Integer
+def f fn [[x:Integer] [String] [x add 1]] f 1	ERROR:type_error	…in either direction
+#
+# §3f  strict lookups
+[1 2] getr 5	ERROR:out of bounds	strict list index misses loudly
+do [{a:1} !. b] error [dot message] eq 'getr: key "b" not found in map'	true	the strict-miss message is readable off the caught Error
+#
+# ─────────────────────────────────────────────────────────────────────
+# §4  `error` is a pattern match — a no-op on every non-Error top
+42 error [drop 0]	42	an Integer passes through; the handler never runs
+"s" error [drop 0] eq "s"	true	a String passes through
+none error [drop 0] typeof	None	None is not an Error
+[1 2] error [drop 0] size	2	a List passes through
+{a:1} error [drop 0] size	1	a Map passes through
+1 2 error [drop 0] eq 2	1 true	only the TOP of stack is matched; deeper values are untouched
+do [5] error [drop 1] error [drop 2] eq 5	true	chained error words are all no-ops on a success value
+#
+# ─────────────────────────────────────────────────────────────────────
+# §5  aql:test assertions — pass, fail, and sequencing
+import "aql:test" Assert.equal 1 1 end 7	7	a passing Assert.equal returns nothing and execution continues
+import "aql:test" Assert.not-equal 1 2 end 7	7	a passing Assert.not-equal is silent
+import "aql:test" Assert.ok 5 end 7	7	any truthy value passes Assert.ok
+import "aql:test" Assert.match "ell" "hello" end 7	7	a contained substring passes Assert.match
+import "aql:test" Assert.throws [1 0 div] end 7	7	a raising body passes Assert.throws
+import "aql:test" Assert.not-equal 3 3	ERROR:assertion_failure	equal sides fail not-equal
+import "aql:test" Assert.ok none	ERROR:assertion_failure	none is falsy for Assert.ok
+import "aql:test" Assert.match "zz" "hello"	ERROR:assertion_failure	a missing substring fails Assert.match
+import "aql:test" Assert.throws [1]	ERROR:assertion_failure	a non-raising body fails Assert.throws
+import "aql:test" Test.test "f" [Assert.equal 1 2] end Test.fail-count	1	Test.test catches an assertion_failure and records it — later cases still run
+import "aql:test" Test.test "f" [Assert.ok none] end Test.summary	{total:1 passed:0 failed:1}	…a falsy Assert.ok records the same way

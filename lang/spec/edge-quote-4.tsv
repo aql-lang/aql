@@ -1,0 +1,88 @@
+# AQL Language Specification: edge-quote-4 — code-as-data in data context
+# Format: input<TAB>expected<TAB>description
+# =====================================================================
+# Edge cases for the remaining code-as-data surfaces: ParenExpr in
+# data context (map values evaluate inline at BIND time — an early
+# snapshot), template strings with ${} interpolation (nesting,
+# quotes, escapes, atoms), and the implicit-quote boundary probed
+# from inside (for-body `i` visibility and shadowing, each bodies
+# reaching outer defs, held lists driving higher-order words).
+# Expected values use the canon renderer. See eng/go/parser notes in
+# lang/go/CLAUDE.md (ParenExpr, template interpolation).
+# =====================================================================
+
+# --- §1 ParenExpr in map values: inline eval at bind ---------------------
+{a:(1 add 2)}	{a:3}	a paren map value evaluates inline
+{a:(1 add 2), b:(2 mul 3)}	{a:3 b:6}	sibling paren values evaluate independently
+{a:{b:(1 add 2)}}	{a:{b:3}}	nested map, nested paren
+{a:(10 sub 3)}	{a:7}	swap-form arithmetic inside a data slot
+def n 4 {a:(n add 1)}	{a:5}	a paren value reads live bindings at bind time
+def dbl fn [[x:Integer][Integer][x mul 2]] {a:(dbl 3)}	{a:6}	…and may call user fns
+{a:((1 add 2) mul 3)}	{a:9}	parens nest inside the value expression
+[(1 add 2) 4]	[3 4]	a paren inside a LIST evaluates during list eval
+[(quote foo)]	[foo/q]	a quoted name rides a list as an atom
+((1 add 2) mul (2 add 2))	12	paren grouping composes at top level too
+
+# --- §2 the early snapshot: bind-time, not read-time ---------------------
+def c 1 def m {a:(c add 1)} def c 10 m	{a:2}	rebinding c does NOT change the snapshot
+def c 2 def m {a:(c mul 5)} undef c m	{a:10}	the snapshot survives undef of its source
+def c 1 def m {a:(c add 1)} def c 10 {a:(c add 1)}	{a:11}	a NEW map literal snapshots the NEW binding
+def c 1 def m {a:(c add 1), b:c} def c 9 m	{a:2 b:1}	bare-word fields snapshot exactly like paren fields
+def c 1 def xs [c add 1] def c 10 xs	[2]	def of a list body is the same early snapshot
+def c 1 def xs [quote [c add 1]] def c 10 do (xs get 0)	11	…but HELD code re-resolves when finally run — late binding via quote
+def c 1 def w word [c] def c 10 w	10	…and a word splice is late too: the splice re-reads at reference
+
+# --- §3 template strings: interpolation edges ----------------------------
+`plain`	'plain'	a backtick literal with no holes is a plain string
+`x ${1 add 2}`	'x 3'	a hole runs code and interpolates the result
+`${1 add 2}${2 mul 2}`	'34'	adjacent holes concatenate their renderings
+`${5}`	'5'	a template is ALWAYS a String, even when one hole is the whole body
+`${5}` typeof	ProperString	…pinned by typeof: the non-empty string subtype
+`say "hi"`	'say "hi"'	double quotes are plain characters inside a template
+def k 3 `k=${k}`	'k=3'	holes read live bindings
+`a ${yy/q}`	'a yy'	an atom interpolates as its bare name
+`${foo/q} ${bar/q}`	'foo bar'	two atom holes, two bare names
+`v ${none}`	'v none'	none interpolates as lowercase none
+`t ${42 typeof}`	't Integer'	a type literal interpolates as its name
+`a ${`b ${1 add 1}`}`	'a b 2'	templates NEST — the inner template is a hole's expression
+`${`${1}`}`	'1'	…to any depth
+[`v ${1 add 1}`]	['v 2']	a template evaluates inside a list literal
+`a\nb`	'a\nb'	the \n escape stays one string (canon shows the escape)
+`a\`b`	'a`b'	an escaped backtick is a literal character
+`\${1}`	'${1}'	the \$ escape suppresses interpolation — ${ becomes text
+"${1}"	'${1}'	an ordinary quoted string never interpolates
+`q ${quote [add 1 2] size}`	'q 3'	a hole is a full sub-program — quotation works inside it
+`n=${9 div 2}`	'n=4'	integer division renders its integer
+`${1 add 2} and ${quote [x] size}`	'3 and 1'	independent holes: one computes, one counts held code
+
+# --- §4 for-body i: visible, shadowing, frame-local ----------------------
+for 3 [i]	0 1 2	the loop index i IS visible inside the body
+for [1 3] [i]	1 2	a range form starts i at the lower bound
+for [0 6 2] [i]	0 2 4	a stepped range steps i
+for 3 [i mul 2]	0 2 4	i is an ordinary operand inside the body
+def i 9 for 2 [i]	0 1	the body i SHADOWS an outer i binding
+def i 9 for 2 [] i	9	…and the outer binding is intact after the loop
+for 3 [] i	ERROR:undefined_word	i does not leak out of a loop that never bound it outside
+for 2 [i] for 2 [i]	0 1 0 1	sequential loops each rebind i from zero
+for 2 [i/q]	i/q i/q	…and /q beats the binding: the NAME rides out as an atom
+def bump 10 for 2 [i add bump]	10 11	the body mixes i with an outer binding
+
+# --- §5 implicit-quote bodies reaching outer defs -------------------------
+def square fn [[x:Integer][Integer][x mul x]] [1 2 3] each [square]	[1 4 9]	an each body calls an outer fn by name
+def n 10 [1 2] each [add n]	[11 12]	an each body reads an outer value binding
+def n 10 [1 2] each [add n] size	2	…and maps one result per element
+iota 3 each [add 10]	[10 11 12]	iota feeds each — the body sees each element
+def f fn [[][List][iota 2 each [add 5]]] f	[5 6]	an each inside a fn body resolves at call time
+if true [quote [add 1 2]] [9]	(quote [word(add) 1 2])	a branch may hold code of its own — still held after the branch runs
+def r (if false [0] [quote [add 1 2]]) r size	3	…bind the branch result and the held size reads through
+if true [do [add 1 2]] [0]	3	a branch may run held code of its own via do
+quote [1 2 3] each [add 1]	[2 3 4]	a HELD data list is still a real List for each
+quote [1 2 3] do	1 2 3	do over held plain data just replays the elements
+
+# --- §6 boundary negatives ------------------------------------------------
+`x ${nosuch}`	ERROR:undefined_word	a hole is real code — unknown words are errors
+{a:(nosuch 1)}	ERROR:undefined_word	a paren map value is real code too
+[1 2] each [nosuch]	ERROR:undefined_word	an each body's unknown word errors when the body runs
+def m {a:(quote foo)} m.a	foo/q	quote inside a paren value stores the atom
+def m {a:(quote [add 1 2])} m.a size	3	a held list stores in a map field without evaluating
+def m {a:(quote [add 1 2])} do m.a	3	…and runs later straight off the field read
