@@ -1,0 +1,74 @@
+# AQL Language Specification: scalar edge cases 2 — Float special values
+# Format: input<TAB>expected<TAB>description
+#
+# The corners of IEEE-754 binary64 that float-special.tsv leaves open:
+# the signed zero (-0.0) as a first-class value, indeterminate-form
+# arithmetic on inf/nan, overflow saturation and subnormals at the
+# representation edges, and the classic binary-representation artifacts
+# (0.1 + 0.2). See design/IEEE-754-COMPLIANCE.8.md (Tier 0/1).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  -0.0 — a distinct bit pattern that compares equal to +0.0
+-0.0	-0.0	the negative-zero literal round-trips
+-0.0 typeof	Float	-0.0 is a Float
+-0.0 eq 0.0	true	IEEE: -0 == +0
+-0.0 deq 0.0	true	deq agrees
+-0.0 cmp 0.0	0	the total order also ties the zeros
+-0.0 lt 0.0	false	not less — they are equal
+0 lte -0.0	true	Integer zero vs -0.0 across leaves
+0.0 mul -1.0	-0.0	negation of +0 produces -0 (the sign bit is real)
+-0.0 mul -1.0	0.0	…and back
+-0.0 add 0.0	0.0	IEEE: (-0) + (+0) is +0 under round-to-nearest
+-0.0 add -0.0	-0.0	(-0) + (-0) keeps the negative zero
+-0.0 sub 0.0	-0.0	(-0) - (+0) is -0
+0.0 sub 0.0	0.0	(+0) - (+0) is +0, never -0
+1.0 div -0.0	-inf	the zero SIGN decides the infinity sign
+-1.0 div -0.0	inf	both signs flip back
+convert String -0.0	'-0.0'	the sign survives string conversion
+convert Integer -0.0	0	…but Integer conversion collapses to plain 0
+import "aql:math-util"  MathUtil.signbit -0.0	true	signbit sees the negative zero
+import "aql:math-util"  MathUtil.signbit 0.0	false	…and the positive one
+import "aql:math-util"  MathUtil.abs -0.0	0.0	abs normalises the sign away
+import "aql:math-util"  MathUtil.sign -0.0	0	sign treats -0.0 as zero
+import "aql:math-util"  3.0 MathUtil.copysign -0.0	-3.0	copysign reads -0.0's sign bit (a magnitude-0 sign donor works)
+[-0.0 0.0] sort	[-0.0 0.0]	the zeros tie, so sort is a stable no-op…
+[0.0 -0.0] sort	[0.0 -0.0]	…in either input order (no IEEE totalOrder -0 < +0 here)
+#
+# §2  inf/nan indeterminate forms (the determinate ones are in
+#     float-special.tsv)
+inf add -inf	nan	inf + (-inf) is indeterminate → nan
+inf mul 0.0	nan	inf × 0 is indeterminate
+inf div inf	nan	inf / inf is indeterminate
+inf mul -1.0	-inf	sign algebra still applies to determinate products
+-1.0 div inf	-0.0	a negative finite over inf underflows to NEGATIVE zero
+nan add 1.0	nan	nan propagates through add
+inf sub 1.0	inf	a finite perturbation does not dent inf
+inf add 1	inf	an Integer operand promotes and propagates too
+#
+# §3  NaN and inf against Integers (cross-leaf specials)
+nan cmp 5	1	the NaN-greatest total order holds across leaves
+5 lt nan	false	relational predicates stay IEEE-unordered vs an Integer
+inf gt 9223372036854775807	true	inf is above int64 max
+-inf lt -9223372036854775808	true	-inf is below int64 min
+#
+# §4  saturation and subnormals — the representation edges
+1.7976931348623157e308	1.7976931348623157e+308	float64 max renders in scientific form and round-trips
+1.7976931348623157e308 add 1.7976931348623157e308	inf	Float overflow SATURATES to inf (no error — contrast Integer overflow)
+-1.7976931348623157e308 sub 1.7976931348623157e308	-inf	…and to -inf on the negative side
+1e308 mul 10.0	inf	multiplication saturates too
+5e-324	5e-324	the smallest subnormal round-trips
+5e-324 typeof	Float	…as an ordinary Float
+5e-324 div 2.0	0.0	halving the smallest subnormal underflows to +0
+import "aql:math-util"  0.0 MathUtil.nextafter 1.0	5e-324	nextafter(0 → 1) is the smallest subnormal
+9007199254740992.0 add 1.0	9007199254740992.0	at 2^53 the float grid spacing is 2: +1 is absorbed
+#
+# §5  binary-representation artifacts (why BigDecimal exists)
+0.1 add 0.2	0.30000000000000004	the classic: 0.1 and 0.2 are not exact in binary
+0.1 add 0.2 eq 0.3	false	…so the sum does not equal the 0.3 literal
+(0.1 add 0.2) cmp 0.3	1	it lands strictly above
+0.2 add 0.1 sub 0.3	5.551115123125783e-17	the residue is one ulp of 0.3, rendered in scientific form
+1.0 add 2.0 eq 3.0	true	small integers are exact in binary64 — no artifact
+convert Float '0.1' add (convert Float '0.2')	0.30000000000000004	string parsing is correctly rounded, so the artifact is identical
+#
+# §6  specials survive interpolation
+`n ${nan} z ${-0.0} i ${-inf}`	'n nan z -0.0 i -inf'	template holes render specials as their literals

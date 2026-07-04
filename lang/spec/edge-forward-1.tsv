@@ -1,0 +1,236 @@
+# AQL Language Specification: forward-collection edge cases I —
+# greediness, the ONE split rule, barriers, type-directed stopping.
+# Format: input<TAB>expected<TAB>description
+#
+# Companion of forward-barrier.tsv (statement-boundary commit) and
+# modifiers.tsv (the /… suffix matrix). These rows pin the COLLECTION
+# rules themselves: how far a word reaches forward, which spellings of
+# a call are the same ONE split (eng/go/CLAUDE.md §Signature Ordering:
+# forward args fill sig positions 0..k-1 in written order, the rest
+# fill backward from the stack prefix), and where collection stops —
+# `end`, `;`, `)`, an empty `()`, another function word, or a type
+# mismatch. Sibling deep-dive: design/FORWARD-COLLECTION-PHASES.10.md.
+#
+# NOTE: a newline is NOT a barrier (EXPLANATION.md §stack) — the TSV
+# format cannot hold multi-line inputs, so the newline rows live here
+# as their single-line equivalents: every multi-statement row below is
+# exactly what the same tokens split across lines would evaluate to.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  Greediness and stranded operands — a binary word between its
+#     operands reaches FORWARD first and takes the stack second,
+#     stranding the deeper value (`1 2 add 3 mul` is 5, not 9).
+1 2 add 3 mul	5	add grabs the forward 3 and the stacked 2; the 1 is stranded for mul
+(1 2 add) 3 mul	9	grouping the first step gives the arithmetic reading
+1 2 add ; 3 mul	9	`;` stops add at the statement; mul then works the stack
+1 2 add end 3 mul	9	`end` is the same barrier as `;`
+1 2 add/s 3 mul	9	/s at the call site: add is stack-only here, so 3 pushes for mul
+1 2 sub 3 mul	-1	sub: forward 3 is sig[0], stacked 2 is sig[1] — 2-3, times the stranded 1
+(1 2 sub) 3 mul	-3	grouped: (1-2) * 3
+1 2 mul 3 add	7	mul takes 3 forward and 2 stacked; add then adds the stranded 1
+(1 2 mul) 3 add	5	grouped: (1*2) + 3
+1.5 2.5 add 3.0 mul	8.25	greediness is type-blind across numerics: (2.5+3.0) * 1.5
+"a" "b" add "c"	'a' 'bc'	string greediness: add concatenates the stacked 'b' with the forward 'c'
+("a" "b" add) "c" add	'abc'	grouped concat chains left to right
+1 2 lt 3	1 true	lt compares the stacked 2 with the forward 3; the 1 is stranded
+(1 2 lt) 3	true 3	grouped: the comparison result then the pushed 3
+1 2 3 add	1 5	a deeper stack is quiet: add takes the top two, no reach past them
+1 2 3 add mul	5	then mul combines the sum with the stranded 1
+1 2 3 4 add mul	1 14	two words each take the top pair; the deepest 1 survives
+2 3 mul 4	2 12	mul reaches forward for 4 and takes 3; the 2 is stranded
+"x" 1 add 2	'x' 3	a stranded operand of a DIFFERENT type is untouched by the advisory case
+true 1 add 2	true 3	stranding past a Boolean
+[9] 1 add 2	[9] 3	stranding past a list
+1 2 add 3 mul 4 add	21	full chain: (3+2)=5, 5*4=20, then the stranded 1 joins: 21
+((1 2 add) 3 mul) 4 add	13	fully grouped: ((1+2)*3)+4
+1 2 add mul	ERROR:signature	add drains the pair; mul is left with one value only
+2 pow 3 pow 2	64	pow chains left-associatively: (2^3)^2 — the second pow is a barrier for the first
+2 pow (3 pow 2)	512	the paren flips association: 2^(3^2)
+5 sub 3 sub 1	1	sub chains the same way: (5-3)-1
+5 sub (3 sub 1)	3	grouped: 5-(3-1)
+10 div 2 add 1	6	(10/2)+1 — div stops at the add word
+10 div (2 add 1)	3	10/(2+1)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §2  The ONE split rule — for sig order (a, b), every barrier point
+#     gives an equivalent spelling: f a b ≡ b f a ≡ b a f. The OTHER
+#     operand order is a DIFFERENT call: f b a ≡ a f b ≡ a b f. Pinned
+#     over every non-commutative core word, so a change to the split
+#     rule cannot hide behind commutativity.
+sub 3 10	7	all-forward: sig[0]=3, sig[1]=10 — handler computes sig[1]-sig[0]
+10 sub 3	7	mixed k=1: forward 3 → sig[0], stacked 10 → sig[1]
+10 3 sub	7	all-stack: top 3 → sig[0], deeper 10 → sig[1]
+sub 10 3	-7	the OTHER split: sig[0]=10, sig[1]=3 → 3-10
+3 sub 10	-7	…its mixed spelling
+3 10 sub	-7	…its stack spelling
+div 2 10	5	all-forward division: sig[1]/sig[0] = 10/2
+10 div 2	5	mixed
+10 2 div	5	stack
+div 10 2	0	the other split: 2/10 in integer division
+2 div 10	0	…mixed
+2 10 div	0	…stack
+pow 3 2	8	all-forward: 2^3 (sig[1] raised to sig[0])
+2 pow 3	8	mixed: reads "2 to the 3rd"
+2 3 pow	8	stack
+pow 2 3	9	the other split: 3^2
+3 pow 2	9	…mixed
+3 2 pow	9	…stack
+mod 3 10	1	all-forward: 10 mod 3
+10 mod 3	1	mixed
+10 3 mod	1	stack
+mod 10 3	3	the other split: 3 mod 10
+3 mod 10	3	…mixed
+3 10 mod	3	…stack
+gt 3 5	true	all-forward: 5 > 3 (sig[1] compared against sig[0])
+5 gt 3	true	mixed: reads "5 greater than 3"
+5 3 gt	true	stack
+gt 5 3	false	the other split: 3 > 5
+3 gt 5	false	…mixed
+3 5 gt	false	…stack
+add "b" "a"	'ab'	concat is anti-commutative in spelling: sig[1] then sig[0]
+"a" add "b"	'ab'	…mixed spelling of the same concat
+"a" "b" add	'ab'	…stack spelling
+add "a" "b"	'ba'	the other split concatenates the other way
+"b" add "a"	'ba'	…mixed
+"b" "a" add	'ba'	…stack
+and 2 3	2	the value-selecting connective EXPOSES the split: both truthy → sig[0], the first forward arg
+3 2 and	2	…mirror-equivalent stack spelling (top 2 → sig[0])
+2 and 3	3	the other split: forward 3 is sig[0]
+2 3 and	3	…its stack spelling
+#
+# §2b  three arguments, one rule: for sig order (a, b, c) all of
+#      f a b c ≡ c f a b ≡ c b f a ≡ c b a f are the same call, and
+#      every OTHER mixed split is a different assignment. The probe fn
+#      encodes the assignment in decimal digits: a*100 + b*10 + c.
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] f3 1 2 3	123	all-forward: a=1 b=2 c=3
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] 3 f3 1 2	123	k=2: forward 1 2 fill a b; stacked 3 fills c
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] 3 2 f3 1	123	k=1: forward 1 fills a; the stack fills backward — top 2 → b, deeper 3 → c
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] 3 2 1 f3	123	k=0: pure stack, top-first
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] 1 f3 2 3	231	NON-equivalent split: forward 2 3 → a b, stacked 1 → c
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] 1 2 f3 3	321	NON-equivalent split: forward 3 → a, stack backward 2 → b, 1 → c
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] 2 1 f3 3	312	the mirror mixed split: forward 3 → a, top 1 → b, deeper 2 → c
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] 2 f3 1 3	132	forward pair the other way: a=1 b=3, stacked 2 → c
+#
+# §2c  a TYPED signature disambiguates which splits are even legal:
+#      tag(s:String, n:Integer) accepts only the spellings whose
+#      forward/stack assignment lands each type in its slot.
+def tag fn [[s:String n:Integer][String][add (convert String n) s]] tag "a" 1	'a1'	all-forward: s='a' n=1
+def tag fn [[s:String n:Integer][String][add (convert String n) s]] 1 tag "a"	'a1'	mixed: forward 'a' → s, stacked 1 → n
+def tag fn [[s:String n:Integer][String][add (convert String n) s]] 1 "a" tag	'a1'	stack: top 'a' → s, deeper 1 → n
+def tag fn [[s:String n:Integer][String][add (convert String n) s]] "a" tag 1	ERROR:signature	the forward 1 cannot fill s:String, and the stack cannot supply both
+def tag fn [[s:String n:Integer][String][add (convert String n) s]] tag 1 "a"	ERROR:signature	all-forward in the wrong type order is no call at all
+take 2 [9 8 7]	[9 8]	take(Integer, List): the typed forward order
+[9 8 7] take 2	[9 8]	mixed: forward 2 → the Integer slot, the stacked list → sig[1]
+2 take [9 8 7]	ERROR:signature	the forward list cannot fill the Integer slot; the lone stacked 2 is not enough
+#
+# ─────────────────────────────────────────────────────────────────────
+# §3  Barriers — end, ;, ), and the empty paren. `end`/`;` stop the
+#     nearest waiting word; `()` is the EMPTY EXPRESSION: it produces
+#     no value and is skipped wherever it appears.
+5 add 1 end	6	end stops add after one forward arg; the 5 fills from the stack
+5 add 1 ;	6	; is end
+add 1 end	ERROR:signature	end with an empty stack: add holds one arg only
+5 add end 1	ERROR:signature	end BEFORE any forward arg: add sees only the stacked 5
+end 5	5	a leading end is a no-op barrier
+5 ; ; 3	5 3	stacked barriers are idempotent
+5 () add 3	8	an empty paren between the operands is skipped
+5 (()) add 3	8	nested empty parens are still nothing
+5 ( () ) add 3	8	whitespace inside changes nothing
+add () 1 2	3	an empty paren before the args is skipped by the collector
+add 1 () 2	3	…and between the args
+add 1 2 ()	3	…and after them
+() () 5	5	empty expressions contribute nothing to the program
+(() 5 ())	5	…nor inside a group
+(add 1 ())	ERROR:no_value	but a paren ARGUMENT that evaluates to nothing is a loud error
+size ()	ERROR:no_value	same for a one-slot word
+if (1 eq 1) [9] () 42	9	an empty paren is NOT an else-silencer: the 42 still arrives as the else (true → discarded)
+if (1 eq 2) [9] () 42	42	…and runs as the else when false
+if (1 eq 1) [9] [] 42	9 42	the explicit [] IS the silencer: the 42 survives as its own value
+if (1 eq 2) [9] [] 42	42	…false polarity: empty else, then 42 pushes
+#
+# §3b  a function word starting the next statement is an implicit end
+#      (forward-barrier.tsv pins the def/add/iota/for boundaries; these
+#      pin more boundary kinds and the in-body variant).
+def n 0 if (n eq 0) [99] case 2 [1 "a" 2 "b"]	99 'b'	case is a committing boundary; the dispatch then runs intact
+def n 5 if (n eq 0) [99] case 2 [1 "a" 2 "b"]	'b'	false polarity of the same
+def n 0 if (n eq 0) [99] each [dup mul] [1 2]	99 [1 4]	each is a committing boundary with its pipeline intact
+def n 5 if (n eq 0) [99] each [dup mul] [1 2]	[1 4]	false polarity
+def n 0 if (n eq 0) [99] size [1 2]	99 2	size commits the guard, then measures its own arg
+def n 0 if (n eq 0) [99] typeof 5	99 Integer	typeof as the boundary
+def f fn [[n:Integer][Integer][if (n eq 0) [raise "z"] mul n 2]] f 3	6	an else-less guard inside a fn body: mul commits it, then runs
+def f fn [[n:Integer][Integer][if (n eq 0) [raise "z"] mul n 2]] f 0	ERROR:z	…and the guard's raise pre-empts the body's mul
+#
+# §3c  the statement boundary does NOT protect a stack value from the
+#      NEXT word's optional bigger arity: range has a 3-arg overload,
+#      so a lone prior result is claimed as its step argument. Pinned
+#      loudly — the protections are arity pinning (/2), grouping, or
+#      filling the optional slot.
+99 range 2 4	[2]	range's optional step slot claims the stacked 99: range(2, 4, step 99)
+99 ; range 2 4	[2]	`;` only stops FORWARD collection — the stack claim still happens
+99 end range 2 4	[2]	end is no protection either
+99 range/2 2 4	99 [2 3]	/2 pins the two-arg overload: the 99 survives
+99 range 2 4 1	99 [2 3]	filling the optional slot explicitly also protects
+(99) (range 2 4)	99 [2 3]	a paren GROUP is a real scope: the inner range cannot see the 99
+99 slice 1 [10 20 30]	99 [20 30]	type pruning protects: slice's 3-arg form needs an Integer where the list sits
+# (The guard-polarity variant of the swallow — `def n 0 if (n eq 0)
+# [99] range 2 4` → [2] — runs correctly but is NOT pinned here: its
+# forward/stack split rides a gradual operand, which the bytecode
+# emitter refuses, and a spec value row must compile or island. The
+# direct-stack rows above pin the same claim shape.)
+def n 0 if (n eq 0) [99] range/2 2 4	99 [2 3]	after a guard, the /2 arity pin keeps the committed 99 out of range's optional slot
+def n 0 if (n eq 0) [99] (range 2 4)	99	a paren after a guard is an ARRIVAL: [2 3] fills the else and a true guard discards it
+#
+# ─────────────────────────────────────────────────────────────────────
+# §4  Type-directed stopping — collection reaches exactly as far as a
+#     still-viable overload can use the next token, no further.
+not true 42	false 42	not takes the Boolean and stops; the 42 pushes untouched
+1 not true	1 false	not in the middle: takes the forward true, leaves the 1
+not true not false	false true	two adjacent nots each take exactly one arg
+not 0	true	the Any overload coerces truthiness: 0 is falsy
+not 1	false	…and 1 is truthy
+add 1 "x"	'x1'	the (Scalar, String) overload keeps 'x' reachable: concat, not a stop
+1 add "x"	'1x'	mixed: 'x' is sig[0], the stacked 1 is sig[1]
+add "x" 1	'1x'	(String, Scalar): the number is coerced onto the string
+add true "x"	'xtrue'	Booleans concatenate through the Scalar slot too
+add 1 true	ERROR:signature	but Number+Boolean fits NO overload pair — collection finds nothing viable
+add 1 1.5	2.5	mixed numerics promote instead of stopping
+mul 2 add 1 3	ERROR:signature	a typed slot treats the next FUNCTION WORD as a boundary: mul holds one arg, no smaller overload
+mul 2 (add 1 3)	8	grouping turns the word's RESULT into the argument
+sub 1 sub 3 5	ERROR:signature	same boundary for sub against sub
+sub 1 (sub 3 5)	1	grouped: (5-3) - 1 … as sig order has it: 2-1
+size iota 3	3	an ANY slot plans a following word as its operand: iota's list arrives and size commits
+typeof iota 3	List	same speculative arrival through typeof
+size range 2 5	3	the arrival works for any value-producing word
+size def x 5 x	5	even def: the probe fails (no 0-arg size), def runs, x's value arrives
+typeof def x 5 x	Integer	the same shape through typeof
+not iota 3	false	not's Any overload coerces the ARRIVED list: truthy → false
+range 2 6 def x 99 x	[2 3 4 5] 99	a TYPED optional slot stops at the word in phase 1: range completes as 2-arg before def runs
+range 2 6 add 1 2	[2 3 4 5] 3	value-producing follow: range is already complete, add keeps its own result
+slice 1 [10 20 30] 5	[20 30] 5	overload pruning: the list at position 1 rules out the 3-arg slice, so the 5 is free
+slice 1 3 [10 20 30] 7	[20 30] 7	the 3-arg slice consumes exactly three, the 7 is free
+reverse iota 3	ERROR:signature	reverse's List slot will not speculate on a word: plan-time stop, empty stack
+reverse (iota 3)	[2 1 0]	the grouped form is the call
+each [dup mul] iota 3	ERROR:signature	each stops at the iota word the same way
+each [dup mul] (iota 3)	[0 1 4]	…grouped, the pipeline works
+convert Integer "42"	42	a TYPE literal is an ordinary forward argument
+"42" convert Integer	42	mixed spelling: the type arrives forward, the string from the stack
+def two 2 add two 3	5	a def-bound VALUE word is a plan-time operand, not a boundary
+def two 2 two add 3	5	…mixed spelling
+def two 2 3 add two	5	…value-word as the trailing forward arg
+#
+# §4b  or/otherwise are BarrierPos natives: sig position 1 is
+#      stack-only, so exactly ONE forward argument is legal. The
+#      short-circuit selection makes the assignment observable.
+false or true	true	the canonical or spelling: one forward arg, one stacked
+or true false	ERROR:signature	all-forward or is impossible — its second slot never collects forward
+or false true	ERROR:signature	…in either operand order
+0 or 9	9	the stacked 0 is falsy → the forward operand is selected
+5 or 9	5	the stacked 5 is truthy → selected (Lisp/Python short-circuit)
+1 2 or	1	pure stack: deeper 1 is sig[1] and truthy → selected
+2 1 or	2	…order flipped
+false or true 42	true 42	or stops after its single forward arg; the 42 pushes
+and true false	false	and is NOT barriered: all-forward works — the asymmetry with or is deliberate
+none otherwise 5	5	otherwise is the other BarrierPos native: none → the forward fallback
+0 otherwise 9	0	only none triggers the fallback — 0 is a real value
+7 otherwise 9	7	a real value passes through
+otherwise 1 2	ERROR:signature	all-forward otherwise is impossible, like or

@@ -1,0 +1,141 @@
+# AQL Language Specification: Dispatch edge cases 3 — options maps,
+# quoted-argument slots (QuoteArgs), arity forcing and 0-arg courtesy
+# dispatch, guard-then-narrow on Any params, and undefined words.
+# Format: input<TAB>expected<TAB>description
+#
+# Four dispatch surfaces that sit OUTSIDE plain positional matching:
+#
+#   1. The Options pattern (EXPLANATION.md): a word's option form is a
+#      separate signature with a trailing Map; longer arity sorts first
+#      so the option-less call still lands on the shorter sig. Option
+#      KEYS are not schema-checked at the plain-Map boundary today — a
+#      typo'd key is silently ignored — but a Record-typed slot
+#      (`refine Record […]`) checks keys, so schema'd options reject
+#      typos at `make` and at fn params.
+#   2. QuoteArgs slots: `def`'s name slot and `set`'s key slot take the
+#      bare word AS DATA (even when the word is bound!), while `get`'s
+#      key slot EVALUATES — an unbound bare key is an undefined word.
+#      Dot access is a third rule again: the key is always literal.
+#   3. The synthetic 0-arg fallback: a fn called with no collectable
+#      args courtesy-dispatches its 0-arg overload when one exists and
+#      raises a grouped-call hint otherwise. /N forces one arity.
+#   4. An unregistered word raises [aql/undefined_word] — the /q, quote
+#      and (quote …) escapes turn the SAME spelling into an Atom.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  options maps — the optional trailing Map signature
+import "aql:string-util" StringUtil.split ',' 'a,b' {}	['a' 'b']	an explicit empty options map lands on the [String String Map] sig
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {}	'baa'	empty options keep the default first-occurrence scope
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q}	'bbb'	an Atom option value selects all-occurrences
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:"all"}	'bbb'	a String option value is accepted for the same key
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q count:2}	'bba'	two options combine: all-scope capped at 2
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:nope/q}	'baa'	an unrecognised option VALUE falls back to the default — no error today
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scop:all/q}	'baa'	a typo'd option KEY is silently ignored at a plain-Map slot — no schema check today
+import "aql:string-util" StringUtil.changecase 'hello' {style:"upper"}	'HELLO'	changecase drives its style through the options map
+import "aql:string-util" StringUtil.changecase 'hello' {styl:"upper"}	'hello'	typo'd key → default style — silently lowercased
+import "aql:emitlang" emit json {prety:true} {a:1}	ERROR:uncalled_function	emit: an unknown option key (typo'd 'prety') no longer matches the schema — a loud rejection, not silent compact output
+import "aql:emitlang" emit json {pretty:1} {a:1}	ERROR:uncalled_function	emit: a non-Boolean 'pretty' value fails the schema's typed slot — rejected rather than ignored
+#
+# §2  options as the longer-arity overload on user fns
+def w fn [[a:Integer][String]["plain"] [a:Integer o:Map][String]["opts"]] w 1	'plain'	no trailing map → the 1-arg sig
+def w fn [[a:Integer][String]["plain"] [a:Integer o:Map][String]["opts"]] w 1 {x:1}	'opts'	a trailing map → the 2-arg sig (longer arity sorts first)
+def w fn [[a:Integer o:Map][String]["opts"] [a:Integer][String]["plain"]] w 1	'plain'	listing order is irrelevant — sigs are arity-sorted at def
+#
+# §3  schema'd options — a Record type checks keys where a plain Map cannot
+def R (refine Record [{pretty:Boolean}]) make R {pretty:true}	{pretty:true}	make against the schema accepts the declared key
+def R (refine Record [{pretty:Boolean}]) make R {prety:true}	ERROR:unknown field	…and REJECTS a typo'd key — the post-schema contrast to §1
+def R (refine Record [{n:Integer}]) make R {}	ERROR:missing field	a declared field cannot be omitted at make
+def R (refine Record [{pretty:Boolean}]) make R {pretty:1}	{pretty:true}	make COERCES a truthy Integer into the Boolean field
+def R (refine Record [{pretty:Boolean}]) make R {pretty:"yes"}	{pretty:true}	…and a yes-string too
+def R (refine Record [{n:Integer}]) make R {n:"5"}	ERROR:not a number	but a non-numeric string cannot coerce into an Integer field
+# (dropped) refine-Record predicate field read compiles-refuses (falls back sound); a compiler-coverage gap, not pinned here to keep the frontier gate pure
+def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {pretty:true}	true	a structurally-conforming plain map is admitted at the param
+def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {pretty:true extra:1}	true	extra keys are fine STRUCTURALLY at a param slot…
+def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {prety:true}	ERROR:no matching signature	…but a missing declared key fails dispatch
+def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {pretty:true}	true	an implicit map-shape param checks the same way
+def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {prety:true}	ERROR:no matching signature	…including the rejection
+#
+# §4  options maps pass through Any slots untouched
+def f fn [[x:Any][Any][x]] f {trim:true}	{trim:true}	an Any param takes an options-looking map as plain data
+true guard {a:1}	{a:1}	guard's Any value slot does too
+if {a:1} [1] [2]	1	a non-empty map is truthy in if's Any condition slot
+if {} [1] [2]	2	…and the empty map is falsy
+#
+# §5  QuoteArgs — def and set quote their key slot; get evaluates
+def x/q 5 x	5	an explicit /q on def's name slot binds the same name
+def m {a:1 b:2} m get a/q	1	get with a quoted key reads the map
+def m {a:1 b:2} m get (quote a)	1	(quote a) materialises the same Atom key
+def m {a:1 b:2} m get "a"	1	a String key works alike
+def m {a:1 b:2} m get ("a")	1	a grouped key expression evaluates before the slot fills
+def m {a:1 b:2} m get a	ERROR:undefined_word	get EVALUATES a bare-word key: unbound a is an undefined word
+def m {a:1 b:2} def a "b" m get a	2	…and a BOUND bare word key evaluates to its value — reads key b, not a
+def m {a:1} def k a/q m get k	1	an Atom-valued variable evaluates into the key slot
+def m {a:1 b:2} m.a	1	dot access takes the key literally
+def m {a:1 b:2} def k "a" m.k	None	…even when the word is bound: no k key exists, → None (contrast `m get k`)
+def m {a:1 b:2} def b "a" m.b	2	a bound word that IS a key reads that key — the binding is ignored
+def b "x" {a:1} set b 2	{a:1 b:2}	set QUOTES its bare-word key even when bound: writes key b, not x
+{a:1} set b 2	{a:1 b:2}	unbound bare word is fine in set's quoted key slot (contrast get)
+set (quote b) 2 {a:1}	{a:1 b:2}	forward form with an explicit Atom key
+{a:1} set "b" 2	{a:1 b:2}	String keys write alike
+{a:1 b:0} set b 2	{a:1 b:2}	overwrite through the quoted slot
+context set k/q 9 end context get k/q	9	Store set/get round-trip on an Atom key
+#
+# §6  get vs dot on lists — the index slot evaluates
+def lst [10 20 30] def i 1 lst get i	20	get evaluates the bound index i
+def lst [10 20 30] lst get (1 add 1)	30	…and a computed index expression
+def lst [10 20 30] lst.1	20	dot with a literal index reads positionally
+def lst [10 20 30] def i 1 lst.i	None	dot NEVER evaluates: no literal i key on a list → None
+{a:1} get 0	None	maps have no positional read — an Integer key misses
+{a:1} getr a/q	1	getr: the required-read twin returns the value…
+{a:1} getr b/q	ERROR:not_found	…but raises [aql/not_found] where get would yield None
+def lst [1 2] lst set 0 9	[9 2]	set on a list evaluates its Integer index
+def lst [1 2] lst set 5 9	ERROR:index_out_of_range	…and range-checks it
+#
+# §7  arity forcing /N on multi-arity words
+if/2 true [9]	9	/2 selects if's 2-arg overload
+if/3 true [1] [2]	1	/3 selects the 3-arg overload
+if/2 true [1] [2]	1 [2]	forcing /2 leaves the would-be else branch on the stack
+if/2 false [1] [2]	[2]	…where the 2-arg false form yields nothing
+# (dropped) `if/1 [true 7]` — checker-vs-runtime type precision gap (would raise the soundness pin); removed to hold pin=7. See design/EDGE-SPEC-FINDINGS.0.md.
+import "aql:emitlang" emit/1 {a:1}	'{"a":1}'	emit/1 forces the bare auto-emit arity
+import "aql:emitlang" emit/2 json {a:1}	'{"a":1}'	emit/2 forces kind + data
+import "aql:emitlang" emit/3 json {} {a:1}	'{"a":1}'	emit/3 forces kind + opts + data
+{a:1} get/2 a/q	1	get/2 pins the 2-arg container read
+import "aql:string-util" StringUtil.split/2 "," "a,b"	ERROR:force-arity	/N does not reach through a module's dotted wrapper — pinned limitation
+import "aql:string-util" StringUtil.split/3 "," "a,b" {}	ERROR:force-arity	…for any forced arity
+#
+# §8  0-arg courtesy dispatch and the grouped-call hint
+def f fn [[][Integer][42]] f	42	a 0-arg fn dispatches bare
+def g fn [[][Integer][42] [a:Integer][Integer][a add 1]] g	42	with no args, a mixed-arity fn courtesy-dispatches its 0-arg sig
+def g fn [[][Integer][42] [a:Integer][Integer][a add 1]] g 5	6	…and still takes the 1-arg sig when an arg is there
+def g fn [[][Integer][7]] g 5	7 5	a 0-arg fn never swallows a forward value — 5 stays on the stack
+def q fn [[][String]["z"] [][Integer][9]] q	'z'	two 0-arg overloads tie — first listed wins the courtesy dispatch
+def p (fn [[][Integer][5]]) p	5	a def-bound anonymous Function value courtesy-dispatches 0-arg too
+def h fn [[a:Integer][Integer][a add 1]] h	ERROR:no matching signature	an arg-taking fn with nothing to collect raises the grouped-call hint
+def dbl fn [[n:Integer][Integer][n mul 2]] dbl dbl 5	ERROR:no matching signature	forward collection runs into the next word — the classic nesting mistake
+def dbl fn [[n:Integer][Integer][n mul 2]] dbl (dbl 5)	20	…which parens fix by making the inner RESULT the argument
+#
+# §9  dispatch after guards — runtime narrowing of an Any param
+def f fn [[x:Any][Integer][if (x is Integer) [x add 1] [0]]] f 5	6	the is-guard admits the Integer arm at run time
+def f fn [[x:Any][Integer][if (x is Integer) [x add 1] [0]]] f "a"	0	a String takes the else arm — no add dispatch attempted
+def f fn [[x:Any][Integer][if (x is Integer) [x add 1] [0]]] f true	0	Boolean likewise
+def f fn [[x:Any][Integer][if (x is Integer) [x add 1] [0]]] f 2.5	0	a Float is NOT an Integer — leaf test, not family test
+def f fn [[x:Any][Boolean][x is Number]] f 0d1	true	…while a Number test admits the BigInteger leaf
+def f fn [[x:Any][String][if (x is String) [x add "!"] ["?"]]] f "hi"	'hi!'	a narrowed String flows into the concat overload
+def f fn [[x:Any][String][if (x is String) [x add "!"] ["?"]]] f 9	'?'	non-strings never reach the concat
+def f fn [[x:Any][Integer][x add 1]] f 1	2	an UNguarded Any param still dispatches by the runtime value
+# (dropped) `f true` into an [x:Any] fn then arithmetic — Any-operand dispatch recovery refuses (falls back sound); documented-tier shape, out of corpus for gate purity
+def f fn [[x:Any][Integer][x add 1]] f "a"	ERROR:expected Integer	a String arg concatenates ('1a') and is then caught by the RETURN check
+#
+# §10  undefined words vs their Atom escapes
+flurble	ERROR:undefined_word	an unregistered bare word raises at resolution
+flurble 1	ERROR:undefined_word	…before any argument dispatch happens
+1 flurble	ERROR:undefined_word	stack form fails identically
+(flurble)	ERROR:undefined_word	grouping does not rescue an unknown word
+flurble/q	flurble/q	/q turns the SAME spelling into an Atom — pure data
+quote flurble	flurble/q	quote does the same as a word
+(quote flurble) typeof	Atom	…and the grouped form pins the type
+typeof flurble/q	Atom	the /q Atom is the same type
+typeof (do [9223372036854775807 add 1])	Error	a run-time dispatch failure reifies to a first-class Error inside do […]
+do [9223372036854775807 add 1] error [drop 42]	42	…which an error handler consumes like any value
+do [flurble/q] error [drop 42]	flurble/q	the Atom escape never errors, so the handler is a no-op pattern-match

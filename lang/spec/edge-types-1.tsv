@@ -1,0 +1,196 @@
+# AQL Language Specification: type-system edge cases 1 — newtype
+# symmetry + predicate subset symmetry
+# Format: input<TAB>expected<TAB>description
+#
+# Companion to user-types.tsv. Pins the REFINE-NEWTYPE-VS-SUBSET
+# decision (design/REFINE-NEWTYPE-VS-SUBSET.10.md) at EVERY boundary a
+# value can cross — fn param, fn return, `is`, typed def, make, class
+# field (make AND set) — with positive and negative rows per family.
+#
+#   - bare refine  → NEWTYPE: nominal, explicit construction, symmetric
+#   - predicate refine → SUBSET: value-sensitive, no construction, symmetric
+#
+# Runs against the production lang registry (test/go/langspec).
+
+
+# ====================================================================
+# §1  a bare refine is a NEWTYPE — a raw base value is NOT a member
+#     at ANY boundary (is / param / return / class field, make + set)
+# ====================================================================
+def P (refine Integer) 7 is P	false	raw Integer is not a P at `is`
+def P (refine Integer) def g fn [[n:P] [Integer] [n add 1]] 7 g	ERROR:signature	raw Integer rejected at a P param
+# (dropped) predicate/newtype-return type_error caught via do/error compiles-refuses (falls back sound); semantics pinned by user-types.tsv + TestPredicateGuardNarrowing
+def P (refine Integer) def S class {x:(make P 1)} make S {x:7}	ERROR:expected P (the default's type)	raw Integer rejected at a P-typed class field (make)
+# (dropped) P-typed class-field set rejection — same disposition as :22
+def P (refine Integer) def S class {x:(make P 1)} (make S {}) dot x typeof	P	the tagged default fills the field AND declares its type
+
+
+# ====================================================================
+# §2  explicit construction — `def x:P v` and `make P v` both tag
+# ====================================================================
+def P (refine Integer) def x:P 42 x	42	typed def constructs a P carrying the base value
+def P (refine Integer) def x:P 42 x typeof	P	the constructed value carries the P tag
+def P (refine Integer) make P 42	42	make on a newtype is the constructor twin of the typed def
+def P (refine Integer) (make P 42) is P	true	a made P is a member
+def P (refine Integer) (make P '42') typeof	P	make casts to the base first (String → Integer), then tags
+def P (refine Integer) do [make P 'zz'] error [dot code]	type_error/q	an uncastable body is a loud make error (type_error), not a silent bind
+def P (refine Integer) def x:P 'hi'	ERROR:does not unify	typed-def construction rejects a wrong-family body
+def P (refine Integer) def g fn [[n:P] [Integer] [n add 1]] (make P 7) g	8	a made P dispatches at a P param, symmetric with def x:P
+def P (refine Integer) def mk fn [[] [P] [make P 5]] mk	5	construction inside the body satisfies the P return
+def P (refine Integer) def mk fn [[] [P] [make P 5]] (mk) typeof	P	the returned value still carries the tag
+def P (refine Integer) def x:P 42 x add 1	43	arithmetic reads through the tag to the base value
+def P (refine Integer) def x:P 42 (x add 1) typeof	Integer	…but the RESULT is a plain base value — ops do not preserve the tag
+def P (refine Integer) def x:P 42 x eq 42	true	eq compares through the tag — a P 42 equals a raw 42
+
+
+# ====================================================================
+# §3  sibling newtypes never mix — same base, distinct identities
+# ====================================================================
+def P (refine Integer) def Q (refine Integer) (make P 1) is Q	false	a made P is not a sibling Q
+def P (refine Integer) def Q (refine Integer) def g fn [[n:Q] [Integer] [1]] def x:P 1 x g	ERROR:signature	a P value is rejected at a Q param
+def P (refine Integer) def Q (refine Integer) def mk fn [[] [Q] [def x:P 1 x]] mk	ERROR:return value 1: expected Q, got P	a P value is rejected at a Q return — the error names both tags
+# (A computed body re-binds across siblings by re-tagging — `def b:Q
+# (make P 1)` constructs a Q, typeof b = Q, b is P = false — but the
+# dynamic-reparent typed-def shape is interpreter-only today, so those
+# rows are not pinned here.)
+
+
+# ====================================================================
+# §4  a newtype OF a newtype — the nominal chain P ≤ Q widens up, never down
+# ====================================================================
+def P (refine Integer) def Q (refine P) def y:Q 3 y is Q	true	a constructed Q is a Q
+def P (refine Integer) def Q (refine P) def y:Q 3 y is P	true	…and widens one level to P
+def P (refine Integer) def Q (refine P) def y:Q 3 y is Integer	true	…and to the base
+def P (refine Integer) def Q (refine P) def y:Q 3 y is Number	true	…and on up the lattice
+def P (refine Integer) def Q (refine P) def y:Q 3 y typeof	Q	typeof names the innermost tag
+def P (refine Integer) def Q (refine P) def x:P 3 x is Q	false	the supertype value is NOT the subtype
+def P (refine Integer) def Q (refine P) 3 is Q	false	a raw base value is not a Q two mints down either
+def P (refine Integer) def Q (refine P) (make Q 3) is P	true	make on the inner newtype widens the same way
+def P (refine Integer) def Q (refine P) def g fn [[n:P] [Integer] [7]] def y:Q 3 y g	7	a Q value dispatches at a P param (subtype admitted)
+def P (refine Integer) def Q (refine P) def g fn [[n:Q] [Integer] [7]] def x:P 3 x g	ERROR:signature	a P value is rejected at a Q param (supertype refused)
+def P (refine Integer) def Q (refine P) def mk fn [[] [P] [def y:Q 1 y]] mk	1	a Q value satisfies a P return (subtype return)
+def P (refine Integer) def Q (refine P) def mk fn [[] [P] [def y:Q 1 y]] (mk) typeof	Q	…and keeps its own Q tag through the boundary
+
+
+# ====================================================================
+# §5  newtypes over the other scalar families — same rules everywhere
+# ====================================================================
+def N (refine String) 'Ada' is N	false	raw String is not an N (String-based newtype)
+def N (refine String) def x:N 'Ada' x is N	true	a constructed N is a member
+def N (refine String) def x:N 'Ada' x is String	true	…and widens to the String family
+def N (refine String) def x:N 'Ada' x is Integer	false	tags widen up, not sideways
+def B (refine Boolean) true is B	false	raw Boolean is not a B (Boolean-based newtype)
+def B (refine Boolean) def g fn [[b:B] [Integer] [1]] true g	ERROR:signature	raw true rejected at a B param
+def B (refine Boolean) def g fn [[b:B] [Integer] [1]] def x:B true x g	1	a constructed B dispatches
+def B (refine Boolean) def x:B true x is Boolean	true	…and widens to the Boolean family
+def F (refine Float) def mk fn [[] [F] [def x:F 1.5 x]] mk	1.5	a constructed F satisfies the F return (a raw 1.5 would be rejected — newtype strictness, §1)
+def P (refine Integer) def Q (refine P) (make Q '7') typeof	Q	make on an inner newtype casts to the ROOT base then tags with the inner mint
+
+
+# ====================================================================
+# §6  undef + re-binding — the name goes away, live values keep their tag,
+#     and the retired NAME cannot be re-minted
+# ====================================================================
+def P (refine Integer) undef P 7 is P	ERROR:undefined word	after undef the name is gone from `is`
+def P (refine Integer) undef P make P 1	ERROR:undefined word	…and from construction
+def P (refine Integer) def x:P 1 undef P x typeof	P	a live value keeps its type identity after undef
+def P (refine Integer) def x:P 1 undef P x	1	…and its value
+def P (refine Integer) undef P def P (refine Integer) 1	ERROR:conflicts with an existing type name	re-defining the SAME name after undef is a loud conflict (the retired node keeps the name)
+def P (refine Integer) undef P def P2 (refine Integer) def y:P2 1 y is P2	true	a FRESH name mints fine after the undef
+def Big (Integer gt 10) undef Big 50 is Big	ERROR:undefined word	predicate refinements undef the same way
+def Big (Integer gt 10) def b:Big 50 undef Big b	50	a bound subset value survives its type's undef
+
+
+# ====================================================================
+# §7  predicate refinements are SUBSET types — value-sensitive and
+#     symmetric at param / return / bind / is, per predicate kind
+# ====================================================================
+# gte — boundary value belongs (contrast gt, user-types.tsv §4)
+def Big (Integer gte 10) 10 is Big	true	gte admits the boundary value
+def Big (Integer gte 10) 9 is Big	false	…and rejects just below it
+def Big (Integer gte 10) def g fn [[n:Big] [Integer] [n]] 10 g	10	gte boundary dispatches at the param
+def Big (Integer gte 10) def mk fn [[] [Big] [10]] (mk) eq 10	true	…and is admitted at the return, value intact
+def Big (Integer gte 10) def b:Big 10 b	10	…and at the bind
+def Sm (Integer lte 0) 0 is Sm	true	lte admits the boundary value
+def Sm (Integer lte 0) 1 is Sm	false	…and rejects just above it
+def Sm (Integer lte 0) def mk fn [[] [Sm] [-3]] (mk) eq -3	true	lte return admits a satisfying value
+def Sm (Integer lte 0) def b:Sm 0 b	0	lte bind admits its boundary
+# gt — the RETURN boundary is exactly as strict as the param
+def Big (Integer gt 10) def mk fn [[] [Big] [11]] (mk) eq 11	true	gt return admits the first passing value
+# (dropped) gt-return boundary rejection — same disposition as :22
+# bind — `def b:Big v` runs the same predicate at bind time
+def Big (Integer gt 10) def b:Big 11 b	11	bind admits the first passing value
+def Big (Integer gt 10) def b:Big 10	ERROR:does not unify	bind rejects the boundary value
+def Big (Integer gt 10) def b:Big 5	ERROR:does not unify	bind rejects a deep miss
+# a subset value keeps its BASE tag — no reparenting (contrast §2 newtypes)
+def Big (Integer gt 10) def b:Big 50 b typeof	Integer	a bound subset value keeps the base tag
+def Big (Integer gt 10) def b:Big 50 b is Big	true	…while remaining a member by value
+def Big (Integer gt 10) def b:Big 50 b is Integer	true	…and a plain Integer
+# cross-family strictness — the base family gates before the predicate
+def Big (Integer gt 10) 10.5 is Big	false	a Float is not an Integer-refinement member even though 10.5 > 10
+def Big (Integer gt 10) def g fn [[n:Big] [Integer] [n]] 10.5 g	ERROR:signature	…and is rejected at the param the same way
+# String base family
+def S (String gt 'm') 'n' is S	true	String predicate admits above the bound
+def S (String gt 'm') 'm' is S	false	…and rejects the boundary (strict gt)
+def S (String gt 'm') def g fn [[s:S] [Integer] [1]] 'z' g	1	String predicate param admits
+def S (String gt 'm') def g fn [[s:S] [Integer] [1]] 'a' g	ERROR:signature	…and rejects
+def S (String gt 'm') def mk fn [[] [S] ['z']] (mk) eq 'z'	true	String predicate return admits
+# (dropped) String-subset return rejection — same disposition as :22
+def S (String gt 'm') def b:S 'z' b	'z'	String predicate bind admits
+def S (String gt 'm') def b:S 'a'	ERROR:does not unify	…and rejects
+# Float base family
+def F (Float gte 0.0) def g fn [[f:F] [Float] [f]] 0.0 g	0.0	Float gte admits its boundary at the param
+def F (Float gte 0.0) def mk fn [[] [F] [2.5]] (mk) eq 2.5	true	Float predicate return admits
+def F (Float gte 0.0) def b:F 0.0 b	0.0	Float predicate bind admits the boundary
+def F (Float gte 0.0) def b:F -0.5	ERROR:does not unify	Float predicate bind rejects
+def F (Float gt 1.5) 2 is F	false	an Integer is not a member of a Float refinement (strict leaves)
+# between — closed interval, both ends in
+def R (Integer between 10 20) 10 is R	true	between includes the low end
+def R (Integer between 10 20) 20 is R	true	…and the high end
+def R (Integer between 10 20) 9 is R	false	below the interval
+def R (Integer between 10 20) 21 is R	false	above the interval
+def R (Integer between 10 20) def g fn [[n:R] [Integer] [n]] 15 g	15	between param admits an interior value
+def R (Integer between 10 20) def g fn [[n:R] [Integer] [n]] 25 g	ERROR:signature	…and rejects an exterior one
+def R (Integer between 10 20) def mk fn [[] [R] [15]] (mk) eq 15	true	between return admits
+def R (Integer between 10 20) def b:R 20 b	20	between bind admits the closed high end
+def R (Integer between 10 20) def b:R 21	ERROR:does not unify	…and rejects just past it
+
+
+# ====================================================================
+# §8  conjunctive refinement — the meet (tand / unify) intersects
+#     interval predicates; BOTH bounds always apply
+# ====================================================================
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) W	(Integer gt 10 lt 20)	tand on a named refinement meets to the interval intersection
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 11 is W	true	interior value, low side
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 19 is W	true	interior value, high side
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 10 is W	false	Big's strict low bound still applies
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 20 is W	false	the added strict high bound applies too
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 3 is W	false	a deep miss on the inherited bound — Big's constraint is never lost in the meet
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 25 is W	false	…nor is the new one
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) def g fn [[n:W] [Integer] [n]] 15 g	15	the meet type dispatches like any refinement
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) def g fn [[n:W] [Integer] [n]] 25 g	ERROR:signature	…and rejects at the param
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) def mk fn [[] [W] [15]] (mk) eq 15	true	…admits at the return (both bounds hold)
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) def w:W 15 w	15	…binds a passing literal
+def Big (Integer gt 10) def W (Big tand (Integer lt 20)) def w:W 5	ERROR:does not unify	…and rejects a failing one at bind
+# disjoint intervals — the meet is EMPTY, spelled Never
+def Big (Integer gt 10) def W (Big tand (Integer lt 5)) W	Never	a disjoint meet folds to Never
+def Big (Integer gt 10) def W (Big tand (Integer lt 5)) 3 is W	false	nothing inhabits the empty meet — not even a value passing ONE side
+def Big (Integer gt 10) def W (Big tand (Integer lt 5)) 12 is W	false	…nor the other
+def A (Integer gt 10) def B (Integer lt 5) A unify B	'~unify-fail' false	unify reports the empty intersection as a failure
+def A (Integer gt 10) def B (Integer lt 5) def x:(A tand B) 3	ERROR:does not unify with declared type Never	binding at the empty meet is a loud unify error naming Never
+# cross-family meets are empty too
+def Big (Integer gt 10) Big tand String	Never	an Integer refinement meets String at Never
+def Big (Integer gt 10) def W (Big tand (String gt 'm')) W	Never	…including String's own refinements
+# meets chain — three constraints intersect pairwise
+((Integer gt 0) tand (Integer lt 100)) tand (Integer gt 50)	(Integer gt 50 lt 100)	a chained meet keeps the tightest bound per side
+
+
+# ====================================================================
+# §9  validate-then-call — an `is` guard proves membership at runtime,
+#     so the guarded branch dispatches and the other branch never errors
+# ====================================================================
+# (dropped) validate-then-call `if (x is Big) [g x]` runs correct but compile-refuses (guard narrowing is a CHECK win, not compile coverage); pinned by TestPredicateGuardNarrowing
+def Big (Integer gt 10) def g fn [[n:Big] [Integer] [n]] def x 50 if (x is (tnot Big)) [0] [g x]	50	the complement guard flips the branches — else proves membership
+def P (refine Integer) def g fn [[n:P] [Integer] [n add 1]] def h fn [[v:Integer] [Integer] [if (v is P) [g v] [0]]] h 5	0	newtype guard, false side: a raw base value takes the else branch instead of the call erroring
+def P (refine Integer) def g fn [[n:P] [Integer] [n add 1]] def h fn [[v:Integer] [Integer] [if (v is P) [g v] [0]]] def x:P 5 h x	6	…and a constructed value passes guard AND call through the same wrapper
+# (dropped) tand-refinement validate-then-call — same disposition as :192

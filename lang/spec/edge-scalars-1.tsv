@@ -1,0 +1,103 @@
+# AQL Language Specification: scalar edge cases 1 — the numeric tower
+# Format: input<TAB>expected<TAB>description
+#
+# Edge coverage for the four numeric leaves (Integer, Float, BigInteger,
+# BigDecimal): cross-leaf equality vs ordering vs deep-equality, leaf
+# promotion in every arithmetic word, int64 overflow at the literal and
+# runtime boundaries, div/mod semantics on negative operands and at the
+# int64 poles, and the two rounding regimes (round = ties away from
+# zero, round-even = IEEE ties-to-even). Complements arithmetic.tsv,
+# numeric-cross-product.tsv, bignum.tsv and float-special.tsv — rows
+# here pin the gaps those files leave. See
+# design/INTEGER-OVERFLOW-STRATEGY.5.md, design/BIGNUM-0D.10.md,
+# design/IEEE-754-COMPLIANCE.8.md.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  cross-leaf equality: eq / deq / cmp all treat equal magnitude as
+#     equal across Integer/Float — deq is NOT stricter for scalars.
+1 deq 1.0	true	deq agrees with eq across the Integer/Float leaves (magnitude, not leaf identity)
+-1 deq -1.0	true	negative cross-leaf deq
+0 eq -0.0	true	Integer zero equals Float negative zero
+0d1 deq 1	true	deq across BigInteger/Integer is magnitude too
+0d1.5 deq 1.5	true	deq across BigDecimal/Float (1.5 is binary-exact)
+0.5 eq 0d0.50	true	trailing BigDecimal scale does not affect equality
+0.1 cmp 0d0.1	1	Float 0.1 is really 0.1000…055…, strictly ABOVE exact 0d0.1 (big.Rat compare)
+0d0.1 cmp 0.1	-1	mirror: the exact decimal sorts below the binary Float
+1 deq '1'	false	deq never coerces across families
+#
+# §2  the 2^53 boundary — Integer/Float comparison projects to float64,
+#     Big comparison is exact (big.Rat). Same magnitude, two answers.
+9007199254740993	9007199254740993	2^53+1 as an Integer literal is exact (Phase 0a lexer)
+9007199254740993 typeof	Integer	stays an Integer, not a Float fallback
+9007199254740993 eq 9007199254740992.0	true	Integer/Float eq projects to float64 — 2^53+1 collapses onto 2^53
+0d9007199254740993 eq 9007199254740992.0	false	BigInteger/Float eq is exact — the same pair is NOT equal via big.Rat
+9007199254740993.0	9007199254740992.0	a FLOAT literal above 2^53 rounds to the nearest representable
+#
+# §3  leaf promotion in every arithmetic word (widest exact leaf wins;
+#     bignum.tsv pins the add/mul basics — these are the gaps).
+0d10 sub 3	0d7	BigInteger sub Integer stays Big
+3 sub 0d10	-0d7	Integer sub BigInteger promotes; canon renders the sign outside 0d
+7 mod 0d2	0d1	Integer mod BigInteger → BigInteger
+0d7 mod 2	0d1	BigInteger mod Integer → BigInteger
+7 div 0d2	0d3	cross-leaf integer division still truncates
+0d10.0 div 4	0d2.500000000000000000000000000000000	BigDecimal div Integer → context division (decimal128)
+2 pow 0d10	0d1024	Integer base, BigInteger exponent → BigInteger
+0d2 pow 10	0d1024	BigInteger base, Integer exponent → BigInteger
+1 sub 0d0.5	0d0.5	Integer sub BigDecimal → BigDecimal
+do [0d2 sub 1.0] error [dot code]	type_error/q	Big ⊕ Float never degrades: sub raises type_error (add/mul pinned in bignum.tsv)
+(do [0d7 div 2.0] error [dot code]) eq type_error/q	true	…and div raises the same type_error
+#
+# §4  int64 overflow — the literal boundary (statically flagged) and the
+#     runtime boundary (uniform [aql/integer_overflow], captured here as
+#     values via do/error so the CODE is pinned, not just the raise).
+9223372036854775807	9223372036854775807	int64 max literal is exact
+-9223372036854775808	-9223372036854775808	int64 min literal is exact
+9223372036854775808	ERROR:integer_overflow	one above max: the literal itself is range-checked
+-9223372036854775809	ERROR:integer_overflow	one below min likewise
+0b1000000000000000000000000000000000000000000000000000000000000000	ERROR:integer_overflow	binary literals are range-checked too (this is 2^63; the hex twin is pinned in numeric-cross-product.tsv)
+do [9223372036854775807 add 1] error [dot code]	integer_overflow/q	runtime overflow carries the integer_overflow code
+do [2 pow 63] error [dot code]	integer_overflow/q	pow overflow carries the same code (no silent wrap)
+do [-9223372036854775808 mul -1] error [dot code]	integer_overflow/q	minint mul -1 has no int64 result — checked, not wrapped
+0d9223372036854775807 add 0d1	0d9223372036854775808	the BigInteger leaf is the overflow escape hatch
+#
+# §5  the int64 poles under div/mod — minint div -1 is the ONE
+#     Go-defined wrap (quotient = minint, Go spec §Integer operators);
+#     mod -1 is 0. Deterministic, pinned as-is.
+-9223372036854775808 div -1	-9223372036854775808	minint div -1 wraps to minint (Go-defined two's-complement edge)
+-9223372036854775808 mod -1	0	minint mod -1 is 0 (no overflow)
+-9223372036854775807 sub 1	-9223372036854775808	reaching minint exactly is fine
+#
+# §6  div/mod on double negatives (single-negative pairs are pinned in
+#     numeric-cross-product.tsv §2-3). The zero-divisor raises are
+#     pinned in arithmetic.tsv / numeric-cross-product.tsv §6.
+-7 div -2	3	both operands negative: truncation toward zero gives +3
+-7 mod -2	-1	mod sign still follows the dividend
+-7.5 mod 2.0	-1.5	Float mod keeps the fraction and the dividend sign
+-1 div 0.0	-inf	a Float zero divisor routes the mixed pair to IEEE -inf
+0 div 0.0	nan	Integer 0 over Float 0.0 is IEEE nan, not an error
+#
+# §7  pow edges not in the cross product
+0 pow 0	1	0^0 is 1 on the integer path
+0.0 pow 0.0	1.0	…and 1.0 on the Float path (IEEE pow(0,0)=1)
+inf pow 0.0	1.0	IEEE: pow(x, 0) is 1 even for x = inf
+nan pow 0.0	1.0	…and even for NaN
+2.0 pow -1	0.5	a Float base admits a negative Integer exponent (real reciprocal)
+0.0 pow -1	inf	IEEE: pow(+0, negative) is +inf
+#
+# §8  the two rounding regimes — round ties AWAY from zero, round-even
+#     ties to even (IEEE roundTiesToEven); floor/ceil are directional.
+#     All four are Float-typed: an Integer input is a dispatch error.
+import "aql:math-util"  MathUtil.round 0.5	1	round: 0.5 goes AWAY from zero
+import "aql:math-util"  MathUtil.round -0.5	-1	round: -0.5 goes away from zero too (not toward -inf)
+import "aql:math-util"  MathUtil.round -2.5	-3	round: -2.5 → -3 (away)
+import "aql:math-util"  MathUtil.round-even 0.5	0	round-even: 0.5 ties to the even neighbour 0
+import "aql:math-util"  MathUtil.round-even -2.5	-2	round-even: -2.5 ties to even -2 (round gives -3)
+import "aql:math-util"  MathUtil.round-even 1.5	2	round-even: 1.5 → 2 (2 is even)
+import "aql:math-util"  MathUtil.round-even 3.5	4	round-even: 3.5 → 4 — adjacent halves land on DIFFERENT sides
+import "aql:math-util"  MathUtil.floor -2.5	-3	floor is toward -inf
+import "aql:math-util"  MathUtil.ceil -2.5	-2	ceil is toward +inf
+import "aql:math-util"  MathUtil.ceil -0.5	0	ceil of a small negative is zero
+import "aql:math-util"  MathUtil.trunc -2.9	-2	trunc is toward zero (compare floor: -3)
+import "aql:math-util"  MathUtil.trunc 2.9	2	trunc positive
+import "aql:math-util"  MathUtil.round 2.5 typeof	Integer	the rounding family returns an Integer, not a Float
+import "aql:math-util"  MathUtil.floor 5	ERROR:uncalled_function	the rounding family is Float-only — an Integer matches no signature

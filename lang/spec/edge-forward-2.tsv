@@ -1,0 +1,157 @@
+# AQL Language Specification: forward-collection edge cases II —
+# per-call-site modifiers, statement-boundary speculation, splice and
+# quote interaction, BarrierPos shapes, deep paren nesting.
+# Format: input<TAB>expected<TAB>description
+#
+# Part II of the forward-collection edge matrix (part I: greediness,
+# the ONE split rule, barriers, type-directed stopping). Companions:
+# modifiers.tsv (the /… suffix grammar), forward-barrier.tsv (the
+# commit matrix), word-splice.tsv (`word` __SP semantics),
+# design/FORWARD-COLLECTION-PHASES.10.md (the two-phase model).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §5  Modifiers steer collection PER CALL SITE — /f (all forward),
+#     /s (all stack), /N (pin the N-arg overload), /q (atom), and
+#     their stacking rules, exercised against the split rule.
+sub/f 10 3	-7	/f: both args forward → sig[0]=10, sig[1]=3 → 3-10
+sub/f 3 10	7	…the other operand order
+pow/f 2 3	9	/f pow: 3^2 (sig order unchanged, only the SOURCE of args is pinned)
+div/f 2 10	5	/f div: 10/2
+10 sub/f 3	ERROR:signature	/f refuses the stacked 10: only ONE forward token is there
+sub/f 3	ERROR:signature	/f with a single forward arg and no more tokens
+add/f 1 2 3	3 3	/f collects exactly the two it needs; the 3 pushes
+mul/f 2 3 4	6 4	same for mul
+10 3 sub/s	7	/s: both from the stack — top 3 → sig[0]
+3 10 sub/s	-7	…the other stack order
+2 10 div/s	0	/s div: top 10 → sig[0], deeper 2 → sig[1] → 2/10 in integer division
+10 2 div/s	5	…flipped: 10/2
+div/s 2 10	ERROR:signature	/s with an empty stack: the forward tokens are invisible to it
+(add 1 1) 5 mul/s	10	/s consumes the grouped result and the 5 — nothing reaches forward
+if/2 true [9] 42	9 42	/2 removes if's optional else slot: the 42 is NOT collected
+if/2 false [9] 42	42	…false polarity: no then, no else, the 42 survives
+if/3 true [9] 42	9	/3 forces the else slot: the 42 IS the else and true discards it
+if/3 false [9] 42	42	…and false runs it
+def n 0 if/2 (n eq 0) [99] def x 1 x	99 1	an arity-pinned guard never speculates: no else slot to fill
+range/2 1 7 2	[1 2 3 4 5 6] 2	/2 range: the trailing 2 is free, not a step
+range/3 1 7 2	[1 3 5]	/3 range: the 2 is the step
+slice/2 1 [10 20 30]	[20 30]	/2 slice picks the (Integer, List) overload
+slice/3 1 3 [10 20 30] 7	[20 30] 7	/3 slice consumes exactly three
+pow/2 2 3	9	a redundant /N (pow is only 2-ary) is harmless
+add/3 1 2 3	ERROR:signature	/3 selects add's 3-arg (Map, Any, Patrun) shape — which these args cannot fill
+pow/9 2 3	ERROR:signature	/9 names an arity pow does not have
+size add/q	3	/q yields an Atom: an ordinary VALUE for the next word (3 characters)
+typeof add/q	Atom	the atom's type
+size mul/q	3	atoms of other words are just data too
+mul/sq	mul/q	stacking: q dominates and letters commute
+mul/qs	mul/q	…either spelling
+sub/f2 10 3	-7	digits stack with f: /f2 ≡ /2f
+sub/2f 10 3	-7	…either spelling
+10 3 sub/s2	7	digits stack with s
+sub/fs 1 2	ERROR:undefined_word	f and s are exclusive: the whole token is an unknown word
+pow/ff 2 3	ERROR:undefined_word	repeated letters are invalid
+div/y 2 10	ERROR:undefined_word	unknown modifier letter
+pow/u 2 3	8	/u reverses the call: pow 3 2
+div/u 2 10	0	/u div: 2/10
+sub/u 10 3	7	/u sub: sub 3 10
+10 sub/u 3	-7	/u composes with the mixed split: the reversed sub sees (3, 10) swapped
+#
+# ─────────────────────────────────────────────────────────────────────
+# §6  Statement-boundary commit and speculative fill — the def idiom
+#     IS speculation working (design/FORWARD-COLLECTION-PHASES.10.md):
+#     a word planned into an Any slot, the barrier probe, and the
+#     arrival that completes the parked word.
+def x add 1 2 x	3	def's value slot plans `add` speculatively; add's result arrives and completes def
+def x iota 3 size x	3	the generator idiom: iota's list arrives as x's value
+def x size [1 2] x	2	a measuring word as the speculative filler
+def x (add 1 2) x mul 2	6	a paren value needs no speculation: def completes in phase 1
+def x add 1 2 def y add x 1 y	4	chained speculative defs commit statement by statement
+def s iota 3 s	[0 1 2]	the bound value is the arrival itself
+def s range 2 5 s	[2 3 4]	range's optional slot stops at the UNBOUND word s: 2-arg completes, then binds
+def a 1 def b 2 add a b	3	plain multi-statement flow — each def commits before the next statement
+def g2 fn [[a:Integer b:Integer][Integer][a add b] [a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] g2 1 2 def x 5 x	3 5	TYPED overloads: the def word prunes the 3-arg form in phase 1 — the 2-arg call completes before parking
+def g2 fn [[a:Integer b:Integer][Integer][a add b] [a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] g2 1 2 3	123	…with a third value present the 3-arg form wins
+def g2 fn [[a:Integer b:Integer][Integer][a add b] [a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] g2 1 def x 5 x	ERROR:signature	one arg and a word: no 1-arg overload exists, so the typed plan fails loudly
+def ga fn [[a:Any b:Any][Any][add a b] [a:Any b:Any c:Any][Any][((a mul 100) add (b mul 10)) add c]] ga 1 2 def x 5 x	3 5	ANY overloads park speculatively instead — the barrier probe commits the exact 2-arg form
+def ga fn [[a:Any b:Any][Any][add a b] [a:Any b:Any c:Any][Any][((a mul 100) add (b mul 10)) add c]] ga 1 2 3 def x 5 x	123 5	…three claimed args commit the 3-arg form
+def ga fn [[a:Any b:Any][Any][add a b] [a:Any b:Any c:Any][Any][((a mul 100) add (b mul 10)) add c]] ga 1 def x 5 x	6	one claimed arg fails the probe: ga keeps waiting and def's x feeds its second slot
+mul 2 def x 5 x	ERROR:signature	a typed native with no smaller overload fails at plan time (mul sibling of the pinned add row)
+not def x 5 x	false	an Any-slot native waits through the boundary: x's 5 arrives, truthy → false
+5 if (1 eq 1) [99] def x 1 x	99 1	a stack value claimed as the else is consumed; the next statement then runs intact
+(if (1 eq 1) [9] def x 1 x)	9 1	the commit scan works inside a paren scope too
+def f fn [[n:Integer][List][if (n eq 0) [raise "z"] range 0 n]] f 2	[0 1]	guard inside a fn body committed by a range statement
+def f fn [[n:Integer][List][if (n eq 0) [raise "z"] range 0 n]] f 0	ERROR:z	…and the raise pre-empts the range
+#
+# ─────────────────────────────────────────────────────────────────────
+# §7  Splice-bound words and quote in forward positions — data splices
+#     expand like the written paren group (f w ≡ f (w)); code splices
+#     stay boundary words; quote takes the NAME, not the binding.
+def sq word [dup mul] 3 sq	9	a code splice runs Forth-style against the live stack
+def vs word [2,3] add vs	5	a data splice fills both of add's forward slots
+def vs word [2,3] mul vs	6	…and mul's
+def vs word [2,3] sub vs	1	sub pins the arrival order: sig[0]=2, sig[1]=3 → 3-2
+def vs word [2,3] add 1 vs	3 3	a literal then the spread: add 1 2 fires, the 3 spills
+def vs word [2,3] add vs ; 9	5 9	a barrier after the spread call behaves normally
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] def vs word [2,3] f3 1 vs	123	mixed literal + spread fills a 3-arg fn in written order
+def tv word [2,[9,8,7]] take tv	[9 8]	a heterogeneous data splice fills TYPED slots: take 2 [9 8 7]
+# (dropped) word-splice + empty-paren before a splice refuses to compile (falls back sound); out of corpus for gate purity
+# (dropped) word-splice residual reaching an un-inlinable word refuses (sound fallback); same disposition as :96
+def p word [1 add 2] mul 2 (p)	6	…group it to use its result
+def inc word [1 add] 1 inc mul 2	4	a code splice chains with the live stack: (1+1) then *2
+def vs word [2,3] size vs/q	2	/q takes the NAME vs, binding notwithstanding: two characters
+quote add 1 2	add/q 1 2	quote captures the word as an atom; the literals push untouched
+typeof (quote mul)	Atom	a quoted word is an Atom value
+def a add/q size a	3	an atom BOUND to a name flows through collection as plain data
+quote (1 add 2)	3	quote of a paren marks the paren's VALUE — a no-op on data
+quote (word [1,2])	1 2	quote cannot ferry a splice: the __SP fires inside the paren first
+def n 0 if (n eq 0) [99] quote z	99 z/q	quote as a guard boundary: commit, then capture
+[1,2,3] def xs end size xs	3	prefix + end binds the evaluated list VALUE (no splice)
+[1,2,3] def xs ; size xs	3	; spelling of the same
+def d [dup add] 5 d	ERROR:signature	a forward list value-binding EVALUATES the list at def time: dup finds an empty stack
+[dup add] def d end 5 d	ERROR:signature	the prefix form evaluates it even earlier — before def ever runs
+#
+# ─────────────────────────────────────────────────────────────────────
+# §8  BarrierPos in fn signatures — a leading | makes every param
+#     stack-only; a mid-list | splits forward-eligible from
+#     stack-only. The or/otherwise natives (part I §4b) are the
+#     built-in instances of the same mechanism.
+def s fn [[| a:Integer b:Integer][Integer][a sub b]] 10 3 s	-7	stack-only fn: top 3 → a, 10 → b → 3-10
+def s fn [[| a:Integer b:Integer][Integer][a sub b]] s 10 3	ERROR:signature	…and it never collects forward: the literals after it are out of reach
+def s fn [[| a:Integer b:Integer][Integer][a sub b]] 5 10 3 s	5 -7	deeper stack values stay untouched
+def m fn [[a:Integer | b:Integer][Integer][a sub b]] 10 m 3	-7	mixed fn: a collects the forward 3, b takes the stacked 10 → 3-10
+def m fn [[a:Integer | b:Integer][Integer][a sub b]] 10 3 m	-7	both slots may still fill from the stack
+def m fn [[a:Integer | b:Integer][Integer][a sub b]] m 3 10	ERROR:signature	but b never collects forward: the second literal is unreachable
+def m fn [[a:Integer | b:Integer][Integer][a sub b]] 7 m 3	-4	the mixed shape reads infix: 3-7
+#
+# §8b  import — the module id is collected, and everything after it
+#      that no overload can use is left alone (structure-first
+#      collection; the classic `end` guard still works).
+import "aql:math-util" MathUtil.sqrt 25	5.0	the dotted call after import is a new statement, not an import argument
+import "aql:math-util" "leftover"	'leftover'	a following bare String is NOT collected (no viable overload puts one there)
+import "aql:math-util" end "leftover"	'leftover'	…the explicit end states the same intent
+import "aql:math-util" [1 2]	[1 2]	a following plain list is not taken as a rename list
+import "aql:math-util" sqrt	ERROR:undefined_word	module exports are namespaced: the bare word after import is not a rename, it is undefined
+import "aql:string-util" (StringUtil.upper "hi") 5	'HI' 5	a paren after import runs as its own expression
+#
+# ─────────────────────────────────────────────────────────────────────
+# §9  Deep nesting — paren groups as forward arguments, groups inside
+#     groups, barriers inside groups, and multi-value groups.
+mul (add (mul 2 3) 4) 5	50	two levels of nesting: ((2*3)+4)*5
+add (add (add 1 2) 3) 4	10	left-nested chain
+add 1 (add 2 (add 3 4))	10	right-nested chain
+((1 2 add)) 3 mul	9	a double-wrapped group is the same barrier
+(((5)))	5	parens collapse to the value
+(def x 5 x)	5	a whole statement inside a group yields its value
+(def x 5) x	5	a def inside a group binds in the enclosing scope
+(5 add 1 end) 2 mul	12	end works inside a group: (5+1)*2
+(3 4 add ; 2 mul)	14	; works inside a group
+(3 4 add) (2 mul)	ERROR:signature	a group is a REAL scope: the second group cannot see the first's result
+5 add (2 mul 3)	11	a group as the forward arg, stack fills the rest
+(2 mul 3) add 5	11	…mirrored
+(2) mul (3)	6	trivial groups are just values
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] f3 (1) (2) (3)	123	three grouped forward args fill sig order in WRITTEN order
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] f3 (1) 2 (3)	123	groups and literals interleave freely
+add (1 2)	3	a MULTI-value group collapses into consecutive slots
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] f3 (1 2) 3	123	a two-value group fills a and b; the literal fills c
+def f3 fn [[a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] f3 (1 2 3)	123	one group can supply every slot
+add ((1) (2))	3	nested groups collapse the same way
+if (if true [true] [false]) [1] [2]	1	an if-group as a condition: inner result feeds the outer slot

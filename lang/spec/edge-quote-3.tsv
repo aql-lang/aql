@@ -1,0 +1,86 @@
+# AQL Language Specification: edge-quote-3 — macro edge cases
+# Format: input<TAB>expected<TAB>description
+# =====================================================================
+# Edge cases for the macro system beyond macro.tsv's basics: operands
+# arrive as FORMS (never evaluated at capture), a form inserted twice
+# EVALUATES twice, unquote inserts one node where splice spreads,
+# auto-hygiene renames template binders (pinned by reading the
+# caller's binding AFTER the call), macroexpand output is plain data,
+# and the staging negatives are statically visible. Each row runs on
+# a fresh registry, so gensym counters restart per row. See
+# REFERENCE.md "Macros", design/MACROS.8.md.
+# =====================================================================
+
+# --- §1 operands are FORMS, not values ----------------------------------
+def keep (macro [[x] [quote [77]]]) keep (1 div 0)	77	a discarded paren operand NEVER evaluates — no division error
+def keep (macro [[x] [quote [77]]]) keep nosuchword	77	a discarded bare word needs no binding — it was only a form
+def keep (macro [[x] [quote [77]]]) keep [1 div 0]	77	a discarded list operand never evaluates either
+def keep (macro [[x] [quote [77]]]) keep {k: nosuch}	77	a discarded map form never evaluates its values
+def m2 (macro [[x] [quote [unquote x]]]) m2 nosuchword	ERROR:undefined_word	…but INSERTING the form makes it real code at the call site
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) tw2 (2 mul 3)	12	a paren form inserted twice runs twice: (2 mul 3)+(2 mul 3)
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) tw2 5	10	the mission-classic expansion: 5 add 5
+def sub2 (macro [[e] [quote [unquote e sub unquote e]]]) sub2 4	0	non-commutative body, same operand twice
+def dupx (macro [[x] [quote [unquote x unquote x]]]) dupx (gensym) eq	false	the FORM is inserted twice, so gensym mints TWICE — never equal
+def dupx (macro [[x] [quote [unquote x unquote x]]]) dupx 9	9 9	a literal form inserted twice is just the literal twice
+
+# --- §2 unquote inserts ONE node; splice SPREADS -------------------------
+def one (macro [[x] [quote [unquote x]]]) one [1 2 3]	[1 2 3]	unquote of a list form: the list arrives as one node
+def one (macro [[x] [quote [[unquote x]]]]) one [1 2 3]	[[1 2 3]]	…wrapped again it nests, still one node
+def spr (macro [[xs] [quote [splice xs]]]) spr [1 2 3]	1 2 3	splice spreads the list's elements into the sequence
+def spr (macro [[xs] [quote [[splice xs]]]]) spr [1 2 3]	[1 2 3]	splice INSIDE a list literal rebuilds the list
+def spr (macro [[xs] [quote [splice xs]]]) spr [] 8	8	an empty list splices to NOTHING — the expansion vanishes
+def mix (macro [[h xs] [quote [unquote h splice xs]]]) mix 0 [1 2]	0 1 2	head as a node, tail spread, in template order
+def sum3 (macro [[xs] [quote [add splice xs]]]) sum3 [1 2]	3	spread elements become the word's forward operands
+def rev2 (macro [[a b] [quote [unquote b unquote a]]]) rev2 1 2	2 1	a macro can reorder its operand forms
+def lift (macro [[a b] [quote [[unquote a unquote b]]]]) lift 1 2	[1 2]	…or wrap them into new structure
+def ev (macro [[x] [quote [unquote (1 add 2)]]]) ev 9	3	a template-side (paren) evaluates at EXPANSION time; the operand is dropped
+
+# --- §3 hygiene: template binders are renamed ----------------------------
+def tmp 42 def myor3 (macro [[a b] [quote [def tmp unquote a if tmp [tmp] [unquote b]]]]) myor3 false tmp tmp	42 42	the template's `def tmp` is gensym'd — result AND the re-read caller tmp
+def tmp 7 def setm (macro [[v] [quote [def tmp unquote v tmp]]]) setm 99 tmp	99 7	the macro's own tmp reads 99; the caller's tmp is untouched at 7
+def m (macro [[a] [ def t (gensym) quote [ def unquote t unquote a unquote t ] ]]) m 5	5	hand-rolled hygiene: a gensym'd binder built in the macro body
+def zz 1 def shad (macro [[u] [quote [def zz 5 zz]]]) shad 0 zz	5 1	a template binder shadowing a live user def is renamed — both survive
+def mkc (macro [[name val] [quote [def unquote name unquote val]]]) mkc kk 9 kk	9	an unquote'd NAME is caller-origin: the binding is user-visible
+def mkc (macro [[name val] [quote [def unquote name unquote val]]]) mkc kk 9 def kk 10 kk	10	…and behaves as an ordinary def afterwards (shadowable)
+[gensym] get 0	tmp$g1/q	a fresh registry's first gensym rides a container
+(gensym) eq (gensym)	false	two mints never collide
+def g1 (gensym) g1 eq g1	true	…but a BOUND mint equals itself
+typeof (gensym)	Atom	a gensym is an ordinary atom
+[gensym gensym] size	2	mints are plain values in containers
+
+# --- §4 macroexpand: the expansion as data -------------------------------
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7)	[7 word(add) 7]	the expansion is a token list, not a result
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) size	3	…with three nodes
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) typeof	List	…and it is a plain List
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) get 0	7	a literal node reads back as data
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) get 1	ERROR:signature_error	the word node re-fires when pulled out bare
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 7) do	14	the expansion is runnable data — do replays it
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) macroexpand (tw2 (2 mul 3))	[paren([2 word(mul) 3]) word(add) paren([2 word(mul) 3])]	a paren operand rides the expansion as a raw paren node
+def sq (macro [[e] [quote [unquote e mul unquote e]]]) def gr (macro [[y] [quote [sq unquote y]]]) macroexpand (gr 4)	[4 word(mul) 4]	macroexpand is recursive: the inner macro expands too
+def sq (macro [[e] [quote [unquote e mul unquote e]]]) def gr (macro [[y] [quote [sq unquote y]]]) gr 4	16	…and the nested call runs to the same answer
+def sq (macro [[e] [quote [unquote e mul unquote e]]]) def gr (macro [[y] [quote [sq unquote y add 1]]]) gr 3	10	an expansion mixing a nested macro call with literal tokens
+
+# --- §5 staging + shape negatives (statically visible) --------------------
+early9 1 def early9 (macro [[a] [quote [unquote a]]])	ERROR:undefined_word	macros are define-before-USE
+macro [[x y]]	ERROR:macro_error	the definer needs [[params] [body]]
+macro []	ERROR:macro_error	…and an empty spec list is no better
+macro [[] [quote [1]]]	ERROR:macro_error	a macro needs at least one parameter — 0-operand macros are rejected
+def m (macro [[a b] [quote [unquote a]]]) m 1	ERROR:macro_error	too few operands at expansion
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) typeof tw2	ERROR:macro_error	a macro name is claimed at expansion — 0 operands is an arity error
+def m (macro [[a] [quote [splice a]]]) m 7	ERROR:macro_error	splice of a non-list operand
+def spr (macro [[xs] [quote [splice xs]]]) spr ([4 5])	ERROR:macro_error	a paren operand is a paren FORM — splice needs a list value
+def m (macro [[a] [quote [splice nosuch]]]) m 7	ERROR:undefined_word	splice of an unbound name inside the template
+
+# --- §6 macros are values built from fn parts -----------------------------
+typeof (macro [[a] [quote [1]]])	Function	a macro VALUE is a Function until installed by def
+def m (macro [[a] [quote [unquote a]]]) m 41	41	the identity macro
+def m (macro [[a] [quote [unquote a]]]) m {a:1}	{a:1}	a map operand form rides through unquote
+def m (macro [[a] [quote [unquote a]]]) m "s"	's'	a string operand form rides through unquote
+def m (macro [[a] [quote [unquote a]]]) typeof (m 5)	Integer	a macro call site types as its expansion's result
+def exp3 (macro [[a] [quote [unquote a add 2]]]) exp3 1 exp3 1 add	6	each call site expands independently
+def cinq (macro [[a] [quote [5]]]) [cinq 1 cinq 2] size	2	expansion inside a list literal, per occurrence
+def cinq (macro [[a] [quote [5]]]) {a: (cinq 0)}	{a:5}	a macro call expands inside a map's paren value
+def unless2 (macro [[c body] [quote [if unquote c [0] unquote body]]]) unless2 false [4 add 3]	7	a control-form macro: the generated if runs the body arm
+def unless2 (macro [[c body] [quote [if unquote c [0] unquote body]]]) unless2 (1 gt 2) [4 add 3]	7	…with a paren condition evaluated inside the generated code
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) def app fn [[n:Integer][Integer][tw2 n]] app 7	14	a macro used in a fn body expands at CALL time
+def app fn [[n:Integer][Integer][tw3 n]] def tw3 (macro [[e] [quote [unquote e add unquote e]]]) app 7	14	…so the macro may be defined after the fn, before the call

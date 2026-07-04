@@ -1,0 +1,120 @@
+# AQL Language Specification: module-system edge cases
+# Format: input<TAB>expected<TAB>description
+#
+# Edge-case battery over the module system: the inline `module […]`
+# body as a FRESH evaluation context, export map shapes and the
+# referent (`fn/r`) vs bare-name export rule, ModuleExport
+# transparency and the $name/$module synthetics, import renaming,
+# module-vs-importer scope, and dispatch through module fn wrappers
+# (swap form, argument order, preamble fns with private helpers).
+# Companion to module-instance.tsv; nothing here duplicates its rows.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the module body is a fresh evaluation context
+import module [def h 5 export "M" {a: h}] M.a	5	a body def feeds the export map…
+import module [def h 5 export "M" {a: h}] h	ERROR:undefined_word	…but is INVISIBLE outside the module
+import module [def h fn [[x:Integer] [Integer] [x add 1]] export "M" {inc: h/r}] h 4	ERROR:undefined_word	a body fn is invisible outside too — only exports cross
+def z 9 import module [export "M" {v: z}]	ERROR:undefined_word	the body cannot see importer bindings — the context starts empty
+def T Integer import module [def x:T 5 export "M" {x: x}]	ERROR:type annotation must be a type value	…including importer TYPE bindings
+import module [def h 1 export "A" {h: h}] import module [def h 2 export "B" {h: h}] A.h add B.h	3	each module body is its own context — same-named defs never collide
+import module [def x 1] 5	5	a module with no exports imports cleanly and binds nothing
+#
+# §2  module values — `module […]` produces an Ideal/Module
+typeof (module [def x 1])	Module	module alone produces the descriptor value
+module [export "M" {a:1}] is Module	true	…an Ideal/Module instance
+def m (module [def y 3 export "Y" {y: y}]) import m end Y.y	3	a def-bound Module imports later (with `end` to stop collection)
+import (module [export "Foo" {a:41}]) end Foo.a	41	a paren-built Module imports inline (again: `end` first)
+def m (module [def y 3 export "Y" {y: y}]) import m Y.y	ERROR:undefined_word	GOTCHA: without `end`, import swallows `Y.y` as an argument — terminate the import statement
+#
+# §3  export map shapes
+import module [export "M" {}] M.$name	'M'	an EMPTY export map is legal — the namespace still binds
+import module [export "M" {cfg: {k: 1}}] M.cfg.k	1	a nested map export reads through dot chains
+import module [export "M" {xs: [1 2 3]}] M.xs size	3	a list export is plain data
+import module [export "M" {t: Integer}] def x:(M.t) 5 x	5	an exported TYPE anchors importer annotations
+import module [export "foo" {a:1}] foo.a	1	a lowercase export name is accepted — it binds like any export
+import module [export "foo" {a:1}] typeof foo	ModuleExport	…as a regular ModuleExport
+import module [export Foo {a:1}]	ERROR:undefined_word	the export name must be a String — a bare word is evaluated (and is unbound)
+import module [export "M" 42]	ERROR:no matching signature	a non-map export payload has no export sig
+#
+# §4  referent-form exports vs the bare-name gotcha
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/r}] M.double 21	42	`d/r` holds the fn as data — the export dispatches on use
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/r}] 21 M.double	42	…in swap form too
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d}]	ERROR:no matching signature	GOTCHA: a BARE fn name in the export map auto-evaluates 0-arg and fails — use /r
+import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v	42	a 0-arg fn exported bare fires at export build — the VALUE is exported
+import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v typeof	Integer	…so the export is an Integer, not a Function
+import module [def z fn [[] [Integer] [42]] export "M" {v: z/r}] M.v	42	with /r the 0-arg fn is held and fires on access — same value, later
+# (dropped) FOUND MISCOMPILE — `def d fn [[n:Integer][Integer][n mul 2]] def m {double:d/r} m.double 21 eq 42`: compiled leaves the fn unapplied (`fn d(Integer) false`) vs interpreted `true` (applied member-fn boundary with a trailing arg). Reproducer in design/EDGE-SPEC-FINDINGS.0.md.
+#
+# §5  argument order through module fn wrappers (top-first, sig order)
+import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] M.sub2 10 3	7	all-forward: args bind in source order (a=10 b=3)
+import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] 10 3 M.sub2	-7	GOTCHA all-stack: sig position 0 is TOP of stack — a=3 b=10
+import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] 10 M.sub2 3	-7	swap form: the forward arg fills position 0 (a=3), the stack arg b=10
+#
+# §6  ModuleExport transparency and the synthetics
+import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports	['A' 'B' 'C']	the descriptor lists every export, in declaration order
+import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module is C.$module	true	all exports share ONE Module instance
+import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports 0 get eq "A"	true	descriptor fields are plain values — list reads compose
+import module [export "M" {a:1}] M.$module.name size	0	an inline module has no reference name (empty string)
+import module [export "foo" {a:1}] foo.$module.kind eq "inline"	true	the synthetics work on a lowercase export too
+import module [export "M" {a:1}] M!.b	ERROR:not_found	…and raises not_found under the strict one
+import "aql:test" Test.$module is Assert.$module	true	a module may bind SEVERAL namespaces — one shared descriptor
+import "aql:test" Assert.$module.exports	['Assert' 'Test']	…which lists both exports
+import "aql:string-util" StringUtil.$module.kind eq "native"	true	builtin modules carry kind native
+import "aql:logic-util" LogicUtil.$module.name eq "aql:logic-util"	true	…and their aql: reference as the name
+#
+# §7  import renaming and aliasing
+import [Foo Bar] module [export "Foo" {a:1}] Foo.a	ERROR:undefined_word	renaming REPLACES the original name — Foo is not bound
+import [Foo Bar] module [export "Foo" {a:1} export "Baz" {b:2}] Baz.b	ERROR:undefined_word	a rename list imports ONLY the listed exports
+import [[Foo X]] module [export "Foo" {a:1}] X.a	1	the pair-list form renames one export
+import [[A X] [B Y]] module [export "A" {a:1} export "B" {b:2}] X.a add Y.b	3	…or several at once
+import [Foo Foo] module [export "Foo" {a:1}] Foo.a	1	renaming to the same name is a plain restriction-import
+import [Foo Bar] module [export "Foo" {a:1}] Bar.$module.exports 0 get eq "Foo"	true	the shared descriptor keeps the DECLARED export names
+import [Nope Bar] module [export "Foo" {a:1}]	ERROR:export "Nope" not found	renaming a missing export is loud
+import [Foo Bar Baz] module [export "Foo" {a:1}]	ERROR:rename list must have exactly 2 elements	a flat rename list is strictly from-to
+import [] module [export "Foo" {a:1}]	ERROR:empty rename list	an empty rename list is refused, not a silent no-op
+#
+# §8  module scope vs importer scope
+def x 5 import module [def x 7 export "M" {x: x}] x	5	the importer's binding is untouched by a module-body def
+def x 5 import module [def x 7 export "M" {x: x}] M.x	7	…the module's own value crosses only through the export
+import module [def helper 5 export "M" {helper: helper}] M.helper	5	an export may carry a body binding out under its own name
+import module [def helper 5 export "M" {helper: helper}] helper	ERROR:undefined_word	…without ever binding the bare name in the importer
+import module [def k 10 def f fn [[x:Integer] [Integer] [x add k]] export "M" {f: f/r}] def k 99 M.f 1	11	an exported fn body runs in MODULE scope — the importer's same-named def does not shadow it
+import module [def h fn [[x:Integer] [Integer] [x mul 3]] def g fn [[x:Integer] [Integer] [(h x) add 1]] export "M" {g: g/r}] M.g 2	7	a module fn may call a PRIVATE helper through the captured module scope
+import module [def h fn [[x:Integer] [Integer] [x mul 3]] def g fn [[x:Integer] [Integer] [(h x) add 1]] export "M" {g: g/r}] M.g 2 add (M.g 0)	8	…on every call
+#
+# §9  coexistence and re-export
+import module [export "A" {x:1}] import module [export "A" {x:2}] A.x	2	a second import of the same export name shadows the first
+import module [def f fn [[x:Integer] [Integer] [x add 1]] export "A" {f: f/r}] import module [def f fn [[x:Integer] [Integer] [x mul 2]] export "B" {f: f/r}] (A.f 4) add (B.f 4)	13	two modules' same-named fns coexist under their namespaces
+import "aql:math-util" import "aql:string-util" (StringUtil.upper "ab" size) add (MathUtil.abs -3)	5	builtin modules coexist the same way
+import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/r}] export "O" {inc: I.inc}] O.inc 4	5	re-export: an outer module re-exposes an inner module's fn
+import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/r}] export "O" {inc: I.inc}] I.inc 4	ERROR:undefined_word	…but the INNER namespace never crosses the outer boundary
+import module [import module [export "I" {v: 40}] export "O" {v: I.v}] O.v add 2	42	plain values re-export the same way
+import module [import "aql:math-util" def s fn [[x:Float] [Float] [MathUtil.sqrt x]] export "M" {s: s/r}] M.s 81.0	9.0	a module-PRIVATE builtin import serves the exported fn's body
+#
+# §10  import misc
+import "aql:math-util" import "aql:math-util" MathUtil.sqrt 4.0	2.0	a duplicate import is idempotent
+import "aql:math-util" end MathUtil.sqrt 25.0	5.0	`end` after an import id is always safe
+#
+# §11  builtin wrappers under edge inputs
+import "aql:math-util" 3 7 MathUtil.min	3	swap-free stack dispatch through the min wrapper
+import "aql:math-util" 3 7 MathUtil.max	7	…and max
+import "aql:math-util" MathUtil.min 3 7	3	forward form agrees
+import "aql:math-util" MathUtil.max 2 2.5	2.5	mixed Integer/Float promotes
+import "aql:math-util" MathUtil.hypot 3.0 4.0	5.0	two-arg wrapper, forward
+import "aql:math-util" MathUtil.sqrt -1.0	nan	IEEE domain error: NaN, not a raise
+import "aql:math-util" MathUtil.log 0.0	-inf	IEEE pole: -inf, not a raise
+import "aql:math-util" MathUtil.copysign 3.0 -1.0	1.0	GOTCHA sig order: the SECOND operand carries the magnitude (|-1.0| with 3.0's sign)
+import "aql:string-util" StringUtil.upper ""	''	empty-string subject is fine
+import "aql:string-util" "ab" StringUtil.upper	'AB'	swap form through a string wrapper
+import "aql:string-util" StringUtil.trim "   "	''	an all-space string trims to empty
+import "aql:string-util" StringUtil.split "," ""	[]	splitting the empty string yields no fields
+import "aql:string-util" StringUtil.split "" "ab"	['a' 'b']	an empty separator splits into characters
+import "aql:string-util" StringUtil.repeat 0 "ab"	''	zero repetitions of a string is the empty string
+import "aql:string-util" StringUtil.indexof "zz" "hello"	-1	a missing needle indexes -1, not an error
+import "aql:string-util" StringUtil.contains "" "abc"	true	the empty string is contained in everything
+import "aql:string-util" StringUtil.replace "a" "o" "banana"	'bonana'	replace rewrites the FIRST occurrence only
+import "aql:logic-util" LogicUtil.implies true false	true	GOTCHA arg order: `implies a b` reads b→a (false→true holds)
+import "aql:logic-util" LogicUtil.implies false true	false	…true→false fails — the operands are NOT symmetric
+import "aql:logic-util" LogicUtil.nor true false	false	nor: any true operand kills it
+import "aql:logic-util" LogicUtil.xnor false false	true	xnor: two falses agree
+import "aql:logic-util" true false LogicUtil.nand	true	stack dispatch through a logic wrapper

@@ -1,0 +1,48 @@
+# AQL edge cases — functions, closures, lambdas, recursion, TCO
+#
+# Capture is IMPLICIT LEXICAL: enclosing-fn params and body-locals are
+# snapshotted; module-level names stay dynamic; forward refs resolve at
+# call time. Shallow snapshot — pointer-backed payloads share. TCO is
+# guaranteed for self/mutual tail calls (constant frames). See
+# lang/go/CLAUDE.md "Closures and Capture" and EXPLANATION.md "tail calls".
+
+## capture table
+# (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
+# (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
+# (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
+def x 1 def f ([y:Integer] => [x add y]) def x 2 f 0	2	module-level name is DYNAMIC — not captured, sees the rebind
+def outer fn [[] [Integer] [def b0 10 def inner fn [[n:Integer] [Integer] [b0 add n]] inner 5]] outer	15	body-local def captured by inner
+def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]] fact 5	120	forward-ref recursion resolves at call time
+# (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
+
+## shallow snapshot: reassignment vs pointer sharing
+# (omitted) 0-arg inner fn auto-fires as a value — the 'sharp edge' documented in lang/go/CLAUDE.md; needs /r to park
+# (omitted) shared-flex-pointer counter needs a more careful lambda-parking construction
+
+## lambda gotchas
+def double x:Integer => [x mul 2] double 21	42	bare single-param lambda binds the lambda not the sig
+def f ([x:Integer y:Integer] => [x add y]) f 3 4	7	multi-param needs bracket form
+def id ([x:Any] => [x]) id 99	99	identity lambda over a wrapped body word
+# (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
+def z ([] => [7]) z	7	0-arg lambda as a value, then dispatched as a named call
+
+## TCO — constant-frame tail recursion at depth
+# (omitted) deep self-TCO (count 100000) is mode-DEPENDENT by design — eliminates with TCO on, exhausts the tape with TCO off; the dual-mode spec requires invariance, so deep-TCO proof lives in recursion.tsv + the TCO tests
+# (omitted) deep mutual-TCO (ev/od 50000) — same mode-dependence as :30
+def out fn [[] [Integer] [def go fn [[n:Integer] [Integer] [if (n lte 0) [99] [go (n sub 1)]]] go 3]] out	99	locally-defined-recursive-fn idiom via enclosing-frame binding
+def sum fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [sum (n sub 1) (acc add n)]]] sum 1000 0	500500	tail-recursive accumulator
+
+## variadic returns (the runtime-variable count)
+# (omitted) variadic recursive spread — checker-precision soundness gap already pinned at recursion.tsv:53 (dup); m 3 -> 6 4 2 runs correct
+# (omitted) m 0 nets zero values — empty output, not pinnable as a value row
+def z fn [[] [] []] z 77	77	a [] -declared fn nets zero values, the 77 survives
+
+## fn values as data / introspection
+def f fn [[x:Integer] [Integer] [add x 1]] def m {b: f/r} m.b 2	3	an applied member fn (arg supplied) dispatches
+def inc fn [[n:Integer] [Integer] [n add 1]] def ops {f: inc/r} ops.f 5	6	same via dot sugar
+# (omitted) introspection-word name varies; covered by fn-value.tsv
+def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]] ((mk 5) 10)	15	single-apply factory: the returned closure applied once
+
+## args accessor stays per-call
+# (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
+# (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity

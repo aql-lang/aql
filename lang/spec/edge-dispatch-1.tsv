@@ -1,0 +1,110 @@
+# AQL Language Specification: Dispatch edge cases 1 — overload order,
+# first-match over sorted signatures, the add numeric-vs-concat lattice,
+# and numeric promotion families.
+# Format: input<TAB>expected<TAB>description
+#
+# Dispatch is type-directed: a word's signatures are sorted at
+# registration by SortSignatures (eng/go/signature.go) — longer arity
+# first, then per position the more specific type first, stable for
+# ties — and matchSignature then takes the FIRST match over that
+# sorted order. So listing order in a `def … fn` is irrelevant except
+# as a tie-break; a leaf type always beats its ancestor at the same
+# position, and position 0 outranks position 1.
+#
+# `add` is the canonical overload lattice (see EXPLANATION.md
+# "Type-directed dispatch"): [Number Number] adds, [String Scalar] /
+# [Scalar String] concatenate — so concatenation fires only when AT
+# LEAST ONE operand is a String; every other Scalar pairing (Boolean +
+# Integer, Atom + Integer, …) matches no overload and raises
+# [aql/signature_error] instead of silently stringifying.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  add concat lattice — positives (result = args[1] ++ args[0])
+add 1 "x"	'x1'	[Scalar String]: the Integer coerces, String-first concat order
+add "x" 1	'1x'	[String Scalar]: mirror slot order concatenates the other way round
+1 add "a"	'1a'	mixed split: a→sig0, 1→sig1 → '1'++'a'
+"a" add 1	'a1'	mixed split the other way: 1→sig0, a→sig1 → 'a'++'1'
+"a" add "b"	'ab'	mixed split with two strings: b→sig0, a→sig1 → 'a'++'b'
+"a" "b" add	'ab'	stack form: top b→sig0, deeper a→sig1 — mirror-equivalent to the mixed split
+add true "x"	'xtrue'	Boolean + String: the String slot admits concat, Boolean coerces
+add "x" true	'truex'	String + Boolean: same lattice, mirrored slots
+add cat/q "x"	'xcat'	Atom + String: an Atom is a Scalar, so it coerces into concat
+"x" add cat/q	'xcat'	mixed split: cat→sig0(Scalar), x→sig1(String) → 'x'++'cat'
+add "" 1	'1'	EmptyString is still a String — concat with the empty string
+add false ""	'false'	String + Boolean via the empty string: coercion, not truthiness
+add 2.5 "x"	'x2.5'	Float + String: the Float's string form is spliced in
+#
+# §2  add concat lattice — negatives ([aql/signature_error]: no overload)
+add true 1	ERROR:no matching signature	Boolean + Integer: neither operand is a String
+1 add true	ERROR:no matching signature	mixed split of the same pair fails identically
+true add 1	ERROR:no matching signature	and the other mixed split too — no slot order admits it
+add false true	ERROR:no matching signature	two Booleans: no String, no Number — no overload
+add cat/q 1	ERROR:no matching signature	Atom + Integer: Atom is a Scalar but not a String
+1 add cat/q	ERROR:no matching signature	mixed split of Atom + Integer fails identically
+add cat/q dog/q	ERROR:no matching signature	two Atoms: still no String operand
+add cat/q true	ERROR:no matching signature	Atom + Boolean: same story
+add true 2.5	ERROR:no matching signature	Boolean + Float: a Number operand does not rescue a Boolean
+add none 1	ERROR:no matching signature	none is not a Number
+add none "x"	ERROR:no matching signature	…and not a Scalar either: even a String cannot concat none
+add none none	ERROR:no matching signature	none + none matches nothing
+add {a:1} 2	ERROR:no matching signature	Map + Integer: compounds are outside the add lattice
+add {a:1} "x"	ERROR:no matching signature	Map + String: a String does not admit a compound partner
+add [1 2] [3]	ERROR:no matching signature	List + List: no concat through add — lists have their own words
+add Integer 1	ERROR:no matching signature	a bare type literal is not a concrete Number
+add String "x"	ERROR:no matching signature	the String TYPE literal is not a concrete String — no concat
+add "x" Boolean	ERROR:no matching signature	type literal in the Scalar slot fails the same way
+#
+# §3  numeric promotion — Integer/Float
+add 1 2.0	3.0	Float partner promotes the result to Float
+typeof (add 1 2.0)	Float	…pinned via typeof
+add 1.0 2	3.0	promotion is slot-symmetric
+typeof (add 2 3)	Integer	Integer + Integer stays Integer
+2 add 3.5	5.5	mixed split promotes identically
+#
+# §4  numeric promotion — the Big leaves (exact types never mix with Float)
+1 add 0d2	0d3	Integer + BigInteger → BigInteger
+0d2 add 1	0d3	slot-symmetric
+typeof (1 add 0d2)	BigInteger	…pinned via typeof
+0d1.5 add 1	0d2.5	Integer + BigDecimal → BigDecimal
+typeof (0d1.5 add 1)	BigDecimal	…pinned via typeof
+0d2 add 0d1.5	0d3.5	BigInteger + BigDecimal → BigDecimal (widest exact leaf)
+0d2 add 1.5	ERROR:cannot mix	Float + BigInteger is a type_error, not a silent binary-float demotion
+1.5 add 0d2	ERROR:cannot mix	slot-symmetric refusal
+0d1.5 add 2.5	ERROR:cannot mix	Float + BigDecimal refuses identically
+add 1.5 0d2	ERROR:cannot mix	pure forward form refuses too
+add 0d2 "x"	'x0d2'	but a String partner still concats a BigInteger — its 0d literal form is spliced in
+#
+# §5  concat is add-only — the other math words have no String overload
+sub "a" 1	ERROR:no matching signature	sub has only numeric signatures
+mul "ab" 2	ERROR:no matching signature	no Python-style string repetition through mul
+div "a" "b"	ERROR:no matching signature	two Strings do not divide
+mod true 1	ERROR:no matching signature	mod rejects Boolean like add does
+pow "a" 2	ERROR:no matching signature	pow rejects a String base
+#
+# §6  user-fn overloads — most-specific-first, NOT listing order
+def g fn [[x:Integer][String]["int"] [x:Number][String]["num"]] g 1	'int'	leaf listed first, leaf wins
+def g fn [[x:Number][String]["num"] [x:Integer][String]["int"]] g 1	'int'	ancestor listed first — the leaf STILL wins (sigs are specificity-sorted)
+def g fn [[x:Integer][String]["int"] [x:Number][String]["num"]] g 1.5	'num'	a Float misses the Integer sig and lands on Number
+def g fn [[x:Any][String]["A"] [x:Number][String]["N"]] g 1	'N'	Any is the last resort even when listed first
+def g fn [[x:Scalar][String]["S"] [x:Number][String]["N"]] g 1	'N'	deeper lattice node beats the shallower one
+def g fn [[x:Any][String]["A"] [x:Number][String]["N"]] g true	'A'	a Boolean misses Number and falls to Any
+def g fn [[x:Integer][String]["int"] [x:Any][String]["any"]] g true	'any'	Any catches what the leaf rejects
+def g fn [[x:Integer][String]["one"] [x:Integer][String]["two"]] g 1	'one'	exact tie: stable sort keeps listing order — first listed wins
+def g fn [[x:String][String]["s"] [x:Integer][String]["i"]] g [1]	ERROR:no matching signature	a List matches neither overload — no silent Any degrade
+def g fn [[x:Integer y:Any][String]["IA"] [x:Any y:Integer][String]["AI"]] g 1 2	'IA'	per-position specificity is lexicographic: position 0 outranks position 1
+def g fn [[x:Any y:Integer][String]["AI"] [x:Integer y:Any][String]["IA"]] g 1 2	'IA'	…and reversing the listing does not change that
+def g fn [[x:Any][String]["one"] [x:Integer y:Integer][String]["two"]] g 1 2	'two'	longer arity sorts first: the 2-arg sig takes both args
+def g fn [[x:Map][String]["map"] [x:Any][String]["any"]] g {a:1}	'map'	a Node-branch leaf beats Any as well
+def g fn [[x:Map][String]["map"] [x:Any][String]["any"]] g 3	'any'	…and an Integer falls through Map to Any
+def g fn [[x:Any][String]["any"] [x:Map][String]["map"]] g {a:1}	'map'	listing order irrelevant on the Node branch too
+#
+# §6b  disjunct-typed params — `tor` unions in the overload order
+def g fn [[x:(Integer tor String)][String]["ok"]] g 1	'ok'	a disjunct param admits its first alternative
+def g fn [[x:(Integer tor String)][String]["ok"]] g "a"	'ok'	…and its second
+def g fn [[x:(Integer tor String)][String]["ok"]] g true	ERROR:no matching signature	…and rejects everything outside the union
+def g fn [[x:(Integer tor String)][String]["dis"] [x:Integer][String]["int"]] g 1	'dis'	a disjunct sig outranks a bare leaf sig for a value both admit
+def g fn [[x:Integer][String]["int"] [x:(Integer tor String)][String]["dis"]] g 1	'dis'	…independent of listing order — the sort decides
+#
+# §7  module FnDef wrappers — an unmatched call fails as uncalled_function
+import "aql:math-util" MathUtil.min 3 5	3	a module word dispatches like a native
+import "aql:math-util" MathUtil.min "a" "b"	ERROR:uncalled_function	unmatched module-fn call is left as data and reported distinctly from [aql/signature_error]

@@ -1,0 +1,129 @@
+# AQL Language Specification: type-system edge cases 3 — generic
+# instantiation identity, invariance, bounds; class sealing + the
+# nominal Class root
+# Format: input<TAB>expected<TAB>description
+#
+# Companion to generics.tsv / generics-sugar.tsv (schemas) and
+# class.tsv (sealed records). Here the EDGES are pinned: instantiation
+# identity across spellings and schemas, strict invariance in both
+# directions, bound admission per bound kind, loud arity/unbound
+# errors, and the sealed-class contract on generic instantiations and
+# subclass chains.
+#
+# Runs against the production lang registry (test/go/langspec).
+
+
+# ====================================================================
+# §1  instantiation identity — one node per (schema, canonical args)
+# ====================================================================
+def Box gen [T] class {v:T} end (Box of [Integer]) teq (Box of [Integer])	true	two mentions of one CLASS instantiation are one node
+def Box gen [T] class {v:T} end (Box of [Integer]) teq (Box of [String])	false	sibling instantiations are distinct types
+def Box gen [T] class {v:T} end Box<Integer> teq (Box of [Integer])	true	the angle sugar and the canonical `of` spelling mint the SAME node
+def Box gen [T] class {v:T} end Box<Integer> teq Box<Integer>	true	…and the sugar memoises with itself
+def Box gen [T] class {v:T} def Cox gen [T] class {v:T} end (Box of [Integer]) teq (Cox of [Integer])	false	same shape, different schema — identity is per schema, not structural
+def Pos (Integer gt 0) def H gen [(T extends Pos)] class {x:T} end (H of [Pos]) teq (H of [(Integer gt 0)])	true	type arguments CANONICALISE: the named refinement and its interned node instantiate identically
+
+
+# ====================================================================
+# §2  invariance — Box<Integer> and Box<Number> never mix, either way
+# ====================================================================
+def Box gen [T] class {v:T} end def b:(Box of [Integer]) {v:1} b is (Box of [Integer])	true	an instance is its exact instantiation
+def Box gen [T] class {v:T} end def b:(Box of [Integer]) {v:1} b is (Box of [Number])	false	…and NOT the wider one — no covariance
+def Box gen [T] class {v:T} end def b:(Box of [Number]) {v:1} b is (Box of [Integer])	false	…and the wider instance is not the narrower one — no contravariance either
+def Box gen [T] class {v:T} end def b:(Box of [Integer]) {v:1} b is Box	true	the bare schema name means "any instantiation"
+def Box gen [T] class {v:T} end 5 is Box	false	…but still rejects non-members
+def Box gen [T] class {v:T} def f fn [[x:(Box of [Number])] [Integer] [1]] end f (make (Box of [Integer]) {v:1})	ERROR:signature	param dispatch is invariant too: a Box<Integer> is refused at a Box<Number> slot
+def Box gen [T] class {v:T} def f fn [[x:(Box of [Integer])] [Integer] [x dot v]] end f (make (Box of [Integer]) {v:7})	7	…while the exact instantiation dispatches
+
+
+# ====================================================================
+# §3  bounds — `extends` checks the type ARGUMENT at instantiation,
+#     and the substituted field type checks VALUES at make
+# ====================================================================
+def H gen [(T extends Number)] class {x:T} end (make (H of [Float]) {x:1.5}) dot x	1.5	a lattice bound admits a subtype argument
+def H gen [(T extends Number)] class {x:T} end H of [String]	ERROR:constraint_violation	…and rejects a foreign family loudly
+def H gen [(T extends Number)] class {x:T} end H of [Boolean]	ERROR:constraint_violation	Boolean is not a Number — the bound names the violation
+def H gen [(T extends Number)] class {x:T} end H of [Never]	ERROR:constraint_violation	Never does not satisfy a lattice bound either
+# predicate bound
+def H gen [(T extends (Integer gt 0))] class {x:T} end (make (H of [(Integer gt 5)]) {x:7}) dot x	7	a predicate bound admits a tighter refinement argument
+def H gen [(T extends (Integer gt 0))] class {x:T} end H of [String]	ERROR:constraint_violation	…and rejects a foreign family
+def H gen [(T extends (Integer gt 0))] class {x:T} end make (H of [(Integer gt 5)]) {x:3}	ERROR:does not satisfy DepScalar bounds	the SUBSTITUTED field predicate still runs on values at make
+# newtype bound
+def P (refine Integer) def H gen [(T extends P)] class {x:T} end (make (H of [P]) {x:(make P 1)}) dot x	1	a newtype bound admits the newtype itself
+def P (refine Integer) def H gen [(T extends P)] class {x:T} end H of [String]	ERROR:constraint_violation	…and rejects a foreign family
+# generic FN bounds run at dispatch
+def f gen [(T extends (Integer gt 0))] fn [[x:T] [T] [x]] f 5	5	a generic fn's predicate bound admits a satisfying argument
+def f gen [(T extends (Integer gt 0))] fn [[x:T] [T] [x]] f 'hi'	ERROR:signature	…and refuses dispatch on a foreign family
+def f gen [(T extends Number)] fn [[x:T] [T] [x]] f 2.5	2.5	a lattice bound admits any Number leaf
+def f gen [(T extends Number)] fn [[x:T] [T] [x]] f 'hi'	ERROR:signature	…and refuses a non-Number
+
+
+# ====================================================================
+# §4  arity — wrong argument counts are loud, and defaults fill
+# ====================================================================
+def Box gen [T] class {v:T} end Box of [Integer String]	ERROR:arity_mismatch	too many arguments for a class schema
+def Box gen [T] class {v:T} end Box<Integer, String>	ERROR:arity_mismatch	…through the angle sugar too
+def Pair gen [K V] class {k:K v:V} end Pair of [Integer]	ERROR:no default for V	too few — the error NAMES the unfilled parameter
+def R gen [(T default Integer)] class {x:T} end (R of []) teq (R of [Integer])	true	a default fills a zero-argument instantiation
+def R gen [(T default Integer)] class {x:T} end (make (R of []) {x:5}) dot x	5	…and the defaulted instantiation constructs
+
+
+# ====================================================================
+# §5  inference — unbound parameters are loud, never silent Any
+# ====================================================================
+def Q gen [T] class {} end make Q {}	ERROR:unbound_param	an empty body gives NO evidence — loud, names the parameter's schema
+def Q gen [T U] class {a:T b:U} end (make Q {a:1 b:'x'}) typeof	Q of [Integer ProperString]	full evidence infers every parameter
+
+
+# ====================================================================
+# §6  the sealed-class contract — on plain classes, generic
+#     instantiations, and subclass chains alike
+# ====================================================================
+# generic instantiations keep the full class contract
+def Box gen [T] class {v:T} end make (Box of [Integer]) {w:1}	ERROR:unknown field	make rejects an undeclared field on an instantiation
+def Box gen [T] class {v:T} end make (Box of [Integer]) {v:'no'}	ERROR:expected Integer	make rejects a wrong-typed field — the SUBSTITUTED type is enforced
+def Box gen [T] class {v:T} end (make (Box of [Integer]) {v:1}) set v 'x'	ERROR:expected Integer	set enforces the same substituted type (type_error)
+def Box gen [T] class {v:T} end (make (Box of [Integer]) {v:1}) set w 2	ERROR:sealed_field	set on an UNDECLARED field is the distinct sealed_field error
+def Box gen [T] class {v:T} end def b (make (Box of [Integer]) {v:1}) b set v 9 end b.v	9	a conforming write lands
+# predicate-typed fields run their predicate at make AND set
+def Big (Integer gt 10) def S class {x:Big} (make S {x:50}) dot x	50	a named-refinement field admits a passing raw value at make (subset semantics)
+def Big (Integer gt 10) def S class {x:Big} make S {x:5}	ERROR:does not satisfy DepScalar bounds	…and rejects a failing one at make
+def Big (Integer gt 10) def S class {x:Big} def s (make S {x:50}) s set x 5	ERROR:does not satisfy DepScalar bounds	…and at set
+def Big (Integer gt 10) def S class {x:Big} def s (make S {x:50}) s set x 99 end s.x	99	…while a passing write lands
+# the nominal root: instances live under Class — there is no Object root
+def C class {x:1} (make C {}) is Object	ERROR:undefined word	the legacy Object root is GONE — the name does not resolve at all
+def C class {x:1} (make C {}) is Class	true	instances root under Class
+def C class {x:1} (make C {}) is Map	false	…and are not Maps, despite the map-shaped schema
+def C class {x:1} (make C {}) is Any	true	…but are members of Any like everything else
+# subclass chains — flat fields, nominal widening, sealing end-to-end
+def P class {x:1} def P2 refine P {y:2} def P3 refine P2 {z:3} (make P3 {}) is P	true	a three-level chain widens to the root class
+def P class {x:1} def P2 refine P {y:2} def P3 refine P2 {z:3} (make P3 {}) dot x	1	…and inherits the root default flat
+def P class {x:1} def P2 refine P {y:2} def P3 refine P2 {z:3} (make P3 {}) set w 1	ERROR:sealed_field	sealing covers the whole three-level field set
+def P class {x:1} def P2 refine P {y:2} def g fn [[p:P] [Integer] [p.x]] g (make P2 {})	1	a subclass instance dispatches at a parent-class param
+# (dropped) subclass-predicate mismatch dispatch recovery refuses (sound fallback); out of corpus for gate purity
+# a child cannot redeclare a parent field with a CONFLICTING default/type
+def P class {x:1} def P2 refine P {x:5} 1	ERROR:cannot expand parent type	a different same-name default conflicts with the parent contract
+def P class {x:1} def P2 refine P {x:'hi'} 1	ERROR:cannot expand parent type	…and so does a foreign-family redeclaration
+def P class {x:1} def P2 refine P {x:1} (make P2 {}) dot x	1	an IDENTICAL redeclaration unifies and is allowed
+def P class {x:Integer} def P2 refine P {x:1} (make P2 {}) dot x	1	…as is narrowing a required Integer field to a concrete default
+
+
+# ====================================================================
+# §7  an ALIAS of an instantiation works in fn signature slots
+#     (a plain name where the paren form would not resolve as a type)
+# ====================================================================
+def Box gen [T] class {v:T} def BoxI (Box of [Integer]) def mk fn [[] [BoxI] [make BoxI {v:1}]] end (mk) typeof	BoxI	an aliased instantiation is a first-class return type
+def Box gen [T] class {v:T} def BoxI (Box of [Integer]) def mk fn [[] [BoxI] [42]] end mk	ERROR:return value 1: expected BoxI, got Integer	…that rejects a raw value
+def Box gen [T] class {v:T} def BoxI (Box of [Integer]) def BoxS (Box of [String]) def mk fn [[] [BoxI] [make BoxS {v:'s'}]] end mk	ERROR:return value 1: expected BoxI, got BoxS	…and a sibling instantiation, naming both
+def Box gen [T] class {v:T} def BoxI (Box of [Integer]) def g fn [[b:BoxI] [Integer] [b.v]] end g (make BoxI {v:7})	7	…and dispatches as a param type
+def Box gen [T] class {v:T} def BoxI (Box of [Integer]) def BoxS (Box of [String]) def g fn [[b:BoxI] [Integer] [1]] end g (make BoxS {v:'s'})	ERROR:signature	…rejecting the sibling instantiation at the param
+
+
+# ====================================================================
+# §8  a NEWTYPE as a type argument — nominal strictness flows through
+#     the instantiation into fields and membership
+# ====================================================================
+def Box gen [T] class {v:T} def P (refine Integer) end def b:(Box of [P]) {v:(make P 1)} b typeof	Box of [P]	a newtype argument names the instantiation
+def Box gen [T] class {v:T} def P (refine Integer) end (make (Box of [P]) {v:(make P 7)}) dot v	7	a tagged value constructs the field
+def Box gen [T] class {v:T} def P (refine Integer) end make (Box of [P]) {v:'x'}	ERROR:expected P	a foreign family is refused at the substituted newtype field
+def Box gen [T] class {v:T} def P (refine Integer) end def b (make (Box of [Integer]) {v:1}) b is (Box of [P])	false	Box<Integer> is not Box<P> — invariance is nominal all the way down

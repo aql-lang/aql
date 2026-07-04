@@ -1,0 +1,144 @@
+# edge-containers-3.tsv — ACCESSOR edge cases (get/getr/dot/dotr/!.
+# over maps, lists, flex nodes, instances, None) and iteration edges
+# (each/fold/filter/scan over empty and single-element containers,
+# KeyVal shapes, nested traversals), plus container-in-literal
+# embedding rules.
+#
+# Accessor law (lang/spec/accessor.tsv): get/dot are FORGIVING (None
+# on a miss), getr/dotr are STRICT (raise). The edges pinned here:
+# what exactly a miss means per container (missing key, out-of-bounds
+# index, negative index, wrong-typed key), and the None-propagation
+# cliffs — a bare-word dot key is only quoted while the receiver can
+# be dispatched, so a SECOND dot after a None result is an
+# undefined-word error, not None.
+
+# ====================================================================
+# §1  forgiving get/dot — the shapes of a miss
+# ====================================================================
+
+{} get 'a'	None	empty map: miss is None
+(flex {}) get 'a'	None	empty FlexMap too
+(flex {a:1}) get 'zz'	None	FlexMap missing key
+(flex [1]) get 5	None	FlexList out of bounds is a forgiving None
+{a:1} get 0	None	an INTEGER key on a map is a miss, not an error
+{a:1} dot b	None	dot with a missing bare-word key
+def P class {x:1} (make P {}) get 'zzz'	None	class instances are SEALED for writes but FORGIVING for reads
+def P class {x:1} (make P {}) dot zzz	None	dot form of the missing-field read
+def P class {x:1} (make P {}) get x/q	1	atom key reads an instance field
+def P class {x:{y:2}} def p (make P {}) p.x.y	2	a nested container default is reachable by a dot chain
+
+# ====================================================================
+# §2  strict getr/dotr — the same misses raise
+# ====================================================================
+
+(flex [1]) getr 5	ERROR:out of bounds	strict out-of-bounds on a FlexList
+(flex {a:1}) getr 'zz'	ERROR:not_found	strict missing key on a FlexMap
+(flex {a:1}) dotr a	1	strict hit on a FlexMap
+(flex [7 8])!.1	8	the !. sugar over a FlexList
+[10 20] getr -1	ERROR:out of bounds	negative index is strictly out of bounds
+[10 20] getr (1 sub 1)	10	a computed strict index evaluates first
+[7] getr 0	7	strict boundary hit at index 0
+{a:{b:2}} getr 'a' getr 'b'	2	strict reads chain
+{a:1} getr a/q	1	strict atom key
+[5 6] dotr 1	6	dotr takes a literal integer index on a list
+[5 6] dotr 9	ERROR:out of bounds	…strictly
+[1 2 3] getr 'x'	ERROR:expected a map	a STRING key against a list is a container-shape error
+[1 2 3] get 1.0	ERROR:signature	a FLOAT index matches no get signature — indices are Integers
+
+# ====================================================================
+# §3  None propagation and its cliffs
+# ====================================================================
+
+{}.a	None	missing field via the . sugar
+{a:{}}.a.b	None	ONE missing level is forgiving
+{a:{}}.a.b.c	ERROR:undefined word	…but a dot on the resulting None stops quoting its bare key — `c` evaluates as a word
+None.a	ERROR:undefined word	the . sugar directly on None has no receiver to quote against
+None getr 'a'	ERROR:not_found	strict read on None raises (parent is None)
+None dotr x	ERROR:undefined word	dotr on None does not quote the bare key either
+{a:{b:{c:5}}}.a!.b.c	5	a strict middle segment passes when present
+{a:{}}.a!.z	ERROR:not_found	…and raises exactly at the missing segment
+{a:{b:1}}!.a!.b	1	all-strict chains work
+{a:[1]}.a!.k	ERROR:expected a map	a strict string segment against a LIST value
+{a:[{b:7}]} get 'a' get 0 get 'b'	7	mixed key kinds chain across map/list/map
+{a:[{b:7}]}.a.0.b	ERROR:invalid numeric literal	`.0.b` lexes as a malformed float — dot chains cannot take bare integer segments
+def i 1 [[1 2] [3 4]] get i get 0	3	evaluated index into a nested list
+[5 6] dot 1	6	dot accepts a literal integer index
+def k 'a' {a:1} get (k)	1	computed string key
+def k b/q {a:1 b:5} get k	5	an atom-valued binding as key
+[10 20] get (0 add 1)	20	computed integer key
+def m {a:1} m dot (quote a)	1	a materialised atom key for dot
+(flex {a:{b:3}}).a.b	3	dot chains descend through nested flex maps
+
+# ====================================================================
+# §4  iteration over EMPTY and single-element containers
+# ====================================================================
+
+each [add 1] []	[]	each over the empty list
+each [add 1] {}	{}	…and the empty map
+each [mul 2] [5]	[10]	single element
+each [mul 2] (flex {a:2})	{a:4}	each over a FlexMap yields a plain map
+fold [add] [] 0	0	an explicit seed survives the empty list
+fold [add] {} 0	0	…and the empty map
+fold [add] []	ERROR:empty list with no initial value	no-init fold over the empty list is a loud error
+{} fold [add]	ERROR:empty map with no initial value	…map form too (stack form)
+fold [add] [7]	7	no-init fold over a singleton is the element
+fold [add] {a:7}	7	…map form
+{a:1 b:2} fold [add]	3	no-init map fold from the first value
+filter [0 gt] []	[]	filter over empty list
+filter [0 gt] {}	{}	filter over empty map
+filter ([p:Any] => [p.value gt 0]) []	[]	lambda filter over empty list
+filter [9 gt] [1 2]	[]	a filter may empty the list entirely
+scan [add] {}	{}	scan over the empty map
+scan [add] [5]	[5]	scan over a singleton is its seed
+scan [add] {a:2 b:3}	{a:2 b:5}	map scan carries the running value through the entries
+scan [mul] (flex [2 3])	[2 6]	scan reads a FlexList like a list
+
+# ====================================================================
+# §5  KeyVal — the map-iteration carrier (k, v, i, n)
+# ====================================================================
+
+{a:1} each ([kv:KeyVal] => [kv.k])	{a:'a'}	kv.k is the entry key (as a String)
+{a:5} each ([kv:KeyVal] => [kv.v])	{a:5}	kv.v is the value
+{a:5 b:6} each ([kv:KeyVal] => [kv.i])	{a:0 b:1}	kv.i is the 0-based iteration index
+{a:5 b:6} each ([kv:KeyVal] => [kv.n])	{a:2 b:2}	kv.n is the total entry count
+0 fold ([acc:Integer kv:KeyVal] => [acc add kv.v]) {a:1 b:2}	3	the fold lambda receives (accumulator, KeyVal)
+{a:1 b:5} filter ([kv:KeyVal] => [kv.i eq 0])	{a:1}	filtering on the iteration index keeps the first entry
+{} each ([kv:KeyVal] => [kv.v])	{}	the lambda never runs over an empty map
+
+# ====================================================================
+# §6  iteration shape errors and nesting
+# ====================================================================
+
+each ([x:Integer] => [x add 1]) [1]	ERROR:signature	a LAMBDA over a LIST is not an each signature — lambdas pair with maps, lists take quotations
+each [mul 2] 'x'	ERROR:signature	strings are not collections
+each [drop] [1]	ERROR:body produced no result	a list body must yield a value per element
+each [drop] {a:1}	ERROR:body produced no result	…map bodies too
+filter [add 1] [1]	ERROR:must produce a Boolean	a filter body yielding a non-Boolean is loud
+[[1 2] [3 4]] each [each [mul 2]]	[[2 4] [6 8]]	quotation eaches nest
+[[] []] each [size]	[0 0]	inner empties traverse fine
+
+# ====================================================================
+# §7  container literals EMBED live values — no snapshot, no copy
+# ====================================================================
+
+def iv (flex [1]) typeof ([iv] get 0)	FlexList	a flex value in a LIST LITERAL stays flex (contrast: plain-list push snapshots)
+def iv (flex [1]) def l [iv] ((l get 0) eq iv)	true	…the literal holds the very node
+def iv (flex [1]) def l [iv] push 2 iv drop l get 0	(flex [1 2])	…so later mutation of the handle shows through the list
+def iv (flex [1]) def m {a:iv} push 2 iv drop m get 'a'	(flex [1 2])	map literals embed the live handle too
+def iv (flex {z:1}) def l [iv] set z 9 (l get 0) end iv	(flex {z:9}) (flex {z:9})	mutating THROUGH the literal view mutates the one node
+{a:1 a:2}	{a:2}	a duplicate literal key: the LAST value wins, one entry results
+context set 'l' [1 2] end (context get 'l') eq (context get 'l')	true	a Store holds the container HANDLE — two reads, one container
+context set 'f' (flex []) end push 1 (context get 'f') drop context get 'f'	(flex [1])	a flex node in the store is live — mutation persists across reads
+
+# ====================================================================
+# §8  ordering words on maps
+# ====================================================================
+
+keys {b:1 a:2}	['a' 'b']	keys come out SORTED, not in insertion order
+keys ({b:1 a:2} set c 3)	['a' 'b' 'c']	…including after a copy-returning set
+keys (set c/q 3 (flex {a:1}))	['a' 'c']	…and over a mutated FlexMap
+sort {b:2 a:1}	{a:1 b:2}	sort on a map orders by key
+def m {b:1} (sort m) eq m	false	…returning a fresh map, not the receiver
+size (flex {a:1})	1	size of a FlexMap counts entries
+size None	0	None is empty — size 0
+(make Pathon ['a']) eq (make Pathon ['a'])	true	Pathon is a SCALAR family — eq is value equality, not container identity

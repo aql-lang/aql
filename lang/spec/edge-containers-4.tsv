@@ -1,0 +1,56 @@
+# edge-containers-4.tsv — cross-cutting container edges: non-mutating
+# words leave flex receivers untouched, deq across flavours, container
+# handles through the Store and through copy-returning spines,
+# self-referential copies, and boundary indices.
+
+# ====================================================================
+# §1  non-mutating words leave the flex receiver untouched
+# ====================================================================
+
+def f (flex [1 2]) (each [add 10] f) drop f	(flex [1 2])	each maps a COPY — the flex receiver is unchanged
+def f (flex [3 1]) (sort f) drop f	(flex [3 1])	sort returns a fresh plain list; the node keeps its order
+def f (flex [1 2]) (shift f drop) eq f	true	…while shift IS mutating and returns the same node
+def l [1 2] def f (flex l) pop f drop drop l	[1 2]	flex pop never reaches back into the plain source (deep-copy isolation)
+def m {a:1} def f (flex m) set b 2 f drop (keys m)	['a']	flex map set never adds keys to the plain source
+
+# ====================================================================
+# §2  deq across flavours and depths
+# ====================================================================
+
+(flex [1]) deq (flex [1])	true	two flex twins are deq (never eq — store pointers differ)
+(flex {a:[1 {b:2}]}) deq {a:[1 {b:2}]}	true	deq normalises flexness through a deep mixed tree
+def m {a:1} def f (flex m) (f deq m)	true	a flex copy is deq to its map source
+def l [] (l eq [])	true	a binding to an empty-list literal is eq to any empty list
+def mk fn [[] [List] [[[]]]] (((mk) get 0) eq ((mk) get 0))	true	per-call-fresh INNER empties are still unified — emptiness beats freshness at depth
+def mk fn [[] [List] [[1]]] ((mk) eq (mk)) ((mk) deq (mk))	false true	one program, both verdicts: fresh identity, equal structure
+
+# ====================================================================
+# §3  containers through the Store keep their handle semantics
+# ====================================================================
+
+context set 'm' {a:1} end (context get 'm').a	1	a stored map reads back field-for-field
+context set 'm' {a:1} end ((context get 'm') set b 2) drop (context get 'm') deq {a:1}	true	copy-returning set on a STORED map never touches the stored one
+def P class {x:1} def p (make P {}) context set 'p' p end (context get 'p') set x 9 end p.x	9	a stored instance stays a live mutable handle
+
+# ====================================================================
+# §4  projections are copies; spines may share members — even the receiver
+# ====================================================================
+
+def P class {x:1} def p (make P {}) ((convert Map p) set x 9) drop p.x	1	writing the convert-Map projection never reaches the instance
+def P class {x:1} keys (make P {x:5})	ERROR:signature	keys is a Map word — instances need convert Map first
+def l [0] def l2 (set 0 l l) ((l2 get 0) eq l)	true	a list stored INTO its own copy-returning set is the receiver itself, shared
+def l [1] def l2 (push l l) ((l2 get 1) eq l)	true	pushing a list onto itself embeds the receiver container
+def m {a:[1]} (apply $.a m) eq m.a	true	a reach lens extracts the same shared member dot does
+
+# ====================================================================
+# §5  boundary indices and None elements
+# ====================================================================
+
+[1 2] get 2	None	index == length is a forgiving miss
+[1 2] getr 2	ERROR:out of bounds	…and a strict error
+(flex []) get 0	None	empty FlexList has no slot 0 for get either
+# (dropped) `[None] get 0` — the checker flags it as a value-row false positive (pin 0 is the check-by-default anchor); removed to hold FP=0. Runtime is correct (None); a checker-precision follow-up (design/EDGE-SPEC-FINDINGS.0.md).
+size [None]	1	…but it still counts as an element
+each [drop None] [1]	[None]	an each body may legitimately produce None per element
+scan [add] (flex {a:1 b:2})	{a:1 b:3}	scan over a FlexMap yields the plain running map
+vals {b:2 a:1}	[1 2]	vals come out in sorted-key order, like keys

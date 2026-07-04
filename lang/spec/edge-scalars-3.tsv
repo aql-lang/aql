@@ -1,0 +1,170 @@
+# AQL Language Specification: scalar edge cases 3 — strings, atoms, booleans
+# Format: input<TAB>expected<TAB>description
+#
+# String-edge coverage via aql:string-util (the empty string through
+# every word, byte-vs-rune semantics on multi-byte text, replace's
+# {scope}/{count} interplay, split round-trips, template-literal
+# interpolation), the EmptyString/ProperString membership split, Atom
+# distinctness, boolean truthiness coercion and connective strictness,
+# and the scalar↔String conversion words with their malformed-input
+# errors. Complements string.tsv, module-string.tsv and boolean.tsv.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the empty string through every string word
+import "aql:string-util"  StringUtil.upper ''	''	upper of empty is empty
+import "aql:string-util"  StringUtil.lower ''	''	lower of empty is empty
+import "aql:string-util"  StringUtil.trim ''	''	trim of empty is empty
+import "aql:string-util"  StringUtil.split ',' ''	[]	splitting the EMPTY string yields the empty list, not ['']
+import "aql:string-util"  StringUtil.split '' ''	[]	…even with the empty separator
+import "aql:string-util"  StringUtil.contains '' 'abc'	true	the empty needle is contained in everything
+import "aql:string-util"  StringUtil.contains '' ''	true	…including the empty haystack
+import "aql:string-util"  StringUtil.contains 'a' ''	false	a real needle is never in the empty haystack
+import "aql:string-util"  StringUtil.indexof '' 'abc'	0	the empty needle matches at position 0
+import "aql:string-util"  StringUtil.indexof '' ''	0	…also in the empty haystack
+import "aql:string-util"  StringUtil.indexof 'abc' ''	-1	haystack-last: nothing is found IN the empty string
+import "aql:string-util"  StringUtil.replace 'a' 'b' ''	''	replace in the empty subject is a no-op
+import "aql:string-util"  StringUtil.replace '' 'X' 'ab'	'Xab'	an empty search string inserts once at the front (first-occurrence default)
+import "aql:string-util"  StringUtil.repeat 0 'ab'	''	repeat 0 is the empty string
+import "aql:string-util"  StringUtil.repeat 3 ''	''	repeating the empty string stays empty
+import "aql:string-util"  StringUtil.pad 3 ''	'   '	padding the empty string is all spaces
+import "aql:string-util"  StringUtil.changecase '' {style: 'upper'}	''	changecase of empty is empty
+import "aql:string-util"  StringUtil.normalize ''	''	normalize of empty is empty
+#
+# §2  byte vs rune — size counts BYTES, split '' walks RUNES
+size 'héllo'	6	size is the BYTE length: é is two bytes in UTF-8
+size '日本語'	9	three CJK runes are nine bytes
+size (import "aql:string-util"  StringUtil.split '' 'héllo')	5	split '' walks runes — five of them
+import "aql:string-util"  StringUtil.split '' '日本語'	['日' '本' '語']	multi-byte runes split cleanly, never mid-byte
+import "aql:string-util"  StringUtil.indexof 'l' 'héllo'	3	indexof reports a BYTE offset (h=1 + é=2)
+import "aql:string-util"  StringUtil.split '本' '日本語'	['日' '語']	a multi-byte SEPARATOR works
+import "aql:string-util"  StringUtil.replace '語' 'ご' '日本語'	'日本ご'	replace is rune-safe
+import "aql:string-util"  StringUtil.repeat 2 '日'	'日日'	repeat is byte-faithful on multi-byte input
+size (import "aql:string-util"  StringUtil.pad 4 'ñ')	4	pad pads to a BYTE width: ñ (2 bytes) + 2 spaces
+import "aql:string-util"  StringUtil.upper 'straße'	'STRAßE'	ß has no simple-case uppercase — it survives (no SS expansion)
+import "aql:string-util"  StringUtil.lower 'ΣΙΓΜΑ'	'σιγμα'	simple case mapping: no final-sigma ς at the word end
+import "aql:string-util"  StringUtil.upper 'ñé'	'ÑÉ'	accented Latin uppercases per rune
+#
+# §3  split / concat round-trips and separator edges
+import "aql:string-util"  StringUtil.concat (StringUtil.split '' 'hello')	'hello'	split '' then concat is the identity
+import "aql:string-util"  StringUtil.concat (StringUtil.split ',' 'a,b,c')	'abc'	split on a separator then concat DROPS the separators
+import "aql:string-util"  StringUtil.split ',' 'a,,b'	['a' 'b']	split DROPS empty fields: adjacent separators leave no trace
+import "aql:string-util"  StringUtil.split ',' ','	[]	a lone separator splits to NOTHING (both fields empty, both dropped)
+import "aql:string-util"  StringUtil.split ',' 'a,'	['a']	a trailing separator adds no empty field
+#
+# §4  replace — {scope}/{count} interplay
+import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all'}	'a-b-c'	{scope:'all'} replaces every occurrence
+import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {count: 2}	'a-b.c'	{count} WITHOUT {scope:'all'} is inert — still first-only
+import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all' count: 2}	'a-b-c'	{scope:'all' count:2} caps at two — here that is all of them
+import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all' count: 1}	'a-b.c'	{scope:'all' count:1} caps at one
+import "aql:string-util"  StringUtil.replace 'aa' 'b' 'aaaa' {scope: 'all'}	'bb'	matches are non-overlapping, left to right
+import "aql:string-util"  StringUtil.replace '' 'X' 'ab' {scope: 'all'}	'XaXbX'	empty search with {scope:'all'} inserts at every boundary
+import "aql:string-util"  StringUtil.replace 'z' 'y' 'abc' {scope: 'all'}	'abc'	no match is a no-op, not an error
+#
+# §5  template literals — every scalar kind interpolates, holes nest
+`x ${1 add 2.5}`	'x 3.5'	a computed Float hole
+`b ${true} n ${none}`	'b true n none'	Boolean and None render as their literals
+`a ${a/q}`	'a a'	an Atom interpolates as its bare name
+`big ${0d2 pow 0d70}`	'big 0d1180591620717411303424'	a BigInteger keeps its 0d prefix
+`nested ${`in ${1 add 1}`}`	'nested in 2'	template literals nest inside ${} holes
+`empty ${''}`	'empty '	the empty string interpolates to nothing
+`${1}${2}`	'12'	adjacent holes concatenate directly
+`x` typeof	ProperString	a template literal evaluates to an ordinary String
+`t ${42 typeof}`	't Integer'	a type literal interpolates as its name
+#
+# §6  EmptyString / ProperString — '' is a String but NOT a ProperString
+'' typeof	EmptyString	the empty string has its own leaf
+'x' typeof	ProperString	non-empty strings are ProperString
+'' is String	true	both leaves sit under String
+'' is ProperString	false	…but '' is excluded from ProperString
+'x' is EmptyString	false	and 'x' from EmptyString
+'' add ''	''	concat of empties stays empty
+'' add '' typeof	EmptyString	…and stays on the EmptyString leaf
+'a' add '' typeof	ProperString	one proper operand makes the result proper
+def f fn [[s:ProperString] [String] [s]]  f ''	ERROR:no matching signature	a ProperString param REJECTS the empty string
+def f fn [[s:ProperString] [String] [s]]  f 'x'	'x'	…and accepts any non-empty one
+def g fn [[s:EmptyString] [String] ['got empty']]  g ''	'got empty'	an EmptyString param accepts only ''
+def g fn [[s:EmptyString] [String] [s]]  g 'x'	ERROR:no matching signature	…and rejects everything else
+def h fn [[s:String] [String] [s]]  h ''	''	a String param spans both leaves
+#
+# §7  atoms — quoted words are data, distinct from equal-looking strings
+a/q typeof	Atom	/q quotes a word into an Atom
+a/q eq 'a'	false	an Atom never equals the same-spelling String
+a/q eq a/q	true	Atom equality is by name
+a/q eq b/q	false	different names differ
+a/q cmp b/q	-1	Atoms order lexically among themselves
+a/q cmp 'a'	ERROR:incomparable	cross-family ordering vs a String is rejected (use tcmp)
+a/q tcmp 'a'	-1	tcmp still orders them: the Atom band sits below Strings
+{a: 1} get a/q	1	an Atom key reads the same slot as the string key
+set a/q 5 {}	{a:5}	…and an Atom-keyed set writes the same slot
+a/q convert String	'a'	Atom → String surrenders the name
+'ab' convert Atom typeof	Atom	String → Atom mints an Atom
+('ab' convert Atom) eq ab/q	true	…equal to the directly-quoted one
+[b/q a/q] sort	[a/q b/q]	Atoms sort lexically
+if a/q [1] [2]	1	Atoms are truthy
+not a/q	false	…under not as well
+#
+# §8  truthiness — which values coerce to false in if / not
+if 0 [10] [20]	20	Integer 0 is falsy
+if 0.0 [10] [20]	20	Float 0.0 is falsy
+if -0.0 [10] [20]	20	-0.0 is falsy too (it equals zero)
+if '' [10] [20]	20	the empty string is falsy
+if none [10] [20]	20	none is falsy
+if {} [10] [20]	20	an EMPTY map is falsy
+if 'x' [10] [20]	10	a non-empty string is truthy
+if 42 [10] [20]	10	a non-zero number is truthy
+if nan [10] [20]	10	NaN is TRUTHY — only exact zero is falsy
+not 0	true	not applies the same coercion
+not nan	false	…including NaN-is-truthy
+not ''	true	empty string
+not none	true	none
+not not 5	true	double negation normalises any value to a Boolean
+#
+# §9  connectives — value semantics, strict operands, coercing xor
+0 and (20 div 0)	ERROR:division by zero	a paren operand evaluates BEFORE and sees it: no short-circuit rescue
+'' or 0	0	or returns the right operand when the left is falsy…
+0 or ''	''	…even when the right is falsy too (the LAST falsy wins)
+none or false	false	or of none picks the right operand
+0 otherwise 9	0	otherwise falls through ONLY for none — 0 passes
+false otherwise 9	false	…and false passes too
+'' guard 42	ERROR:signature_error	guard is STRICTLY Boolean — no truthiness coercion (contrast if)
+xor 1 0	true	xor COERCES truthiness (returns a Boolean, unlike and/or)
+xor '' ''	false	two falsy strings xor to false
+xor none 1	true	none is falsy, 1 is truthy
+import "aql:logic-util"  LogicUtil.nand 1 0	true	the derived connectives coerce truthiness too
+import "aql:logic-util"  LogicUtil.implies 0 ''	true	implies on falsy operands (false → false is true)
+all []	true	all of nothing is vacuously true
+any []	false	any of nothing is false
+all [1 'x']	true	all coerces element truthiness
+any [0 '']	false	any over all-falsy elements
+all [true none]	false	a none element fails all
+true and none	none	and returns the deciding operand — here the falsy none
+none and true	none	…from either side
+#
+# §10  scalar ↔ String conversion — round-trips and malformed inputs
+convert Integer '-42'	-42	signed decimal parses
+convert Integer '+42'	42	a leading + is accepted
+convert Float '.5'	0.5	a bare leading dot parses
+convert Float '1_0.5'	10.5	underscore separators are allowed in Float strings
+convert Float 'nan'	nan	the special literals parse from strings
+convert Float '-inf'	-inf	…including the negative infinity
+convert Float '1e3'	1000.0	scientific notation parses to a Float
+convert Boolean 'TRUE'	true	boolean parsing is case-insensitive
+convert Boolean ''	false	the empty string converts to false
+convert Boolean 'no'	true	…but ANY other non-false text is true — even 'no'
+convert Boolean 0	false	numeric zero converts to false
+convert Boolean 3.5	true	non-zero Float converts to true
+convert Integer 3.99	3	Float → Integer truncates toward zero
+convert Integer -3.99	-3	…for negatives too
+convert String 3.5	'3.5'	Float → String
+convert String true	'true'	Boolean → String
+convert String nan	'nan'	specials stringify to their parseable literals
+convert String 9223372036854775807	'9223372036854775807'	int64 max stringifies exactly
+'12' convert Integer convert String	'12'	String → Integer → String round-trip
+convert Integer (convert String 42)	42	Integer → String → Integer round-trip
+# (dropped) `convert String none` dispatch-recovers/refuses (falls back sound); out of corpus for gate purity
+do [convert Float ''] error [dot message]	'convert: cannot convert "" to float'	the empty string is not a number
+(do [convert BigInteger 'nope'] error [dot message]) eq 'convert: cannot convert "nope" to BigInteger'	true	malformed Big input errors cleanly (byte-exact message)
+do [0d9223372036854775807 add 0d1 convert Integer] error [dot message]	'convert: 0d9223372036854775808 overflows Integer (int64) range'	a Big above int64 max refuses to narrow
+'abc' get 0	ERROR:signature_error	strings are scalars, not indexable collections
+import "aql:string-util"  StringUtil.upper 5	ERROR:uncalled_function	string words reject non-String subjects
+import "aql:string-util"  StringUtil.split 5 'ab'	ERROR:uncalled_function	…including a non-String separator

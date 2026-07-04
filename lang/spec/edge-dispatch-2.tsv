@@ -1,0 +1,141 @@
+# AQL Language Specification: Dispatch edge cases 2 — family-restricted
+# ordering vs tcmp totality, type-literal operand ordering, the left-side
+# predicate-construction gotcha, and the equality lattice.
+# Format: input<TAB>expected<TAB>description
+#
+# cmp / lt / lte / gt / gte are FAMILY-RESTRICTED (compare-restrict.tsv):
+# a cross-family pair raises [aql/incomparable]. tcmp is TOTAL: the same
+# pair orders by the unified lattice Rank (compare.tsv). This file walks
+# the frontier BETWEEN those two suites: for each cross-family pair the
+# restricted word errors AND tcmp still answers — plus the asymmetric
+# type-literal rules, where a type literal on the RIGHT of an ordering
+# word is an ordinary operand (literal sorts first within its family),
+# but a type literal on the LEFT of lt/lte/gt/gte CONSTRUCTS a predicate
+# type (a DepScalar) instead of comparing at all.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  cross-family pairs: the restricted word errors, tcmp answers
+1 lt "a"	ERROR:incomparable	Integer vs String: no shared family comparer
+1 tcmp "a"	-1	…but tcmp orders it: Number band before String band
+none cmp 1	ERROR:incomparable	None vs Integer: none joins no scalar family
+none lt 1	ERROR:incomparable	lt refuses the same pair
+none tcmp 1	-1	tcmp: the None root ranks before every scalar
+1 tcmp none	1	…and the mirror flips the sign
+cat/q lt 1	ERROR:incomparable	Atom vs Integer
+cat/q tcmp 1	-1	tcmp: Atom band before Number band
+1 tcmp cat/q	1	mirror
+cat/q lt "a"	ERROR:incomparable	Atom vs String
+cat/q cmp "cat"	ERROR:incomparable	even when the spelling matches, Atom and String stay incomparable
+"a" tcmp cat/q	1	tcmp: String band after Atom band
+2.5 lt "x"	ERROR:incomparable	Float vs String
+2.5 tcmp "x"	-1	tcmp still orders the pair
+{a:1} gt "x"	ERROR:incomparable	Map vs String: Node branch vs Scalar branch
+{a:1} tcmp "x"	1	tcmp: Node branch ranks after the scalar families
+0d2 lt true	ERROR:incomparable	BigInteger vs Boolean
+0d2 tcmp true	1	tcmp: Number band after Boolean band
+0d2 cmp "a"	ERROR:incomparable	BigInteger vs String
+0d2 tcmp "a"	-1	tcmp orders the exact leaf into the Number band
+(make Pathon ["a"]) lt 1	ERROR:incomparable	Pathon vs Integer
+(make Pathon ["a"]) tcmp 1	1	tcmp: the Pathon micron sits after the Number band
+true gt 0	ERROR:incomparable	Boolean vs Integer
+true tcmp 0	-1	tcmp: Boolean band before Number band
+0 tcmp true	1	mirror
+1 gte "a"	ERROR:incomparable	the non-strict orderings are restricted too
+1 lte 1.0	true	…while same-family non-strict admits the cross-leaf magnitude tie
+1 gte 1.0	true	both directions, because 1 and 1.0 tie
+true tcmp cat/q	1	band walk: Atom before Boolean
+cat/q tcmp ""	-1	Atom before String
+5 tcmp Any	1	the degenerate Any root ranks before every concrete
+Any tcmp Never	-1	…and before the other degenerate roots by rank
+#
+# §2  cross-family TYPE LITERAL pairs — same split
+Boolean gt Integer	ERROR:incomparable	two cross-family literals refuse to order
+Boolean tcmp Integer	-1	…but rank by lattice band under tcmp
+Map gt String	ERROR:incomparable	Node-branch literal vs Scalar-branch literal
+Map tcmp List	1	tcmp: List ranks below Map
+String gt Integer	ERROR:incomparable	String literal vs Integer literal
+5 lt String	ERROR:incomparable	concrete value vs cross-family literal
+"a" lt Integer	ERROR:incomparable	mirror pairing errors identically
+#
+# §3  type literal on the RIGHT — an ordinary operand; literal sorts first
+0 gt Integer	true	within the Number family the literal sorts FIRST, so any concrete beats it
+0 lt Integer	false	mirror
+0 gte Integer	true	non-strict agrees
+0 lte Integer	false	a concrete value is never lte its own family literal
+-99 gt Integer	true	even the smallest concrete Integer sorts after the literal
+1.5 gt Integer	true	Float vs Integer literal — the shared Number comparer applies the same rule
+5 gt Number	true	ancestor literal, same family
+5 gt Float	true	sibling leaf literal, still the Number family
+5 lt Float	false	mirror
+"a" gt String	true	String family: literal first
+"" gt String	true	the EmptyString value also beats the String literal
+"" gt EmptyString	true	…and its own exact leaf literal
+true gt Boolean	true	Boolean family
+false gt Boolean	true	both concretes sort after the literal
+cat/q gt Atom	true	Atom family
+typeof (0 gt Integer)	Boolean	right-side literal comparison RETURNS a Boolean — contrast §5
+#
+# §4  literal vs literal within a family — lattice Rank decides
+Number lt Integer	true	parent ranks before child
+Integer lt Float	true	siblings run least-to-most complex
+Number cmp Float	-1	cmp agrees with lt on same-family literals
+Integer gt Number	true	mirror of parent-before-child
+EmptyString lt ProperString	true	String leaves order by rank too
+1 tcmp Integer	1	tcmp: literal-first holds for the total order as well
+Integer tcmp 1	-1	mirror
+Float tcmp 0.5	-1	literal before concrete under tcmp
+none tcmp None	1	the none VALUE sorts after the None literal
+None tcmp none	-1	mirror
+#
+# §5  the LEFT-side gotcha — `Integer lt 0` builds a TYPE, not a Boolean
+Integer lt 0	(Integer lt 0)	a type literal left of lt CONSTRUCTS a predicate type (DepScalar)
+typeof (Integer lt 0)	Integer	the predicate value keeps its base family tag
+(Integer lt 0) is Type	true	…but IS a type as far as `is` cares
+Integer gt 0	(Integer gt 0)	every ordering word constructs when the literal is on the left
+Float gte 1.5	(Float gte 1.5)	Float base
+String lt "m"	(String lt 'm')	String base with a String bound
+Boolean lt true	(Boolean lt true)	even Boolean constructs
+Number lt 5	(Integer lt 5)	a Number base NARROWS to the bound's leaf — the Integer bound rewrites the base
+-3 is (Integer lt 0)	true	the constructed predicate admits members below the bound
+3 is (Integer lt 0)	false	…and rejects the rest
+0 is (Integer lt 0)	false	strict: the bound itself is excluded
+0 is (Integer lte 0)	true	non-strict includes the bound
+"hi" is (String lt "m")	true	String predicate admits lexicographically-smaller strings
+"zz" is (String lt "m")	false	…and rejects larger ones
+false is (Boolean lt true)	true	false < true in the Boolean order
+def Neg (Integer lt 0) -5 is Neg	true	the predicate type binds under def like any type
+def Neg (Integer lt 0) 5 is Neg	false	…keeping its membership rule
+def Neg (Integer lt 0) def f fn [[n:Neg][String]["neg"]] f -3	'neg'	predicate types dispatch fn params (subset typing)
+def Neg (Integer lt 0) def f fn [[n:Neg][String]["neg"]] f 3	ERROR:no matching signature	…and reject non-members at the same boundary
+Integer lt "a"	ERROR:does not match dependent base	a bound outside the base family cannot construct a predicate
+#
+# §6  equality stays total and cross-type-false; numeric magnitude unifies leaves
+1 eq "1"	false	cross-family eq is false, never an error
+"1" eq 1	false	symmetric
+1 neq "1"	true	neq is the complement
+true eq 1	false	Boolean never equals a Number
+cat/q eq "cat"	false	an Atom never equals its String spelling
+none eq 0	false	none equals only none
+"" eq none	false	the empty string is not none
+none eq none	true	…and none IS none
+none cmp none	0	the None family comparer accepts the identical pair
+none lt none	false	consistent strict order on the singleton family
+1 eq 0d1	true	Integer and BigInteger unify by exact magnitude
+0d1.00 eq 0d1	true	BigDecimal scale is display-only for equality
+0d1 cmp 1	0	cross-leaf magnitude ties under cmp (shared Number comparer)
+0d1.5 cmp 1.5	0	BigDecimal vs Float magnitude tie
+1.0 deq 1	true	deq agrees with eq on scalar leaves
+"1" deq 1	false	…without ever crossing families
+[[1] {a:1}] deq [[1] {a:1}]	true	deq recurses through mixed compounds
+#
+# §7  sort / grade ride the SAME total order tcmp exposes
+sort [3 1 true]	[true 1 3]	Boolean band before the numbers
+sort [true "a" 1 cat/q]	[cat/q true 1 'a']	full scalar band order: Atom, Boolean, Number, String
+sort [Integer 0 Number]	[Number Integer 0]	literals first (parent before child), then the concrete
+sort [3 0d1 2.5]	[0d1 2.5 3]	cross-leaf numerics sort by magnitude, not by leaf
+sort [1.0 1 2]	[1.0 1 2]	the 1.0/1 magnitude tie is stable — original order kept
+sort [none 1 "a"]	[none 1 'a']	none ranks before every scalar
+sort ["b" "" "a"]	['' 'a' 'b']	EmptyString is just the smallest String
+sort [[2] [1 5] {a:1}]	[[2] [1 5] {a:1}]	Node branch: shorter list first, every list before every map
+import "aql:array-util" ArrayUtil.grade [true "a" 1]	[0 2 1]	grade returns sort indices over the same order
+import "aql:array-util" ArrayUtil.grade ["b" 2 cat/q true]	[2 3 1 0]	Atom, Boolean, Number, String again — as indices

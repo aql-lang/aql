@@ -1,0 +1,118 @@
+# edge-containers-2.tsv — MUTATION edge cases: copy-returning vs
+# in-place words, the flex family, and Store/context layering.
+#
+# The mutation contract has three tiers (EXPLANATION.md "Immutability
+# and mutability"; eng/go/core_storage.go):
+#   * plain Map/List: set/push/pop/shift/unshift are COPY-RETURNING —
+#     a new spine comes back, the receiver never changes;
+#   * FlexMap/FlexList: set and the list-mutation family mutate IN
+#     PLACE and return the SAME node (identity-verified here with eq);
+#   * Store (context) and class instances: set mutates in place and
+#     returns NOTHING — `def r (x set …)` binds nothing at all.
+# Sub-engine layering: `do`/`each` children inherit the context store
+# for READS, their WRITES are local and vanish; a fn body runs in the
+# SAME engine, so its context writes persist. Flex nodes are shared
+# pointers, so flex MUTATION inside a sub-engine does persist.
+
+# ====================================================================
+# §1  plain Map/List — copy-returning, receiver untouched
+# ====================================================================
+
+def m {a:1} def m2 (m set b 2) (m eq m2)	false	map set returns a NEW spine — not the receiver
+def m {a:1} def m2 (m set a 1) (m eq m2)	false	even a value-identical overwrite returns a fresh map
+def m {a:1} (m set b 2) drop m	{a:1}	the receiver map is untouched by the discarded copy
+def m {} def m2 (m set a 1) def m3 (m2 set b 2) (m2 eq m3)	false	each chained set mints another spine
+def m {} def m2 (m set a 1) def m3 (m2 set b 2) m3	{a:1 b:2}	…accumulating the writes
+def l [1 2] def l2 (push 3 l) (l eq l2)	false	plain push is copy-returning
+def l [1 2] def l2 (set 0 9 l) (l eq l2)	false	plain list set too
+def l [1 2] ((pop l) drop) eq l	false	pop returns a fresh shorter list, not the receiver
+def l [1 2] (pop l) drop drop l	[1 2]	…and the receiver still has both elements
+unshift 9 [1 2]	[9 1 2]	plain unshift returns the grown copy
+def l [1 2] (unshift 0 l) drop l	[1 2]	…receiver untouched
+shift [1 2]	[2] 1	plain shift returns the shrunk copy and the element
+def l [1 2] (shift l) drop drop l	[1 2]	…receiver untouched
+
+# ====================================================================
+# §2  Store and class-instance set return NOTHING
+# ====================================================================
+
+def r (context set 'k' 1) r	ERROR:undefined word	Store set yields no value — the def binds nothing
+def P class {x:1} def p (make P {}) def r (p set x 2) r	ERROR:undefined word	class-instance set yields no value either
+def s context s set 'k' 1 end context get 'k'	1	a write through a captured store alias reaches the context
+context set 'x' 1 end def s context s get 'x'	1	a store captured AFTER a write sees it
+def s context context set 'j' 2 end s get 'j'	ERROR:unknown key	…but a store captured BEFORE the write does NOT — set pushes a new layer
+
+# ====================================================================
+# §3  flex set/push family — in place, returning the SAME node
+# ====================================================================
+
+def f (flex {}) ((f set a 1) eq f)	true	flex map set returns the receiver node itself
+def f (flex {}) (((f set a 1) set b 2) eq f)	true	…so chains keep operating on one node
+def f (flex [0]) ((set 0 5 f) eq f)	true	FlexList indexed set returns the node
+def f (flex [1]) ((push 2 f) eq f)	true	push returns the node
+def f (flex [1]) ((append 2 f) eq f)	true	append returns the node
+def f (flex [1]) ((unshift 0 f) eq f)	true	unshift returns the node
+def f (flex [1 2]) (pop f drop) eq f	true	pop returns the node (under the popped element)
+def f (flex {a:1}) (f eq f)	true	sanity: a flex node is eq to itself
+def f (flex [1 2]) (f deq f)	true	…and deq to itself
+
+# ====================================================================
+# §4  flex mutation ordering and the two-result words
+# ====================================================================
+
+def l (flex []) push 1 l drop push 2 l drop unshift 0 l drop l	(flex [0 1 2])	push/unshift ordering: unshift prepends
+def l (flex [1 2 3]) pop l drop drop shift l drop drop l	(flex [2])	pop takes the tail, shift the head
+pop (flex [9])	(flex []) 9	pop empties the node and returns the element on top
+shift (flex [9])	(flex []) 9	shift does too, from the front
+def l (flex [1]) pop l drop drop push 5 l drop l	(flex [5])	a node emptied by pop grows again by push
+def l (flex [1 2 3]) (size l) (pop l) drop drop (size l)	3 2	size tracks the in-place shrink
+
+# ====================================================================
+# §5  flex aliasing — one node behind many views
+# ====================================================================
+
+def f (flex []) do [push 7 f] drop f	(flex [7])	flex mutation inside `do` PERSISTS — the node is a shared pointer (unlike context writes)
+def f (flex [[1]]) def g (f get 0) push 2 g drop f	(flex [(flex [1 2])])	mutating an extracted inner node is visible through the root
+def f (flex {a:{b:1}}) def g f.a set b 9 g end f.a.b	(flex {b:9}) 9	a nested flex member reached twice is the same node
+def acc (flex []) [3 1 2] each [drop (size (push 9 acc))] drop acc	(flex [9 9 9])	the flex-accumulator pattern: each-body pushes land in the shared node
+def acc (flex {}) [1 2] each [drop (size (set n 5 acc))] drop acc	(flex {n:5})	flex map accumulator: sub-engine writes to the node persist
+def f (flex {}) (set a [1 2] f) drop typeof f.a	FlexList	a plain LIST stored into a FlexMap is adopted deep-flex (the §12 adoption rule)
+def P class {x:1} def p (make P {}) def f (flex {q:p}) (f.q eq p)	true	a class INSTANCE stored in flex is NOT adopted — the handle stays shared
+def P class {x:1} def p (make P {}) def f (flex {q:p}) set x 9 f.q end p.x	9	…so a write through the flex view mutates the one instance
+
+# ====================================================================
+# §6  non-mutating words over flex yield PLAIN results
+# ====================================================================
+
+filter [1 gt] (flex [1 2 3])	[2 3]	filter over a FlexList returns a plain List
+typeof (filter [1 gt] (flex [1 2]))	List	…nominally plain
+fold [add] (flex [1 2 3]) 0	6	fold reads the flex node like a list
+fold [add] (flex {a:1 b:2}) 0	3	…and a FlexMap like a map
+scan [add] (flex [1 2])	[1 3]	scan over flex
+keys (flex {a:1})	['a']	keys of a FlexMap
+vals (flex {a:2})	[2]	vals of a FlexMap
+
+# ====================================================================
+# §7  context layering — child engines read through, write locally
+# ====================================================================
+
+context set 'x' 1 end do [context get 'x']	1	a do-child READS the parent store through the prototype chain
+context set 'x' 1 end do [do [context get 'x']]	1	…transitively through two layers
+context set 'x' 1 end do [context set 'x' 2 end context get 'x']	2	a child write SHADOWS inside the child (it also VANISHES when the child ends — that shape is pinned interpreter-side only, as it currently compiles to a fallback island)
+do [do [context set 'w' 4 end context get 'w']]	4	nested children can still read their own writes
+context set 'x' 1 end each [drop (context get 'x')] [0]	[1]	each bodies read the parent store too
+context set 'x' 1 end context set 'x' 2 end context set 'x' 3 end context get 'x'	3	repeated sets in ONE engine layer up — latest wins
+context set k/q 3 end context dot k	3	atom keys work against the store
+context set 'x' 5 end def g fn [[] [Integer] [context get 'x']] (g)	5	a fn body reads the caller's context (dynamic scope)
+def g fn [[] [Integer] [context set 'y' 7 end context get 'y']] (g) context get 'y'	7 7	a fn body runs in the SAME engine — its context write PERSISTS after the call (contrast `do`)
+context deq context	false	Stores opt out of deq as well as eq — never equal, even to themselves
+def s1 context def s2 context (s1 deq s2)	false	…including two captures of the same context
+
+# ====================================================================
+# §8  class-instance writes are in place and visible through every view
+# ====================================================================
+
+def P class {x:1} def p (make P {}) def q p q set x 9 end p.x	9	an alias write mutates the one instance
+def P class {x:1} def p (make P {}) def l [p] (l get 0) set x 9 end p.x	9	a write through a list element mutates it too
+def P class {x:1} def p (make P {}) def m {q:p} m.q set x 8 end p.x	8	…and through a map field
+def P class {items:(flex [])} def p (make P {}) push 1 p.items drop p.items	(flex [1])	a flex field default is one live node per instance — reads share it

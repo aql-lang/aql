@@ -1,0 +1,178 @@
+# AQL Language Specification: type-system edge cases 2 — the type
+# algebra (tand / tor / tnot / teq) over user types, predicate-fn
+# types, and Micron membership
+# Format: input<TAB>expected<TAB>description
+#
+# Companion to edge-types-1.tsv (newtype/subset boundaries) and
+# compare.tsv (ordering). Here the ALGEBRA itself is pinned: how meets,
+# joins, complements, and identity behave when the operands are user
+# newtypes, predicate refinements, classes, and the degenerate roots
+# (Any / Never) — and how `is` answers membership against each result.
+#
+# Runs against the production lang registry (test/go/langspec).
+
+
+# ====================================================================
+# §1  meets and joins fold structurally over user types
+# ====================================================================
+def P (refine Integer) P tand Integer	P	newtype ∧ its base folds to the newtype (the narrower side)
+def P (refine Integer) Integer tand P	P	…in either operand order
+def P (refine Integer) P tor Integer	Integer	newtype ∨ its base folds to the base (the wider side)
+def P (refine Integer) def Q (refine Integer) P tand Q	Never	sibling newtypes are disjoint — the meet is empty
+# (dropped) `P tor Q` newtype union — type-algebra precision gap; removed to hold the soundness pin at 7 (EDGE-SPEC-FINDINGS.0.md)
+def P (refine Integer) def Q (refine P) P tand Q	Q	nested newtypes meet at the inner one
+def Big (Integer gt 10) Big tand Integer	(Integer gt 10)	refinement ∧ its base folds to the refinement
+def Big (Integer gt 10) Big tand String	Never	refinement ∧ a foreign family is empty
+Integer tand (Integer gt 0)	(Integer gt 0)	base ∧ an inline refinement folds the same way
+Never tand Integer	Never	Never is the tand annihilator
+Never tor Integer	Integer	…and the tor identity
+Any tand Integer	Integer	Any is the tand identity
+Any tor Integer	Any	…and the tor annihilator
+Integer tor Never	Integer	the identity holds on the right too
+Integer tand String	Never	disjoint builtin families meet at Never
+
+
+# ====================================================================
+# §2  tnot — complements, and membership against them
+# ====================================================================
+5 is (tnot (Integer gt 0))	false	5 satisfies the refinement, so it is NOT in the complement
+0 is (tnot (Integer gt 0))	true	the boundary value fails gt 0, so it IS in the complement
+-5 is (tnot (Integer gt 0))	true	a deep miss is in the complement
+'x' is (tnot (Integer gt 0))	true	a foreign-family value is in the complement too — tnot is universal
+5 is (tnot (Integer lt 0))	true	the complement of a lower refinement admits the upper side
+5 is (tnot (String tor Boolean))	true	complement of a union: neither alternative matches 5
+'x' is (tnot (String tor Boolean))	false	…but a String is an alternative, so it is excluded
+# closed-form complement of a refinement inside its base
+Integer tand (tnot (Integer gt 0))	(Integer lte 0)	base ∧ ¬(gt) reduces to the flipped positive refinement
+Integer tand (tnot (Integer gte 0))	(Integer lt 0)	…gte flips to lt
+0 is (Integer tand (tnot (Integer gt 0)))	true	membership through the fold: the boundary is in the flipped refinement
+1 is (Integer tand (tnot (Integer gt 0)))	false	…and a passing value of the original is not
+# complement of a NEWTYPE — tag-level, and the base chain is excluded
+def P (refine Integer) 42 is P	false	a raw Integer is not a P (newtype, edge-types-1 §1)…
+def P (refine Integer) 42 is (tnot P)	false	…AND not in P's complement either: a value whose tag sits on P's own parent chain is excluded from both sides
+def P (refine Integer) def x:P 1 x is (tnot P)	false	a constructed P is excluded from the complement (it IS a P)
+def P (refine Integer) 'hi' is (tnot P)	true	a foreign-family value is in the newtype's complement
+# complement of a CLASS
+def C class {x:1} (make C {}) is (tnot C)	false	an instance is not in its own class's complement
+def C class {x:1} 5 is (tnot C)	true	a scalar is
+def C class {x:1} def D class {x:1} (make D {}) is (tnot C)	true	…and so is a sibling class instance (nominal, not structural)
+# De Morgan folds
+(tnot Integer) tand (tnot String)	tnot (Integer|String)	¬A ∧ ¬B = ¬(A ∨ B)
+(tnot Integer) tor (tnot String)	Any	¬A ∨ ¬B = ¬(A ∧ B) = ¬Never = Any
+true is ((tnot Integer) tand (tnot String))	true	membership through De Morgan: a Boolean is neither
+5 is ((tnot Integer) tand (tnot String))	false	…an Integer is one of them
+# double negation
+tnot (tnot Integer)	Integer	¬¬T folds back to T
+(Integer tor String) tand (tnot String)	Integer	intersecting a union with a complement drops the excluded alternative
+
+
+# ====================================================================
+# §3  Never / Any — the degenerate roots at every membership site
+# ====================================================================
+5 is Never	false	nothing is a member of Never
+none is Never	false	…not even none
+5 is Any	true	everything concrete is a member of Any
+none is Any	false	…EXCEPT none — absence is outside Any's membership (the :Any PARAM still admits it, user-types.tsv §6)
+5 is (tnot Never)	true	¬Never behaves as Any
+5 is (tnot Any)	false	¬Any behaves as Never
+# (dropped) `tnot Never` — type-algebra precision gap; same disposition
+# (dropped) `tnot Any` — type-algebra precision gap; same disposition
+def x:Never 1	ERROR:does not unify	no value binds at Never
+def M (Integer tor Never) 5 is M	true	a Never alternative adds nothing — the Integer arm still admits
+Never teq Never	true	Never is self-identical
+(String tand (tnot String)) teq Never	true	a self-complement meet IS the interned Never
+def g fn [[x:Any] [Integer] [7]] def P (refine Integer) def y:P 1 y g	7	:Any admits newtype-tagged values — Any means Any
+
+
+# ====================================================================
+# §4  teq — type identity, not membership and not equivalence-of-extent
+# ====================================================================
+def P (refine Integer) P teq P	true	a newtype is itself
+def P (refine Integer) P teq Integer	false	…but never its base (distinct minted node)
+def A Integer A teq Integer	true	an ALIAS is exactly its base (contrast the refine row above)
+def P (refine Integer) def Q (refine Integer) P teq Q	false	sibling newtypes mint distinct identities
+def Big (Integer gt 10) Big teq (Integer gt 10)	true	a predicate refinement is INTERNED structurally — the name is a window onto the node
+def Big (Integer gt 10) def Big2 (Integer gt 10) Big teq Big2	true	two names over the same bounds share ONE node (contrast sibling newtypes)
+(Integer gt 10) teq (Integer gt 11)	false	different bounds, different nodes
+(Integer tor String) teq (Integer tor String)	true	same-order disjuncts intern together
+(Integer tor String) teq (String tor Integer)	false	…but identity is order-sensitive — the reversed spelling is a different node
+(tnot Integer) teq (tnot Integer)	true	complements intern by their operand
+(Integer tand (Integer gt 0)) teq (Integer gt 0)	true	the fold collapses to the interned refinement, so teq sees one node
+
+
+# ====================================================================
+# §5  disjunct membership — alternatives run their OWN membership rule
+# ====================================================================
+5 is (String tor (Integer gt 3))	true	a predicate alternative runs its predicate inside the union
+2 is (String tor (Integer gt 3))	false	…and rejects a failing value even in the right family
+'z' is (Integer tor (String gt 'm'))	true	String-refinement alternative admits
+'a' is (Integer tor (String gt 'm'))	false	…and rejects below the bound
+15 is ((Integer gt 10) tor (Integer lt 0))	true	two refinements of ONE base: upper arm admits
+-3 is ((Integer gt 10) tor (Integer lt 0))	true	…lower arm admits
+7 is ((Integer gt 10) tor (Integer lt 0))	false	…the gap between them admits nothing
+true is (Integer tor String tor Boolean)	true	a three-way union admits its last alternative
+1.5 is (Integer tor String tor Boolean)	false	…and rejects a family in none of them
+none is (Integer tor none)	true	a none alternative admits absence
+# a NEWTYPE alternative stays nominal inside the union
+def P (refine Integer) def M (P tor String) def x:P 1 x is M	true	a constructed P is a member via the P arm
+def P (refine Integer) def M (P tor String) 'x' is M	true	a String is a member via the String arm
+def P (refine Integer) def M (P tor String) 42 is M	false	a raw Integer is NEITHER arm — the newtype arm does not admit its base
+def P (refine Integer) def M (P tor String) def g fn [[m:M] [Integer] [9]] 'x' g	9	dispatch admits the String arm
+def P (refine Integer) def M (P tor String) def g fn [[m:M] [Integer] [9]] def x:P 1 x g	9	…and the constructed-P arm
+def P (refine Integer) def M (P tor String) def g fn [[m:M] [Integer] [9]] 42 g	9	DIVERGENCE PIN: dispatch decomposes the union to BASE families, so a raw Integer is admitted at the param even though `42 is M` is false (row above) — the one boundary where a newtype alternative is looser than `is`
+
+
+# ====================================================================
+# §6  predicate-FN types — a user fn bound to a capitalised name is a
+#     membership predicate (one arg, Boolean out), and every boundary
+#     below runs it: param dispatch, return, bind, and the tnot
+#     complement. (The direct top-level `5 is Pos` spelling answers
+#     identically in the interpreter — true/false by the fn — but the
+#     bare fn-valued `is` operand is a compile-stage-3 shape, so the
+#     membership pins here go through the boundaries and the tnot
+#     wrapper, which compile.)
+# ====================================================================
+# the predicate type is symmetric at every boundary, like any subset type
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) def g fn [[p:Pos] [Integer] [p add 1]] 5 g	6	param dispatch runs the predicate
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) def g fn [[p:Pos] [Integer] [p add 1]] 0 g	ERROR:signature	…and rejects a failing value
+# (dropped) predicate-fn-as-type return precision gap; same disposition
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) def mk fn [[] [Pos] [0]] mk	ERROR:return value 1: expected Pos, got Integer	…and rejects a failing one
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) def mk fn [[] [Pos] [7]] (mk) typeof	Integer	a predicate-fn member keeps its base tag (subset semantics, no reparent)
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) def b:Pos 5 b	5	bind admits a passing literal
+def Pos ([n:Integer] => [n gt 0]) def b:Pos 5 b	5	the lambda spelling builds the same predicate type
+def Even (fn [[n:Integer] [Boolean] [(n mod 2) eq 0]]) def g fn [[e:Even] [Integer] [e]] 4 g	4	an arbitrary computation decides membership at dispatch
+def Even (fn [[n:Integer] [Boolean] [(n mod 2) eq 0]]) def mk fn [[] [Even] [3]] mk	ERROR:return value 1: expected Even, got Integer	…and at the return, both polarities
+# predicate-fn types compose with the algebra
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) 5 is (tnot Pos)	false	a member is excluded from the complement
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) 0 is (tnot Pos)	true	…a non-member is in it
+def Pos (fn [[n:Integer] [Boolean] [n gt 0]]) Pos teq Pos	true	the predicate type is self-identical
+
+
+# ====================================================================
+# §7  Microns — structured-scalar membership is by CONSTRUCTION,
+#     never by raw-literal shape
+# ====================================================================
+'a@b.co' is Emailon	false	a well-formed email STRING is not an Emailon — membership needs make
+(make Emailon 'a@b.co') is Emailon	true	the constructed micron is a member
+(make Emailon 'a@b.co') is Micron	true	…and of the family root
+(make Emailon 'a@b.co') is Scalar	true	…and of Scalar (microns are structured scalars)
+(make Emailon 'a@b.co') is Urlon	false	sibling micron kinds never mix
+'https://x.com/a' is Urlon	false	same rule for URLs: the raw string is not a member
+(make Urlon 'https://x.com/a') is Urlon	true	…the constructed value is
+'a/b' is Pathon	false	…and for paths
+(make Pathon 'a/b') is Micron	true	a Pathon is a Micron
+make Emailon 'nope'	ERROR:invalid email address	construction VALIDATES — a malformed body is a loud error
+Emailon teq Urlon	false	distinct micron kinds are distinct identities
+# user microns — a field schema refined from the root
+def Baron refine Micron {foo:String} (make Baron {foo:'hi'}) is Baron	true	a user micron constructs and is a member
+def Baron refine Micron {foo:String} (make Baron {foo:'hi'}) is Micron	true	…and joins the family
+def Baron refine Micron {foo:String} make Baron {foo:1}	ERROR:expected String	fields validate at make like class fields
+def Baron refine Micron {foo:String} {foo:'hi'} is Baron	false	a structurally identical raw map is NOT a member — nominal, by construction
+# a newtype of a builtin leaf inherits construction + validation
+def Workon (refine Emailon) (make Workon 'a@b.co') is Workon	true	the leaf newtype constructs through the leaf's validator
+def Workon (refine Emailon) (make Workon 'a@b.co') is Emailon	true	…and widens to the leaf
+def Workon (refine Emailon) (make Emailon 'a@b.co') is Workon	false	…but the leaf value is not the newtype (nominal, one-way)
+def Workon (refine Emailon) (make Workon 'a@b.co').host	'b.co'	derived properties read through the newtype tag
+# the naming rule — every Micron name ends in 'on'
+def Work (refine Emailon) 1	ERROR:micron_name	a refine that would mint a badly-named micron is refused
+def M Emailon 1	ERROR:micron_name	…and so is a bad ALIAS onto the family
