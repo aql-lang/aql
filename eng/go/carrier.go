@@ -637,6 +637,16 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 	// r.Args is empty so `args` falls through to RecordCall's refusal.
 	if word == "args" {
 		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
+			// In compile mode `args.N` folds to a frame local (PUSH_LOCAL N),
+			// which is exact ONLY when every param is named. When the frame has
+			// an unnamed (stack-flowing) param, that input stays live on the
+			// body stack, so folding args.N over the projection strands it — a
+			// divergent value/count vs the interpreter, which reads the separate
+			// per-call args stack (design/EDGE-SPEC-FINDINGS.0.md §4). Refuse so
+			// the body falls back, matching the bare-`args` boundary.
+			if es := r.Check.Recorder(); es.active() && r.Check.ArgsFrameUnnamed {
+				es.MarkUncompilable("args over a frame with unnamed params (Stage 3)")
+			}
 			return []Value{top}, true
 		}
 	}
@@ -909,6 +919,15 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 // boundary to a single named call is the first step of the Emit/check
 // decoupling (checker review, Tier 2).
 func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out []Value, pos SrcPos, ownerReg *Registry) {
+	// Tag a get-family read that surfaces a fn-valued container member so the
+	// stranded-member-fn guard can recognise its dynamic(Any) result downstream
+	// (design/EDGE-SPEC-FINDINGS.0.md §2). Independent of how the read itself
+	// records — the tag rides the result ID onto the tape.
+	if len(out) == 1 && (isGetWord(word) || isGetrWord(word)) {
+		if es := r.Check.Recorder(); es.active() && readsFnMember(args) {
+			es.noteMemberFnRead(out[0].ID)
+		}
+	}
 	if !tryRecordMethodApply(r, word, args, out, pos) &&
 		!tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
@@ -3361,14 +3380,25 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// Unnamed parameters flow through the stack — push them
 	// before the body.
 	var input []Value
+	hasUnnamed := false
 	for i, arg := range args {
 		if i < len(paramNames) && paramNames[i] != "" {
 			r.Defs.Push(paramNames[i], arg)
 		} else {
 			input = append(input, arg)
+			hasUnnamed = true
 		}
 	}
 	input = append(input, body...)
+
+	// Record whether this frame has stack-flowing unnamed params so a body
+	// `args` / `args.N` read can refuse in compile mode (the unnamed input
+	// stays live on the body stack; folding args.N over it strands the input
+	// — design/EDGE-SPEC-FINDINGS.0.md §4). Save/restore around the body run
+	// so nested analyses see their own frame's answer.
+	prevUnnamed := r.Check.ArgsFrameUnnamed
+	r.Check.ArgsFrameUnnamed = hasUnnamed
+	defer func() { r.Check.ArgsFrameUnnamed = prevUnnamed }()
 
 	sub := New(r)
 	result, err := sub.Run(input)

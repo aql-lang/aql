@@ -440,6 +440,14 @@ type EmitState struct {
 	// holding genuinely-0-param fn values (noteFnRiskFields /
 	// instanceFnFieldRisk — the carrier-receiver auto-dispatch hazard).
 	fnRiskFields map[string]map[string]bool
+	// memberFnReads holds the value IDs of get-family reads that surfaced a
+	// FUNCTION-valued container member (readsFnMember). The read's static type is
+	// dynamic(Any), so downstream code cannot see it is a fn; this side table
+	// lets the stranded-member-fn guard (refuseStrandedMemberFn) recognise the
+	// value and refuse a mid-expression auto-apply
+	// (design/EDGE-SPEC-FINDINGS.0.md §2). Over-approximate + append-only like
+	// fnRiskFields — a stale entry only ever over-refuses (sound).
+	memberFnReads map[string]bool
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -3267,6 +3275,89 @@ func zeroArgFnOut(outs []Value) bool {
 	for _, o := range outs {
 		if !o.Carrier && fnValueZeroArg(o) {
 			return true
+		}
+	}
+	return false
+}
+
+// noteMemberFnRead records that the value with id came from a get-family read
+// of a fn-valued container member. Lazily-inits the side table; nil-safe and
+// active-gated (a suspended / uncompilable pass records nothing).
+func (es *EmitState) noteMemberFnRead(id string) {
+	if !es.active() || id == "" {
+		return
+	}
+	if es.memberFnReads == nil {
+		es.memberFnReads = map[string]bool{}
+	}
+	es.memberFnReads[id] = true
+}
+
+// memberFnRead reports whether id was tagged by noteMemberFnRead.
+func (es *EmitState) memberFnRead(id string) bool {
+	return es != nil && es.memberFnReads != nil && es.memberFnReads[id]
+}
+
+// readsFnMember reports whether a get-family dispatch surfaces a FUNCTION-valued
+// member from a concrete container — the member the interpreter auto-applies
+// the moment a value lands on it (design/EDGE-SPEC-FINDINGS.0.md §2). Unlike
+// containerFnAutoDispatchRisk (which gates on GENUINE 0-param fns only, so the
+// statement-tail apply `m.double 21` keeps compiling), this reports ANY arity:
+// the caller tags the read so a MID-EXPRESSION stranded apply can refuse while
+// the tail apply is unaffected. Mirrors containerFnAutoDispatchRisk's
+// container/key walk (map member, list element, flat-instance field).
+func readsFnMember(args []Value) bool {
+	isFn := func(v Value) bool { _, ok := v.Data.(FnDefInfo); return ok }
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		switch d := a.Data.(type) {
+		case ListPayload:
+			if idx, ok := concreteIntKey(args); ok {
+				if idx >= 0 && idx < int64(len(d.Elems)) && isFn(d.Elems[idx]) {
+					return true
+				}
+				continue
+			}
+			for _, e := range d.Elems {
+				if isFn(e) {
+					return true
+				}
+			}
+		case MapPayload:
+			if d.M == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := d.M.Get(key); hit && isFn(mv) {
+					return true
+				}
+				continue
+			}
+			for _, k := range d.M.Keys() {
+				mv, _ := d.M.Get(k)
+				if isFn(mv) {
+					return true
+				}
+			}
+		default:
+			fields, _, isInst := flatInstanceParts(a)
+			if !isInst || fields == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := fields.Get(key); hit && isFn(mv) {
+					return true
+				}
+				continue
+			}
+			for _, k := range fields.Keys() {
+				mv, _ := fields.Get(k)
+				if isFn(mv) {
+					return true
+				}
+			}
 		}
 	}
 	return false

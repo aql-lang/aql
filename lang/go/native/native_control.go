@@ -467,6 +467,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		thenFrag = es.Recorder().TakeFragment()
 		restoreThen()
 	} else {
+		refuseComputedBranchBody(r, args[0], args[1], true)
 		v := args[1]
 		thenValue = &v
 		thenStk = []Value{v}
@@ -488,6 +489,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		elseFrag = es.Recorder().TakeFragment()
 		restoreElse()
 	} else {
+		refuseComputedBranchBody(r, args[0], args[2], false)
 		v := args[2]
 		elseValue = &v
 		elseStk = []Value{v}
@@ -524,6 +526,48 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
 	})
 	return []Value{out}
+}
+
+// refuseComputedBranchBody refuses (compile mode only) an `if` arm that
+// arrives as a non-body VALUE which is nonetheless LIST-shaped — the shape a
+// paren group evaluating to a list produces (`if c [t] (range 2 4)`). The
+// interpreter's spliceArg EXECUTES any plain list arm at run time (its
+// elements run as a sub-expression, `(range 2 4)` → `2 3`), but the value path
+// here pushes the LIST as data, so the branch lowering would diverge
+// (design/EDGE-SPEC-FINDINGS.0.md §3). A literal `[…]` bracket body takes the
+// IsConcrete body path instead (and a genuinely multi-value one refuses at the
+// single-result branch gate). The static carrier's typed-ness does NOT predict
+// the split — `range` is statically `[:Integer]` (IsTypedList) yet returns a
+// plain, spliced list — so any TList-conforming value arm is refused rather
+// than guessed.
+//
+// isThen marks which arm this is; the refusal fires only when the condition
+// can actually SELECT it (condSelectsArm). A constant condition makes the
+// opposite arm dead — `def n 0 if (n eq 0) [99] (range 2 4)` never runs the
+// range else, so its list-value lowering is harmless and stays compiled. A
+// non-concrete condition leaves both arms reachable. No-op outside a compile
+// pass (recorder inactive); interpreter and plain check unaffected.
+func refuseComputedBranchBody(r *Registry, cond, arm Value, isThen bool) {
+	es := r.Check.Recorder()
+	if !es.Active() || !condSelectsArm(cond, isThen) {
+		return
+	}
+	if arm.Parent.ConformsTo(TList) {
+		es.MarkUncompilable("if: computed branch arm is a spliced list body, not a value (Stage 3)")
+	}
+}
+
+// condSelectsArm reports whether the branch arm (then when isThen, else
+// otherwise) can be taken given cond. A concrete boolean condition fixes the
+// taken arm and leaves the other dead; a non-concrete condition leaves both
+// reachable (conservative — either could run at run time).
+func condSelectsArm(cond Value, isThen bool) bool {
+	if IsConcrete(cond) && cond.Parent.ConformsTo(TBoolean) {
+		if b, err := AsBoolean(cond); err == nil {
+			return b == isThen
+		}
+	}
+	return true
 }
 
 // analyseCondFragment captures a list-form `if` condition body as an
