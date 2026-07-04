@@ -4709,13 +4709,28 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 // (§5a), so a module fn and a parent fn of the same name cannot alias. See
 // design/module-fn-checkstate-ownership.1.md §5b.
 func (e *Engine) shareCheckState(capturedReg *Registry) func() {
-	if capturedReg == nil || e.registry == nil ||
-		capturedReg == e.registry || !e.registry.Check.IsActive() {
+	return shareCheckStateFrom(capturedReg, e.registry)
+}
+
+// shareCheckStateFrom is the registry-level mechanism behind shareCheckState:
+// it points owner's Check at caller's for the duration (restore via the
+// returned func), no-op when the registries coincide, either is nil, or the
+// caller is not in check mode. Split out so the MERGED-WORD seam can share at
+// the ReturnsFn boundary itself (buildFnBodyReturnsFn — Stage M1,
+// design/STAGE3-INLINING-DESIGN-ROUND.0.md §5): a transplanted word-extension
+// sig dispatches as a BARE word on the importer's engine, where no
+// execFnDefLiteral wrapper exists to share around the call, and the sig's
+// owning registry is known only to the ReturnsFn closure (the transplant
+// clone's FnDefInfo.Registry is deliberately nil — see TransplantExtension).
+// Idempotent under nesting: when an enclosing dispatch already shared, the
+// swap is pointer-equal and the restore puts back the same shared state.
+func shareCheckStateFrom(owner, caller *Registry) func() {
+	if owner == nil || caller == nil || owner == caller || !caller.Check.IsActive() {
 		return func() {}
 	}
-	saved := capturedReg.Check
-	capturedReg.Check = e.registry.Check
-	return func() { capturedReg.Check = saved }
+	saved := owner.Check
+	owner.Check = caller.Check
+	return func() { owner.Check = saved }
 }
 
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil

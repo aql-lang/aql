@@ -74,6 +74,31 @@ func TestModuleFnCheckPathGate(t *testing.T) {
 				`def s {name:"d" subject:double/q cases:[{name:"a" in:[3] out:999}] subs:[]} end ` +
 				`s Test.run-spec end Test.summary`,
 		},
+		{
+			// MERGED-WORD seam (Stage M1): a module-defined `add` transplanted
+			// onto the importer's bare word dispatches through the ReturnsFn-
+			// boundary check-state share (shareCheckStateFrom). The historical
+			// failure mode of check-state sharing was +29/+39 spurious
+			// diagnostics corpus-wide (invisible to the differential) — this
+			// fixture extends the (b) zero-error gate to the merged seam.
+			"merged-word extension dispatch (open words)",
+			`import module [def Flag (refine Boolean) ` +
+				`def add fn [[a:Flag b:Flag] [Boolean] [a and b]] ` +
+				`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
+				`export "M" {add: add/r mk: mk/r Flag: Flag}] end ` +
+				`add (M.mk true) (M.mk false)`,
+		},
+		{
+			// merged-word seam + same-name collision: the importer ALSO calls
+			// the builtin `add` and the module's merged overload in one
+			// program — the scopeID-keyed memos must keep the two apart.
+			"merged-word extension beside the builtin word",
+			`import module [def Flag (refine Boolean) ` +
+				`def add fn [[a:Flag b:Flag] [Boolean] [a and b]] ` +
+				`def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] ` +
+				`export "M" {add: add/r mk: mk/r Flag: Flag}] end ` +
+				`(add 1 2) end add (M.mk true) (M.mk true)`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

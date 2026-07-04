@@ -740,7 +740,27 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	capturesCopy := fnDef.Captured
 	genSpec := fnDef.Gen
 	sigParams := append([]FnParam(nil), s.Params...)
-	return func(args []Value, _ *Registry) []Value {
+	return func(args []Value, caller *Registry) []Value {
+		// The MERGED-WORD seam (Stage M1, design/STAGE3-INLINING-DESIGN-ROUND.0.md
+		// §2.4a/§5): a transplanted word-extension sig (open words — a module-
+		// defined `add` merged into the importer's dispatch table) dispatches as a
+		// BARE word on the importer's engine, so no execFnDefLiteral wrapper
+		// shares the check state with this closure's captured registry r. Without
+		// sharing, `es` below read the module's own INACTIVE CheckState:
+		// StartFnCompile declined, RecordUserCall never ran, every merged dispatch
+		// refused "user fn call … (Stage 3)", and the body was ANALYSED
+		// CONCRETELY with its diagnostics stranded on the invisible module Check.
+		// Sharing caller → r at the ReturnsFn boundary itself converts the WHOLE
+		// user-fn seam (every dispatch path that reaches a foreign-registry fn
+		// body records identically — the §2.2 one-recording-path rule): body
+		// diagnostics, the FnSummaries/FnInflight memos (scopeID-disjoint keys)
+		// and the compiled unit all land on the dispatching pass, while name
+		// resolution stays in the module's own Defs/Types. No-op when caller == r
+		// (ordinary same-registry fns), when an enclosing execFnDefLiteral /
+		// execFnDefSig dispatch already shared (pointer-equal swap), and outside
+		// check mode — interpretation is untouched.
+		restoreCheck := shareCheckStateFrom(r, caller)
+		defer restoreCheck()
 		checkRecordShapeArgs(r, nameCopy, paramPatterns, args)
 		// Generic fns (Phase 5): infer the parameter bindings from the
 		// call's arg carriers and install them around the body
