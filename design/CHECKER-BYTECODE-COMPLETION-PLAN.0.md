@@ -689,6 +689,25 @@ from everything; 7 is gated on 6's exit criteria.
   frontier 195 pin 195, census 3547 compiled / 250 check-errors /
   78 refused / 1 islanded, differential 3299/0, fallback 3522/0,
   ceilings 3/0/66).
+- **2026-07-04 — Phase 4 CLOSED (4.4 + 4.5) and Phase 5 executed
+  (5.1 re-census, 5.2 check-by-default; 5.3 voxgig stays
+  blocked-external).** 4.4: aql:emitlang gains a declared Options
+  schema — the {prety:true} typo is now a hard dispatch rejection
+  (the G6 probe shape). 4.5: the checker talks to the compiler
+  through the narrow recorder interface (eng/go/emit_recorder.go);
+  EmitState implements it; behavior-identical by gates. 5.2: aql run
+  pre-flights by DEFAULT — quiet gate (diagnostics only when
+  aborting), --check upgrades to verbose, --no-check / AQL_NO_CHECK
+  opt out; TestCheckByDefault pins all five behaviors. Also landed
+  from PR #225 review (P1s, both probe-confirmed real): the
+  embedded-enclosing-binding literal refusal (fresh spine over
+  shared member is unmodelable — embedsEnclosingCompound) and the
+  class-instance fn-field auto-dispatch refusal (make-time risk
+  tracking by instance ID + zeroArgFnOut backstop), pinned by
+  TestPR225P1Refusals with fallback-parity. All landed through the
+  full battery (VERIFY PASSED, make test 0, differential 0
+  divergences) and pushed as 581f143 / 8651c5f / 40a92b7; both
+  review threads answered.
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,
