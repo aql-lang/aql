@@ -496,6 +496,29 @@ from everything; 7 is gated on 6's exit criteria.
   green (VERIFY PASSED, make test exit 0, differential + fallback 0
   divergences); orchestrator spot-checked taxonomy + effect-order
   parity via CLI.
+- **2026-07-04 — Phase 3.5a landed: compiled typed-def
+  store-with-reparent (OpBindTyped) — both typed-def refusal buckets
+  → 0, refusals 81 → 78.** RunTypedBind (typed_bind.go) mirrors
+  defTypedHandler exactly (predicate → RunPredicate + conditional
+  ReparentValue; refine → Unify + ReparentValue over the CANONICAL
+  node; DepScalar → self-contained Unify, no reparent), with the spec
+  carrying the *Type pointer (module sub-registry mints resolve via
+  CanonicalType at run time, never a main-table ID). RecordTypedBind
+  remints the bound value's provenance ID — the exact §B aliasing
+  mechanism, closed. The op rides the generic emitCall machinery
+  (promotion/dead-drop free) rather than a fused store. Probe-parity:
+  typeof renders the newtype compiled (was Integer — §B divergence),
+  and the plain-fmt.Errorf validate-fail text is byte-identical
+  (pinned via RunCompiledStrict; the interpreter's own errors carry
+  no position, so none is added). Census: native 3543 → 3546; of the
+  12 rows, 3 compiled outright and 9 progressed to the open-words
+  merged-word dispatch frontier (user-fn-call 4 → 10, dispatch
+  recovery 11 → 14); error rows stay 13 (open-words 83/84/90 now
+  refuse at best-guess recovery, not the definite trap seam).
+  computeRefusalCeiling ratcheted 86 → 66. Landing test
+  TestTypedDefBindCompiles (6 positives, 3 byte-identical FAILs,
+  2 negatives). Full battery green (VERIFY PASSED, make test exit 0,
+  0 divergences).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

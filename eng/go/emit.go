@@ -44,10 +44,11 @@ const (
 // producerWord / makeListRange read them back, so the two sides must use the
 // same string. Centralised here rather than repeated as literals.
 const (
-	wordMakeList = "[…]"
-	wordMakeMap  = "{…}"
-	wordInterp   = "`…`"
-	wordDynApply = "(…fn)"
+	wordMakeList  = "[…]"
+	wordMakeMap   = "{…}"
+	wordInterp    = "`…`"
+	wordDynApply  = "(…fn)"
+	wordTypedBind = "def:…"
 )
 
 // operandKind discriminates how an emitOperand sources its value. The kind
@@ -151,6 +152,13 @@ type emitCall struct {
 	interp     bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
 	interpSegs []InterpSeg
 	diverges   bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	// typedBind, when non-nil, marks this event as a typed value-def's runtime
+	// validate/reparent step (OpBindTyped over the single operand) instead of a
+	// word dispatch — recorded by RecordTypedBind from the def handler's
+	// refinement branches. Riding emitCall keeps the whole generic evCall
+	// machinery (operand provenance, value-def promotion, dead-drop, fragment
+	// walks) working unchanged for the bind result.
+	typedBind *TypedBindSpec
 }
 
 // emitBranch is a recorded `if`: a resolved condition operand, the
@@ -2446,6 +2454,42 @@ func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) boo
 		pos:  pos,
 	}})
 	return true
+}
+
+// RecordTypedBind records the runtime validate/reparent step of a typed
+// value-def (`def x:Pos n`) whose constraint is a refinement and whose body is
+// DYNAMIC — the compiled replacement for the "dynamic refinement
+// reparent/validate is interpreter-only" refusal. The event pops the body
+// operand, runs RunTypedBind (the interpreter-mirroring OpBindTyped), and
+// pushes the value the interpreter binds; `out` is the CHECK-mode binding the
+// def handler is about to install (the reparented carrier / the base-tagged
+// carrier for a DepScalar), returned with a FRESH provenance ID registered
+// against the new event so downstream references to the binding resolve to the
+// bind's RESULT, not to the raw body operand (out shares the body's ID —
+// ReparentValue preserves it — and without the remint a reference would
+// resolve straight to the un-reparented param local: miscompile B's exact
+// mechanism, design/MISCOMPILE-HUNT-FINDINGS.0.md §B).
+//
+// Declines (returning out unchanged and false) when recording is inactive or
+// the body is CONCRETE — a static typed-def's reparent rides the const pool
+// faithfully and must keep today's proven path — or when the body operand has
+// no resolvable provenance; the caller then falls back to the refusal mark,
+// which itself no-ops for the concrete/inactive cases.
+func (es *EmitState) RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool) {
+	if !es.active() || IsConcrete(in) {
+		return out, false
+	}
+	op, ok := es.resolveOperand(in)
+	if !ok {
+		return out, false
+	}
+	sp := spec
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: wordTypedBind, ops: []emitOperand{op}, nout: 1, pos: pos, typedBind: &sp,
+	}})
+	out.ID = GenerateID(IDPrefixForType(out.Parent))
+	es.setProduced(out, seq)
+	return out, true
 }
 
 // RememberStrippedOriginals records the pre-strip original of each value that

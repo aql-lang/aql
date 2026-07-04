@@ -879,6 +879,27 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, err
 			}
 			stack = append(stack, results...)
+		case OpBindTyped:
+			// Typed value-def validate/reparent (the compiled defTypedHandler
+			// refinement step): pop the body value, run the SAME membership check
+			// the interpreter runs, push the value the interpreter would bind. A
+			// failed validation returns the interpreter's byte-identical plain
+			// error unstamped (defTypedHandler raises via fmt.Errorf with no
+			// position; stampAt only touches AqlErrors, so it is a no-op here and
+			// kept purely for uniformity with the other dispatch sites).
+			if len(stack) == 0 {
+				return nil, vmErrAt(curDebug, pc, "BIND_TYPED stack underflow")
+			}
+			bound, err := RunTypedBind(r, &p.TypedBinds[in.Arg], stack[len(stack)-1])
+			if err != nil {
+				return nil, stampAt(err, curDebug, pc, r)
+			}
+			// Belt-and-braces, like every dispatch site: a value-transforming
+			// predicate body could hand back a tape-coupled token; never push one.
+			if err := vc.screenResults([]Value{bound}, "typed-bind result at "+p.TypedBinds[in.Arg].Name, curDebug, pc); err != nil {
+				return nil, err
+			}
+			stack[len(stack)-1] = bound
 		case OpFallback:
 			ns, err := vc.runFallback(&p.Fallbacks[in.Arg], stack, curDebug, pc)
 			if err != nil {

@@ -583,6 +583,11 @@ Current reparent callsites:
 - `defTypedHandler` predicate-type branch.
 - `defTypedHandler` refine-bare branch.
 - `defTypedHandler` FnUndef branch.
+- `RunTypedBind` (typed_bind.go) — the compiled mirror of the first
+  two: `OpBindTyped` re-runs the predicate/refine validate + reparent
+  over the runtime value for a typed def whose body was DYNAMIC at
+  compile time (the interpreter branches above record the spec via
+  `EmitState.RecordTypedBind`).
 - (the class-type branch uses `eng.MakeObject` to construct an
   instance rather than reparenting — different shape, same intent.)
 

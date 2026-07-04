@@ -3834,3 +3834,104 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 		t.Errorf("flex-reach parity: compiled=%v interp=%v", gotC, gotI)
 	}
 }
+
+// Typed-def store-with-reparent (the compiled closure of miscompile B,
+// design/MISCOMPILE-HUNT-FINDINGS.0.md §B): a typed value-def whose refinement
+// constraint guards a DYNAMIC body (`def v:Flag b` over a param / computed
+// carrier) compiles to an OpBindTyped that runs the interpreter's own
+// validate/reparent (RunTypedBind) at run time instead of refusing the whole
+// program — pass stores the (reparented) value, FAIL raises the byte-identical
+// plain error, typeof renders the newtype, and sig dispatch keys off the
+// reparented tag.
+func TestTypedDefBindCompiles(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"predicate validate-pass stores and reads back (multi-read forces the frame local)",
+			`def Positive fn [[n:Integer] [Boolean] [n gt 0]] def f fn [[x:Integer] [Integer] [def v:Positive x (v add v)]] f 5`},
+		{"predicate reparent: typeof renders the predicate type",
+			`def Positive fn [[n:Integer] [Boolean] [n gt 0]] def f fn [[x:Integer] [Integer] [def v:Positive x v]] typeof (f 5)`},
+		{"newtype reparent: typeof renders the newtype in compiled mode (the §B divergence)",
+			`def Flag (refine Boolean) def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] typeof (mk true)`},
+		{"sig-dispatch on the reparented local",
+			`def Pos (refine Integer) def need-pos fn [[p:Pos] [Integer] [p add 100]] def f fn [[n:Integer] [Integer] [def x:Pos n need-pos x]] f 5`},
+		{"top-level dynamic refine def (the other live class)",
+			`def Pos (refine Integer) def g fn [[] [Integer] [41]] def n (g) def x:Pos (add n 1) typeof x`},
+		{"named DepScalar dynamic pass keeps the base tag (no reparent: typeof stays Integer)",
+			`def Big (Integer gt 10) def f fn [[x:Integer] [Type] [def v:Big x typeof v]] f 50`},
+	}
+	for _, c := range cases {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%s: did not compile: reason=%q err=%v", c.name, reason, cerr)
+		}
+		if !strings.Contains(prog.Disassemble(), "BIND_TYPED") {
+			t.Errorf("%s: no BIND_TYPED in the program (the dynamic bind must run at the VM):\n%s",
+				c.name, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%s: compiled run failed: compiled=%v err=%v", c.name, compiled, errC)
+		}
+		gotI, errI := mustNew(t).Run(c.src)
+		if errI != nil {
+			t.Fatalf("%s: interp run failed: %v", c.name, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: compiled=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
+
+	// Validation failures raise the byte-identical error — the interpreter's
+	// defTypedHandler raises a PLAIN position-less error (fmt.Errorf; probe:
+	// stampErrPos only positions AqlErrors), so byte-identical INCLUDING
+	// position means the full rendered text matches exactly, with no position
+	// added by either engine. Asserted through RunCompiledStrict so the error
+	// provably comes from the VM's OpBindTyped, not from a silent interpreter
+	// fallback re-run.
+	fails := []struct {
+		name string
+		src  string
+	}{
+		{"predicate validate-FAIL",
+			`def Positive fn [[n:Integer] [Boolean] [n gt 0]] def f fn [[x:Integer] [Integer] [def v:Positive x v]] f 0`},
+		{"inline DepScalar validate-FAIL",
+			`def f fn [[x:Integer] [Integer] [def v:(Integer gt 10) x v]] f 5`},
+		{"newtype validate-FAIL on a laundered gradual value",
+			`def Pos (refine Integer) def g fn [[] [Any] ['nope']] def f fn [[x:Any] [Integer] [def v:Pos x 1]] f (g)`},
+	}
+	for _, c := range fails {
+		_, errC := mustNew(t).RunCompiledStrict(c.src)
+		_, errI := mustNew(t).Run(c.src)
+		if errC == nil || errI == nil {
+			t.Fatalf("%s: expected both engines to raise: compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if errC.Error() != errI.Error() {
+			t.Errorf("%s: error divergence:\n  compiled: %s\n  interp:   %s", c.name, errC, errI)
+		}
+	}
+
+	// Negatives — what must NOT change:
+	// (a) a STATIC (concrete) typed-def body keeps the proven const-pool
+	//     reparent — no BIND_TYPED is emitted;
+	// (b) a statically-failing typed-def stays a check-diagnostics row (no
+	//     Program, flagged in both engines), never a compiled bind.
+	staticSrc := `def Pt (refine Integer) def p:Pt 5 typeof p`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(staticSrc)
+	if cerr != nil || prog == nil {
+		t.Fatalf("static typed-def did not compile: reason=%q err=%v", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "BIND_TYPED") {
+		t.Errorf("static typed-def must ride the const pool, not BIND_TYPED:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(staticSrc)
+	gotI, errI := mustNew(t).Run(staticSrc)
+	if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("static typed-def parity: compiled=%v/%v/%v interp=%v/%v", gotC, compiled, errC, gotI, errI)
+	}
+	if prog, _, _, _ := mustNew(t).CompileCheck(`def x:(Integer gt 10) 5 x`); prog != nil {
+		t.Errorf("statically-failing DepScalar typed-def must stay a check-diagnostics row, got a Program:\n%s",
+			prog.Disassemble())
+	}
+}

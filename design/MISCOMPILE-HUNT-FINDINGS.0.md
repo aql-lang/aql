@@ -122,6 +122,20 @@ mirror the interpreter — validate the predicate and reparent to the declared t
 (the value-level check, not just base-lattice membership). Or refuse typed-local
 refinement bindings.
 
+**UPDATE (July 2026) — the refusal is now COMPILED.** The interim sound fix
+(refuse dynamic + DepScalar, keep the static newtype on the const pool) was
+replaced by a compiled store-with-reparent: `defTypedHandler`'s refinement
+branches record an `OpBindTyped` event (`EmitState.RecordTypedBind`) whose VM
+half (`RunTypedBind`, eng/go/typed_bind.go) runs the SAME
+RunPredicate / Unify-against-builtin-ancestor / DepScalar-Unify the interpreter
+runs over the runtime value, raising the byte-identical plain error on failure
+and reparenting via `ReparentValue` where the interpreter reparents. The bound
+value gets a fresh provenance ID registered against the bind event, so
+downstream reads resolve to the bind RESULT — never to the un-reparented body
+operand (this ID aliasing was mechanism (b)'s root). The static/concrete path
+is untouched, and a statically-failing typed def stays a check-diagnostics row.
+Pinned by `lang/go/bytecode_findings_test.go::TestTypedDefBindCompiles`.
+
 ## C. Multi-overload user fn + gradual-Any arg (2 cases) — bakes ONE overload
 
 ```

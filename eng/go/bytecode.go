@@ -261,6 +261,25 @@ const (
 	// consumption refuses before lowering. Captured containers arrive through
 	// capture slots (locals), never consts, so closure identity is preserved.
 	OpPushConstFresh
+
+	// OpBindTyped is the runtime validate/reparent step of a typed value-def
+	// (`def x:Pos n`) whose constraint is a REFINEMENT — a predicate type, a
+	// bare-refine newtype, or an inline/named DepScalar subset — and whose body
+	// is DYNAMIC (a param / computed carrier). It pops the body value, runs the
+	// SAME membership check the interpreter's defTypedHandler runs (RunPredicate
+	// / Unify against the builtin ancestor / the self-contained DepScalar
+	// predicate — see RunTypedBind, typed_bind.go), raising the byte-identical
+	// (position-less, plain — exactly what the interpreter surfaces) error on
+	// failure, then pushes the value the interpreter would bind — reparented via
+	// ReparentValue where the interpreter reparents, so a downstream typeof /
+	// sig dispatch sees the refined tag. The STORE half of the binding stays
+	// with the ordinary value-def machinery (planValueDefLocals promotes a
+	// multiply-read binding to a frame local via OpStoreLocal; a dead binding
+	// drops the result AFTER the validation ran, matching the interpreter, which
+	// validates even a never-read typed def). Arg indexes Program.TypedBinds.
+	// A STATIC (concrete) typed-def body never emits this — its reparent rides
+	// the const pool, unchanged.
+	OpBindTyped
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -302,6 +321,7 @@ var opcodeNames = [...]string{
 	OpCallUserPoly:        "CALL_USER_POLY",
 	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
 	OpPushConstFresh:      "PUSH_CONST_FRESH",
+	OpBindTyped:           "BIND_TYPED",
 }
 
 func (o Opcode) String() string {
@@ -481,6 +501,46 @@ type InterpSpec struct {
 	NHoles int
 }
 
+// TypedBindKind selects which of defTypedHandler's refinement branches one
+// OpBindTyped mirrors at run time. Explicit non-zero values (iota+1) so the
+// struct zero value is an invalid kind that RunTypedBind rejects loudly, never
+// a silently-valid predicate bind (No-Zero-Value-Overload, eng/go/CLAUDE.md).
+type TypedBindKind uint8
+
+const (
+	// TypedBindPredicate: the constraint is a predicate TYPE (an fn body —
+	// `def Positive fn [[n:Integer] [Boolean] [n gt 0]]`). Runtime runs
+	// RunPredicate over the value; Def (when non-nil) is the minted type the
+	// passing value reparents to (the interpreter reparents only for a NAMED
+	// non-builtin predicate type with a concrete declared input).
+	TypedBindPredicate TypedBindKind = iota + 1
+	// TypedBindRefine: the constraint is a bare-refine NEWTYPE (`def Pos
+	// (refine Integer)`). Runtime unifies the value against Def's nearest
+	// builtin ancestor, then reparents to Def.
+	TypedBindRefine
+	// TypedBindDepScalar: the constraint is a DepScalar subset (`(Integer gt
+	// 10)`, inline or named). Runtime unifies the value against the
+	// self-contained Constraint; the value keeps its base tag (no reparent).
+	TypedBindDepScalar
+)
+
+// TypedBindSpec describes one OpBindTyped: the typed-def name (for the error
+// text), the rendered constraint (Describe — the annotation NAME when the
+// constraint was named, else the constraint's rendering, mirroring
+// defTypedHandler's describeType), the reparent target type, and the
+// constraint VALUE for the kinds that validate against a self-contained value
+// (the predicate fn / the DepScalar). Def rides as a *Type pointer — the same
+// convention CompiledFn.Returns/Params use — resolved through CanonicalType at
+// run time, so a type minted in a module sub-registry (whose ID the main
+// TypeTable does not know) still reaches its live canonical node.
+type TypedBindSpec struct {
+	Kind     TypedBindKind
+	Name     string
+	Describe string
+	Def      *Type  // reparent target: TypedBindRefine always; TypedBindPredicate when the interpreter reparents; nil otherwise
+	Cons     *Value // constraint value: TypedBindPredicate (the fn) and TypedBindDepScalar (the DepScalar); nil for TypedBindRefine
+}
+
 // TrapSpec describes the AQL error one OpTrap raises: the taxonomy code, the
 // detail message, the word it is attributed to, and an optional hint — built
 // from the SAME strings the interpreter raises for the matching runtime error,
@@ -497,20 +557,21 @@ type TrapSpec struct {
 // Program is a compiled unit: code, interned constants, the signature
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
-	Code      []Instr
-	Consts    []Value
-	Types     []TypeRef
-	Sigs      []SigRef
-	PolyRefs  []PolyRef
-	UserPolys []UserPolyRef
-	Fallbacks []FallbackSpan
-	MakeMaps  []MakeMapSpec
-	Interps   []InterpSpec
-	Traps     []TrapSpec
-	Fns       []CompiledFn
-	Debug     []SrcPos // 1:1 with Code
-	MaxStack  int      // a floor when the program loops (results accumulate)
-	NumLocals int
+	Code       []Instr
+	Consts     []Value
+	Types      []TypeRef
+	Sigs       []SigRef
+	PolyRefs   []PolyRef
+	UserPolys  []UserPolyRef
+	Fallbacks  []FallbackSpan
+	MakeMaps   []MakeMapSpec
+	Interps    []InterpSpec
+	Traps      []TrapSpec
+	TypedBinds []TypedBindSpec
+	Fns        []CompiledFn
+	Debug      []SrcPos // 1:1 with Code
+	MaxStack   int      // a floor when the program loops (results accumulate)
+	NumLocals  int
 }
 
 // CompiledFn is one compiled AQL fn overload at one arg shape: its
@@ -663,6 +724,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " n%-3d ; reverse top %d", in.Arg, in.Arg)
 		case OpInterp:
 			fmt.Fprintf(sb, " i%-3d ; interpolate %d hole(s)", in.Arg, p.Interps[in.Arg].NHoles)
+		case OpBindTyped:
+			tb := p.TypedBinds[in.Arg]
+			fmt.Fprintf(sb, " y%-3d ; typed bind %s:%s", in.Arg, tb.Name, tb.Describe)
 		}
 		sb.WriteByte('\n')
 	}

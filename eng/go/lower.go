@@ -1349,7 +1349,14 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	}); reason != "" {
 		return reason
 	}
-	if c.dynApply > 0 {
+	if c.typedBind != nil {
+		// A typed value-def's runtime validate/reparent step: pop the body
+		// operand (laid out above), run the interpreter-mirroring RunTypedBind,
+		// push the bound value. The spec rides in TypedBinds like a trap/map spec.
+		ti := len(lw.p.TypedBinds)
+		lw.p.TypedBinds = append(lw.p.TypedBinds, *c.typedBind)
+		lw.emit(OpBindTyped, ti, c.pos)
+	} else if c.dynApply > 0 {
 		// Apply the TOP operand (a runtime fn VALUE) to the `dynApply` trailing args
 		// laid out below it — a paren-bounded trailing fn-value apply (`(a b comp)`)
 		// recorded as an event (RecordDynApply) so it seats like any computed result:
