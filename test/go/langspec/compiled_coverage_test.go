@@ -170,12 +170,28 @@ func TestCompiledCoverage(t *testing.T) {
 		t.Errorf("correct-error refusals %d (want 0): a known-to-error row must compile an OpTrap / RET error path, not refuse", byCause["correct-error"])
 	}
 
-	// Coverage ratchets are INFORMATIONAL, not gates. The compile-coverage goal is
-	// "all valid AQL compiles", driven by the corpus (lang/spec/corpus-*.tsv) and
-	// its dedicated all-three-modes test (TestCorpusAllModes), not by pinning a
-	// refusal/island count that an expanding corpus would trip. The real
-	// correctness contract — compiled output == interpreted output — stays a hard
-	// gate in the differential tests; here we only report the coverage surface.
-	t.Logf("compile refusals=%d (ceiling ref %d), islanded=%d (ceiling ref %d) — informational",
-		refused, refusalCeiling, islanded, islandCeiling)
+	// P7 ENDGAME RE-ARM (design/P7-ENDGAME.10.md): the growth-phase
+	// informational policy is over — the frontier is GATED again at the
+	// documented-tier floor. Every one of the refusalGate rows below is owned
+	// by a named tier with a written rationale; a NEW refusal (a regression,
+	// or an unclassified corpus row) must trip CI and force a conscious
+	// classification, never drift in silently. The gate moves DOWN as tiers
+	// close (auto-dispatch runtime model, G5 flex path shapes, M6
+	// dynamic-scope decision, the three proof-held error rows); it moves UP
+	// only with a new named tier documented in the endgame record.
+	//   4  container auto-dispatch guard (module-log 72/73, module-rand 14/15)
+	//   2  G5 flex path-shape typing (flex 88/95)
+	//   2  M6 dynamic-scope tier (recursion 71/72)
+	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier 80,
+	//      word-splice 115) — the entire error allowlist
+	const refusalGate = 11
+	const islandGate = 1 // error.tsv:25 — the last compute-frontier island
+	if refused > refusalGate {
+		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)
+	}
+	if islanded > islandGate {
+		t.Errorf("interpreter islands %d exceed the gate %d", islanded, islandGate)
+	}
+	t.Logf("compile refusals=%d (gate %d), islanded=%d (gate %d); historical floor refs %d/%d",
+		refused, refusalGate, islanded, islandGate, refusalCeiling, islandCeiling)
 }

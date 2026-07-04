@@ -84,13 +84,13 @@ func TestResolveCompileMode(t *testing.T) {
 		compile, force, noCompile string
 		want                      CompileMode
 	}{
-		{false, false, "", "", "", CompileOff},     // default: interpreter
+		{false, false, "", "", "", CompileTry},     // P7 default: compiled with silent sound fallback (design/P7-ENDGAME.10.md)
 		{true, false, "", "", "", CompileTry},      // --compile flag
 		{false, true, "", "", "", CompileForce},    // --force-compile flag
 		{false, false, "1", "", "", CompileTry},    // AQL_COMPILE=1
 		{false, false, "true", "", "", CompileTry}, // AQL_COMPILE=true
-		{false, false, "0", "", "", CompileOff},    // AQL_COMPILE=0 is off
-		{false, false, "no", "", "", CompileOff},   // AQL_COMPILE=no is off
+		{false, false, "0", "", "", CompileTry},    // AQL_COMPILE=0: legacy opt-in var is inert post-flip; AQL_NO_COMPILE is the control
+		{false, false, "no", "", "", CompileTry},   // same — the legacy opt-in var no longer disables
 		{false, false, "", "1", "", CompileForce},  // AQL_FORCE_COMPILE=1
 		{true, true, "", "", "", CompileForce},     // force wins over try (flags)
 		{true, false, "", "1", "", CompileForce},   // force env wins over try flag

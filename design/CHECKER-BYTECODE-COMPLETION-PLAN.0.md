@@ -1,7 +1,8 @@
 # Checker + Bytecode Compiler — Completeness Review and Completion Plan
 
-Status: **plan** (review verified against the live tree; plan not yet
-started). Snapshot date **2026-07-03**, tree = `main` @ `060157b`
+Status: **executed** — see [`P7-ENDGAME.10.md`](P7-ENDGAME.10.md) for
+the closing record and the execution log below for every landing.
+Originally: Snapshot date **2026-07-03**, tree = `main` @ `060157b`
 (post-PR #224 cross-module element typing). All gate numbers below were
 measured by running the ratchet/differential suites on this tree, not
 copied from older docs — refusal counts in earlier docs (0, 6, 19, 23,
@@ -1005,6 +1006,18 @@ from everything; 7 is gated on 6's exit criteria.
   full battery (VERIFY PASSED, make test 0, differential 0
   divergences) and pushed as 581f143 / 8651c5f / 40a92b7; both
   review threads answered.
+- **2026-07-04 — Phase 7 executed; program closed.** Compiled mode
+  flipped to default (ResolveCompileMode → CompileTry bare;
+  AQL_NO_COMPILE the kill switch, per the rollout contract's reserved
+  Stage-7 language); the coverage frontier re-armed as a GATE at the
+  documented-tier floor (refusalGate 11 / islandGate 1 in
+  TestCompiledCoverage, tier decomposition in-comment); perf/alloc
+  baseline confirmed standing (verify-bytecode alloc ceilings green
+  at every landing). The unbounded fallback deletion stays gated on
+  the tiers reaching 0, recorded in P7-ENDGAME.10.md with the full
+  achievement table (refusals 151 → 11, error rows 83 → 3,
+  Any-frontier 381 → 195, miscompiles 0, check- and
+  compiled-by-default).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,
