@@ -428,6 +428,10 @@ type EmitState struct {
 	// escape the fn, and refuses otherwise. See OpPushConstFresh (bytecode.go)
 	// and design/MISCOMPILE-HUNT-FINDINGS.0.md §A.
 	freshenConst map[int]bool
+	// fnRiskFields maps a constructed INSTANCE's value ID → the field keys
+	// holding genuinely-0-param fn values (noteFnRiskFields /
+	// instanceFnFieldRisk — the carrier-receiver auto-dispatch hazard).
+	fnRiskFields map[string]map[string]bool
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -954,12 +958,58 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// to exactly this materialise context.
 	if len(es.units) > 1 && freshenableConst(lit) &&
 		!es.units[len(es.units)-1].enclosingIDs[v.ID] {
+		// A body literal EMBEDDING an enclosing binding's container cannot
+		// be freshened OR shared: the interpreter constructs the OUTER
+		// literal fresh per call while the binding-read MEMBER keeps its
+		// shared instance (`def c [9] def mk fn [[] [List] [[c]]]` —
+		// `((mk) get 0) eq c` stays true, `(mk) eq (mk)` stays false).
+		// A deep-clone freshen breaks the member identity; a shared const
+		// breaks the outer's. Until a selective (spine-only) freshen
+		// exists, refuse — the sound fallback (PR #225 P1).
+		if embedsEnclosingCompound(lit, es.units[len(es.units)-1].enclosingIDs) {
+			es.MarkUncompilable("fn body literal embeds an enclosing binding's container (per-call spine identity over a shared member)")
+			return emitOperand{}, false
+		}
 		if es.freshenConst == nil {
 			es.freshenConst = map[int]bool{}
 		}
 		es.freshenConst[idx] = true
 	}
 	return constOperand(idx), true
+}
+
+// embedsEnclosingCompound reports whether a compound literal (recursively)
+// contains a compound member whose identity is an ENCLOSING binding's value
+// — the shape whose interpreter semantics mix a per-call-fresh spine with a
+// shared member, which neither OpPushConstFresh (deep clone) nor a shared
+// pooled const can model. See the refusal at the resolveOperand marking
+// site (PR #225 P1).
+func embedsEnclosingCompound(v Value, enclosing map[string]bool) bool {
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if !freshenableConst(e) {
+				continue
+			}
+			if enclosing[e.ID] || embedsEnclosingCompound(e, enclosing) {
+				return true
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if !freshenableConst(mv) {
+				continue
+			}
+			if enclosing[mv.ID] || embedsEnclosingCompound(mv, enclosing) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // freshenFnUnitConsts gives fn-unit compound body literals per-call identity
@@ -2611,6 +2661,7 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	if !es.active() {
 		return
 	}
+	es.noteFnRiskFields(word, args, outs)
 	if es.recordCallElided(word, sig, args, outs) {
 		return
 	}
@@ -2742,7 +2793,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 	case sig.fullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
-	case isGetFamilyWord(word) && containerFnAutoDispatchRisk(args):
+	case isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
 		// A get/dot/getr/dotr read from a container HOLDING a function member
 		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
 		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
@@ -2972,7 +3023,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	if !es.active() || len(outs) > 1 {
 		return false
 	}
-	if isGetFamilyWord(word) && containerFnAutoDispatchRisk(args) {
+	if isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
 		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
 		// the interpreter invokes a container-read fn value as it lands; the
 		// VM would push it as data. Refuse the program (sound fallback).
@@ -3014,6 +3065,89 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 // conservatively. The receiver signal behind the get-family auto-dispatch
 // refusals (recordCallRefusal, RecordPolyCall). Census cost at landing:
 // 2 rows (3,875-row corpus), both previously divergence-exposed.
+// noteFnRiskFields records, at a construction dispatch (make), which field
+// keys of the produced INSTANCE hold genuinely-0-param fn values — the
+// auto-dispatch-on-read hazard containerFnAutoDispatchRisk cannot see when
+// the later get-family receiver is the instance CARRIER (schema only, no
+// field values; probe: `def C class {f:Function} def o (make C
+// {f:make42/r}) o.f` → 42 interpreted vs the fn value compiled — PR #225
+// P1). The construction MAP is concrete at record time, so the hazard is
+// decidable here and consulted by ID at the get-family guard sites. A field
+// later overwritten with a non-fn value over-refuses (sound, rare —
+// documented trade).
+func (es *EmitState) noteFnRiskFields(word string, args, outs []Value) {
+	if word != "make" || len(outs) == 0 {
+		return
+	}
+	var risky map[string]bool
+	for _, a := range args {
+		mp, ok := a.Data.(MapPayload)
+		if !ok || a.Carrier || mp.M == nil {
+			continue
+		}
+		for _, k := range mp.M.Keys() {
+			mv, _ := mp.M.Get(k)
+			if fnValueZeroArg(mv) {
+				if risky == nil {
+					risky = map[string]bool{}
+				}
+				risky[k] = true
+			}
+		}
+	}
+	if risky == nil {
+		return
+	}
+	if es.fnRiskFields == nil {
+		es.fnRiskFields = map[string]map[string]bool{}
+	}
+	for _, o := range outs {
+		if o.ID != "" {
+			es.fnRiskFields[o.ID] = risky
+		}
+	}
+}
+
+// instanceFnFieldRisk consults noteFnRiskFields' record for a get-family
+// dispatch whose receiver is (a carrier of) a tracked instance: a concrete
+// key inspects only that field, an unresolvable key any tracked field.
+func (es *EmitState) instanceFnFieldRisk(args []Value) bool {
+	if len(es.fnRiskFields) == 0 {
+		return false
+	}
+	for _, a := range args {
+		risky := es.fnRiskFields[a.ID]
+		if risky == nil {
+			continue
+		}
+		if key, ok := concreteMapKey(args); ok {
+			if risky[key] {
+				return true
+			}
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// zeroArgFnOut is the OUT-side backstop to the receiver heuristic: when a
+// get-family dispatch's check-mode result IS a concrete fn value with a
+// genuine 0-param overload, the read demonstrably surfaced an
+// auto-dispatchable member regardless of how the receiver was represented
+// (a class-instance CARRIER receiver dodges the payload inspection —
+// probe: `def C class {f:Function} def o (make C {f:make42/r}) o.f` → 42
+// interpreted vs the fn value compiled; PR #225 P1). Zero FP risk: the out
+// is the very value whose landing diverges.
+func zeroArgFnOut(outs []Value) bool {
+	for _, o := range outs {
+		if !o.Carrier && fnValueZeroArg(o) {
+			return true
+		}
+	}
+	return false
+}
+
 func containerFnAutoDispatchRisk(args []Value) bool {
 	for _, a := range args {
 		if a.Carrier {
@@ -3044,6 +3178,29 @@ func containerFnAutoDispatchRisk(args []Value) bool {
 			}
 			for _, k := range d.M.Keys() {
 				mv, _ := d.M.Get(k)
+				if fnValueZeroArg(mv) {
+					return true
+				}
+			}
+		default:
+			// Flat instances (class / Resource) expose FIELD reads through
+			// the same get family, and the interpreter auto-dispatches a
+			// landed fn field exactly like a map member (probe-verified:
+			// `def C class {f:Function} def o (make C {f:make42/r}) o.f`
+			// -> 42 interpreted, `fn make42` compiled — PR #225 P1).
+			// Same key-precision rule as MapPayload.
+			fields, _, isInst := flatInstanceParts(a)
+			if !isInst || fields == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := fields.Get(key); hit && fnValueZeroArg(mv) {
+					return true
+				}
+				continue
+			}
+			for _, k := range fields.Keys() {
+				mv, _ := fields.Get(k)
 				if fnValueZeroArg(mv) {
 					return true
 				}

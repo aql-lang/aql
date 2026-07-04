@@ -3935,3 +3935,54 @@ func TestTypedDefBindCompiles(t *testing.T) {
 			prog.Disassemble())
 	}
 }
+
+// PR #225 P1 review findings — two auto-dispatch/identity escapes, both
+// probe-confirmed divergences before the fix, both now sound refusals.
+func TestPR225P1Refusals(t *testing.T) {
+	// (1) A fn-body literal EMBEDDING an enclosing binding's container:
+	// interp = fresh spine + SHARED member, which neither a deep-clone
+	// freshen nor a shared const models — must refuse; fallback restores
+	// parity (true).
+	const embeds = `def c [9] def mk fn [[] [List] [[c]]] ((mk) get 0) eq c`
+	prog, reason, _, _ := mustNew(t).CompileCheck(embeds)
+	if prog != nil {
+		t.Fatalf("embedded-binding literal compiled; want refusal")
+	}
+	if !strings.Contains(reason, "embeds an enclosing binding") {
+		t.Errorf("refusal reason = %q; want the embedded-binding identity reason", reason)
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(embeds)
+	gotI, errI := mustNew(t).Run(embeds)
+	if compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[true]" {
+		t.Errorf("fallback parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want [true])",
+			compiled, errC, errI, gotC, gotI)
+	}
+
+	// (2) A class-instance field holding a genuinely-0-param fn: the
+	// interpreter auto-dispatches the read (42); the instance receiver is a
+	// schema CARRIER at record time, so the hazard is tracked at make time
+	// by instance ID (noteFnRiskFields) — the read must refuse.
+	const classFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function} def o (make C {f:make42/r}) o.f`
+	prog2, reason2, _, _ := mustNew(t).CompileCheck(classFn)
+	if prog2 != nil {
+		t.Fatalf("class fn-field read compiled; want refusal")
+	}
+	if !strings.Contains(reason2, "auto-dispatches") {
+		t.Errorf("refusal reason = %q; want the auto-dispatch reason", reason2)
+	}
+	gotC2, compiled2, errC2 := mustNew(t).RunCompiled(classFn)
+	gotI2, errI2 := mustNew(t).Run(classFn)
+	if compiled2 || errC2 != nil || errI2 != nil || fmt.Sprint(gotC2) != fmt.Sprint(gotI2) || fmt.Sprint(gotI2) != "[42]" {
+		t.Errorf("fallback parity: compiled=%v cErr=%v iErr=%v got %v vs %v (want [42])",
+			compiled2, errC2, errI2, gotC2, gotI2)
+	}
+
+	// NEGATIVES: a NON-fn field of the same instance keeps compiling with
+	// parity (key precision), and the applied multi-param member-call
+	// pattern is untouched.
+	const nonFn = `def make42 fn [[] [Integer] [42]] def C class {f:Function x:0} def o (make C {f:make42/r x:5}) o.x`
+	gotC3, compiled3, errC3 := mustNew(t).RunCompiled(nonFn)
+	if !compiled3 || errC3 != nil || fmt.Sprint(gotC3) != "[5]" {
+		t.Errorf("non-fn field read: compiled=%v err=%v got=%v (want compiled [5])", compiled3, errC3, gotC3)
+	}
+}
