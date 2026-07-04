@@ -2313,11 +2313,34 @@ func (e *Engine) stepWord(val Value) error {
 	// or dispatch. See design/FORWARD-STRAND-ADVISORY.10.md.
 	e.checkMixedFormAdvisories(w, sig, positions, val.Pos, fwdCount, stkCount)
 
+	// Compile-mode stranded-member-fn guard (design/EDGE-SPEC-FINDINGS.0.md §2):
+	// a parked user-fn value surfaced from a container read (`m.double`) AUTO-
+	// APPLIES the moment a value lands on it in the interpreter. A dispatch that
+	// instead consumes that value while the fn sits stranded just below it
+	// (`m.double 21 eq 42` — `eq` grabs 21, and the fn is then applied WRONGLY at
+	// the residual tail) diverges. Refuse so the body falls back. The
+	// statement-tail apply (`m.double 21`, nothing dispatches above the fn) is
+	// unaffected — its residual [fn, 21] lowers to the correct trailing apply.
+	e.refuseStrandedMemberFn(positions)
+
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
 		e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
 		return e.insertForward(w, sig, fwdCount, stkCount, specAt)
 	}
+
+	// Compile-mode forward-collection drift guard
+	// (design/EDGE-SPEC-FINDINGS.0.md §1). A forward-eligible word that matched
+	// ALL-STACK (fwdCount==0) under a DYNAMIC top-of-stack operand — while a
+	// concrete forward token sits right after it — diverges: the interpreter,
+	// seeing the operand's CONCRETE runtime value, forward-collects that token
+	// into the narrower overload (`add 1` → 7+1=8), whereas the check-mode match
+	// (the dynamic carrier blocks that overload's stack slot) reached PAST the
+	// dynamic value to a deeper leading residual (`add` over [dyn, 5] → 5+7).
+	// The residual-window operand accounting across the reified-error / island
+	// boundary is unsound, so refuse in compile mode and fall back. The
+	// interpreter and plain check mode are untouched (recorder inactive).
+	e.refuseForwardStackDrift(sig, positions)
 
 	// Immediate execution: read args from recorded positions.
 	match := &MatchResult{Sig: sig, Positions: positions, Name: w.Name}
@@ -2445,6 +2468,148 @@ func (e *Engine) checkForwardStrandsOperand(w WordInfo, sig *Signature, position
 		}
 		return // only the nearest value below matters
 	}
+}
+
+// refuseForwardStackDrift refuses (compile mode only) a dispatch whose
+// check-mode operand match would DIVERGE from the interpreter's runtime
+// forward collection — the reified-error / island residual accounting of
+// design/EDGE-SPEC-FINDINGS.0.md §1. Preconditions (checked by the caller):
+// the dispatch matched ALL-STACK (fwdCount==0). It refuses when ALL of:
+//
+//   - the recorder is active (a real compile pass — never plain check / run);
+//   - the sig is forward-eligible (BarrierPos != 0, not a full-stack word), so
+//     the trailing token is a forward CANDIDATE, not a separate residual;
+//   - the TOP-OF-STACK matched arg (sig[0], the highest-position operand) is
+//     DYNAMIC. That is the operand whose unknown static type BLOCKED the
+//     narrower forward overload — forcing check mode to a catch-all all-stack
+//     match — while at run time its concrete value would let the word
+//     forward-collect instead. If a concrete value is on top, the all-stack
+//     match is what the interpreter takes too (`get key dyn`, `force-arity 2
+//     dynfn`), so there is no drift;
+//   - a DEEPER matched arg is NON-dynamic — the leading residual the all-stack
+//     match reached PAST (the `5` of `5 do … error … add 1`). Its runtime
+//     value stays put under the word's real result;
+//   - the token immediately after the word is a single ATOMIC LITERAL forward
+//     operand (a concrete scalar/atom or a bare type node) — the operand the
+//     interpreter forward-collects once the dynamic value is concrete. A
+//     CloseParen / ParenExpr / structural token is NOT a forward operand (the
+//     `eq`/`and` comparison residuals that end on `)` compile faithfully
+//     all-stack), so those are excluded.
+//
+// Without the top-is-dynamic and trailing-token gates a genuine all-stack
+// dynamic dispatch (`get key dyn`, `dyn 5 add`) would be refused although it
+// compiles faithfully, so both gates are load-bearing.
+func (e *Engine) refuseForwardStackDrift(sig *Signature, positions []int) {
+	es := e.registry.Check.Recorder()
+	if !es.active() || sig == nil || sig.BarrierPos == 0 || sig.fullStack() || len(positions) < 2 {
+		return
+	}
+	// Find the top-of-stack matched arg (highest tape position) and whether any
+	// deeper matched arg is non-dynamic.
+	topPos, deeperConcrete := -1, false
+	for _, p := range positions {
+		if p < 0 || p >= e.tape.Len() {
+			return
+		}
+		if p > topPos {
+			topPos = p
+		}
+	}
+	for _, p := range positions {
+		if p != topPos && !e.tape.At(p).Dynamic {
+			deeperConcrete = true
+		}
+	}
+	if !e.tape.At(topPos).Dynamic || !deeperConcrete {
+		return
+	}
+	nxt := e.pointer + 1
+	if nxt >= e.tape.Len() {
+		return
+	}
+	if forwardLiteralOperand(e.tape.At(nxt)) {
+		es.MarkUncompilable("forward operand accounting across a dynamic/island residual (Stage 3)")
+	}
+}
+
+// refuseStrandedMemberFn refuses (compile mode only) a dispatch that consumes a
+// stack operand while a parked FUNCTION VALUE sits directly beneath it — the
+// mid-expression member-fn-apply divergence of design/EDGE-SPEC-FINDINGS.0.md
+// §2. The interpreter auto-applies a surfaced member fn (`m.double`) to the
+// value that lands on it, so `m.double 21 eq 42` runs `(m.double 21)` → 42
+// BEFORE `eq`; the compiler instead lets `eq` consume `21` and applies the
+// stranded fn at the residual tail (to the wrong value). The bare statement-tail
+// apply `m.double 21` never reaches here — nothing dispatches above the fn — so
+// it keeps compiling. No-op outside a compile pass (recorder inactive).
+func (e *Engine) refuseStrandedMemberFn(positions []int) {
+	es := e.registry.Check.Recorder()
+	if !es.active() {
+		return
+	}
+	// Deepest stack operand this dispatch consumes.
+	minStack := -1
+	for _, p := range positions {
+		if p >= 0 && p < e.pointer && (minStack == -1 || p < minStack) {
+			minStack = p
+		}
+	}
+	if minStack <= 0 {
+		return
+	}
+	// Walk to the FIRST data value directly below the consumed operands (skipping
+	// pure structural markers), stopping at a scope / statement boundary. Only an
+	// IMMEDIATELY-adjacent parked fn is the stolen-arg hazard: a fn buried under
+	// other residual values (a previous statement's leftover) is not stranded
+	// against THIS dispatch's operand, so the scan stops at the first value
+	// regardless of what it is.
+	for i := minStack - 1; i >= 0; i-- {
+		v := e.tape.At(i)
+		if IsOpenParen(v) || IsCloseParen(v) || IsForward(v) || IsEnd(v) || IsDefCleanup(v) {
+			return // scope / statement boundary
+		}
+		if v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) ||
+			v.Parent.ConformsTo(TInternal) || v.Parent.ConformsTo(TReturnCheck) {
+			continue // pure structural marker between the operand and its neighbour
+		}
+		// First data value directly below the operand. Only a CONTAINER MEMBER
+		// read is the hazard this guard owns (design/EDGE-SPEC-FINDINGS.0.md §2):
+		// its result is a checker-typed dynamic(Any) whose PROVENANCE (memberFnRead)
+		// marks it as a fn-valued member surfaced by a get-family read. A bare
+		// Function/FnDef value here (a `c/r` param ref, a factory closure) is a
+		// DIFFERENT boundary (M2a `apply`, the residual leading/trailing apply) with
+		// its own handling — do NOT claim it, or those refuse with the wrong reason.
+		if es.memberFnRead(v.ID) {
+			es.MarkUncompilable("member fn value auto-applies mid-expression (fn-value-call boundary, Stage 3)")
+		}
+		return
+	}
+}
+
+// forwardLiteralOperand reports whether t is a single ATOMIC LITERAL that
+// forward collection would grab as one operand: a concrete scalar/atom or a
+// bare type node. It deliberately excludes structural tokens (paren markers,
+// End, Forward, DefCleanup, Mark/Move/Internal/ReturnCheck) and ParenExpr
+// data — none of which a forward-collecting word treats as a lone literal
+// operand, and all of which showed up as false positives in the drift sweep
+// (an `eq`/`and` comparison residual ending on `)` compiles faithfully
+// all-stack). The structural exclusions mirror checkForwardStrandsOperand's
+// scope-boundary set (a CloseParen marker's Parent quirkily conforms to
+// TScalar, so the type test below is not sufficient on its own). Used only by
+// refuseForwardStackDrift.
+func forwardLiteralOperand(t Value) bool {
+	if IsOpenParen(t) || IsCloseParen(t) || IsForward(t) || IsEnd(t) ||
+		IsDefCleanup(t) || IsParenExpr(t) ||
+		t.Parent.ConformsTo(TMark) || t.Parent.ConformsTo(TMove) ||
+		t.Parent.ConformsTo(TInternal) || t.Parent.ConformsTo(TReturnCheck) {
+		return false
+	}
+	if IsBareTypeNode(t) {
+		return true
+	}
+	if !IsConcrete(t) || t.Parent == nil {
+		return false
+	}
+	return t.Parent.ConformsTo(TScalar) || t.Parent.ConformsTo(TAtom)
 }
 
 // execMatch executes a matched signature, splicing args and results.

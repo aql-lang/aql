@@ -539,6 +539,17 @@ type CheckState struct {
 	// the name has a binding by then (RescueForwardRefDiagnostics).
 	FnBodyDepth int
 
+	// ArgsFrameUnnamed reports whether the fn body CURRENTLY under analysis
+	// (the one whose args projection is on top of r.Args) has at least one
+	// UNNAMED (stack-flowing) parameter. Set and save/restored by
+	// runFnBodyOnce in lockstep with the args projection push, so it always
+	// reflects the innermost active body. `args` / `args.N` folds soundly to
+	// a frame local only when every param is NAMED; with an unnamed param the
+	// input stays live on the body stack and folding args.N strands it
+	// (a compile≠interpret divergence — design/EDGE-SPEC-FINDINGS.0.md §4), so
+	// specialWordResults refuses the program in compile mode when this is set.
+	ArgsFrameUnnamed bool
+
 	// FnNameStack is the stack of NAMED fn bodies currently under analysis
 	// (one entry per AnalyseFnBody whose fn has a name). Its top is the fn
 	// whose body is executing; used to attribute body-local defs and

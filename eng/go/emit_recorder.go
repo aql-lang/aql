@@ -60,6 +60,8 @@ type EmitRecorder interface {
 	RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool
 	RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool
 	RegisterTrailingApply(fnID string, arity int)
+	noteMemberFnRead(id string)
+	memberFnRead(id string) bool
 	dynInputsProven(sig *Signature, args []Value) bool
 	materialise(v Value) (Value, bool)
 	resolveOperand(v Value) (emitOperand, bool)
@@ -153,6 +155,8 @@ func (inactiveEmit) RecordMakeMap(*Registry, []string, []Value, bool, Value, Src
 }
 func (inactiveEmit) RecordInterp([]InterpPart, []Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RegisterTrailingApply(string, int)                      {}
+func (inactiveEmit) noteMemberFnRead(string)                                {}
+func (inactiveEmit) memberFnRead(string) bool                               { return false }
 func (inactiveEmit) dynInputsProven(*Signature, []Value) bool               { return false }
 func (inactiveEmit) materialise(v Value) (Value, bool)                      { return v, false }
 func (inactiveEmit) resolveOperand(Value) (emitOperand, bool)               { return emitOperand{}, false }
