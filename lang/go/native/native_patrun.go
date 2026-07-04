@@ -90,7 +90,8 @@ var patrunNatives = []NativeFunc{
 	{
 		Name: "patrun",
 		Signatures: []Signature{
-			{Args: []*Type{}, Impl: Go(patrunNewHandler), Returns: []*Type{TPatrun}, BarrierPos: -1},
+			{Args: []*Type{}, Impl: Go(patrunNewHandler), Returns: []*Type{TPatrun},
+				ReturnsFn: patrunNewReturns, BarrierPos: -1},
 		},
 	},
 	{
@@ -102,16 +103,19 @@ var patrunNatives = []NativeFunc{
 			// the VM tape — so a PURE fn literal rides as an inert const
 			// (CompileStoresFn; a capturing fn declines at isInertConst and falls
 			// back, keeping its real binding).
-			{Args: []*Type{TMap, TAny, TPatrun}, Impl: Go(patrunAddHandler), Returns: []*Type{}, BarrierPos: -1, CompileEffect: CompileStoresFn},
+			{Args: []*Type{TMap, TAny, TPatrun}, Impl: Go(patrunAddHandler), Returns: []*Type{},
+				ReturnsFn: patrunAddReturns, BarrierPos: -1, CompileEffect: CompileStoresFn},
 		},
 	},
 	{
 		Name: "find",
 		Signatures: []Signature{
 			// find SUBJECT PATRUN {opts} — opts: {exact:Boolean}.
-			{Args: []*Type{TMap, TPatrun, TMap}, Impl: Go(patrunFindHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, TPatrun, TMap}, Impl: Go(patrunFindHandler), Returns: []*Type{TAny},
+				ReturnsFn: patrunFindReturns, BarrierPos: -1},
 			// find SUBJECT PATRUN
-			{Args: []*Type{TMap, TPatrun}, Impl: Go(patrunFindHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TMap, TPatrun}, Impl: Go(patrunFindHandler), Returns: []*Type{TAny},
+				ReturnsFn: patrunFindReturns, BarrierPos: -1},
 		},
 	},
 	{
@@ -132,6 +136,56 @@ var patrunNatives = []NativeFunc{
 
 func patrunNewHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewPatrun()}, nil
+}
+
+// ---- check-mode shape twins (design/checker-precision-fronts.0.md §2) ----
+//
+// A Patrun is a store-class container: a mutable dispatch table whose
+// stored values are unreachable to the checker — `find` declared the
+// honest dynamic(Any) hatch. Per-creation-site shaping recovers a BOUND
+// without touching that epistemics: `patrun` mints an abstract
+// StoreShapeInfo in check mode, `add` joins the WRITTEN VALUE's type
+// into its unkeyed join (patterns are map-shaped, not string keys — the
+// join is over values, the exact analogue of a typed list's element
+// join), and `find` surfaces dynamic(join ∪ None) — a gradual bound,
+// never a proof, since WHICH rule matches is runtime dispatch. A
+// dispatch-bearing stored value (the lambda-router pattern, whose
+// reader re-dispatches the found fn) POISONS the join and find keeps
+// today's dynamic(Any) — the pinned patrun.tsv:40 residual is
+// deliberately unchanged. Compile passes keep the legacy carriers
+// (patrun rows compile natively today; byte-identical lowering).
+
+func patrunNewReturns(_ []Value, r *Registry) []Value {
+	if r == nil || r.Check.Compiling {
+		return []Value{NewCarrier(TPatrun)}
+	}
+	return []Value{eng.NewStoreShapeCarrier(TPatrun, 0)}
+}
+
+func patrunAddReturns(args []Value, r *Registry) []Value {
+	// len guard: the no-signature recovery can assume this sig with a
+	// short arg window (defensive — panic prevention).
+	if r != nil && !r.Check.Compiling && len(args) >= 3 {
+		if ss, ok := eng.StoreShapeOf(args[2]); ok {
+			ss.RecordVal(args[1])
+		}
+	}
+	return nil
+}
+
+func patrunFindReturns(args []Value, r *Registry) []Value {
+	if r != nil && !r.Check.Compiling && len(args) >= 2 {
+		if ss, ok := eng.StoreShapeOf(args[1]); ok {
+			if vals, hit := ss.LookupVals(); hit {
+				// The bound includes None: an unmatched subject reads None
+				// (patrunFindHandler's miss path), and remove-then-find keeps
+				// the join monotone.
+				bound := eng.JoinCarriers(vals, NewCarrier(eng.TNone))
+				return []Value{eng.NewDynamicCarrierValue(bound)}
+			}
+		}
+	}
+	return []Value{NewDynamicCarrier(TAny)} // legacy hatch: unshaped / poisoned / empty
 }
 
 func patrunAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

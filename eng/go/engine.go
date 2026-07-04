@@ -6810,15 +6810,33 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			bestHasFn = hasFn
 		}
 	}
-	// Fallback pass: if no compatible sig was found at all, prefer
-	// a sig with a ReturnsFn over one without (all else equal).
+	// Fallback pass: if no compatible sig was found at all, prefer a
+	// sig with a ReturnsFn over one without (all else equal), at a
+	// SATISFIABLE arity. The fallback (first-ranked candidate) may be
+	// a wider overload than this call site can even supply positions
+	// for — specificity ranking puts the 3-arg patrun `add` above the
+	// 2-arg math adds — and a fallback that merely CARRIES a ReturnsFn
+	// must not win on that alone: assuming the wider sig swallows an
+	// unrelated operand into the recovery window (corrupting the
+	// disjunct rescue for `add` over two disjuncts) or feeds its
+	// ReturnsFn a short args slice (an index-out-of-range panic
+	// class). So when the current best is Fn-less OR arity-
+	// unsatisfiable, move to the first ReturnsFn-bearing sig whose
+	// full window EXISTS; if none does, the fallback stands (its
+	// ReturnsFn sees the short window — ReturnsFns are len-guarded).
 	if bestMatch < 0 {
-		for i := range fn.Signatures {
-			s := &fn.Signatures[i]
-			if s.Fallback {
-				continue
-			}
-			if s.ReturnsFn != nil && !bestHasFn {
+		fbn := best.TotalArgs()
+		bestSat := len(e.checkModeFallbackPositions(fbn)) == fbn
+		if !bestHasFn || !bestSat {
+			for i := range fn.Signatures {
+				s := &fn.Signatures[i]
+				if s.Fallback || s.ReturnsFn == nil {
+					continue
+				}
+				n := s.TotalArgs()
+				if len(e.checkModeFallbackPositions(n)) != n {
+					continue
+				}
 				best = s
 				break
 			}

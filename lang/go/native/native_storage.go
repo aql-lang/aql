@@ -84,15 +84,17 @@ var storageNatives = []NativeFunc{
 
 			// FlexMap (in-place key set; returns the node for chaining)
 			{
-				Args:    []*Type{TString, TAny, TFlexMap},
-				Impl:    Go(setFlexMapHandler),
-				Returns: []*Type{TFlexMap}, BarrierPos: -1,
+				Args:      []*Type{TString, TAny, TFlexMap},
+				Impl:      Go(setFlexMapHandler),
+				Returns:   []*Type{TFlexMap},
+				ReturnsFn: setFlexMapReturns, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TFlexMap},
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(setFlexMapHandler),
-				Returns:   []*Type{TFlexMap}, BarrierPos: -1,
+				Returns:   []*Type{TFlexMap},
+				ReturnsFn: setFlexMapReturns, BarrierPos: -1,
 			},
 
 			// FlexList (in-place index set; 0..len-1 only — sparse is
@@ -158,9 +160,10 @@ var storageNatives = []NativeFunc{
 		Name: "context",
 
 		Signatures: []Signature{{
-			Args:    []*Type{},
-			Impl:    Go(contextHandler),
-			Returns: []*Type{TStore}, BarrierPos: -1,
+			Args:      []*Type{},
+			Impl:      Go(contextHandler),
+			Returns:   []*Type{TStore},
+			ReturnsFn: contextReturns, BarrierPos: -1,
 		}},
 	},
 }
@@ -471,7 +474,7 @@ func recordSchemaFieldReturns(rt RecordTypeInfo, key Value) []Value {
 	return []Value{NewDynamicCarrier(ft)}
 }
 
-func getNodeReturns(args []Value, _ *Registry) []Value {
+func getNodeReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	if len(args) != 2 {
 		return dyn
@@ -491,6 +494,23 @@ func getNodeReturns(args []Value, _ *Registry) []Value {
 	// bearing (Function/FnDef) field, keeps dynamic Any.
 	if rt, ok := container.Data.(RecordTypeInfo); ok && rt.Fields != nil {
 		return recordSchemaFieldReturns(rt, key)
+	}
+	// A store-shaped FLEX carrier (`flex {…}` and the set-writes threaded
+	// through it — design/checker-precision-fronts.0.md §2 stage 1): a key
+	// this container saw written reads back its recorded bound, surfaced
+	// GRADUAL like the record-schema rule above (a flex tree has runtime
+	// writers the shape cannot see, so the claim is a bound a guard
+	// discharges, never strict/concrete). A key the shape missed keeps
+	// dynamic(Any) — untracked writers exist, so absent-key None would be
+	// unsound. Plain check mode only (compile parity: flex rows compile
+	// natively today over the bare carrier).
+	if ss, ok := eng.StoreShapeOf(container); ok {
+		if r != nil && !r.Check.Compiling {
+			if v, hit := ss.LookupKey(getKey(key)); hit {
+				return []Value{eng.ShapeFieldRead(v)}
+			}
+		}
+		return dyn
 	}
 	// A CARRIER of a minted record type (`make Test.TestCase {…}`, a module
 	// fn declared `[TestCase]`): `type Type = Value`, and the record-refine
@@ -745,7 +765,21 @@ func setStoreHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 }
 
 func setStoreReturnsFn(args []Value, r *Registry) []Value {
-	r.Check.RecordContextSet(StoreKey(args[0]), args[1])
+	// Store-identity typing (design/checker-precision-fronts.0.md §2
+	// stage 1): a SHAPED store carrier records the write in ITS OWN
+	// KeyTypes, so two stores' same-named keys no longer join. The flat
+	// map is ALSO written — it remains the compatibility fallback for
+	// unshaped readers, so precision only increases. Plain check mode
+	// only: the compiled stream must stay byte-identical (store rows
+	// compile natively through the flat-map typing today).
+	if r != nil && !r.Check.Compiling && len(args) >= 3 {
+		if ss, ok := eng.StoreShapeOf(args[2]); ok {
+			ss.RecordKey(StoreKey(args[0]), args[1])
+		}
+	}
+	if len(args) >= 2 {
+		r.Check.RecordContextSet(StoreKey(args[0]), args[1])
+	}
 	return nil
 }
 
@@ -765,6 +799,21 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 }
 
 func getStoreReturnsFn(args []Value, r *Registry) []Value {
+	// Store-identity typing: a SHAPED store answers a key it saw
+	// written through ITSELF (no cross-store join). A key the shape
+	// missed falls back to the flat map — today's optimism, unchanged
+	// (the prototype chain / another scope's layer may have written
+	// it). Plain check mode only (compile parity).
+	if len(args) < 2 {
+		return []Value{NewDynamicCarrier(TAny)}
+	}
+	if r != nil && !r.Check.Compiling {
+		if ss, ok := eng.StoreShapeOf(args[1]); ok {
+			if v, hit := ss.LookupKey(StoreKey(args[0])); hit {
+				return []Value{v}
+			}
+		}
+	}
 	v, ok := r.Check.LookupContextType(StoreKey(args[0]))
 	if !ok {
 		// Escape hatch: the checker has no proven type for this key.
@@ -792,6 +841,47 @@ func contextHandler(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		return nil, reg.AqlError("context_error", "context: no active context", "context")
 	}
 	return []Value{NewStoreValue(TStore, store)}, nil
+}
+
+// contextReturns is `context`'s check-mode twin: it returns the ABSTRACT
+// shape carrier for the live top context layer (minted once per layer —
+// CheckState.ContextShape), never the real store. The real
+// *StoreInstanceInfo must not flow through check mode (toCarrier strips
+// it deliberately; the check pass is observation-free), and per-call-
+// site minting would be wrong — every `context` call in one scope
+// returns the SAME runtime store, so they must share ONE shape or a
+// set-then-get across two `context` calls would miss. During a COMPILE
+// pass the legacy bare Store carrier stands (byte-identical lowering —
+// context/set/get rows compile natively through the flat map today).
+func contextReturns(_ []Value, r *Registry) []Value {
+	if r == nil || r.Check.Compiling {
+		return []Value{NewCarrier(TStore)}
+	}
+	top := r.Contexts.Top()
+	if top == nil {
+		return []Value{NewCarrier(TStore)}
+	}
+	return []Value{r.Check.ContextShape(top, r.Contexts.Depth())}
+}
+
+// setFlexMapReturns is the FlexMap `set` check-mode twin: it records the
+// write in the receiver's StoreShapeInfo (the value adopted the way the
+// runtime AdoptIntoFlex would — a concrete map becomes a nested FlexMap
+// shape) and returns the RECEIVER carrier itself, mirroring the in-place
+// runtime contract (`set … f` leaves f, so the same shape flows on for
+// chaining). An unshaped receiver — and every COMPILE pass — keeps the
+// legacy fresh FlexMap carrier, so nothing changes where the shape
+// machinery is not in play.
+func setFlexMapReturns(args []Value, r *Registry) []Value {
+	// len guard: the no-signature recovery can assume this sig with a
+	// short arg window (defensive — panic prevention).
+	if r != nil && !r.Check.Compiling && len(args) >= 3 {
+		if ss, ok := eng.StoreShapeOf(args[2]); ok {
+			ss.RecordKey(StoreKey(args[0]), eng.AdoptShapeValue(args[1], 1))
+			return []Value{args[2]}
+		}
+	}
+	return []Value{NewCarrier(TFlexMap)}
 }
 
 // setListHandler is the List form of set: copy-returning, like Map —

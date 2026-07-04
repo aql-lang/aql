@@ -251,6 +251,7 @@ Payload variants live in `eng/go/payload.go`. Two flavours:
    `DisjunctInfo`, `ChildTypeInfo`, `CodeEffectInfo`, `RecordTypeInfo`,
    `OptionsTypeInfo`, `TableTypeInfo`, `TableData`,
    `ClassTypeInfo`, `ClassInstanceInfo`, `*StoreInstanceInfo`,
+   `*StoreShapeInfo`,
    `ResourceTypeInfo`, `ResourceInstanceInfo`,
    `*TimeoutInfo`, `*IntervalInfo`,
    `ErrorInfo`, `CalDurationData`, `DepScalarInfo`,

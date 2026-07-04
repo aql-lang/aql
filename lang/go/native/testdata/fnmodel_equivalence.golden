@@ -11,7 +11,7 @@ WORD __varundef
   [Scalar/String] barrier=1 runcheck
   [Scalar/Atom] barrier=1 runcheck quote={0}
 WORD add
-  [Node/Map Any Ideal/Patrun] barrier=3
+  [Node/Map Any Ideal/Patrun] barrier=3 +returnsfn
   [Scalar/Bytes Scalar/Bytes] barrier=2 returns=[Scalar/Bytes]
   [Scalar/String Scalar] barrier=2 +returnsfn
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
@@ -91,7 +91,7 @@ WORD contains
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/Boolean]
   [Scalar/String Scalar/String] barrier=2 returns=[Scalar/Boolean]
 WORD context
-  [] barrier=0 returns=[Ideal/Store]
+  [] barrier=0 returns=[Ideal/Store] +returnsfn
 WORD continue
   [] barrier=0
 WORD convert
@@ -214,8 +214,8 @@ WORD filter
   [Ideal/Reach Any] barrier=2 +returnsfn
   [Node/List Any] barrier=2 noeval={0} +returnsfn
 WORD find
-  [Node/Map Ideal/Patrun Node/Map] barrier=3 returns=[Any]
-  [Node/Map Ideal/Patrun] barrier=2 returns=[Any]
+  [Node/Map Ideal/Patrun Node/Map] barrier=3 returns=[Any] +returnsfn
+  [Node/Map Ideal/Patrun] barrier=2 returns=[Any] +returnsfn
 WORD flatten
   [Scalar/Number/Integer Node/List] barrier=2 returns=[Node/List]
   [Node/List] barrier=1 returns=[Node/List]
@@ -462,7 +462,7 @@ WORD parse
 WORD pathof
   [Any] barrier=1 typearg={0} returns=[Node/List]
 WORD patrun
-  [] barrier=0 returns=[Ideal/Patrun]
+  [] barrier=0 returns=[Ideal/Patrun] +returnsfn
 WORD patterns
   [Ideal/Patrun] barrier=1 returns=[Node/List]
 WORD pick
@@ -545,7 +545,7 @@ WORD set
   [Scalar/String Any Ideal/Class] barrier=3
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Node/Xml/FlexXml] barrier=3 returns=[Node/Xml/FlexXml]
-  [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap]
+  [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap] +returnsfn
   [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
   [Scalar/String Any Scalar/Micron] barrier=3 +returnsfn
   [Scalar/Number/Integer Any Node/List/FlexList] barrier=3 returns=[Node/List/FlexList]
@@ -553,7 +553,7 @@ WORD set
   [Scalar/Atom Any Ideal/Class] barrier=3 quote={0}
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Node/Xml/FlexXml] barrier=3 quote={0} returns=[Node/Xml/FlexXml]
-  [Scalar/Atom Any Node/Map/FlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap]
+  [Scalar/Atom Any Node/Map/FlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap] +returnsfn
   [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map]
   [Scalar/Atom Any Scalar/Micron] barrier=3 quote={0} +returnsfn
 WORD setpath

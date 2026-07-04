@@ -562,6 +562,64 @@ from everything; 7 is gated on 6's exit criteria.
   Residuals: patrun/flex/log stores (G5 → Phase 4.2), error .code
   (sound Any), user-registered DSL fns (G4-adjacent), Vm.run*
   (honestly Any), the module-fn return-seam schema loss (follow-up).
+- **2026-07-04 — Phase 4.2 (stage 1 + natural stage-2 slice) landed:
+  StoreShapeInfo store-identity context typing — Any-frontier
+  220 → 195 (6.65% → 5.90%), ratio ceiling 8 → 7.** The abstract
+  payload (`*StoreShapeInfo{Scope, KeyTypes, Vals, ValsPoisoned}`,
+  eng/go/store_shape.go; pointer payload so every carrier copy aliases
+  ONE shape, mirroring runtime container aliasing; KeyTypes carries
+  VALUES not bare *Type — the JoinCarriers domain, the ChildTypeInfo/
+  flat-ContextTypes precedent) is minted per creation site / live
+  layer in PLAIN check mode by the live store-creating words: `context`
+  (one shape per live ctx LAYER, keyed by the *StoreInstanceInfo
+  pointer — stable in check mode because the COW Impl never runs; each
+  engine Run's pushed layer gets its own shape, so the stage-2
+  scope-correctness headline falls out: a `do` body's same-named ctx
+  write no longer contaminates the outer read, agreeing with the
+  runtime pop), `flex` over a concrete map (nested maps recursively,
+  mirroring FlexDeepCopy; flex-of-flex CLONES; handles stored in
+  another flex SHARE), and `patrun` (unkeyed value join). set/get over
+  a shaped Store, set/get/dot over a shaped FlexMap (reads surface
+  GRADUAL dynamic(T), the record-schema rule — flex trees have
+  untracked writers), and add/find over a shaped patrun (find =
+  dynamic(join ∪ None); a dispatch-bearing stored value POISONS the
+  join, so the pinned patrun.tsv:40 residual is untouched — the
+  "irreducible" pin verdict is refined: the CONTAINER is shapeable,
+  the stored-fn dispatch is not) read/write the shape; every miss and
+  every unshaped store keeps the flat-ContextTypes path byte-for-byte
+  (writes go to BOTH maps), so precision only increases. Live-state
+  findings: the spec's `ctx-set`/`ctx-get`/`make Store` words do NOT
+  exist — the live surface is set/get/context + the G5 residual list's
+  flex/patrun; and store/flex/patrun rows COMPILE natively today (the
+  "store ops refuse" note was stale), so every shape path is
+  !Compiling-gated and TestStoreShapeCompileDiscipline pins native
+  compile + parity + the one pre-existing drop-refusal unchanged.
+  CtxShapes rides CheckState (Begin-reset, Clone-copied; the lifecycle
+  gate's mutateContainers extended for pointer-keyed maps). One engine
+  fix surfaced by the work: checkModeAssumeSig's no-compatible-sig
+  fallback pass preferred ANY ReturnsFn-bearing sig — with the patrun
+  `add` overload ranked first by specificity, a failing 2-arg `add`
+  recovery assumed the 3-arg sig, corrupting the disjunct-rescue
+  window and feeding ReturnsFns short args slices (a latent
+  index-out-of-range class); the pass now requires an
+  arity-SATISFIABLE window (engine.go), and the new ReturnsFns are
+  len-guarded. fnmodel_equivalence.golden regenerated for the 7
+  intentional +returnsfn annotations. Landing
+  tests (lang/go/store_shape_test.go): the two-stores-no-join headline
+  (flex + patrun), ctx layer isolation with runtime agreement, nested/
+  aliased/cloned flex flows, 6 negatives (unshaped store keeps flat
+  set-then-get, unseen keys stay dynamic(Any) never None, lambda
+  poison, empty table), and TestStoreShapeObservationFree (a check
+  pass full of ctx/flex/patrun writes leaves the REAL context store's
+  Data, pointer, and stack depth untouched). Ratchets: FP 0, unflagged
+  170, soundness 7 (identical rows), fuzz 104, frontier pin 220 → 195
+  (patrun 17→1, flex 15→9, minilang 10→9). Residuals → stage 3/4:
+  FlexList/patrun element ordering stays unkeyed (pop/shift/get-index
+  rows), `node` does not thread shapes onto Parent=TMap carriers (the
+  positionalMatch Data!=nil pattern rule), fn-param stores stay
+  unshaped (the call-boundary carrier is fresh), ContextTypes retire
+  blocked on those readers, and replace-on-write flow-sensitivity
+  stays deferred (join-only keeps sandbox leaks monotone).
 - **2026-07-03 — Phase 1.3 (M3) verified sound, no change needed.**
   (a) `checkParamContract` already routes through `sigTypeMatches` —
   the interpreter's own runtime param match (deliberately NOT `v.Is`,

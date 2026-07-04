@@ -51,6 +51,16 @@ func (cs *ContextStack) Pop() {
 	cs.stack = cs.stack[:len(cs.stack)-1]
 }
 
+// Depth returns the number of live layers. Used by the check-mode
+// context-shape minting to stamp StoreShapeInfo.Scope (the stage-2
+// layering substrate — see store_shape.go).
+func (cs *ContextStack) Depth() int {
+	if cs == nil {
+		return 0
+	}
+	return len(cs.stack)
+}
+
 // Top returns the top context Store, or nil if the stack is empty.
 func (cs *ContextStack) Top() *StoreInstanceInfo {
 	if cs == nil || len(cs.stack) == 0 {

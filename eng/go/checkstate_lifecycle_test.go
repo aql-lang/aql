@@ -17,7 +17,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"Diagnostics": true, "StepCount": true, "BudgetTripped": true,
 		"SuppressedRuntimeError": true, "AmbiguousGradualSplit": true,
 		"DefsInstalled": true, "DefsUsed": true, "FnNameStack": true,
-		"FnBinders": true, "FnCallGraph": true, "ContextTypes": true,
+		"FnBinders": true, "FnCallGraph": true, "ContextTypes": true, "CtxShapes": true,
 		"InflightBails": true, "FnNameInflight": true, "SuppressBodyErrors": true,
 		"FnAnalysisCounts": true, "Emit": true, "FnBodyDepth": true,
 		"CodeEffectDepth": true,
@@ -141,10 +141,17 @@ func mutateContainers(v reflect.Value) {
 			f.Set(reflect.AppendSlice(f, reflect.MakeSlice(f.Type(), 1, 1)))
 		case reflect.Map:
 			k := reflect.New(f.Type().Key()).Elem()
-			if k.Kind() == reflect.String {
+			switch k.Kind() {
+			case reflect.String:
 				k.SetString("k2")
-				f.SetMapIndex(k, reflect.New(f.Type().Elem()).Elem())
+			case reflect.Ptr:
+				// Pointer-keyed maps (CtxShapes): a fresh non-nil pointer is
+				// a distinguishable second key.
+				k.Set(reflect.New(f.Type().Key().Elem()))
+			default:
+				continue
 			}
+			f.SetMapIndex(k, reflect.New(f.Type().Elem()).Elem())
 		}
 	}
 }

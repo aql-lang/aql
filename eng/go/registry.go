@@ -475,9 +475,23 @@ type CheckState struct {
 	// on repeated writes. Used by get's ReturnsFn so subsequent
 	// reads can produce a typed carrier rather than falling back to
 	// Any. Shared across the entire check run — not keyed by store
-	// identity — to keep the model simple for the common
-	// "one context store" usage pattern.
+	// identity. It remains the COMPATIBILITY FALLBACK for any store
+	// the shape minting misses (design/checker-precision-fronts.0.md
+	// §2 stage 3 retires it only when every reader is store-shaped);
+	// store-identity-keyed typing lives on StoreShapeInfo carriers
+	// (store_shape.go).
 	ContextTypes map[string]Value
+
+	// CtxShapes maps a LIVE context-store layer to its abstract
+	// StoreShapeInfo carrier, minted lazily by the `context` word's
+	// check-mode ReturnsFn (CheckState.ContextShape). Pointer-keyed
+	// deliberately: check mode never runs the runtime COW replace, so
+	// a layer's pointer is stable for its scope, and holding it as a
+	// key keeps the layer reachable (no recycled-allocation aliasing).
+	// Per-pass state — reset by Begin, header-cloned by Clone (the
+	// shape pointees stay shared; all shape mutation is join-only, so
+	// a sandbox leak can only widen — see store_shape.go).
+	CtxShapes map[*StoreInstanceInfo]Value
 
 	// CodeEffectDepth counts nested code-effect body analyses
 	// (AnalyseCodeEffectCarrier — the typed-code-value producer). A
