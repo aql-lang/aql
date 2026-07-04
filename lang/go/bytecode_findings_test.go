@@ -3788,14 +3788,35 @@ func TestUnmatchedDispatchTrapPreservesPriorEffects(t *testing.T) {
 // refusal and falls back to the interpreter — the trap must never claim a
 // dispatch whose runtime outcome can differ from the static one.
 func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
+	// (The former "carrier operand declines" negative — `5 inc apply` —
+	// became a POSITIVE with the Phase 6 M4 carrier-disjointness extension:
+	// an Integer carrier is provably disjoint from apply's Function slot, so
+	// that failure IS definite; see TestUnmatchedDispatchTrapCarrierDisjoint.
+	// The negatives below pin the shapes the extension must keep declining.)
 	refusals := []struct{ name, src, want string }{
-		// A CARRIER operand: the fn result's runtime tag may be a refined
-		// subtype / satisfy a value-sensitive param, so the failure is not
-		// statically definite (and here the interpreter DOES raise — via the
-		// fallback, faithfully).
-		{"carrier operand declines",
-			`def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply`,
-			"unmatched dispatch recovered at apply"},
+		// The REFINEMENT ESCAPE (the original carrier hazard, in its live
+		// form): mkb's declared return is Boolean but the runtime value
+		// carries the Flag-reparented tag, so the merged [Flag Flag] overload
+		// MATCHES at run time (the fallback computes true below). Boolean is
+		// not disjoint from Flag (Flag ⊑ Boolean), so the disjointness proof
+		// must decline — a trap here would raise where the interpreter
+		// computes.
+		{"refined-subtype carrier declines",
+			`import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`,
+			"unmatched dispatch recovered at add"},
+		// A value-sensitive predicate param (membershipBeyondNominal): the
+		// carrier's runtime VALUE decides membership, so nothing nominal is
+		// provable — and this variant PASSES at run time (f 5 → 11 ∈ Big).
+		{"predicate-param carrier declines (runtime pass)",
+			`def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] def f fn [[x:Integer] [Integer] [x add 6]] g (f 5)`,
+			"unmatched dispatch recovered at g"},
+		// A disjunct carrier with a MATCHING alternative (forward-barrier:80's
+		// shape): the if result is Integer|List and each's List overload could
+		// take the List arm, so the failure is not definite (this run's 99
+		// arm does raise — via the fallback, faithfully).
+		{"disjunct matching-alternative declines",
+			`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`,
+			"unmatched dispatch recovered at each"},
 		// A deferred-expression token (a word splice) expands at dispatch/step
 		// time; its expansion is not statically modelled, so decline.
 		{"splice operand declines",
@@ -3810,13 +3831,16 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 		if !strings.Contains(reason, c.want) {
 			t.Errorf("%s: refusal reason %q; want substring %q", c.name, reason, c.want)
 		}
-		_, compiled, errC := mustNew(t).RunCompiled(c.src)
-		_, errI := mustNew(t).Run(c.src)
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
 		if compiled {
 			t.Errorf("%s: ran compiled; want interpreter fallback", c.name)
 		}
 		if codeOf(errC) != codeOf(errI) {
 			t.Errorf("%s: fallback err=[%s] interp err=[%s] (should agree)", c.name, codeOf(errC), codeOf(errI))
+		}
+		if errC == nil && errI == nil && fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: fallback value=%v interp value=%v (should agree)", c.name, gotC, gotI)
 		}
 	}
 

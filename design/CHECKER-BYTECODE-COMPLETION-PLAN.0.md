@@ -338,6 +338,110 @@ from everything; 7 is gated on 6's exit criteria.
 
 ## Execution log
 
+- **2026-07-04 — Phase 6 Stages M3 + M4 landed (DSL registration + definite
+  traps): refusals 40 → 19, native 3584 → 3605, error allowlist 12 → 3;
+  census deltas ONLY in the targeted rows.** Per
+  design/STAGE3-INLINING-DESIGN-ROUND.0.md §6, with these recorded design
+  corrections:
+  - **M3 module-parse (11/11 targeted +1 bonus: module-parse.tsv:14,18,37-44
+    landed AND :15, the "dynamic input" row the design said might need M2c).**
+    The design offered "a check-only registration table consulted by
+    moduleExportGet, or Pos-idempotent runtime registration"; the landed
+    mechanism is NEITHER install — the `parse` macro's deferred-kind branch
+    (native_macro.go) now RECORDS one CALL_NATIVE of a new
+    parselang-internal word, `parselang-deferred-dispatch` (kind, source,
+    opts → dynamic(Any)), whose runtime handler resolves `parse_<kind>`
+    against the LIVE export map (by then populated by the compiled
+    Parse.register call) and replays the parse macro's own expansion tail
+    (wrapper value + source + opts + end in a sub-engine — the token
+    sequence the interpreter re-steps after `ParseLang dot parse_<kind>`
+    resolves); a kind still missing at run time raises the macro's
+    byte-identical parse_unknown_lang. The runtime lookup IS the
+    registration proof, so a runtime-conditional Parse.register needs no
+    static refusal: the miss raises exactly as the interpreter does
+    (TestDeferredParseDispatchMissParity; the interpreter stamps the `parse`
+    word, the compiled op the kind atom — code+detail identical, both
+    positions present, the full-corpus error-lane contract). The check pass
+    installs NOTHING into the export map — the reverted register-ReturnsFn
+    LEAK stays closed (TestDeferredParseCheckObservationFree re-runs the
+    row interpretively on the same instance after a compile pass; a leak
+    would raise "already registered"). module-parse:15 cleared as a side
+    effect: with provenance on the parse result, the dot's EXISTING poly
+    recovery records where "dynamic input at dot" used to refuse.
+  - **M3 minilang:320 (1/1).** A second mechanism the design only implied:
+    tryFoldModuleConst's missing-key None fold declines because "a module's
+    keyspace can GROW at runtime" — made provable via a module-export GROWTH
+    LEDGER (eng/go/module_export_growth.go, pointer-keyed by the exports
+    OrderedMap through a new eng ExportFieldsCarrier interface on the lang
+    payload — the §4 pointer-payload discipline). MiniLang registers its map
+    at build time (its program-reachable growers are audited: register +
+    register-compiled; host registration is between-runs); each grower's
+    check twin notes the keys its runtime execution may install (lang_<kind>
+    always; the capitalised member-type key unless the fn is provably
+    non-filter-shaped; compile_<name> for register-compiled) or POISONS on a
+    non-concrete name; notes are per-pass (reset beside
+    ResetParseDeferredKinds). The fold then admits exactly the
+    ledger-proven-stable absence: `MiniLang.Gen` after registering a
+    non-filter `gen` folds to None (the row's whole point — no member type
+    is ever minted), while `MiniLang.Gen2` after a FILTER-shaped register
+    and `MiniLang.lang_gen` stay declined (TestMiniLangAbsenceFoldCompiles
+    pins both directions — folding those would bake a stale absence).
+  - **M4 definite traps (9 landed: apply:37,38 · open-words:32,83,84,90,100 ·
+    generics-sugar:37 · generics:60 — within the 6-10 forecast).** The
+    design named "provably disjoint carrier args"; the landed proof is
+    stronger and pairing-independent: per overload, assignment FEASIBILITY —
+    bipartite matching of slots against the complete candidate window
+    (checkModeFallbackPositions(maxN), which bounds every forward/stack
+    split), with an edge wherever the pair is not PROVABLY failing (concrete
+    values replay the matcher's own per-value test via definiteSlotFail's
+    mirror of the scan's word-resolution chain; strict carriers use the
+    residualProvablyDisjoint core extended with sigTypeMatches' structural
+    carves — Options slots take concrete maps, Map/Node slots take
+    Options/Record tags — plus Word-disjointness against the scan's
+    word-coercion branches). Needed beyond plain disjointness because add's
+    3-arg [Map Any Patrun] overload has an Any slot (defeats universal
+    disjointness; its Map slot is the zero-edge kill) and open-words:100
+    needs the COUNTING argument (two Point slots, one Point-compatible
+    candidate — the Integer must occupy one). Two probe/gate-found
+    soundness corrections: (a) a CONTAINER-family carrier declines — a
+    check-mode `for` records its value-body residue as ONE typed-list
+    carrier where the runtime leaves loose per-iteration values, so the
+    tag-conformance premise fails (`add 100 (for 4 [add i 1])`, caught by
+    TestCompiledCombinationParity); (b) the trap window must not cross an
+    UNEVALUATED paren group (in-paren raw tokens are not what the runtime
+    match examines). Both were latent pre-M4: such programs died at
+    Finalize's residual seating, which now legitimately relaxes — a
+    trap-truncated program with unconsumed prior call results compiles (the
+    interpreter aborts at the same point with those values live;
+    TestTrapKeepsPriorCallEffects). The stale
+    "carrier operand declines" negative (`5 inc apply`) became the positive
+    battery (TestUnmatchedDispatchTrapCarrierDisjoint, with exact
+    code+detail+position parity); the new negatives pin the shapes that must
+    keep declining: the REFINEMENT ESCAPE (a Boolean-declared return
+    carrying a Flag-reparented tag matches the merged [Flag Flag] overload
+    at run time — Flag ⊑ Boolean blocks the proof), a predicate param that
+    PASSES at run time, the matching disjunct alternative
+    (forward-barrier:80's shape), and the splice/flex-Reach pins.
+  - Census: refusals 40 → 19 (operand provenance 13 → 2 = recursion:71,72;
+    dispatch recovery 14 → 5 = convert-ideal:30 (its Foo carrier CONFORMS to
+    the [Node Ideal] overload's Ideal slot — feasible, sound decline),
+    word-splice:115 (splice screen), forward-barrier:80 (List alternative),
+    flex:88,95 (Reach pin); dynamic input 1 → 0; fn-value-call boundary 7,
+    paren-bounded 1, container auto-dispatch 4 unchanged = the M2c stall +
+    the sound miscompile-E guard); islands still 1 (none added); tier-1/2 0;
+    error rows 12 → 3 (the only permitted direction — the 9 M4 rows now
+    COMPILE to byte-identical taxonomy); computeRefusalCeiling 29 → 17 with
+    rationale. Full battery green before and after (differential +
+    or-fallback + combinations + property fuzz + -race + aqldebug: VERIFY
+    PASSED; make test exit 0). Remaining 19 + 1 island against the design's
+    §7 forecast: 8 fn-value shapes need the M2c shaped-instance-method
+    feature, 4 sit on the sound auto-dispatch guard (permanent unless the
+    runtime model is built), 2 are the M6 dynamic-scope tier (recursion:71,
+    72), 2 are G5 flex path-shape typing (flex:88,95), 3 are sound
+    non-definite error rows (convert-ideal:30, forward-barrier:80,
+    word-splice:115), plus the 1 compute-frontier island — Phase 7's entry
+    now reads "0 outside documented tiers" over exactly these families.
+
 - **2026-07-04 — Phase 6 Stage M2 landed (fn-value frontier, partial-M2c):
   refusals 68 → 40, native 3556 → 3584; census deltas ONLY in
   the targeted buckets.** Per design/STAGE3-INLINING-DESIGN-ROUND.0.md §6

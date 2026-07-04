@@ -91,6 +91,39 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("kinds", wrapMiniFnDef("parselang-kinds", [][]native.FnParam{{}},
 		[]*native.Type{native.TList}, nil, subReg))
 
+	// ---- out-of-band: deferred dispatch (compile-pass seam, NOT exported) ----
+	// parselang-deferred-dispatch is the RUNTIME twin of the `parse` macro's
+	// deferred-kind branch (Phase 6 M3, design/STAGE3-INLINING-DESIGN-ROUND.0.md
+	// §6 Stage M3). An aql:parse kind (`Parse.register op g`) is installed only
+	// at RUN time — the grammar is built by Parse builder words whose result is
+	// not concrete under analysis — so the check pass cannot expand
+	// `parse op 'src'` to the `ParseLang.parse_op` wrapper call it expands to
+	// at run time. Instead the compile pass records ONE call to this word
+	// (kind, source, opts), and at run time it resolves `parse_<kind>` against
+	// the LIVE export map (which the compiled Parse.register call has by then
+	// populated) and dispatches the registered parser through the same
+	// callParseFn invoke the grammar's own callbacks use. A kind that is STILL
+	// missing at run time (a runtime-conditional registration that did not
+	// execute) raises the byte-identical parse_unknown_lang the `parse` macro
+	// raises — the lookup is the dynamic proof, never a baked guess. The word
+	// is NOT exported: the surface stays `parse <kind>`, and the check-only
+	// deferred-kind table (native.MarkParseKindDeferred) is the only producer
+	// of recorded calls. No check-pass state is installed into the export map
+	// (the reverted register-ReturnsFn leak, aql-bytecode-stage3-inlining-plan
+	// §"register-ReturnsFn attempt", stays closed).
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "parselang-deferred-dispatch",
+		Signatures: []native.Signature{{
+			Args:       []*native.Type{native.TAtom, native.TAny, native.TMap},
+			Returns:    []*native.Type{native.TAny},
+			BarrierPos: -1,
+			Impl:       native.Go(parseDeferredDispatchHandler(exports, subReg)),
+		}},
+	})
+	if fn := subReg.Lookup("parselang-deferred-dispatch"); fn != nil && len(fn.Signatures) == 1 {
+		native.InstallParseDeferredDispatch(parent, &fn.Signatures[0])
+	}
+
 	// ---- out-of-band: source ------------------------------------------
 	// ParseLang.source <source> resolves a String or {src:…} Source map to
 	// a String (so AQL parsers can opt into the same normalisation host
@@ -540,6 +573,48 @@ func parseRegisterReturns(exports *native.OrderedMap, idents map[string]register
 			surfaceRegisterCheckError(r, err, args[0])
 		}
 		return nil
+	}
+}
+
+// parseDeferredDispatchHandler builds the runtime resolver behind the
+// compiled `parse <kind>` deferred dispatch (see the registration comment in
+// BuildParseLangModule). args are [kind:Atom source:Any opts:Map]. The
+// resolution mirrors the `parse` macro's own runtime behaviour exactly: a
+// registered kind REPLAYS the macro's expansion tail — the resolved parser
+// value followed by `source opts end`, stepped in a sub-engine over the
+// calling registry, which is the token sequence the interpreter itself
+// re-steps after `ParseLang dot parse_<kind>` resolves — and a missing kind
+// raises the parse macro's byte-identical parse_unknown_lang (code, detail,
+// hint). The export-map read at run time IS the dynamic registration proof:
+// a runtime-conditional Parse.register that did not execute leaves the kind
+// missing here exactly as it does for the interpreter's expansion.
+func parseDeferredDispatchHandler(exports *native.OrderedMap, _ *native.Registry) native.Handler {
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+		kind, err := args[0].AsConcreteAtom()
+		if err != nil {
+			return nil, r.AqlErrorHint("parse_error",
+				"parse: the kind must be a literal name", "parse",
+				"write the kind as a bare word: parse calc 'x + y'")
+		}
+		v, ok := exports.Get("parse_" + kind)
+		if !ok {
+			return nil, r.AqlErrorHint("parse_unknown_lang",
+				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
+				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`)
+		}
+		sub := native.NewTop(r)
+		res, err := sub.Run([]native.Value{v, args[1], args[2], native.NewEnd()})
+		if err != nil {
+			return nil, err
+		}
+		if len(res) != 1 {
+			// Defensive: every Parse.register kind declares Returns [Any] and
+			// its handler yields exactly one value; a drifted registration must
+			// fail loudly rather than corrupt the operand stack.
+			return nil, r.AqlError("internal_error",
+				fmt.Sprintf("parse %s: expected one result, got %d", kind, len(res)), "parse")
+		}
+		return res, nil
 	}
 }
 

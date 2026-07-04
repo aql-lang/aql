@@ -384,6 +384,7 @@ var (
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
+	ResetModuleExportGrowth   = eng.ResetModuleExportGrowth
 	MakeClassFieldValue       = eng.MakeClassFieldValue
 	MakeClassInstance         = eng.MakeClassInstance
 	MakeResource              = eng.MakeResource

@@ -4877,12 +4877,20 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		ops = append(ops, constOperand(es.intern(lit)))
 	}
-	if reason := lw.seatResults(ops, false, false, seatMsgs{
-		aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
-		reordered:    "residual shape beyond Stage 1 (call results reordered)",
-		unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
-	}, lastPos); reason != "" {
-		return nil, reason, false
+	// A trap-truncated program seats nothing: the residual was dropped above,
+	// and results the kept event prefix leaves on the stack are legitimately
+	// dangling — the interpreter aborts at this same point with those values
+	// still on its stack (`5 inc apply`: inc's result is live when apply
+	// raises), and OpTrap aborts before anything could read them. Only a
+	// program that RUNS TO COMPLETION owes the residual seating discipline.
+	if es.trapAt == 0 {
+		if reason := lw.seatResults(ops, false, false, seatMsgs{
+			aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
+			reordered:    "residual shape beyond Stage 1 (call results reordered)",
+			unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
+		}, lastPos); reason != "" {
+			return nil, reason, false
+		}
 	}
 	if dynOp != 0 {
 		// The fn value (leading, or trailing rotated to the front) sits at the

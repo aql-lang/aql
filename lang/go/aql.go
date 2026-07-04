@@ -229,6 +229,7 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 	// prior Check on this reused instance so a now-unregistered `parse <kind>`
 	// reports parse_unknown_lang instead of silently degrading to dynamic.
 	native.ResetParseDeferredKinds(a.registry)
+	native.ResetModuleExportGrowth(a.registry)
 
 	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
@@ -296,6 +297,7 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	// Per-check-run reset (see Check): a reused instance must not inherit a
 	// prior pass's deferred parse kinds.
 	native.ResetParseDeferredKinds(a.registry)
+	native.ResetModuleExportGrowth(a.registry)
 	a.registry.Check.Emit = eng.NewEmitState()
 	a.registry.Check.Compiling = true
 	// Fn-body analyses must run (and record) under THIS emit pass —

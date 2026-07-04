@@ -1064,7 +1064,15 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	// registered key). Decline the fold so the get stays dynamic and the
 	// program falls back / islands faithfully. A PRESENT key (any non-None
 	// value) folds as before; this only blocks the absent-key case.
-	if isGetWord(word) && IsNoneShape(one) {
+	//
+	// EXCEPTION (Phase 6 M3): a receiver whose export map carries a growth
+	// LEDGER — every program-reachable runtime grower is check-modelled — and
+	// whose ledger proves the requested key is NOT among this pass's possible
+	// installs folds the stable absence (`MiniLang.Gen` after registering a
+	// non-filter kind `gen` is None on every run, because a non-filter kind
+	// mints no member type). An unregistered map, a poisoned ledger, or a key
+	// a grower may add keeps the decline. See module_export_growth.go.
+	if isGetWord(word) && IsNoneShape(one) && !moduleExportAbsenceStable(r, args) {
 		return false
 	}
 	switch {

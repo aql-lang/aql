@@ -59,6 +59,11 @@ type moduleExportInfo struct {
 	Module Value       // the owning Module instance (Ideal/Module)
 }
 
+// ExportFields implements eng.ExportFieldsCarrier so the kernel's
+// module-export growth ledger (eng/go/module_export_growth.go) can key
+// per-export-map state by the Fields pointer without importing this type.
+func (m *moduleExportInfo) ExportFields() *OrderedMap { return m.Fields }
+
 // NewModuleInstance builds an Ideal/Module value wrapping a ModuleDesc. The
 // descriptor metadata (Ref/Kind/File/Folder) and the export names are
 // surfaced as the id/kind/file/folder/exports fields; the carried Exports

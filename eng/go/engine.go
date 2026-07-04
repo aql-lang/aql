@@ -7092,10 +7092,23 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 // is deterministic over identical inputs, and the check pass mirrors the
 // interpreter's tape step-for-step over concrete values). It does NOT hold
 // for:
-//   - a CARRIER operand: its static tag is a declared type, but the runtime
-//     value may carry a refined subtype tag (a fn declared [Integer] can
-//     return a Pos-reparented value) or satisfy a value-sensitive predicate
-//     param — the runtime match can succeed where the static one failed;
+//   - a CARRIER operand — UNLESS the carrier-disjointness extension proves
+//     the failure anyway (Phase 6 M4, design/STAGE3-INLINING-DESIGN-ROUND.0.md
+//     §6 Stage M4). The base hazard: a carrier's static tag is a declared
+//     type, but the runtime value may carry a refined subtype tag (a fn
+//     declared [Integer] can return a Pos-reparented value) or satisfy a
+//     value-sensitive predicate param — the runtime match can succeed where
+//     the static one failed. The extension re-admits exactly the shapes where
+//     that cannot happen: for EVERY non-fallback overload, every carrier in
+//     the overload's own candidate window is provably disjoint from EVERY
+//     slot type of that overload (sigDefinitelyUnmatched) — the runtime
+//     value's tag conforms to the carrier's static tag, so a Never meet with
+//     no value-level membership admits no runtime refinement either (the
+//     same proof checkBodyReturnConformance rides, residualProvablyDisjoint).
+//     An overload whose window holds no carrier saw only runtime-identical
+//     values, so its static failure replays verbatim; one whose window
+//     cannot even fill (arity shortfall over the same tape) fails
+//     deterministically too;
 //   - a DYNAMIC operand (no static type at all);
 //   - an UNDEFINED-word placeholder (the interpreter raises undefined_word,
 //     a different taxonomy — and the pass already carries an error diagnostic
@@ -7135,7 +7148,33 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 			maxN = n
 		}
 	}
-	for _, p := range e.checkModeFallbackPositions(maxN) {
+	window := e.checkModeFallbackPositions(maxN)
+	// The forward walk can collect positions INSIDE a not-yet-evaluated paren
+	// group (checkModeFallbackPositions depth-tracks rather than stopping at
+	// an open paren). The interpreter pre-evaluates the paren before its
+	// match runs, so in-paren tokens are NOT the values the runtime match
+	// examines — never definite. (`add 100 (for 4 [add i 1])`: the static
+	// window holds the raw `for` word where the runtime sees the loop's
+	// value; latent under the pre-M4 screens only because such programs
+	// still refused at Finalize's residual seating, which the trap
+	// truncation now legitimately skips.)
+	for i := e.pointer + 1; i < e.tape.Len(); i++ {
+		inWindow := false
+		for _, p := range window {
+			if p >= i {
+				inWindow = true
+				break
+			}
+		}
+		if !inWindow {
+			break
+		}
+		if IsOpenParen(e.tape.At(i)) {
+			return false
+		}
+	}
+	carriers := false
+	for _, p := range window {
 		v := e.tape.At(p)
 		if IsWord(v) {
 			if wi, werr := AsWord(v); werr == nil {
@@ -7144,7 +7183,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 				}
 			}
 		}
-		if v.Carrier || v.Dynamic || v.Undefined {
+		if v.Dynamic || v.Undefined {
 			return false
 		}
 		// A deferred-expression token (a reach path, an unexpanded paren
@@ -7156,11 +7195,223 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		if IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) {
 			return false
 		}
+		if v.Carrier {
+			carriers = true // judged per-overload below (Phase 6 M4)
+		}
+	}
+	if carriers {
+		// Carrier-disjointness extension (Phase 6 M4): a strict carrier in
+		// the window is admissible only when EVERY non-fallback overload
+		// still fails DEFINITELY — see sigDefinitelyUnmatched for the
+		// per-overload proof obligations.
+		for i := range fn.Signatures {
+			s := &fn.Signatures[i]
+			if s.Fallback {
+				continue
+			}
+			if !e.sigDefinitelyUnmatched(s, window) {
+				return false
+			}
+		}
 	}
 	if verr := e.voidArgErrorFor(w.Name, pos); verr != nil {
 		return es.RecordTrap(verr.Code, verr.Detail, w.Name, verr.Hint, pos)
 	}
 	return es.RecordTrap("signature_error", "no matching signature for "+w.Name, w.Name, "", pos)
+}
+
+// sigDefinitelyUnmatched reports whether overload s of an already
+// statically-failed dispatch PROVABLY fails at run time too (the Phase 6 M4
+// carrier-disjointness extension; reached only from
+// tryRecordUnmatchedDispatchTrap after the shared window screens passed —
+// no dynamics, no deferred-expression tokens, no undefined placeholders
+// anywhere a candidate could look, and window(k) ⊆ window(maxN) for every
+// overload arity k, so the shared screens cover every value any overload can
+// examine). The proof is per-overload,
+// the assignment-FEASIBILITY argument: the runtime match, whatever
+// forward/stack split it takes (the split may shift when a carrier's runtime
+// value changes which type tests pass, so no single pairing may be assumed),
+// fills s's n slots with n DISTINCT values drawn from the shared window —
+// the window is the complete candidate pool (the stack side reaches at most
+// arity-many nearest values and the forward side stops at boundaries the
+// window walk also honours, both ⊆ window(maxN)). Model "slot j could accept
+// candidate i" as a bipartite edge (the NEGATION of definiteSlotFail, which
+// answers true only for PROVABLY-failing pairs); if no perfect matching over
+// the slots exists, s can never complete at run time. This subsumes the
+// arity shortfall (fewer candidates than slots), the zero-edge slot (every
+// candidate definitely fails some slot), and the counting cases (two Point
+// slots but only one Point-compatible candidate — open-words:100).
+//
+// Per-pair definiteness: a concrete value / resolved binding / raw token
+// fails j deterministically when the matcher's own per-value test rejects it
+// (definiteSlotFail mirrors the scan's branch chain over runtime-identical
+// inputs); a strict carrier fails j when it is provably disjoint from j's
+// slot type — the runtime value's tag conforms to the carrier's static tag,
+// so a Never meet with no value-level membership admits no runtime
+// refinement either (the residualProvablyDisjoint proof, extended for the
+// matcher's structural carves in carrierSlotProvablyDisjoint).
+func (e *Engine) sigDefinitelyUnmatched(s *Signature, window []int) bool {
+	n := s.TotalArgs()
+	// Edge matrix: canTake[j][i] — slot j could accept window candidate i.
+	canTake := make([][]bool, n)
+	for j := 0; j < n; j++ {
+		canTake[j] = make([]bool, len(window))
+		for i, p := range window {
+			canTake[j][i] = !e.definiteSlotFail(s, j, e.tape.At(p))
+		}
+	}
+	// Augmenting-path maximum bipartite matching, slots → candidates (n and
+	// the window are dispatch-arity-sized, so the quadratic walk is trivial).
+	matchedSlot := make([]int, len(window))
+	for i := range matchedSlot {
+		matchedSlot[i] = -1
+	}
+	var assign func(j int, seen []bool) bool
+	assign = func(j int, seen []bool) bool {
+		for i := range window {
+			if !canTake[j][i] || seen[i] {
+				continue
+			}
+			seen[i] = true
+			if matchedSlot[i] == -1 || assign(matchedSlot[i], seen) {
+				matchedSlot[i] = j
+				return true
+			}
+		}
+		return false
+	}
+	for j := 0; j < n; j++ {
+		if !assign(j, make([]bool, len(window))) {
+			return true // slot j cannot be filled by any candidate — definite failure
+		}
+	}
+	return false
+}
+
+// definiteSlotFail reports whether candidate value v PROVABLY fails slot j of
+// signature s on every run. Mirrors matchSignature's per-value admission
+// branches over runtime-identical inputs and uses the carrier-disjointness
+// proof for strict carriers; anything it cannot mirror exactly answers false
+// (the sound direction — the trap then declines).
+func (e *Engine) definiteSlotFail(s *Signature, j int, v Value) bool {
+	t := sigArgType(s, j)
+	if t == nil || t.Equal(TAny) {
+		return false // an Any slot admits everything
+	}
+	// Slot kinds whose admission is not the plain per-value type test.
+	if (s.QuoteArgs != nil && s.QuoteArgs[j]) || (s.FormArgs != nil && s.FormArgs[j]) {
+		return false
+	}
+	typeSlot := s.TypeArgs != nil && s.TypeArgs[j]
+	if IsWord(v) {
+		wi, werr := AsWord(v)
+		if werr != nil {
+			return false
+		}
+		// The scan's word-resolution chain, in its order; every branch is
+		// deterministic over the same registry state at this dispatch point.
+		if top, ok := e.registry.Defs.Top(wi.Name); ok {
+			return e.definiteSlotFail(s, j, top)
+		}
+		if tv, ok := e.registry.TopTypeBody(wi.Name); ok {
+			return !sigArgMatches(s, j, tv)
+		}
+		if e.registry.Lookup(wi.Name) != nil {
+			return true // a function word is a scan BOUNDARY — it never fills a slot
+		}
+		if wi.Name == "true" || wi.Name == "false" {
+			return !sigArgMatches(s, j, Value{Parent: TBoolean})
+		}
+		if tn, isType := typeNames[wi.Name]; isType {
+			return !sigArgMatches(s, j, NewTypeLiteral(tn))
+		}
+		if tn, isType := ResolveTypePath(wi.Name); isType {
+			return !sigArgMatches(s, j, NewTypeLiteral(tn))
+		}
+		// Undefined word: the scan resolves it to an Atom.
+		return !sigArgMatches(s, j, Value{Parent: TAtom})
+	}
+	if v.Carrier {
+		if v.Dynamic || typeSlot {
+			// Dynamics are screened upstream (belt here); a TypeArgs slot's
+			// admission (sigTypeMatchesAsType over a possible runtime type
+			// node) is not a tag test — decline.
+			return false
+		}
+		// A carrier whose runtime value could itself be a raw Word re-enters
+		// the word-resolution branches above; require Word-disjointness
+		// alongside the slot proof.
+		return carrierSlotProvablyDisjoint(v, t) && carrierSlotProvablyDisjoint(v, TWord)
+	}
+	// A runtime-identical value (concrete const, bare type literal): the
+	// matcher's own per-position test, replayed.
+	return !sigArgMatches(s, j, v)
+}
+
+// carrierSlotProvablyDisjoint reports whether a strict carrier can NEVER
+// satisfy a signature slot of type t at run time: no runtime value whose tag
+// conforms to the carrier's static tag passes sigTypeMatches against t. The
+// core is residualProvablyDisjoint's proof (no conformance either direction,
+// no value-level membership, Never tand meet), extended with declines for
+// sigTypeMatches' structural carves — an Options slot admits any concrete
+// map, and a Map/Node-family slot admits Options/Record-tagged values — so
+// the disjointness claim matches the runtime matcher, not just the nominal
+// lattice. A disjunct carrier is disjoint only if every alternative is.
+func carrierSlotProvablyDisjoint(v Value, t *Type) bool {
+	if t == nil || !v.Carrier || v.Dynamic {
+		return false
+	}
+	if IsDisjunct(v) {
+		di, err := AsDisjunct(v)
+		if err != nil || len(di.Alternatives) == 0 {
+			return false // opaque union — nothing provable
+		}
+		for _, alt := range di.Alternatives {
+			probe := alt
+			if IsBareTypeNode(alt) {
+				probe = carrierOfLiteral(alt)
+			}
+			probe.Carrier = true
+			if !carrierSlotProvablyDisjoint(probe, t) {
+				return false
+			}
+		}
+		return true
+	}
+	p := v.Parent
+	if p == nil || p.ConformsTo(t) || t.ConformsTo(p) {
+		return false
+	}
+	// A Function/FnDef-tagged carrier sits on the fn-value modelling
+	// frontier (routinely "not modeled", per residualProvablyDisjoint) and
+	// an opaque Disjunct tag denotes "one of several types" — decline both.
+	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) || p.ConformsTo(TFnDef) {
+		return false
+	}
+	// A container-family carrier can stand for a SPLICED runtime sequence,
+	// not a single value: a check-mode `for` records its value-body residue
+	// as ONE typed-list carrier where the runtime leaves the loose
+	// per-iteration values (`add 100 (for 4 [add i 1])` — the
+	// combination-parity counterexample: the Integers match Number slots the
+	// list "tag" is disjoint from). The tag-conformance premise does not
+	// hold for such stand-ins, so nothing is provable — decline.
+	if p.ConformsTo(TList) || p.ConformsTo(TMap) {
+		return false
+	}
+	// Value-level membership (predicate / disjunct / negation / member /
+	// DepScalar slots) admits by value, not tag — nothing nominal is provable.
+	if membershipBeyondNominal(t) || NewCarrier(p).Is(t) {
+		return false
+	}
+	// sigTypeMatches' structural carves: an Options slot accepts any concrete
+	// map value; a slot at-or-above Map accepts Options/Record-tagged values.
+	if t.Equal(TOptions) && !isNeverShape(TandValues(NewCarrier(p), NewCarrier(TMap))) {
+		return false
+	}
+	if TMap.ConformsTo(t) && (p.ConformsTo(TOptions) || p.ConformsTo(TRecord)) {
+		return false
+	}
+	return isNeverShape(TandValues(NewCarrier(p), NewCarrier(t)))
 }
 
 // argTypeSummary renders the operand types of a failed dispatch for the

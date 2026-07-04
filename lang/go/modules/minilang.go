@@ -70,6 +70,18 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg.Types.AdoptSeqFrom(parent.Types)
 	tMini := subReg.Types.MintType("MiniLangCompiled", native.TIdeal)
 	exports := native.NewOrderedMap()
+	// Growth ledger (Phase 6 M3): every PROGRAM-reachable word that installs
+	// new keys into this export map at run time has a check-mode twin that
+	// notes its adds — minilang-register (lang_<kind> + the filter-kind
+	// member-type mint, miniRegisterReturns) and minilang-register-compiled
+	// (compile_<name>, miniRegisterCompiledReturns). Host registration
+	// (RegisterHostMiniLang) mutates exports from Go between runs, never
+	// mid-program. Registering the map lets the checker fold a PROVABLY
+	// stable missing-key read to None (`MiniLang.Gen` after registering a
+	// non-filter kind `gen` — module-minilang.tsv:320) while every unproven
+	// absence keeps the blanket fold decline. See
+	// eng/go/module_export_growth.go.
+	eng.RegisterModuleExportGrowth(parent, exports)
 
 	// mintMiniFnType mints the NAMED member type for a filter kind's
 	// partially-applied Function and exports it under the capitalized
@@ -385,7 +397,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			// statically-registered kind (the fn is provided literally) instead
 			// of flagging "no mini-language is registered" — the minilang twin
 			// of parselang-register's check-mode ReturnsFn.
-			ReturnsFn: miniRegisterReturns(exports, miniRegisterIdents, mintMiniFnType),
+			ReturnsFn: miniRegisterReturns(exports, miniRegisterIdents, mintMiniFnType, parent),
 		}},
 	})
 	exports.Set("register", wrapMiniFnDef("minilang-register", [][]native.FnParam{
@@ -420,6 +432,8 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			BarrierPos:    -1,
 			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
 			Impl:          native.Go(miniRegisterCompiledHandler(exports)),
+			// Growth-ledger note only (Phase 6 M3) — installs nothing at check.
+			ReturnsFn: miniRegisterCompiledReturns(parent, exports),
 		}},
 	})
 	exports.Set("register-compiled", wrapMiniFnDef("minilang-register-compiled", [][]native.FnParam{
@@ -1647,8 +1661,9 @@ func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerI
 // `mini poly …` during the check pass. Idempotent on the source-call identity,
 // so the compiled program's runtime re-run is a no-op rather than
 // mini_kind_exists. A non-concrete name or fn value leaves the kind
-// unregistered (the downstream `mini` degrades as before).
-func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerIdent, mint func(kind string)) native.ReturnsFunc {
+// unregistered (the downstream `mini` degrades as before). owner is the
+// registry whose growth ledger tracks this export map (the Build parent).
+func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerIdent, mint func(kind string), owner *native.Registry) native.ReturnsFunc {
 	return func(args []native.Value, r *native.Registry) []native.Value {
 		// PURE-CHECK ONLY. Under a REAL compile (CompileCheck) the kind must NOT
 		// be installed here: a kind that ALSO has a `register-compiled` macro
@@ -1658,6 +1673,14 @@ func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerI
 		// compile pass un-installed keeps that row on its prior fallback path;
 		// pure check still installs so `mini <name>` resolves and the row clears.
 		if r == nil || r.Check.Compiling {
+			// Growth ledger (Phase 6 M3): the compile pass installs nothing,
+			// but the RUNTIME register this dispatch compiles to WILL — note
+			// the keys it may add so the missing-key None fold declines for
+			// them (and only them). A non-concrete kind name poisons the
+			// ledger: the key set is statically undecidable.
+			if r != nil {
+				noteMiniRegisterGrowth(owner, exports, args)
+			}
 			return nil
 		}
 		if len(args) < 2 || !native.IsConcrete(args[0]) {
@@ -1668,6 +1691,59 @@ func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerI
 		}
 		if err := miniRegisterInstall(exports, idents, args, r, mint); err != nil {
 			surfaceRegisterCheckError(r, err, args[0])
+		}
+		return nil
+	}
+}
+
+// noteMiniRegisterGrowth records, on owner's growth ledger, the export keys a
+// runtime `MiniLang.register <name> <fn>` MAY install: `lang_<name>` always,
+// plus the capitalised member-type key when the fn is not PROVABLY
+// non-filter-shaped (miniRegisterInstall mints the type only when every sig
+// has exactly the 3-param [src opts subject] shape; a register that fails
+// validation raises at run time and installs nothing, so over-noting its keys
+// is harmless — noted keys only make the absence fold DECLINE). A
+// non-concrete kind name poisons the ledger: any key could appear.
+func noteMiniRegisterGrowth(owner *native.Registry, exports *native.OrderedMap, args []native.Value) {
+	if len(args) < 2 {
+		return
+	}
+	name, err := args[0].AsConcreteAtom()
+	if err != nil {
+		eng.PoisonModuleExportGrowth(owner, exports)
+		return
+	}
+	keys := []string{"lang_" + name}
+	fnDef, isFn := args[1].Data.(native.FnDefInfo)
+	provablyNonFilter := false
+	if isFn && len(fnDef.Signatures) > 0 {
+		for _, sig := range fnDef.Signatures {
+			if len(sig.Params) != 3 {
+				provablyNonFilter = true
+				break
+			}
+		}
+	}
+	if !provablyNonFilter && name != "" {
+		keys = append(keys, strings.ToUpper(name[:1])+name[1:])
+	}
+	eng.NoteModuleExportAdd(owner, exports, keys...)
+}
+
+// miniRegisterCompiledReturns is minilang-register-compiled's check-mode
+// twin. It installs nothing (the hook is runtime state); its only job is the
+// growth-ledger note (Phase 6 M3): the runtime handler installs
+// compile_<name>, so the missing-key None fold must decline for that key. A
+// non-concrete name poisons the ledger.
+func miniRegisterCompiledReturns(owner *native.Registry, exports *native.OrderedMap) native.ReturnsFunc {
+	return func(args []native.Value, r *native.Registry) []native.Value {
+		if r == nil || len(args) < 1 {
+			return nil
+		}
+		if name, err := args[0].AsConcreteAtom(); err == nil {
+			eng.NoteModuleExportAdd(owner, exports, "compile_"+name)
+		} else {
+			eng.PoisonModuleExportGrowth(owner, exports)
 		}
 		return nil
 	}
