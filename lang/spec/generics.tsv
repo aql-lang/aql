@@ -73,7 +73,7 @@ def Box gen [T] class {value:T} end (make Box {value:42}) typeof	Box of [Integer
 def Box gen [T] class {value:T} def b:Box {value:'hi'} end b typeof	Box of [ProperString]	…and so does a bare-schema typed-def annotation (typeof-consistent)
 def Stack gen [T] class {items:[:T]} end (make Stack {items:[1 2]}) typeof	Stack of [Integer]	a [:T] field infers from its elements
 def Pair gen [K V] refine Record [key:K value:V] end make Pair {key:'a' value:1}	{key:'a' value:1}	record schemas construct through inference too
-def M gen [T] class {items:[:T]} end (make M {items:[1 'x']}) typeof	M of [Integer|ProperString]	conflicting field evidence tor-merges (§9.2.2) — never rejected
+def M gen [T] class {items:[:T]} end (make M {items:[1 'x']}) typeof	M of [Integer tor ProperString]	conflicting field evidence tor-merges (§9.2.2) — never rejected
 def Q gen [T (E default Error)] class {a:T} end (make Q {a:1}) typeof	Q of [Integer Error]	defaults fill behind the inferred prefix
 def R gen [(T default Integer)] class {items:[:T]} end (make R {items:[]}) typeof	R of [Integer]	a fully-defaulted schema auto-instantiates without evidence (D12)
 def Box gen [T] class {value:T} def Outer gen [T] class {inner:T} end (make Outer {inner:(make (Box of [Integer]) {value:1})}) typeof	Outer of [Box of [Integer]]	a nested instantiation binds as the parameter

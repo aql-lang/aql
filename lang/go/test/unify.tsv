@@ -619,8 +619,8 @@ None	(Integer tor None)	true	None
 "a"	(Integer tor None)	false
 
 # --- Disjunct vs Any ---
-Any	(Integer tor String)	true	Integer|String
-(Integer tor String)	Any	true	Integer|String
+Any	(Integer tor String)	true	Integer tor String
+(Integer tor String)	Any	true	Integer tor String
 
 # --- Disjunct vs Never ---
 Never	(Integer tor String)	false

@@ -155,6 +155,14 @@ def Big (Integer gt 10) def mk fn [[] [Big] [50]] def use fn [[n:Big] [Integer] 
 # disjunctUnifier admits it.
 def Maybe (Integer tor none) 42 is Maybe	true	Disjunct: Integer is one of the alternatives
 def Maybe (Integer tor none) 'hi' is Maybe	false	String is not an alternative
+# The `None` TYPE literal as an alternative admits the `none` VALUE — the
+# spelling of the alternative (`None` type vs `none` value) must not change
+# membership (foldDegenRoot returns the concrete inhabitant).
+def Maybe (Integer tor None) none is Maybe	true	None type literal alternative admits the none value
+none is (Integer tor None)	true	anonymous disjunct: none matches the None alternative
+none is (Integer tor String)	false	none is NOT a member when None is not an alternative
+'x' is (Integer tor None)	false	String is not an alternative of (Integer tor None)
+5 is (Integer tor None)	true	Integer 5 matches the Integer alternative
 
 # DepScalar: the bound constraint, when run on the value's tag, must
 # admit the value. unifyDepScalar checks the base type AND the bound.

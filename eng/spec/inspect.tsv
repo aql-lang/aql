@@ -173,9 +173,9 @@ def Pt (refine Record [ { x:Integer } { y:Integer } ]) inspect Pt	{name:'Pt' typ
 # --- object (struct is the named type; fields includes inherited, parent first) ---		
 		
 # --- disjunct / enum (alternatives are the members' VType paths) ---		
-inspect ( Integer tor Boolean )	{type:'Type' struct:'Disjunct' kind:disjunct alternatives:['Scalar/Number/Integer' 'Scalar/Boolean']}	
+inspect ( Integer tor Boolean )	{type:'Type' struct:'Disjunct' kind:disjunct alternatives:['Scalar/Boolean' 'Scalar/Number/Integer']}	
 inspect ( enum [ red green blue ] )	{type:'Type' struct:'Enum' kind:disjunct alternatives:['Scalar/Atom' 'Scalar/Atom' 'Scalar/Atom']}	enum members are atoms
-def D ( Integer tor Boolean ) inspect D	{name:'D' type:'Type' struct:'Disjunct' kind:disjunct alternatives:['Scalar/Number/Integer' 'Scalar/Boolean']}	
+def D ( Integer tor Boolean ) inspect D	{name:'D' type:'Type' struct:'Disjunct' kind:disjunct alternatives:['Scalar/Boolean' 'Scalar/Number/Integer']}	
 def Color enum [ red green blue ] inspect Color	{name:'Color' type:'Type' struct:'Enum' kind:disjunct alternatives:['Scalar/Atom' 'Scalar/Atom' 'Scalar/Atom']}	
 		
 # --- function-shape (fnsig) ---		

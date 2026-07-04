@@ -109,6 +109,7 @@ export {
   TType,
   TWord,
   TXml,
+  builtinRank,
   newType,
   typeNameTable,
 } from './type.ts'

@@ -207,8 +207,9 @@ export function canonValue(v: Value): string {
   if (v.isFnDef()) {
     return canonFnDef(v.asFnDef())
   }
-  // Disjunct / Enum: alternatives joined by '|' (atoms render bare,
-  // type literals as their leaf).
+  // Disjunct / Enum: alternatives joined by ' tor ' — the word form, so
+  // the rendering re-reads as source (`tor` is commutative). Atoms render
+  // bare, type literals as their leaf.
   if (v.isDisjunct()) {
     return v
       .asDisjunct()
@@ -219,7 +220,7 @@ export function canonValue(v: Value): string {
             ? a.vType.leaf()
             : canonValue(a),
       )
-      .join('|')
+      .join(' tor ')
   }
   return v.toString()
 }

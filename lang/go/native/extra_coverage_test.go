@@ -107,8 +107,8 @@ func TestExtraStringBoolean(t *testing.T) {
 func TestExtraStringDisjunct(t *testing.T) {
 	v := NewDisjunct([]Value{NewInteger(1), NewString("a")})
 	s := v.String()
-	if !strings.Contains(s, "|") {
-		t.Errorf("disjunct String() = %q, want pipe separator", s)
+	if !strings.Contains(s, " tor ") {
+		t.Errorf("disjunct String() = %q, want %q separator", s, " tor ")
 	}
 }
 

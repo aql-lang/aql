@@ -564,7 +564,7 @@ in the else branch.
 De Morgan's laws fold conjunctions and disjunctions of negations:
 
 ```
-(tnot Integer) tand (tnot String)  # returns tnot (Integer|String) — tnot A tand tnot B = tnot (A tor B)
+(tnot Integer) tand (tnot String)  # returns tnot (Integer tor String) — tnot A tand tnot B = tnot (A tor B)
 (tnot Integer) tor (tnot String)   # returns Any — tnot A tor tnot B = tnot (A tand B) = tnot Never
 ```
 
@@ -574,7 +574,7 @@ to a positive refinement:
 
 ```
 Integer tand (tnot (Integer gt 0))        # returns (Integer lte 0)
-Integer tand (tnot (between 5 10 Integer))  # returns (Integer lt 5)|(Integer gt 10)
+Integer tand (tnot (between 5 10 Integer))  # returns (Integer gt 10) tor (Integer lt 5)
 ```
 
 ### Type ordering

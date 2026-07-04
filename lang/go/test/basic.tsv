@@ -106,7 +106,7 @@ def Foo refine Record [x:Number] def Bar refine Record [y:Number] (refine Table 
 List unify (refine Table (refine Record [x:Number]))	'~unify-fail' false
 
 # Record with inline disjunct field (list evaluated as code)
-refine Record [x:Number y:[String tor None]]	record{x:Number y:String|None}
+refine Record [x:Number y:[String tor None]]	record{x:Number y:None tor String}
 
 # Record with inline disjunct - unification narrows
 refine Record [x:Number y:[String tor None]] unify refine Record [x:Number y:String]	record{x:Number y:String} true
@@ -118,7 +118,7 @@ def Foo refine Record [x:Number y:[String tor None]] make Foo [42 None]	{x:42 y:
 def Foo refine Record [x:Number y:[String tor None]] make Foo [42 "hello"]	{x:42 y:'hello'}
 
 # Record with user-defined type Field (disjunct for optional)
-def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo	record{x:Number y:String|None}
+def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo	record{x:Number y:None tor String}
 
 # Record with user-defined type - unification narrows disjunct
 def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo unify refine Record [x:Number y:String]	record{x:Number y:String} true
@@ -185,7 +185,7 @@ def d (make Options {y:(Integer tor None)}) d unify {}	{y:None} true
 # Optional field syntax ? — desugars to (type Tor None Tor Absent).
 # Absent is the kernel type meaning "key not present"; its appearance
 # as a disjunct alternative makes "may be missing" first-class.
-{x?:Integer}	{x:Integer|None|Absent}
+{x?:Integer}	{x:Integer tor None tor Absent}
 
 # Computed key syntax {[key]:value} — uses defined variables
 def a "a" {[a]:1}	{a:1}
@@ -259,7 +259,7 @@ do {x:1,y:2}	{x:1 y:2}
 {x:(3 add 4),y:(upper "a")}	{x:7 y:'A'}
 
 # Disjunct - union types via tor
-String tor None	String|None
+String tor None	None tor String
 (String tor None) unify "a"	'a' true
 (None tor Boolean) unify None	None true
 ({x:1} tor {y:2}) unify {x:1,q:9}	{q:9 x:1} true
@@ -345,17 +345,17 @@ true teq Boolean	false
 (refine Record [x:Integer]) teq (refine Record [x:String])	false
 (refine Record [x:Integer y:String]) teq (refine Record [x:Integer y:String])	true
 (String tor None) teq (String tor None)	true
-(String tor None) teq (None tor String)	false
+(String tor None) teq (None tor String)	true
 [:Integer] teq [:Integer]	true
 [:Integer] teq [:String]	false
 
 # tpartial - wrap every record field as T|None
-tpartial (refine Record [x:Integer])	record{x:Integer|None}
-tpartial (refine Record [x:Integer y:String])	record{x:Integer|None y:String|None}
-tpartial (refine Record [x:Number y:Boolean z:String])	record{x:Number|None y:Boolean|None z:String|None}
+tpartial (refine Record [x:Integer])	record{x:None tor Integer}
+tpartial (refine Record [x:Integer y:String])	record{x:None tor Integer y:None tor String}
+tpartial (refine Record [x:Number y:Boolean z:String])	record{x:None tor Number y:None tor Boolean z:None tor String}
 
 # tpartial - idempotent on fields already including None
-tpartial (refine Record [x:Integer y:[String tor None]])	record{x:Integer|None y:String|None}
+tpartial (refine Record [x:Integer y:[String tor None]])	record{x:None tor Integer y:None tor String}
 tpartial (tpartial (refine Record [x:Integer])) teq tpartial (refine Record [x:Integer])	true
 
 # is - per-element type List: type Names in lists match element-wise

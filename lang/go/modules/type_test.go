@@ -75,7 +75,7 @@ func TestTypeExclude(t *testing.T) {
 		want string
 	}{
 		{`(String tor None) TypeUtil.exclude None`, "String"},
-		{`(String tor Number tor Boolean) TypeUtil.exclude Boolean`, "String|Number"},
+		{`(String tor Number tor Boolean) TypeUtil.exclude Boolean`, "Number tor String"},
 		{`(String tor Number) TypeUtil.exclude (String tor Number)`, "Never"},
 		{`Integer TypeUtil.exclude String`, "Integer"},
 		{`Integer TypeUtil.exclude Integer`, "Never"},
@@ -104,7 +104,7 @@ func TestTypeExtract(t *testing.T) {
 		{`Integer TypeUtil.extract Integer`, "Integer"},
 		// Subtype semantics (TypeScript `Extract<T,U>`): extracting a
 		// supertype keeps every numeric subtype in the disjunct.
-		{`(Integer tor Float tor String) TypeUtil.extract Number`, "Integer|Float"},
+		{`(Integer tor Float tor String) TypeUtil.extract Number`, "Integer tor Float"},
 		{`(Integer tor String) TypeUtil.extract Number`, "Integer"},
 		{`Integer TypeUtil.extract Number`, "Integer"},
 	}
@@ -242,8 +242,10 @@ func TestTypeAlts(t *testing.T) {
 		expr string
 		want string
 	}{
-		{`TypeUtil.alts (String tor None)`, "[String None]"},
-		{`TypeUtil.alts (Integer tor Float tor Boolean)`, "[Integer Float Boolean]"},
+		// Alternatives are returned in canonical tcmp order (disjuncts are
+		// sorted at construction), not source order.
+		{`TypeUtil.alts (String tor None)`, "[None String]"},
+		{`TypeUtil.alts (Integer tor Float tor Boolean)`, "[Boolean Integer Float]"},
 		{`TypeUtil.alts Integer`, "[Integer]"},
 	}
 	for _, c := range cases {

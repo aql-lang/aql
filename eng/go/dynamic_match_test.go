@@ -133,14 +133,15 @@ func TestDynamicFirstMatchPartition(t *testing.T) {
 		t.Fatalf("expected 2 reachable returns for dynamic(Integer|String), got %v", rets)
 	}
 
-	// The dispatch result is dynamic(Boolean|Atom), not just dynamic(Boolean).
+	// The dispatch result is dynamic(Atom tor Boolean) — a union whose terms
+	// print in canonical tcmp order (disjuncts are sorted at construction).
 	sig := &Signature{Args: []*Type{TInteger}, Returns: []*Type{TBoolean}}
 	out := carrierResults(r, "wdiv", sig, []Value{intStr}, SrcPos{}, nil, false)
 	if len(out) != 1 || !out[0].Dynamic {
 		t.Fatalf("expected a single dynamic result, got %v", out)
 	}
-	if got := out[0].String(); got != "dynamic(Boolean|Atom)" && got != "dynamic(Atom|Boolean)" {
-		t.Errorf("partition result = %q, want dynamic(Boolean|Atom)", got)
+	if got := out[0].String(); got != "dynamic(Atom tor Boolean)" {
+		t.Errorf("partition result = %q, want dynamic(Atom tor Boolean)", got)
 	}
 
 	// A dynamic bound reaching only ONE overload → no refinement (the
@@ -160,7 +161,7 @@ func TestDynamicCarrierString(t *testing.T) {
 	}{
 		{NewDynamicCarrier(TInteger), "dynamic(Integer)"},
 		{NewDynamicCarrier(TAny), "dynamic(Any)"},
-		{NewDynamicCarrierValue(NewDisjunct([]Value{NewTypeLiteral(TInteger), NewTypeLiteral(TString)})), "dynamic(Integer|String)"},
+		{NewDynamicCarrierValue(NewDisjunct([]Value{NewTypeLiteral(TInteger), NewTypeLiteral(TString)})), "dynamic(Integer tor String)"},
 		{NewCarrier(TInteger), "Integer"}, // strict carrier unchanged
 	}
 	for _, tc := range cases {

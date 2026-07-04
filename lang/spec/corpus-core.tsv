@@ -58,7 +58,7 @@ deq 2 3	false	deq
 div 2 3.5	1.75	div
 do ['a','b']	'a' 'b'	do
 do {a:1,b:2}	{a:1 b:2}	do
-enum [a/q b/q c/q]	a|b|c	enum
+enum [a/q b/q c/q]	a tor b tor c	enum
 eq 2 3	false	eq
 false guard 42	None	guard
 filter ([p:Any] => [p.value gt 3]) [1 2 3 4 5]	[4 5]	filter
@@ -121,7 +121,7 @@ sort [3 1 2]	[1 2 3]	sort
 sub 2 3.5	1.5	sub
 take 2 [1 2 3 4]	[1 2]	take
 tall ['a','b']	Never	tall
-tany ['a','b']	'a'|'b'	tany
+tany ['a','b']	'a' tor 'b'	tany
 tcmp 2 3	1	tcmp
 true guard 42	42	guard
 typeof (tnot Integer)	Negation	tnot

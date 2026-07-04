@@ -1798,9 +1798,29 @@ func NewDefCleanup(info DefCleanupInfo) Value {
 	return NewValueRaw(TDefCleanup, info)
 }
 
-// NewDisjunct creates a disjunction type value from a list of alternatives.
+// NewDisjunct creates a disjunction type value from a list of
+// alternatives. The low-level constructor preserves the caller's order —
+// some internal callers build order-bearing disjuncts (a DepScalar
+// `[low, high]` bound, a dynamic-dispatch reachable-returns partition).
+// Canonical tcmp ordering for `tor` type UNIONS is applied one layer up,
+// in SimplifyDisjunctAlts (core_helpers.go), which every user-facing
+// union construction routes through — so `None tor 1` and `1 tor None`
+// build equal values that print identically and compare equal under
+// `tcmp`. (NewEnum also preserves order — an enum's member order is
+// significant.)
 func NewDisjunct(alternatives []Value) Value {
 	return NewValueRaw(TDisjunct, DisjunctInfo{Alternatives: alternatives})
+}
+
+// disjunctAltLess is the canonical ordering predicate for disjunct
+// alternatives: primarily CompareValues (the `tcmp` total order); when a
+// pair is incomparable (CompareValues errs) it falls back to a stable
+// CanonValue lexical tiebreak so the sort stays a strict weak ordering.
+func disjunctAltLess(a, b Value) bool {
+	if c, err := CompareValues(a, b); err == nil {
+		return c < 0
+	}
+	return CanonValue(a) < CanonValue(b)
 }
 
 // NewEnum creates an Enum value (Type/Disjunct/Enum) — a fixed
@@ -2910,11 +2930,11 @@ func kernelFormatDefault(v Value) string {
 		for i, alt := range di.Alternatives {
 			parts[i] = alt.String()
 		}
-		return strings.Join(parts, "|")
+		return strings.Join(parts, " tor ")
 	case IsNegation(v):
 		ni, _ := AsNegation(v)
-		// Parenthesise a compound inner so `tnot (A|B)` doesn't misread
-		// as `(tnot A)|B`.
+		// Parenthesise a compound inner so `tnot (A tor B)` doesn't misread
+		// as `(tnot A) tor B`.
 		if IsDisjunct(ni.Inner) || IsNegation(ni.Inner) {
 			return "tnot (" + ni.Inner.String() + ")"
 		}

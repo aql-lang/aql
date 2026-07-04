@@ -91,8 +91,8 @@ func TestValueStringTableTypeOrig(t *testing.T) {
 func TestValueStringDisjunctOrig(t *testing.T) {
 	v := NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)})
 	got := v.String()
-	if got != "String|None" {
-		t.Errorf("got %q, want %q", got, "String|None")
+	if got != "String tor None" {
+		t.Errorf("got %q, want %q", got, "String tor None")
 	}
 }
 
