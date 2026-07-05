@@ -815,7 +815,7 @@ CHECK check-closure
   => "Scalar/Number/Integer"
 CHECK check-if-branches
   if (1 gt 0) [10] [20] end
-  => "Scalar/Number/Integer"
+  => "Scalar/Number/Integer diagnostics=[unreachable_branch]"
 CHECK check-recursive
   def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]  fact 4
   => "Scalar/Number/Integer"

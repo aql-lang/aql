@@ -405,6 +405,17 @@ func if2Handler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 
 func if3ReturnsFn(args []Value, r *Registry) []Value {
 	es := r.Check
+	// Plain-check static reduction (the else-less-if soundness fix,
+	// forward-barrier.tsv:83): a paren comparison folds to a bare concrete
+	// Boolean, so reduce to the taken arm and return a bare-VALUE arm as-is,
+	// letting a trailing forward token dispatch against it. Gated to
+	// non-recording — the emit path keeps the folded condition EVENT and its
+	// existing const/join lowering, so the compiled differential is untouched.
+	if !es.Recorder().Active() {
+		if out, ok := reduceStaticIf(r, args[0], args[1], &args[2]); ok {
+			return out
+		}
+	}
 	if lit, ok := LiteralCondValue(args[0]); ok {
 		branch := "else"
 		if !lit {
@@ -570,6 +581,94 @@ func condSelectsArm(cond Value, isThen bool) bool {
 	return true
 }
 
+// staticCondArm reports the taken arm for a statically-known BARE concrete
+// Boolean condition — the shape a paren comparison folds to in plain check
+// (`(n eq 0)` → concrete false via CompileScalarFold, carrier.go). It is the
+// bare-value analogue of LiteralCondValue (which reads a length-1 LIST body)
+// and reuses condSelectsArm's concrete-Boolean probe. ok=false for a
+// list-form / dynamic / non-Boolean condition, so the caller falls through to
+// the existing const/join analysis.
+func staticCondArm(cond Value) (takeThen bool, ok bool) {
+	if IsConcrete(cond) && cond.Parent.ConformsTo(TBoolean) {
+		if b, err := AsBoolean(cond); err == nil {
+			return b, true
+		}
+	}
+	return false, false
+}
+
+// reduceStaticIf reduces an `if` whose condition is a statically-known bare
+// Boolean to its TAKEN arm, in PLAIN-CHECK mode only (callers gate on
+// !es.Recorder().Active() — the emit lowering has no representation for an
+// `if` that evaporates into its arm value; see native_control.go's other
+// !Active() reductions). It returns the taken arm's residual directly, with NO
+// join against the dead arm — the soundness fix for forward-barrier.tsv:83,
+// where the else arm is a bare module-export Function value that must
+// forward-collect the token following the `if`. elseArm is nil for the 2-arg
+// (if2) form: a false condition then nets no value (matching the runtime).
+func reduceStaticIf(r *Registry, cond, thenArm Value, elseArm *Value) ([]Value, bool) {
+	takeThen, ok := staticCondArm(cond)
+	if !ok {
+		return nil, false
+	}
+	// Warn on the dead arm, mirroring the const path — but only when a dead
+	// arm actually exists (a 2-arg true `if` has no else to call unreachable).
+	if !takeThen {
+		emitUnreachableBranch(r, false, "then")
+	} else if elseArm != nil {
+		emitUnreachableBranch(r, true, "else")
+	}
+	if takeThen {
+		return reduceStaticArm(r, cond, thenArm, true), true
+	}
+	if elseArm == nil {
+		return nil, true // if2, false: the then is unreachable and nothing runs
+	}
+	return reduceStaticArm(r, cond, *elseArm, false), true
+}
+
+// emitUnreachableBranch records the constant-condition dead-branch warning
+// shared by the if2/if3 const paths.
+func emitUnreachableBranch(r *Registry, lit bool, dead string) {
+	r.Check.AddDiagnostic(CheckDiagnostic{
+		Code:   "unreachable_branch",
+		Detail: "if condition is a constant " + BoolWord(lit) + "; " + dead + "-branch is unreachable",
+		Word:   "if",
+		Row:    r.Check.CurCallPos.Row,
+		Col:    r.Check.CurCallPos.Col,
+	})
+}
+
+// reduceStaticArm returns the taken arm's residual. A list code body runs via
+// RunCarrierBodyWithDefs (with the arm's guard narrowing installed, exactly as
+// the const path) and contributes its FULL residual stack, matching the
+// runtime splice. A bare VALUE arm (a module-export fn value, a literal, a
+// def-bound value, a typed list) is returned AS-IS — so a trailing forward
+// token dispatches against it in the shared engine loop (`… MathUtil.sqrt 16`
+// → the else fn value forward-collects 16 → sqrt(16)=Float), exactly as the
+// runtime's spliceArg does. The isCodeBody test mirrors spliceArg's own
+// wrap-and-execute condition (conditional.go), so check and runtime agree on
+// which arms are bodies.
+func reduceStaticArm(r *Registry, cond, arm Value, isThen bool) []Value {
+	if !isCodeBody(arm) {
+		return []Value{arm}
+	}
+	var stk []Value
+	var defs map[string]Value
+	if isThen {
+		restore := ApplyGuardNarrowing(r, cond)
+		stk, defs = RunCarrierBodyWithDefs(r, arm)
+		restore()
+		InstallJoinedDefs(r, defs, nil)
+	} else {
+		restore := ApplyComplementNarrowing(r, cond)
+		stk, defs = RunCarrierBodyWithDefs(r, arm)
+		restore()
+		InstallJoinedDefs(r, nil, defs)
+	}
+	return stk
+}
+
 // analyseCondFragment captures a list-form `if` condition body as an
 // emit fragment (nil when the condition is a pre-evaluated value, or
 // when no bytecode recording is active).
@@ -585,6 +684,15 @@ func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
 
 func if2ReturnsFn(args []Value, r *Registry) []Value {
 	es := r.Check
+	// Plain-check static reduction (else-less if): a folded bare-Boolean
+	// condition reduces to the then residual (true) or nothing (false),
+	// instead of the phantom Disjunct(then, None) the join path produces.
+	// Gated to non-recording, like if3ReturnsFn.
+	if !es.Recorder().Active() {
+		if out, ok := reduceStaticIf(r, args[0], args[1], nil); ok {
+			return out
+		}
+	}
 	if lit, ok := LiteralCondValue(args[0]); ok && !lit {
 		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "unreachable_branch",

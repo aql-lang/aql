@@ -19,11 +19,15 @@ func TestCheckParenGuardNarrows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	list, err := a.Check(`def y if (1 gt 0) [1] ['s'] if [y is Integer] [y add 1] [0]`)
+	// The disjunct is built with a LIST-form condition `[1 gt 0]`: a paren
+	// condition folds to a concrete Boolean and reduces the constructor `if`
+	// to one arm (else-less-if soundness fix). The guard under test stays
+	// paren-form (`z is Integer`), which does not fold.
+	list, err := a.Check(`def y if [1 gt 0] [1] ['s'] if [y is Integer] [y add 1] [0]`)
 	if err != nil {
 		t.Fatalf("check list form: %v", err)
 	}
-	paren, err := a.Check(`def z if (1 gt 0) [1] ['s'] if (z is Integer) [z add 1] [0]`)
+	paren, err := a.Check(`def z if [1 gt 0] [1] ['s'] if (z is Integer) [z add 1] [0]`)
 	if err != nil {
 		t.Fatalf("check paren form: %v", err)
 	}
@@ -45,7 +49,9 @@ func TestCheckParenGuardComplement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Check(`def z if (1 gt 0) [1] ['s'] if (z is Integer) [1] [z]`)
+	// List-form disjunct constructor (see TestCheckParenGuardNarrows); the
+	// guard under test `(z is Integer)` stays paren-form.
+	res, err := a.Check(`def z if [1 gt 0] [1] ['s'] if (z is Integer) [1] [z]`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
