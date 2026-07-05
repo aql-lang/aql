@@ -2949,7 +2949,7 @@ func TestMixedFnValueApplyCompiles(t *testing.T) {
 // instead of refusing "function value reaches add". A genuinely CAPTURING
 // closure still declines at isInertConst and falls back faithfully.
 func TestPatrunFnValueStoreCompiles(t *testing.T) {
-	const mk = `def api (patrun)  add {cmd:"sum"} ([m:Map] => [m.x add m.y]) api  `
+	const mk = `def api (patrun Function)  add {cmd:"sum"} ([m:Map] => [m.x add m.y]) api  `
 	// POSITIVE: pure stored fn compiles natively (no island) and dispatches.
 	pos := []struct{ src, want string }{
 		{mk + `def h (find {cmd:"sum" x:3 y:4} api)  h {x:3 y:4}`, "[7]"},
@@ -2982,7 +2982,7 @@ func TestPatrunFnValueStoreCompiles(t *testing.T) {
 	// NEGATIVE: a genuinely CAPTURING closure (captures the enclosing fn param
 	// `bse`) stored in a patrun declines the const-bake (isInertConst rejects a
 	// Captured fn) and falls back — compiled == interp, no divergence.
-	capSrc := `def mk fn [[bse:Integer] [Patrun] [def p (patrun)  add {cmd:"x"} ([m:Map] => [m.v add bse]) p  p]]  def api (mk 100)  def h (find {cmd:"x" v:5} api)  h {v:5}`
+	capSrc := `def mk fn [[bse:Integer] [Patrun] [def p (patrun Function)  add {cmd:"x"} ([m:Map] => [m.v add bse]) p  p]]  def api (mk 100)  def h (find {cmd:"x" v:5} api)  h {v:5}`
 	gotC, _, eC := mustNew(t).RunCompiled(capSrc)
 	gotI, eI := mustNew(t).Run(capSrc)
 	if eC != nil || eI != nil {

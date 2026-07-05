@@ -51,9 +51,9 @@ def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) ap
 def double word [dup add]  5 double	10	word
 def f fn [[x:Integer] [Integer] [mul x 2]]  3 (usurp f)	6	usurp
 def inc fn [[n:Integer] [Integer] [n add 1]]  5 inc/r apply	6	apply
-def r (patrun)  add {a:1} "A" r  add {a:1 b:1} "B" r  find {a:1 b:1} r	'B'	find
-def r (patrun)  add {a:1} "A" r  find {a:1 z:9} r	'A'	patrun
-def r (patrun)  add {a:1} "A" r  patterns r	[{pattern:{a:1} value:'A'}]	patterns
+def r (patrun String)  add {a:1} "A" r  add {a:1 b:1} "B" r  find {a:1 b:1} r	'B'	find
+def r (patrun String)  add {a:1} "A" r  find {a:1 z:9} r	'A'	patrun
+def r (patrun String)  add {a:1} "A" r  patterns r	[{pattern:{a:1} value:'A'}]	patterns
 deq 2 3	false	deq
 div 2 3.5	1.75	div
 do ['a','b']	'a' 'b'	do

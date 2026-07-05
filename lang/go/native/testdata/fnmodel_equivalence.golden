@@ -462,7 +462,7 @@ WORD parse
 WORD pathof
   [Any] barrier=1 typearg={0} returns=[Node/List]
 WORD patrun
-  [] barrier=0 returns=[Ideal/Patrun] +returnsfn
+  [Any] barrier=1 returns=[Ideal/Patrun] +returnsfn
 WORD patterns
   [Ideal/Patrun] barrier=1 returns=[Node/List]
 WORD pick

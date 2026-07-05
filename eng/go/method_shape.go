@@ -270,6 +270,79 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	return sig, positions, true
 }
 
+// dynamicBoundConformsToFunction reports whether a dynamic carrier's static
+// BOUND could be a callable — its Parent conforms to Function/FnDef, or (the
+// typed-patrun `find` shape) one alternative of its disjunct bound does. Only
+// a Function-bearing bound may auto-dispatch a forward window; a
+// dynamic(String|None) etc. must strand its trailing values as data (the
+// runtime never calls them), keeping the residual stack depth honest.
+func dynamicBoundConformsToFunction(v Value) bool {
+	if v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef) {
+		return true
+	}
+	if disj, err := AsDisjunct(v); err == nil {
+		for _, alt := range disj.Alternatives {
+			// A disjunct alternative is a bare type-literal Value whose own
+			// lattice identity (typeNodeOf) is the represented type — its
+			// .Parent is TType, not the type itself.
+			at := typeNodeOf(alt)
+			if at.ConformsTo(TFunction) || at.ConformsTo(TFnDef) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// tryDynamicFnValueDispatch is the general-value analogue of
+// tryShapedMethodDispatch: a DYNAMIC carrier whose bound is Function-bearing
+// (a typed-patrun `find` result — dynamic(Function ∪ None) — or any dynamic
+// fn value) sitting at the pointer with a contiguous inert forward-arg window
+// after it is the interpreter's auto-dispatch site. WHICH concrete fn the
+// carrier holds is a runtime fact, so the model is optimistic on the callable
+// alternative (like every dynamic-modality escape hatch): consume the window
+// and produce a single dynamic(Any), which the oracle's Dynamic rule covers.
+// This clears the arg-stranding that leaves `h {x:3 y:4}` as
+// `[dynamic(Function|None) Map]` (vs runtime `[Integer]`) — patrun.tsv:40.
+//
+// PLAIN-CHECK ONLY (not compiling, no live recorder). The compile pass keeps
+// the [dynamic, args] residual so resolveDynamicApply / OpCallDynamicTrailing
+// still lowers the call, and a suspended pass stays byte-identical
+// (TestSpecCompiledDifferential). Optimism is sound for every clean corpus row
+// — a clean miss-then-call (a None reader immediately applied) does not occur;
+// it is the same gradual gap dynamic modality accepts elsewhere.
+func (e *Engine) tryDynamicFnValueDispatch(valIdx int) bool {
+	r := e.registry
+	if r.Check.Compiling || r.Check.Recorder().Active() {
+		return false
+	}
+	v := e.tape.At(valIdx)
+	if !v.Dynamic || v.Quoted || !dynamicBoundConformsToFunction(v) {
+		return false
+	}
+	// The forward window: every token from the carrier to the statement
+	// boundary must be inert and evaluation-fixed (the same admission the
+	// shaped-method window uses). A word/paren/marker in the window declines
+	// the model — the interpreter would dispatch or collect through it in ways
+	// a flat consume cannot mirror.
+	winEnd := valIdx
+	for i := valIdx + 1; i < e.tape.Len(); i++ {
+		tv := e.tape.At(i)
+		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
+			break
+		}
+		if !evalFixedWindowToken(tv) {
+			return false
+		}
+		winEnd = i
+	}
+	if winEnd == valIdx {
+		return false // no args — a bare dynamic fn value stays data (both engines)
+	}
+	e.tape.Splice(valIdx, 1+(winEnd-valIdx), NewDynamicCarrier(TAny))
+	return true
+}
+
 // methodShapeAnnotated reports whether a value ID carries a method-shape
 // annotation this pass. Consulted by resolveDynamicApply: an ANNOTATED
 // carrier reaching the program residual as a LEADING or INTERIOR apply

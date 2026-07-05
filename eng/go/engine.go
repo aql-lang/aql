@@ -3211,6 +3211,15 @@ func (e *Engine) stepLiteral() error {
 		if e.registry.Check.IsActive() && e.tryShapedMethodDispatch(valIdx) {
 			return nil
 		}
+		// General dynamic-fn-value dispatch (method_shape.go): a DYNAMIC carrier
+		// whose bound is Function-bearing (a typed-patrun `find` result) followed
+		// by an inert forward window collapses to one dynamic(Any) on the
+		// plain-check surface, clearing the arg-stranding the compiled path lowers
+		// via resolveDynamicApply. Declines outside plain check and for any
+		// non-callable bound or non-inert window.
+		if e.registry.Check.IsActive() && e.tryDynamicFnValueDispatch(valIdx) {
+			return nil
+		}
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.tape.At(valIdx)

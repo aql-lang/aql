@@ -60,6 +60,12 @@ type StoreShapeInfo struct {
 	// lambda re-dispatched by the reader) poisons it, and readers keep
 	// the pre-existing dynamic(Any) hatch.
 	ValsPoisoned bool
+	// DeclaredVal is the DECLARED element type of a typed container (a
+	// `patrun T` table): nil for an inferred/untyped shape. When set, a
+	// reader (`find`) surfaces `dynamic(DeclaredVal ∪ None)` directly,
+	// bypassing the Vals join and its poisoning entirely — the type is a
+	// declaration, not an inference.
+	DeclaredVal *Type
 }
 
 // payloadMarker — see payload.go's catalogue; registered there.
@@ -155,7 +161,7 @@ func (s *StoreShapeInfo) CloneShape() *StoreShapeInfo {
 	if s == nil {
 		return nil
 	}
-	cp := &StoreShapeInfo{Scope: s.Scope, Vals: s.Vals, ValsPoisoned: s.ValsPoisoned}
+	cp := &StoreShapeInfo{Scope: s.Scope, Vals: s.Vals, ValsPoisoned: s.ValsPoisoned, DeclaredVal: s.DeclaredVal}
 	if s.KeyTypes != nil {
 		cp.KeyTypes = make(map[string]Value, len(s.KeyTypes))
 		for k, v := range s.KeyTypes {

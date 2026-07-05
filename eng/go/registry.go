@@ -644,6 +644,10 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unreachable_branch":    SeverityWarning,
 	"record_shape_mismatch": SeverityError,
 	"fold_error":            SeverityError,
+	// A typed Patrun (`patrun T`) whose `add` stores a CONCRETE value the
+	// checker can prove is not a T (native_patrun.go — the static mirror of
+	// the runtime add guard).
+	"patrun_error": SeverityError,
 	// Advisory (non-gating): a readability nudge, not a defect.
 	"forward_strands_operand": SeverityInfo,
 	"mixed_form_call":         SeverityInfo,
