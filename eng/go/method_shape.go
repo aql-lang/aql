@@ -157,67 +157,30 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 	if !ok {
 		return false
 	}
-	// Compile pass only, live recording only: the model changes the check
-	// tape, so a plain check (ratchet surface) and a suspended/refused pass
-	// keep today's byte-identical behaviour.
 	if !r.Check.Recorder().Active() {
-		return false
-	}
-	fnDef, ok := member.Data.(FnDefInfo)
-	if !ok || fnDef.Registry == nil {
-		return false
-	}
-	fn := fnDef.Registry.Lookup(fnDef.Name)
-	if fn == nil {
-		return false
-	}
-	// The statement window: every token from the carrier to the statement
-	// boundary must be inert and evaluation-fixed. Anything else — a word, a
-	// paren, a marker, a carrier — declines the whole model (the interpreter
-	// could dispatch or collect through it in ways the window cannot bake).
-	winEnd := valIdx
-	for i := valIdx + 1; i < e.tape.Len(); i++ {
-		tv := e.tape.At(i)
-		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
-			break
+		// Plain-check surface (not compiling): a shaped dynamic method apply —
+		// a delegation-wrapper method value followed by its contiguous inert
+		// forward-arg window — collapses to a single dynamic(Any), consuming
+		// the window, so the residual covers any runtime result. Without this
+		// the args strand on the check stack and the checker mis-models the
+		// arity (module-rand.tsv:37: `r.string "abc" 5` left
+		// `[dynamic(Any) ProperString Integer]` vs runtime `[ProperString]`).
+		// Gated to the non-compiling ratchet surface: the compile pass below
+		// keeps the [dynamic, args] residual intact so resolveDynamicApply →
+		// OpCallDynMethod still fires, and a suspended pass stays byte-identical.
+		if !r.Check.Compiling {
+			if _, positions, wok := e.shapedMethodApplyWindow(valIdx, member); wok {
+				e.tape.Splice(valIdx, 1+len(positions), NewDynamicCarrier(TAny))
+				return true
+			}
 		}
-		if !evalFixedWindowToken(tv) {
-			return false
-		}
-		winEnd = i
-	}
-	if winEnd == valIdx {
-		return false // no args — a bare landed value stays data in both engines
-	}
-	// The interpreter's own overload choice over the same tape. The window
-	// admission above guarantees no paren pre-evaluation is needed
-	// (resolveForwardArgs would be a no-op), so the plan-time match here IS
-	// the match the interpreter performs on the concrete member.
-	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
-	sig, positions, _ := e.matchSignature(fn, w, e.effectiveResolved())
-	if sig == nil || sig.Fallback || len(positions) == 0 {
 		return false
 	}
-	// Pure-forward, contiguous-prefix coverage: the matched positions must be
-	// exactly the window slots valIdx+1 .. valIdx+k. A match that reaches the
-	// stack below the carrier (a trailing/mixed shape) or skips a slot is not
-	// the statement-window apply — those keep today's paths.
-	for i, p := range positions {
-		if p != valIdx+1+i {
-			return false
-		}
-	}
-	if positions[len(positions)-1] > winEnd {
+	sig, positions, ok := e.shapedMethodApplyWindow(valIdx, member)
+	if !ok {
 		return false
 	}
-	// Only a plain Go-handler native models: no code bodies, no quotation
-	// beyond atom capture, no check-mode side effects, no user-fn frames —
-	// the shaped-method class is exactly the delegation-wrapper methods.
-	if sig.dispatchHandler() == nil || sig.fnFrame() != nil || sig.fullStack() ||
-		sig.runInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
-		sig.parkResult() {
-		return false
-	}
+	fnDef, _ := member.Data.(FnDefInfo) // validated by shapedMethodApplyWindow
 	args := make([]Value, len(positions))
 	for i, p := range positions {
 		args[i] = e.tape.At(p)
@@ -240,6 +203,71 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 	k := len(positions)
 	e.tape.Splice(valIdx, 1+k, outs...)
 	return true
+}
+
+// shapedMethodApplyWindow returns the matched signature and forward-arg
+// positions for a shaped dynamic method carrier at valIdx followed by a
+// contiguous inert forward-arg window — or ok=false when the shape is not a
+// plain-native statement-window apply. Pure (no tape mutation): shared by the
+// compile-pass model (which runs the real dispatch) and the plain-check
+// collapse (which folds the apply to dynamic(Any)).
+func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, []int, bool) {
+	fnDef, ok := member.Data.(FnDefInfo)
+	if !ok || fnDef.Registry == nil {
+		return nil, nil, false
+	}
+	fn := fnDef.Registry.Lookup(fnDef.Name)
+	if fn == nil {
+		return nil, nil, false
+	}
+	// The statement window: every token from the carrier to the statement
+	// boundary must be inert and evaluation-fixed. Anything else — a word, a
+	// paren, a marker, a carrier — declines the whole model (the interpreter
+	// could dispatch or collect through it in ways the window cannot bake).
+	winEnd := valIdx
+	for i := valIdx + 1; i < e.tape.Len(); i++ {
+		tv := e.tape.At(i)
+		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
+			break
+		}
+		if !evalFixedWindowToken(tv) {
+			return nil, nil, false
+		}
+		winEnd = i
+	}
+	if winEnd == valIdx {
+		return nil, nil, false // no args — a bare landed value stays data in both engines
+	}
+	// The interpreter's own overload choice over the same tape. The window
+	// admission above guarantees no paren pre-evaluation is needed
+	// (resolveForwardArgs would be a no-op), so the plan-time match here IS
+	// the match the interpreter performs on the concrete member.
+	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+	sig, positions, _ := e.matchSignature(fn, w, e.effectiveResolved())
+	if sig == nil || sig.Fallback || len(positions) == 0 {
+		return nil, nil, false
+	}
+	// Pure-forward, contiguous-prefix coverage: the matched positions must be
+	// exactly the window slots valIdx+1 .. valIdx+k. A match that reaches the
+	// stack below the carrier (a trailing/mixed shape) or skips a slot is not
+	// the statement-window apply — those keep today's paths.
+	for i, p := range positions {
+		if p != valIdx+1+i {
+			return nil, nil, false
+		}
+	}
+	if positions[len(positions)-1] > winEnd {
+		return nil, nil, false
+	}
+	// Only a plain Go-handler native models: no code bodies, no quotation
+	// beyond atom capture, no check-mode side effects, no user-fn frames —
+	// the shaped-method class is exactly the delegation-wrapper methods.
+	if sig.dispatchHandler() == nil || sig.fnFrame() != nil || sig.fullStack() ||
+		sig.runInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
+		sig.parkResult() {
+		return nil, nil, false
+	}
+	return sig, positions, true
 }
 
 // methodShapeAnnotated reports whether a value ID carries a method-shape
