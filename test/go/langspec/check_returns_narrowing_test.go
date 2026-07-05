@@ -75,6 +75,17 @@ func TestReturnsAnnotationNarrowing(t *testing.T) {
 
 		// ---- istype annotation ----
 		{"istype-boolean", `istype 5`, false, false},
+
+		// ---- Error field reads: literal-key narrowing (errorFieldReturns) ----
+		// A direct read off a bound Error carrier narrows the two well-known
+		// keys off the Any-frontier; the result is gradual (dynamic), so it
+		// does not add strictness (no "now flags" counterpart).
+		{"err-code-narrows", `def e (do [raise bad_input "nope"])  e dot code`, false, false},
+		{"err-message-narrows", `def e (do [raise "boom"])  e.message`, false, false},
+		// NEGATIVE (does-not-over-claim): a payload key is an arbitrary
+		// raise-spec value the checker cannot type, so it STAYS on the
+		// frontier — the narrowing is confined to code/message.
+		{"err-payload-key-stays-frontier", `def e (do [raise {code: bad_input/q, message: "m", got: 42}])  e dot got`, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

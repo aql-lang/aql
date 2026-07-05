@@ -65,8 +65,8 @@ var errorNatives = []NativeFunc{
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []Signature{
-			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAtom, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), ReturnsFn: errorFieldReturns, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TError}, Impl: Go(getErrorFieldHandler), ReturnsFn: errorFieldReturns, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 	{
@@ -76,8 +76,8 @@ var errorNatives = []NativeFunc{
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 
 		Signatures: []Signature{
-			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Impl: Go(getErrorFieldHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TString, TError}, Impl: Go(getErrorFieldHandler), ReturnsFn: errorFieldReturns, Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Impl: Go(getErrorFieldHandler), ReturnsFn: errorFieldReturns, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
 }
@@ -142,6 +142,34 @@ func raiseSpecHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	ae := MakeAqlError(code, msg, "raise", r.Source, "")
 	ae.Data = data
 	return nil, ae
+}
+
+// errorFieldReturns narrows a literal-key read off an Error carrier to the
+// field's known type — the static mirror of getErrorFieldHandler's two
+// well-known keys: `code`→Atom∪None (none when the error carries no stable
+// code) and `message`→String. A payload key (an arbitrary raise-spec entry)
+// or a computed/absent key stays dynamic(Any). Gradual (a caught Error may
+// lack the key), discharged by the runtime read; plain-check-gated so the
+// compile pass keeps the prior strict-Any return byte-identical.
+func errorFieldReturns(args []Value, r *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if r == nil || r.Check.Compiling {
+		// Compile pass: reproduce the prior Returns:[TAny] EXACTLY — a declared
+		// Any return is a DYNAMIC Any carrier (declaredReturnCarriers marks it so),
+		// not a strict one; a strict Any would fail the downstream error dispatch
+		// and refuse native compilation (compiled-coverage refusal gate).
+		return dyn
+	}
+	if len(args) < 1 || !IsConcrete(args[0]) {
+		return dyn
+	}
+	switch getKey(args[0]) {
+	case "code":
+		return []Value{NewDynamicCarrierValue(JoinCarriers(NewCarrier(TAtom), NewCarrier(TNone)))}
+	case "message":
+		return []Value{NewDynamicCarrier(TString)}
+	}
+	return dyn
 }
 
 // getErrorFieldHandler reads a field off an Error value: "code" (an
