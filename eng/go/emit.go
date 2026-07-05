@@ -2756,7 +2756,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 		return
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: sig.CompileEffect.Has(CompileDiverges)}})
+	// A CompileValueDiverges word (div/mod) raises value-dependently: its
+	// check-mode ReturnsFn drops the declared result (len(outs)==0) exactly on
+	// the divergent path (a static-zero divisor), so treat that call as a
+	// divergent terminal too — a closure body ending in it compiles with no RET
+	// and the catching word wraps the raised error, instead of islanding.
+	diverges := sig.CompileEffect.Has(CompileDiverges) ||
+		(sig.CompileEffect.Has(CompileValueDiverges) && len(outs) == 0)
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: diverges}})
 	// Carrier-identity de-collision (the deferred runtime-independence item, in
 	// its targeted form). A call OUTPUT whose ID already maps to a PRIOR event is
 	// a repeated identical computed call: `(context get 'n') add (context get

@@ -449,6 +449,19 @@ const (
 	// family-restricted `lt` on cross-family operands) declines the fold and
 	// keeps today's diagnostic path.
 	CompileScalarFold
+	// CompileValueDiverges marks a word that diverges VALUE-DEPENDENTLY: it
+	// returns its declared result for most operands but RAISES for a specific
+	// statically-decidable operand shape — `div` / `mod` by a static-zero
+	// integer divisor (`1 div 0`). Unlike CompileDiverges (ALWAYS raises), the
+	// divergence is per-call, so the recorder infers it from the word's own
+	// check-mode ReturnsFn: when the ReturnsFn produced NO result (the divergent
+	// path — returnsDivMod returns nil for a static-zero divisor), the call
+	// raises and is recorded as a divergent terminal (like raise), so a closure
+	// body ending in it (`do [1 div 0]`) compiles with no RET and the catching
+	// `do` turns the raised error into an Error value — instead of islanding.
+	// The flag scopes the "0 results ⇒ diverges" inference to these words: a
+	// genuinely void word (print/set, declared 0-result) is unaffected.
+	CompileValueDiverges
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
