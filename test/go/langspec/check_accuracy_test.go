@@ -173,7 +173,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 // wrong-TYPE checker bugs (A1, A4), which the value-pinning ratchet
 // cannot see. Violations are pinned and may only decrease.
 
-const pinnedTypeSoundnessViolations = 6 // was 7 — forward-barrier.tsv:83 (else-less-if module-export-in-else): `if (n eq 0) [99] MathUtil.sqrt 16` swallows the bare `MathUtil.sqrt` Function as the else arm; at runtime a false condition selects it and it forward-collects the trailing `16` → sqrt(16)=Float, but the checker joined both arms into a Disjunct and left `16` as a separate Integer (checked [Disjunct Integer] ⊉ runtime [Float]). Comparison ops already fold concrete operands in plain check (tryFoldScalarConst), so `(n eq 0)` reduces to a concrete Boolean; `if2ReturnsFn`/`if3ReturnsFn` now recognise that bare-Boolean condition (reduceStaticIf) and reduce to the TAKEN arm, returning a bare-VALUE arm AS-IS so the shared engine loop forward-collects the trailing token exactly as the runtime splice does (a list-body arm still runs via RunCarrierBodyWithDefs). Plain-check only (gated on !Recorder().Active(), like the loop-spread and zero-guard reductions), so the emit/compiled path is byte-identical. The other hard straggler recursion.tsv:53 stays (its `lte` operand is an abstract fn-param that never folds — needs recursion unrolling). was 8 — generics.tsv:75 (make-generic→Map) no longer diverges: concrete generic-record construction validation types the instantiation, so the checked residual matches the runtime (−1, sound). was 12 — −4 loop residual-arity: a STATICALLY-COUNTED `for` leaves the SPREAD of its per-iteration residual on the stack (`for 3 ['x']` → three strings, `for [1 4] [7 8]` → six ints), but the checker modelled it as a single List carrier — a variadic APPROXIMATION the bytecode lowerer requires. forCarrierAnalyse now returns the exact spread (per-iteration residual repeated `count` times, bounded by loopSpreadResidualCap) in PLAIN-CHECK mode only (gated on !Emit.Active(), so the recording path keeps the List and the bytecode differential is untouched). Repeating the fixed-point join `count` times is a sound over-approximation — a break/continue loop runs FEWER iterations, and a shorter runtime stack is still covered by the longer checked one (control.tsv:20, recursion.tsv:63/64, and forward-barrier.tsv:23 whose else-less-if Disjunct now covers the aligned Integer). REMAINING 8 are precision/dynamic limits, not the loop cluster: forward-barrier.tsv:83 (an else-less-if's Disjunct residual corrupts the subsequent MathUtil.sqrt module-wrapper dispatch — needs concrete-condition folding, which needs comparison ops to fold concretes) and recursion.tsv:53 (a recursive fn declared `[]`-void whose body leaks a per-frame value — modelling the spread needs recursion unrolling) are the two hard stragglers; the other six (class.tsv:88 singleton widened by set, corpus-core.tsv:61 enum identity, generics.tsv:75 make-generic→Map, module-rand.tsv:37 + patrun.tsv:40 dynamic-dispatch containers, user-types.tsv:115 subset keeps base tag) are checker-MORE-precise-than-runtime or inherent dynamic-dispatch limits. was 13 — module-rand:38: a Rand.with-seed instance method dispatch (`def r (Rand.with-seed N)  r.<method> …`) was a residual-mismatch violation (shapeless `r` → method result Any vs the runtime's concrete value); with-seed's check-mode shaped-carrier ReturnsFn resolves the method wrapper's typed result, removing it (−1, sound). was 15 — IO.write now declares its true Returns (the target path / Stream handle), making the write/read spec rows sound (−2); was 14 — +1 patrun.tsv:L40, the dynamic dispatch of a value pulled out of a Patrun: `find` returns a dynamic Any (the matcher is a dynamic-dispatch container, so a stored value's static type is unknowable), so calling the found lambda leaves the checker residual [dynamic(Any) Map] while the runtime yields [Integer] — a precision limit surfacing as an apparent mismatch, not a checker soundness bug; was 15 — do [body] now reports the body's full residual stack (matching doListHandler) instead of only the last value; was 16 — pop/shift TList sigs now declare their true 2-value Returns ([TList, TAny]); was 22 — corrected six wrong aql:time-util inner-native Returns (weeks/days/until/since → CalDuration, tz-offset → String, total-ms → Float) to match their handlers; was 159 — typeCovered now applies the runtime `is Type` membership rule to type-as-value actuals (typeof / type-algebra / make-of-a-type / record shapes), which a raw actual.Parent.ConformsTo misjudged (a type literal's Parent is the DENOTED type's lattice parent), removing 127 spurious flags and exposing the genuine residue (wrong module-time Returns annotations, do/for/pop arity, dynamic method dispatch)
+const pinnedTypeSoundnessViolations = 3 // was 6 — −3 typeCovered oracle refinement (NOT checker bugs; the oracle proxied membership by tag-subtyping): user-types.tsv:124 (a predicate-refine `Big`=Integer gt 10 return: the runtime Integer 50 keeps its base tag but `is Big`, and Big's Parent IS Integer so Integer never conforms to Big), class.tsv:85 (a `const 'point'` field re-`set`: runtime ProperString value but `is (const 'point')`), and corpus-core.tsv:61 (enum: toCarrier preserves the Enum DisjunctInfo so the disjunct branch decomposed it into atoms instead of the type-value branch). typeCovered now (a) runs the type-value denoted-node check BEFORE the disjunct decomposition and (b) accepts `actual.Is(node)` membership at the terminal — which runs the real predicate/equality on the concrete value (depScalarUnifier.Match / memberBehavior.Match), still catching a genuine non-member. Same class of oracle-proxy refinement as the earlier `actualIsTypeValue` fix (−127). Remaining 3 are inherent: module-rand.tsv:37 + patrun.tsv:40 (dynamic-dispatch containers) and recursion.tsv:53 (void-recursion per-frame spread). was 7 — forward-barrier.tsv:83 (else-less-if module-export-in-else): `if (n eq 0) [99] MathUtil.sqrt 16` swallows the bare `MathUtil.sqrt` Function as the else arm; at runtime a false condition selects it and it forward-collects the trailing `16` → sqrt(16)=Float, but the checker joined both arms into a Disjunct and left `16` as a separate Integer (checked [Disjunct Integer] ⊉ runtime [Float]). Comparison ops already fold concrete operands in plain check (tryFoldScalarConst), so `(n eq 0)` reduces to a concrete Boolean; `if2ReturnsFn`/`if3ReturnsFn` now recognise that bare-Boolean condition (reduceStaticIf) and reduce to the TAKEN arm, returning a bare-VALUE arm AS-IS so the shared engine loop forward-collects the trailing token exactly as the runtime splice does (a list-body arm still runs via RunCarrierBodyWithDefs). Plain-check only (gated on !Recorder().Active(), like the loop-spread and zero-guard reductions), so the emit/compiled path is byte-identical. The other hard straggler recursion.tsv:53 stays (its `lte` operand is an abstract fn-param that never folds — needs recursion unrolling). was 8 — generics.tsv:75 (make-generic→Map) no longer diverges: concrete generic-record construction validation types the instantiation, so the checked residual matches the runtime (−1, sound). was 12 — −4 loop residual-arity: a STATICALLY-COUNTED `for` leaves the SPREAD of its per-iteration residual on the stack (`for 3 ['x']` → three strings, `for [1 4] [7 8]` → six ints), but the checker modelled it as a single List carrier — a variadic APPROXIMATION the bytecode lowerer requires. forCarrierAnalyse now returns the exact spread (per-iteration residual repeated `count` times, bounded by loopSpreadResidualCap) in PLAIN-CHECK mode only (gated on !Emit.Active(), so the recording path keeps the List and the bytecode differential is untouched). Repeating the fixed-point join `count` times is a sound over-approximation — a break/continue loop runs FEWER iterations, and a shorter runtime stack is still covered by the longer checked one (control.tsv:20, recursion.tsv:63/64, and forward-barrier.tsv:23 whose else-less-if Disjunct now covers the aligned Integer). REMAINING 8 are precision/dynamic limits, not the loop cluster: forward-barrier.tsv:83 (an else-less-if's Disjunct residual corrupts the subsequent MathUtil.sqrt module-wrapper dispatch — needs concrete-condition folding, which needs comparison ops to fold concretes) and recursion.tsv:53 (a recursive fn declared `[]`-void whose body leaks a per-frame value — modelling the spread needs recursion unrolling) are the two hard stragglers; the other six (class.tsv:88 singleton widened by set, corpus-core.tsv:61 enum identity, generics.tsv:75 make-generic→Map, module-rand.tsv:37 + patrun.tsv:40 dynamic-dispatch containers, user-types.tsv:115 subset keeps base tag) are checker-MORE-precise-than-runtime or inherent dynamic-dispatch limits. was 13 — module-rand:38: a Rand.with-seed instance method dispatch (`def r (Rand.with-seed N)  r.<method> …`) was a residual-mismatch violation (shapeless `r` → method result Any vs the runtime's concrete value); with-seed's check-mode shaped-carrier ReturnsFn resolves the method wrapper's typed result, removing it (−1, sound). was 15 — IO.write now declares its true Returns (the target path / Stream handle), making the write/read spec rows sound (−2); was 14 — +1 patrun.tsv:L40, the dynamic dispatch of a value pulled out of a Patrun: `find` returns a dynamic Any (the matcher is a dynamic-dispatch container, so a stored value's static type is unknowable), so calling the found lambda leaves the checker residual [dynamic(Any) Map] while the runtime yields [Integer] — a precision limit surfacing as an apparent mismatch, not a checker soundness bug; was 15 — do [body] now reports the body's full residual stack (matching doListHandler) instead of only the last value; was 16 — pop/shift TList sigs now declare their true 2-value Returns ([TList, TAny]); was 22 — corrected six wrong aql:time-util inner-native Returns (weeks/days/until/since → CalDuration, tz-offset → String, total-ms → Float) to match their handlers; was 159 — typeCovered now applies the runtime `is Type` membership rule to type-as-value actuals (typeof / type-algebra / make-of-a-type / record shapes), which a raw actual.Parent.ConformsTo misjudged (a type literal's Parent is the DENOTED type's lattice parent), removing 127 spurious flags and exposing the genuine residue (wrong module-time Returns annotations, do/for/pop arity, dynamic method dispatch)
 
 func TestCheckTypeSoundness(t *testing.T) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
@@ -328,6 +328,25 @@ func typeCovered(checked, actual eng.Value) bool {
 	if checked.Dynamic {
 		return true
 	}
+	// A type-as-value actual (typeof / type-algebra / `make`-of-a-type /
+	// enum) is covered when its DENOTED node conforms to the checked node —
+	// tested BEFORE the disjunct decomposition below. Without this, a checked
+	// Enum/Disjunct value (whose DisjunctInfo toCarrier preserves) would be
+	// split into its per-alternative atoms and matched against the whole
+	// runtime enum value, which is nonsensical (corpus-core.tsv:61 — the two
+	// enum mints share members and differ only by ID).
+	if actualIsTypeValue(actual) {
+		cnode := checked.Parent
+		if eng.IsBareTypeNode(checked) {
+			cnode = eng.ValueType(checked)
+		}
+		if cnode != nil && eng.TType.ConformsTo(cnode) {
+			return true
+		}
+		if dn := eng.ValueType(actual); dn != nil && cnode != nil && dn.ConformsTo(cnode) {
+			return true
+		}
+	}
 	if eng.IsDisjunct(checked) {
 		di, err := eng.AsDisjunct(checked)
 		if err != nil {
@@ -347,27 +366,19 @@ func typeCovered(checked, actual eng.Value) bool {
 	if node == nil {
 		return false
 	}
-	// A type-as-value actual — the result of `typeof`, type algebra
-	// (`exclude`/`extract`/`tor`), `make`-of-a-type, a record shape left
-	// on the stack — is a VALUE THAT IS A TYPE. Its runtime membership is
-	// the `is Type` rule (native_type.go), NOT actual.Parent.ConformsTo:
-	// a type literal's Parent is the DENOTED type's lattice parent (the
-	// `Integer` literal has Parent == Number, the `Resource` literal has
-	// Parent == Object), so a raw Parent.ConformsTo misjudges every such
-	// value as not-a-Type. The checker correctly types these as the
-	// meta-type `Type`; cover them when the checked node admits `Type`
-	// (checked == Type/Any), or — when the checker was precise enough to
-	// produce a specific type literal — when the actual's denoted node
-	// conforms to it.
-	if actualIsTypeValue(actual) {
-		if eng.TType.ConformsTo(node) {
-			return true
-		}
-		if dn := eng.ValueType(actual); dn != nil && dn.ConformsTo(node) {
-			return true
-		}
-	}
-	return actual.Parent.ConformsTo(node)
+	// The type-as-value case (typeof / type-algebra / make-of-a-type / enum)
+	// is handled at the top of the function, before the disjunct branch.
+	//
+	// Tag-conformance OR runtime membership. For an ordinary carrier the
+	// tag test suffices, but for a subset/singleton carrier the runtime value
+	// keeps its BASE tag while genuinely inhabiting the checked type — the
+	// checker's real promise is `runtime is checked`, not tag-subtyping. So a
+	// predicate-refine (`Big` = Integer gt 10, whose Parent IS Integer, so a
+	// concrete Integer's tag never conforms) and a const singleton (a member
+	// subtype of ProperString) are covered via Value.Is, which runs the real
+	// predicate / equality on the concrete value — still rejecting a genuine
+	// non-member (user-types.tsv:124, class.tsv:85).
+	return actual.Parent.ConformsTo(node) || actual.Is(node)
 }
 
 // actualIsTypeValue mirrors the runtime `is Type` membership rule
