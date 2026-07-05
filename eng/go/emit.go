@@ -866,9 +866,29 @@ func (es *EmitState) TakeFragment() *EmitFragment {
 
 // appendEvent adds an event to the current frame and returns its seq.
 func (es *EmitState) appendEvent(ev emitEvent) int {
+	n := len(es.frames) - 1
+	// Dead code after a divergent terminal, IN A FRAGMENT: a diverging call
+	// (raise, or a static-zero div/mod — CompileValueDiverges) never returns, so
+	// any event recorded after it in the same CLOSURE/BRANCH fragment is
+	// unreachable. Emitting it builds a malformed frame — an op wired to the
+	// divergent call's absent result crashes the VM (`do [(raise "x") add 1]`,
+	// `do [(0 mod 0) mod 0]` both did). DROP it: the fragment already diverges
+	// (fragDiverges sees the divergent call as its terminal, so the closure body
+	// compiles with no RET and the catching word wraps the raised error), exactly
+	// as the interpreter stops at the raise. The dropped event still consumes a
+	// seq so a caller registering its (dead) output writes a harmless slot Finalize
+	// never linearises. Gated to n>0 (a pushed fragment frame): at the TOP LEVEL
+	// the divergence is the program terminator — Finalize truncates the residual
+	// after it (`0 and (20 div 0)` raises and aborts, matching the interpreter),
+	// so top-level events past it stay put.
+	if n > 0 && len(es.frames[n]) > 0 {
+		if prev := es.frames[n][len(es.frames[n])-1]; prev.kind == evCall && prev.call.diverges {
+			es.seq++
+			return es.seq
+		}
+	}
 	es.seq++
 	ev.seq = es.seq
-	n := len(es.frames) - 1
 	es.frames[n] = append(es.frames[n], ev)
 	return ev.seq
 }

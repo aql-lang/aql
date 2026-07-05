@@ -540,6 +540,56 @@ func genUserFnProg(r *rand.Rand) *gnode {
 	return node
 }
 
+// genCatchProg — do/error catch frames + the CompileValueDiverges div/mod-by-zero
+// divergent terminal (the island-fix path). The body is an Integer expression;
+// half the time it is FORCED to raise (`(body) div 0` / `mod 0`) and a consuming
+// handler reads the caught Error (`dot code` / `dot message`) or a bind-and-read
+// converts it — exercising the native catch-frame closure and the divergent
+// terminal. The other half is a non-raising body whose value the handler passes
+// through. No prior fuzzer path reached do/error/raise or the div0-in-do shape.
+func genCatchProg(r *rand.Rand) *gnode {
+	// The bind-and-read handler `convert Map e0` TYPE-CONSUMES the caught value,
+	// so it pairs only with a CLEAN literal div/mod-by-zero terminal. A gen body
+	// can nest a static-zero div/mod inside an OUTER static-zero mod
+	// (`(0 mod 0) mod 0` — dead code); the check then mistypes the caught error
+	// under `convert` (a narrow pre-existing precision edge, tracked separately).
+	// The error-READING handlers (dot code/message, fallback int) read the Error
+	// directly and are robust to that nesting, so they take a full gen body.
+	if r.Intn(3) == 0 {
+		return &gnode{op: "catchlit", n: 1 + r.Intn(2)} // 1=div0, 2=mod0 → convert Map
+	}
+	body := gen(r, cInt, 2, nil)
+	raise := 0
+	if r.Intn(2) == 0 {
+		raise = 1 + r.Intn(2) // force a raise: (body) div 0 / mod 0
+	}
+	return &gnode{op: "catchprog", n: raise, cmp: []string{"code", "message", "int"}[r.Intn(3)], kids: []*gnode{body}}
+}
+
+// genGradualAnyProg — the gradual-`Any` boundary (miscompile classes C & D,
+// design/MISCOMPILE-HUNT-FINDINGS.0.md): a fn DECLARED to return `[Any]` whose
+// gradual result feeds a polymorphic word (`add`), a higher-order word over a
+// list of Any elements (`each` / `size`), a comparison, or a concrete Integer
+// param (via a second Any-returning fn). These were CONFIRMED silent
+// divergences and the well-typed literal-only generator structurally never
+// built them.
+func genGradualAnyProg(r *rand.Rand) *gnode {
+	body := gen(r, cInt, 2, []string{"x"}) // Integer body in the param scope
+	return &gnode{op: "anyprog", n: r.Intn(5), kids: []*gnode{body,
+		{op: "lit", cat: cInt, n: r.Intn(6)}, {op: "lit", cat: cInt, n: r.Intn(6)}}}
+}
+
+// genInterpProg — template strings (`\`text ${expr} …\“) → OpInterp, an entire
+// opcode with ZERO prior generative coverage. 1–2 typed Integer holes woven
+// through literal text; the whole thing evaluates to a String on both engines.
+func genInterpProg(r *rand.Rand) *gnode {
+	kids := make([]*gnode, 1+r.Intn(2))
+	for i := range kids {
+		kids[i] = gen(r, cInt, 2, nil)
+	}
+	return &gnode{op: "interpprog", kids: kids}
+}
+
 // renderFnDef renders a fn VALUE: a named-fn `(fn [[params][Integer][body]])` or
 // an afn lambda `([params] => [body])`. The body is already rendered in the
 // param scope.
@@ -656,7 +706,7 @@ func sleaf(r *rand.Rand, c cat) *gnode {
 }
 
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
-	switch r.Intn(10) {
+	switch r.Intn(13) {
 	case 0:
 		return genArrProg(r), nil
 	case 1:
@@ -669,6 +719,12 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 		return genStrProg(r), nil // StringUtil ops (computed strings, indexof, split…)
 	case 5:
 		return genUserFnProg(r), nil // directly-called named fn (CALL_USER / TAIL_CALL_USER / RET)
+	case 6:
+		return genCatchProg(r), nil // do/error catch frames + div/mod-by-zero terminal
+	case 7:
+		return genGradualAnyProg(r), nil // gradual-Any boundary (miscompile classes C & D)
+	case 8:
+		return genInterpProg(r), nil // template strings → OpInterp
 	}
 	scope := []string{}
 	var stmts []*gnode
@@ -714,6 +770,61 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 
 // ctxKeys is the pool of context-store keys the generator may seed and read.
 var ctxKeys = []string{"n", "p", "q"}
+
+// renderProgOp renders the added whole-program shapes (catch frames, the
+// gradual-Any boundary, template strings) — split out of render so its
+// cyclomatic complexity stays under the linter budget.
+func renderProgOp(n *gnode, scope []string) string {
+	switch n.op {
+	case "catchlit": // clean literal div/mod-by-zero terminal, bound and type-consumed
+		op := "div"
+		if n.n == 2 {
+			op = "mod"
+		}
+		return "def e0 (do [5 " + op + " 0]) convert Map e0"
+	case "catchprog":
+		body := render(n.kids[0], nil)
+		switch n.n {
+		case 1:
+			body = "(" + body + ") div 0"
+		case 2:
+			body = "(" + body + ") mod 0"
+		}
+		switch n.cmp {
+		case "message":
+			return "do [" + body + "] error [dot message]"
+		case "int": // handler ignores the error (nets 2 → island; still parity)
+			return "do [" + body + "] error [99]"
+		default: // "code" — Atom or None; a non-raising body passes through
+			return "do [" + body + "] error [dot code]"
+		}
+	case "anyprog":
+		fdef := "def f0 fn [[x:Integer] [Any] [" + render(n.kids[0], []string{"x"}) + "]] "
+		a, b := render(n.kids[1], scope), render(n.kids[2], scope)
+		switch n.n {
+		case 0:
+			return fdef + "add (f0 " + a + ") " + b // Any + Integer into a polymorphic word
+		case 1:
+			return fdef + "[(f0 " + a + ") (f0 " + b + ")] each [add 1]" // list of Any → each
+		case 2:
+			return fdef + "if ((f0 " + a + ") gt 0) [1] [2]" // Any into a comparison
+		case 3:
+			return fdef + "size [(f0 " + a + ") (f0 " + b + ")]" // list of Any → size
+		default: // gradual Any into a CONCRETE Integer param (a second boundary)
+			return "def g0 fn [[y:Any] [Any] [y]] " + fdef + "f0 (g0 " + a + ")"
+		}
+	default: // "interpprog"
+		var sb strings.Builder
+		sb.WriteString("`v")
+		for i, k := range n.kids {
+			sb.WriteString(fmt.Sprintf("%d=${", i))
+			sb.WriteString(render(k, nil))
+			sb.WriteString("} ")
+		}
+		sb.WriteString("end`")
+		return sb.String()
+	}
+}
 
 func render(n *gnode, scope []string) string {
 	switch n.op {
@@ -902,6 +1013,8 @@ func render(n *gnode, scope []string) string {
 		init := render(n.kids[0], scope)
 		return "def f0 fn [[n:Integer acc:Integer][Integer][if (n lte 0) [acc] [f0 (n sub 1) (acc " +
 			n.cmp + " n)]]] (f0 " + fmt.Sprint(n.n) + " " + init + ")"
+	case "catchlit", "catchprog", "anyprog", "interpprog":
+		return renderProgOp(n, scope)
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":
