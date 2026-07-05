@@ -530,6 +530,16 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		}
 		return []Value{out}
 	}
+	// Plain-check variadic fold (recursion.tsv:53): when an arm's residual
+	// carries a variadic-spread (a `[]`-declared recursive fn's seeded
+	// self-call), the whole `if` yields a single variadic spread of the
+	// per-frame leaked type, absorbing the base arm's emptiness. Gated to
+	// non-recording — the compiled path keeps its own STAGE A variadic model.
+	if !es.Recorder().Active() {
+		if v, ok := FoldVariadicArms(thenStk, elseStk); ok {
+			return []Value{v}
+		}
+	}
 	out := joined[len(joined)-1]
 	es.Recorder().RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,

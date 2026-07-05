@@ -407,6 +407,7 @@ var (
 	IsTypeLiteral             = eng.IsTypeLiteral
 	JoinCarrierStacks         = eng.JoinCarrierStacks
 	JoinCarriers              = eng.JoinCarriers
+	FoldVariadicArms          = eng.FoldVariadicArms
 	MakeAqlError              = eng.MakeAqlError
 	MapFieldBoolean           = eng.MapFieldBoolean
 	MapFieldFloat             = eng.MapFieldFloat
