@@ -1826,11 +1826,16 @@ func NewDisjunct(alternatives []Value) Value {
 }
 
 // disjunctAltLess is the canonical ordering predicate for disjunct
-// alternatives: primarily CompareValues (the `tcmp` total order); when a
-// pair is incomparable (CompareValues errs) it falls back to a stable
-// CanonValue lexical tiebreak so the sort stays a strict weak ordering.
+// alternatives: primarily CompareValues (the `tcmp` total order); a CanonValue
+// lexical tiebreak resolves both incomparable pairs (CompareValues errs) AND
+// value-equal-but-distinct pairs (CompareValues returns 0). The tie case is
+// real: cross-leaf numeric magnitude equality (`1 cmp 1.0 == 0`) leaves two
+// type-distinct alts the primary order cannot separate, so without the tiebreak
+// `1 tor 1.0` and `1.0 tor 1` would keep the caller's order and render/store
+// differently despite `tor` being commutative. CanonValue distinguishes them
+// (`1` vs `1.0`), keeping the sort a deterministic strict weak ordering.
 func disjunctAltLess(a, b Value) bool {
-	if c, err := CompareValues(a, b); err == nil {
+	if c, err := CompareValues(a, b); err == nil && c != 0 {
 		return c < 0
 	}
 	return CanonValue(a) < CanonValue(b)

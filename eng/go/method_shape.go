@@ -169,8 +169,25 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 		// keeps the [dynamic, args] residual intact so resolveDynamicApply →
 		// OpCallDynMethod still fires, and a suspended pass stays byte-identical.
 		if !r.Check.Compiling {
-			if _, positions, wok := e.shapedMethodApplyWindow(valIdx, member); wok {
-				e.tape.Splice(valIdx, 1+len(positions), NewDynamicCarrier(TAny))
+			if sig, positions, wok := e.shapedMethodApplyWindow(valIdx, member); wok {
+				// Collapse to the matched signature's ARITY, not always one value.
+				// Side-effect-only shaped methods (logger info, metric add/record)
+				// declare zero returns; splicing a lone dynamic(Any) would fabricate
+				// a value the runtime never produces, so `(l.info "msg") add 1` would
+				// wrongly check clean. Resolve the arity exactly as a real dispatch
+				// would (ReturnsFn / declared Returns), then splice that many gradual
+				// carriers — 0 for a side-effect method, 1 for a value method.
+				args := make([]Value, len(positions))
+				for i, p := range positions {
+					args[i] = e.tape.At(p)
+					args[i].Eval = false
+					args[i].Undefined = false
+				}
+				reps := make([]Value, e.shapedMethodReturnArity(sig, args, v.Pos))
+				for i := range reps {
+					reps[i] = NewDynamicCarrier(TAny)
+				}
+				e.tape.Splice(valIdx, 1+len(positions), reps...)
 				return true
 			}
 		}
@@ -268,6 +285,20 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 		return nil, nil, false
 	}
 	return sig, positions, true
+}
+
+// shapedMethodReturnArity is the runtime result count of a shaped-method apply,
+// resolved exactly as declaredReturnCarriers does — a ReturnsFn's produced arity,
+// else the declared Returns length (nil → 0) — but WITHOUT the missing-returns
+// diagnostic, since the plain-check collapse is silent. This keeps the collapse
+// arity-faithful: a side-effect-only method (0 returns) collapses to 0 values,
+// not a fabricated one.
+func (e *Engine) shapedMethodReturnArity(sig *Signature, args []Value, pos SrcPos) int {
+	if sig.ReturnsFn != nil {
+		e.registry.Check.CurCallPos = pos
+		return len(sig.ReturnsFn(args, e.registry))
+	}
+	return len(sig.Returns)
 }
 
 // dynamicBoundConformsToFunction reports whether a dynamic carrier's static

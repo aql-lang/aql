@@ -880,7 +880,14 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 		// (the map unifier synthesises Absent when a key is absent);
 		// the None alternative carries the "may be explicitly None"
 		// half. No separate metadata needed — the optionality lives
-		// entirely in the type.
+		// entirely in the type. For an EXPLICIT record/map (`{a?:T}`), route
+		// through SimplifyDisjunctAlts — the same boundary user-facing `tor`
+		// unions pass through — so `{a?:T}` and the explicit
+		// `{a:(T tor None tor Absent)}` reduce to the SAME canonically-ordered
+		// value (otherwise they build order-divergent disjuncts and record
+		// equality compares false). An IMPLICIT map is the fn-param list
+		// (`[a?:T]`), whose optional-param expansion reads the base type off
+		// the FIRST alternative — keep the parser order there.
 		optional := qmSet[key] || optBase[key]
 		realKey := key
 		if strings.HasSuffix(key, "?") {
@@ -888,11 +895,15 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 			optional = true
 		}
 		if optional {
-			child = eng.NewDisjunct([]eng.Value{
+			alts := []eng.Value{
 				child,
 				eng.NewTypeLiteral(eng.TNone),
 				eng.NewTypeLiteral(eng.TAbsent),
-			})
+			}
+			if !implicit {
+				alts = eng.SimplifyDisjunctAlts(alts)
+			}
+			child = eng.NewDisjunct(alts)
 		}
 		om.Set(realKey, child)
 	}

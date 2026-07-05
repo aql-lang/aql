@@ -184,8 +184,14 @@ def d (make Options {y:(Integer tor None)}) d unify {}	{y:None} true
 
 # Optional field syntax ? — desugars to (type Tor None Tor Absent).
 # Absent is the kernel type meaning "key not present"; its appearance
-# as a disjunct alternative makes "may be missing" first-class.
-{x?:Integer}	{x:Integer tor None tor Absent}
+# as a disjunct alternative makes "may be missing" first-class. An explicit
+# record's optional field routes through the union simplifier, so the
+# alternatives store in canonical `tor` order (matching the explicit
+# `{x:(Integer tor None tor Absent)}` spelling) — not source order.
+{x?:Integer}	{x:None tor Absent tor Integer}
+# The shorthand's field union is the SAME value as the explicit spelling —
+# same canonical order, teq-equal — because both route through the simplifier.
+({x?:Integer} dot x) teq (Integer tor None tor Absent)	true
 
 # Computed key syntax {[key]:value} — uses defined variables
 def a "a" {[a]:1}	{a:1}

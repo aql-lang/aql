@@ -722,6 +722,11 @@ def Maybe (String tor None) Maybe tcmp Maybe	0
 tcmp (None tor 1) (1 tor None)	0	commutative: reordered terms compare equal
 tcmp (Integer tor String) (String tor Integer)	0	commutative: type-literal union order-insensitive
 (String tor None) teq (None tor String)	true	commutative union: teq sees them as the same type
+# Cross-leaf magnitude equality (1 cmp 1.0 == 0) leaves two type-distinct alts
+# the primary tcmp order cannot separate; a CanonValue tiebreak still gives them
+# a deterministic order, so even this union is commutative.
+tcmp (1 tor 1.0) (1.0 tor 1)	0	commutative: magnitude-equal cross-leaf alternatives still canonicalise
+(1 tor 1.0) teq (1.0 tor 1)	true	magnitude-equal union: order-insensitive under teq
 def Maybe (String tor None) def Choice (Integer tor Boolean) Maybe tcmp Choice	1
 def Maybe (String tor None) def Choice (Integer tor Boolean) Choice tcmp Maybe	-1
 def Maybe (String tor None) Maybe tcmp Disjunct	1
