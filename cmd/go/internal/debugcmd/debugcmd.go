@@ -35,6 +35,16 @@ import (
 	"github.com/aql-lang/aql/lang/go/debugserve"
 )
 
+// langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive runServe's init-error arm — lang.New only fails on registry
+// construction errors that nothing here can provoke.
+var langNew = lang.New
+
+// jsonMarshal is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive writeDiscovery's marshal-error arm, which is unreachable with
+// the plain discovery shape.
+var jsonMarshal = json.Marshal
+
 type cmdImpl struct{}
 
 // New returns the debug subcommand.
@@ -82,7 +92,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	a, err := lang.New()
+	a, err := langNew()
 	if err != nil {
 		fmt.Fprintf(stderr, "debug serve: init: %s\n", err)
 		return 1
@@ -122,7 +132,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 
 func writeDiscovery(path, bind, token string) {
 	d := discovery{URL: "http://" + bind, Token: token, PID: os.Getpid()}
-	data, err := json.Marshal(d)
+	data, err := jsonMarshal(d)
 	if err != nil {
 		return
 	}

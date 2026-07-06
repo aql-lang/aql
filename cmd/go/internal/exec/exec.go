@@ -31,6 +31,16 @@ import (
 	"github.com/aql-lang/aql/lang/go/policy"
 )
 
+// newServer is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive run's construction-error arm — NewServer cannot fail today, but
+// run's contract keeps the arm for future constructor validations.
+var newServer = NewServer
+
+// langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive the exec handler's init-error arm — lang.New only fails on
+// registry construction errors that no request can provoke.
+var langNew = lang.New
+
 // cmd is the Command implementation for `aql exec`.
 type cmd struct{}
 
@@ -78,7 +88,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Expand a leading ~ the shell left verbatim (e.g. -r=~/reg).
-	srv, err := NewServer(addr, pathutil.Expand(*registry), pol)
+	srv, err := newServer(addr, pathutil.Expand(*registry), pol)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", strings.TrimPrefix(err.Error(), "exec: "))
 		return 1
@@ -159,7 +169,7 @@ func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *ht
 		return
 	}
 
-	a, err := lang.New(lang.Options{Registry: registry, Policy: pol})
+	a, err := langNew(lang.Options{Registry: registry, Policy: pol})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, execResponse{Error: "init error: " + err.Error()})
 		return
