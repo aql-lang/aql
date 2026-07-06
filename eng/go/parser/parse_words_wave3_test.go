@@ -1,0 +1,351 @@
+package parser
+
+import (
+	"math"
+	"strings"
+	"testing"
+
+	"github.com/aql-lang/aql/eng/go"
+)
+
+// --- shared wave3 helpers ---
+
+// parseWave3 parses src, failing the test if Parse panics: every input —
+// well-formed or malformed — must produce values or a clean error.
+func parseWave3(t *testing.T, src string) (vals []eng.Value, err error) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Parse(%q) panicked: %v", src, r)
+		}
+	}()
+	return Parse(src)
+}
+
+// mustParseWave3 parses src and fails on error, returning the values.
+func mustParseWave3(t *testing.T, src string) []eng.Value {
+	t.Helper()
+	vals, err := parseWave3(t, src)
+	if err != nil {
+		t.Fatalf("Parse(%q) unexpected error: %v", src, err)
+	}
+	return vals
+}
+
+// wantParseErrWave3 asserts src FAILS to parse (never panics) and that the
+// error message contains sub (empty sub = any error).
+func wantParseErrWave3(t *testing.T, src, sub string) {
+	t.Helper()
+	_, err := parseWave3(t, src)
+	if err == nil {
+		t.Fatalf("Parse(%q): expected an error, got none", src)
+	}
+	if sub != "" && !strings.Contains(err.Error(), sub) {
+		t.Errorf("Parse(%q): error %q does not contain %q", src, err.Error(), sub)
+	}
+}
+
+// wordNameWave3 asserts v is a Word and returns its info.
+func wordNameWave3(t *testing.T, v eng.Value, ctx string) eng.WordInfo {
+	t.Helper()
+	if !eng.IsWord(v) {
+		t.Fatalf("%s: expected a Word, got %s", ctx, v.String())
+	}
+	w, err := eng.AsWord(v)
+	if err != nil {
+		t.Fatalf("%s: AsWord: %v", ctx, err)
+	}
+	return w
+}
+
+// --- reserved literals ---
+
+func TestParseWave3NoneLiteral(t *testing.T) {
+	vals := mustParseWave3(t, "none")
+	if len(vals) != 1 || !eng.IsNone(vals[0]) {
+		t.Fatalf("none: expected the unique None value, got %v", vals)
+	}
+}
+
+func TestParseWave3FloatSpecialLiterals(t *testing.T) {
+	cases := []struct {
+		src   string
+		check func(f float64) bool
+	}{
+		{"inf", func(f float64) bool { return math.IsInf(f, 1) }},
+		{"-inf", func(f float64) bool { return math.IsInf(f, -1) }},
+		{"nan", math.IsNaN},
+	}
+	for _, c := range cases {
+		vals := mustParseWave3(t, c.src)
+		if len(vals) != 1 {
+			t.Fatalf("%q: got %d values, want 1", c.src, len(vals))
+		}
+		f, err := eng.AsFloat(vals[0])
+		if err != nil {
+			t.Fatalf("%q: AsFloat: %v", c.src, err)
+		}
+		if !c.check(f) {
+			t.Errorf("%q: got %v, wrong special float", c.src, f)
+		}
+	}
+}
+
+// --- marker tokens ---
+
+func TestParseWave3MarkerTokens(t *testing.T) {
+	// `?` and `|` become plain marker words; a bare `)` becomes the
+	// close-paren marker so the engine can report the mismatch at runtime.
+	for _, c := range []struct{ src, word string }{{"?", "?"}, {"|", "|"}} {
+		vals := mustParseWave3(t, c.src)
+		if len(vals) != 1 {
+			t.Fatalf("%q: got %d values, want 1", c.src, len(vals))
+		}
+		if w := wordNameWave3(t, vals[0], c.src); w.Name != c.word {
+			t.Errorf("%q: word %q, want %q", c.src, w.Name, c.word)
+		}
+	}
+	vals := mustParseWave3(t, ")")
+	if len(vals) != 1 || !eng.IsCloseParen(vals[0]) {
+		t.Fatalf("bare `)`: expected a close-paren marker, got %v", vals)
+	}
+	// A trailing `!` with no following `.` stays a bare `!` word.
+	vals = mustParseWave3(t, "5 !")
+	if len(vals) != 2 {
+		t.Fatalf("5 !: got %d values, want 2", len(vals))
+	}
+	if w := wordNameWave3(t, vals[1], "5 !"); w.Name != "!" {
+		t.Errorf("5 !: second value word %q, want !", w.Name)
+	}
+}
+
+// --- word modifiers ---
+
+func TestParseWave3TypeBoundSugar(t *testing.T) {
+	// `Map/t` desugars to the paren group `(Type of [Map])`.
+	vals := mustParseWave3(t, "Map/t")
+	if len(vals) != 1 || !eng.IsParenExpr(vals[0]) {
+		t.Fatalf("Map/t: expected one ParenExpr, got %v", vals)
+	}
+	if s := vals[0].String(); !strings.Contains(s, "Type") || !strings.Contains(s, "of") {
+		t.Errorf("Map/t: rendering %q lacks the Type-of shape", s)
+	}
+}
+
+func TestParseWave3UsurpAndRefWords(t *testing.T) {
+	cases := []struct {
+		src        string
+		usurp, ref bool
+	}{
+		{"foo/u", true, false},
+		{"foo/ur", true, true},
+		{"foo/r", false, true},
+	}
+	for _, c := range cases {
+		vals := mustParseWave3(t, c.src)
+		if len(vals) != 1 {
+			t.Fatalf("%q: got %d values, want 1", c.src, len(vals))
+		}
+		w := wordNameWave3(t, vals[0], c.src)
+		if w.Name != "foo" || w.ForceUsurp != c.usurp || w.ForceRef != c.ref {
+			t.Errorf("%q: got name=%q usurp=%v ref=%v, want foo/%v/%v",
+				c.src, w.Name, w.ForceUsurp, w.ForceRef, c.usurp, c.ref)
+		}
+	}
+}
+
+// TestParseWave3InvalidModifierCombos pins the scanWordModifier rejection
+// rules: an invalid modifier suffix demotes the whole token to a plain
+// word (full text kept), never a partial parse and never a panic.
+func TestParseWave3InvalidModifierCombos(t *testing.T) {
+	for _, src := range []string{
+		"a/1f2", // second digit run
+		"a/rr",  // repeated r
+		"a/qr",  // q + r are mutually exclusive
+		"a/qu",  // q + u are mutually exclusive
+		"a/uu",  // repeated u
+		"a/uq",  // u + q (other order)
+		"a/tt",  // repeated t
+		"a/tq",  // t combines with nothing
+		"a/qt",  // t after q
+		"a/tf",  // t + f
+		"a/2t",  // t + argCount
+		"a/zz",  // unknown letters
+	} {
+		vals := mustParseWave3(t, src)
+		if len(vals) != 1 {
+			t.Fatalf("%q: got %d values, want 1", src, len(vals))
+		}
+		w := wordNameWave3(t, vals[0], src)
+		if w.Name != src {
+			t.Errorf("%q: invalid modifier must keep the whole token as the word name, got %q", src, w.Name)
+		}
+		if w.ForceUsurp || w.ForceRef || w.ForceStack || w.ForceForward {
+			t.Errorf("%q: invalid modifier must not set any flag: %+v", src, w)
+		}
+	}
+}
+
+// TestParseWave3WordContextTypePath pins that a full builtin type path in
+// WORD context resolves to the type literal (the `/` suffix is not a valid
+// modifier, so the whole token stays intact and resolves as a path).
+func TestParseWave3WordContextTypePath(t *testing.T) {
+	vals := mustParseWave3(t, "Scalar/Number/Integer")
+	if len(vals) != 1 || !eng.IsTypeLiteral(vals[0]) || vals[0].ID != eng.TInteger.ID {
+		t.Fatalf("Scalar/Number/Integer: expected the Integer type literal, got %v", vals)
+	}
+}
+
+// TestParseWave3HugeArityModifier pins that an argCount too large for int
+// demotes the token to a plain word instead of mis-parsing.
+func TestParseWave3HugeArityModifier(t *testing.T) {
+	src := "a/99999999999999999999"
+	vals := mustParseWave3(t, src)
+	if len(vals) != 1 {
+		t.Fatalf("%q: got %d values, want 1", src, len(vals))
+	}
+	if w := wordNameWave3(t, vals[0], src); w.Name != src || w.ArgCount != -1 {
+		t.Errorf("%q: got name=%q argCount=%d, want the full token and -1", src, w.Name, w.ArgCount)
+	}
+}
+
+// --- numeric literal edges ---
+
+func TestParseWave3NumberEdges(t *testing.T) {
+	// 0e1 is scientific notation, not base-prefixed: value 0 (Integer).
+	vals := mustParseWave3(t, "0e1")
+	if len(vals) != 1 {
+		t.Fatalf("0e1: got %d values, want 1", len(vals))
+	}
+	if n, err := eng.AsInteger(vals[0]); err != nil || n != 0 {
+		t.Errorf("0e1: got %v (err %v), want Integer 0", vals[0], err)
+	}
+	// int64 min in hex is exactly representable; jsonic cannot lex it as a
+	// number so it reaches parseWord as text and parses exactly.
+	vals = mustParseWave3(t, "-0x8000000000000000")
+	if len(vals) != 1 {
+		t.Fatalf("-0x8000000000000000: got %d values, want 1", len(vals))
+	}
+	if n, err := eng.AsInteger(vals[0]); err != nil || n != math.MinInt64 {
+		t.Errorf("-0x8000000000000000: got %v (err %v), want int64 min", vals[0], err)
+	}
+}
+
+func TestParseWave3NumberEdgeErrors(t *testing.T) {
+	cases := []struct{ src, code string }{
+		{"0x8000000000000000", "integer_overflow"},       // int64 max + 1
+		{"0xFFFFFFFFFFFFFFFF", "integer_overflow"},       // 2^64-1, hex text path
+		{"0o2000000000000000000000", "integer_overflow"}, // 2^63 in octal
+		{"0xZZ", "syntax_error"},                         // invalid hex digits
+		{"0x1__2", "syntax_error"},                       // misplaced separator
+		{"0xFFFFFFFFFFFFFFF__F", "syntax_error"},         // misplaced separator, text path
+		{"1e309", "float_overflow"},                      // overflows binary64
+	}
+	for _, c := range cases {
+		_, err := parseWave3(t, c.src)
+		if err == nil {
+			t.Errorf("Parse(%q): expected [aql/%s], got nil", c.src, c.code)
+			continue
+		}
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != c.code {
+			t.Errorf("Parse(%q): expected [aql/%s], got %v", c.src, c.code, err)
+		}
+	}
+}
+
+func TestParseWave3BigNumEdges(t *testing.T) {
+	// Signed exponents lex as one 0d run and build exact BigDecimals.
+	cases := map[string]string{
+		"0d1e+3": "0d1000",
+		"0d1e-3": "0d0.001",
+	}
+	for src, want := range cases {
+		vals := mustParseWave3(t, src)
+		if len(vals) != 1 || !vals[0].Parent.ConformsTo(eng.TBigDecimal) {
+			t.Fatalf("%q: expected one BigDecimal, got %v", src, vals)
+		}
+		if got := vals[0].String(); got != want {
+			t.Errorf("%q: got %s, want %s", src, got, want)
+		}
+	}
+	// `+0d5`: a digit after `+` is not a minilang name start, so the
+	// big-number matcher claims the signed literal.
+	vals := mustParseWave3(t, "+0d5")
+	if len(vals) != 1 || !vals[0].Parent.ConformsTo(eng.TBigInteger) {
+		t.Fatalf("+0d5: expected one BigInteger, got %v", vals)
+	}
+	n, _ := eng.AsBigInteger(vals[0])
+	if n.Int64() != 5 {
+		t.Errorf("+0d5: got %s, want 5", n)
+	}
+}
+
+func TestParseWave3BigNumMalformed(t *testing.T) {
+	// A `0d` prefix with a non-digit body is a clean 0d syntax error.
+	for _, src := range []string{"0dx", "0de", "0d1_"} {
+		_, err := parseWave3(t, src)
+		ae, ok := err.(*eng.AqlError)
+		if !ok || ae.Code != "syntax_error" {
+			t.Errorf("Parse(%q): expected [aql/syntax_error], got %v", src, err)
+		}
+	}
+	// `0d.` — the matcher declines (no digit), the residue is a malformed
+	// digit-led token.
+	wantParseErrWave3(t, "0d.", "invalid numeric literal")
+}
+
+// TestNumberClassifiersWave3 pins the numeric-shape classifier edges that
+// no lexed token can produce (jsonic never emits an empty or sign-only
+// number token) but that the predicates must still reject.
+func TestNumberClassifiersWave3(t *testing.T) {
+	for _, src := range []string{"", "-", "+", "1x"} {
+		if isPlainDecimalInteger(src) {
+			t.Errorf("isPlainDecimalInteger(%q) = true, want false", src)
+		}
+	}
+	for _, src := range []string{"1_0", "-42", "+7"} {
+		if !isPlainDecimalInteger(src) {
+			t.Errorf("isPlainDecimalInteger(%q) = false, want true", src)
+		}
+	}
+}
+
+// --- resolveTextValue (data-context bare text classifier) ---
+
+func TestResolveTextValueWave3Specials(t *testing.T) {
+	for src, check := range map[string]func(f float64) bool{
+		"inf":  func(f float64) bool { return math.IsInf(f, 1) },
+		"-inf": func(f float64) bool { return math.IsInf(f, -1) },
+		"nan":  math.IsNaN,
+	} {
+		v := resolveTextValue(src)
+		f, err := eng.AsFloat(v)
+		if err != nil || !check(f) {
+			t.Errorf("resolveTextValue(%q) = %v (err %v), wrong special float", src, v, err)
+		}
+	}
+	// A full builtin type PATH resolves to the type literal (the literal
+	// IS its lattice node, so compare by ID).
+	v := resolveTextValue("Scalar/Number/Integer")
+	if !eng.IsTypeLiteral(v) || v.ID != eng.TInteger.ID {
+		t.Errorf("resolveTextValue(Scalar/Number/Integer) = %v, want the Integer type literal", v)
+	}
+}
+
+// --- top-level implicit map ---
+
+func TestParseWave3TopLevelImplicitMapAutoEval(t *testing.T) {
+	// A whole-input implicit map (`a:1`) must be marked Eval so value
+	// expressions resolve at run time.
+	vals := mustParseWave3(t, "a:1")
+	if len(vals) != 1 {
+		t.Fatalf("a:1: got %d values, want 1", len(vals))
+	}
+	if !vals[0].Parent.ConformsTo(eng.TMap) {
+		t.Fatalf("a:1: expected a Map, got %s", vals[0].String())
+	}
+	if !vals[0].Eval {
+		t.Errorf("a:1: top-level implicit map must have Eval=true")
+	}
+}
