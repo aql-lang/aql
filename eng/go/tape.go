@@ -141,10 +141,9 @@ func growthCeiling(initial, maxGrows int, factor float64) int {
 // by cfg. warn (may be nil) receives one-time 90/95/99% capacity
 // warnings.
 func NewTapeWith(vals []Value, cfg TapeConfig, warn func(string)) *Tape {
+	// resolve guarantees initial >= len(vals) (its final clamp raises
+	// initial to progLen), so no re-check is needed here.
 	initial, maxGrows, factor := cfg.resolve(len(vals))
-	if initial < len(vals) {
-		initial = len(vals)
-	}
 	buf := make([]Value, initial)
 	copy(buf, vals)
 	return &Tape{
