@@ -142,7 +142,7 @@ func writeSidecar(homeDir string, gen int64, storeBytes, ik []byte) error {
 	if ik != nil {
 		sc.HMAC = storeHMAC(ik, gen, sha)
 	}
-	body, err := json.Marshal(&sc)
+	body, err := jsonMarshal(&sc)
 	if err != nil {
 		return err
 	}

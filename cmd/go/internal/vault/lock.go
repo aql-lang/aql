@@ -39,7 +39,7 @@ func withVaultLock(homeDir string, fn func() error) error {
 		return err
 	}
 	defer f.Close()
-	if err := lockFile(f); err != nil {
+	if err := s7lockFile(f); err != nil {
 		return err
 	}
 	defer func() { _ = unlockFile(f) }()

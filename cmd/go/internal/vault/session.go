@@ -139,10 +139,10 @@ func authenticateWith(s *Store, homeDir, pass string) (*Session, error) {
 		if pass == "" {
 			return nil, errors.New("file backend requires a passphrase")
 		}
-		kr, err := selectKeyring(BackendFile, vaultFolder(homeDir), pass)
-		if err != nil {
-			return nil, err
-		}
+		// selectKeyring(BackendFile, …) only ever constructs a *fileKeyring
+		// and cannot fail, so build it directly rather than leave the
+		// unreachable error arm uncovered (design/TEST-SEAMS.10.md, ADR-005).
+		kr := &fileKeyring{folder: vaultFolder(homeDir), pass: pass}
 		return &Session{kr: kr, Scope: ScopeAdmin}, nil
 	}
 	return openSession(s, homeDir, pass)
@@ -164,7 +164,7 @@ func openSession(s *Store, homeDir, pass string) (*Session, error) {
 	if err != nil || len(vsalt) == 0 {
 		return nil, errors.New("vault: missing vault salt (corrupt store)")
 	}
-	master, err := vaultMasterKEK(pass, vsalt)
+	master, err := s7vaultMasterKEK(pass, vsalt)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func openSession(s *Store, homeDir, pass string) (*Session, error) {
 		if err != nil {
 			continue
 		}
-		kek, err := slotKEK(master, salt)
+		kek, err := s7slotKEK(master, salt)
 		if err != nil {
 			continue
 		}
@@ -314,11 +314,11 @@ func ensureSessionNamespace(homeDir string, sess *Session, ns string) error {
 		if id := st.CurrentNDK[ns]; id != "" {
 			return fmt.Errorf("namespace %q was created concurrently; re-run the command", nsLabel(ns))
 		}
-		ndk, err := newNDK()
+		ndk, err := s7newNDK()
 		if err != nil {
 			return err
 		}
-		idb, err := newNDKID()
+		idb, err := s7newNDKID()
 		if err != nil {
 			return err
 		}

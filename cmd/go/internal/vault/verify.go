@@ -162,7 +162,7 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 				if e.Type().IsRegular() && strings.HasPrefix(n, ".") && strings.HasSuffix(n, ".tmp") {
 					report(true, "stale temp file: %s", n)
 					if *prune {
-						if err := os.Remove(filepath.Join(dir, n)); err != nil {
+						if err := s7osRemove(filepath.Join(dir, n)); err != nil {
 							fmt.Fprintf(stderr, "warning: removing %s: %s\n", n, err)
 							pruned--
 						}
