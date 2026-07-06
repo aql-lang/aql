@@ -771,7 +771,7 @@ func NewRegistry() (*Registry, error) {
 	// builtin type table (a malformed builtinDecls or an unknown
 	// well-known path). These are init-time programmer errors that used
 	// to panic; per ADR-005 they are reported here instead.
-	if err := BuiltinInitError(); err != nil {
+	if err := builtinInitError(); err != nil {
 		return nil, err
 	}
 	r := &Registry{
