@@ -384,12 +384,8 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 					if err := emitPrimary(&tmp, keyItem, kpos, d); err != nil {
 						return nil, err
 					}
-					if len(tmp) == 1 {
-						seg.KeyLit = tmp[0]
-					} else {
-						seg.Computed = true
-						seg.KeyExpr = tmp
-					}
+					// emitPrimary appends exactly one value on success.
+					seg.KeyLit = tmp[0]
 				}
 				segs = append(segs, seg)
 			}

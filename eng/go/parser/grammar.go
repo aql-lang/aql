@@ -3,6 +3,7 @@ package parser
 import (
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/aql-lang/aql/eng/go"
 	jsonic "github.com/tabnas/jsonic/go"
@@ -310,14 +311,10 @@ func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
 		}
 		tkn := lex.Token("#ML", t.ML, miniLitVal{Name: name, Src: b.String()}, s[start:si])
 		cursor.SI = si
-		for _, ch := range s[start:si] {
-			if ch == '\n' {
-				cursor.RI++
-				cursor.CI = 1
-			} else {
-				cursor.CI++
-			}
-		}
+		// The span can never contain a newline (the scan breaks at any
+		// unescaped whitespace and only escape-consumes space/tab), so
+		// the cursor stays on this row and advances one column per rune.
+		cursor.CI += utf8.RuneCountInString(s[start:si])
 		return tkn
 	})
 }
@@ -362,9 +359,9 @@ func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
 			}
 			si++
 		}
-		if si == start {
-			return nil
-		}
+		// si > start always: the entry guards returned on end-of-source,
+		// backtick, and `${`, so the first iteration cannot break and
+		// every arm advances si.
 		lit := s[start:si]
 		// Process escape sequences.
 		lit = processTemplateEscapes(lit)
