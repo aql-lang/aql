@@ -13,7 +13,7 @@ import (
 
 func TestW4LoadConfigInvalidJsonic(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "svc.jsonic")
-	if err := os.WriteFile(path, []byte("[unclosed"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("{{"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := loadConfig(path)
