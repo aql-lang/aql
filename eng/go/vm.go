@@ -314,7 +314,7 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 			}
 		}
 	}
-	if err := screenResultsFn(vc, results, "poly result at "+pr.Word, curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "poly result at "+pr.Word, curDebug, pc); err != nil {
 		return nil, err
 	}
 	return append(stack[:len(stack)-n], results...), nil
@@ -454,7 +454,7 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := screenResultsFn(vc, results, "dynamic result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -523,7 +523,7 @@ func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := screenResultsFn(vc, results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil {
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -578,7 +578,7 @@ func (vc *vmContext) callDynApplyTop(n int, stack []Value, curDebug []SrcPos, pc
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := screenResultsFn(vc, results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil {
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -619,7 +619,7 @@ func (vc *vmContext) callDynMethod(spec *DynMethodSpec, stack []Value, curDebug 
 				"shaped method apply %s: result count %d differs from the shape claim %d; deferring to the interpreter",
 				spec.Word, len(results), spec.NOut))
 		}
-		if err := screenResultsFn(vc, results, "shaped method result at "+spec.Word, curDebug, pc); err != nil {
+		if err := vc.screenResults(results, "shaped method result at "+spec.Word, curDebug, pc); err != nil {
 			return nil, err
 		}
 		return append(stack[:base], results...), nil
@@ -676,7 +676,7 @@ func (vc *vmContext) callDynamicMixed(w int, stack []Value, curDebug []SrcPos, p
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
 	}
-	if err := screenResultsFn(vc, results, "dynamic result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -776,7 +776,7 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := screenResultsFn(vc, results, "island result at "+fb.Desc, curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "island result at "+fb.Desc, curDebug, pc); err != nil {
 		return nil, err
 	}
 	return append(stack, results...), nil
@@ -1013,7 +1013,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			// compiled — the emitter refuses fn-invoking and
 			// code-splicing words. Fail loudly, never push tokens as
 			// data.
-			if err := screenResultsFn(vc, results, "handler result at "+s.Word, curDebug, pc); err != nil {
+			if err := vc.screenResults(results, "handler result at "+s.Word, curDebug, pc); err != nil {
 				return nil, err
 			}
 			stack = append(stack, results...)
@@ -1034,7 +1034,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			}
 			// Belt-and-braces, like every dispatch site: a value-transforming
 			// predicate body could hand back a tape-coupled token; never push one.
-			if err := screenResultsFn(vc, []Value{bound}, "typed-bind result at "+p.TypedBinds[in.Arg].Name, curDebug, pc); err != nil {
+			if err := vc.screenResults([]Value{bound}, "typed-bind result at "+p.TypedBinds[in.Arg].Name, curDebug, pc); err != nil {
 				return nil, err
 			}
 			stack[len(stack)-1] = bound
