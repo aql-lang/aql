@@ -88,7 +88,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					pol, err := policy.Load("sandbox")
+					pol, err := s7aPolicyLoad("sandbox")
 					if err != nil {
 						return nil, fmt.Errorf("running Vm.run: load sandbox: %w", err)
 					}
@@ -107,7 +107,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					pol, err := policy.Load("sandbox")
+					pol, err := s7aPolicyLoad("sandbox")
 					if err != nil {
 						return nil, fmt.Errorf("running Vm.run-sandbox: %w", err)
 					}
@@ -126,7 +126,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					pol, err := policy.Load("compute")
+					pol, err := s7aPolicyLoad("compute")
 					if err != nil {
 						return nil, fmt.Errorf("running Vm.run-compute: %w", err)
 					}
@@ -500,17 +500,14 @@ func policyFromMapValue(v native.Value) (policy.Policy, error) {
 	if !native.IsConcrete(v) {
 		return nil, fmt.Errorf("policy map cannot be a type literal or carrier")
 	}
-	m, err := native.RequireConcreteMap(v, "Vm.run-with policy")
-	if err != nil {
+	if _, err := native.RequireConcreteMap(v, "Vm.run-with policy"); err != nil {
 		return nil, err
 	}
-	// Convert the AQL map to a generic map[string]any for the
-	// policy loader. We use AQL's value-to-any conversion path,
-	// which already handles maps, lists, strings, numbers, bools.
-	raw := native.ValueToAny(v)
-	asMap, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("policy map: expected map, got %T (size=%d)", raw, m.Len())
-	}
+	// Convert the AQL map to a generic map[string]any for the policy loader.
+	// RequireConcreteMap has already established that v is a concrete map
+	// backed by an OrderedMap payload, so native.ValueToAny always yields a
+	// map[string]any here (see native.valueToAny's TMap arm) — the assertion
+	// cannot fail, so no unreachable error arm is left to guard (ADR-005).
+	asMap, _ := native.ValueToAny(v).(map[string]any)
 	return policy.FromMap(asMap)
 }
