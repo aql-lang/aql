@@ -32,7 +32,7 @@ var moduleCatalog = []ModuleInfo{
 	{"query", "SQL-style query pipelines: from, where, join, group, order."},
 	{"struct-util", "Structured-data utilities: merge, walk, transform, jsonify, …."},
 	{"io", "I/O: read, write, stdin/stdout/stderr, printstr, trace."},
-	{"net", "HTTP requests and API access: fetch, prepare, direct."},
+	{"net", "Networking: HTTP requests, raw TCP sockets, codecs, and service endpoints."},
 	{"logic-util", "Derived boolean connectives: nand, nor, xnor, iff, implies."},
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
 	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), gex (globs), register."},
@@ -42,6 +42,7 @@ var moduleCatalog = []ModuleInfo{
 	{"model", "Build a system model from .jsonic source (via aontu unification) and run generator actions over it: new, run, start, stop, model."},
 	{"log", "Structured logging: severity levels, fields, console/memory sinks, a global threshold."},
 	{"debug", "Debugging: print taps, structural/system introspection, value sizing, and performance measurement."},
+	{"repl", "A socket REPL server and client, written in AQL over aql:net."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The

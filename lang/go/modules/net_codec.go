@@ -636,8 +636,22 @@ func makeHTTPCodec() native.Value {
 		m.Set("method", native.NewString(method))
 		m.Set("path", native.NewString(path))
 		m.Set("query", parseQuery(query))
-		m.Set("headers", headerMap(lines[1:]))
+		headers := headerMap(lines[1:])
+		m.Set("headers", headers)
 		m.Set("body", native.NewBytesValue(body))
+		// JSON convenience (the RFC §6.4 body-parsing wrap, folded into
+		// the codec): a JSON content-type body also arrives decoded as
+		// `req.body-json`. A malformed body just omits the key — the
+		// handler still has the raw bytes.
+		if hm, _ := native.AsMap(headers); hm != nil && len(body) > 0 {
+			if ct, ok := hm.Get("content-type"); ok {
+				if cts, err := ct.AsConcreteString(); err == nil && strings.Contains(cts, "json") {
+					if bj, jErr := jsonToValue(body); jErr == nil {
+						m.Set("body-json", bj)
+					}
+				}
+			}
+		}
 		return []native.Value{msgRest(native.NewMap(m), rest)}, nil
 	}
 	encode := func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {

@@ -43,6 +43,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"parse":       BuildParseModule,
 	"model":       BuildModelModule,
 	"log":         BuildLogModule,
+	"repl":        BuildReplModule,
 	"debug":       BuildDebugModule,
 }
 

@@ -22,6 +22,7 @@ func runNetSteps(t *testing.T, steps []string) ([]native.Value, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reg.ParseFunc = parser.Parse
 	InstallResolver(reg)
 	engine := native.NewTop(reg)
 	var result []native.Value

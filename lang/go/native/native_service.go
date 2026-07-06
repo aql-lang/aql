@@ -380,7 +380,17 @@ func dispatchService(r *Registry, s *serviceState, req Value) ([]Value, error) {
 	// gen_server guarantee — handlers mutate `state` without locks).
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return runHandlerChain(r, state, req, chain)
+	res, err := runHandlerChain(r, state, req, chain)
+	if err != nil {
+		return nil, err
+	}
+	// The reply is the handler's LAST result: bodies routinely leave
+	// residue (a flex `set` returns its receiver), and "the reply" is a
+	// single value by contract.
+	if len(res) > 1 {
+		res = res[len(res)-1:]
+	}
+	return res, nil
 }
 
 // runHandlerChain invokes chain[0] with (req, state) or (req, state,
