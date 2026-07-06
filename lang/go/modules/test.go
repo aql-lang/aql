@@ -53,11 +53,11 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 		return native.ModuleDesc{}, fmt.Errorf("test: parser not configured")
 	}
 
-	testParseOnce.Do(func() {
-		testParsed, testParseErr = parent.ParseFunc(testAQLPreamble)
-	})
-	if testParseErr != nil {
-		return native.ModuleDesc{}, fmt.Errorf("test: parse preamble: %w", testParseErr)
+	// The aql:test preamble parse is routed through a seam
+	// (design/TEST-SEAMS.10.md) so its parse/run error arms are drivable.
+	parsed, perr := w9ParsePreamble(parent)
+	if perr != nil {
+		return native.ModuleDesc{}, fmt.Errorf("test: parse preamble: %w", perr)
 	}
 
 	// Build the module sub-registry, register the Go-implemented test
@@ -123,7 +123,7 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 		},
 	})
 
-	tokens := append([]native.Value(nil), testParsed...)
+	tokens := append([]native.Value(nil), parsed...)
 	sub := native.New(modReg)
 	if _, err := sub.Run(tokens); err != nil {
 		return native.ModuleDesc{}, fmt.Errorf("test: run preamble: %w", err)
@@ -742,7 +742,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		// Build the per-iteration seeded rand instance. Each
 		// iteration uses (seed + i) so failures replay with a
 		// known-good sub-seed.
-		randMap, err := BuildSeededRandInstance(seed + i)
+		randMap, err := w9BuildSeededRandInstance(seed + i)
 		if err != nil {
 			failed = true
 			failingIter = i
@@ -904,7 +904,7 @@ func shrinkFailingProgram(
 	// sub-engine where `r` is bound to a freshly-seeded rand instance
 	// (matching what the failing iteration would have done) and a
 	// stackform.Recorder is installed to capture the execution.
-	randMap, err := BuildSeededRandInstance(failingSeed)
+	randMap, err := w9BuildSeededRandInstance(failingSeed)
 	if err != nil {
 		return native.NewNone(), "", 0, false
 	}
@@ -925,11 +925,11 @@ func shrinkFailingProgram(
 		if form == nil || form.Len() == 0 {
 			return shrink.Invalid
 		}
-		evalReg, err := BuildSeededRandRegistry(failingSeed)
+		evalReg, err := w9BuildSeededRandRegistry(failingSeed)
 		if err != nil {
 			return shrink.Invalid
 		}
-		vals, err := stackform.Eval(evalReg, form)
+		vals, err := w9StackformEval(evalReg, form)
 		if err != nil || len(vals) == 0 {
 			return shrink.Invalid
 		}
@@ -969,11 +969,11 @@ func shrinkFailingProgram(
 	}
 
 	// Materialise the shrunk value by re-evaluating the reduced form.
-	evalReg, err := BuildSeededRandRegistry(failingSeed)
+	evalReg, err := w9BuildSeededRandRegistry(failingSeed)
 	if err != nil {
 		return native.NewNone(), "", 0, false
 	}
-	vals, err := stackform.Eval(evalReg, reduced)
+	vals, err := w9StackformEval(evalReg, reduced)
 	if err != nil || len(vals) == 0 {
 		return native.NewNone(), "", 0, false
 	}
@@ -1023,7 +1023,7 @@ func shrinkFailingInput(
 		// are always shape [PushLit(v)] (possibly nested via
 		// shrinkLiteral on a list/map) — Flatten + Run gives the
 		// reconstructed value.
-		vals, err := stackform.Eval(parent, form)
+		vals, err := w9StackformEval(parent, form)
 		if err != nil || len(vals) == 0 {
 			return shrink.Invalid
 		}
@@ -1059,7 +1059,7 @@ func shrinkFailingInput(
 	// Extract shrunk input from the reduced form. Should be a
 	// single PushLit (or a series that evaluates to one value).
 	if reducedForm != nil && len(reducedForm.Ops) > 0 {
-		if vals, err := stackform.Eval(parent, reducedForm); err == nil && len(vals) > 0 {
+		if vals, err := w9StackformEval(parent, reducedForm); err == nil && len(vals) > 0 {
 			shrunkInput = vals[len(vals)-1]
 		}
 	}
