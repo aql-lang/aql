@@ -157,7 +157,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			return 1
 		}
 		defer sess.Close()
-		if err := requireScope(sess, OpRead); err != nil {
+		if err := w8requireScope(sess, OpRead); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}

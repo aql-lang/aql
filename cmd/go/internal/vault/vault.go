@@ -501,7 +501,7 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if err := writeSecret(homeDir, sess, alias, ns, value); err != nil {
+	if err := w8writeSecret(homeDir, sess, alias, ns, value); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -967,7 +967,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	_, alias, err := findAliasRef(s, fs.Arg(0))
+	_, alias, err := w8findAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -1193,7 +1193,7 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	_, alias, err := findAliasRef(s, fs.Arg(0))
+	_, alias, err := w8findAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
