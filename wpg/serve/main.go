@@ -22,25 +22,23 @@ type evalResponse struct {
 	Error  string   `json:"error,omitempty"`
 }
 
-func main() {
-	port := flag.Int("port", 8080, "HTTP port")
-	flag.Parse()
-
-	instance, err := lang.New()
-	if err != nil {
-		log.Fatalf("failed to create AQL instance: %v", err)
-	}
-
+// newMux builds the REPL server's handler over one AQL instance.
+// Extracted from main so tests can drive the production routes through
+// httptest.
+func newMux(instance *lang.AQL) (*http.ServeMux, error) {
 	var mu sync.Mutex
 	var outBuf bytes.Buffer
 	instance.SetOutput(&outBuf)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(indexHTML))
+		if _, err := w.Write([]byte(indexHTML)); err != nil {
+			log.Printf("write index: %v", err)
+		}
 	})
 
-	http.HandleFunc("/api/eval", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/eval", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -69,10 +67,25 @@ func main() {
 		}
 		writeJSON(w, resp)
 	})
+	return mux, nil
+}
+
+func main() {
+	port := flag.Int("port", 8080, "HTTP port")
+	flag.Parse()
+
+	instance, err := lang.New()
+	if err != nil {
+		log.Fatalf("failed to create AQL instance: %v", err)
+	}
+	mux, err := newMux(instance)
+	if err != nil {
+		log.Fatalf("failed to build handler: %v", err)
+	}
 
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("AQL Web REPL listening on http://localhost%s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

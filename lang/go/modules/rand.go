@@ -206,9 +206,8 @@ func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
 }
 
 // wrapRandFnDef builds the FnDef wrapper that dispatches a dotted
-// rand.<word> call into the sub-registry's native handler. Body is
-// `[Word(wordName)]` so execFnDefLiteral's trivial-delegation
-// short-circuit fires (direct execMatch on the inner handler).
+// rand.<word> call into the sub-registry's native handler (the shared
+// makeWrapFnDef trivial-delegation shape).
 func wrapRandFnDef(wordName string, params []native.FnParam, returns []*native.Type, subReg *native.Registry) native.Value {
 	return wrapRandFnDefNoEval(wordName, params, returns, nil, nil, subReg)
 }
@@ -226,19 +225,12 @@ func wrapRandFnDefNoEval(
 	noEvalMap map[int]bool,
 	subReg *native.Registry,
 ) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:        params,
-			Returns:       returns,
-			Impl:          native.AQL([]native.Value{native.NewWord(wordName)}),
-			BarrierPos:    -1,
-			NoEvalArgs:    noEval,
-			NoEvalMapArgs: noEvalMap,
-		}},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
+	return makeWrapFnDef(wordName, subReg, wrapSig{
+		params:    params,
+		returns:   returns,
+		noEval:    noEval,
+		noEvalMap: noEvalMap,
+	})
 }
 
 // randNativesForState builds the Go-implemented rand primitives.

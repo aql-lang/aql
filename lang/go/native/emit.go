@@ -211,36 +211,51 @@ func NaturalEmitKind(v Value) (string, bool) {
 	return "", false
 }
 
+// scalarLeaf renders the format-independent scalar arms shared by the leaf
+// renderers (emitScalarText / yamlLeaf / tomlScalar / iniScalar): Float,
+// Integer and Boolean render identically in every format, while String and
+// Atom route through the per-format quote fn. ok=false for any other shape
+// (None, containers, Xml, …) so each format keeps its own None / default /
+// error arm. (None and Atom are disjoint lattice families — None sits at the
+// top-level "None" path, Atom under Scalar — so checking Atom here before
+// each caller's None arm cannot change which arm a value hits.)
+func scalarLeaf(v Value, quote func(string) string) (string, bool) {
+	switch {
+	case v.Parent.ConformsTo(TString):
+		s, _ := AsString(v)
+		return quote(s), true
+	case v.Parent.ConformsTo(TFloat):
+		f, _ := AsFloat(v)
+		return strconv.FormatFloat(f, 'f', -1, 64), true
+	case v.Parent.ConformsTo(TInteger):
+		i, _ := AsInteger(v)
+		return fmt.Sprintf("%d", i), true
+	case v.Parent.ConformsTo(TBoolean):
+		b, _ := AsBoolean(v)
+		if b {
+			return "true", true
+		}
+		return "false", true
+	case v.Parent.ConformsTo(TAtom):
+		a, _ := AsAtom(v)
+		return quote(a), true
+	}
+	return "", false
+}
+
 // emitScalarText renders a scalar leaf for json/jsonic: String→JSON-quoted,
 // Float→FormatFloat(f,'f',-1,64), Integer→%d, Boolean→true/false, None→null,
 // Atom→JSON-quoted, anything else→JSON-quoted String(). Strings go through
 // jsonQuote (not %q) so control bytes escape as \u00XX and the output is always
 // valid, parseable JSON. Shared by json and jsonic.
 func emitScalarText(v Value) string {
-	switch {
-	case v.Parent.ConformsTo(TString):
-		s, _ := AsString(v)
-		return jsonQuote(s)
-	case v.Parent.ConformsTo(TFloat):
-		f, _ := AsFloat(v)
-		return strconv.FormatFloat(f, 'f', -1, 64)
-	case v.Parent.ConformsTo(TInteger):
-		i, _ := AsInteger(v)
-		return fmt.Sprintf("%d", i)
-	case v.Parent.ConformsTo(TBoolean):
-		b, _ := AsBoolean(v)
-		if b {
-			return "true"
-		}
-		return "false"
-	case IsNoneShape(v):
-		return "null"
-	case v.Parent.ConformsTo(TAtom):
-		a, _ := AsAtom(v)
-		return jsonQuote(a)
-	default:
-		return jsonQuote(v.String())
+	if s, ok := scalarLeaf(v, jsonQuote); ok {
+		return s
 	}
+	if IsNoneShape(v) {
+		return "null"
+	}
+	return jsonQuote(v.String())
 }
 
 // jsonQuote renders s as a valid JSON string literal. It escapes the JSON
@@ -517,33 +532,19 @@ func yamlNode(sb *strings.Builder, v Value, indent, depth int, atTop bool) {
 // yamlLeaf renders a scalar (or an Xml element as its string) for yaml.
 func yamlLeaf(v Value) string {
 	if IsXmlValue(v) {
-		return yamlScalar(NewString(v.String()))
+		return yamlQuote(v.String())
 	}
-	switch {
-	case v.Parent.ConformsTo(TString):
-		s, _ := AsString(v)
-		return yamlScalar(NewString(s))
-	case v.Parent.ConformsTo(TFloat):
-		f, _ := AsFloat(v)
-		return strconv.FormatFloat(f, 'f', -1, 64)
-	case v.Parent.ConformsTo(TInteger):
-		i, _ := AsInteger(v)
-		return fmt.Sprintf("%d", i)
-	case v.Parent.ConformsTo(TBoolean):
-		b, _ := AsBoolean(v)
-		if b {
-			return "true"
-		}
-		return "false"
-	case IsNoneShape(v):
+	if s, ok := scalarLeaf(v, yamlQuote); ok {
+		return s
+	}
+	if IsNoneShape(v) {
 		return "null"
-	case v.Parent.ConformsTo(TAtom):
-		a, _ := AsAtom(v)
-		return yamlScalar(NewString(a))
-	default:
-		return yamlScalar(NewString(v.String()))
 	}
+	return yamlQuote(v.String())
 }
+
+// yamlQuote routes a raw string through yaml's minimal-quoting scalar rule.
+func yamlQuote(s string) string { return yamlScalar(NewString(s)) }
 
 // yamlScalar renders a string scalar with minimal quoting: quote when empty,
 // when it could be mis-parsed as another type, or when it contains special
@@ -697,14 +698,12 @@ func joinFields(fields []string, sep string) string {
 // the separator, a quote, newline or carriage return is wrapped in quotes
 // with internal quotes doubled). Non-string cells render via String().
 func csvCell(v Value, sep string) string {
+	var s string
 	if v.Parent.ConformsTo(TString) && IsConcrete(v) {
-		s, _ := AsString(v)
-		if strings.Contains(s, sep) || strings.ContainsAny(s, "\"\n\r") {
-			return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
-		}
-		return s
+		s, _ = AsString(v)
+	} else {
+		s = v.String()
 	}
-	s := v.String()
 	if strings.Contains(s, sep) || strings.ContainsAny(s, "\"\n\r") {
 		return "\"" + strings.ReplaceAll(s, "\"", "\"\"") + "\""
 	}
@@ -818,28 +817,10 @@ func tomlArray(v Value) (string, error) {
 // value TOML cannot represent (e.g. None — TOML has no null) so the type is
 // never silently corrupted to a string on round-trip.
 func tomlScalar(v Value) (string, error) {
-	switch {
-	case v.Parent.ConformsTo(TString):
-		s, _ := AsString(v)
-		return jsonQuote(s), nil
-	case v.Parent.ConformsTo(TFloat):
-		f, _ := AsFloat(v)
-		return strconv.FormatFloat(f, 'f', -1, 64), nil
-	case v.Parent.ConformsTo(TInteger):
-		i, _ := AsInteger(v)
-		return fmt.Sprintf("%d", i), nil
-	case v.Parent.ConformsTo(TBoolean):
-		b, _ := AsBoolean(v)
-		if b {
-			return "true", nil
-		}
-		return "false", nil
-	case v.Parent.ConformsTo(TAtom):
-		a, _ := AsAtom(v)
-		return jsonQuote(a), nil
-	default:
-		return "", emitUnsupported("toml", "cannot represent value: "+v.String())
+	if s, ok := scalarLeaf(v, jsonQuote); ok {
+		return s, nil
 	}
+	return "", emitUnsupported("toml", "cannot represent value: "+v.String())
 }
 
 // ---- ini -----------------------------------------------------------------
@@ -894,29 +875,13 @@ func encodeINI(v Value, _ map[string]any) (string, error) {
 	return strings.TrimRight(sb.String(), "\n"), nil
 }
 
+// iniScalar renders a scalar for ini: strings and atoms stay raw (no
+// quoting), everything else (incl. None) falls back to String().
 func iniScalar(v Value) string {
-	switch {
-	case v.Parent.ConformsTo(TString):
-		s, _ := AsString(v)
+	if s, ok := scalarLeaf(v, func(s string) string { return s }); ok {
 		return s
-	case v.Parent.ConformsTo(TFloat):
-		f, _ := AsFloat(v)
-		return strconv.FormatFloat(f, 'f', -1, 64)
-	case v.Parent.ConformsTo(TInteger):
-		i, _ := AsInteger(v)
-		return fmt.Sprintf("%d", i)
-	case v.Parent.ConformsTo(TBoolean):
-		b, _ := AsBoolean(v)
-		if b {
-			return "true"
-		}
-		return "false"
-	case v.Parent.ConformsTo(TAtom):
-		a, _ := AsAtom(v)
-		return a
-	default:
-		return v.String()
 	}
+	return v.String()
 }
 
 // ---- xml -----------------------------------------------------------------

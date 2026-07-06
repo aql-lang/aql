@@ -39,15 +39,11 @@ func init() { moduleNamesFn = Names }
 //	big-value Debug.sizeof                  # estimated retained bytes
 //	"add" Debug.explain                     # the describe text as a String
 func BuildDebugModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
-	if err != nil {
-		return native.ModuleDesc{}, err
-	}
-
 	natives := append(debugNatives(), stepNatives()...)
 	natives = append(natives, dashboardNatives()...)
-	for _, n := range natives {
-		subReg.RegisterNativeFunc(n)
+	subReg, err := newModuleRegistry(natives)
+	if err != nil {
+		return native.ModuleDesc{}, err
 	}
 
 	exports := native.NewOrderedMap()
@@ -55,11 +51,7 @@ func BuildDebugModule(parent *native.Registry) (native.ModuleDesc, error) {
 		exports.Set(debugExportName(n.Name), makeModuleFnDef(n, subReg))
 	}
 
-	return native.ModuleDesc{
-		Src:     subReg,
-		ID:      parent.Modules.NextID(),
-		Exports: map[string]*native.OrderedMap{"Debug": exports},
-	}, nil
+	return moduleDesc(parent, "Debug", subReg, exports), nil
 }
 
 // debugExportName strips the internal "debug-" prefix off an inner native

@@ -48,31 +48,30 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Construct a sub-registry for the module's words. Module exports
 	// are dispatched through this sub-registry; the parent's policy
 	// is consulted for module.call gating elsewhere.
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newModuleRegistry(vmNatives(parent))
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	natives := vmNatives(parent)
-	for _, n := range natives {
-		subReg.RegisterNativeFunc(n)
-	}
+	// vm-run-with takes code + policy map. Its wrapper uses TAny params
+	// (rather than the underlying TString + TMap signature) because the
+	// dotted-form dispatch via `Vm.run-with` matches against the FnDef's
+	// own signature, and we want the dotted form to dispatch against
+	// any-typed args (the native validates types itself). It is the one
+	// stack-only wrapper (BarrierPos 0).
+	runWithSig := typeSig([]*native.Type{native.TAny, native.TAny}, native.TAny)
+	runWithSig.stackOnly = true
 
 	exports := native.NewOrderedMap()
-	exports.Set("run", makeRunFnDef("vm-run", subReg))
-	exports.Set("run-with", makeRunWithFnDef("vm-run-with", subReg))
-	exports.Set("run-sandbox", makeRunFnDef("vm-run-sandbox", subReg))
-	exports.Set("run-compute", makeRunFnDef("vm-run-compute", subReg))
-	exports.Set("parse", makeRunFnDef("vm-parse", subReg))
-	exports.Set("check", makeRunFnDef("vm-check", subReg))
-	exports.Set("compile", makeRunFnDef("vm-compile", subReg))
+	exports.Set("run", makeTypedFnDef("vm-run", subReg, native.TAny, native.TString))
+	exports.Set("run-with", makeWrapFnDef("vm-run-with", subReg, runWithSig))
+	exports.Set("run-sandbox", makeTypedFnDef("vm-run-sandbox", subReg, native.TAny, native.TString))
+	exports.Set("run-compute", makeTypedFnDef("vm-run-compute", subReg, native.TAny, native.TString))
+	exports.Set("parse", makeTypedFnDef("vm-parse", subReg, native.TAny, native.TString))
+	exports.Set("check", makeTypedFnDef("vm-check", subReg, native.TAny, native.TString))
+	exports.Set("compile", makeTypedFnDef("vm-compile", subReg, native.TAny, native.TString))
 
-	modID := parent.Modules.NextID()
-	return native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"Vm": exports},
-	}, nil
+	return moduleDesc(parent, "Vm", subReg, exports), nil
 }
 
 // vmNatives builds the NativeFunc slice for the vm module. Defined
@@ -514,43 +513,4 @@ func policyFromMapValue(v native.Value) (policy.Policy, error) {
 		return nil, fmt.Errorf("policy map: expected map, got %T (size=%d)", raw, m.Len())
 	}
 	return policy.FromMap(asMap)
-}
-
-// makeRunFnDef creates a FnDef wrapper for a single-arg vm-run word.
-func makeRunFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:     []native.FnParam{{Type: native.TString}},
-			Returns:    []*native.Type{native.TAny},
-			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
-			BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-// makeRunWithFnDef creates a FnDef wrapper for vm-run-with (code +
-// policy map). The FnDef's params take the call's stack args by
-// position and pass them through to the native vm-run-with.
-//
-// The body uses TAny params (rather than the underlying TString +
-// TMap signature) because the dotted-form dispatch via `Vm.run-with`
-// matches against the FnDef's own signature, and we want the dotted
-// form to dispatch against any-typed args (the native validates
-// types itself).
-func makeRunWithFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params: []native.FnParam{
-				{Type: native.TAny},
-				{Type: native.TAny},
-			},
-			Returns:    []*native.Type{native.TAny},
-			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
-			BarrierPos: 0,
-		}},
-		Registry: subReg,
-	})
 }

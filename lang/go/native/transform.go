@@ -3,6 +3,7 @@ package native
 import (
 	"fmt"
 	"math"
+	"sort"
 
 	voxgigstruct "github.com/voxgig/struct"
 )
@@ -161,16 +162,14 @@ func valueToMap(v Value) map[string]any {
 	return out
 }
 
-// sortedAnyMapKeys returns map keys in sorted order for deterministic output.
+// sortedAnyMapKeys returns map keys in sorted order for deterministic
+// output. The single implementation shared across the package (fileio's
+// sortedMapKeys delegates here).
 func sortedAnyMapKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
-			keys[j], keys[j-1] = keys[j-1], keys[j]
-		}
-	}
+	sort.Strings(keys)
 	return keys
 }

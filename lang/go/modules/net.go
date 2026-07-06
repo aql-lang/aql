@@ -33,21 +33,12 @@ func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := native.NewOrderedMap()
-	for _, n := range netNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
+	exports := delegatingExports(netNatives, subReg)
 	// The module-owned Fetch types, exported as type literals —
 	// `resp is Net.Response` — mirroring IO.StreamKind.
 	exports.Set("Fetch", native.NewTypeLiteral(ft.Fetch))
 	exports.Set("Request", native.NewTypeLiteral(ft.Request))
 	exports.Set("Response", native.NewTypeLiteral(ft.Response))
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"Net": exports},
-	}
-	return desc, nil
+	return moduleDesc(parent, "Net", subReg, exports), nil
 }

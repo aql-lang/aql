@@ -43,17 +43,8 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := native.NewOrderedMap()
-	for _, n := range ioNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
+	exports := delegatingExports(ioNatives, subReg)
 	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"IO": exports},
-	}
-	return desc, nil
+	return moduleDesc(parent, "IO", subReg, exports), nil
 }
