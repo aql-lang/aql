@@ -117,8 +117,8 @@ func seedMemFS(reg *native.Registry) error {
 	// Enable the in-memory filesystem: __sys.fs.mem = true in the root
 	// context, matching enableMemFS in the validation test.
 	prog := []native.Value{
-		native.NewWord("context"), native.NewWord("get"), native.NewWord("__sys"),
-		native.NewWord("get"), native.NewWord("fs"),
+		native.NewWord("context"), native.NewWord("dot"), native.NewWord("__sys"),
+		native.NewWord("dot"), native.NewWord("fs"),
 		native.NewWord("set"), native.NewWord("mem"), native.NewBoolean(true),
 	}
 	eng := native.New(reg)
