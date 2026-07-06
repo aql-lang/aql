@@ -69,6 +69,13 @@ func valueToAny(v Value) any {
 		return nil
 	case v.Parent.ConformsTo(TMap):
 		m, _ := AsMap(v)
+		if m == nil {
+			// A TMap-conforming value whose payload is not a concrete
+			// OrderedMap (a record/options/typed-map descriptor) — AsMap
+			// returns nil rather than an OrderedMap. Fall back to the
+			// rendered form instead of dereferencing nil (ADR-005).
+			return v.String()
+		}
 		out := make(map[string]any, m.Len())
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)
