@@ -78,9 +78,23 @@ import (
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
 
-// osExit is a test seam (design/TEST-SEAMS.10.md); tests swap it to
-// observe the tool's exit arms without killing the test process.
-var osExit = os.Exit
+// Test seams (design/TEST-SEAMS.10.md): tests swap these to observe
+// the tool's exit arms without killing the test process, to drive the
+// single-CPU worker floor, the instance-construction failures, and the
+// compiled-divergence branches (reachable otherwise only via a genuine
+// compiler bug).
+var (
+	osExit      = os.Exit
+	numCPU      = runtime.NumCPU
+	langNew     = func() (*lang.AQL, error) { return lang.New() }
+	runCompiled = (*lang.AQL).RunCompiled
+	// newNativeRegistry / compileCheck: the registry constructor cannot
+	// fail on a healthy build, and CompileCheck can never return a
+	// Program alongside a check error (the checker runs first) — the
+	// seams make those arms drivable.
+	newNativeRegistry = native.DefaultRegistry
+	compileCheck      = (*lang.AQL).CompileCheck
+)
 
 // alphabet is the fixed, ordered set of syntax atoms the enumeration
 // ranges over. Each entry is ONE syntactic element; "up to N elements"
@@ -128,7 +142,7 @@ func run(input string) ([]eng.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := native.DefaultRegistry()
+	reg, err := newNativeRegistry()
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +477,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 	var next int64 = -1
 	var checked, kept, scanned int64
 
-	workers := runtime.NumCPU()
+	workers := numCPU()
 	if workers < 1 {
 		workers = 1
 	}
@@ -472,8 +486,8 @@ func extractPassing(inPath, outPath string, maxLen int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ai, err1 := lang.New()
-			ac, err2 := lang.New()
+			ai, err1 := langNew()
+			ac, err2 := langNew()
 			if err1 != nil || err2 != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extract: lang.New: %v %v\n", err1, err2)
 				osExit(1)
@@ -506,7 +520,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 					continue
 				}
 				// 3. compile → accepted AND result matches the interpreter
-				gotC, wasCompiled, errC := ac.RunCompiled(r.input)
+				gotC, wasCompiled, errC := runCompiled(ac, r.input)
 				if !wasCompiled || errC != nil {
 					continue
 				}
@@ -602,7 +616,7 @@ const (
 // check-stage failure can never also be `compiled`. The caller asserts
 // that (the "checker runs first" confirmation) on the returned bool.
 func classifyFrontier(a *lang.AQL, src string) (frontierClass, string, bool) {
-	prog, reason, res, err := a.CompileCheck(src)
+	prog, reason, res, err := compileCheck(a, src)
 	compiled := prog != nil
 	if err != nil {
 		return classCheck, sanitizeNote(reason), compiled // parse error / check run error
@@ -702,7 +716,7 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 	notes := make([]string, len(cands))
 	var checkFirstViolations int64
 	var idx int64 = -1
-	workers := runtime.NumCPU()
+	workers := numCPU()
 	if workers < 1 {
 		workers = 1
 	}
@@ -711,7 +725,7 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a, e := lang.New()
+			a, e := langNew()
 			if e != nil {
 				fmt.Fprintf(os.Stderr, "specgen -frontier: lang.New: %v\n", e)
 				osExit(1)
@@ -907,13 +921,13 @@ func hasErrorDiag(res lang.CheckResult) bool {
 // does not compile in isolation), so a reused-instance artifact can never
 // be mistaken for a compiler bug.
 func freshDivergence(s string) (string, bool) {
-	a, err := lang.New()
+	a, err := langNew()
 	if err != nil {
 		return "", false
 	}
 	a.SetClock(specClock)
 	gotI, errI := a.Run(s)
-	gotC, wasC, errC := a.RunCompiled(s)
+	gotC, wasC, errC := runCompiled(a, s)
 	if !wasC {
 		return "", false
 	}
@@ -927,6 +941,21 @@ func freshDivergence(s string) (string, bool) {
 		return sanitizeNote(fmt.Sprintf("interpreted=[%s] compiled=[%s]", renderAny(gotI), renderAny(gotC))), true
 	}
 	return "", false
+}
+
+// canonOf renders one input's canonical (eng.Canon) value via a reused
+// native registry — the same recipe as the full matrix — or "" when the
+// input does not parse or does not run cleanly.
+func canonOf(reg *eng.Registry, s string) string {
+	values, perr := parser.Parse(s)
+	if perr != nil {
+		return ""
+	}
+	out, rerr := native.NewTop(reg).Run(values)
+	if rerr != nil {
+		return ""
+	}
+	return eng.Canon(out)
 }
 
 func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, runtimeOut, mismatchOut string) {
@@ -962,7 +991,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 	var idx int64 = -1
 	var nPass, nCheck, nCompile, nRuntime, nMismatch int64
 
-	workers := runtime.NumCPU()
+	workers := numCPU()
 	if workers < 1 {
 		workers = 1
 	}
@@ -971,7 +1000,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			la, e := lang.New()
+			la, e := langNew()
 			if e != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extend5: lang.New: %v\n", e)
 				osExit(1)
@@ -979,7 +1008,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 			la.SetClock(specClock)
 			// A reused native registry produces the canonical (eng.Canon)
 			// value for passing rows — same recipe as the full matrix.
-			reg, e2 := native.DefaultRegistry()
+			reg, e2 := newNativeRegistry()
 			if e2 != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extend5: registry: %v\n", e2)
 				osExit(1)
@@ -988,17 +1017,6 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 			reg.SetParseFunc(parser.Parse)
 			modules.InstallResolver(reg)
 			native.SetHostClock(reg, specClock)
-			canonOf := func(s string) string {
-				values, perr := parser.Parse(s)
-				if perr != nil {
-					return ""
-				}
-				out, rerr := native.NewTop(reg).Run(values)
-				if rerr != nil {
-					return ""
-				}
-				return eng.Canon(out)
-			}
 
 			for {
 				k := int(atomic.AddInt64(&idx, 1))
@@ -1024,7 +1042,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 						atomic.AddInt64(&nRuntime, 1)
 						continue
 					}
-					gotC, wasC, errC := la.RunCompiled(s)
+					gotC, wasC, errC := runCompiled(la, s)
 					if !wasC || errC != nil || renderAny(gotC) != renderAny(gotI) {
 						// Divergence on the reused instance — re-verify on a
 						// FRESH lang (matching the langspec differential gate)
@@ -1037,7 +1055,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 							continue
 						}
 					}
-					classes[k], expects[k] = fivePass, canonOf(s)
+					classes[k], expects[k] = fivePass, canonOf(reg, s)
 					atomic.AddInt64(&nPass, 1)
 				}
 			}
