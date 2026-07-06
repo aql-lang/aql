@@ -1,0 +1,132 @@
+package native
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/aql-lang/aql/lang/go/capabilities"
+)
+
+// Seam-9 coverage (W9_nativeC) for natives.go: reach / folder / cancel
+// handler error and edge arms, driven directly with crafted args and an
+// FS-hermetic (in-memory / failing) FileOps.
+
+// w9FailResolveOps is a FileOps whose ResolvePath fails, so the
+// parents=false ResolvePath error arm in doFolder is reachable.
+type w9FailResolveOps struct{}
+
+func (w9FailResolveOps) ReadFile(string) ([]byte, error) { return nil, fmt.Errorf("no") }
+func (w9FailResolveOps) WriteFile(string, []byte, os.FileMode) error {
+	return fmt.Errorf("no")
+}
+func (w9FailResolveOps) MkdirAll(string, os.FileMode) error { return fmt.Errorf("no") }
+func (w9FailResolveOps) ResolvePath(string) (string, error) {
+	return "", fmt.Errorf("resolve boom")
+}
+
+// w9FailMkdirOps is a hermetic FileOps whose ResolvePath succeeds but
+// MkdirAll fails — exactly notInstalled's shape, injected so the doFolder
+// MkdirAll error arms are reachable without touching the real FS.
+type w9FailMkdirOps struct{}
+
+func (w9FailMkdirOps) ReadFile(string) ([]byte, error)             { return nil, fmt.Errorf("no") }
+func (w9FailMkdirOps) WriteFile(string, []byte, os.FileMode) error { return fmt.Errorf("no") }
+func (w9FailMkdirOps) MkdirAll(string, os.FileMode) error          { return fmt.Errorf("mkdir boom") }
+func (w9FailMkdirOps) ResolvePath(p string) (string, error)        { return p, nil }
+
+func w9SetFileOps(t *testing.T, r *Registry, ops capabilities.FileOps) {
+	t.Helper()
+	if err := r.Capabilities.Set(CapFileOps, ops); err != nil {
+		t.Fatalf("set CapFileOps: %v", err)
+	}
+}
+
+func TestW9CaptureAtomReferentAlreadyBound(t *testing.T) {
+	r := seam5Reg(t)
+	// An atom that already carries a referent short-circuits (457.36,459.3).
+	atom := SetAtomReferent(NewAtom("x"), NewInteger(5))
+	out := captureAtomReferent(atom, r)
+	if _, has := AtomReferent(out); !has {
+		t.Fatalf("captureAtomReferent must preserve existing referent")
+	}
+}
+
+func TestW9ReachHandlerBadKeyList(t *testing.T) {
+	r := seam5Reg(t)
+	// args[1] a type literal (not a concrete list) → RequireConcreteList
+	// error propagates (477.16,479.3).
+	if _, err := reachHandler([]Value{NewInteger(1), NewTypeLiteral(TList)}, nil, nil, r); err == nil {
+		t.Fatalf("reachHandler: expected key-list error")
+	}
+}
+
+func TestW9FolderHandlersWrongPathType(t *testing.T) {
+	r := seam5Reg(t)
+	// folderHandler: non-Pathon path (554.24,556.3).
+	if _, err := folderHandler([]Value{NewInteger(1)}, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "expected Path") {
+		t.Fatalf("folderHandler wrong type: %v", err)
+	}
+	// folderOptsHandler: non-Pathon path (538.24,540.3).
+	optsMap := NewOrderedMap()
+	if _, err := folderOptsHandler([]Value{NewMap(optsMap), NewInteger(1)}, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "expected Path") {
+		t.Fatalf("folderOptsHandler wrong type: %v", err)
+	}
+}
+
+func TestW9DoFolderMkdirAllError(t *testing.T) {
+	// A hermetic FileOps whose MkdirAll errors drives the parents=true
+	// error arm (568.53,570.4) without touching the real FS.
+	r := seam5Reg(t)
+	w9SetFileOps(t, r, w9FailMkdirOps{})
+	out, err := folderHandler([]Value{NewPathon([]string{"a", "b"}, false)}, nil, nil, r)
+	if err != nil || len(out) != 1 || !IsError(out[0]) {
+		t.Fatalf("folderHandler mkdir-fail: expected Error value, got %v / %v", out, err)
+	}
+}
+
+func TestW9FolderOptsPlainMapParentsFalse(t *testing.T) {
+	// A plain concrete Map {parents:false} exercises the opts-map
+	// extraction (542.50,543.75 / 543.75,545.4) — existing tests pass an
+	// Options value, whose AsMap returns nil. parents=false then takes the
+	// else branch of doFolder; the hermetic MkdirAll errors (571 / 576).
+	r := seam5Reg(t)
+	w9SetFileOps(t, r, w9FailMkdirOps{})
+	om := NewOrderedMap()
+	om.Set("parents", NewBoolean(false))
+	out, err := folderOptsHandler([]Value{NewMap(om), NewPathon([]string{"z"}, false)}, nil, nil, r)
+	if err != nil || len(out) != 1 || !IsError(out[0]) {
+		t.Fatalf("folderOpts parents=false no-FS: expected Error value, got %v / %v", out, err)
+	}
+}
+
+func TestW9DoFolderResolvePathError(t *testing.T) {
+	// parents=false with a FileOps whose ResolvePath fails (573.17,575.4).
+	r := seam5Reg(t)
+	if err := r.Capabilities.Set(CapFileOps, capabilities.FileOps(w9FailResolveOps{})); err != nil {
+		t.Fatalf("set CapFileOps: %v", err)
+	}
+	om := NewOrderedMap()
+	om.Set("parents", NewBoolean(false))
+	out, err := folderOptsHandler([]Value{NewMap(om), NewPathon([]string{"z"}, false)}, nil, nil, r)
+	if err != nil || len(out) != 1 || !IsError(out[0]) {
+		t.Fatalf("folderOpts ResolvePath-fail: expected Error value, got %v / %v", out, err)
+	}
+}
+
+func TestW9CancelHandlersWrongType(t *testing.T) {
+	r := seam5Reg(t)
+	// cancelTimeoutHandler: non-Timeout (678.9,680.3).
+	if _, err := cancelTimeoutHandler([]Value{NewInteger(1)}, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "not a Timeout") {
+		t.Fatalf("cancelTimeoutHandler wrong type: %v", err)
+	}
+	// cancelIntervalHandler: non-Interval (692.9,694.3).
+	if _, err := cancelIntervalHandler([]Value{NewInteger(1)}, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "not an Interval") {
+		t.Fatalf("cancelIntervalHandler wrong type: %v", err)
+	}
+}
