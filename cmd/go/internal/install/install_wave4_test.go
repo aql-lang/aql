@@ -8,6 +8,7 @@ package install
 import (
 	"archive/zip"
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -224,6 +225,182 @@ func TestW4InstallPrepFails(t *testing.T) {
 	}
 }
 
+func TestW4InstallBodyReadError(t *testing.T) {
+	setupModuleDir(t)
+	// Content-Length promises more than the handler delivers, so the
+	// client's ReadAll fails with an unexpected EOF.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "1000")
+		_, _ = w.Write([]byte("short"))
+	}))
+	t.Cleanup(srv.Close)
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"-r", srv.URL, "mod-0.1.0"}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
+	}
+}
+
+func TestW4InstallDownloadTooLarge(t *testing.T) {
+	setupModuleDir(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chunk := make([]byte, 1<<20) // 1 MiB
+		for written := int64(0); written <= maxDownloadBytes; written += int64(len(chunk)) {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"-r", srv.URL, "mod-0.1.0"}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "exceeds") {
+		t.Errorf("stderr = %q, want size-cap error", errOut.String())
+	}
+}
+
+func TestW4InstallDirEntryBlocked(t *testing.T) {
+	dir := setupModuleDir(t)
+	// .aql/mod/docs pre-exists as a FILE, so the dir entry's MkdirAll fails.
+	if err := os.MkdirAll(filepath.Join(dir, ".aql", "mod"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".aql", "mod", "docs"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	url := serveBody(t, zipBytes(t, map[string]string{"docs/": ""}))
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"-r", url, "mod-0.1.0"}, &out, &errOut); code != 1 {
+		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
+	}
+}
+
+func TestW4InstallParentDirBlocked(t *testing.T) {
+	dir := setupModuleDir(t)
+	// .aql/mod/sub pre-exists as a FILE, so the file entry's parent
+	// MkdirAll fails.
+	if err := os.MkdirAll(filepath.Join(dir, ".aql", "mod"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".aql", "mod", "sub"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	url := serveBody(t, zipBytes(t, map[string]string{"sub/a.txt": "x"}))
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"-r", url, "mod-0.1.0"}, &out, &errOut); code != 1 {
+		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
+	}
+}
+
+// zipWithMethod builds a single-entry zip whose entry uses the given
+// (non-standard) compression method. Pair with zip.RegisterCompressor
+// / RegisterDecompressor to simulate entry open/read failures.
+func zipWithMethod(t *testing.T, method uint16, name string, content []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: method})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// passthroughCompressor stores bytes verbatim under a custom method.
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }
+
+func TestW4InstallEntryOpenError(t *testing.T) {
+	// Method 60000 has a registered COMPRESSOR (so the archive can be
+	// built) but no decompressor, so f.Open fails at extraction.
+	zip.RegisterCompressor(60000, func(w io.Writer) (io.WriteCloser, error) {
+		return nopWriteCloser{w}, nil
+	})
+	setupModuleDir(t)
+	url := serveBody(t, zipWithMethod(t, 60000, "a.txt", []byte("payload")))
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"-r", url, "mod-0.1.0"}, &out, &errOut); code != 1 {
+		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
+	}
+}
+
+// failAfterReader yields n zero bytes and then an error.
+type failAfterReader struct{ n int }
+
+func (r *failAfterReader) Read(p []byte) (int, error) {
+	if r.n <= 0 {
+		return 0, io.ErrUnexpectedEOF
+	}
+	if len(p) > r.n {
+		p = p[:r.n]
+	}
+	for i := range p {
+		p[i] = 0
+	}
+	r.n -= len(p)
+	return len(p), nil
+}
+
+func (r *failAfterReader) Close() error { return nil }
+
+func TestW4InstallEntryReadError(t *testing.T) {
+	// Method 60001 decompresses into a stream that errors mid-read.
+	zip.RegisterCompressor(60001, func(w io.Writer) (io.WriteCloser, error) {
+		return nopWriteCloser{w}, nil
+	})
+	zip.RegisterDecompressor(60001, func(io.Reader) io.ReadCloser {
+		return &failAfterReader{n: 16}
+	})
+	setupModuleDir(t)
+	url := serveBody(t, zipWithMethod(t, 60001, "a.txt", []byte("payload")))
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"-r", url, "mod-0.1.0"}, &out, &errOut); code != 1 {
+		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
+	}
+}
+
+func TestW4InstallEntryTooLarge(t *testing.T) {
+	// A deflated entry of 64MiB+2 zero bytes: tiny on the wire, but the
+	// per-entry extraction cap rejects it as a zip bomb.
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: "a.txt", Method: zip.Deflate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunk := make([]byte, 1<<20)
+	for written := int64(0); written < maxEntryBytes+2; written += int64(len(chunk)) {
+		if _, err := w.Write(chunk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	setupModuleDir(t)
+	url := serveBody(t, buf.Bytes())
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"-r", url, "mod-0.1.0"}, &out, &errOut); code != 1 {
+		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "exceeds") {
+		t.Errorf("stderr = %q, want entry-cap error", errOut.String())
+	}
+}
+
 // --- updateDeps rewrite branches -------------------------------------------
 
 // withJsonic writes content to aql.jsonic in a fresh cwd and returns a
@@ -308,6 +485,20 @@ func TestW4UpdateDepsNoDepsSection(t *testing.T) {
 	got := read()
 	if !strings.Contains(got, "deps: {color: 0.1.0}") {
 		t.Errorf("deps section not appended: %q", got)
+	}
+}
+
+func TestW4UpdateDepsBlockWithoutName(t *testing.T) {
+	// A multi-line deps block that never names the module and has no
+	// inline "deps: {" — the not-found fallback replace runs (and is a
+	// no-op on this shape).
+	read := withJsonic(t, "name: host\ndeps:\nother: 1.0.0\n}\n")
+	if err := updateDeps("color", "0.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	got := read()
+	if !strings.Contains(got, "other: 1.0.0") {
+		t.Errorf("existing content lost: %q", got)
 	}
 }
 
