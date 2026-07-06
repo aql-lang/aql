@@ -51,6 +51,20 @@ func TestExecHealthz(t *testing.T) {
 	}
 }
 
+func TestExecHealthzRejectsWrongMethod(t *testing.T) {
+	srv := httptest.NewServer(Handler("", nil))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/healthz", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want 405", resp.StatusCode)
+	}
+}
+
 func TestExecAdd(t *testing.T) {
 	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
