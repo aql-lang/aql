@@ -19,6 +19,7 @@ import {
 import { makeIdealHandler, makeScalarHandler, makeScalarOptsHandler } from './make.ts'
 import {
   AqlError,
+  type AqlType,
   Engine,
   type Handler,
   type NativeFunc,
@@ -1235,6 +1236,40 @@ function registerSpecWords(r: Registry): void {
   // by the corpus, so a minimal handler suffices). Mirror
   // registerEngSpecTypeOps + registerEngSpecTypeWords::enum.
   const flattenAlts = (v: Value): Value[] => (v.isDisjunct() ? v.asDisjunct().alternatives : [v])
+  // compareAlt mirrors eng/go CompareValues for the value shapes a union
+  // alternative can take (type literals + scalar concretes): a per-family
+  // "type-literal sorts before a concrete inhabitant" rule, cross-leaf numeric
+  // magnitude for concrete numbers, then lattice rank. Returns 0 to defer to a
+  // canon tiebreak (magnitude-equal cross-leaf pairs, same-rank literals).
+  const familyRoot = (v: Value): AqlType | null => {
+    for (const root of [TNumber, TString, TBoolean, TAtom]) {
+      if (v.vType.matches(root)) return root
+    }
+    return null
+  }
+  const compareAlt = (a: Value, b: Value): number => {
+    const fa = familyRoot(a)
+    const fb = familyRoot(b)
+    if (fa !== null && fb !== null && fa.equal(fb)) {
+      const aLit = a.data === null
+      const bLit = b.data === null
+      if (aLit !== bLit) return aLit ? -1 : 1 // litVsConcreteOrder: literal first
+      if (!aLit && !bLit && fa.equal(TNumber)) {
+        // Project both leaves to a JS number (Integer data is a bigint) so the
+        // magnitude comparison is cross-leaf, like Go's Number Comparer.
+        const num = (v: Value): number =>
+          v.vType.matches(TInteger) ? Number(v.asInteger()) : v.asFloat()
+        const na = num(a)
+        const nb = num(b)
+        if (na < nb) return -1
+        if (na > nb) return 1
+        return 0 // magnitude-equal (1 vs 1.0) → canon tiebreak
+      }
+    }
+    const ra = builtinRank(a.vType)
+    const rb = builtinRank(b.vType)
+    return ra !== rb ? ra - rb : 0
+  }
   reg({
     name: 'tor',
     forwardPrecedence: true,
@@ -1259,12 +1294,18 @@ function registerSpecWords(r: Registry): void {
           }
           // `tor` is commutative: store the alternatives in canonical
           // (tcmp-equivalent) order so `A tor B` and `B tor A` reduce to the
-          // identical value — mirrors eng/go SimplifyDisjunctAlts, and keeps
-          // the cross-engine differential in agreement with the Go kernel.
+          // identical value — mirrors eng/go SimplifyDisjunctAlts →
+          // disjunctAltLess → CompareValues, keeping the cross-engine
+          // differential in agreement with the Go kernel. The primary key is
+          // the value order (NOT builtinRank alone): within a family a bare
+          // type literal sorts before a concrete inhabitant, and concrete
+          // numbers sort by numeric magnitude across Integer/Float — so
+          // `Integer tor 0` and `100 tor 2.0` match the Go kernel's order. A
+          // canon tiebreak settles ties (cross-leaf magnitude-equality like
+          // `1 tor 1.0`, and same-rank literals/atoms).
           out.sort((a, b) => {
-            const ra = builtinRank(a.vType)
-            const rb = builtinRank(b.vType)
-            if (ra !== rb) return ra - rb
+            const c = compareAlt(a, b)
+            if (c !== 0) return c
             const ka = canon([a])
             const kb = canon([b])
             return ka < kb ? -1 : ka > kb ? 1 : 0

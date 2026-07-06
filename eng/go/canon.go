@@ -148,7 +148,7 @@ func CanonValue(v Value) string {
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())
 		for i := 0; i < lst.Len(); i++ {
-			parts[i] = CanonValue(lst.Get(i))
+			parts[i] = canonChild(lst.Get(i))
 		}
 		return "(flex [" + strings.Join(parts, " ") + "])"
 	case IsFlexMap(v):
@@ -159,14 +159,14 @@ func CanonValue(v Value) string {
 		parts := make([]string, m.Len())
 		for i, k := range m.Keys() {
 			val, _ := m.Get(k)
-			parts[i] = k + ":" + CanonValue(val)
+			parts[i] = k + ":" + canonChild(val)
 		}
 		return "(flex {" + strings.Join(parts, " ") + "})"
 	case v.Parent.ConformsTo(TList) && v.Data != nil:
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())
 		for i := 0; i < lst.Len(); i++ {
-			parts[i] = CanonValue(lst.Get(i))
+			parts[i] = canonChild(lst.Get(i))
 		}
 		body := "[" + strings.Join(parts, " ") + "]"
 		if v.Quoted {
@@ -181,7 +181,7 @@ func CanonValue(v Value) string {
 		parts := make([]string, m.Len())
 		for i, k := range m.Keys() {
 			val, _ := m.Get(k)
-			parts[i] = k + ":" + CanonValue(val)
+			parts[i] = k + ":" + canonChild(val)
 		}
 		return "{" + strings.Join(parts, " ") + "}"
 	case IsReach(v):
@@ -200,6 +200,22 @@ func CanonValue(v Value) string {
 	default:
 		return v.String()
 	}
+}
+
+// canonChild renders a value that sits INSIDE a composite canon (a map value,
+// a list element, a record/childtype field). A disjunct's `A tor B` renders
+// with whitespace, so concatenated into a container it fragments into extra
+// word-separated tokens (`{x:Integer tor String}` reads as broken map syntax)
+// and breaks the source round-trip; grouping it in parens keeps the compound
+// canon re-parseable (`{x:(Integer tor String)}`). A TOP-LEVEL disjunct canon
+// is left ungrouped — it re-parses as-is AND it is a comparison ordering key
+// (compareStructural), so a leading `(` there would silently reorder unions.
+// The TS engine mirrors this (eng/ts/src/canon.ts::canonChild).
+func canonChild(v Value) string {
+	if IsDisjunct(v) {
+		return "(" + CanonValue(v) + ")"
+	}
+	return CanonValue(v)
 }
 
 // canonReachToken renders one receiver/key token of a Reach as source:
