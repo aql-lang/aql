@@ -206,6 +206,59 @@ type Registry struct {
 	// concurrent goroutine pushes onto its own stack and never the parent's
 	// shared backing array.
 	debugEngines []*Engine
+
+	// enginePool holds idle reusable sub-engines for the interpreter's
+	// body/element evaluation seams (InvokeBody, autoEvalList, paren and
+	// interp-hole evaluation). Each pooled engine has reuseTape set, so a
+	// hot loop reloads one tape in place instead of allocating a fresh
+	// ~DefaultTapeInitialFloor-entry tape per body invocation — the same
+	// reuse the VM's island engine already proved sound. Reentrancy is
+	// safe by construction: a nested sub-run POPS a different engine (or
+	// creates one) while its parent's engine is mid-Run and not in the
+	// pool. A plain slice is safe for the same reason debugEngines is:
+	// per-execution state, reset by ForkConcurrent so forks never share
+	// the parent's engines (a pooled engine pins its creating registry).
+	enginePool []*Engine
+}
+
+// Engine-pool bounds. An engine whose tape grew past pooledTapeMaxEntries
+// is dropped rather than pooled so a one-off giant body does not pin its
+// buffer for the rest of the run; the pool itself is capped so pathological
+// nesting cannot accumulate engines without bound.
+const (
+	maxPooledEngines     = 16
+	pooledTapeMaxEntries = 4096
+)
+
+// takeSubEngine pops an idle reusable sub-engine from the pool, creating
+// one (with reuseTape set) when the pool is empty. Pair with putSubEngine
+// after the engine's Run returns; results must be copied out first —
+// Run's result slice aliases the engine's tape, which the next Reload
+// overwrites.
+func (r *Registry) takeSubEngine() *Engine {
+	if n := len(r.enginePool); n > 0 {
+		e := r.enginePool[n-1]
+		r.enginePool[n-1] = nil
+		r.enginePool = r.enginePool[:n-1]
+		return e
+	}
+	e := New(r)
+	e.reuseTape = true
+	return e
+}
+
+// putSubEngine returns an idle sub-engine to the pool. Engines whose tape
+// grew beyond the pooling bound are dropped (GC'd) instead, and per-call
+// configuration is cleared so nothing leaks into the next use.
+func (r *Registry) putSubEngine(e *Engine) {
+	if e == nil || len(r.enginePool) >= maxPooledEngines {
+		return
+	}
+	if e.tape != nil && e.tape.capEntries() > pooledTapeMaxEntries {
+		return
+	}
+	e.elemEvalRecordable = false
+	r.enginePool = append(r.enginePool, e)
 }
 
 // enterInterpRun / exitInterpRun bracket one interpreter Engine.Run activation

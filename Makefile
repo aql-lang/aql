@@ -1,4 +1,4 @@
-.PHONY: all build install test test-ts vet fmt lint vuln clean cover cover-html cover-html-open \
+.PHONY: all build install test test-ts vet fmt lint vuln bench clean cover cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
@@ -122,6 +122,29 @@ vuln:
 	  echo "==> vuln $$m"; \
 	  ( cd $$m && govulncheck ./... ); \
 	done
+
+# ---- performance baseline ----------------------------------------------
+#
+# Run the performance-baseline benchmark suites: kernel primitives
+# (eng/go), parser shapes (eng/go/parser), dispatch shapes + interpreter
+# vs compiled + word families + check/compile cost (lang/go). Compare
+# before/after an engine change with benchstat:
+#
+#   make bench > after.txt     # (and once on the base commit > before.txt)
+#   benchstat before.txt after.txt
+#
+# BENCH_TIME tunes -benchtime (default 1s per benchmark). The
+# deterministic regression *gates* (allocation ceilings) run in the
+# normal `make test`: TestCompiledAllocCeilings and TestInterpAllocCeilings
+# in lang/go.
+BENCH_TIME ?= 1s
+bench:
+	@echo "==> bench eng/go (kernel primitives)"
+	cd eng/go && go test -run '^$$' -bench 'BenchmarkKernel|BenchmarkTape' -benchmem -benchtime $(BENCH_TIME) .
+	@echo "==> bench eng/go/parser (parse shapes)"
+	cd eng/go && go test -run '^$$' -bench 'BenchmarkParse' -benchmem -benchtime $(BENCH_TIME) ./parser/
+	@echo "==> bench lang/go (dispatch, exec, words, check, compile)"
+	cd lang/go && go test -run '^$$' -bench 'BenchmarkBytecodeBaseline|BenchmarkStage6|BenchmarkParens|BenchmarkPerf' -benchmem -benchtime $(BENCH_TIME) .
 
 # ---- TypeScript engine port (eng/ts) -----------------------------------
 #

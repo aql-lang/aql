@@ -24,7 +24,34 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	input := make([]Value, len(inputs)+len(toks))
 	copy(input, inputs)
 	copy(input[len(inputs):], toks)
-	return New(r).Run(input)
+	return runPooledSub(r, input, false)
+}
+
+// runPooledSub runs input on a pooled reusable sub-engine and returns a
+// caller-owned COPY of the results. It is the shared seam behind every
+// per-element sub-evaluation (higher-order bodies, list/paren/interp-hole
+// auto-evaluation): pooling means a hot loop reloads one tape in place
+// instead of allocating a fresh ~DefaultTapeInitialFloor-entry tape per
+// invocation. The result copy is mandatory — Engine.Run's result slice
+// aliases the engine's tape (Tape.TakeAll), which the pool's next Reload
+// overwrites — and it also stops a retained result from pinning the whole
+// tape buffer the way the previous spin-up-per-call path did.
+//
+// elemEvalRecordable configures the sub-engine's container-element
+// recording flag (see Engine.elemEvalRecordable); pass false when the
+// caller does not evaluate recordable container elements.
+func runPooledSub(r *Registry, input []Value, elemEvalRecordable bool) ([]Value, error) {
+	sub := r.takeSubEngine()
+	sub.elemEvalRecordable = elemEvalRecordable
+	res, err := sub.Run(input)
+	if err != nil {
+		r.putSubEngine(sub)
+		return nil, err
+	}
+	out := make([]Value, len(res))
+	copy(out, res)
+	r.putSubEngine(sub)
+	return out, nil
 }
 
 // bodyTokens returns the executable token sequence for a code body: a concrete

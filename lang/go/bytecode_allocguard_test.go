@@ -12,6 +12,15 @@ import (
 // compiled Program, so a small fixed sample is exact and fast (no
 // benchmark auto-scaling).
 func allocsPerOp(fn func()) int64 {
+	allocs, _ := allocStatsPerOp(fn)
+	return allocs
+}
+
+// allocStatsPerOp is allocsPerOp with the allocated BYTES per call too.
+// Byte counts catch the regression class alloc counts miss: one big
+// allocation per op (e.g. a fresh ~1024-entry tape per body invocation)
+// moves the needle by a single alloc but hundreds of KB.
+func allocStatsPerOp(fn func()) (allocs, bytes int64) {
 	const iters = 64
 	fn() // warm up (lazy one-time allocations)
 	runtime.GC()
@@ -21,7 +30,7 @@ func allocsPerOp(fn func()) int64 {
 		fn()
 	}
 	runtime.ReadMemStats(&m1)
-	return int64(m1.Mallocs-m0.Mallocs) / iters
+	return int64(m1.Mallocs-m0.Mallocs) / iters, int64(m1.TotalAlloc-m0.TotalAlloc) / iters
 }
 
 // Compiled-mode allocation guard (design/aql-bytecode-plan.0.md Stage 6
@@ -51,16 +60,17 @@ func TestCompiledAllocCeilings(t *testing.T) {
 		ceiling int64
 	}{
 		{"arith_chain64", "", arithChain(64), 210},
-		{"compare_loop", "", `for 200 [gt i 100]`, 1900},
-		{"if_scalar", "", `for 200 [if (gt i 100) [1] [0]]`, 1900},
-		{"if_listcond", "", `for 200 [if [i gt 100] [1] [0]]`, 1900},
+		{"compare_loop", "", `for 200 [gt i 100]`, 1150},
+		{"if_scalar", "", `for 200 [if (gt i 100) [1] [0]]`, 1150},
+		{"if_listcond", "", `for 200 [if [i gt 100] [1] [0]]`, 1150},
 		{"for_tight", "", `for 200 [add (mul i 3) 7]`, 1950},
-		{"recursion_nontail", `def s fn [[n:Integer] [Integer] [if (n lte 0) [0] [n add (s (n sub 1))]]] end`, `s 200`, 3150},
-		{"recursion_tail", `def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] end`, `s2 1000 0`, 16500},
+		{"recursion_nontail", `def s fn [[n:Integer] [Integer] [if (n lte 0) [0] [n add (s (n sub 1))]]] end`, `s 200`, 2450},
+		{"recursion_tail", `def s2 fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [s2 (n sub 1) (acc add n)]]] end`, `s2 1000 0`, 13000},
 		// Island reuse keeps a hot island in a loop at interpreter-level
 		// allocation; a regression that re-allocates a sub-engine per
-		// island would roughly double this (≈5000 → ≈10000).
-		{"do_body", `def body [add 1 2]`, `for 100 [do body]`, 4800},
+		// island would sharply raise this (the pre-engine-pool level was
+		// ≈4800, and a per-island sub-engine would roughly double that).
+		{"do_body", `def body [add 1 2]`, `for 100 [do body]`, 500},
 	}
 	for _, g := range guards {
 		a, err := New()

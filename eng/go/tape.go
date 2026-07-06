@@ -197,6 +197,12 @@ func (t *Tape) MaxCap() int { return t.maxCap }
 // Len reports the number of logical elements.
 func (t *Tape) Len() int { return len(t.buf) - (t.gapEnd - t.gapStart) }
 
+// capEntries reports the tape's current physical capacity in entries —
+// the size of the backing buffer, independent of the gap. Used by the
+// registry's engine pool to drop engines whose tape grew too large to
+// keep around.
+func (t *Tape) capEntries() int { return len(t.buf) }
+
 // phys translates a logical index to a physical one.
 func (t *Tape) phys(i int) int {
 	if i < t.gapStart {
