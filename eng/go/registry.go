@@ -206,6 +206,21 @@ type Registry struct {
 	// concurrent goroutine pushes onto its own stack and never the parent's
 	// shared backing array.
 	debugEngines []*Engine
+
+	// Procs is the BEAM-style process runtime (see process.go): the pid
+	// table, named-process registry, and root cancellation scope. It is a
+	// POINTER created by NewRegistry, so ForkConcurrent's shallow copy
+	// shares one runtime across every fork — the whole engine tree sees
+	// one process table (PROCESSES.0.md §2). No goroutines start until
+	// the first spawn.
+	Procs *ProcessRuntime
+
+	// Proc identifies the process THIS registry's goroutine runs as: set
+	// on the fork by `spawn` before the goroutine starts, and lazily set
+	// on a top-level registry the first time `self`/`receive` runs there
+	// (the implicit main process, so a top-level program can converse
+	// with the actors it spawns — PROCESSES.0.md §10). Nil until then.
+	Proc *Process
 }
 
 // enterInterpRun / exitInterpRun bracket one interpreter Engine.Run activation
@@ -742,6 +757,7 @@ func NewRegistry() (*Registry, error) {
 		// recorder calls are always safe (CheckState.Recorder() covers
 		// registries constructed without NewRegistry).
 		Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit},
+		Procs: NewProcessRuntime(),
 	}
 	// Mint a process-stable scope id so fn-analysis memo keys can be
 	// namespaced per registry (parent vs module sub-registry). A

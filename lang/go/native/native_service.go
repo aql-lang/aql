@@ -1,0 +1,415 @@
+package native
+
+import (
+	"fmt"
+	"sync"
+
+	eng "github.com/aql-lang/aql/eng/go"
+)
+
+// In-process services — the language surface of design/SERVICES.0.md
+// phase 1: a `Service` value owns private state and answers
+// pattern-matched requests through a patrun of handlers. Words:
+//
+//	service {state}                 -> Service
+//	add {pattern} [handler] svc                  (patrun routing; handler stacks)
+//	call {request} svc              -> reply     (no_match if nothing matches)
+//	send {request} svc                           (same dispatch, reply discarded)
+//	state-of svc                    -> Map       (the private state)
+//	wrap [handler] svc                           (ambient middleware)
+//
+// Handlers are `[req state] -> reply` or, for layering/middleware,
+// `[req state prior] -> reply` where `prior` is the continuation for the
+// next handler down the chain (SERVICES.0.md §1 "prior"/"wrap").
+//
+// Divergences from the RFC (recorded in
+// design/NETWORK-IMPLEMENTATION-PLAN.0.md):
+//   - The state accessor is `state-of` (not `state`): handler params
+//     cannot shadow a built-in word, and the RFC's handler contract
+//     names its second param `state` in every example.
+//   - The state is a FLEX map, not a Store: flex nodes are the one
+//     container family whose `set` mutates IN PLACE through every
+//     alias (lang/spec/edge-containers-2.tsv §"flex"), which is the
+//     semantics the handler contract needs — a Store `set` is
+//     COW/layered and a Map `set` is functional, so writes through a
+//     captured alias would not stick with either. Handlers write
+//     `state set count 9` and read `state.count`.
+//   - Instead of running a served service as its own process, a
+//     Service serializes dispatch with an internal mutex — the same
+//     "one request at a time" gen_server guarantee, so one shared
+//     service is safe under many connection actors. A handler that
+//     `call`s its OWN service deadlocks (as in OTP).
+
+// TService is Ideal/Service. FixedID 5008 (5000-band; see native_process.go).
+var TService = registerServiceType()
+
+func registerServiceType() *eng.Type {
+	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Service", 5008, serviceBehavior{})
+	if err != nil {
+		recordTypeInitErr(fmt.Errorf("native_service: register Ideal/Service: %w", err))
+	}
+	return t
+}
+
+// RemoteDispatch is the transport hook a `connect`ed Endpoint carries: it
+// forwards an encoded request to the remote peer and returns the reply.
+// Installed by aql:net (design/NETWORK-CLIENTS.0.md §6); nil for ordinary
+// in-process services.
+type RemoteDispatch func(r *Registry, req Value, opts Value) ([]Value, error)
+
+// serviceState is the payload behind a Service value: the handler patrun,
+// per-pattern handler stacks, wrap middleware, and the private state
+// Store. The dispatch mutex serializes handling (one request at a time).
+type serviceState struct {
+	mu     sync.Mutex
+	pm     *patrunMatcher
+	stacks map[string][]Value // pattern sig → handler stack (newest last)
+	wraps  []Value            // ambient middleware (newest last = outermost)
+	state  Value              // the private state: a flex map, mutated in place
+
+	// remote, when non-nil, makes this Service an Endpoint: call/send
+	// forward over the wire instead of dispatching locally. `add`ed
+	// handlers stay local (peer-push dispatch is a later phase).
+	remote RemoteDispatch
+	// closer tears down the endpoint's transport (the `close` overload).
+	closer func() error
+}
+
+// NewServiceValue builds a fresh in-process Service with the given
+// initial state fields (may be nil).
+func NewServiceValue(initial *OrderedMap) Value {
+	om := NewOrderedMap()
+	if initial != nil {
+		for _, k := range initial.Keys() {
+			v, _ := initial.Get(k)
+			om.Set(k, v)
+		}
+	}
+	st, err := eng.FlexDeepCopy(NewMap(om))
+	if err != nil {
+		// A plain map of already-constructed values always flexes; fall
+		// back to the map itself rather than failing construction.
+		st = NewMap(om)
+	}
+	s := &serviceState{
+		pm:     newPatrunMatcher(TAny),
+		stacks: map[string][]Value{},
+		state:  st,
+	}
+	return eng.NewExtension(TService, s)
+}
+
+// NewRemoteServiceValue builds an Endpoint: a Service whose call/send
+// forward through the given transport dispatch. Used by aql:net connect.
+func NewRemoteServiceValue(dispatch RemoteDispatch, closer func() error) Value {
+	v := NewServiceValue(nil)
+	s, _ := asService(v)
+	s.remote = dispatch
+	s.closer = closer
+	return v
+}
+
+// ServiceCloser returns the endpoint's transport closer (nil for plain
+// services). Used by aql:net's `close` overload.
+func ServiceCloser(v Value) func() error {
+	if s, ok := asService(v); ok {
+		return s.closer
+	}
+	return nil
+}
+
+func asService(v Value) (*serviceState, bool) {
+	ep, ok := v.Data.(eng.ExtensionPayload)
+	if !ok {
+		return nil, false
+	}
+	s, ok := ep.Body.(*serviceState)
+	return s, ok
+}
+
+// serviceBehavior renders a Service with its handler count.
+type serviceBehavior struct{}
+
+func (serviceBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
+func (serviceBehavior) Equal(a, b Value) bool {
+	sa, oka := asService(a)
+	sb, okb := asService(b)
+	if !oka || !okb {
+		return DefaultBehavior.Equal(a, b)
+	}
+	return sa == sb
+}
+func (serviceBehavior) Format(v Value) string {
+	s, ok := asService(v)
+	if !ok {
+		return "Service"
+	}
+	s.mu.Lock()
+	n := 0
+	for _, st := range s.stacks {
+		n += len(st)
+	}
+	w := len(s.wraps)
+	remote := s.remote != nil
+	s.mu.Unlock()
+	if remote {
+		return fmt.Sprintf("Endpoint(%d handlers, %d wraps)", n, w)
+	}
+	return fmt.Sprintf("Service(%d handlers, %d wraps)", n, w)
+}
+
+// serviceNatives installs the service words. `add` and `send` carry
+// Service overloads folded onto the existing words (upsertFnDef appends).
+var serviceNatives = []NativeFunc{
+	{
+		Name: "service",
+		Signatures: []Signature{
+			// service {state} — construct a service with initial private state.
+			{Args: []*Type{TMap}, Impl: Go(serviceNewHandler), Returns: []*Type{TService}, BarrierPos: -1},
+		},
+	},
+	{
+		Name: "add",
+		Signatures: []Signature{
+			// add {pattern} [handler] svc — register a handler; adding to an
+			// already-registered pattern PUSHES a layering stack (prior).
+			// Returns nothing (statement form, like the Patrun overload).
+			{Args: []*Type{TMap, TAny, TService}, Impl: Go(serviceAddHandler), Returns: []*Type{},
+				BarrierPos: -1, CompileEffect: CompileStoresFn},
+		},
+	},
+	{
+		Name: "call",
+		Signatures: []Signature{
+			// call {request} svc {opts} — opts (timeout:, …) honoured by remote
+			// endpoints; advisory in-process.
+			{Args: []*Type{TMap, TService, TMap}, Impl: Go(serviceCallHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			// call {request} svc — synchronous request → reply.
+			{Args: []*Type{TMap, TService}, Impl: Go(serviceCallHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+		},
+	},
+	{
+		Name: "send",
+		Signatures: []Signature{
+			// send {request} svc — same dispatch as call, reply discarded.
+			{Args: []*Type{TAny, TService}, Impl: Go(serviceSendHandler), Returns: []*Type{}, BarrierPos: -1},
+		},
+	},
+	{
+		Name: "state-of",
+		Signatures: []Signature{
+			// state-of svc — the service's private state (rarely needed
+			// directly; handlers receive it as their second param).
+			{Args: []*Type{TService}, Impl: Go(serviceStateHandler), Returns: []*Type{TMap}, BarrierPos: -1},
+		},
+	},
+	{
+		Name: "wrap",
+		Signatures: []Signature{
+			// wrap [handler] svc — ambient middleware around every dispatch.
+			{Args: []*Type{TAny, TService}, Impl: Go(serviceWrapHandler), Returns: []*Type{},
+				BarrierPos: -1, CompileEffect: CompileStoresFn},
+		},
+	},
+}
+
+func serviceNewHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	mp, err := RequireConcreteMap(args[0], "service")
+	if err != nil {
+		return nil, err
+	}
+	om := NewOrderedMap()
+	for _, k := range mp.Keys() {
+		v, _ := mp.Get(k)
+		om.Set(k, v)
+	}
+	return []Value{NewServiceValue(om)}, nil
+}
+
+// requireHandlerFn validates a handler argument is a function value.
+func requireHandlerFn(r *Registry, v Value, word string) error {
+	if _, ok := FnDefFromValue(v); !ok {
+		return r.AqlErrorHint(word+"_error",
+			word+": handler must be a function, got "+v.Parent.String(),
+			word, "write `[ [req state] => [ … ] ]` (or `[req state prior]` for a layering handler)")
+	}
+	return nil
+}
+
+func serviceAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	s, ok := asService(args[2])
+	if !ok {
+		return nil, r.AqlError("service_error", "add: expected a Service, got "+args[2].Parent.String(), "add")
+	}
+	if err := requireHandlerFn(r, args[1], "add"); err != nil {
+		return nil, err
+	}
+	pat, keys, sig, err := coercePattern(args[0], "add", r)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.stacks[sig]; !exists {
+		h := sig
+		s.pm.pm.Add(pat, &h)
+		s.pm.side[sig] = patrunRule{raw: args[0], val: args[1], disp: patrunDisp(keys, pat)}
+		s.pm.order = append(s.pm.order, sig)
+	}
+	// Same-pattern add PUSHES (layering, newest outermost) — deliberately
+	// different from raw patrun, which overwrites (SERVICES.0.md §1).
+	s.stacks[sig] = append(s.stacks[sig], args[1])
+	return nil, nil
+}
+
+func serviceWrapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	s, ok := asService(args[1])
+	if !ok {
+		return nil, r.AqlError("service_error", "wrap: expected a Service, got "+args[1].Parent.String(), "wrap")
+	}
+	if err := requireHandlerFn(r, args[0], "wrap"); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	s.wraps = append(s.wraps, args[0])
+	s.mu.Unlock()
+	return nil, nil
+}
+
+func serviceStateHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	s, ok := asService(args[0])
+	if !ok {
+		return nil, r.AqlError("service_error", "state-of: expected a Service, got "+args[0].Parent.String(), "state-of")
+	}
+	return []Value{s.state}, nil
+}
+
+func serviceCallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	s, ok := asService(args[1])
+	if !ok {
+		return nil, r.AqlError("service_error", "call: expected a Service, got "+args[1].Parent.String(), "call")
+	}
+	var opts Value
+	if len(args) >= 3 {
+		opts = args[2]
+	}
+	if s.remote != nil {
+		return s.remote(r, args[0], opts)
+	}
+	res, err := dispatchService(r, s, args[0])
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func serviceSendHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	s, ok := asService(args[1])
+	if !ok {
+		return nil, r.AqlError("service_error", "send: expected a Service, got "+args[1].Parent.String(), "send")
+	}
+	if s.remote != nil {
+		_, err := s.remote(r, args[0], Value{})
+		return nil, err
+	}
+	if _, err := dispatchService(r, s, args[0]); err != nil {
+		return nil, err
+	}
+	return nil, nil // reply discarded
+}
+
+// DispatchServiceValue routes one request into a Service from Go — the
+// hook the aql:net transport loop uses to deliver decoded messages.
+func DispatchServiceValue(r *Registry, svc Value, req Value) ([]Value, error) {
+	s, ok := asService(svc)
+	if !ok {
+		return nil, r.AqlError("service_error", "dispatch: expected a Service", "call")
+	}
+	return dispatchService(r, s, req)
+}
+
+// dispatchService routes req through the wrap layers → patrun match →
+// per-pattern prior stack → base handler, under the service mutex.
+func dispatchService(r *Registry, s *serviceState, req Value) ([]Value, error) {
+	s.mu.Lock()
+	// Route on the request's scalar fields.
+	subj, err := coerceSubject(req, "call")
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	h, found := s.pm.pm.Find(subj)
+	var chain []Value
+	// wraps run outermost, newest first.
+	for i := len(s.wraps) - 1; i >= 0; i-- {
+		chain = append(chain, s.wraps[i])
+	}
+	if found && h != nil {
+		stack := s.stacks[*h]
+		for i := len(stack) - 1; i >= 0; i-- {
+			chain = append(chain, stack[i])
+		}
+	}
+	state := s.state
+	s.mu.Unlock()
+
+	if !found || h == nil {
+		return nil, r.AqlErrorHint("no_match",
+			"call: no handler matches request "+ValToString(req),
+			"call", "register a handler with `add {pattern} [handler] svc` (a catch-all `add {} …` accepts anything)")
+	}
+
+	// Serialize the actual handling: one request at a time (the
+	// gen_server guarantee — handlers mutate `state` without locks).
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return runHandlerChain(r, state, req, chain)
+}
+
+// runHandlerChain invokes chain[0] with (req, state) or (req, state,
+// prior) by handler arity; `prior` continues at chain[1:].
+func runHandlerChain(r *Registry, state Value, req Value, chain []Value) ([]Value, error) {
+	if len(chain) == 0 {
+		// A layering handler called `prior` past the bottom of the stack.
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	handler := chain[0]
+	rest := chain[1:]
+	fnInfo, ok := FnDefFromValue(handler)
+	if !ok {
+		return nil, r.AqlError("service_error", "handler is not a function", "call")
+	}
+
+	// Try the layering arity first: [req state prior].
+	priorFn := makePriorFn(r, state, rest)
+	args3 := []Value{req, state, priorFn}
+	if sig := MatchFnSig(handler, args3); sig != nil {
+		return r.CallAQL(sig, args3, fnInfo.Captured)
+	}
+	args2 := []Value{req, state}
+	if sig := MatchFnSig(handler, args2); sig != nil {
+		return r.CallAQL(sig, args2, fnInfo.Captured)
+	}
+	return nil, r.AqlErrorHint("service_error",
+		"handler signature must be [req state] or [req state prior]",
+		"call", "declare handlers as `[ [req state] => [ … ] ]`")
+}
+
+// makePriorFn builds the `prior` continuation: a Function value whose Go
+// handler resumes the chain at rest. Passing a (possibly modified)
+// request re-dispatches the remaining layers with it.
+func makePriorFn(r *Registry, state Value, rest []Value) Value {
+	handler := func(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+		return runHandlerChain(reg, state, args[0], rest)
+	}
+	// Authored with Params (not the legacy Args field): a constructed
+	// Function value dispatches through compileFnDef, which derives the
+	// forward barrier from len(Params).
+	sig := Signature{
+		Params:     []eng.FnParam{{Type: TAny}},
+		Impl:       Go(handler),
+		Returns:    []*Type{TAny},
+		BarrierPos: 1,
+	}
+	return NewFunction(FnDefInfo{Name: "prior", Signatures: []Signature{sig}})
+}

@@ -96,6 +96,8 @@ func TestFixedIDStability(t *testing.T) {
 		// retired — per-import module mints now (aql:minilang /
 		// aql:parse / aql:model own them; see design/OPEN-WORDS.0.md).
 		"Ideal/Patrun":       5004, // pattern-dispatch table — lang/go/native/native_patrun.go
+		"Ideal/Pid":          5007, // process handle — lang/go/native/native_process.go
+		"Ideal/Service":      5008, // service/endpoint — lang/go/native/native_service.go
 		"Word/__IS":          51,
 		"Word/__XI":          109, // interpolated XML literal skeleton
 		"Type/Disjunct/Enum": 62,
