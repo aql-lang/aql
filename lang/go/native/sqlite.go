@@ -68,7 +68,7 @@ type SQLiteStore struct {
 
 // NewSQLiteStore opens a shared in-memory SQLite database.
 func NewSQLiteStore() (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := w8SQLOpen("sqlite", ":memory:")
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: %w", err)
 	}
