@@ -51,10 +51,12 @@ func (s *store) genID() string {
 	return fmt.Sprintf("gen%04d", s.nextID-1)
 }
 
-func main() {
-	s := newStore()
+// newMux builds the API handler over s. Extracted from main so tests can
+// drive the exact production routes through httptest.
+func newMux(s *store) *http.ServeMux {
+	mux := http.NewServeMux()
 
-	http.HandleFunc("/api/planet", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/planet", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -87,7 +89,7 @@ func main() {
 		}
 	})
 
-	http.HandleFunc("/api/planet/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/planet/", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -200,6 +202,10 @@ func main() {
 		}
 	})
 
+	return mux
+}
+
+func main() {
 	log.Println("solardemo server listening on :8901")
-	log.Fatal(http.ListenAndServe(":8901", nil))
+	log.Fatal(http.ListenAndServe(":8901", newMux(newStore())))
 }
