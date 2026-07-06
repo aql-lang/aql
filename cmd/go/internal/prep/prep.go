@@ -3,7 +3,6 @@
 package prep
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -63,7 +62,7 @@ func Do(dir string) (map[string]any, error) {
 		return nil, fmt.Errorf("aql.jsonic must be a map")
 	}
 
-	out, err := json.MarshalIndent(m, "", "  ")
+	out, err := jsonMarshalIndent(m, "", "  ")
 	if err != nil {
 		return nil, err
 	}

@@ -135,7 +135,7 @@ func testCheck(stdout, stderr io.Writer, args []string, verbose bool) int {
 		fmt.Fprintln(stderr, "test/explain: usage: <name|path> <scope.op> [k=v...]")
 		return 1
 	}
-	p, err := pol.LoadAuto(args[0])
+	p, err := policyLoadAuto(args[0])
 	if err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1

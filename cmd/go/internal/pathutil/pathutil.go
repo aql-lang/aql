@@ -43,7 +43,7 @@ func Expand(path string) string {
 	if path == "" || path[0] != '~' {
 		return path
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return path
 	}

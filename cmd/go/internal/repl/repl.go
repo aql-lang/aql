@@ -26,7 +26,7 @@ var newReadline = func(cfg *readline.Config) (readliner, error) {
 }
 
 var newRegistry = func() (*native.Registry, error) {
-	reg, err := native.DefaultRegistry()
+	reg, err := nativeDefaultRegistry()
 	if err != nil {
 		return nil, err
 	}
