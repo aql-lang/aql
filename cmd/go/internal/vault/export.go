@@ -118,7 +118,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 	defer sess.Close()
-	if err := requireScope(sess, OpRead); err != nil {
+	if err := c7requireScope(sess, OpRead); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -375,7 +375,7 @@ func sealExport(plain []byte, passphrase string) ([]byte, error) {
 	if _, err := randRead(salt); err != nil {
 		return nil, err
 	}
-	key, err := scryptKey(passphrase, salt)
+	key, err := c7scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +423,7 @@ func openExport(blob []byte, passphrase string) ([]byte, error) {
 	salt := blob[off : off+keyringSaltLen]
 	nonce := blob[off+keyringSaltLen : off+keyringSaltLen+keyringNonceLen]
 	ct := blob[off+keyringSaltLen+keyringNonceLen:]
-	key, err := scryptKey(passphrase, salt)
+	key, err := c7scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
 	}

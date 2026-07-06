@@ -143,7 +143,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 	var changes []string
 	var grantedTokens []string
 	applyErr := withVaultLock(homeDir, func() error {
-		s, err := LoadStore(homeDir)
+		s, err := c7loadStore(homeDir)
 		if err != nil {
 			return err
 		}
@@ -222,7 +222,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 				changes = append(changes, "+capability "+c.Alias+"@"+c.Agent)
 			}
 			if !*dryRun {
-				tok, token, err := s.NewCapability(c.Alias, c.Agent, c.Hosts, c.Methods, ttl)
+				tok, token, err := c7newCapability(s, c.Alias, c.Agent, c.Hosts, c.Methods, ttl)
 				if err != nil {
 					return fmt.Errorf("granting capability for %s: %w", c.Alias, err)
 				}

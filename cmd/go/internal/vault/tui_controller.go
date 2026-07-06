@@ -246,7 +246,7 @@ func (c *tuiController) alias(name string) (Alias, bool) {
 // copyToClipboard sets the OS clipboard to text (non-secret helper text),
 // returning the clipboard tool's label.
 func (c *tuiController) copyToClipboard(text string) (string, error) {
-	clip, err := detectClipboard(hostClipEnv())
+	clip, err := t7detectClipboard(hostClipEnv())
 	if err != nil {
 		return "", err
 	}

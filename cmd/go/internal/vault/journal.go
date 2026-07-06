@@ -114,7 +114,7 @@ func appendJournal(homeDir string, ik []byte, gen int64, actor, action, sha stri
 	if ik != nil {
 		rec.HMAC = journalChainHMAC(ik, gen, sha, prev)
 	}
-	line, err := json.Marshal(&rec)
+	line, err := jsonMarshal(&rec)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func appendJournal(homeDir string, ik []byte, gen int64, actor, action, sha stri
 		return err
 	}
 	defer f.Close()
-	if _, err := f.Write(append(line, '\n')); err != nil {
+	if _, err := fileWrite(f, append(line, '\n')); err != nil {
 		return err
 	}
 	return f.Sync()
@@ -202,7 +202,7 @@ func pruneJournal(homeDir string, keep int) error {
 	recs = recs[len(recs)-keep:]
 	var buf strings.Builder
 	for i := range recs {
-		line, err := json.Marshal(&recs[i])
+		line, err := jsonMarshal(&recs[i])
 		if err != nil {
 			return err
 		}
@@ -369,7 +369,7 @@ func runRestore(args []string, homeDir string, stdin io.Reader, stdout, stderr i
 		fmt.Fprintln(stderr, "error: specify --generation=G (see `aql vault history`) or --list")
 		return 1
 	}
-	rec, err := findJournalGeneration(homeDir, *gen)
+	rec, err := c7findJournalGeneration(homeDir, *gen)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -395,7 +395,7 @@ func runRestore(args []string, homeDir string, stdin io.Reader, stdout, stderr i
 	}
 
 	if err := withVaultLock(homeDir, func() error {
-		cur, err := LoadStore(homeDir)
+		cur, err := c7loadStore(homeDir)
 		if err != nil {
 			return err
 		}

@@ -323,7 +323,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	if err := withVaultLock(homeDir, func() error {
 		// Re-check under the lock so two concurrent inits can't both
 		// create a store (the early check above is best-effort).
-		if existing, _ := LoadStore(homeDir); existing != nil && !*force {
+		if existing, _ := c7loadStore(homeDir); existing != nil && !*force {
 			return fmt.Errorf("vault already initialized at %s (use --force to reinitialize)", StorePath(homeDir))
 		}
 		return SaveStore(homeDir, &Store{
@@ -981,7 +981,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		if a, _ := s.FindAlias(alias); a == nil {
 			return fmt.Errorf("no alias named %q", alias)
 		}
-		_, tk, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
+		_, tk, err := c7newCapability(s, alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
 		if err != nil {
 			return err
 		}
