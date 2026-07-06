@@ -22,7 +22,7 @@ func itemsHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 			keyStr = fmt.Sprintf("%v", pair[0])
 		}
 		keyVal := NewString(keyStr)
-		valVal, err := anyToValue(pair[1])
+		valVal, err := structConvert(pair[1])
 		if err != nil {
 			valVal = NewString("")
 		}

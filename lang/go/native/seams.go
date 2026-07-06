@@ -24,6 +24,23 @@ var jsonMarshal = json.Marshal
 // log_span.go, RunModuleBody in native_module_module.go).
 var newSubRegistry = DefaultRegistry
 
+// structConvert seams anyToValue for the convert-back failure arms of the
+// voxgig-struct word handlers (filter / flatten / getpath / inject / merge /
+// items). Their inputs come from valueToAny, which only produces JSON-shaped
+// Go values that anyToValue always accepts — but the voxgig-struct library
+// owns that round-trip guarantee, not this package.
+var structConvert = anyToValue
+
+// newEngRegistry seams eng.NewRegistry for the kernel-init error arm of
+// DefaultRegistryWithPolicy (setup.go) — eng.NewRegistry fails only on
+// an init-time builtin-table error, which is unreachable from here.
+var newEngRegistry = NewRegistry
+
+// newSQLiteStoreFn seams NewSQLiteStore for the store-init error arm of
+// DefaultRegistryWithPolicy (setup.go) — sql.Open with the compiled-in
+// driver cannot fail in production.
+var newSQLiteStoreFn = NewSQLiteStore
+
 // sdkClient is the narrow surface the API-word handlers (create / load /
 // list / update / remove / prepare / direct) consume from the host SDK
 // (seam shape 3, design/TEST-SEAMS.10.md). *udk.UniversalSDK satisfies
