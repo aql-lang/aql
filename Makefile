@@ -1,4 +1,4 @@
-.PHONY: all build install test test-ts vet fmt lint vuln bench clean cover cover-html cover-html-open \
+.PHONY: all build install test test-ts vet fmt lint vuln bench clean cover cover-gate cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
@@ -291,6 +291,24 @@ tags:
 # variants render one report per module under $(COVER_DIR)/html/.
 
 COVER_DIR := coverage
+
+# cover-gate enforces ADR-008: 100% Go unit coverage at all times.
+# Every module's tests run with -coverpkg spanning the whole repo (so a
+# statement counts as covered when ANY suite reaches it — lang's tests
+# legitimately cover eng, the spec corpus covers both), the per-module
+# profiles are merged block-by-block by test/go/covergate, and the gate
+# fails below GATE_FLOOR. Seam conventions for reaching the hard edges
+# are in design/TEST-SEAMS.10.md.
+GATE_FLOOR ?= 100
+GATE_PKGS := github.com/aql-lang/aql/...
+cover-gate:
+	@mkdir -p $(COVER_DIR)
+	@set -e; for m in $(MODULES); do \
+	  echo "==> cover-gate $$m"; \
+	  out="$(abspath $(COVER_DIR))/$$(echo $$m | tr '/' '_').xout"; \
+	  ( cd $$m && go test -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > /dev/null ); \
+	done
+	cd test/go && go run ./covergate -threshold $(GATE_FLOOR) $(abspath $(COVER_DIR))/*.xout
 
 cover:
 	@mkdir -p $(COVER_DIR)
