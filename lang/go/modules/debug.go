@@ -563,7 +563,7 @@ func debugNatives() []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					sub, derr := native.DefaultRegistry()
+					sub, derr := newDefaultRegistry()
 					if derr != nil {
 						return nil, derr
 					}

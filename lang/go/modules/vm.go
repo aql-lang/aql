@@ -308,7 +308,7 @@ func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]n
 // marked ready. Shared by run / check / compile so the three stay
 // configured identically — only what they DO with the registry differs.
 func newSubEngineRegistry(parent *native.Registry, pol policy.Policy) (*native.Registry, error) {
-	subReg, err := native.DefaultRegistryWithPolicy(pol)
+	subReg, err := newDefaultRegistryWithPolicy(pol)
 	if err != nil {
 		return nil, fmt.Errorf("vm: init sub-engine: %w", err)
 	}

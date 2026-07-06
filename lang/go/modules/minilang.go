@@ -60,7 +60,7 @@ func miniCompiledPattern(src string) (*regexp.Regexp, error) {
 
 // BuildMiniLangModule creates the "aql:minilang" native module.
 func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

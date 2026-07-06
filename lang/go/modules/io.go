@@ -24,7 +24,7 @@ import (
 // IO.stdout/IO.trace/IO.printstr reach the host Output writer, exactly as the
 // former core words did.
 func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

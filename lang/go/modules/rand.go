@@ -48,7 +48,7 @@ func BuildRandModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// exports map with all the standard methods (int, bool, float,
 	// string, one-of), and returns that map as an OrderedMap. Each
 	// call mints a fresh instance — no global mutation.
-	withSeedSubReg, err := native.DefaultRegistry()
+	withSeedSubReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -144,7 +144,7 @@ func BuildSeededRandInstance(seed int64) (*native.OrderedMap, error) {
 // native.DefaultRegistry; complex gen bodies that mix rand with
 // arithmetic replay cleanly.
 func BuildSeededRandRegistry(seed int64) (*native.Registry, error) {
-	r, err := native.DefaultRegistry()
+	r, err := newDefaultRegistry()
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func BuildSeededRandRegistry(seed int64) (*native.Registry, error) {
 // `Rand.with-seed` instance — each gets its own sub-registry of
 // natives closing over its own randState.
 func buildRandExportsForState(state *randState) (*native.OrderedMap, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return nil, err
 	}

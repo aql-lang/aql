@@ -154,7 +154,7 @@ func asParseGrammar(v native.Value, word string, r *native.Registry) (*parseGram
 
 // BuildParseModule creates the "aql:parse" native module.
 func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

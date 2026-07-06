@@ -64,7 +64,7 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// natives into it, then run the AQL preamble so record types and
 	// spec-runner fns are defined alongside them. The preamble's
 	// `export` call assembles the final export map.
-	modReg, err := native.DefaultRegistry()
+	modReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, fmt.Errorf("test: init: %w", err)
 	}

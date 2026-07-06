@@ -16,7 +16,7 @@ import (
 // RunModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
 func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
-	modReg, err := DefaultRegistry()
+	modReg, err := newSubRegistry()
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
 	}

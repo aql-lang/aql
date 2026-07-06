@@ -178,10 +178,20 @@ func buildConfig(srcPath, registry string, seed int64, mode buildrt.CompileMode,
 	return cfg, nil
 }
 
+// osExecutable is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive buildSelfEmbed's locate/read/nested-payload arms — os.Executable
+// does not fail on a healthy host and always names a stock test binary.
+var osExecutable = os.Executable
+
+// encodePayload is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive buildSelfEmbed's encode-failure arm, which is unreachable with
+// the plain buildrt.Config shape.
+var encodePayload = buildrt.EncodePayload
+
 // buildSelfEmbed produces the standalone binary by copying the running aql
 // executable and appending the encoded payload.
 func buildSelfEmbed(cfg buildrt.Config, outPath string) error {
-	self, err := os.Executable()
+	self, err := osExecutable()
 	if err != nil {
 		return fmt.Errorf("locate self: %w", err)
 	}
@@ -194,7 +204,7 @@ func buildSelfEmbed(cfg buildrt.Config, outPath string) error {
 	if _, ok, _ := buildrt.DecodePayload(image); ok {
 		return fmt.Errorf("the running aql binary is itself a built executable; run `aql build` with a stock aql binary")
 	}
-	payload, err := buildrt.EncodePayload(cfg)
+	payload, err := encodePayload(cfg)
 	if err != nil {
 		return err
 	}

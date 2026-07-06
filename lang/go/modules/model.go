@@ -85,7 +85,7 @@ type modelHandle struct {
 
 // BuildModelModule creates the "aql:model" native module.
 func BuildModelModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

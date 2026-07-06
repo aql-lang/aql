@@ -20,7 +20,7 @@ import (
 // registry — so Net.fetch reaches the host network policy and Net.prepare /
 // Net.direct reach the host API SDKs, exactly as the former core words did.
 func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

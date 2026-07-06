@@ -9,7 +9,7 @@ import (
 
 // BuildTimeModule creates the "aql:time-util" native module.
 func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

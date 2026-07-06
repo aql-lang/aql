@@ -9,7 +9,9 @@ import (
 
 // getSDK extracts the spec and entity name from an API map ({kind:"api", spec:..., entity:...}),
 // looks up or creates the SDK instance, and returns the SDK and entity name.
-func getSDK(apiMap ReadMap, opName string, r *Registry) (*udk.UniversalSDK, string, error) {
+// The return type is the narrow sdkClient seam (seams.go): production
+// instances are always *udk.UniversalSDK, tests plant fakes in r.SDKCache.
+func getSDK(apiMap ReadMap, opName string, r *Registry) (sdkClient, string, error) {
 	specVal, ok := apiMap.Get("spec")
 	if !ok {
 		return nil, "", fmt.Errorf("%s: missing required \"spec\" field", opName)
@@ -32,9 +34,9 @@ func getSDK(apiMap ReadMap, opName string, r *Registry) (*udk.UniversalSDK, stri
 	spec = strings.TrimSuffix(spec, ".json")
 
 	// Get or create SDK.
-	var sdkInst *udk.UniversalSDK
+	var sdkInst sdkClient
 	if cached, ok := r.SDKCache[spec]; ok {
-		sdkInst, _ = cached.(*udk.UniversalSDK)
+		sdkInst, _ = cached.(sdkClient)
 	}
 	if sdkInst == nil {
 		mgr, ok := r.Manager.(*udk.UniversalManager)

@@ -145,7 +145,7 @@ func New(opts ...Options) (*AQL, error) {
 		native.SetIDSeed(o.Seed)
 	}
 
-	reg, err := native.DefaultRegistryWithPolicy(o.Policy)
+	reg, err := newDefaultRegistryWithPolicy(o.Policy)
 	if err != nil {
 		return nil, err
 	}
@@ -726,10 +726,7 @@ func (a *AQL) RunCompiledStrict(src string) ([]any, error) {
 	}
 	if prog == nil {
 		a.registry.RestoreForCompile(snap)
-		if reason == "" {
-			reason = "program is not compilable"
-		}
-		return nil, errors.New("force-compile: " + reason)
+		return nil, errors.New("force-compile: " + forceCompileReason(reason))
 	}
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
@@ -739,6 +736,17 @@ func (a *AQL) RunCompiledStrict(src string) ([]any, error) {
 		return nil, err
 	}
 	return convertResults(result), nil
+}
+
+// forceCompileReason renders an uncompilable-program refusal reason for
+// RunCompiledStrict's error, defaulting the (defensive, never observed
+// through CompileCheck's current return paths) empty reason to a generic
+// message rather than emitting a bare "force-compile: ".
+func forceCompileReason(reason string) string {
+	if reason == "" {
+		return "program is not compilable"
+	}
+	return reason
 }
 
 // runtimeShouldFallback reports whether a compiled-mode RUN error should be

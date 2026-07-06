@@ -156,7 +156,7 @@ func makeTypedFnDef(wordName string, subReg *native.Registry, ret *native.Type, 
 // types BEFORE registering their words keep constructing the registry
 // by hand and register with a plain loop.
 func newModuleRegistry(natives []native.NativeFunc) (*native.Registry, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return nil, err
 	}

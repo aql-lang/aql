@@ -30,10 +30,32 @@ func outputPath() string {
 	return filepath.Join(repoRoot, "lang", "go", "native", "help", "examples_gen.go")
 }
 
+// osExit is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// observe exit codes without killing the process.
+var osExit = os.Exit
+
+// runGenhelp is a test seam (design/TEST-SEAMS.10.md); tests swap it so
+// main() is drivable without regenerating the committed examples file.
+var runGenhelp = run
+
+// newDefaultRegistry is a test seam (design/TEST-SEAMS.10.md); tests
+// swap it to drive run's registry-construction and seed-fs error arms.
+var newDefaultRegistry = native.DefaultRegistry
+
+// exampleExprs is a test seam (design/TEST-SEAMS.10.md); tests swap it
+// to drive the duplicate-expression skip, which the real example corpus
+// never reaches.
+var exampleExprs = help.ExampleExprs
+
+// formatSource is a test seam (design/TEST-SEAMS.10.md); tests swap it
+// to drive the gofmt-failure arm; renderSource always emits well-formed
+// source, so the arm is otherwise unreachable.
+var formatSource = format.Source
+
 func main() {
-	if err := run(outputPath(), os.Stderr); err != nil {
+	if err := runGenhelp(outputPath(), os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "genhelp: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 }
 
@@ -41,7 +63,7 @@ func main() {
 // source to outPath. Extracted from main so tests can drive the exact
 // production pipeline against a temp path.
 func run(outPath string, errw io.Writer) error {
-	reg, err := native.DefaultRegistry()
+	reg, err := newDefaultRegistry()
 	if err != nil {
 		return err
 	}
@@ -58,10 +80,10 @@ func run(outPath string, errw io.Writer) error {
 		if info == nil {
 			continue
 		}
-		exprs := help.ExampleExprs(*info)
+		exprs := exampleExprs(*info)
 
 		// Fresh registry per word.
-		wordReg, err := native.DefaultRegistry()
+		wordReg, err := newDefaultRegistry()
 		if err != nil {
 			return err
 		}
@@ -82,7 +104,7 @@ func run(outPath string, errw io.Writer) error {
 		}
 	}
 
-	src, err := format.Source([]byte(renderSource(results)))
+	src, err := formatSource([]byte(renderSource(results)))
 	if err != nil {
 		return fmt.Errorf("gofmt generated source: %w", err)
 	}

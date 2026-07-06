@@ -46,11 +46,16 @@ const (
 	CompileForce
 )
 
+// langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive the init-error arms of Eval and Main — lang.New only fails on
+// registry construction errors that no Options value can provoke.
+var langNew = lang.New
+
 // Eval runs source under Options o with the engine selected by mode, then
 // writes the residual stack (carriers joined by spaces) to w. This is the body
 // the run subcommand's EvalOptionsMode forwards to.
 func Eval(w io.Writer, source string, o lang.Options, mode CompileMode) error {
-	a, err := lang.New(o)
+	a, err := langNew(o)
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
@@ -133,7 +138,7 @@ func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	a, err := lang.New(o)
+	a, err := langNew(o)
 	if err != nil {
 		fmt.Fprintf(stderr, "init error: %s\n", err)
 		return 1
@@ -173,8 +178,13 @@ const (
 // EncodePayload returns the bytes to append to a copied host binary: the
 // JSON-encoded Config followed by the fixed trailer (magic + 8-byte big-endian
 // payload length). Detection reads the trailer from the end of the file.
+// jsonMarshal is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive EncodePayload's marshal-failure arm, which is unreachable with
+// the plain Config shape.
+var jsonMarshal = json.Marshal
+
 func EncodePayload(cfg Config) ([]byte, error) {
-	body, err := json.Marshal(cfg)
+	body, err := jsonMarshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("encode payload: %w", err)
 	}
@@ -208,6 +218,16 @@ func DecodePayload(image []byte) (cfg Config, ok bool, err error) {
 	return cfg, true, nil
 }
 
+// fileStat is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive ReadEmbeddedPayload's stat-failure arm — Stat on a freshly
+// opened local file does not fail on a healthy host.
+var fileStat = (*os.File).Stat
+
+// fileReadAt is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive ReadEmbeddedPayload's read-failure arms, which the preceding
+// size checks make unreachable with real files.
+var fileReadAt = (*os.File).ReadAt
+
 // ReadEmbeddedPayload returns the embedded Config if exePath is a built
 // executable. ok is false (nil error) for a plain aql binary. Only the trailing
 // footer is read first, and the payload only when the magic matches — so the
@@ -220,7 +240,7 @@ func ReadEmbeddedPayload(exePath string) (cfg Config, ok bool, err error) {
 	}
 	defer f.Close()
 
-	info, err := f.Stat()
+	info, err := fileStat(f)
 	if err != nil {
 		return Config{}, false, fmt.Errorf("read self: %w", err)
 	}
@@ -230,7 +250,7 @@ func ReadEmbeddedPayload(exePath string) (cfg Config, ok bool, err error) {
 	}
 
 	footer := make([]byte, footerSize)
-	if _, err := f.ReadAt(footer, size-footerSize); err != nil {
+	if _, err := fileReadAt(f, footer, size-footerSize); err != nil {
 		return Config{}, false, fmt.Errorf("read self: %w", err)
 	}
 	if !bytes.Equal(footer[:magicSize], magic) {
@@ -242,7 +262,7 @@ func ReadEmbeddedPayload(exePath string) (cfg Config, ok bool, err error) {
 		return Config{}, false, fmt.Errorf("embedded payload: length %d exceeds image", n)
 	}
 	body := make([]byte, n)
-	if _, err := f.ReadAt(body, size-footerSize-n); err != nil {
+	if _, err := fileReadAt(f, body, size-footerSize-n); err != nil {
 		return Config{}, false, fmt.Errorf("embedded payload: %w", err)
 	}
 	if err := json.Unmarshal(body, &cfg); err != nil {
