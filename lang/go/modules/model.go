@@ -626,12 +626,16 @@ func mapStrList(m native.ReadMap, key string) ([]string, bool) {
 	out := make([]string, 0, lst.Len())
 	for i := 0; i < lst.Len(); i++ {
 		e := lst.Get(i)
-		if s, err := e.AsConcreteString(); err == nil {
-			out = append(out, s)
-			continue
-		}
+		// Atom first: AsConcreteString also accepts atoms (returning the
+		// atom's text), so the string arm would otherwise claim every atom
+		// and leave the atom arm unreachable. The order is behaviour-
+		// preserving — both accessors yield the same text for an atom.
 		if a, err := e.AsConcreteAtom(); err == nil {
 			out = append(out, a)
+			continue
+		}
+		if s, err := e.AsConcreteString(); err == nil {
+			out = append(out, s)
 		}
 	}
 	return out, true
