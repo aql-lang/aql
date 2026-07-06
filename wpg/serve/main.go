@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/aql-lang/aql/lang/go"
@@ -25,7 +26,7 @@ type evalResponse struct {
 // newMux builds the REPL server's handler over one AQL instance.
 // Extracted from main so tests can drive the production routes through
 // httptest.
-func newMux(instance *lang.AQL) (*http.ServeMux, error) {
+func newMux(instance *lang.AQL) *http.ServeMux {
 	var mu sync.Mutex
 	var outBuf bytes.Buffer
 	instance.SetOutput(&outBuf)
@@ -67,25 +68,44 @@ func newMux(instance *lang.AQL) (*http.ServeMux, error) {
 		}
 		writeJSON(w, resp)
 	})
-	return mux, nil
+	return mux
 }
 
-func main() {
-	port := flag.Int("port", 8080, "HTTP port")
-	flag.Parse()
+// Test seams (design/TEST-SEAMS.10.md): tests swap these to observe
+// exit codes and to drive the constructor/serve failure arms.
+var (
+	osExit      = os.Exit
+	newInstance = lang.New
+	listenServe = http.ListenAndServe
+)
 
-	instance, err := lang.New()
-	if err != nil {
-		log.Fatalf("failed to create AQL instance: %v", err)
+func main() {
+	osExit(run(os.Args[1:]))
+}
+
+// run carries main's logic so tests can drive it; it returns the
+// process exit code.
+func run(args []string) int {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	port := fs.Int("port", 8080, "HTTP port")
+	if err := fs.Parse(args); err != nil {
+		return 2
 	}
-	mux, err := newMux(instance)
+
+	instance, err := newInstance()
 	if err != nil {
-		log.Fatalf("failed to build handler: %v", err)
+		log.Printf("failed to create AQL instance: %v", err)
+		return 1
 	}
+	mux := newMux(instance)
 
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("AQL Web REPL listening on http://localhost%s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	if err := listenServe(addr, mux); err != nil {
+		log.Print(err)
+		return 1
+	}
+	return 0
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

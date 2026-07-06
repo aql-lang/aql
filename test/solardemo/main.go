@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 )
@@ -205,7 +206,17 @@ func newMux(s *store) *http.ServeMux {
 	return mux
 }
 
+// Test seams (design/TEST-SEAMS.10.md): tests swap these to observe
+// the exit path without opening a socket.
+var (
+	osExit      = os.Exit
+	listenServe = http.ListenAndServe
+)
+
 func main() {
 	log.Println("solardemo server listening on :8901")
-	log.Fatal(http.ListenAndServe(":8901", newMux(newStore())))
+	if err := listenServe(":8901", newMux(newStore())); err != nil {
+		log.Print(err)
+		osExit(1)
+	}
 }

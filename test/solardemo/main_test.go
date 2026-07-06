@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -186,5 +187,30 @@ func TestGenIDSequence(t *testing.T) {
 	}
 	if got := s.genID(); got != "gen0002" {
 		t.Errorf("second genID = %q, want gen0002", got)
+	}
+}
+
+// main is covered through the seams (design/TEST-SEAMS.10.md).
+func TestMainThroughSeams(t *testing.T) {
+	prevExit, prevListen := osExit, listenServe
+	t.Cleanup(func() { osExit, listenServe = prevExit, prevListen })
+
+	// Clean serve return: main falls through without exiting.
+	listenServe = func(addr string, h http.Handler) error {
+		if addr != ":8901" || h == nil {
+			t.Errorf("listenServe got addr %q, handler %v", addr, h)
+		}
+		return nil
+	}
+	osExit = func(int) { t.Error("osExit called on clean serve return") }
+	main()
+
+	// Serve failure exits 1.
+	listenServe = func(string, http.Handler) error { return errors.New("bind failed") }
+	var code int
+	osExit = func(c int) { code = c }
+	main()
+	if code != 1 {
+		t.Errorf("main with failing serve exited %d, want 1", code)
 	}
 }

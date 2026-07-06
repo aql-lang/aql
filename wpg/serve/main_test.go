@@ -16,11 +16,7 @@ func testMux(t *testing.T) *http.ServeMux {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	mux, err := newMux(instance)
-	if err != nil {
-		t.Fatalf("newMux: %v", err)
-	}
-	return mux
+	return newMux(instance)
 }
 
 func postEval(t *testing.T, mux http.Handler, body string) (int, evalResponse) {
