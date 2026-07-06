@@ -78,6 +78,10 @@ import (
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
 
+// osExit is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// observe the tool's exit arms without killing the test process.
+var osExit = os.Exit
+
 // alphabet is the fixed, ordered set of syntax atoms the enumeration
 // ranges over. Each entry is ONE syntactic element; "up to N elements"
 // means every sequence of 1..N of these joined by spaces (N defaults to
@@ -209,7 +213,7 @@ func main() {
 	if *frontier {
 		if *passing == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
 			fmt.Fprintln(os.Stderr, "specgen -frontier requires -passing, -check-out, -compile-out and -runtime-out")
-			os.Exit(2)
+			osExit(2)
 		}
 		extractFrontier(*passing, *checkOut, *compileOut, *runtimeOut, *max)
 		return
@@ -218,7 +222,7 @@ func main() {
 	if *extend5 {
 		if *passing == "" || *len123 == "" || *passOut == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
 			fmt.Fprintln(os.Stderr, "specgen -extend5 requires -passing, -len123, -pass-out, -check-out, -compile-out and -runtime-out")
-			os.Exit(2)
+			osExit(2)
 		}
 		extendFive(*passing, *len123, *passOut, *checkOut, *compileOut, *runtimeOut, *mismatchOut)
 		return
@@ -227,7 +231,7 @@ func main() {
 	if *extract {
 		if *in == "" || *out == "" {
 			fmt.Fprintln(os.Stderr, "specgen -extract requires both -in and -out")
-			os.Exit(2)
+			osExit(2)
 		}
 		extractPassing(*in, *out, *max)
 		return
@@ -238,7 +242,7 @@ func main() {
 		f, err := os.Create(*out)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "specgen: create %s: %v\n", *out, err)
-			os.Exit(1)
+			osExit(1)
 		}
 		defer f.Close()
 		w = bufio.NewWriter(f)
@@ -452,7 +456,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 	rows, err := readDataRows(inPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extract: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	pass := make([]bool, len(rows))
@@ -472,7 +476,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 			ac, err2 := lang.New()
 			if err1 != nil || err2 != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extract: lang.New: %v %v\n", err1, err2)
-				os.Exit(1)
+				osExit(1)
 			}
 			ai.SetClock(specClock)
 			ac.SetClock(specClock)
@@ -519,7 +523,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 	f, err := os.Create(outPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extract: create %s: %v\n", outPath, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
@@ -673,7 +677,7 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 	passing, err := readInputSet(passingPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// 1. Collect the frontier: fails, immediate prefix passes.
@@ -710,7 +714,7 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 			a, e := lang.New()
 			if e != nil {
 				fmt.Fprintf(os.Stderr, "specgen -frontier: lang.New: %v\n", e)
-				os.Exit(1)
+				osExit(1)
 			}
 			a.SetClock(specClock)
 			for {
@@ -783,7 +787,7 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: create %s: %v\n", path, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
@@ -929,12 +933,12 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 	passingRows, err := readDataRows(passingPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 	short, err := readInputSet(len123PassingPath) // length-1..3 passing
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// Length-4 passing roots = full passing minus the length-1..3 passing.
@@ -970,7 +974,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 			la, e := lang.New()
 			if e != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extend5: lang.New: %v\n", e)
-				os.Exit(1)
+				osExit(1)
 			}
 			la.SetClock(specClock)
 			// A reused native registry produces the canonical (eng.Canon)
@@ -978,7 +982,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 			reg, e2 := native.DefaultRegistry()
 			if e2 != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extend5: registry: %v\n", e2)
-				os.Exit(1)
+				osExit(1)
 			}
 			specrunner.RegisterQFixtures(reg)
 			reg.SetParseFunc(parser.Parse)
@@ -1066,7 +1070,7 @@ func writeLen5Pass(path string, cands []string, classes []fiveClass, expects []s
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: create %s: %v\n", path, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
@@ -1097,7 +1101,7 @@ func writeLen5Fail(path, kind string, cands []string, classes []fiveClass, notes
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: create %s: %v\n", path, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
