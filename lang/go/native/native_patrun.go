@@ -60,18 +60,20 @@ type patrunRule struct {
 // `patterns`. add/remove mutate in place; a Patrun Value wraps the pointer
 // (ExtensionPayload), so mutation is visible through every copy.
 type patrunMatcher struct {
-	pm    *patrun.Patrun
-	side  map[string]patrunRule
-	order []string
+	pm      *patrun.Patrun
+	side    map[string]patrunRule
+	order   []string
+	valType *eng.Type // the DECLARED type of every stored value (`patrun T`)
 }
 
-func newPatrunMatcher() *patrunMatcher {
-	return &patrunMatcher{pm: patrun.New(), side: map[string]patrunRule{}}
+func newPatrunMatcher(valType *eng.Type) *patrunMatcher {
+	return &patrunMatcher{pm: patrun.New(), side: map[string]patrunRule{}, valType: valType}
 }
 
-// NewPatrun builds a fresh empty Patrun value.
-func NewPatrun() Value {
-	return eng.NewExtension(TPatrun, newPatrunMatcher())
+// NewPatrun builds a fresh empty Patrun whose stored values are declared to be
+// of type valType.
+func NewPatrun(valType *eng.Type) Value {
+	return eng.NewExtension(TPatrun, newPatrunMatcher(valType))
 }
 
 func asPatrun(v Value) (*patrunMatcher, bool) {
@@ -90,7 +92,10 @@ var patrunNatives = []NativeFunc{
 	{
 		Name: "patrun",
 		Signatures: []Signature{
-			{Args: []*Type{}, Impl: Go(patrunNewHandler), Returns: []*Type{TPatrun},
+			// patrun T — a dispatch table whose every stored/matched value must
+			// be a T (`patrun String`, `patrun Function`). `find` surfaces the
+			// DECLARED T (∪ None on a miss), never a poisoned dynamic(Any).
+			{Args: []*Type{TAny}, Impl: Go(patrunNewHandler), Returns: []*Type{TPatrun},
 				ReturnsFn: patrunNewReturns, BarrierPos: -1},
 		},
 	},
@@ -134,8 +139,20 @@ var patrunNatives = []NativeFunc{
 	},
 }
 
-func patrunNewHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	return []Value{NewPatrun()}, nil
+func patrunNewHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	return []Value{NewPatrun(patrunValType(args))}, nil
+}
+
+// patrunValType extracts the declared value type from `patrun T`'s type-literal
+// argument, defaulting to TAny defensively (the no-signature recovery may call
+// with a short window).
+func patrunValType(args []Value) *eng.Type {
+	if len(args) >= 1 {
+		if t := eng.ValueType(args[0]); t != nil {
+			return t
+		}
+	}
+	return TAny
 }
 
 // ---- check-mode shape twins (design/checker-precision-fronts.0.md §2) ----
@@ -155,19 +172,34 @@ func patrunNewHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 // deliberately unchanged. Compile passes keep the legacy carriers
 // (patrun rows compile natively today; byte-identical lowering).
 
-func patrunNewReturns(_ []Value, r *Registry) []Value {
+func patrunNewReturns(args []Value, r *Registry) []Value {
 	if r == nil || r.Check.Compiling {
 		return []Value{NewCarrier(TPatrun)}
 	}
-	return []Value{eng.NewStoreShapeCarrier(TPatrun, 0)}
+	c := eng.NewStoreShapeCarrier(TPatrun, 0)
+	if ss, ok := eng.StoreShapeOf(c); ok {
+		ss.DeclaredVal = patrunValType(args) // the declared value type rides the shape
+	}
+	return []Value{c}
 }
 
 func patrunAddReturns(args []Value, r *Registry) []Value {
-	// len guard: the no-signature recovery can assume this sig with a
-	// short arg window (defensive — panic prevention).
+	// The stored value's type is DECLARED at construction, so `add` no longer
+	// INFERS it — but a CONCRETE value the checker can prove is not the declared
+	// type is a static error (the mirror of patrunAddHandler's runtime guard),
+	// so the checker flags `add {a:1} 5 (patrun String)` rather than deferring
+	// the whole class to runtime. Abstract / carrier values can't be proven and
+	// stay a runtime check. Plain-check only — the diagnostic never bakes.
 	if r != nil && !r.Check.Compiling && len(args) >= 3 {
-		if ss, ok := eng.StoreShapeOf(args[2]); ok {
-			ss.RecordVal(args[1])
+		if ss, ok := eng.StoreShapeOf(args[2]); ok && ss.DeclaredVal != nil &&
+			!ss.DeclaredVal.Equal(TAny) && IsConcrete(args[1]) && !args[1].Is(ss.DeclaredVal) {
+			r.Check.AddDiagnostic(eng.CheckDiagnostic{
+				Code:   "patrun_error",
+				Detail: fmt.Sprintf("add: value must be a %s, got %s", ss.DeclaredVal.Leaf(), args[1].Parent.String()),
+				Word:   "add",
+				Row:    args[1].Pos.Row,
+				Col:    args[1].Pos.Col,
+			})
 		}
 	}
 	return nil
@@ -175,23 +207,26 @@ func patrunAddReturns(args []Value, r *Registry) []Value {
 
 func patrunFindReturns(args []Value, r *Registry) []Value {
 	if r != nil && !r.Check.Compiling && len(args) >= 2 {
-		if ss, ok := eng.StoreShapeOf(args[1]); ok {
-			if vals, hit := ss.LookupVals(); hit {
-				// The bound includes None: an unmatched subject reads None
-				// (patrunFindHandler's miss path), and remove-then-find keeps
-				// the join monotone.
-				bound := eng.JoinCarriers(vals, NewCarrier(eng.TNone))
-				return []Value{eng.NewDynamicCarrierValue(bound)}
-			}
+		if ss, ok := eng.StoreShapeOf(args[1]); ok && ss.DeclaredVal != nil {
+			// A typed table: surface the DECLARED element type ∪ None (an
+			// unmatched subject reads None, patrunFindHandler's miss path). No
+			// poisoning — the type is a declaration, not an inference.
+			bound := eng.JoinCarriers(NewCarrier(ss.DeclaredVal), NewCarrier(eng.TNone))
+			return []Value{eng.NewDynamicCarrierValue(bound)}
 		}
 	}
-	return []Value{NewDynamicCarrier(TAny)} // legacy hatch: unshaped / poisoned / empty
+	return []Value{NewDynamicCarrier(TAny)} // unshaped fallback (recovery / no shape)
 }
 
 func patrunAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, ok := asPatrun(args[2])
 	if !ok {
 		return nil, r.AqlError("patrun_error", "add: expected a Patrun, got "+args[2].Parent.String(), "add")
+	}
+	if m.valType != nil && !m.valType.Equal(TAny) && !args[1].Is(m.valType) {
+		return nil, r.AqlErrorHint("patrun_error",
+			fmt.Sprintf("add: value must be a %s, got %s", m.valType.Leaf(), args[1].Parent.String()),
+			"add", "this Patrun was declared `patrun "+m.valType.Leaf()+"` — its stored values must be that type")
 	}
 	pat, keys, sig, err := coercePattern(args[0], "add", r)
 	if err != nil {

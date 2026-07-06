@@ -221,20 +221,20 @@ None otherwise 5	5
 # =====================================================================
 
 # Two type Literals.
-String tor None	String|None
-Number tor String	Number|String
-Boolean tor None	Boolean|None
+String tor None	None tor String
+Number tor String	Number tor String
+Boolean tor None	None tor Boolean
 
 # Three or more (flattened).
-String tor Number tor Boolean	String|Number|Boolean
-Integer tor Float tor String tor None	Integer|Float|String|None
+String tor Number tor Boolean	Boolean tor Number tor String
+Integer tor Float tor String tor None	None tor Integer tor Float tor String
 
 # Concrete values produce a disjunct of values.
-1 tor 2	1|2
-"a" tor "b" tor "c"	'a'|'b'|'c'
+1 tor 2	1 tor 2
+"a" tor "b" tor "c"	'a' tor 'b' tor 'c'
 
 # Mixed concrete and type Literals.
-String tor 42	String|42
+String tor 42	42 tor String
 
 # Disjunct alternatives are simplified at construction:
 # - Identical alternatives dedupe (idempotence).
@@ -284,7 +284,7 @@ Number tand Integer	Integer
 # =====================================================================
 
 # Disjunct of merged maps.
-({x:1} tand {y:2}) tor {z:3}	{x:1 y:2}|{z:3}
+({x:1} tand {y:2}) tor {z:3}	{z:3} tor {x:1 y:2}
 
 # Merge of disjuncts: each merge picks an alternative — tested via unify.
 ({x:Integer} tor {x:String}) unify {x:1}	{x:1} true
@@ -292,7 +292,7 @@ Number tand Integer	Integer
 ({x:Integer} tor {x:String}) unify {x:true}	'~unify-fail' false
 
 # tor inside an optional record field.
-refine Record [name:String age:[Integer tor None]]	record{name:String age:Integer|None}
+refine Record [name:String age:[Integer tor None]]	record{name:String age:None tor Integer}
 
 # tand at type-level then unify.
 ({x:Integer} tand {y:String}) unify {x:1 y:"a"}	{x:1 y:'a'} true
@@ -414,7 +414,7 @@ def Item refine Record [name:String desc:[String tor None]] (make Item ["a" None
 (String tor None) not	false
 
 # tor with a single arg via chaining.
-None tor String	None|String
+None tor String	None tor String
 
 # otherwise with both None.
 None otherwise None	None
@@ -519,22 +519,22 @@ if ([1 0 1] all) [42] [99]	99
 # =====================================================================
 
 # Type literals.
-[String None] tany	String|None
-[Number String Boolean] tany	Number|String|Boolean
+[String None] tany	None tor String
+[Number String Boolean] tany	Boolean tor Number tor String
 
 # Single-element list returns the element unchanged.
 [String] tany	String
 
 # Concrete values.
-[1 2 3] tany	1|2|3
-["a" "b"] tany	'a'|'b'
+[1 2 3] tany	1 tor 2 tor 3
+["a" "b"] tany	'a' tor 'b'
 
 # Existing disjuncts are flattened.
-[(String tor None) Number] tany	String|None|Number
+[(String tor None) Number] tany	None tor Number tor String
 
 # Equivalent to chained tor.
-[String Number Boolean None] tany	String|Number|Boolean|None
-String tor Number tor Boolean tor None	String|Number|Boolean|None
+[String Number Boolean None] tany	None tor Boolean tor Number tor String
+String tor Number tor Boolean tor None	None tor Boolean tor Number tor String
 
 # Use a tany result with unify.
 ([String None] tany) unify "hi"	'hi' true
@@ -577,7 +577,7 @@ String tor Number tor Boolean tor None	String|Number|Boolean|None
 # =====================================================================
 
 # tany a list with computed disjuncts.
-[({x:1} tand {y:2}) {z:3}] tany	{x:1 y:2}|{z:3}
+[({x:1} tand {y:2}) {z:3}] tany	{z:3} tor {x:1 y:2}
 
 # Use tall to fold a list of map schemas, then unify.
 ([{x:Integer} {y:String}] tall) unify {x:1 y:"a"}	{x:1 y:'a'} true
@@ -773,21 +773,21 @@ quote [true false true] all	false
 # =====================================================================
 
 # Existing disjunct alternatives are inlined.
-[(String tor None) Number] tany	String|None|Number
-[(String tor None) (Number tor Boolean)] tany	String|None|Number|Boolean
+[(String tor None) Number] tany	None tor Number tor String
+[(String tor None) (Number tor Boolean)] tany	None tor Boolean tor Number tor String
 
 # Single-element with an existing disjunct returns it unchanged.
-[(String tor None)] tany	String|None
+[(String tor None)] tany	None tor String
 
 # tany of values around a disjunct preserves order.
-[1 (String tor None) 2] tany	1|String|None|2
+[1 (String tor None) 2] tany	None tor 1 tor 2 tor String
 
 # =====================================================================
 # 35. tany — used inside type-related constructs
 # =====================================================================
 
 # tany result as a record field type.
-refine Record [name:String age:([Integer None] tany)]	record{name:String age:Integer|None}
+refine Record [name:String age:([Integer None] tany)]	record{name:String age:None tor Integer}
 
 # tany result used in `is`.
 42 is ([Integer String None] tany)	true
@@ -862,29 +862,29 @@ None is ([Integer String None] tany)	true
 ([{x:Integer} {y:String}] tall) unify {x:1}	'~unify-fail' false
 
 # tany schema as an `Options` field type (note: Options prints lowercase).
-make Options {x:([Integer None] tany)}	options{x:Integer|None}
+make Options {x:([Integer None] tany)}	options{x:None tor Integer}
 
 # =====================================================================
 # 40. tany/tall — interactions with each other
 # =====================================================================
 
 # Build a disjunct of merged maps.
-[([{x:Integer} {y:String}] tall) ([{a:Boolean} {b:None}] tall)] tany	{x:Integer y:String}|{a:Boolean b:None}
+[([{x:Integer} {y:String}] tall) ([{a:Boolean} {b:None}] tall)] tany	{a:Boolean b:None} tor {x:Integer y:String}
 
 # Use tany inside tall (combined into a single field).
-[{kind:([String Number] tany)}] tall	{kind:String|Number}
-[{x:([Integer None] tany)} {y:Boolean}] tall	{x:Integer|None y:Boolean}
+[{kind:([String Number] tany)}] tall	{kind:Number tor String}
+[{x:([Integer None] tany)} {y:Boolean}] tall	{x:None tor Integer y:Boolean}
 
 # tall then tany then tall — composable.
-[([{x:Integer}] tall) ([{y:String}] tall)] tany	{x:Integer}|{y:String}
+[([{x:Integer}] tall) ([{y:String}] tall)] tany	{x:Integer} tor {y:String}
 
 # =====================================================================
 # 41. tany/tall — `type` definitions
 # =====================================================================
 
 # Define a named disjunct via tany.
-def Maybe tany [String None] Maybe	String|None
-def ScalarOrList tany [Scalar List] ScalarOrList	Scalar|List
+def Maybe tany [String None] Maybe	None tor String
+def ScalarOrList tany [Scalar List] ScalarOrList	Scalar tor List
 
 # Use the named disjunct as a record field constraint.
 def Maybe tany [String None] def Person refine Record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice' nick:None}

@@ -50,8 +50,8 @@ func TestStoreShapeTwoStoresNoJoin(t *testing.T) {
 		{`def a (flex {}) def b (flex {}) set k 1 a end set k 'x' b end b.k`,
 			"FlexMap FlexMap dynamic(ProperString)"},
 		// Two patrun instances: each find is bounded by ITS OWN table's
-		// value join (∪ None), not the other's.
-		{`def r (patrun) def s (patrun) add {a:1} 7 r add {a:1} 'x' s find {a:1} r is Integer`,
+		// DECLARED value type (∪ None), not the other's.
+		{`def r (patrun Integer) def s (patrun String) add {a:1} 7 r add {a:1} 'x' s find {a:1} r is Integer`,
 			"dynamic(Boolean)"},
 	}
 	for _, c := range cases {
@@ -148,21 +148,21 @@ func TestStoreShapeFlexTyping(t *testing.T) {
 	}
 }
 
-// TestStoreShapePatrunTyping — a patrun's find is bounded by the JOIN
-// of the values added to THAT instance, ∪ None (the miss result): a
-// gradual bound over the dynamic-dispatch container, never a proof of
-// which rule matches.
+// TestStoreShapePatrunTyping — a patrun's find is bounded by the
+// DECLARED value type of THAT instance (`patrun T`), ∪ None (the miss
+// result): a gradual bound over the dynamic-dispatch container, never a
+// proof of which rule matches.
 func TestStoreShapePatrunTyping(t *testing.T) {
 	cases := []struct {
 		src     string
 		want    string
 		wantRun string
 	}{
-		{`def r (patrun)  add {a:1} "A" r  add {a:1 b:1} "B" r  find {a:1} r`,
+		{`def r (patrun String)  add {a:1} "A" r  add {a:1 b:1} "B" r  find {a:1} r`,
 			"dynamic(Disjunct)", "[A]"},
-		{`def r (patrun)  add {a:1} "A" r  remove {a:1} r  find {a:1} r`,
-			"dynamic(Disjunct)", "[None]"}, // remove keeps the join monotone; None is in the bound
-		{`def r (patrun)  add {a:1} 7 r  add {b:1} 'x' r  find {a:1} r`,
+		{`def r (patrun String)  add {a:1} "A" r  remove {a:1} r  find {a:1} r`,
+			"dynamic(Disjunct)", "[None]"}, // the declared bound is String ∪ None; a miss reads None
+		{`def r (patrun Integer)  add {a:1} 7 r  add {b:1} 9 r  find {a:1} r`,
 			"dynamic(Disjunct)", "[7]"},
 	}
 	for _, c := range cases {
@@ -188,9 +188,9 @@ func TestStoreShapePatrunTyping(t *testing.T) {
 // TestStoreShapeNegatives — the compat/decline contract: a store the
 // minting missed keeps the flat-map path entirely; a shaped container's
 // UNSEEN key stays dynamic(Any) (untracked writers exist — never None);
-// a dispatch-bearing stored value keeps the dynamic(Any) hatch (a
-// surfaced fn would push fn-value dispatch; the pinned patrun.tsv:40
-// residual is unchanged by construction).
+// a typed patrun surfaces its DECLARED value type ∪ None (a
+// Function-valued table reads dynamic(Function|None), no longer a
+// poisoned dynamic(Any) — the typed refactor cleared patrun.tsv:40).
 func TestStoreShapeNegatives(t *testing.T) {
 	cases := []struct {
 		src  string
@@ -208,10 +208,10 @@ func TestStoreShapeNegatives(t *testing.T) {
 			"shaped flex, unseen key: dynamic(Any), never None (untracked writers exist)"},
 		{`def f (flex {a:([x:Any] => [x])}) f.a`, "dynamic(Any)",
 			"dispatch-bearing field omitted from the shape: the fn-value hatch stands"},
-		{`def r (patrun)  add {a:1} ([m:Map] => [m.x]) r  find {a:1} r`, "dynamic(Any)",
-			"a stored lambda poisons the value join: find keeps the dynamic-dispatch hatch"},
-		{`def r (patrun)  find {a:1} r`, "dynamic(Any)",
-			"empty table: nothing recorded, legacy hatch"},
+		{`def r (patrun Function)  add {a:1} ([m:Map] => [m.x]) r  find {a:1} r`, "dynamic(Disjunct)",
+			"a Function-valued table surfaces dynamic(Function|None), not a poisoned Any"},
+		{`def r (patrun String)  find {a:1} r`, "dynamic(Disjunct)",
+			"empty table: the declared bound String ∪ None still applies (a miss reads None)"},
 	}
 	for _, c := range cases {
 		stack, flagged := shapeCheckStack(t, c.src)
@@ -246,7 +246,7 @@ func TestStoreShapeObservationFree(t *testing.T) {
 
 	values, perr := Parse(`context set 'zzob' 99 end context get 'zzob' drop ` +
 		`def f (flex {a:1}) set b/q 2 f end ` +
-		`def r (patrun) add {a:1} 'A' r find {a:1} r`)
+		`def r (patrun String) add {a:1} 'A' r find {a:1} r`)
 	if perr != nil {
 		t.Fatalf("parse: %v", perr)
 	}
@@ -285,7 +285,7 @@ func TestStoreShapeCompileDiscipline(t *testing.T) {
 		{`context set 'x' 42 end context get 'x' add 3`},
 		{`def f (flex {a:7}) f.a add 1`},
 		{`def f (flex {}) set a "s" f end f.a`},
-		{`def r (patrun)  add {a:1} "A" r  find {a:1} r`},
+		{`def r (patrun String)  add {a:1} "A" r  find {a:1} r`},
 	}
 	for _, c := range compiles {
 		a, err := New()

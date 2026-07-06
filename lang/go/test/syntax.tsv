@@ -874,12 +874,12 @@ do {m:{x:[5 mul 2]}}	{m:{x:10}}
 # === disjunct - union types via tor ===
 
 # Disjunct creation: type Literals
-String tor Number	String|Number
-String tor None	String|None
-None tor Boolean	None|Boolean
+String tor Number	Number tor String
+String tor None	None tor String
+None tor Boolean	None tor Boolean
 
 # Disjunct chaining (flattened)
-String tor Number tor Boolean	String|Number|Boolean
+String tor Number tor Boolean	Boolean tor Number tor String
 
 # Disjunct unify with scalar types
 (String tor None) unify "a"	'a' true
@@ -900,7 +900,7 @@ String tor Number tor Boolean	String|Number|Boolean
 (Number tor None) unify None	None true
 
 # Disjunct with any
-(String tor Number) unify Any	String|Number true
+(String tor Number) unify Any	Number tor String true
 
 # Disjunct with concrete maps (open matching)
 ({x:1} tor {y:2}) unify {x:1}	{x:1} true

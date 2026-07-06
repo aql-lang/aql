@@ -449,6 +449,19 @@ const (
 	// family-restricted `lt` on cross-family operands) declines the fold and
 	// keeps today's diagnostic path.
 	CompileScalarFold
+	// CompileValueDiverges marks a word that diverges VALUE-DEPENDENTLY: it
+	// returns its declared result for most operands but RAISES for a specific
+	// statically-decidable operand shape — `div` / `mod` by a static-zero
+	// integer divisor (`1 div 0`). Unlike CompileDiverges (ALWAYS raises), the
+	// divergence is per-call, so the recorder infers it from the word's own
+	// check-mode ReturnsFn: when the ReturnsFn produced NO result (the divergent
+	// path — returnsDivMod returns nil for a static-zero divisor), the call
+	// raises and is recorded as a divergent terminal (like raise), so a closure
+	// body ending in it (`do [1 div 0]`) compiles with no RET and the catching
+	// `do` turns the raised error into an Error value — instead of islanding.
+	// The flag scopes the "0 results ⇒ diverges" inference to these words: a
+	// genuinely void word (print/set, declared 0-result) is unaffected.
+	CompileValueDiverges
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
@@ -1798,9 +1811,34 @@ func NewDefCleanup(info DefCleanupInfo) Value {
 	return NewValueRaw(TDefCleanup, info)
 }
 
-// NewDisjunct creates a disjunction type value from a list of alternatives.
+// NewDisjunct creates a disjunction type value from a list of
+// alternatives. The low-level constructor preserves the caller's order —
+// some internal callers build order-bearing disjuncts (a DepScalar
+// `[low, high]` bound, a dynamic-dispatch reachable-returns partition).
+// Canonical tcmp ordering for `tor` type UNIONS is applied one layer up,
+// in SimplifyDisjunctAlts (core_helpers.go), which every user-facing
+// union construction routes through — so `None tor 1` and `1 tor None`
+// build equal values that print identically and compare equal under
+// `tcmp`. (NewEnum also preserves order — an enum's member order is
+// significant.)
 func NewDisjunct(alternatives []Value) Value {
 	return NewValueRaw(TDisjunct, DisjunctInfo{Alternatives: alternatives})
+}
+
+// disjunctAltLess is the canonical ordering predicate for disjunct
+// alternatives: primarily CompareValues (the `tcmp` total order); a CanonValue
+// lexical tiebreak resolves both incomparable pairs (CompareValues errs) AND
+// value-equal-but-distinct pairs (CompareValues returns 0). The tie case is
+// real: cross-leaf numeric magnitude equality (`1 cmp 1.0 == 0`) leaves two
+// type-distinct alts the primary order cannot separate, so without the tiebreak
+// `1 tor 1.0` and `1.0 tor 1` would keep the caller's order and render/store
+// differently despite `tor` being commutative. CanonValue distinguishes them
+// (`1` vs `1.0`), keeping the sort a deterministic strict weak ordering.
+func disjunctAltLess(a, b Value) bool {
+	if c, err := CompareValues(a, b); err == nil && c != 0 {
+		return c < 0
+	}
+	return CanonValue(a) < CanonValue(b)
 }
 
 // NewEnum creates an Enum value (Type/Disjunct/Enum) — a fixed
@@ -2910,11 +2948,11 @@ func kernelFormatDefault(v Value) string {
 		for i, alt := range di.Alternatives {
 			parts[i] = alt.String()
 		}
-		return strings.Join(parts, "|")
+		return strings.Join(parts, " tor ")
 	case IsNegation(v):
 		ni, _ := AsNegation(v)
-		// Parenthesise a compound inner so `tnot (A|B)` doesn't misread
-		// as `(tnot A)|B`.
+		// Parenthesise a compound inner so `tnot (A tor B)` doesn't misread
+		// as `(tnot A) tor B`.
 		if IsDisjunct(ni.Inner) || IsNegation(ni.Inner) {
 			return "tnot (" + ni.Inner.String() + ")"
 		}

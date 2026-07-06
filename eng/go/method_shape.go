@@ -157,67 +157,47 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 	if !ok {
 		return false
 	}
-	// Compile pass only, live recording only: the model changes the check
-	// tape, so a plain check (ratchet surface) and a suspended/refused pass
-	// keep today's byte-identical behaviour.
 	if !r.Check.Recorder().Active() {
-		return false
-	}
-	fnDef, ok := member.Data.(FnDefInfo)
-	if !ok || fnDef.Registry == nil {
-		return false
-	}
-	fn := fnDef.Registry.Lookup(fnDef.Name)
-	if fn == nil {
-		return false
-	}
-	// The statement window: every token from the carrier to the statement
-	// boundary must be inert and evaluation-fixed. Anything else — a word, a
-	// paren, a marker, a carrier — declines the whole model (the interpreter
-	// could dispatch or collect through it in ways the window cannot bake).
-	winEnd := valIdx
-	for i := valIdx + 1; i < e.tape.Len(); i++ {
-		tv := e.tape.At(i)
-		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
-			break
+		// Plain-check surface (not compiling): a shaped dynamic method apply —
+		// a delegation-wrapper method value followed by its contiguous inert
+		// forward-arg window — collapses to a single dynamic(Any), consuming
+		// the window, so the residual covers any runtime result. Without this
+		// the args strand on the check stack and the checker mis-models the
+		// arity (module-rand.tsv:37: `r.string "abc" 5` left
+		// `[dynamic(Any) ProperString Integer]` vs runtime `[ProperString]`).
+		// Gated to the non-compiling ratchet surface: the compile pass below
+		// keeps the [dynamic, args] residual intact so resolveDynamicApply →
+		// OpCallDynMethod still fires, and a suspended pass stays byte-identical.
+		if !r.Check.Compiling {
+			if sig, positions, wok := e.shapedMethodApplyWindow(valIdx, member); wok {
+				// Collapse to the matched signature's ARITY, not always one value.
+				// Side-effect-only shaped methods (logger info, metric add/record)
+				// declare zero returns; splicing a lone dynamic(Any) would fabricate
+				// a value the runtime never produces, so `(l.info "msg") add 1` would
+				// wrongly check clean. Resolve the arity exactly as a real dispatch
+				// would (ReturnsFn / declared Returns), then splice that many gradual
+				// carriers — 0 for a side-effect method, 1 for a value method.
+				args := make([]Value, len(positions))
+				for i, p := range positions {
+					args[i] = e.tape.At(p)
+					args[i].Eval = false
+					args[i].Undefined = false
+				}
+				reps := make([]Value, e.shapedMethodReturnArity(sig, args, v.Pos))
+				for i := range reps {
+					reps[i] = NewDynamicCarrier(TAny)
+				}
+				e.tape.Splice(valIdx, 1+len(positions), reps...)
+				return true
+			}
 		}
-		if !evalFixedWindowToken(tv) {
-			return false
-		}
-		winEnd = i
-	}
-	if winEnd == valIdx {
-		return false // no args — a bare landed value stays data in both engines
-	}
-	// The interpreter's own overload choice over the same tape. The window
-	// admission above guarantees no paren pre-evaluation is needed
-	// (resolveForwardArgs would be a no-op), so the plan-time match here IS
-	// the match the interpreter performs on the concrete member.
-	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
-	sig, positions, _ := e.matchSignature(fn, w, e.effectiveResolved())
-	if sig == nil || sig.Fallback || len(positions) == 0 {
 		return false
 	}
-	// Pure-forward, contiguous-prefix coverage: the matched positions must be
-	// exactly the window slots valIdx+1 .. valIdx+k. A match that reaches the
-	// stack below the carrier (a trailing/mixed shape) or skips a slot is not
-	// the statement-window apply — those keep today's paths.
-	for i, p := range positions {
-		if p != valIdx+1+i {
-			return false
-		}
-	}
-	if positions[len(positions)-1] > winEnd {
+	sig, positions, ok := e.shapedMethodApplyWindow(valIdx, member)
+	if !ok {
 		return false
 	}
-	// Only a plain Go-handler native models: no code bodies, no quotation
-	// beyond atom capture, no check-mode side effects, no user-fn frames —
-	// the shaped-method class is exactly the delegation-wrapper methods.
-	if sig.dispatchHandler() == nil || sig.fnFrame() != nil || sig.fullStack() ||
-		sig.runInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
-		sig.parkResult() {
-		return false
-	}
+	fnDef, _ := member.Data.(FnDefInfo) // validated by shapedMethodApplyWindow
 	args := make([]Value, len(positions))
 	for i, p := range positions {
 		args[i] = e.tape.At(p)
@@ -239,6 +219,158 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 	// results; the pointer re-steps them (spliceMatchResults' convention).
 	k := len(positions)
 	e.tape.Splice(valIdx, 1+k, outs...)
+	return true
+}
+
+// shapedMethodApplyWindow returns the matched signature and forward-arg
+// positions for a shaped dynamic method carrier at valIdx followed by a
+// contiguous inert forward-arg window — or ok=false when the shape is not a
+// plain-native statement-window apply. Pure (no tape mutation): shared by the
+// compile-pass model (which runs the real dispatch) and the plain-check
+// collapse (which folds the apply to dynamic(Any)).
+func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, []int, bool) {
+	fnDef, ok := member.Data.(FnDefInfo)
+	if !ok || fnDef.Registry == nil {
+		return nil, nil, false
+	}
+	fn := fnDef.Registry.Lookup(fnDef.Name)
+	if fn == nil {
+		return nil, nil, false
+	}
+	// The statement window: every token from the carrier to the statement
+	// boundary must be inert and evaluation-fixed. Anything else — a word, a
+	// paren, a marker, a carrier — declines the whole model (the interpreter
+	// could dispatch or collect through it in ways the window cannot bake).
+	winEnd := valIdx
+	for i := valIdx + 1; i < e.tape.Len(); i++ {
+		tv := e.tape.At(i)
+		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
+			break
+		}
+		if !evalFixedWindowToken(tv) {
+			return nil, nil, false
+		}
+		winEnd = i
+	}
+	if winEnd == valIdx {
+		return nil, nil, false // no args — a bare landed value stays data in both engines
+	}
+	// The interpreter's own overload choice over the same tape. The window
+	// admission above guarantees no paren pre-evaluation is needed
+	// (resolveForwardArgs would be a no-op), so the plan-time match here IS
+	// the match the interpreter performs on the concrete member.
+	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+	sig, positions, _ := e.matchSignature(fn, w, e.effectiveResolved())
+	if sig == nil || sig.Fallback || len(positions) == 0 {
+		return nil, nil, false
+	}
+	// Pure-forward, contiguous-prefix coverage: the matched positions must be
+	// exactly the window slots valIdx+1 .. valIdx+k. A match that reaches the
+	// stack below the carrier (a trailing/mixed shape) or skips a slot is not
+	// the statement-window apply — those keep today's paths.
+	for i, p := range positions {
+		if p != valIdx+1+i {
+			return nil, nil, false
+		}
+	}
+	if positions[len(positions)-1] > winEnd {
+		return nil, nil, false
+	}
+	// Only a plain Go-handler native models: no code bodies, no quotation
+	// beyond atom capture, no check-mode side effects, no user-fn frames —
+	// the shaped-method class is exactly the delegation-wrapper methods.
+	if sig.dispatchHandler() == nil || sig.fnFrame() != nil || sig.fullStack() ||
+		sig.runInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
+		sig.parkResult() {
+		return nil, nil, false
+	}
+	return sig, positions, true
+}
+
+// shapedMethodReturnArity is the runtime result count of a shaped-method apply,
+// resolved exactly as declaredReturnCarriers does — a ReturnsFn's produced arity,
+// else the declared Returns length (nil → 0) — but WITHOUT the missing-returns
+// diagnostic, since the plain-check collapse is silent. This keeps the collapse
+// arity-faithful: a side-effect-only method (0 returns) collapses to 0 values,
+// not a fabricated one.
+func (e *Engine) shapedMethodReturnArity(sig *Signature, args []Value, pos SrcPos) int {
+	if sig.ReturnsFn != nil {
+		e.registry.Check.CurCallPos = pos
+		return len(sig.ReturnsFn(args, e.registry))
+	}
+	return len(sig.Returns)
+}
+
+// dynamicBoundConformsToFunction reports whether a dynamic carrier's static
+// BOUND could be a callable — its Parent conforms to Function/FnDef, or (the
+// typed-patrun `find` shape) one alternative of its disjunct bound does. Only
+// a Function-bearing bound may auto-dispatch a forward window; a
+// dynamic(String|None) etc. must strand its trailing values as data (the
+// runtime never calls them), keeping the residual stack depth honest.
+func dynamicBoundConformsToFunction(v Value) bool {
+	if v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef) {
+		return true
+	}
+	if disj, err := AsDisjunct(v); err == nil {
+		for _, alt := range disj.Alternatives {
+			// A disjunct alternative is a bare type-literal Value whose own
+			// lattice identity (typeNodeOf) is the represented type — its
+			// .Parent is TType, not the type itself.
+			at := typeNodeOf(alt)
+			if at.ConformsTo(TFunction) || at.ConformsTo(TFnDef) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// tryDynamicFnValueDispatch is the general-value analogue of
+// tryShapedMethodDispatch: a DYNAMIC carrier whose bound is Function-bearing
+// (a typed-patrun `find` result — dynamic(Function ∪ None) — or any dynamic
+// fn value) sitting at the pointer with a contiguous inert forward-arg window
+// after it is the interpreter's auto-dispatch site. WHICH concrete fn the
+// carrier holds is a runtime fact, so the model is optimistic on the callable
+// alternative (like every dynamic-modality escape hatch): consume the window
+// and produce a single dynamic(Any), which the oracle's Dynamic rule covers.
+// This clears the arg-stranding that leaves `h {x:3 y:4}` as
+// `[dynamic(Function|None) Map]` (vs runtime `[Integer]`) — patrun.tsv:40.
+//
+// PLAIN-CHECK ONLY (not compiling, no live recorder). The compile pass keeps
+// the [dynamic, args] residual so resolveDynamicApply / OpCallDynamicTrailing
+// still lowers the call, and a suspended pass stays byte-identical
+// (TestSpecCompiledDifferential). Optimism is sound for every clean corpus row
+// — a clean miss-then-call (a None reader immediately applied) does not occur;
+// it is the same gradual gap dynamic modality accepts elsewhere.
+func (e *Engine) tryDynamicFnValueDispatch(valIdx int) bool {
+	r := e.registry
+	if r.Check.Compiling || r.Check.Recorder().Active() {
+		return false
+	}
+	v := e.tape.At(valIdx)
+	if !v.Dynamic || v.Quoted || !dynamicBoundConformsToFunction(v) {
+		return false
+	}
+	// The forward window: every token from the carrier to the statement
+	// boundary must be inert and evaluation-fixed (the same admission the
+	// shaped-method window uses). A word/paren/marker in the window declines
+	// the model — the interpreter would dispatch or collect through it in ways
+	// a flat consume cannot mirror.
+	winEnd := valIdx
+	for i := valIdx + 1; i < e.tape.Len(); i++ {
+		tv := e.tape.At(i)
+		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
+			break
+		}
+		if !evalFixedWindowToken(tv) {
+			return false
+		}
+		winEnd = i
+	}
+	if winEnd == valIdx {
+		return false // no args — a bare dynamic fn value stays data (both engines)
+	}
+	e.tape.Splice(valIdx, 1+(winEnd-valIdx), NewDynamicCarrier(TAny))
 	return true
 }
 

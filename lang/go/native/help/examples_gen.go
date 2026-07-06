@@ -107,7 +107,7 @@ func init() {
 		"split 'c' 'd'":                 "['d']",
 		"sub 2 3.5":                     "1.5",
 		"tall ['a','b']":                "Never",
-		"tany ['a','b']":                "'a'|'b'",
+		"tany ['a','b']":                "'a' tor 'b'",
 		"trace ['a','b']":               "'a' 'b'",
 		"trim 'a' {a:1,b:2}":            "'a'",
 		"trim 'b'":                      "'b'",

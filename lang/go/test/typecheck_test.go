@@ -81,6 +81,49 @@ func TestCheckAddIntegerPrecision(t *testing.T) {
 	}
 }
 
+// TestCheckShapedMethodArity pins the plain-check collapse of a shaped
+// instance-method apply (eng/go/method_shape.go) to the matched signature's
+// RESULT COUNT, not always one value. A side-effect-only method (logger info)
+// declares zero returns, so its dispatch must leave NOTHING on the residual
+// stack; fabricating a lone dynamic(Any) let a program consume a value the
+// runtime never produces — `(l.info "msg") add 1` checked clean but raises at
+// runtime. A value method (rand string) still leaves exactly one carrier.
+func TestCheckShapedMethodArity(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	seedAQL(a)
+
+	// Side-effect-only method: 0 declared returns → 0 residual carriers.
+	res, err := a.Check(`import "aql:log" ; def l (Log.logger "x") ; l.info "msg"`)
+	if err != nil {
+		t.Fatalf("check side-effect method: %v", err)
+	}
+	if len(res.Stack) != 0 {
+		t.Errorf("side-effect method l.info: want 0 residual carriers, got %d: %v", len(res.Stack), res.Stack)
+	}
+
+	// Consuming that absent result must be FLAGGED (add needs two operands),
+	// not silently accepted against a fabricated value.
+	res, err = a.Check(`import "aql:log" ; def l (Log.logger "x") ; (l.info "msg") add 1`)
+	if err != nil {
+		t.Fatalf("check consume-absent: %v", err)
+	}
+	if len(res.Diagnostics) == 0 {
+		t.Errorf("consuming a 0-return method result should flag a diagnostic; got clean, residual %v", res.Stack)
+	}
+
+	// Value method: 1 declared return → exactly 1 residual carrier.
+	res, err = a.Check(`import "aql:rand" ; def r (Rand.with-seed 7) ; r.string "abc" 5`)
+	if err != nil {
+		t.Fatalf("check value method: %v", err)
+	}
+	if len(res.Stack) != 1 {
+		t.Errorf("value method r.string: want 1 residual carrier, got %d: %v", len(res.Stack), res.Stack)
+	}
+}
+
 // TestCheckModuleExportTypePropagation verifies that an imported export
 // carries its real type through check mode rather than degrading to Any.
 // `get`/`getr` on a ModuleExport resolve the concrete export in carrier

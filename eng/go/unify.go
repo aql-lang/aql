@@ -419,10 +419,23 @@ func init() {
 // matching the prior `if sa == sb { return a }` rule).
 func foldDegenRoot(name string, root ValueShape) func(Value, Value) (Value, *UnifyError) {
 	return func(ruling, other Value) (Value, *UnifyError) {
-		if Shape(other) == root {
-			return ruling, nil
+		if Shape(other) != root {
+			return Value{}, unifyFail(name+" only unifies with "+name, ruling, other)
 		}
-		return Value{}, unifyFail(name+" only unifies with "+name, ruling, other)
+		// Both sides denote this root. Return the concrete inhabitant when
+		// exactly one side is concrete — matching the general type-literal-
+		// vs-value convention (`unify Integer 5 → 5`, not `→ Integer`). The
+		// value `none` unified against the `None` type literal must yield
+		// `none`, so a membership test whose winning disjunct alternative is
+		// the bare `None` literal (`none is (Integer tor None)`) sees a
+		// result whose Parent matches the tested value rather than the None
+		// root — without this the `is` handler's post-unify parent-equality
+		// check wrongly rejected the match. Two literals (or two values)
+		// keep the prior first-checked (`ruling`) side.
+		if IsConcrete(other) && !IsConcrete(ruling) {
+			return other, nil
+		}
+		return ruling, nil
 	}
 }
 

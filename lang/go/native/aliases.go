@@ -225,6 +225,7 @@ const (
 	CompileFallbackBody     = eng.CompileFallbackBody
 	CompileQuoteInert       = eng.CompileQuoteInert
 	CompileDiverges         = eng.CompileDiverges
+	CompileValueDiverges    = eng.CompileValueDiverges
 	CompileExecutesBody     = eng.CompileExecutesBody
 	CompileRunsBodyIsolated = eng.CompileRunsBodyIsolated
 )
@@ -407,6 +408,7 @@ var (
 	IsTypeLiteral             = eng.IsTypeLiteral
 	JoinCarrierStacks         = eng.JoinCarrierStacks
 	JoinCarriers              = eng.JoinCarriers
+	FoldVariadicArms          = eng.FoldVariadicArms
 	MakeAqlError              = eng.MakeAqlError
 	MapFieldBoolean           = eng.MapFieldBoolean
 	MapFieldFloat             = eng.MapFieldFloat

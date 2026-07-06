@@ -211,6 +211,18 @@ export function newType(path: string): AqlType {
   return new AqlType(parts)
 }
 
+// builtinRank returns a type's position in builtinDecls (parent-first
+// order), which mirrors eng/go's positional lattice Rank closely enough
+// to reproduce the Go engine's canonical disjunct ordering for the spec
+// corpus. Types absent from the table sort last. Used to keep `tor`
+// unions in the same tcmp order the Go kernel stores them in, so the
+// cross-engine differential agrees.
+const RANK_BY_PATH = new Map<string, number>(builtinDecls.map((d, i) => [d.path, i]))
+export function builtinRank(t: AqlType): number {
+  const r = RANK_BY_PATH.get(t.parts.join('/'))
+  return r === undefined ? Number.MAX_SAFE_INTEGER : r
+}
+
 // Well-known types. Mirrors the var block in eng/go/types.go.
 export const TAny = newType('Any')
 export const TNone = newType('None')

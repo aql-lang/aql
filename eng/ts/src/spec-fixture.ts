@@ -40,6 +40,7 @@ import {
   TType,
   TWord,
   Value,
+  builtinRank,
   type FnParam,
   type FnSig,
   type InterpSegment,
@@ -1256,6 +1257,18 @@ function registerSpecWords(r: Registry): void {
               out.push(a)
             }
           }
+          // `tor` is commutative: store the alternatives in canonical
+          // (tcmp-equivalent) order so `A tor B` and `B tor A` reduce to the
+          // identical value — mirrors eng/go SimplifyDisjunctAlts, and keeps
+          // the cross-engine differential in agreement with the Go kernel.
+          out.sort((a, b) => {
+            const ra = builtinRank(a.vType)
+            const rb = builtinRank(b.vType)
+            if (ra !== rb) return ra - rb
+            const ka = canon([a])
+            const kb = canon([b])
+            return ka < kb ? -1 : ka > kb ? 1 : 0
+          })
           if (out.length === 1) return [out[0]!]
           return [newDisjunct(out)]
         },

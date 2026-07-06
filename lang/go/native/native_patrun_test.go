@@ -15,7 +15,7 @@ func buildBenchPatrun(b *testing.B, n int) (Value, *Registry) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	pm := NewPatrun()
+	pm := NewPatrun(TString)
 	for i := 0; i < n; i++ {
 		s := strconv.Itoa(i)
 		om := NewOrderedMap()

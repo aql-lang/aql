@@ -81,15 +81,15 @@ def t Integer { rows:[ { id:t } { id:t } ] }	{rows:[{id:Integer} {id:Integer}]}
 # (`{ k:( enum … ) }`) or — more usefully — name it with `def` and		
 # reference the name.		
 		
-{ e:( enum [ red green blue ] ) }	{e:red|green|blue}	disjunct value as a map value
-{ choices:[ ( enum [ a b ] ) ( enum [ c d ] ) ] }	{choices:[a|b c|d]}	list of disjuncts
-firstq [ ( enum [ a b ] ) ( enum [ c d ] ) ]	a|b	
+{ e:( enum [ red green blue ] ) }	{e:red tor green tor blue}	disjunct value as a map value
+{ choices:[ ( enum [ a b ] ) ( enum [ c d ] ) ] }	{choices:[a tor b c tor d]}	list of disjuncts
+firstq [ ( enum [ a b ] ) ( enum [ c d ] ) ]	a tor b	
 		
 # type-named enum referenced at depth.		
-def Color enum [ red green blue ] { c:Color }	{c:red|green|blue}	
-def Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[red|green|blue red|green|blue]}	
-def Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:red|green|blue}}}	
-def Color enum [ red green blue ] firstq [ Color ]	red|green|blue	
+def Color enum [ red green blue ] { c:Color }	{c:red tor green tor blue}	
+def Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[red tor green tor blue red tor green tor blue]}	
+def Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:red tor green tor blue}}}	
+def Color enum [ red green blue ] firstq [ Color ]	red tor green tor blue	
 		
 # ====================================================================		
 # 4. Functions as structure values		
@@ -145,13 +145,13 @@ def t Integer { a:{ b:{ c:t } } }	{a:{b:{c:Integer}}}	three maps deep
 def t Integer { a:[ { b:[ { c:t } ] } ] }	{a:[{b:[{c:Integer}]}]}	map → list → map → list → map
 def t Integer [ [ [ t ] ] ]	[[[Integer]]]	three lists deep
 def t Integer { rows:[ { cols:[ t t ] } { cols:[ t ] } ] }	{rows:[{cols:[Integer Integer]} {cols:[Integer]}]}	
-def Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:a|b|c base:a|b|c}}}	type-named disjunct, three deep, twice
+def Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:a tor b tor c base:a tor b tor c}}}	type-named disjunct, three deep, twice
 def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:red/q}]}}}	atom, four deep
 		
 # Mixed: a config-shaped structure combining a type, a disjunct, an		
 # atom, and a paren-evaluated number, all at depth, plus a def		
 # reference resolving inside it.		
-def n 2 def Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:red|green|blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+def n 2 def Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:red tor green tor blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
 		
 # Auto-eval still mixes freely with these: a paren-evaluated scalar		
 # value alongside a type-literal value in the same nested map.		

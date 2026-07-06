@@ -57,7 +57,7 @@ def C class {x:1} (make C {}) is (tnot C)	false	an instance is not in its own cl
 def C class {x:1} 5 is (tnot C)	true	a scalar is
 def C class {x:1} def D class {x:1} (make D {}) is (tnot C)	true	…and so is a sibling class instance (nominal, not structural)
 # De Morgan folds
-(tnot Integer) tand (tnot String)	tnot (Integer|String)	¬A ∧ ¬B = ¬(A ∨ B)
+(tnot Integer) tand (tnot String)	tnot (Integer tor String)	¬A ∧ ¬B = ¬(A ∨ B)
 (tnot Integer) tor (tnot String)	Any	¬A ∨ ¬B = ¬(A ∧ B) = ¬Never = Any
 true is ((tnot Integer) tand (tnot String))	true	membership through De Morgan: a Boolean is neither
 5 is ((tnot Integer) tand (tnot String))	false	…an Integer is one of them
@@ -95,7 +95,7 @@ def Big (Integer gt 10) Big teq (Integer gt 10)	true	a predicate refinement is I
 def Big (Integer gt 10) def Big2 (Integer gt 10) Big teq Big2	true	two names over the same bounds share ONE node (contrast sibling newtypes)
 (Integer gt 10) teq (Integer gt 11)	false	different bounds, different nodes
 (Integer tor String) teq (Integer tor String)	true	same-order disjuncts intern together
-(Integer tor String) teq (String tor Integer)	false	…but identity is order-sensitive — the reversed spelling is a different node
+(Integer tor String) teq (String tor Integer)	true	…but identity is order-sensitive — the reversed spelling is a different node
 (tnot Integer) teq (tnot Integer)	true	complements intern by their operand
 (Integer tand (Integer gt 0)) teq (Integer gt 0)	true	the fold collapses to the interned refinement, so teq sees one node
 

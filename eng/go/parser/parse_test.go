@@ -2337,15 +2337,24 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	// `?:T` desugars to `disjunct(T, None, Absent)` — Absent is the
 	// kernel type denoting "key not present", and the third
 	// alternative is what makes the missing-key half of the rule
-	// work via the type system rather than out-of-band metadata.
+	// work via the type system rather than out-of-band metadata. The
+	// alternatives are stored in canonical tcmp order (disjuncts sort at
+	// construction), so assert the SET of members, not their positions.
 	if len(alts) != 3 {
 		t.Fatalf("expected 3 alternatives, got %d", len(alts))
 	}
-	if !alts[1].Equal(eng.TNone) {
-		t.Errorf("expected second alternative to be None, got %s", alts[1])
+	want := map[*eng.Type]bool{eng.TInteger: false, eng.TNone: false, eng.TAbsent: false}
+	for _, alt := range alts {
+		for ty := range want {
+			if alt.Equal(ty) {
+				want[ty] = true
+			}
+		}
 	}
-	if !alts[2].Equal(eng.TAbsent) {
-		t.Errorf("expected third alternative to be Absent, got %s", alts[2])
+	for ty, seen := range want {
+		if !seen {
+			t.Errorf("expected alternative %s among %v", ty.Leaf(), alts)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package eng
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -1643,6 +1644,15 @@ outer:
 		}
 		out = append(out, cand)
 	}
+	// Canonicalise: `tor` is commutative, so a type union's terms are
+	// stored in tcmp order. This is the single boundary every user-facing
+	// disjunction passes through (TorHandler / unionType / exclude /
+	// extract / the check-mode carrier merge), so `None tor 1` and
+	// `1 tor None` reduce to the identical value — equal under `tcmp`,
+	// identical when printed.
+	sort.SliceStable(out, func(i, j int) bool {
+		return disjunctAltLess(out[i], out[j])
+	})
 	return out
 }
 
