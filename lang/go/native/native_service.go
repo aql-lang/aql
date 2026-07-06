@@ -318,6 +318,23 @@ func serviceSendHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	return nil, nil // reply discarded
 }
 
+// ServiceRoutePatterns returns the raw pattern maps registered on a
+// Service, in registration order. The aql:net HTTP router scans these
+// for `path` templates carrying `:param` / `*rest` segments.
+func ServiceRoutePatterns(svc Value) []Value {
+	s, ok := asService(svc)
+	if !ok {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Value, 0, len(s.pm.order))
+	for _, sig := range s.pm.order {
+		out = append(out, s.pm.side[sig].raw)
+	}
+	return out
+}
+
 // DispatchServiceValue routes one request into a Service from Go — the
 // hook the aql:net transport loop uses to deliver decoded messages.
 func DispatchServiceValue(r *Registry, svc Value, req Value) ([]Value, error) {
