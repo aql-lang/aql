@@ -1,0 +1,67 @@
+package native
+
+import (
+	"testing"
+)
+
+// Wave-7 coverage for minilang_compile.go (the no-state arms of
+// miniCompileStateFor / miniGoHook) and native_temporal_await.go (the
+// branch-error and multi-value awaitFull arms) — design/TEST-SEAMS.10.md.
+
+func TestMiniCompileNoStateArms(t *testing.T) {
+	r := b2Reg(t)
+	// No state installed and create=false → miniCompileStateFor returns nil.
+	if s := miniCompileStateFor(r, false); s != nil {
+		t.Fatal("miniCompileStateFor(create=false) with no state should be nil")
+	}
+	// miniGoHook with no state → (nil, false).
+	if h, ok := miniGoHook(r, "re"); ok || h != nil {
+		t.Fatalf("miniGoHook with no state = %v/%v, want nil/false", h, ok)
+	}
+	// Positive pair: after registering, the hook is discoverable and state
+	// is created.
+	called := false
+	RegisterMiniCompileGoHook(r, "re", func(string, Value, *Registry) ([]Value, error) {
+		called = true
+		return nil, nil
+	})
+	h, ok := miniGoHook(r, "re")
+	if !ok || h == nil {
+		t.Fatal("registered hook should be discoverable")
+	}
+	if _, err := h("x", NewTypeLiteral(TNone), r); err != nil || !called {
+		t.Fatalf("hook call = %v, called=%v", err, called)
+	}
+}
+
+func TestRunParallelBranchError(t *testing.T) {
+	r := b2Reg(t)
+	// A list branch whose body raises produces an error result.
+	pr := runParallelBranch(r, NewList([]Value{NewWord("zzz_undef_word_xyz")}))
+	if !pr.err {
+		t.Fatal("runParallelBranch of erroring body should set err=true")
+	}
+	// Positive pair: a non-list element passes through.
+	pr = runParallelBranch(r, NewInteger(5))
+	if pr.err || len(pr.values) != 1 {
+		t.Fatalf("runParallelBranch(5) = %+v", pr)
+	}
+}
+
+func TestAwaitFullMultiValueBranch(t *testing.T) {
+	r := b2Reg(t)
+	// A branch whose body leaves two values on the stack takes awaitFull's
+	// "wrap in a List" arm; a scalar branch takes the single-value arm.
+	elems := []Value{
+		NewList([]Value{NewInteger(1), NewInteger(2)}),
+		NewInteger(9),
+	}
+	out, err := awaitFull(r, elems)
+	if err != nil || len(out) != 1 {
+		t.Fatalf("awaitFull = %v / %v", out, err)
+	}
+	rl, aerr := AsList(out[0])
+	if aerr != nil || rl.Len() != 2 {
+		t.Fatalf("awaitFull result should have 2 status maps, got %v", out[0])
+	}
+}

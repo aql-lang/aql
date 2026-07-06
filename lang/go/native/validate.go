@@ -20,7 +20,9 @@ func validateHandler(args []Value, ctx map[string]Value, stack []Value, r *Regis
 		return nil, fmt.Errorf("validate: %w", err)
 	}
 
-	val, convErr := anyToValue(result)
+	// Route convert-back through the shared structConvert seam
+	// (design/TEST-SEAMS.10.md) so the failure arm is drivable.
+	val, convErr := structConvert(result)
 	if convErr != nil {
 		return nil, fmt.Errorf("validate: %w", convErr)
 	}
