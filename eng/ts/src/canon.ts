@@ -177,7 +177,7 @@ export function canonValue(v: Value): string {
     return `${open}${parts.join(' ')}${close}`
   }
   if (v.vType.matches(TList) && Array.isArray(v.data)) {
-    const body = `[${v.asList().map(canonValue).join(' ')}]`
+    const body = `[${v.asList().map(canonChild).join(' ')}]`
     return v.quoted ? `(quote ${body})` : body
   }
   if (v.data instanceof OptionsData) {
@@ -187,7 +187,7 @@ export function canonValue(v: Value): string {
   }
   if (v.vType.equal(TMap) && v.data instanceof OrderedMap) {
     const m = v.data
-    const parts = m.sortedKeys().map((k) => `${k}:${canonValue(m.get(k)!)}`)
+    const parts = m.sortedKeys().map((k) => `${k}:${canonChild(m.get(k)!)}`)
     return `{${parts.join(' ')}}`
   }
   // An inspection map renders in insertion order with bare word values
@@ -209,7 +209,9 @@ export function canonValue(v: Value): string {
   }
   // Disjunct / Enum: alternatives joined by ' tor ' — the word form, so
   // the rendering re-reads as source (`tor` is commutative). Atoms render
-  // bare, type literals as their leaf.
+  // bare, type literals as their leaf. A TOP-LEVEL union is left ungrouped
+  // (it re-parses as-is); a union nested in a container is grouped by
+  // canonChild so it does not fragment into extra tokens.
   if (v.isDisjunct()) {
     return v
       .asDisjunct()
@@ -223,6 +225,18 @@ export function canonValue(v: Value): string {
       .join(' tor ')
   }
   return v.toString()
+}
+
+// canonChild renders a value that sits INSIDE a composite canon (a map value,
+// a list element, a record/childtype field). A union's `A tor B` renders with
+// whitespace, so concatenated into a container it fragments into extra
+// word-separated tokens (`{x:Integer tor String}` reads as broken map syntax)
+// and breaks the source round-trip; grouping it in parens keeps the compound
+// canon re-parseable (`{x:(Integer tor String)}`). A top-level union is left
+// ungrouped by canonValue — it re-parses as-is and is a comparison ordering
+// key. Mirrors eng/go/canon.go::canonChild.
+function canonChild(v: Value): string {
+  return v.isDisjunct() ? `(${canonValue(v)})` : canonValue(v)
 }
 
 // canonFnDef renders a function value's discriminating canonical form.

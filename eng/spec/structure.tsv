@@ -81,18 +81,25 @@ def t Integer { rows:[ { id:t } { id:t } ] }	{rows:[{id:Integer} {id:Integer}]}
 # (`{ k:( enum … ) }`) or — more usefully — name it with `def` and		
 # reference the name.		
 		
-{ e:( enum [ red green blue ] ) }	{e:red tor green tor blue}	disjunct value as a map value
-{ choices:[ ( enum [ a b ] ) ( enum [ c d ] ) ] }	{choices:[a tor b c tor d]}	list of disjuncts
+{ e:( enum [ red green blue ] ) }	{e:(red tor green tor blue)}	disjunct value as a map value
+{ choices:[ ( enum [ a b ] ) ( enum [ c d ] ) ] }	{choices:[(a tor b) (c tor d)]}	list of disjuncts
 firstq [ ( enum [ a b ] ) ( enum [ c d ] ) ]	a tor b	
 		
 # type-named enum referenced at depth.		
-def Color enum [ red green blue ] { c:Color }	{c:red tor green tor blue}	
-def Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[red tor green tor blue red tor green tor blue]}	
-def Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:red tor green tor blue}}}	
-def Color enum [ red green blue ] firstq [ Color ]	red tor green tor blue	
-		
-# ====================================================================		
-# 4. Functions as structure values		
+def Color enum [ red green blue ] { c:Color }	{c:(red tor green tor blue)}	
+def Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[(red tor green tor blue) (red tor green tor blue)]}	
+def Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:(red tor green tor blue)}}}	
+def Color enum [ red green blue ] firstq [ Color ]	red tor green tor blue
+
+# `tor` orders its alternatives by the value (tcmp) order, not lattice rank
+# alone: concrete numbers by magnitude across Integer/Float, and within a
+# family a type literal before a concrete inhabitant. A nested union groups.
+100 tor 2.0	2.0 tor 100	concrete numbers order by magnitude, not by Integer-before-Float rank
+Integer tor 0	Integer tor 0	a type literal sorts before a concrete inhabitant of its family
+{ x:( Integer tor 0 ) }	{x:(Integer tor 0)}	a union nested in a map is grouped so the canon round-trips
+
+# ====================================================================
+# 4. Functions as structure values
 # ====================================================================		
 # A function VALUE (the `( fn … )` literal, not a def-bound name)		
 # can be a Node element. It stringifies verbosely, so these rows		
@@ -145,13 +152,13 @@ def t Integer { a:{ b:{ c:t } } }	{a:{b:{c:Integer}}}	three maps deep
 def t Integer { a:[ { b:[ { c:t } ] } ] }	{a:[{b:[{c:Integer}]}]}	map → list → map → list → map
 def t Integer [ [ [ t ] ] ]	[[[Integer]]]	three lists deep
 def t Integer { rows:[ { cols:[ t t ] } { cols:[ t ] } ] }	{rows:[{cols:[Integer Integer]} {cols:[Integer]}]}	
-def Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:a tor b tor c base:a tor b tor c}}}	type-named disjunct, three deep, twice
+def Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:(a tor b tor c) base:(a tor b tor c)}}}	type-named disjunct, three deep, twice
 def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:red/q}]}}}	atom, four deep
 		
 # Mixed: a config-shaped structure combining a type, a disjunct, an		
 # atom, and a paren-evaluated number, all at depth, plus a def		
 # reference resolving inside it.		
-def n 2 def Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:red tor green tor blue}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+def n 2 def Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:(red tor green tor blue)}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
 		
 # Auto-eval still mixes freely with these: a paren-evaluated scalar		
 # value alongside a type-literal value in the same nested map.		
