@@ -284,6 +284,19 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 // module's Go-implemented words. Replaces the per-word
 // registerMatrix* functions and the master registerAllMatrixWords
 // aggregator.
+// matrixMakeHandler builds the pure `matrix-make` construction handler —
+// NAMED so the sig wires the same function as both the runtime Impl and
+// the check-mode DryPassReturns mirror.
+func matrixMakeHandler(tt TensorModuleTypes) func([]native.Value, map[string]native.Value, []native.Value, *native.Registry) ([]native.Value, error) {
+	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+		td, err := matrixFromRows(args[0])
+		if err != nil {
+			return nil, err
+		}
+		return []native.Value{tensorValue(tt.Matrix, td)}, nil
+	}
+}
+
 // matrixNatives builds the module's Go-implemented words,
 // parameterised by the per-import tensor mints.
 func matrixNatives(tt TensorModuleTypes) []native.NativeFunc {
@@ -292,16 +305,14 @@ func matrixNatives(tt TensorModuleTypes) []native.NativeFunc {
 		{
 			Name: "matrix-make",
 
+			// Pure construction: the DryPassReturns mirror flags a
+			// top-level create over a concrete ragged/malformed row list
+			// with the runtime's own error.
 			Signatures: []native.Signature{{
-				Args: []*native.Type{native.TList},
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					td, err := matrixFromRows(args[0])
-					if err != nil {
-						return nil, err
-					}
-					return []native.Value{tensorValue(tt.Matrix, td)}, nil
-				}),
-				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+				Args:      []*native.Type{native.TList},
+				Impl:      native.Go(matrixMakeHandler(tt)),
+				ReturnsFn: native.DryPassReturns(matrixMakeHandler(tt), tt.Matrix),
+				Returns:   []*native.Type{tt.Matrix}, BarrierPos: -1,
 			}},
 		},
 		{

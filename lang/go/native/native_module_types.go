@@ -274,6 +274,15 @@ func moduleExportGetrReturns(args []Value, r *Registry) []Value {
 		if val, ok := moduleExportGet(args[1], k); ok {
 			return []Value{val}
 		}
+		// A module's export map is sealed at import, so a concrete-key miss
+		// is ALSO a plain-check diagnostic (the strict-read contract, same
+		// text). PLAIN check only: the COMPILE pass must stay
+		// diagnostic-free so the trap below keeps compiling
+		// (TestModuleExportGetrNotFoundTrapCompiles pins it).
+		if r.Check.IsActive() && !r.Check.Compiling {
+			eng.CheckAddUniqueDiagnostic(r, "not_found",
+				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos)
+		}
 		r.Check.Recorder().RecordTrap("not_found",
 			fmt.Sprintf("getr: export %q not found in module", k), "getr",
 			"", args[0].Pos)

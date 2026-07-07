@@ -136,13 +136,10 @@ func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
 			if _, err := handler(args, nil, nil, r); err != nil {
 				var ae *AqlError
 				if errors.As(err, &ae) && ae.Code == "incomparable" {
-					pos := args[0].Pos
-					r.Check.AddDiagnostic(CheckDiagnostic{
-						Code:   "incomparable",
-						Detail: ae.Detail,
-						Row:    pos.Row,
-						Col:    pos.Col,
-					})
+					// Routed through the unique-diagnostic helper for the
+					// caught-body gate: inside `do [...]` the runtime error
+					// is trapped, so the static mirror stays silent there.
+					CheckAddUniqueDiagnostic(r, "incomparable", ae.Detail, "", args[0].Pos)
 				}
 			}
 		}
@@ -156,13 +153,17 @@ func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
 // its own). `none` also qualifies even though it is non-concrete
 // (Data==nil): None is a SINGLETON type, so a non-dynamic none-shaped
 // value is determinately `none` at runtime — running the handler on it
-// yields exactly the runtime result (no false positive). A dynamic /
-// gradual carrier never qualifies: its family is genuinely unknown.
+// yields exactly the runtime result (no false positive). A bare type
+// NODE qualifies for the same reason — the literal IS the runtime
+// operand (`List lt Map`, `5 cmp Scalar`), so the handler's verdict
+// (litVsLit Rank order within a family, incomparable across) is exactly
+// the runtime's. A dynamic / gradual carrier never qualifies: its
+// family is genuinely unknown.
 func orderingDeterminate(v Value) bool {
 	if v.Dynamic {
 		return false
 	}
-	return IsConcrete(v) || IsNoneShape(v)
+	return IsConcrete(v) || IsNoneShape(v) || IsBareTypeNode(v)
 }
 
 // incomparableError is the [aql/incomparable] error the restricted

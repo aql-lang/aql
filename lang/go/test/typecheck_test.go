@@ -1827,8 +1827,9 @@ func TestCheckUndefinedWordTypoNextToValid(t *testing.T) {
 // (design/elixir-types-in-aql-report.10.md item 4). A provably
 // out-of-range list index — past the end, equal to the length, or
 // negative — is flagged at `aql check` with an index_out_of_range
-// warning; in-bounds, unknown-length, and non-list accesses stay
-// silent (soundness: never a false positive).
+// diagnostic (SeverityError: every consumer of a provably-OOB index
+// errors at runtime); in-bounds, unknown-length, and non-list accesses
+// stay silent (soundness: never a false positive).
 func TestCheckIndexOutOfRange(t *testing.T) {
 	countOOB := func(t *testing.T, src string) (int, []lang.CheckDiagnostic) {
 		t.Helper()

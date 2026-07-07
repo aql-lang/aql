@@ -12,6 +12,53 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
+// The pure assertion handlers are NAMED so the sig can wire the same
+// function as both the runtime Impl and the check-mode DryPassReturns
+// mirror (a provably-failing top-level assertion flags statically).
+func assertEqualHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	// args[0] is the forward / first arg (expected), args[1] is the
+	// second (actual). Print order: "expected X, got Y".
+	expected, actual := args[0], args[1]
+	if !native.ValuesEqual(expected, actual) {
+		return nil, r.AqlError("assertion_failure",
+			fmt.Sprintf("Assert.equal: expected %s, got %s",
+				native.FormatForPrint(expected),
+				native.FormatForPrint(actual)),
+			"Assert.equal")
+	}
+	return nil, nil
+}
+
+func assertNotEqualHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	if native.ValuesEqual(args[0], args[1]) {
+		return nil, r.AqlError("assertion_failure",
+			fmt.Sprintf("Assert.not-equal: both sides equal %s",
+				native.FormatForPrint(args[0])),
+			"Assert.not-equal")
+	}
+	return nil, nil
+}
+
+func assertOkHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	if !isTruthy(args[0]) {
+		return nil, r.AqlError("assertion_failure",
+			fmt.Sprintf("Assert.ok: value is falsy: %s", native.FormatForPrint(args[0])),
+			"Assert.ok")
+	}
+	return nil, nil
+}
+
+func assertMatchHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	sub, _ := args[0].AsConcreteString()
+	s, _ := args[1].AsConcreteString()
+	if !strings.Contains(s, sub) {
+		return nil, r.AqlError("assertion_failure",
+			fmt.Sprintf("Assert.match: %q does not contain %q", s, sub),
+			"Assert.match")
+	}
+	return nil, nil
+}
+
 // testRun is the per-registry state that test/describe/it accumulate
 // into. It is created lazily on first call to a test word and stored
 // under capTestRun on the parent (caller's) registry — so successive
@@ -385,24 +432,16 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// All assertion words raise an AQL error with code
 		// "assertion_failure" when they fail. The enclosing test
 		// handler catches the error and records the case as failed.
+		// The PURE comparisons (equal / not-equal / ok / match) carry a
+		// DryPassReturns mirror: a top-level assertion over concrete
+		// literals that provably fails is flagged at `aql check` with the
+		// byte-identical failure text. assert-throws runs a BODY, so it is
+		// not pure and keeps the runtime-only contract.
 		{
 			Name: "assert-equal",
 			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny, native.TAny},
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					// args[0] is the forward / first arg (expected),
-					// args[1] is the second (actual). Print order:
-					// "expected X, got Y".
-					expected, actual := args[0], args[1]
-					if !native.ValuesEqual(expected, actual) {
-						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("Assert.equal: expected %s, got %s",
-								native.FormatForPrint(expected),
-								native.FormatForPrint(actual)),
-							"Assert.equal")
-					}
-					return nil, nil
-				}),
+				Impl: native.Go(assertEqualHandler), ReturnsFn: native.DryPassReturns(assertEqualHandler),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
@@ -410,15 +449,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "assert-not-equal",
 			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny, native.TAny},
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					if native.ValuesEqual(args[0], args[1]) {
-						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("Assert.not-equal: both sides equal %s",
-								native.FormatForPrint(args[0])),
-							"Assert.not-equal")
-					}
-					return nil, nil
-				}),
+				Impl: native.Go(assertNotEqualHandler), ReturnsFn: native.DryPassReturns(assertNotEqualHandler),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
@@ -426,14 +457,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "assert-ok",
 			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TAny},
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					if !isTruthy(args[0]) {
-						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("Assert.ok: value is falsy: %s", native.FormatForPrint(args[0])),
-							"Assert.ok")
-					}
-					return nil, nil
-				}),
+				Impl: native.Go(assertOkHandler), ReturnsFn: native.DryPassReturns(assertOkHandler),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},
@@ -462,16 +486,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "assert-match",
 			Signatures: []native.Signature{{
 				Args: []*native.Type{native.TString, native.TString},
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					sub, _ := args[0].AsConcreteString()
-					s, _ := args[1].AsConcreteString()
-					if !strings.Contains(s, sub) {
-						return nil, r.AqlError("assertion_failure",
-							fmt.Sprintf("Assert.match: %q does not contain %q", s, sub),
-							"Assert.match")
-					}
-					return nil, nil
-				}),
+				Impl: native.Go(assertMatchHandler), ReturnsFn: native.DryPassReturns(assertMatchHandler),
 				Returns: []*native.Type{}, BarrierPos: -1,
 			}},
 		},

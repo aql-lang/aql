@@ -252,7 +252,13 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	if !(IsConcrete(body) && body.Parent.ConformsTo(TList)) {
 		return []Value{NewDynamicCarrier(TAny)}
 	}
+	// `do` TRAPS every body error at runtime (doListHandler surfaces it as
+	// an Error value), so a guaranteed-runtime-error mirror firing inside
+	// this body is not a program error — raise CaughtBodyDepth so those
+	// emitters (CheckAddUniqueDiagnostic, emitIndexOOB) stay silent here.
+	r.Check.CaughtBodyDepth++
 	stk := RunCarrierBody(r, body)
+	r.Check.CaughtBodyDepth--
 	if len(stk) == 0 {
 		// A NON-EMPTY body that produced an empty residual ran to nothing —
 		// for `do` (the error-catching word) that is exactly the shape a

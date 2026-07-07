@@ -23,6 +23,31 @@ marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
 linear. Behaviour the marker can't express directly belongs in the
 registered word's handler, not in a separate parser stage.
 
+## Check-mode guaranteed-error mirrors (reachability gates)
+
+A check diagnostic that mirrors a GUARANTEED runtime error (a strict-
+accessor static miss, a provable index OOB, an unconditional raise, a
+dry-passed pure handler's failure — design/CHECKER-COMPLETION.0.md)
+must respect four gates before it fires:
+
+- `CheckState.FnBodyDepth` — fn bodies run only if called;
+- `CheckState.NestedBodyDepth` — raised by `RunCarrierBodyWithDefs`,
+  so every branch / loop / quotation body counts as conditionally
+  reached;
+- `CheckState.CaughtBodyDepth` — raised by `do`'s body analysis; `do`
+  TRAPS body errors at runtime, so mirrors inside it are not program
+  errors (`CheckAddUniqueDiagnostic` and `emitIndexOOB` honour it);
+- `!Compiling` — the compile pass must stay diagnostic-free for these
+  rows: it deliberately COMPILES the error path (RecordTrap / the VM
+  RET count check) and an Error diagnostic there flips the row to a
+  "check diagnostics" refusal (aql.go::CompileCheck).
+
+`CheckAtUncaughtTopLevel(r)` (drypass.go) composes all four; use it —
+or the CaughtBodyDepth-honouring `CheckAddUniqueDiagnostic` — rather
+than re-deriving the gates at a new emit site. For PURE handlers over
+concrete args, wire `DryPassReturns` / `DryPassWrap` instead of a
+bespoke ReturnsFn.
+
 ## Per-Call Stacks (Args / DefSnapshot / FnBaselines)
 
 Every fn-body entry pushes onto three coordinated stacks; every fn

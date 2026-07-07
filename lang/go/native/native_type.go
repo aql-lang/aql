@@ -288,8 +288,10 @@ var typeNatives = []NativeFunc{
 				Args:     []*Type{TScalar, TScalar},
 				TypeArgs: map[int]bool{0: true},
 				Impl:     Go(convert2Handler),
-				// See the Ideal sig above: a VALUE of arg0's type, not the literal.
-				ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1,
+				// See the Ideal sig above: a VALUE of arg0's type, not the
+				// literal. The wrapper additionally flags the one TYPE-decidable
+				// refusal: a Float source into a Big target always raises.
+				ReturnsFn: convertScalarReturns, BarrierPos: -1,
 			},
 		},
 	},
@@ -1155,6 +1157,32 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 	default:
 		return Value{}, fmt.Errorf("convert: unsupported target type %s", targetType)
 	}
+}
+
+// convertScalarReturns wraps the fresh-instance result model for the
+// [Scalar Scalar] convert overload with its one TYPE-decidable refusal:
+// a Float source into a Big target ALWAYS raises (convertToBigInteger /
+// convertToBigDecimal reject exactly by source type — no value can pass),
+// so a source the checker has PROVEN Float (strict, non-dynamic) is
+// flagged on the top-level straight line with the byte-identical runtime
+// message. Every other shape keeps the fresh-instance carrier untouched.
+func convertScalarReturns(args []Value, r *Registry) []Value {
+	// args[0] is the TARGET type literal — the value IS its lattice node,
+	// so resolve it via ValueType (its .Parent is the node's parent).
+	if atUncaughtTopLevel(r) && len(args) == 2 && !args[1].Dynamic &&
+		args[1].Parent != nil && args[1].Parent.ConformsTo(TFloat) && ValueType(args[0]) != nil {
+		switch {
+		case ValueType(args[0]).ConformsTo(TBigInteger):
+			eng.CheckAddUniqueDiagnostic(r, "convert_error",
+				"convert: cannot convert Float to BigInteger (a binary Float is inexact; convert to Integer first)",
+				"convert", args[1].Pos)
+		case ValueType(args[0]).ConformsTo(TBigDecimal):
+			eng.CheckAddUniqueDiagnostic(r, "convert_error",
+				"convert: cannot convert Float to BigDecimal (a binary Float is already rounded; build the BigDecimal from a String or the 0d literal)",
+				"convert", args[1].Pos)
+		}
+	}
+	return ReturnsFreshInstance(0)(args, r)
 }
 
 // convertToBigInteger converts a scalar source to BigInteger. Exact

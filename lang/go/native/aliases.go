@@ -548,6 +548,8 @@ var (
 	ReturnsAddConcat       = eng.ReturnsAddConcat
 	ReturnsPreserveListAt  = eng.ReturnsPreserveListAt
 	ReturnsStatic          = eng.ReturnsStatic
+	DryPassReturns         = eng.DryPassReturns
+	DryPassWrap            = eng.DryPassWrap
 	CheckListIndex         = eng.CheckListIndex
 	CheckAtIndices         = eng.CheckAtIndices
 	NewCarrierTypedListLen = eng.NewCarrierTypedListLen

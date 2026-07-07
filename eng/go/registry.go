@@ -445,6 +445,24 @@ type CheckState struct {
 	// re-entry re-runs body tokens the outer analysis already checked.
 	SuppressBodyErrors int
 
+	// CaughtBodyDepth, when > 0, marks analysis running inside an
+	// error-CATCHING body — `do [body]` traps every body error and
+	// surfaces it as an Error VALUE, so a guaranteed-runtime-error mirror
+	// (a strict-accessor static miss, a provable index OOB, a make
+	// construction failure) that fires in the region is NOT a program
+	// error and must stay silent (`do [{a:1} !. b] error [dot message]`
+	// is a working program). Raised around doListReturnsFn's body run;
+	// consulted by CheckAddUniqueDiagnostic and emitIndexOOB.
+	CaughtBodyDepth int
+
+	// NestedBodyDepth, when > 0, marks analysis running inside ANY nested
+	// body region (RunCarrierBodyWithDefs — if/case branches, loop bodies,
+	// quotation/closure bodies). A diagnostic that is only sound for
+	// unconditionally-reached code (the top-level unconditional-raise
+	// mirror) consults it: a branch or loop body may never execute, so
+	// firing there would flag working guard idioms.
+	NestedBodyDepth int
+
 	// InflightBails counts Any-placeholder bail-outs taken by
 	// recursive calls of UNCHECKED fns (declared returns use the
 	// declaration instead and don't count). AnalyseFnBody compares
@@ -676,16 +694,60 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unreachable_signature": SeverityWarning,
 	"partial_dispatch":      SeverityWarning,
 	"analysis_truncated":    SeverityInfo,
-	"index_out_of_range":    SeverityWarning,
-	"missing_returns":       SeverityWarning,
-	"step_budget_exceeded":  SeverityWarning,
-	"body_error":            SeverityWarning,
+	// Every emit site (CheckListIndex / CheckAtIndices / the module
+	// insert-at/remove-at mirrors) fires only on a PROVABLY out-of-range
+	// index over a statically-known length, and every consuming word
+	// (getr / at / set / ArrayUtil.*) errors at runtime on that index —
+	// there is no lenient consumer, so the diagnostic is a guaranteed
+	// runtime failure, not a suspicion. Promoted from SeverityWarning
+	// (accessors are REQUIRED reads: a static miss must gate).
+	"index_out_of_range":   SeverityError,
+	"missing_returns":      SeverityWarning,
+	"step_budget_exceeded": SeverityWarning,
+	"body_error":           SeverityWarning,
 	// The Micron naming rule: a type bound under Scalar/Micron whose
 	// name does not end in the "on" suffix (micron.go).
 	"micron_name": SeverityError,
 	// A strict read (getr/dotr) whose miss is statically decidable — a
-	// known Micron kind with a concrete unknown key (native_micron.go).
+	// known Micron kind with a concrete unknown key (native_micron.go), a
+	// concrete map / class schema / module export the key provably misses
+	// (native_accessor.go getrNodeReturns / getrObjectReturns,
+	// native_module_types.go), or a statically-None strict-read parent.
 	"not_found": SeverityError,
+	// A strict read whose CONTAINER is provably the wrong shape — a
+	// concrete list read with a non-integer key ("getr: expected a map").
+	"getr_error": SeverityError,
+	// `unpack` against a CONCRETE source map that provably lacks a
+	// requested key (native_unpack.go's check-mode mirror).
+	"unpack_error": SeverityError,
+	// A `raise` on the top-level straight line — outside every fn body,
+	// branch, loop, and catching `do` — unconditionally errors the
+	// program (native_error_raise.go raiseReturns).
+	"unconditional_raise": SeverityError,
+	// Concrete-operand arithmetic that provably faults at runtime, on the
+	// same top-level straight line: an int64 overflow (integer_overflow,
+	// the runtime's own code) or an uncoded arithmetic raise — div/mod by
+	// a static zero, pow's negative exponent (native_math.go
+	// returnsIntArithChecked / returnsDivMod).
+	"integer_overflow": SeverityError,
+	"arith_error":      SeverityError,
+	// `convert` of a PROVEN-Float source into a Big target — the one
+	// type-decidable convert refusal (native_type.go convertScalarReturns).
+	"convert_error": SeverityError,
+	// `set` of a field outside a class instance's CLOSED schema
+	// (native_storage.go setClassInstanceReturns — the runtime's own code).
+	"sealed_field": SeverityError,
+	// Dry-pass mirrors of PURE words over concrete literals
+	// (eng/go/drypass.go DryPassReturns): each code is the runtime's own —
+	// a failing Assert comparison, a malformed codec/parse literal, an
+	// out-of-range module list edit, a reify shape violation, and the
+	// outside-a-template macro words.
+	"assertion_failure": SeverityError,
+	"decode_error":      SeverityError,
+	"parse_error":       SeverityError,
+	"reify_error":       SeverityError,
+	"unquote_error":     SeverityError,
+	"splice_error":      SeverityError,
 	// Parse.spec's check-mode dry pass (aql:parse): a concrete
 	// whole-grammar map with a decidable shape error — unknown section,
 	// mistyped token/action/matcher/abnf/rule entries.

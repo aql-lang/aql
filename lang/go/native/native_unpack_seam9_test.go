@@ -54,7 +54,7 @@ func TestW9UnpackSourceArms(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("a", NewInteger(1))
 	rec := NewRecordType(fields)
-	get, keys, err := unpackSource(rec, r)
+	get, keys, proven, err := unpackSource(rec, r)
 	if err != nil {
 		t.Fatalf("record source: %v", err)
 	}
@@ -66,13 +66,16 @@ func TestW9UnpackSourceArms(t *testing.T) {
 	} else if n, _ := AsInteger(v); n != 1 {
 		t.Fatalf("record a = %d, want 1", n)
 	}
+	if !proven {
+		t.Fatalf("record source getter should be proven (concrete)")
+	}
 
 	// Concrete non-map/non-record source is rejected.
-	_, _, err = unpackSource(NewInteger(5), r)
+	_, _, _, err = unpackSource(NewInteger(5), r)
 	w9wantErr(t, err, "source must be a map or record")
 
 	// Non-concrete source out of check mode is rejected.
-	_, _, err = unpackSource(NewTypeLiteral(TMap), r)
+	_, _, _, err = unpackSource(NewTypeLiteral(TMap), r)
 	w9wantErr(t, err, "not a concrete map")
 }
 
@@ -83,7 +86,7 @@ func TestW9UnpackSourceCheckModeLenient(t *testing.T) {
 
 	// In check mode a non-concrete source yields an empty getter and no
 	// error so static analysis can continue.
-	get, keys, err := unpackSource(NewTypeLiteral(TMap), r)
+	get, keys, proven, err := unpackSource(NewTypeLiteral(TMap), r)
 	if err != nil {
 		t.Fatalf("check-mode source: unexpected error %v", err)
 	}
@@ -93,6 +96,9 @@ func TestW9UnpackSourceCheckModeLenient(t *testing.T) {
 	if _, ok := get("anything"); ok {
 		t.Fatalf("check-mode empty getter should report missing")
 	}
+	if proven {
+		t.Fatalf("check-mode stub getter must NOT be proven — its misses are not static evidence")
+	}
 }
 
 func TestW9BindUnpackEntryRejects(t *testing.T) {
@@ -100,14 +106,14 @@ func TestW9BindUnpackEntryRejects(t *testing.T) {
 	get := func(string) (Value, bool) { return NewInteger(1), true }
 
 	// Invalid word name (leading digit) is rejected by ValidateWordName.
-	err := bindUnpackEntry(r, "1bad", "1bad", get, SrcPos{})
+	err := bindUnpackEntry(r, "1bad", "1bad", get, true, SrcPos{})
 	w9wantErr(t, err, "must begin with")
 
 	// Name clash with an existing (lowercase) type binding. A lowercase
 	// type cannot arise through def/InstallType (which require a capital),
 	// so force the DefTable state directly to exercise the guard.
 	r.Defs.PushType("lc_type", TInteger, NewTypeLiteral(TInteger))
-	err = bindUnpackEntry(r, "lc_type", "lc_type", get, SrcPos{})
+	err = bindUnpackEntry(r, "lc_type", "lc_type", get, true, SrcPos{})
 	w9wantErr(t, err, "name clash")
 }
 

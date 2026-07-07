@@ -1,8 +1,10 @@
 package native
 
 import (
+	"errors"
 	"math/big"
 
+	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -175,28 +177,67 @@ func numericBinaryHandler(ops towerOps) Handler {
 	}
 }
 
-// returnsDivMod is the check-mode ReturnsFn for div / mod. An INTEGER-family
+// returnsDivMod is the check-mode ReturnsFn for div / mod. An EXACT-family
 // division or modulo by a STATICALLY-ZERO divisor DIVERGES (raises) at
 // runtime — exactly like `raise`, it leaves NO residual. Modelling it as an
 // empty residual lets an enclosing `do` catch it as an Error value (do's
 // empty-body residual → Error carrier), so `do [1 div 0] convert Map e` types
 // cleanly, while every other operand pair produces the normal numeric result.
 // Float division by zero is IEEE inf/nan (no raise), so a Float operand is
-// excluded. A non-concrete or non-zero divisor delegates to the shared
-// numeric-binary result.
-func returnsDivMod() ReturnsFunc {
+// excluded; the exact leaves (Integer / BigInteger / BigDecimal) all raise.
+// A non-concrete or non-zero divisor delegates to the shared numeric-binary
+// result. On the top-level straight line the guaranteed raise is ALSO a
+// check diagnostic (the unconditional-raise discipline; detail names the
+// word — "division by zero" / "modulo by zero" — matching the runtime).
+func returnsDivMod(detail string) ReturnsFunc {
 	base := ReturnsNumericBinary()
 	return func(args []Value, r *Registry) []Value {
+		checkBigFloatMix(r, args)
 		if len(args) == 2 && isStaticZeroIntDivisor(args[0]) &&
 			!args[0].Parent.ConformsTo(TFloat) && !args[1].Parent.ConformsTo(TFloat) {
+			if atUncaughtTopLevel(r) {
+				eng.CheckAddUniqueDiagnostic(r, "arith_error", detail, "", args[0].Pos)
+			}
 			return nil // divergence: no residual (raise-like)
 		}
 		return base(args, r)
 	}
 }
 
-// isStaticZeroIntDivisor reports whether v is a concrete integer-family value
-// equal to zero — the divisor shape that makes div / mod raise at runtime.
+// checkBigFloatMix flags the arithmetic tower's one TYPE-decidable
+// refusal on the top-level straight line: a Big leaf mixed with a binary
+// Float always raises (numericBinaryHandler → bigFloatMixError — exactness
+// is never silently lost), and the leaves are fixed by the operands'
+// STRICT static types, so no value can save the call. Emits the
+// byte-identical runtime detail; dynamic operands prove nothing and stay
+// silent.
+func checkBigFloatMix(r *Registry, args []Value) {
+	if !atUncaughtTopLevel(r) || len(args) != 2 ||
+		args[0].Dynamic || args[1].Dynamic ||
+		args[0].Parent == nil || args[1].Parent == nil ||
+		IsBareTypeNode(args[0]) || IsBareTypeNode(args[1]) {
+		return
+	}
+	la, lb := numLeaf(args[0]), numLeaf(args[1])
+	if (la == leafFloat && (lb == leafBigInteger || lb == leafBigDecimal)) ||
+		(lb == leafFloat && (la == leafBigInteger || la == leafBigDecimal)) {
+		var ae *AqlError
+		if errors.As(bigFloatMixError(r, args[0], args[1]), &ae) {
+			eng.CheckAddUniqueDiagnostic(r, ae.Code, ae.Detail, "", args[0].Pos)
+		}
+	}
+}
+
+// atUncaughtTopLevel is the local alias of the kernel's
+// CheckAtUncaughtTopLevel (eng/go/drypass.go) — see there for the
+// reachability contract.
+func atUncaughtTopLevel(r *Registry) bool {
+	return eng.CheckAtUncaughtTopLevel(r)
+}
+
+// isStaticZeroIntDivisor reports whether v is a concrete exact-family value
+// equal to zero — the divisor shape that makes div / mod raise at runtime
+// (the Float leaves are IEEE and never raise).
 func isStaticZeroIntDivisor(v Value) bool {
 	if !IsConcrete(v) {
 		return false
@@ -204,6 +245,12 @@ func isStaticZeroIntDivisor(v Value) bool {
 	if v.Parent.ConformsTo(TBigInteger) {
 		if b, err := AsBigInteger(v); err == nil && b != nil {
 			return b.Sign() == 0
+		}
+		return false
+	}
+	if v.Parent.ConformsTo(TBigDecimal) {
+		if d, err := AsBigDecimal(v); err == nil && d != nil {
+			return d.Sign() == 0
 		}
 		return false
 	}

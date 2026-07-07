@@ -117,6 +117,8 @@ func (c *CheckState) Begin() func() {
 	c.Emit = theInactiveEmit
 	c.CodeEffectDepth = 0
 	c.FnBodyDepth = 0
+	c.CaughtBodyDepth = 0
+	c.NestedBodyDepth = 0
 	c.ArgsFrameUnnamed = false
 	// Compiling marks a REAL compile pass; the compile entry points
 	// (CompileCheck / RunCompiled) set it true AFTER this Begin. Reset it here so

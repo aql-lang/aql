@@ -186,9 +186,13 @@ var allArrayNatives = []NativeFunc{
 		Name: "insert-at",
 
 		Signatures: []Signature{{
-			Args:    []*Type{TInteger, TAny, TList},
-			Impl:    Go(insertAtHandler),
-			Returns: []*Type{TList}, BarrierPos: -1,
+			Args: []*Type{TInteger, TAny, TList},
+			Impl: Go(insertAtHandler),
+			// Pure copy-returning edit: a top-level call over concrete
+			// literals with a provably out-of-range index flags at check
+			// time with the runtime's own index_out_of_range text.
+			ReturnsFn: DryPassReturns(insertAtHandler, TList),
+			Returns:   []*Type{TList}, BarrierPos: -1,
 		}},
 	},
 	{
@@ -198,9 +202,12 @@ var allArrayNatives = []NativeFunc{
 		Name: "remove-at",
 
 		Signatures: []Signature{{
-			Args:      []*Type{TInteger, TList},
-			Impl:      Go(removeAtHandler),
-			ReturnsFn: ReturnsPreserveListAt(1), BarrierPos: -1,
+			Args: []*Type{TInteger, TList},
+			Impl: Go(removeAtHandler),
+			// Pure copy-returning edit (see insert-at): the dry pass flags
+			// a provably out-of-range concrete index; the base ReturnsFn
+			// keeps its element-preserving residual model.
+			ReturnsFn: DryPassWrap(removeAtHandler, ReturnsPreserveListAt(1)), BarrierPos: -1,
 		}},
 	},
 	{

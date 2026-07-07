@@ -57,19 +57,25 @@ var macroNatives = []NativeFunc{
 	{
 		Name: "unquote",
 		// Template escape — recognized by the expander. Stepped outside an
-		// expansion it is a misuse and errors.
+		// expansion it is a misuse and errors UNCONDITIONALLY, so the
+		// DryPassWrap mirror flags a top-level stepped use at check time
+		// (inside a template the expander consumes the word — it is never
+		// dispatched, so the mirror cannot misfire there).
 		Signatures: []Signature{{
-			Args:    []*Type{TAny},
-			Impl:    Go(unquoteOutsideMacroHandler),
-			Returns: []*Type{TAny}, BarrierPos: -1,
+			Args:      []*Type{TAny},
+			Impl:      Go(unquoteOutsideMacroHandler),
+			ReturnsFn: DryPassWrap(unquoteOutsideMacroHandler, ReturnsStatic(TAny)),
+			Returns:   []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{
 		Name: "splice",
+		// See unquote: an unconditional misuse error, mirrored statically.
 		Signatures: []Signature{{
-			Args:    []*Type{TAny},
-			Impl:    Go(spliceOutsideMacroHandler),
-			Returns: []*Type{TAny}, BarrierPos: -1,
+			Args:      []*Type{TAny},
+			Impl:      Go(spliceOutsideMacroHandler),
+			ReturnsFn: DryPassWrap(spliceOutsideMacroHandler, ReturnsStatic(TAny)),
+			Returns:   []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
 	{

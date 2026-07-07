@@ -2817,7 +2817,12 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	tokens := make([]Value, elems.Len())
 	copy(tokens, elems.Slice())
 	sub := New(r)
+	// Every body through here is a NESTED region (branch / loop /
+	// quotation) — reached-conditionally by construction. Mark the depth
+	// so unconditional-only diagnostics (unconditional_raise) stay silent.
+	r.Check.NestedBodyDepth++
 	result, err := sub.Run(tokens)
+	r.Check.NestedBodyDepth--
 	if err != nil {
 		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "branch_error",

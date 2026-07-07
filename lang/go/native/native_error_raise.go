@@ -1,6 +1,10 @@
 package native
 
-import "fmt"
+import (
+	"fmt"
+
+	eng "github.com/aql-lang/aql/eng/go"
+)
 
 // This file holds the user-facing error words (design/ERRORS.8.md §2,
 // retiring DX report T9.6):
@@ -36,20 +40,20 @@ var errorNatives = []NativeFunc{
 				Args:      []*Type{TAtom, TString},
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(raiseCodeMessageHandler),
-				Returns:   []*Type{}, BarrierPos: -1,
+				Returns:   []*Type{}, ReturnsFn: raiseReturns, BarrierPos: -1,
 			},
 			// raise <message> — code defaults to user_error.
 			{
 				Args:    []*Type{TString},
 				Impl:    Go(raiseMessageHandler),
-				Returns: []*Type{}, BarrierPos: -1,
+				Returns: []*Type{}, ReturnsFn: raiseReturns, BarrierPos: -1,
 			},
 			// raise <spec> — {code:… message:…} required; remaining
 			// keys are preserved on the Error value for the handler.
 			{
 				Args:    []*Type{TMap},
 				Impl:    Go(raiseSpecHandler),
-				Returns: []*Type{}, BarrierPos: -1,
+				Returns: []*Type{}, ReturnsFn: raiseReturns, BarrierPos: -1,
 			},
 		},
 	},
@@ -80,6 +84,34 @@ var errorNatives = []NativeFunc{
 			{Args: []*Type{TAtom, TError}, QuoteArgs: map[int]bool{0: true}, Impl: Go(getErrorFieldHandler), ReturnsFn: errorFieldReturns, Returns: []*Type{TAny}, BarrierPos: -1},
 		},
 	},
+}
+
+// raiseReturns is the check-mode mirror of an UNCONDITIONAL raise: the
+// word always raises (even malformed args raise raise_error), so a raise
+// dispatched on the top-level straight line — outside every fn body
+// (FnBodyDepth), nested branch/loop/quotation body (NestedBodyDepth), and
+// error-catching `do` body (CaughtBodyDepth, via CheckAddUniqueDiagnostic)
+// — is a program that provably errors, flagged statically. Guard idioms
+// (`if (n eq 0) [raise "zero"]`) live in nested bodies and stay silent.
+// Plain-check only (!Compiling): the compile pass already models raise as
+// a diverging terminal (CompileDiverges) and must stay byte-identical.
+// The residual model is unchanged either way: raise produces no value.
+func raiseReturns(args []Value, r *Registry) []Value {
+	if r != nil && r.Check.IsActive() && !r.Check.Compiling &&
+		r.Check.FnBodyDepth == 0 && r.Check.NestedBodyDepth == 0 && len(args) > 0 {
+		detail := "raise: this raise is unconditionally reached — the program always errors"
+		if msg, err := args[len(args)-1].AsConcreteString(); err == nil && len(args) <= 2 {
+			code := "user_error"
+			if len(args) == 2 {
+				if c, cerr := args[0].AsConcreteAtom(); cerr == nil {
+					code = c
+				}
+			}
+			detail = fmt.Sprintf("raise: unconditionally raises [aql/%s]: %s", code, msg)
+		}
+		eng.CheckAddUniqueDiagnostic(r, "unconditional_raise", detail, "raise", args[0].Pos)
+	}
+	return []Value{}
 }
 
 func raiseMessageHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

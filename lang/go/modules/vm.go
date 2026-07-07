@@ -146,9 +146,10 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// design/PARSING.10.md §3. Parse errors raise
 			// [aql/parse_error] with the same message the CLI prints.
 			Name: "vm-parse",
-			Signatures: []native.Signature{{
-				Args: []*native.Type{native.TString},
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			// Pure parse of the literal (see Debug.parse): the dry-pass
+			// mirror flags top-level malformed source at check time.
+			Signatures: func() []native.Signature {
+				h := func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -161,10 +162,15 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					lst := native.NewList(tokens)
 					lst.Quoted = true
 					return []native.Value{lst}, nil
-				}),
-				Returns:    []*native.Type{native.TList},
-				BarrierPos: -1,
-			}},
+				}
+				return []native.Signature{{
+					Args:       []*native.Type{native.TString},
+					Impl:       native.Go(h),
+					ReturnsFn:  native.DryPassReturns(h, native.TList),
+					Returns:    []*native.Type{native.TList},
+					BarrierPos: -1,
+				}}
+			}(),
 		},
 		{
 			Name: "vm-run-with",
@@ -392,6 +398,12 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 	subReg.Source = src
 	defer subReg.Check.Begin()()
 	subReg.Check.Emit = native.NewEmitState()
+	// This IS a compile pass: mark it so (mirroring CompileCheck) — the
+	// plain-check-only guaranteed-error mirrors (design/CHECKER-COMPLETION
+	// .0.md) must stay silent here, or a row that compiles the error path
+	// (a trap, the VM RET count check) flips to a "check diagnostics"
+	// refusal.
+	subReg.Check.Compiling = true
 	// Fn-body analyses must record under THIS emit pass; a summary cached by
 	// an earlier plain check on the shared registry would leave its compiled
 	// unit empty (see CompileCheck).
