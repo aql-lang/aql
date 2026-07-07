@@ -219,3 +219,91 @@ func TestAppMiniRedis(t *testing.T) {
 		t.Errorf("GET after EXPIRE 0 = %q, want $-1 (lazy expiry)", parts[19])
 	}
 }
+
+// The mini-S3 object store (mini-s3.aql) and its raw-socket client
+// (mini-s3-client.aql) — both on the LOW-LEVEL tier: hand-framed HTTP
+// over recv-until/recv-bytes, bodies streamed in bounded 64 KiB chunks
+// both ways, and RESUMABLE uploads/downloads (HEAD → x-size resume
+// point, PUT x-offset with 409 on a wrong offset, GET with Range → 206).
+func TestAppMiniS3StreamingAndResumption(t *testing.T) {
+	out, err := runAppSteps(t, []string{"mini-s3.aql", "mini-s3-client.aql"}, []string{
+		`import "/apps/mini-s3.aql"`,
+		`import "/apps/mini-s3-client.aql"`,
+		`import "aql:net"`,
+		`import "aql:string-util"`,
+		`def ln (MiniS3.serve {port: 0})`,
+		`def lna (Net.addr ln)`,
+		`def port lna.port`,
+		`def sock (MiniS3Client.dial (join "" ["127.0.0.1:" (convert String port)]))`,
+		// a 131072-byte object, uploaded as an interrupted 100000-byte
+		// part followed by a resumed remainder
+		`def big (convert Bytes (StringUtil.repeat 8192 "0123456789abcdef"))`,
+		`def part1 (slice 0 100000 big)`,
+		`def part2 (slice 100000 131072 big)`,
+		`def r1 (MiniS3Client.req sock "PUT" "/b/data.bin" [] part1)`,
+		`def h1 (MiniS3Client.req sock "HEAD" "/b/data.bin" [] (convert Bytes ""))`,
+		`def h1s (h1.headers get "x-size")`,
+		`def r2 (MiniS3Client.req sock "PUT" "/b/data.bin" ["x-offset: 0"] part2)`,
+		`def r2s (r2.headers get "x-size")`,
+		`def r3 (MiniS3Client.req sock "PUT" "/b/data.bin" ["x-offset: 100000"] part2)`,
+		`def r3s (r3.headers get "x-size")`,
+		`def g1 (MiniS3Client.req sock "GET" "/b/data.bin" [] (convert Bytes ""))`,
+		`def g2 (MiniS3Client.req sock "GET" "/b/data.bin" ["range: bytes=5-14"] (convert Bytes ""))`,
+		`def g2r (g2.headers get "content-range")`,
+		`def g3 (MiniS3Client.req sock "GET" "/b/data.bin" ["range: bytes=131062-"] (convert Bytes ""))`,
+		`def g4 (MiniS3Client.req sock "GET" "/b/data.bin" ["range: bytes=999999-"] (convert Bytes ""))`,
+		`MiniS3Client.req sock "PUT" "/b/other.txt" [] (convert Bytes "hi") drop`,
+		`def l1 (MiniS3Client.req sock "GET" "/b" [] (convert Bytes ""))`,
+		`def d1 (MiniS3Client.req sock "DELETE" "/b/other.txt" [] (convert Bytes ""))`,
+		`def g5 (MiniS3Client.req sock "GET" "/b/other.txt" [] (convert Bytes ""))`,
+		`Net.close sock;`,
+		`Net.close ln;`,
+		`join "|" [(convert String r1.status) h1s (convert String r2.status) r2s
+		           (convert String r3.status) r3s
+		           (convert String g1.status) (convert String (size g1.body)) (convert String (g1.body eq big))
+		           (convert String g2.status) (convert String g2.body) g2r
+		           (convert String g3.status) (convert String g3.body)
+		           (convert String g4.status)
+		           (convert String l1.body)
+		           (convert String d1.status) (convert String g5.status)]`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	got := appLastString(t, out)
+	parts := strings.Split(got, "|")
+	if len(parts) != 18 {
+		t.Fatalf("expected 18 fields, got %d: %q", len(parts), got)
+	}
+	want := []struct {
+		i    int
+		name string
+		val  string
+	}{
+		{0, "initial PUT status", "200"},
+		{1, "HEAD x-size (resume point)", "100000"},
+		{2, "wrong-offset PUT status", "409"},
+		{3, "409 x-size tells the client where to resume", "100000"},
+		{4, "resumed PUT status", "200"},
+		{5, "final size after resume", "131072"},
+		{6, "GET status", "200"},
+		{7, "GET size", "131072"},
+		{8, "streamed round-trip equality", "true"},
+		{9, "range GET status", "206"},
+		{10, "range body", "56789abcde"},
+		{11, "content-range", "bytes 5-14/131072"},
+		{12, "open-ended range status", "206"},
+		{13, "open-ended range body (last 10 bytes)", "6789abcdef"},
+		{14, "unsatisfiable range status", "416"},
+		{16, "DELETE status", "204"},
+		{17, "GET after delete", "404"},
+	}
+	for _, w := range want {
+		if parts[w.i] != w.val {
+			t.Errorf("%s = %q, want %q", w.name, parts[w.i], w.val)
+		}
+	}
+	if !strings.Contains(parts[15], "b/data.bin") || !strings.Contains(parts[15], "b/other.txt") {
+		t.Errorf("bucket listing = %q, want both keys", parts[15])
+	}
+}
