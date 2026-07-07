@@ -725,6 +725,18 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
 		return nil, false, nil
 	}
+	// An AQL-BODIED overload resolved in a FOREIGN sub-registry (a module-
+	// preamble fn reached through its /r delegation export, e.g. Repl.serve)
+	// must not run its body-splicing handler against the dispatching
+	// registry: the body's words resolve in the module's own scope
+	// (module-private helpers), which only the interpreter's foreign-wrapper
+	// branch (execFnDefLiteral engine.go:4356) provides via match.Reg.
+	// Decline so the caller islands — the island applies the value through
+	// that branch, module scope and all. Go-handler natives stay on this
+	// fast path: they read HOST state from vc.r and never resolve body words.
+	if _, isAQL := mr.Sig.Impl.(*AQLImpl); isAQL && reg != vc.r {
+		return nil, false, nil
+	}
 	// The handler runs against the DISPATCHING registry (vc.r), not the
 	// fn's owning sub-registry: the interpreter's execMatch passes
 	// e.registry (the engine the value dispatched on) to every native

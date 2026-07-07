@@ -36,3 +36,40 @@ import "aql:net" Net.direct {kind:"api"}	ERROR:missing required "spec" field	dir
 import "aql:net"  Net.Response is Net.Fetch	true	Response is a lattice child of the module's Fetch root
 import "aql:net"  Net.Request is Net.Fetch	true	Request is a lattice child of the module's Fetch root
 import "aql:net"  typeof Net.Response	Fetch	the exported literal IS its lattice node (typeof reports the parent)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §4  Tier-1 sockets — Listener/Socket handles, bind/dial, passive reads.
+#     Every row binds an ephemeral port ({tcp: 0}) and reads it back via
+#     Net.addr so outputs stay deterministic.
+#
+# listen / addr / close: bind, inspect the bound port, release
+import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) Net.close l; a.port gt 0	true	Net.listen binds; Net.addr reports the ephemeral port; Net.close releases
+# the exported handle types (module type literals)
+import "aql:net" canon Net.Socket	'Socket'	Net.Socket is the connection-handle type literal
+import "aql:net" canon Net.Listener	'Listener'	Net.Listener is the listen-socket type literal
+# listener identity: a bound listener IS a Net.Listener
+import "aql:net" def l (Net.listen {tcp: 0}) def ok (l is Net.Listener) Net.close l; ok	true	a bound listener is a Net.Listener
+# accept: dial from this thread first — the kernel backlog holds the pending
+# connection, so the subsequent accept is deterministic (no spawn race); the
+# {within} deadline is belt-and-braces so the row can never hang the runner
+import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def c (Net.accept l {within: 5000}) Net.send-bytes (convert Bytes "x") s; def g (convert String (Net.recv-bytes c 1 {within: 5000})) Net.close s; Net.close c; Net.close l; g	'x'	Net.accept yields the pending connection and Net.recv-bytes reads exactly n
+# negative — accept honours {within}: an idle listener raises `timeout`
+import "aql:net" def l (Net.listen {tcp: 0}) def code (do [ Net.accept l {within: 60} ] error [ dot code ]) Net.close l; code eq timeout/q	true	Net.accept with {within: ms} times out instead of blocking forever
+# serve-raw echo over connect-raw: recv-until frames a line, send-bytes replies
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.send-bytes (Net.recv-until c (convert Bytes "\n") {within: 5000}) c ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) Net.send-bytes (convert Bytes "ping\n") s; def r (convert String (Net.recv-bytes s 4 {within: 5000})) Net.close s; Net.close l; r	'ping'	serve-raw accept-loop + connect-raw dial + recv-until framing round-trip
+# peer / shutdown / recv deadline: a silent peer raises `timeout`
+import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def p (Net.peer s) Net.shutdown s "write"; def code (do [ Net.recv s 1 {within: 60} ] error [ dot code ]) Net.close s; Net.close l; (p.port gt 0) and (code eq timeout/q)	true	Net.peer reports the remote; Net.shutdown half-closes; Net.recv honours {within}
+# negative — malformed options are refused loudly
+import "aql:net" Net.listen {}	ERROR:net_error	listen needs a tcp: (or unix:) option
+import "aql:net" Net.listen {tcp: -1}	ERROR:net_error	listen rejects an out-of-range port
+import "aql:net" Net.connect-raw {tcp: 99}	ERROR:net_error	connect-raw wants a "host:port" String
+#
+# §5  Tier-2 codecs — a codec is a {decode encode} map; built-ins are values.
+import "aql:net" Net.lines get "name"	'lines'	Net.lines is the newline-delimited text codec value
+import "aql:net" Net.json-lines get "name"	'json-lines'	Net.json-lines is the NDJSON codec value
+import "aql:net" Net.http get "name"	'http'	Net.http is the HTTP/1.1 codec value
+# listen {codec} service + connect → Endpoint: a lines echo round-trip
+import "aql:net" def svc (service {}) add {} ([r:Map state:Any] => [ r.line ]) svc def l (Net.listen {tcp: 0 codec: Net.lines} svc) def a (Net.addr l) def e (Net.connect {tcp: (join "" ["127.0.0.1:" (convert String a.port)]) codec: Net.lines}) def r (call {line: "ok"} e {timeout: 5000}) Net.close e; Net.close l; r.line	'ok'	listen exposes a service over a codec; connect returns a callable Endpoint
+# negative — a wire protocol is never implicit
+import "aql:net" def svc (service {}) Net.listen {tcp: 0} svc	ERROR:codec	listen over a service requires an explicit codec
+import "aql:net" Net.connect {tcp: "127.0.0.1:1"}	ERROR:codec	connect requires an explicit codec

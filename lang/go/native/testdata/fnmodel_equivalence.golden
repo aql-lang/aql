@@ -11,6 +11,7 @@ WORD __varundef
   [Scalar/String] barrier=1 runcheck
   [Scalar/Atom] barrier=1 runcheck quote={0}
 WORD add
+  [Node/Map Any Ideal/Service] barrier=3
   [Node/Map Any Ideal/Patrun] barrier=3 +returnsfn
   [Scalar/Bytes Scalar/Bytes] barrier=2 returns=[Scalar/Bytes]
   [Scalar/String Scalar] barrier=2 +returnsfn
@@ -61,6 +62,9 @@ WORD busr
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD bxor
   [Scalar/Number/Integer Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
+WORD call
+  [Node/Map Ideal/Service Node/Map] barrier=3 returns=[Any]
+  [Node/Map Ideal/Service] barrier=2 returns=[Any]
 WORD cancel
   [Ideal/Timeout] barrier=1
   [Ideal/Interval] barrier=1
@@ -505,6 +509,8 @@ WORD read
   [Scalar/String] barrier=1 returns=[Any]
 WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
+WORD receive
+  [Node/List] barrier=1 noeval={0} returns=[Any]
 WORD ref
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Any]
 WORD referent
@@ -512,6 +518,9 @@ WORD referent
 WORD refine
   [Any Node] barrier=2 runcheck returns=[Type]
   [Any] barrier=1 runcheck returns=[Type]
+WORD register
+  [Scalar/String Ideal/Pid] barrier=2
+  [Scalar/Atom Ideal/Pid] barrier=2
 WORD reify
   [Any Node/Map] barrier=2 returns=[Any] +returnsfn
   [Any Scalar/String] barrier=2 returns=[Any] +returnsfn
@@ -541,6 +550,15 @@ WORD scan
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD selector
   [Node/Map Any] barrier=2 returns=[Any]
+WORD self
+  [] barrier=0 returns=[Ideal/Pid]
+WORD send
+  [Any Ideal/Service] barrier=2
+  [Any Ideal/Pid] barrier=2
+  [Any Scalar/String] barrier=2
+  [Any Scalar/Atom] barrier=2
+WORD service
+  [Node/Map] barrier=1 returns=[Ideal/Service]
 WORD set
   [Scalar/String Any Ideal/Class] barrier=3
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
@@ -583,6 +601,9 @@ WORD slice
 WORD sort
   [Node/Map] barrier=1 returns=[Node/Map]
   [Node/List] barrier=1 returns=[Node/List]
+WORD spawn
+  [Node/List Node/Map] barrier=2 noeval={0} returns=[Ideal/Pid]
+  [Node/List] barrier=1 noeval={0} returns=[Ideal/Pid]
 WORD splice
   [Any] barrier=1 returns=[Any]
 WORD split
@@ -593,6 +614,8 @@ WORD stack
 WORD stack-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
+WORD state-of
+  [Ideal/Service] barrier=1 returns=[Node/Map]
 WORD stderr
   [] barrier=0 returns=[Scalar/Atom/StreamKind]
 WORD stdin
@@ -661,6 +684,9 @@ WORD unpack-prefix
   [Ideal/Class Scalar/Bytes] barrier=2 typearg={0} returns=[Node/Map]
 WORD unquote
   [Any] barrier=1 returns=[Any]
+WORD unregister
+  [Scalar/String] barrier=1
+  [Scalar/Atom] barrier=1
 WORD unshift
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
   [Any Node/List] barrier=2 returns=[Node/List]
@@ -689,10 +715,15 @@ WORD walk
   [Node/Map Any Any] barrier=3 noeval={2} +returnsfn
   [Type/Function Any] barrier=2 returns=[Any]
   [Any] barrier=1 returns=[Node/List]
+WORD whereis
+  [Scalar/String] barrier=1 returns=[Any]
+  [Scalar/Atom] barrier=1 returns=[Any]
 WORD with-decimal
   [Node/Map Node/List] barrier=2 noeval={1} returns=[Any]
 WORD word
   [Any] barrier=1 noeval={0} returns=[Any]
+WORD wrap
+  [Any Ideal/Service] barrier=2
 WORD write
   [Scalar/Atom/StreamKind Scalar/String Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Any Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]

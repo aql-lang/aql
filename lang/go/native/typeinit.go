@@ -22,6 +22,13 @@ func recordTypeInitErr(err error) {
 	}
 }
 
+// RecordTypeInitError is the exported spelling of recordTypeInitErr for
+// sibling packages (lang/go/modules) that register global external
+// builtins of their own (the aql:net Socket/Listener handles) and must
+// funnel init-time failures through the same surfaced-at-construction
+// channel.
+func RecordTypeInitError(err error) { recordTypeInitErr(err) }
+
 // TypeInitError returns the first init-time type-registration error, or
 // nil. Surfaced by DefaultRegistryWithPolicy so a bad registration is
 // reported at construction rather than crashing at import.

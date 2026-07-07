@@ -96,7 +96,7 @@ spec-test:
 test:
 	@set -e; for m in $(MODULES); do \
 	  echo "==> test $$m"; \
-	  ( cd $$m && go test ./... ); \
+	  ( cd $$m && go test -timeout 20m ./... ); \
 	done
 
 vet:

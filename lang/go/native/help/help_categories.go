@@ -80,6 +80,10 @@ var categories = []Category{
 		"export", "each", "for-each", "fold", "scan", "filter", "walk",
 		"list", "create", "load", "update", "remove", "between", "outer", "inner",
 	}},
+	{"concurrent", "Processes, messages, and services.", []string{
+		"spawn", "self", "send", "receive", "register", "whereis",
+		"unregister", "service", "call", "state-of", "wrap",
+	}},
 	{"io", "Input and output.", []string{
 		"print", "printstr", "read", "write", "trace", "stdin", "stdout",
 		"stderr",

@@ -184,7 +184,21 @@ func TestCompiledCoverage(t *testing.T) {
 	//   2  M6 dynamic-scope tier (recursion 71/72)
 	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier 80,
 	//      word-splice 115) — the entire error allowlist
-	const refusalGate = 11
+	//   4  aql:repl served-handler construction (module-repl 12/16/17/18):
+	//      repl-serve's body CONSTRUCTS the service-handler lambda, whose
+	//      tokens reference module-private words (repl-eval-line). A compiled
+	//      unit executes against the DISPATCHING registry, so the escaped
+	//      lambda loses module scope — only the interpreter's foreign-wrapper
+	//      dispatch (execFnDefLiteral) runs the constructing body in the
+	//      module's own registry. The emitter refuses any foreign-registry fn
+	//      whose body constructs a fn value (bodyConstructsFn,
+	//      eng/go/core_helpers.go); these rows fall back to full
+	//      interpretation. (Supersedes the previous 3-row "endpoint
+	//      round-trips" entry: rows 16/18 stopped refusing for the incidental
+	//      reason — repl-close's return-arity mismatch — once that was fixed,
+	//      and then diverged; this tier names the real frontier and row 12
+	//      joins it.)
+	const refusalGate = 15
 	const islandGate = 0 // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)

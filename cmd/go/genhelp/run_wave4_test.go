@@ -51,13 +51,14 @@ func TestRunGeneratesExamples(t *testing.T) {
 	}
 }
 
-// stripMintedIDs drops rows whose value embeds a freshly-minted type ID,
-// which legitimately differs per generation run.
+// stripMintedIDs drops rows whose value embeds a freshly-minted identity —
+// a per-process type ID (`class` examples) or a spawned process id (`spawn`
+// examples) — which legitimately differs per generation run.
 func stripMintedIDs(src string) string {
 	lines := strings.Split(src, "\n")
 	kept := lines[:0]
 	for _, l := range lines {
-		if strings.Contains(l, "Ideal/Class/T_") {
+		if strings.Contains(l, "Ideal/Class/T_") || strings.Contains(l, "Pid<P_") {
 			continue
 		}
 		kept = append(kept, l)

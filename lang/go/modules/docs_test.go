@@ -23,6 +23,7 @@ func TestModuleExportDocs(t *testing.T) {
 		t.Fatalf("DefaultRegistry: %v", err)
 	}
 	reg.SetParseFunc(parser.Parse) // AQL modules parse their source on import
+	InstallResolver(reg)           // aql:repl's AQL preamble imports aql:net / aql:vm
 
 	var missing []string
 	names := Names()
